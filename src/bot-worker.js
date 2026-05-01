@@ -133,10 +133,13 @@ async function startBot() {
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     logger.info({ type, count: messages.length }, 'messages.upsert recebido')
-    if (type !== 'notify') return
+    if (type !== 'notify' && type !== 'append') return
+    const cutoff = Date.now() - 30_000
 
     for (const msg of messages) {
       if (msg.key.fromMe) continue
+      const msgTs = (msg.messageTimestamp ?? 0) * 1000
+      if (msgTs < cutoff) continue
       const msgId = msg.key.id
       if (dedup.msgIds.some(e => e.id === msgId)) continue
       dedup.msgIds.push({ id: msgId, ts: Date.now() })
