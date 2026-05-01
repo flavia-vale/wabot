@@ -572,6 +572,450 @@ Afeta leitores de tela e ferramentas de tradução automática. Correção: `lan
 
 ---
 
+---
+
+## Módulo 11 — Features F5 (Polish & Novas Funcionalidades)
+
+---
+
+### FEAT-001 · Modo de imagem por grupo monitorado
+
+**Status:** open  
+**Prioridade:** alta  
+**Inspiração:** proafiliados.shop — opções `prioritize_preview`, `fallback_to_original_image`, `original_image_as_preview`
+
+**Descrição:**  
+Atualmente o bot envia apenas texto com o link convertido. O concorrente envia imagem do produto + texto + link como mensagem de imagem no WhatsApp, gerando muito mais engajamento. A feature permite configurar por grupo monitorado como a imagem da mensagem de saída deve ser tratada.
+
+**Motivação do design:**  
+Mensagens com múltiplos links (ex: link de produto + link de cupom) exigem que o usuário escolha qual link usar para buscar a imagem — não é possível simplesmente usar a imagem de cada link porque nem todo link é de produto.
+
+---
+
+#### Modos de imagem (mutuamente exclusivos)
+
+| Modo | Valor | Comportamento |
+|------|-------|---------------|
+| Nenhuma | `none` | Comportamento atual — só texto |
+| Original | `original` | Usa a imagem que veio na mensagem monitorada (se houver) |
+| Buscar no site | `fetch` | Faz scraping da imagem do produto no site da loja |
+
+Quando modo = `fetch`, dois parâmetros extras:
+- **`imageLinkTarget`** (`first` \| `last`) — qual link da mensagem usar para o scraping
+- **`fallbackToOriginal`** (boolean) — se o scraping falhar, tenta usar a imagem original da mensagem
+
+---
+
+#### Lógica de envio (bot-worker.js)
+
+```
+modo "none"     → sock.sendMessage(jid, { text: finalText })   ← atual
+
+modo "original" → se msg tiver imageMessage:
+                    sock.sendMessage(jid, { image: { url: imageUrl }, caption: finalText })
+                  senão:
+                    sock.sendMessage(jid, { text: finalText })
+
+modo "fetch"    → url = links[0] ou links[-1] conforme imageLinkTarget
+                  imageUrl = await fetchProductImage(platform, url)
+                  se imageUrl:
+                    sock.sendMessage(jid, { image: { url: imageUrl }, caption: finalText })
+                  senão se fallbackToOriginal e msg tem imageMessage:
+                    sock.sendMessage(jid, { image: { url: originalImageUrl }, caption: finalText })
+                  senão:
+                    sock.sendMessage(jid, { text: finalText })
+```
+
+---
+
+#### Alterações necessárias
+
+**1. Prisma schema — tabela `Group`**
+
+Adicionar campos:
+```prisma
+model Group {
+  // campos existentes ...
+  imageMode          String  @default("none")   // "none" | "original" | "fetch"
+  imageLinkTarget    String  @default("first")  // "first" | "last"
+  fallbackToOriginal Boolean @default(false)
+}
+```
+
+Migration: `npx prisma migrate dev --name add-group-image-mode`
+
+**2. Backend — `src/api/routes/groups.js`**
+
+- `POST /` e `PUT /:id` — aceitar e salvar os 3 novos campos
+- Validar `imageMode` ∈ `['none', 'original', 'fetch']`
+- Validar `imageLinkTarget` ∈ `['first', 'last']`
+
+**3. Scrapers de imagem — `src/converters/imageScrapers.js` (arquivo novo)**
+
+Uma função por plataforma que recebe a URL do produto e retorna a URL da imagem:
+
+```js
+export async function fetchProductImage(platform, productUrl) { ... }
+// internamente chama:
+async function fetchShopeeImage(url)        // API ou scraping da página
+async function fetchMercadoLivreImage(url)  // og:image da página
+async function fetchAmazonImage(url)        // og:image ou scraping
+async function fetchMagazineluizaImage(url) // og:image da página
+async function fetchAliexpressImage(url)    // og:image ou scraping
+```
+
+Estratégia recomendada: `GET` na URL do produto, extrair `<meta property="og:image">` — funciona em ML, Amazon, Magalu. Shopee pode exigir abordagem diferente (API ou headless).
+
+**4. bot-worker.js — `src/bot-worker.js`**
+
+- `loadConfig()` passa a incluir `imageMode`, `imageLinkTarget`, `fallbackToOriginal` de cada grupo monitor
+- No handler de `messages.upsert`, após construir `finalText`, chamar função auxiliar `buildImageMessage()`:
+
+```js
+async function buildImageMessage(finalText, imageMode, imageLinkTarget, fallbackToOriginal, links, originalMsg) {
+  if (imageMode === 'none') return { text: finalText }
+
+  if (imageMode === 'original') {
+    const imgUrl = extractOriginalImageUrl(originalMsg)
+    if (imgUrl) return { image: { url: imgUrl }, caption: finalText }
+    return { text: finalText }
+  }
+
+  if (imageMode === 'fetch') {
+    const targetLink = imageLinkTarget === 'first' ? links[0] : links[links.length - 1]
+    const imgUrl = await fetchProductImage(targetLink.platform, targetLink.url)
+    if (imgUrl) return { image: { url: imgUrl }, caption: finalText }
+    if (fallbackToOriginal) {
+      const origUrl = extractOriginalImageUrl(originalMsg)
+      if (origUrl) return { image: { url: origUrl }, caption: finalText }
+    }
+    return { text: finalText }
+  }
+}
+```
+
+**5. Dashboard — `dashboard/app/dashboard/grupos/page.js`**
+
+Expandir o card de cada grupo monitorado para exibir as configurações de imagem:
+
+```
+[Grupo monitorado: xet das promoções]
+  Papel: Monitor  |  Post
+  ─────────────────────────────
+  Imagem:
+    ○ Nenhuma
+    ○ Usar imagem original da mensagem
+    ○ Buscar imagem no site
+       └ Usar link:  [Primeiro ▾] [Último ▾]
+       └ Fallback para original se falhar: [toggle]
+```
+
+**6. API `lib/api.js`**
+
+- `addGroup(waJid, name, role, imageMode, imageLinkTarget, fallbackToOriginal)`
+- Novo método: `updateGroup(id, data)` — `PUT /api/groups/:id`
+
+---
+
+#### Ordem de implementação recomendada
+
+1. Migration Prisma + backend (rotas grupos)
+2. `imageScrapers.js` com og:image para ML/Amazon/Magalu (mais simples)
+3. `bot-worker.js` — integrar `buildImageMessage()`
+4. Dashboard — UI de configuração por grupo
+5. Scraper Shopee (mais complexo, pode vir depois)
+
+---
+
+#### Riscos e observações
+
+- **Shopee** bloqueia scraping por browser fingerprint — pode exigir puppeteer/headless ou uso da API de afiliados (que já retorna `item_url` com imagem)
+- **Latência**: buscar imagem no site adiciona 0.5–2s por mensagem — considerar timeout de 3s com fallback automático
+- **Cache de imagem**: mesma URL de produto pode ser processada várias vezes — cache por URL com TTL de 1h reduz carga
+
+---
+
+### FEAT-002 · Conexão WhatsApp — estado desconectado e pareamento por número
+
+**Status:** open  
+**Prioridade:** alta  
+**Inspiração:** proafiliados.shop — modais `qrcode-modal` e `pairing-modal`
+
+**Descrição:**  
+Quando o bot está desconectado, a aba WhatsApp não exibe nenhuma opção de conexão. O correto é mostrar dois métodos de conexão:
+
+1. **QR Code** — escanear com a câmera (comportamento atual ao clicar "Ligar bot", mas sem UI clara)
+2. **Código por número** — usuário informa o número, recebe código de 8 dígitos e entra no WhatsApp → Dispositivos vinculados → Vincular pelo número
+
+**Alterações necessárias:**
+
+**Backend — `src/api/routes/session.js`**
+```js
+// Novo endpoint
+app.post('/pairing-code', { onRequest: [app.authenticate] }, async (req, reply) => {
+  const { phone } = req.body  // ex: "5511999999999"
+  // bot precisa estar rodando e aguardando QR (não conectado ainda)
+  const code = await requestPairingCode(userId, phone)
+  return { code }  // ex: "ABCD-1234"
+})
+```
+
+**Manager — `src/manager.js`**
+```js
+export function requestPairingCode(userId, phone) {
+  // envia msg ao worker, worker chama sock.requestPairingCode(phone)
+  // retorna Promise<string> com o código
+}
+```
+
+**bot-worker.js**
+```js
+// No startBot(), passar registerWithQR: false quando for pareamento por número
+// sock.requestPairingCode(phone) retorna o código de 8 dígitos
+```
+
+**Dashboard — `dashboard/app/dashboard/page.js`**
+
+Estado desconectado exibe dois botões:
+```
+┌─────────────────────────────────────────────┐
+│  ⚫ Desconectado                             │
+├─────────────────────────────────────────────┤
+│  [📷 Conectar via QR Code]                  │
+│  [📱 Conectar pelo número]                  │
+│                                             │
+│  [Esquecer número]  ← só se havia sessão    │
+└─────────────────────────────────────────────┘
+```
+
+Ao clicar "Conectar via QR Code" → inicia bot + abre WebSocket (fluxo atual)  
+Ao clicar "Conectar pelo número" → modal pede número → chama `/pairing-code` → exibe código de 8 dígitos
+
+---
+
+### FEAT-003 · Logs de Envio
+
+**Status:** open  
+**Prioridade:** média  
+**Inspiração:** proafiliados.shop — modal com Total/Sucesso/Erros/Pendente, badge por plataforma, grupo destino, preview da mensagem
+
+**Descrição:**  
+Registrar cada envio do bot em banco de dados e exibir no dashboard com filtros por status.
+
+**Schema:**
+```prisma
+model MessageLog {
+  id          String   @id @default(cuid())
+  userId      String
+  platform    String   // "shopee" | "mercadolivre" etc.
+  sourceGroup String   // JID do grupo monitorado
+  destGroup   String   // JID do grupo de destino
+  originalUrl String
+  convertedUrl String
+  messageText String
+  status      String   @default("success")  // "success" | "error"
+  errorMsg    String?
+  sentAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+```
+
+**Dashboard:** modal com abas Todos / Sucesso / Erros, mostrando plataforma, grupo destino, preview da mensagem e timestamp.
+
+---
+
+### FEAT-004 · Conversor AliExpress
+
+**Status:** open  
+**Prioridade:** média  
+**Credenciais necessárias:** Track ID + Cookie `xman_t`
+
+**Descrição:**  
+AliExpress usa a API de afiliados Portals (`portals.aliexpress.com`). O link de afiliado é gerado passando o `trackingId` e o cookie de sessão `xman_t`.
+
+**Arquivo:** `src/converters/aliexpress.js` (criar)  
+**Credenciais:** adicionar `aliexpress` em `REQUIRED` no `credentials.js`
+
+---
+
+### FEAT-005 · Grupos alvo por grupo monitorado
+
+**Status:** open  
+**Prioridade:** alta  
+**Inspiração:** proafiliados.shop — "Configurar Alvos" por grupo
+
+**Descrição:**  
+Atualmente, quando um link é detectado em qualquer grupo monitor, ele é enviado para **todos** os grupos post. O proafiliados permite configurar, por grupo monitorado, quais grupos de destino receberão as mensagens. Isso é essencial quando o usuário tem grupos de nichos diferentes (ex: grupo monitor de eletrônicos → só dispara para grupo post de eletrônicos).
+
+**Comportamento esperado:**
+- Cada grupo com `role: 'monitor'` pode ter uma lista de grupos `role: 'post'` associados
+- Se nenhum alvo estiver configurado, mantém comportamento atual (dispara para todos os posts)
+
+**Alterações necessárias:**
+
+**Schema Prisma:**
+```prisma
+model GroupTarget {
+  id          String @id @default(cuid())
+  userId      String
+  monitorId   String  // Group.id do monitor
+  postId      String  // Group.id do post
+  user        User    @relation(fields: [userId], references: [id])
+  monitor     Group   @relation("MonitorTargets", fields: [monitorId], references: [id], onDelete: Cascade)
+  post        Group   @relation("PostTargets", fields: [postId], references: [id], onDelete: Cascade)
+  @@unique([monitorId, postId])
+}
+```
+
+**Backend:** `GET /api/groups/:id/targets`, `PUT /api/groups/:id/targets` (recebe array de postIds)
+
+**bot-worker.js:** `loadConfig()` passa a carregar os alvos de cada grupo monitor. No handler de `messages.upsert`, em vez de usar `cfg.groups.post` global, usa os alvos específicos do monitor que originou a mensagem (fallback para todos se vazio).
+
+**Dashboard:** Botão "Configurar Alvos" em cada card de grupo monitor. Abre modal com lista de grupos post com checkboxes. Badge "Todos" ou "N grupos" mostra o estado atual.
+
+---
+
+### FEAT-006 · Filtros por grupo monitorado
+
+**Status:** open  
+**Prioridade:** média  
+**Inspiração:** proafiliados.shop — opção "Filtros" por grupo (badge "Nenhum")
+
+**Descrição:**  
+Atualmente os filtros (palavras bloqueadas, plataformas habilitadas) são globais em `BotConfig`. O proafiliados permite configurar filtros diferentes por grupo monitorado, permitindo, por exemplo, monitorar Shopee em um grupo e só AliExpress em outro.
+
+**Filtros por grupo:**
+- `blockedKeywords` — palavras que, se presentes na mensagem, ignoram o disparo
+- `allowedPlatforms` — quais plataformas são convertidas neste grupo (override do global)
+
+**Schema Prisma:**
+```prisma
+// Adicionar em Group:
+blockedKeywords  String?   // CSV, override do global se preenchido
+allowedPlatforms String?   // CSV, override do global se preenchido
+```
+
+**bot-worker.js:** ao processar mensagem, usa filtros do grupo monitor específico se definidos; senão cai no global `BotConfig`.
+
+**Dashboard:** seção "Filtros" expansível em cada card de grupo monitor.
+
+---
+
+### FEAT-007 · Welcome message por grupo de disparo
+
+**Status:** open  
+**Prioridade:** baixa  
+**Inspiração:** proafiliados.shop — campo `welcome_message` por grupo
+
+**Descrição:**  
+A welcome message atual é global (`BotConfig.welcomeMsg`) e enviada em todos os grupos post quando alguém entra. O correto é configurar mensagens de boas-vindas diferentes por grupo de disparo.
+
+**Schema Prisma:**
+```prisma
+// Adicionar em Group:
+welcomeMsg String?  // override do global para este grupo
+```
+
+**bot-worker.js:** no handler `group-participants.update`, usar `group.welcomeMsg` se definido, senão `cfg.botConfig.welcomeMsg`.
+
+---
+
+### FEAT-008 · Toast notifications no dashboard
+
+**Status:** open  
+**Prioridade:** baixa  
+**Inspiração:** proafiliados.shop — sistema de toast com tipo (success/error/warning/info), título e mensagem, auto-dismiss
+
+**Descrição:**  
+Atualmente erros são exibidos como `<p className="text-red-500">` inline, que some ao recarregar a página e não tem auto-dismiss. O padrão do proafiliados usa toasts posicionados no canto superior direito, com ícone por tipo, que desaparecem automaticamente.
+
+**Implementação sugerida:** instalar `react-hot-toast` ou `sonner` (ambos leves, ~2kb). Substituir todos os `setError(err.message)` + `<p className="text-red-500">` por `toast.error(err.message)`. Adicionar `toast.success()` em operações bem-sucedidas (salvar credenciais, remover grupo, etc.).
+
+**Arquivos afetados:** todos os `page.js` do dashboard que têm estado de `error`.
+
+---
+
+### FEAT-009 · Modal de confirmação customizado
+
+**Status:** open  
+**Prioridade:** baixa  
+**Inspiração:** proafiliados.shop — `showConfirm()` com título, mensagem e botões customizados
+
+**Descrição:**  
+Os `confirm()` nativos do browser têm visual inconsistente entre sistemas operacionais, bloqueiam a thread e não permitem customização (cor dos botões, título, ícone). Em mobile, alguns browsers suprimem `confirm()` em contextos de iframe.
+
+**Implementação sugerida:** componente React `<ConfirmModal>` com estado global (Context ou Zustand), substituindo todos os `confirm(...)` do dashboard:
+- `handleDelete` em grupos
+- `handleCancel` em agendamentos  
+- `handleForget` em WhatsApp
+
+Interface:
+```js
+const { confirm } = useConfirm()
+const ok = await confirm({ title: 'Remover grupo?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Remover', danger: true })
+if (!ok) return
+```
+
+---
+
+### FEAT-010 · Instruções inline nas telas de credenciais
+
+**Status:** open  
+**Prioridade:** média  
+**Inspiração:** proafiliados.shop — box amarelo com passo a passo dentro do modal de cada plataforma
+
+**Descrição:**  
+Usuários não sabem onde encontrar AppID, Secret Key, Tag de afiliado etc. O proafiliados exibe um box de instruções numeradas dentro de cada formulário de credencial. Reduz suporte e abandono no onboarding.
+
+**Instruções a adicionar por plataforma:**
+
+| Plataforma | Campos | Onde obter |
+|------------|--------|------------|
+| Shopee | AppID, Secret Key | affiliate.shopee.com.br → Ferramentas → API de Afiliados → Gerar credenciais |
+| Amazon | Tag de afiliado | affiliate-program.amazon.com.br → Gerenciar → Tracking IDs |
+| Mercado Livre | Tag de afiliado, Cookie ssid | afiliados.mercadolivre.com.br → cookie de sessão via DevTools |
+| Magazine Luiza | Tag | afiliados.magazineluiza.com.br → painel |
+| AliExpress | Track ID, Cookie xman_t | portals.aliexpress.com → Ferramentas → Track ID; cookie via extensão EditThisCookie |
+
+**Implementação:** box colapsável (expandido por padrão na primeira visita) em `dashboard/app/dashboard/credenciais/page.js` para cada plataforma.
+
+---
+
+### FEAT-011 · Feed Global
+
+**Status:** open  
+**Prioridade:** baixa  
+**Inspiração:** proafiliados.shop — "Feed Global" — recebe links de todos os grupos sem precisar configurar monitor individual
+
+**Descrição:**  
+O usuário pode ativar um "Feed Global" que monitora automaticamente todos os grupos em que o número está, sem precisar cadastrar cada um como monitor. Links detectados em qualquer grupo são convertidos e disparados para os grupos de destino configurados. Útil para usuários que participam de muitos grupos e querem cobrir todos sem configuração manual.
+
+**Implementação:** campo `feedGlobal: Boolean @default(false)` em `BotConfig`. No bot-worker, no handler `messages.upsert`, se `feedGlobal = true`, não filtra pelo `cfg.groups.monitor` — processa mensagem de qualquer JID.
+
+---
+
+### FEAT-012 · Postar no Status do WhatsApp
+
+**Status:** open  
+**Prioridade:** baixa  
+**Inspiração:** proafiliados.shop — "Postar no Status"
+
+**Descrição:**  
+Além de disparar para grupos, o bot pode postar as mensagens convertidas no Status do WhatsApp do número conectado. O Baileys suporta envio para `status@broadcast`.
+
+**Implementação:**
+```js
+// Baileys — enviar para Status
+await sock.sendMessage('status@broadcast', { text: finalText })
+// ou com imagem
+await sock.sendMessage('status@broadcast', { image: { url: imgUrl }, caption: finalText })
+```
+
+Campo `postToStatus: Boolean @default(false)` em `BotConfig`. Toggle na aba Configurações do dashboard.
+
+---
+
 ## Como adicionar novas issues
 
 Ao encontrar novos bugs durante o QA, adicionar neste arquivo seguindo o padrão:
