@@ -38,6 +38,7 @@ export const api = {
   sessionStart: () => apiFetch('/api/session/start', { method: 'POST' }),
   sessionStop: () => apiFetch('/api/session/stop', { method: 'POST' }),
   sessionForget: () => apiFetch('/api/session/forget', { method: 'POST' }),
+  sessionPairingCode: (phone) => apiFetch('/api/session/pairing-code', { method: 'POST', body: JSON.stringify({ phone }) }),
   sessionWAGroups: () => apiFetch('/api/session/wa-groups'),
 
   groups: () => apiFetch('/api/groups'),

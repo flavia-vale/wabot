@@ -17,6 +17,7 @@ const userId = process.env.BOT_USER_ID
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
 
 let activeSock = null
+let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
 
 const AUTH_DIR = resolve(`./auth_info/${userId}`)
 const DEDUP_FILE = resolve(`./logs/dedup_${userId}.json`)
@@ -148,6 +149,8 @@ async function startBot() {
     logger: logger.child({ name: 'baileys' }),
   })
 
+  pendingSock = sock
+
   sock.ev.on('creds.update', saveCreds)
 
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
@@ -162,6 +165,7 @@ async function startBot() {
 
     if (connection === 'open') {
       activeSock = sock
+      pendingSock = null
       const phone = sock.user?.id?.split(':')[0] ?? null
       if (process.send) process.send({ type: 'status', data: 'connected', phone })
       await db.waSession.upsert({
@@ -175,6 +179,7 @@ async function startBot() {
       const code = new Boom(lastDisconnect?.error)?.output?.statusCode
       const shouldReconnect = code !== DisconnectReason.loggedOut
       activeSock = null
+      pendingSock = null
       if (process.send) process.send({ type: 'status', data: 'disconnected' })
       await db.waSession.upsert({
         where: { userId },
@@ -313,6 +318,29 @@ process.on('message', async msg => {
       .catch(err => {
         process.send({ type: 'groups', requestId: msg.requestId, data: [], error: err.message })
       })
+  }
+
+  if (msg?.type === 'requestPairingCode') {
+    let attempts = 0
+    const tryRequest = async () => {
+      const sock = pendingSock || activeSock
+      if (!sock && attempts < 20) {
+        attempts++
+        setTimeout(tryRequest, 500)
+        return
+      }
+      if (!sock) {
+        process.send({ type: 'pairingCode', requestId: msg.requestId, error: 'Bot não disponível' })
+        return
+      }
+      try {
+        const code = await sock.requestPairingCode(msg.phone)
+        process.send({ type: 'pairingCode', requestId: msg.requestId, code })
+      } catch (err) {
+        process.send({ type: 'pairingCode', requestId: msg.requestId, error: err.message })
+      }
+    }
+    tryRequest()
   }
 
   if (msg?.type === 'broadcast') {

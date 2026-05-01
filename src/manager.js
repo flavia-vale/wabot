@@ -39,6 +39,14 @@ export function startBot(userId) {
         pendingRequests.delete(msg.requestId)
       }
     }
+    if (msg.type === 'pairingCode' && msg.requestId) {
+      const pending = pendingRequests.get(msg.requestId)
+      if (pending) {
+        if (msg.error) pending.reject(new Error(msg.error))
+        else pending.resolve(msg.code)
+        pendingRequests.delete(msg.requestId)
+      }
+    }
   })
 
   proc.on('exit', () => bots.delete(userId))
@@ -100,6 +108,22 @@ export function sendBroadcast(userId, text, jids) {
       }
     }, 30000)
     entry.proc.send({ type: 'broadcast', requestId, text, jids })
+  })
+}
+
+export function requestPairingCode(userId, phone) {
+  return new Promise((resolve, reject) => {
+    const entry = bots.get(userId)
+    if (!entry) return reject(new Error('Bot não está rodando'))
+    const requestId = Math.random().toString(36).slice(2)
+    pendingRequests.set(requestId, { resolve, reject })
+    setTimeout(() => {
+      if (pendingRequests.has(requestId)) {
+        pendingRequests.delete(requestId)
+        reject(new Error('Timeout ao solicitar código de pareamento'))
+      }
+    }, 15000)
+    entry.proc.send({ type: 'requestPairingCode', requestId, phone })
   })
 }
 

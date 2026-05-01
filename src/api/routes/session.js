@@ -1,4 +1,4 @@
-import { startBot, stopBot, isRunning, onQR, onStatus, listGroups } from '../../manager.js'
+import { startBot, stopBot, isRunning, onQR, onStatus, listGroups, requestPairingCode } from '../../manager.js'
 import db from '../../db.js'
 import { rm } from 'fs/promises'
 import { resolve } from 'path'
@@ -48,6 +48,21 @@ export async function sessionRoutes(app) {
       return groups
     } catch (err) {
       return reply.code(400).send({ error: err.message })
+    }
+  })
+
+  app.post('/pairing-code', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const userId = req.user.sub
+    const { phone } = req.body ?? {}
+    if (!phone) return reply.code(400).send({ error: 'Número de telefone obrigatório' })
+    const normalized = phone.replace(/\D/g, '')
+    if (normalized.length < 10) return reply.code(400).send({ error: 'Número inválido' })
+    if (!isRunning(userId)) return reply.code(400).send({ error: 'Bot não está rodando' })
+    try {
+      const code = await requestPairingCode(userId, normalized)
+      return { code }
+    } catch (err) {
+      return reply.code(500).send({ error: err.message })
     }
   })
 
