@@ -6,7 +6,9 @@ export async function groupsRoutes(app) {
   })
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const { waJid, name, role } = req.body ?? {}
+    const { waJid: rawJid, name: rawName, role } = req.body ?? {}
+    const waJid = rawJid?.trim()
+    const name = rawName?.trim()
     if (!waJid || !name || !role) return reply.code(400).send({ error: 'waJid, name e role obrigatórios' })
     if (!['monitor', 'post'].includes(role)) return reply.code(400).send({ error: 'role deve ser monitor ou post' })
 

@@ -30,7 +30,7 @@ export default function DashboardPage() {
       if (msg.type === 'qr') setQr(msg.data)
       if (msg.type === 'status') {
         setStatus(s => ({ ...s, status: msg.data, phone: msg.phone ?? s?.phone }))
-        if (msg.data === 'connected') { setQr(null); fetchStatus() }
+        if (msg.data === 'connected') { setQr(null); wsRef.current?.close(); fetchStatus() }
       }
     })
     wsRef.current = ws

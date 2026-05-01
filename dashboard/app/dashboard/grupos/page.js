@@ -6,13 +6,14 @@ export default function GruposPage() {
   const [groups, setGroups] = useState([])
   const [form, setForm] = useState({ waJid: '', name: '', role: 'monitor' })
   const [error, setError] = useState('')
+  const [actionError, setActionError] = useState('')
   const [loading, setLoading] = useState(false)
   const [waGroups, setWaGroups] = useState(null)
   const [loadingWA, setLoadingWA] = useState(false)
   const [waError, setWaError] = useState('')
 
   async function load() {
-    try { setGroups(await api.groups()) } catch {}
+    try { setGroups(await api.groups()) } catch (err) { setActionError(err.message) }
   }
 
   useEffect(() => { load() }, [])
@@ -33,7 +34,9 @@ export default function GruposPage() {
   }
 
   async function handleDelete(id) {
-    try { await api.deleteGroup(id); await load() } catch {}
+    if (!confirm('Remover este grupo?')) return
+    setActionError('')
+    try { await api.deleteGroup(id); await load() } catch (err) { setActionError(err.message) }
   }
 
   async function handleLoadWA() {
@@ -51,20 +54,23 @@ export default function GruposPage() {
   }
 
   async function handleAddFromWA(g, role) {
+    setActionError('')
     try {
       await api.addGroup(g.waJid, g.name, role)
       await load()
-    } catch {}
+    } catch (err) { setActionError(err.message) }
   }
 
   const monitor = groups.filter(g => g.role === 'monitor')
   const post = groups.filter(g => g.role === 'post')
-  const existingJids = new Set(groups.map(g => g.waJid))
+  const existingJidRoles = new Set(groups.map(g => `${g.waJid}::${g.role}`))
 
   return (
     <div className="max-w-xl">
       <h2 className="text-2xl font-bold text-gray-800 mb-1">Grupos</h2>
       <p className="text-gray-500 text-sm mb-6">Configure quais grupos monitorar e onde postar</p>
+
+      {actionError && <p className="text-red-500 text-sm mb-4">{actionError}</p>}
 
       {/* Grupos cadastrados */}
       {[{ label: '👀 Monitorar (origem)', items: monitor }, { label: '📢 Postar (destino)', items: post }].map(({ label, items }) => (
@@ -113,27 +119,33 @@ export default function GruposPage() {
         {waGroups && waGroups.length > 0 && (
           <ul className="flex flex-col gap-2 max-h-64 overflow-y-auto">
             {waGroups.map(g => {
-              const already = existingJids.has(g.waJid)
+              const monitorAlready = existingJidRoles.has(`${g.waJid}::monitor`)
+              const postAlready    = existingJidRoles.has(`${g.waJid}::post`)
+              const bothAlready    = monitorAlready && postAlready
               return (
                 <li key={g.waJid} className="flex items-center justify-between text-sm border-b pb-2 last:border-0">
-                  <span className={`font-medium ${already ? 'text-gray-400' : 'text-gray-700'}`}>
+                  <span className={`font-medium ${bothAlready ? 'text-gray-400' : 'text-gray-700'}`}>
                     {g.name}
-                    {already && <span className="ml-2 text-xs text-gray-400">(já cadastrado)</span>}
+                    {bothAlready && <span className="ml-2 text-xs text-gray-400">(já cadastrado)</span>}
                   </span>
-                  {!already && (
+                  {!bothAlready && (
                     <div className="flex gap-2">
-                      <button
-                        onClick={() => handleAddFromWA(g, 'monitor')}
-                        className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition"
-                      >
-                        👀 Monitorar
-                      </button>
-                      <button
-                        onClick={() => handleAddFromWA(g, 'post')}
-                        className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200 transition"
-                      >
-                        📢 Postar
-                      </button>
+                      {!monitorAlready && (
+                        <button
+                          onClick={() => handleAddFromWA(g, 'monitor')}
+                          className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition"
+                        >
+                          👀 Monitorar
+                        </button>
+                      )}
+                      {!postAlready && (
+                        <button
+                          onClick={() => handleAddFromWA(g, 'post')}
+                          className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200 transition"
+                        >
+                          📢 Postar
+                        </button>
+                      )}
                     </div>
                   )}
                 </li>

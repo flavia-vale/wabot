@@ -33,9 +33,11 @@ export default function EnvioPage() {
 
   const [scheduled, setScheduled] = useState([])
   const [listLoading, setListLoading] = useState(true)
+  const [listError, setListError] = useState('')
 
   async function loadScheduled() {
-    try { setScheduled(await api.scheduledList()) } catch {}
+    setListError('')
+    try { setScheduled(await api.scheduledList()) } catch (err) { setListError(err.message) }
     setListLoading(false)
   }
 
@@ -74,7 +76,9 @@ export default function EnvioPage() {
   }
 
   async function handleCancel(id) {
-    try { await api.scheduledCancel(id); await loadScheduled() } catch {}
+    if (!confirm('Cancelar este agendamento?')) return
+    setListError('')
+    try { await api.scheduledCancel(id); await loadScheduled() } catch (err) { setListError(err.message) }
   }
 
   // min datetime para o picker (agora + 1 min)
@@ -153,8 +157,9 @@ export default function EnvioPage() {
       {/* Lista de agendamentos */}
       <div className="bg-white rounded-2xl shadow p-5">
         <h3 className="font-semibold text-gray-700 mb-3">📋 Mensagens agendadas</h3>
+        {listError && <p className="text-red-500 text-sm mb-2">{listError}</p>}
         {listLoading && <p className="text-gray-400 text-sm">Carregando...</p>}
-        {!listLoading && scheduled.length === 0 && (
+        {!listLoading && !listError && scheduled.length === 0 && (
           <p className="text-gray-400 text-sm">Nenhuma mensagem agendada</p>
         )}
         {!listLoading && scheduled.length > 0 && (

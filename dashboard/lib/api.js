@@ -16,6 +16,11 @@ async function apiFetch(path, options = {}) {
     },
   })
   const data = await res.json().catch(() => ({}))
+  if (res.status === 401 && !path.startsWith('/api/auth/')) {
+    localStorage.removeItem('token')
+    window.location.replace('/login')
+    return
+  }
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
   return data
 }
@@ -24,8 +29,8 @@ export const api = {
   login: (email, password) =>
     apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
 
-  register: (email, password) =>
-    apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  register: (email, password, ref) =>
+    apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password, ...(ref && { ref }) }) }),
 
   me: () => apiFetch('/api/auth/me'),
 

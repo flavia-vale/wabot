@@ -25,7 +25,11 @@ export function startBot(userId) {
     if (msg.type === 'status') entry.statusListeners.forEach(fn => fn(msg.data, msg.phone))
     if (msg.type === 'groups' && msg.requestId) {
       const pending = pendingRequests.get(msg.requestId)
-      if (pending) { pending.resolve(msg.data); pendingRequests.delete(msg.requestId) }
+      if (pending) {
+        if (msg.error) pending.reject(new Error(msg.error))
+        else pending.resolve(msg.data)
+        pendingRequests.delete(msg.requestId)
+      }
     }
     if (msg.type === 'broadcastResult' && msg.requestId) {
       const pending = pendingRequests.get(msg.requestId)
@@ -44,6 +48,7 @@ export function startBot(userId) {
 export function stopBot(userId) {
   const entry = bots.get(userId)
   if (!entry) return false
+  bots.delete(userId)
   try { entry.proc.send({ type: 'stop' }) } catch {}
   return true
 }

@@ -181,7 +181,7 @@ async function startBot() {
         create: { userId, status: 'disconnected' },
         update: { status: 'disconnected' },
       }).catch(() => {})
-      if (shouldReconnect) startBot()
+      if (shouldReconnect) setTimeout(startBot, 5_000)
     }
   })
 

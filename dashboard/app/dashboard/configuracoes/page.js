@@ -47,7 +47,7 @@ export default function ConfigPage() {
     e.preventDefault()
     setError('')
     setSuccess(false)
-    if (form.delayMin > form.delayMax) {
+    if (Number(form.delayMin) > Number(form.delayMax)) {
       setError('Delay mínimo não pode ser maior que o máximo')
       return
     }

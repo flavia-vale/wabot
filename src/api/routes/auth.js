@@ -4,8 +4,11 @@ import db from '../../db.js'
 
 export async function authRoutes(app) {
   app.post('/register', async (req, reply) => {
-    const { email, password, ref } = req.body ?? {}
+    const { email: rawEmail, password, ref } = req.body ?? {}
+    const email = rawEmail?.toLowerCase()
     if (!email || !password) return reply.code(400).send({ error: 'email e password obrigatórios' })
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply.code(400).send({ error: 'Formato de email inválido' })
+    if (password.length < 8) return reply.code(400).send({ error: 'Senha deve ter no mínimo 8 caracteres' })
 
     const existing = await db.user.findUnique({ where: { email } })
     if (existing) return reply.code(409).send({ error: 'Email já cadastrado' })
@@ -15,7 +18,13 @@ export async function authRoutes(app) {
     const referralCode = randomBytes(4).toString('hex')
 
     let referrer = null
-    if (ref) referrer = await db.user.findUnique({ where: { referralCode: ref } }).catch(() => null)
+    if (ref) {
+      const found = await db.user.findUnique({ where: { referralCode: ref } }).catch(() => null)
+      if (found) {
+        const useCount = await db.user.count({ where: { referredBy: found.id } })
+        if (useCount < 20) referrer = found
+      }
+    }
 
     const user = await db.user.create({
       data: { email, passwordHash, plan: 'trial', trialExpiresAt, referralCode, referredBy: referrer?.id },
@@ -36,7 +45,8 @@ export async function authRoutes(app) {
   })
 
   app.post('/login', async (req, reply) => {
-    const { email, password } = req.body ?? {}
+    const { email: rawEmail, password } = req.body ?? {}
+    const email = rawEmail?.toLowerCase()
     if (!email || !password) return reply.code(400).send({ error: 'email e password obrigatórios' })
 
     const user = await db.user.findUnique({ where: { email } })

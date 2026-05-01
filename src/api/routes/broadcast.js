@@ -20,10 +20,11 @@ export async function broadcastRoutes(app) {
   })
 
   app.get('/scheduled', { onRequest: [app.authenticate] }, async (req) => {
-    return db.scheduledMessage.findMany({
+    const msgs = await db.scheduledMessage.findMany({
       where: { userId: req.user.sub, status: { not: 'cancelled' } },
       orderBy: { scheduledAt: 'asc' },
     })
+    return msgs.map(m => ({ ...m, targetJids: JSON.parse(m.targetJids) }))
   })
 
   app.post('/scheduled', { onRequest: [app.authenticate] }, async (req, reply) => {

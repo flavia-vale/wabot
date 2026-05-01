@@ -50,11 +50,10 @@ export async function paymentsRoutes(app) {
       const dataId = req.query?.['data.id'] ?? req.body?.data?.id ?? ''
       const parts = Object.fromEntries(signature.split(',').map(p => p.split('=')))
       const { ts, v1 } = parts
-      if (ts && v1) {
-        const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`
-        const expected = createHmac('sha256', MP_WEBHOOK_SECRET).update(manifest).digest('hex')
-        if (expected !== v1) return reply.code(401).send({ error: 'Assinatura inválida' })
-      }
+      if (!ts || !v1) return reply.code(401).send({ error: 'Assinatura ausente' })
+      const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`
+      const expected = createHmac('sha256', MP_WEBHOOK_SECRET).update(manifest).digest('hex')
+      if (expected !== v1) return reply.code(401).send({ error: 'Assinatura inválida' })
     }
 
     const type = req.query?.type ?? req.body?.type
@@ -78,30 +77,38 @@ export async function paymentsRoutes(app) {
       ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
       : null
 
-    const existing = await db.payment.findUnique({ where: { mpPaymentId: String(paymentId) } })
-    if (existing) {
-      await db.payment.update({
-        where: { id: existing.id },
-        data: { status, expiresAt: expiresAt ?? existing.expiresAt },
-      })
-    } else {
-      await db.payment.create({
-        data: {
-          userId,
-          mpPaymentId: String(paymentId),
-          plan,
-          status,
-          amount: PLANS[plan]?.price ?? 0,
-          expiresAt,
-        },
-      })
-    }
+    try {
+      const existing = await db.payment.findUnique({ where: { mpPaymentId: String(paymentId) } })
+      if (existing) {
+        await db.payment.update({
+          where: { id: existing.id },
+          data: { status, expiresAt: expiresAt ?? existing.expiresAt },
+        })
+      } else {
+        await db.payment.create({
+          data: {
+            userId,
+            mpPaymentId: String(paymentId),
+            plan,
+            status,
+            amount: PLANS[plan]?.price ?? 0,
+            expiresAt,
+          },
+        })
+      }
 
-    if (status === 'approved') {
-      await db.user.update({
-        where: { id: userId },
-        data: { plan, trialExpiresAt: expiresAt },
-      })
+      if (status === 'approved') {
+        const userExists = await db.user.findUnique({ where: { id: userId }, select: { id: true } })
+        if (userExists) {
+          await db.user.update({
+            where: { id: userId },
+            data: { plan, trialExpiresAt: expiresAt },
+          })
+        }
+      }
+    } catch (err) {
+      console.error('Webhook db error:', err.message)
+      return reply.code(500).send({ error: 'Erro interno ao processar pagamento' })
     }
 
     return { ok: true }

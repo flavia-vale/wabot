@@ -18,25 +18,30 @@ function PlanosContent() {
 
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [checkoutLoading, setCheckoutLoading] = useState('')
+  const [checkoutError, setCheckoutError] = useState('')
   const [copied, setCopied] = useState(false)
 
   const load = useCallback(async () => {
     try {
       setData(await api.paymentsStatus())
-    } catch {}
+    } catch (err) {
+      setLoadError(err.message)
+    }
     setLoading(false)
   }, [])
 
   useEffect(() => { load() }, [load])
 
   async function handleCheckout(plan) {
+    setCheckoutError('')
     setCheckoutLoading(plan)
     try {
       const { checkout_url } = await api.paymentsCheckout(plan)
       window.location.href = checkout_url
     } catch (err) {
-      alert(err.message)
+      setCheckoutError(err.message)
     } finally {
       setCheckoutLoading('')
     }
@@ -50,6 +55,7 @@ function PlanosContent() {
   }
 
   if (loading) return <p className="text-gray-500">Carregando...</p>
+  if (loadError) return <p className="text-red-500 text-sm">{loadError}</p>
 
   const days = daysLeft(data?.accessExpiresAt)
   const planLabel = PLAN_LABELS[data?.plan] ?? data?.plan
@@ -128,6 +134,8 @@ function PlanosContent() {
           </button>
         </div>
       </div>
+
+      {checkoutError && <p className="text-red-500 text-sm mb-4">{checkoutError}</p>}
 
       {data?.referralCode && (
         <div className="bg-white rounded-2xl shadow p-5 mb-5">

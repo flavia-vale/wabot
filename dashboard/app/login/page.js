@@ -1,10 +1,13 @@
 'use client'
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { api } from '@/lib/api'
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const ref = searchParams.get('ref')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isRegister, setIsRegister] = useState(false)
@@ -17,7 +20,7 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const res = isRegister
-        ? await api.register(email, password)
+        ? await api.register(email, password, ref)
         : await api.login(email, password)
       localStorage.setItem('token', res.token)
       router.push('/dashboard')
@@ -73,5 +76,13 @@ export default function LoginPage() {
         </button>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginContent />
+    </Suspense>
   )
 }

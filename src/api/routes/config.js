@@ -15,9 +15,15 @@ export async function configRoutes(app) {
     return cfg ?? { ...DEFAULTS, userId: req.user.sub }
   })
 
-  app.put('/', { onRequest: [app.authenticate] }, async (req) => {
+  app.put('/', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
     const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg } = req.body ?? {}
+    if (delayMin !== undefined && (delayMin < 0 || delayMin > 300))
+      return reply.code(400).send({ error: 'delayMin deve ser entre 0 e 300' })
+    if (delayMax !== undefined && (delayMax < 0 || delayMax > 300))
+      return reply.code(400).send({ error: 'delayMax deve ser entre 0 e 300' })
+    if (delayMin !== undefined && delayMax !== undefined && delayMin > delayMax)
+      return reply.code(400).send({ error: 'delayMin não pode ser maior que delayMax' })
     const cfg = await db.botConfig.upsert({
       where: { userId },
       create: {
