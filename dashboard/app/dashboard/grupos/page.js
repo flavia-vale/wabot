@@ -39,6 +39,11 @@ export default function GruposPage() {
     try { await api.deleteGroup(id); await load() } catch (err) { setActionError(err.message) }
   }
 
+  async function handleUpdateGroup(id, data) {
+    setGroups(prev => prev.map(g => g.id === id ? { ...g, ...data } : g))
+    try { await api.updateGroup(id, data) } catch (err) { setActionError(err.message); await load() }
+  }
+
   async function handleLoadWA() {
     setLoadingWA(true)
     setWaError('')
@@ -73,15 +78,16 @@ export default function GruposPage() {
       {actionError && <p className="text-red-500 text-sm mb-4">{actionError}</p>}
 
       {/* Grupos cadastrados */}
-      {[{ label: '👀 Monitorar (origem)', items: monitor }, { label: '📢 Postar (destino)', items: post }].map(({ label, items }) => (
-        <div key={label} className="bg-white rounded-2xl shadow p-5 mb-4">
-          <h3 className="font-semibold text-gray-700 mb-3">{label}</h3>
-          {items.length === 0 ? (
-            <p className="text-gray-400 text-sm">Nenhum grupo cadastrado</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {items.map(g => (
-                <li key={g.id} className="flex items-center justify-between text-sm">
+      {/* Grupos monitorados */}
+      <div className="bg-white rounded-2xl shadow p-5 mb-4">
+        <h3 className="font-semibold text-gray-700 mb-3">👀 Monitorar (origem)</h3>
+        {monitor.length === 0 ? (
+          <p className="text-gray-400 text-sm">Nenhum grupo cadastrado</p>
+        ) : (
+          <ul className="flex flex-col gap-4">
+            {monitor.map(g => (
+              <li key={g.id} className="text-sm border border-gray-100 rounded-xl p-3">
+                <div className="flex items-center justify-between mb-2">
                   <div>
                     <span className="font-medium text-gray-700">{g.name}</span>
                     <span className="ml-2 text-gray-400 text-xs">{g.waJid}</span>
@@ -89,12 +95,74 @@ export default function GruposPage() {
                   <button onClick={() => handleDelete(g.id)} className="text-red-400 hover:text-red-600 text-xs">
                     Remover
                   </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      ))}
+                </div>
+                <div className="border-t border-gray-100 pt-2">
+                  <p className="text-xs text-gray-500 mb-1.5">Imagem da mensagem:</p>
+                  <div className="flex gap-4">
+                    {[['none', 'Nenhuma'], ['original', 'Original'], ['fetch', 'Buscar no site']].map(([value, label]) => (
+                      <label key={value} className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`imageMode-${g.id}`}
+                          value={value}
+                          checked={(g.imageMode ?? 'none') === value}
+                          onChange={() => handleUpdateGroup(g.id, { imageMode: value })}
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                  {(g.imageMode ?? 'none') === 'fetch' && (
+                    <div className="flex gap-5 mt-2">
+                      <label className="text-xs text-gray-500">
+                        Usar link:{' '}
+                        <select
+                          value={g.imageLinkTarget ?? 'first'}
+                          onChange={e => handleUpdateGroup(g.id, { imageLinkTarget: e.target.value })}
+                          className="ml-1 border border-gray-200 rounded px-1.5 py-0.5 text-xs"
+                        >
+                          <option value="first">Primeiro</option>
+                          <option value="last">Último</option>
+                        </select>
+                      </label>
+                      <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={g.fallbackToOriginal ?? false}
+                          onChange={e => handleUpdateGroup(g.id, { fallbackToOriginal: e.target.checked })}
+                        />
+                        Fallback para original
+                      </label>
+                    </div>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Grupos de postagem */}
+      <div className="bg-white rounded-2xl shadow p-5 mb-4">
+        <h3 className="font-semibold text-gray-700 mb-3">📢 Postar (destino)</h3>
+        {post.length === 0 ? (
+          <p className="text-gray-400 text-sm">Nenhum grupo cadastrado</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {post.map(g => (
+              <li key={g.id} className="flex items-center justify-between text-sm">
+                <div>
+                  <span className="font-medium text-gray-700">{g.name}</span>
+                  <span className="ml-2 text-gray-400 text-xs">{g.waJid}</span>
+                </div>
+                <button onClick={() => handleDelete(g.id)} className="text-red-400 hover:text-red-600 text-xs">
+                  Remover
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {/* Carregar grupos do WhatsApp */}
       <div className="bg-white rounded-2xl shadow p-5 mb-4">

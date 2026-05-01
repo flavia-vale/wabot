@@ -23,6 +23,29 @@ export async function groupsRoutes(app) {
     }
   })
 
+  app.put('/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (!group) return reply.code(404).send({ error: 'Grupo não encontrado' })
+
+    const { imageMode, imageLinkTarget, fallbackToOriginal } = req.body ?? {}
+    if (imageMode !== undefined && !['none', 'original', 'fetch'].includes(imageMode)) {
+      return reply.code(400).send({ error: 'imageMode deve ser none, original ou fetch' })
+    }
+    if (imageLinkTarget !== undefined && !['first', 'last'].includes(imageLinkTarget)) {
+      return reply.code(400).send({ error: 'imageLinkTarget deve ser first ou last' })
+    }
+
+    const updated = await db.group.update({
+      where: { id: req.params.id },
+      data: {
+        ...(imageMode !== undefined ? { imageMode } : {}),
+        ...(imageLinkTarget !== undefined ? { imageLinkTarget } : {}),
+        ...(fallbackToOriginal !== undefined ? { fallbackToOriginal } : {}),
+      },
+    })
+    return updated
+  })
+
   app.delete('/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo não encontrado' })

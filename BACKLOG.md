@@ -580,7 +580,7 @@ Afeta leitores de tela e ferramentas de tradução automática. Correção: `lan
 
 ### FEAT-001 · Modo de imagem por grupo monitorado
 
-**Status:** open  
+**Status:** done  
 **Prioridade:** alta  
 **Inspiração:** proafiliados.shop — opções `prioritize_preview`, `fallback_to_original_image`, `original_image_as_preview`
 
@@ -795,7 +795,7 @@ Ao clicar "Conectar pelo número" → modal pede número → chama `/pairing-cod
 
 ### FEAT-003 · Logs de Envio
 
-**Status:** open  
+**Status:** done  
 **Prioridade:** média  
 **Inspiração:** proafiliados.shop — modal com Total/Sucesso/Erros/Pendente, badge por plataforma, grupo destino, preview da mensagem
 

@@ -12,10 +12,11 @@ import { paymentsRoutes } from './routes/payments.js'
 import { configRoutes } from './routes/config.js'
 import { broadcastRoutes } from './routes/broadcast.js'
 import { dashboardRoutes } from './routes/dashboard.js'
+import { logsRoutes } from './routes/logs.js'
 
 const app = Fastify({ logger: true })
 
-await app.register(fastifyCors, { origin: true })
+await app.register(fastifyCors, { origin: true, methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS'] })
 await app.register(fastifyJwt, { secret: process.env.JWT_SECRET })
 await app.register(fastifyWebsocket)
 
@@ -32,6 +33,7 @@ app.register(paymentsRoutes, { prefix: '/api/payments' })
 app.register(configRoutes, { prefix: '/api/config' })
 app.register(broadcastRoutes, { prefix: '/api/broadcast' })
 app.register(dashboardRoutes, { prefix: '/api/dashboard' })
+app.register(logsRoutes, { prefix: '/api/logs' })
 
 app.get('/health', () => ({ ok: true }))
 

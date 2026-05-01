@@ -24,6 +24,7 @@ model User {
   payments    Payment[]
   botConfig   BotConfig?
   scheduled   ScheduledMessage[]
+  messageLogs MessageLog[]
 }
 
 model WaSession {
@@ -36,12 +37,15 @@ model WaSession {
 }
 
 model Group {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  waJid  String
-  name   String
-  role   String
+  id                 String  @id @default(cuid())
+  userId             String
+  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  waJid              String
+  name               String
+  role               String
+  imageMode          String  @default("none")
+  imageLinkTarget    String  @default("first")
+  fallbackToOriginal Boolean @default(false)
 
   @@unique([userId, waJid, role])
 }
@@ -90,4 +94,19 @@ model ScheduledMessage {
   sentAt      DateTime?
   status      String    @default("pending")
   createdAt   DateTime  @default(now())
+}
+
+model MessageLog {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform     String
+  sourceGroup  String
+  destGroup    String
+  originalUrl  String
+  convertedUrl String
+  messageText  String
+  status       String   @default("success")
+  errorMsg     String?
+  sentAt       DateTime @default(now())
 }

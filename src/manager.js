@@ -16,13 +16,19 @@ export function startBot(userId) {
     env: { ...process.env, BOT_USER_ID: userId },
   })
 
-  const entry = { proc, qrListeners: new Set(), statusListeners: new Set() }
+  const entry = { proc, qrListeners: new Set(), statusListeners: new Set(), lastQR: null }
   bots.set(userId, entry)
 
   proc.on('message', msg => {
     if (!msg?.type) return
-    if (msg.type === 'qr') entry.qrListeners.forEach(fn => fn(msg.data))
-    if (msg.type === 'status') entry.statusListeners.forEach(fn => fn(msg.data, msg.phone))
+    if (msg.type === 'qr') {
+      entry.lastQR = msg.data
+      entry.qrListeners.forEach(fn => fn(msg.data))
+    }
+    if (msg.type === 'status') {
+      if (msg.data === 'connected' || msg.data === 'disconnected') entry.lastQR = null
+      entry.statusListeners.forEach(fn => fn(msg.data, msg.phone))
+    }
     if (msg.type === 'groups' && msg.requestId) {
       const pending = pendingRequests.get(msg.requestId)
       if (pending) {
@@ -68,6 +74,7 @@ export function isRunning(userId) {
 export function onQR(userId, fn) {
   const entry = bots.get(userId)
   if (!entry) return () => {}
+  if (entry.lastQR) fn(entry.lastQR)
   entry.qrListeners.add(fn)
   return () => entry.qrListeners.delete(fn)
 }

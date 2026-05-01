@@ -12,6 +12,7 @@ import { resolve } from 'path'
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
+import { fetchProductImage } from './converters/imageScrapers.js'
 import db from './db.js'
 
 const userId = process.env.BOT_USER_ID
@@ -55,8 +56,14 @@ async function loadConfig() {
   for (const c of user.credentials) credentials[c.platform] = JSON.parse(c.data)
 
   const groups = {
-    monitor: user.groups.filter(g => g.role === 'monitor').map(g => g.waJid),
-    post:    user.groups.filter(g => g.role === 'post').map(g => g.waJid),
+    monitor: user.groups.filter(g => g.role === 'monitor').map(g => ({
+      waJid: g.waJid,
+      imageMode: g.imageMode,
+      imageLinkTarget: g.imageLinkTarget,
+      fallbackToOriginal: g.fallbackToOriginal,
+    })),
+    monitorJids: user.groups.filter(g => g.role === 'monitor').map(g => g.waJid),
+    post: user.groups.filter(g => g.role === 'post').map(g => g.waJid),
   }
 
   const botConfig = user.botConfig ?? {
@@ -232,7 +239,7 @@ async function startBot() {
       const jid = msg.key.remoteJid
       const cfg = await getConfig()
       logger.info({ jid, monitorGroups: cfg.groups.monitor }, 'mensagem recebida')
-      if (!cfg.groups.monitor.includes(jid)) continue
+      if (!cfg.groups.monitorJids.includes(jid)) continue
 
       const text =
         msg.message?.conversation ||
@@ -255,6 +262,30 @@ async function startBot() {
 
       // Filtro por plataforma
       const enabledPlatforms = new Set(cfg.botConfig.platforms.split(',').filter(Boolean))
+      const monitorGroup = cfg.groups.monitor.find(m => m.waJid === jid)
+
+      // Pre-fetch image URL uma vez por mensagem (lazy, com cache)
+      let cachedImageUrl
+      let imageFetched = false
+      async function getImageUrl() {
+        if (imageFetched) return cachedImageUrl
+        imageFetched = true
+        if (!monitorGroup || monitorGroup.imageMode === 'none') return null
+        if (monitorGroup.imageMode === 'original') {
+          cachedImageUrl = msg.message?.imageMessage?.url || null
+          return cachedImageUrl
+        }
+        if (monitorGroup.imageMode === 'fetch') {
+          const enabled = links.filter(l => enabledPlatforms.has(l.platform))
+          const target = monitorGroup.imageLinkTarget === 'first' ? enabled[0] : enabled[enabled.length - 1]
+          if (target) cachedImageUrl = await fetchProductImage(target.platform, target.url)
+          if (!cachedImageUrl && monitorGroup.fallbackToOriginal) {
+            cachedImageUrl = msg.message?.imageMessage?.url || null
+          }
+          return cachedImageUrl
+        }
+        return null
+      }
 
       for (const { platform, url } of links) {
         if (!enabledPlatforms.has(platform)) {
@@ -283,9 +314,17 @@ async function startBot() {
             await sleep(ms)
           }
 
+          const imageUrl = monitorGroup?.imageMode !== 'none' ? await getImageUrl() : null
+          const msgPayload = imageUrl
+            ? { image: { url: imageUrl }, caption: finalText }
+            : { text: finalText }
+
           try {
-            await sock.sendMessage(destJid, { text: finalText })
-            logger.info({ destJid, platform }, 'Mensagem enviada')
+            await sock.sendMessage(destJid, msgPayload)
+            logger.info({ destJid, platform, imageMode: monitorGroup?.imageMode }, 'Mensagem enviada')
+            db.messageLog.create({
+              data: { userId, platform, sourceGroup: jid, destGroup: destJid, originalUrl: url, convertedUrl: converted, messageText: finalText, status: 'success' },
+            }).catch(() => {})
             if (cfg.plan === 'basic') {
               adSendCount++
               if (adSendCount % 50 === 0) {
@@ -294,6 +333,9 @@ async function startBot() {
             }
           } catch (err) {
             logger.error({ destJid, err: err.message }, 'Erro ao enviar')
+            db.messageLog.create({
+              data: { userId, platform, sourceGroup: jid, destGroup: destJid, originalUrl: url, convertedUrl: converted, messageText: finalText, status: 'error', errorMsg: err.message },
+            }).catch(() => {})
           }
         }
       }

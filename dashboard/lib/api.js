@@ -44,6 +44,8 @@ export const api = {
   groups: () => apiFetch('/api/groups'),
   addGroup: (waJid, name, role) =>
     apiFetch('/api/groups', { method: 'POST', body: JSON.stringify({ waJid, name, role }) }),
+  updateGroup: (id, data) =>
+    apiFetch(`/api/groups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteGroup: (id) => apiFetch(`/api/groups/${id}`, { method: 'DELETE' }),
 
   credentials: () => apiFetch('/api/credentials'),
@@ -65,6 +67,10 @@ export const api = {
   scheduledCancel: (id) => apiFetch(`/api/broadcast/scheduled/${id}`, { method: 'DELETE' }),
 
   dashboardStatus: () => apiFetch('/api/dashboard/status'),
+
+  logs: (status = 'all', page = 1, limit = 20) =>
+    apiFetch(`/api/logs?status=${status}&page=${page}&limit=${limit}`),
+  logsClear: () => apiFetch('/api/logs/clear', { method: 'DELETE' }),
 }
 
 export function openQRSocket(token, onMessage) {
