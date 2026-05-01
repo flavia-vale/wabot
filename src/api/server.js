@@ -9,6 +9,8 @@ import { sessionRoutes } from './routes/session.js'
 import { groupsRoutes } from './routes/groups.js'
 import { credentialsRoutes } from './routes/credentials.js'
 import { paymentsRoutes } from './routes/payments.js'
+import { configRoutes } from './routes/config.js'
+import { broadcastRoutes } from './routes/broadcast.js'
 
 const app = Fastify({ logger: true })
 
@@ -26,6 +28,8 @@ app.register(sessionRoutes, { prefix: '/api/session' })
 app.register(groupsRoutes, { prefix: '/api/groups' })
 app.register(credentialsRoutes, { prefix: '/api/credentials' })
 app.register(paymentsRoutes, { prefix: '/api/payments' })
+app.register(configRoutes, { prefix: '/api/config' })
+app.register(broadcastRoutes, { prefix: '/api/broadcast' })
 
 app.get('/health', () => ({ ok: true }))
 

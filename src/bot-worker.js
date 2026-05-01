@@ -30,10 +30,16 @@ function saveDedup(store) {
   writeFileSync(DEDUP_FILE, JSON.stringify(store), 'utf8')
 }
 
+const sleep = ms => new Promise(res => setTimeout(res, ms))
+
+// Config cache com TTL de 60s
+let configCache = null
+let configCacheTime = 0
+
 async function loadConfig() {
   const user = await db.user.findUnique({
     where: { id: userId },
-    include: { groups: true, credentials: true },
+    include: { groups: true, credentials: true, botConfig: true },
   })
   if (!user) throw new Error(`Usuário ${userId} não encontrado`)
 
@@ -51,8 +57,55 @@ async function loadConfig() {
     post:    user.groups.filter(g => g.role === 'post').map(g => g.waJid),
   }
 
-  return { credentials, groups, plan: user.plan }
+  const botConfig = user.botConfig ?? {
+    delayMin: 5,
+    delayMax: 15,
+    platforms: 'shopee,amazon,mercadolivre,magazineluiza',
+    blockedKeywords: '',
+    welcomeMsg: '',
+  }
+
+  return { credentials, groups, plan: user.plan, botConfig }
 }
+
+async function getConfig() {
+  if (!configCache || Date.now() - configCacheTime > 60_000) {
+    configCache = await loadConfig()
+    configCacheTime = Date.now()
+  }
+  return configCache
+}
+
+// Checa e envia mensagens agendadas pendentes
+async function checkScheduledMessages() {
+  if (!activeSock) return
+  try {
+    const pending = await db.scheduledMessage.findMany({
+      where: { userId, status: 'pending', scheduledAt: { lte: new Date() } },
+    })
+    for (const msg of pending) {
+      const jids = JSON.parse(msg.targetJids)
+      let allOk = true
+      for (const jid of jids) {
+        try {
+          await activeSock.sendMessage(jid, { text: msg.text })
+          logger.info({ jid }, 'Mensagem agendada enviada')
+        } catch (err) {
+          logger.error({ jid, err: err.message }, 'Erro ao enviar mensagem agendada')
+          allOk = false
+        }
+      }
+      await db.scheduledMessage.update({
+        where: { id: msg.id },
+        data: { status: allOk ? 'sent' : 'failed', sentAt: new Date() },
+      })
+    }
+  } catch (err) {
+    logger.error({ err: err.message }, 'Erro ao processar agendamentos')
+  }
+}
+
+setInterval(checkScheduledMessages, 30_000)
 
 const INVITE_RE = /🚀?\s*Participe do Grupo[:\s]+https:\/\/chat\.whatsapp\.com\/\S+/gi
 
@@ -72,7 +125,7 @@ const AD_TEXT = '💡 Bot gerenciado pelo WaBot — automatize seus grupos de af
 let adSendCount = 0
 
 async function startBot() {
-  const { credentials, groups, plan } = await loadConfig()
+  const { credentials, groups, plan, botConfig } = await getConfig()
 
   const dedupeWindowMs = 300_000
   const dedup = loadDedup()
@@ -121,6 +174,7 @@ async function startBot() {
     if (connection === 'close') {
       const code = new Boom(lastDisconnect?.error)?.output?.statusCode
       const shouldReconnect = code !== DisconnectReason.loggedOut
+      activeSock = null
       if (process.send) process.send({ type: 'status', data: 'disconnected' })
       await db.waSession.upsert({
         where: { userId },
@@ -128,6 +182,24 @@ async function startBot() {
         update: { status: 'disconnected' },
       }).catch(() => {})
       if (shouldReconnect) startBot()
+    }
+  })
+
+  // Welcome msg quando alguém entra nos grupos de postagem
+  sock.ev.on('group-participants.update', async ({ id: groupJid, participants, action }) => {
+    if (action !== 'add') return
+    const cfg = await getConfig()
+    if (!cfg.botConfig.welcomeMsg || !cfg.groups.post.includes(groupJid)) return
+    for (const participantJid of participants) {
+      try {
+        await sock.sendMessage(groupJid, {
+          text: cfg.botConfig.welcomeMsg,
+          mentions: [participantJid],
+        })
+        logger.info({ groupJid, participantJid }, 'Welcome msg enviada')
+      } catch (err) {
+        logger.error({ err: err.message }, 'Erro ao enviar welcome msg')
+      }
     }
   })
 
@@ -146,8 +218,9 @@ async function startBot() {
       saveDedup(dedup)
 
       const jid = msg.key.remoteJid
-      logger.info({ jid, monitorGroups: groups.monitor }, 'mensagem recebida')
-      if (!groups.monitor.includes(jid)) continue
+      const cfg = await getConfig()
+      logger.info({ jid, monitorGroups: cfg.groups.monitor }, 'mensagem recebida')
+      if (!cfg.groups.monitor.includes(jid)) continue
 
       const text =
         msg.message?.conversation ||
@@ -156,17 +229,34 @@ async function startBot() {
 
       if (!text) continue
 
+      // Filtro por palavras bloqueadas
+      if (cfg.botConfig.blockedKeywords) {
+        const blocked = cfg.botConfig.blockedKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean)
+        const lower = text.toLowerCase()
+        if (blocked.some(kw => lower.includes(kw))) {
+          logger.info({ blocked }, 'Mensagem bloqueada por keyword'); continue
+        }
+      }
+
       const links = detectLinks(text)
       if (!links.length) continue
 
+      // Filtro por plataforma
+      const enabledPlatforms = new Set(cfg.botConfig.platforms.split(',').filter(Boolean))
+
       for (const { platform, url } of links) {
+        if (!enabledPlatforms.has(platform)) {
+          logger.info({ platform }, 'Plataforma desabilitada — pulando')
+          continue
+        }
+
         logger.info({ platform, url }, 'Link detectado')
-        const converted = await convertLink(platform, url, credentials)
+        const converted = await convertLink(platform, url, cfg.credentials)
         if (!converted) { logger.warn({ platform, url }, 'Conversão falhou'); continue }
 
         const finalText = buildMessage(text, converted, url, null)
 
-        for (const destJid of groups.post) {
+        for (const destJid of cfg.groups.post) {
           const key = `${destJid}:${converted}`
           if (dedup.links[key] && Date.now() - dedup.links[key] < dedupeWindowMs) {
             logger.info({ destJid, converted }, 'Duplicata ignorada'); continue
@@ -174,10 +264,17 @@ async function startBot() {
           dedup.links[key] = Date.now()
           saveDedup(dedup)
 
+          // Delay configurável antes de cada envio
+          const { delayMin, delayMax } = cfg.botConfig
+          if (delayMax > 0) {
+            const ms = (delayMin + Math.random() * Math.max(0, delayMax - delayMin)) * 1000
+            await sleep(ms)
+          }
+
           try {
             await sock.sendMessage(destJid, { text: finalText })
             logger.info({ destJid, platform }, 'Mensagem enviada')
-            if (plan === 'basic') {
+            if (cfg.plan === 'basic') {
               adSendCount++
               if (adSendCount % 50 === 0) {
                 await sock.sendMessage(destJid, { text: AD_TEXT }).catch(() => {})
@@ -192,11 +289,17 @@ async function startBot() {
   })
 }
 
-process.on('message', msg => {
+process.on('message', async msg => {
   if (msg?.type === 'stop') {
     logger.info('Bot parando por solicitação do manager')
     process.exit(0)
   }
+
+  if (msg?.type === 'reloadConfig') {
+    configCache = null
+    logger.info('Config recarregada')
+  }
+
   if (msg?.type === 'listGroups') {
     if (!activeSock) {
       process.send({ type: 'groups', requestId: msg.requestId, data: [], error: 'Bot não conectado' })
@@ -210,6 +313,25 @@ process.on('message', msg => {
       .catch(err => {
         process.send({ type: 'groups', requestId: msg.requestId, data: [], error: err.message })
       })
+  }
+
+  if (msg?.type === 'broadcast') {
+    if (!activeSock) {
+      process.send({ type: 'broadcastResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      return
+    }
+    let sent = 0
+    const errors = []
+    for (const jid of msg.jids) {
+      try {
+        await activeSock.sendMessage(jid, { text: msg.text })
+        sent++
+      } catch (err) {
+        errors.push({ jid, error: err.message })
+        logger.error({ jid, err: err.message }, 'Erro no broadcast')
+      }
+    }
+    process.send({ type: 'broadcastResult', requestId: msg.requestId, data: { sent, errors } })
   }
 })
 

@@ -21,6 +21,8 @@ export default function DashboardLayout({ children }) {
     { href: '/dashboard', label: '📱 WhatsApp' },
     { href: '/dashboard/grupos', label: '👥 Grupos' },
     { href: '/dashboard/credenciais', label: '🔑 Credenciais' },
+    { href: '/dashboard/configuracoes', label: '⚙️ Configurações' },
+    { href: '/dashboard/envio', label: '📤 Envio' },
     { href: '/dashboard/planos', label: '💳 Planos' },
   ]
 

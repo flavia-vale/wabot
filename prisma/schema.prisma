@@ -22,6 +22,8 @@ model User {
   groups      Group[]
   credentials Credential[]
   payments    Payment[]
+  botConfig   BotConfig?
+  scheduled   ScheduledMessage[]
 }
 
 model WaSession {
@@ -63,5 +65,29 @@ model Payment {
   status      String    @default("pending")
   amount      Float
   expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+model BotConfig {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  delayMin        Int      @default(5)
+  delayMax        Int      @default(15)
+  platforms       String   @default("shopee,amazon,mercadolivre,magazineluiza")
+  blockedKeywords String   @default("")
+  welcomeMsg      String   @default("")
+  updatedAt       DateTime @updatedAt
+}
+
+model ScheduledMessage {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text        String
+  targetJids  String
+  scheduledAt DateTime
+  sentAt      DateTime?
+  status      String    @default("pending")
   createdAt   DateTime  @default(now())
 }

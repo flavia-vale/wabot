@@ -1,0 +1,42 @@
+import db from '../../db.js'
+import { reloadConfig } from '../../manager.js'
+
+const DEFAULTS = {
+  delayMin: 5,
+  delayMax: 15,
+  platforms: 'shopee,amazon,mercadolivre,magazineluiza',
+  blockedKeywords: '',
+  welcomeMsg: '',
+}
+
+export async function configRoutes(app) {
+  app.get('/', { onRequest: [app.authenticate] }, async (req) => {
+    const cfg = await db.botConfig.findUnique({ where: { userId: req.user.sub } })
+    return cfg ?? { ...DEFAULTS, userId: req.user.sub }
+  })
+
+  app.put('/', { onRequest: [app.authenticate] }, async (req) => {
+    const userId = req.user.sub
+    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg } = req.body ?? {}
+    const cfg = await db.botConfig.upsert({
+      where: { userId },
+      create: {
+        userId,
+        delayMin: delayMin ?? DEFAULTS.delayMin,
+        delayMax: delayMax ?? DEFAULTS.delayMax,
+        platforms: platforms ?? DEFAULTS.platforms,
+        blockedKeywords: blockedKeywords ?? '',
+        welcomeMsg: welcomeMsg ?? '',
+      },
+      update: {
+        ...(delayMin !== undefined && { delayMin }),
+        ...(delayMax !== undefined && { delayMax }),
+        ...(platforms !== undefined && { platforms }),
+        ...(blockedKeywords !== undefined && { blockedKeywords }),
+        ...(welcomeMsg !== undefined && { welcomeMsg }),
+      },
+    })
+    reloadConfig(userId)
+    return cfg
+  })
+}

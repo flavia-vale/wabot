@@ -46,6 +46,16 @@ export const api = {
   paymentsStatus: () => apiFetch('/api/payments/status'),
   paymentsCheckout: (plan) =>
     apiFetch('/api/payments/checkout', { method: 'POST', body: JSON.stringify({ plan }) }),
+
+  getConfig: () => apiFetch('/api/config'),
+  saveConfig: (data) => apiFetch('/api/config', { method: 'PUT', body: JSON.stringify(data) }),
+
+  broadcastSend: (text, jids) =>
+    apiFetch('/api/broadcast/send', { method: 'POST', body: JSON.stringify({ text, jids }) }),
+  scheduledList: () => apiFetch('/api/broadcast/scheduled'),
+  scheduledCreate: (text, scheduledAt) =>
+    apiFetch('/api/broadcast/scheduled', { method: 'POST', body: JSON.stringify({ text, scheduledAt }) }),
+  scheduledCancel: (id) => apiFetch(`/api/broadcast/scheduled/${id}`, { method: 'DELETE' }),
 }
 
 export function openQRSocket(token, onMessage) {

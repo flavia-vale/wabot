@@ -27,6 +27,14 @@ export function startBot(userId) {
       const pending = pendingRequests.get(msg.requestId)
       if (pending) { pending.resolve(msg.data); pendingRequests.delete(msg.requestId) }
     }
+    if (msg.type === 'broadcastResult' && msg.requestId) {
+      const pending = pendingRequests.get(msg.requestId)
+      if (pending) {
+        if (msg.error) pending.reject(new Error(msg.error))
+        else pending.resolve(msg.data)
+        pendingRequests.delete(msg.requestId)
+      }
+    }
   })
 
   proc.on('exit', () => bots.delete(userId))
@@ -51,6 +59,13 @@ export function onQR(userId, fn) {
   return () => entry.qrListeners.delete(fn)
 }
 
+export function onStatus(userId, fn) {
+  const entry = bots.get(userId)
+  if (!entry) return () => {}
+  entry.statusListeners.add(fn)
+  return () => entry.statusListeners.delete(fn)
+}
+
 export function listGroups(userId) {
   return new Promise((resolve, reject) => {
     const entry = bots.get(userId)
@@ -67,9 +82,25 @@ export function listGroups(userId) {
   })
 }
 
-export function onStatus(userId, fn) {
+export function sendBroadcast(userId, text, jids) {
+  return new Promise((resolve, reject) => {
+    const entry = bots.get(userId)
+    if (!entry) return reject(new Error('Bot não está rodando'))
+    const requestId = Math.random().toString(36).slice(2)
+    pendingRequests.set(requestId, { resolve, reject })
+    setTimeout(() => {
+      if (pendingRequests.has(requestId)) {
+        pendingRequests.delete(requestId)
+        reject(new Error('Timeout ao enviar mensagem'))
+      }
+    }, 30000)
+    entry.proc.send({ type: 'broadcast', requestId, text, jids })
+  })
+}
+
+export function reloadConfig(userId) {
   const entry = bots.get(userId)
-  if (!entry) return () => {}
-  entry.statusListeners.add(fn)
-  return () => entry.statusListeners.delete(fn)
+  if (!entry) return false
+  try { entry.proc.send({ type: 'reloadConfig' }) } catch {}
+  return true
 }
