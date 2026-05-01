@@ -73,7 +73,9 @@ export default function DashboardPage() {
       await api.sessionForget()
       setQr(null)
       wsRef.current?.close()
+      await api.sessionStart()
       await fetchStatus()
+      openWS()
     } catch (err) {
       setError(err.message)
     } finally {
