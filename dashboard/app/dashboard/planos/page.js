@@ -1,8 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-
-export const dynamic = 'force-dynamic'
 import { api } from '@/lib/api'
 
 const PLAN_LABELS = { trial: 'Trial', basic: 'Basic', pro: 'Pro' }
@@ -14,7 +12,7 @@ function daysLeft(dateStr) {
   return Math.max(0, Math.ceil(diff / 86400000))
 }
 
-export default function PlanosPage() {
+function PlanosContent() {
   const searchParams = useSearchParams()
   const redirectStatus = searchParams.get('status')
 
@@ -77,7 +75,6 @@ export default function PlanosPage() {
         </div>
       )}
 
-      {/* Status atual */}
       <div className="bg-white rounded-2xl shadow p-5 mb-5">
         <div className="flex items-center justify-between mb-1">
           <span className="font-semibold text-gray-700">Plano atual</span>
@@ -96,7 +93,6 @@ export default function PlanosPage() {
         )}
       </div>
 
-      {/* Planos */}
       <div className="grid grid-cols-2 gap-4 mb-5">
         <div className="bg-white rounded-2xl shadow p-5">
           <h3 className="font-bold text-gray-800 mb-1">Basic</h3>
@@ -133,7 +129,6 @@ export default function PlanosPage() {
         </div>
       </div>
 
-      {/* Indicação */}
       {data?.referralCode && (
         <div className="bg-white rounded-2xl shadow p-5 mb-5">
           <h3 className="font-semibold text-gray-700 mb-1">Indique e ganhe</h3>
@@ -154,7 +149,6 @@ export default function PlanosPage() {
         </div>
       )}
 
-      {/* Histórico de pagamentos */}
       {data?.payments?.length > 0 && (
         <div className="bg-white rounded-2xl shadow p-5">
           <h3 className="font-semibold text-gray-700 mb-3">Histórico</h3>
@@ -179,5 +173,13 @@ export default function PlanosPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function PlanosPage() {
+  return (
+    <Suspense fallback={<p className="text-gray-500">Carregando...</p>}>
+      <PlanosContent />
+    </Suspense>
   )
 }
