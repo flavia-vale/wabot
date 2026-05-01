@@ -1,5 +1,7 @@
 import { startBot, stopBot, isRunning, onQR, onStatus, listGroups } from '../../manager.js'
 import db from '../../db.js'
+import { rm } from 'fs/promises'
+import { resolve } from 'path'
 
 export async function sessionRoutes(app) {
   app.post('/start', { onRequest: [app.authenticate] }, async (req, reply) => {
@@ -47,6 +49,18 @@ export async function sessionRoutes(app) {
     } catch (err) {
       return reply.code(400).send({ error: err.message })
     }
+  })
+
+  app.post('/forget', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const userId = req.user.sub
+    stopBot(userId)
+    await db.waSession.updateMany({
+      where: { userId },
+      data: { status: 'disconnected', phone: null },
+    }).catch(() => {})
+    const authDir = resolve(`./auth_info/${userId}`)
+    await rm(authDir, { recursive: true, force: true })
+    return { ok: true }
   })
 
   // WebSocket: emite QR em tempo real (token via query string porque browser não envia headers em WS)

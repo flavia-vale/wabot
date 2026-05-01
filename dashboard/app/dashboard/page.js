@@ -65,6 +65,22 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleForget() {
+    if (!confirm('Esquecer o número vai desconectar o bot e apagar a sessão salva. Você precisará escanear um novo QR Code. Continuar?')) return
+    setError('')
+    setLoading(true)
+    try {
+      await api.sessionForget()
+      setQr(null)
+      wsRef.current?.close()
+      await fetchStatus()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const isConnected = status?.status === 'connected'
   const isConnecting = status?.status === 'connecting'
 
@@ -100,7 +116,7 @@ export default function DashboardPage() {
       {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
 
       {/* Botões */}
-      <div className="flex gap-3">
+      <div className="flex gap-3 flex-wrap">
         {!status?.running ? (
           <button
             onClick={handleStart}
@@ -118,6 +134,13 @@ export default function DashboardPage() {
             {loading ? 'Parando...' : 'Desligar bot'}
           </button>
         )}
+        <button
+          onClick={handleForget}
+          disabled={loading}
+          className="bg-gray-200 text-gray-600 px-5 py-2 rounded-lg font-semibold hover:bg-gray-300 disabled:opacity-50 transition"
+        >
+          Esquecer número
+        </button>
       </div>
     </div>
   )
