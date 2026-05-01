@@ -18,6 +18,7 @@ export default function DashboardLayout({ children }) {
   }
 
   const nav = [
+    { href: '/dashboard/inicio', label: '🏠 Início' },
     { href: '/dashboard', label: '📱 WhatsApp' },
     { href: '/dashboard/grupos', label: '👥 Grupos' },
     { href: '/dashboard/credenciais', label: '🔑 Credenciais' },

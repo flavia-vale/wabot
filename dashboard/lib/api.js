@@ -61,6 +61,8 @@ export const api = {
   scheduledCreate: (text, scheduledAt) =>
     apiFetch('/api/broadcast/scheduled', { method: 'POST', body: JSON.stringify({ text, scheduledAt }) }),
   scheduledCancel: (id) => apiFetch(`/api/broadcast/scheduled/${id}`, { method: 'DELETE' }),
+
+  dashboardStatus: () => apiFetch('/api/dashboard/status'),
 }
 
 export function openQRSocket(token, onMessage) {

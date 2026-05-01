@@ -11,6 +11,7 @@ import { credentialsRoutes } from './routes/credentials.js'
 import { paymentsRoutes } from './routes/payments.js'
 import { configRoutes } from './routes/config.js'
 import { broadcastRoutes } from './routes/broadcast.js'
+import { dashboardRoutes } from './routes/dashboard.js'
 
 const app = Fastify({ logger: true })
 
@@ -30,6 +31,7 @@ app.register(credentialsRoutes, { prefix: '/api/credentials' })
 app.register(paymentsRoutes, { prefix: '/api/payments' })
 app.register(configRoutes, { prefix: '/api/config' })
 app.register(broadcastRoutes, { prefix: '/api/broadcast' })
+app.register(dashboardRoutes, { prefix: '/api/dashboard' })
 
 app.get('/health', () => ({ ok: true }))
 
