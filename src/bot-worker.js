@@ -16,6 +16,8 @@ import db from './db.js'
 const userId = process.env.BOT_USER_ID
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
 
+let activeSock = null
+
 const AUTH_DIR = resolve(`./auth_info/${userId}`)
 const DEDUP_FILE = resolve(`./logs/dedup_${userId}.json`)
 
@@ -106,6 +108,7 @@ async function startBot() {
     }
 
     if (connection === 'open') {
+      activeSock = sock
       const phone = sock.user?.id?.split(':')[0] ?? null
       if (process.send) process.send({ type: 'status', data: 'connected', phone })
       await db.waSession.upsert({
@@ -188,6 +191,20 @@ process.on('message', msg => {
   if (msg?.type === 'stop') {
     logger.info('Bot parando por solicitação do manager')
     process.exit(0)
+  }
+  if (msg?.type === 'listGroups') {
+    if (!activeSock) {
+      process.send({ type: 'groups', requestId: msg.requestId, data: [], error: 'Bot não conectado' })
+      return
+    }
+    activeSock.groupFetchAllParticipating()
+      .then(groups => {
+        const list = Object.entries(groups).map(([id, g]) => ({ waJid: id, name: g.subject }))
+        process.send({ type: 'groups', requestId: msg.requestId, data: list })
+      })
+      .catch(err => {
+        process.send({ type: 'groups', requestId: msg.requestId, data: [], error: err.message })
+      })
   }
 })
 

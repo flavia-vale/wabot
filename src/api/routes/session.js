@@ -1,4 +1,4 @@
-import { startBot, stopBot, isRunning, onQR, onStatus } from '../../manager.js'
+import { startBot, stopBot, isRunning, onQR, onStatus, listGroups } from '../../manager.js'
 import db from '../../db.js'
 
 export async function sessionRoutes(app) {
@@ -36,6 +36,16 @@ export async function sessionRoutes(app) {
       running: isRunning(userId),
       status: session?.status ?? 'disconnected',
       phone: session?.phone ?? null,
+    }
+  })
+
+  app.get('/wa-groups', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const userId = req.user.sub
+    try {
+      const groups = await listGroups(userId)
+      return groups
+    } catch (err) {
+      return reply.code(400).send({ error: err.message })
     }
   })
 

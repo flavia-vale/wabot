@@ -32,6 +32,7 @@ export const api = {
   sessionStatus: () => apiFetch('/api/session/status'),
   sessionStart: () => apiFetch('/api/session/start', { method: 'POST' }),
   sessionStop: () => apiFetch('/api/session/stop', { method: 'POST' }),
+  sessionWAGroups: () => apiFetch('/api/session/wa-groups'),
 
   groups: () => apiFetch('/api/groups'),
   addGroup: (waJid, name, role) =>
