@@ -6,6 +6,7 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
+import { rm } from 'fs/promises'
 import { resolve } from 'path'
 
 import logger from './logger.js'
@@ -177,7 +178,7 @@ async function startBot() {
 
     if (connection === 'close') {
       const code = new Boom(lastDisconnect?.error)?.output?.statusCode
-      const shouldReconnect = code !== DisconnectReason.loggedOut
+      const isLoggedOut = code === DisconnectReason.loggedOut
       activeSock = null
       pendingSock = null
       if (process.send) process.send({ type: 'status', data: 'disconnected' })
@@ -186,7 +187,13 @@ async function startBot() {
         create: { userId, status: 'disconnected' },
         update: { status: 'disconnected' },
       }).catch(() => {})
-      if (shouldReconnect) setTimeout(startBot, 5_000)
+      if (isLoggedOut) {
+        // Sessão revogada/expirada — limpar auth para que próximo start gere QR limpo
+        await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
+        logger.info('Sessão encerrada pelo servidor WA — auth_info limpo automaticamente')
+      } else {
+        setTimeout(startBot, 5_000)
+      }
     }
   })
 

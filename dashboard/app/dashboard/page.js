@@ -50,6 +50,14 @@ export default function DashboardPage() {
       await api.sessionStart()
       await fetchStatus()
       openWS()
+      // Verificar após 6s se ainda está rodando — detecta loggedOut imediato
+      setTimeout(async () => {
+        const s = await api.sessionStatus().catch(() => null)
+        if (s && !s.running && s.status === 'disconnected') {
+          setQr(null)
+          setStatus(s)
+        }
+      }, 6000)
     } catch (err) {
       setError(err.message)
     } finally {
