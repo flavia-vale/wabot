@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  passwordHash   String
+  plan           String    @default("trial")
+  trialExpiresAt DateTime?
+  sendCount      Int       @default(0)
+  referralCode   String?   @unique
+  referredBy     String?
+  createdAt      DateTime  @default(now())
+
+  waSession   WaSession?
+  groups      Group[]
+  credentials Credential[]
+  payments    Payment[]
+}
+
+model WaSession {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone     String?
+  status    String   @default("disconnected")
+  updatedAt DateTime @updatedAt
+}
+
+model Group {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  waJid  String
+  name   String
+  role   String
+
+  @@unique([userId, waJid, role])
+}
+
+model Credential {
+  id       String @id @default(cuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform String
+  data     String
+
+  @@unique([userId, platform])
+}
+
+model Payment {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mpPaymentId String?   @unique
+  plan        String
+  status      String    @default("pending")
+  amount      Float
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+}

@@ -1,0 +1,25 @@
+{
+  "credentials": {
+    "mercadolivre": {
+      "tag": "SEU_TAG_NUMERICO",
+      "ssid": "SEU_COOKIE_SSID"
+    },
+    "amazon": {
+      "tag": "sua-tag-20",
+      "marketplace": "amazon.com.br"
+    },
+    "shopee": {
+      "appId": "SEU_APP_ID",
+      "secretKey": "SUA_CHAVE_SECRETA"
+    },
+    "magazineluiza": {
+      "tag": "SUA_TAG"
+    }
+  },
+  "groups": {
+    "monitor": ["ID_DO_GRUPO_FONTE@g.us"],
+    "post": ["ID_DO_GRUPO_DESTINO@g.us"]
+  },
+  "groupInvite": "https://chat.whatsapp.com/SEU_LINK_DE_CONVITE",
+  "dedupeWindowMs": 300000
+}
