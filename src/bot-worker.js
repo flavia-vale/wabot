@@ -132,6 +132,7 @@ async function startBot() {
   })
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    logger.info({ type, count: messages.length }, 'messages.upsert recebido')
     if (type !== 'notify') return
 
     for (const msg of messages) {
@@ -142,6 +143,7 @@ async function startBot() {
       saveDedup(dedup)
 
       const jid = msg.key.remoteJid
+      logger.info({ jid, monitorGroups: groups.monitor }, 'mensagem recebida')
       if (!groups.monitor.includes(jid)) continue
 
       const text =
