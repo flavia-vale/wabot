@@ -287,56 +287,68 @@ async function startBot() {
         return null
       }
 
+      // Converter todos os links habilitados de uma vez
+      const conversions = []
       for (const { platform, url } of links) {
         if (!enabledPlatforms.has(platform)) {
           logger.info({ platform }, 'Plataforma desabilitada — pulando')
           continue
         }
-
         logger.info({ platform, url }, 'Link detectado')
         const converted = await convertLink(platform, url, cfg.credentials)
         if (!converted) { logger.warn({ platform, url }, 'Conversão falhou'); continue }
+        conversions.push({ platform, url, converted })
+      }
 
-        const finalText = buildMessage(text, converted, url, null)
+      if (!conversions.length) continue
 
-        for (const destJid of cfg.groups.post) {
-          const key = `${destJid}:${converted}`
-          if (dedup.links[key] && Date.now() - dedup.links[key] < dedupeWindowMs) {
-            logger.info({ destJid, converted }, 'Duplicata ignorada'); continue
-          }
-          dedup.links[key] = Date.now()
-          saveDedup(dedup)
+      // Substituir todos os links convertidos no texto original de uma vez
+      let finalText = text
+      for (const { url, converted } of conversions) {
+        finalText = finalText.replace(url, converted)
+      }
+      finalText = finalText.trimEnd()
 
-          // Delay configurável antes de cada envio
-          const { delayMin, delayMax } = cfg.botConfig
-          if (delayMax > 0) {
-            const ms = (delayMin + Math.random() * Math.max(0, delayMax - delayMin)) * 1000
-            await sleep(ms)
-          }
+      const primary = conversions[0]
 
-          const imageUrl = monitorGroup?.imageMode !== 'none' ? await getImageUrl() : null
-          const msgPayload = imageUrl
-            ? { image: { url: imageUrl }, caption: finalText }
-            : { text: finalText }
+      for (const destJid of cfg.groups.post) {
+        const key = `${destJid}:${primary.converted}`
+        if (dedup.links[key] && Date.now() - dedup.links[key] < dedupeWindowMs) {
+          logger.info({ destJid }, 'Duplicata ignorada'); continue
+        }
+        dedup.links[key] = Date.now()
+        saveDedup(dedup)
 
-          try {
-            await sock.sendMessage(destJid, msgPayload)
-            logger.info({ destJid, platform, imageMode: monitorGroup?.imageMode }, 'Mensagem enviada')
-            db.messageLog.create({
-              data: { userId, platform, sourceGroup: jid, destGroup: destJid, originalUrl: url, convertedUrl: converted, messageText: finalText, status: 'success' },
-            }).catch(() => {})
-            if (cfg.plan === 'basic') {
-              adSendCount++
-              if (adSendCount % 50 === 0) {
-                await sock.sendMessage(destJid, { text: AD_TEXT }).catch(() => {})
-              }
+        // Delay configurável antes de cada envio
+        const { delayMin, delayMax } = cfg.botConfig
+        if (delayMax > 0) {
+          const ms = (delayMin + Math.random() * Math.max(0, delayMax - delayMin)) * 1000
+          await sleep(ms)
+        }
+
+        const imageUrl = monitorGroup?.imageMode !== 'none' ? await getImageUrl() : null
+        const msgPayload = imageUrl
+          ? { image: { url: imageUrl }, caption: finalText }
+          : { text: finalText }
+
+        const platforms = conversions.map(c => c.platform).join('+')
+        try {
+          await sock.sendMessage(destJid, msgPayload)
+          logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode }, 'Mensagem enviada')
+          db.messageLog.create({
+            data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: finalText, status: 'success' },
+          }).catch(() => {})
+          if (cfg.plan === 'basic') {
+            adSendCount++
+            if (adSendCount % 50 === 0) {
+              await sock.sendMessage(destJid, { text: AD_TEXT }).catch(() => {})
             }
-          } catch (err) {
-            logger.error({ destJid, err: err.message }, 'Erro ao enviar')
-            db.messageLog.create({
-              data: { userId, platform, sourceGroup: jid, destGroup: destJid, originalUrl: url, convertedUrl: converted, messageText: finalText, status: 'error', errorMsg: err.message },
-            }).catch(() => {})
           }
+        } catch (err) {
+          logger.error({ destJid, err: err.message }, 'Erro ao enviar')
+          db.messageLog.create({
+            data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: finalText, status: 'error', errorMsg: err.message },
+          }).catch(() => {})
         }
       }
     }
