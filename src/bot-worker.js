@@ -297,6 +297,7 @@ async function startBot() {
         logger.info({ platform, url }, 'Link detectado')
         const converted = await convertLink(platform, url, cfg.credentials)
         if (!converted) { logger.warn({ platform, url }, 'Conversão falhou'); continue }
+        logger.info({ platform, converted }, 'Link convertido')
         conversions.push({ platform, url, converted })
       }
 

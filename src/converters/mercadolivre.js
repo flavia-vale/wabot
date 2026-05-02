@@ -1,17 +1,24 @@
 import axios from 'axios'
 
-// Resolve URL curta (meli.la, mluvem.com) para URL completa
+// Captura apenas o Location do redirect meli.la sem seguir até o ML
+// (evita fingerprinting do ML que bloqueia requests de bot)
 async function resolve(url) {
   try {
     const res = await axios.get(url, {
-      maxRedirects: 5,
+      maxRedirects: 0,
       timeout: 8000,
       headers: { 'User-Agent': 'Mozilla/5.0' },
+      validateStatus: () => true,
     })
-    return res.request?.res?.responseUrl || res.config?.url || url
-  } catch (err) {
-    // axios lança erro em redirect — a URL final fica em err.request
-    return err?.request?._redirectable?._currentUrl || url
+    if (res.status >= 300 && res.status < 400 && res.headers?.location) {
+      const next = new URL(res.headers.location, url).toString()
+      // Se ainda for short URL, seguir mais um passo
+      if (/meli\.la|mluvem\.com/.test(next)) return resolve(next)
+      return next
+    }
+    return url
+  } catch {
+    return url
   }
 }
 
