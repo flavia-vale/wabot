@@ -44,21 +44,19 @@ async function createAffiliateLink(mlUrl, tag, ssid) {
   return null
 }
 
+const ML_HOST = /mercadolivre|mercadolibre|meli\.la|mluvem\.com/
+
 export async function convert(url, creds) {
   const { tag, ssid } = creds
   try {
+    // Checar domínio ML antes de qualquer coisa
+    if (!ML_HOST.test(new URL(url).hostname)) return null
+
     let target = url
 
     // Resolver short URLs para obter a URL real do produto ML
     if (/meli\.la|mluvem\.com/.test(url)) {
       target = await resolve(url)
-    }
-
-    const u = new URL(target)
-
-    // Garantir que é domínio ML real
-    if (!u.hostname.includes('mercadolivre') && !u.hostname.includes('mercadolibre')) {
-      return null
     }
 
     // Gerar link de afiliado real via API (retorna novo meli.la com a tag do usuário)
@@ -71,7 +69,9 @@ export async function convert(url, creds) {
       }
     }
 
-    // Fallback: injetar partner_id na URL ML resolvida
+    const u = new URL(target)
+
+    // Fallback: injetar partner_id na URL resolvida (ou na meli.la original se resolve falhou)
     for (const p of ['matt_word', 'matt_tool', 'forceInApp', 'ref', 'partner_id']) {
       u.searchParams.delete(p)
     }
