@@ -159,6 +159,38 @@ export function stopBot(userId) {
 
 ## Módulo 3 — Grupos
 
+### UX-008 · Card "Carregar grupos existentes" deve ser o primeiro da página
+**Status:** open
+**Prioridade:** média
+**Arquivo:** `dashboard/app/dashboard/grupos/page.js`
+
+**Descrição:**
+A ordem atual dos cards na página de Grupos é: [Monitorar] → [Postar] → [Carregar do WhatsApp] → [Adicionar manualmente]. O fluxo natural para um usuário novo é primeiro carregar os grupos do WhatsApp e depois classificá-los — o card de importação deveria preceder os cards de listagem.
+
+**Ordem correta:**
+1. Carregar grupos existentes (importação do WhatsApp)
+2. Monitorar (origem)
+3. Postar (destino)
+4. Adicionar manualmente (oculto — ver UX-009)
+
+**Correção:** Mover o bloco `{/* Carregar grupos do WhatsApp */}` para antes dos blocos `{/* Grupos monitorados */}` e `{/* Grupos de postagem */}` no JSX de `GruposPage`.
+
+---
+
+### UX-009 · Card "Adicionar manualmente" deve ser ocultado
+**Status:** open
+**Prioridade:** média
+**Arquivo:** `dashboard/app/dashboard/grupos/page.js`
+
+**Descrição:**
+O formulário de adição manual exige que o usuário saiba o JID técnico do grupo (ex: `120363421377996844@g.us`), informação que não é acessível na interface do WhatsApp comum. Na prática, todos os grupos devem ser adicionados via importação do WhatsApp (card "Carregar grupos existentes"). O card de adição manual é inútil para o usuário final e polui a página.
+
+**Root cause:** O card foi criado como alternativa de fallback para quando o bot está desconectado, mas o JID não é informação que o usuário consegue obter facilmente — tornando o fallback inaplicável.
+
+**Correção:** Remover o bloco JSX `{/* Formulário manual */}` e os estados/handlers associados (`form`, `error`, `loading`, `handleAdd`).
+
+---
+
 ### BUG-005 · POST /api/groups aceita campos com apenas espaços
 **Status:** done
 **Prioridade:** alta
@@ -569,6 +601,32 @@ Após conectar, o WebSocket continua aberto indefinidamente. Deveria ser fechado
 
 **Descrição:**
 Afeta leitores de tela e ferramentas de tradução automática. Correção: `lang="pt-BR"`.
+
+---
+
+### BUG-020 · Página `/dashboard/logs` retorna 404 em produção
+**Status:** open
+**Prioridade:** alta
+**Arquivo:** `dashboard/app/dashboard/logs/page.js`
+
+**Descrição:**
+Ao acessar `/dashboard/logs` no servidor de produção, o Next.js retorna "This page could not be found." (404). Localmente a página existe e está corretamente implementada — `page.js`, rota backend `/api/logs`, registro no `server.js` e métodos em `lib/api.js` estão todos presentes.
+
+**Root cause:**
+O build de produção do dashboard (`.next/`) foi gerado antes do commit `d96489d` (FEAT-003) chegar ao servidor. O `npm run build` pode ter sido executado antes do `git pull` incluir esse commit, ou o build falhou silenciosamente e o `pm2 restart dashboard` subiu com o artefato antigo — que não continha a rota `/dashboard/logs`.
+
+**Reprodução:**
+1. Acessar `http://178.105.54.0/dashboard/logs` → "This page could not be found."
+2. Acessar `/dashboard/envio` ou outras páginas → funcionam normalmente (build antigo)
+
+**Correção:**
+Rodar os comandos de rebuild no servidor SSH:
+```bash
+cd ~/wabot && git pull
+cd dashboard && npm run build && cd ..
+pm2 restart all
+```
+Verificar que o build termina sem erro antes de reiniciar. Após `pm2 restart`, religar o bot no dashboard (novo QR).
 
 ---
 
