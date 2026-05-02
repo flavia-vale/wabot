@@ -4,20 +4,20 @@ import axios from 'axios'
 // (evita fingerprinting do ML que bloqueia requests de bot)
 async function resolve(url) {
   try {
-    const res = await axios.get(url, {
+    await axios.get(url, {
       maxRedirects: 0,
       timeout: 8000,
       headers: { 'User-Agent': 'Mozilla/5.0' },
-      validateStatus: () => true,
     })
-    if (res.status >= 300 && res.status < 400 && res.headers?.location) {
-      const next = new URL(res.headers.location, url).toString()
-      // Se ainda for short URL, seguir mais um passo
+    return url
+  } catch (err) {
+    // follow-redirects lança erro na 3xx — Location fica em err.response.headers
+    const location = err?.response?.headers?.location
+    if (location) {
+      const next = new URL(location, url).toString()
       if (/meli\.la|mluvem\.com/.test(next)) return resolve(next)
       return next
     }
-    return url
-  } catch {
     return url
   }
 }
