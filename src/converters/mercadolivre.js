@@ -74,11 +74,37 @@ function extractMlbId(input) {
 function buildCanonicalCandidates(targetUrl) {
   const id = extractMlbId(targetUrl)
   if (!id) return [targetUrl]
-  return [
+  const candidates = [
+    targetUrl,
     `https://www.mercadolivre.com.br/p/${id}`,
     `https://produto.mercadolivre.com.br/${id}-x-_JM`,
-    targetUrl,
   ]
+  return [...new Set(candidates)]
+}
+
+async function tryExtractProductFromLanding(url) {
+  try {
+    const res = await axios.get(url, {
+      timeout: 8000,
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    })
+    const html = typeof res?.data === 'string' ? res.data : ''
+    const patterns = [
+      /https?:\/\/www\.mercadolivre\.com\.br\/p\/MLB[0-9]{6,}/i,
+      /https?:\/\/produto\.mercadolivre\.com\.br\/MLB[-_][0-9]{6,}[^"'\\\s<]*/i,
+      /https?:\\\/\\\/www\.mercadolivre\.com\.br\\\/p\\\/MLB[0-9]{6,}/i,
+      /https?:\\\/\\\/produto\.mercadolivre\.com\.br\\\/MLB[-_][0-9]{6,}[^"'\\\s<]*/i,
+    ]
+    for (const p of patterns) {
+      const found = html.match(p)?.[0]
+      if (!found) continue
+      const normalized = found.replace(/\\\//g, '/')
+      return canonicalizeMlProductUrl(normalized)
+    }
+    return null
+  } catch {
+    return null
+  }
 }
 
 async function tryExtractProductFromLanding(url) {
@@ -172,7 +198,7 @@ export async function resolveToCleanProductUrl(url) {
         if (extracted) target = extracted
       }
     }
-    return buildCanonicalCandidates(target)[0] ?? target
+    return target
   } catch {
     return null
   }
