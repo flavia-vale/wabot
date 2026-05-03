@@ -25,6 +25,13 @@ async function run() {
     out = await convert('https://meli.la/outro', { tag: 'TAGX', ssid: 'SSID_OK', csrf: 'CSRF' })
     assert.equal(out, 'https://meli.la/meu-link')
 
+
+    // fallback não deve devolver wrapper /gz/webdevice/config
+    axios.post = async () => { throw new Error('401') }
+    out = await convert('https://www.mercadolivre.com.br/gz/webdevice/config?go=https%3A%2F%2Fwww.mercadolivre.com.br%2Fp%2FMLB999%3Fref%3Dabc&noscript=true', { tag: 'TAGGO', ssid: 'BAD', csrf: 'CSRF' })
+    assert.ok(out.startsWith('https://www.mercadolivre.com.br/p/MLB999'))
+    assert.ok(out.includes('partner_id=TAGGO'))
+
     // fallback
     axios.post = async () => { throw new Error('401') }
     axios.get = originalGet

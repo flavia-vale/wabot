@@ -40,6 +40,53 @@ async function resolve(url) {
 
 function canonicalizeMlProductUrl(raw) {
   const u = new URL(raw)
+  // Alguns fluxos móveis do ML encapsulam destino real em ?go=
+  if (u.pathname === '/gz/webdevice/config') {
+    const go = u.searchParams.get('go')
+    if (go) {
+      try { return canonicalizeMlProductUrl(go) } catch {}
+    }
+  }
+  u.hash = ''
+  for (const p of ['matt_word', 'matt_tool', 'forceInApp', 'ref', 'partner_id', 'reco_backend', 'reco_client', 'reco_item_pos', 'reco_backend_type', 'reco_id', 'sid', 'c_id', 'c_uid', 'polycard_client']) {
+    u.searchParams.delete(p)
+  }
+  return u.toString()
+}
+
+function extractMlbId(input) {
+  if (!input) return null
+  const m = String(input).match(/\bMLB[-_]?([0-9]{6,})\b/i)
+  if (!m) return null
+  return `MLB${m[1]}`
+}
+
+function buildCanonicalCandidates(targetUrl) {
+  const id = extractMlbId(targetUrl)
+  if (!id) return [targetUrl]
+  return [
+    `https://www.mercadolivre.com.br/p/${id}`,
+    `https://produto.mercadolivre.com.br/${id}-x-_JM`,
+    targetUrl,
+  ]
+}
+
+function unwrapMlSocialUrl(raw) {
+  try {
+    const u = new URL(raw)
+    if (u.pathname === '/social/oreidapromobr') {
+      const ref = u.searchParams.get('ref')
+      if (ref) u.searchParams.set('ref', ref)
+    }
+    return u.toString()
+  } catch {
+    return raw
+  }
+  return current
+}
+
+function canonicalizeMlProductUrl(raw) {
+  const u = new URL(raw)
   u.hash = ''
   for (const p of ['matt_word', 'matt_tool', 'forceInApp', 'ref', 'partner_id', 'reco_backend', 'reco_client', 'reco_item_pos', 'reco_backend_type', 'reco_id', 'sid', 'c_id', 'c_uid', 'polycard_client']) {
     u.searchParams.delete(p)
@@ -113,7 +160,7 @@ export async function convert(url, creds) {
       target = await resolve(url)
     }
 
-    target = canonicalizeMlProductUrl(target)
+    target = unwrapMlSocialUrl(canonicalizeMlProductUrl(target))
     const candidates = buildCanonicalCandidates(target)
 
     // Gerar link de afiliado real via API (retorna novo meli.la com a tag do usuário)
@@ -130,16 +177,6 @@ export async function convert(url, creds) {
       // Segunda tentativa em formato canônico mínimo (remove query inteira)
       try {
         const clean = new URL(candidates[0] ?? target)
-        clean.search = ''
-        const affiliateUrl = await createAffiliateLink(clean.toString(), tag, creds)
-        if (affiliateUrl) return affiliateUrl
-      } catch {
-        // cai no fallback
-      }
-
-      // Segunda tentativa em formato canônico mínimo (remove query inteira)
-      try {
-        const clean = new URL(target)
         clean.search = ''
         const affiliateUrl = await createAffiliateLink(clean.toString(), tag, creds)
         if (affiliateUrl) return affiliateUrl
