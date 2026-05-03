@@ -62,7 +62,11 @@ async function run() {
     out = await convert('https://www.mercadolivre.com.br/social/oreidapromobr', { resolveOnly: true })
     assert.equal(out, 'https://produto.mercadolivre.com.br/MLB-8888888888-nome-_JM')
 
-    console.log('OK: 6 cenários de conversão/resolve ML passaram')
+    // resolve-only: remove params matt_* e amp;* vindos de HTML entities
+    out = await convert('https://produto.mercadolivre.com.br/MLB-6420129610-tv-_JM?matt_event_ts=1&amp%3Bmatt_d2id=&amp%3Bmatt_tracing_id=abc', { resolveOnly: true })
+    assert.equal(out, 'https://produto.mercadolivre.com.br/MLB-6420129610-tv-_JM')
+
+    console.log('OK: 7 cenários de conversão/resolve ML passaram')
   } finally {
     axios.get = originalGet
     axios.post = originalPost

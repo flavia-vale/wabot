@@ -52,14 +52,30 @@ async function resolve(url) {
 }
 
 function canonicalizeMlProductUrl(raw) {
-  const u = new URL(raw)
+  const normalizedRaw = String(raw).replace(/&amp;/gi, '&')
+  const u = new URL(normalizedRaw)
   if (u.pathname === '/gz/webdevice/config') {
     const go = u.searchParams.get('go')
     if (go) return canonicalizeMlProductUrl(go)
   }
   u.hash = ''
-  for (const p of ['matt_word', 'matt_tool', 'forceInApp', 'ref', 'partner_id', 'reco_backend', 'reco_client', 'reco_item_pos', 'reco_backend_type', 'reco_id', 'sid', 'c_id', 'c_uid', 'polycard_client']) {
+  const removableParams = new Set([
+    'matt_word', 'matt_tool', 'matt_event_ts', 'matt_d2id', 'matt_tracing_id',
+    'forceInApp', 'ref', 'partner_id',
+    'reco_backend', 'reco_client', 'reco_item_pos', 'reco_backend_type', 'reco_id',
+    'sid', 'c_id', 'c_uid', 'polycard_client',
+  ])
+  for (const key of [...u.searchParams.keys()]) {
+    const normalizedKey = key.replace(/^amp;/i, '')
+    if (normalizedKey !== key) {
+      const values = u.searchParams.getAll(key)
+      u.searchParams.delete(key)
+      for (const value of values) u.searchParams.append(normalizedKey, value)
+    }
+  }
+  for (const p of removableParams) {
     u.searchParams.delete(p)
+    u.searchParams.delete(`amp;${p}`)
   }
   return u.toString()
 }
