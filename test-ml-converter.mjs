@@ -45,12 +45,12 @@ async function run() {
       return { data: '' }
     }
     out = await convert('https://meli.la/resolve-only', { resolveOnly: true })
-    assert.equal(out, 'https://www.mercadolivre.com.br/p/MLB9999999999')
+    assert.equal(out, 'https://produto.mercadolivre.com.br/MLB-9999999999-teste-_JM?utm=x')
 
     // resolve-only: decodifica wrapper /gz/webdevice/config?go=...
     const wrapped = 'https://www.mercadolivre.com.br/gz/webdevice/config?go=https%3A%2F%2Fproduto.mercadolivre.com.br%2FMLB-1234567890-produto-_JM%3Fmatt_word%3Dabc%26ref%3Dxyz'
     out = await convert(wrapped, { resolveOnly: true })
-    assert.equal(out, 'https://www.mercadolivre.com.br/p/MLB1234567890')
+    assert.equal(out, 'https://produto.mercadolivre.com.br/MLB-1234567890-produto-_JM')
 
     // resolve-only: social landing deve extrair link de produto real da página
     axios.get = async (url) => {
@@ -60,7 +60,7 @@ async function run() {
       return { data: '' }
     }
     out = await convert('https://www.mercadolivre.com.br/social/oreidapromobr', { resolveOnly: true })
-    assert.equal(out, 'https://www.mercadolivre.com.br/p/MLB8888888888')
+    assert.equal(out, 'https://produto.mercadolivre.com.br/MLB-8888888888-nome-_JM')
 
     console.log('OK: 6 cenários de conversão/resolve ML passaram')
   } finally {
