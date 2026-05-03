@@ -81,6 +81,31 @@ function buildCanonicalCandidates(targetUrl) {
   ]
 }
 
+async function tryExtractProductFromLanding(url) {
+  try {
+    const res = await axios.get(url, {
+      timeout: 8000,
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    })
+    const html = typeof res?.data === 'string' ? res.data : ''
+    const patterns = [
+      /https?:\/\/www\.mercadolivre\.com\.br\/p\/MLB[0-9]{6,}/i,
+      /https?:\/\/produto\.mercadolivre\.com\.br\/MLB[-_][0-9]{6,}[^"'\\\s<]*/i,
+      /https?:\\\/\\\/www\.mercadolivre\.com\.br\\\/p\\\/MLB[0-9]{6,}/i,
+      /https?:\\\/\\\/produto\.mercadolivre\.com\.br\\\/MLB[-_][0-9]{6,}[^"'\\\s<]*/i,
+    ]
+    for (const p of patterns) {
+      const found = html.match(p)?.[0]
+      if (!found) continue
+      const normalized = found.replace(/\\\//g, '/')
+      return canonicalizeMlProductUrl(normalized)
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 // Chama a API real de afiliados do ML para gerar um meli.la com a tag do usuário
 // Endpoint descoberto via reverse-engineering do portal afiliados.mercadolivre.com.br
 function buildCookieHeader({ ssid, csrf, cookie, id }) {
@@ -140,6 +165,13 @@ export async function resolveToCleanProductUrl(url) {
     }
 
     target = canonicalizeMlProductUrl(target)
+    if (!extractMlbId(target)) {
+      const u = new URL(target)
+      if (/^\/social\//i.test(u.pathname)) {
+        const extracted = await tryExtractProductFromLanding(target)
+        if (extracted) target = extracted
+      }
+    }
     return buildCanonicalCandidates(target)[0] ?? target
   } catch {
     return null

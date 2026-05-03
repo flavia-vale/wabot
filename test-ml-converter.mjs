@@ -52,7 +52,17 @@ async function run() {
     out = await convert(wrapped, { resolveOnly: true })
     assert.equal(out, 'https://www.mercadolivre.com.br/p/MLB1234567890')
 
-    console.log('OK: 5 cenários de conversão/resolve ML passaram')
+    // resolve-only: social landing deve extrair link de produto real da página
+    axios.get = async (url) => {
+      if (url === 'https://www.mercadolivre.com.br/social/oreidapromobr') {
+        return { data: '<html><script>window.__DATA__={"target":"https:\\/\\/produto.mercadolivre.com.br\\/MLB-8888888888-nome-_JM?ref=abc"}</script></html>' }
+      }
+      return { data: '' }
+    }
+    out = await convert('https://www.mercadolivre.com.br/social/oreidapromobr', { resolveOnly: true })
+    assert.equal(out, 'https://www.mercadolivre.com.br/p/MLB8888888888')
+
+    console.log('OK: 6 cenários de conversão/resolve ML passaram')
   } finally {
     axios.get = originalGet
     axios.post = originalPost
