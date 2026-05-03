@@ -53,6 +53,28 @@ async function run() {
     assert.equal(out, 'https://meli.la/meu-link')
     assert.equal(getCalls, 3)
 
+    // Cenário 3: meli.la com página intermediária 200 (sem 3xx) => extrai canonical e reafilia
+    axios.get = async (url) => {
+      if (url === 'https://meli.la/html') {
+        return { data: '<html><head><link rel="canonical" href="https://www.mercadolivre.com.br/p/MLB555?reco_id=xyz"></head></html>' }
+      }
+      return { data: '' }
+    }
+    axios.post = async (_reqUrl, body) => {
+      assert.equal(body.urls[0].includes('reco_id='), false)
+      return { data: { urls: [{ short_url: 'https://meli.la/reafiliado555' }] } }
+    }
+    out = await convert('https://meli.la/html', { tag: 'TAGX', ssid: 'SSID_OK', csrf: 'CSRF' })
+    assert.equal(out, 'https://meli.la/reafiliado555')
+
+    // Cenário 4: API falha nas 2 tentativas => fallback partner_id
+    axios.post = async () => { throw new Error('401') }
+    axios.get = originalGet
+    out = await convert('https://www.mercadolivre.com.br/p/MLB777?ref=old', { tag: 'TAGFALLBACK', ssid: 'BAD', csrf: 'CSRF' })
+    assert.ok(out.includes('partner_id=TAGFALLBACK'))
+    assert.ok(!out.includes('ref=old'))
+
+    console.log('OK: 4 cenários de conversão ML passaram')
     // Cenário 3: API falha nas 2 tentativas => fallback partner_id
     axios.post = async () => { throw new Error('401') }
     axios.get = originalGet

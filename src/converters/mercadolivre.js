@@ -6,11 +6,26 @@ async function resolve(url) {
   let current = url
   for (let i = 0; i < 8; i++) {
     try {
+      const res = await axios.get(current, {
       await axios.get(current, {
         maxRedirects: 0,
         timeout: 8000,
         headers: { 'User-Agent': 'Mozilla/5.0' },
       })
+
+      // Alguns meli.la retornam 200 com HTML intermediário (sem 3xx).
+      // Tentar extrair URL final via meta refresh / canonical / location.href.
+      const html = typeof res?.data === 'string' ? res.data : ''
+      const metaRefresh = html.match(/<meta[^>]*http-equiv=["']refresh["'][^>]*content=["'][^"']*url=([^"'>\s]+)["']/i)?.[1]
+      const canonical = html.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1]
+      const jsLocation = html.match(/(?:window\.)?location\.(?:href|replace)\s*=\s*["']([^"']+)["']/i)?.[1]
+      const nextFromHtml = metaRefresh || canonical || jsLocation
+      if (!nextFromHtml) return current
+
+      const next = new URL(nextFromHtml, current).toString()
+      if (next === current) return current
+      current = next
+      continue
       return current
     } catch (err) {
       const location = err?.response?.headers?.location
