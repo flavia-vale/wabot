@@ -66,7 +66,12 @@ async function run() {
     out = await convert('https://produto.mercadolivre.com.br/MLB-6420129610-tv-_JM?matt_event_ts=1&amp%3Bmatt_d2id=&amp%3Bmatt_tracing_id=abc', { resolveOnly: true })
     assert.equal(out, 'https://produto.mercadolivre.com.br/MLB-6420129610-tv-_JM')
 
-    console.log('OK: 7 cenários de conversão/resolve ML passaram')
+    // fallback: também deve limpar matt_* escapado antes de injetar partner_id
+    axios.post = async () => { throw new Error('401') }
+    out = await convert('https://produto.mercadolivre.com.br/MLB-6420129610-tv-_JM?matt_event_ts=1&amp%3Bmatt_d2id=&amp%3Bmatt_tracing_id=abc', { tag: 'TAGX', ssid: 'BAD' })
+    assert.equal(out, 'https://produto.mercadolivre.com.br/MLB-6420129610-tv-_JM?partner_id=TAGX')
+
+    console.log('OK: 8 cenários de conversão/resolve ML passaram')
   } finally {
     axios.get = originalGet
     axios.post = originalPost

@@ -265,12 +265,10 @@ export async function convert(url, creds) {
         fallbackTarget = `https://produto.mercadolivre.com.br/${fallbackId}-x-_JM`
       }
     }
-    const u = new URL(fallbackTarget)
+    const u = new URL(canonicalizeMlProductUrl(fallbackTarget))
 
     // Fallback: injetar partner_id na URL resolvida (ou na meli.la original se resolve falhou)
-    for (const p of ['matt_word', 'matt_tool', 'forceInApp', 'ref', 'partner_id']) {
-      u.searchParams.delete(p)
-    }
+    u.searchParams.delete('partner_id')
     if (tag) u.searchParams.set('partner_id', tag)
     return u.toString()
   } catch {
