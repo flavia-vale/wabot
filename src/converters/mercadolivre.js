@@ -3,6 +3,19 @@ import axios from 'axios'
 // Captura o Location do redirect meli.la sem seguir até o ML
 // (follow-redirects lança erro na 3xx — Location fica em err.response.headers)
 async function resolve(url) {
+  try {
+    const res = await fetch(url, {
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+      },
+    })
+    if (res?.url && res.url !== url) return res.url
+  } catch {
+    // fallback para resolução manual abaixo
+  }
+
   let current = url
   for (let i = 0; i < 8; i++) {
     try {
@@ -39,10 +52,30 @@ async function resolve(url) {
 }
 
 function canonicalizeMlProductUrl(raw) {
-  const u = new URL(raw)
+  const normalizedRaw = String(raw).replace(/&amp;/gi, '&')
+  const u = new URL(normalizedRaw)
+  if (u.pathname === '/gz/webdevice/config') {
+    const go = u.searchParams.get('go')
+    if (go) return canonicalizeMlProductUrl(go)
+  }
   u.hash = ''
-  for (const p of ['matt_word', 'matt_tool', 'forceInApp', 'ref', 'partner_id', 'reco_backend', 'reco_client', 'reco_item_pos', 'reco_backend_type', 'reco_id', 'sid', 'c_id', 'c_uid', 'polycard_client']) {
+  const removableParams = new Set([
+    'matt_word', 'matt_tool', 'matt_event_ts', 'matt_d2id', 'matt_tracing_id',
+    'forceInApp', 'ref', 'partner_id',
+    'reco_backend', 'reco_client', 'reco_item_pos', 'reco_backend_type', 'reco_id',
+    'sid', 'c_id', 'c_uid', 'polycard_client',
+  ])
+  for (const key of [...u.searchParams.keys()]) {
+    const normalizedKey = key.replace(/^amp;/i, '')
+    if (normalizedKey !== key) {
+      const values = u.searchParams.getAll(key)
+      u.searchParams.delete(key)
+      for (const value of values) u.searchParams.append(normalizedKey, value)
+    }
+  }
+  for (const p of removableParams) {
     u.searchParams.delete(p)
+    u.searchParams.delete(`amp;${p}`)
   }
   return u.toString()
 }
@@ -57,26 +90,53 @@ function extractMlbId(input) {
 function buildCanonicalCandidates(targetUrl) {
   const id = extractMlbId(targetUrl)
   if (!id) return [targetUrl]
-  return [
+  const candidates = [
+    targetUrl,
     `https://www.mercadolivre.com.br/p/${id}`,
     `https://produto.mercadolivre.com.br/${id}-x-_JM`,
-    targetUrl,
   ]
+  return [...new Set(candidates)]
+}
+
+async function tryExtractProductFromLanding(url) {
+  try {
+    const res = await axios.get(url, {
+      timeout: 8000,
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    })
+    const html = typeof res?.data === 'string' ? res.data : ''
+    const patterns = [
+      /https?:\/\/www\.mercadolivre\.com\.br\/p\/MLB[0-9]{6,}/i,
+      /https?:\/\/produto\.mercadolivre\.com\.br\/MLB[-_][0-9]{6,}[^"'\\\s<]*/i,
+      /https?:\\\/\\\/www\.mercadolivre\.com\.br\\\/p\\\/MLB[0-9]{6,}/i,
+      /https?:\\\/\\\/produto\.mercadolivre\.com\.br\\\/MLB[-_][0-9]{6,}[^"'\\\s<]*/i,
+    ]
+    for (const p of patterns) {
+      const found = html.match(p)?.[0]
+      if (!found) continue
+      const normalized = found.replace(/\\\//g, '/')
+      return canonicalizeMlProductUrl(normalized)
+    }
+    return null
+  } catch {
+    return null
+  }
 }
 
 // Chama a API real de afiliados do ML para gerar um meli.la com a tag do usuário
 // Endpoint descoberto via reverse-engineering do portal afiliados.mercadolivre.com.br
-function buildCookieHeader({ ssid, csrf, cookie }) {
+function buildCookieHeader({ ssid, csrf, cookie, id }) {
   if (cookie) return cookie
   const pairs = []
+  if (id) pairs.push(`id=${id}`)
   if (csrf) pairs.push(`_csrf=${csrf}`)
   if (ssid) pairs.push(`ssid=${ssid}`)
   return pairs.join('; ')
 }
 
 async function createAffiliateLink(mlUrl, tag, creds) {
-  const { ssid, csrf, cookie } = creds
-  const cookieHeader = buildCookieHeader({ ssid, csrf, cookie })
+  const { ssid, csrf, cookie, id } = creds
+  const cookieHeader = buildCookieHeader({ ssid, csrf, cookie, id })
   const res = await axios.post(
     'https://www.mercadolivre.com.br/affiliate-program/api/v2/affiliates/createLink',
     { urls: [mlUrl], tag },
@@ -98,22 +158,53 @@ async function createAffiliateLink(mlUrl, tag, creds) {
   return null
 }
 
+
+async function validateAffiliateRedirect(affiliateUrl, expectedMlbId) {
+  if (!affiliateUrl || !expectedMlbId) return false
+  try {
+    const resolved = await resolve(affiliateUrl)
+    const finalId = extractMlbId(resolved)
+    return finalId === expectedMlbId
+  } catch {
+    return false
+  }
+}
+
 const ML_HOST = /mercadolivre|mercadolibre|meli\.la|mluvem\.com/
 
-export async function convert(url, creds) {
-  const { tag, ssid } = creds
+export async function resolveToCleanProductUrl(url) {
   try {
-    // Checar domínio ML antes de qualquer coisa
     if (!ML_HOST.test(new URL(url).hostname)) return null
 
     let target = url
-
-    // Resolver short URLs para obter a URL real do produto ML
     if (/meli\.la|mluvem\.com/.test(url)) {
       target = await resolve(url)
     }
 
     target = canonicalizeMlProductUrl(target)
+    if (!extractMlbId(target)) {
+      const u = new URL(target)
+      if (/^\/social\//i.test(u.pathname)) {
+        const extracted = await tryExtractProductFromLanding(target)
+        if (extracted) target = extracted
+      }
+    }
+    return target
+  } catch {
+    return null
+  }
+}
+
+export async function convert(url, creds) {
+  const { tag, ssid, resolveOnly } = creds
+  try {
+    // Checar domínio ML antes de qualquer coisa
+    if (!ML_HOST.test(new URL(url).hostname)) return null
+
+    const cleanTarget = await resolveToCleanProductUrl(url)
+    if (!cleanTarget) return null
+    if (resolveOnly) return cleanTarget
+    const target = cleanTarget
     const candidates = buildCanonicalCandidates(target)
 
     // Gerar link de afiliado real via API (retorna novo meli.la com a tag do usuário)
@@ -121,7 +212,11 @@ export async function convert(url, creds) {
       for (const candidate of candidates) {
         try {
           const affiliateUrl = await createAffiliateLink(candidate, tag, creds)
-          if (affiliateUrl) return affiliateUrl
+          if (!affiliateUrl) continue
+          const expectedMlbId = extractMlbId(candidate) || extractMlbId(target)
+          if (!expectedMlbId || await validateAffiliateRedirect(affiliateUrl, expectedMlbId)) {
+            return affiliateUrl
+          }
         } catch {
           // tenta próximo candidato
         }
@@ -132,7 +227,14 @@ export async function convert(url, creds) {
         const clean = new URL(candidates[0] ?? target)
         clean.search = ''
         const affiliateUrl = await createAffiliateLink(clean.toString(), tag, creds)
-        if (affiliateUrl) return affiliateUrl
+        if (!affiliateUrl) {
+          // tenta próximo fallback
+        } else {
+          const expectedMlbId = extractMlbId(clean.toString()) || extractMlbId(target)
+          if (!expectedMlbId || await validateAffiliateRedirect(affiliateUrl, expectedMlbId)) {
+            return affiliateUrl
+          }
+        }
       } catch {
         // cai no fallback
       }
@@ -142,19 +244,34 @@ export async function convert(url, creds) {
         const clean = new URL(target)
         clean.search = ''
         const affiliateUrl = await createAffiliateLink(clean.toString(), tag, creds)
-        if (affiliateUrl) return affiliateUrl
+        if (!affiliateUrl) {
+          // tenta próximo fallback
+        } else {
+          const expectedMlbId = extractMlbId(clean.toString()) || extractMlbId(target)
+          if (!expectedMlbId || await validateAffiliateRedirect(affiliateUrl, expectedMlbId)) {
+            return affiliateUrl
+          }
+        }
       } catch {
         // cai no fallback
       }
     }
 
-    const u = new URL(target)
+    let fallbackTarget = target
+    const fallbackId = extractMlbId(target)
+    if (fallbackId) {
+      const parsed = new URL(target)
+      if (/^\/p\/MLB/i.test(parsed.pathname)) {
+        fallbackTarget = `https://produto.mercadolivre.com.br/${fallbackId}-x-_JM`
+      }
+    }
+    const u = new URL(fallbackTarget)
 
     // Fallback: injetar partner_id na URL resolvida (ou na meli.la original se resolve falhou)
     for (const p of ['matt_word', 'matt_tool', 'forceInApp', 'ref', 'partner_id']) {
       u.searchParams.delete(p)
     }
-    u.searchParams.set('partner_id', tag)
+    if (tag) u.searchParams.set('partner_id', tag)
     return u.toString()
   } catch {
     return null
