@@ -7,6 +7,7 @@ async function resolve(url) {
   for (let i = 0; i < 8; i++) {
     try {
       const res = await axios.get(current, {
+      await axios.get(current, {
         maxRedirects: 0,
         timeout: 8000,
         headers: { 'User-Agent': 'Mozilla/5.0' },
@@ -25,6 +26,7 @@ async function resolve(url) {
       if (next === current) return current
       current = next
       continue
+      return current
     } catch (err) {
       const location = err?.response?.headers?.location
       if (!location) return current
