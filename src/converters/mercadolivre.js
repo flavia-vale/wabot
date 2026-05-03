@@ -47,6 +47,23 @@ function canonicalizeMlProductUrl(raw) {
   return u.toString()
 }
 
+function extractMlbId(input) {
+  if (!input) return null
+  const m = String(input).match(/\bMLB[-_]?([0-9]{6,})\b/i)
+  if (!m) return null
+  return `MLB${m[1]}`
+}
+
+function buildCanonicalCandidates(targetUrl) {
+  const id = extractMlbId(targetUrl)
+  if (!id) return [targetUrl]
+  return [
+    `https://www.mercadolivre.com.br/p/${id}`,
+    `https://produto.mercadolivre.com.br/${id}-x-_JM`,
+    targetUrl,
+  ]
+}
+
 // Chama a API real de afiliados do ML para gerar um meli.la com a tag do usuário
 // Endpoint descoberto via reverse-engineering do portal afiliados.mercadolivre.com.br
 function buildCookieHeader({ ssid, csrf, cookie }) {
@@ -97,14 +114,27 @@ export async function convert(url, creds) {
     }
 
     target = canonicalizeMlProductUrl(target)
+    const candidates = buildCanonicalCandidates(target)
 
     // Gerar link de afiliado real via API (retorna novo meli.la com a tag do usuário)
     if (ssid) {
+      for (const candidate of candidates) {
+        try {
+          const affiliateUrl = await createAffiliateLink(candidate, tag, creds)
+          if (affiliateUrl) return affiliateUrl
+        } catch {
+          // tenta próximo candidato
+        }
+      }
+
+      // Segunda tentativa em formato canônico mínimo (remove query inteira)
       try {
-        const affiliateUrl = await createAffiliateLink(target, tag, creds)
+        const clean = new URL(candidates[0] ?? target)
+        clean.search = ''
+        const affiliateUrl = await createAffiliateLink(clean.toString(), tag, creds)
         if (affiliateUrl) return affiliateUrl
       } catch {
-        // Se a API falhar, cai no fallback abaixo
+        // cai no fallback
       }
 
       // Segunda tentativa em formato canônico mínimo (remove query inteira)

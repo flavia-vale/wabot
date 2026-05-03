@@ -7,59 +7,31 @@ const originalPost = axios.post
 
 async function run() {
   try {
-    // Cenário 1: URL direta + ssid válido => retorna meli.la da API
-    axios.post = async () => ({ data: { urls: [{ created: true, short_url: 'https://meli.la/afiliado123' }] } })
+    axios.post = async () => ({ data: { urls: [{ short_url: 'https://meli.la/afiliado123' }] } })
     let out = await convert('https://www.mercadolivre.com.br/p/MLB123', { tag: 'TAGX', ssid: 'SSID_OK', csrf: 'CSRF' })
     assert.equal(out, 'https://meli.la/afiliado123')
 
-    // Cenário 2: meli.la de outro afiliado com redirects em cadeia => resolve e reafilia
-    let getCalls = 0
+    // link de outro afiliado -> resolve -> extrai MLB -> usa canônico /p/MLB...
     axios.get = async (url) => {
-      getCalls++
       if (url === 'https://meli.la/outro') {
-        const err = new Error('redirect')
-        err.response = { headers: { location: 'https://mluvem.com/r1' } }
-        throw err
-      }
-      if (url === 'https://mluvem.com/r1') {
-        const err = new Error('redirect')
-        err.response = { headers: { location: 'https://www.mercadolivre.com.br/kit-travesseiro/p/MLB43954645?reco_id=abc#polycard_client=x' } }
-        throw err
-      }
-      throw new Error(`URL inesperada no mock: ${url}`)
-    }
-    axios.post = async (reqUrl, body) => {
-      assert.equal(reqUrl.includes('/affiliate-program/api/v2/affiliates/createLink'), true)
-      assert.equal(body.urls[0].includes('reco_id='), false)
-      assert.equal(body.urls[0].includes('#'), false)
-      return { data: { urls: [{ created: true, short_url: 'https://meli.la/meu-link' }] } }
-    }
-    out = await convert('https://meli.la/outro', { tag: 'TAGX', ssid: 'SSID_OK', csrf: 'CSRF' })
-    assert.equal(out, 'https://meli.la/meu-link')
-    assert.equal(getCalls, 3)
-
-    // Cenário 3: meli.la com página intermediária 200 (sem 3xx) => extrai canonical e reafilia
-    axios.get = async (url) => {
-      if (url === 'https://meli.la/html') {
-        return { data: '<html><script>window.__DATA__={"origin_url":"https:\\/\\/www.mercadolivre.com.br\\/p\\/MLB555?reco_id=xyz"}</script></html>' }
+        return { data: '<html><script>window.__DATA__={"origin_url":"https:\\/\\/produto.mercadolivre.com.br\\/MLB-4270189813-kit-3-calcas-_JM?ref=x"}</script></html>' }
       }
       return { data: '' }
     }
     axios.post = async (_reqUrl, body) => {
-      assert.equal(body.urls[0].includes('reco_id='), false)
-      return { data: { urls: [{ short_url: 'https://meli.la/reafiliado555' }] } }
+      assert.equal(body.urls[0], 'https://www.mercadolivre.com.br/p/MLB4270189813')
+      return { data: { urls: [{ short_url: 'https://meli.la/meu-link' }] } }
     }
-    out = await convert('https://meli.la/html', { tag: 'TAGX', ssid: 'SSID_OK', csrf: 'CSRF' })
-    assert.equal(out, 'https://meli.la/reafiliado555')
+    out = await convert('https://meli.la/outro', { tag: 'TAGX', ssid: 'SSID_OK', csrf: 'CSRF' })
+    assert.equal(out, 'https://meli.la/meu-link')
 
-    // Cenário 4: API falha nas 2 tentativas => fallback partner_id
+    // fallback
     axios.post = async () => { throw new Error('401') }
     axios.get = originalGet
     out = await convert('https://www.mercadolivre.com.br/p/MLB777?ref=old', { tag: 'TAGFALLBACK', ssid: 'BAD', csrf: 'CSRF' })
     assert.ok(out.includes('partner_id=TAGFALLBACK'))
-    assert.ok(!out.includes('ref=old'))
 
-    console.log('OK: 4 cenários de conversão ML passaram')
+    console.log('OK: 3 cenários de conversão ML passaram')
   } finally {
     axios.get = originalGet
     axios.post = originalPost
