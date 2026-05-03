@@ -7,6 +7,7 @@ Gerado durante processo de QA. Issues ordenadas por módulo e prioridade.
 
 ## Módulo 1 — Autenticação
 
+
 ### BUG-001 · Sem validação de formato de email no registro
 **Status:** done  
 **Prioridade:** alta  
@@ -85,6 +86,7 @@ const normalizedEmail = email.toLowerCase()
 
 ## Módulo 2 — Sessão WhatsApp
 
+
 ### BUG-003 · `wa-groups` retorna `[]` silenciosamente quando WhatsApp não está conectado
 **Status:** done  
 **Prioridade:** alta  
@@ -158,6 +160,7 @@ export function stopBot(userId) {
 ---
 
 ## Módulo 3 — Grupos
+
 
 ### UX-008 · Card "Carregar grupos existentes" deve ser o primeiro da página
 **Status:** open
@@ -287,6 +290,7 @@ const postAlready    = existingJidRoles.has(`${g.waJid}::post`)
 
 ## Módulo 4 — Credenciais
 
+
 ### BUG-007 · Credenciais salvas não aparecem nos campos ao reabrir a página
 **Status:** done
 **Prioridade:** alta
@@ -336,6 +340,7 @@ if (missing.length) return reply.code(400).send({ error: `Campos obrigatórios: 
 
 ## Módulo 5 — Configurações do Bot
 
+
 ### BUG-009 · Validação de delayMin/delayMax usa comparação de strings
 **Status:** done
 **Prioridade:** alta
@@ -382,6 +387,7 @@ if (delayMin !== undefined && delayMax !== undefined && delayMin > delayMax)
 ---
 
 ## Módulo 6 — Envio e Agendamento
+
 
 ### BUG-011 · `loadScheduled` e `handleCancel` silenciam erros
 **Status:** done
@@ -490,6 +496,7 @@ Todos os outros handlers exibem erros com `<p className="text-red-500">`. Apenas
 
 ## Módulo 8 — Lógica do Bot
 
+
 ### BUG-014 · GraphQL injection no converter Shopee
 **Status:** done
 **Prioridade:** média
@@ -528,6 +535,7 @@ if (shouldReconnect) setTimeout(startBot, 5_000)
 ---
 
 ## Módulo 9 — Indicação (Referral)
+
 
 ### BUG-016 · Página de login não lê `?ref=` da URL — link de indicação não funciona
 **Status:** done
@@ -571,6 +579,7 @@ Nenhum limite de quantas contas podem usar o mesmo `ref`. Um atacante pode criar
 ---
 
 ## Módulo 10 — Dashboard (UI / Shell)
+
 
 ### BUG-018 · Token expirado/inválido não detectado — sem auto-redirect para login
 **Status:** done
@@ -633,6 +642,7 @@ Verificar que o build termina sem erro antes de reiniciar. Após `pm2 restart`, 
 ---
 
 ## Módulo 11 — Features F5 (Polish & Novas Funcionalidades)
+
 
 ---
 
