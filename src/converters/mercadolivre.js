@@ -82,6 +82,33 @@ function unwrapMlSocialUrl(raw) {
   } catch {
     return raw
   }
+  return current
+}
+
+function canonicalizeMlProductUrl(raw) {
+  const u = new URL(raw)
+  u.hash = ''
+  for (const p of ['matt_word', 'matt_tool', 'forceInApp', 'ref', 'partner_id', 'reco_backend', 'reco_client', 'reco_item_pos', 'reco_backend_type', 'reco_id', 'sid', 'c_id', 'c_uid', 'polycard_client']) {
+    u.searchParams.delete(p)
+  }
+  return u.toString()
+}
+
+function extractMlbId(input) {
+  if (!input) return null
+  const m = String(input).match(/\bMLB[-_]?([0-9]{6,})\b/i)
+  if (!m) return null
+  return `MLB${m[1]}`
+}
+
+function buildCanonicalCandidates(targetUrl) {
+  const id = extractMlbId(targetUrl)
+  if (!id) return [targetUrl]
+  return [
+    `https://www.mercadolivre.com.br/p/${id}`,
+    `https://produto.mercadolivre.com.br/${id}-x-_JM`,
+    targetUrl,
+  ]
 }
 
 // Chama a API real de afiliados do ML para gerar um meli.la com a tag do usuário
