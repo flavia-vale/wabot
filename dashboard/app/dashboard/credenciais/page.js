@@ -3,10 +3,40 @@ import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 
 const PLATFORMS = [
-  { id: 'shopee', label: 'Shopee', fields: [{ key: 'appId', label: 'App ID' }, { key: 'secretKey', label: 'Secret Key' }] },
-  { id: 'amazon', label: 'Amazon', fields: [{ key: 'tag', label: 'Tag de afiliado' }, { key: 'marketplace', label: 'Marketplace', placeholder: 'amazon.com.br' }] },
-  { id: 'mercadolivre', label: 'Mercado Livre', fields: [{ key: 'tag', label: 'Tag numérica' }, { key: 'ssid', label: 'SSID (cookie)' }, { key: 'csrf', label: 'CSRF (cookie _csrf)' }] },
-  { id: 'magazineluiza', label: 'Magazine Luiza', fields: [{ key: 'tag', label: 'Tag de afiliado' }] },
+  {
+    id: 'shopee',
+    label: 'Shopee',
+    instructions: 'Use as credenciais do app de afiliado/API. O Secret Key deve ser mantido privado.',
+    fields: [
+      { key: 'appId', label: 'App ID', hint: 'Identificador do seu app na Shopee.' },
+      { key: 'secretKey', label: 'Secret Key', hint: 'Chave secreta do app (não compartilhe).' },
+    ]
+  },
+  {
+    id: 'amazon',
+    label: 'Amazon',
+    instructions: 'Informe seu tracking ID (tag) e o marketplace correto onde os links serão resolvidos.',
+    fields: [
+      { key: 'tag', label: 'Tag de afiliado', hint: 'Ex.: suatag-20' },
+      { key: 'marketplace', label: 'Marketplace', placeholder: 'amazon.com.br', hint: 'Domínio da loja Amazon alvo.' },
+    ]
+  },
+  {
+    id: 'mercadolivre',
+    label: 'Mercado Livre',
+    instructions: 'Para gerar meli.la corretamente, preencha os 3 campos: Tag, SSID e CSRF.',
+    fields: [
+      { key: 'tag', label: 'Tag numérica', hint: 'Somente números da sua afiliação.' },
+      { key: 'ssid', label: 'SSID (cookie)', hint: 'Valor do cookie ssid da conta afiliada.' },
+      { key: 'csrf', label: 'CSRF (cookie _csrf)', hint: 'Valor do cookie _csrf da sessão ativa.' },
+    ]
+  },
+  {
+    id: 'magazineluiza',
+    label: 'Magazine Luiza',
+    instructions: 'Preencha a tag de afiliado usada nos links do Magalu.',
+    fields: [{ key: 'tag', label: 'Tag de afiliado', hint: 'Ex.: parceiro123' }]
+  },
 ]
 
 function PlatformCard({ platform, initialData, onSave }) {
@@ -35,16 +65,22 @@ function PlatformCard({ platform, initialData, onSave }) {
 
   return (
     <div className="bg-white rounded-2xl shadow p-5 mb-4">
-      <h3 className="font-semibold text-gray-700 mb-3">{platform.label}</h3>
+      <h3 className="font-semibold text-gray-700 mb-1">{platform.label}</h3>
+      {platform.instructions && (
+        <p className="text-xs text-gray-500 mb-3">{platform.instructions}</p>
+      )}
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         {platform.fields.map(f => (
-          <input
-            key={f.key}
-            placeholder={f.label + (f.placeholder ? ` (ex: ${f.placeholder})` : '')}
-            value={values[f.key] ?? ''}
-            onChange={e => setValues(v => ({ ...v, [f.key]: e.target.value }))}
-            className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
-          />
+          <div key={f.key} className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">{f.label}</label>
+            <input
+              placeholder={f.placeholder ? `ex: ${f.placeholder}` : ''}
+              value={values[f.key] ?? ''}
+              onChange={e => setValues(v => ({ ...v, [f.key]: e.target.value }))}
+              className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
+            />
+            {f.hint && <p className="text-[11px] text-gray-400">{f.hint}</p>}
+          </div>
         ))}
         {error && <p className="text-red-500 text-sm">{error}</p>}
         <button
