@@ -136,6 +136,16 @@ export async function convert(url, creds) {
       } catch {
         // cai no fallback
       }
+
+      // Segunda tentativa em formato canônico mínimo (remove query inteira)
+      try {
+        const clean = new URL(target)
+        clean.search = ''
+        const affiliateUrl = await createAffiliateLink(clean.toString(), tag, creds)
+        if (affiliateUrl) return affiliateUrl
+      } catch {
+        // cai no fallback
+      }
     }
 
     const u = new URL(target)
