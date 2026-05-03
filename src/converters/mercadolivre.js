@@ -3,35 +3,55 @@ import axios from 'axios'
 // Captura o Location do redirect meli.la sem seguir até o ML
 // (follow-redirects lança erro na 3xx — Location fica em err.response.headers)
 async function resolve(url) {
-  try {
-    await axios.get(url, {
-      maxRedirects: 0,
-      timeout: 8000,
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-    })
-    return url
-  } catch (err) {
-    const location = err?.response?.headers?.location
-    if (location) {
-      const next = new URL(location, url).toString()
-      if (/meli\.la|mluvem\.com/.test(next)) return resolve(next)
-      return next
+  let current = url
+  for (let i = 0; i < 8; i++) {
+    try {
+      await axios.get(current, {
+        maxRedirects: 0,
+        timeout: 8000,
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+      })
+      return current
+    } catch (err) {
+      const location = err?.response?.headers?.location
+      if (!location) return current
+      current = new URL(location, current).toString()
     }
-    return url
   }
+  return current
+}
+
+function canonicalizeMlProductUrl(raw) {
+  const u = new URL(raw)
+  u.hash = ''
+  for (const p of ['matt_word', 'matt_tool', 'forceInApp', 'ref', 'partner_id', 'reco_backend', 'reco_client', 'reco_item_pos', 'reco_backend_type', 'reco_id', 'sid', 'c_id', 'c_uid', 'polycard_client']) {
+    u.searchParams.delete(p)
+  }
+  return u.toString()
 }
 
 // Chama a API real de afiliados do ML para gerar um meli.la com a tag do usuário
 // Endpoint descoberto via reverse-engineering do portal afiliados.mercadolivre.com.br
-async function createAffiliateLink(mlUrl, tag, ssid) {
+function buildCookieHeader({ ssid, csrf, cookie }) {
+  if (cookie) return cookie
+  const pairs = []
+  if (csrf) pairs.push(`_csrf=${csrf}`)
+  if (ssid) pairs.push(`ssid=${ssid}`)
+  return pairs.join('; ')
+}
+
+async function createAffiliateLink(mlUrl, tag, creds) {
+  const { ssid, csrf, cookie } = creds
+  const cookieHeader = buildCookieHeader({ ssid, csrf, cookie })
   const res = await axios.post(
     'https://www.mercadolivre.com.br/affiliate-program/api/v2/affiliates/createLink',
     { urls: [mlUrl], tag },
     {
       headers: {
         'Content-Type': 'application/json',
-        'Cookie': `ssid=${ssid}`,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        ...(cookieHeader ? { 'Cookie': cookieHeader } : {}),
+        ...(csrf ? { 'x-csrf-token': csrf } : {}),
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
         'Accept': 'application/json, text/plain, */*',
         'Referer': 'https://www.mercadolivre.com.br/afiliados/linkbuilder',
         'Origin': 'https://www.mercadolivre.com.br',
@@ -40,7 +60,7 @@ async function createAffiliateLink(mlUrl, tag, ssid) {
     }
   )
   const result = res.data?.urls?.[0]
-  if (result?.created && result?.short_url) return result.short_url
+  if (result?.short_url) return result.short_url
   return null
 }
 
@@ -59,13 +79,25 @@ export async function convert(url, creds) {
       target = await resolve(url)
     }
 
+    target = canonicalizeMlProductUrl(target)
+
     // Gerar link de afiliado real via API (retorna novo meli.la com a tag do usuário)
     if (ssid) {
       try {
-        const affiliateUrl = await createAffiliateLink(target, tag, ssid)
+        const affiliateUrl = await createAffiliateLink(target, tag, creds)
         if (affiliateUrl) return affiliateUrl
       } catch {
         // Se a API falhar, cai no fallback abaixo
+      }
+
+      // Segunda tentativa em formato canônico mínimo (remove query inteira)
+      try {
+        const clean = new URL(target)
+        clean.search = ''
+        const affiliateUrl = await createAffiliateLink(clean.toString(), tag, creds)
+        if (affiliateUrl) return affiliateUrl
+      } catch {
+        // cai no fallback
       }
     }
 
