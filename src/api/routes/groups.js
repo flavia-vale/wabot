@@ -1,5 +1,12 @@
 import db from '../../db.js'
 
+function normalizeGroupJid(rawJid) {
+  const jid = String(rawJid ?? '').trim()
+  if (!jid) return null
+  if (jid.includes('@')) return jid
+  return `${jid}@g.us`
+}
+
 export async function groupsRoutes(app) {
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
     return db.group.findMany({ where: { userId: req.user.sub } })
@@ -7,7 +14,7 @@ export async function groupsRoutes(app) {
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
     const { waJid: rawJid, name: rawName, role } = req.body ?? {}
-    const waJid = rawJid?.trim()
+    const waJid = normalizeGroupJid(rawJid)
     const name = rawName?.trim()
     if (!waJid || !name || !role) return reply.code(400).send({ error: 'waJid, name e role obrigatórios' })
     if (!['monitor', 'post'].includes(role)) return reply.code(400).send({ error: 'role deve ser monitor ou post' })

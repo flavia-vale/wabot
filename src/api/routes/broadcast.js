@@ -1,6 +1,16 @@
 import db from '../../db.js'
 import { sendBroadcast, isRunning } from '../../manager.js'
 
+function normalizeTargetJids(jids) {
+  const input = Array.isArray(jids) ? jids : []
+  return [...new Set(
+    input
+      .map(jid => String(jid ?? '').trim())
+      .filter(Boolean)
+      .map(jid => (jid.includes('@') ? jid : `${jid}@g.us`)),
+  )]
+}
+
 export async function broadcastRoutes(app) {
   app.post('/send', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
@@ -8,10 +18,10 @@ export async function broadcastRoutes(app) {
     if (!text?.trim()) return reply.code(400).send({ error: 'text obrigatório' })
     if (!isRunning(userId)) return reply.code(400).send({ error: 'Bot não está conectado' })
 
-    let targetJids = jids?.length ? jids : null
+    let targetJids = jids?.length ? normalizeTargetJids(jids) : null
     if (!targetJids) {
       const postGroups = await db.group.findMany({ where: { userId, role: 'post' } })
-      targetJids = postGroups.map(g => g.waJid)
+      targetJids = normalizeTargetJids(postGroups.map(g => g.waJid))
     }
     if (!targetJids.length) return reply.code(400).send({ error: 'Nenhum grupo de destino configurado' })
 
@@ -37,10 +47,10 @@ export async function broadcastRoutes(app) {
       return reply.code(400).send({ error: 'scheduledAt deve ser uma data futura válida' })
     }
 
-    let targetJids = jids?.length ? jids : null
+    let targetJids = jids?.length ? normalizeTargetJids(jids) : null
     if (!targetJids) {
       const postGroups = await db.group.findMany({ where: { userId, role: 'post' } })
-      targetJids = postGroups.map(g => g.waJid)
+      targetJids = normalizeTargetJids(postGroups.map(g => g.waJid))
     }
     if (!targetJids.length) return reply.code(400).send({ error: 'Nenhum grupo de destino configurado' })
 
