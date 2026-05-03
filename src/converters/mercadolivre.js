@@ -23,15 +23,26 @@ async function resolve(url) {
 
 // Chama a API real de afiliados do ML para gerar um meli.la com a tag do usuário
 // Endpoint descoberto via reverse-engineering do portal afiliados.mercadolivre.com.br
-async function createAffiliateLink(mlUrl, tag, ssid) {
+function buildCookieHeader({ ssid, csrf, cookie }) {
+  if (cookie) return cookie
+  const pairs = []
+  if (csrf) pairs.push(`_csrf=${csrf}`)
+  if (ssid) pairs.push(`ssid=${ssid}`)
+  return pairs.join('; ')
+}
+
+async function createAffiliateLink(mlUrl, tag, creds) {
+  const { ssid, csrf, cookie } = creds
+  const cookieHeader = buildCookieHeader({ ssid, csrf, cookie })
   const res = await axios.post(
     'https://www.mercadolivre.com.br/affiliate-program/api/v2/affiliates/createLink',
     { urls: [mlUrl], tag },
     {
       headers: {
         'Content-Type': 'application/json',
-        'Cookie': `ssid=${ssid}`,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        ...(cookieHeader ? { 'Cookie': cookieHeader } : {}),
+        ...(csrf ? { 'x-csrf-token': csrf } : {}),
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
         'Accept': 'application/json, text/plain, */*',
         'Referer': 'https://www.mercadolivre.com.br/afiliados/linkbuilder',
         'Origin': 'https://www.mercadolivre.com.br',
@@ -40,7 +51,7 @@ async function createAffiliateLink(mlUrl, tag, ssid) {
     }
   )
   const result = res.data?.urls?.[0]
-  if (result?.created && result?.short_url) return result.short_url
+  if (result?.short_url) return result.short_url
   return null
 }
 
@@ -62,7 +73,7 @@ export async function convert(url, creds) {
     // Gerar link de afiliado real via API (retorna novo meli.la com a tag do usuário)
     if (ssid) {
       try {
-        const affiliateUrl = await createAffiliateLink(target, tag, ssid)
+        const affiliateUrl = await createAffiliateLink(target, tag, creds)
         if (affiliateUrl) return affiliateUrl
       } catch {
         // Se a API falhar, cai no fallback abaixo
