@@ -53,7 +53,13 @@ async function loadConfig() {
   }
 
   const credentials = {}
-  for (const c of user.credentials) credentials[c.platform] = JSON.parse(c.data)
+  for (const c of user.credentials) {
+    try {
+      credentials[c.platform] = JSON.parse(c.data)
+    } catch (err) {
+      logger.warn({ platform: c.platform, err: err.message }, 'Credencial inválida ignorada')
+    }
+  }
 
   const groups = {
     monitor: user.groups.filter(g => g.role === 'monitor').map(g => ({
