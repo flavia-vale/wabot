@@ -7,6 +7,8 @@ Gerado durante processo de QA. Issues ordenadas por módulo e prioridade.
 
 ## Módulo 1 — Autenticação
 
+**Status do módulo:** done
+
 ### BUG-001 · Sem validação de formato de email no registro
 **Status:** done  
 **Prioridade:** alta  
@@ -84,6 +86,8 @@ const normalizedEmail = email.toLowerCase()
 ---
 
 ## Módulo 2 — Sessão WhatsApp
+
+**Status do módulo:** done
 
 ### BUG-003 · `wa-groups` retorna `[]` silenciosamente quando WhatsApp não está conectado
 **Status:** done  
@@ -287,6 +291,8 @@ const postAlready    = existingJidRoles.has(`${g.waJid}::post`)
 
 ## Módulo 4 — Credenciais
 
+**Status do módulo:** done
+
 ### BUG-007 · Credenciais salvas não aparecem nos campos ao reabrir a página
 **Status:** done
 **Prioridade:** alta
@@ -335,6 +341,8 @@ if (missing.length) return reply.code(400).send({ error: `Campos obrigatórios: 
 ---
 
 ## Módulo 5 — Configurações do Bot
+
+**Status do módulo:** done
 
 ### BUG-009 · Validação de delayMin/delayMax usa comparação de strings
 **Status:** done
