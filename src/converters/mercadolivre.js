@@ -18,7 +18,11 @@ async function resolve(url) {
       const metaRefresh = html.match(/<meta[^>]*http-equiv=["']refresh["'][^>]*content=["'][^"']*url=([^"'>\s]+)["']/i)?.[1]
       const canonical = html.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1]
       const jsLocation = html.match(/(?:window\.)?location\.(?:href|replace)\s*=\s*["']([^"']+)["']/i)?.[1]
-      const nextFromHtml = metaRefresh || canonical || jsLocation
+      const encodedOriginUrl = html.match(/"origin_url"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/i)?.[1]
+      const originUrl = encodedOriginUrl
+        ? JSON.parse(`"${encodedOriginUrl}"`)
+        : null
+      const nextFromHtml = originUrl || metaRefresh || canonical || jsLocation
       if (!nextFromHtml) return current
 
       const next = new URL(nextFromHtml, current).toString()

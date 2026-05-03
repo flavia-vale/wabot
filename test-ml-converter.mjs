@@ -41,7 +41,7 @@ async function run() {
     // Cenário 3: meli.la com página intermediária 200 (sem 3xx) => extrai canonical e reafilia
     axios.get = async (url) => {
       if (url === 'https://meli.la/html') {
-        return { data: '<html><head><link rel="canonical" href="https://www.mercadolivre.com.br/p/MLB555?reco_id=xyz"></head></html>' }
+        return { data: '<html><script>window.__DATA__={"origin_url":"https:\\/\\/www.mercadolivre.com.br\\/p\\/MLB555?reco_id=xyz"}</script></html>' }
       }
       return { data: '' }
     }
