@@ -9,6 +9,21 @@ async function run() {
   try {
     // Cenário 1: URL direta + ssid válido => retorna meli.la da API
     axios.post = async () => ({ data: { urls: [{ created: true, short_url: 'https://meli.la/afiliado123' }] } })
+    let out = await convert('https://www.mercadolivre.com.br/p/MLB123', { tag: 'TAGX', ssid: 'SSID_OK', csrf: 'CSRF' })
+    assert.equal(out, 'https://meli.la/afiliado123')
+
+    // Cenário 2: meli.la de outro afiliado com redirects em cadeia => resolve e reafilia
+    let getCalls = 0
+    axios.get = async (url) => {
+      getCalls++
+      if (url === 'https://meli.la/outro') {
+        const err = new Error('redirect')
+        err.response = { headers: { location: 'https://mluvem.com/r1' } }
+        throw err
+      }
+      if (url === 'https://mluvem.com/r1') {
+        const err = new Error('redirect')
+        err.response = { headers: { location: 'https://www.mercadolivre.com.br/kit-travesseiro/p/MLB43954645?reco_id=abc#polycard_client=x' } }
     let out = await convert('https://www.mercadolivre.com.br/p/MLB123', { tag: 'TAGX', ssid: 'SSID_OK' })
     assert.equal(out, 'https://meli.la/afiliado123')
 
@@ -28,6 +43,20 @@ async function run() {
       }
       throw new Error(`URL inesperada no mock: ${url}`)
     }
+    axios.post = async (reqUrl, body) => {
+      assert.equal(reqUrl.includes('/affiliate-program/api/v2/affiliates/createLink'), true)
+      assert.equal(body.urls[0].includes('reco_id='), false)
+      assert.equal(body.urls[0].includes('#'), false)
+      return { data: { urls: [{ created: true, short_url: 'https://meli.la/meu-link' }] } }
+    }
+    out = await convert('https://meli.la/outro', { tag: 'TAGX', ssid: 'SSID_OK', csrf: 'CSRF' })
+    assert.equal(out, 'https://meli.la/meu-link')
+    assert.equal(getCalls, 3)
+
+    // Cenário 3: API falha nas 2 tentativas => fallback partner_id
+    axios.post = async () => { throw new Error('401') }
+    axios.get = originalGet
+    out = await convert('https://www.mercadolivre.com.br/p/MLB777?ref=old', { tag: 'TAGFALLBACK', ssid: 'BAD', csrf: 'CSRF' })
     axios.post = async () => ({ data: { urls: [{ created: true, short_url: 'https://meli.la/final999' }] } })
     out = await convert('https://meli.la/abc', { tag: 'TAGX', ssid: 'SSID_OK' })
     assert.equal(out, 'https://meli.la/final999')

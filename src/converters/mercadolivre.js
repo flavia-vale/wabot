@@ -3,22 +3,31 @@ import axios from 'axios'
 // Captura o Location do redirect meli.la sem seguir até o ML
 // (follow-redirects lança erro na 3xx — Location fica em err.response.headers)
 async function resolve(url) {
-  try {
-    await axios.get(url, {
-      maxRedirects: 0,
-      timeout: 8000,
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-    })
-    return url
-  } catch (err) {
-    const location = err?.response?.headers?.location
-    if (location) {
-      const next = new URL(location, url).toString()
-      if (/meli\.la|mluvem\.com/.test(next)) return resolve(next)
-      return next
+  let current = url
+  for (let i = 0; i < 8; i++) {
+    try {
+      await axios.get(current, {
+        maxRedirects: 0,
+        timeout: 8000,
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+      })
+      return current
+    } catch (err) {
+      const location = err?.response?.headers?.location
+      if (!location) return current
+      current = new URL(location, current).toString()
     }
-    return url
   }
+  return current
+}
+
+function canonicalizeMlProductUrl(raw) {
+  const u = new URL(raw)
+  u.hash = ''
+  for (const p of ['matt_word', 'matt_tool', 'forceInApp', 'ref', 'partner_id', 'reco_backend', 'reco_client', 'reco_item_pos', 'reco_backend_type', 'reco_id', 'sid', 'c_id', 'c_uid', 'polycard_client']) {
+    u.searchParams.delete(p)
+  }
+  return u.toString()
 }
 
 // Chama a API real de afiliados do ML para gerar um meli.la com a tag do usuário
@@ -70,6 +79,8 @@ export async function convert(url, creds) {
       target = await resolve(url)
     }
 
+    target = canonicalizeMlProductUrl(target)
+
     // Gerar link de afiliado real via API (retorna novo meli.la com a tag do usuário)
     if (ssid) {
       try {
@@ -77,6 +88,16 @@ export async function convert(url, creds) {
         if (affiliateUrl) return affiliateUrl
       } catch {
         // Se a API falhar, cai no fallback abaixo
+      }
+
+      // Segunda tentativa em formato canônico mínimo (remove query inteira)
+      try {
+        const clean = new URL(target)
+        clean.search = ''
+        const affiliateUrl = await createAffiliateLink(clean.toString(), tag, creds)
+        if (affiliateUrl) return affiliateUrl
+      } catch {
+        // cai no fallback
       }
     }
 
