@@ -5,7 +5,7 @@ import { api } from '@/lib/api'
 const PLATFORMS = [
   { id: 'shopee', label: 'Shopee', fields: [{ key: 'appId', label: 'App ID' }, { key: 'secretKey', label: 'Secret Key' }] },
   { id: 'amazon', label: 'Amazon', fields: [{ key: 'tag', label: 'Tag de afiliado' }, { key: 'marketplace', label: 'Marketplace', placeholder: 'amazon.com.br' }] },
-  { id: 'mercadolivre', label: 'Mercado Livre', fields: [{ key: 'tag', label: 'Tag numérica' }, { key: 'ssid', label: 'SSID (cookie)' }] },
+  { id: 'mercadolivre', label: 'Mercado Livre', fields: [{ key: 'tag', label: 'Tag numérica' }, { key: 'ssid', label: 'SSID (cookie)' }, { key: 'csrf', label: 'CSRF (cookie _csrf)' }] },
   { id: 'magazineluiza', label: 'Magazine Luiza', fields: [{ key: 'tag', label: 'Tag de afiliado' }] },
 ]
 
@@ -79,6 +79,9 @@ export default function CredenciaisPage() {
     <div className="max-w-xl">
       <h2 className="text-2xl font-bold text-gray-800 mb-1">Credenciais</h2>
       <p className="text-gray-500 text-sm mb-6">Configure suas contas de afiliado por plataforma</p>
+      <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs mb-4">
+        Mercado Livre: para gerar link curto correto (meli.la), preencha obrigatoriamente Tag, SSID e CSRF.
+      </p>
 
       {PLATFORMS.map(p => (
         <PlatformCard

@@ -3,35 +3,109 @@ import axios from 'axios'
 // Captura o Location do redirect meli.la sem seguir até o ML
 // (follow-redirects lança erro na 3xx — Location fica em err.response.headers)
 async function resolve(url) {
-  try {
-    await axios.get(url, {
-      maxRedirects: 0,
-      timeout: 8000,
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-    })
-    return url
-  } catch (err) {
-    const location = err?.response?.headers?.location
-    if (location) {
-      const next = new URL(location, url).toString()
-      if (/meli\.la|mluvem\.com/.test(next)) return resolve(next)
-      return next
+  let current = url
+  for (let i = 0; i < 8; i++) {
+    try {
+      const res = await axios.get(current, {
+        maxRedirects: 0,
+        timeout: 8000,
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+      })
+
+      // Alguns meli.la retornam 200 com HTML intermediário (sem 3xx).
+      // Tentar extrair URL final via meta refresh / canonical / location.href.
+      const html = typeof res?.data === 'string' ? res.data : ''
+      const metaRefresh = html.match(/<meta[^>]*http-equiv=["']refresh["'][^>]*content=["'][^"']*url=([^"'>\s]+)["']/i)?.[1]
+      const canonical = html.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1]
+      const jsLocation = html.match(/(?:window\.)?location\.(?:href|replace)\s*=\s*["']([^"']+)["']/i)?.[1]
+      const encodedOriginUrl = html.match(/"origin_url"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/i)?.[1]
+      const originUrl = encodedOriginUrl
+        ? JSON.parse(`"${encodedOriginUrl}"`)
+        : null
+      const nextFromHtml = originUrl || metaRefresh || canonical || jsLocation
+      if (!nextFromHtml) return current
+
+      const next = new URL(nextFromHtml, current).toString()
+      if (next === current) return current
+      current = next
+      continue
+    } catch (err) {
+      const location = err?.response?.headers?.location
+      if (!location) return current
+      current = new URL(location, current).toString()
     }
-    return url
+  }
+  return current
+}
+
+function canonicalizeMlProductUrl(raw) {
+  const u = new URL(raw)
+  // Alguns fluxos móveis do ML encapsulam destino real em ?go=
+  if (u.pathname === '/gz/webdevice/config') {
+    const go = u.searchParams.get('go')
+    if (go) {
+      try { return canonicalizeMlProductUrl(go) } catch {}
+    }
+  }
+  u.hash = ''
+  for (const p of ['matt_word', 'matt_tool', 'forceInApp', 'ref', 'partner_id', 'reco_backend', 'reco_client', 'reco_item_pos', 'reco_backend_type', 'reco_id', 'sid', 'c_id', 'c_uid', 'polycard_client']) {
+    u.searchParams.delete(p)
+  }
+  return u.toString()
+}
+
+function extractMlbId(input) {
+  if (!input) return null
+  const m = String(input).match(/\bMLB[-_]?([0-9]{6,})\b/i)
+  if (!m) return null
+  return `MLB${m[1]}`
+}
+
+function buildCanonicalCandidates(targetUrl) {
+  const id = extractMlbId(targetUrl)
+  if (!id) return [targetUrl]
+  return [
+    `https://www.mercadolivre.com.br/p/${id}`,
+    `https://produto.mercadolivre.com.br/${id}-x-_JM`,
+    targetUrl,
+  ]
+}
+
+function unwrapMlSocialUrl(raw) {
+  try {
+    const u = new URL(raw)
+    if (u.pathname === '/social/oreidapromobr') {
+      const ref = u.searchParams.get('ref')
+      if (ref) u.searchParams.set('ref', ref)
+    }
+    return u.toString()
+  } catch {
+    return raw
   }
 }
 
 // Chama a API real de afiliados do ML para gerar um meli.la com a tag do usuário
 // Endpoint descoberto via reverse-engineering do portal afiliados.mercadolivre.com.br
-async function createAffiliateLink(mlUrl, tag, ssid) {
+function buildCookieHeader({ ssid, csrf, cookie }) {
+  if (cookie) return cookie
+  const pairs = []
+  if (csrf) pairs.push(`_csrf=${csrf}`)
+  if (ssid) pairs.push(`ssid=${ssid}`)
+  return pairs.join('; ')
+}
+
+async function createAffiliateLink(mlUrl, tag, creds) {
+  const { ssid, csrf, cookie } = creds
+  const cookieHeader = buildCookieHeader({ ssid, csrf, cookie })
   const res = await axios.post(
     'https://www.mercadolivre.com.br/affiliate-program/api/v2/affiliates/createLink',
     { urls: [mlUrl], tag },
     {
       headers: {
         'Content-Type': 'application/json',
-        'Cookie': `ssid=${ssid}`,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        ...(cookieHeader ? { 'Cookie': cookieHeader } : {}),
+        ...(csrf ? { 'x-csrf-token': csrf } : {}),
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
         'Accept': 'application/json, text/plain, */*',
         'Referer': 'https://www.mercadolivre.com.br/afiliados/linkbuilder',
         'Origin': 'https://www.mercadolivre.com.br',
@@ -40,7 +114,7 @@ async function createAffiliateLink(mlUrl, tag, ssid) {
     }
   )
   const result = res.data?.urls?.[0]
-  if (result?.created && result?.short_url) return result.short_url
+  if (result?.short_url) return result.short_url
   return null
 }
 
@@ -59,13 +133,28 @@ export async function convert(url, creds) {
       target = await resolve(url)
     }
 
+    target = unwrapMlSocialUrl(canonicalizeMlProductUrl(target))
+    const candidates = buildCanonicalCandidates(target)
+
     // Gerar link de afiliado real via API (retorna novo meli.la com a tag do usuário)
     if (ssid) {
+      for (const candidate of candidates) {
+        try {
+          const affiliateUrl = await createAffiliateLink(candidate, tag, creds)
+          if (affiliateUrl) return affiliateUrl
+        } catch {
+          // tenta próximo candidato
+        }
+      }
+
+      // Segunda tentativa em formato canônico mínimo (remove query inteira)
       try {
-        const affiliateUrl = await createAffiliateLink(target, tag, ssid)
+        const clean = new URL(candidates[0] ?? target)
+        clean.search = ''
+        const affiliateUrl = await createAffiliateLink(clean.toString(), tag, creds)
         if (affiliateUrl) return affiliateUrl
       } catch {
-        // Se a API falhar, cai no fallback abaixo
+        // cai no fallback
       }
     }
 
