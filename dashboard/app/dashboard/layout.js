@@ -1,5 +1,5 @@
 'use client'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 
@@ -16,6 +16,8 @@ export default function DashboardLayout({ children }) {
     localStorage.removeItem('token')
     router.push('/login')
   }
+
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const navGroups = [
     {
@@ -42,6 +44,10 @@ export default function DashboardLayout({ children }) {
   ]
 
   const isActive = (href) => href === '/dashboard' ? pathname === href : pathname.startsWith(href)
+
+  function handleNavigate() {
+    setMenuOpen(false)
+  }
 
   return (
     <div className="min-h-screen flex bg-gray-50">
