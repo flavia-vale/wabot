@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { api, openQRSocket } from '@/lib/api'
 import { QRCodeCanvas as QRCode } from 'qrcode.react'
 
@@ -19,7 +19,17 @@ export default function DashboardPage() {
   const [pairingPhone, setPairingPhone] = useState('')
   const [pairingCode, setPairingCode] = useState('')
 
-  function openWS() {
+  const fetchStatus = useCallback(async () => {
+    try {
+      const s = await api.sessionStatus()
+      setStatus(s)
+      return s
+    } catch {
+      return null
+    }
+  }, [])
+
+  const openWS = useCallback(() => {
     if (wsRef.current) wsRef.current.close()
     const token = localStorage.getItem('token')
     const ws = openQRSocket(token, {
@@ -41,20 +51,22 @@ export default function DashboardPage() {
       },
     })
     wsRef.current = ws
-  }
-
-  async function fetchStatus() {
-    try {
-      const s = await api.sessionStatus()
-      setStatus(s)
-      if (s.running && s.status === 'connecting') openWS()
-    } catch {}
-  }
+  }, [fetchStatus])
 
   useEffect(() => {
-    fetchStatus()
-    return () => wsRef.current?.close()
-  }, [])
+    let active = true
+    api.sessionStatus()
+      .then((s) => {
+        if (!active || !s) return
+        setStatus(s)
+        if (s.running && s.status === 'connecting') openWS()
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+      wsRef.current?.close()
+    }
+  }, [openWS])
 
   useEffect(() => {
     if (!(status?.running && status?.status === 'connecting') || qr || pairingCode) return
@@ -71,8 +83,8 @@ export default function DashboardPage() {
     setLoading(true)
     try {
       await api.sessionStart()
-      await fetchStatus()
-      openWS()
+      const s = await fetchStatus()
+      if (s?.running && s.status === 'connecting') openWS()
       setTimeout(async () => {
         const s = await api.sessionStatus().catch(() => null)
         if (s && !s.running && s.status === 'disconnected') {

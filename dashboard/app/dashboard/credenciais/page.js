@@ -45,9 +45,6 @@ function PlatformCard({ platform, initialData, onSave }) {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    if (initialData) setValues(initialData)
-  }, [initialData])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -121,7 +118,7 @@ export default function CredenciaisPage() {
 
       {PLATFORMS.map(p => (
         <PlatformCard
-          key={p.id}
+          key={`${p.id}-${JSON.stringify(credMap[p.id] ?? {})}`}
           platform={p}
           initialData={credMap[p.id]}
           onSave={handleSave}

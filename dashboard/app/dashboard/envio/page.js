@@ -1,23 +1,39 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
+import { Alert } from '@/components/Alert'
 
 function formatDateTime(iso) {
   return new Date(iso).toLocaleString('pt-BR', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   })
+}
+
+function classifyError(message = '') {
+  const text = message.toLowerCase()
+  if (text.includes('network') || text.includes('fetch') || text.includes('conex')) {
+    return 'conectividade'
+  }
+  if (text.includes('invalid') || text.includes('obrigat') || text.includes('required')) {
+    return 'validação'
+  }
+  return 'regra de negócio'
 }
 
 function StatusBadge({ status }) {
   const map = {
-    pending: { label: 'Agendado', cls: 'bg-yellow-100 text-yellow-700' },
-    sent:    { label: 'Enviado',  cls: 'bg-green-100 text-green-700' },
-    failed:  { label: 'Falhou',   cls: 'bg-red-100 text-red-600' },
-    cancelled: { label: 'Cancelado', cls: 'bg-gray-100 text-gray-500' },
+    pending: ['Agendado', 'bg-yellow-100 text-yellow-700'],
+    sent: ['Enviado', 'bg-green-100 text-green-700'],
+    failed: ['Falhou', 'bg-red-100 text-red-600'],
+    cancelled: ['Cancelado', 'bg-gray-100 text-gray-500'],
   }
-  const s = map[status] ?? { label: status, cls: 'bg-gray-100 text-gray-500' }
-  return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.cls}`}>{s.label}</span>
+  const [label, cls] = map[status] ?? [status, 'bg-gray-100 text-gray-500']
+  return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{label}</span>
 }
 
 export default function EnvioPage() {
@@ -35,21 +51,62 @@ export default function EnvioPage() {
   const [listLoading, setListLoading] = useState(true)
   const [listError, setListError] = useState('')
   const [listInfo, setListInfo] = useState('')
+  const [cancelLoadingId, setCancelLoadingId] = useState(null)
+  const [statusFilter, setStatusFilter] = useState('all')
+
+  const timezoneLabel = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const [minDateTime] = useState(() => new Date(Date.now() + 60_000).toISOString().slice(0, 16))
 
   async function loadScheduled() {
     setListError('')
     setListInfo('')
-    try { setScheduled(await api.scheduledList()) } catch (err) { setListError(err.message) }
-    setListLoading(false)
+    try {
+      const data = await api.scheduledList()
+      setScheduled(data)
+    } catch (err) {
+      setListError(err.message)
+    } finally {
+      setListLoading(false)
+    }
   }
 
-  useEffect(() => { loadScheduled() }, [])
+  useEffect(() => {
+    let active = true
+    api.scheduledList()
+      .then((data) => {
+        if (active) setScheduled(data)
+      })
+      .catch((err) => {
+        if (active) setListError(err.message)
+      })
+      .finally(() => {
+        if (active) setListLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   async function handleBroadcast(e) {
     e.preventDefault()
     setBroadcastError('')
     setBroadcastResult(null)
     setBroadcastLoading(true)
+
+    const confirmKey = 'broadcastConfirmShown'
+    const hasConfirmedBefore = localStorage.getItem(confirmKey) === '1'
+    const shouldConfirm = !hasConfirmedBefore || broadcastText.trim().length > 280
+
+    if (shouldConfirm) {
+      const confirmed = confirm('Confirmar envio imediato para todos os grupos de destino?')
+      if (!confirmed) {
+        setBroadcastLoading(false)
+        return
+      }
+      localStorage.setItem(confirmKey, '1')
+    }
+
     try {
       const res = await api.broadcastSend(broadcastText.trim())
       setBroadcastResult(res)
@@ -79,106 +136,139 @@ export default function EnvioPage() {
 
   async function handleCancel(id) {
     if (!confirm('Cancelar este agendamento?')) return
+
+    setCancelLoadingId(id)
     setListError('')
     setListInfo('')
     try {
       const res = await api.scheduledCancel(id)
-      if (res?.alreadyCancelled) setListInfo('Este agendamento já estava cancelado.')
+      if (res?.alreadyCancelled) {
+        setListInfo('Este agendamento já estava cancelado.')
+      }
       await loadScheduled()
-    } catch (err) { setListError(err.message) }
+    } catch (err) {
+      setListError(err.message)
+    } finally {
+      setCancelLoadingId(null)
+    }
   }
 
-  // min datetime para o picker (agora + 1 min)
-  const minDateTime = new Date(Date.now() + 60_000).toISOString().slice(0, 16)
+  const filtered = useMemo(
+    () => scheduled.filter((m) => (statusFilter === 'all' ? true : m.status === statusFilter)),
+    [scheduled, statusFilter],
+  )
 
   return (
     <div className="max-w-xl">
       <h2 className="text-2xl font-bold text-gray-800 mb-1">Envio de mensagens</h2>
       <p className="text-gray-500 text-sm mb-6">Envie manualmente ou agende mensagens para seus grupos de postagem</p>
 
-      {/* Envio manual */}
       <div className="bg-white rounded-2xl shadow p-5 mb-4">
         <h3 className="font-semibold text-gray-700 mb-1">📤 Enviar agora</h3>
-        <p className="text-xs text-gray-400 mb-3">Envia imediatamente para todos os grupos de destino configurados</p>
+        <p className="text-xs text-amber-700 mb-2">Impacto: a mensagem será enviada para todos os grupos de destino configurados.</p>
+
         <form onSubmit={handleBroadcast} className="flex flex-col gap-3">
           <textarea
             rows={4}
             placeholder="Digite a mensagem..."
             value={broadcastText}
-            onChange={e => setBroadcastText(e.target.value)}
+            onChange={(e) => setBroadcastText(e.target.value)}
             required
-            className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 resize-none"
+            className="w-full border rounded-lg px-3 py-2 text-sm"
           />
-          {broadcastError && <p className="text-red-500 text-sm">{broadcastError}</p>}
-          {broadcastResult && (
-            <p className="text-green-600 text-sm font-medium">
-              ✓ Enviado para {broadcastResult.sent} grupo{broadcastResult.sent !== 1 ? 's' : ''}
-              {broadcastResult.errors?.length > 0 && ` (${broadcastResult.errors.length} erro${broadcastResult.errors.length > 1 ? 's' : ''})`}
-            </p>
+
+          {broadcastError && (
+            <Alert
+              type="error"
+              title={`Erro de ${classifyError(broadcastError)}`}
+              message={broadcastError}
+            />
           )}
+
+          {broadcastResult && (
+            <Alert
+              type="success"
+              title="Envio concluído"
+              message={`Enviado para ${broadcastResult.sent} grupo(s).`}
+            />
+          )}
+
           <button
             type="submit"
             disabled={broadcastLoading || !broadcastText.trim()}
-            className="bg-green-600 text-white rounded-xl py-2.5 font-semibold hover:bg-green-700 disabled:opacity-50 transition"
+            className="bg-green-600 text-white rounded-xl py-2.5 font-semibold disabled:opacity-50"
           >
             {broadcastLoading ? 'Enviando...' : '📤 Enviar agora'}
           </button>
         </form>
       </div>
 
-      {/* Agendar mensagem */}
       <div className="bg-white rounded-2xl shadow p-5 mb-4">
         <h3 className="font-semibold text-gray-700 mb-1">🗓️ Agendar mensagem</h3>
-        <p className="text-xs text-gray-400 mb-3">A mensagem será enviada automaticamente na data e hora escolhidas</p>
+        <p className="text-xs text-gray-500 mb-2">Fuso detectado: <strong>{timezoneLabel}</strong>.</p>
+
         <form onSubmit={handleSchedule} className="flex flex-col gap-3">
           <textarea
             rows={3}
             placeholder="Digite a mensagem..."
             value={schedText}
-            onChange={e => setSchedText(e.target.value)}
+            onChange={(e) => setSchedText(e.target.value)}
             required
-            className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 resize-none"
+            className="w-full border rounded-lg px-3 py-2 text-sm"
           />
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">Data e hora do envio</label>
-            <input
-              type="datetime-local"
-              min={minDateTime}
-              value={schedAt}
-              onChange={e => setSchedAt(e.target.value)}
-              required
-              className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
-            />
-          </div>
-          {schedError && <p className="text-red-500 text-sm">{schedError}</p>}
+          <input
+            type="datetime-local"
+            min={minDateTime}
+            value={schedAt}
+            onChange={(e) => setSchedAt(e.target.value)}
+            required
+            className="w-full border rounded-lg px-3 py-2 text-sm"
+          />
+
+          {schedError && (
+            <Alert type="error" title={`Erro de ${classifyError(schedError)}`} message={schedError} />
+          )}
+
           <button
             type="submit"
             disabled={schedLoading || !schedText.trim() || !schedAt}
-            className="bg-blue-600 text-white rounded-xl py-2.5 font-semibold hover:bg-blue-700 disabled:opacity-50 transition"
+            className="bg-blue-600 text-white rounded-xl py-2.5 font-semibold disabled:opacity-50"
           >
             {schedLoading ? 'Agendando...' : '🗓️ Agendar'}
           </button>
         </form>
       </div>
 
-      {/* Lista de agendamentos */}
       <div className="bg-white rounded-2xl shadow p-5">
         <h3 className="font-semibold text-gray-700 mb-3">📋 Mensagens agendadas</h3>
-        {listError && <p className="text-red-500 text-sm mb-2">{listError}</p>}
-        {listInfo && <p className="text-amber-600 text-sm mb-2">{listInfo}</p>}
+
+        <div className="flex gap-2 mb-3">
+          {[['all', 'Todos'], ['pending', 'Pendentes'], ['sent', 'Enviados'], ['failed', 'Falhos'], ['cancelled', 'Cancelados']].map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setStatusFilter(value)}
+              className={`text-xs px-2 py-1 rounded-full border ${statusFilter === value ? 'bg-gray-800 text-white' : 'bg-white text-gray-600'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {listError && <Alert type="error" title={`Erro de ${classifyError(listError)}`} message={listError} />}
+        {listInfo && <Alert type="warning" title="Aviso" message={listInfo} />}
         {listLoading && <p className="text-gray-400 text-sm">Carregando...</p>}
-        {!listLoading && !listError && scheduled.length === 0 && (
-          <p className="text-gray-400 text-sm">Nenhuma mensagem agendada</p>
-        )}
-        {!listLoading && scheduled.length > 0 && (
+
+        {!listLoading && filtered.length === 0 && <p className="text-gray-400 text-sm">Nenhuma mensagem agendada</p>}
+
+        {!listLoading && filtered.length > 0 && (
           <ul className="flex flex-col gap-3">
-            {scheduled.map(m => (
-              <li key={m.id} className="border rounded-xl p-3 flex flex-col gap-1.5">
-                <div className="flex items-start justify-between gap-2">
+            {filtered.map((m) => (
+              <li key={m.id} className="border rounded-xl p-3">
+                <div className="flex justify-between gap-2">
                   <p className="text-sm text-gray-700 line-clamp-2 flex-1">{m.text}</p>
                   <StatusBadge status={m.status} />
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mt-1">
                   <span className="text-xs text-gray-400">
                     {m.status === 'sent' && m.sentAt
                       ? `Enviado em ${formatDateTime(m.sentAt)}`
@@ -186,10 +276,11 @@ export default function EnvioPage() {
                   </span>
                   {m.status === 'pending' && (
                     <button
+                      disabled={cancelLoadingId === m.id}
                       onClick={() => handleCancel(m.id)}
-                      className="text-xs text-red-400 hover:text-red-600"
+                      className="text-xs text-red-500 disabled:opacity-50"
                     >
-                      Cancelar
+                      {cancelLoadingId === m.id ? 'Cancelando...' : 'Cancelar'}
                     </button>
                   )}
                 </div>

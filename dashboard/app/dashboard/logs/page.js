@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { api } from '@/lib/api'
 
 const PLATFORM_COLORS = {
@@ -20,21 +20,25 @@ export default function LogsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError('')
-    try {
-      const data = await api.logs(tab, page, LIMIT)
-      setLogs(data.logs)
-      setTotal(data.total)
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
+  useEffect(() => {
+    let active = true
+    async function loadLogs() {
+      setLoading(true)
+      setError('')
+      try {
+        const data = await api.logs(tab, page, LIMIT)
+        if (!active) return
+        setLogs(data.logs)
+        setTotal(data.total)
+      } catch (e) {
+        if (active) setError(e.message)
+      } finally {
+        if (active) setLoading(false)
+      }
     }
+    loadLogs()
+    return () => { active = false }
   }, [tab, page])
-
-  useEffect(() => { load() }, [load])
 
   async function handleClear() {
     if (!confirm('Limpar todos os logs? Esta ação não pode ser desfeita.')) return
@@ -42,7 +46,9 @@ export default function LogsPage() {
     try {
       await api.logsClear()
       setPage(1)
-      await load()
+      const data = await api.logs(tab, 1, LIMIT)
+      setLogs(data.logs)
+      setTotal(data.total)
     } catch (e) {
       setError(e.message)
     }

@@ -2,52 +2,42 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
+import { Alert } from '@/components/Alert'
 
 const STEPS = [
-  {
-    key: 'waConnected',
-    title: 'WhatsApp conectado',
-    ok: 'Número conectado ao bot',
-    pending: 'Conecte seu número na aba WhatsApp',
-    href: '/dashboard',
-  },
-  {
-    key: 'hasCredentials',
-    title: 'Chaves de afiliado',
-    ok: 'Credenciais de afiliado configuradas',
-    pending: 'Adicione suas chaves de afiliado',
-    href: '/dashboard/credenciais',
-  },
-  {
-    key: 'hasMonitorGroup',
-    title: 'Grupo monitorado',
-    ok: 'Grupo de origem configurado',
-    pending: 'Adicione um grupo para monitorar (origem dos links)',
-    href: '/dashboard/grupos',
-  },
-  {
-    key: 'hasPostGroup',
-    title: 'Grupo de envio',
-    ok: 'Grupo de destino configurado',
-    pending: 'Adicione um grupo para postar os links convertidos',
-    href: '/dashboard/grupos',
-  },
+  { key: 'waConnected', title: 'WhatsApp conectado', ok: 'Número conectado ao bot', pending: 'Conecte seu número na aba WhatsApp', href: '/dashboard' },
+  { key: 'hasCredentials', title: 'Chaves de afiliado', ok: 'Credenciais de afiliado configuradas', pending: 'Adicione suas chaves de afiliado', href: '/dashboard/credenciais' },
+  { key: 'hasMonitorGroup', title: 'Grupo monitorado', ok: 'Grupo de origem configurado', pending: 'Adicione um grupo para monitorar (origem dos links)', href: '/dashboard/grupos' },
+  { key: 'hasPostGroup', title: 'Grupo de envio', ok: 'Grupo de destino configurado', pending: 'Adicione um grupo para postar os links convertidos', href: '/dashboard/grupos' },
 ]
 
 export default function InicioPage() {
   const [status, setStatus] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const router = useRouter()
 
+  async function fetchStatus() {
+    try {
+      const data = await api.dashboardStatus()
+      setStatus(data)
+    } catch {
+      setLoadError('Não foi possível carregar o status agora. Verifique sua conexão e tente novamente.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
+    let active = true
     api.dashboardStatus()
-      .then(setStatus)
-      .catch(() => {})
-      .finally(() => setLoading(false))
+      .then((data) => { if (active) setStatus(data) })
+      .catch(() => { if (active) setLoadError('Não foi possível carregar o status agora. Verifique sua conexão e tente novamente.') })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
   }, [])
 
   const allOk = status && STEPS.every(s => status[s.key])
-
   if (loading) return <p className="text-gray-400 text-sm">Carregando...</p>
 
   return (
@@ -55,14 +45,15 @@ export default function InicioPage() {
       <h2 className="text-2xl font-bold text-gray-800 mb-1">Início</h2>
       <p className="text-gray-500 text-sm mb-6">Status do seu bot</p>
 
-      <div className={`rounded-2xl p-4 mb-6 text-sm font-semibold ${
-        allOk
-          ? 'bg-green-100 text-green-800 border border-green-200'
-          : 'bg-yellow-50 text-yellow-800 border border-yellow-200'
-      }`}>
-        {allOk
-          ? '🤖 Bot ativo e funcionando!'
-          : '⚠️ Complete os passos abaixo para ativar o bot.'}
+      {loadError && (
+        <div className="mb-4 space-y-3">
+          <Alert type="error" title="Falha ao carregar status" message={loadError} />
+          <button onClick={fetchStatus} className="text-sm bg-gray-800 text-white px-3 py-2 rounded-lg hover:bg-gray-900">Tentar novamente</button>
+        </div>
+      )}
+
+      <div className={`rounded-2xl p-4 mb-6 text-sm font-semibold ${allOk ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-yellow-50 text-yellow-800 border border-yellow-200'}`}>
+        {allOk ? '🤖 Bot ativo e funcionando!' : '⚠️ Complete os passos abaixo para ativar o bot.'}
       </div>
 
       <div className="flex flex-col gap-3">
@@ -72,20 +63,14 @@ export default function InicioPage() {
             <button
               key={step.key}
               onClick={() => router.push(step.href)}
-              className={`w-full text-left bg-white rounded-2xl shadow p-5 flex items-center gap-4 hover:shadow-md transition border-2 ${
-                ok ? 'border-green-200' : 'border-red-200'
-              }`}
+              className={`w-full text-left bg-white rounded-2xl shadow p-5 flex items-center gap-4 hover:shadow-md transition border-2 ${ok ? 'border-green-200' : 'border-amber-200'}`}
             >
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${
-                ok ? 'bg-green-500' : 'bg-red-400'
-              }`}>
-                {ok ? '✓' : '✗'}
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${ok ? 'bg-green-500' : 'bg-amber-500'}`}>
+                {ok ? '✓' : '!'}
               </div>
               <div className="flex-1">
                 <p className="font-semibold text-gray-800 text-sm">{step.title}</p>
-                <p className={`text-xs mt-0.5 ${ok ? 'text-gray-400' : 'text-red-500'}`}>
-                  {ok ? step.ok : step.pending}
-                </p>
+                <p className={`text-xs mt-0.5 ${ok ? 'text-gray-400' : 'text-amber-700'}`}>{ok ? step.ok : step.pending}</p>
               </div>
               <span className="text-gray-300 text-lg">›</span>
             </button>

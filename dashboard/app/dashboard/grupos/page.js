@@ -17,7 +17,11 @@ export default function GruposPage() {
     try { setGroups(await api.groups()) } catch (err) { setActionError(err.message) }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    let active = true
+    api.groups().then((data) => { if (active) setGroups(data) }).catch((err) => { if (active) setActionError(err.message) })
+    return () => { active = false }
+  }, [])
 
   async function handleDelete(id) {
     if (!confirm('Remover este grupo?')) return
