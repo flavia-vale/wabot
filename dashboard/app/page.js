@@ -8,5 +8,6 @@ export default function Home() {
     const token = localStorage.getItem('token')
     router.replace(token ? '/dashboard' : '/login')
   }, [router])
-  return null
+
+  return <p aria-live="polite" className="p-6 text-sm text-gray-500">Redirecionando...</p>
 }

@@ -11,8 +11,18 @@ function LoginContent() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isRegister, setIsRegister] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    const reason = new URLSearchParams(window.location.search).get('reason')
+    const message = localStorage.getItem('loginRedirectMessage')
+    if (reason === 'session-expired' && message) {
+      localStorage.removeItem('loginRedirectMessage')
+      return message
+    }
+    return ''
+  })
   const [loading, setLoading] = useState(false)
+
 
   async function handleSubmit(e) {
     e.preventDefault()

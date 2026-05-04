@@ -1,4 +1,5 @@
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou ou foi invalidada. Faça login novamente para continuar.'
 
 function getToken() {
   if (typeof window === 'undefined') return null
@@ -18,7 +19,8 @@ async function apiFetch(path, options = {}) {
   const data = await res.json().catch(() => ({}))
   if (res.status === 401 && !path.startsWith('/api/auth/')) {
     localStorage.removeItem('token')
-    window.location.replace('/login')
+    localStorage.setItem('loginRedirectMessage', SESSION_EXPIRED_MESSAGE)
+    window.location.replace('/login?reason=session-expired')
     return
   }
   if (!res.ok) {
@@ -80,9 +82,20 @@ export const api = {
   logsClear: () => apiFetch('/api/logs/clear', { method: 'DELETE' }),
 }
 
-export function openQRSocket(token, onMessage) {
+export function openQRSocket(token, handlers = {}) {
   const wsBase = BASE.replace('http', 'ws')
   const ws = new WebSocket(`${wsBase}/api/session/qr?token=${token}`)
-  ws.onmessage = (e) => { try { onMessage(JSON.parse(e.data)) } catch {} }
+
+  if (typeof handlers === 'function') {
+    ws.onmessage = (e) => { try { handlers(JSON.parse(e.data)) } catch {} }
+    return ws
+  }
+
+  const { onMessage, onError, onClose, onOpen } = handlers
+  ws.onmessage = (e) => { try { onMessage?.(JSON.parse(e.data)) } catch {} }
+  ws.onerror = (event) => onError?.(event)
+  ws.onclose = (event) => onClose?.(event)
+  ws.onopen = (event) => onOpen?.(event)
+
   return ws
 }
