@@ -1317,7 +1317,7 @@ Desabilitar botão do item em cancelamento, mostrar estado “Cancelando...” e
 ## Módulo 10 — Auditoria UI/UX Dashboard (Grupo 3: Configurações, Planos, Grupos, Credenciais, Logs)
 
 ### UX-025 · Configurações sem estado de erro ao falhar carregamento inicial
-**Status:** open  
+**Status:** done  
 **Prioridade:** alta  
 **Arquivo:** `dashboard/app/dashboard/configuracoes/page.js`
 
@@ -1333,7 +1333,7 @@ Adicionar `loadError` com CTA “Tentar novamente” e bloqueio de submit até r
 ---
 
 ### UX-026 · Planos sem comparação orientada por benefício e sem destaque de recomendação
-**Status:** open  
+**Status:** done  
 **Prioridade:** média  
 **Arquivo:** `dashboard/app/dashboard/planos/page.js`
 
@@ -1349,7 +1349,7 @@ Adicionar selo “Mais escolhido” no Pro (ou no plano-alvo), tabela comparativ
 ---
 
 ### UX-027 · Fluxo de indicação não trata erro de clipboard
-**Status:** open  
+**Status:** done  
 **Prioridade:** baixa  
 **Arquivo:** `dashboard/app/dashboard/planos/page.js`
 
@@ -1365,7 +1365,7 @@ Tratar exceção com fallback (selecionar input automaticamente) e feedback de e
 ---
 
 ### UX-028 · Tela de Grupos mantém formulário manual com alta fricção técnica
-**Status:** open  
+**Status:** done  
 **Prioridade:** média  
 **Arquivo:** `dashboard/app/dashboard/grupos/page.js`
 
@@ -1381,7 +1381,7 @@ Ocultar por padrão em “modo avançado” ou remover, priorizando importação
 ---
 
 ### UX-029 · Credenciais sem estado de carregamento/erro global por plataforma
-**Status:** open  
+**Status:** done  
 **Prioridade:** alta  
 **Arquivo:** `dashboard/app/dashboard/credenciais/page.js`
 
@@ -1397,7 +1397,7 @@ Adicionar loading skeleton por card + erro global com “Recarregar”. Bloquear
 ---
 
 ### UX-030 · Logs em tabela desktop sem versão responsiva para mobile
-**Status:** open  
+**Status:** done  
 **Prioridade:** alta  
 **Arquivo:** `dashboard/app/dashboard/logs/page.js`
 
@@ -1413,7 +1413,7 @@ Criar layout alternativo em cards no mobile (origem/destino/status/horário), ma
 ---
 
 ### UX-031 · Logs não oferecem busca textual por conteúdo/grupo
-**Status:** open  
+**Status:** done  
 **Prioridade:** média  
 **Arquivo:** `dashboard/app/dashboard/logs/page.js`
 
