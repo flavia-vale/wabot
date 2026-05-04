@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
+import { LoadingState } from '@/components/States'
 
 const STEPS = [
   { key: 'waConnected', title: 'WhatsApp conectado', ok: 'Número conectado ao bot', pending: 'Conecte seu número na aba WhatsApp', href: '/dashboard' },
@@ -38,7 +39,7 @@ export default function InicioPage() {
   }, [])
 
   const allOk = status && STEPS.every(s => status[s.key])
-  if (loading) return <p className="text-gray-400 text-sm">Carregando...</p>
+  if (loading) return <LoadingState />
 
   return (
     <div className="max-w-lg">
