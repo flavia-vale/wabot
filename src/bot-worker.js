@@ -136,7 +136,7 @@ function buildMessage(originalText, convertedUrl, originalUrl, groupInvite) {
   return text
 }
 
-const AD_TEXT = '💡 Bot gerenciado pelo WaBot — automatize seus grupos de afiliados: wabot.com.br'
+const AD_TEXT = '💡 Bot gerenciado pelo Bot Conversor para Afiliados — automatize seus grupos de afiliados'
 let adSendCount = 0
 
 async function startBot() {
