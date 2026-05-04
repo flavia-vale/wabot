@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
+import { ErrorState, LoadingState } from '@/components/States'
 
 const ALL_PLATFORMS = [
   { id: 'shopee', label: '🛍️ Shopee' },
@@ -98,7 +99,7 @@ export default function ConfigPage() {
     }
   }
 
-  if (loading) return <p className="text-gray-400">Carregando...</p>
+  if (loading) return <LoadingState />
 
   const enabledPlatforms = new Set(form.platforms.split(',').filter(Boolean))
 
@@ -107,12 +108,7 @@ export default function ConfigPage() {
       <h2 className="text-2xl font-bold text-gray-800 mb-1">Configurações do Bot</h2>
       <p className="text-gray-500 text-sm mb-6">Ajuste o comportamento do bot</p>
 
-      {loadError && (
-        <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl p-4 mb-4 text-sm">
-          <p className="mb-2">{loadError}</p>
-          <button type="button" onClick={loadConfig} className="underline font-medium">Tentar novamente</button>
-        </div>
-      )}
+      {loadError && <div className="mb-4"><ErrorState title="Falha ao carregar configurações" message={loadError} actionLabel="Tentar novamente" onAction={loadConfig} /></div>}
 
       <form onSubmit={handleSave} className="flex flex-col gap-4">
         <div className="bg-white rounded-2xl shadow p-5">
@@ -133,8 +129,8 @@ export default function ConfigPage() {
 
         <div className="bg-white rounded-2xl shadow p-5"><h3 className="font-semibold text-gray-700 mb-1">👋 Mensagem de boas-vindas</h3><textarea rows={3} placeholder="Ex: Bem-vindo(a)!" value={form.welcomeMsg} onChange={e => setForm(f => ({ ...f, welcomeMsg: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 resize-none" /></div>
 
-        {error && <p className="text-red-500 text-sm">{error}</p>}
-        {success && <p className="text-green-600 text-sm font-medium">✓ Configurações salvas com sucesso!</p>}
+        <div aria-live="assertive">{error && <p className="text-red-500 text-sm">{error}</p>}</div>
+        <div aria-live="polite">{success && <p className="text-green-600 text-sm font-medium">✓ Configurações salvas com sucesso!</p>}</div>
 
         <button type="submit" disabled={saving || !!loadError || !loadedOnce} className="bg-green-600 text-white rounded-xl py-3 font-semibold hover:bg-green-700 disabled:opacity-50 transition">{saving ? 'Salvando...' : 'Salvar configurações'}</button>
       </form>
