@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback, Suspense } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { api } from '@/lib/api'
 
@@ -23,16 +23,14 @@ function PlanosContent() {
   const [checkoutError, setCheckoutError] = useState('')
   const [copied, setCopied] = useState(false)
 
-  const load = useCallback(async () => {
-    try {
-      setData(await api.paymentsStatus())
-    } catch (err) {
-      setLoadError(err.message)
-    }
-    setLoading(false)
+  useEffect(() => {
+    let active = true
+    api.paymentsStatus()
+      .then((res) => { if (active) setData(res) })
+      .catch((err) => { if (active) setLoadError(err.message) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
   }, [])
-
-  useEffect(() => { load() }, [load])
 
   async function handleCheckout(plan) {
     setCheckoutError('')
