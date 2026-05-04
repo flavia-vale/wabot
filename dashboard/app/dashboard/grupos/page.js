@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 
 export default function GruposPage() {
   const [groups, setGroups] = useState([])
@@ -12,6 +13,7 @@ export default function GruposPage() {
   const [manualForm, setManualForm] = useState({ waJid: '', name: '', role: 'monitor' })
   const [manualLoading, setManualLoading] = useState(false)
   const [manualError, setManualError] = useState('')
+  const [deleteTargetId, setDeleteTargetId] = useState(null)
 
   async function load() {
     try { setGroups(await api.groups()) } catch (err) { setActionError(err.message) }
@@ -24,7 +26,6 @@ export default function GruposPage() {
   }, [])
 
   async function handleDelete(id) {
-    if (!confirm('Remover este grupo?')) return
     setActionError('')
     try { await api.deleteGroup(id); await load() } catch (err) { setActionError(err.message) }
   }
@@ -156,7 +157,7 @@ export default function GruposPage() {
                     <span className="font-medium text-gray-700">{g.name}</span>
                     <span className="ml-2 text-gray-400 text-xs">{g.waJid}</span>
                   </div>
-                  <button onClick={() => handleDelete(g.id)} className="text-red-400 hover:text-red-600 text-xs">
+                  <button onClick={() => setDeleteTargetId(g.id)} className="text-red-400 hover:text-red-600 text-xs">
                     Remover
                   </button>
                 </div>
@@ -219,7 +220,7 @@ export default function GruposPage() {
                   <span className="font-medium text-gray-700">{g.name}</span>
                   <span className="ml-2 text-gray-400 text-xs">{g.waJid}</span>
                 </div>
-                <button onClick={() => handleDelete(g.id)} className="text-red-400 hover:text-red-600 text-xs">
+                <button onClick={() => setDeleteTargetId(g.id)} className="text-red-400 hover:text-red-600 text-xs">
                   Remover
                 </button>
               </li>
@@ -279,6 +280,7 @@ export default function GruposPage() {
           </>
         )}
       </div>
+      <ConfirmDialog open={!!deleteTargetId} title="Remover grupo" message="O grupo será removido desta configuração." confirmLabel="Remover" danger onCancel={() => setDeleteTargetId(null)} onConfirm={async () => { const id = deleteTargetId; setDeleteTargetId(null); if (id) await handleDelete(id) }} />
     </div>
   )
 }
