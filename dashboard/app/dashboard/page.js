@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { api, openQRSocket } from '@/lib/api'
 import { QRCodeCanvas as QRCode } from 'qrcode.react'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 
 const QR_TIMEOUT_SECONDS = 20
 
@@ -18,6 +19,7 @@ export default function DashboardPage() {
   const [showPairingInput, setShowPairingInput] = useState(false)
   const [pairingPhone, setPairingPhone] = useState('')
   const [pairingCode, setPairingCode] = useState('')
+  const [showForgetConfirm, setShowForgetConfirm] = useState(false)
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -140,7 +142,6 @@ export default function DashboardPage() {
   }
 
   async function handleForget() {
-    if (!confirm('Esquecer o número vai desconectar o bot e apagar a sessão salva. Você precisará escanear um novo QR Code. Continuar?')) return
     setError('')
     setFeedback('')
     setLoading(true)
@@ -239,7 +240,7 @@ export default function DashboardPage() {
               <span>📱</span>Conectar pelo número
             </button>
           </div>
-          <button onClick={handleForget} disabled={loading} className="bg-gray-200 text-gray-600 px-5 py-2 rounded-lg font-semibold hover:bg-gray-300 disabled:opacity-50 transition text-sm">Esquecer número salvo</button>
+          <button onClick={() => setShowForgetConfirm(true)} disabled={loading} className="bg-gray-200 text-gray-600 px-5 py-2 rounded-lg font-semibold hover:bg-gray-300 disabled:opacity-50 transition text-sm">Esquecer número salvo</button>
         </div>
       )}
 
@@ -260,9 +261,10 @@ export default function DashboardPage() {
       {isRunning && (
         <div className="flex gap-3 flex-wrap">
           <button onClick={handleStop} disabled={loading} className="bg-red-500 text-white px-5 py-2 rounded-lg font-semibold hover:bg-red-600 disabled:opacity-50 transition">{loading ? 'Parando...' : 'Desligar bot'}</button>
-          <button onClick={handleForget} disabled={loading} className="bg-gray-200 text-gray-600 px-5 py-2 rounded-lg font-semibold hover:bg-gray-300 disabled:opacity-50 transition">Esquecer número</button>
+          <button onClick={() => setShowForgetConfirm(true)} disabled={loading} className="bg-gray-200 text-gray-600 px-5 py-2 rounded-lg font-semibold hover:bg-gray-300 disabled:opacity-50 transition">Esquecer número</button>
         </div>
       )}
+      <ConfirmDialog open={showForgetConfirm} title="Esquecer número" message="Vai desconectar o bot e apagar a sessão salva." confirmLabel="Esquecer" danger onCancel={() => setShowForgetConfirm(false)} onConfirm={async () => { setShowForgetConfirm(false); await handleForget() }} />
     </div>
   )
 }

@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
+import { ErrorState, LoadingState } from '@/components/States'
 
 const PLATFORMS = [
   {
@@ -139,8 +140,8 @@ export default function CredenciaisPage() {
         Mercado Livre: para gerar link curto correto (meli.la), preencha obrigatoriamente Tag, SSID e CSRF.
       </p>
 
-      {loading && <p className="text-gray-500 text-sm mb-4">Carregando credenciais...</p>}
-      {loadError && <div className="bg-red-50 border border-red-200 text-red-600 rounded-lg px-3 py-2 text-sm mb-4">{loadError} <button onClick={loadCredentials} className="underline ml-2">Recarregar</button></div>}
+      {loading && <div className="mb-4"><LoadingState message="Carregando credenciais..." /></div>}
+      {loadError && <div className="mb-4"><ErrorState title="Falha ao carregar credenciais" message={loadError} actionLabel="Recarregar" onAction={loadCredentials} /></div>}
 
       {PLATFORMS.map(p => (
         <PlatformCard

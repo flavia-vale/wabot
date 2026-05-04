@@ -1529,7 +1529,7 @@ Encapsular handlers `onerror/onclose` e refletir estado (“Conexão perdida. Te
 ## Módulo 12 — Auditoria UI/UX (Fluxos secundários e consistência transversal)
 
 ### UX-038 · Ausência de padrão único para estados de loading/erro/empty entre telas
-**Status:** open  
+**Status:** done  
 **Prioridade:** alta  
 **Arquivo:** `dashboard/app/dashboard/*/page.js`
 
@@ -1545,7 +1545,7 @@ Criar design tokens/componentes reutilizáveis (`LoadingState`, `ErrorState`, `E
 ---
 
 ### UX-039 · Dependência de `window.confirm` em ações críticas sem padrão visual do produto
-**Status:** open  
+**Status:** done  
 **Prioridade:** média  
 **Arquivo:** `dashboard/app/dashboard/page.js`, `dashboard/app/dashboard/grupos/page.js`, `dashboard/app/dashboard/envio/page.js`, `dashboard/app/dashboard/logs/page.js`
 
@@ -1561,7 +1561,7 @@ Implementar modal de confirmação próprio com variantes (danger/warning), text
 ---
 
 ### UX-040 · Inconsistência de linguagem e tom entre feedbacks de sucesso/erro
-**Status:** open  
+**Status:** done  
 **Prioridade:** média  
 **Arquivo:** `dashboard/app/dashboard/configuracoes/page.js`, `dashboard/app/dashboard/envio/page.js`, `dashboard/app/dashboard/planos/page.js`, `dashboard/app/login/page.js`
 
@@ -1577,7 +1577,7 @@ Definir guideline de microcopy (voz, tamanho, CTA sugerido) e normalizar mensage
 ---
 
 ### UX-041 · Falta de indicadores de acessibilidade dinâmica (`aria-live`) para mensagens de status
-**Status:** open  
+**Status:** done  
 **Prioridade:** média  
 **Arquivo:** `dashboard/app/login/page.js`, `dashboard/app/dashboard/envio/page.js`, `dashboard/app/dashboard/configuracoes/page.js`
 
@@ -1593,7 +1593,7 @@ Adicionar regiões `aria-live="polite/assertive"` para alertas críticos e confi
 ---
 
 ### UX-042 · Suporte mobile parcial na navegação lateral do dashboard
-**Status:** open  
+**Status:** done  
 **Prioridade:** alta  
 **Arquivo:** `dashboard/app/dashboard/layout.js`
 

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
+import { EmptyState, LoadingState } from '@/components/States'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 
 function formatDateTime(iso) {
   return new Date(iso).toLocaleString('pt-BR', {
@@ -53,6 +55,7 @@ export default function EnvioPage() {
   const [listInfo, setListInfo] = useState('')
   const [cancelLoadingId, setCancelLoadingId] = useState(null)
   const [statusFilter, setStatusFilter] = useState('all')
+  const [cancelTargetId, setCancelTargetId] = useState(null)
 
   const timezoneLabel = Intl.DateTimeFormat().resolvedOptions().timeZone
   const [minDateTime] = useState(() => new Date(Date.now() + 60_000).toISOString().slice(0, 16))
@@ -135,7 +138,6 @@ export default function EnvioPage() {
   }
 
   async function handleCancel(id) {
-    if (!confirm('Cancelar este agendamento?')) return
 
     setCancelLoadingId(id)
     setListError('')
@@ -256,9 +258,9 @@ export default function EnvioPage() {
 
         {listError && <Alert type="error" title={`Erro de ${classifyError(listError)}`} message={listError} />}
         {listInfo && <Alert type="warning" title="Aviso" message={listInfo} />}
-        {listLoading && <p className="text-gray-400 text-sm">Carregando...</p>}
+        {listLoading && <LoadingState />}
 
-        {!listLoading && filtered.length === 0 && <p className="text-gray-400 text-sm">Nenhuma mensagem agendada</p>}
+        {!listLoading && filtered.length === 0 && <EmptyState message="Nenhuma mensagem agendada" />}
 
         {!listLoading && filtered.length > 0 && (
           <ul className="flex flex-col gap-3">
@@ -277,7 +279,7 @@ export default function EnvioPage() {
                   {m.status === 'pending' && (
                     <button
                       disabled={cancelLoadingId === m.id}
-                      onClick={() => handleCancel(m.id)}
+                      onClick={() => setCancelTargetId(m.id)}
                       className="text-xs text-red-500 disabled:opacity-50"
                     >
                       {cancelLoadingId === m.id ? 'Cancelando...' : 'Cancelar'}
@@ -289,6 +291,7 @@ export default function EnvioPage() {
           </ul>
         )}
       </div>
+      <ConfirmDialog open={!!cancelTargetId} title="Cancelar agendamento" message="Esta ação interrompe o envio futuro dessa mensagem." confirmLabel="Sim, cancelar" danger onCancel={() => setCancelTargetId(null)} onConfirm={async () => { const id = cancelTargetId; setCancelTargetId(null); if (id) await handleCancel(id) }} />
     </div>
   )
 }
