@@ -22,6 +22,7 @@ function PlanosContent() {
   const [checkoutLoading, setCheckoutLoading] = useState('')
   const [checkoutError, setCheckoutError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [copyError, setCopyError] = useState('')
 
   useEffect(() => {
     let active = true
@@ -45,11 +46,18 @@ function PlanosContent() {
     }
   }
 
-  function copyRef() {
+  async function copyRef() {
     const url = `${window.location.origin}/login?ref=${data.referralCode}`
-    navigator.clipboard.writeText(url)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    setCopyError('')
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (_) {
+      setCopyError('Não foi possível copiar automaticamente. Selecione e copie o link manualmente.')
+      const input = document.getElementById('ref-link-input')
+      if (input) { input.focus(); input.select() }
+    }
   }
 
   if (loading) return <p className="text-gray-500">Carregando...</p>
@@ -97,7 +105,12 @@ function PlanosContent() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-4 mb-5">
+      <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 mb-5 text-xs text-indigo-800">
+        <p className="font-semibold mb-2">Comparativo rápido</p>
+        <ul className="space-y-1"><li><strong>Basic</strong>: ideal para começar e validar operação.</li><li><strong>Pro</strong>: recomendado para volume maior e operação sem anúncios.</li><li><strong>Economia de tempo</strong>: Pro evita interrupções durante campanhas.</li></ul>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
         <div className="bg-white rounded-2xl shadow p-5">
           <h3 className="font-bold text-gray-800 mb-1">Basic</h3>
           <p className="text-3xl font-bold text-blue-600 mb-1">R$50<span className="text-sm font-normal text-gray-400">/mês</span></p>
@@ -116,7 +129,7 @@ function PlanosContent() {
         </div>
 
         <div className="bg-white rounded-2xl shadow p-5 border-2 border-purple-300">
-          <h3 className="font-bold text-gray-800 mb-1">Pro</h3>
+          <div className="flex items-center justify-between mb-1"><h3 className="font-bold text-gray-800">Pro</h3><span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">Mais escolhido</span></div>
           <p className="text-3xl font-bold text-purple-600 mb-1">R$100<span className="text-sm font-normal text-gray-400">/mês</span></p>
           <ul className="text-xs text-gray-500 space-y-1 mb-4">
             <li>✅ Bot ilimitado</li>
@@ -141,6 +154,7 @@ function PlanosContent() {
           <p className="text-xs text-gray-500 mb-3">Cada amigo que se cadastrar pelo seu link te dá +7 dias de acesso.</p>
           <div className="flex gap-2">
             <input
+              id="ref-link-input"
               readOnly
               value={`${typeof window !== 'undefined' ? window.location.origin : ''}/login?ref=${data.referralCode}`}
               className="flex-1 text-xs border rounded-lg px-3 py-2 bg-gray-50 text-gray-600"
@@ -152,6 +166,7 @@ function PlanosContent() {
               {copied ? 'Copiado!' : 'Copiar'}
             </button>
           </div>
+          {copyError && <p className="text-red-500 text-xs mt-2">{copyError}</p>}
         </div>
       )}
 
