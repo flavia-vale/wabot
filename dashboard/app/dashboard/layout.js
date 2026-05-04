@@ -74,19 +74,19 @@ export default function DashboardLayout({ children }) {
                   </Link>
                 ))}
               </div>
-            ))}
-          </nav>
-          <div className="p-4 border-t border-green-600">
-            <button
-              onClick={logout}
-              className="w-full text-sm text-green-200 hover:text-white text-left"
-            >
-              Sair →
-            </button>
-          </div>
-        </aside>
-        <main className="flex-1 p-4 md:p-8">{children}</main>
-      </div>
+            </div>
+          ))}
+        </nav>
+        <div className="p-4 border-t border-green-600">
+          <button
+            onClick={logout}
+            className="w-full text-sm text-green-200 hover:text-white text-left"
+          >
+            Sair →
+          </button>
+        </div>
+      </aside>
+      <main className="flex-1 p-4 md:p-8">{children}</main>
     </div>
   )
 }
