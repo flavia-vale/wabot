@@ -91,8 +91,8 @@ function LoginContent() {
             />
           </div>
 
-          {error && <Alert type="error" title="Falha na autenticação" message={error} />}
-          {success && <Alert type="success" title="Sucesso" message={success} />}
+          <div aria-live="assertive">{error && <Alert type="error" title="Falha na autenticação" message={error} />}</div>
+          <div aria-live="polite">{success && <Alert type="success" title="Sucesso" message={success} />}</div>
 
           <button
             type="submit"
