@@ -2,10 +2,35 @@ import axios from 'axios'
 import { createHmac } from 'crypto'
 import db from '../../db.js'
 
-const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN
 const MP_WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000'
 const API_URL = process.env.API_URL || 'http://localhost:3001'
+
+function getMpAccessToken() {
+  return process.env.MP_ACCESS_TOKEN
+}
+
+function sendError(reply, statusCode, code, message) {
+  return reply.code(statusCode).send({ error: { code, message } })
+}
+
+function validateCheckoutInput(body) {
+  const { plan } = body ?? {}
+  if (!PLANS[plan]) {
+    return {
+      ok: false,
+      error: { statusCode: 400, code: 'INVALID_PLAN', message: 'Plano inválido. Use basic ou pro.' },
+    }
+  }
+  return { ok: true, data: { plan } }
+}
+
+function ensurePaymentProviderConfigured(reply) {
+  if (getMpAccessToken()) return true
+  sendError(reply, 500, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'MercadoPago não configurado no servidor')
+  return false
+}
+
 
 const PLANS = {
   basic: { title: 'WaBot Basic', price: 50 },
@@ -14,12 +39,14 @@ const PLANS = {
 
 export async function paymentsRoutes(app) {
   app.post('/checkout', { onRequest: [app.authenticate] }, async (req, reply) => {
-    if (!MP_ACCESS_TOKEN) return reply.code(500).send({ error: 'MercadoPago não configurado no servidor' })
-    const { plan } = req.body ?? {}
-    if (!PLANS[plan]) return reply.code(400).send({ error: 'Plano inválido. Use basic ou pro.' })
+    const validation = validateCheckoutInput(req.body)
+    if (!validation.ok) return sendError(reply, validation.error.statusCode, validation.error.code, validation.error.message)
+    if (!ensurePaymentProviderConfigured(reply)) return
 
+    const { plan } = validation.data
     const userId = req.user.sub
     const planInfo = PLANS[plan]
+    const accessToken = getMpAccessToken()
 
     const mpRes = await axios.post(
       'https://api.mercadopago.com/checkout/preferences',
@@ -34,7 +61,7 @@ export async function paymentsRoutes(app) {
         notification_url: `${API_URL}/api/payments/webhook`,
         metadata: { userId, plan },
       },
-      { headers: { Authorization: `Bearer ${MP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
+      { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } }
     ).catch(err => {
       throw new Error(err.response?.data?.message || 'Erro ao criar preferência MercadoPago')
     })
@@ -60,11 +87,12 @@ export async function paymentsRoutes(app) {
     const paymentId = req.query?.['data.id'] ?? req.body?.data?.id
     if (type !== 'payment' || !paymentId) return { ok: true }
 
-    if (!MP_ACCESS_TOKEN) return reply.code(500).send({ error: 'MP não configurado' })
+    const accessToken = getMpAccessToken()
+    if (!accessToken) return sendError(reply, 500, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'MP não configurado')
 
     const mpPayRes = await axios.get(
       `https://api.mercadopago.com/v1/payments/${paymentId}`,
-      { headers: { Authorization: `Bearer ${MP_ACCESS_TOKEN}` } }
+      { headers: { Authorization: `Bearer ${accessToken}` } }
     ).catch(() => null)
 
     if (!mpPayRes) return { ok: true }
