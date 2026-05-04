@@ -1,152 +1,114 @@
 import Link from 'next/link'
 
-export const metadata = {
-  title: 'Bot Conversor para Afiliados | Automação de WhatsApp para Escalar Vendas',
-  description: 'Automatize envios no WhatsApp, converta links de afiliado e escale sua operação.',
-}
-
 export default function HomePage() {
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: `
+        /* RESET E VARIÁVEIS ORIGINAIS */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
         :root {
           --bg: #EEF6F2;
-          --bg-soft: #DDEDE5;
           --surface: #FCFEFD;
           --ink: #1F2D2A;
           --ink-soft: #5A6E68;
           --accent: #7CC9A9;
           --accent-strong: #3E9C7A;
-          --accent-2: #D9CFEA;
-          --accent-3: #F6E8D8;
-          --line: rgba(31,45,42,0.10);
-          --shadow: 0 30px 60px -30px rgba(62,156,122,0.30), 0 8px 24px -8px rgba(31,45,42,0.08);
-          --shadow-soft: 0 12px 30px -12px rgba(62,156,122,0.20);
-          --pad-section: 72px;
-          --pad-card: 20px;
-          --gap: 16px;
+          --line: rgba(31,45,42,0.1);
+          --font-main: 'Inter', sans-serif;
+          --font-serif: 'Instrument Serif', serif;
         }
 
         main { 
-          background: var(--bg); 
+          background-color: var(--bg); 
           color: var(--ink); 
           min-height: 100vh;
-          font-family: 'Inter', sans-serif;
-          position: relative;
+          font-family: var(--font-main);
+          overflow-x: hidden;
         }
 
-        /* Efeito de granulado do seu HTML */
-        main::before {
-          content:""; position: absolute; inset:0; pointer-events:none; z-index: 0;
-          background-image: radial-gradient(rgba(0,0,0,0.025) 1px, transparent 1px);
-          background-size: 4px 4px; opacity: .5;
-        }
-
-        .serif { font-family: 'Instrument Serif', serif; font-weight: 400; }
-        .mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; opacity: 0.7; }
-        .wrap { max-width: 1240px; margin: 0 auto; padding: 0 28px; position: relative; z-index: 1; }
-        section { padding: var(--pad-section) 0; }
+        .serif { font-family: var(--font-serif); font-weight: 400; }
+        .wrap { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
         
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--gap); }
-        
-        .card {
-          background: var(--surface);
-          border: 1px solid var(--line);
-          border-radius: 24px;
-          padding: var(--pad-card);
-          transition: transform 0.2s ease;
+        /* HERO */
+        .hero { padding: 100px 0 60px; text-align: center; }
+        .pill { 
+          display: inline-flex; align-items: center; gap: 8px;
+          background: var(--surface); border: 1px solid var(--line);
+          padding: 6px 16px; border-radius: 100px; font-size: 13px; margin-bottom: 24px;
         }
+        .dot { width: 8px; height: 8px; background: var(--accent-strong); border-radius: 50%; }
+        h1 { font-size: clamp(2.5rem, 8vw, 4.5rem); line-height: 1.1; margin-bottom: 20px; }
+        .subtitle { font-size: 1.25rem; color: var(--ink-soft); max-width: 600px; margin: 0 auto 32px; }
 
-        .btn {
-          display: inline-flex; align-items:center; gap:10px;
-          padding: 14px 22px; border-radius: 999px;
-          font-weight: 600; font-size: 15px; text-decoration: none;
-          transition: all .2s ease;
+        /* GRID */
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; padding: 40px 0; }
+        .card { 
+          background: var(--surface); border: 1px solid var(--line); 
+          padding: 32px; border-radius: 24px; transition: 0.2s;
         }
-        .btn-primary { background: var(--ink); color: var(--surface); }
+        .card:hover { border-color: var(--accent); }
+        .kicker { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.1em; color: var(--accent-strong); margin-bottom: 12px; display: block; }
+
+        /* BOTÕES */
+        .btn-row { display: flex; gap: 12px; justifyContent: center; flex-wrap: wrap; justify-content: center; }
+        .btn { 
+          padding: 16px 32px; border-radius: 100px; font-weight: 600; 
+          text-decoration: none; transition: 0.2s; font-size: 16px;
+        }
+        .btn-primary { background: var(--ink); color: white; }
         .btn-ghost { border: 1px solid var(--line); color: var(--ink); }
-        .btn-accent { background: var(--accent-strong); color: white; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
 
-        .pill {
-          display:inline-flex; align-items:center; gap:8px;
-          padding: 6px 12px; border-radius: 999px;
-          font-size: 12.5px; background: var(--surface);
-          border: 1px solid var(--line); color: var(--ink-soft);
-          margin-bottom: 16px;
-        }
-        .dot { width:6px; height:6px; border-radius:50%; background: var(--accent-strong); }
-        
-        h1 { font-size: 4rem; line-height: 1; margin-bottom: 24px; }
-        p { font-size: 1.2rem; line-height: 1.5; color: var(--ink-soft); margin-bottom: 32px; }
-        h2 { font-size: 2.5rem; margin-bottom: 16px; }
+        /* LISTA */
+        .check-list { list-style: none; text-align: left; margin: 24px 0; }
+        .check-list li { margin-bottom: 12px; display: flex; gap: 10px; align-items: center; }
       `}} />
 
       <main>
-        {/* HERO SECTION */}
-        <section className="wrap" style={{ textAlign: 'center', paddingTop: '100px' }}>
-          <div className="pill">
-            <div className="dot" />
-            <span>Feito para afiliados que querem escalar</span>
-          </div>
-          <h1 className="serif">Bot Conversor para Afiliados para vender todos os dias no WhatsApp</h1>
-          <p style={{ maxWidth: '700px', margin: '0 auto 32px' }}>
-            Converta links automaticamente, organize grupos e mantenha consistência operacional sem depender de processos manuais.
-          </p>
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+        <section className="hero wrap">
+          <div className="pill"><div className="dot" /> Feito para afiliados que querem escalar</div>
+          <h1 className="serif">Bot Conversor para Afiliados para vender todos os dias</h1>
+          <p className="subtitle">Converta links automaticamente e mantenha consistência operacional sem processos manuais.</p>
+          <div className="btn-row">
             <Link href="/login" className="btn btn-primary">Começar agora</Link>
             <Link href="/login" className="btn btn-ghost">Ver demonstração</Link>
           </div>
         </section>
 
-        {/* STEPS SECTION */}
         <section className="wrap">
           <div className="grid">
             <article className="card">
-              <p className="mono">PASSO 1</p>
-              <h3 className="serif" style={{ fontSize: '1.5rem', margin: '8px 0' }}>Conecte seu WhatsApp</h3>
-              <p style={{ fontSize: '1rem' }}>Ative seu número em poucos passos para começar a operação.</p>
+              <span className="kicker">PASSO 01</span>
+              <h2 className="serif" style={{fontSize: '1.8rem', marginBottom: '12px'}}>Conecte seu WhatsApp</h2>
+              <p style={{color: 'var(--ink-soft)'}}>Ative seu número em poucos passos para começar a operação.</p>
             </article>
             <article className="card">
-              <p className="mono">PASSO 2</p>
-              <h3 className="serif" style={{ fontSize: '1.5rem', margin: '8px 0' }}>Configure grupos</h3>
-              <p style={{ fontSize: '1rem' }}>Defina origem/destino e plataformas para conversão automática.</p>
+              <span className="kicker">PASSO 02</span>
+              <h2 className="serif" style={{fontSize: '1.8rem', marginBottom: '12px'}}>Configure grupos</h2>
+              <p style={{color: 'var(--ink-soft)'}}>Defina origem/destino e plataformas para conversão automática.</p>
             </article>
             <article className="card">
-              <p className="mono">PASSO 3</p>
-              <h3 className="serif" style={{ fontSize: '1.5rem', margin: '8px 0' }}>Escalone seus envios</h3>
-              <p style={{ fontSize: '1rem' }}>Ganhe produtividade com rotina de disparo contínua.</p>
+              <span className="kicker">PASSO 03</span>
+              <h2 className="serif" style={{fontSize: '1.8rem', marginBottom: '12px'}}>Escalone vendas</h2>
+              <p style={{color: 'var(--ink-soft)'}}>Ganhe produtividade com rotina de disparo contínua e organizada.</p>
             </article>
           </div>
         </section>
 
-        {/* CTA SECTION */}
-        <section className="wrap">
-          <div className="card" style={{ textAlign: 'center', padding: '60px 20px', background: 'var(--accent-3)' }}>
-            <h2 className="serif">Por que afiliados escolhem o Pro?</h2>
-            <ul style={{ listStyle: 'none', padding: 0, margin: '24px 0', textAlign: 'left', display: 'inline-block' }}>
-              <li>✅ Operação sem anúncios</li>
-              <li>✅ Conversores de links integrados</li>
-              <li>✅ Melhor previsibilidade de envios</li>
-              <li>✅ Upgrade simples conforme escala</li>
-            </ul>
-            <div style={{ marginTop: '20px' }}>
-              <Link href="/login" className="btn btn-accent">Criar conta e escalar</Link>
+        <section className="wrap" style={{paddingBottom: '100px'}}>
+          <div className="card" style={{background: '#F6E8D8', textAlign: 'center', padding: '60px'}}>
+            <h2 className="serif" style={{fontSize: '2.5rem'}}>Por que afiliados escolhem o Pro?</h2>
+            <div style={{display: 'inline-block'}}>
+              <ul className="check-list">
+                <li>✅ Operação sem anúncios</li>
+                <li>✅ Conversores de links integrados</li>
+                <li>✅ Melhor previsibilidade de envios</li>
+              </ul>
             </div>
-          </div>
-        </section>
-
-        {/* FAQ SECTION */}
-        <section className="wrap">
-          <h2 className="serif" style={{ textAlign: 'center' }}>Perguntas frequentes</h2>
-          <div className="grid" style={{ marginTop: '40px' }}>
-            <article className="card">
-              <h4 className="serif" style={{ fontSize: '1.3rem' }}>Preciso ser técnico?</h4>
-              <p style={{ fontSize: '1rem' }}>Não. O fluxo foi pensado para afiliados configurarem rapidamente.</p>
-            </article>
-            <article className="card">
-              <h4 className="serif" style={{ fontSize: '1.3rem' }}>Funciona para qualquer volume?</h4>
-              <p style={{ fontSize: '1rem' }}>Sim. Do iniciante ao avançado, o bot se adapta à sua escala.</p>
-            </article>
+            <div className="btn-row" style={{marginTop: '20px'}}>
+              <Link href="/login" className="btn btn-primary" style={{background: 'var(--accent-strong)'}}>Assinar Plano Pro</Link>
+            </div>
           </div>
         </section>
       </main>
