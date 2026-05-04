@@ -2,6 +2,7 @@ import { startBot, stopBot, isRunning, onQR, onStatus, listGroups, requestPairin
 import db from '../../db.js'
 import { rm } from 'fs/promises'
 import { resolve } from 'path'
+import { mapInfraError } from '../../errors.js'
 
 export async function sessionRoutes(app) {
   app.post('/start', { onRequest: [app.authenticate] }, async (req, reply) => {
@@ -62,7 +63,13 @@ export async function sessionRoutes(app) {
       const code = await requestPairingCode(userId, normalized)
       return { code }
     } catch (err) {
-      return reply.code(500).send({ error: err.message })
+      const appErr = mapInfraError(err)
+      req.log.error({ err, userId, phone: normalized, code: appErr.code }, 'Falha técnica ao solicitar pairing code')
+      return reply.code(appErr.statusCode).send({
+        code: appErr.code,
+        message: appErr.message,
+        retryable: appErr.retryable,
+      })
     }
   })
 

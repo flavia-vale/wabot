@@ -63,9 +63,12 @@ export async function broadcastRoutes(app) {
   app.delete('/scheduled/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
     const msg = await db.scheduledMessage.findFirst({
       where: { id: req.params.id, userId: req.user.sub },
+      select: { id: true, status: true },
     })
     if (!msg) return reply.code(404).send({ error: 'Mensagem não encontrada' })
+    if (msg.status === 'cancelled') return { ok: true, alreadyCancelled: true }
+
     await db.scheduledMessage.update({ where: { id: req.params.id }, data: { status: 'cancelled' } })
-    return { ok: true }
+    return { ok: true, alreadyCancelled: false }
   })
 }

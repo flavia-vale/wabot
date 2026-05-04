@@ -21,7 +21,14 @@ async function apiFetch(path, options = {}) {
     window.location.replace('/login')
     return
   }
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+  if (!res.ok) {
+    const message = data.message || data.error || `HTTP ${res.status}`
+    const err = new Error(message)
+    if (data.code) err.code = data.code
+    if (typeof data.retryable === 'boolean') err.retryable = data.retryable
+    err.status = res.status
+    throw err
+  }
   return data
 }
 
