@@ -59,7 +59,7 @@ function LoginContent() {
           <span className={`text-lg ${isRegister ? 'text-emerald-300' : 'text-green-600'}`}>
             {isRegister ? '✨' : '🤖'}
           </span>
-          <h1 className={`text-2xl font-bold ${isRegister ? 'text-emerald-100' : 'text-green-700'}`}>WaBot</h1>
+          <h1 className={`text-2xl font-bold ${isRegister ? 'text-emerald-100' : 'text-green-700'}`}>Bot Conversor para Afiliados</h1>
         </div>
         <p className={`text-sm mb-6 ${isRegister ? 'text-emerald-200' : 'text-gray-500'}`}>
           {isRegister ? 'Modo cadastro: crie sua conta para começar' : 'Entrar na sua conta'}
