@@ -3,25 +3,98 @@ const OG_IMAGE_RE = [
   /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
 ]
 
-async function fetchOgImage(url) {
-  try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WaBot/1.0; +https://wabot.com.br)' },
-      signal: AbortSignal.timeout(5_000),
-      redirect: 'follow',
-    })
-    if (!res.ok) return null
-    const html = await res.text()
-    for (const re of OG_IMAGE_RE) {
-      const m = html.match(re)
-      if (m?.[1]) return m[1]
-    }
-    return null
-  } catch {
+const JSON_LD_RE = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi
+const IMAGE_CACHE_TTL_MS = 5 * 60 * 1000
+const imageCache = new Map()
+const domainFailureMetrics = new Map()
+
+function getDomain(url) {
+  try { return new URL(url).hostname } catch { return 'invalid-url' }
+}
+
+function incFailure(url) {
+  const domain = getDomain(url)
+  domainFailureMetrics.set(domain, (domainFailureMetrics.get(domain) ?? 0) + 1)
+}
+
+function getCached(url) {
+  const cached = imageCache.get(url)
+  if (!cached) return null
+  if (cached.expiresAt < Date.now()) {
+    imageCache.delete(url)
     return null
   }
+  return cached.value
+}
+
+function setCached(url, value) {
+  imageCache.set(url, { value, expiresAt: Date.now() + IMAGE_CACHE_TTL_MS })
+}
+
+function extractJsonLdImage(html) {
+  const scripts = [...html.matchAll(JSON_LD_RE)]
+  for (const script of scripts) {
+    try {
+      const parsed = JSON.parse(script[1])
+      const nodes = Array.isArray(parsed) ? parsed : [parsed]
+      for (const node of nodes) {
+        const image = node?.image
+        if (typeof image === 'string') return image
+        if (Array.isArray(image) && typeof image[0] === 'string') return image[0]
+        if (image?.url) return image.url
+      }
+    } catch {
+      // ignora json-ld inválido
+    }
+  }
+  return null
+}
+
+async function fetchHtml(url) {
+  const res = await fetch(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WaBot/1.0; +https://wabot.com.br)' },
+    signal: AbortSignal.timeout(5_000),
+    redirect: 'follow',
+  })
+  if (!res.ok) return null
+  return res.text()
+}
+
+async function resolveByHtmlLayers(url) {
+  const html = await fetchHtml(url)
+  if (!html) return null
+
+  for (const re of OG_IMAGE_RE) {
+    const m = html.match(re)
+    if (m?.[1]) return m[1]
+  }
+
+  return extractJsonLdImage(html)
+}
+
+async function resolveFromOfficialApi(_platform, _url) {
+  return null
+}
+
+export function getImageResolverMetrics() {
+  return Object.fromEntries(domainFailureMetrics)
 }
 
 export async function fetchProductImage(platform, productUrl) {
-  return fetchOgImage(productUrl)
+  const cached = getCached(productUrl)
+  if (cached !== null) return cached
+
+  try {
+    const image = await resolveByHtmlLayers(productUrl)
+      ?? await resolveFromOfficialApi(platform, productUrl)
+      ?? null
+
+    if (!image) incFailure(productUrl)
+    setCached(productUrl, image)
+    return image
+  } catch {
+    incFailure(productUrl)
+    setCached(productUrl, null)
+    return null
+  }
 }
