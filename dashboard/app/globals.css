@@ -42,12 +42,12 @@ textarea::placeholder {
   input,
   textarea,
   select {
-    color: #f9fafb;
-    caret-color: #f9fafb;
+    color: #000000;
+    caret-color: #000000;
   }
 
   input::placeholder,
   textarea::placeholder {
-    color: #9ca3af;
+    color: #4b5563;
   }
 }

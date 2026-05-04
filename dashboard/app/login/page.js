@@ -77,8 +77,8 @@ function LoginContent() {
               required
               className={`border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 w-full transition-colors ${
                 isRegister
-                  ? 'bg-emerald-900/70 border-emerald-700 text-emerald-50 placeholder:text-emerald-300 focus:ring-emerald-300'
-                  : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-500 focus:ring-green-400'
+                  ? 'bg-white border-emerald-300 text-black placeholder:text-gray-600 focus:ring-emerald-400'
+                  : 'bg-white border-gray-300 text-black placeholder:text-gray-600 focus:ring-green-400'
               }`}
             />
           </div>
@@ -93,8 +93,8 @@ function LoginContent() {
               required
               className={`border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 w-full transition-colors ${
                 isRegister
-                  ? 'bg-emerald-900/70 border-emerald-700 text-emerald-50 placeholder:text-emerald-300 focus:ring-emerald-300'
-                  : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-500 focus:ring-green-400'
+                  ? 'bg-white border-emerald-300 text-black placeholder:text-gray-600 focus:ring-emerald-400'
+                  : 'bg-white border-gray-300 text-black placeholder:text-gray-600 focus:ring-green-400'
               }`}
             />
           </div>
