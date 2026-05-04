@@ -163,7 +163,7 @@ export function stopBot(userId) {
 
 
 ### UX-008 · Card "Carregar grupos existentes" deve ser o primeiro da página
-**Status:** open
+**Status:** closed
 **Prioridade:** média
 **Arquivo:** `dashboard/app/dashboard/grupos/page.js`
 
@@ -181,7 +181,7 @@ A ordem atual dos cards na página de Grupos é: [Monitorar] → [Postar] → [C
 ---
 
 ### UX-009 · Card "Adicionar manualmente" deve ser ocultado
-**Status:** open
+**Status:** closed
 **Prioridade:** média
 **Arquivo:** `dashboard/app/dashboard/grupos/page.js`
 
@@ -614,7 +614,7 @@ Afeta leitores de tela e ferramentas de tradução automática. Correção: `lan
 ---
 
 ### BUG-020 · Página `/dashboard/logs` retorna 404 em produção
-**Status:** open
+**Status:** closed
 **Prioridade:** alta
 **Arquivo:** `dashboard/app/dashboard/logs/page.js`
 
@@ -805,7 +805,7 @@ Expandir o card de cada grupo monitorado para exibir as configurações de image
 
 ### FEAT-002 · Conexão WhatsApp — estado desconectado e pareamento por número
 
-**Status:** open  
+**Status:** closed  
 **Prioridade:** alta  
 **Inspiração:** proafiliados.shop — modais `qrcode-modal` e `pairing-modal`
 
@@ -895,7 +895,7 @@ model MessageLog {
 
 ### FEAT-004 · Conversor AliExpress
 
-**Status:** open  
+**Status:** closed  
 **Prioridade:** média  
 **Credenciais necessárias:** Track ID + Cookie `xman_t`
 
@@ -909,7 +909,7 @@ AliExpress usa a API de afiliados Portals (`portals.aliexpress.com`). O link de 
 
 ### FEAT-005 · Grupos alvo por grupo monitorado
 
-**Status:** open  
+**Status:** closed  
 **Prioridade:** alta  
 **Inspiração:** proafiliados.shop — "Configurar Alvos" por grupo
 
@@ -1431,7 +1431,7 @@ Adicionar campo de busca com debounce + filtros combináveis (plataforma/grupo/p
 ## Módulo 11 — Auditoria UI/UX Dashboard (Grupo 4: Conexão WhatsApp, Home e Infra de feedback)
 
 ### UX-032 · Conexão WhatsApp sem retry explícito para geração de QR
-**Status:** open  
+**Status:** closed  
 **Prioridade:** média  
 **Arquivo:** `dashboard/app/dashboard/page.js`
 
@@ -1447,7 +1447,7 @@ Adicionar contador de espera + botão “Gerar novamente QR” após timeout seg
 ---
 
 ### UX-033 · Código de pareamento sem affordance de cópia rápida
-**Status:** open  
+**Status:** closed  
 **Prioridade:** baixa  
 **Arquivo:** `dashboard/app/dashboard/page.js`
 
@@ -1463,7 +1463,7 @@ Adicionar CTA “Copiar código” com feedback de sucesso/erro.
 ---
 
 ### UX-034 · Ações destrutivas (esquecer número/desligar) sem reforço de consequência em contexto
-**Status:** open  
+**Status:** closed  
 **Prioridade:** média  
 **Arquivo:** `dashboard/app/dashboard/page.js`
 
@@ -1479,7 +1479,7 @@ Exibir toast/alerta pós-ação com próximos passos claros.
 ---
 
 ### UX-035 · Home com redirecionamento silencioso sem fallback visual
-**Status:** open  
+**Status:** closed  
 **Prioridade:** baixa  
 **Arquivo:** `dashboard/app/page.js`
 
@@ -1495,7 +1495,7 @@ Renderizar estado mínimo (“Redirecionando...”) com acessibilidade (`aria-li
 ---
 
 ### UX-036 · Camada de API força redirect em 401 sem aviso prévio ao usuário
-**Status:** open  
+**Status:** closed  
 **Prioridade:** alta  
 **Arquivo:** `dashboard/lib/api.js`
 
@@ -1511,7 +1511,7 @@ Persistir mensagem de sessão expirada (query param ou storage) e exibir alerta 
 ---
 
 ### UX-037 · WebSocket de QR sem superfície de erro/estado de conexão na UI
-**Status:** open  
+**Status:** closed  
 **Prioridade:** média  
 **Arquivo:** `dashboard/lib/api.js` + `dashboard/app/dashboard/page.js`
 
