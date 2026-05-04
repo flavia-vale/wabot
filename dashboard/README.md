@@ -1,36 +1,38 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Dashboard - Deploy & operação segura
 
-## Getting Started
+## Mapa atual de política de segurança
 
-First, run the development server:
+### 1) CSP da homepage estática
+A homepage (`dashboard/public/index.html`) usa CSP via `<meta http-equiv="Content-Security-Policy">` com as diretivas:
+- `default-src 'self'`
+- `script-src 'self' https://unpkg.com`
+- `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`
+- `font-src 'self' https://fonts.gstatic.com data:`
+- `img-src 'self' data: https:`
+- `connect-src 'self'`
+- `object-src 'none'`, `base-uri 'self'`, `frame-ancestors 'none'`
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+### 2) Dependências externas críticas
+A homepage depende de CDN para:
+- React 18.3.1
+- ReactDOM 18.3.1
+- Babel Standalone 7.29.0
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Foi implementado fallback local para `/public/vendor/*` quando a CDN falha.
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+### 3) Firewall / egress na VPS Hetzner
+Risco operacional: se firewall local (UFW/iptables/nftables), cloud firewall da Hetzner, proxy corporativo ou ACL de saída bloquear `unpkg.com`, a homepage pode degradar.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Pré-check obrigatório antes de restart (produção)
 
-## Learn More
+Execute **antes** de qualquer `pm2 restart`:
 
-To learn more about Next.js, take a look at the following resources:
+1. Confirmar arquivos fallback locais:
+   - `/home/deploy/wabot/public/vendor/react.development.js`
+   - `/home/deploy/wabot/public/vendor/react-dom.development.js`
+   - `/home/deploy/wabot/public/vendor/babel.min.js`
+2. Validar saída HTTPS para CDN (ou confirmar que fallback local está populado e atualizado).
+3. Validar CSP efetiva da homepage sem violações no console.
+4. Testar homepage em cenário online e com bloqueio parcial de egress.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Se algum check falhar, **não reiniciar** o `dashboard` até corrigir.
