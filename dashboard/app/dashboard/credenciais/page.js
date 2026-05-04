@@ -144,7 +144,7 @@ export default function CredenciaisPage() {
 
       {PLATFORMS.map(p => (
         <PlatformCard
-          key={`${p.id}-${JSON.stringify(credMap[p.id] ?? {})}`}
+          key={p.id}
           platform={p}
           initialData={credMap[p.id]}
           onSave={handleSave}
