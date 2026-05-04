@@ -39,7 +39,7 @@ const PLATFORMS = [
   },
 ]
 
-function PlatformCard({ platform, initialData, onSave }) {
+function PlatformCard({ platform, initialData, onSave, disabled }) {
   const [values, setValues] = useState(initialData ?? {})
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -82,7 +82,7 @@ function PlatformCard({ platform, initialData, onSave }) {
         {error && <p className="text-red-500 text-sm">{error}</p>}
         <button
           type="submit"
-          disabled={saving}
+          disabled={saving || disabled}
           className="bg-green-600 text-white rounded-lg py-2 font-semibold hover:bg-green-700 disabled:opacity-50 transition text-sm"
         >
           {saving ? 'Salvando...' : saved ? '✅ Salvo!' : 'Salvar'}
@@ -94,13 +94,34 @@ function PlatformCard({ platform, initialData, onSave }) {
 
 export default function CredenciaisPage() {
   const [credMap, setCredMap] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
 
-  useEffect(() => {
-    api.credentials().then(list => {
+  async function loadCredentials() {
+    try {
+      const list = await api.credentials()
       const map = {}
       for (const c of list) map[c.platform] = c.data
       setCredMap(map)
-    }).catch(() => {})
+    } catch (err) {
+      setLoadError(err.message || 'Falha ao carregar credenciais.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    let active = true
+    api.credentials()
+      .then((list) => {
+        if (!active) return
+        const map = {}
+        for (const c of list) map[c.platform] = c.data
+        setCredMap(map)
+      })
+      .catch((err) => { if (active) setLoadError(err.message || 'Falha ao carregar credenciais.') })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
   }, [])
 
   async function handleSave(platform, data) {
@@ -116,12 +137,16 @@ export default function CredenciaisPage() {
         Mercado Livre: para gerar link curto correto (meli.la), preencha obrigatoriamente Tag, SSID e CSRF.
       </p>
 
+      {loading && <p className="text-gray-500 text-sm mb-4">Carregando credenciais...</p>}
+      {loadError && <div className="bg-red-50 border border-red-200 text-red-600 rounded-lg px-3 py-2 text-sm mb-4">{loadError} <button onClick={loadCredentials} className="underline ml-2">Recarregar</button></div>}
+
       {PLATFORMS.map(p => (
         <PlatformCard
           key={`${p.id}-${JSON.stringify(credMap[p.id] ?? {})}`}
           platform={p}
           initialData={credMap[p.id]}
           onSave={handleSave}
+          disabled={loading || !!loadError}
         />
       ))}
     </div>
