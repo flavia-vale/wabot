@@ -19,6 +19,7 @@ export default function LogsPage() {
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     let active = true
@@ -60,6 +61,8 @@ export default function LogsPage() {
   }
 
   const totalPages = Math.ceil(total / LIMIT)
+  const query = search.trim().toLowerCase()
+  const filtered = logs.filter(log => !query || `${log.messageText||''} ${log.sourceGroupName||''} ${log.destGroupName||''} ${log.platform||''}`.toLowerCase().includes(query))
 
   return (
     <div>
@@ -90,14 +93,15 @@ export default function LogsPage() {
       </div>
 
       {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
+      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar por conteúdo, grupo ou plataforma" className="w-full mb-4 border rounded-lg px-3 py-2 text-sm" />
 
       {loading ? (
         <p className="text-gray-500 text-sm">Carregando...</p>
-      ) : logs.length === 0 ? (
+) : filtered.length === 0 ? (
         <p className="text-gray-500 text-sm">Nenhum log encontrado.</p>
       ) : (
         <>
-          <div className="bg-white rounded-xl shadow overflow-hidden">
+          <div className="md:hidden space-y-3">{filtered.map(log => (<div key={`m-${log.id}`} className="bg-white rounded-xl shadow p-3 text-sm"><div className="flex justify-between"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${PLATFORM_COLORS[log.platform] || 'bg-gray-100 text-gray-600'}`}>{log.platform}</span><span className="text-xs text-gray-400">{new Date(log.sentAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span></div><p className="text-gray-700 mt-2"><strong>Origem:</strong> {log.sourceGroupName}</p><p className="text-gray-700"><strong>Destino:</strong> {log.destGroupName}</p><p className="text-gray-600 truncate" title={log.messageText}>{log.messageText}</p><p className={log.status === 'success' ? 'text-green-600 font-medium mt-1' : 'text-red-500 font-medium mt-1'}>{log.status === 'success' ? '✓ Enviado' : '✗ Erro'}</p></div>))}</div><div className="hidden md:block bg-white rounded-xl shadow overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
                 <tr>
@@ -110,7 +114,7 @@ export default function LogsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {logs.map(log => (
+                {filtered.map(log => (
                   <tr key={log.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${PLATFORM_COLORS[log.platform] || 'bg-gray-100 text-gray-600'}`}>
