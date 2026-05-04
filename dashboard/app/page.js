@@ -53,6 +53,10 @@ export default function HomePage() {
           Converta links automaticamente, organize envios em grupos e mantenha consistência operacional sem depender de processos manuais.
         </p>
 
+        <div className="mt-4 inline-flex items-center rounded-full border border-[#3E9C7A] bg-[#e9f7f1] px-4 py-2 text-xs font-semibold text-[#256b54]">
+          ✅ Nova Landing ativa — versão 2026-05-04
+        </div>
+
         <div className="mt-8 flex flex-wrap gap-3">
           <Link href="/login" className="rounded-full bg-[#1F2D2A] px-6 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5">
             Começar agora
