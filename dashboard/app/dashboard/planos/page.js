@@ -191,7 +191,6 @@ function PlanosContent() {
               </div>
             ))}
           </div>
-          {copyError && <p className="text-red-500 text-xs mt-2">{copyError}</p>}
         </div>
       )}
     </div>

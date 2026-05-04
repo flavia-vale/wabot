@@ -25,6 +25,8 @@ export default function ConfigPage() {
   const [error, setError] = useState('')
 
   async function loadConfig() {
+    setLoading(true)
+    setLoadError('')
     try {
       const cfg = await api.getConfig()
       setForm({

@@ -98,6 +98,8 @@ export default function CredenciaisPage() {
   const [loadError, setLoadError] = useState('')
 
   async function loadCredentials() {
+    setLoading(true)
+    setLoadError('')
     try {
       const list = await api.credentials()
       const map = {}
@@ -142,7 +144,7 @@ export default function CredenciaisPage() {
 
       {PLATFORMS.map(p => (
         <PlatformCard
-          key={`${p.id}-${JSON.stringify(credMap[p.id] ?? {})}`}
+          key={p.id}
           platform={p}
           initialData={credMap[p.id]}
           onSave={handleSave}
