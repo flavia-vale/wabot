@@ -1,9 +1,10 @@
 /* dashboard/app/globals.css */
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;600&family=JetBrains+Mono&display=swap');
+
 html, body {
   margin: 0;
   padding: 0;
-  box-sizing: border-box;
-  background-color: #EEF6F2; /* Cor de fundo menta original */
+  background-color: #EEF6F2 !important; /* Força a cor menta */
 }
 
 * {
