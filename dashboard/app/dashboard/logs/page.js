@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { api } from '@/lib/api'
+import { EmptyState, ErrorState, LoadingState } from '@/components/States'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 
 const PLATFORM_COLORS = {
   shopee:        'bg-orange-100 text-orange-700',
@@ -20,6 +22,7 @@ export default function LogsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
+  const [showClearConfirm, setShowClearConfirm] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -42,7 +45,6 @@ export default function LogsPage() {
   }, [tab, page])
 
   async function handleClear() {
-    if (!confirm('Limpar todos os logs? Esta ação não pode ser desfeita.')) return
     setError('')
     try {
       await api.logsClear()
@@ -69,7 +71,7 @@ export default function LogsPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-800">📋 Logs de Envio</h1>
         <button
-          onClick={handleClear}
+          onClick={() => setShowClearConfirm(true)}
           className="text-sm text-red-500 hover:text-red-700 transition"
         >
           Limpar logs
@@ -92,13 +94,13 @@ export default function LogsPage() {
         ))}
       </div>
 
-      {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
+      {error && <div className="mb-4"><ErrorState title="Falha ao carregar logs" message={error} /></div>}
       <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar por conteúdo, grupo ou plataforma" className="w-full mb-4 border rounded-lg px-3 py-2 text-sm" />
 
       {loading ? (
-        <p className="text-gray-500 text-sm">Carregando...</p>
+        <LoadingState />
 ) : filtered.length === 0 ? (
-        <p className="text-gray-500 text-sm">Nenhum log encontrado.</p>
+        <EmptyState message="Nenhum log encontrado." />
       ) : (
         <>
           <div className="md:hidden space-y-3">{filtered.map(log => (<div key={`m-${log.id}`} className="bg-white rounded-xl shadow p-3 text-sm"><div className="flex justify-between"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${PLATFORM_COLORS[log.platform] || 'bg-gray-100 text-gray-600'}`}>{log.platform}</span><span className="text-xs text-gray-400">{new Date(log.sentAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span></div><p className="text-gray-700 mt-2"><strong>Origem:</strong> {log.sourceGroupName}</p><p className="text-gray-700"><strong>Destino:</strong> {log.destGroupName}</p><p className="text-gray-600 truncate" title={log.messageText}>{log.messageText}</p><p className={log.status === 'success' ? 'text-green-600 font-medium mt-1' : 'text-red-500 font-medium mt-1'}>{log.status === 'success' ? '✓ Enviado' : '✗ Erro'}</p></div>))}</div><div className="hidden md:block bg-white rounded-xl shadow overflow-hidden">
@@ -172,6 +174,7 @@ export default function LogsPage() {
           </div>
         </>
       )}
+      <ConfirmDialog open={showClearConfirm} title="Limpar logs" message="Todos os registros serão apagados permanentemente." confirmLabel="Limpar agora" danger onCancel={() => setShowClearConfirm(false)} onConfirm={async () => { setShowClearConfirm(false); await handleClear() }} />
     </div>
   )
 }
