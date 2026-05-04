@@ -4,34 +4,20 @@ import { api } from '@/lib/api'
 
 export default function GruposPage() {
   const [groups, setGroups] = useState([])
-  const [form, setForm] = useState({ waJid: '', name: '', role: 'monitor' })
-  const [error, setError] = useState('')
   const [actionError, setActionError] = useState('')
-  const [loading, setLoading] = useState(false)
   const [waGroups, setWaGroups] = useState(null)
   const [loadingWA, setLoadingWA] = useState(false)
   const [waError, setWaError] = useState('')
+  const [showManual, setShowManual] = useState(false)
+  const [manualForm, setManualForm] = useState({ waJid: '', name: '', role: 'monitor' })
+  const [manualLoading, setManualLoading] = useState(false)
+  const [manualError, setManualError] = useState('')
 
   async function load() {
     try { setGroups(await api.groups()) } catch (err) { setActionError(err.message) }
   }
 
   useEffect(() => { load() }, [])
-
-  async function handleAdd(e) {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
-    try {
-      await api.addGroup(form.waJid.trim(), form.name.trim(), form.role)
-      setForm({ waJid: '', name: '', role: 'monitor' })
-      await load()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   async function handleDelete(id) {
     if (!confirm('Remover este grupo?')) return
@@ -66,6 +52,22 @@ export default function GruposPage() {
     } catch (err) { setActionError(err.message) }
   }
 
+  async function handleManualAdd(e) {
+    e.preventDefault()
+    setManualError('')
+    setActionError('')
+    setManualLoading(true)
+    try {
+      await api.addGroup(manualForm.waJid.trim(), manualForm.name.trim(), manualForm.role)
+      setManualForm({ waJid: '', name: '', role: 'monitor' })
+      await load()
+    } catch (err) {
+      setManualError(err.message)
+    } finally {
+      setManualLoading(false)
+    }
+  }
+
   const monitor = groups.filter(g => g.role === 'monitor')
   const post = groups.filter(g => g.role === 'post')
   const existingJidRoles = new Set(groups.map(g => `${g.waJid}::${g.role}`))
@@ -77,7 +79,65 @@ export default function GruposPage() {
 
       {actionError && <p className="text-red-500 text-sm mb-4">{actionError}</p>}
 
-      {/* Grupos cadastrados */}
+      {/* Carregar grupos do WhatsApp */}
+      <div className="bg-white rounded-2xl shadow p-5 mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-gray-700">Carregar grupos existentes</h3>
+          <button
+            onClick={handleLoadWA}
+            disabled={loadingWA}
+            className="bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-50 transition"
+          >
+            {loadingWA ? 'Carregando...' : 'Carregar do WhatsApp'}
+          </button>
+        </div>
+        <p className="text-xs text-gray-400 mb-3">O bot precisa estar conectado para listar os grupos.</p>
+
+        {waError && <p className="text-red-500 text-sm mb-2">{waError}</p>}
+
+        {waGroups && waGroups.length === 0 && (
+          <p className="text-gray-400 text-sm">Nenhum grupo encontrado.</p>
+        )}
+
+        {waGroups && waGroups.length > 0 && (
+          <ul className="flex flex-col gap-2 max-h-64 overflow-y-auto">
+            {waGroups.map(g => {
+              const monitorAlready = existingJidRoles.has(`${g.waJid}::monitor`)
+              const postAlready = existingJidRoles.has(`${g.waJid}::post`)
+              const bothAlready = monitorAlready && postAlready
+              return (
+                <li key={g.waJid} className="flex items-center justify-between text-sm border-b pb-2 last:border-0">
+                  <span className={`font-medium ${bothAlready ? 'text-gray-400' : 'text-gray-700'}`}>
+                    {g.name}
+                    {bothAlready && <span className="ml-2 text-xs text-gray-400">(já cadastrado)</span>}
+                  </span>
+                  {!bothAlready && (
+                    <div className="flex gap-2">
+                      {!monitorAlready && (
+                        <button
+                          onClick={() => handleAddFromWA(g, 'monitor')}
+                          className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition"
+                        >
+                          👀 Monitorar
+                        </button>
+                      )}
+                      {!postAlready && (
+                        <button
+                          onClick={() => handleAddFromWA(g, 'post')}
+                          className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200 transition"
+                        >
+                          📢 Postar
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+
       {/* Grupos monitorados */}
       <div className="bg-white rounded-2xl shadow p-5 mb-4">
         <h3 className="font-semibold text-gray-700 mb-3">👀 Monitorar (origem)</h3>
@@ -164,102 +224,56 @@ export default function GruposPage() {
         )}
       </div>
 
-      {/* Carregar grupos do WhatsApp */}
-      <div className="bg-white rounded-2xl shadow p-5 mb-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-gray-700">Carregar grupos existentes</h3>
-          <button
-            onClick={handleLoadWA}
-            disabled={loadingWA}
-            className="bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-50 transition"
-          >
-            {loadingWA ? 'Carregando...' : 'Carregar do WhatsApp'}
-          </button>
-        </div>
-        <p className="text-xs text-gray-400 mb-3">O bot precisa estar conectado para listar os grupos.</p>
-
-        {waError && <p className="text-red-500 text-sm mb-2">{waError}</p>}
-
-        {waGroups && waGroups.length === 0 && (
-          <p className="text-gray-400 text-sm">Nenhum grupo encontrado.</p>
-        )}
-
-        {waGroups && waGroups.length > 0 && (
-          <ul className="flex flex-col gap-2 max-h-64 overflow-y-auto">
-            {waGroups.map(g => {
-              const monitorAlready = existingJidRoles.has(`${g.waJid}::monitor`)
-              const postAlready    = existingJidRoles.has(`${g.waJid}::post`)
-              const bothAlready    = monitorAlready && postAlready
-              return (
-                <li key={g.waJid} className="flex items-center justify-between text-sm border-b pb-2 last:border-0">
-                  <span className={`font-medium ${bothAlready ? 'text-gray-400' : 'text-gray-700'}`}>
-                    {g.name}
-                    {bothAlready && <span className="ml-2 text-xs text-gray-400">(já cadastrado)</span>}
-                  </span>
-                  {!bothAlready && (
-                    <div className="flex gap-2">
-                      {!monitorAlready && (
-                        <button
-                          onClick={() => handleAddFromWA(g, 'monitor')}
-                          className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition"
-                        >
-                          👀 Monitorar
-                        </button>
-                      )}
-                      {!postAlready && (
-                        <button
-                          onClick={() => handleAddFromWA(g, 'post')}
-                          className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200 transition"
-                        >
-                          📢 Postar
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </div>
-
-      {/* Formulário manual */}
       <div className="bg-white rounded-2xl shadow p-5">
-        <h3 className="font-semibold text-gray-700 mb-3">Adicionar manualmente</h3>
-        <form onSubmit={handleAdd} className="flex flex-col gap-3">
-          <input
-            placeholder="Nome do grupo (ex: Grupo Ofertas)"
-            value={form.name}
-            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-            required
-            className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
-          />
-          <input
-            placeholder="JID do grupo (ex: 120363421377996844@g.us)"
-            value={form.waJid}
-            onChange={e => setForm(f => ({ ...f, waJid: e.target.value }))}
-            required
-            className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
-          />
-          <select
-            value={form.role}
-            onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
-            className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
-          >
-            <option value="monitor">👀 Monitorar (origem)</option>
-            <option value="post">📢 Postar (destino)</option>
-          </select>
+        <button
+          type="button"
+          onClick={() => setShowManual(v => !v)}
+          className="text-sm text-gray-600 underline underline-offset-4"
+        >
+          {showManual ? 'Ocultar modo avançado' : 'Mostrar modo avançado (JID manual)'}
+        </button>
 
-          {error && <p className="text-red-500 text-sm">{error}</p>}
+        {showManual && (
+          <>
+            <p className="text-xs text-amber-600 mt-3 mb-2">
+              Use apenas se você já tiver o JID técnico do grupo.
+            </p>
+            <form onSubmit={handleManualAdd} className="flex flex-col gap-3">
+              <input
+                placeholder="Nome do grupo (ex: Grupo Ofertas)"
+                value={manualForm.name}
+                onChange={e => setManualForm(f => ({ ...f, name: e.target.value }))}
+                required
+                className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
+              />
+              <input
+                placeholder="JID do grupo (ex: 120363421377996844@g.us)"
+                value={manualForm.waJid}
+                onChange={e => setManualForm(f => ({ ...f, waJid: e.target.value }))}
+                required
+                className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
+              />
+              <select
+                value={manualForm.role}
+                onChange={e => setManualForm(f => ({ ...f, role: e.target.value }))}
+                className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
+              >
+                <option value="monitor">👀 Monitorar (origem)</option>
+                <option value="post">📢 Postar (destino)</option>
+              </select>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="bg-green-600 text-white rounded-lg py-2 font-semibold hover:bg-green-700 disabled:opacity-50 transition"
-          >
-            {loading ? 'Salvando...' : 'Adicionar'}
-          </button>
-        </form>
+              {manualError && <p className="text-red-500 text-sm">{manualError}</p>}
+
+              <button
+                type="submit"
+                disabled={manualLoading}
+                className="bg-gray-700 text-white rounded-lg py-2 font-semibold hover:bg-gray-800 disabled:opacity-50 transition"
+              >
+                {manualLoading ? 'Salvando...' : 'Adicionar manualmente'}
+              </button>
+            </form>
+          </>
+        )}
       </div>
     </div>
   )
