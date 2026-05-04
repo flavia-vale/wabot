@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Dashboard (Home estática via `public/index.html`)
 
-## Getting Started
+Este projeto contém o dashboard em Next.js, mas **a edição da home pública deve seguir o fluxo oficial via `public/index.html`**.
 
-First, run the development server:
+## Fluxo oficial para editar a Home
+
+> **Não usar `app/page.js` para a home pública.**
+
+1. Edite `public/index.html`.
+2. Revise referências de assets (`/public/...`) e links absolutos/relativos.
+3. Valide localmente com build de produção.
+4. Publique e execute smoke test mínimo pós-deploy.
+
+## Dependências externas (CDNs)
+
+Se `public/index.html` usar bibliotecas externas (CSS/JS/fontes) por CDN:
+
+- Documente cada dependência (nome, versão e URL).
+- Prefira versões fixas (evitar `latest`).
+- Garanta fallback ou plano de contingência para indisponibilidade da CDN.
+- Avalie impacto de CSP, SRI (`integrity`) e `crossorigin` quando aplicável.
+
+## Checklist de publicação (Home)
+
+Antes de publicar:
+
+- [ ] Alterações da home feitas em `public/index.html`.
+- [ ] Assets referenciados existem e carregam sem erro.
+- [ ] Dependências CDN revisadas (versão fixa e disponibilidade).
+- [ ] Build de produção concluído com sucesso.
+- [ ] Sem erros críticos no console do navegador.
+
+## Smoke test mínimo pós-deploy (Home)
+
+Após deploy, validar no domínio publicado:
+
+1. `GET /` retorna `200`.
+2. HTML final contém as seções esperadas da home.
+3. CSS principal carrega sem `404`.
+4. JS principal carrega sem `404`.
+5. Abrir em aba anônima e confirmar renderização inicial sem erro crítico no console.
+
+Exemplo rápido com `curl`:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+curl -I https://SEU_DOMINIO/
+curl -s https://SEU_DOMINIO/ | head -n 40
 ```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
