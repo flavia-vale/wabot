@@ -1,0 +1,2402 @@
+<!DOCTYPE html>
+	<html lang="pt-BR">
+	<head>
+	        <meta charset="UTF-8">
+	        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+	
+
+	        
+	        <title>Pro Afiliados - Bot WhatsApp Grátis e Ilimitado para Afiliados</title>
+	        <meta name="title" content="Pro Afiliados - Bot WhatsApp Grátis e Ilimitado para Afiliados">
+	        <meta name="description" content="Bot WhatsApp grátis e ilimitado para afiliados. Monitora grupos ilimitados 24/7, converte links de Shopee, Amazon, AliExpress, Mercado Livre e Magazine Luiza. Plano gratuito com tag proafiliados. Feed Global exclusivo, agendamento, broadcast.">
+	        <meta name="author" content="Pro Afiliados">
+	        <meta name="robots" content="index, follow">
+	        <meta name="language" content="Portuguese">
+	
+
+	        
+	        <meta name="geo.region" content="BR">
+	        <meta name="geo.placename" content="Brasil">
+	        <meta name="geo.position" content="-14.2350;-51.9253">
+	        <meta name="ICBM" content="-14.2350, -51.9253">
+	
+
+	        
+	        <meta name="format-detection" content="telephone=no">
+	        <meta name="mobile-web-app-capable" content="yes">
+	        <meta name="apple-mobile-web-app-capable" content="yes">
+	        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+	        <meta name="theme-color" content="#09090B">
+	        <meta name="msapplication-TileColor" content="#09090B">
+	        <meta name="msapplication-config" content="/browserconfig.xml">
+	
+
+	        
+	        
+	        
+	
+
+	        
+	        <meta property="og:type" content="website">
+	        <meta property="og:url" content="https://proafiliados.com/">
+	        <meta property="og:title" content="Pro Afiliados - Bot WhatsApp Grátis e Ilimitado para Afiliados">
+	        <meta property="og:description" content="Bot WhatsApp grátis e ilimitado para afiliados. Monitora grupos ilimitados 24/7, converte links de 5 plataformas automaticamente. Plano gratuito.">
+	        <meta property="og:image" content="https://proafiliados.com/og-image.png">
+	        <meta property="og:image:secure_url" content="https://proafiliados.com/og-image.png">
+	        <meta property="og:image:width" content="1200">
+	        <meta property="og:image:height" content="630">
+	        <meta property="og:image:alt" content="Pro Afiliados - Bot WhatsApp para Afiliados | Automação de Links 24/7">
+	        <meta property="og:image:type" content="image/png">
+	        <meta property="og:locale" content="pt_BR">
+	        <meta property="og:site_name" content="Pro Afiliados">
+	
+
+	        
+	        <meta name="twitter:card" content="summary_large_image">
+	        <meta name="twitter:url" content="https://proafiliados.com/">
+	        <meta name="twitter:title" content="Pro Afiliados - Bot WhatsApp Grátis e Ilimitado para Afiliados">
+	        <meta name="twitter:description" content="Bot WhatsApp grátis e ilimitado para afiliados. Monitora grupos ilimitados 24/7, converte links automaticamente. Plano gratuito.">
+	        <meta name="twitter:image" content="https://proafiliados.com/twitter-image.png">
+	        <meta name="twitter:image:alt" content="Pro Afiliados - Bot WhatsApp para Afiliados | Automação de Links 24/7">
+	        <meta name="twitter:site" content="@proafiliadosbot">
+	        <meta name="twitter:creator" content="@proafiliadosbot">
+	
+
+	        
+	        <link rel="canonical" href="https://proafiliados.com/">
+	
+
+	        
+	        <script async src="https://www.googletagmanager.com/gtag/js?id=G-7ZKQCY6PJN"></script>
+	        <script>
+	         window.dataLayer = window.dataLayer || [];
+	         function gtag(){dataLayer.push(arguments);}
+	         gtag('js', new Date());
+	         gtag('config', 'G-7ZKQCY6PJN');
+	        </script>
+	
+
+	        
+	        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+	        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+	        <link rel="shortcut icon" href="/favicon.ico">
+	        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+	        <link rel="manifest" href="/site.webmanifest">
+	
+
+	        
+	        <link rel="dns-prefetch" href="https://fonts.googleapis.com">
+	        <link rel="dns-prefetch" href="https://fonts.gstatic.com">
+	        <link rel="dns-prefetch" href="https://cdn.tailwindcss.com">
+	        <link rel="preconnect" href="https://fonts.googleapis.com">
+	        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	        <link rel="prefetch" href="https://proafiliados.com/login">
+	        <link rel="prefetch" href="https://proafiliados.com/register">
+	
+
+	        
+	        <script type="application/ld+json">
+	        {
+	                "@context": "https://schema.org",
+	                "@type": "SoftwareApplication",
+	                "name": "Pro Afiliados",
+	                "applicationCategory": "BusinessApplication",
+	                "operatingSystem": "Web",
+	                "image": "https://proafiliados.com/og-image.png",
+	                "offers": {
+	                        "@type": "AggregateOffer",
+	                        "lowPrice": "0",
+	                        "highPrice": "100",
+	                        "priceCurrency": "BRL",
+	                        "offerCount": "3",
+	                        "offers": [
+	                                { "@type": "Offer", "name": "Plano Grátis", "price": "0", "priceCurrency": "BRL", "description": "Grupos ilimitados, monitoramento 24/7, tag proafiliados incluída", "availability": "https://schema.org/InStock" },
+	                                { "@type": "Offer", "name": "Plano Premium", "price": "50", "priceCurrency": "BRL", "description": "Sem anúncios do sistema, todos os recursos inclusos", "availability": "https://schema.org/InStock" },
+	                                { "@type": "Offer", "name": "Plano Premium Plus", "price": "100", "priceCurrency": "BRL", "description": "Sem anúncios do sistema, todos os recursos inclusos", "availability": "https://schema.org/InStock" }
+	                        ]
+	                },
+	                "description": "Pro Afiliados: bot WhatsApp grátis e ilimitado para afiliados. Plataforma de automação que monitora grupos ilimitados do WhatsApp 24/7, detecta links de produtos de Shopee, AliExpress, Mercado Livre, Amazon e Magazine Luiza, e converte automaticamente para links de afiliados com tag proafiliados incluída no plano gratuito. Melhor alternativa ao Divulgador Inteligente, Divulga Ninja, Gigi Prime Bot, Busqy e DivulgaLinks.",
+	                "featureList": ["Plano grátis ilimitado com tag proafiliados incluída","Monitoramento ilimitado de grupos WhatsApp 24/7","Detecção automática de links de produtos em tempo real","Conversão automática de links para afiliados (Shopee, AliExpress, Mercado Livre, Amazon, Magazine Luiza)","Reenvio automático para grupos ilimitados de afiliados","Feed Global exclusivo: compartilhamento P2P de links entre afiliados","Preview inteligente de produtos com título, descrição, imagem, preço e desconto","Agendamento automático: liga e desliga o bot em horários configurados","Mensagens programadas: intervalo fixo, diário ou semanal","Disparo manual de links para grupos específicos","Broadcast em massa: enviar texto e imagem para todos os grupos","Postar no Status do WhatsApp automaticamente","Mensagem de boas-vindas personalizável por grupo","Convite automático de grupo","Sistema de delay inteligente entre postagens com delay global entre grupos monitorados","Filtros avançados: palavras bloqueadas, strip keywords e marketplaces permitidos","Fallback de imagem e imagem original como preview","Suporte a Canais e Comunidades do WhatsApp","Sistema de referências com código único e recompensa de 15 dias grátis","Histórico de logs de envio com estatísticas em tempo real","Autenticação via QR Code e código de pareamento por telefone","Dashboard completo e responsivo para gerenciamento","Proxy residencial para previews do Mercado Livre","Servidor AliExpress dedicado"],
+	                "aggregateRating": { "@type": "AggregateRating", "ratingValue": "5", "reviewCount": "3", "bestRating": "5", "worstRating": "1" },
+	                "softwareVersion": "1.0",
+	                "datePublished": "2024-01-01",
+	                "dateModified": "2026-05-02"
+	        }
+	        </script>
+	        <script type="application/ld+json">
+	        {
+	                "@context": "https://schema.org",
+	                "@type": "Organization",
+	                "name": "Pro Afiliados",
+	                "url": "https://proafiliados.com",
+	                "logo": { "@type": "ImageObject", "url": "https://proafiliados.com/logo-512x512.png", "width": 512, "height": 512 },
+	                "image": "https://proafiliados.com/og-image.png",
+	                "description": "Pro Afiliados: bot WhatsApp grátis e ilimitado para automação de afiliados no WhatsApp. Monitora grupos ilimitados 24/7 e converte links de Shopee, Amazon, AliExpress, Mercado Livre e Magazine Luiza automaticamente. Siga no Instagram @proafiliadosbot e assista tutoriais no YouTube.",
+	                "sameAs": ["https://www.facebook.com/proafiliadosbot","https://www.instagram.com/proafiliadosbot","https://twitter.com/proafiliadosbot","https://www.youtube.com/@proafiliadosbot"],
+	                "contactPoint": { "@type": "ContactPoint", "contactType": "Suporte ao Cliente", "availableLanguage": "Portuguese", "contactOption": "WhatsApp" },
+	                "founder": { "@type": "Person", "name": "Equipe Pro Afiliados" },
+	                "foundingDate": "2024",
+	                "knowsAbout": ["Automação de Afiliados no WhatsApp","Marketing de Afiliados","Bot WhatsApp para Afiliados","Shopee Afiliados","Amazon Afiliados","Mercado Livre Afiliados","AliExpress Afiliados","Magazine Luiza Afiliados","Divulgação de Links no WhatsApp","Monitoramento de Grupos WhatsApp"]
+	        }
+	        </script>
+	        <script type="application/ld+json">
+	        { "@context": "https://schema.org", "@type": "VideoObject", "name": "Como se cadastrar na Amazon como afiliado e se cadastrar no Pro Afiliados", "description": "Tutorial completo: aprenda como se cadastrar na Amazon como afiliado e conectar sua conta no Pro Afiliados.", "thumbnailUrl": "https://img.youtube.com/vi/yczbULSavQA/maxresdefault.jpg", "uploadDate": "2025-01-27T10:00:00-03:00", "duration": "PT6M30S", "contentUrl": "https://www.youtube.com/watch?v=yczbULSavQA", "embedUrl": "https://www.youtube.com/embed/yczbULSavQA", "@id": "https://www.youtube.com/watch?v=yczbULSavQA", "inLanguage": "pt-BR", "isFamilyFriendly": true, "publisher": { "@type": "Organization", "name": "Pro Afiliados", "logo": { "@type": "ImageObject", "url": "https://proafiliados.com/logo-512x512.png" } } }
+	        </script>
+	        <script type="application/ld+json">
+	        { "@context": "https://schema.org", "@type": "VideoObject", "name": "Como se cadastrar no AliExpress como afiliado e conectar no Pro Afiliados", "description": "Tutorial passo a passo: aprenda como se cadastrar na AliExpress como afiliado e conectar sua conta no Pro Afiliados.", "thumbnailUrl": "https://img.youtube.com/vi/ivueF_cinls/maxresdefault.jpg", "uploadDate": "2025-01-27T10:00:00-03:00", "duration": "PT8M27S", "contentUrl": "https://www.youtube.com/watch?v=ivueF_cinls", "embedUrl": "https://www.youtube.com/embed/ivueF_cinls", "@id": "https://www.youtube.com/watch?v=ivueF_cinls", "inLanguage": "pt-BR", "isFamilyFriendly": true, "publisher": { "@type": "Organization", "name": "Pro Afiliados", "logo": { "@type": "ImageObject", "url": "https://proafiliados.com/logo-512x512.png" } } }
+	        </script>
+	        <script type="application/ld+json">
+	        { "@context": "https://schema.org", "@type": "VideoObject", "name": "Como se cadastrar na Shopee Afiliados, Solicitar API e configurar no Pro Afiliados", "description": "Tutorial completo: aprenda como se cadastrar na Shopee como afiliado, solicitar sua API Key e configurar no Pro Afiliados.", "thumbnailUrl": "https://img.youtube.com/vi/fBpE1bjmjqI/maxresdefault.jpg", "uploadDate": "2025-01-27T10:00:00-03:00", "duration": "PT7M32S", "contentUrl": "https://www.youtube.com/watch?v=fBpE1bjmjqI", "embedUrl": "https://www.youtube.com/embed/fBpE1bjmjqI", "@id": "https://www.youtube.com/watch?v=fBpE1bjmjqI", "inLanguage": "pt-BR", "isFamilyFriendly": true, "publisher": { "@type": "Organization", "name": "Pro Afiliados", "logo": { "@type": "ImageObject", "url": "https://proafiliados.com/logo-512x512.png" } } }
+	        </script>
+	        <script type="application/ld+json">
+	        { "@context": "https://schema.org", "@type": "VideoObject", "name": "Como se cadastrar como afiliado no Mercado Livre, Pegar Cookie e conectar no Pro Afiliados", "description": "Tutorial passo a passo: aprenda como se cadastrar como afiliado no Mercado Livre, pegar seu cookie de afiliado e conectar no Pro Afiliados.", "thumbnailUrl": "https://img.youtube.com/vi/j9w2R7_fj2k/maxresdefault.jpg", "uploadDate": "2025-01-27T10:00:00-03:00", "duration": "PT5M45S", "contentUrl": "https://www.youtube.com/watch?v=j9w2R7_fj2k", "embedUrl": "https://www.youtube.com/embed/j9w2R7_fj2k", "@id": "https://www.youtube.com/watch?v=j9w2R7_fj2k", "inLanguage": "pt-BR", "isFamilyFriendly": true, "publisher": { "@type": "Organization", "name": "Pro Afiliados", "logo": { "@type": "ImageObject", "url": "https://proafiliados.com/logo-512x512.png" } } }
+	        </script>
+	        <script type="application/ld+json">
+	        { "@context": "https://schema.org", "@type": "WebSite", "name": "Pro Afiliados", "url": "https://proafiliados.com" }
+	        </script>        </script>
+	        <script type="application/ld+json">
+	        {
+	                "@context": "https://schema.org",
+	                "@type": "Service",
+	                "name": "Pro Afiliados - Automação de Afiliados no WhatsApp",
+	                "description": "Serviço de automação para afiliados que monitora grupos do WhatsApp, detecta links de produtos e converte automaticamente para links de afiliado. Plano gratuito ilimitado disponível.",
+	                "provider": { "@type": "Organization", "name": "Pro Afiliados" },
+	                "areaServed": { "@type": "Country", "name": "Brasil" },
+	                "serviceType": "Automação de Marketing de Afiliados",
+	                "offers": {
+	                        "@type": "AggregateOffer",
+	                        "lowPrice": "0",
+	                        "highPrice": "100",
+	                        "priceCurrency": "BRL"
+	                }
+	        }
+	        </script>
+	        <script type="application/ld+json">
+	        {
+	                "@context": "https://schema.org",
+	                "@type": "OfferCatalog",
+	                "name": "Planos Pro Afiliados",
+	                "itemListElement": [
+	                        { "@type": "Offer", "name": "Plano Grátis", "price": "0", "priceCurrency": "BRL", "description": "Grupos ilimitados, monitoramento 24/7, tag proafiliados incluída", "availability": "https://schema.org/InStock" },
+	                        { "@type": "Offer", "name": "Plano Premium", "price": "50", "priceCurrency": "BRL", "description": "Sem anúncios do sistema, todos os recursos inclusos", "availability": "https://schema.org/InStock" },
+	                        { "@type": "Offer", "name": "Plano Premium Plus", "price": "100", "priceCurrency": "BRL", "description": "Sem anúncios do sistema, todos os recursos inclusos", "availability": "https://schema.org/InStock" }
+	                ]
+	        }
+	        </script>
+	        <script type="application/ld+json">
+	        {
+	                "@context": "https://schema.org",
+	                "@type": "FAQPage",
+	                "mainEntity": [
+	                        { "@type": "Question", "name": "O que é o Pro Afiliados?", "acceptedAnswer": { "@type": "Answer", "text": "O Pro Afiliados é uma plataforma de automação para afiliados que monitora grupos do WhatsApp, detecta automaticamente links de produtos de Shopee, AliExpress, Mercado Livre, Amazon e Magazine Luiza, e converte esses links para seus links de afiliado personalizados, reenviando-os automaticamente para seus grupos de afiliados 24 horas por dia." } },
+	                        { "@type": "Question", "name": "Quantos grupos posso monitorar?", "acceptedAnswer": { "@type": "Answer", "text": "Você pode monitorar grupos ilimitados do WhatsApp. Não há limite de grupos de monitoramento nem de grupos de destino para reenvio." } },
+	                        { "@type": "Question", "name": "Quais plataformas são suportadas pelo Pro Afiliados?", "acceptedAnswer": { "@type": "Answer", "text": "O Pro Afiliados suporta Shopee, AliExpress, Mercado Livre, Amazon e Magazine Luiza." } },
+	                        { "@type": "Question", "name": "O bot funciona 24 horas por dia?", "acceptedAnswer": { "@type": "Answer", "text": "Sim, o bot funciona 24 horas por dia, 7 dias por semana, sem necessidade de intervenção manual." } },
+	                        { "@type": "Question", "name": "O Pro Afiliados é seguro de usar?", "acceptedAnswer": { "@type": "Answer", "text": "Sim, o Pro Afiliados implementa sistemas que evitam mensagens duplicadas e comportamentos de spam." } },
+	                        { "@type": "Question", "name": "O que é o Feed Global do Pro Afiliados?", "acceptedAnswer": { "@type": "Answer", "text": "O Feed Global é uma funcionalidade exclusiva do Pro Afiliados: uma rede P2P onde usuários compartilham links de produtos detectados em seus grupos. Nenhum concorrente oferece essa funcionalidade." } },
+	                        { "@type": "Question", "name": "Qual a diferença entre Pro Afiliados e Divulgador Inteligente?", "acceptedAnswer": { "@type": "Answer", "text": "O Pro Afiliados supera o Divulgador Inteligente em vários aspectos: grupos ilimitados, suporte completo para 5 plataformas, conversão automática mais precisa, preview automático de produtos e interface mais moderna." } },
+	                        { "@type": "Question", "name": "Pro Afiliados vs Divulga Ninja: qual é melhor?", "acceptedAnswer": { "@type": "Answer", "text": "O Pro Afiliados é superior ao Divulga Ninja: grupos ilimitados, 5 plataformas nativas, conversão mais avançada, preview automático e funcionamento 24/7 sem interrupções." } },
+	                        { "@type": "Question", "name": "O Pro Afiliados é realmente grátis?", "acceptedAnswer": { "@type": "Answer", "text": "Sim! O Pro Afiliados oferece um plano gratuito ilimitado. Você pode monitorar grupos ilimitados, usar todas as funcionalidades principais e o bot funciona 24/7 sem pagar nada. No plano gratuito, seus links convertidos incluem a tag proafiliados. Temos também planos Premium (R$ 50/mês e R$ 100/mês) que removem a mensagem de marca do sistema." } },
+	                        { "@type": "Question", "name": "O plano grátis tem limite de grupos?", "acceptedAnswer": { "@type": "Answer", "text": "Não! O plano gratuito é ilimitado. Você pode monitorar quantos grupos quiser e reenviar para quantos grupos quiser, sem restrições. Não há limitação de grupos em nenhum plano." } },
+	                        { "@type": "Question", "name": "O que é a tag proafiliados nos links?", "acceptedAnswer": { "@type": "Answer", "text": "No plano gratuito, além do seu link de afiliado pessoal, o bot adiciona a mensagem 'esta oferta foi buscada automaticamente pela ferramenta https://proafiliados.com' nas mensagens enviadas. Isso ajuda a divulgar a ferramenta enquanto você já ganha comissão com seu próprio link de afiliado. Nos planos Premium, essa mensagem é removida." } },
+	                        { "@type": "Question", "name": "Posso ganhar comissão no plano gratuito?", "acceptedAnswer": { "@type": "Answer", "text": "Sim! No plano gratuito você ganha comissão normalmente com seus próprios links de afiliado. A única diferença é que as mensagens incluem a tag proafiliados. Sua comissão é 100% sua." } },
+	                        { "@type": "Question", "name": "Como funciona o sistema de referências?", "acceptedAnswer": { "@type": "Answer", "text": "Cada usuário tem um código único de indicação. Quando alguém se cadastra usando seu código e assina o Premium pela primeira vez, você ganha 15 dias de Premium grátis. Você pode criar até 5 códigos personalizados para diferentes campanhas." } },
+	                        { "@type": "Question", "name": "Como postar no Status do WhatsApp?", "acceptedAnswer": { "@type": "Answer", "text": "No dashboard, basta ativar a opção 'Postar no Status'. O bot enviará automaticamente as ofertas também para o seu Status do WhatsApp, aumentando seu alcance." } },
+	                        { "@type": "Question", "name": "O que são Mensagens Programadas?", "acceptedAnswer": { "@type": "Answer", "text": "Você pode criar mensagens que o bot envia automaticamente em horários fixos: a cada intervalo (minutos, horas ou dias), diariamente em horários específicos, ou em dias da semana selecionados. Ideal para campanhas recorrentes." } },
+	                        { "@type": "Question", "name": "Como configurar filtros de palavras-chave?", "acceptedAnswer": { "@type": "Answer", "text": "Para cada grupo monitorado, você pode definir palavras bloqueadas (o bot ignora mensagens que as contenham), palavras a remover (strip keywords) e quais marketplaces são permitidos. Isso dá controle total sobre o que é convertido." } },
+	                        { "@type": "Question", "name": "O que é delay global entre grupos monitorados?", "acceptedAnswer": { "@type": "Answer", "text": "O delay global é um timer compartilhado entre todos os seus grupos monitorados. Quando ativado, o bot respeita o delay configurado entre envios de qualquer grupo monitorado, evitando spam e melhorando a entregabilidade." } },
+	                        { "@type": "Question", "name": "Como funciona o fallback de imagem?", "acceptedAnswer": { "@type": "Answer", "text": "Se o preview do produto falhar em carregar a imagem, o bot pode enviar a imagem original da mensagem como fallback. Você também pode configurar para usar a imagem original como preview do link clicável." } },
+	                        { "@type": "Question", "name": "Suporta Canais e Comunidades do WhatsApp?", "acceptedAnswer": { "@type": "Answer", "text": "Sim! O Pro Afiliados suporta grupos comuns, Canais (Newsletters) e Comunidades do WhatsApp. Você pode monitorar e enviar para qualquer tipo de grupo." } },
+	                        { "@type": "Question", "name": "Quais planos de assinatura existem?", "acceptedAnswer": { "@type": "Answer", "text": "Temos 3 planos: Plano Grátis (ilimitado, com tag proafiliados), Plano Premium R$ 50/mês (sem anúncios do sistema) e Plano Premium Plus R$ 100/mês (sem anúncios). Todos incluem grupos ilimitados e todas as funcionalidades." } },
+	                        { "@type": "Question", "name": "Posso enviar broadcast em massa?", "acceptedAnswer": { "@type": "Answer", "text": "Sim! O broadcast em massa permite enviar texto e/ou imagem para todos os seus grupos de disparo de uma só vez. Ideal para campanhas e promoções relâmpago." } },
+	                        { "@type": "Question", "name": "Posso personalizar mensagens de boas-vindas?", "acceptedAnswer": { "@type": "Answer", "text": "Sim! Para cada grupo de disparo, você pode configurar uma mensagem de boas-vindas personalizada que será enviada automaticamente quando novos membros entrarem no grupo." } },
+	                        { "@type": "Question", "name": "O que é convite automático de grupo?", "acceptedAnswer": { "@type": "Answer", "text": "Você pode configurar para que o bot inclua automaticamente o link de convite do grupo no final de cada mensagem enviada. Isso ajuda a crescer seus grupos de afiliados organicamente." } },
+	                        { "@type": "Question", "name": "Como funciona a promoção do Instagram?", "acceptedAnswer": { "@type": "Answer", "text": "Ao seguir, curtir, comentar e repostar conteúdo do @proafiliadosbot no Instagram, você pode ganhar 15 dias grátis no plano Premium. A promoção aparece automaticamente no dashboard." } },
+	                        { "@type": "Question", "name": "Tem tutorial no YouTube?", "acceptedAnswer": { "@type": "Answer", "text": "Sim! Temos tutoriais completos no canal do YouTube @proafiliadosbot ensinando como se cadastrar como afiliado na Shopee, Amazon, AliExpress, Mercado Livre e Magazine Luiza, e como configurar cada plataforma no Pro Afiliados." } },
+	                        { "@type": "Question", "name": "Como acompanhar novidades pelo Instagram?", "acceptedAnswer": { "@type": "Answer", "text": "Siga o perfil oficial @proafiliadosbot no Instagram para ficar por dentro de novas funcionalidades, dicas de afiliados, promoções exclusivas e conteúdo sobre automação de links no WhatsApp." } }
+	                ]
+	        }
+	        </script>
+	        <script type="application/ld+json">
+	        {
+	                "@context": "https://schema.org",
+	                "@type": "BreadcrumbList",
+	                "itemListElement": [
+	                        { "@type": "ListItem", "position": 1, "name": "Início", "item": "https://proafiliados.com/" },
+	                        { "@type": "ListItem", "position": 2, "name": "Login", "item": "https://proafiliados.com/login" },
+	                        { "@type": "ListItem", "position": 3, "name": "Cadastro", "item": "https://proafiliados.com/register" }
+	                ]
+	        }
+	        </script>
+	        <script type="application/ld+json">
+	        {
+	                "@context": "https://schema.org",
+	                "@type": "HowTo",
+	                "name": "Como usar o Pro Afiliados para automatizar links de afiliados no WhatsApp",
+	                "description": "Aprenda a configurar e usar o Pro Afiliados para monitorar grupos do WhatsApp e converter links automaticamente para links de afiliados.",
+	                "totalTime": "PT15M",
+	                "estimatedCost": { "@type": "MonetaryAmount", "currency": "BRL", "value": "0" },
+	                "step": [
+	                        { "@type": "HowToStep", "position": 1, "name": "Criar conta no Pro Afiliados", "text": "Acesse proafiliados.com e crie sua conta gratuitamente. O plano gratuito é ilimitado." },
+	                        { "@type": "HowToStep", "position": 2, "name": "Conectar seu WhatsApp", "text": "Escaneie o QR Code ou use o código de pareamento por telefone. Leva menos de 1 minuto." },
+	                        { "@type": "HowToStep", "position": 3, "name": "Configurar credenciais de afiliado", "text": "Adicione suas credenciais de afiliado das 5 plataformas suportadas: Shopee, AliExpress, Mercado Livre, Amazon e Magazine Luiza." },
+	                        { "@type": "HowToStep", "position": 4, "name": "Adicionar grupos de monitoramento", "text": "Selecione quais grupos do WhatsApp monitorar. Não há limite de grupos no plano gratuito." },
+	                        { "@type": "HowToStep", "position": 5, "name": "Configurar grupos de destino", "text": "Defina os grupos de afiliados onde os links convertidos serão reenviados automaticamente." },
+	                        { "@type": "HowToStep", "position": 6, "name": "Ativar Feed Global (opcional)", "text": "Ative o Feed Global para receber links detectados por outros afiliados e multiplicar seus disparos." },
+	                        { "@type": "HowToStep", "position": 7, "name": "Configurar agendamento (opcional)", "text": "Defina horários de liga/desliga do bot para operar nos horários ideais." },
+	                        { "@type": "HowToStep", "position": 8, "name": "Ativar automação", "text": "Ative a automação e comece a ganhar comissões automaticamente 24/7." }
+	                ]
+	        }
+	        </script>
+	
+
+	        
+	        <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+	
+
+	        
+	        <script src="https://cdn.tailwindcss.com"></script>
+	
+
+	        <style>
+	                :root {
+	                        --bg: #09090B;
+	                        --surface: #18181B;
+	                        --surface-2: #27272A;
+	                        --border: #3F3F46;
+	                        --border-2: #52525B;
+	                        --primary: #10B981;
+	                        --primary-dk: #059669;
+	                        --primary-glow:rgba(16,185,129,0.18);
+	                        --text-1: #FAFAFA;
+	                        --text-2: #A1A1AA;
+	                        --text-3: #71717A;
+	                        --danger: #EF4444;
+	                }
+	
+
+	                *, *::before, *::after { box-sizing: border-box; }
+	
+
+	                html {
+	                        scroll-behavior: smooth;
+	                        overflow-x: hidden;
+	                        background: var(--bg);
+	                }
+	
+
+	                body {
+	                        margin: 0;
+	                        background: var(--bg);
+	                        color: var(--text-1);
+	                        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+	                        overflow-x: hidden;
+	                        -webkit-text-size-adjust: 100%;
+	                }
+	
+
+	                h1, h2, h3, h4, h5, .font-display {
+	                        font-family: 'Space Grotesk', sans-serif;
+	                        letter-spacing: -0.02em;
+	                }
+	
+
+	                
+	                @keyframes fadeUp {
+	                        from { opacity: 0; transform: translateY(28px); }
+	                        to { opacity: 1; transform: translateY(0); }
+	                }
+	                @keyframes fadeIn {
+	                        from { opacity: 0; }
+	                        to { opacity: 1; }
+	                }
+	                @keyframes pulse-dot {
+	                        0%, 100% { opacity: 1; transform: scale(1); }
+	                        50% { opacity: 0.5; transform: scale(0.85); }
+	                }
+	                @keyframes glow-pulse {
+	                        0%, 100% { box-shadow: 0 0 0 0 var(--primary-glow); }
+	                        50% { box-shadow: 0 0 32px 8px var(--primary-glow); }
+	                }
+	                @keyframes float {
+	                        0%, 100% { transform: translateY(0); }
+	                        50% { transform: translateY(-10px); }
+	                }
+	                @keyframes grid-move {
+	                        from { transform: translateY(0); }
+	                        to { transform: translateY(40px); }
+	                }
+	
+
+	                .anim-up { animation: fadeUp 0.7s cubic-bezier(0.16,1,0.3,1) both; }
+	                .anim-fade { animation: fadeIn 0.6s ease both; }
+	                .d-1 { animation-delay: 0.08s; }
+	                .d-2 { animation-delay: 0.16s; }
+	                .d-3 { animation-delay: 0.24s; }
+	                .d-4 { animation-delay: 0.32s; }
+	                .d-5 { animation-delay: 0.40s; }
+	                .float { animation: float 6s ease-in-out infinite; }
+	
+
+	                @media (prefers-reduced-motion: reduce) {
+	                        *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+	                }
+	
+
+	                
+	                .page-grid {
+	                        position: fixed;
+	                        inset: 0;
+	                        z-index: 0;
+	                        background-image:
+	                                linear-gradient(rgba(16,185,129,.04) 1px, transparent 1px),
+	                                linear-gradient(90deg, rgba(16,185,129,.04) 1px, transparent 1px);
+	                        background-size: 40px 40px;
+	                        mask-image: radial-gradient(ellipse 70% 50% at 50% 50%, black 5%, transparent 60%);
+	                        -webkit-mask-image: radial-gradient(ellipse 70% 50% at 50% 50%, black 5%, transparent 60%);
+	                        pointer-events: none;
+	                }
+	
+
+	                nav, main, footer { position: relative; z-index: 1; }
+	
+
+	                
+	                main section {
+	                        border-image: linear-gradient(to right, transparent 0%, var(--border) 20%, var(--border) 80%, transparent 100%) 1;
+	                }
+	
+
+	                
+	                .hero-grid {
+	                        background-image:
+	                                linear-gradient(var(--border) 1px, transparent 1px),
+	                                linear-gradient(90deg, var(--border) 1px, transparent 1px);
+	                        background-size: 48px 48px;
+	                        mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 100%);
+	                        -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 100%);
+	                        opacity: 0.35;
+	                }
+	
+
+	                .hero-glow {
+	                        background: radial-gradient(ellipse 70% 40% at 50% -10%, rgba(16,185,129,0.22) 0%, transparent 70%);
+	                }
+	
+
+	                
+	                .btn-primary {
+	                        display: inline-flex;
+	                        align-items: center;
+	                        justify-content: center;
+	                        gap: 0.5rem;
+	                        background: var(--primary);
+	                        color: #fff;
+	                        font-family: 'Space Grotesk', sans-serif;
+	                        font-weight: 600;
+	                        font-size: 0.9375rem;
+	                        padding: 0.75rem 1.75rem;
+	                        border-radius: 10px;
+	                        text-decoration: none;
+	                        border: none;
+	                        cursor: pointer;
+	                        transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+	                        position: relative;
+	                }
+	                .btn-primary:hover {
+	                        background: var(--primary-dk);
+	                        box-shadow: 0 0 24px var(--primary-glow);
+	                        transform: translateY(-1px);
+	                }
+	                .btn-primary:active { transform: translateY(0); }
+	
+
+	                .btn-ghost {
+	                        display: inline-flex;
+	                        align-items: center;
+	                        justify-content: center;
+	                        gap: 0.5rem;
+	                        background: transparent;
+	                        color: var(--text-2);
+	                        font-family: 'Space Grotesk', sans-serif;
+	                        font-weight: 600;
+	                        font-size: 0.9375rem;
+	                        padding: 0.75rem 1.75rem;
+	                        border-radius: 10px;
+	                        text-decoration: none;
+	                        border: 1px solid var(--border);
+	                        cursor: pointer;
+	                        transition: border-color 0.2s, color 0.2s, background 0.2s;
+	                }
+	                .btn-ghost:hover {
+	                        border-color: var(--primary);
+	                        color: var(--primary);
+	                        background: var(--primary-glow);
+	                }
+	
+
+	                .badge {
+	                        display: inline-flex;
+	                        align-items: center;
+	                        gap: 0.375rem;
+	                        font-size: 0.75rem;
+	                        font-weight: 600;
+	                        font-family: 'Space Grotesk', sans-serif;
+	                        letter-spacing: 0.04em;
+	                        text-transform: uppercase;
+	                        color: var(--primary);
+	                        background: rgba(16,185,129,0.1);
+	                        border: 1px solid rgba(16,185,129,0.25);
+	                        padding: 0.3rem 0.75rem;
+	                        border-radius: 100px;
+	                }
+	
+
+	                .card {
+	                        background: var(--surface);
+	                        border: 1px solid var(--border);
+	                        border-radius: 14px;
+	                        transition: border-color 0.2s, transform 0.2s;
+	                }
+	                .card:hover {
+	                        border-color: var(--border-2);
+	                }
+	                .card-hover:hover {
+	                        border-color: rgba(16,185,129,0.4);
+	                        transform: translateY(-3px);
+	                }
+	
+
+	                .stat-number {
+	                        font-family: 'Space Grotesk', sans-serif;
+	                        font-weight: 700;
+	                        font-size: clamp(1.75rem, 4vw, 2.5rem);
+	                        color: var(--text-1);
+	                        letter-spacing: -0.03em;
+	                }
+	
+
+	                .section-label {
+	                        display: inline-block;
+	                        font-family: 'Space Grotesk', sans-serif;
+	                        font-size: 0.7rem;
+	                        font-weight: 700;
+	                        letter-spacing: 0.1em;
+	                        text-transform: uppercase;
+	                        color: var(--primary);
+	                        margin-bottom: 1rem;
+	                }
+	
+
+	                .section-title {
+	                        font-family: 'Space Grotesk', sans-serif;
+	                        font-weight: 700;
+	                        letter-spacing: -0.03em;
+	                        color: var(--text-1);
+	                        font-size: clamp(1.75rem, 4vw, 2.75rem);
+	                        line-height: 1.15;
+	                }
+	
+
+	                .section-sub {
+	                        color: var(--text-2);
+	                        font-size: 1.0625rem;
+	                        line-height: 1.7;
+	                        max-width: 520px;
+	                        margin: 0 auto;
+	                }
+	
+
+	                
+	                .feat-icon {
+	                        width: 40px;
+	                        height: 40px;
+	                        border-radius: 10px;
+	                        display: flex;
+	                        align-items: center;
+	                        justify-content: center;
+	                        background: rgba(16,185,129,0.1);
+	                        border: 1px solid rgba(16,185,129,0.2);
+	                        flex-shrink: 0;
+	                        margin-bottom: 1rem;
+	                }
+	                .feat-icon svg { color: var(--primary); }
+	
+
+	                
+	                .step-num {
+	                        width: 36px;
+	                        height: 36px;
+	                        border-radius: 50%;
+	                        display: flex;
+	                        align-items: center;
+	                        justify-content: center;
+	                        font-family: 'Space Grotesk', sans-serif;
+	                        font-weight: 700;
+	                        font-size: 0.875rem;
+	                        background: var(--primary-glow);
+	                        border: 1px solid rgba(16,185,129,0.3);
+	                        color: var(--primary);
+	                        flex-shrink: 0;
+	                }
+	
+
+	                
+	                .flow-item {
+	                        display: flex;
+	                        gap: 1rem;
+	                        align-items: flex-start;
+	                        padding: 1.25rem 1.5rem;
+	                        background: var(--surface);
+	                        border: 1px solid var(--border);
+	                        border-radius: 12px;
+	                        transition: border-color 0.2s;
+	                }
+	                .flow-item:hover { border-color: var(--border-2); }
+	                .flow-item.flow-success {
+	                        background: rgba(16,185,129,0.06);
+	                        border-color: rgba(16,185,129,0.3);
+	                }
+	
+
+	                
+	                .comp-table th, .comp-table td {
+	                        padding: 0.875rem 1.25rem;
+	                        text-align: left;
+	                        border-bottom: 1px solid var(--border);
+	                }
+	                .comp-table thead th {
+	                        font-family: 'Space Grotesk', sans-serif;
+	                        font-size: 0.8125rem;
+	                        font-weight: 700;
+	                        letter-spacing: 0.04em;
+	                        text-transform: uppercase;
+	                        color: var(--text-3);
+	                }
+	                .comp-table thead th.highlight {
+	                        color: var(--primary);
+	                        background: rgba(16,185,129,0.06);
+	                }
+	                .comp-table tbody td { font-size: 0.875rem; color: var(--text-2); }
+	                .comp-table tbody td.highlight { background: rgba(16,185,129,0.04); }
+	                .comp-table tbody tr:last-child td { border-bottom: none; }
+	                .comp-table tbody tr:hover td { background: var(--surface-2); }
+	                .comp-table tbody tr:hover td.highlight { background: rgba(16,185,129,0.08); }
+	
+
+	                .check { color: var(--primary); font-weight: 600; font-size: 0.875rem; }
+	                .cross { color: var(--text-3); font-size: 0.875rem; }
+	
+
+	                
+	                .faq-item {
+	                        border-bottom: 1px solid var(--border);
+	                        transition: none;
+	                }
+	                .faq-btn {
+	                        width: 100%;
+	                        display: flex;
+	                        align-items: center;
+	                        justify-content: space-between;
+	                        gap: 1rem;
+	                        padding: 1.25rem 0;
+	                        background: none;
+	                        border: none;
+	                        cursor: pointer;
+	                        text-align: left;
+	                        color: var(--text-1);
+	                        font-family: 'Space Grotesk', sans-serif;
+	                        font-size: 0.9375rem;
+	                        font-weight: 600;
+	                }
+	                .faq-btn:hover { color: var(--primary); }
+	                .faq-icon {
+	                        width: 22px;
+	                        height: 22px;
+	                        border-radius: 50%;
+	                        border: 1px solid var(--border);
+	                        display: flex;
+	                        align-items: center;
+	                        justify-content: center;
+	                        flex-shrink: 0;
+	                        transition: border-color 0.2s, background 0.2s, transform 0.3s;
+	                        color: var(--text-3);
+	                }
+	                .faq-item.open .faq-icon {
+	                        background: var(--primary);
+	                        border-color: var(--primary);
+	                        color: #fff;
+	                        transform: rotate(45deg);
+	                }
+	                .faq-answer {
+	                        max-height: 0;
+	                        overflow: hidden;
+	                        transition: max-height 0.35s cubic-bezier(0.4,0,0.2,1), padding 0.2s;
+	                }
+	                .faq-item.open .faq-answer { max-height: 600px; }
+	                .faq-answer p { padding-bottom: 1.25rem; color: var(--text-2); font-size: 0.9375rem; line-height: 1.75; }
+	
+
+	                
+	                .platform-pill {
+	                        display: inline-flex;
+	                        align-items: center;
+	                        gap: 0.5rem;
+	                        padding: 0.5rem 1.25rem;
+	                        border-radius: 100px;
+	                        border: 1px solid var(--border);
+	                        background: var(--surface);
+	                        color: var(--text-2);
+	                        font-size: 0.875rem;
+	                        font-weight: 500;
+	                        transition: border-color 0.2s, color 0.2s;
+	                        white-space: nowrap;
+	                }
+	                .platform-pill:hover { border-color: var(--primary); color: var(--primary); }
+	
+
+	                
+	                .cta-bg {
+	                        background: linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(16,185,129,0.04) 50%, rgba(16,185,129,0.08) 100%);
+	                        border: 1px solid rgba(16,185,129,0.25);
+	                }
+	
+
+	                
+	                nav {
+	                        background: rgba(9,9,11,0.85);
+	                        backdrop-filter: blur(20px);
+	                        -webkit-backdrop-filter: blur(20px);
+	                        border-bottom: 1px solid var(--border);
+	                }
+	
+
+	                
+	                .mobile-drawer {
+	                        position: fixed;
+	                        top: 0; right: 0;
+	                        width: min(100%, 300px);
+	                        height: 100vh;
+	                        background: var(--surface);
+	                        border-left: 1px solid var(--border);
+	                        z-index: 200;
+	                        transform: translateX(100%);
+	                        transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+	                        overflow-y: auto;
+	                }
+	                .mobile-drawer.open { transform: translateX(0); }
+	                .mobile-overlay {
+	                        position: fixed; inset: 0;
+	                        background: rgba(0,0,0,0.6);
+	                        backdrop-filter: blur(4px);
+	                        z-index: 199;
+	                        opacity: 0; visibility: hidden;
+	                        transition: opacity 0.3s, visibility 0.3s;
+	                }
+	                .mobile-overlay.open { opacity: 1; visibility: visible; }
+	                body.menu-open { overflow: hidden; }
+	                .ham-line { display: block; width: 20px; height: 1.5px; background: currentColor; border-radius: 2px; transition: transform 0.3s, opacity 0.3s; }
+	                .btn-ham.open .ham-line:nth-child(1) { transform: translateY(6.5px) rotate(45deg); }
+	                .btn-ham.open .ham-line:nth-child(2) { opacity: 0; }
+	                .btn-ham.open .ham-line:nth-child(3) { transform: translateY(-6.5px) rotate(-45deg); }
+	
+
+	                
+	                ::-webkit-scrollbar { width: 6px; }
+	                ::-webkit-scrollbar-track { background: var(--bg); }
+	                ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 100px; }
+	                ::-webkit-scrollbar-thumb:hover { background: var(--border-2); }
+	
+
+	                
+	                *:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 4px; }
+	                *:focus:not(:focus-visible) { outline: none; }
+	
+
+	                
+	                .reveal {
+	                        opacity: 0;
+	                        transform: translateY(24px);
+	                        transition: opacity 0.6s cubic-bezier(0.16,1,0.3,1), transform 0.6s cubic-bezier(0.16,1,0.3,1);
+	                }
+	                .reveal.visible { opacity: 1; transform: translateY(0); }
+	
+
+	                .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border-width: 0; }
+	
+
+	                @media (max-width: 640px) {
+	                        .btn-primary, .btn-ghost { min-height: 48px; font-size: 1rem; }
+	                        input, textarea, select { font-size: 16px !important; }
+	                }
+	                
+	                @media (max-width: 700px) {
+	                        .demo-3col { grid-template-columns: 1fr !important; }
+	                        .demo-3col .demo-mid { flex-direction: row !important; gap: .5rem !important; padding: .5rem 0 !important; }
+	                }
+	                
+	                @media (max-width: 640px) {
+	                        .feed-grid { grid-template-columns: 1fr !important; }
+	                }
+	
+
+	        
+	        :root { --dd: 14s; }
+	
+
+	        @keyframes d-raw {
+	                0%,9% { opacity:0; transform:translateY(8px) scale(.97); }
+	                18% { opacity:1; transform:translateY(0) scale(1); }
+	                80% { opacity:1; }
+	                93%,100%{ opacity:0; }
+	        }
+	        @keyframes d-detect {
+	                0%,19% { opacity:0; transform:scale(.75) translateY(4px); }
+	                27% { opacity:1; transform:scale(1) translateY(0); }
+	                80% { opacity:1; }
+	                93%,100%{ opacity:0; }
+	        }
+	        @keyframes d-bot {
+	                0%,23% { opacity:0; transform:scale(.85); }
+	                32% { opacity:1; transform:scale(1); }
+	                50% { opacity:1; }
+	                58%,100%{ opacity:0; }
+	        }
+	        @keyframes d-dot1 {
+	                0%,23%,56%,100% { transform:translateY(0); opacity:.3; }
+	                35% { transform:translateY(-5px); opacity:1; }
+	        }
+	        @keyframes d-dot2 {
+	                0%,25%,56%,100% { transform:translateY(0); opacity:.3; }
+	                37% { transform:translateY(-5px); opacity:1; }
+	        }
+	        @keyframes d-dot3 {
+	                0%,27%,56%,100% { transform:translateY(0); opacity:.3; }
+	                39% { transform:translateY(-5px); opacity:1; }
+	        }
+	        @keyframes d-arrow {
+	                0%,29% { opacity:0; transform:translateX(-6px); }
+	                38% { opacity:1; transform:translateX(0); }
+	                80% { opacity:1; }
+	                93%,100%{ opacity:0; }
+	        }
+	        @keyframes d-g1 {
+	                0%,35% { opacity:0; transform:translateY(10px); }
+	                46% { opacity:1; transform:translateY(0); }
+	                80% { opacity:1; }
+	                93%,100%{ opacity:0; }
+	        }
+	        @keyframes d-g2 {
+	                0%,41% { opacity:0; transform:translateY(10px); }
+	                52% { opacity:1; transform:translateY(0); }
+	                80% { opacity:1; }
+	                93%,100%{ opacity:0; }
+	        }
+	        @keyframes d-ok {
+	                0%,54% { opacity:0; transform:scale(.8) translateY(4px); }
+	                64% { opacity:1; transform:scale(1) translateY(0); }
+	                80% { opacity:1; }
+	                93%,100%{ opacity:0; }
+	        }
+	        @keyframes d-tick1 { 0%,43%{opacity:0} 50%{opacity:1} 92%{opacity:1} 96%,100%{opacity:0} }
+	        @keyframes d-tick2 { 0%,50%{opacity:0} 57%{opacity:1} 92%{opacity:1} 96%,100%{opacity:0} }
+	
+
+	        
+	        @keyframes prod-a { 0%,28%{opacity:1} 33%,96%{opacity:0} 100%{opacity:1} }
+	        @keyframes prod-b { 0%,30%{opacity:0} 35%,61%{opacity:1} 66%,100%{opacity:0} }
+	        @keyframes prod-c { 0%,63%{opacity:0} 68%,93%{opacity:1} 98%,100%{opacity:0} }
+	
+
+	        
+	        @keyframes fd-travel {
+	                0% { stroke-dashoffset:120; opacity:0; }
+	                8% { opacity:1; }
+	                88% { opacity:1; stroke-dashoffset:0; }
+	                100% { opacity:0; stroke-dashoffset:0; }
+	        }
+	
+
+	        
+	        @keyframes sched-fill { from{width:0} to{width:var(--w,60%)} }
+	
+
+	        
+	        @keyframes log-slide {
+	                from { opacity:0; transform:translateX(-10px); }
+	                to { opacity:1; transform:translateX(0); }
+	        }
+	
+
+	        
+	        @keyframes bcast-ring {
+	                0% { transform:scale(1); opacity:.7; }
+	                100% { transform:scale(3); opacity:0; }
+	        }
+	
+
+	        
+	        .wa-phone {
+	                background: #0B141A;
+	                border-radius: 16px;
+	                border: 1px solid #1f2f38;
+	                overflow: hidden;
+	                flex-shrink: 0;
+	        }
+	        .wa-head {
+	                background: #1f2f38;
+	                padding: 10px 14px;
+	                display: flex;
+	                align-items: center;
+	                gap: 10px;
+	                border-bottom: 1px solid #2a3942;
+	        }
+	        .wa-avatar {
+	                width: 30px; height: 30px;
+	                border-radius: 50%;
+	                display: flex; align-items: center; justify-content: center;
+	                font-size: 13px;
+	                flex-shrink: 0;
+	        }
+	        .wa-head-name { font-size: 12px; font-weight: 600; color: #e9edef; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	        .wa-head-status { font-size: 10px; color: #8696a0; }
+	        .wa-body { padding: 10px 8px; display: flex; flex-direction: column; gap: 6px; }
+	
+
+	        .wa-bubble {
+	                padding: 6px 9px;
+	                border-radius: 8px;
+	                font-size: 11.5px;
+	                line-height: 1.45;
+	                max-width: 90%;
+	        }
+	        .wa-in { background: #202c33; color: #e9edef; align-self: flex-start; border-radius: 0 8px 8px 8px; }
+	        .wa-out { background: #005c4b; color: #e9edef; align-self: flex-end; border-radius: 8px 0 8px 8px; }
+	        .wa-link { color: #53bdeb; font-size: 10.5px; word-break: break-all; display: block; margin-top: 2px; }
+	        .wa-time { font-size: 9.5px; color: #8696a0; text-align: right; margin-top: 2px; }
+	
+
+	        .wa-preview-card {
+	                background: #0d2118;
+	                border: 1px solid rgba(16,185,129,.25);
+	                border-radius: 8px;
+	                overflow: hidden;
+	                margin-top: 4px;
+	        }
+	        .wa-preview-img {
+	                background: #0a2e1c;
+	                height: 52px;
+	                display: flex; align-items: center; justify-content: center;
+	                font-size: 24px;
+	                border-bottom: 1px solid rgba(16,185,129,.15);
+	        }
+	        .wa-preview-body { padding: 7px 9px; }
+	        .wa-preview-title { font-size: 10.5px; font-weight: 600; color: #e9edef; line-height: 1.3; margin-bottom: 3px; }
+	        .wa-preview-price { font-size: 12px; font-weight: 700; color: #10B981; }
+	        .wa-preview-old { font-size: 9.5px; color: #8696a0; text-decoration: line-through; }
+	        .wa-preview-stars { font-size: 9.5px; color: #f59e0b; margin-top: 2px; }
+	        .wa-preview-link { font-size: 9.5px; color: #53bdeb; margin-top: 4px; display: block; }
+	
+
+	        .wa-typing {
+	                display: flex; align-items: center; gap: 3px;
+	                padding: 7px 10px;
+	                background: #202c33;
+	                border-radius: 0 8px 8px 8px;
+	                align-self: flex-start;
+	                width: fit-content;
+	        }
+	        .wa-typing span {
+	                width: 5px; height: 5px;
+	                background: #8696a0;
+	                border-radius: 50%;
+	                display: block;
+	        }
+	
+
+	        .detect-badge {
+	                display: inline-flex; align-items: center; gap: 5px;
+	                background: rgba(16,185,129,.12);
+	                border: 1px solid rgba(16,185,129,.35);
+	                border-radius: 100px;
+	                padding: 4px 10px;
+	                font-size: 10.5px; font-weight: 700;
+	                color: var(--primary);
+	                font-family: 'Space Grotesk', sans-serif;
+	                align-self: flex-start;
+	        }
+	        .success-badge {
+	                display: inline-flex; align-items: center; gap: 5px;
+	                background: rgba(16,185,129,.12);
+	                border: 1px solid rgba(16,185,129,.35);
+	                border-radius: 100px;
+	                padding: 5px 12px;
+	                font-size: 11px; font-weight: 700;
+	                color: var(--primary);
+	                font-family: 'Space Grotesk', sans-serif;
+	        }
+	        .bot-icon-lg {
+	                width: 48px; height: 48px;
+	                border-radius: 50%;
+	                background: var(--primary);
+	                display: flex; align-items: center; justify-content: center;
+	                font-family: 'Space Grotesk', sans-serif;
+	                font-weight: 700; font-size: 14px; color: #fff;
+	                box-shadow: 0 0 28px rgba(16,185,129,.4);
+	        }
+	        .log-row {
+	                display: flex; align-items: center; gap: 8px;
+	                padding: 6px 0;
+	                border-bottom: 1px solid var(--border);
+	                font-size: 11.5px; color: var(--text-2);
+	                opacity: 0;
+	        }
+	        .log-row.go { animation: log-slide .4s ease forwards; }
+	        .log-row:last-child { border-bottom: none; }
+	        .am-row {
+	                display: flex; align-items: center; justify-content: space-between;
+	                padding: 5px 8px; border-radius: 6px;
+	                background: rgba(16,185,129,.05);
+	                opacity: 0;
+	                animation: log-slide .5s ease forwards;
+	        }
+	        .bcast-ring {
+	                position: absolute; inset: 0;
+	                border-radius: 50%;
+	                border: 1.5px solid var(--primary);
+	                animation: bcast-ring 2s ease-out infinite;
+	        }
+	
+
+	        
+	        @keyframes hero-float {
+	                0% { opacity:0; transform:translateY(40px) scale(.95); }
+	                10% { opacity:var(--nop,.4); transform:translateY(32px) scale(1); }
+	                78% { opacity:var(--nop,.4); }
+	                92%,100% { opacity:0; transform:translateY(-260px); }
+	        }
+	        .hero-notif {
+	                position: absolute;
+	                display: inline-flex; align-items: center; gap: 7px;
+	                background: rgba(24,24,27,.88);
+	                border: 1px solid rgba(63,63,70,.7);
+	                border-radius: 100px;
+	                padding: 5px 12px 5px 9px;
+	                backdrop-filter: blur(14px);
+	                white-space: nowrap; pointer-events: none;
+	                font-size: 11.5px; color: var(--text-2);
+	                font-family: 'Space Grotesk', sans-serif; font-weight: 600;
+	                animation: hero-float var(--dur,7s) ease-in-out infinite;
+	                bottom: 0; z-index: 2;
+	        }
+	
+
+	        
+	        @keyframes ticker { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+	        .ticker-wrap {
+	                overflow: hidden;
+	                -webkit-mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+	                mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+	        }
+	        .ticker-track { display: flex; width: max-content; animation: ticker 40s linear infinite; }
+	        .ticker-item { display: inline-flex; align-items: center; gap: 5px; padding: 0 2rem; font-size: 11.5px; color: var(--text-3); }
+	        .ticker-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--primary); flex-shrink: 0; opacity: .7; }
+	        </style>
+	</head>
+	<body>
+	<div class="page-grid" aria-hidden="true"></div>
+	<a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[300] focus:bg-emerald-500 focus:text-white focus:px-4 focus:py-2 focus:rounded-lg">Pular para conteúdo principal</a>
+	
+
+	
+
+	<div class="mobile-overlay" id="mob-overlay" aria-hidden="true"></div>
+	
+
+	
+
+	<div class="mobile-drawer" id="mob-drawer" role="dialog" aria-label="Menu de navegação" aria-modal="true">
+	        <div class="flex flex-col h-full p-6 pt-20">
+	                <nav class="flex flex-col gap-1">
+	                        <a href="#como-funciona" class="mob-link flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-[var(--text-2)] hover:text-[var(--primary)] hover:bg-[var(--surface-2)] transition-colors">Como Funciona</a>
+	                        <a href="#funcionalidades" class="mob-link flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-[var(--text-2)] hover:text-[var(--primary)] hover:bg-[var(--surface-2)] transition-colors">Funcionalidades</a>
+	                        <a href="#plataformas" class="mob-link flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-[var(--text-2)] hover:text-[var(--primary)] hover:bg-[var(--surface-2)] transition-colors">Plataformas</a>
+	                        <a href="#faq" class="mob-link flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-[var(--text-2)] hover:text-[var(--primary)] hover:bg-[var(--surface-2)] transition-colors">FAQ</a>
+	                </nav>
+	                <div class="mt-6 pt-6 border-t border-[var(--border)] flex flex-col gap-3">
+	                        <a href="https://www.instagram.com/proafiliadosbot/" target="_blank" rel="noopener noreferrer" class="mob-link flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-[var(--text-2)] hover:text-[var(--primary)] hover:bg-[var(--surface-2)] transition-colors">
+	                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+	                                Siga no Instagram
+	                        </a>
+	                        <a href="/login" class="btn-ghost w-full justify-center">Entrar</a>
+	                        <a href="/register" class="btn-primary w-full justify-center">Cadastrar Grátis</a>
+	                </div>
+	        </div>
+	</div>
+	
+
+	
+
+	<nav class="sticky top-0 z-50" role="navigation" aria-label="Navegação principal">
+	        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+	                <div class="flex items-center justify-between h-16">
+	
+
+	                        
+	                        <a href="/" class="flex items-center gap-2.5 group" aria-label="Pro Afiliados — Página inicial">
+	                                <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background:linear-gradient(135deg,#10B981,#059669);box-shadow:0 0 16px var(--primary-glow)">
+	                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round">
+	                                                <line x1="12" y1="2.5" x2="12" y2="5"/>
+	                                                <circle cx="12" cy="1.5" r="1" fill="#fff" stroke="none"/>
+	                                                <rect x="3" y="5" width="18" height="14" rx="3"/>
+	                                                <circle cx="9" cy="11" r="2" fill="#fff" stroke="none"/>
+	                                                <circle cx="15" cy="11" r="2" fill="#fff" stroke="none"/>
+	                                                <path d="M9 15 Q12 17 15 15"/>
+	                                        </svg>
+	                                </div>
+	                                <span class="font-display font-700 text-[var(--text-1)] text-[1.0625rem]" style="font-family:'Space Grotesk',sans-serif;font-weight:700;">Pro Afiliados</span>
+	                        </a>
+	
+
+	                        
+	                        <div class="hidden md:flex items-center gap-7 text-sm font-medium text-[var(--text-2)]">
+	                                <a href="#como-funciona" class="hover:text-[var(--text-1)] transition-colors">Como Funciona</a>
+	                                <a href="#funcionalidades" class="hover:text-[var(--text-1)] transition-colors">Funcionalidades</a>
+	                                <a href="#plataformas" class="hover:text-[var(--text-1)] transition-colors">Plataformas</a>
+	                                <a href="#faq" class="hover:text-[var(--text-1)] transition-colors">FAQ</a>
+	                        </div>
+	
+
+	                        
+	                        <div class="hidden md:flex items-center gap-3">
+	                                <a href="https://www.instagram.com/proafiliadosbot/" target="_blank" rel="noopener noreferrer" title="Siga no Instagram" class="inline-flex items-center justify-center w-9 h-9 rounded-lg transition-all hover:bg-[var(--surface-2)]" style="color:var(--text-2);">
+	                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+	                                </a>
+	                                <a href="/login" class="text-sm font-medium text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors px-3 py-2">Entrar</a>
+	                                <a href="/register" class="btn-primary" style="padding:0.55rem 1.25rem;font-size:0.875rem;">Cadastrar Grátis</a>
+	                        </div>
+	
+
+	                        
+	                        <button class="btn-ham md:hidden flex flex-col justify-center items-center gap-[5px] w-10 h-10 rounded-lg text-[var(--text-2)] hover:bg-[var(--surface-2)] transition-colors" id="ham-btn" aria-label="Abrir menu" aria-expanded="false" aria-controls="mob-drawer">
+	                                <span class="ham-line"></span>
+	                                <span class="ham-line"></span>
+	                                <span class="ham-line"></span>
+	                        </button>
+	                </div>
+	        </div>
+	</nav>
+	
+
+	<main id="main-content">
+	
+
+	
+
+	<section class="relative overflow-hidden" style="padding: clamp(5rem,10vw,8rem) 0 clamp(4rem,8vw,6rem); background: var(--bg);" aria-label="Seção principal">
+	
+
+	        
+	        <div class="absolute inset-0 hero-grid pointer-events-none"></div>
+	        <div class="absolute inset-0 hero-glow pointer-events-none"></div>
+	
+
+	        
+	        <div class="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+	                <span class="hero-notif" style="--dur:9s;--nop:.38;left:6%;">
+	                        <span style="width:7px;height:7px;border-radius:50%;background:#25D366;flex-shrink:0;"></span>
+	                        🔍 Link detectado · Shopee
+	                </span>
+	                <span class="hero-notif" style="--dur:8s;--nop:.42;left:58%;animation-delay:2.4s;">
+	                        <span style="width:7px;height:7px;border-radius:50%;background:var(--primary);flex-shrink:0;"></span>
+	                        ⚡ Link convertido
+	                </span>
+	                <span class="hero-notif" style="--dur:10s;--nop:.36;left:26%;animation-delay:4.2s;">
+	                        <span style="width:7px;height:7px;border-radius:50%;background:#f59e0b;flex-shrink:0;"></span>
+	                        💰 +R$ 23,40 comissão
+	                </span>
+	                <span class="hero-notif" style="--dur:7.5s;--nop:.4;left:78%;animation-delay:1.1s;">
+	                        <span style="width:7px;height:7px;border-radius:50%;background:#3b82f6;flex-shrink:0;"></span>
+	                        📤 Enviado · 3 grupos
+	                </span>
+	                <span class="hero-notif" style="--dur:8.5s;--nop:.35;left:42%;animation-delay:5.8s;">
+	                        <span style="width:7px;height:7px;border-radius:50%;background:var(--primary);flex-shrink:0;"></span>
+	                        ✅ Afiliado · Mercado Livre
+	                </span>
+	                <span class="hero-notif" style="--dur:9.5s;--nop:.37;left:15%;animation-delay:7s;">
+	                        <span style="width:7px;height:7px;border-radius:50%;background:#ef4444;flex-shrink:0;"></span>
+	                        🛍️ Amazon · +R$ 41,20
+	                </span>
+	        </div>
+	
+
+	        <div class="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center" style="z-index:10;">
+	
+
+	                
+	                <div class="anim-fade inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold mb-8" style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.25);color:var(--primary);font-family:'Space Grotesk',sans-serif;letter-spacing:0.04em;text-transform:uppercase;">
+	                        <span class="w-1.5 h-1.5 rounded-full bg-[var(--primary)]" style="animation:pulse-dot 2s ease-in-out infinite;"></span>
+	                        Bot WhatsApp para Afiliados &bull; Automação 24/7
+	                </div>
+	
+
+	                
+	                <h1 class="anim-up d-1" style="font-family:'Space Grotesk',sans-serif;font-weight:700;letter-spacing:-0.04em;font-size:clamp(2.25rem,6vw,4rem);line-height:1.08;color:var(--text-1);margin-bottom:1.5rem;">
+	                        Transforme links em<br>
+	                        <span style="color:var(--primary);">comissões automáticas</span>
+	                </h1>
+	
+
+	                
+	                <p class="anim-up d-2 section-sub" style="margin-bottom:2.5rem;font-size:clamp(1rem,2vw,1.125rem);">
+	                        O bot que monitora grupos ilimitados do WhatsApp, detecta produtos e converte em links de afiliado automaticamente — com Shopee, AliExpress, Mercado Livre, Amazon e Magazine Luiza.
+	                </p>
+	
+
+	                
+	                <div class="anim-up d-3 flex flex-col sm:flex-row gap-3 justify-center items-center" style="margin-bottom:3rem;">
+	                        <a href="/register" class="btn-primary w-full sm:w-auto" style="padding:0.875rem 2rem;font-size:1rem;" aria-label="Começar grátis">
+	                                Começar Grátis
+	                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+	                        </a>
+	                        <a href="#como-funciona" class="btn-ghost w-full sm:w-auto" style="padding:0.875rem 2rem;font-size:1rem;">
+	                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+	                                Como funciona
+	                        </a>
+	                </div>
+	
+
+	                
+	                <div class="anim-up d-4 flex flex-wrap justify-center gap-x-6 gap-y-2" style="color:var(--text-3);font-size:0.8125rem;">
+	                        <span class="flex items-center gap-1.5">
+	                                <svg class="w-3.5 h-3.5 text-[var(--primary)]" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+	                                Sem cartão de crédito
+	                        </span>
+	                        <span class="flex items-center gap-1.5">
+	                                <svg class="w-3.5 h-3.5 text-[var(--primary)]" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+	                                Pronto em 5 minutos
+	                        </span>
+	                        <span class="flex items-center gap-1.5">
+	                                <svg class="w-3.5 h-3.5 text-[var(--primary)]" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+	                                Grupos ilimitados
+	                        </span>
+	                        <span class="flex items-center gap-1.5">
+	                                <svg class="w-3.5 h-3.5 text-[var(--primary)]" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+	                                Cancele quando quiser
+	                        </span>
+	                </div>
+	
+
+	                
+	                <div class="ticker-wrap anim-up d-5" style="margin-top:2.5rem;border-top:1px solid var(--border);padding-top:1.25rem;" role="marquee" aria-label="Atividade recente do bot">
+	                        <div class="ticker-track">
+	                                <span class="ticker-item"><span class="ticker-dot"></span>🎧 Fone Bluetooth · Shopee <span style="color:var(--primary);margin-left:4px;font-size:10px;">✓</span></span>
+	                                <span class="ticker-item"><span class="ticker-dot"></span>⌚ Smartwatch · Amazon <span style="color:var(--primary);margin-left:4px;font-size:10px;">✓</span></span>
+	                                <span class="ticker-item"><span class="ticker-dot"></span>👟 Tênis Corrida · Mercado Livre <span style="color:var(--primary);margin-left:4px;font-size:10px;">✓</span></span>
+	                                <span class="ticker-item"><span class="ticker-dot"></span>💻 SSD 1TB · AliExpress <span style="color:var(--primary);margin-left:4px;font-size:10px;">✓</span></span>
+	                                <span class="ticker-item"><span class="ticker-dot"></span>📱 Capinha iPhone · Shopee <span style="color:var(--primary);margin-left:4px;font-size:10px;">✓</span></span>
+	                                <span class="ticker-item"><span class="ticker-dot"></span>🎮 Controle PS5 · Magazine Luiza <span style="color:var(--primary);margin-left:4px;font-size:10px;">✓</span></span>
+	                                <span class="ticker-item"><span class="ticker-dot"></span>🖥️ Monitor 4K · Amazon <span style="color:var(--primary);margin-left:4px;font-size:10px;">✓</span></span>
+	                                <span class="ticker-item"><span class="ticker-dot"></span>🎒 Mochila Escolar · Shopee <span style="color:var(--primary);margin-left:4px;font-size:10px;">✓</span></span>
+	                                <span class="ticker-item"><span class="ticker-dot"></span>🔌 Carregador 65W · AliExpress <span style="color:var(--primary);margin-left:4px;font-size:10px;">✓</span></span>
+	                                <span class="ticker-item"><span class="ticker-dot"></span>🏋️ Haltere 10kg · Magazine Luiza <span style="color:var(--primary);margin-left:4px;font-size:10px;">✓</span></span>
+	                                
+	                                <span class="ticker-item"><span class="ticker-dot"></span>🎧 Fone Bluetooth · Shopee <span style="color:var(--primary);margin-left:4px;font-size:10px;">✓</span></span>
+	                                <span class="ticker-item"><span class="ticker-dot"></span>⌚ Smartwatch · Amazon <span style="color:var(--primary);margin-left:4px;font-size:10px;">✓</span></span>
+	                                <span class="ticker-item"><span class="ticker-dot"></span>👟 Tênis Corrida · Mercado Livre <span style="color:var(--primary);margin-left:4px;font-size:10px;">✓</span></span>
+	                                <span class="ticker-item"><span class="ticker-dot"></span>💻 SSD 1TB · AliExpress <span style="color:var(--primary);margin-left:4px;font-size:10px;">✓</span></span>
+	                                <span class="ticker-item"><span class="ticker-dot"></span>📱 Capinha iPhone · Shopee <span style="color:var(--primary);margin-left:4px;font-size:10px;">✓</span></span>
+	                                <span class="ticker-item"><span class="ticker-dot"></span>🎮 Controle PS5 · Magazine Luiza <span style="color:var(--primary);margin-left:4px;font-size:10px;">✓</span></span>
+	                                <span class="ticker-item"><span class="ticker-dot"></span>🖥️ Monitor 4K · Amazon <span style="color:var(--primary);margin-left:4px;font-size:10px;">✓</span></span>
+	                                <span class="ticker-item"><span class="ticker-dot"></span>🎒 Mochila Escolar · Shopee <span style="color:var(--primary);margin-left:4px;font-size:10px;">✓</span></span>
+	                                <span class="ticker-item"><span class="ticker-dot"></span>🔌 Carregador 65W · AliExpress <span style="color:var(--primary);margin-left:4px;font-size:10px;">✓</span></span>
+	                                <span class="ticker-item"><span class="ticker-dot"></span>🏋️ Haltere 10kg · Magazine Luiza <span style="color:var(--primary);margin-left:4px;font-size:10px;">✓</span></span>
+	                        </div>
+	                </div>
+	        </div>
+	</section>
+	
+
+	
+
+	<section style="padding:0 0 clamp(4rem,8vw,6rem);border-top:1px solid var(--border);" aria-label="Demonstração do bot em ação">
+	        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+	
+
+	                <div class="text-center reveal" style="padding-top:clamp(3rem,6vw,5rem);margin-bottom:2.5rem;">
+	                        <p class="section-label">Veja o bot em ação</p>
+	                        <h2 class="section-title" style="font-size:clamp(1.5rem,3.5vw,2.25rem);">Do link bruto à comissão — em segundos</h2>
+	                        <p class="section-sub" style="margin-top:.75rem;font-size:.9375rem;">Alguém posta um link no grupo → o bot detecta → converte para seu link de afiliado → envia com preview rico para seus grupos.</p>
+	                </div>
+	
+
+	                
+	                <div class="reveal demo-3col" style="display:grid;grid-template-columns:1fr auto 1fr;gap:1rem;align-items:center;transition-delay:.1s;">
+	
+
+	                        
+	                        <div style="display:flex;flex-direction:column;gap:.75rem;align-items:center;">
+	                                <span style="font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);font-family:'Space Grotesk',sans-serif;">① Grupo monitorado</span>
+	                                <div class="wa-phone" style="width:100%;max-width:230px;">
+	                                        <div class="wa-head">
+	                                                <div class="wa-avatar" style="background:#2a3942;">👥</div>
+	                                                <div>
+	                                                        <div class="wa-head-name">Promoções BR 🛍️</div>
+	                                                        <div class="wa-head-status">4.382 membros</div>
+	                                                </div>
+	                                        </div>
+	                                        <div class="wa-body">
+	                                                
+	                                                <div class="wa-bubble wa-in">
+	                                                        Alguém sabe um fone bom barato? 🎧
+	                                                        <div class="wa-time">08:43</div>
+	                                                </div>
+	                                                <div class="wa-bubble wa-in">
+	                                                        Esse aqui tá excelente pelo preço
+	                                                        <div class="wa-time">08:44</div>
+	                                                </div>
+	                                                
+	                                                <div class="wa-bubble wa-in" style="animation:d-raw var(--dd) ease infinite;">
+	                                                        Achei esse 👀
+	                                                        <span class="wa-link">shope.ee/3xAbFone2024xz</span>
+	                                                        <div class="wa-time">08:45</div>
+	                                                </div>
+	                                                
+	                                                <div class="detect-badge" style="animation:d-detect var(--dd) ease infinite;">
+	                                                        <svg style="width:10px;height:10px;" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+	                                                        Bot detectou um link!
+	                                                </div>
+	                                        </div>
+	                                </div>
+	                        </div>
+	
+
+	                        
+	                        <div class="demo-mid" style="display:flex;flex-direction:column;align-items:center;gap:.625rem;padding:0 .5rem;">
+	                                
+	                                <div style="font-size:20px;color:var(--primary);animation:d-arrow var(--dd) ease infinite;">→</div>
+	                                
+	                                <div style="display:flex;flex-direction:column;align-items:center;gap:.5rem;animation:d-bot var(--dd) ease infinite;">
+	                                        <div class="bot-icon-lg">PA</div>
+	                                        <div class="wa-typing">
+	                                                <span style="animation:d-dot1 var(--dd) ease infinite;"></span>
+	                                                <span style="animation:d-dot2 var(--dd) ease infinite;"></span>
+	                                                <span style="animation:d-dot3 var(--dd) ease infinite;"></span>
+	                                        </div>
+	                                        <span style="font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--primary);font-family:'Space Grotesk',sans-serif;">Convertendo…</span>
+	                                </div>
+	                                
+	                                <div style="font-size:20px;color:var(--primary);animation:d-arrow var(--dd) ease infinite;animation-delay:.3s;">→</div>
+	                        </div>
+	
+
+	                        
+	                        <div style="display:flex;flex-direction:column;gap:.75rem;align-items:center;">
+	                                <span style="font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);font-family:'Space Grotesk',sans-serif;">③ Seus grupos afiliados</span>
+	
+
+	                                
+	                                <div class="wa-phone" style="width:100%;max-width:230px;animation:d-g1 var(--dd) ease infinite;">
+	                                        <div class="wa-head">
+	                                                <div class="wa-avatar" style="background:#1a3a2a;">📢</div>
+	                                                <div>
+	                                                        <div class="wa-head-name">Afiliados VIP 💸</div>
+	                                                        <div class="wa-head-status">1.240 membros</div>
+	                                                </div>
+	                                        </div>
+	                                        <div class="wa-body">
+	                                                <div class="wa-bubble wa-out">
+	                                                        <div class="wa-preview-card">
+	                                                                <div class="wa-preview-img">🎧</div>
+	                                                                <div class="wa-preview-body">
+	                                                                        <div class="wa-preview-title">Fone Bluetooth Pro X9 sem fio</div>
+	                                                                        <div style="display:flex;align-items:baseline;gap:6px;margin-top:3px;">
+	                                                                                <div class="wa-preview-price">R$ 89,90</div>
+	                                                                                <div class="wa-preview-old">R$ 199,90</div>
+	                                                                        </div>
+	                                                                        <div class="wa-preview-stars">★★★★★ 4.9 (3.2k)</div>
+	                                                                        <span class="wa-preview-link">🔗 Ver com meu link de afiliado →</span>
+	                                                                </div>
+	                                                        </div>
+	                                                        <div class="wa-time" style="display:flex;align-items:center;justify-content:flex-end;gap:3px;">
+	                                                                08:45
+	                                                                <svg style="width:12px;height:12px;color:#53bdeb;" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+	                                                        </div>
+	                                                </div>
+	                                        </div>
+	                                </div>
+	
+
+	                                
+	                                <div class="wa-phone" style="width:100%;max-width:230px;animation:d-g2 var(--dd) ease infinite;">
+	                                        <div class="wa-head">
+	                                                <div class="wa-avatar" style="background:#1a2a3a;">🛒</div>
+	                                                <div>
+	                                                        <div class="wa-head-name">Ofertas do Dia 🔥</div>
+	                                                        <div class="wa-head-status">892 membros</div>
+	                                                </div>
+	                                        </div>
+	                                        <div class="wa-body">
+	                                                <div class="wa-bubble wa-out">
+	                                                        <div class="wa-preview-card">
+	                                                                <div class="wa-preview-img">🎧</div>
+	                                                                <div class="wa-preview-body">
+	                                                                        <div class="wa-preview-title">Fone Bluetooth Pro X9 sem fio</div>
+	                                                                        <div class="wa-preview-price" style="margin-top:3px;">R$ 89,90</div>
+	                                                                        <span class="wa-preview-link">🔗 Ver com meu link de afiliado →</span>
+	                                                                </div>
+	                                                        </div>
+	                                                        <div class="wa-time">08:45 ✓✓</div>
+	                                                </div>
+	                                        </div>
+	                                </div>
+	
+
+	                                
+	                                <div style="display:flex;gap:.5rem;">
+	                                        <span style="font-size:.7rem;font-weight:700;color:var(--primary);font-family:'Space Grotesk',sans-serif;animation:d-tick1 var(--dd) ease infinite;">1/2 ✓</span>
+	                                        <span style="font-size:.7rem;font-weight:700;color:var(--primary);font-family:'Space Grotesk',sans-serif;animation:d-tick2 var(--dd) ease infinite;">2/2 ✓</span>
+	                                </div>
+	                        </div>
+	                </div>
+	
+
+	                
+	                <div style="display:flex;justify-content:center;margin-top:1.5rem;">
+	                        <div class="success-badge" style="animation:d-ok var(--dd) ease infinite;">
+	                                <svg style="width:14px;height:14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+	                                Link convertido e enviado para 2 grupos · Comissão gerada 💰
+	                        </div>
+	                </div>
+	                <p style="text-align:center;font-size:.7rem;color:var(--text-3);margin-top:.875rem;">↻ Animação em loop contínuo · Isso acontece 24/7 automaticamente</p>
+	        </div>
+	</section>
+	
+
+	
+
+	<section style="padding:0 0 clamp(4rem,8vw,6rem);" aria-label="Estatísticas">
+	        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+	                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+	                        <div class="card reveal text-center p-6">
+	                                <div class="stat-number" style="color:var(--primary);">1.000+</div>
+	                                <div style="color:var(--text-3);font-size:0.8125rem;margin-top:0.25rem;">Afiliados Ativos</div>
+	                        </div>
+	                        <div class="card reveal text-center p-6" style="transition-delay:0.08s;">
+	                                <div class="stat-number" style="color:var(--primary);">24/7</div>
+	                                <div style="color:var(--text-3);font-size:0.8125rem;margin-top:0.25rem;">Sempre Ativo</div>
+	                        </div>
+	                        <div class="card reveal text-center p-6" style="transition-delay:0.16s;">
+	                                <div class="stat-number" style="color:var(--primary);">&infin;</div>
+	                                <div style="color:var(--text-3);font-size:0.8125rem;margin-top:0.25rem;">Grupos Ilimitados</div>
+	                        </div>
+	                        <div class="card reveal text-center p-6" style="transition-delay:0.24s;">
+	                                <div class="stat-number" style="color:var(--primary);">5</div>
+	                                <div style="color:var(--text-3);font-size:0.8125rem;margin-top:0.25rem;">Plataformas</div>
+	                        </div>
+	                </div>
+	        </div>
+	</section>
+	
+
+	
+
+	
+
+	        <section style="padding:0 0 clamp(4rem,8vw,6rem);" aria-label="Plano gratuito ilimitado">
+	                <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+	                        <div class="cta-bg reveal rounded-2xl text-center" style="padding:clamp(2rem,5vw,3rem);">
+	                                <p class="section-label" style="margin-bottom:1rem;">Plano Grátis Ilimitado</p>
+	                                <h2 class="section-title" style="font-size:clamp(1.5rem,3.5vw,2.25rem);margin-bottom:1rem;">Use de graça, sem limites</h2>
+	                                <p style="color:var(--text-2);font-size:1rem;line-height:1.7;max-width:560px;margin:0 auto 1.5rem;">O Pro Afiliados tem um <strong style="color:var(--text-1);">plano gratuito ilimitado</strong>. Monitore quantos grupos quiser, use todas as funcionalidades principais e o bot trabalha 24/7 sem você pagar nada. No plano grátis, seus links incluem a tag <strong style="color:var(--primary);">proafiliados</strong> — você já ganha comissão com seu próprio link de afiliado. Quer remover a tag? Assine o Premium a partir de R$ 50/mês.</p>
+	                                <div class="flex flex-wrap justify-center gap-x-6 gap-y-2" style="color:var(--text-3);font-size:0.8125rem;margin-bottom:1.5rem;">
+	                                        <span class="flex items-center gap-1.5">
+	                                                <svg class="w-3.5 h-3.5 text-[var(--primary)]" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+	                                                Grupos ilimitados
+	                                        </span>
+	                                        <span class="flex items-center gap-1.5">
+	                                                <svg class="w-3.5 h-3.5 text-[var(--primary)]" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+	                                                Tag proafiliados inclusa
+	                                        </span>
+	                                        <span class="flex items-center gap-1.5">
+	                                                <svg class="w-3.5 h-3.5 text-[var(--primary)]" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+	                                                Bot 24/7 no automático
+	                                        </span>
+	                                        <span class="flex items-center gap-1.5">
+	                                                <svg class="w-3.5 h-3.5 text-[var(--primary)]" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+	                                                Sem cartão de crédito
+	                                        </span>
+	                                </div>
+	                                <a href="/register" class="btn-primary" style="padding:0.875rem 2rem;font-size:1rem;" aria-label="Começar grátis">
+	                                        Começar Grátis Agora
+	                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+	                                </a>
+	                        </div>
+	                </div>
+	        </section>
+	
+
+	
+
+	<section id="plataformas" style="padding:clamp(3rem,6vw,5rem) 0;border-top:1px solid var(--border);" aria-label="Plataformas suportadas">
+	        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+	                <p class="reveal section-label">Plataformas suportadas</p>
+	                <div class="reveal flex flex-wrap justify-center gap-3" style="transition-delay:0.08s;">
+	                        <span class="platform-pill">
+	                                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" style="color:#EE4D2D;"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.5 14.5h-9a.5.5 0 010-1h9a.5.5 0 010 1zm0-4h-9a.5.5 0 010-1h9a.5.5 0 010 1zm0-4h-9a.5.5 0 010-1h9a.5.5 0 010 1z"/></svg>
+	                                Shopee
+	                        </span>
+	                        <span class="platform-pill">
+	                                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" style="color:#FF9900;"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 4a3 3 0 110 6 3 3 0 010-6zm0 14.2a7.2 7.2 0 01-6-3.22c.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08a7.2 7.2 0 01-6 3.22z"/></svg>
+	                                Amazon
+	                        </span>
+	                        <span class="platform-pill">
+	                                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" style="color:#E53238;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+	                                Mercado Livre
+	                        </span>
+	                        <span class="platform-pill">
+	                                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" style="color:#FF6900;"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 4a6 6 0 010 12A6 6 0 0112 6z"/></svg>
+	                                AliExpress
+	                        </span>
+	                        <span class="platform-pill">
+	                                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" style="color:#0073CF;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+	                                Magazine Luiza
+	                        </span>
+	                </div>
+	        </div>
+	</section>
+	
+
+	
+
+	
+
+	<section style="padding:clamp(4rem,8vw,6rem) 0;border-top:1px solid var(--border);" aria-label="Preview rico de produtos">
+	        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+	                <div class="text-center reveal" style="margin-bottom:clamp(2rem,4vw,3rem);">
+	                        <p class="section-label">Preview rico</p>
+	                        <h2 class="section-title" style="font-size:clamp(1.5rem,3.5vw,2.25rem);">O que seus grupos realmente recebem</h2>
+	                        <p class="section-sub" style="margin-top:.75rem;font-size:.9375rem;">O bot não só envia o link — ele busca e monta um card completo com imagem, título, preço e avaliação do produto.</p>
+	                </div>
+	
+
+	                <div class="reveal" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.5rem;transition-delay:.1s;">
+	
+
+	                        
+	                        <div style="display:flex;flex-direction:column;gap:.875rem;align-items:center;">
+	                                <span class="badge" style="font-size:.65rem;">Shopee</span>
+	                                <div class="wa-phone" style="width:100%;max-width:280px;">
+	                                        <div class="wa-head">
+	                                                <div class="wa-avatar" style="background:#1a3a2a;">📢</div>
+	                                                <div>
+	                                                        <div class="wa-head-name">Afiliados Premium</div>
+	                                                        <div class="wa-head-status">online agora</div>
+	                                                </div>
+	                                        </div>
+	                                        <div class="wa-body" style="padding:12px;">
+	                                                <div class="wa-bubble wa-out" style="max-width:100%;">
+	                                                        <div class="wa-preview-card">
+	                                                                <div class="wa-preview-img" style="height:72px;font-size:36px;">🎧</div>
+	                                                                <div class="wa-preview-body">
+	                                                                        <div class="wa-preview-title">Fone Bluetooth TWS Pro sem fio com cancelamento de ruído</div>
+	                                                                        <div style="display:flex;align-items:baseline;gap:8px;margin-top:5px;">
+	                                                                                <div class="wa-preview-price" style="font-size:15px;">R$ 89,90</div>
+	                                                                                <div class="wa-preview-old">R$ 199,90</div>
+	                                                                        </div>
+	                                                                        <div style="display:inline-flex;align-items:center;gap:4px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:4px;padding:2px 6px;margin-top:4px;">
+	                                                                                <span style="font-size:9px;font-weight:700;color:#ef4444;">-55%</span>
+	                                                                        </div>
+	                                                                        <div class="wa-preview-stars" style="font-size:11px;margin-top:4px;">★★★★★ 4.9 · 3.2k avaliações</div>
+	                                                                        <span class="wa-preview-link" style="font-size:10px;margin-top:6px;">🔗 Ver oferta com meu link de afiliado →</span>
+	                                                                </div>
+	                                                        </div>
+	                                                        <div class="wa-time" style="margin-top:4px;">08:45 ✓✓</div>
+	                                                </div>
+	                                        </div>
+	                                </div>
+	                                <p style="font-size:.78rem;color:var(--text-3);text-align:center;max-width:220px;">Imagem, título, preço com desconto, avaliações e link de afiliado</p>
+	                        </div>
+	
+
+	                        
+	                        <div style="display:flex;flex-direction:column;gap:.875rem;align-items:center;">
+	                                <span class="badge" style="font-size:.65rem;">Amazon</span>
+	                                <div class="wa-phone" style="width:100%;max-width:280px;">
+	                                        <div class="wa-head">
+	                                                <div class="wa-avatar" style="background:#2a2a1a;">💰</div>
+	                                                <div>
+	                                                        <div class="wa-head-name">Ofertas Exclusivas</div>
+	                                                        <div class="wa-head-status">2.108 membros</div>
+	                                                </div>
+	                                        </div>
+	                                        <div class="wa-body" style="padding:12px;">
+	                                                <div class="wa-bubble wa-out" style="max-width:100%;">
+	                                                        <div class="wa-preview-card">
+	                                                                <div class="wa-preview-img" style="height:72px;font-size:36px;">⌚</div>
+	                                                                <div class="wa-preview-body">
+	                                                                        <div class="wa-preview-title">Smartwatch Amazfit GTS 4 GPS 150+ modos esportivos</div>
+	                                                                        <div style="display:flex;align-items:baseline;gap:8px;margin-top:5px;">
+	                                                                                <div class="wa-preview-price" style="font-size:15px;">R$ 299,00</div>
+	                                                                                <div class="wa-preview-old">R$ 599,00</div>
+	                                                                        </div>
+	                                                                        <div style="display:inline-flex;align-items:center;gap:4px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:4px;padding:2px 6px;margin-top:4px;">
+	                                                                                <span style="font-size:9px;font-weight:700;color:#ef4444;">-50%</span>
+	                                                                        </div>
+	                                                                        <div class="wa-preview-stars" style="font-size:11px;margin-top:4px;">★★★★★ 4.7 · 1.8k avaliações</div>
+	                                                                        <span class="wa-preview-link" style="font-size:10px;margin-top:6px;">🔗 Ver oferta com meu link de afiliado →</span>
+	                                                                </div>
+	                                                        </div>
+	                                                        <div class="wa-time" style="margin-top:4px;">14:32 ✓✓</div>
+	                                                </div>
+	                                        </div>
+	                                </div>
+	                                <p style="font-size:.78rem;color:var(--text-3);text-align:center;max-width:220px;">Preview automático de qualquer produto da Amazon</p>
+	                        </div>
+	
+
+	                        
+	                        <div style="display:flex;flex-direction:column;gap:.875rem;align-items:center;">
+	                                <span class="badge" style="font-size:.65rem;">Mercado Livre</span>
+	                                <div class="wa-phone" style="width:100%;max-width:280px;">
+	                                        <div class="wa-head">
+	                                                <div class="wa-avatar" style="background:#1a2a3a;">🛒</div>
+	                                                <div>
+	                                                        <div class="wa-head-name">Achados do ML</div>
+	                                                        <div class="wa-head-status">756 membros</div>
+	                                                </div>
+	                                        </div>
+	                                        <div class="wa-body" style="padding:12px;">
+	                                                <div class="wa-bubble wa-out" style="max-width:100%;">
+	                                                        <div class="wa-preview-card">
+	                                                                <div class="wa-preview-img" style="height:72px;font-size:36px;">💻</div>
+	                                                                <div class="wa-preview-body">
+	                                                                        <div class="wa-preview-title">Notebook Samsung Book E30 i3 4GB 256GB SSD</div>
+	                                                                        <div style="display:flex;align-items:baseline;gap:8px;margin-top:5px;">
+	                                                                                <div class="wa-preview-price" style="font-size:15px;">R$ 1.799,99</div>
+	                                                                                <div class="wa-preview-old">R$ 2.399,99</div>
+	                                                                        </div>
+	                                                                        <div style="display:inline-flex;align-items:center;gap:4px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:4px;padding:2px 6px;margin-top:4px;">
+	                                                                                <span style="font-size:9px;font-weight:700;color:#ef4444;">-25%</span>
+	                                                                        </div>
+	                                                                        <div class="wa-preview-stars" style="font-size:11px;margin-top:4px;">★★★★☆ 4.5 · 980 avaliações</div>
+	                                                                        <span class="wa-preview-link" style="font-size:10px;margin-top:6px;">🔗 Ver oferta com meu link de afiliado →</span>
+	                                                                </div>
+	                                                        </div>
+	                                                        <div class="wa-time" style="margin-top:4px;">20:11 ✓✓</div>
+	                                                </div>
+	                                        </div>
+	                                </div>
+	                                <p style="font-size:.78rem;color:var(--text-3);text-align:center;max-width:220px;">Links do Mercado Livre convertidos e enviados automaticamente</p>
+	                        </div>
+	
+
+	                </div>
+	
+
+	                <p style="text-align:center;font-size:.78rem;color:var(--text-3);margin-top:1.75rem;">Funciona da mesma forma com AliExpress e Magazine Luiza</p>
+	        </div>
+	</section>
+	
+
+	<section id="como-funciona" style="padding:clamp(4rem,8vw,7rem) 0;border-top:1px solid var(--border);" aria-labelledby="h-como-funciona">
+	        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+	                <div class="text-center" style="margin-bottom:clamp(2.5rem,5vw,4rem);">
+	                        <p class="reveal section-label">Simples e rápido</p>
+	                        <h2 id="h-como-funciona" class="reveal section-title" style="transition-delay:0.08s;">Configure em 4 passos</h2>
+	                        <p class="reveal section-sub" style="margin-top:1rem;transition-delay:0.16s;">Pronto em menos de 5 minutos. Sem complicação.</p>
+	                </div>
+	
+
+	                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+	                        <div class="card card-hover reveal p-6" style="transition-delay:0.05s;">
+	                                <div class="step-num mb-4">1</div>
+	                                <h3 style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1rem;color:var(--text-1);margin-bottom:0.5rem;">Conecte o WhatsApp</h3>
+	                                <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">Escaneie o QR Code ou use o código de pareamento. Leva menos de 1 minuto.</p>
+	                        </div>
+	                        <div class="card card-hover reveal p-6" style="transition-delay:0.10s;">
+	                                <div class="step-num mb-4">2</div>
+	                                <h3 style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1rem;color:var(--text-1);margin-bottom:0.5rem;">Escolha os Grupos</h3>
+	                                <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">Selecione quais grupos monitorar e para onde reenviar. Sem limites de grupos.</p>
+	                        </div>
+	                        <div class="card card-hover reveal p-6" style="transition-delay:0.15s;">
+	                                <div class="step-num mb-4">3</div>
+	                                <h3 style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1rem;color:var(--text-1);margin-bottom:0.5rem;">Adicione Credenciais</h3>
+	                                <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">Insira suas chaves de afiliado nas 5 plataformas suportadas.</p>
+	                        </div>
+	                        <div class="card card-hover reveal p-6" style="transition-delay:0.20s;border-color:rgba(16,185,129,0.25);">
+	                                <div class="step-num mb-4" style="background:rgba(16,185,129,0.15);border-color:rgba(16,185,129,0.4);">
+	                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+	                                </div>
+	                                <h3 style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1rem;color:var(--primary);margin-bottom:0.5rem;">Ganhe no Automático</h3>
+	                                <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">O bot trabalha 24/7 convertendo links e gerando comissões para você.</p>
+	                        </div>
+	                </div>
+	        </div>
+	</section>
+	
+
+	
+
+	<section id="funcionalidades" style="padding:clamp(4rem,8vw,7rem) 0;border-top:1px solid var(--border);" aria-labelledby="h-features">
+	        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+	                <div class="text-center" style="margin-bottom:clamp(2.5rem,5vw,4rem);">
+	                        <p class="reveal section-label">Funcionalidades</p>
+	                        <h2 id="h-features" class="reveal section-title" style="transition-delay:0.08s;">Tudo que você precisa</h2>
+	                        <p class="reveal section-sub" style="margin-top:1rem;transition-delay:0.16s;">Automação completa para maximizar suas comissões como afiliado.</p>
+	                </div>
+	
+
+	                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+	
+
+	                        <div class="card card-hover reveal p-6" style="transition-delay:0.04s;">
+	                                <div class="feat-icon"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg></div>
+	                                <h3 style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.9375rem;color:var(--text-1);margin-bottom:0.375rem;">Monitoramento 24/7</h3>
+	                                <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">Monitore grupos ilimitados do WhatsApp em tempo real, sem parar.</p>
+	                        </div>
+	
+
+	                        <div class="card card-hover reveal p-6" style="transition-delay:0.08s;">
+	                                <div class="feat-icon"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></div>
+	                                <h3 style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.9375rem;color:var(--text-1);margin-bottom:0.375rem;">Conversão Instantânea</h3>
+	                                <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">Links de produtos convertidos para seus links de afiliado em segundos.</p>
+	                        </div>
+	
+
+	                        <div class="card card-hover reveal p-6" style="transition-delay:0.12s;">
+	                                <div class="feat-icon"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>
+	                                <h3 style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.9375rem;color:var(--text-1);margin-bottom:0.375rem;">Preview Rico</h3>
+	                                <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">Busca título, descrição e imagem do produto para previews atrativos.</p>
+	                        </div>
+	
+
+	                        <div class="card card-hover reveal p-6" style="transition-delay:0.16s;background:rgba(16,185,129,0.04);border-color:rgba(16,185,129,0.2);">
+	                                <div class="feat-icon"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+	                                <div class="badge" style="font-size:0.65rem;margin-bottom:0.625rem;">Exclusivo</div>
+	                                <h3 style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.9375rem;color:var(--text-1);margin-bottom:0.375rem;">Feed Global (P2P)</h3>
+	                                <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">Rede exclusiva P2P: receba links detectados por outros afiliados automaticamente. Multiplique seus disparos sem esforço.</p>
+	                        </div>
+	
+
+	                        <div class="card card-hover reveal p-6" style="transition-delay:0.20s;">
+	                                <div class="feat-icon"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+	                                <h3 style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.9375rem;color:var(--text-1);margin-bottom:0.375rem;">Agendamento Automático</h3>
+	                                <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">Configure horários de liga/desliga. O bot opera no horário ideal sem precisar de você.</p>
+	                        </div>
+	
+
+	                        <div class="card card-hover reveal p-6" style="transition-delay:0.24s;">
+	                                <div class="feat-icon"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg></div>
+	                                <h3 style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.9375rem;color:var(--text-1);margin-bottom:0.375rem;">Anti-Spam Inteligente</h3>
+	                                <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">Sistema que evita duplicatas e delay configurável entre postagens.</p>
+	                        </div>
+	
+
+	                        <div class="card card-hover reveal p-6" style="transition-delay:0.28s;">
+	                                <div class="feat-icon"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg></div>
+	                                <h3 style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.9375rem;color:var(--text-1);margin-bottom:0.375rem;">Disparo Manual</h3>
+	                                <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">Cole um link e envie para grupos específicos com um clique. Converte e manda na hora.</p>
+	                        </div>
+	
+
+	                        <div class="card card-hover reveal p-6" style="transition-delay:0.32s;">
+	                                <div class="feat-icon"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg></div>
+	                                <h3 style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.9375rem;color:var(--text-1);margin-bottom:0.375rem;">Broadcast em Massa</h3>
+	                                <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">Envie texto e imagem para todos os grupos de uma só vez. Ideal para campanhas.</p>
+	                        </div>
+	
+
+	                        <div class="card card-hover reveal p-6" style="transition-delay:0.36s;">
+	                                <div class="feat-icon"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></div>
+	                                <h3 style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.9375rem;color:var(--text-1);margin-bottom:0.375rem;">Histórico de Logs</h3>
+	                                <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">Acompanhe todos os envios: status, plataforma detectada e erros em tempo real.</p>
+	                        </div>
+	
+
+	                        <div class="card card-hover reveal p-6" style="transition-delay:0.40s;">
+	                                <div class="feat-icon"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/></svg></div>
+	                                <h3 style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.9375rem;color:var(--text-1);margin-bottom:0.375rem;">Mensagem de Boas-Vindas</h3>
+	                                <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">Mensagem personalizada enviada para cada novo membro que entra no grupo.</p>
+	                        </div>
+	
+
+	                        <div class="card card-hover reveal p-6" style="transition-delay:0.44s;">
+	                                <div class="feat-icon"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg></div>
+	                                <h3 style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.9375rem;color:var(--text-1);margin-bottom:0.375rem;">Postar no Status WA</h3>
+	                                <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">Publica automaticamente nos seus Status do WhatsApp. Alcance ainda mais pessoas.</p>
+	                        </div>
+	
+
+	                        <div class="card card-hover reveal p-6" style="transition-delay:0.48s;">
+	                                <div class="feat-icon"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg></div>
+	                                <h3 style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.9375rem;color:var(--text-1);margin-bottom:0.375rem;">Sistema de Referências</h3>
+	                                <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">Código único de indicação. Indique amigos e acompanhe seus resultados pelo dashboard.</p>
+	                        </div>
+	
+
+	                </div>
+	        </div>
+	</section>
+	
+
+	
+
+	<section style="padding:clamp(4rem,8vw,6rem) 0;border-top:1px solid var(--border);" aria-label="Feed Global exclusivo">
+	        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+	                <div style="display:grid;grid-template-columns:1fr 1fr;gap:clamp(2rem,5vw,5rem);align-items:center;" class="reveal feed-grid">
+	
+
+	                        
+	                        <div>
+	                                <div class="badge" style="margin-bottom:1rem;">Exclusivo Pro Afiliados</div>
+	                                <h2 class="section-title" style="font-size:clamp(1.5rem,3vw,2.125rem);text-align:left;">Feed Global: mais links,<br>mais comissões</h2>
+	                                <p style="color:var(--text-2);font-size:.9375rem;line-height:1.75;margin-top:1rem;margin-bottom:1.5rem;">A única rede P2P do mercado para afiliados. Quando outros usuários detectam links em seus grupos, <strong style="color:var(--text-1);">você também recebe automaticamente</strong> — e o bot converte para seus próprios links de afiliado.</p>
+	                                <div style="display:flex;flex-direction:column;gap:.75rem;">
+	                                        <div style="display:flex;align-items:flex-start;gap:.75rem;">
+	                                                <div style="width:20px;height:20px;border-radius:50%;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;">
+	                                                        <svg style="width:10px;height:10px;color:var(--primary);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+	                                                </div>
+	                                                <p style="font-size:.875rem;color:var(--text-2);line-height:1.6;">Multiplique seus disparos sem precisar de mais grupos monitorados</p>
+	                                        </div>
+	                                        <div style="display:flex;align-items:flex-start;gap:.75rem;">
+	                                                <div style="width:20px;height:20px;border-radius:50%;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;">
+	                                                        <svg style="width:10px;height:10px;color:var(--primary);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+	                                                </div>
+	                                                <p style="font-size:.875rem;color:var(--text-2);line-height:1.6;">Links convertidos com suas próprias credenciais de afiliado</p>
+	                                        </div>
+	                                        <div style="display:flex;align-items:flex-start;gap:.75rem;">
+	                                                <div style="width:20px;height:20px;border-radius:50%;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;">
+	                                                        <svg style="width:10px;height:10px;color:var(--primary);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+	                                                </div>
+	                                                <p style="font-size:.875rem;color:var(--text-2);line-height:1.6;">Nenhum concorrente tem essa funcionalidade</p>
+	                                        </div>
+	                                </div>
+	                        </div>
+	
+
+	                        
+	                        <div style="display:flex;flex-direction:column;align-items:center;gap:1rem;">
+	                                <div style="position:relative;width:260px;height:260px;">
+	                                        
+	                                        <svg width="260" height="260" style="position:absolute;inset:0;" viewBox="0 0 260 260">
+	                                                
+	                                                <line x1="130" y1="130" x2="130" y2="30" stroke="rgba(16,185,129,.15)" stroke-width="1.5" stroke-dasharray="4 3"/>
+	                                                <line x1="130" y1="130" x2="230" y2="80" stroke="rgba(16,185,129,.15)" stroke-width="1.5" stroke-dasharray="4 3"/>
+	                                                <line x1="130" y1="130" x2="230" y2="185" stroke="rgba(16,185,129,.15)" stroke-width="1.5" stroke-dasharray="4 3"/>
+	                                                <line x1="130" y1="130" x2="130" y2="230" stroke="rgba(16,185,129,.15)" stroke-width="1.5" stroke-dasharray="4 3"/>
+	                                                <line x1="130" y1="130" x2="30" y2="185" stroke="rgba(16,185,129,.15)" stroke-width="1.5" stroke-dasharray="4 3"/>
+	                                                <line x1="130" y1="130" x2="30" y2="80" stroke="rgba(16,185,129,.15)" stroke-width="1.5" stroke-dasharray="4 3"/>
+	                                                
+	                                                
+	                                                <circle cx="0" cy="0" r="4" fill="#10B981" style="filter:drop-shadow(0 0 4px #10B981);">
+	                                                        <animateMotion dur="2s" repeatCount="indefinite" begin="0s">
+	                                                                <mpath href="#path1"/>
+	                                                        </animateMotion>
+	                                                        <animate attributeName="opacity" values="0;1;1;0" dur="2s" repeatCount="indefinite"/>
+	                                                </circle>
+	                                                
+	                                                <circle cx="0" cy="0" r="4" fill="#10B981" style="filter:drop-shadow(0 0 4px #10B981);">
+	                                                        <animateMotion dur="2s" repeatCount="indefinite" begin="0.5s">
+	                                                                <mpath href="#path2"/>
+	                                                        </animateMotion>
+	                                                        <animate attributeName="opacity" values="0;1;1;0" dur="2s" repeatCount="indefinite" begin="0.5s"/>
+	                                                </circle>
+	                                                
+	                                                <circle cx="0" cy="0" r="4" fill="#10B981" style="filter:drop-shadow(0 0 4px #10B981);">
+	                                                        <animateMotion dur="2s" repeatCount="indefinite" begin="1s">
+	                                                                <mpath href="#path3"/>
+	                                                        </animateMotion>
+	                                                        <animate attributeName="opacity" values="0;1;1;0" dur="2s" repeatCount="indefinite" begin="1s"/>
+	                                                </circle>
+	                                                
+	                                                <circle cx="0" cy="0" r="4" fill="#10B981" style="filter:drop-shadow(0 0 4px #10B981);">
+	                                                        <animateMotion dur="2s" repeatCount="indefinite" begin="1.5s">
+	                                                                <mpath href="#path4"/>
+	                                                        </animateMotion>
+	                                                        <animate attributeName="opacity" values="0;1;1;0" dur="2s" repeatCount="indefinite" begin="1.5s"/>
+	                                                </circle>
+	                                                
+	                                                <circle cx="0" cy="0" r="4" fill="#10B981" style="filter:drop-shadow(0 0 4px #10B981);">
+	                                                        <animateMotion dur="2s" repeatCount="indefinite" begin="0.3s">
+	                                                                <mpath href="#path5"/>
+	                                                        </animateMotion>
+	                                                        <animate attributeName="opacity" values="0;1;1;0" dur="2s" repeatCount="indefinite" begin="0.3s"/>
+	                                                </circle>
+	                                                
+	                                                <circle cx="0" cy="0" r="4" fill="#10B981" style="filter:drop-shadow(0 0 4px #10B981);">
+	                                                        <animateMotion dur="2s" repeatCount="indefinite" begin="0.8s">
+	                                                                <mpath href="#path6"/>
+	                                                        </animateMotion>
+	                                                        <animate attributeName="opacity" values="0;1;1;0" dur="2s" repeatCount="indefinite" begin="0.8s"/>
+	                                                </circle>
+	                                                
+	                                                <defs>
+	                                                        <path id="path1" d="M 130 30 L 130 130"/>
+	                                                        <path id="path2" d="M 230 80 L 130 130"/>
+	                                                        <path id="path3" d="M 230 185 L 130 130"/>
+	                                                        <path id="path4" d="M 130 130 L 130 230"/>
+	                                                        <path id="path5" d="M 30 185 L 130 130"/>
+	                                                        <path id="path6" d="M 30 80 L 130 130"/>
+	                                                </defs>
+	                                        </svg>
+	                                        
+	                                        <div style="position:absolute;left:130px;top:30px;transform:translate(-50%,-50%);width:36px;height:36px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:15px;">👤</div>
+	                                        <div style="position:absolute;left:230px;top:80px;transform:translate(-50%,-50%);width:36px;height:36px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:15px;">👤</div>
+	                                        <div style="position:absolute;left:230px;top:185px;transform:translate(-50%,-50%);width:36px;height:36px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:15px;">👤</div>
+	                                        <div style="position:absolute;left:130px;top:230px;transform:translate(-50%,-50%);width:36px;height:36px;border-radius:50%;background:var(--surface-2);border:1px solid var(--primary);display:flex;align-items:center;justify-content:center;font-size:15px;">😊</div>
+	                                        <div style="position:absolute;left:30px;top:185px;transform:translate(-50%,-50%);width:36px;height:36px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:15px;">👤</div>
+	                                        <div style="position:absolute;left:30px;top:80px;transform:translate(-50%,-50%);width:36px;height:36px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:15px;">👤</div>
+	                                        
+	                                        <div style="position:absolute;left:130px;top:130px;transform:translate(-50%,-50%);width:52px;height:52px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px;color:#fff;box-shadow:0 0 28px rgba(16,185,129,.45);">PA</div>
+	                                        
+	                                        <div style="position:absolute;left:130px;top:252px;transform:translateX(-50%);font-size:9.5px;font-weight:700;color:var(--primary);font-family:'Space Grotesk',sans-serif;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;">Você</div>
+	                                </div>
+	                                <p style="font-size:.78rem;color:var(--text-3);text-align:center;max-width:200px;">5 afiliados detectam links → você recebe automaticamente</p>
+	                        </div>
+	                </div>
+	        </div>
+	</section>
+	
+
+	
+
+	<section style="padding:clamp(3rem,6vw,5rem) 0;border-top:1px solid var(--border);" aria-label="Demonstrações de funcionalidades">
+	        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+	                <div class="text-center reveal" style="margin-bottom:2rem;">
+	                        <p class="section-label">Mais funcionalidades</p>
+	                        <h2 class="section-title" style="font-size:clamp(1.5rem,3vw,2.125rem);">Controle total na palma da mão</h2>
+	                </div>
+	
+
+	                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:1.25rem;">
+	
+
+	                        
+	                        <div class="card reveal" style="padding:1.5rem;transition-delay:.05s;" id="sched-card">
+	                                <div style="display:flex;align-items:center;gap:.625rem;margin-bottom:1.25rem;">
+	                                        <div class="feat-icon" style="margin-bottom:0;">
+	                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+	                                        </div>
+	                                        <div>
+	                                                <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:.9375rem;color:var(--text-1);">Agendamento Automático</div>
+	                                                <div style="font-size:.78rem;color:var(--text-3);">Define quando o bot trabalha</div>
+	                                        </div>
+	                                </div>
+	                                
+	                                <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:1rem;">
+	                                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.625rem;">
+	                                                <span style="font-size:.7rem;color:var(--text-3);">00h</span>
+	                                                <span style="font-size:.7rem;font-weight:700;color:var(--primary);">08h</span>
+	                                                <span style="font-size:.7rem;color:var(--text-3);">12h</span>
+	                                                <span style="font-size:.7rem;font-weight:700;color:var(--primary);">22h</span>
+	                                                <span style="font-size:.7rem;color:var(--text-3);">24h</span>
+	                                        </div>
+	                                        <div style="height:8px;border-radius:100px;background:var(--border);position:relative;overflow:visible;">
+	                                                
+	                                                <div style="position:absolute;left:33%;width:58%;height:100%;border-radius:100px;background:var(--primary);box-shadow:0 0 10px rgba(16,185,129,.4);"></div>
+	                                        </div>
+	                                        <div style="display:flex;justify-content:space-between;margin-top:.5rem;">
+	                                                <div style="display:flex;align-items:center;gap:.25rem;">
+	                                                        <div style="width:8px;height:8px;border-radius:50%;background:var(--primary);animation:pulse-dot 2s ease-in-out infinite;"></div>
+	                                                        <span style="font-size:.7rem;color:var(--primary);font-weight:700;">Liga 08h</span>
+	                                                </div>
+	                                                <div style="display:flex;align-items:center;gap:.25rem;">
+	                                                        <div style="width:8px;height:8px;border-radius:50%;background:var(--text-3);"></div>
+	                                                        <span style="font-size:.7rem;color:var(--text-3);">Desliga 22h</span>
+	                                                </div>
+	                                        </div>
+	                                        <div style="margin-top:.875rem;padding:.625rem;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.2);border-radius:8px;display:flex;align-items:center;gap:.5rem;">
+	                                                <div style="width:8px;height:8px;border-radius:50%;background:var(--primary);animation:pulse-dot 2s ease-in-out infinite;flex-shrink:0;"></div>
+	                                                <span style="font-size:.75rem;color:var(--primary);font-weight:600;">Bot ativo agora · 14h de operação por dia</span>
+	                                        </div>
+	                                </div>
+	                                <p style="font-size:.78rem;color:var(--text-3);margin-top:.875rem;line-height:1.6;">Configure uma vez. O bot liga e desliga sozinho — sem precisar abrir o app.</p>
+	                        </div>
+	
+
+	                        
+	                        <div class="card reveal" style="padding:1.5rem;transition-delay:.10s;">
+	                                <div style="display:flex;align-items:center;gap:.625rem;margin-bottom:1.25rem;">
+	                                        <div class="feat-icon" style="margin-bottom:0;">
+	                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>
+	                                        </div>
+	                                        <div>
+	                                                <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:.9375rem;color:var(--text-1);">Broadcast em Massa</div>
+	                                                <div style="font-size:.78rem;color:var(--text-3);">Mensagem para todos os grupos</div>
+	                                        </div>
+	                                </div>
+	                                <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:1rem;">
+	                                        
+	                                        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;">
+	                                                <div style="position:relative;width:44px;height:44px;flex-shrink:0;">
+	                                                        <div class="bcast-ring" style="animation-delay:0s;"></div>
+	                                                        <div class="bcast-ring" style="animation-delay:.7s;"></div>
+	                                                        <div class="bcast-ring" style="animation-delay:1.4s;"></div>
+	                                                        <div style="position:relative;width:44px;height:44px;border-radius:50%;background:rgba(16,185,129,.15);border:1.5px solid rgba(16,185,129,.4);display:flex;align-items:center;justify-content:center;z-index:2;">
+	                                                                <svg style="width:18px;height:18px;color:var(--primary);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>
+	                                                        </div>
+	                                                </div>
+	                                                <div style="flex:1;">
+	                                                        <div style="font-size:.75rem;font-weight:700;color:var(--text-1);margin-bottom:.25rem;">🔥 BLACK FRIDAY chegando!</div>
+	                                                        <div style="font-size:.7rem;color:var(--text-2);line-height:1.4;">Prepara seus grupos pras melhores ofertas do ano 💰</div>
+	                                                </div>
+	                                        </div>
+	                                        
+	                                        <div style="display:flex;flex-direction:column;gap:.375rem;">
+	                                                <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem .625rem;background:rgba(16,185,129,.06);border-radius:6px;font-size:.7rem;">
+	                                                        <span style="color:var(--text-2);">📢 Afiliados VIP · 1.240 membros</span>
+	                                                        <span style="color:var(--primary);font-weight:700;">✓ Enviado</span>
+	                                                </div>
+	                                                <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem .625rem;background:rgba(16,185,129,.06);border-radius:6px;font-size:.7rem;">
+	                                                        <span style="color:var(--text-2);">🛒 Ofertas do Dia · 892 membros</span>
+	                                                        <span style="color:var(--primary);font-weight:700;">✓ Enviado</span>
+	                                                </div>
+	                                                <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem .625rem;background:rgba(16,185,129,.06);border-radius:6px;font-size:.7rem;">
+	                                                        <span style="color:var(--text-2);">💸 Achados BR · 3.100 membros</span>
+	                                                        <span style="color:var(--primary);font-weight:700;">✓ Enviado</span>
+	                                                </div>
+	                                        </div>
+	                                        <div style="margin-top:.75rem;text-align:center;font-size:.7rem;font-weight:700;color:var(--primary);">3 grupos · 5.232 membros alcançados</div>
+	                                </div>
+	                                <p style="font-size:.78rem;color:var(--text-3);margin-top:.875rem;line-height:1.6;">Um clique. Mensagem em todos os grupos ao mesmo tempo.</p>
+	                        </div>
+	
+
+	                        
+	                        <div class="card reveal" style="padding:1.5rem;transition-delay:.15s;" id="logs-card">
+	                                <div style="display:flex;align-items:center;gap:.625rem;margin-bottom:1.25rem;">
+	                                        <div class="feat-icon" style="margin-bottom:0;">
+	                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+	                                        </div>
+	                                        <div>
+	                                                <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:.9375rem;color:var(--text-1);">Histórico de Logs</div>
+	                                                <div style="font-size:.78rem;color:var(--text-3);">Cada envio registrado</div>
+	                                        </div>
+	                                </div>
+	                                <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:.875rem;">
+	                                        
+	                                        <div style="display:flex;gap:.375rem;margin-bottom:.75rem;flex-wrap:wrap;">
+	                                                <span style="font-size:.65rem;font-weight:700;padding:3px 8px;border-radius:100px;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);color:var(--primary);">Todos</span>
+	                                                <span style="font-size:.65rem;font-weight:600;padding:3px 8px;border-radius:100px;background:var(--surface);border:1px solid var(--border);color:var(--text-3);">Shopee</span>
+	                                                <span style="font-size:.65rem;font-weight:600;padding:3px 8px;border-radius:100px;background:var(--surface);border:1px solid var(--border);color:var(--text-3);">Amazon</span>
+	                                        </div>
+	                                        
+	                                        <div class="log-row go" style="animation-delay:.1s;">
+	                                                <div style="width:6px;height:6px;border-radius:50%;background:#10B981;flex-shrink:0;"></div>
+	                                                <div style="flex:1;min-width:0;">
+	                                                        <div style="font-size:.7rem;font-weight:600;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Shopee · Fone Bluetooth Pro</div>
+	                                                        <div style="font-size:.65rem;color:var(--text-3);">2 grupos · 08:45</div>
+	                                                </div>
+	                                                <span style="font-size:.65rem;font-weight:700;color:#10B981;white-space:nowrap;">✓ Enviado</span>
+	                                        </div>
+	                                        <div class="log-row go" style="animation-delay:.3s;">
+	                                                <div style="width:6px;height:6px;border-radius:50%;background:#10B981;flex-shrink:0;"></div>
+	                                                <div style="flex:1;min-width:0;">
+	                                                        <div style="font-size:.7rem;font-weight:600;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Amazon · Smartwatch Amazfit</div>
+	                                                        <div style="font-size:.65rem;color:var(--text-3);">3 grupos · 09:12</div>
+	                                                </div>
+	                                                <span style="font-size:.65rem;font-weight:700;color:#10B981;white-space:nowrap;">✓ Enviado</span>
+	                                        </div>
+	                                        <div class="log-row go" style="animation-delay:.5s;">
+	                                                <div style="width:6px;height:6px;border-radius:50%;background:#10B981;flex-shrink:0;"></div>
+	                                                <div style="flex:1;min-width:0;">
+	                                                        <div style="font-size:.7rem;font-weight:600;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">ML · Notebook Samsung</div>
+	                                                        <div style="font-size:.65rem;color:var(--text-3);">1 grupo · 10:30</div>
+	                                                </div>
+	                                                <span style="font-size:.65rem;font-weight:700;color:#10B981;white-space:nowrap;">✓ Enviado</span>
+	                                        </div>
+	                                        <div class="log-row go" style="animation-delay:.7s;">
+	                                                <div style="width:6px;height:6px;border-radius:50%;background:#10B981;flex-shrink:0;"></div>
+	                                                <div style="flex:1;min-width:0;">
+	                                                        <div style="font-size:.7rem;font-weight:600;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">AliExpress · Relógio Digital</div>
+	                                                        <div style="font-size:.65rem;color:var(--text-3);">2 grupos · 11:07</div>
+	                                                </div>
+	                                                <span style="font-size:.65rem;font-weight:700;color:#10B981;white-space:nowrap;">✓ Enviado</span>
+	                                        </div>
+	                                </div>
+	                                <p style="font-size:.78rem;color:var(--text-3);margin-top:.875rem;line-height:1.6;">Filtre por plataforma, status ou data. Auditoria completa de tudo que o bot disparou.</p>
+	                        </div>
+	
+
+	                </div>
+	        </div>
+	</section>
+	
+
+	
+
+	
+
+	<section style="padding:clamp(4rem,8vw,7rem) 0;border-top:1px solid var(--border);" aria-labelledby="h-flow">
+	        <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+	                <div class="text-center" style="margin-bottom:clamp(2.5rem,5vw,3.5rem);">
+	                        <p class="reveal section-label">Fluxo automatizado</p>
+	                        <h2 id="h-flow" class="reveal section-title" style="transition-delay:0.08s;">O bot faz tudo por você</h2>
+	                        <p class="reveal section-sub" style="margin-top:1rem;transition-delay:0.16s;">Configure uma vez. O sistema trabalha 24/7.</p>
+	                </div>
+	                <div class="flex flex-col gap-3">
+	                        <div class="flow-item reveal">
+	                                <div class="step-num">1</div>
+	                                <div>
+	                                        <p style="font-family:'Space Grotesk',sans-serif;font-weight:600;color:var(--text-1);margin-bottom:0.25rem;">Monitora grupos ilimitados</p>
+	                                        <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">Detecta links de produtos em todos os seus grupos do WhatsApp.</p>
+	                                </div>
+	                        </div>
+	                        <div class="flow-item reveal" style="transition-delay:0.08s;">
+	                                <div class="step-num">2</div>
+	                                <div>
+	                                        <p style="font-family:'Space Grotesk',sans-serif;font-weight:600;color:var(--text-1);margin-bottom:0.25rem;">Identifica a plataforma</p>
+	                                        <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">Reconhece Shopee, AliExpress, Mercado Livre, Amazon e Magazine Luiza.</p>
+	                                </div>
+	                        </div>
+	                        <div class="flow-item reveal" style="transition-delay:0.16s;">
+	                                <div class="step-num">3</div>
+	                                <div>
+	                                        <p style="font-family:'Space Grotesk',sans-serif;font-weight:600;color:var(--text-1);margin-bottom:0.25rem;">Converte para seu link de afiliado</p>
+	                                        <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">Usa suas credenciais para gerar o link com seu código de comissão.</p>
+	                                </div>
+	                        </div>
+	                        <div class="flow-item reveal" style="transition-delay:0.24s;">
+	                                <div class="step-num">4</div>
+	                                <div>
+	                                        <p style="font-family:'Space Grotesk',sans-serif;font-weight:600;color:var(--text-1);margin-bottom:0.25rem;">Reenvia com preview do produto</p>
+	                                        <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">Encaminha para todos os seus grupos de afiliados com imagem e descrição.</p>
+	                                </div>
+	                        </div>
+	                        <div class="flow-item flow-success reveal" style="transition-delay:0.32s;">
+	                                <div class="step-num" style="background:rgba(16,185,129,0.2);border-color:var(--primary);">
+	                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+	                                </div>
+	                                <div>
+	                                        <p style="font-family:'Space Grotesk',sans-serif;font-weight:600;color:var(--primary);margin-bottom:0.25rem;">Você ganha comissão automaticamente</p>
+	                                        <p style="color:var(--text-2);font-size:0.875rem;line-height:1.65;">Tudo acontece 24/7, sem qualquer intervenção manual da sua parte.</p>
+	                                </div>
+	                        </div>
+	                </div>
+	        </div>
+	</section>
+	
+
+	
+
+	<section style="padding:clamp(4rem,8vw,7rem) 0;border-top:1px solid var(--border);" aria-labelledby="h-comp" itemscope itemtype="https://schema.org/ComparisonPage">
+	        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+	                <div class="text-center" style="margin-bottom:clamp(2.5rem,5vw,4rem);">
+	                        <p class="reveal section-label">Comparativo</p>
+	                        <h2 id="h-comp" class="reveal section-title" style="transition-delay:0.08s;" itemprop="name">Por que escolher o Pro Afiliados?</h2>
+	                        <p class="reveal section-sub" style="margin-top:1rem;transition-delay:0.16s;">Veja como nos comparamos com Divulgador Inteligente, Divulga Ninja, Gigi Prime Bot, Busqy e DivulgaLinks.</p>
+	                </div>
+	
+
+	                <div class="reveal card overflow-hidden" style="border-radius:16px;">
+	                        <div class="overflow-x-auto">
+	                                <table class="comp-table w-full">
+	                                        <thead>
+	                                                <tr style="border-bottom:1px solid var(--border);">
+	                                                        <th style="color:var(--text-3);font-size:0.75rem;font-family:'Space Grotesk',sans-serif;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Funcionalidade</th>
+	                                                        <th class="highlight" style="text-align:center;">Pro Afiliados</th>
+	                                                        <th style="text-align:center;color:var(--text-3);font-size:0.75rem;font-family:'Space Grotesk',sans-serif;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Concorrentes</th>
+	                                                </tr>
+	                                        </thead>
+	                                        <tbody>
+	                                                <tr><td>Grupos Ilimitados</td><td class="highlight" style="text-align:center;"><span class="check">✓ Ilimitado</span></td><td style="text-align:center;"><span class="cross">Limitado</span></td></tr>
+	                                                <tr><td>Plataformas Suportadas</td><td class="highlight" style="text-align:center;"><span class="check">✓ 5 plataformas</span></td><td style="text-align:center;"><span class="cross">Limitado</span></td></tr>
+	                                                <tr><td>Conversão de Links</td><td class="highlight" style="text-align:center;"><span class="check">✓ Avançada</span></td><td style="text-align:center;"><span class="cross">Básica</span></td></tr>
+	                                                <tr><td>Preview com Imagem</td><td class="highlight" style="text-align:center;"><span class="check">✓ Completo</span></td><td style="text-align:center;"><span class="cross">Limitado</span></td></tr>
+	                                                <tr><td>Funcionamento 24/7</td><td class="highlight" style="text-align:center;"><span class="check">✓ Sem limites</span></td><td style="text-align:center;"><span class="cross">Com restrições</span></td></tr>
+	                                                <tr><td>Feed Global (P2P)</td><td class="highlight" style="text-align:center;"><span class="check">✓ Exclusivo</span></td><td style="text-align:center;"><span class="cross" style="color:var(--danger);">✗ Não tem</span></td></tr>
+	                                                <tr><td>Agendamento de Bot</td><td class="highlight" style="text-align:center;"><span class="check">✓ Liga/Desliga auto</span></td><td style="text-align:center;"><span class="cross" style="color:var(--danger);">✗ Não tem</span></td></tr>
+	                                                <tr><td>Broadcast em Massa</td><td class="highlight" style="text-align:center;"><span class="check">✓ Texto + Imagem</span></td><td style="text-align:center;"><span class="cross">Limitado</span></td></tr>
+	                                                <tr><td>Postar no Status WA</td><td class="highlight" style="text-align:center;"><span class="check">✓ Incluso</span></td><td style="text-align:center;"><span class="cross" style="color:var(--danger);">✗ Não tem</span></td></tr>
+	                                                <tr><td>Mensagem de Boas-Vindas</td><td class="highlight" style="text-align:center;"><span class="check">✓ Sim</span></td><td style="text-align:center;"><span class="cross" style="color:var(--danger);">✗ Não tem</span></td></tr>
+	                                                <tr><td>Canais &amp; Comunidades</td><td class="highlight" style="text-align:center;"><span class="check">✓ Sim</span></td><td style="text-align:center;"><span class="cross" style="color:var(--danger);">✗ Não tem</span></td></tr>
+	                                                <tr><td>Histórico de Logs</td><td class="highlight" style="text-align:center;"><span class="check">✓ Sim</span></td><td style="text-align:center;"><span class="cross" style="color:var(--danger);">✗ Não tem</span></td></tr>
+	                                                <tr><td>Sistema de Referências</td><td class="highlight" style="text-align:center;"><span class="check">✓ Sim</span></td><td style="text-align:center;"><span class="cross" style="color:var(--danger);">✗ Não tem</span></td></tr>
+	                                        </tbody>
+	                                </table>
+	                        </div>
+	                </div>
+	        </div>
+	</section>
+	
+
+	
+
+	<section id="faq" style="padding:clamp(4rem,8vw,7rem) 0;border-top:1px solid var(--border);" aria-labelledby="h-faq" role="region">
+	        <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+	                <div class="text-center" style="margin-bottom:clamp(2.5rem,5vw,3.5rem);">
+	                        <p class="reveal section-label">FAQ</p>
+	                        <h2 id="h-faq" class="reveal section-title" style="transition-delay:0.08s;">Perguntas frequentes</h2>
+	                </div>
+	
+
+	                <div class="reveal" id="faq-list">
+	
+
+	                        <div class="faq-item">
+	                                <button class="faq-btn" aria-expanded="false">
+	                                        O que é o Pro Afiliados?
+	                                        <span class="faq-icon"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></span>
+	                                </button>
+	                                <div class="faq-answer"><p>O Pro Afiliados é uma plataforma de automação que monitora grupos do WhatsApp, detecta links de produtos de Shopee, AliExpress, Mercado Livre, Amazon e Magazine Luiza, e converte automaticamente para seus links de afiliado, reenviando para seus grupos 24/7. <a href="/register" style="color:var(--primary);">Cadastre-se gratuitamente</a>.</p></div>
+	                        </div>
+	
+
+	                        <div class="faq-item">
+	                                <button class="faq-btn" aria-expanded="false">
+	                                        Quantos grupos posso monitorar?
+	                                        <span class="faq-icon"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></span>
+	                                </button>
+	                                <div class="faq-answer"><p>Grupos ilimitados! Não há limite de grupos de monitoramento nem de grupos de destino para reenvio.</p></div>
+	                        </div>
+	
+
+	                        <div class="faq-item">
+	                                <button class="faq-btn" aria-expanded="false">
+	                                        Quais plataformas são suportadas?
+	                                        <span class="faq-icon"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></span>
+	                                </button>
+	                                <div class="faq-answer"><p>Shopee, AliExpress, Mercado Livre, Amazon e Magazine Luiza. Configure suas credenciais de afiliado para cada plataforma e o bot converte automaticamente.</p></div>
+	                        </div>
+	
+
+	                        <div class="faq-item">
+	                                <button class="faq-btn" aria-expanded="false">
+	                                        O bot funciona 24 horas por dia?
+	                                        <span class="faq-icon"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></span>
+	                                </button>
+	                                <div class="faq-answer"><p>Sim! Funciona 24/7 sem intervenção manual. Monitora, detecta, converte e reenvia automaticamente enquanto você faz outras coisas.</p></div>
+	                        </div>
+	
+
+	                        <div class="faq-item">
+	                                <button class="faq-btn" aria-expanded="false">
+	                                        É seguro usar? Posso ser bloqueado?
+	                                        <span class="faq-icon"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></span>
+	                                </button>
+	                                <div class="faq-answer"><p>O Pro Afiliados implementa sistemas anti-spam e evita envios duplicados. Use com moderação, configure um delay adequado entre mensagens e siga as melhores práticas.</p></div>
+	                        </div>
+	
+
+	                        <div class="faq-item">
+	                                <button class="faq-btn" aria-expanded="false">
+	                                        O que é o Feed Global do Pro Afiliados?
+	                                        <span class="faq-icon"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></span>
+	                                </button>
+	                                <div class="faq-answer"><p>O Feed Global é uma funcionalidade exclusiva e única do Pro Afiliados: uma rede P2P onde usuários compartilham links de produtos detectados em seus grupos. Quando você ativa o Feed Global, recebe automaticamente links de outros afiliados e envia para seus grupos — multiplicando seus disparos sem esforço adicional. Nenhum concorrente oferece essa funcionalidade.</p></div>
+	                        </div>
+	
+
+	                        <div class="faq-item">
+	                                <button class="faq-btn" aria-expanded="false">
+	                                        Posso agendar o horário de funcionamento?
+	                                        <span class="faq-icon"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></span>
+	                                </button>
+	                                <div class="faq-answer"><p>Sim! Você define o horário de liga e desliga do bot (ex: ligar às 8h e desligar às 22h) e ele opera automaticamente nesse período. Perfeito para horários de pico e para evitar envios na madrugada.</p></div>
+	                        </div>
+	
+
+	                        <div class="faq-item">
+	                                <button class="faq-btn" aria-expanded="false">
+	                                        Como funciona o disparo manual de links?
+	                                        <span class="faq-icon"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></span>
+	                                </button>
+	                                <div class="faq-answer"><p>Cole qualquer link de produto no dashboard e envie para os grupos que escolher. O bot converte para seu link de afiliado, gera preview com imagem e preço, e envia com um clique. Ótimo para promoções relâmpago.</p></div>
+	                        </div>
+	
+
+	                        <div class="faq-item">
+	                                <button class="faq-btn" aria-expanded="false">
+	                                        Preciso de conhecimento técnico?
+	                                        <span class="faq-icon"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></span>
+	                                </button>
+	                                <div class="faq-answer"><p>Não! O processo é simples e guiado. Conecte seu WhatsApp, configure os grupos e adicione suas credenciais. Temos <a href="https://www.youtube.com/@proafiliadosbot" target="_blank" rel="noopener noreferrer" style="color:var(--primary);">tutoriais em vídeo</a> para cada plataforma.</p></div>
+	                        </div>
+	
+
+	                        <div class="faq-item">
+	                                <button class="faq-btn" aria-expanded="false">
+	                                        Funciona com WhatsApp Business?
+	                                        <span class="faq-icon"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></span>
+	                                </button>
+	                                <div class="faq-answer"><p>Sim! Funciona com WhatsApp pessoal e WhatsApp Business.</p></div>
+	                        </div>
+	
+
+	                        <div class="faq-item">
+	                                <button class="faq-btn" aria-expanded="false">
+	                                        Qual a diferença entre Pro Afiliados e Divulgador Inteligente?
+	                                        <span class="faq-icon"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></span>
+	                                </button>
+	                                <div class="faq-answer"><p>O Pro Afiliados supera o Divulgador Inteligente com grupos ilimitados (sem restrições), suporte completo para 5 plataformas, conversão automática mais precisa, preview automático de produtos com imagens e interface mais moderna.</p></div>
+	                        </div>
+	
+
+	                        <div class="faq-item">
+	                                <button class="faq-btn" aria-expanded="false">
+	                                        Pro Afiliados vs Divulga Ninja, Gigi Prime Bot, Busqy e DivulgaLinks?
+	                                        <span class="faq-icon"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></span>
+	                                </button>
+	                                <div class="faq-answer"><p>O Pro Afiliados é a melhor alternativa a todos eles. Grupos ilimitados, 5 plataformas nativas, Feed Global exclusivo (P2P), agendamento automático, broadcast completo, postar no Status, canais e comunidades — funcionalidades que nenhum concorrente oferece. <a href="/register" style="color:var(--primary);">Compare você mesmo</a>!</p></div>
+	                        </div>
+	
+
+	                        <div class="faq-item">
+	                                <button class="faq-btn" aria-expanded="false">
+	                                        Como conectar o WhatsApp ao Pro Afiliados?
+	                                        <span class="faq-icon"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></span>
+	                                </button>
+	                                <div class="faq-answer"><p>Via QR Code (WhatsApp → Aparelhos Conectados → escanear) ou via código de pareamento pelo número de telefone. Ambas as opções são rápidas e funcionam com WhatsApp pessoal e Business.</p></div>
+	                        </div>
+	
+
+	                </div>
+	        </div>
+	</section>
+	
+
+	
+
+	<section style="padding:clamp(4rem,8vw,7rem) 0;border-top:1px solid var(--border);" aria-labelledby="h-cta">
+	        <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+	                <div class="cta-bg reveal rounded-2xl text-center" style="padding:clamp(2.5rem,6vw,4rem);">
+	                        <p class="section-label" style="margin-bottom:1rem;">Comece agora</p>
+	                        <h2 id="h-cta" class="section-title" style="font-size:clamp(1.75rem,4vw,2.5rem);margin-bottom:1rem;">Ganhe comissões no<br>piloto automático</h2>
+	                        <p style="color:var(--text-2);font-size:1rem;line-height:1.7;max-width:420px;margin:0 auto 2rem;">Configure em 5 minutos. Grupos ilimitados. Funciona 24/7. Cancele quando quiser.</p>
+	                        <div class="flex flex-col sm:flex-row gap-3 justify-center">
+	                                <a href="/register" class="btn-primary" style="padding:0.9375rem 2.25rem;font-size:1rem;" aria-label="Criar conta gratuita">
+	                                        Criar Minha Conta — É Grátis!
+	                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+	                                </a>
+	                                <a href="/login" class="btn-ghost" style="padding:0.9375rem 2.25rem;font-size:1rem;">Já tenho conta</a>
+	                        </div>
+	                </div>
+	        </div>
+	</section>
+	
+
+	</main>
+	
+
+	
+
+	<footer style="border-top:1px solid var(--border);padding:2.5rem 0;" role="contentinfo">
+	        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+	                <div class="flex flex-col md:flex-row items-center justify-between gap-5">
+	                        <a href="/" class="flex items-center gap-2.5">
+	                                <div class="w-7 h-7 rounded-lg flex items-center justify-center" style="background:linear-gradient(135deg,#10B981,#059669);">
+	                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><line x1="12" y1="2.5" x2="12" y2="5"/><circle cx="12" cy="1.5" r="1" fill="#fff" stroke="none"/><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="9" cy="11" r="2" fill="#fff" stroke="none"/><circle cx="15" cy="11" r="2" fill="#fff" stroke="none"/><path d="M9 15 Q12 17 15 15"/></svg>
+	                                </div>
+	                                <span style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.9375rem;color:var(--text-1);">Pro Afiliados</span>
+	                        </a>
+	                        <div class="flex items-center gap-6" style="font-size:0.875rem;">
+	                                <a href="/login" style="color:var(--text-3);" class="hover:text-[var(--text-2)] transition-colors">Login</a>
+	                                <a href="/register" style="color:var(--text-3);" class="hover:text-[var(--text-2)] transition-colors">Cadastro</a>
+	                                <a href="https://www.youtube.com/@proafiliadosbot" target="_blank" rel="noopener noreferrer" style="color:var(--text-3);" class="hover:text-[var(--text-2)] transition-colors">YouTube</a>
+	                                <a href="https://www.instagram.com/proafiliadosbot/" target="_blank" rel="noopener noreferrer" style="color:var(--text-3);" class="inline-flex items-center gap-1.5 hover:text-[var(--text-2)] transition-colors">
+	                                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+	                                        Instagram
+	                                </a>
+	                        </div>
+	                        <p style="color:var(--text-3);font-size:0.8125rem;">&copy; 2025-2026 Pro Afiliados. Todos os direitos reservados.</p>
+	                </div>
+	        </div>
+	</footer>
+	
+
+	<script>
+	
+
+	(function() {
+	        var btn = document.getElementById('ham-btn');
+	        var drawer = document.getElementById('mob-drawer');
+	        var overlay = document.getElementById('mob-overlay');
+	        if (!btn) return;
+	
+
+	        function open() {
+	                drawer.classList.add('open');
+	                overlay.classList.add('open');
+	                btn.classList.add('open');
+	                btn.setAttribute('aria-expanded', 'true');
+	                document.body.classList.add('menu-open');
+	        }
+	        function close() {
+	                drawer.classList.remove('open');
+	                overlay.classList.remove('open');
+	                btn.classList.remove('open');
+	                btn.setAttribute('aria-expanded', 'false');
+	                document.body.classList.remove('menu-open');
+	        }
+	
+
+	        btn.addEventListener('click', function() {
+	                drawer.classList.contains('open') ? close() : open();
+	        });
+	        overlay.addEventListener('click', close);
+	        document.querySelectorAll('.mob-link').forEach(function(l) { l.addEventListener('click', close); });
+	        document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close(); });
+	})();
+	
+
+	
+
+	document.querySelectorAll('#faq-list .faq-item').forEach(function(item) {
+	        var btn = item.querySelector('.faq-btn');
+	        btn.addEventListener('click', function() {
+	                var isOpen = item.classList.contains('open');
+	                
+	                document.querySelectorAll('#faq-list .faq-item.open').forEach(function(i) {
+	                        i.classList.remove('open');
+	                        i.querySelector('.faq-btn').setAttribute('aria-expanded', 'false');
+	                });
+	                if (!isOpen) {
+	                        item.classList.add('open');
+	                        btn.setAttribute('aria-expanded', 'true');
+	                }
+	        });
+	});
+	
+
+	
+
+	(function() {
+	        var els = document.querySelectorAll('.reveal');
+	        if (!('IntersectionObserver' in window)) {
+	                els.forEach(function(el) { el.classList.add('visible'); });
+	                
+	                document.querySelectorAll('.log-row').forEach(function(r) { r.classList.add('go'); });
+	                return;
+	        }
+	        var io = new IntersectionObserver(function(entries) {
+	                entries.forEach(function(e) {
+	                        if (e.isIntersecting) {
+	                                e.target.classList.add('visible');
+	                                
+	                                e.target.querySelectorAll('.log-row').forEach(function(r) { r.classList.add('go'); });
+	                                io.unobserve(e.target);
+	                        }
+	                });
+	        }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+	        els.forEach(function(el) { io.observe(el); });
+	})();
+	
+
+	
+
+	document.addEventListener('DOMContentLoaded', function() {
+	        var ref = new URLSearchParams(window.location.search).get('ref');
+	        if (ref) {
+	                document.querySelectorAll('a[href="/register"]').forEach(function(a) {
+	                        var u = new URL(a.href, location.origin);
+	                        u.searchParams.set('ref', ref.toUpperCase().trim());
+	                        a.href = u.pathname + '?' + u.searchParams.toString();
+	                });
+	        }
+	});
+	</script>
+	
+
+	</body>
+	</html>
