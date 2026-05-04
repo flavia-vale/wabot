@@ -1104,3 +1104,504 @@ Ao encontrar novos bugs durante o QA, adicionar neste arquivo seguindo o padrão
 
 **Correção sugerida:** Trecho de código ou abordagem recomendada.
 ```
+
+---
+
+## Módulo 9 — Auditoria UI/UX Dashboard (maio/2026)
+
+### UX-013 · Login sem labels acessíveis nos campos de email/senha
+**Status:** open  
+**Prioridade:** alta  
+**Arquivo:** `dashboard/app/login/page.js`
+
+**Descrição:**
+A tela de login usa apenas `placeholder` para identificar os campos. Após digitação, a referência visual some e leitores de tela têm contexto limitado.
+
+**Reprodução:**
+1. Acessar `/login`.
+2. Navegar apenas por teclado/leitor de tela.
+3. Observar ausência de `<label>` semântica para os inputs.
+
+**Impacto:**
+Piora de acessibilidade (WCAG), maior chance de erro de preenchimento e menor clareza para usuários com necessidades assistivas.
+
+**Correção sugerida:**
+Adicionar `label` explícita vinculada por `htmlFor/id` nos campos de email e senha; manter placeholder apenas como exemplo.
+
+---
+
+### UX-014 · Feedback de erro no login sem padronização visual
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `dashboard/app/login/page.js`
+
+**Descrição:**
+Erros de autenticação são exibidos como texto solto vermelho, sem estrutura de alerta (ícone, título curto, espaçamento consistente).
+
+**Reprodução:**
+1. Tentar login com credenciais inválidas.
+2. Verificar feedback apresentado abaixo dos campos.
+
+**Impacto:**
+Mensagem pode passar despercebida e dificulta compreensão rápida do que fazer em seguida.
+
+**Correção sugerida:**
+Criar componente padrão de alerta (`error/success/info`) para uso em todo dashboard.
+
+---
+
+### UX-015 · Ausência de estado de sucesso antes do redirecionamento no login/cadastro
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `dashboard/app/login/page.js`
+
+**Descrição:**
+Após autenticar, o usuário é redirecionado sem confirmação visual explícita de sucesso.
+
+**Impacto:**
+Percepção de travamento em conexões lentas entre a conclusão do submit e a navegação.
+
+**Correção sugerida:**
+Exibir estado curto de sucesso (“Login realizado, redirecionando...”) com spinner leve antes de `router.push('/dashboard')`.
+
+---
+
+### UX-016 · Menu lateral sem agrupamento por domínio funcional
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `dashboard/app/dashboard/layout.js`
+
+**Descrição:**
+Itens de navegação estão em lista única. Para usuários novos, falta separação entre “Operação”, “Configuração” e “Conta”.
+
+**Impacto:**
+Aumento de carga cognitiva na descoberta de funcionalidades.
+
+**Correção sugerida:**
+Agrupar links com subtítulos e espaçamento visual; revisar nomenclatura de “📱 WhatsApp” para “Painel” ou “Conexão WhatsApp”.
+
+---
+
+### UX-017 · Estado ativo da navegação depende de igualdade exata de rota
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `dashboard/app/dashboard/layout.js`
+
+**Descrição:**
+O destaque usa `pathname === item.href`. Rotas filhas podem perder contexto de item ativo.
+
+**Impacto:**
+Desorientação em páginas aninhadas e menor previsibilidade da navegação.
+
+**Correção sugerida:**
+Adotar comparação por prefixo controlado (`pathname.startsWith`) onde fizer sentido, evitando falso positivo.
+
+---
+
+### UX-018 · Jornada inicial sem ação orientada quando status falha em carregar
+**Status:** open  
+**Prioridade:** alta  
+**Arquivo:** `dashboard/app/dashboard/inicio/page.js`
+
+**Descrição:**
+Se `api.dashboardStatus()` falhar, a tela remove loading mas não apresenta erro nem call-to-action de recuperação.
+
+**Reprodução:**
+1. Simular falha de rede na chamada de status.
+2. Observar que a interface permanece sem feedback de problema.
+
+**Impacto:**
+Usuário sem diagnóstico e sem próximo passo (atualizar/recarregar/suporte).
+
+**Correção sugerida:**
+Adicionar estado de erro com botão “Tentar novamente” e mensagem orientativa.
+
+---
+
+### UX-019 · Dependência de cor/vermelho para passos pendentes no onboarding
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `dashboard/app/dashboard/inicio/page.js`
+
+**Descrição:**
+Passos pendentes usam forte associação visual em vermelho (`border-red`, `text-red`) como principal sinal.
+
+**Impacto:**
+Pode transmitir severidade excessiva e gerar leitura ruim para usuários com daltonismo.
+
+**Correção sugerida:**
+Combinar ícone, texto e contraste neutro/âmbar para “pendente”, deixando vermelho para erro real.
+
+---
+
+### UX-020 · Tela de Envio não explicita impacto e irreversibilidade da ação “Enviar agora”
+**Status:** open  
+**Prioridade:** alta  
+**Arquivo:** `dashboard/app/dashboard/envio/page.js`
+
+**Descrição:**
+O envio imediato dispara para todos os grupos de destino sem confirmação extra contextual.
+
+**Impacto:**
+Risco de disparo acidental e retrabalho operacional.
+
+**Correção sugerida:**
+Adicionar resumo de impacto (“X grupos receberão”) + confirmação opcional para primeira utilização ou mensagens longas.
+
+---
+
+### UX-021 · Agendamento usa fuso do navegador sem transparência explícita
+**Status:** open  
+**Prioridade:** alta  
+**Arquivo:** `dashboard/app/dashboard/envio/page.js`
+
+**Descrição:**
+`datetime-local` e `toISOString()` podem gerar confusão de timezone sem indicação clara do fuso efetivo no agendamento.
+
+**Impacto:**
+Mensagens enviadas fora do horário esperado.
+
+**Correção sugerida:**
+Exibir fuso atual ao lado do campo (ex.: UTC-3) e normalizar parsing no backend com confirmação do horário final.
+
+---
+
+### UX-022 · Erros das áreas de envio/agendamento/listagem não têm severidade diferenciada
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `dashboard/app/dashboard/envio/page.js`
+
+**Descrição:**
+Cada bloco mostra erro como texto simples, sem distinguir erro de validação, conectividade ou regra de negócio.
+
+**Impacto:**
+Dificulta reação adequada do usuário e troubleshooting.
+
+**Correção sugerida:**
+Padronizar mensagens por categoria + possíveis ações (repetir, revisar conteúdo, checar conexão).
+
+---
+
+### UX-023 · Lista de agendamentos sem filtros e sem busca
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `dashboard/app/dashboard/envio/page.js`
+
+**Descrição:**
+Com muitos agendamentos, a lista linear dificulta localizar itens por status/data.
+
+**Impacto:**
+Baixa eficiência operacional para usuários ativos.
+
+**Correção sugerida:**
+Adicionar filtros rápidos (Todos/Pendentes/Enviados/Falhos/Cancelados) e ordenação por data.
+
+---
+
+### UX-024 · Cancelamento de agendamento sem feedback otimista/estado de processamento
+**Status:** open  
+**Prioridade:** baixa  
+**Arquivo:** `dashboard/app/dashboard/envio/page.js`
+
+**Descrição:**
+Ao cancelar, não existe estado visual de progresso no item específico; apenas refresh da lista.
+
+**Impacto:**
+Sensação de latência e incerteza durante a ação.
+
+**Correção sugerida:**
+Desabilitar botão do item em cancelamento, mostrar estado “Cancelando...” e feedback de sucesso.
+
+---
+
+## Módulo 10 — Auditoria UI/UX Dashboard (Grupo 3: Configurações, Planos, Grupos, Credenciais, Logs)
+
+### UX-025 · Configurações sem estado de erro ao falhar carregamento inicial
+**Status:** open  
+**Prioridade:** alta  
+**Arquivo:** `dashboard/app/dashboard/configuracoes/page.js`
+
+**Descrição:**
+A carga inicial usa `catch(() => {})`, ocultando falhas de API. O loading encerra sem feedback claro de indisponibilidade.
+
+**Impacto:**
+Usuário pode editar dados desatualizados ou achar que não há configurações salvas.
+
+**Correção sugerida:**
+Adicionar `loadError` com CTA “Tentar novamente” e bloqueio de submit até recuperar estado válido.
+
+---
+
+### UX-026 · Planos sem comparação orientada por benefício e sem destaque de recomendação
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `dashboard/app/dashboard/planos/page.js`
+
+**Descrição:**
+Os cards Basic/Pro exibem preço e bullets, mas não deixam explícito “plano recomendado” nem economia/perfil ideal.
+
+**Impacto:**
+Aumenta indecisão e reduz conversão em upgrade.
+
+**Correção sugerida:**
+Adicionar selo “Mais escolhido” no Pro (ou no plano-alvo), tabela comparativa curta e microcopy por perfil de uso.
+
+---
+
+### UX-027 · Fluxo de indicação não trata erro de clipboard
+**Status:** open  
+**Prioridade:** baixa  
+**Arquivo:** `dashboard/app/dashboard/planos/page.js`
+
+**Descrição:**
+`navigator.clipboard.writeText` é chamado sem tratamento de falha/permissão.
+
+**Impacto:**
+Usuário não sabe por que o botão não funcionou em contextos com bloqueio de clipboard.
+
+**Correção sugerida:**
+Tratar exceção com fallback (selecionar input automaticamente) e feedback de erro amigável.
+
+---
+
+### UX-028 · Tela de Grupos mantém formulário manual com alta fricção técnica
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `dashboard/app/dashboard/grupos/page.js`
+
+**Descrição:**
+Formulário manual exige JID, informação pouco acessível para o usuário final e desalinhada ao fluxo natural de importação do WhatsApp.
+
+**Impacto:**
+Polui a tela, gera erros e aumenta suporte.
+
+**Correção sugerida:**
+Ocultar por padrão em “modo avançado” ou remover, priorizando importação automática.
+
+---
+
+### UX-029 · Credenciais sem estado de carregamento/erro global por plataforma
+**Status:** open  
+**Prioridade:** alta  
+**Arquivo:** `dashboard/app/dashboard/credenciais/page.js`
+
+**Descrição:**
+A tela carrega dados sem indicar loading geral e sem feedback quando `api.credentials()` falha.
+
+**Impacto:**
+Usuário pode sobrescrever credenciais sem saber se dados atuais foram realmente carregados.
+
+**Correção sugerida:**
+Adicionar loading skeleton por card + erro global com “Recarregar”. Bloquear salvamento enquanto mapa inicial não estiver confiável.
+
+---
+
+### UX-030 · Logs em tabela desktop sem versão responsiva para mobile
+**Status:** open  
+**Prioridade:** alta  
+**Arquivo:** `dashboard/app/dashboard/logs/page.js`
+
+**Descrição:**
+A tabela de logs possui múltiplas colunas e truncamentos, sem adaptação para telas pequenas.
+
+**Impacto:**
+Leitura e diagnóstico ficam comprometidos em dispositivos móveis.
+
+**Correção sugerida:**
+Criar layout alternativo em cards no mobile (origem/destino/status/horário), mantendo tabela apenas em breakpoints maiores.
+
+---
+
+### UX-031 · Logs não oferecem busca textual por conteúdo/grupo
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `dashboard/app/dashboard/logs/page.js`
+
+**Descrição:**
+Filtros atuais cobrem apenas status (Todos/Sucesso/Erros), sem busca por texto, grupo de origem/destino ou plataforma.
+
+**Impacto:**
+Baixa eficiência para investigar incidentes em alto volume.
+
+**Correção sugerida:**
+Adicionar campo de busca com debounce + filtros combináveis (plataforma/grupo/período).
+
+---
+
+## Módulo 11 — Auditoria UI/UX Dashboard (Grupo 4: Conexão WhatsApp, Home e Infra de feedback)
+
+### UX-032 · Conexão WhatsApp sem retry explícito para geração de QR
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `dashboard/app/dashboard/page.js`
+
+**Descrição:**
+Quando o QR demora/falha, a tela exibe “Gerando QR Code...” sem timeout visível e sem ação direta de retry contextual.
+
+**Impacto:**
+Usuário pode abandonar o fluxo por percepção de travamento.
+
+**Correção sugerida:**
+Adicionar contador de espera + botão “Gerar novamente QR” após timeout seguro (ex.: 20s).
+
+---
+
+### UX-033 · Código de pareamento sem affordance de cópia rápida
+**Status:** open  
+**Prioridade:** baixa  
+**Arquivo:** `dashboard/app/dashboard/page.js`
+
+**Descrição:**
+O código de pareamento é exibido em destaque, mas sem botão de copiar.
+
+**Impacto:**
+Aumenta atrito operacional em dispositivos onde o usuário alterna entre telas/aparelhos.
+
+**Correção sugerida:**
+Adicionar CTA “Copiar código” com feedback de sucesso/erro.
+
+---
+
+### UX-034 · Ações destrutivas (esquecer número/desligar) sem reforço de consequência em contexto
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `dashboard/app/dashboard/page.js`
+
+**Descrição:**
+Há confirmação em “esquecer número”, porém faltam mensagens persistentes de impacto após execução (ex.: sessão removida, precisa reescanear).
+
+**Impacto:**
+Usuário pode não entender o estado final e repetir ações desnecessárias.
+
+**Correção sugerida:**
+Exibir toast/alerta pós-ação com próximos passos claros.
+
+---
+
+### UX-035 · Home com redirecionamento silencioso sem fallback visual
+**Status:** open  
+**Prioridade:** baixa  
+**Arquivo:** `dashboard/app/page.js`
+
+**Descrição:**
+A Home retorna `null` enquanto decide rota por token, sem indicador de carregamento.
+
+**Impacto:**
+Em dispositivos lentos, pode parecer tela branca momentânea.
+
+**Correção sugerida:**
+Renderizar estado mínimo (“Redirecionando...”) com acessibilidade (`aria-live="polite"`).
+
+---
+
+### UX-036 · Camada de API força redirect em 401 sem aviso prévio ao usuário
+**Status:** open  
+**Prioridade:** alta  
+**Arquivo:** `dashboard/lib/api.js`
+
+**Descrição:**
+Ao receber 401, remove token e redireciona para login imediatamente, sem explicar motivo (sessão expirada/invalidada).
+
+**Impacto:**
+Quebra de contexto e frustração por perda de fluxo.
+
+**Correção sugerida:**
+Persistir mensagem de sessão expirada (query param ou storage) e exibir alerta no login após redirect.
+
+---
+
+### UX-037 · WebSocket de QR sem superfície de erro/estado de conexão na UI
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `dashboard/lib/api.js` + `dashboard/app/dashboard/page.js`
+
+**Descrição:**
+`openQRSocket` não expõe eventos de erro/close para camada de UI além de mensagens recebidas.
+
+**Impacto:**
+Dificulta diagnóstico quando socket cai silenciosamente.
+
+**Correção sugerida:**
+Encapsular handlers `onerror/onclose` e refletir estado (“Conexão perdida. Tentando reconectar...”).
+
+---
+
+## Módulo 12 — Auditoria UI/UX (Fluxos secundários e consistência transversal)
+
+### UX-038 · Ausência de padrão único para estados de loading/erro/empty entre telas
+**Status:** open  
+**Prioridade:** alta  
+**Arquivo:** `dashboard/app/dashboard/*/page.js`
+
+**Descrição:**
+Cada tela implementa loading/erro/empty de forma diferente (texto simples, sem componentes compartilhados), gerando inconsistência de percepção.
+
+**Impacto:**
+Experiência fragmentada e maior esforço de manutenção de UI.
+
+**Correção sugerida:**
+Criar design tokens/componentes reutilizáveis (`LoadingState`, `ErrorState`, `EmptyState`) e aplicar em todo dashboard.
+
+---
+
+### UX-039 · Dependência de `window.confirm` em ações críticas sem padrão visual do produto
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `dashboard/app/dashboard/page.js`, `dashboard/app/dashboard/grupos/page.js`, `dashboard/app/dashboard/envio/page.js`, `dashboard/app/dashboard/logs/page.js`
+
+**Descrição:**
+Confirmações usam modal nativo do navegador, que quebra consistência visual e não oferece contexto rico (impacto, quantidade afetada, opção secundária).
+
+**Impacto:**
+Perda de confiança e experiência inconsistente entre browsers/dispositivos.
+
+**Correção sugerida:**
+Implementar modal de confirmação próprio com variantes (danger/warning), texto contextual e foco acessível.
+
+---
+
+### UX-040 · Inconsistência de linguagem e tom entre feedbacks de sucesso/erro
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `dashboard/app/dashboard/configuracoes/page.js`, `dashboard/app/dashboard/envio/page.js`, `dashboard/app/dashboard/planos/page.js`, `dashboard/app/login/page.js`
+
+**Descrição:**
+Mensagens variam entre estilos (“✓”, frases curtas, erros crus de API), sem guia editorial único.
+
+**Impacto:**
+Menor clareza comunicacional e percepção menos profissional.
+
+**Correção sugerida:**
+Definir guideline de microcopy (voz, tamanho, CTA sugerido) e normalizar mensagens por tipo de evento.
+
+---
+
+### UX-041 · Falta de indicadores de acessibilidade dinâmica (`aria-live`) para mensagens de status
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `dashboard/app/login/page.js`, `dashboard/app/dashboard/envio/page.js`, `dashboard/app/dashboard/configuracoes/page.js`
+
+**Descrição:**
+Mensagens de erro/sucesso surgem visualmente, mas sem regiões `aria-live` para leitores de tela.
+
+**Impacto:**
+Usuários com tecnologia assistiva podem não perceber mudanças de estado em tempo real.
+
+**Correção sugerida:**
+Adicionar regiões `aria-live="polite/assertive"` para alertas críticos e confirmações de ação.
+
+---
+
+### UX-042 · Suporte mobile parcial na navegação lateral do dashboard
+**Status:** open  
+**Prioridade:** alta  
+**Arquivo:** `dashboard/app/dashboard/layout.js`
+
+**Descrição:**
+Layout atual fixa sidebar com largura estática (`w-56`) sem comportamento explícito de colapso/menu em telas menores.
+
+**Impacto:**
+Risco de overflow, baixa usabilidade em smartphones e interação comprometida.
+
+**Correção sugerida:**
+Criar navegação responsiva (drawer/hamburger), preservando contexto de tela ativa e ação de logout.
