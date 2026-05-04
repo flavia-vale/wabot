@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" />
 <title>Bot Conversor para Afiliados</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -144,20 +145,48 @@
 }/*EDITMODE-END*/
 </script>
 
-<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script>
+  window.__homepageDeps = [
+    { name: 'React', cdn: 'https://unpkg.com/react@18.3.1/umd/react.development.js', local: '/public/vendor/react.development.js' },
+    { name: 'ReactDOM', cdn: 'https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js', local: '/public/vendor/react-dom.development.js' },
+    { name: 'Babel', cdn: 'https://unpkg.com/@babel/standalone@7.29.0/babel.min.js', local: '/public/vendor/babel.min.js' },
+  ];
 
-<script type="text/babel" src="tweaks-panel.jsx"></script>
-<script type="text/babel" src="src/icons.jsx"></script>
-<script type="text/babel" src="src/whatsapp.jsx"></script>
-<script type="text/babel" src="src/hero.jsx"></script>
-<script type="text/babel" src="src/how.jsx"></script>
-<script type="text/babel" src="src/features.jsx"></script>
-<script type="text/babel" src="src/social.jsx"></script>
-<script type="text/babel" src="src/pricing.jsx"></script>
-<script type="text/babel" src="src/faq.jsx"></script>
-<script type="text/babel" src="src/footer.jsx"></script>
-<script type="text/babel" src="src/app.jsx"></script>
+  const loadScript = (src) => new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.defer = false;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.body.appendChild(script);
+  });
+
+  async function loadDeps() {
+    for (const dep of window.__homepageDeps) {
+      try {
+        await loadScript(dep.cdn);
+      } catch {
+        await loadScript(dep.local);
+      }
+    }
+
+    const appScripts = [
+      'tweaks-panel.jsx',
+      'src/icons.jsx','src/whatsapp.jsx','src/hero.jsx','src/how.jsx','src/features.jsx','src/social.jsx','src/pricing.jsx','src/faq.jsx','src/footer.jsx','src/app.jsx'
+    ];
+
+    appScripts.forEach((src) => {
+      const script = document.createElement('script');
+      script.type = 'text/babel';
+      script.src = src;
+      document.body.appendChild(script);
+    });
+  }
+
+  loadDeps().catch(() => {
+    document.getElementById('app').innerHTML = '<div style="padding:24px;font-family:Inter,sans-serif">Não foi possível carregar os scripts da homepage. Verifique os arquivos locais em <code>/public/vendor</code> e a conectividade externa da VPS.</div>';
+  });
+</script>
+
 </body>
 </html>

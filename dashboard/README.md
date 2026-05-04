@@ -1,48 +1,38 @@
-# Dashboard (Home estática via `public/index.html`)
+# Dashboard - Deploy & operação segura
 
-Este projeto contém o dashboard em Next.js, mas **a edição da home pública deve seguir o fluxo oficial via `public/index.html`**.
+## Mapa atual de política de segurança
 
-## Fluxo oficial para editar a Home
+### 1) CSP da homepage estática
+A homepage (`dashboard/public/index.html`) usa CSP via `<meta http-equiv="Content-Security-Policy">` com as diretivas:
+- `default-src 'self'`
+- `script-src 'self' https://unpkg.com`
+- `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`
+- `font-src 'self' https://fonts.gstatic.com data:`
+- `img-src 'self' data: https:`
+- `connect-src 'self'`
+- `object-src 'none'`, `base-uri 'self'`, `frame-ancestors 'none'`
 
-> **Não usar `app/page.js` para a home pública.**
+### 2) Dependências externas críticas
+A homepage depende de CDN para:
+- React 18.3.1
+- ReactDOM 18.3.1
+- Babel Standalone 7.29.0
 
-1. Edite `public/index.html`.
-2. Revise referências de assets (`/public/...`) e links absolutos/relativos.
-3. Valide localmente com build de produção.
-4. Publique e execute smoke test mínimo pós-deploy.
+Foi implementado fallback local para `/public/vendor/*` quando a CDN falha.
 
-## Dependências externas (CDNs)
+### 3) Firewall / egress na VPS Hetzner
+Risco operacional: se firewall local (UFW/iptables/nftables), cloud firewall da Hetzner, proxy corporativo ou ACL de saída bloquear `unpkg.com`, a homepage pode degradar.
 
-Se `public/index.html` usar bibliotecas externas (CSS/JS/fontes) por CDN:
+## Pré-check obrigatório antes de restart (produção)
 
-- Documente cada dependência (nome, versão e URL).
-- Prefira versões fixas (evitar `latest`).
-- Garanta fallback ou plano de contingência para indisponibilidade da CDN.
-- Avalie impacto de CSP, SRI (`integrity`) e `crossorigin` quando aplicável.
+Execute **antes** de qualquer `pm2 restart`:
 
-## Checklist de publicação (Home)
+1. Confirmar arquivos fallback locais:
+   - `/home/deploy/wabot/public/vendor/react.development.js`
+   - `/home/deploy/wabot/public/vendor/react-dom.development.js`
+   - `/home/deploy/wabot/public/vendor/babel.min.js`
+2. Validar saída HTTPS para CDN (ou confirmar que fallback local está populado e atualizado).
+3. Validar CSP efetiva da homepage sem violações no console.
+4. Testar homepage em cenário online e com bloqueio parcial de egress.
 
-Antes de publicar:
-
-- [ ] Alterações da home feitas em `public/index.html`.
-- [ ] Assets referenciados existem e carregam sem erro.
-- [ ] Dependências CDN revisadas (versão fixa e disponibilidade).
-- [ ] Build de produção concluído com sucesso.
-- [ ] Sem erros críticos no console do navegador.
-
-## Smoke test mínimo pós-deploy (Home)
-
-Após deploy, validar no domínio publicado:
-
-1. `GET /` retorna `200`.
-2. HTML final contém as seções esperadas da home.
-3. CSS principal carrega sem `404`.
-4. JS principal carrega sem `404`.
-5. Abrir em aba anônima e confirmar renderização inicial sem erro crítico no console.
-
-Exemplo rápido com `curl`:
-
-```bash
-curl -I https://SEU_DOMINIO/
-curl -s https://SEU_DOMINIO/ | head -n 40
-```
+Se algum check falhar, **não reiniciar** o `dashboard` até corrigir.
