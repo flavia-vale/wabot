@@ -1110,7 +1110,7 @@ Ao encontrar novos bugs durante o QA, adicionar neste arquivo seguindo o padrão
 ## Módulo 9 — Auditoria UI/UX Dashboard (maio/2026)
 
 ### UX-013 · Login sem labels acessíveis nos campos de email/senha
-**Status:** open  
+**Status:** done  
 **Prioridade:** alta  
 **Arquivo:** `dashboard/app/login/page.js`
 
@@ -1131,7 +1131,7 @@ Adicionar `label` explícita vinculada por `htmlFor/id` nos campos de email e se
 ---
 
 ### UX-014 · Feedback de erro no login sem padronização visual
-**Status:** open  
+**Status:** done  
 **Prioridade:** média  
 **Arquivo:** `dashboard/app/login/page.js`
 
@@ -1151,7 +1151,7 @@ Criar componente padrão de alerta (`error/success/info`) para uso em todo dashb
 ---
 
 ### UX-015 · Ausência de estado de sucesso antes do redirecionamento no login/cadastro
-**Status:** open  
+**Status:** done  
 **Prioridade:** média  
 **Arquivo:** `dashboard/app/login/page.js`
 
@@ -1167,7 +1167,7 @@ Exibir estado curto de sucesso (“Login realizado, redirecionando...”) com sp
 ---
 
 ### UX-016 · Menu lateral sem agrupamento por domínio funcional
-**Status:** open  
+**Status:** done  
 **Prioridade:** média  
 **Arquivo:** `dashboard/app/dashboard/layout.js`
 
@@ -1183,7 +1183,7 @@ Agrupar links com subtítulos e espaçamento visual; revisar nomenclatura de “
 ---
 
 ### UX-017 · Estado ativo da navegação depende de igualdade exata de rota
-**Status:** open  
+**Status:** done  
 **Prioridade:** média  
 **Arquivo:** `dashboard/app/dashboard/layout.js`
 
@@ -1199,7 +1199,7 @@ Adotar comparação por prefixo controlado (`pathname.startsWith`) onde fizer se
 ---
 
 ### UX-018 · Jornada inicial sem ação orientada quando status falha em carregar
-**Status:** open  
+**Status:** done  
 **Prioridade:** alta  
 **Arquivo:** `dashboard/app/dashboard/inicio/page.js`
 
@@ -1219,7 +1219,7 @@ Adicionar estado de erro com botão “Tentar novamente” e mensagem orientativ
 ---
 
 ### UX-019 · Dependência de cor/vermelho para passos pendentes no onboarding
-**Status:** open  
+**Status:** done  
 **Prioridade:** média  
 **Arquivo:** `dashboard/app/dashboard/inicio/page.js`
 
@@ -1235,7 +1235,7 @@ Combinar ícone, texto e contraste neutro/âmbar para “pendente”, deixando v
 ---
 
 ### UX-020 · Tela de Envio não explicita impacto e irreversibilidade da ação “Enviar agora”
-**Status:** open  
+**Status:** done  
 **Prioridade:** alta  
 **Arquivo:** `dashboard/app/dashboard/envio/page.js`
 
@@ -1251,7 +1251,7 @@ Adicionar resumo de impacto (“X grupos receberão”) + confirmação opcional
 ---
 
 ### UX-021 · Agendamento usa fuso do navegador sem transparência explícita
-**Status:** open  
+**Status:** done  
 **Prioridade:** alta  
 **Arquivo:** `dashboard/app/dashboard/envio/page.js`
 
@@ -1267,7 +1267,7 @@ Exibir fuso atual ao lado do campo (ex.: UTC-3) e normalizar parsing no backend 
 ---
 
 ### UX-022 · Erros das áreas de envio/agendamento/listagem não têm severidade diferenciada
-**Status:** open  
+**Status:** done  
 **Prioridade:** média  
 **Arquivo:** `dashboard/app/dashboard/envio/page.js`
 
@@ -1283,7 +1283,7 @@ Padronizar mensagens por categoria + possíveis ações (repetir, revisar conte�
 ---
 
 ### UX-023 · Lista de agendamentos sem filtros e sem busca
-**Status:** open  
+**Status:** done  
 **Prioridade:** média  
 **Arquivo:** `dashboard/app/dashboard/envio/page.js`
 
@@ -1299,7 +1299,7 @@ Adicionar filtros rápidos (Todos/Pendentes/Enviados/Falhos/Cancelados) e ordena
 ---
 
 ### UX-024 · Cancelamento de agendamento sem feedback otimista/estado de processamento
-**Status:** open  
+**Status:** done  
 **Prioridade:** baixa  
 **Arquivo:** `dashboard/app/dashboard/envio/page.js`
 

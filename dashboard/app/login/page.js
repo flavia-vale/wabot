@@ -67,7 +67,7 @@ function LoginContent() {
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>
-            <label htmlFor="email" className={`block text-sm font-medium mb-1 ${isRegister ? 'text-emerald-100' : 'text-gray-700'}`}>Email</label>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <input
               id="email"
               type="email"
@@ -75,15 +75,11 @@ function LoginContent() {
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
-              className={`border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 w-full transition-colors ${
-                isRegister
-                  ? 'bg-white border-emerald-300 text-black placeholder:text-gray-600 focus:ring-emerald-400'
-                  : 'bg-white border-gray-300 text-black placeholder:text-gray-600 focus:ring-green-400'
-              }`}
+              className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 w-full"
             />
           </div>
           <div>
-            <label htmlFor="password" className={`block text-sm font-medium mb-1 ${isRegister ? 'text-emerald-100' : 'text-gray-700'}`}>Senha</label>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
             <input
               id="password"
               type="password"
@@ -91,11 +87,7 @@ function LoginContent() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
-              className={`border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 w-full transition-colors ${
-                isRegister
-                  ? 'bg-white border-emerald-300 text-black placeholder:text-gray-600 focus:ring-emerald-400'
-                  : 'bg-white border-gray-300 text-black placeholder:text-gray-600 focus:ring-green-400'
-              }`}
+              className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 w-full"
             />
           </div>
 
@@ -117,7 +109,7 @@ function LoginContent() {
 
         <button
           onClick={() => { setIsRegister(!isRegister); setError(''); setSuccess('') }}
-          className={`mt-4 text-sm hover:underline w-full text-center ${isRegister ? 'text-emerald-200' : 'text-green-600'}`}
+          className="mt-4 text-sm text-green-600 hover:underline w-full text-center"
         >
           {isRegister ? 'Já tenho conta — Entrar' : 'Não tenho conta — Criar agora'}
         </button>
