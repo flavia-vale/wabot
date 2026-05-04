@@ -12,8 +12,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "WaBot — Painel de Controle",
-  description: "Bot de afiliados WhatsApp",
+  title: "Bot Conversor para Afiliados — Painel de Controle",
+  description: "Bot Conversor para Afiliados no WhatsApp",
 };
 
 export default function RootLayout({ children }) {

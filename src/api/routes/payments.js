@@ -33,8 +33,8 @@ function ensurePaymentProviderConfigured(reply) {
 
 
 const PLANS = {
-  basic: { title: 'WaBot Basic', price: 50 },
-  pro:   { title: 'WaBot Pro',   price: 100 },
+  basic: { title: 'Bot Conversor para Afiliados Basic', price: 50 },
+  pro:   { title: 'Bot Conversor para Afiliados Pro',   price: 100 },
 }
 
 export async function paymentsRoutes(app) {
