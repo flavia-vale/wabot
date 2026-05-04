@@ -3,6 +3,7 @@ import { useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSearchParams } from 'next/navigation'
 import { api } from '@/lib/api'
+import { Alert } from '@/components/Alert'
 
 function LoginContent() {
   const router = useRouter()
@@ -21,19 +22,21 @@ function LoginContent() {
     }
     return ''
   })
+  const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
-
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
+    setSuccess('')
     setLoading(true)
     try {
       const res = isRegister
         ? await api.register(email, password, ref)
         : await api.login(email, password)
       localStorage.setItem('token', res.token)
-      router.push('/dashboard')
+      setSuccess(isRegister ? 'Conta criada com sucesso. Redirecionando...' : 'Login realizado. Redirecionando...')
+      setTimeout(() => router.push('/dashboard'), 300)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -50,24 +53,33 @@ function LoginContent() {
         </p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            required
-            className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
-          />
-          <input
-            type="password"
-            placeholder="Senha"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-            className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
-          />
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <input
+              id="email"
+              type="email"
+              placeholder="seuemail@exemplo.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+              className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 w-full"
+            />
+          </div>
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
+            <input
+              id="password"
+              type="password"
+              placeholder="Digite sua senha"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+              className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 w-full"
+            />
+          </div>
 
-          {error && <p className="text-red-500 text-sm">{error}</p>}
+          {error && <Alert type="error" title="Falha na autenticação" message={error} />}
+          {success && <Alert type="success" title="Sucesso" message={success} />}
 
           <button
             type="submit"
@@ -79,7 +91,7 @@ function LoginContent() {
         </form>
 
         <button
-          onClick={() => { setIsRegister(!isRegister); setError('') }}
+          onClick={() => { setIsRegister(!isRegister); setError(''); setSuccess('') }}
           className="mt-4 text-sm text-green-600 hover:underline w-full text-center"
         >
           {isRegister ? 'Já tenho conta — Entrar' : 'Não tenho conta — Criar agora'}

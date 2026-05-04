@@ -17,16 +17,31 @@ export default function DashboardLayout({ children }) {
     router.push('/login')
   }
 
-  const nav = [
-    { href: '/dashboard/inicio', label: '🏠 Início' },
-    { href: '/dashboard', label: '📱 WhatsApp' },
-    { href: '/dashboard/grupos', label: '👥 Grupos' },
-    { href: '/dashboard/credenciais', label: '🔑 Credenciais' },
-    { href: '/dashboard/configuracoes', label: '⚙️ Configurações' },
-    { href: '/dashboard/envio', label: '📤 Envio' },
-    { href: '/dashboard/logs', label: '📋 Logs' },
-    { href: '/dashboard/planos', label: '💳 Planos' },
+  const navGroups = [
+    {
+      title: 'Operação',
+      items: [
+        { href: '/dashboard/inicio', label: '🏠 Início' },
+        { href: '/dashboard', label: '📱 Conexão WhatsApp' },
+        { href: '/dashboard/envio', label: '📤 Envio' },
+        { href: '/dashboard/logs', label: '📋 Logs' },
+      ],
+    },
+    {
+      title: 'Configuração',
+      items: [
+        { href: '/dashboard/grupos', label: '👥 Grupos' },
+        { href: '/dashboard/credenciais', label: '🔑 Credenciais' },
+        { href: '/dashboard/configuracoes', label: '⚙️ Configurações' },
+      ],
+    },
+    {
+      title: 'Conta',
+      items: [{ href: '/dashboard/planos', label: '💳 Planos' }],
+    },
   ]
+
+  const isActive = (href) => href === '/dashboard' ? pathname === href : pathname.startsWith(href)
 
   return (
     <div className="min-h-screen flex bg-gray-50">
@@ -34,19 +49,26 @@ export default function DashboardLayout({ children }) {
         <div className="p-5 border-b border-green-600">
           <h1 className="text-xl font-bold">🤖 WaBot</h1>
         </div>
-        <nav className="flex-1 p-4 flex flex-col gap-1">
-          {nav.map(item => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
-                pathname === item.href
-                  ? 'bg-white text-green-700'
-                  : 'hover:bg-green-600'
-              }`}
-            >
-              {item.label}
-            </Link>
+        <nav className="flex-1 p-4 flex flex-col gap-4">
+          {navGroups.map(group => (
+            <div key={group.title}>
+              <p className="text-xs font-semibold uppercase tracking-wide text-green-100 mb-2">{group.title}</p>
+              <div className="flex flex-col gap-1">
+                {group.items.map(item => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+                      isActive(item.href)
+                        ? 'bg-white text-green-700'
+                        : 'hover:bg-green-600'
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
         <div className="p-4 border-t border-green-600">
