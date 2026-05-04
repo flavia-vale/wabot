@@ -52,7 +52,7 @@ function extractJsonLdImage(html) {
 
 async function fetchHtml(url) {
   const res = await fetch(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WaBot/1.0; +https://wabot.com.br)' },
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BotConversorAfiliados/1.0)' },
     signal: AbortSignal.timeout(5_000),
     redirect: 'follow',
   })
