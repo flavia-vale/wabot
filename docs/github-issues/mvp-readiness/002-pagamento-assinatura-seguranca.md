@@ -1,3 +1,6 @@
+## Status
+Concluída em 05 de maio de 2026. Implementada e testada no repositório.
+
 ## Contexto
 O fluxo atual cria preferência de checkout no Mercado Pago e ativa plano por 30 dias quando o pagamento é aprovado. Porém a comunicação visual usa linguagem de planos mensais e o webhook só valida assinatura quando `MP_WEBHOOK_SECRET` está configurado.
 
@@ -17,13 +20,13 @@ Deixar a jornada de pagamento segura, honesta e pronta para venda MVP.
 - Exibir estado “pagamento em confirmação” quando webhook ainda não processou.
 
 ## Critérios de aceite
-- [ ] Tela de planos comunica exatamente o modelo implementado.
-- [ ] Checkout ainda redireciona corretamente para Mercado Pago.
-- [ ] Webhook rejeita requisições sem assinatura válida em produção, quando aplicável.
-- [ ] Mensagem de sucesso pós-checkout depende do status real retornado pelo backend.
-- [ ] Pagamento pendente/falha mostra orientação clara para o usuário.
-- [ ] Histórico de pagamentos continua visível.
-- [ ] Variáveis de ambiente de pagamento estão documentadas.
+- [x] Tela de planos comunica exatamente o modelo implementado.
+- [x] Checkout ainda redireciona corretamente para Mercado Pago.
+- [x] Webhook rejeita requisições sem assinatura válida em produção, quando aplicável.
+- [x] Mensagem de sucesso pós-checkout depende do status real retornado pelo backend.
+- [x] Pagamento pendente/falha mostra orientação clara para o usuário.
+- [x] Histórico de pagamentos continua visível.
+- [x] Variáveis de ambiente de pagamento estão documentadas.
 
 ## Fora de escopo
 - Nota fiscal automática.
