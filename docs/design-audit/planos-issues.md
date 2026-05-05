@@ -1,51 +1,165 @@
-# Auditoria SEO & Conversão — `/dashboard/planos`
+# Issues de Design — Planos
 
-## Contexto da página
-Página de monetização e retenção. Mostra plano atual, feedback pós-checkout, comparação Basic/Pro, CTAs de assinatura, link de indicação e histórico de pagamentos.
+Este arquivo registra issues prontas para serem copiadas para o GitHub Issues. Elas foram derivadas da auditoria de UI/UX da tela `dashboard/app/dashboard/planos/page.js`, responsável por status de assinatura, checkout, comparativo de planos, indicação e histórico de pagamentos.
 
-## ISSUE PLANOS-001 — Reforçar recomendação de plano e diferença de valor
-- **Diagnóstico:** ❌ Precisa de ajuste.
-- **Ponto analisado:** Comparativo rápido e cards Basic/Pro.
-- **Observação técnica:** A página informa preço e benefícios, mas ainda não deixa claro qual plano é melhor para cada perfil de afiliado nem o impacto operacional de anúncios/interrupções.
-- **Impacto em marketing/CRO:** O usuário pode comparar apenas preço e escolher Basic por economia imediata, sem entender o custo de interrupções durante campanhas.
-- **Sugestão de melhoria:** Adicionar uma faixa “Recomendado para você” baseada em volume/uso e uma linha de ROI: “Se você divulga ofertas todos os dias, o Pro evita anúncios e reduz interrupções em campanhas”.
-- **Critérios de aceite:**
-  - Card Pro mantém destaque visual como plano recomendado.
-  - A diferença entre Basic e Pro é descrita em linguagem de operação, não só lista de recursos.
-  - CTA Pro reforça resultado: “Assinar Pro sem anúncios”.
-- **Testes sugeridos:** Validar renderização mobile/desktop, estado de plano atual e checkout de Basic/Pro.
+## Issue 1 — Padronizar erros de checkout e cópia com `Alert`
 
-## ISSUE PLANOS-002 — Adicionar microcopy de segurança antes do checkout
-- **Diagnóstico:** ❌ Precisa de ajuste.
-- **Ponto analisado:** Botões “Assinar Basic” e “Assinar Pro”.
-- **Observação técnica:** Os CTAs redirecionam para checkout externo, mas a página não antecipa que o usuário sairá do painel nem informa segurança do pagamento.
-- **Impacto em marketing/CRO:** Pode gerar hesitação no clique, principalmente em usuários novos.
-- **Sugestão de melhoria:** Inserir abaixo dos cards: “Você será redirecionado para um checkout seguro. Após a aprovação, o acesso é atualizado automaticamente.”
-- **Critérios de aceite:**
-  - Microcopy aparece antes de qualquer erro de checkout.
-  - Não promete aprovação instantânea quando houver status pendente.
-  - Mantém consistência com mensagens success/failure/pending.
-- **Testes sugeridos:** Simular retorno `status=success`, `status=failure` e `status=pending`.
+**Tipo:** UX / Acessibilidade / Feedback de sistema  
+**Prioridade:** P1  
+**Status recomendado:** ⚠️ Melhorar  
+**Tela:** Planos  
+**Arquivos relacionados:**
+- `dashboard/app/dashboard/planos/page.js`
+- `dashboard/components/Alert.js`
 
-## ISSUE PLANOS-003 — Melhorar bloco de indicação com termos e benefício claro
-- **Diagnóstico:** ⚠️ Parcialmente otimizado.
-- **Ponto analisado:** Seção “Indique e ganhe”.
-- **Observação técnica:** O benefício de +7 dias aparece, mas não explica limite, validade ou o que o indicado precisa fazer.
-- **Impacto em marketing/CRO:** Usuário pode copiar menos o link por não confiar na regra ou não entender quando ganha o benefício.
-- **Sugestão de melhoria:** Adicionar texto curto: “Válido quando o convidado cria a conta pelo seu link. Benefício limitado conforme regras do programa.”
-- **Critérios de aceite:**
-  - Explica quando o benefício é aplicado.
-  - Não expõe regras técnicas internas desnecessárias.
-  - Mantém fallback de cópia manual.
-- **Testes sugeridos:** Testar `navigator.clipboard` disponível/indisponível e presença/ausência de `referralCode`.
+### Problema
+Erros de checkout e cópia aparecem como textos vermelhos simples. Isso reduz visibilidade em ações financeiras/importantes.
 
-## ISSUE PLANOS-004 — Criar estado vazio para histórico de pagamentos
-- **Diagnóstico:** ❌ Precisa de ajuste.
-- **Ponto analisado:** Histórico de pagamentos.
-- **Observação técnica:** Quando não há pagamentos, a área simplesmente não aparece.
-- **Impacto em UX/CRO:** Usuário em trial pode não entender que ainda não possui histórico.
-- **Sugestão de melhoria:** Exibir estado vazio: “Você ainda não possui pagamentos. Escolha um plano para ativar seu acesso.”
-- **Critérios de aceite:**
-  - Estado vazio aparece quando `payments` está vazio.
-  - Histórico continua aparecendo normalmente quando há registros.
-- **Testes sugeridos:** Mockar `payments: []` e `payments` com múltiplos status.
+### Impacto no usuário
+- Falha de checkout pode passar despercebida.
+- Feedback visual fica inconsistente.
+- Leitores de tela podem não ser notificados adequadamente.
+
+### Critérios de aceite
+- Erros de checkout devem usar `Alert type="error"`.
+- Sucesso/erro de cópia deve ter feedback acessível.
+- Mensagens devem orientar próxima ação.
+- Rodar lint e build após a alteração.
+
+### Sugestão de solução
+Usar alertas locais para checkout e indicação.
+
+---
+
+## Issue 2 — Melhorar clareza de plano atual e estados de acesso
+
+**Tipo:** UX / Assinatura / Hierarquia visual  
+**Prioridade:** P1  
+**Status recomendado:** ⚠️ Melhorar  
+**Tela:** Planos  
+**Arquivos relacionados:**
+- `dashboard/app/dashboard/planos/page.js`
+
+### Problema
+A tela informa plano atual e validade, mas os cards de Basic/Pro ainda competem visualmente com o status de acesso. O estado expirado poderia ter CTA mais direto.
+
+### Impacto no usuário
+- Usuário pode não entender rapidamente se precisa agir.
+- Plano atual pode ficar pouco destacado entre ofertas.
+- Acesso expirado precisa de caminho claro de recuperação.
+
+### Critérios de aceite
+- Plano atual deve ter badge clara no card correspondente.
+- Acesso expirado deve mostrar CTA primário para renovar.
+- Dias restantes devem ser destacados sem competir com preços.
+
+### Sugestão de solução
+Adicionar bloco de status com CTA contextual e badge “Seu plano”.
+
+---
+
+## Issue 3 — Explicar melhor diferenças entre Basic e Pro
+
+**Tipo:** UX Writing / Conversão / Comparação  
+**Prioridade:** P2  
+**Status recomendado:** ⚠️ Melhorar  
+**Tela:** Planos  
+**Arquivos relacionados:**
+- `dashboard/app/dashboard/planos/page.js`
+
+### Problema
+Os cards de plano listam poucos benefícios e “Anúncio a cada 50 envios” pode não explicar impacto real para o usuário.
+
+### Impacto no usuário
+- Usuário pode escolher sem entender trade-offs.
+- Pro pode parecer apenas “sem anúncios”, sem argumento operacional completo.
+- A decisão de compra fica menos informada.
+
+### Critérios de aceite
+- Explicar limitações e benefícios em linguagem clara.
+- Destacar cenário recomendado de cada plano.
+- Evitar jargão ou ambiguidades.
+
+### Sugestão de solução
+Adicionar bullets como “Ideal para X grupos/volume” se houver critério real.
+
+---
+
+## Issue 4 — Melhorar feedback de redirecionamento para checkout
+
+**Tipo:** UX / Pagamento / Feedback de sistema  
+**Prioridade:** P1  
+**Status recomendado:** ⚠️ Melhorar  
+**Tela:** Planos  
+**Arquivos relacionados:**
+- `dashboard/app/dashboard/planos/page.js`
+
+### Problema
+Durante checkout, o botão mostra “Redirecionando...”, mas não há mensagem contextual informando que o usuário será levado para ambiente de pagamento.
+
+### Impacto no usuário
+- Em conexões lentas, pode parecer travamento.
+- Usuário pode estranhar sair do painel.
+- A confiança no pagamento diminui.
+
+### Critérios de aceite
+- Mostrar feedback contextual durante redirecionamento.
+- Desabilitar ambos os CTAs enquanto checkout está em andamento.
+- Em falha, mostrar erro com alternativa de tentar novamente.
+
+### Sugestão de solução
+Adicionar texto abaixo dos botões: “Vamos abrir o checkout seguro em instantes.”
+
+---
+
+## Issue 5 — Melhorar responsividade do link de indicação
+
+**Tipo:** UI / Responsividade / Compartilhamento  
+**Prioridade:** P2  
+**Status recomendado:** ⚠️ Melhorar  
+**Tela:** Planos  
+**Arquivos relacionados:**
+- `dashboard/app/dashboard/planos/page.js`
+
+### Problema
+O campo de link de indicação e o botão de copiar ficam em linha. Em telas pequenas, URLs longas podem ficar difíceis de revisar/copiar.
+
+### Impacto no usuário
+- Link pode ficar espremido no mobile.
+- Botão pode perder área de toque confortável.
+- A ação de indicação perde fluidez.
+
+### Critérios de aceite
+- Layout deve empilhar input e botão em telas pequenas.
+- Botão deve ter área de toque adequada.
+- Feedback “Copiado!” deve ser acessível.
+
+### Sugestão de solução
+Usar `flex-col sm:flex-row` e `aria-live` para resultado de cópia.
+
+---
+
+## Issue 6 — Tornar histórico de pagamentos mais escaneável
+
+**Tipo:** UI / Dados financeiros / Histórico  
+**Prioridade:** P3  
+**Status recomendado:** ⚠️ Melhorar  
+**Tela:** Planos  
+**Arquivos relacionados:**
+- `dashboard/app/dashboard/planos/page.js`
+
+### Problema
+O histórico usa linhas simples com data, plano, valor e status. Funciona para poucos itens, mas pode ficar pouco escaneável com muitos pagamentos.
+
+### Impacto no usuário
+- Usuário pode ter dificuldade para revisar pagamentos antigos.
+- Status e valores podem competir visualmente.
+- Não há empty state explicando ausência de histórico.
+
+### Critérios de aceite
+- Melhorar espaçamento e hierarquia dos itens.
+- Adicionar empty state quando não houver pagamentos.
+- Considerar tabela em desktop e cards em mobile se histórico crescer.
+
+### Sugestão de solução
+Criar componente `PaymentHistoryItem` e empty state “Nenhum pagamento registrado ainda.”

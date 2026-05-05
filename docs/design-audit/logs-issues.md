@@ -1,49 +1,178 @@
-# Auditoria SEO & Conversão — `/dashboard/logs`
+# Issues de Design — Logs de Envio
 
-## Contexto da página
-Página para acompanhar histórico de envios, status, grupos, plataformas, busca, paginação e limpeza de logs.
+Este arquivo registra issues prontas para serem copiadas para o GitHub Issues. Elas foram derivadas da auditoria de UI/UX da tela `dashboard/app/dashboard/logs/page.js`, responsável por listar envios, erros, filtros, busca, paginação e limpeza de logs.
 
-## ISSUE LOGS-001 — Adicionar filtros avançados por status/plataforma/data
-- **Diagnóstico:** ❌ Precisa de ajuste.
-- **Ponto analisado:** Busca e abas de logs.
-- **Observação técnica:** Há busca textual, mas filtros operacionais importantes exigem leitura manual.
-- **Impacto em suporte/diagnóstico:** Usuário demora para encontrar falhas específicas.
-- **Sugestão de melhoria:** Adicionar filtros por status, plataforma e intervalo de datas.
-- **Critérios de aceite:**
-  - Filtros combinam com busca textual.
-  - Estado vazio mostra filtros aplicados.
-- **Testes sugeridos:** Validar combinações e reset de filtros.
+## Issue 1 — Adicionar labels acessíveis para abas/filtros e busca
 
-## ISSUE LOGS-002 — Criar detalhe expandido do log
-- **Diagnóstico:** ❌ Precisa de ajuste.
-- **Ponto analisado:** Tabela/cards de logs.
-- **Observação técnica:** Mensagens longas são truncadas, dificultando auditoria.
-- **Impacto em operação:** Usuário pode não conseguir entender por que um envio falhou.
-- **Sugestão de melhoria:** Adicionar drawer/modal com mensagem completa, origem, destino, plataforma, data e erro.
-- **Critérios de aceite:**
-  - Detalhe abre por item.
-  - Mensagem completa é copiável.
-  - Funciona em mobile.
-- **Testes sugeridos:** Validar log sucesso, log erro e mensagem longa.
+**Tipo:** Acessibilidade / Navegação / Busca  
+**Prioridade:** P1  
+**Status recomendado:** ⚠️ Melhorar  
+**Tela:** Logs de Envio  
+**Arquivos relacionados:**
+- `dashboard/app/dashboard/logs/page.js`
 
-## ISSUE LOGS-003 — Reforçar irreversibilidade ao limpar logs
-- **Diagnóstico:** ⚠️ Parcialmente otimizado.
-- **Ponto analisado:** Confirmação “Limpar logs”.
-- **Observação técnica:** Existe confirmação, mas pode reforçar que a ação é permanente e remove evidências de auditoria.
-- **Impacto em segurança operacional:** Evita perda acidental de histórico.
-- **Sugestão de melhoria:** Ajustar modal: “Esta ação apaga permanentemente o histórico usado para auditoria de envios.”
-- **Critérios de aceite:**
-  - Modal mantém estilo destrutivo.
-  - Usuário precisa confirmar explicitamente.
-- **Testes sugeridos:** Validar cancelar/confirmar e recarregamento.
+### Problema
+As abas de status são botões visuais sem semântica de tabs ou `aria-pressed`, e o campo de busca não possui label visível/associado.
 
-## ISSUE LOGS-004 — Adicionar exportação CSV
-- **Diagnóstico:** 💡 Oportunidade.
-- **Ponto analisado:** Auditoria externa de envios.
-- **Observação técnica:** Não há exportação visível de logs.
-- **Impacto em valor percebido:** Afiliados podem querer analisar performance fora do painel.
-- **Sugestão de melhoria:** Adicionar botão “Exportar CSV” respeitando filtros atuais.
-- **Critérios de aceite:**
-  - CSV contém data, plataforma, origem, destino, status e mensagem.
-  - Exportação respeita filtros aplicados.
-- **Testes sugeridos:** Validar conteúdo do CSV e encoding UTF-8.
+### Impacto no usuário
+- Usuários de leitores de tela podem não entender o estado do filtro ativo.
+- Busca depende de placeholder, que desaparece ao digitar.
+- Navegação por teclado fica menos clara.
+
+### Critérios de aceite
+- Filtros devem expor estado ativo com `aria-pressed` ou padrão de tabs.
+- Campo de busca deve ter label visível ou `aria-label` adequado.
+- Estado ativo visual deve permanecer claro.
+- Rodar lint e build após a alteração.
+
+### Sugestão de solução
+Adicionar:
+
+```jsx
+aria-pressed={tab === value}
+aria-label="Buscar logs por conteúdo, grupo ou plataforma"
+```
+
+---
+
+## Issue 2 — Evitar renderização mobile condensada em uma linha de JSX
+
+**Tipo:** Manutenibilidade / UI / Responsividade  
+**Prioridade:** P2  
+**Status recomendado:** ⚠️ Melhorar  
+**Tela:** Logs de Envio  
+**Arquivos relacionados:**
+- `dashboard/app/dashboard/logs/page.js`
+
+### Problema
+A renderização dos cards mobile está condensada em uma linha muito longa. Isso dificulta manutenção, revisão de acessibilidade e evolução visual.
+
+### Impacto no usuário
+- Não afeta diretamente o uso atual.
+- Aumenta risco de regressões em melhorias mobile.
+- Dificulta adicionar botões, detalhes de erro e labels acessíveis.
+
+### Critérios de aceite
+- Extrair componente `LogMobileCard` ou quebrar JSX em blocos legíveis.
+- Preservar visual atual.
+- Facilitar inclusão de detalhes de erro.
+
+### Sugestão de solução
+Criar componente local:
+
+```jsx
+function LogMobileCard({ log }) { ... }
+```
+
+---
+
+## Issue 3 — Exibir detalhes de erro de forma acessível e descobrível
+
+**Tipo:** UX / Diagnóstico / Acessibilidade  
+**Prioridade:** P1  
+**Status recomendado:** ⚠️ Melhorar  
+**Tela:** Logs de Envio  
+**Arquivos relacionados:**
+- `dashboard/app/dashboard/logs/page.js`
+
+### Problema
+No desktop, erros aparecem com `title={log.errorMsg}`. Tooltips nativos não são acessíveis o suficiente e não funcionam bem em touch/mobile.
+
+### Impacto no usuário
+- Usuário pode não conseguir ver o motivo do erro no celular.
+- Diagnóstico de falhas fica difícil.
+- Suporte e investigação ficam prejudicados.
+
+### Critérios de aceite
+- Erros devem ter ação “Ver detalhes” ou expansão acessível.
+- Detalhes devem funcionar em mobile e desktop.
+- Não depender apenas de atributo `title`.
+
+### Sugestão de solução
+Adicionar botão/accordion no card/linha para mostrar `errorMsg`.
+
+---
+
+## Issue 4 — Melhorar segurança da ação “Limpar logs”
+
+**Tipo:** UX / Ação destrutiva / Prevenção de erro  
+**Prioridade:** P1  
+**Status recomendado:** ⚠️ Melhorar  
+**Tela:** Logs de Envio  
+**Arquivos relacionados:**
+- `dashboard/app/dashboard/logs/page.js`
+- `dashboard/components/ConfirmDialog.js`
+
+### Problema
+“Limpar logs” é uma ação destrutiva global. Embora exista confirmação, a ação fica disponível de forma discreta no cabeçalho e pode não comunicar impacto total.
+
+### Impacto no usuário
+- Usuário pode apagar histórico importante sem entender a irreversibilidade.
+- Falta contexto de quantos registros serão removidos.
+- A ação compete pouco visualmente com a gravidade.
+
+### Critérios de aceite
+- Modal deve informar que a ação é permanente.
+- Mostrar quantidade aproximada/total de registros quando disponível.
+- Botão destrutivo deve ter texto claro: “Limpar todos os logs”.
+
+### Sugestão de solução
+Atualizar copy do modal com total e impacto.
+
+---
+
+## Issue 5 — Exibir estado de busca sem resultados separadamente de lista vazia
+
+**Tipo:** UX / Estado vazio / Busca  
+**Prioridade:** P2  
+**Status recomendado:** ⚠️ Melhorar  
+**Tela:** Logs de Envio  
+**Arquivos relacionados:**
+- `dashboard/app/dashboard/logs/page.js`
+
+### Problema
+Quando a busca local filtra tudo, a tela mostra “Nenhum log encontrado”, igual ao estado de não haver logs. Isso não diferencia “não existem logs” de “nenhum resultado para sua busca”.
+
+### Impacto no usuário
+- Usuário pode achar que não há logs no sistema.
+- Fica menos claro como recuperar resultados.
+- Busca parece menos confiável.
+
+### Critérios de aceite
+- Se houver termo de busca, empty state deve mencionar a busca.
+- Oferecer ação para limpar busca.
+- Estado sem logs deve continuar separado.
+
+### Sugestão de solução
+Se `query` existir, usar mensagem:
+
+```text
+Nenhum log encontrado para “termo”. Limpar busca.
+```
+
+---
+
+## Issue 6 — Melhorar paginação quando há busca local
+
+**Tipo:** UX / Dados / Paginação  
+**Prioridade:** P2  
+**Status recomendado:** ⚠️ Melhorar  
+**Tela:** Logs de Envio  
+**Arquivos relacionados:**
+- `dashboard/app/dashboard/logs/page.js`
+
+### Problema
+A busca filtra apenas os logs carregados na página atual, mas a paginação mostra total do backend. Isso pode confundir: resultados em outras páginas não aparecem na busca atual.
+
+### Impacto no usuário
+- Usuário pode acreditar que a busca cobre todo o histórico quando cobre apenas a página carregada.
+- Dados relevantes podem ficar ocultos em outra página.
+- Paginação e busca entram em conflito conceitual.
+
+### Critérios de aceite
+- Deixar claro que a busca é na página atual; ou
+- Implementar busca server-side; ou
+- Resetar/consultar backend com termo de busca.
+
+### Sugestão de solução
+Preferível: adicionar parâmetro de busca na API de logs e paginar resultados filtrados no servidor.
