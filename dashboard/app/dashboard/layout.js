@@ -2,22 +2,27 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
+import { api } from '@/lib/api'
 
 export default function DashboardLayout({ children }) {
   const router = useRouter()
   const pathname = usePathname()
 
+  const [checkingAuth, setCheckingAuth] = useState(true)
+  const [menuOpen, setMenuOpen] = useState(false)
+
   useEffect(() => {
-    const token = localStorage.getItem('token')
-    if (!token) router.replace('/login')
+    let active = true
+    api.me()
+      .then(() => { if (active) setCheckingAuth(false) })
+      .catch(() => { if (active) router.replace('/login') })
+    return () => { active = false }
   }, [router])
 
-  function logout() {
-    localStorage.removeItem('token')
+  async function logout() {
+    await api.logout().catch(() => {})
     router.push('/login')
   }
-
-  const [menuOpen, setMenuOpen] = useState(false)
 
   const navGroups = [
     {
@@ -48,6 +53,8 @@ export default function DashboardLayout({ children }) {
   function handleNavigate() {
     setMenuOpen(false)
   }
+
+  if (checkingAuth) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-sm text-gray-600">Validando sessão...</div>
 
   return (
     <div className="min-h-screen flex bg-gray-50">

@@ -85,12 +85,22 @@ export async function sessionRoutes(app) {
     return { ok: true }
   })
 
-  // WebSocket: emite QR em tempo real (token via query string porque browser não envia headers em WS)
+  app.post('/qr-ticket', { onRequest: [app.authenticate] }, async (req) => {
+    return {
+      ticket: app.jwt.sign({ sub: req.user.sub, purpose: 'qr_ws' }, { expiresIn: '2m' }),
+    }
+  })
+
+  // WebSocket: emite QR em tempo real (ticket efêmero via subprotocol para não expor segredo na URL)
   app.get('/qr', { websocket: true }, (socket, req) => {
     let userId
     try {
-      const token = req.query.token
+      const rawProtocols = req.headers['sec-websocket-protocol'] ?? ''
+      const protocols = rawProtocols.split(',').map((value) => value.trim()).filter(Boolean)
+      const [scheme, token] = protocols
+      if (scheme !== 'wabot-auth' || !token) throw new Error('Token WS ausente')
       const decoded = app.jwt.verify(token)
+      if (decoded.purpose !== 'qr_ws') throw new Error('Ticket WS inválido')
       userId = decoded.sub
     } catch {
       socket.send(JSON.stringify({ type: 'error', message: 'Não autorizado' }))

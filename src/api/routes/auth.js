@@ -2,6 +2,20 @@ import bcrypt from 'bcryptjs'
 import { randomBytes } from 'crypto'
 import db from '../../db.js'
 
+function setAuthCookie(reply, token) {
+  const secure = process.env.COOKIE_SECURE !== 'false'
+  const maxAge = 60 * 60 * 24 * 7
+  const parts = [
+    `wb_auth=${encodeURIComponent(token)}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    `Max-Age=${maxAge}`,
+  ]
+  if (secure) parts.push('Secure')
+  reply.header('Set-Cookie', parts.join('; '))
+}
+
 export async function authRoutes(app) {
   app.post('/register', async (req, reply) => {
     const { email: rawEmail, password, ref } = req.body ?? {}
@@ -40,8 +54,9 @@ export async function authRoutes(app) {
       })
     }
 
-    const token = app.jwt.sign({ sub: user.id, email: user.email })
-    return { token, user: { id: user.id, email: user.email, plan: user.plan, trialExpiresAt } }
+    const token = app.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: '7d' })
+    setAuthCookie(reply, token)
+    return { user: { id: user.id, email: user.email, plan: user.plan, trialExpiresAt } }
   })
 
   app.post('/login', async (req, reply) => {
@@ -55,8 +70,14 @@ export async function authRoutes(app) {
     const valid = await bcrypt.compare(password, user.passwordHash)
     if (!valid) return reply.code(401).send({ error: 'Credenciais inválidas' })
 
-    const token = app.jwt.sign({ sub: user.id, email: user.email })
-    return { token, user: { id: user.id, email: user.email, plan: user.plan, trialExpiresAt: user.trialExpiresAt } }
+    const token = app.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: '7d' })
+    setAuthCookie(reply, token)
+    return { user: { id: user.id, email: user.email, plan: user.plan, trialExpiresAt: user.trialExpiresAt } }
+  })
+
+  app.post('/logout', async (_req, reply) => {
+    reply.header('Set-Cookie', 'wb_auth=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0')
+    return { ok: true }
   })
 
   app.get('/me', { onRequest: [app.authenticate] }, async (req) => {

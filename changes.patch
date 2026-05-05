@@ -1,0 +1,1155 @@
+diff --git a/PLANO_MIGRACAO_HTTPONLY.md b/PLANO_MIGRACAO_HTTPONLY.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..a570e05efb3626b5c25ef1a7dadf099209fb76f2
+--- /dev/null
++++ b/PLANO_MIGRACAO_HTTPONLY.md
+@@ -0,0 +1,28 @@
++# Plano de migração: localStorage -> cookie HttpOnly (INFRA-AUTH-STORAGE-005)
++
++## Objetivo
++Eliminar armazenamento de JWT de autenticação em `localStorage` e adotar sessão via cookie `HttpOnly` + `Secure` + `SameSite`.
++
++## Status aplicado
++- Backend autentica sessões do dashboard exclusivamente pelo cookie `wb_auth`.
++- Login e registro emitem cookie `HttpOnly` e não retornam mais o JWT no corpo da resposta.
++- Frontend envia cookies com `credentials: 'include'` em todas as chamadas da API.
++- Guarda de rota do dashboard valida sessão via `/api/auth/me`, sem consultar token em `localStorage`.
++- Logout chama `/api/auth/logout`, que limpa o cookie de sessão.
++- WebSocket de QR usa ticket efêmero (`/api/session/qr-ticket`) com expiração curta, sem reutilizar o JWT de sessão.
++
++## Configuração operacional
++- Em produção HTTPS, manter `COOKIE_SECURE=true` (padrão).
++- Em ambiente temporário sem HTTPS, usar `COOKIE_SECURE=false` apenas como exceção controlada, pois isso reduz a proteção do cookie.
++- Manter `CORS_ORIGINS` restrito às origens reais do dashboard/API.
++
++## Validação pós-deploy
++- Realizar login e confirmar que não há token de autenticação em `localStorage`.
++- Confirmar que a resposta de login contém `Set-Cookie: wb_auth=...; HttpOnly`.
++- Abrir o dashboard e validar que `/api/auth/me` retorna 200 usando cookie.
++- Iniciar QR e confirmar que o WebSocket usa `/api/session/qr` sem token na URL.
++- Executar logout e confirmar que `/api/auth/me` passa a retornar 401.
++
++## Rollback
++- Restaurar temporariamente emissão/uso de Bearer token no frontend e no middleware se o proxy bloquear cookies.
++- Manter `COOKIE_SECURE=false` somente em ambiente sem TLS enquanto HTTPS não estiver disponível.
+diff --git a/dashboard/app/dashboard/layout.js b/dashboard/app/dashboard/layout.js
+index c0a7cf768d8cdbd94885f88f4afe794b63f9a7b1..6993c504b3073db48ad92475167b8b8e174681bc 100644
+--- a/dashboard/app/dashboard/layout.js
++++ b/dashboard/app/dashboard/layout.js
+@@ -1,76 +1,83 @@
+ 'use client'
+ import { useEffect, useState } from 'react'
+ import { useRouter, usePathname } from 'next/navigation'
+ import Link from 'next/link'
++import { api } from '@/lib/api'
+ 
+ export default function DashboardLayout({ children }) {
+   const router = useRouter()
+   const pathname = usePathname()
+ 
++  const [checkingAuth, setCheckingAuth] = useState(true)
++  const [menuOpen, setMenuOpen] = useState(false)
++
+   useEffect(() => {
+-    const token = localStorage.getItem('token')
+-    if (!token) router.replace('/login')
++    let active = true
++    api.me()
++      .then(() => { if (active) setCheckingAuth(false) })
++      .catch(() => { if (active) router.replace('/login') })
++    return () => { active = false }
+   }, [router])
+ 
+-  function logout() {
+-    localStorage.removeItem('token')
++  async function logout() {
++    await api.logout().catch(() => {})
+     router.push('/login')
+   }
+ 
+-  const [menuOpen, setMenuOpen] = useState(false)
+-
+   const navGroups = [
+     {
+       title: 'Operação',
+       items: [
+         { href: '/dashboard/inicio', label: '🏠 Início' },
+         { href: '/dashboard', label: '📱 Conexão WhatsApp' },
+         { href: '/dashboard/envio', label: '📤 Envio' },
+         { href: '/dashboard/logs', label: '📋 Logs' },
+       ],
+     },
+     {
+       title: 'Configuração',
+       items: [
+         { href: '/dashboard/grupos', label: '👥 Grupos' },
+         { href: '/dashboard/credenciais', label: '🔑 Credenciais' },
+         { href: '/dashboard/configuracoes', label: '⚙️ Configurações' },
+       ],
+     },
+     {
+       title: 'Conta',
+       items: [{ href: '/dashboard/planos', label: '💳 Planos' }],
+     },
+   ]
+ 
+   const isActive = (href) => href === '/dashboard' ? pathname === href : pathname.startsWith(href)
+ 
+   function handleNavigate() {
+     setMenuOpen(false)
+   }
+ 
++  if (checkingAuth) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-sm text-gray-600">Validando sessão...</div>
++
+   return (
+     <div className="min-h-screen flex bg-gray-50">
+       <aside className="w-56 bg-green-700 text-white flex flex-col">
+         <div className="p-5 border-b border-green-600">
+           <h1 className="text-xl font-bold">🤖 Bot Conversor para Afiliados</h1>
+         </div>
+         <nav className="flex-1 p-4 flex flex-col gap-4">
+           {navGroups.map(group => (
+             <div key={group.title}>
+               <p className="text-xs font-semibold uppercase tracking-wide text-green-100 mb-2">{group.title}</p>
+               <div className="flex flex-col gap-1">
+                 {group.items.map(item => (
+                   <Link
+                     key={item.href}
+                     href={item.href}
+                     className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+                       isActive(item.href)
+                         ? 'bg-white text-green-700'
+                         : 'hover:bg-green-600'
+                     }`}
+                   >
+                     {item.label}
+                   </Link>
+                 ))}
+               </div>
+diff --git a/dashboard/app/dashboard/page.js b/dashboard/app/dashboard/page.js
+index c6b698972c8e4f96f67e40f5927845e50d32fa69..e95944685bf4e40c45e71928f2837185dc7d0e4f 100644
+--- a/dashboard/app/dashboard/page.js
++++ b/dashboard/app/dashboard/page.js
+@@ -9,133 +9,133 @@ const QR_TIMEOUT_SECONDS = 20
+ export default function DashboardPage() {
+   const [status, setStatus] = useState(null)
+   const [qr, setQr] = useState(null)
+   const [loading, setLoading] = useState(false)
+   const [error, setError] = useState('')
+   const [feedback, setFeedback] = useState('')
+   const [socketState, setSocketState] = useState('idle')
+   const [qrWaitElapsed, setQrWaitElapsed] = useState(0)
+   const wsRef = useRef(null)
+ 
+   const [showPairingInput, setShowPairingInput] = useState(false)
+   const [pairingPhone, setPairingPhone] = useState('')
+   const [pairingCode, setPairingCode] = useState('')
+   const [showForgetConfirm, setShowForgetConfirm] = useState(false)
+ 
+   const fetchStatus = useCallback(async () => {
+     try {
+       const s = await api.sessionStatus()
+       setStatus(s)
+       return s
+     } catch {
+       return null
+     }
+   }, [])
+ 
+-  const openWS = useCallback(() => {
++  const openWS = useCallback(async () => {
+     if (wsRef.current) wsRef.current.close()
+-    const token = localStorage.getItem('token')
+-    const ws = openQRSocket(token, {
++    const { ticket } = await api.sessionQRTicket()
++    const ws = openQRSocket(ticket, {
+       onOpen: () => setSocketState('connected'),
+       onError: () => setSocketState('error'),
+       onClose: () => setSocketState('closed'),
+       onMessage: (msg) => {
+         if (msg.type === 'qr') setQr(msg.data)
+         if (msg.type === 'status') {
+           setStatus((s) => ({ ...s, status: msg.data, phone: msg.phone ?? s?.phone }))
+           if (msg.data === 'connected') {
+             setFeedback('WhatsApp conectado com sucesso.')
+             setQr(null)
+             setPairingCode('')
+             wsRef.current?.close()
+             fetchStatus()
+           }
+         }
+       },
+     })
+     wsRef.current = ws
+   }, [fetchStatus])
+ 
+   useEffect(() => {
+     let active = true
+     api.sessionStatus()
+       .then((s) => {
+         if (!active || !s) return
+         setStatus(s)
+-        if (s.running && s.status === 'connecting') openWS()
++        if (s.running && s.status === 'connecting') openWS().catch(() => setSocketState('error'))
+       })
+       .catch(() => {})
+     return () => {
+       active = false
+       wsRef.current?.close()
+     }
+   }, [openWS])
+ 
+   useEffect(() => {
+     if (!(status?.running && status?.status === 'connecting') || qr || pairingCode) return
+     const interval = setInterval(() => setQrWaitElapsed((prev) => prev + 1), 1000)
+     return () => clearInterval(interval)
+   }, [status?.running, status?.status, qr, pairingCode])
+ 
+   async function handleQRConnect() {
+     setError('')
+     setFeedback('')
+     setShowPairingInput(false)
+     setPairingCode('')
+     setQrWaitElapsed(0)
+     setLoading(true)
+     try {
+       await api.sessionStart()
+       const s = await fetchStatus()
+-      if (s?.running && s.status === 'connecting') openWS()
++      if (s?.running && s.status === 'connecting') await openWS()
+       setTimeout(async () => {
+         const s = await api.sessionStatus().catch(() => null)
+         if (s && !s.running && s.status === 'disconnected') {
+           setQr(null)
+           setStatus(s)
+         }
+       }, 6000)
+     } catch (err) {
+       setError(err.message)
+     } finally {
+       setLoading(false)
+     }
+   }
+ 
+   async function handlePairingSubmit(e) {
+     e.preventDefault()
+     if (!pairingPhone.trim()) return
+     setError('')
+     setFeedback('')
+     setLoading(true)
+     try {
+       if (!status?.running) await api.sessionStart()
+       const { code } = await api.sessionPairingCode(pairingPhone.trim())
+       setPairingCode(code)
+       setQrWaitElapsed(0)
+       setFeedback('Código de pareamento gerado.')
+-      openWS()
++      await openWS()
+     } catch (err) {
+       setError(err.message)
+       if (!status?.running) await fetchStatus().catch(() => {})
+     } finally {
+       setLoading(false)
+     }
+   }
+ 
+   async function handleStop() {
+     setError('')
+     setFeedback('')
+     setLoading(true)
+     try {
+       await api.sessionStop()
+       setQr(null)
+       setPairingCode('')
+       setShowPairingInput(false)
+       wsRef.current?.close()
+       await fetchStatus()
+       setFeedback('Bot desligado. Para voltar, gere um novo QR Code ou código de pareamento.')
+     } catch (err) {
+       setError(err.message)
+     } finally {
+       setLoading(false)
+     }
+diff --git a/dashboard/app/login/page.js b/dashboard/app/login/page.js
+index 218e275474706ac390dae65ddc321ba6a340b824..14cda0a0e1c30d7ca3fff1da16b3299549964a97 100644
+--- a/dashboard/app/login/page.js
++++ b/dashboard/app/login/page.js
+@@ -1,62 +1,60 @@
+ 'use client'
+ import { useState, Suspense } from 'react'
+ import { useRouter } from 'next/navigation'
+ import { useSearchParams } from 'next/navigation'
+ import { api } from '@/lib/api'
+ import { Alert } from '@/components/Alert'
+ 
+ function LoginContent() {
+   const router = useRouter()
+   const searchParams = useSearchParams()
+   const ref = searchParams.get('ref')
+   const [email, setEmail] = useState('')
+   const [password, setPassword] = useState('')
+   const [isRegister, setIsRegister] = useState(false)
+   const [error, setError] = useState(() => {
+     if (typeof window === 'undefined') return ''
+     const reason = new URLSearchParams(window.location.search).get('reason')
+-    const message = localStorage.getItem('loginRedirectMessage')
++    const message = sessionStorage.getItem('loginRedirectMessage')
+     if (reason === 'session-expired' && message) {
+-      localStorage.removeItem('loginRedirectMessage')
++      sessionStorage.removeItem('loginRedirectMessage')
+       return message
+     }
+     return ''
+   })
+   const [success, setSuccess] = useState('')
+   const [loading, setLoading] = useState(false)
+ 
+   async function handleSubmit(e) {
+     e.preventDefault()
+     setError('')
+     setSuccess('')
+     setLoading(true)
+     try {
+-      const res = isRegister
+-        ? await api.register(email, password, ref)
+-        : await api.login(email, password)
+-      localStorage.setItem('token', res.token)
++      if (isRegister) await api.register(email, password, ref)
++      else await api.login(email, password)
+       setSuccess(isRegister ? 'Conta criada com sucesso. Redirecionando...' : 'Login realizado. Redirecionando...')
+       setTimeout(() => router.push('/dashboard'), 300)
+     } catch (err) {
+       setError(err.message)
+     } finally {
+       setLoading(false)
+     }
+   }
+ 
+   return (
+     <div className={`min-h-screen flex items-center justify-center px-4 transition-colors duration-500 ${
+       isRegister
+         ? 'bg-gradient-to-br from-emerald-100 via-teal-50 to-cyan-100'
+         : 'bg-green-50'
+     }`}>
+       <div className={`rounded-2xl shadow-lg p-8 w-full max-w-sm transition-all duration-500 ${
+         isRegister
+           ? 'bg-emerald-950/95 text-emerald-50 border border-emerald-700 shadow-emerald-900/20'
+           : 'bg-white text-gray-900 border border-transparent'
+       }`}>
+         <div className="flex items-center gap-2 mb-2">
+           <span className={`text-lg ${isRegister ? 'text-emerald-300' : 'text-green-600'}`}>
+             {isRegister ? '✨' : '🤖'}
+           </span>
+           <h1 className={`text-2xl font-bold ${isRegister ? 'text-emerald-100' : 'text-green-700'}`}>Bot Conversor para Afiliados</h1>
+diff --git a/dashboard/lib/api.js b/dashboard/lib/api.js
+index c550a079c45cb2e4ed90d230918f350b1ee7d18a..57b088bf72baaf8f0c7583ad347a31a9f49ae9a9 100644
+--- a/dashboard/lib/api.js
++++ b/dashboard/lib/api.js
+@@ -1,101 +1,96 @@
+ const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+ const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou ou foi invalidada. Faça login novamente para continuar.'
+ 
+-function getToken() {
+-  if (typeof window === 'undefined') return null
+-  return localStorage.getItem('token')
+-}
+-
+ async function apiFetch(path, options = {}) {
+-  const token = getToken()
+   const res = await fetch(`${BASE}${path}`, {
+     ...options,
++    credentials: 'include',
+     headers: {
+       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+       ...(options.headers ?? {}),
+     },
+   })
+   const data = await res.json().catch(() => ({}))
+   if (res.status === 401 && !path.startsWith('/api/auth/')) {
+-    localStorage.removeItem('token')
+-    localStorage.setItem('loginRedirectMessage', SESSION_EXPIRED_MESSAGE)
++    sessionStorage.setItem('loginRedirectMessage', SESSION_EXPIRED_MESSAGE)
+     window.location.replace('/login?reason=session-expired')
+     return
+   }
+   if (!res.ok) {
+     const message = data.message || data.error || `HTTP ${res.status}`
+     const err = new Error(message)
+     if (data.code) err.code = data.code
+     if (typeof data.retryable === 'boolean') err.retryable = data.retryable
+     err.status = res.status
+     throw err
+   }
+   return data
+ }
+ 
+ export const api = {
+   login: (email, password) =>
+     apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+ 
+   register: (email, password, ref) =>
+     apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password, ...(ref && { ref }) }) }),
+ 
+   me: () => apiFetch('/api/auth/me'),
++  logout: () => apiFetch('/api/auth/logout', { method: 'POST' }),
+ 
+   sessionStatus: () => apiFetch('/api/session/status'),
+   sessionStart: () => apiFetch('/api/session/start', { method: 'POST' }),
+   sessionStop: () => apiFetch('/api/session/stop', { method: 'POST' }),
+   sessionForget: () => apiFetch('/api/session/forget', { method: 'POST' }),
+   sessionPairingCode: (phone) => apiFetch('/api/session/pairing-code', { method: 'POST', body: JSON.stringify({ phone }) }),
++  sessionQRTicket: () => apiFetch('/api/session/qr-ticket', { method: 'POST' }),
+   sessionWAGroups: () => apiFetch('/api/session/wa-groups'),
+ 
+   groups: () => apiFetch('/api/groups'),
+   addGroup: (waJid, name, role) =>
+     apiFetch('/api/groups', { method: 'POST', body: JSON.stringify({ waJid, name, role }) }),
+   updateGroup: (id, data) =>
+     apiFetch(`/api/groups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+   deleteGroup: (id) => apiFetch(`/api/groups/${id}`, { method: 'DELETE' }),
+ 
+   credentials: () => apiFetch('/api/credentials'),
+   saveCredential: (platform, data) =>
+     apiFetch(`/api/credentials/${platform}`, { method: 'PUT', body: JSON.stringify(data) }),
+ 
+   paymentsStatus: () => apiFetch('/api/payments/status'),
+   paymentsCheckout: (plan) =>
+     apiFetch('/api/payments/checkout', { method: 'POST', body: JSON.stringify({ plan }) }),
+ 
+   getConfig: () => apiFetch('/api/config'),
+   saveConfig: (data) => apiFetch('/api/config', { method: 'PUT', body: JSON.stringify(data) }),
+ 
+   broadcastSend: (text, jids) =>
+     apiFetch('/api/broadcast/send', { method: 'POST', body: JSON.stringify({ text, jids }) }),
+   scheduledList: () => apiFetch('/api/broadcast/scheduled'),
+   scheduledCreate: (text, scheduledAt) =>
+     apiFetch('/api/broadcast/scheduled', { method: 'POST', body: JSON.stringify({ text, scheduledAt }) }),
+   scheduledCancel: (id) => apiFetch(`/api/broadcast/scheduled/${id}`, { method: 'DELETE' }),
+ 
+   dashboardStatus: () => apiFetch('/api/dashboard/status'),
+ 
+   logs: (status = 'all', page = 1, limit = 20) =>
+     apiFetch(`/api/logs?status=${status}&page=${page}&limit=${limit}`),
+   logsClear: () => apiFetch('/api/logs/clear', { method: 'DELETE' }),
+ }
+ 
+ export function openQRSocket(token, handlers = {}) {
+   const wsBase = BASE.replace('http', 'ws')
+-  const ws = new WebSocket(`${wsBase}/api/session/qr?token=${token}`)
++  const ws = new WebSocket(`${wsBase}/api/session/qr`, ['wabot-auth', token])
+ 
+   if (typeof handlers === 'function') {
+     ws.onmessage = (e) => { try { handlers(JSON.parse(e.data)) } catch {} }
+     return ws
+   }
+ 
+   const { onMessage, onError, onClose, onOpen } = handlers
+   ws.onmessage = (e) => { try { onMessage?.(JSON.parse(e.data)) } catch {} }
+   ws.onerror = (event) => onError?.(event)
+   ws.onclose = (event) => onClose?.(event)
+   ws.onopen = (event) => onOpen?.(event)
+ 
+   return ws
+ }
+diff --git a/patches/http-only-migration.patch b/patches/http-only-migration.patch
+new file mode 100644
+index 0000000000000000000000000000000000000000..25ae9a897cf85161a6e729f19305ae9be1e26aae
+--- /dev/null
++++ b/patches/http-only-migration.patch
+@@ -0,0 +1,382 @@
++diff --git a/PLANO_MIGRACAO_HTTPONLY.md b/PLANO_MIGRACAO_HTTPONLY.md
++new file mode 100644
++index 0000000..a570e05
++--- /dev/null
+++++ b/PLANO_MIGRACAO_HTTPONLY.md
++@@ -0,0 +1,28 @@
+++# Plano de migração: localStorage -> cookie HttpOnly (INFRA-AUTH-STORAGE-005)
+++
+++## Objetivo
+++Eliminar armazenamento de JWT de autenticação em `localStorage` e adotar sessão via cookie `HttpOnly` + `Secure` + `SameSite`.
+++
+++## Status aplicado
+++- Backend autentica sessões do dashboard exclusivamente pelo cookie `wb_auth`.
+++- Login e registro emitem cookie `HttpOnly` e não retornam mais o JWT no corpo da resposta.
+++- Frontend envia cookies com `credentials: 'include'` em todas as chamadas da API.
+++- Guarda de rota do dashboard valida sessão via `/api/auth/me`, sem consultar token em `localStorage`.
+++- Logout chama `/api/auth/logout`, que limpa o cookie de sessão.
+++- WebSocket de QR usa ticket efêmero (`/api/session/qr-ticket`) com expiração curta, sem reutilizar o JWT de sessão.
+++
+++## Configuração operacional
+++- Em produção HTTPS, manter `COOKIE_SECURE=true` (padrão).
+++- Em ambiente temporário sem HTTPS, usar `COOKIE_SECURE=false` apenas como exceção controlada, pois isso reduz a proteção do cookie.
+++- Manter `CORS_ORIGINS` restrito às origens reais do dashboard/API.
+++
+++## Validação pós-deploy
+++- Realizar login e confirmar que não há token de autenticação em `localStorage`.
+++- Confirmar que a resposta de login contém `Set-Cookie: wb_auth=...; HttpOnly`.
+++- Abrir o dashboard e validar que `/api/auth/me` retorna 200 usando cookie.
+++- Iniciar QR e confirmar que o WebSocket usa `/api/session/qr` sem token na URL.
+++- Executar logout e confirmar que `/api/auth/me` passa a retornar 401.
+++
+++## Rollback
+++- Restaurar temporariamente emissão/uso de Bearer token no frontend e no middleware se o proxy bloquear cookies.
+++- Manter `COOKIE_SECURE=false` somente em ambiente sem TLS enquanto HTTPS não estiver disponível.
++diff --git a/dashboard/app/dashboard/layout.js b/dashboard/app/dashboard/layout.js
++index c0a7cf7..6993c50 100644
++--- a/dashboard/app/dashboard/layout.js
+++++ b/dashboard/app/dashboard/layout.js
++@@ -2,23 +2,28 @@
++ import { useEffect, useState } from 'react'
++ import { useRouter, usePathname } from 'next/navigation'
++ import Link from 'next/link'
+++import { api } from '@/lib/api'
++ 
++ export default function DashboardLayout({ children }) {
++   const router = useRouter()
++   const pathname = usePathname()
++ 
+++  const [checkingAuth, setCheckingAuth] = useState(true)
+++  const [menuOpen, setMenuOpen] = useState(false)
+++
++   useEffect(() => {
++-    const token = localStorage.getItem('token')
++-    if (!token) router.replace('/login')
+++    let active = true
+++    api.me()
+++      .then(() => { if (active) setCheckingAuth(false) })
+++      .catch(() => { if (active) router.replace('/login') })
+++    return () => { active = false }
++   }, [router])
++ 
++-  function logout() {
++-    localStorage.removeItem('token')
+++  async function logout() {
+++    await api.logout().catch(() => {})
++     router.push('/login')
++   }
++ 
++-  const [menuOpen, setMenuOpen] = useState(false)
++-
++   const navGroups = [
++     {
++       title: 'Operação',
++@@ -49,6 +54,8 @@ export default function DashboardLayout({ children }) {
++     setMenuOpen(false)
++   }
++ 
+++  if (checkingAuth) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-sm text-gray-600">Validando sessão...</div>
+++
++   return (
++     <div className="min-h-screen flex bg-gray-50">
++       <aside className="w-56 bg-green-700 text-white flex flex-col">
++diff --git a/dashboard/app/dashboard/page.js b/dashboard/app/dashboard/page.js
++index c6b6989..e959446 100644
++--- a/dashboard/app/dashboard/page.js
+++++ b/dashboard/app/dashboard/page.js
++@@ -31,10 +31,10 @@ export default function DashboardPage() {
++     }
++   }, [])
++ 
++-  const openWS = useCallback(() => {
+++  const openWS = useCallback(async () => {
++     if (wsRef.current) wsRef.current.close()
++-    const token = localStorage.getItem('token')
++-    const ws = openQRSocket(token, {
+++    const { ticket } = await api.sessionQRTicket()
+++    const ws = openQRSocket(ticket, {
++       onOpen: () => setSocketState('connected'),
++       onError: () => setSocketState('error'),
++       onClose: () => setSocketState('closed'),
++@@ -61,7 +61,7 @@ export default function DashboardPage() {
++       .then((s) => {
++         if (!active || !s) return
++         setStatus(s)
++-        if (s.running && s.status === 'connecting') openWS()
+++        if (s.running && s.status === 'connecting') openWS().catch(() => setSocketState('error'))
++       })
++       .catch(() => {})
++     return () => {
++@@ -86,7 +86,7 @@ export default function DashboardPage() {
++     try {
++       await api.sessionStart()
++       const s = await fetchStatus()
++-      if (s?.running && s.status === 'connecting') openWS()
+++      if (s?.running && s.status === 'connecting') await openWS()
++       setTimeout(async () => {
++         const s = await api.sessionStatus().catch(() => null)
++         if (s && !s.running && s.status === 'disconnected') {
++@@ -113,7 +113,7 @@ export default function DashboardPage() {
++       setPairingCode(code)
++       setQrWaitElapsed(0)
++       setFeedback('Código de pareamento gerado.')
++-      openWS()
+++      await openWS()
++     } catch (err) {
++       setError(err.message)
++       if (!status?.running) await fetchStatus().catch(() => {})
++diff --git a/dashboard/app/login/page.js b/dashboard/app/login/page.js
++index 218e275..14cda0a 100644
++--- a/dashboard/app/login/page.js
+++++ b/dashboard/app/login/page.js
++@@ -15,9 +15,9 @@ function LoginContent() {
++   const [error, setError] = useState(() => {
++     if (typeof window === 'undefined') return ''
++     const reason = new URLSearchParams(window.location.search).get('reason')
++-    const message = localStorage.getItem('loginRedirectMessage')
+++    const message = sessionStorage.getItem('loginRedirectMessage')
++     if (reason === 'session-expired' && message) {
++-      localStorage.removeItem('loginRedirectMessage')
+++      sessionStorage.removeItem('loginRedirectMessage')
++       return message
++     }
++     return ''
++@@ -31,10 +31,8 @@ function LoginContent() {
++     setSuccess('')
++     setLoading(true)
++     try {
++-      const res = isRegister
++-        ? await api.register(email, password, ref)
++-        : await api.login(email, password)
++-      localStorage.setItem('token', res.token)
+++      if (isRegister) await api.register(email, password, ref)
+++      else await api.login(email, password)
++       setSuccess(isRegister ? 'Conta criada com sucesso. Redirecionando...' : 'Login realizado. Redirecionando...')
++       setTimeout(() => router.push('/dashboard'), 300)
++     } catch (err) {
++diff --git a/dashboard/lib/api.js b/dashboard/lib/api.js
++index c550a07..57b088b 100644
++--- a/dashboard/lib/api.js
+++++ b/dashboard/lib/api.js
++@@ -1,25 +1,18 @@
++ const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
++ const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou ou foi invalidada. Faça login novamente para continuar.'
++ 
++-function getToken() {
++-  if (typeof window === 'undefined') return null
++-  return localStorage.getItem('token')
++-}
++-
++ async function apiFetch(path, options = {}) {
++-  const token = getToken()
++   const res = await fetch(`${BASE}${path}`, {
++     ...options,
+++    credentials: 'include',
++     headers: {
++       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
++-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
++       ...(options.headers ?? {}),
++     },
++   })
++   const data = await res.json().catch(() => ({}))
++   if (res.status === 401 && !path.startsWith('/api/auth/')) {
++-    localStorage.removeItem('token')
++-    localStorage.setItem('loginRedirectMessage', SESSION_EXPIRED_MESSAGE)
+++    sessionStorage.setItem('loginRedirectMessage', SESSION_EXPIRED_MESSAGE)
++     window.location.replace('/login?reason=session-expired')
++     return
++   }
++@@ -42,12 +35,14 @@ export const api = {
++     apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password, ...(ref && { ref }) }) }),
++ 
++   me: () => apiFetch('/api/auth/me'),
+++  logout: () => apiFetch('/api/auth/logout', { method: 'POST' }),
++ 
++   sessionStatus: () => apiFetch('/api/session/status'),
++   sessionStart: () => apiFetch('/api/session/start', { method: 'POST' }),
++   sessionStop: () => apiFetch('/api/session/stop', { method: 'POST' }),
++   sessionForget: () => apiFetch('/api/session/forget', { method: 'POST' }),
++   sessionPairingCode: (phone) => apiFetch('/api/session/pairing-code', { method: 'POST', body: JSON.stringify({ phone }) }),
+++  sessionQRTicket: () => apiFetch('/api/session/qr-ticket', { method: 'POST' }),
++   sessionWAGroups: () => apiFetch('/api/session/wa-groups'),
++ 
++   groups: () => apiFetch('/api/groups'),
++@@ -84,7 +79,7 @@ export const api = {
++ 
++ export function openQRSocket(token, handlers = {}) {
++   const wsBase = BASE.replace('http', 'ws')
++-  const ws = new WebSocket(`${wsBase}/api/session/qr?token=${token}`)
+++  const ws = new WebSocket(`${wsBase}/api/session/qr`, ['wabot-auth', token])
++ 
++   if (typeof handlers === 'function') {
++     ws.onmessage = (e) => { try { handlers(JSON.parse(e.data)) } catch {} }
++diff --git a/src/api/routes/auth.js b/src/api/routes/auth.js
++index 90b2f71..3857166 100644
++--- a/src/api/routes/auth.js
+++++ b/src/api/routes/auth.js
++@@ -2,6 +2,20 @@ import bcrypt from 'bcryptjs'
++ import { randomBytes } from 'crypto'
++ import db from '../../db.js'
++ 
+++function setAuthCookie(reply, token) {
+++  const secure = process.env.COOKIE_SECURE !== 'false'
+++  const maxAge = 60 * 60 * 24 * 7
+++  const parts = [
+++    `wb_auth=${encodeURIComponent(token)}`,
+++    'Path=/',
+++    'HttpOnly',
+++    'SameSite=Lax',
+++    `Max-Age=${maxAge}`,
+++  ]
+++  if (secure) parts.push('Secure')
+++  reply.header('Set-Cookie', parts.join('; '))
+++}
+++
++ export async function authRoutes(app) {
++   app.post('/register', async (req, reply) => {
++     const { email: rawEmail, password, ref } = req.body ?? {}
++@@ -40,8 +54,9 @@ export async function authRoutes(app) {
++       })
++     }
++ 
++-    const token = app.jwt.sign({ sub: user.id, email: user.email })
++-    return { token, user: { id: user.id, email: user.email, plan: user.plan, trialExpiresAt } }
+++    const token = app.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: '7d' })
+++    setAuthCookie(reply, token)
+++    return { user: { id: user.id, email: user.email, plan: user.plan, trialExpiresAt } }
++   })
++ 
++   app.post('/login', async (req, reply) => {
++@@ -55,8 +70,14 @@ export async function authRoutes(app) {
++     const valid = await bcrypt.compare(password, user.passwordHash)
++     if (!valid) return reply.code(401).send({ error: 'Credenciais inválidas' })
++ 
++-    const token = app.jwt.sign({ sub: user.id, email: user.email })
++-    return { token, user: { id: user.id, email: user.email, plan: user.plan, trialExpiresAt: user.trialExpiresAt } }
+++    const token = app.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: '7d' })
+++    setAuthCookie(reply, token)
+++    return { user: { id: user.id, email: user.email, plan: user.plan, trialExpiresAt: user.trialExpiresAt } }
+++  })
+++
+++  app.post('/logout', async (_req, reply) => {
+++    reply.header('Set-Cookie', 'wb_auth=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0')
+++    return { ok: true }
++   })
++ 
++   app.get('/me', { onRequest: [app.authenticate] }, async (req) => {
++diff --git a/src/api/routes/session.js b/src/api/routes/session.js
++index 602eb69..6a89768 100644
++--- a/src/api/routes/session.js
+++++ b/src/api/routes/session.js
++@@ -85,12 +85,22 @@ export async function sessionRoutes(app) {
++     return { ok: true }
++   })
++ 
++-  // WebSocket: emite QR em tempo real (token via query string porque browser não envia headers em WS)
+++  app.post('/qr-ticket', { onRequest: [app.authenticate] }, async (req) => {
+++    return {
+++      ticket: app.jwt.sign({ sub: req.user.sub, purpose: 'qr_ws' }, { expiresIn: '2m' }),
+++    }
+++  })
+++
+++  // WebSocket: emite QR em tempo real (ticket efêmero via subprotocol para não expor segredo na URL)
++   app.get('/qr', { websocket: true }, (socket, req) => {
++     let userId
++     try {
++-      const token = req.query.token
+++      const rawProtocols = req.headers['sec-websocket-protocol'] ?? ''
+++      const protocols = rawProtocols.split(',').map((value) => value.trim()).filter(Boolean)
+++      const [scheme, token] = protocols
+++      if (scheme !== 'wabot-auth' || !token) throw new Error('Token WS ausente')
++       const decoded = app.jwt.verify(token)
+++      if (decoded.purpose !== 'qr_ws') throw new Error('Ticket WS inválido')
++       userId = decoded.sub
++     } catch {
++       socket.send(JSON.stringify({ type: 'error', message: 'Não autorizado' }))
++diff --git a/src/api/server.js b/src/api/server.js
++index 83f0a59..2cfe9a5 100644
++--- a/src/api/server.js
+++++ b/src/api/server.js
++@@ -15,7 +15,39 @@ import { dashboardRoutes } from './routes/dashboard.js'
++ import { logsRoutes } from './routes/logs.js'
++ import db from '../db.js'
++ 
++-const app = Fastify({ logger: true })
+++const app = Fastify({ logger: true, trustProxy: true })
+++
+++const DEFAULT_ALLOWED_ORIGINS = [
+++  'http://localhost:3000',
+++  'http://127.0.0.1:3000',
+++  'http://178.105.54.0',
+++  'https://178.105.54.0',
+++]
+++
+++function getAllowedOrigins() {
+++  const configured = process.env.CORS_ORIGINS
+++    ?.split(',')
+++    .map((origin) => origin.trim())
+++    .filter(Boolean)
+++
+++  return configured?.length ? configured : DEFAULT_ALLOWED_ORIGINS
+++}
+++
+++const allowedOrigins = new Set(getAllowedOrigins())
+++app.log.info({ allowedOrigins: [...allowedOrigins] }, 'CORS allowlist carregada')
+++
+++function isOriginAllowed(origin) {
+++  if (!origin) return true
+++  return allowedOrigins.has(origin)
+++}
+++
+++function getTokenFromCookie(cookieHeader, cookieName = 'wb_auth') {
+++  if (!cookieHeader) return null
+++  const parts = cookieHeader.split(';').map((part) => part.trim())
+++  const target = parts.find((part) => part.startsWith(`${cookieName}=`))
+++  if (!target) return null
+++  return decodeURIComponent(target.slice(cookieName.length + 1))
+++}
++ 
++ async function verifyDatabase() {
++   await db.$queryRaw`SELECT 1`
++@@ -33,13 +65,38 @@ async function ensureDatabaseReady() {
++   }
++ }
++ 
++-await app.register(fastifyCors, { origin: true, methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS'] })
+++await app.register(fastifyCors, {
+++  origin(origin, cb) {
+++    if (isOriginAllowed(origin)) return cb(null, true)
+++    cb(new Error('Origem não permitida por CORS'), false)
+++  },
+++  methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+++  credentials: true,
+++})
+++
+++app.addHook('onSend', async (req, reply) => {
+++  reply.header('X-Content-Type-Options', 'nosniff')
+++  reply.header('X-Frame-Options', 'DENY')
+++  reply.header('Referrer-Policy', 'no-referrer')
+++  reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+++  reply.header('Content-Security-Policy', "default-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+++
+++  if (req.protocol === 'https') {
+++    reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+++  }
+++})
+++
++ await app.register(fastifyJwt, { secret: process.env.JWT_SECRET })
++ await app.register(fastifyWebsocket)
++ 
++ app.decorate('authenticate', async function (req, reply) {
++-  try { await req.jwtVerify() }
++-  catch { reply.code(401).send({ error: 'Não autorizado' }) }
+++  try {
+++    const token = getTokenFromCookie(req.headers.cookie)
+++    if (!token) throw new Error('Token ausente')
+++    req.user = app.jwt.verify(token)
+++  } catch {
+++    reply.code(401).send({ error: 'Não autorizado' })
+++  }
++ })
++ 
++ app.register(authRoutes, { prefix: '/api/auth' })
+diff --git a/src/api/routes/auth.js b/src/api/routes/auth.js
+index 90b2f71546030fdf0fd36addb2e7e6a442a6f476..3857166cf569e1ec68870fdd23317a550f774d63 100644
+--- a/src/api/routes/auth.js
++++ b/src/api/routes/auth.js
+@@ -1,77 +1,98 @@
+ import bcrypt from 'bcryptjs'
+ import { randomBytes } from 'crypto'
+ import db from '../../db.js'
+ 
++function setAuthCookie(reply, token) {
++  const secure = process.env.COOKIE_SECURE !== 'false'
++  const maxAge = 60 * 60 * 24 * 7
++  const parts = [
++    `wb_auth=${encodeURIComponent(token)}`,
++    'Path=/',
++    'HttpOnly',
++    'SameSite=Lax',
++    `Max-Age=${maxAge}`,
++  ]
++  if (secure) parts.push('Secure')
++  reply.header('Set-Cookie', parts.join('; '))
++}
++
+ export async function authRoutes(app) {
+   app.post('/register', async (req, reply) => {
+     const { email: rawEmail, password, ref } = req.body ?? {}
+     const email = rawEmail?.toLowerCase()
+     if (!email || !password) return reply.code(400).send({ error: 'email e password obrigatórios' })
+     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply.code(400).send({ error: 'Formato de email inválido' })
+     if (password.length < 8) return reply.code(400).send({ error: 'Senha deve ter no mínimo 8 caracteres' })
+ 
+     const existing = await db.user.findUnique({ where: { email } })
+     if (existing) return reply.code(409).send({ error: 'Email já cadastrado' })
+ 
+     const passwordHash = await bcrypt.hash(password, 10)
+     const trialExpiresAt = new Date(Date.now() + 3 * 60 * 60 * 1000)
+     const referralCode = randomBytes(4).toString('hex')
+ 
+     let referrer = null
+     if (ref) {
+       const found = await db.user.findUnique({ where: { referralCode: ref } }).catch(() => null)
+       if (found) {
+         const useCount = await db.user.count({ where: { referredBy: found.id } })
+         if (useCount < 20) referrer = found
+       }
+     }
+ 
+     const user = await db.user.create({
+       data: { email, passwordHash, plan: 'trial', trialExpiresAt, referralCode, referredBy: referrer?.id },
+     })
+ 
+     if (referrer) {
+       const base = referrer.trialExpiresAt && referrer.trialExpiresAt > new Date()
+         ? referrer.trialExpiresAt.getTime()
+         : Date.now()
+       await db.user.update({
+         where: { id: referrer.id },
+         data: { trialExpiresAt: new Date(base + 7 * 24 * 60 * 60 * 1000) },
+       })
+     }
+ 
+-    const token = app.jwt.sign({ sub: user.id, email: user.email })
+-    return { token, user: { id: user.id, email: user.email, plan: user.plan, trialExpiresAt } }
++    const token = app.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: '7d' })
++    setAuthCookie(reply, token)
++    return { user: { id: user.id, email: user.email, plan: user.plan, trialExpiresAt } }
+   })
+ 
+   app.post('/login', async (req, reply) => {
+     const { email: rawEmail, password } = req.body ?? {}
+     const email = rawEmail?.toLowerCase()
+     if (!email || !password) return reply.code(400).send({ error: 'email e password obrigatórios' })
+ 
+     const user = await db.user.findUnique({ where: { email } })
+     if (!user) return reply.code(401).send({ error: 'Credenciais inválidas' })
+ 
+     const valid = await bcrypt.compare(password, user.passwordHash)
+     if (!valid) return reply.code(401).send({ error: 'Credenciais inválidas' })
+ 
+-    const token = app.jwt.sign({ sub: user.id, email: user.email })
+-    return { token, user: { id: user.id, email: user.email, plan: user.plan, trialExpiresAt: user.trialExpiresAt } }
++    const token = app.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: '7d' })
++    setAuthCookie(reply, token)
++    return { user: { id: user.id, email: user.email, plan: user.plan, trialExpiresAt: user.trialExpiresAt } }
++  })
++
++  app.post('/logout', async (_req, reply) => {
++    reply.header('Set-Cookie', 'wb_auth=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0')
++    return { ok: true }
+   })
+ 
+   app.get('/me', { onRequest: [app.authenticate] }, async (req) => {
+     let user = await db.user.findUnique({
+       where: { id: req.user.sub },
+       select: { id: true, email: true, plan: true, trialExpiresAt: true, referralCode: true, createdAt: true },
+     })
+     if (!user.referralCode) {
+       const referralCode = randomBytes(4).toString('hex')
+       user = await db.user.update({
+         where: { id: req.user.sub },
+         data: { referralCode },
+         select: { id: true, email: true, plan: true, trialExpiresAt: true, referralCode: true, createdAt: true },
+       })
+     }
+     return user
+   })
+ }
+diff --git a/src/api/routes/session.js b/src/api/routes/session.js
+index 602eb69423d27ddeea7e5c3614d58ee782be684d..6a897689bf8acffd053ff871cb1e654db1b80d01 100644
+--- a/src/api/routes/session.js
++++ b/src/api/routes/session.js
+@@ -63,56 +63,66 @@ export async function sessionRoutes(app) {
+       const code = await requestPairingCode(userId, normalized)
+       return { code }
+     } catch (err) {
+       const appErr = mapInfraError(err)
+       req.log.error({ err, userId, phone: normalized, code: appErr.code }, 'Falha técnica ao solicitar pairing code')
+       return reply.code(appErr.statusCode).send({
+         code: appErr.code,
+         message: appErr.message,
+         retryable: appErr.retryable,
+       })
+     }
+   })
+ 
+   app.post('/forget', { onRequest: [app.authenticate] }, async (req, reply) => {
+     const userId = req.user.sub
+     stopBot(userId)
+     await db.waSession.updateMany({
+       where: { userId },
+       data: { status: 'disconnected', phone: null },
+     }).catch(() => {})
+     const authDir = resolve(`./auth_info/${userId}`)
+     await rm(authDir, { recursive: true, force: true })
+     return { ok: true }
+   })
+ 
+-  // WebSocket: emite QR em tempo real (token via query string porque browser não envia headers em WS)
++  app.post('/qr-ticket', { onRequest: [app.authenticate] }, async (req) => {
++    return {
++      ticket: app.jwt.sign({ sub: req.user.sub, purpose: 'qr_ws' }, { expiresIn: '2m' }),
++    }
++  })
++
++  // WebSocket: emite QR em tempo real (ticket efêmero via subprotocol para não expor segredo na URL)
+   app.get('/qr', { websocket: true }, (socket, req) => {
+     let userId
+     try {
+-      const token = req.query.token
++      const rawProtocols = req.headers['sec-websocket-protocol'] ?? ''
++      const protocols = rawProtocols.split(',').map((value) => value.trim()).filter(Boolean)
++      const [scheme, token] = protocols
++      if (scheme !== 'wabot-auth' || !token) throw new Error('Token WS ausente')
+       const decoded = app.jwt.verify(token)
++      if (decoded.purpose !== 'qr_ws') throw new Error('Ticket WS inválido')
+       userId = decoded.sub
+     } catch {
+       socket.send(JSON.stringify({ type: 'error', message: 'Não autorizado' }))
+       socket.close()
+       return
+     }
+ 
+     if (!isRunning(userId)) {
+       socket.send(JSON.stringify({ type: 'error', message: 'Bot não está rodando' }))
+       socket.close()
+       return
+     }
+ 
+     const unsubQR = onQR(userId, (qr) => {
+       if (socket.readyState === 1) socket.send(JSON.stringify({ type: 'qr', data: qr }))
+     })
+ 
+     const unsubStatus = onStatus(userId, (status, phone) => {
+       if (socket.readyState === 1) socket.send(JSON.stringify({ type: 'status', data: status, phone }))
+       if (status === 'connected') socket.close()
+     })
+ 
+     socket.on('close', () => { unsubQR(); unsubStatus() })
+   })
+ }
+diff --git a/src/api/server.js b/src/api/server.js
+index 83f0a59cbb2f098301179a31414a3526a8ac85cb..2cfe9a5eb5a4f479f24583b6e2efe32925282fa8 100644
+--- a/src/api/server.js
++++ b/src/api/server.js
+@@ -1,67 +1,124 @@
+ import 'dotenv/config'
+ import Fastify from 'fastify'
+ import fastifyJwt from '@fastify/jwt'
+ import fastifyWebsocket from '@fastify/websocket'
+ import fastifyCors from '@fastify/cors'
+ 
+ import { authRoutes } from './routes/auth.js'
+ import { sessionRoutes } from './routes/session.js'
+ import { groupsRoutes } from './routes/groups.js'
+ import { credentialsRoutes } from './routes/credentials.js'
+ import { paymentsRoutes } from './routes/payments.js'
+ import { configRoutes } from './routes/config.js'
+ import { broadcastRoutes } from './routes/broadcast.js'
+ import { dashboardRoutes } from './routes/dashboard.js'
+ import { logsRoutes } from './routes/logs.js'
+ import db from '../db.js'
+ 
+-const app = Fastify({ logger: true })
++const app = Fastify({ logger: true, trustProxy: true })
++
++const DEFAULT_ALLOWED_ORIGINS = [
++  'http://localhost:3000',
++  'http://127.0.0.1:3000',
++  'http://178.105.54.0',
++  'https://178.105.54.0',
++]
++
++function getAllowedOrigins() {
++  const configured = process.env.CORS_ORIGINS
++    ?.split(',')
++    .map((origin) => origin.trim())
++    .filter(Boolean)
++
++  return configured?.length ? configured : DEFAULT_ALLOWED_ORIGINS
++}
++
++const allowedOrigins = new Set(getAllowedOrigins())
++app.log.info({ allowedOrigins: [...allowedOrigins] }, 'CORS allowlist carregada')
++
++function isOriginAllowed(origin) {
++  if (!origin) return true
++  return allowedOrigins.has(origin)
++}
++
++function getTokenFromCookie(cookieHeader, cookieName = 'wb_auth') {
++  if (!cookieHeader) return null
++  const parts = cookieHeader.split(';').map((part) => part.trim())
++  const target = parts.find((part) => part.startsWith(`${cookieName}=`))
++  if (!target) return null
++  return decodeURIComponent(target.slice(cookieName.length + 1))
++}
+ 
+ async function verifyDatabase() {
+   await db.$queryRaw`SELECT 1`
+   // Verifica schema esperado (captura banco sem migrations)
+   await db.user.count()
+ }
+ 
+ async function ensureDatabaseReady() {
+   try {
+     await verifyDatabase()
+     app.log.info('Banco de dados pronto para receber tráfego')
+   } catch (err) {
+     app.log.error({ err: err.message }, 'Banco de dados indisponível ou sem migrations aplicadas')
+     throw new Error('Falha na inicialização do banco. Execute: npx prisma migrate deploy e reinicie a API.')
+   }
+ }
+ 
+-await app.register(fastifyCors, { origin: true, methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS'] })
++await app.register(fastifyCors, {
++  origin(origin, cb) {
++    if (isOriginAllowed(origin)) return cb(null, true)
++    cb(new Error('Origem não permitida por CORS'), false)
++  },
++  methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
++  credentials: true,
++})
++
++app.addHook('onSend', async (req, reply) => {
++  reply.header('X-Content-Type-Options', 'nosniff')
++  reply.header('X-Frame-Options', 'DENY')
++  reply.header('Referrer-Policy', 'no-referrer')
++  reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
++  reply.header('Content-Security-Policy', "default-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
++
++  if (req.protocol === 'https') {
++    reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
++  }
++})
++
+ await app.register(fastifyJwt, { secret: process.env.JWT_SECRET })
+ await app.register(fastifyWebsocket)
+ 
+ app.decorate('authenticate', async function (req, reply) {
+-  try { await req.jwtVerify() }
+-  catch { reply.code(401).send({ error: 'Não autorizado' }) }
++  try {
++    const token = getTokenFromCookie(req.headers.cookie)
++    if (!token) throw new Error('Token ausente')
++    req.user = app.jwt.verify(token)
++  } catch {
++    reply.code(401).send({ error: 'Não autorizado' })
++  }
+ })
+ 
+ app.register(authRoutes, { prefix: '/api/auth' })
+ app.register(sessionRoutes, { prefix: '/api/session' })
+ app.register(groupsRoutes, { prefix: '/api/groups' })
+ app.register(credentialsRoutes, { prefix: '/api/credentials' })
+ app.register(paymentsRoutes, { prefix: '/api/payments' })
+ app.register(configRoutes, { prefix: '/api/config' })
+ app.register(broadcastRoutes, { prefix: '/api/broadcast' })
+ app.register(dashboardRoutes, { prefix: '/api/dashboard' })
+ app.register(logsRoutes, { prefix: '/api/logs' })
+ 
+ // Liveness: processo está de pé
+ app.get('/health', () => ({ ok: true }))
+ 
+ // Readiness: dependências estão prontas para receber tráfego
+ app.get('/ready', async (req, reply) => {
+   try {
+     await verifyDatabase()
+     return { ok: true }
+   } catch {
+     return reply.code(503).send({ ok: false, error: 'Banco indisponível' })
+   }
+ })
+ 

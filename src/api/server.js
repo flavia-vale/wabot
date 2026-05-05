@@ -15,7 +15,39 @@ import { dashboardRoutes } from './routes/dashboard.js'
 import { logsRoutes } from './routes/logs.js'
 import db from '../db.js'
 
-const app = Fastify({ logger: true })
+const app = Fastify({ logger: true, trustProxy: true })
+
+const DEFAULT_ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://178.105.54.0',
+  'https://178.105.54.0',
+]
+
+function getAllowedOrigins() {
+  const configured = process.env.CORS_ORIGINS
+    ?.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+
+  return configured?.length ? configured : DEFAULT_ALLOWED_ORIGINS
+}
+
+const allowedOrigins = new Set(getAllowedOrigins())
+app.log.info({ allowedOrigins: [...allowedOrigins] }, 'CORS allowlist carregada')
+
+function isOriginAllowed(origin) {
+  if (!origin) return true
+  return allowedOrigins.has(origin)
+}
+
+function getTokenFromCookie(cookieHeader, cookieName = 'wb_auth') {
+  if (!cookieHeader) return null
+  const parts = cookieHeader.split(';').map((part) => part.trim())
+  const target = parts.find((part) => part.startsWith(`${cookieName}=`))
+  if (!target) return null
+  return decodeURIComponent(target.slice(cookieName.length + 1))
+}
 
 async function verifyDatabase() {
   await db.$queryRaw`SELECT 1`
@@ -33,13 +65,38 @@ async function ensureDatabaseReady() {
   }
 }
 
-await app.register(fastifyCors, { origin: true, methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS'] })
+await app.register(fastifyCors, {
+  origin(origin, cb) {
+    if (isOriginAllowed(origin)) return cb(null, true)
+    cb(new Error('Origem não permitida por CORS'), false)
+  },
+  methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  credentials: true,
+})
+
+app.addHook('onSend', async (req, reply) => {
+  reply.header('X-Content-Type-Options', 'nosniff')
+  reply.header('X-Frame-Options', 'DENY')
+  reply.header('Referrer-Policy', 'no-referrer')
+  reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  reply.header('Content-Security-Policy', "default-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+
+  if (req.protocol === 'https') {
+    reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+  }
+})
+
 await app.register(fastifyJwt, { secret: process.env.JWT_SECRET })
 await app.register(fastifyWebsocket)
 
 app.decorate('authenticate', async function (req, reply) {
-  try { await req.jwtVerify() }
-  catch { reply.code(401).send({ error: 'Não autorizado' }) }
+  try {
+    const token = getTokenFromCookie(req.headers.cookie)
+    if (!token) throw new Error('Token ausente')
+    req.user = app.jwt.verify(token)
+  } catch {
+    reply.code(401).send({ error: 'Não autorizado' })
+  }
 })
 
 app.register(authRoutes, { prefix: '/api/auth' })

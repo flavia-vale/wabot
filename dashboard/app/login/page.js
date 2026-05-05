@@ -15,9 +15,9 @@ function LoginContent() {
   const [error, setError] = useState(() => {
     if (typeof window === 'undefined') return ''
     const reason = new URLSearchParams(window.location.search).get('reason')
-    const message = localStorage.getItem('loginRedirectMessage')
+    const message = sessionStorage.getItem('loginRedirectMessage')
     if (reason === 'session-expired' && message) {
-      localStorage.removeItem('loginRedirectMessage')
+      sessionStorage.removeItem('loginRedirectMessage')
       return message
     }
     return ''
@@ -31,10 +31,8 @@ function LoginContent() {
     setSuccess('')
     setLoading(true)
     try {
-      const res = isRegister
-        ? await api.register(email, password, ref)
-        : await api.login(email, password)
-      localStorage.setItem('token', res.token)
+      if (isRegister) await api.register(email, password, ref)
+      else await api.login(email, password)
       setSuccess(isRegister ? 'Conta criada com sucesso. Redirecionando...' : 'Login realizado. Redirecionando...')
       setTimeout(() => router.push('/dashboard'), 300)
     } catch (err) {

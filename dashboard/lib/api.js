@@ -1,25 +1,18 @@
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou ou foi invalidada. Faça login novamente para continuar.'
 
-function getToken() {
-  if (typeof window === 'undefined') return null
-  return localStorage.getItem('token')
-}
-
 async function apiFetch(path, options = {}) {
-  const token = getToken()
   const res = await fetch(`${BASE}${path}`, {
     ...options,
+    credentials: 'include',
     headers: {
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers ?? {}),
     },
   })
   const data = await res.json().catch(() => ({}))
   if (res.status === 401 && !path.startsWith('/api/auth/')) {
-    localStorage.removeItem('token')
-    localStorage.setItem('loginRedirectMessage', SESSION_EXPIRED_MESSAGE)
+    sessionStorage.setItem('loginRedirectMessage', SESSION_EXPIRED_MESSAGE)
     window.location.replace('/login?reason=session-expired')
     return
   }
@@ -42,12 +35,14 @@ export const api = {
     apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password, ...(ref && { ref }) }) }),
 
   me: () => apiFetch('/api/auth/me'),
+  logout: () => apiFetch('/api/auth/logout', { method: 'POST' }),
 
   sessionStatus: () => apiFetch('/api/session/status'),
   sessionStart: () => apiFetch('/api/session/start', { method: 'POST' }),
   sessionStop: () => apiFetch('/api/session/stop', { method: 'POST' }),
   sessionForget: () => apiFetch('/api/session/forget', { method: 'POST' }),
   sessionPairingCode: (phone) => apiFetch('/api/session/pairing-code', { method: 'POST', body: JSON.stringify({ phone }) }),
+  sessionQRTicket: () => apiFetch('/api/session/qr-ticket', { method: 'POST' }),
   sessionWAGroups: () => apiFetch('/api/session/wa-groups'),
 
   groups: () => apiFetch('/api/groups'),
@@ -84,7 +79,7 @@ export const api = {
 
 export function openQRSocket(token, handlers = {}) {
   const wsBase = BASE.replace('http', 'ws')
-  const ws = new WebSocket(`${wsBase}/api/session/qr?token=${token}`)
+  const ws = new WebSocket(`${wsBase}/api/session/qr`, ['wabot-auth', token])
 
   if (typeof handlers === 'function') {
     ws.onmessage = (e) => { try { handlers(JSON.parse(e.data)) } catch {} }

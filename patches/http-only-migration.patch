@@ -1,0 +1,382 @@
+diff --git a/PLANO_MIGRACAO_HTTPONLY.md b/PLANO_MIGRACAO_HTTPONLY.md
+new file mode 100644
+index 0000000..a570e05
+--- /dev/null
++++ b/PLANO_MIGRACAO_HTTPONLY.md
+@@ -0,0 +1,28 @@
++# Plano de migração: localStorage -> cookie HttpOnly (INFRA-AUTH-STORAGE-005)
++
++## Objetivo
++Eliminar armazenamento de JWT de autenticação em `localStorage` e adotar sessão via cookie `HttpOnly` + `Secure` + `SameSite`.
++
++## Status aplicado
++- Backend autentica sessões do dashboard exclusivamente pelo cookie `wb_auth`.
++- Login e registro emitem cookie `HttpOnly` e não retornam mais o JWT no corpo da resposta.
++- Frontend envia cookies com `credentials: 'include'` em todas as chamadas da API.
++- Guarda de rota do dashboard valida sessão via `/api/auth/me`, sem consultar token em `localStorage`.
++- Logout chama `/api/auth/logout`, que limpa o cookie de sessão.
++- WebSocket de QR usa ticket efêmero (`/api/session/qr-ticket`) com expiração curta, sem reutilizar o JWT de sessão.
++
++## Configuração operacional
++- Em produção HTTPS, manter `COOKIE_SECURE=true` (padrão).
++- Em ambiente temporário sem HTTPS, usar `COOKIE_SECURE=false` apenas como exceção controlada, pois isso reduz a proteção do cookie.
++- Manter `CORS_ORIGINS` restrito às origens reais do dashboard/API.
++
++## Validação pós-deploy
++- Realizar login e confirmar que não há token de autenticação em `localStorage`.
++- Confirmar que a resposta de login contém `Set-Cookie: wb_auth=...; HttpOnly`.
++- Abrir o dashboard e validar que `/api/auth/me` retorna 200 usando cookie.
++- Iniciar QR e confirmar que o WebSocket usa `/api/session/qr` sem token na URL.
++- Executar logout e confirmar que `/api/auth/me` passa a retornar 401.
++
++## Rollback
++- Restaurar temporariamente emissão/uso de Bearer token no frontend e no middleware se o proxy bloquear cookies.
++- Manter `COOKIE_SECURE=false` somente em ambiente sem TLS enquanto HTTPS não estiver disponível.
+diff --git a/dashboard/app/dashboard/layout.js b/dashboard/app/dashboard/layout.js
+index c0a7cf7..6993c50 100644
+--- a/dashboard/app/dashboard/layout.js
++++ b/dashboard/app/dashboard/layout.js
+@@ -2,23 +2,28 @@
+ import { useEffect, useState } from 'react'
+ import { useRouter, usePathname } from 'next/navigation'
+ import Link from 'next/link'
++import { api } from '@/lib/api'
+ 
+ export default function DashboardLayout({ children }) {
+   const router = useRouter()
+   const pathname = usePathname()
+ 
++  const [checkingAuth, setCheckingAuth] = useState(true)
++  const [menuOpen, setMenuOpen] = useState(false)
++
+   useEffect(() => {
+-    const token = localStorage.getItem('token')
+-    if (!token) router.replace('/login')
++    let active = true
++    api.me()
++      .then(() => { if (active) setCheckingAuth(false) })
++      .catch(() => { if (active) router.replace('/login') })
++    return () => { active = false }
+   }, [router])
+ 
+-  function logout() {
+-    localStorage.removeItem('token')
++  async function logout() {
++    await api.logout().catch(() => {})
+     router.push('/login')
+   }
+ 
+-  const [menuOpen, setMenuOpen] = useState(false)
+-
+   const navGroups = [
+     {
+       title: 'Operação',
+@@ -49,6 +54,8 @@ export default function DashboardLayout({ children }) {
+     setMenuOpen(false)
+   }
+ 
++  if (checkingAuth) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-sm text-gray-600">Validando sessão...</div>
++
+   return (
+     <div className="min-h-screen flex bg-gray-50">
+       <aside className="w-56 bg-green-700 text-white flex flex-col">
+diff --git a/dashboard/app/dashboard/page.js b/dashboard/app/dashboard/page.js
+index c6b6989..e959446 100644
+--- a/dashboard/app/dashboard/page.js
++++ b/dashboard/app/dashboard/page.js
+@@ -31,10 +31,10 @@ export default function DashboardPage() {
+     }
+   }, [])
+ 
+-  const openWS = useCallback(() => {
++  const openWS = useCallback(async () => {
+     if (wsRef.current) wsRef.current.close()
+-    const token = localStorage.getItem('token')
+-    const ws = openQRSocket(token, {
++    const { ticket } = await api.sessionQRTicket()
++    const ws = openQRSocket(ticket, {
+       onOpen: () => setSocketState('connected'),
+       onError: () => setSocketState('error'),
+       onClose: () => setSocketState('closed'),
+@@ -61,7 +61,7 @@ export default function DashboardPage() {
+       .then((s) => {
+         if (!active || !s) return
+         setStatus(s)
+-        if (s.running && s.status === 'connecting') openWS()
++        if (s.running && s.status === 'connecting') openWS().catch(() => setSocketState('error'))
+       })
+       .catch(() => {})
+     return () => {
+@@ -86,7 +86,7 @@ export default function DashboardPage() {
+     try {
+       await api.sessionStart()
+       const s = await fetchStatus()
+-      if (s?.running && s.status === 'connecting') openWS()
++      if (s?.running && s.status === 'connecting') await openWS()
+       setTimeout(async () => {
+         const s = await api.sessionStatus().catch(() => null)
+         if (s && !s.running && s.status === 'disconnected') {
+@@ -113,7 +113,7 @@ export default function DashboardPage() {
+       setPairingCode(code)
+       setQrWaitElapsed(0)
+       setFeedback('Código de pareamento gerado.')
+-      openWS()
++      await openWS()
+     } catch (err) {
+       setError(err.message)
+       if (!status?.running) await fetchStatus().catch(() => {})
+diff --git a/dashboard/app/login/page.js b/dashboard/app/login/page.js
+index 218e275..14cda0a 100644
+--- a/dashboard/app/login/page.js
++++ b/dashboard/app/login/page.js
+@@ -15,9 +15,9 @@ function LoginContent() {
+   const [error, setError] = useState(() => {
+     if (typeof window === 'undefined') return ''
+     const reason = new URLSearchParams(window.location.search).get('reason')
+-    const message = localStorage.getItem('loginRedirectMessage')
++    const message = sessionStorage.getItem('loginRedirectMessage')
+     if (reason === 'session-expired' && message) {
+-      localStorage.removeItem('loginRedirectMessage')
++      sessionStorage.removeItem('loginRedirectMessage')
+       return message
+     }
+     return ''
+@@ -31,10 +31,8 @@ function LoginContent() {
+     setSuccess('')
+     setLoading(true)
+     try {
+-      const res = isRegister
+-        ? await api.register(email, password, ref)
+-        : await api.login(email, password)
+-      localStorage.setItem('token', res.token)
++      if (isRegister) await api.register(email, password, ref)
++      else await api.login(email, password)
+       setSuccess(isRegister ? 'Conta criada com sucesso. Redirecionando...' : 'Login realizado. Redirecionando...')
+       setTimeout(() => router.push('/dashboard'), 300)
+     } catch (err) {
+diff --git a/dashboard/lib/api.js b/dashboard/lib/api.js
+index c550a07..57b088b 100644
+--- a/dashboard/lib/api.js
++++ b/dashboard/lib/api.js
+@@ -1,25 +1,18 @@
+ const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+ const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou ou foi invalidada. Faça login novamente para continuar.'
+ 
+-function getToken() {
+-  if (typeof window === 'undefined') return null
+-  return localStorage.getItem('token')
+-}
+-
+ async function apiFetch(path, options = {}) {
+-  const token = getToken()
+   const res = await fetch(`${BASE}${path}`, {
+     ...options,
++    credentials: 'include',
+     headers: {
+       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+       ...(options.headers ?? {}),
+     },
+   })
+   const data = await res.json().catch(() => ({}))
+   if (res.status === 401 && !path.startsWith('/api/auth/')) {
+-    localStorage.removeItem('token')
+-    localStorage.setItem('loginRedirectMessage', SESSION_EXPIRED_MESSAGE)
++    sessionStorage.setItem('loginRedirectMessage', SESSION_EXPIRED_MESSAGE)
+     window.location.replace('/login?reason=session-expired')
+     return
+   }
+@@ -42,12 +35,14 @@ export const api = {
+     apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password, ...(ref && { ref }) }) }),
+ 
+   me: () => apiFetch('/api/auth/me'),
++  logout: () => apiFetch('/api/auth/logout', { method: 'POST' }),
+ 
+   sessionStatus: () => apiFetch('/api/session/status'),
+   sessionStart: () => apiFetch('/api/session/start', { method: 'POST' }),
+   sessionStop: () => apiFetch('/api/session/stop', { method: 'POST' }),
+   sessionForget: () => apiFetch('/api/session/forget', { method: 'POST' }),
+   sessionPairingCode: (phone) => apiFetch('/api/session/pairing-code', { method: 'POST', body: JSON.stringify({ phone }) }),
++  sessionQRTicket: () => apiFetch('/api/session/qr-ticket', { method: 'POST' }),
+   sessionWAGroups: () => apiFetch('/api/session/wa-groups'),
+ 
+   groups: () => apiFetch('/api/groups'),
+@@ -84,7 +79,7 @@ export const api = {
+ 
+ export function openQRSocket(token, handlers = {}) {
+   const wsBase = BASE.replace('http', 'ws')
+-  const ws = new WebSocket(`${wsBase}/api/session/qr?token=${token}`)
++  const ws = new WebSocket(`${wsBase}/api/session/qr`, ['wabot-auth', token])
+ 
+   if (typeof handlers === 'function') {
+     ws.onmessage = (e) => { try { handlers(JSON.parse(e.data)) } catch {} }
+diff --git a/src/api/routes/auth.js b/src/api/routes/auth.js
+index 90b2f71..3857166 100644
+--- a/src/api/routes/auth.js
++++ b/src/api/routes/auth.js
+@@ -2,6 +2,20 @@ import bcrypt from 'bcryptjs'
+ import { randomBytes } from 'crypto'
+ import db from '../../db.js'
+ 
++function setAuthCookie(reply, token) {
++  const secure = process.env.COOKIE_SECURE !== 'false'
++  const maxAge = 60 * 60 * 24 * 7
++  const parts = [
++    `wb_auth=${encodeURIComponent(token)}`,
++    'Path=/',
++    'HttpOnly',
++    'SameSite=Lax',
++    `Max-Age=${maxAge}`,
++  ]
++  if (secure) parts.push('Secure')
++  reply.header('Set-Cookie', parts.join('; '))
++}
++
+ export async function authRoutes(app) {
+   app.post('/register', async (req, reply) => {
+     const { email: rawEmail, password, ref } = req.body ?? {}
+@@ -40,8 +54,9 @@ export async function authRoutes(app) {
+       })
+     }
+ 
+-    const token = app.jwt.sign({ sub: user.id, email: user.email })
+-    return { token, user: { id: user.id, email: user.email, plan: user.plan, trialExpiresAt } }
++    const token = app.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: '7d' })
++    setAuthCookie(reply, token)
++    return { user: { id: user.id, email: user.email, plan: user.plan, trialExpiresAt } }
+   })
+ 
+   app.post('/login', async (req, reply) => {
+@@ -55,8 +70,14 @@ export async function authRoutes(app) {
+     const valid = await bcrypt.compare(password, user.passwordHash)
+     if (!valid) return reply.code(401).send({ error: 'Credenciais inválidas' })
+ 
+-    const token = app.jwt.sign({ sub: user.id, email: user.email })
+-    return { token, user: { id: user.id, email: user.email, plan: user.plan, trialExpiresAt: user.trialExpiresAt } }
++    const token = app.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: '7d' })
++    setAuthCookie(reply, token)
++    return { user: { id: user.id, email: user.email, plan: user.plan, trialExpiresAt: user.trialExpiresAt } }
++  })
++
++  app.post('/logout', async (_req, reply) => {
++    reply.header('Set-Cookie', 'wb_auth=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0')
++    return { ok: true }
+   })
+ 
+   app.get('/me', { onRequest: [app.authenticate] }, async (req) => {
+diff --git a/src/api/routes/session.js b/src/api/routes/session.js
+index 602eb69..6a89768 100644
+--- a/src/api/routes/session.js
++++ b/src/api/routes/session.js
+@@ -85,12 +85,22 @@ export async function sessionRoutes(app) {
+     return { ok: true }
+   })
+ 
+-  // WebSocket: emite QR em tempo real (token via query string porque browser não envia headers em WS)
++  app.post('/qr-ticket', { onRequest: [app.authenticate] }, async (req) => {
++    return {
++      ticket: app.jwt.sign({ sub: req.user.sub, purpose: 'qr_ws' }, { expiresIn: '2m' }),
++    }
++  })
++
++  // WebSocket: emite QR em tempo real (ticket efêmero via subprotocol para não expor segredo na URL)
+   app.get('/qr', { websocket: true }, (socket, req) => {
+     let userId
+     try {
+-      const token = req.query.token
++      const rawProtocols = req.headers['sec-websocket-protocol'] ?? ''
++      const protocols = rawProtocols.split(',').map((value) => value.trim()).filter(Boolean)
++      const [scheme, token] = protocols
++      if (scheme !== 'wabot-auth' || !token) throw new Error('Token WS ausente')
+       const decoded = app.jwt.verify(token)
++      if (decoded.purpose !== 'qr_ws') throw new Error('Ticket WS inválido')
+       userId = decoded.sub
+     } catch {
+       socket.send(JSON.stringify({ type: 'error', message: 'Não autorizado' }))
+diff --git a/src/api/server.js b/src/api/server.js
+index 83f0a59..2cfe9a5 100644
+--- a/src/api/server.js
++++ b/src/api/server.js
+@@ -15,7 +15,39 @@ import { dashboardRoutes } from './routes/dashboard.js'
+ import { logsRoutes } from './routes/logs.js'
+ import db from '../db.js'
+ 
+-const app = Fastify({ logger: true })
++const app = Fastify({ logger: true, trustProxy: true })
++
++const DEFAULT_ALLOWED_ORIGINS = [
++  'http://localhost:3000',
++  'http://127.0.0.1:3000',
++  'http://178.105.54.0',
++  'https://178.105.54.0',
++]
++
++function getAllowedOrigins() {
++  const configured = process.env.CORS_ORIGINS
++    ?.split(',')
++    .map((origin) => origin.trim())
++    .filter(Boolean)
++
++  return configured?.length ? configured : DEFAULT_ALLOWED_ORIGINS
++}
++
++const allowedOrigins = new Set(getAllowedOrigins())
++app.log.info({ allowedOrigins: [...allowedOrigins] }, 'CORS allowlist carregada')
++
++function isOriginAllowed(origin) {
++  if (!origin) return true
++  return allowedOrigins.has(origin)
++}
++
++function getTokenFromCookie(cookieHeader, cookieName = 'wb_auth') {
++  if (!cookieHeader) return null
++  const parts = cookieHeader.split(';').map((part) => part.trim())
++  const target = parts.find((part) => part.startsWith(`${cookieName}=`))
++  if (!target) return null
++  return decodeURIComponent(target.slice(cookieName.length + 1))
++}
+ 
+ async function verifyDatabase() {
+   await db.$queryRaw`SELECT 1`
+@@ -33,13 +65,38 @@ async function ensureDatabaseReady() {
+   }
+ }
+ 
+-await app.register(fastifyCors, { origin: true, methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS'] })
++await app.register(fastifyCors, {
++  origin(origin, cb) {
++    if (isOriginAllowed(origin)) return cb(null, true)
++    cb(new Error('Origem não permitida por CORS'), false)
++  },
++  methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
++  credentials: true,
++})
++
++app.addHook('onSend', async (req, reply) => {
++  reply.header('X-Content-Type-Options', 'nosniff')
++  reply.header('X-Frame-Options', 'DENY')
++  reply.header('Referrer-Policy', 'no-referrer')
++  reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
++  reply.header('Content-Security-Policy', "default-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
++
++  if (req.protocol === 'https') {
++    reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
++  }
++})
++
+ await app.register(fastifyJwt, { secret: process.env.JWT_SECRET })
+ await app.register(fastifyWebsocket)
+ 
+ app.decorate('authenticate', async function (req, reply) {
+-  try { await req.jwtVerify() }
+-  catch { reply.code(401).send({ error: 'Não autorizado' }) }
++  try {
++    const token = getTokenFromCookie(req.headers.cookie)
++    if (!token) throw new Error('Token ausente')
++    req.user = app.jwt.verify(token)
++  } catch {
++    reply.code(401).send({ error: 'Não autorizado' })
++  }
+ })
+ 
+ app.register(authRoutes, { prefix: '/api/auth' })

@@ -31,10 +31,10 @@ export default function DashboardPage() {
     }
   }, [])
 
-  const openWS = useCallback(() => {
+  const openWS = useCallback(async () => {
     if (wsRef.current) wsRef.current.close()
-    const token = localStorage.getItem('token')
-    const ws = openQRSocket(token, {
+    const { ticket } = await api.sessionQRTicket()
+    const ws = openQRSocket(ticket, {
       onOpen: () => setSocketState('connected'),
       onError: () => setSocketState('error'),
       onClose: () => setSocketState('closed'),
@@ -61,7 +61,7 @@ export default function DashboardPage() {
       .then((s) => {
         if (!active || !s) return
         setStatus(s)
-        if (s.running && s.status === 'connecting') openWS()
+        if (s.running && s.status === 'connecting') openWS().catch(() => setSocketState('error'))
       })
       .catch(() => {})
     return () => {
@@ -86,7 +86,7 @@ export default function DashboardPage() {
     try {
       await api.sessionStart()
       const s = await fetchStatus()
-      if (s?.running && s.status === 'connecting') openWS()
+      if (s?.running && s.status === 'connecting') await openWS()
       setTimeout(async () => {
         const s = await api.sessionStatus().catch(() => null)
         if (s && !s.running && s.status === 'disconnected') {
@@ -113,7 +113,7 @@ export default function DashboardPage() {
       setPairingCode(code)
       setQrWaitElapsed(0)
       setFeedback('Código de pareamento gerado.')
-      openWS()
+      await openWS()
     } catch (err) {
       setError(err.message)
       if (!status?.running) await fetchStatus().catch(() => {})
