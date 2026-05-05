@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "node src/bot.js",
+    "start": "node src/api/server.js",
     "api": "node src/api/server.js",
     "dashboard": "cd dashboard && npm run dev"
   },
@@ -11,6 +11,7 @@
     "@fastify/cors": "^11.2.0",
     "@fastify/jwt": "^10.0.0",
     "@fastify/websocket": "^11.2.0",
+    "@hapi/boom": "^9.1.4",
     "@prisma/client": "^5.22.0",
     "@whiskeysockets/baileys": "^6.7.16",
     "axios": "^1.7.9",
