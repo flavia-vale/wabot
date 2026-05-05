@@ -41,6 +41,9 @@ export async function groupsRoutes(app) {
     if (imageLinkTarget !== undefined && !['first', 'last'].includes(imageLinkTarget)) {
       return reply.code(400).send({ error: 'imageLinkTarget deve ser first ou last' })
     }
+    if (fallbackToOriginal !== undefined && typeof fallbackToOriginal !== 'boolean') {
+      return reply.code(400).send({ error: 'fallbackToOriginal deve ser boolean' })
+    }
 
     const updated = await db.group.update({
       where: { id: req.params.id },

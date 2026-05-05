@@ -9,6 +9,10 @@ const DEFAULTS = {
   welcomeMsg: '',
 }
 
+function isIntegerInRange(value) {
+  return Number.isInteger(value) && value >= 0 && value <= 300
+}
+
 export async function configRoutes(app) {
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
     const cfg = await db.botConfig.findUnique({ where: { userId: req.user.sub } })
@@ -18,12 +22,21 @@ export async function configRoutes(app) {
   app.put('/', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
     const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg } = req.body ?? {}
-    if (delayMin !== undefined && (delayMin < 0 || delayMin > 300))
-      return reply.code(400).send({ error: 'delayMin deve ser entre 0 e 300' })
-    if (delayMax !== undefined && (delayMax < 0 || delayMax > 300))
-      return reply.code(400).send({ error: 'delayMax deve ser entre 0 e 300' })
-    if (delayMin !== undefined && delayMax !== undefined && delayMin > delayMax)
+
+    if (delayMin !== undefined && !isIntegerInRange(delayMin)) {
+      return reply.code(400).send({ error: 'delayMin deve ser um número inteiro entre 0 e 300' })
+    }
+    if (delayMax !== undefined && !isIntegerInRange(delayMax)) {
+      return reply.code(400).send({ error: 'delayMax deve ser um número inteiro entre 0 e 300' })
+    }
+
+    const existing = await db.botConfig.findUnique({ where: { userId } })
+    const nextDelayMin = delayMin ?? existing?.delayMin ?? DEFAULTS.delayMin
+    const nextDelayMax = delayMax ?? existing?.delayMax ?? DEFAULTS.delayMax
+    if (nextDelayMin > nextDelayMax) {
       return reply.code(400).send({ error: 'delayMin não pode ser maior que delayMax' })
+    }
+
     const cfg = await db.botConfig.upsert({
       where: { userId },
       create: {

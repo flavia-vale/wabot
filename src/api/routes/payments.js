@@ -3,6 +3,7 @@ import { createHmac } from 'crypto'
 import db from '../../db.js'
 
 const MP_WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET
+const IS_PRODUCTION = process.env.NODE_ENV === 'production'
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000'
 const API_URL = process.env.API_URL || 'http://localhost:3001'
 
@@ -33,8 +34,30 @@ function ensurePaymentProviderConfigured(reply) {
 
 
 const PLANS = {
-  basic: { title: 'Bot Conversor para Afiliados Basic', price: 50 },
-  pro:   { title: 'Bot Conversor para Afiliados Pro',   price: 100 },
+  basic: { title: 'Wabot Basic - acesso por 30 dias', price: 50 },
+  pro:   { title: 'Wabot Pro - acesso por 30 dias',   price: 100 },
+}
+
+export function shouldEnforceWebhookSignature({ isProduction = IS_PRODUCTION, secret = MP_WEBHOOK_SECRET } = {}) {
+  return Boolean(secret) || isProduction
+}
+
+export function parseMercadoPagoSignature(signature = '') {
+  return Object.fromEntries(
+    String(signature)
+      .split(',')
+      .map(part => part.trim().split('='))
+      .filter(([key, value]) => key && value)
+  )
+}
+
+export function isValidMercadoPagoWebhookSignature({ signature = '', requestId = '', dataId = '', secret = MP_WEBHOOK_SECRET } = {}) {
+  if (!secret) return false
+  const { ts, v1 } = parseMercadoPagoSignature(signature)
+  if (!ts || !v1 || !requestId || !dataId) return false
+  const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`
+  const expected = createHmac('sha256', secret).update(manifest).digest('hex')
+  return expected === v1
 }
 
 export async function paymentsRoutes(app) {
@@ -71,16 +94,18 @@ export async function paymentsRoutes(app) {
 
   // MP webhook — sem autenticação JWT
   app.post('/webhook', async (req, reply) => {
-    if (MP_WEBHOOK_SECRET) {
-      const signature = req.headers['x-signature'] ?? ''
-      const requestId = req.headers['x-request-id'] ?? ''
-      const dataId = req.query?.['data.id'] ?? req.body?.data?.id ?? ''
-      const parts = Object.fromEntries(signature.split(',').map(p => p.split('=')))
-      const { ts, v1 } = parts
-      if (!ts || !v1) return reply.code(401).send({ error: 'Assinatura ausente' })
-      const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`
-      const expected = createHmac('sha256', MP_WEBHOOK_SECRET).update(manifest).digest('hex')
-      if (expected !== v1) return reply.code(401).send({ error: 'Assinatura inválida' })
+    const signature = req.headers['x-signature'] ?? ''
+    const requestId = req.headers['x-request-id'] ?? ''
+    const dataId = req.query?.['data.id'] ?? req.body?.data?.id ?? ''
+
+    if (shouldEnforceWebhookSignature()) {
+      if (!MP_WEBHOOK_SECRET) {
+        req.log?.error?.('MP_WEBHOOK_SECRET ausente em produção; webhook rejeitado por segurança')
+        return reply.code(500).send({ error: 'Webhook de pagamento sem segredo configurado' })
+      }
+      if (!isValidMercadoPagoWebhookSignature({ signature, requestId, dataId })) {
+        return reply.code(401).send({ error: 'Assinatura inválida ou ausente' })
+      }
     }
 
     const type = req.query?.type ?? req.body?.type
