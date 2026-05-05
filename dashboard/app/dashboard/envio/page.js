@@ -30,6 +30,8 @@ function classifyError(message = '') {
 function StatusBadge({ status }) {
   const map = {
     pending: ['Agendado', 'bg-yellow-100 text-yellow-700'],
+    queued: ['Na fila', 'bg-slate-100 text-slate-700'],
+    sending: ['Enviando', 'bg-blue-100 text-blue-700'],
     sent: ['Enviado', 'bg-green-100 text-green-700'],
     failed: ['Falhou', 'bg-red-100 text-red-600'],
     cancelled: ['Cancelado', 'bg-gray-100 text-gray-500'],
@@ -190,8 +192,8 @@ export default function EnvioPage() {
           {broadcastResult && (
             <Alert
               type="success"
-              title="Envio concluído"
-              message={`Enviado para ${broadcastResult.sent} grupo(s).`}
+              title="Broadcast enfileirado"
+              message={`Enfileirado para ${broadcastResult.queued ?? 0} grupo(s). ${broadcastResult.rejected ? `${broadcastResult.rejected} rejeitado(s) pela fila.` : ''}`}
             />
           )}
 
@@ -245,7 +247,7 @@ export default function EnvioPage() {
         <h3 className="font-semibold text-gray-700 mb-3">📋 Mensagens agendadas</h3>
 
         <div className="flex gap-2 mb-3">
-          {[['all', 'Todos'], ['pending', 'Pendentes'], ['sent', 'Enviados'], ['failed', 'Falhos'], ['cancelled', 'Cancelados']].map(([value, label]) => (
+          {[['all', 'Todos'], ['pending', 'Pendentes'], ['queued', 'Na fila'], ['sending', 'Enviando'], ['sent', 'Enviados'], ['failed', 'Falhos'], ['cancelled', 'Cancelados']].map(([value, label]) => (
             <button
               key={value}
               onClick={() => setStatusFilter(value)}

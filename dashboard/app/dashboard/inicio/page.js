@@ -39,6 +39,7 @@ export default function InicioPage() {
   }, [])
 
   const allOk = status && STEPS.every(s => status[s.key])
+  const queue = status?.queue
   if (loading) return <LoadingState />
 
   return (
@@ -56,6 +57,36 @@ export default function InicioPage() {
       <div className={`rounded-2xl p-4 mb-6 text-sm font-semibold ${allOk ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-yellow-50 text-yellow-800 border border-yellow-200'}`}>
         {allOk ? '🤖 Bot ativo e funcionando!' : '⚠️ Complete os passos abaixo para ativar o bot.'}
       </div>
+
+      {queue && (
+        <div className="bg-white rounded-2xl shadow p-5 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-gray-800 text-sm">Saúde operacional</h3>
+            <span className={`text-xs px-2 py-1 rounded-full ${queue.queueSize > 0 ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+              {queue.queueSize > 0 ? 'Fila ativa' : 'Fila vazia'}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="rounded-xl bg-gray-50 p-3">
+              <p className="text-gray-400">Fila atual</p>
+              <p className="text-lg font-bold text-gray-800">{queue.queueSize}/{queue.maxSize}</p>
+            </div>
+            <div className="rounded-xl bg-gray-50 p-3">
+              <p className="text-gray-400">Latência média</p>
+              <p className="text-lg font-bold text-gray-800">{queue.avgLatencyMs ?? 0}ms</p>
+            </div>
+            <div className="rounded-xl bg-green-50 p-3">
+              <p className="text-green-600">Sucessos</p>
+              <p className="text-lg font-bold text-green-700">{queue.successTotal ?? 0}</p>
+            </div>
+            <div className="rounded-xl bg-red-50 p-3">
+              <p className="text-red-600">Erros</p>
+              <p className="text-lg font-bold text-red-700">{queue.errorTotal ?? 0}</p>
+            </div>
+          </div>
+          {queue.lastError && <p className="text-xs text-red-500 mt-3">Último erro: {queue.lastError}</p>}
+        </div>
+      )}
 
       <div className="flex flex-col gap-3">
         {STEPS.map((step) => {
