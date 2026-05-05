@@ -12,19 +12,26 @@ const BASE = `http://localhost:${process.env.API_PORT || 3001}`
 
 let passed = 0
 let failed = 0
-let token = ''
+let authCookie = ''
 let userId = ''
 let groupId = ''
 
 function ok(name) { console.log(`  ✓ ${name}`); passed++ }
 function fail(name, reason) { console.error(`  ✗ ${name}: ${reason}`); failed++ }
 
+function captureAuthCookie(res) {
+  const setCookie = res.headers.get('set-cookie')
+  const cookie = setCookie?.split(';')[0]
+  if (!cookie?.startsWith('wb_auth=')) throw new Error('Cookie wb_auth ausente na resposta de autenticação')
+  return cookie
+}
+
 async function req(method, path, body) {
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: {
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(authCookie ? { Cookie: authCookie } : {}),
     },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   })
@@ -48,12 +55,11 @@ async function setup() {
       body: JSON.stringify({ email, password }),
     })
   }
-  const auth = await res.json()
-  token = auth.token
-  if (!token) throw new Error(`Sem token: ${JSON.stringify(auth)}`)
+  await res.json()
+  authCookie = captureAuthCookie(res)
 
   const me = await fetch(`${BASE}/api/auth/me`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Cookie: authCookie },
   }).then(r => r.json())
   userId = me.id
 
@@ -121,31 +127,39 @@ async function testValidation() {
 
 async function testAuthProtection() {
   console.log('\nAuth protection no PUT:')
-  const savedToken = token
-  token = ''
+  const savedCookie = authCookie
+  authCookie = ''
   const { status } = await req('PUT', `/api/groups/${groupId}`, { imageMode: 'none' })
-  token = savedToken
-  status === 401 ? ok('sem token → 401') : fail('sem token', `status ${status}`)
+  authCookie = savedCookie
+  status === 401 ? ok('sem cookie → 401') : fail('sem cookie', `status ${status}`)
 }
 
 async function testOwnership() {
   console.log('\nIsolamento por userId:')
   // Create another user
-  const { token: token2 } = await fetch(`${BASE}/api/auth/register`, {
+  let otherRes = await fetch(`${BASE}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: 'other-feat001@wabot.com', password: 'Other1234!' }),
-  }).then(r => r.json())
+  })
+  if (otherRes.status === 409 || otherRes.status === 400) {
+    otherRes = await fetch(`${BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'other-feat001@wabot.com', password: 'Other1234!' }),
+    })
+  }
+  const otherCookie = captureAuthCookie(otherRes)
 
-  const savedToken = token
-  token = token2
+  const savedCookie = authCookie
+  authCookie = otherCookie
   const { status } = await req('PUT', `/api/groups/${groupId}`, { imageMode: 'original' })
-  token = savedToken
+  authCookie = savedCookie
   status === 404 ? ok('outro usuário não pode alterar grupo alheio → 404') : fail('isolamento', `status ${status}`)
 
   // Cleanup other user
   const { id: otherId } = await fetch(`${BASE}/api/auth/me`, {
-    headers: { Authorization: `Bearer ${token2}` },
+    headers: { Cookie: otherCookie },
   }).then(r => r.json())
   await db.user.delete({ where: { id: otherId } }).catch(() => {})
 }
