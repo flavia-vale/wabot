@@ -1,4 +1,4 @@
-import { startBot, stopBot, isRunning, onQR, onStatus, listGroups, requestPairingCode } from '../../manager.js'
+import { startBot, stopBot, isRunning, onQR, onStatus, listGroups, requestPairingCode, getBotMetrics } from '../../manager.js'
 import db from '../../db.js'
 import { rm } from 'fs/promises'
 import { resolve } from 'path'
@@ -34,11 +34,16 @@ export async function sessionRoutes(app) {
 
   app.get('/status', { onRequest: [app.authenticate] }, async (req) => {
     const userId = req.user.sub
-    const session = await db.waSession.findUnique({ where: { userId } })
+    const running = isRunning(userId)
+    const [session, metrics] = await Promise.all([
+      db.waSession.findUnique({ where: { userId } }),
+      running ? getBotMetrics(userId).catch(() => null) : Promise.resolve(null),
+    ])
     return {
-      running: isRunning(userId),
+      running,
       status: session?.status ?? 'disconnected',
       phone: session?.phone ?? null,
+      metrics,
     }
   })
 

@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import Link from 'next/link'
 import { PublicFooter, PublicHeader } from '@/components/PublicShell'
 
@@ -7,6 +8,12 @@ const benefits = [
   'Envie ou agende ofertas sem repetir trabalho manual',
 ]
 
+const painBenefits = [
+  'Pare de copiar, colar e converter links manualmente durante suas campanhas.',
+  'Tenha mais controle sobre quais grupos monitorar e onde postar cada oferta.',
+  'Mantenha consistência nos envios mesmo quando houver várias ofertas no dia.',
+]
+
 const steps = [
   {
     title: 'Conecte seu WhatsApp',
@@ -14,7 +21,7 @@ const steps = [
   },
   {
     title: 'Configure suas credenciais',
-    description: 'Cadastre suas tags e chaves de afiliado para transformar links comuns em links monetizados.',
+    description: 'Cadastre suas tags e chaves de Shopee, Amazon, Mercado Livre e Magalu para transformar links comuns em links monetizados.',
   },
   {
     title: 'Automatize seus envios',
@@ -48,10 +55,10 @@ export default function LandingPage() {
             🤖 Bot Conversor para Afiliados no WhatsApp
           </p>
           <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-gray-950 md:text-6xl">
-            Automatize seus links de afiliado e ganhe tempo para vender mais
+            Automatize seus links de afiliado no WhatsApp e ganhe tempo para vender mais
           </h1>
           <p className="mt-5 max-w-2xl text-lg leading-8 text-gray-600">
-            O Wabot ajuda afiliados a converter links, organizar grupos de WhatsApp e enviar ofertas pelo painel, reduzindo tarefas manuais na sua operação.
+            Pare de converter links manualmente. Com o Wabot, você organiza seus grupos de WhatsApp, transforma links em links de afiliado e envia ofertas pelo painel.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link
@@ -68,7 +75,7 @@ export default function LandingPage() {
             </Link>
           </div>
           <p className="mt-4 text-sm text-gray-500">
-            Configure seu bot em poucos passos: conecte o WhatsApp, informe suas credenciais e escolha os grupos.
+            Em poucos passos, você conecta o WhatsApp, cadastra suas credenciais e começa a organizar seus envios.
           </p>
         </div>
 
@@ -88,17 +95,46 @@ export default function LandingPage() {
                   <span>{benefit}</span>
                 </div>
               ))}
+              <div className="rounded-xl border border-green-400/20 bg-green-400/10 p-3 text-sm text-green-50">
+                Menos tarefas manuais para quem divulga ofertas todos os dias.
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto grid w-full max-w-6xl gap-4 px-5 pb-8 md:grid-cols-4 md:px-8">
-        {platforms.map((platform) => (
-          <div key={platform} className="rounded-2xl border border-green-100 bg-white p-5 text-center font-bold text-gray-700 shadow-sm">
-            {platform}
+      <section className="mx-auto w-full max-w-6xl px-5 pb-8 md:px-8">
+        <div className="mb-5 text-center">
+          <p className="text-sm font-bold uppercase tracking-wide text-green-700">Marketplaces</p>
+          <h2 className="mt-2 text-2xl font-bold text-gray-950">Compatível com os principais marketplaces</h2>
+        </div>
+        <div className="grid gap-4 md:grid-cols-4">
+          {platforms.map((platform) => (
+            <div key={platform} className="rounded-2xl border border-green-100 bg-white p-5 text-center font-bold text-gray-700 shadow-sm">
+              {platform}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="mx-auto w-full max-w-6xl px-5 py-10 md:px-8">
+        <div className="grid gap-5 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-green-100 md:grid-cols-[1.1fr_1fr] md:p-8">
+          <div>
+            <p className="text-sm font-bold uppercase tracking-wide text-green-700">Por que usar o Wabot?</p>
+            <h2 className="mt-2 text-3xl font-bold text-gray-950">Feito para afiliados que divulgam ofertas todos os dias</h2>
+            <p className="mt-4 text-gray-600">
+              O Wabot ajuda a reduzir etapas repetitivas para você focar em escolher boas ofertas e manter sua comunidade ativa.
+            </p>
           </div>
-        ))}
+          <div className="space-y-3">
+            {painBenefits.map((benefit) => (
+              <div key={benefit} className="flex gap-3 rounded-2xl bg-green-50 p-4 text-sm text-green-900">
+                <span aria-hidden="true">✅</span>
+                <span>{benefit}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
 
       <section className="mx-auto w-full max-w-6xl px-5 py-10 md:px-8">
@@ -148,7 +184,7 @@ export default function LandingPage() {
             href="/login"
             className="mt-7 inline-flex rounded-xl bg-white px-6 py-3 font-bold text-green-700 transition hover:bg-green-50"
           >
-            Começar agora
+            Criar conta e configurar o Wabot
           </Link>
         </div>
       </section>

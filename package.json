@@ -5,7 +5,8 @@
   "scripts": {
     "start": "node src/api/server.js",
     "api": "node src/api/server.js",
-    "dashboard": "cd dashboard && npm run dev"
+    "dashboard": "cd dashboard && npm run dev",
+    "pressure:logs": "node scripts/pressure-logs.mjs"
   },
   "dependencies": {
     "@fastify/cors": "^11.2.0",
