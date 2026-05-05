@@ -1,38 +1,18 @@
 # Dashboard - Deploy & operação segura
 
-## Mapa atual de política de segurança
+## Estado atual da rota principal
 
-### 1) CSP da homepage estática
-A homepage (`dashboard/public/index.html`) usa CSP via `<meta http-equiv="Content-Security-Policy">` com as diretivas:
-- `default-src 'self'`
-- `script-src 'self' https://unpkg.com`
-- `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`
-- `font-src 'self' https://fonts.gstatic.com data:`
-- `img-src 'self' data: https:`
-- `connect-src 'self'`
-- `object-src 'none'`, `base-uri 'self'`, `frame-ancestors 'none'`
+A rota raiz (`/`) do dashboard não serve mais uma homepage/landing page estática. Ela redireciona imediatamente para `/dashboard` pelo App Router do Next.js.
 
-### 2) Dependências externas críticas
-A homepage depende de CDN para:
-- React 18.3.1
-- ReactDOM 18.3.1
-- Babel Standalone 7.29.0
-
-Foi implementado fallback local para `/public/vendor/*` quando a CDN falha.
-
-### 3) Firewall / egress na VPS Hetzner
-Risco operacional: se firewall local (UFW/iptables/nftables), cloud firewall da Hetzner, proxy corporativo ou ACL de saída bloquear `unpkg.com`, a homepage pode degradar.
+Os arquivos legados de landing/index foram removidos para permitir recriação futura do zero, sem dependências antigas de CDN, Babel no navegador ou componentes estáticos de marketing.
 
 ## Pré-check obrigatório antes de restart (produção)
 
 Execute **antes** de qualquer `pm2 restart`:
 
-1. Confirmar arquivos fallback locais:
-   - `/home/deploy/wabot/public/vendor/react.development.js`
-   - `/home/deploy/wabot/public/vendor/react-dom.development.js`
-   - `/home/deploy/wabot/public/vendor/babel.min.js`
-2. Validar saída HTTPS para CDN (ou confirmar que fallback local está populado e atualizado).
-3. Validar CSP efetiva da homepage sem violações no console.
-4. Testar homepage em cenário online e com bloqueio parcial de egress.
-
-Se algum check falhar, **não reiniciar** o `dashboard` até corrigir.
+1. Validar build do dashboard:
+   - `cd /home/deploy/wabot/dashboard && npm run build`
+2. Validar sintaxe do backend:
+   - `cd /home/deploy/wabot && node --check src/api/server.js`
+3. Confirmar que `/` redireciona para `/dashboard` após o restart.
+4. Confirmar saúde dos processos PM2 (`api` e `dashboard`).
