@@ -72,20 +72,45 @@ export default function ConfigPage() {
     setForm(f => ({ ...f, platforms: next.join(',') }))
   }
 
+  function parseDelay(value, label) {
+    const text = String(value).trim()
+    if (!text) return { error: `${label} é obrigatório` }
+
+    const number = Number(text)
+    if (!Number.isInteger(number) || number < 0 || number > 300) {
+      return { error: `${label} deve ser um número inteiro entre 0 e 300` }
+    }
+
+    return { value: number }
+  }
+
   async function handleSave(e) {
     e.preventDefault()
     if (!loadedOnce || loadError) return
     setError('')
     setSuccess(false)
-    if (Number(form.delayMin) > Number(form.delayMax)) {
+
+    const parsedMin = parseDelay(form.delayMin, 'Delay mínimo')
+    if (parsedMin.error) {
+      setError(parsedMin.error)
+      return
+    }
+
+    const parsedMax = parseDelay(form.delayMax, 'Delay máximo')
+    if (parsedMax.error) {
+      setError(parsedMax.error)
+      return
+    }
+
+    if (parsedMin.value > parsedMax.value) {
       setError('Delay mínimo não pode ser maior que o máximo')
       return
     }
     setSaving(true)
     try {
       await api.saveConfig({
-        delayMin: Number(form.delayMin),
-        delayMax: Number(form.delayMax),
+        delayMin: parsedMin.value,
+        delayMax: parsedMax.value,
         platforms: form.platforms,
         blockedKeywords: form.blockedKeywords,
         welcomeMsg: form.welcomeMsg,
@@ -115,8 +140,8 @@ export default function ConfigPage() {
           <h3 className="font-semibold text-gray-700 mb-1">⏱️ Delay entre envios</h3>
           <p className="text-xs text-gray-400 mb-4">Aguarda um tempo aleatório antes de repostar (evita bloqueios)</p>
           <div className="flex items-center gap-4">
-            <div className="flex-1"><label className="text-xs text-gray-500 mb-1 block">Mínimo (segundos)</label><input type="number" min="0" max="300" value={form.delayMin} onChange={e => setForm(f => ({ ...f, delayMin: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400" /></div>
-            <div className="flex-1"><label className="text-xs text-gray-500 mb-1 block">Máximo (segundos)</label><input type="number" min="0" max="300" value={form.delayMax} onChange={e => setForm(f => ({ ...f, delayMax: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400" /></div>
+            <div className="flex-1"><label className="text-xs text-gray-500 mb-1 block">Mínimo (segundos)</label><input type="number" min="0" max="300" step="1" required value={form.delayMin} onChange={e => setForm(f => ({ ...f, delayMin: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400" /></div>
+            <div className="flex-1"><label className="text-xs text-gray-500 mb-1 block">Máximo (segundos)</label><input type="number" min="0" max="300" step="1" required value={form.delayMax} onChange={e => setForm(f => ({ ...f, delayMax: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400" /></div>
           </div>
         </div>
 

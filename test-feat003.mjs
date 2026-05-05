@@ -10,18 +10,25 @@ const BASE = `http://localhost:${process.env.API_PORT || 3001}`
 
 let passed = 0
 let failed = 0
-let token = ''
+let authCookie = ''
 let userId = ''
 
 function ok(name) { console.log(`  ✓ ${name}`); passed++ }
 function fail(name, reason) { console.error(`  ✗ ${name}: ${reason}`); failed++ }
+
+function captureAuthCookie(res) {
+  const setCookie = res.headers.get('set-cookie')
+  const cookie = setCookie?.split(';')[0]
+  if (!cookie?.startsWith('wb_auth=')) throw new Error('Cookie wb_auth ausente na resposta de autenticação')
+  return cookie
+}
 
 async function req(method, path, body) {
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: {
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(authCookie ? { Cookie: authCookie } : {}),
     },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   })
@@ -30,7 +37,7 @@ async function req(method, path, body) {
 }
 
 async function setup() {
-  // Register or login test user via API to get a real JWT
+  // Register or login test user via API to get a real HttpOnly auth cookie
   const email = 'test-logs@wabot.com'
   const password = 'TestLogs123!'
 
@@ -47,12 +54,11 @@ async function setup() {
       body: JSON.stringify({ email, password }),
     })
   }
-  const auth = await res.json()
-  token = auth.token
-  if (!token) throw new Error(`Sem token: ${JSON.stringify(auth)}`)
+  await res.json()
+  authCookie = captureAuthCookie(res)
 
   const me = await fetch(`${BASE}/api/auth/me`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Cookie: authCookie },
   }).then(r => r.json())
   userId = me.id
 
@@ -90,11 +96,11 @@ async function cleanup() {
 
 async function testUnauthorized() {
   console.log('\nAuth protection:')
-  const saved = token
-  token = ''
+  const saved = authCookie
+  authCookie = ''
   const { status } = await req('GET', '/api/logs')
-  token = saved
-  status === 401 ? ok('GET /api/logs sem token → 401') : fail('GET /api/logs sem token', `esperado 401, recebido ${status}`)
+  authCookie = saved
+  status === 401 ? ok('GET /api/logs sem cookie → 401') : fail('GET /api/logs sem cookie', `esperado 401, recebido ${status}`)
 }
 
 async function testGetAllLogs() {
