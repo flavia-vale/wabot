@@ -2,8 +2,15 @@
 import { useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSearchParams } from 'next/navigation'
+import Image from 'next/image'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
+
+const LOGIN_BENEFITS = [
+  'Conversão automática de links de afiliado',
+  'Grupos de WhatsApp organizados por origem e destino',
+  'Envio e agendamento de ofertas em menos tempo',
+]
 
 function LoginContent() {
   const router = useRouter()
@@ -48,24 +55,50 @@ function LoginContent() {
         ? 'bg-gradient-to-br from-emerald-100 via-teal-50 to-cyan-100'
         : 'bg-green-50'
     }`}>
-      <div className={`rounded-2xl shadow-lg p-8 w-full max-w-sm transition-all duration-500 ${
+      <div className={`rounded-2xl shadow-lg p-8 w-full max-w-md transition-all duration-500 ${
         isRegister
           ? 'bg-emerald-950/95 text-emerald-50 border border-emerald-700 shadow-emerald-900/20'
           : 'bg-white text-gray-900 border border-transparent'
       }`}>
-        <div className="flex items-center gap-2 mb-2">
-          <span className={`text-lg ${isRegister ? 'text-emerald-300' : 'text-green-600'}`}>
-            {isRegister ? '✨' : '🤖'}
-          </span>
+        <div className="mb-5 flex justify-center">
+          <div className={`rounded-2xl p-3 shadow-sm ${isRegister ? 'bg-emerald-900' : 'bg-green-50'}`}>
+            <Image
+              src="/wabot-logo.svg"
+              alt="Logo do Wabot, bot conversor para afiliados no WhatsApp"
+              width={64}
+              height={64}
+              priority
+            />
+          </div>
+        </div>
+
+        <div className="mb-2 text-center">
           <h1 className={`text-2xl font-bold ${isRegister ? 'text-emerald-100' : 'text-green-700'}`}>Bot Conversor para Afiliados</h1>
         </div>
-        <p className={`text-sm mb-6 ${isRegister ? 'text-emerald-200' : 'text-gray-500'}`}>
-          {isRegister ? 'Modo cadastro: crie sua conta para começar' : 'Entrar na sua conta'}
+        <p className={`text-center text-sm mb-4 ${isRegister ? 'text-emerald-200' : 'text-gray-500'}`}>
+          {isRegister ? 'Crie sua conta para converter links, organizar grupos e enviar ofertas com menos trabalho manual.' : 'Acesse seu painel para conectar o WhatsApp, converter links e acompanhar seus envios.'}
         </p>
+
+        {ref && (
+          <p className={`mb-4 rounded-lg px-3 py-2 text-xs font-medium ${
+            isRegister ? 'bg-emerald-800 text-emerald-100' : 'bg-green-50 text-green-700'
+          }`}>
+            Você chegou por um convite. Crie sua conta para receber o benefício de indicação disponível.
+          </p>
+        )}
+
+        <ul className={`mb-5 space-y-2 text-xs ${isRegister ? 'text-emerald-100' : 'text-gray-600'}`}>
+          {LOGIN_BENEFITS.map(benefit => (
+            <li key={benefit} className="flex gap-2">
+              <span aria-hidden="true">✅</span>
+              <span>{benefit}</span>
+            </li>
+          ))}
+        </ul>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <label htmlFor="email" className={`block text-sm font-medium mb-1 ${isRegister ? 'text-emerald-100' : 'text-gray-700'}`}>Email</label>
             <input
               id="email"
               type="email"
@@ -77,7 +110,17 @@ function LoginContent() {
             />
           </div>
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <label htmlFor="password" className={`block text-sm font-medium ${isRegister ? 'text-emerald-100' : 'text-gray-700'}`}>Senha</label>
+              {!isRegister && (
+                <a
+                  href="mailto:suporte@wabot.app?subject=Recuperar%20senha%20do%20Wabot"
+                  className="text-xs font-medium text-green-600 hover:underline"
+                >
+                  Esqueci minha senha
+                </a>
+              )}
+            </div>
             <input
               id="password"
               type="password"
@@ -92,6 +135,12 @@ function LoginContent() {
           <div aria-live="assertive">{error && <Alert type="error" title="Falha na autenticação" message={error} />}</div>
           <div aria-live="polite">{success && <Alert type="success" title="Sucesso" message={success} />}</div>
 
+          {isRegister && (
+            <p className={`text-xs ${isRegister ? 'text-emerald-200' : 'text-gray-500'}`}>
+              Depois do cadastro, você poderá conectar seu WhatsApp, cadastrar suas credenciais e escolher os grupos do bot.
+            </p>
+          )}
+
           <button
             type="submit"
             disabled={loading}
@@ -101,15 +150,15 @@ function LoginContent() {
                 : 'bg-green-600 hover:bg-green-700'
             }`}
           >
-            {loading ? 'Aguarde...' : isRegister ? 'Criar conta' : 'Entrar'}
+            {loading ? 'Aguarde...' : isRegister ? 'Criar conta e acessar painel' : 'Entrar no painel'}
           </button>
         </form>
 
         <button
           onClick={() => { setIsRegister(!isRegister); setError(''); setSuccess('') }}
-          className="mt-4 text-sm text-green-600 hover:underline w-full text-center"
+          className={`mt-4 text-sm hover:underline w-full text-center ${isRegister ? 'text-emerald-200' : 'text-green-600'}`}
         >
-          {isRegister ? 'Já tenho conta — Entrar' : 'Não tenho conta — Criar agora'}
+          {isRegister ? 'Já tenho conta — Entrar' : 'Ainda não tenho conta — começar agora'}
         </button>
       </div>
     </div>
