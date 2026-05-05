@@ -44,7 +44,10 @@ export default function DashboardLayout({ children }) {
     },
     {
       title: 'Conta',
-      items: [{ href: '/dashboard/planos', label: '💳 Planos' }],
+      items: [
+        { href: '/dashboard/planos', label: '💳 Planos' },
+        { href: '/suporte', label: '🆘 Suporte' },
+      ],
     },
   ]
 

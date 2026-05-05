@@ -10,6 +10,7 @@ const STEPS = [
   { key: 'hasCredentials', title: 'Chaves de afiliado', ok: 'Credenciais de afiliado configuradas', pending: 'Adicione suas chaves de afiliado', href: '/dashboard/credenciais' },
   { key: 'hasMonitorGroup', title: 'Grupo monitorado', ok: 'Grupo de origem configurado', pending: 'Adicione um grupo para monitorar (origem dos links)', href: '/dashboard/grupos' },
   { key: 'hasPostGroup', title: 'Grupo de envio', ok: 'Grupo de destino configurado', pending: 'Adicione um grupo para postar os links convertidos', href: '/dashboard/grupos' },
+  { key: 'hasSuccessfulLog', title: 'Primeiro envio validado', ok: 'Já existe log de envio com sucesso', pending: 'Faça um teste de envio e confirme sucesso nos logs', href: '/dashboard/envio' },
 ]
 
 export default function InicioPage() {
@@ -44,7 +45,7 @@ export default function InicioPage() {
   return (
     <div className="max-w-lg">
       <h2 className="text-2xl font-bold text-gray-800 mb-1">Início</h2>
-      <p className="text-gray-500 text-sm mb-6">Status do seu bot</p>
+      <p className="text-gray-500 text-sm mb-6">Primeiros passos para sair do cadastro até o primeiro envio validado.</p>
 
       {loadError && (
         <div className="mb-4 space-y-3">
@@ -54,7 +55,7 @@ export default function InicioPage() {
       )}
 
       <div className={`rounded-2xl p-4 mb-6 text-sm font-semibold ${allOk ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-yellow-50 text-yellow-800 border border-yellow-200'}`}>
-        {allOk ? '🤖 Bot ativo e funcionando!' : '⚠️ Complete os passos abaixo para ativar o bot.'}
+        {allOk ? '🤖 Checklist completo: seu bot já teve um envio validado.' : '⚠️ Siga a ordem abaixo para configurar e testar sua operação sem depender do suporte.'}
       </div>
 
       <div className="flex flex-col gap-3">
@@ -73,7 +74,7 @@ export default function InicioPage() {
                 <p className="font-semibold text-gray-800 text-sm">{step.title}</p>
                 <p className={`text-xs mt-0.5 ${ok ? 'text-gray-400' : 'text-amber-700'}`}>{ok ? step.ok : step.pending}</p>
               </div>
-              <span className="text-gray-300 text-lg">›</span>
+              <span className="text-xs font-semibold text-gray-400">{ok ? 'Concluído' : 'Resolver'}</span>
             </button>
           )
         })}
