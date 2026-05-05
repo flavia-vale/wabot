@@ -5,6 +5,8 @@ const OG_IMAGE_RE = [
 
 const JSON_LD_RE = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi
 const IMAGE_CACHE_TTL_MS = 5 * 60 * 1000
+const IMAGE_FETCH_TIMEOUT_MS = Number(process.env.IMAGE_FETCH_TIMEOUT_MS) || 2_500
+const IMAGE_HTML_MAX_BYTES = Number(process.env.IMAGE_HTML_MAX_BYTES) || 512 * 1024
 const imageCache = new Map()
 const domainFailureMetrics = new Map()
 
@@ -50,14 +52,45 @@ function extractJsonLdImage(html) {
   return null
 }
 
+async function readLimitedText(res) {
+  const contentLength = Number(res.headers.get('content-length'))
+  if (contentLength && contentLength > IMAGE_HTML_MAX_BYTES) return null
+  if (!res.body) return res.text()
+
+  const reader = res.body.getReader()
+  const chunks = []
+  let received = 0
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    received += value.byteLength
+    if (received > IMAGE_HTML_MAX_BYTES) {
+      await reader.cancel().catch(() => {})
+      return null
+    }
+    chunks.push(value)
+  }
+
+  const body = new Uint8Array(received)
+  let offset = 0
+  for (const chunk of chunks) {
+    body.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return new TextDecoder().decode(body)
+}
+
 async function fetchHtml(url) {
   const res = await fetch(url, {
     headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BotConversorAfiliados/1.0)' },
-    signal: AbortSignal.timeout(5_000),
+    signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS),
     redirect: 'follow',
   })
   if (!res.ok) return null
-  return res.text()
+  const contentType = res.headers.get('content-type') || ''
+  if (contentType && !contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) return null
+  return readLimitedText(res)
 }
 
 async function resolveByHtmlLayers(url) {
