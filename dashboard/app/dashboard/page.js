@@ -3,6 +3,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { api, openQRSocket } from '@/lib/api'
 import { QRCodeCanvas as QRCode } from 'qrcode.react'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { HelpLink } from '@/components/HelpLink'
 
 const QR_TIMEOUT_SECONDS = 20
 
@@ -177,7 +178,10 @@ export default function DashboardPage() {
   return (
     <div className="max-w-lg">
       <h2 className="text-2xl font-bold text-gray-800 mb-1">WhatsApp</h2>
-      <p className="text-gray-500 text-sm mb-6">Conecte seu número ao bot</p>
+      <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-gray-500 text-sm">Conecte seu número ao bot</p>
+        <HelpLink topic="como-conectar-whatsapp-qr-code">Ajuda para conectar</HelpLink>
+      </div>
 
       {socketState === 'error' && <p className="text-amber-600 text-xs mb-3">Conexão de pareamento instável. Tentando reconectar...</p>}
       {socketState === 'closed' && isConnecting && <p className="text-amber-600 text-xs mb-3">Conexão perdida. Gere novamente o QR ou aguarde reconexão.</p>}

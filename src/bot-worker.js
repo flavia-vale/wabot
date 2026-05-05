@@ -478,6 +478,7 @@ async function startBot() {
         create: { userId, status: 'connected', phone },
         update: { status: 'connected', phone },
       })
+      trackAnalyticsEventSafe({ userId, event: 'whatsapp_connected' })
     }
 
     if (connection === 'close') {
@@ -628,43 +629,33 @@ async function startBot() {
           messageText: finalText,
         }
 
-        if (!canAcceptSendJob()) {
-          await db.messageLog.create({
-            data: { ...logData, status: 'error', errorMsg: 'Fila interna de envios cheia ou worker encerrando' },
+        const imageUrl = monitorGroup?.imageMode !== 'none' ? await getImageUrl() : null
+        const msgPayload = imageUrl
+          ? { image: { url: imageUrl }, caption: finalText }
+          : { text: finalText }
+
+        const platforms = conversions.map(c => c.platform).join('+')
+        try {
+          await sock.sendMessage(destJid, msgPayload)
+          logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode }, 'Mensagem enviada')
+          const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
+          db.messageLog.create({
+            data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: finalText, status: 'success' },
+          }).then(() => {
+            if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
           }).catch(() => {})
-          logger.warn({ destJid, queueSize: sendQueue.length }, 'Envio recusado pela fila interna')
-          continue
-        }
-
-        const queuedLog = await db.messageLog.create({
-          data: { ...logData, status: 'queued' },
-        })
-
-        // Delay configurável é aplicado dentro da fila, sem bloquear o listener de mensagens.
-        const { delayMin, delayMax } = cfg.botConfig
-        const delayMs = delayMax > 0
-          ? (delayMin + Math.random() * Math.max(0, delayMax - delayMin)) * 1000
-          : 0
-
-        const accepted = enqueueSendJob({
-          logId: queuedLog.id,
-          destJid,
-          platforms,
-          imageMode: monitorGroup?.imageMode,
-          plan: cfg.plan,
-          delayMs,
-          buildPayload: async () => {
-            const imageUrl = monitorGroup?.imageMode !== 'none' ? await getImageUrl() : null
-            return imageUrl
-              ? { image: { url: imageUrl }, caption: finalText }
-              : { text: finalText }
-          },
-        })
-
-        if (!accepted) {
-          await db.messageLog.update({
-            where: { id: queuedLog.id },
-            data: { status: 'error', errorMsg: 'Fila interna de envios cheia ou worker encerrando', sentAt: new Date() },
+          if (cfg.plan === 'basic') {
+            adSendCount++
+            if (adSendCount % 50 === 0) {
+              await sock.sendMessage(destJid, { text: AD_TEXT }).catch(() => {})
+            }
+          }
+        } catch (err) {
+          logger.error({ destJid, err: err.message }, 'Erro ao enviar')
+          db.messageLog.create({
+            data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: finalText, status: 'error', errorMsg: err.message },
+          }).then(() => {
+            trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: err.name } })
           }).catch(() => {})
           logger.warn({ destJid, queueSize: sendQueue.length }, 'Envio recusado após criação do log queued')
         }

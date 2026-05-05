@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { HelpLink } from '@/components/HelpLink'
 
 export default function GruposPage() {
   const [groups, setGroups] = useState([])
@@ -79,7 +80,10 @@ export default function GruposPage() {
 
   return (
     <div className="max-w-xl">
-      <h2 className="text-2xl font-bold text-gray-800 mb-1">Grupos</h2>
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="text-2xl font-bold text-gray-800 mb-1">Grupos</h2>
+        <HelpLink topic="como-cadastrar-grupos">Ajuda</HelpLink>
+      </div>
       <p className="text-gray-500 text-sm mb-6">Configure quais grupos monitorar e onde postar</p>
 
       {actionError && <p className="text-red-500 text-sm mb-4">{actionError}</p>}
