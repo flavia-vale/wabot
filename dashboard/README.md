@@ -1,38 +1,26 @@
 # Dashboard - Deploy & operação segura
 
-## Mapa atual de política de segurança
+## Arquitetura atual
 
-### 1) CSP da homepage estática
-A homepage (`dashboard/public/index.html`) usa CSP via `<meta http-equiv="Content-Security-Policy">` com as diretivas:
-- `default-src 'self'`
-- `script-src 'self' https://unpkg.com`
-- `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`
-- `font-src 'self' https://fonts.gstatic.com data:`
-- `img-src 'self' data: https:`
-- `connect-src 'self'`
-- `object-src 'none'`, `base-uri 'self'`, `frame-ancestors 'none'`
+O dashboard é uma aplicação Next.js localizada em `dashboard/app` e executada pelos scripts de `dashboard/package.json`.
 
-### 2) Dependências externas críticas
-A homepage depende de CDN para:
-- React 18.3.1
-- ReactDOM 18.3.1
-- Babel Standalone 7.29.0
+- Desenvolvimento local: `npm run dev`
+- Build de produção: `npm run build`
+- Execução de produção: `npm run start`
+- Lint: `npm run lint`
 
-Foi implementado fallback local para `/public/vendor/*` quando a CDN falha.
+## Arquivos estáticos
 
-### 3) Firewall / egress na VPS Hetzner
-Risco operacional: se firewall local (UFW/iptables/nftables), cloud firewall da Hetzner, proxy corporativo ou ACL de saída bloquear `unpkg.com`, a homepage pode degradar.
+A antiga homepage estática em `dashboard/public/` foi removida porque não é usada em produção. Com isso, a aplicação deixa de servir rotas legadas como `/Landing.html`, `/src/*.jsx` e `/tweaks-panel.jsx` pelo Next.js.
 
-## Pré-check obrigatório antes de restart (produção)
+Para novos assets públicos do dashboard, recrie `dashboard/public/` somente com arquivos realmente referenciados pela aplicação Next, como imagens, `robots.txt` ou outros assets estáticos necessários.
 
-Execute **antes** de qualquer `pm2 restart`:
+## Pré-check obrigatório antes de restart em produção
 
-1. Confirmar arquivos fallback locais:
-   - `/home/deploy/wabot/public/vendor/react.development.js`
-   - `/home/deploy/wabot/public/vendor/react-dom.development.js`
-   - `/home/deploy/wabot/public/vendor/babel.min.js`
-2. Validar saída HTTPS para CDN (ou confirmar que fallback local está populado e atualizado).
-3. Validar CSP efetiva da homepage sem violações no console.
-4. Testar homepage em cenário online e com bloqueio parcial de egress.
+Execute antes de reiniciar o processo `dashboard` no PM2:
 
-Se algum check falhar, **não reiniciar** o `dashboard` até corrigir.
+1. Validar dependências do dashboard com `npm install` ou `npm ci`, conforme o fluxo de deploy usado.
+2. Rodar `npm run lint` dentro de `dashboard/`.
+3. Rodar `npm run build` dentro de `dashboard/`.
+4. Reiniciar o processo PM2 somente após lint e build passarem.
+5. Validar login e navegação principal do dashboard após o restart.
