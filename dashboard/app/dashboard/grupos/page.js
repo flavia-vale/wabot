@@ -4,6 +4,13 @@ import { api } from '@/lib/api'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { HelpLink } from '@/components/HelpLink'
 
+const ALL_PLATFORMS = [
+  { id: 'shopee', label: 'Shopee' },
+  { id: 'amazon', label: 'Amazon' },
+  { id: 'mercadolivre', label: 'Mercado Livre' },
+  { id: 'magazineluiza', label: 'Magazine Luiza' },
+]
+
 export default function GruposPage() {
   const [groups, setGroups] = useState([])
   const [actionError, setActionError] = useState('')
@@ -34,6 +41,16 @@ export default function GruposPage() {
   async function handleUpdateGroup(id, data) {
     setGroups(prev => prev.map(g => g.id === id ? { ...g, ...data } : g))
     try { await api.updateGroup(id, data) } catch (err) { setActionError(err.message); await load() }
+  }
+
+  function toggleGroupPlatform(group, platformId) {
+    const current = group.allowedPlatforms
+      ? group.allowedPlatforms.split(',').filter(Boolean)
+      : ALL_PLATFORMS.map(p => p.id)
+    const next = current.includes(platformId)
+      ? current.filter(p => p !== platformId)
+      : [...current, platformId]
+    handleUpdateGroup(group.id, { allowedPlatforms: next.join(',') })
   }
 
   async function handleLoadWA() {
@@ -205,6 +222,28 @@ export default function GruposPage() {
                     </div>
                   )}
                 </div>
+                <div className="mt-3 border-t border-gray-100 pt-3">
+                  <p className="text-xs font-medium text-gray-500 mb-2">Filtros deste grupo (opcional):</p>
+                  <input
+                    value={g.blockedKeywords ?? ''}
+                    onChange={e => handleUpdateGroup(g.id, { blockedKeywords: e.target.value })}
+                    placeholder="Palavras bloqueadas só neste grupo"
+                    className="mb-2 w-full border border-gray-200 rounded-lg px-3 py-2 text-xs"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    {ALL_PLATFORMS.map(platform => {
+                      const selected = new Set((g.allowedPlatforms || '').split(',').filter(Boolean))
+                      const checked = g.allowedPlatforms ? selected.has(platform.id) : true
+                      return (
+                        <label key={platform.id} className="flex items-center gap-1 text-xs text-gray-500">
+                          <input type="checkbox" checked={checked} onChange={() => toggleGroupPlatform(g, platform.id)} />
+                          {platform.label}
+                        </label>
+                      )
+                    })}
+                  </div>
+                  <p className="mt-1 text-[11px] text-gray-400">Sem seleção manual, usa as plataformas globais.</p>
+                </div>
               </li>
             ))}
           </ul>
@@ -219,14 +258,23 @@ export default function GruposPage() {
         ) : (
           <ul className="flex flex-col gap-2">
             {post.map(g => (
-              <li key={g.id} className="flex items-center justify-between text-sm">
-                <div>
-                  <span className="font-medium text-gray-700">{g.name}</span>
-                  <span className="ml-2 text-gray-400 text-xs">{g.waJid}</span>
+              <li key={g.id} className="text-sm border border-gray-100 rounded-xl p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <span className="font-medium text-gray-700">{g.name}</span>
+                    <span className="ml-2 text-gray-400 text-xs">{g.waJid}</span>
+                  </div>
+                  <button onClick={() => setDeleteTargetId(g.id)} className="text-red-400 hover:text-red-600 text-xs">
+                    Remover
+                  </button>
                 </div>
-                <button onClick={() => setDeleteTargetId(g.id)} className="text-red-400 hover:text-red-600 text-xs">
-                  Remover
-                </button>
+                <textarea
+                  rows={2}
+                  value={g.welcomeMsg ?? ''}
+                  onChange={e => handleUpdateGroup(g.id, { welcomeMsg: e.target.value })}
+                  placeholder="Mensagem de boas-vindas específica deste grupo (opcional)"
+                  className="mt-3 w-full border border-gray-200 rounded-lg px-3 py-2 text-xs"
+                />
               </li>
             ))}
           </ul>

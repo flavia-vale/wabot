@@ -947,7 +947,7 @@ model GroupTarget {
 
 ### FEAT-006 · Filtros por grupo monitorado
 
-**Status:** open  
+**Status:** done
 **Prioridade:** média  
 **Inspiração:** proafiliados.shop — opção "Filtros" por grupo (badge "Nenhum")
 
@@ -973,7 +973,7 @@ allowedPlatforms String?   // CSV, override do global se preenchido
 
 ### FEAT-007 · Welcome message por grupo de disparo
 
-**Status:** open  
+**Status:** done
 **Prioridade:** baixa  
 **Inspiração:** proafiliados.shop — campo `welcome_message` por grupo
 
@@ -1053,7 +1053,7 @@ Usuários não sabem onde encontrar AppID, Secret Key, Tag de afiliado etc. O pr
 
 ### FEAT-011 · Feed Global
 
-**Status:** open  
+**Status:** done
 **Prioridade:** baixa  
 **Inspiração:** proafiliados.shop — "Feed Global" — recebe links de todos os grupos sem precisar configurar monitor individual
 
@@ -1066,7 +1066,7 @@ O usuário pode ativar um "Feed Global" que monitora automaticamente todos os gr
 
 ### FEAT-012 · Postar no Status do WhatsApp
 
-**Status:** open  
+**Status:** done
 **Prioridade:** baixa  
 **Inspiração:** proafiliados.shop — "Postar no Status"
 
