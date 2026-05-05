@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs'
 import { randomBytes } from 'crypto'
 import db from '../../db.js'
+import { trackAnalyticsEventSafe } from '../../analytics.js'
 
 function setAuthCookie(reply, token) {
   const secure = process.env.COOKIE_SECURE !== 'false'
@@ -56,6 +57,7 @@ export async function authRoutes(app) {
 
     const token = app.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: '7d' })
     setAuthCookie(reply, token)
+    trackAnalyticsEventSafe({ userId: user.id, event: 'signup_created', metadata: { hasReferral: Boolean(referrer) } })
     return { user: { id: user.id, email: user.email, plan: user.plan, trialExpiresAt } }
   })
 
@@ -72,6 +74,7 @@ export async function authRoutes(app) {
 
     const token = app.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: '7d' })
     setAuthCookie(reply, token)
+    trackAnalyticsEventSafe({ userId: user.id, event: 'login_completed', metadata: { plan: user.plan } })
     return { user: { id: user.id, email: user.email, plan: user.plan, trialExpiresAt: user.trialExpiresAt } }
   })
 

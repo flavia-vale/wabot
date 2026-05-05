@@ -2,12 +2,13 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { ErrorState, LoadingState } from '@/components/States'
+import { HelpLink } from '@/components/HelpLink'
 
 const PLATFORMS = [
   {
     id: 'shopee',
     label: 'Shopee',
-    instructions: 'Use as credenciais do app de afiliado/API. O Secret Key deve ser mantido privado.',
+    instructions: 'Onde obter: affiliate.shopee.com.br → Ferramentas → API de Afiliados → Gerar credenciais. Mantenha o Secret Key privado.',
     fields: [
       { key: 'appId', label: 'App ID', hint: 'Identificador do seu app na Shopee.' },
       { key: 'secretKey', label: 'Secret Key', hint: 'Chave secreta do app (não compartilhe).' },
@@ -16,7 +17,7 @@ const PLATFORMS = [
   {
     id: 'amazon',
     label: 'Amazon',
-    instructions: 'Informe seu tracking ID (tag) e o marketplace correto onde os links serão resolvidos.',
+    instructions: 'Onde obter: affiliate-program.amazon.com.br → Gerenciar → Tracking IDs. Informe também o marketplace correto dos links.',
     fields: [
       { key: 'tag', label: 'Tag de afiliado', hint: 'Ex.: suatag-20' },
       { key: 'marketplace', label: 'Marketplace', placeholder: 'amazon.com.br', hint: 'Domínio da loja Amazon alvo.' },
@@ -25,7 +26,7 @@ const PLATFORMS = [
   {
     id: 'mercadolivre',
     label: 'Mercado Livre',
-    instructions: 'Para gerar meli.la corretamente, preencha os 3 campos: Tag, SSID e CSRF.',
+    instructions: 'Onde obter: afiliados.mercadolivre.com.br. A Tag vem do painel; SSID e CSRF são cookies da sessão ativa e devem ser tratados como dados sensíveis.',
     fields: [
       { key: 'tag', label: 'Tag numérica', hint: 'Somente números da sua afiliação.' },
       { key: 'ssid', label: 'SSID (cookie)', hint: 'Valor do cookie ssid da conta afiliada.' },
@@ -35,7 +36,7 @@ const PLATFORMS = [
   {
     id: 'magazineluiza',
     label: 'Magazine Luiza',
-    instructions: 'Preencha a tag de afiliado usada nos links do Magalu.',
+    instructions: 'Onde obter: painel de afiliados do Magazine Luiza. Copie a tag usada nos seus links de afiliado.',
     fields: [{ key: 'tag', label: 'Tag de afiliado', hint: 'Ex.: parceiro123' }]
   },
 ]
@@ -134,7 +135,10 @@ export default function CredenciaisPage() {
 
   return (
     <div className="max-w-xl">
-      <h2 className="text-2xl font-bold text-gray-800 mb-1">Credenciais</h2>
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="text-2xl font-bold text-gray-800 mb-1">Credenciais</h2>
+        <HelpLink topic="como-configurar-credenciais">Ajuda</HelpLink>
+      </div>
       <p className="text-gray-500 text-sm mb-6">Configure suas contas de afiliado por plataforma</p>
       <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs mb-4">
         Mercado Livre: para gerar link curto correto (meli.la), preencha obrigatoriamente Tag, SSID e CSRF.

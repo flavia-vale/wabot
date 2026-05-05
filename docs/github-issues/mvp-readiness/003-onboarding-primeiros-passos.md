@@ -1,3 +1,6 @@
+## Status
+Concluída em 05 de maio de 2026. Implementada e testada no repositório.
+
 ## Contexto
 O produto possui as telas essenciais, mas o usuário iniciante ainda precisa descobrir sozinho a ordem correta para chegar ao primeiro link convertido: conectar WhatsApp, configurar credenciais, cadastrar grupos e validar logs.
 
@@ -18,12 +21,12 @@ Criar um onboarding guiado que leve o usuário ao primeiro resultado sem depende
 - Se necessário, criar endpoint agregado de readiness do usuário para evitar excesso de chamadas no frontend.
 
 ## Critérios de aceite
-- [ ] Usuário novo vê uma sequência clara de configuração ao entrar no dashboard.
-- [ ] Cada etapa mostra status concluído/pendente.
-- [ ] Cada etapa pendente tem CTA para resolver.
-- [ ] Usuário entende como fazer primeiro teste operacional.
-- [ ] Checklist não bloqueia usuários avançados que já sabem operar.
-- [ ] O estado do checklist reflete dados reais do backend.
+- [x] Usuário novo vê uma sequência clara de configuração ao entrar no dashboard.
+- [x] Cada etapa mostra status concluído/pendente.
+- [x] Cada etapa pendente tem CTA para resolver.
+- [x] Usuário entende como fazer primeiro teste operacional.
+- [x] Checklist não bloqueia usuários avançados que já sabem operar.
+- [x] O estado do checklist reflete dados reais do backend.
 
 ## Fora de escopo
 - Tutorial em vídeo.

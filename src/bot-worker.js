@@ -14,6 +14,7 @@ import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
 import { fetchProductImage } from './converters/imageScrapers.js'
 import db from './db.js'
+import { trackAnalyticsEventSafe } from './analytics.js'
 
 const userId = process.env.BOT_USER_ID
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
@@ -67,9 +68,12 @@ async function loadConfig() {
       imageMode: g.imageMode,
       imageLinkTarget: g.imageLinkTarget,
       fallbackToOriginal: g.fallbackToOriginal,
+      blockedKeywords: g.blockedKeywords,
+      allowedPlatforms: g.allowedPlatforms,
     })),
     monitorJids: user.groups.filter(g => g.role === 'monitor').map(g => g.waJid),
     post: user.groups.filter(g => g.role === 'post').map(g => g.waJid),
+    postDetails: user.groups.filter(g => g.role === 'post').map(g => ({ waJid: g.waJid, welcomeMsg: g.welcomeMsg })),
   }
 
   const botConfig = user.botConfig ?? {
@@ -78,6 +82,8 @@ async function loadConfig() {
     platforms: 'shopee,amazon,mercadolivre,magazineluiza',
     blockedKeywords: '',
     welcomeMsg: '',
+    feedGlobal: false,
+    postToStatus: false,
   }
 
   return { credentials, groups, plan: user.plan, botConfig }
@@ -187,6 +193,7 @@ async function startBot() {
         create: { userId, status: 'connected', phone },
         update: { status: 'connected', phone },
       })
+      trackAnalyticsEventSafe({ userId, event: 'whatsapp_connected' })
     }
 
     if (connection === 'close') {
@@ -214,11 +221,13 @@ async function startBot() {
   sock.ev.on('group-participants.update', async ({ id: groupJid, participants, action }) => {
     if (action !== 'add') return
     const cfg = await getConfig()
-    if (!cfg.botConfig.welcomeMsg || !cfg.groups.post.includes(groupJid)) return
+    const postGroup = cfg.groups.postDetails.find(g => g.waJid === groupJid)
+    const welcomeMsg = postGroup?.welcomeMsg?.trim() || cfg.botConfig.welcomeMsg
+    if (!welcomeMsg || !cfg.groups.post.includes(groupJid)) return
     for (const participantJid of participants) {
       try {
         await sock.sendMessage(groupJid, {
-          text: cfg.botConfig.welcomeMsg,
+          text: welcomeMsg,
           mentions: [participantJid],
         })
         logger.info({ groupJid, participantJid }, 'Welcome msg enviada')
@@ -244,8 +253,10 @@ async function startBot() {
 
       const jid = msg.key.remoteJid
       const cfg = await getConfig()
-      logger.info({ jid, monitorGroups: cfg.groups.monitor }, 'mensagem recebida')
-      if (!cfg.groups.monitorJids.includes(jid)) continue
+      logger.info({ jid, monitorGroups: cfg.groups.monitor, feedGlobal: cfg.botConfig.feedGlobal }, 'mensagem recebida')
+      const monitorGroup = cfg.groups.monitor.find(m => m.waJid === jid)
+      if (!cfg.botConfig.feedGlobal && !monitorGroup) continue
+      if (cfg.botConfig.feedGlobal && !String(jid).endsWith('@g.us')) continue
 
       const text =
         msg.message?.conversation ||
@@ -254,9 +265,10 @@ async function startBot() {
 
       if (!text) continue
 
-      // Filtro por palavras bloqueadas
-      if (cfg.botConfig.blockedKeywords) {
-        const blocked = cfg.botConfig.blockedKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean)
+      // Filtro por palavras bloqueadas (override por grupo monitorado quando preenchido)
+      const blockedKeywords = monitorGroup?.blockedKeywords?.trim() || cfg.botConfig.blockedKeywords
+      if (blockedKeywords) {
+        const blocked = blockedKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean)
         const lower = text.toLowerCase()
         if (blocked.some(kw => lower.includes(kw))) {
           logger.info({ blocked }, 'Mensagem bloqueada por keyword'); continue
@@ -266,9 +278,9 @@ async function startBot() {
       const links = detectLinks(text)
       if (!links.length) continue
 
-      // Filtro por plataforma
-      const enabledPlatforms = new Set(cfg.botConfig.platforms.split(',').filter(Boolean))
-      const monitorGroup = cfg.groups.monitor.find(m => m.waJid === jid)
+      // Filtro por plataforma (override por grupo monitorado quando preenchido)
+      const platformCsv = monitorGroup?.allowedPlatforms?.trim() || cfg.botConfig.platforms
+      const enabledPlatforms = new Set(platformCsv.split(',').filter(Boolean))
 
       // Pre-fetch image URL uma vez por mensagem (lazy, com cache)
       let cachedImageUrl
@@ -318,7 +330,8 @@ async function startBot() {
 
       const primary = conversions[0]
 
-      for (const destJid of cfg.groups.post) {
+      const destinations = cfg.botConfig.postToStatus ? [...cfg.groups.post, 'status@broadcast'] : cfg.groups.post
+      for (const destJid of destinations) {
         const key = `${destJid}:${primary.converted}`
         if (dedup.links[key] && Date.now() - dedup.links[key] < dedupeWindowMs) {
           logger.info({ destJid }, 'Duplicata ignorada'); continue
@@ -342,8 +355,11 @@ async function startBot() {
         try {
           await sock.sendMessage(destJid, msgPayload)
           logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode }, 'Mensagem enviada')
+          const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
           db.messageLog.create({
             data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: finalText, status: 'success' },
+          }).then(() => {
+            if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
           }).catch(() => {})
           if (cfg.plan === 'basic') {
             adSendCount++
@@ -355,6 +371,8 @@ async function startBot() {
           logger.error({ destJid, err: err.message }, 'Erro ao enviar')
           db.messageLog.create({
             data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: finalText, status: 'error', errorMsg: err.message },
+          }).then(() => {
+            trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: err.name } })
           }).catch(() => {})
         }
       }
