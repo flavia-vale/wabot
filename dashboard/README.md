@@ -1,18 +1,26 @@
 # Dashboard - Deploy & operação segura
 
-## Estado atual da rota principal
+## Arquitetura atual
 
-A rota raiz (`/`) do dashboard não serve mais uma homepage/landing page estática. Ela redireciona imediatamente para `/dashboard` pelo App Router do Next.js.
+O dashboard é uma aplicação Next.js localizada em `dashboard/app` e executada pelos scripts de `dashboard/package.json`.
 
-Os arquivos legados de landing/index foram removidos para permitir recriação futura do zero, sem dependências antigas de CDN, Babel no navegador ou componentes estáticos de marketing.
+- Desenvolvimento local: `npm run dev`
+- Build de produção: `npm run build`
+- Execução de produção: `npm run start`
+- Lint: `npm run lint`
 
-## Pré-check obrigatório antes de restart (produção)
+## Arquivos estáticos
 
-Execute **antes** de qualquer `pm2 restart`:
+A antiga homepage estática em `dashboard/public/` foi removida porque não é usada em produção. Com isso, a aplicação deixa de servir rotas legadas como `/Landing.html`, `/src/*.jsx` e `/tweaks-panel.jsx` pelo Next.js.
 
-1. Validar build do dashboard:
-   - `cd /home/deploy/wabot/dashboard && npm run build`
-2. Validar sintaxe do backend:
-   - `cd /home/deploy/wabot && node --check src/api/server.js`
-3. Confirmar que `/` redireciona para `/dashboard` após o restart.
-4. Confirmar saúde dos processos PM2 (`api` e `dashboard`).
+Para novos assets públicos do dashboard, recrie `dashboard/public/` somente com arquivos realmente referenciados pela aplicação Next, como imagens, `robots.txt` ou outros assets estáticos necessários.
+
+## Pré-check obrigatório antes de restart em produção
+
+Execute antes de reiniciar o processo `dashboard` no PM2:
+
+1. Validar dependências do dashboard com `npm install` ou `npm ci`, conforme o fluxo de deploy usado.
+2. Rodar `npm run lint` dentro de `dashboard/`.
+3. Rodar `npm run build` dentro de `dashboard/`.
+4. Reiniciar o processo PM2 somente após lint e build passarem.
+5. Validar login e navegação principal do dashboard após o restart.
