@@ -1,4 +1,5 @@
 import db from '../../db.js'
+import { getBotMetrics, isRunning } from '../../manager.js'
 
 export async function dashboardRoutes(app) {
   app.get('/status', { onRequest: [app.authenticate] }, async (req) => {

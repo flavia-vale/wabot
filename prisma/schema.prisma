@@ -94,6 +94,8 @@ model ScheduledMessage {
   sentAt      DateTime?
   status      String    @default("pending")
   createdAt   DateTime  @default(now())
+
+  @@index([userId, status, scheduledAt])
 }
 
 model MessageLog {
@@ -109,6 +111,9 @@ model MessageLog {
   status       String   @default("success")
   errorMsg     String?
   sentAt       DateTime @default(now())
+
+  @@index([userId, sentAt])
+  @@index([userId, status, sentAt])
 }
 
 
