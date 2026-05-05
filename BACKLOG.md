@@ -1007,7 +1007,7 @@ Atualmente erros são exibidos como `<p className="text-red-500">` inline, que s
 
 ### FEAT-009 · Modal de confirmação customizado
 
-**Status:** open  
+**Status:** done
 **Prioridade:** baixa  
 **Inspiração:** proafiliados.shop — `showConfirm()` com título, mensagem e botões customizados
 
@@ -1030,7 +1030,7 @@ if (!ok) return
 
 ### FEAT-010 · Instruções inline nas telas de credenciais
 
-**Status:** open  
+**Status:** done
 **Prioridade:** média  
 **Inspiração:** proafiliados.shop — box amarelo com passo a passo dentro do modal de cada plataforma
 

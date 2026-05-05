@@ -1,4 +1,5 @@
 import db from '../../db.js'
+import { trackAnalyticsEventSafe } from '../../analytics.js'
 
 function normalizeGroupJid(rawJid) {
   const jid = String(rawJid ?? '').trim()
@@ -22,6 +23,11 @@ export async function groupsRoutes(app) {
     try {
       const group = await db.group.create({
         data: { userId: req.user.sub, waJid, name, role },
+      })
+      trackAnalyticsEventSafe({
+        userId: req.user.sub,
+        event: role === 'monitor' ? 'monitor_group_created' : 'post_group_created',
+        metadata: { role },
       })
       return group
     } catch (err) {

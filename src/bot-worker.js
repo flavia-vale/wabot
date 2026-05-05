@@ -187,6 +187,7 @@ async function startBot() {
         create: { userId, status: 'connected', phone },
         update: { status: 'connected', phone },
       })
+      trackAnalyticsEventSafe({ userId, event: 'whatsapp_connected' })
     }
 
     if (connection === 'close') {
@@ -342,8 +343,11 @@ async function startBot() {
         try {
           await sock.sendMessage(destJid, msgPayload)
           logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode }, 'Mensagem enviada')
+          const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
           db.messageLog.create({
             data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: finalText, status: 'success' },
+          }).then(() => {
+            if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
           }).catch(() => {})
           if (cfg.plan === 'basic') {
             adSendCount++
@@ -355,6 +359,8 @@ async function startBot() {
           logger.error({ destJid, err: err.message }, 'Erro ao enviar')
           db.messageLog.create({
             data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: finalText, status: 'error', errorMsg: err.message },
+          }).then(() => {
+            trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: err.name } })
           }).catch(() => {})
         }
       }
