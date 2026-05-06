@@ -17,6 +17,8 @@ export default function ConfigPage() {
     platforms: 'shopee,amazon,mercadolivre,magazineluiza',
     blockedKeywords: '',
     welcomeMsg: '',
+    feedGlobal: false,
+    postToStatus: false,
   })
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -36,6 +38,8 @@ export default function ConfigPage() {
         platforms: cfg.platforms ?? 'shopee,amazon,mercadolivre,magazineluiza',
         blockedKeywords: cfg.blockedKeywords ?? '',
         welcomeMsg: cfg.welcomeMsg ?? '',
+        feedGlobal: cfg.feedGlobal ?? false,
+        postToStatus: cfg.postToStatus ?? false,
       })
       setLoadedOnce(true)
     } catch (err) {
@@ -56,6 +60,8 @@ export default function ConfigPage() {
           platforms: cfg.platforms ?? 'shopee,amazon,mercadolivre,magazineluiza',
           blockedKeywords: cfg.blockedKeywords ?? '',
           welcomeMsg: cfg.welcomeMsg ?? '',
+          feedGlobal: cfg.feedGlobal ?? false,
+          postToStatus: cfg.postToStatus ?? false,
         })
         setLoadedOnce(true)
       })
@@ -114,6 +120,8 @@ export default function ConfigPage() {
         platforms: form.platforms,
         blockedKeywords: form.blockedKeywords,
         welcomeMsg: form.welcomeMsg,
+        feedGlobal: form.feedGlobal,
+        postToStatus: form.postToStatus,
       })
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
@@ -148,6 +156,20 @@ export default function ConfigPage() {
         <div className="bg-white rounded-2xl shadow p-5">
           <h3 className="font-semibold text-gray-700 mb-1">🏪 Plataformas habilitadas</h3>
           <div className="flex flex-col gap-2">{ALL_PLATFORMS.map(p => <label key={p.id} className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={enabledPlatforms.has(p.id)} onChange={() => togglePlatform(p.id)} className="w-4 h-4 accent-green-600" /><span className="text-sm text-gray-700">{p.label}</span></label>)}</div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow p-5">
+          <h3 className="font-semibold text-gray-700 mb-3">🌐 Cobertura e destinos extras</h3>
+          <div className="flex flex-col gap-3">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input type="checkbox" checked={form.feedGlobal} onChange={e => setForm(f => ({ ...f, feedGlobal: e.target.checked }))} className="mt-1 w-4 h-4 accent-green-600" />
+              <span><span className="block text-sm font-medium text-gray-700">Feed Global</span><span className="block text-xs text-gray-400">Monitorar links em todos os grupos em que o número participa.</span></span>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input type="checkbox" checked={form.postToStatus} onChange={e => setForm(f => ({ ...f, postToStatus: e.target.checked }))} className="mt-1 w-4 h-4 accent-green-600" />
+              <span><span className="block text-sm font-medium text-gray-700">Postar também no Status</span><span className="block text-xs text-gray-400">Além dos grupos de destino, publicar a oferta convertida no Status do WhatsApp.</span></span>
+            </label>
+          </div>
         </div>
 
         <div className="bg-white rounded-2xl shadow p-5"><h3 className="font-semibold text-gray-700 mb-1">🚫 Palavras bloqueadas</h3><input type="text" placeholder="ex: proibido, spam, fora" value={form.blockedKeywords} onChange={e => setForm(f => ({ ...f, blockedKeywords: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400" /></div>

@@ -3,6 +3,7 @@ import { useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSearchParams } from 'next/navigation'
 import Image from 'next/image'
+import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 
@@ -141,6 +142,10 @@ function LoginContent() {
             </p>
           )}
 
+          <p className={`text-xs leading-5 ${isRegister ? 'text-emerald-200' : 'text-gray-500'}`}>
+            Ao continuar, você concorda com os <Link href="/termos" className="font-semibold underline">Termos de Uso</Link> e a <Link href="/privacidade" className="font-semibold underline">Política de Privacidade</Link>.
+          </p>
+
           <button
             type="submit"
             disabled={loading}
@@ -160,6 +165,12 @@ function LoginContent() {
         >
           {isRegister ? 'Já tenho conta — Entrar' : 'Ainda não tenho conta — começar agora'}
         </button>
+
+        <nav className={`mt-6 flex flex-wrap justify-center gap-3 text-xs ${isRegister ? 'text-emerald-200' : 'text-gray-500'}`}>
+          <Link href="/suporte" className="hover:underline">Suporte</Link>
+          <Link href="/termos" className="hover:underline">Termos</Link>
+          <Link href="/privacidade" className="hover:underline">Privacidade</Link>
+        </nav>
       </div>
     </div>
   )

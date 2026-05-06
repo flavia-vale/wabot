@@ -1,3 +1,6 @@
+## Status
+Concluída em 05 de maio de 2026. Implementada e testada no repositório.
+
 ## Contexto
 Hoje a raiz do dashboard redireciona direto para `/dashboard`, sem uma camada pública mínima para venda, confiança e validação legal. Para abrir vendas com tráfego frio ou checkout público, precisamos de páginas públicas básicas.
 
@@ -13,13 +16,13 @@ Criar uma camada pública mínima de confiança para permitir venda profissional
 - Adicionar links de Termos, Privacidade, Quem Somos e Suporte no login e/ou rodapé público.
 
 ## Critérios de aceite
-- [ ] `/` não redireciona automaticamente para o dashboard; apresenta landing pública.
-- [ ] Usuário consegue acessar Termos de Uso sem estar logado.
-- [ ] Usuário consegue acessar Política de Privacidade sem estar logado.
-- [ ] Usuário consegue acessar Quem Somos sem estar logado.
-- [ ] Usuário consegue encontrar um caminho claro de suporte antes e depois do login.
-- [ ] Login/cadastro exibem links para Termos e Privacidade.
-- [ ] Conteúdo não promete assinatura recorrente se o modelo implementado for acesso por 30 dias.
+- [x] `/` não redireciona automaticamente para o dashboard; apresenta landing pública.
+- [x] Usuário consegue acessar Termos de Uso sem estar logado.
+- [x] Usuário consegue acessar Política de Privacidade sem estar logado.
+- [x] Usuário consegue acessar Quem Somos sem estar logado.
+- [x] Usuário consegue encontrar um caminho claro de suporte antes e depois do login.
+- [x] Login/cadastro exibem links para Termos e Privacidade.
+- [x] Conteúdo não promete assinatura recorrente se o modelo implementado for acesso por 30 dias.
 
 ## Fora de escopo
 - Landing page com CRO avançado.
