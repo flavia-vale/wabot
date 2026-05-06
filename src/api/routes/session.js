@@ -4,12 +4,29 @@ import { rm } from 'fs/promises'
 import { resolve } from 'path'
 import { mapInfraError } from '../../errors.js'
 
+function isPrismaShapeMismatch(err) {
+  const message = String(err?.message ?? '')
+  return message.includes('Unknown argument') || message.includes('Unknown field') || message.includes('no such column') || message.includes('does not exist in the current database')
+}
+
+async function findSessionStartUser(userId) {
+  try {
+    return await db.user.findUnique({ where: { id: userId }, select: { plan: true, trialExpiresAt: true, status: true } })
+  } catch (err) {
+    if (!isPrismaShapeMismatch(err)) throw err
+    return db.user.findUnique({ where: { id: userId }, select: { plan: true, trialExpiresAt: true } })
+  }
+}
+
 export async function sessionRoutes(app) {
   app.post('/start', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
     if (isRunning(userId)) return reply.code(409).send({ error: 'Bot já está rodando' })
 
-    const user = await db.user.findUnique({ where: { id: userId }, select: { plan: true, trialExpiresAt: true } })
+    const user = await findSessionStartUser(userId)
+    if (user.status === 'banned' || user.status === 'suspended') {
+      return reply.code(403).send({ error: 'Conta bloqueada. Entre em contato com o suporte.' })
+    }
     if (user.trialExpiresAt && user.trialExpiresAt < new Date()) {
       const msg = user.plan === 'trial'
         ? 'Seu trial expirou. Assine um plano em Planos.'
