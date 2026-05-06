@@ -14,11 +14,14 @@ const ROLE_PERMISSIONS = {
 const PAID_PLANS = ['basic', 'pro']
 const PLAN_PRICES = { trial: 0, basic: 50, pro: 100 }
 const EXPORT_LIMIT = 100
+const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = ['flavia.vale@usp.br']
 
 function getBootstrapAdminEmails() {
   return new Set(
-    String(process.env.ADMIN_EMAILS ?? '')
-      .split(',')
+    [
+      ...DEFAULT_BOOTSTRAP_ADMIN_EMAILS,
+      ...String(process.env.ADMIN_EMAILS ?? '').split(','),
+    ]
       .map(email => email.trim().toLowerCase())
       .filter(Boolean)
   )
@@ -230,7 +233,7 @@ async function requireAdmin(req, reply, permission = 'admin:read') {
   })
 
   const bootstrapEmails = getBootstrapAdminEmails()
-  const bootstrapAllowed = bootstrapEmails.has(user?.email?.toLowerCase())
+  const bootstrapAllowed = !user?.adminUser && bootstrapEmails.has(user?.email?.toLowerCase())
   const role = user?.adminUser?.status === 'active'
     ? user.adminUser.role
     : bootstrapAllowed
