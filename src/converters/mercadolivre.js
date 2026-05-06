@@ -186,6 +186,8 @@ async function createAffiliateLink(mlUrl, tag, creds) {
         attempt: attempt.label,
         apiError: result?.error || result?.message || res.data?.error || res.data?.message,
         urls: res.data?.urls,
+        rawBody: typeof res.data === 'string' ? res.data.slice(0, 500) : JSON.stringify(res.data).slice(0, 500),
+        responseHeaders: { 'content-type': res.headers?.['content-type'], 'set-cookie': res.headers?.['set-cookie']?.length },
       }
       logger.warn(lastError, 'ML createLink: API respondeu sem short_url')
     } catch (err) {
@@ -280,7 +282,8 @@ export async function convert(url, creds) {
         }
       }
 
-      logger.warn({ url, target }, 'ML createLink: todas as tentativas falharam — caindo para partner_id')
+      logger.warn({ url, target }, 'ML createLink: todas as tentativas falharam — abortando (ssid preenchido, partner_id desativado)')
+      return null
     }
 
     let fallbackTarget = target
