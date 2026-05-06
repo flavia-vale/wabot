@@ -19,6 +19,7 @@ function LoginContent() {
   const ref = searchParams.get('ref')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [contactPhone, setContactPhone] = useState('')
   const [isRegister, setIsRegister] = useState(false)
   const [error, setError] = useState(() => {
     if (typeof window === 'undefined') return ''
@@ -39,7 +40,7 @@ function LoginContent() {
     setSuccess('')
     setLoading(true)
     try {
-      if (isRegister) await api.register(email, password, ref)
+      if (isRegister) await api.register(email, password, contactPhone, ref)
       else await api.login(email, password)
       setSuccess(isRegister ? 'Conta criada com sucesso. Redirecionando...' : 'Login realizado. Redirecionando...')
       setTimeout(() => router.push('/dashboard'), 300)
@@ -110,6 +111,25 @@ function LoginContent() {
               className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 w-full"
             />
           </div>
+          {isRegister && (
+            <div>
+              <label htmlFor="contactPhone" className="block text-sm font-medium mb-1 text-emerald-100">Celular/WhatsApp para suporte</label>
+              <input
+                id="contactPhone"
+                type="tel"
+                inputMode="tel"
+                placeholder="Ex: 5511999999999"
+                value={contactPhone}
+                onChange={e => setContactPhone(e.target.value)}
+                required={isRegister}
+                className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 w-full"
+              />
+              <p className="mt-1 text-[11px] leading-4 text-emerald-200">
+                Usaremos este contato para suporte proativo, como avisar se seu robô ficar parado por 2 dias ou se detectarmos dificuldade na configuração.
+              </p>
+            </div>
+          )}
+
           <div>
             <div className="mb-1 flex items-center justify-between gap-3">
               <label htmlFor="password" className={`block text-sm font-medium ${isRegister ? 'text-emerald-100' : 'text-gray-700'}`}>Senha</label>
@@ -160,7 +180,7 @@ function LoginContent() {
         </form>
 
         <button
-          onClick={() => { setIsRegister(!isRegister); setError(''); setSuccess('') }}
+          onClick={() => { setIsRegister(!isRegister); setError(''); setSuccess(''); setContactPhone('') }}
           className={`mt-4 text-sm hover:underline w-full text-center ${isRegister ? 'text-emerald-200' : 'text-green-600'}`}
         >
           {isRegister ? 'Já tenho conta — Entrar' : 'Ainda não tenho conta — começar agora'}

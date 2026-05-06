@@ -9,7 +9,10 @@ export async function sessionRoutes(app) {
     const userId = req.user.sub
     if (isRunning(userId)) return reply.code(409).send({ error: 'Bot já está rodando' })
 
-    const user = await db.user.findUnique({ where: { id: userId }, select: { plan: true, trialExpiresAt: true } })
+    const user = await db.user.findUnique({ where: { id: userId }, select: { plan: true, trialExpiresAt: true, status: true } })
+    if (user.status === 'banned' || user.status === 'suspended') {
+      return reply.code(403).send({ error: 'Conta bloqueada. Entre em contato com o suporte.' })
+    }
     if (user.trialExpiresAt && user.trialExpiresAt < new Date()) {
       const msg = user.plan === 'trial'
         ? 'Seu trial expirou. Assine um plano em Planos.'
