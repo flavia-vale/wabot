@@ -16,6 +16,7 @@ import { logsRoutes } from './routes/logs.js'
 import { adminRoutes } from './routes/admin.js'
 import { registerApiMetricsHooks } from './metrics.js'
 import db from '../db.js'
+import { resumePersistedBots, stopAllBots } from '../manager.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
 registerApiMetricsHooks(app)
@@ -178,3 +179,16 @@ await ensureDatabaseReady()
 startLogRetentionJob()
 await app.listen({ port, host: '0.0.0.0' })
 console.log(`API rodando em http://localhost:${port}`)
+await resumePersistedBots(db, app.log).catch(err => {
+  app.log.error({ err: err.message }, 'Falha ao retomar sessões WhatsApp persistidas')
+})
+
+async function shutdown(signal) {
+  app.log.info({ signal }, 'Encerrando API com parada graciosa')
+  stopAllBots()
+  await app.close()
+  await db.$disconnect()
+}
+
+process.once('SIGTERM', () => { void shutdown('SIGTERM') })
+process.once('SIGINT', () => { void shutdown('SIGINT') })
