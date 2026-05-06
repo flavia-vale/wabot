@@ -33,6 +33,7 @@ function LoginContent() {
   })
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -42,8 +43,8 @@ function LoginContent() {
     try {
       if (isRegister) await api.register(email, password, contactPhone, ref)
       else await api.login(email, password)
-      setSuccess(isRegister ? 'Conta criada com sucesso. Redirecionando...' : 'Login realizado. Redirecionando...')
-      setTimeout(() => router.push('/dashboard'), 300)
+      setSuccess(isRegister ? 'Conta criada com sucesso. Redirecionando para o checklist...' : 'Login realizado. Redirecionando para o checklist...')
+      setTimeout(() => router.push('/dashboard/inicio'), 300)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -75,10 +76,11 @@ function LoginContent() {
         </div>
 
         <div className="mb-2 text-center">
-          <h1 className={`text-2xl font-bold ${isRegister ? 'text-emerald-100' : 'text-green-700'}`}>Bot Conversor para Afiliados</h1>
+          <p className={`text-sm font-semibold ${isRegister ? 'text-emerald-200' : 'text-green-700'}`}><span aria-hidden="true">🤖</span> Bot Conversor para Afiliados</p>
+          <h1 className={`mt-2 text-2xl font-bold ${isRegister ? 'text-emerald-100' : 'text-gray-900'}`}>{isRegister ? 'Criar sua conta' : 'Entrar na sua conta'}</h1>
         </div>
         <p className={`text-center text-sm mb-4 ${isRegister ? 'text-emerald-200' : 'text-gray-500'}`}>
-          {isRegister ? 'Crie sua conta para converter links, organizar grupos e enviar ofertas com menos trabalho manual.' : 'Acesse seu painel para conectar o WhatsApp, converter links e acompanhar seus envios.'}
+          {isRegister ? 'Comece configurando seu WhatsApp e suas credenciais de afiliado.' : 'Acesse seu painel para conectar o WhatsApp e gerenciar seus grupos.'}
         </p>
 
         {ref && (
@@ -108,7 +110,8 @@ function LoginContent() {
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
-              className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 w-full"
+              autoComplete="email"
+              className="border bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-400 w-full rounded-lg"
             />
           </div>
           {isRegister && (
@@ -122,7 +125,8 @@ function LoginContent() {
                 value={contactPhone}
                 onChange={e => setContactPhone(e.target.value)}
                 required={isRegister}
-                className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 w-full"
+                autoComplete="tel"
+                className="border bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-400 w-full rounded-lg"
               />
               <p className="mt-1 text-[11px] leading-4 text-emerald-200">
                 Usaremos este contato para suporte proativo, como avisar se seu robô ficar parado por 2 dias ou se detectarmos dificuldade na configuração.
@@ -142,19 +146,32 @@ function LoginContent() {
                 </a>
               )}
             </div>
-            <input
-              id="password"
-              type="password"
-              placeholder="Digite sua senha"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 w-full"
-            />
+            <div className="relative">
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Digite sua senha"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                minLength={isRegister ? 8 : undefined}
+                autoComplete={isRegister ? 'new-password' : 'current-password'}
+                className="w-full rounded-lg border bg-white px-3 py-2 pr-24 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-400"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((value) => !value)}
+                aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                className="absolute inset-y-1 right-1 rounded-md px-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+              >
+                {showPassword ? 'Ocultar' : 'Mostrar'}
+              </button>
+            </div>
+            {isRegister && <p className="mt-1 text-[11px] leading-4 text-emerald-200">Use pelo menos 8 caracteres para reduzir erros no cadastro.</p>}
           </div>
 
-          <div aria-live="assertive">{error && <Alert type="error" title="Falha na autenticação" message={error} />}</div>
-          <div aria-live="polite">{success && <Alert type="success" title="Sucesso" message={success} />}</div>
+          {error && <Alert type="error" title="Falha na autenticação" message={error} />}
+          {success && <Alert type="success" title="Sucesso" message={success} />}
 
           {isRegister && (
             <p className={`text-xs ${isRegister ? 'text-emerald-200' : 'text-gray-500'}`}>
@@ -175,7 +192,7 @@ function LoginContent() {
                 : 'bg-green-600 hover:bg-green-700'
             }`}
           >
-            {loading ? 'Aguarde...' : isRegister ? 'Criar conta e acessar painel' : 'Entrar no painel'}
+            {loading ? (isRegister ? 'Criando conta...' : 'Entrando...') : isRegister ? 'Criar conta e acessar painel' : 'Entrar no painel'}
           </button>
         </form>
 

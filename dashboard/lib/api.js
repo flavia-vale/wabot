@@ -91,8 +91,11 @@ export const api = {
     return apiFetch(`/api/admin/sessions${query ? `?${query}` : ''}`)
   },
 
-  logs: (status = 'all', page = 1, limit = 20) =>
-    apiFetch(`/api/logs?status=${status}&page=${page}&limit=${limit}`),
+  logs: (status = 'all', page = 1, limit = 20, search = '') => {
+    const query = new URLSearchParams({ status, page: String(page), limit: String(limit) })
+    if (search) query.set('search', search)
+    return apiFetch(`/api/logs?${query}`)
+  },
   logsClear: () => apiFetch('/api/logs/clear', { method: 'DELETE' }),
 }
 
