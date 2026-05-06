@@ -116,6 +116,8 @@ model ScheduledMessage {
   sentAt      DateTime?
   status      String    @default("pending")
   createdAt   DateTime  @default(now())
+
+  @@index([userId, status, scheduledAt])
 }
 
 model MessageLog {
@@ -131,6 +133,33 @@ model MessageLog {
   status       String   @default("success")
   errorMsg     String?
   sentAt       DateTime @default(now())
+
+  @@index([userId, sentAt])
+  @@index([userId, status, sentAt])
+}
+
+
+model AnalyticsEvent {
+  id        String   @id
+  userId    String?
+  event     String
+  metadata  String   @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([event, createdAt])
+  @@index([userId, createdAt])
+}
+
+
+model AnalyticsEvent {
+  id        String   @id
+  userId    String?
+  event     String
+  metadata  String   @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([event, createdAt])
+  @@index([userId, createdAt])
 }
 
 

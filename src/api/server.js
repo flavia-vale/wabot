@@ -55,6 +55,31 @@ async function verifyDatabase() {
   await db.user.count()
 }
 
+
+const LOG_RETENTION_DAYS = process.env.LOG_RETENTION_DAYS === undefined
+  ? 90
+  : Number(process.env.LOG_RETENTION_DAYS)
+const LOG_RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000
+
+async function cleanupOldLogs() {
+  if (LOG_RETENTION_DAYS <= 0) return
+  const cutoff = new Date(Date.now() - LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000)
+  const result = await db.messageLog.deleteMany({ where: { sentAt: { lt: cutoff } } })
+  if (result.count > 0) app.log.info({ deleted: result.count, cutoff }, 'Logs antigos removidos por retenção automática')
+}
+
+function startLogRetentionJob() {
+  if (LOG_RETENTION_DAYS <= 0) {
+    app.log.info('Retenção automática de logs desabilitada')
+    return
+  }
+  cleanupOldLogs().catch(err => app.log.error({ err: err.message }, 'Falha na limpeza automática de logs'))
+  const timer = setInterval(() => {
+    cleanupOldLogs().catch(err => app.log.error({ err: err.message }, 'Falha na limpeza automática de logs'))
+  }, LOG_RETENTION_INTERVAL_MS)
+  timer.unref?.()
+}
+
 async function ensureDatabaseReady() {
   try {
     await verifyDatabase()
@@ -124,5 +149,6 @@ app.get('/ready', async (req, reply) => {
 
 const port = Number(process.env.API_PORT) || 3001
 await ensureDatabaseReady()
+startLogRetentionJob()
 await app.listen({ port, host: '0.0.0.0' })
 console.log(`API rodando em http://localhost:${port}`)
