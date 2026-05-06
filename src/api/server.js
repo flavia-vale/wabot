@@ -13,6 +13,7 @@ import { configRoutes } from './routes/config.js'
 import { broadcastRoutes } from './routes/broadcast.js'
 import { dashboardRoutes } from './routes/dashboard.js'
 import { logsRoutes } from './routes/logs.js'
+import { adminRoutes } from './routes/admin.js'
 import db from '../db.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
@@ -119,6 +120,11 @@ app.decorate('authenticate', async function (req, reply) {
     const token = getTokenFromCookie(req.headers.cookie)
     if (!token) throw new Error('Token ausente')
     req.user = app.jwt.verify(token)
+    const activity = await db.user.updateMany({
+      where: { id: req.user.sub, status: { notIn: ['banned', 'suspended'] } },
+      data: { lastActivityAt: new Date() },
+    })
+    if (activity.count !== 1) throw new Error('Usuário inativo ou bloqueado')
   } catch {
     reply.code(401).send({ error: 'Não autorizado' })
   }
@@ -133,6 +139,7 @@ app.register(configRoutes, { prefix: '/api/config' })
 app.register(broadcastRoutes, { prefix: '/api/broadcast' })
 app.register(dashboardRoutes, { prefix: '/api/dashboard' })
 app.register(logsRoutes, { prefix: '/api/logs' })
+app.register(adminRoutes, { prefix: '/api/admin' })
 
 // Liveness: processo está de pé
 app.get('/health', () => ({ ok: true }))
