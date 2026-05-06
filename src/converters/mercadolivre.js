@@ -159,6 +159,11 @@ async function callCreateLinkApi(mlUrl, tag, { cookieHeader, csrf }) {
 async function createAffiliateLink(mlUrl, tag, creds) {
   const { ssid, csrf, cookie, id } = creds
 
+  if (!ssid && !cookie) {
+    logger.warn({ ssid, cookie, id }, 'ML createLink: ssid vazio, pulando chamada API')
+    return null
+  }
+
   // Tenta primeiro sem csrf — alguns fluxos do ML aceitam só com ssid
   const attempts = []
   attempts.push({ cookieHeader: buildCookieHeader({ ssid, cookie, id }), csrf: null, label: 'no-csrf' })
@@ -169,6 +174,7 @@ async function createAffiliateLink(mlUrl, tag, creds) {
   let lastError = null
   for (const attempt of attempts) {
     try {
+      logger.info({ attempt: attempt.label, mlUrl, hasSsid: !!ssid, hasCsrf: !!csrf }, 'ML createLink: tentando chamada API')
       const res = await callCreateLinkApi(mlUrl, tag, attempt)
       const result = res.data?.urls?.[0]
       if (result?.short_url) {
