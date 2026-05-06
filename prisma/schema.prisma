@@ -28,6 +28,7 @@ model User {
 
   waSession             WaSession?
   groups                Group[]
+  groupTargets          GroupTarget[]
   credentials           Credential[]
   payments              Payment[]
   botConfig             BotConfig?

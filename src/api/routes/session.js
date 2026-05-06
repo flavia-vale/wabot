@@ -1,7 +1,7 @@
 import { startBot, stopBot, isRunning, onQR, onStatus, listGroups, requestPairingCode, getBotMetrics } from '../../manager.js'
 import db from '../../db.js'
 import { rm } from 'fs/promises'
-import { resolve } from 'path'
+import { getAuthInfoDir } from '../../paths.js'
 import { mapInfraError } from '../../errors.js'
 
 function isPrismaShapeMismatch(err) {
@@ -102,7 +102,7 @@ export async function sessionRoutes(app) {
       where: { userId },
       data: { status: 'disconnected', phone: null },
     }).catch(() => {})
-    const authDir = resolve(`./auth_info/${userId}`)
+    const authDir = getAuthInfoDir(userId)
     await rm(authDir, { recursive: true, force: true })
     return { ok: true }
   })
