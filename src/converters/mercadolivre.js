@@ -1,4 +1,5 @@
 import axios from 'axios'
+import logger from '../logger.js'
 
 // Captura o Location do redirect meli.la sem seguir até o ML
 // (follow-redirects lança erro na 3xx — Location fica em err.response.headers)
@@ -134,9 +135,7 @@ function buildCookieHeader({ ssid, csrf, cookie, id }) {
   return pairs.join('; ')
 }
 
-async function createAffiliateLink(mlUrl, tag, creds) {
-  const { ssid, csrf, cookie, id } = creds
-  const cookieHeader = buildCookieHeader({ ssid, csrf, cookie, id })
+async function callCreateLinkApi(mlUrl, tag, { cookieHeader, csrf }) {
   const res = await axios.post(
     'https://www.mercadolivre.com.br/affiliate-program/api/v2/affiliates/createLink',
     { urls: [mlUrl], tag },
@@ -151,10 +150,44 @@ async function createAffiliateLink(mlUrl, tag, creds) {
         'Origin': 'https://www.mercadolivre.com.br',
       },
       timeout: 10000,
+      validateStatus: () => true,
     }
   )
-  const result = res.data?.urls?.[0]
-  if (result?.short_url) return result.short_url
+  return res
+}
+
+async function createAffiliateLink(mlUrl, tag, creds) {
+  const { ssid, csrf, cookie, id } = creds
+
+  // Tenta primeiro sem csrf — alguns fluxos do ML aceitam só com ssid
+  const attempts = []
+  attempts.push({ cookieHeader: buildCookieHeader({ ssid, cookie, id }), csrf: null, label: 'no-csrf' })
+  if (csrf) {
+    attempts.push({ cookieHeader: buildCookieHeader({ ssid, csrf, cookie, id }), csrf, label: 'with-csrf' })
+  }
+
+  let lastError = null
+  for (const attempt of attempts) {
+    try {
+      const res = await callCreateLinkApi(mlUrl, tag, attempt)
+      const result = res.data?.urls?.[0]
+      if (result?.short_url) {
+        logger.info({ attempt: attempt.label, mlUrl }, 'ML createLink: short_url gerado')
+        return result.short_url
+      }
+      lastError = {
+        status: res.status,
+        attempt: attempt.label,
+        apiError: result?.error || result?.message || res.data?.error || res.data?.message,
+        urls: res.data?.urls,
+      }
+      logger.warn(lastError, 'ML createLink: API respondeu sem short_url')
+    } catch (err) {
+      lastError = { attempt: attempt.label, err: err.message, status: err.response?.status }
+      logger.warn(lastError, 'ML createLink: erro ao chamar API')
+    }
+  }
+
   return null
 }
 
@@ -209,52 +242,39 @@ export async function convert(url, creds) {
 
     // Gerar link de afiliado real via API (retorna novo meli.la com a tag do usuário)
     if (ssid) {
-      for (const candidate of candidates) {
+      const tries = [...candidates]
+      try {
+        const clean = new URL(candidates[0] ?? target)
+        clean.search = ''
+        tries.push(clean.toString())
+      } catch {}
+      try {
+        const clean = new URL(target)
+        clean.search = ''
+        tries.push(clean.toString())
+      } catch {}
+
+      const seen = new Set()
+      for (const candidate of tries) {
+        if (seen.has(candidate)) continue
+        seen.add(candidate)
         try {
           const affiliateUrl = await createAffiliateLink(candidate, tag, creds)
           if (!affiliateUrl) continue
           const expectedMlbId = extractMlbId(candidate) || extractMlbId(target)
-          if (!expectedMlbId || await validateAffiliateRedirect(affiliateUrl, expectedMlbId)) {
-            return affiliateUrl
+          if (expectedMlbId) {
+            const valid = await validateAffiliateRedirect(affiliateUrl, expectedMlbId)
+            if (!valid) {
+              logger.warn({ affiliateUrl, expectedMlbId }, 'ML createLink: short_url não validou redirect — usando assim mesmo')
+            }
           }
-        } catch {
-          // tenta próximo candidato
+          return affiliateUrl
+        } catch (err) {
+          logger.warn({ candidate, err: err.message }, 'ML createLink: tentativa falhou')
         }
       }
 
-      // Segunda tentativa em formato canônico mínimo (remove query inteira)
-      try {
-        const clean = new URL(candidates[0] ?? target)
-        clean.search = ''
-        const affiliateUrl = await createAffiliateLink(clean.toString(), tag, creds)
-        if (!affiliateUrl) {
-          // tenta próximo fallback
-        } else {
-          const expectedMlbId = extractMlbId(clean.toString()) || extractMlbId(target)
-          if (!expectedMlbId || await validateAffiliateRedirect(affiliateUrl, expectedMlbId)) {
-            return affiliateUrl
-          }
-        }
-      } catch {
-        // cai no fallback
-      }
-
-      // Segunda tentativa em formato canônico mínimo (remove query inteira)
-      try {
-        const clean = new URL(target)
-        clean.search = ''
-        const affiliateUrl = await createAffiliateLink(clean.toString(), tag, creds)
-        if (!affiliateUrl) {
-          // tenta próximo fallback
-        } else {
-          const expectedMlbId = extractMlbId(clean.toString()) || extractMlbId(target)
-          if (!expectedMlbId || await validateAffiliateRedirect(affiliateUrl, expectedMlbId)) {
-            return affiliateUrl
-          }
-        }
-      } catch {
-        // cai no fallback
-      }
+      logger.warn({ url, target }, 'ML createLink: todas as tentativas falharam — caindo para partner_id')
     }
 
     let fallbackTarget = target
