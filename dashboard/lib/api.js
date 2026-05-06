@@ -31,8 +31,8 @@ export const api = {
   login: (email, password) =>
     apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
 
-  register: (email, password, ref) =>
-    apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password, ...(ref && { ref }) }) }),
+  register: (email, password, contactPhone, ref) =>
+    apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password, contactPhone, ...(ref && { ref }) }) }),
 
   me: () => apiFetch('/api/auth/me'),
   logout: () => apiFetch('/api/auth/logout', { method: 'POST' }),
@@ -71,6 +71,22 @@ export const api = {
   scheduledCancel: (id) => apiFetch(`/api/broadcast/scheduled/${id}`, { method: 'DELETE' }),
 
   dashboardStatus: () => apiFetch('/api/dashboard/status'),
+
+  adminMe: () => apiFetch('/api/admin/me'),
+  adminOverview: () => apiFetch('/api/admin/overview'),
+  adminUsers: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/users${query ? `?${query}` : ''}`)
+  },
+  adminUserDetail: (id) => apiFetch(`/api/admin/users/${id}`),
+  adminLogs: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/logs${query ? `?${query}` : ''}`)
+  },
+  adminSessions: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/sessions${query ? `?${query}` : ''}`)
+  },
 
   logs: (status = 'all', page = 1, limit = 20) =>
     apiFetch(`/api/logs?status=${status}&page=${page}&limit=${limit}`),
