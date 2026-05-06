@@ -82,7 +82,7 @@ let configCacheTime = 0
 async function loadConfig() {
   const user = await db.user.findUnique({
     where: { id: userId },
-    include: { groups: true, credentials: true, botConfig: true },
+    include: { groups: true, credentials: true, botConfig: true, groupTargets: { include: { post: true } } },
   })
   if (!user) throw new Error(`Usuário ${userId} não encontrado`)
 
@@ -101,20 +101,22 @@ async function loadConfig() {
     }
   }
 
-  const monitor = user.groups.filter(g => g.role === 'monitor').map(g => ({
-    waJid: g.waJid,
-    imageMode: g.imageMode,
-    imageLinkTarget: g.imageLinkTarget,
-    fallbackToOriginal: g.fallbackToOriginal,
-  }))
+  const targetsByMonitor = new Map()
+  for (const target of user.groupTargets) {
+    if (!targetsByMonitor.has(target.monitorId)) targetsByMonitor.set(target.monitorId, [])
+    if (target.post?.waJid) targetsByMonitor.get(target.monitorId).push(target.post.waJid)
+  }
+
   const groups = {
     monitor: user.groups.filter(g => g.role === 'monitor').map(g => ({
+      id: g.id,
       waJid: g.waJid,
       imageMode: g.imageMode,
       imageLinkTarget: g.imageLinkTarget,
       fallbackToOriginal: g.fallbackToOriginal,
       blockedKeywords: g.blockedKeywords,
       allowedPlatforms: g.allowedPlatforms,
+      targetPostJids: targetsByMonitor.get(g.id) ?? [],
     })),
     monitorJids: user.groups.filter(g => g.role === 'monitor').map(g => g.waJid),
     post: user.groups.filter(g => g.role === 'post').map(g => g.waJid),
@@ -624,7 +626,8 @@ async function startBot() {
 
       const primary = conversions[0]
 
-      const destinations = cfg.botConfig.postToStatus ? [...cfg.groups.post, 'status@broadcast'] : cfg.groups.post
+      const baseDestinations = monitorGroup?.targetPostJids?.length ? monitorGroup.targetPostJids : cfg.groups.post
+      const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
       for (const destJid of destinations) {
         const key = `${destJid}:${primary.converted}`
         if (dedup.links[key] && Date.now() - dedup.links[key] < dedupeWindowMs) {

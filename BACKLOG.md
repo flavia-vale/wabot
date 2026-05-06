@@ -910,7 +910,7 @@ AliExpress usa a API de afiliados Portals (`portals.aliexpress.com`). O link de 
 
 ### FEAT-005 · Grupos alvo por grupo monitorado
 
-**Status:** closed  
+**Status:** done
 **Prioridade:** alta  
 **Inspiração:** proafiliados.shop — "Configurar Alvos" por grupo
 

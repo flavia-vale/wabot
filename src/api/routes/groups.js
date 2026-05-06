@@ -36,6 +36,33 @@ export async function groupsRoutes(app) {
     }
   })
 
+  app.get('/:id/targets', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const monitor = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub, role: 'monitor' } })
+    if (!monitor) return reply.code(404).send({ error: 'Grupo monitor não encontrado' })
+
+    const targets = await db.groupTarget.findMany({ where: { userId: req.user.sub, monitorId: monitor.id }, select: { postId: true } })
+    return { postIds: targets.map(t => t.postId) }
+  })
+
+  app.put('/:id/targets', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const monitor = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub, role: 'monitor' } })
+    if (!monitor) return reply.code(404).send({ error: 'Grupo monitor não encontrado' })
+
+    const postIds = Array.isArray(req.body?.postIds) ? [...new Set(req.body.postIds.map(String))] : []
+    const validPosts = await db.group.findMany({
+      where: { userId: req.user.sub, role: 'post', id: { in: postIds } },
+      select: { id: true },
+    })
+    if (validPosts.length !== postIds.length) return reply.code(400).send({ error: 'Lista de grupos destino inválida' })
+
+    await db.$transaction([
+      db.groupTarget.deleteMany({ where: { userId: req.user.sub, monitorId: monitor.id } }),
+      ...postIds.map(postId => db.groupTarget.create({ data: { userId: req.user.sub, monitorId: monitor.id, postId } })),
+    ])
+
+    return { postIds }
+  })
+
   app.put('/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo não encontrado' })

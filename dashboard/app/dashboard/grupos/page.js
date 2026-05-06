@@ -22,6 +22,9 @@ export default function GruposPage() {
   const [manualLoading, setManualLoading] = useState(false)
   const [manualError, setManualError] = useState('')
   const [deleteTargetId, setDeleteTargetId] = useState(null)
+  const [targetEditorId, setTargetEditorId] = useState(null)
+  const [targetPostIds, setTargetPostIds] = useState([])
+  const [targetLoading, setTargetLoading] = useState(false)
 
   async function load() {
     try { setGroups(await api.groups()) } catch (err) { setActionError(err.message) }
@@ -51,6 +54,41 @@ export default function GruposPage() {
       ? current.filter(p => p !== platformId)
       : [...current, platformId]
     handleUpdateGroup(group.id, { allowedPlatforms: next.join(',') })
+  }
+
+  async function openTargetEditor(groupId) {
+    setActionError('')
+    setTargetLoading(true)
+    setTargetEditorId(groupId)
+    try {
+      const data = await api.groupTargets(groupId)
+      setTargetPostIds(data.postIds ?? [])
+    } catch (err) {
+      setActionError(err.message)
+      setTargetEditorId(null)
+    } finally {
+      setTargetLoading(false)
+    }
+  }
+
+  function toggleTargetPost(postId) {
+    setTargetPostIds(current => current.includes(postId)
+      ? current.filter(id => id !== postId)
+      : [...current, postId])
+  }
+
+  async function saveTargetPosts() {
+    if (!targetEditorId) return
+    setTargetLoading(true)
+    setActionError('')
+    try {
+      await api.updateGroupTargets(targetEditorId, targetPostIds)
+      setTargetEditorId(null)
+    } catch (err) {
+      setActionError(err.message)
+    } finally {
+      setTargetLoading(false)
+    }
   }
 
   async function handleLoadWA() {
@@ -178,9 +216,14 @@ export default function GruposPage() {
                     <span className="font-medium text-gray-700">{g.name}</span>
                     <span className="ml-2 text-gray-400 text-xs">{g.waJid}</span>
                   </div>
-                  <button onClick={() => setDeleteTargetId(g.id)} className="text-red-400 hover:text-red-600 text-xs">
-                    Remover
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => openTargetEditor(g.id)} className="text-blue-500 hover:text-blue-700 text-xs">
+                      Configurar alvos
+                    </button>
+                    <button onClick={() => setDeleteTargetId(g.id)} className="text-red-400 hover:text-red-600 text-xs">
+                      Remover
+                    </button>
+                  </div>
                 </div>
                 <div className="border-t border-gray-100 pt-2">
                   <p className="text-xs text-gray-500 mb-1.5">Imagem da mensagem:</p>
@@ -332,6 +375,31 @@ export default function GruposPage() {
           </>
         )}
       </div>
+      {targetEditorId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">Configurar alvos</h3>
+            <p className="text-sm text-gray-500 mb-4">Escolha quais grupos de destino recebem mensagens deste grupo monitorado. Se nenhum for selecionado, o bot envia para todos.</p>
+            {post.length === 0 ? (
+              <p className="text-sm text-amber-600 mb-4">Cadastre ao menos um grupo de postagem para configurar alvos.</p>
+            ) : (
+              <div className="mb-4 flex max-h-64 flex-col gap-2 overflow-y-auto">
+                {post.map(group => (
+                  <label key={group.id} className="flex items-center gap-2 rounded-lg border border-gray-100 p-2 text-sm text-gray-600">
+                    <input type="checkbox" checked={targetPostIds.includes(group.id)} onChange={() => toggleTargetPost(group.id)} />
+                    <span>{group.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setTargetEditorId(null)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button>
+              <button onClick={saveTargetPosts} disabled={targetLoading} className="rounded-lg bg-green-600 px-4 py-2 text-sm text-white disabled:opacity-50">{targetLoading ? 'Salvando...' : 'Salvar alvos'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ConfirmDialog open={!!deleteTargetId} title="Remover grupo" message="O grupo será removido desta configuração." confirmLabel="Remover" danger onCancel={() => setDeleteTargetId(null)} onConfirm={async () => { const id = deleteTargetId; setDeleteTargetId(null); if (id) await handleDelete(id) }} />
     </div>
   )

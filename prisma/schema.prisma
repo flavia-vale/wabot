@@ -20,6 +20,7 @@ model User {
 
   waSession   WaSession?
   groups      Group[]
+  groupTargets GroupTarget[]
   credentials Credential[]
   payments    Payment[]
   botConfig   BotConfig?
@@ -49,8 +50,24 @@ model Group {
   blockedKeywords   String?
   allowedPlatforms  String?
   welcomeMsg        String?
+  monitorTargets   GroupTarget[] @relation("MonitorTargets")
+  postTargets      GroupTarget[] @relation("PostTargets")
 
   @@unique([userId, waJid, role])
+}
+
+model GroupTarget {
+  id        String @id @default(cuid())
+  userId    String
+  monitorId String
+  postId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monitor   Group  @relation("MonitorTargets", fields: [monitorId], references: [id], onDelete: Cascade)
+  post      Group  @relation("PostTargets", fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([monitorId, postId])
+  @@index([userId])
+  @@index([postId])
 }
 
 model Credential {
@@ -119,6 +136,18 @@ model MessageLog {
 
   @@index([userId, sentAt])
   @@index([userId, status, sentAt])
+}
+
+
+model AnalyticsEvent {
+  id        String   @id
+  userId    String?
+  event     String
+  metadata  String   @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([event, createdAt])
+  @@index([userId, createdAt])
 }
 
 
