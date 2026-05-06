@@ -81,6 +81,15 @@ export const api = {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/users${query ? `?${query}` : ''}`)
   },
+  adminUserDetail: (id) => apiFetch(`/api/admin/users/${id}`),
+  adminLogs: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/logs${query ? `?${query}` : ''}`)
+  },
+  adminSessions: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/sessions${query ? `?${query}` : ''}`)
+  },
 
   logs: (status = 'all', page = 1, limit = 20) =>
     apiFetch(`/api/logs?status=${status}&page=${page}&limit=${limit}`),
