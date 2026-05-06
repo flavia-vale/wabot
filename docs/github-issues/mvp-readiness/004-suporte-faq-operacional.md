@@ -1,3 +1,6 @@
+## Status
+Concluída em 05 de maio de 2026. Implementada e testada no repositório.
+
 ## Contexto
 O produto depende de etapas técnicas como conexão do WhatsApp, credenciais de afiliados, grupos monitorados e grupos de destino. Sem suporte visível, usuários podem abandonar a configuração ou abrir muitos chamados manuais.
 
@@ -20,11 +23,11 @@ Criar suporte mínimo e FAQ operacional para reduzir abandono e suporte repetiti
 - Adicionar links de ajuda contextual nas telas mais críticas: WhatsApp, Credenciais, Grupos e Planos.
 
 ## Critérios de aceite
-- [ ] Usuário logado encontra suporte em até 1 clique no dashboard.
-- [ ] Usuário não logado encontra suporte a partir da área pública/login.
-- [ ] FAQ cobre as dúvidas operacionais mínimas do MVP.
-- [ ] Textos de suporte não prometem SLA não definido.
-- [ ] As páginas críticas apontam para ajuda contextual.
+- [x] Usuário logado encontra suporte em até 1 clique no dashboard.
+- [x] Usuário não logado encontra suporte a partir da área pública/login.
+- [x] FAQ cobre as dúvidas operacionais mínimas do MVP.
+- [x] Textos de suporte não prometem SLA não definido.
+- [x] As páginas críticas apontam para ajuda contextual.
 
 ## Fora de escopo
 - Sistema de tickets completo.

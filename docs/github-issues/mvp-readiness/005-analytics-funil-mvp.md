@@ -1,3 +1,6 @@
+## Status
+Concluída em 05 de maio de 2026. Implementada e testada no repositório.
+
 ## Contexto
 Existem logs operacionais de envio, mas não há analytics de funil para entender onde usuários abandonam: cadastro, conexão, credenciais, grupos, checkout, pagamento e primeiro envio.
 
@@ -22,12 +25,12 @@ Implementar analytics mínimo de produto e conversão para medir readiness comer
 - Criar uma visualização ou checklist de como conferir esses eventos na ferramenta escolhida.
 
 ## Critérios de aceite
-- [ ] Eventos principais são disparados nos pontos corretos do funil.
-- [ ] Não há envio de credenciais/tokens/cookies para analytics.
-- [ ] Eventos de pagamento distinguem checkout iniciado, pendente, aprovado e falho.
-- [ ] Evento de primeiro envio com sucesso pode ser identificado.
-- [ ] Variáveis de ambiente estão documentadas.
-- [ ] Analytics pode ser desabilitado em ambiente local/teste.
+- [x] Eventos principais são disparados nos pontos corretos do funil.
+- [x] Não há envio de credenciais/tokens/cookies para analytics.
+- [x] Eventos de pagamento distinguem checkout iniciado, pendente, aprovado e falho.
+- [x] Evento de primeiro envio com sucesso pode ser identificado.
+- [x] Variáveis de ambiente estão documentadas.
+- [x] Analytics pode ser desabilitado em ambiente local/teste.
 
 ## Fora de escopo
 - Data warehouse.

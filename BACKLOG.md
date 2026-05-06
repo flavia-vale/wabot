@@ -910,7 +910,7 @@ AliExpress usa a API de afiliados Portals (`portals.aliexpress.com`). O link de 
 
 ### FEAT-005 · Grupos alvo por grupo monitorado
 
-**Status:** closed  
+**Status:** done
 **Prioridade:** alta  
 **Inspiração:** proafiliados.shop — "Configurar Alvos" por grupo
 
@@ -947,7 +947,7 @@ model GroupTarget {
 
 ### FEAT-006 · Filtros por grupo monitorado
 
-**Status:** open  
+**Status:** done
 **Prioridade:** média  
 **Inspiração:** proafiliados.shop — opção "Filtros" por grupo (badge "Nenhum")
 
@@ -973,7 +973,7 @@ allowedPlatforms String?   // CSV, override do global se preenchido
 
 ### FEAT-007 · Welcome message por grupo de disparo
 
-**Status:** open  
+**Status:** done
 **Prioridade:** baixa  
 **Inspiração:** proafiliados.shop — campo `welcome_message` por grupo
 
@@ -1007,7 +1007,7 @@ Atualmente erros são exibidos como `<p className="text-red-500">` inline, que s
 
 ### FEAT-009 · Modal de confirmação customizado
 
-**Status:** open  
+**Status:** done
 **Prioridade:** baixa  
 **Inspiração:** proafiliados.shop — `showConfirm()` com título, mensagem e botões customizados
 
@@ -1030,7 +1030,7 @@ if (!ok) return
 
 ### FEAT-010 · Instruções inline nas telas de credenciais
 
-**Status:** open  
+**Status:** done
 **Prioridade:** média  
 **Inspiração:** proafiliados.shop — box amarelo com passo a passo dentro do modal de cada plataforma
 
@@ -1053,7 +1053,7 @@ Usuários não sabem onde encontrar AppID, Secret Key, Tag de afiliado etc. O pr
 
 ### FEAT-011 · Feed Global
 
-**Status:** open  
+**Status:** done
 **Prioridade:** baixa  
 **Inspiração:** proafiliados.shop — "Feed Global" — recebe links de todos os grupos sem precisar configurar monitor individual
 
@@ -1066,7 +1066,7 @@ O usuário pode ativar um "Feed Global" que monitora automaticamente todos os gr
 
 ### FEAT-012 · Postar no Status do WhatsApp
 
-**Status:** open  
+**Status:** done
 **Prioridade:** baixa  
 **Inspiração:** proafiliados.shop — "Postar no Status"
 
