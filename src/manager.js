@@ -79,6 +79,10 @@ export function isRunning(userId) {
   return bots.has(userId)
 }
 
+export function listRunningBots() {
+  return [...bots.keys()]
+}
+
 export function onQR(userId, fn) {
   const entry = bots.get(userId)
   if (!entry) return () => {}
