@@ -1,4 +1,4 @@
-# Issues de Design — Planos
+# Issues de Design — Planos - FEITOS
 
 Este arquivo registra issues prontas para serem copiadas para o GitHub Issues. Elas foram derivadas da auditoria de UI/UX da tela `dashboard/app/dashboard/planos/page.js`, responsável por status de assinatura, checkout, comparativo de planos, indicação e histórico de pagamentos.
 

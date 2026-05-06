@@ -14,6 +14,7 @@ import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
 import { fetchProductImage } from './converters/imageScrapers.js'
 import db from './db.js'
+import { trackAnalyticsEventSafe } from './analytics.js'
 
 const userId = process.env.BOT_USER_ID
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
@@ -81,7 +82,7 @@ let configCacheTime = 0
 async function loadConfig() {
   const user = await db.user.findUnique({
     where: { id: userId },
-    include: { groups: true, credentials: true, botConfig: true },
+    include: { groups: true, credentials: true, botConfig: true, groupTargets: { include: { post: true } } },
   })
   if (!user) throw new Error(`Usuário ${userId} não encontrado`)
 
@@ -100,18 +101,26 @@ async function loadConfig() {
     }
   }
 
-  const monitor = user.groups.filter(g => g.role === 'monitor').map(g => ({
-    waJid: g.waJid,
-    imageMode: g.imageMode,
-    imageLinkTarget: g.imageLinkTarget,
-    fallbackToOriginal: g.fallbackToOriginal,
-  }))
+  const targetsByMonitor = new Map()
+  for (const target of user.groupTargets) {
+    if (!targetsByMonitor.has(target.monitorId)) targetsByMonitor.set(target.monitorId, [])
+    if (target.post?.waJid) targetsByMonitor.get(target.monitorId).push(target.post.waJid)
+  }
+
   const groups = {
-    monitor,
-    monitorJids: monitor.map(g => g.waJid),
-    monitorJidSet: new Set(monitor.map(g => g.waJid)),
-    monitorByJid: new Map(monitor.map(g => [g.waJid, g])),
+    monitor: user.groups.filter(g => g.role === 'monitor').map(g => ({
+      id: g.id,
+      waJid: g.waJid,
+      imageMode: g.imageMode,
+      imageLinkTarget: g.imageLinkTarget,
+      fallbackToOriginal: g.fallbackToOriginal,
+      blockedKeywords: g.blockedKeywords,
+      allowedPlatforms: g.allowedPlatforms,
+      targetPostJids: targetsByMonitor.get(g.id) ?? [],
+    })),
+    monitorJids: user.groups.filter(g => g.role === 'monitor').map(g => g.waJid),
     post: user.groups.filter(g => g.role === 'post').map(g => g.waJid),
+    postDetails: user.groups.filter(g => g.role === 'post').map(g => ({ waJid: g.waJid, welcomeMsg: g.welcomeMsg })),
   }
 
   const botConfig = user.botConfig ?? {
@@ -120,6 +129,8 @@ async function loadConfig() {
     platforms: 'shopee,amazon,mercadolivre,magazineluiza',
     blockedKeywords: '',
     welcomeMsg: '',
+    feedGlobal: false,
+    postToStatus: false,
   }
 
   return { credentials, groups, plan: user.plan, botConfig }
@@ -478,6 +489,7 @@ async function startBot() {
         create: { userId, status: 'connected', phone },
         update: { status: 'connected', phone },
       })
+      trackAnalyticsEventSafe({ userId, event: 'whatsapp_connected' })
     }
 
     if (connection === 'close') {
@@ -505,11 +517,13 @@ async function startBot() {
   sock.ev.on('group-participants.update', async ({ id: groupJid, participants, action }) => {
     if (action !== 'add') return
     const cfg = await getConfig()
-    if (!cfg.botConfig.welcomeMsg || !cfg.groups.post.includes(groupJid)) return
+    const postGroup = cfg.groups.postDetails.find(g => g.waJid === groupJid)
+    const welcomeMsg = postGroup?.welcomeMsg?.trim() || cfg.botConfig.welcomeMsg
+    if (!welcomeMsg || !cfg.groups.post.includes(groupJid)) return
     for (const participantJid of participants) {
       try {
         await sock.sendMessage(groupJid, {
-          text: cfg.botConfig.welcomeMsg,
+          text: welcomeMsg,
           mentions: [participantJid],
         })
         logger.info({ groupJid, participantJid }, 'Welcome msg enviada')
@@ -535,8 +549,10 @@ async function startBot() {
 
       const jid = msg.key.remoteJid
       const cfg = await getConfig()
-      logger.info({ jid, monitorGroups: cfg.groups.monitor }, 'mensagem recebida')
-      if (!cfg.groups.monitorJidSet.has(jid)) continue
+      logger.info({ jid, monitorGroups: cfg.groups.monitor, feedGlobal: cfg.botConfig.feedGlobal }, 'mensagem recebida')
+      const monitorGroup = cfg.groups.monitor.find(m => m.waJid === jid)
+      if (!cfg.botConfig.feedGlobal && !monitorGroup) continue
+      if (cfg.botConfig.feedGlobal && !String(jid).endsWith('@g.us')) continue
 
       const text =
         msg.message?.conversation ||
@@ -545,9 +561,10 @@ async function startBot() {
 
       if (!text) continue
 
-      // Filtro por palavras bloqueadas
-      if (cfg.botConfig.blockedKeywords) {
-        const blocked = cfg.botConfig.blockedKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean)
+      // Filtro por palavras bloqueadas (override por grupo monitorado quando preenchido)
+      const blockedKeywords = monitorGroup?.blockedKeywords?.trim() || cfg.botConfig.blockedKeywords
+      if (blockedKeywords) {
+        const blocked = blockedKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean)
         const lower = text.toLowerCase()
         if (blocked.some(kw => lower.includes(kw))) {
           logger.info({ blocked }, 'Mensagem bloqueada por keyword'); continue
@@ -557,9 +574,9 @@ async function startBot() {
       const links = detectLinks(text)
       if (!links.length) continue
 
-      // Filtro por plataforma
-      const enabledPlatforms = new Set(cfg.botConfig.platforms.split(',').filter(Boolean))
-      const monitorGroup = cfg.groups.monitorByJid.get(jid)
+      // Filtro por plataforma (override por grupo monitorado quando preenchido)
+      const platformCsv = monitorGroup?.allowedPlatforms?.trim() || cfg.botConfig.platforms
+      const enabledPlatforms = new Set(platformCsv.split(',').filter(Boolean))
 
       // Pre-fetch image URL uma vez por mensagem (lazy, com cache)
       let cachedImageUrl
@@ -609,7 +626,9 @@ async function startBot() {
 
       const primary = conversions[0]
 
-      for (const destJid of cfg.groups.post) {
+      const baseDestinations = monitorGroup?.targetPostJids?.length ? monitorGroup.targetPostJids : cfg.groups.post
+      const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
+      for (const destJid of destinations) {
         const key = `${destJid}:${primary.converted}`
         if (dedup.links[key] && Date.now() - dedup.links[key] < dedupeWindowMs) {
           logger.info({ destJid }, 'Duplicata ignorada'); continue
@@ -628,43 +647,33 @@ async function startBot() {
           messageText: finalText,
         }
 
-        if (!canAcceptSendJob()) {
-          await db.messageLog.create({
-            data: { ...logData, status: 'error', errorMsg: 'Fila interna de envios cheia ou worker encerrando' },
+        const imageUrl = monitorGroup?.imageMode !== 'none' ? await getImageUrl() : null
+        const msgPayload = imageUrl
+          ? { image: { url: imageUrl }, caption: finalText }
+          : { text: finalText }
+
+        const platforms = conversions.map(c => c.platform).join('+')
+        try {
+          await sock.sendMessage(destJid, msgPayload)
+          logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode }, 'Mensagem enviada')
+          const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
+          db.messageLog.create({
+            data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: finalText, status: 'success' },
+          }).then(() => {
+            if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
           }).catch(() => {})
-          logger.warn({ destJid, queueSize: sendQueue.length }, 'Envio recusado pela fila interna')
-          continue
-        }
-
-        const queuedLog = await db.messageLog.create({
-          data: { ...logData, status: 'queued' },
-        })
-
-        // Delay configurável é aplicado dentro da fila, sem bloquear o listener de mensagens.
-        const { delayMin, delayMax } = cfg.botConfig
-        const delayMs = delayMax > 0
-          ? (delayMin + Math.random() * Math.max(0, delayMax - delayMin)) * 1000
-          : 0
-
-        const accepted = enqueueSendJob({
-          logId: queuedLog.id,
-          destJid,
-          platforms,
-          imageMode: monitorGroup?.imageMode,
-          plan: cfg.plan,
-          delayMs,
-          buildPayload: async () => {
-            const imageUrl = monitorGroup?.imageMode !== 'none' ? await getImageUrl() : null
-            return imageUrl
-              ? { image: { url: imageUrl }, caption: finalText }
-              : { text: finalText }
-          },
-        })
-
-        if (!accepted) {
-          await db.messageLog.update({
-            where: { id: queuedLog.id },
-            data: { status: 'error', errorMsg: 'Fila interna de envios cheia ou worker encerrando', sentAt: new Date() },
+          if (cfg.plan === 'basic') {
+            adSendCount++
+            if (adSendCount % 50 === 0) {
+              await sock.sendMessage(destJid, { text: AD_TEXT }).catch(() => {})
+            }
+          }
+        } catch (err) {
+          logger.error({ destJid, err: err.message }, 'Erro ao enviar')
+          db.messageLog.create({
+            data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: finalText, status: 'error', errorMsg: err.message },
+          }).then(() => {
+            trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: err.name } })
           }).catch(() => {})
           logger.warn({ destJid, queueSize: sendQueue.length }, 'Envio recusado após criação do log queued')
         }

@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { createHmac } from 'crypto'
 import db from '../../db.js'
+import { trackAnalyticsEventSafe } from '../../analytics.js'
 
 const MP_WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET
 const IS_PRODUCTION = process.env.NODE_ENV === 'production'
@@ -71,6 +72,8 @@ export async function paymentsRoutes(app) {
     const planInfo = PLANS[plan]
     const accessToken = getMpAccessToken()
 
+    trackAnalyticsEventSafe({ userId, event: 'checkout_started', metadata: { plan } })
+
     const mpRes = await axios.post(
       'https://api.mercadopago.com/checkout/preferences',
       {
@@ -125,6 +128,13 @@ export async function paymentsRoutes(app) {
     const { status, metadata } = mpPayRes.data
     const { userId, plan } = metadata ?? {}
     if (!userId || !plan) return { ok: true }
+
+    const paymentEvent = status === 'approved'
+      ? 'payment_approved'
+      : status === 'pending'
+        ? 'payment_pending'
+        : 'payment_failed'
+    trackAnalyticsEventSafe({ userId, event: paymentEvent, metadata: { plan, status } })
 
     const expiresAt = status === 'approved'
       ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)

@@ -51,6 +51,9 @@ export const api = {
   updateGroup: (id, data) =>
     apiFetch(`/api/groups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteGroup: (id) => apiFetch(`/api/groups/${id}`, { method: 'DELETE' }),
+  groupTargets: (id) => apiFetch(`/api/groups/${id}/targets`),
+  updateGroupTargets: (id, postIds) =>
+    apiFetch(`/api/groups/${id}/targets`, { method: 'PUT', body: JSON.stringify({ postIds }) }),
 
   credentials: () => apiFetch('/api/credentials'),
   saveCredential: (platform, data) =>

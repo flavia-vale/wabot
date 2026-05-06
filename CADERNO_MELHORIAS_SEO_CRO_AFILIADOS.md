@@ -3,6 +3,8 @@
 Contexto: produto focado em afiliados, com nova marca **Bot Conversor para Afiliados**.
 
 ## ISSUE 01 — Criar Landing Pública na `/` (substituir redirecionamento puro)
+**Status:** Concluída em 05 de maio de 2026 — landing pública criada no dashboard.
+
 
 **Problema**
 A home atual apenas redireciona para `/dashboard` ou `/login`, sem conteúdo indexável para aquisição orgânica.
@@ -32,6 +34,8 @@ Transformar `/` em landing comercial SEO-first, mantendo redirecionamento apenas
 ---
 
 ## ISSUE 02 — Metadata por rota (Title/Description/OpenGraph)
+**Status:** Concluída em 05 de maio de 2026 — metadata, OG básico, canonicals e noindex em rotas privadas/prioritárias.
+
 
 **Problema**
 O metadata está global e genérico para todo o app, sem especialização por intenção de busca por página.
@@ -59,6 +63,8 @@ Criar metadata dedicado nas rotas principais (`/`, `/login`, `/dashboard/planos`
 ---
 
 ## ISSUE 03 — Reescrever copy do Login/Cadastro para afiliados
+**Status:** Concluída em 05 de maio de 2026 — login/cadastro com copy orientada para afiliados e links legais.
+
 
 **Problema**
 A copy de login/cadastro é funcional, mas não comunica promessa de transformação para afiliado.
@@ -87,6 +93,8 @@ Aumentar taxa de cadastro com microcopy orientada a benefício.
 ---
 
 ## ISSUE 04 — Otimizar seção de Planos para redução de fricção de compra
+**Status:** Concluída em 05 de maio de 2026 — planos com FAQ, ativação e modelo de acesso por 30 dias.
+
 
 **Problema**
 A página de planos está boa estruturalmente, mas carece de elementos de redução de risco.
@@ -114,6 +122,8 @@ Elevar conversão para checkout com mais confiança e clareza de decisão.
 ---
 
 ## ISSUE 05 — Implementar Sitemap + Robots + estratégia de indexação
+**Status:** Concluída em 05 de maio de 2026 — sitemap e robots criados para páginas públicas e privadas.
+
 
 **Problema**
 Sem estratégia explícita de indexação das páginas públicas vs privadas.
@@ -139,6 +149,8 @@ Garantir que apenas páginas públicas estratégicas recebam atenção de crawle
 ---
 
 ## ISSUE 06 — Inserir tracking de funil (eventos de conversão)
+**Status:** Concluída em 05 de maio de 2026 — analytics interno de funil implementado e documentado.
+
 
 **Problema**
 Sem telemetria explícita de microconversões (clique CTA, cadastro iniciado, checkout iniciado).
@@ -163,6 +175,8 @@ Instrumentar eventos para medir gargalos reais do funil.
 ---
 
 ## ISSUE 07 — Melhorar performance percebida (Core Web Vitals na landing)
+**Status:** Concluída em 05 de maio de 2026 — páginas públicas renderizadas estaticamente sem imagens pesadas no hero.
+
 
 **Problema**
 Sem otimizações específicas de LCP/CLS para a futura landing.
@@ -212,6 +226,8 @@ Estabelecer ciclo contínuo de otimização de conversão.
 ---
 
 ## ISSUE 09 — Revisar consistência de marca em mensagens operacionais
+**Status:** Concluída em 05 de maio de 2026 — copy pública e operacional revisada para Wabot e modelo de 30 dias.
+
 
 **Problema**
 Mudanças de marca exigem revisão contínua em conteúdos automáticos e integrações.
@@ -234,6 +250,8 @@ Garantir uniformidade total da marca em frontend, backend e comunicações gerad
 ---
 
 ## ISSUE 10 — Roadmap de conteúdo SEO para afiliados (fora produto)
+**Status:** Concluída em 05 de maio de 2026 — roadmap inicial de conteúdo criado em docs.
+
 
 **Problema**
 Sem plano de conteúdo para capturar demanda orgânica recorrente.

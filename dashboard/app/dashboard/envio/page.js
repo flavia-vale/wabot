@@ -16,6 +16,27 @@ function formatDateTime(iso) {
   })
 }
 
+
+function formatSchedulePreview(value, timezoneLabel) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return `Será enviado em ${formatDateTime(date.toISOString())} (fuso ${timezoneLabel}).`
+}
+
+function isPastSchedule(value) {
+  if (!value) return false
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return true
+  return date.getTime() <= Date.now()
+}
+
+function excerpt(text, max = 140) {
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  if (normalized.length <= max) return normalized
+  return `${normalized.slice(0, max).trim()}…`
+}
+
 function classifyError(message = '') {
   const text = message.toLowerCase()
   if (text.includes('network') || text.includes('fetch') || text.includes('conex')) {
@@ -26,6 +47,30 @@ function classifyError(message = '') {
   }
   return 'regra de negócio'
 }
+
+function MessagePreview({ text, title = 'Prévia da mensagem' }) {
+  const trimmed = text.trim()
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{title}</p>
+        <span className="text-xs text-gray-400">{text.length} caractere(s)</span>
+      </div>
+      {trimmed ? (
+        <p className="whitespace-pre-wrap rounded-2xl bg-white px-3 py-2 text-sm text-gray-700 shadow-sm">{text}</p>
+      ) : (
+        <p className="text-sm text-gray-400">Digite uma mensagem para visualizar a prévia antes de enviar.</p>
+      )}
+    </div>
+  )
+}
+
+const MESSAGE_TEMPLATES = [
+  { label: 'Oferta relâmpago', text: '⚡ Oferta relâmpago!\n\nProduto:\nPreço:\nLink:' },
+  { label: 'Cupom', text: '🎟️ Cupom disponível!\n\nUse o cupom:\nLink da oferta:' },
+  { label: 'Últimas unidades', text: '🔥 Últimas unidades!\n\nGaranta antes que acabe:' },
+]
 
 function StatusBadge({ status }) {
   const map = {
@@ -57,10 +102,27 @@ export default function EnvioPage() {
   const [listInfo, setListInfo] = useState('')
   const [cancelLoadingId, setCancelLoadingId] = useState(null)
   const [statusFilter, setStatusFilter] = useState('all')
-  const [cancelTargetId, setCancelTargetId] = useState(null)
+  const [cancelTarget, setCancelTarget] = useState(null)
+  const [broadcastConfirmOpen, setBroadcastConfirmOpen] = useState(false)
+  const [targetGroups, setTargetGroups] = useState([])
+  const [targetGroupsLoading, setTargetGroupsLoading] = useState(true)
+  const [targetGroupsError, setTargetGroupsError] = useState('')
 
   const timezoneLabel = Intl.DateTimeFormat().resolvedOptions().timeZone
   const [minDateTime] = useState(() => new Date(Date.now() + 60_000).toISOString().slice(0, 16))
+
+  async function loadTargetGroups() {
+    setTargetGroupsError('')
+    setTargetGroupsLoading(true)
+    try {
+      const groups = await api.groups()
+      setTargetGroups(groups.filter((group) => group.role === 'post'))
+    } catch (err) {
+      setTargetGroupsError(err.message || 'Não foi possível carregar os grupos de destino.')
+    } finally {
+      setTargetGroupsLoading(false)
+    }
+  }
 
   async function loadScheduled() {
     setListError('')
@@ -77,6 +139,18 @@ export default function EnvioPage() {
 
   useEffect(() => {
     let active = true
+
+    api.groups()
+      .then((groups) => {
+        if (active) setTargetGroups(groups.filter((group) => group.role === 'post'))
+      })
+      .catch((err) => {
+        if (active) setTargetGroupsError(err.message || 'Não foi possível carregar os grupos de destino.')
+      })
+      .finally(() => {
+        if (active) setTargetGroupsLoading(false)
+      })
+
     api.scheduledList()
       .then((data) => {
         if (active) setScheduled(data)
@@ -93,25 +167,9 @@ export default function EnvioPage() {
     }
   }, [])
 
-  async function handleBroadcast(e) {
-    e.preventDefault()
-    setBroadcastError('')
-    setBroadcastResult(null)
+  async function sendBroadcastNow() {
+    if (broadcastLoading) return
     setBroadcastLoading(true)
-
-    const confirmKey = 'broadcastConfirmShown'
-    const hasConfirmedBefore = localStorage.getItem(confirmKey) === '1'
-    const shouldConfirm = !hasConfirmedBefore || broadcastText.trim().length > 280
-
-    if (shouldConfirm) {
-      const confirmed = confirm('Confirmar envio imediato para todos os grupos de destino?')
-      if (!confirmed) {
-        setBroadcastLoading(false)
-        return
-      }
-      localStorage.setItem(confirmKey, '1')
-    }
-
     try {
       const res = await api.broadcastSend(broadcastText.trim())
       setBroadcastResult(res)
@@ -120,12 +178,32 @@ export default function EnvioPage() {
       setBroadcastError(err.message)
     } finally {
       setBroadcastLoading(false)
+      setBroadcastConfirmOpen(false)
     }
+  }
+
+  async function handleBroadcast(e) {
+    e.preventDefault()
+    setBroadcastError('')
+    setBroadcastResult(null)
+
+    if (!targetGroupsError && !targetGroups.length) {
+      setBroadcastError('Nenhum grupo de destino configurado. Adicione um grupo de postagem antes de enviar.')
+      return
+    }
+
+    setBroadcastConfirmOpen(true)
   }
 
   async function handleSchedule(e) {
     e.preventDefault()
     setSchedError('')
+
+    if (isPastSchedule(schedAt)) {
+      setSchedError('Escolha uma data e horário futuros para agendar a mensagem.')
+      return
+    }
+
     setSchedLoading(true)
     try {
       await api.scheduledCreate(schedText.trim(), new Date(schedAt).toISOString())
@@ -161,6 +239,15 @@ export default function EnvioPage() {
     () => scheduled.filter((m) => (statusFilter === 'all' ? true : m.status === statusFilter)),
     [scheduled, statusFilter],
   )
+  const targetGroupCount = targetGroups.length
+  const schedulePreview = formatSchedulePreview(schedAt, timezoneLabel)
+  const scheduleInvalid = isPastSchedule(schedAt)
+  const cancelConfirmMessage = cancelTarget
+    ? `Cancelar o agendamento de ${formatDateTime(cancelTarget.scheduledAt)}? Mensagem: “${excerpt(cancelTarget.text)}”. Esta ação interrompe apenas este envio futuro.`
+    : ''
+  const broadcastConfirmMessage = targetGroupsError
+    ? 'Você está prestes a enviar esta mensagem agora para os grupos de destino configurados. Não foi possível contar os grupos neste momento; a API fará a validação final.'
+    : `Você está prestes a enviar esta mensagem agora para ${targetGroupCount} grupo(s) de destino configurado(s).`
 
   return (
     <div className="max-w-xl">
@@ -169,7 +256,26 @@ export default function EnvioPage() {
 
       <div className="bg-white rounded-2xl shadow p-5 mb-4">
         <h3 className="font-semibold text-gray-700 mb-1">📤 Enviar agora</h3>
-        <p className="text-xs text-amber-700 mb-2">Impacto: a mensagem será enviada para todos os grupos de destino configurados.</p>
+        <p className="text-xs text-amber-700 mb-2">Impacto: a mensagem será enviada para todos os grupos de destino configurados{targetGroupsLoading ? '' : ` (${targetGroupCount})`}.</p>
+        {targetGroupsError && (
+          <div className="mb-3">
+            <Alert type="warning" title="Grupos indisponíveis" message={`${targetGroupsError} A confirmação usará a validação da API ao enviar.`} />
+            <button type="button" onClick={loadTargetGroups} className="mt-2 text-xs font-semibold text-amber-700 underline">Recarregar grupos</button>
+          </div>
+        )}
+
+        <div className="mb-3 flex flex-wrap gap-2">
+          {MESSAGE_TEMPLATES.map((template) => (
+            <button
+              key={template.label}
+              type="button"
+              onClick={() => setBroadcastText(template.text)}
+              className="rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 hover:border-green-400 hover:text-green-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2"
+            >
+              {template.label}
+            </button>
+          ))}
+        </div>
 
         <form onSubmit={handleBroadcast} className="flex flex-col gap-3">
           <textarea
@@ -180,6 +286,8 @@ export default function EnvioPage() {
             required
             className="w-full border rounded-lg px-3 py-2 text-sm"
           />
+
+          <MessagePreview text={broadcastText} />
 
           {broadcastError && (
             <Alert
@@ -199,17 +307,30 @@ export default function EnvioPage() {
 
           <button
             type="submit"
-            disabled={broadcastLoading || !broadcastText.trim()}
+            disabled={broadcastLoading || targetGroupsLoading || !broadcastText.trim()}
             className="bg-green-600 text-white rounded-xl py-2.5 font-semibold disabled:opacity-50"
           >
-            {broadcastLoading ? 'Enviando...' : '📤 Enviar agora'}
+            {broadcastLoading ? 'Enviando...' : <><span aria-hidden="true">📤</span> Enviar agora</>}
           </button>
         </form>
       </div>
 
       <div className="bg-white rounded-2xl shadow p-5 mb-4">
         <h3 className="font-semibold text-gray-700 mb-1">🗓️ Agendar mensagem</h3>
-        <p className="text-xs text-gray-500 mb-2">Fuso detectado: <strong>{timezoneLabel}</strong>.</p>
+        <p className="text-xs text-gray-500 mb-2">Fuso detectado: <strong>{timezoneLabel}</strong>. O horário abaixo será salvo no fuso detectado deste navegador.</p>
+
+        <div className="mb-3 flex flex-wrap gap-2">
+          {MESSAGE_TEMPLATES.map((template) => (
+            <button
+              key={template.label}
+              type="button"
+              onClick={() => setSchedText(template.text)}
+              className="rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 hover:border-blue-400 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+            >
+              {template.label}
+            </button>
+          ))}
+        </div>
 
         <form onSubmit={handleSchedule} className="flex flex-col gap-3">
           <textarea
@@ -221,13 +342,22 @@ export default function EnvioPage() {
             className="w-full border rounded-lg px-3 py-2 text-sm"
           />
           <input
+            id="scheduled-at"
             type="datetime-local"
             min={minDateTime}
             value={schedAt}
             onChange={(e) => setSchedAt(e.target.value)}
             required
+            aria-describedby="scheduled-at-help"
+            aria-invalid={scheduleInvalid}
             className="w-full border rounded-lg px-3 py-2 text-sm"
           />
+          <div id="scheduled-at-help" className="text-xs">
+            {schedAt && !scheduleInvalid && <p className="text-blue-700">{schedulePreview}</p>}
+            {schedAt && scheduleInvalid && <p className="text-red-600" role="alert">Escolha um horário futuro no fuso {timezoneLabel}.</p>}
+          </div>
+
+          <MessagePreview text={schedText} title="Prévia do agendamento" />
 
           {schedError && (
             <Alert type="error" title={`Erro de ${classifyError(schedError)}`} message={schedError} />
@@ -235,10 +365,10 @@ export default function EnvioPage() {
 
           <button
             type="submit"
-            disabled={schedLoading || !schedText.trim() || !schedAt}
+            disabled={schedLoading || !schedText.trim() || !schedAt || scheduleInvalid}
             className="bg-blue-600 text-white rounded-xl py-2.5 font-semibold disabled:opacity-50"
           >
-            {schedLoading ? 'Agendando...' : '🗓️ Agendar'}
+            {schedLoading ? 'Agendando...' : <><span aria-hidden="true">🗓️</span> Agendar</>}
           </button>
         </form>
       </div>
@@ -246,12 +376,13 @@ export default function EnvioPage() {
       <div className="bg-white rounded-2xl shadow p-5">
         <h3 className="font-semibold text-gray-700 mb-3">📋 Mensagens agendadas</h3>
 
-        <div className="flex gap-2 mb-3">
+        <div className="mb-3 flex flex-wrap gap-2">
           {[['all', 'Todos'], ['pending', 'Pendentes'], ['queued', 'Na fila'], ['sending', 'Enviando'], ['sent', 'Enviados'], ['failed', 'Falhos'], ['cancelled', 'Cancelados']].map(([value, label]) => (
             <button
               key={value}
               onClick={() => setStatusFilter(value)}
-              className={`text-xs px-2 py-1 rounded-full border ${statusFilter === value ? 'bg-gray-800 text-white' : 'bg-white text-gray-600'}`}
+              aria-pressed={statusFilter === value}
+              className={`min-h-9 px-3 py-2 text-xs rounded-full border transition ${statusFilter === value ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}
             >
               {label}
             </button>
@@ -281,7 +412,7 @@ export default function EnvioPage() {
                   {m.status === 'pending' && (
                     <button
                       disabled={cancelLoadingId === m.id}
-                      onClick={() => setCancelTargetId(m.id)}
+                      onClick={() => setCancelTarget(m)}
                       className="text-xs text-red-500 disabled:opacity-50"
                     >
                       {cancelLoadingId === m.id ? 'Cancelando...' : 'Cancelar'}
@@ -293,7 +424,8 @@ export default function EnvioPage() {
           </ul>
         )}
       </div>
-      <ConfirmDialog open={!!cancelTargetId} title="Cancelar agendamento" message="Esta ação interrompe o envio futuro dessa mensagem." confirmLabel="Sim, cancelar" danger onCancel={() => setCancelTargetId(null)} onConfirm={async () => { const id = cancelTargetId; setCancelTargetId(null); if (id) await handleCancel(id) }} />
+      <ConfirmDialog open={broadcastConfirmOpen} title="Confirmar envio imediato" message={broadcastConfirmMessage} confirmLabel={broadcastLoading ? 'Enviando...' : 'Enviar agora'} onCancel={() => setBroadcastConfirmOpen(false)} onConfirm={sendBroadcastNow} />
+      <ConfirmDialog open={!!cancelTarget} title="Cancelar agendamento" message={cancelConfirmMessage} confirmLabel={cancelLoadingId === cancelTarget?.id ? 'Cancelando...' : 'Sim, cancelar'} danger onCancel={() => setCancelTarget(null)} onConfirm={async () => { const target = cancelTarget; setCancelTarget(null); if (target?.id) await handleCancel(target.id) }} />
     </div>
   )
 }
