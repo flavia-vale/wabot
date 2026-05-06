@@ -50,6 +50,16 @@ const RISK_FILTERS = [
   ['missing_post', 'Sem destino'],
 ]
 
+const SUCCESS_REASON_LABELS = {
+  missing_phone: 'Sem celular',
+  paid_stale_48h: 'Pago parado 48h',
+  wa_disconnected: 'WhatsApp desconectado',
+  no_first_success: 'Sem primeiro sucesso',
+  onboarding_incomplete: 'Onboarding incompleto',
+  expiring_soon: 'Expira em 7 dias',
+  high_errors_24h: 'Muitos erros 24h',
+}
+
 function formatDate(value) {
   if (!value) return '—'
   return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
@@ -148,6 +158,13 @@ export default function AdminPage() {
   const [users, setUsers] = useState(null)
   const [sessions, setSessions] = useState(null)
   const [logs, setLogs] = useState(null)
+  const [finance, setFinance] = useState(null)
+  const [payments, setPayments] = useState(null)
+  const [subscriptions, setSubscriptions] = useState(null)
+  const [success, setSuccess] = useState(null)
+  const [successQueue, setSuccessQueue] = useState(null)
+  const [systemHealth, setSystemHealth] = useState(null)
+  const [systemMetrics, setSystemMetrics] = useState(null)
   const [selectedUser, setSelectedUser] = useState(null)
   const [risk, setRisk] = useState('')
   const [search, setSearch] = useState('')
@@ -156,18 +173,32 @@ export default function AdminPage() {
 
   async function loadAdminData(nextRisk = risk, nextSearch = search) {
     setError('')
-    const [adminData, overviewData, usersData, sessionsData, logsData] = await Promise.all([
+    const [adminData, overviewData, usersData, sessionsData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData] = await Promise.all([
       api.adminMe(),
       api.adminOverview(),
       api.adminUsers({ risk: nextRisk, search: nextSearch, limit: 20 }),
       api.adminSessions({ limit: 10 }),
       api.adminLogs({ limit: 10, status: 'all' }),
+      api.adminFinanceOverview().catch(() => null),
+      api.adminPayments({ limit: 10 }).catch(() => null),
+      api.adminSubscriptions({ limit: 10, status: 'expiring_soon' }).catch(() => null),
+      api.adminSuccessOverview().catch(() => null),
+      api.adminSuccessQueue({ limit: 8 }).catch(() => null),
+      api.adminSystemHealth().catch(() => null),
+      api.adminSystemMetrics().catch(() => null),
     ])
     setAdmin(adminData)
     setOverview(overviewData)
     setUsers(usersData)
     setSessions(sessionsData)
     setLogs(logsData)
+    setFinance(financeData)
+    setPayments(paymentsData)
+    setSubscriptions(subscriptionsData)
+    setSuccess(successData)
+    setSuccessQueue(successQueueData)
+    setSystemHealth(systemHealthData)
+    setSystemMetrics(systemMetricsData)
   }
 
   useEffect(() => {
@@ -178,14 +209,28 @@ export default function AdminPage() {
       api.adminUsers({ limit: 20 }),
       api.adminSessions({ limit: 10 }),
       api.adminLogs({ limit: 10, status: 'all' }),
+      api.adminFinanceOverview().catch(() => null),
+      api.adminPayments({ limit: 10 }).catch(() => null),
+      api.adminSubscriptions({ limit: 10, status: 'expiring_soon' }).catch(() => null),
+      api.adminSuccessOverview().catch(() => null),
+      api.adminSuccessQueue({ limit: 8 }).catch(() => null),
+      api.adminSystemHealth().catch(() => null),
+      api.adminSystemMetrics().catch(() => null),
     ])
-      .then(([adminData, overviewData, usersData, sessionsData, logsData]) => {
+      .then(([adminData, overviewData, usersData, sessionsData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData]) => {
         if (!active) return
         setAdmin(adminData)
         setOverview(overviewData)
         setUsers(usersData)
         setSessions(sessionsData)
         setLogs(logsData)
+        setFinance(financeData)
+        setPayments(paymentsData)
+        setSubscriptions(subscriptionsData)
+        setSuccess(successData)
+        setSuccessQueue(successQueueData)
+        setSystemHealth(systemHealthData)
+        setSystemMetrics(systemMetricsData)
       })
       .catch((err) => { if (active) setError(err.message || 'Não foi possível carregar o painel admin.') })
       .finally(() => { if (active) setLoading(false) })
@@ -212,6 +257,19 @@ export default function AdminPage() {
       setSelectedUser(await api.adminUserDetail(id))
     } catch (err) {
       setError(err.message || 'Falha ao carregar cliente.')
+    }
+  }
+
+  async function recordContact(user) {
+    const notes = window.prompt(`Resumo do contato com ${user.email}:`)
+    if (notes === null) return
+    const reason = user.contactReasons?.[0] ?? user.riskFlags?.[0] ?? 'support'
+    try {
+      await api.adminCreateContactLog(user.id, { channel: 'whatsapp', reason, outcome: 'contacted', notes })
+      await loadAdminData(risk, search)
+      if (selectedUser?.id === user.id) setSelectedUser(await api.adminUserDetail(user.id))
+    } catch (err) {
+      setError(err.message || 'Falha ao registrar contato.')
     }
   }
 
@@ -253,6 +311,161 @@ export default function AdminPage() {
                 <p className="mt-2 text-3xl font-black text-gray-900">{statValue(key, overview[key])}</p>
               </article>
             ))}
+          </section>
+        )}
+
+
+
+
+        {systemHealth && (
+          <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Observabilidade · Etapa 5</p>
+                <h2 className="text-lg font-black text-gray-900">Saúde técnica da plataforma</h2>
+                <p className="text-sm text-gray-500">API, banco, latência, erros HTTP, memória e bots ativos no processo.</p>
+              </div>
+              <span className={`rounded-full px-3 py-1 text-xs font-bold ${systemHealth.status === 'ok' ? 'bg-green-100 text-green-700' : systemHealth.status === 'degraded' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>Status: {systemHealth.status}</span>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+              <div className="rounded-xl bg-gray-50 p-3"><p className="text-xs text-gray-400">Banco</p><p className="text-xl font-black">{systemHealth.dbOk ? 'OK' : 'Falha'}</p></div>
+              <div className="rounded-xl bg-gray-50 p-3"><p className="text-xs text-gray-400">Uptime</p><p className="text-xl font-black">{Math.round((systemHealth.uptimeSeconds ?? 0) / 60)}m</p></div>
+              <div className="rounded-xl bg-gray-50 p-3"><p className="text-xs text-gray-400">Latência média</p><p className="text-xl font-black">{systemHealth.api?.avgLatencyMs ?? 0}ms</p></div>
+              <div className="rounded-xl bg-red-50 p-3"><p className="text-xs text-red-600">5xx</p><p className="text-xl font-black text-red-700">{systemHealth.api?.total5xx ?? 0}</p></div>
+              <div className="rounded-xl bg-blue-50 p-3"><p className="text-xs text-blue-600">Bots</p><p className="text-xl font-black text-blue-700">{systemHealth.counts?.runningBots ?? 0}</p></div>
+              <div className="rounded-xl bg-purple-50 p-3"><p className="text-xs text-purple-600">Heap</p><p className="text-xl font-black text-purple-700">{systemHealth.memory?.heapUsedMb ?? 0}MB</p></div>
+            </div>
+
+            <div className="mt-5 grid gap-5 lg:grid-cols-2">
+              <div>
+                <h3 className="mb-3 text-sm font-bold text-gray-800">Rotas mais chamadas</h3>
+                <div className="space-y-2">
+                  {(systemMetrics?.routes ?? []).slice(0, 6).map(route => (
+                    <div key={`${route.method}-${route.route}`} className="rounded-xl border border-gray-100 p-3 text-xs text-gray-600">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-bold text-gray-900">{route.method} {route.route}</span>
+                        <span>{route.count} req · {route.avgMs}ms méd.</span>
+                      </div>
+                      <p className="mt-1">4xx: {route.status4xxCount} · 5xx: {route.status5xxCount} · máx: {route.maxMs}ms</p>
+                    </div>
+                  ))}
+                  {!systemMetrics?.routes?.length && <p className="text-sm text-gray-400">Sem métricas de rota ainda.</p>}
+                </div>
+              </div>
+              <div>
+                <h3 className="mb-3 text-sm font-bold text-gray-800">Erros recentes</h3>
+                <div className="space-y-2">
+                  {(systemMetrics?.recentErrors ?? []).slice(0, 6).map((item, index) => (
+                    <div key={`${item.at}-${index}`} className="rounded-xl border border-red-100 bg-red-50 p-3 text-xs text-red-700">
+                      <p className="font-bold">{item.statusCode} · {item.method} {item.route}</p>
+                      <p>{item.error || item.url} · {formatDate(item.at)}</p>
+                    </div>
+                  ))}
+                  {!systemMetrics?.recentErrors?.length && <p className="text-sm text-gray-400">Sem erros 5xx recentes.</p>}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {success && (
+          <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Sucesso do Cliente · Etapa 4</p>
+                <h2 className="text-lg font-black text-gray-900">Fila proativa de atendimento</h2>
+                <p className="text-sm text-gray-500">Clientes com robô parado, onboarding incompleto, WhatsApp desconectado, expiração próxima ou muitos erros.</p>
+              </div>
+              <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">Contatos hoje: {success.contactsToday}</span>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+              <div className="rounded-xl bg-gray-50 p-3"><p className="text-xs text-gray-400">Follow-ups</p><p className="text-xl font-black">{success.followUpsDue}</p></div>
+              <div className="rounded-xl bg-gray-50 p-3"><p className="text-xs text-gray-400">Sem celular</p><p className="text-xl font-black">{success.missingPhone}</p></div>
+              <div className="rounded-xl bg-amber-50 p-3"><p className="text-xs text-amber-600">Pagos parados</p><p className="text-xl font-black text-amber-700">{success.paidStale48h}</p></div>
+              <div className="rounded-xl bg-amber-50 p-3"><p className="text-xs text-amber-600">Onboarding</p><p className="text-xl font-black text-amber-700">{success.onboardingIncomplete}</p></div>
+              <div className="rounded-xl bg-red-50 p-3"><p className="text-xs text-red-600">Muitos erros</p><p className="text-xl font-black text-red-700">{success.highErrorUsers24h}</p></div>
+              <div className="rounded-xl bg-purple-50 p-3"><p className="text-xs text-purple-600">Expiram 7d</p><p className="text-xl font-black text-purple-700">{success.expiringSoon}</p></div>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {(successQueue?.queue ?? []).map(customer => (
+                <div key={customer.id} className="rounded-xl border border-gray-100 p-3 text-sm">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <p className="font-bold text-gray-900">{customer.email}</p>
+                      <p className="text-xs text-gray-500">{customer.contactPhone || 'Sem celular'} · {customer.plan} · último contato {formatDate(customer.lastSupportContactAt)}</p>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {customer.contactReasons.map(reason => (
+                          <span key={reason} className="rounded-full bg-blue-100 px-2 py-1 text-[11px] font-bold text-blue-700">{SUCCESS_REASON_LABELS[reason] ?? reason}</span>
+                        ))}
+                      </div>
+                      {customer.lastContact?.notes && <p className="mt-2 text-xs text-gray-500">Último registro: {customer.lastContact.notes}</p>}
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => openUserDetail(customer.id)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Drill-down</button>
+                      <button onClick={() => recordContact(customer)} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700">Registrar contato</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {!successQueue?.queue?.length && <p className="text-sm text-gray-400">Nenhum cliente na fila proativa agora.</p>}
+            </div>
+          </section>
+        )}
+
+        {finance && (
+          <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Financeiro · Etapa 3</p>
+                <h2 className="text-lg font-black text-gray-900">Assinaturas e pagamentos</h2>
+                <p className="text-sm text-gray-500">MRR ativo, LTV, inadimplência, expirações e últimos pagamentos.</p>
+              </div>
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">MRR: {formatCurrency(finance.activeMrr)}</span>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl bg-gray-50 p-3"><p className="text-xs text-gray-400">Receita 30d</p><p className="text-xl font-black">{formatCurrency(finance.revenue30d)}</p></div>
+              <div className="rounded-xl bg-gray-50 p-3"><p className="text-xs text-gray-400">LTV médio</p><p className="text-xl font-black">{formatCurrency(finance.avgLtv)}</p></div>
+              <div className="rounded-xl bg-amber-50 p-3"><p className="text-xs text-amber-600">Pendentes</p><p className="text-xl font-black text-amber-700">{finance.pendingPayments}</p></div>
+              <div className="rounded-xl bg-red-50 p-3"><p className="text-xs text-red-600">Pagos vencidos</p><p className="text-xl font-black text-red-700">{finance.overduePaid}</p></div>
+            </div>
+
+            <div className="mt-5 grid gap-5 lg:grid-cols-2">
+              <div>
+                <h3 className="mb-3 text-sm font-bold text-gray-800">Expirações próximas</h3>
+                <div className="space-y-2">
+                  {(subscriptions?.subscriptions ?? []).map(subscription => (
+                    <button key={subscription.id} onClick={() => openUserDetail(subscription.id)} className="w-full rounded-xl border border-gray-100 p-3 text-left text-sm hover:bg-gray-50">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-bold text-gray-900">{subscription.email}</p>
+                        <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-700">{subscription.daysRemaining ?? '—'} dias</span>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500">{subscription.plan} · LTV {formatCurrency(subscription.ltv)} · expira {formatDate(subscription.trialExpiresAt)}</p>
+                    </button>
+                  ))}
+                  {!subscriptions?.subscriptions?.length && <p className="text-sm text-gray-400">Sem assinaturas expirando no filtro atual.</p>}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="mb-3 text-sm font-bold text-gray-800">Pagamentos recentes</h3>
+                <div className="space-y-2">
+                  {(payments?.payments ?? []).map(payment => (
+                    <div key={payment.id} className="rounded-xl border border-gray-100 p-3 text-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-bold text-gray-900">{payment.user?.email}</p>
+                        <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${payment.status === 'approved' ? 'bg-green-100 text-green-700' : payment.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{payment.status}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500">{payment.plan} · {formatCurrency(payment.amount)} · {formatDate(payment.createdAt)}</p>
+                    </div>
+                  ))}
+                  {!payments?.payments?.length && <p className="text-sm text-gray-400">Sem pagamentos no período.</p>}
+                </div>
+              </div>
+            </div>
           </section>
         )}
 

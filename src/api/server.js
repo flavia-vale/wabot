@@ -14,9 +14,11 @@ import { broadcastRoutes } from './routes/broadcast.js'
 import { dashboardRoutes } from './routes/dashboard.js'
 import { logsRoutes } from './routes/logs.js'
 import { adminRoutes } from './routes/admin.js'
+import { registerApiMetricsHooks } from './metrics.js'
 import db from '../db.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
+registerApiMetricsHooks(app)
 
 const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:3000',

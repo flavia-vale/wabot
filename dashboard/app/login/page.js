@@ -125,8 +125,7 @@ function LoginContent() {
                 value={contactPhone}
                 onChange={e => setContactPhone(e.target.value)}
                 required={isRegister}
-                autoComplete="tel"
-                className="border bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-400 w-full rounded-lg"
+                className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 w-full"
               />
               <p className="mt-1 text-[11px] leading-4 text-emerald-200">
                 Usaremos este contato para suporte proativo, como avisar se seu robô ficar parado por 2 dias ou se detectarmos dificuldade na configuração.

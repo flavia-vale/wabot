@@ -26,16 +26,18 @@ model User {
   supportStatus          String    @default("new")
   createdAt              DateTime  @default(now())
 
-  waSession         WaSession?
-  groups            Group[]
-  credentials       Credential[]
-  payments          Payment[]
-  botConfig         BotConfig?
-  scheduled         ScheduledMessage[]
-  messageLogs       MessageLog[]
-  adminUser         AdminUser?
-  adminAuditActors  AdminAuditLog[]    @relation("AdminAuditActor")
-  adminAuditTargets AdminAuditLog[]    @relation("AdminAuditTarget")
+  waSession             WaSession?
+  groups                Group[]
+  credentials           Credential[]
+  payments              Payment[]
+  botConfig             BotConfig?
+  scheduled             ScheduledMessage[]
+  messageLogs           MessageLog[]
+  adminUser             AdminUser?
+  adminAuditActors      AdminAuditLog[]      @relation("AdminAuditActor")
+  adminAuditTargets     AdminAuditLog[]      @relation("AdminAuditTarget")
+  customerContacts      CustomerContactLog[]
+  customerContactActors CustomerContactLog[] @relation("CustomerContactActor")
 
   @@index([status, plan, trialExpiresAt])
   @@index([lastActivityAt])
@@ -161,7 +163,8 @@ model AdminUser {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  auditLogs AdminAuditLog[]
+  auditLogs        AdminAuditLog[]
+  customerContacts CustomerContactLog[]
 
   @@index([role, status])
 }
@@ -189,4 +192,26 @@ model AdminAuditLog {
   @@index([actorUserId, createdAt])
   @@index([targetUserId, createdAt])
   @@index([action, createdAt])
+}
+
+model CustomerContactLog {
+  id             String     @id @default(cuid())
+  userId         String
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  adminUserId    String?
+  adminUser      AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
+  actorUserId    String?
+  actorUser      User?      @relation("CustomerContactActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  channel        String     @default("whatsapp")
+  reason         String
+  outcome        String     @default("contacted")
+  notes          String?
+  nextFollowUpAt DateTime?
+  createdAt      DateTime   @default(now())
+
+  @@index([userId, createdAt])
+  @@index([adminUserId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([reason, createdAt])
+  @@index([outcome, nextFollowUpAt])
 }

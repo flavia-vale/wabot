@@ -1,5 +1,6 @@
 import db from '../../db.js'
 import { listRunningBots } from '../../manager.js'
+import { getApiMetricsSnapshot } from '../metrics.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -11,6 +12,7 @@ const ROLE_PERMISSIONS = {
 }
 
 const PAID_PLANS = ['basic', 'pro']
+const PLAN_PRICES = { trial: 0, basic: 50, pro: 100 }
 const EXPORT_LIMIT = 100
 
 function getBootstrapAdminEmails() {
@@ -69,6 +71,82 @@ function getGroupCounts(groups = []) {
     acc.total++
     return acc
   }, { total: 0, monitor: 0, post: 0 })
+}
+
+
+function getDaysRemaining(expiresAt, now = new Date()) {
+  if (!expiresAt) return null
+  return Math.ceil((new Date(expiresAt).getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
+}
+
+function getSubscriptionStatus(user, now = new Date()) {
+  if (user.status === 'banned' || user.status === 'suspended') return user.status
+  if (!user.trialExpiresAt) return 'active'
+  if (user.trialExpiresAt < now) return 'expired'
+  if (user.trialExpiresAt <= addDays(now, 7)) return 'expiring_soon'
+  return 'active'
+}
+
+function parseManualAccessInput(body = {}) {
+  const plan = body.plan === undefined || body.plan === '' ? undefined : String(body.plan)
+  const daysRaw = body.days === undefined || body.days === '' ? undefined : Number(body.days)
+  const expiresAtRaw = body.expiresAt === undefined || body.expiresAt === '' ? undefined : String(body.expiresAt)
+  const reason = String(body.reason ?? '').trim()
+
+  if (plan !== undefined && !['trial', ...PAID_PLANS].includes(plan)) {
+    return { ok: false, error: 'Plano inválido. Use trial, basic ou pro.' }
+  }
+  if (daysRaw !== undefined && (!Number.isInteger(daysRaw) || daysRaw < -365 || daysRaw > 365)) {
+    return { ok: false, error: 'Dias deve ser um inteiro entre -365 e 365.' }
+  }
+  let expiresAt
+  if (expiresAtRaw !== undefined) {
+    expiresAt = new Date(expiresAtRaw)
+    if (Number.isNaN(expiresAt.getTime())) return { ok: false, error: 'Data de expiração inválida.' }
+  }
+  if (!reason || reason.length < 5) return { ok: false, error: 'Motivo obrigatório com pelo menos 5 caracteres.' }
+  if (plan === undefined && daysRaw === undefined && expiresAt === undefined) {
+    return { ok: false, error: 'Informe plano, dias ou data de expiração para alterar o acesso.' }
+  }
+
+  return { ok: true, data: { plan, days: daysRaw, expiresAt, reason } }
+}
+
+
+function parseContactLogInput(body = {}) {
+  const channel = String(body.channel ?? 'whatsapp').trim()
+  const reason = String(body.reason ?? '').trim()
+  const outcome = String(body.outcome ?? 'contacted').trim()
+  const notes = body.notes === undefined ? null : String(body.notes).trim()
+  const nextFollowUpRaw = body.nextFollowUpAt === undefined || body.nextFollowUpAt === '' ? undefined : String(body.nextFollowUpAt)
+
+  if (!['whatsapp', 'email', 'phone', 'internal'].includes(channel)) {
+    return { ok: false, error: 'Canal inválido. Use whatsapp, email, phone ou internal.' }
+  }
+  if (!reason || reason.length < 3) return { ok: false, error: 'Motivo obrigatório com pelo menos 3 caracteres.' }
+  if (!['contacted', 'no_response', 'resolved', 'follow_up', 'not_applicable'].includes(outcome)) {
+    return { ok: false, error: 'Resultado inválido.' }
+  }
+
+  let nextFollowUpAt = null
+  if (nextFollowUpRaw !== undefined) {
+    nextFollowUpAt = new Date(nextFollowUpRaw)
+    if (Number.isNaN(nextFollowUpAt.getTime())) return { ok: false, error: 'Data de follow-up inválida.' }
+  }
+
+  return { ok: true, data: { channel, reason, outcome, notes: notes || null, nextFollowUpAt } }
+}
+
+function getCustomerSuccessReasons({ user, riskFlags = [], errorCount24h = 0 }) {
+  const reasons = []
+  if (!user.contactPhone) reasons.push('missing_phone')
+  if (riskFlags.includes('paid_stale_48h')) reasons.push('paid_stale_48h')
+  if (riskFlags.includes('wa_disconnected')) reasons.push('wa_disconnected')
+  if (riskFlags.includes('no_success_log')) reasons.push('no_first_success')
+  if (riskFlags.includes('no_credentials') || riskFlags.includes('no_monitor_group') || riskFlags.includes('no_post_group')) reasons.push('onboarding_incomplete')
+  if (riskFlags.includes('expiring_soon')) reasons.push('expiring_soon')
+  if (errorCount24h >= 5) reasons.push('high_errors_24h')
+  return [...new Set(reasons)]
 }
 
 function getAccessStatus(user, now = new Date()) {
@@ -330,6 +408,384 @@ export async function adminRoutes(app) {
         }, req.admin.role)
       }),
     }
+  })
+
+
+
+
+  app.get('/system/health', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+
+    const memory = process.memoryUsage()
+    const cpu = process.cpuUsage()
+    const [dbOk, messageLogCount, userCount] = await Promise.all([
+      db.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
+      db.messageLog.count().catch(() => null),
+      db.user.count().catch(() => null),
+    ])
+    const metrics = getApiMetricsSnapshot()
+    const status = dbOk && metrics.total5xx === 0 ? 'ok' : dbOk ? 'degraded' : 'critical'
+
+    await writeAdminAuditLog(req, { action: 'admin.system.health.read', resource: 'systemHealth' })
+
+    return {
+      status,
+      dbOk,
+      nodeEnv: process.env.NODE_ENV || 'development',
+      pid: process.pid,
+      uptimeSeconds: metrics.uptimeSeconds,
+      memory: {
+        rssMb: Math.round(memory.rss / 1024 / 1024),
+        heapUsedMb: Math.round(memory.heapUsed / 1024 / 1024),
+        heapTotalMb: Math.round(memory.heapTotal / 1024 / 1024),
+      },
+      cpu,
+      counts: { users: userCount, messageLogs: messageLogCount, runningBots: listRunningBots().length },
+      api: {
+        totalRequests: metrics.totalRequests,
+        total4xx: metrics.total4xx,
+        total5xx: metrics.total5xx,
+        avgLatencyMs: metrics.avgLatencyMs,
+        p95RouteAvgMs: metrics.p95RouteAvgMs,
+      },
+    }
+  })
+
+  app.get('/system/metrics', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const metrics = getApiMetricsSnapshot()
+    await writeAdminAuditLog(req, { action: 'admin.system.metrics.read', resource: 'apiMetrics' })
+    return metrics
+  })
+
+  app.get('/success/overview', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+
+    const now = new Date()
+    const since24h = addDays(now, -1)
+    const sinceToday = new Date(now)
+    sinceToday.setHours(0, 0, 0, 0)
+
+    const [
+      contactsToday,
+      followUpsDue,
+      missingPhone,
+      paidStale48h,
+      onboardingIncomplete,
+      expiringSoon,
+      errors24h,
+    ] = await Promise.all([
+      db.customerContactLog.count({ where: { createdAt: { gte: sinceToday } } }),
+      db.customerContactLog.count({ where: { outcome: 'follow_up', nextFollowUpAt: { lte: now } } }),
+      db.user.count({ where: { status: 'active', contactPhone: null } }),
+      db.user.count({ where: { status: 'active', plan: { in: PAID_PLANS }, OR: [{ lastActivityAt: null }, { lastActivityAt: { lt: addDays(now, -2) } }] } }),
+      db.user.count({ where: { status: 'active', OR: [{ credentials: { none: {} } }, { groups: { none: { role: 'monitor' } } }, { groups: { none: { role: 'post' } } }] } }),
+      db.user.count({ where: { status: 'active', trialExpiresAt: { gt: now, lte: addDays(now, 7) } } }),
+      db.messageLog.groupBy({ by: ['userId'], where: { status: 'error', sentAt: { gte: since24h } }, _count: { _all: true } }),
+    ])
+
+    await writeAdminAuditLog(req, { action: 'admin.success.overview.read', resource: 'customerSuccess' })
+
+    return {
+      contactsToday,
+      followUpsDue,
+      missingPhone,
+      paidStale48h,
+      onboardingIncomplete,
+      expiringSoon,
+      highErrorUsers24h: errors24h.filter(row => row._count._all >= 5).length,
+    }
+  })
+
+  app.get('/success/queue', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+
+    const { limit = '25', reason = 'all' } = req.query
+    const limitNum = Math.min(EXPORT_LIMIT, Math.max(1, parseInt(limit) || 25))
+    const now = new Date()
+    const since24h = addDays(now, -1)
+    const running = new Set(listRunningBots())
+
+    const [users, successMap, errorMap] = await Promise.all([
+      db.user.findMany({
+        where: { status: 'active' },
+        orderBy: [{ lastSupportContactAt: 'asc' }, { lastActivityAt: 'asc' }],
+        take: EXPORT_LIMIT,
+        select: {
+          id: true,
+          email: true,
+          contactPhone: true,
+          status: true,
+          plan: true,
+          trialExpiresAt: true,
+          lastActivityAt: true,
+          lastSupportContactAt: true,
+          supportStatus: true,
+          waSession: { select: { status: true, phone: true, updatedAt: true } },
+          groups: { select: { role: true } },
+          customerContacts: { orderBy: { createdAt: 'desc' }, take: 1 },
+          _count: { select: { credentials: true, messageLogs: true } },
+        },
+      }),
+      getLogCountMap({ status: 'success' }),
+      getLogCountMap({ status: 'error', since: since24h }),
+    ])
+
+    const queue = users
+      .map(user => {
+        const successCount = successMap.get(user.id) ?? 0
+        const errorCount24h = errorMap.get(user.id) ?? 0
+        const botRunning = running.has(user.id)
+        const riskFlags = buildRiskFlags({ user, groups: user.groups, successCount, errorCount: errorCount24h, now, running: botRunning })
+        const contactReasons = getCustomerSuccessReasons({ user, riskFlags, errorCount24h })
+        return sanitizeUser({
+          ...user,
+          groups: undefined,
+          botRunning,
+          groupCounts: getGroupCounts(user.groups),
+          errorCount24h,
+          riskFlags,
+          contactReasons,
+          lastContact: user.customerContacts?.[0] ?? null,
+          customerContacts: undefined,
+        }, req.admin.role)
+      })
+      .filter(user => user.contactReasons.length > 0)
+      .filter(user => reason === 'all' || user.contactReasons.includes(reason))
+      .slice(0, limitNum)
+
+    await writeAdminAuditLog(req, { action: 'admin.success.queue.list', resource: 'customerSuccess' })
+
+    return { total: queue.length, queue }
+  })
+
+  app.post('/users/:id/contact-log', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:write'))) return
+
+    const validation = parseContactLogInput(req.body)
+    if (!validation.ok) return reply.code(400).send({ error: validation.error })
+
+    const user = await db.user.findUnique({ where: { id: req.params.id }, select: { id: true, email: true, supportStatus: true, lastSupportContactAt: true } })
+    if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
+
+    const data = validation.data
+    const contact = await db.customerContactLog.create({
+      data: {
+        userId: user.id,
+        adminUserId: req.admin?.adminUserId ?? null,
+        actorUserId: req.user?.sub ?? null,
+        channel: data.channel,
+        reason: data.reason,
+        outcome: data.outcome,
+        notes: data.notes,
+        nextFollowUpAt: data.nextFollowUpAt,
+      },
+    })
+
+    const after = await db.user.update({
+      where: { id: user.id },
+      data: { lastSupportContactAt: new Date(), supportStatus: data.outcome },
+      select: { id: true, email: true, supportStatus: true, lastSupportContactAt: true },
+    })
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.customer.contact.create',
+      resource: 'customerContactLog',
+      resourceId: contact.id,
+      targetUserId: user.id,
+      before: user,
+      after: { user: after, contact },
+      reason: data.reason,
+    })
+
+    return { ok: true, contact, user: after }
+  })
+
+  app.get('/finance/overview', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:read'))) return
+
+    const now = new Date()
+    const since30d = addDays(now, -30)
+    const [
+      approved30d,
+      approvedAll,
+      approvedPayingUsers,
+      pendingPayments,
+      failedPayments,
+      activeBasic,
+      activePro,
+      trialsActive,
+      expiring7d,
+      expiring30d,
+      overduePaid,
+    ] = await Promise.all([
+      db.payment.aggregate({ where: { status: 'approved', createdAt: { gte: since30d } }, _sum: { amount: true }, _count: { _all: true } }),
+      db.payment.aggregate({ where: { status: 'approved' }, _sum: { amount: true }, _count: { _all: true } }),
+      db.payment.groupBy({ by: ['userId'], where: { status: 'approved' }, _sum: { amount: true } }),
+      db.payment.count({ where: { status: 'pending' } }),
+      db.payment.count({ where: { status: { notIn: ['approved', 'pending'] } } }),
+      db.user.count({ where: { status: 'active', plan: 'basic', trialExpiresAt: { gt: now } } }),
+      db.user.count({ where: { status: 'active', plan: 'pro', trialExpiresAt: { gt: now } } }),
+      db.user.count({ where: { status: 'active', plan: 'trial', OR: [{ trialExpiresAt: null }, { trialExpiresAt: { gt: now } }] } }),
+      db.user.count({ where: { status: 'active', trialExpiresAt: { gt: now, lte: addDays(now, 7) } } }),
+      db.user.count({ where: { status: 'active', trialExpiresAt: { gt: now, lte: addDays(now, 30) } } }),
+      db.user.count({ where: { status: 'active', plan: { in: PAID_PLANS }, trialExpiresAt: { lt: now } } }),
+    ])
+
+    const activeMrr = activeBasic * PLAN_PRICES.basic + activePro * PLAN_PRICES.pro
+    const totalLtv = approvedAll._sum.amount ?? 0
+    const payingUsers = approvedPayingUsers.length
+
+    await writeAdminAuditLog(req, { action: 'admin.finance.overview.read', resource: 'finance' })
+
+    return {
+      revenue30d: approved30d._sum.amount ?? 0,
+      approvedPayments30d: approved30d._count._all,
+      totalRevenue: totalLtv,
+      approvedPaymentsAll: approvedAll._count._all,
+      pendingPayments,
+      failedPayments,
+      activeMrr,
+      activeBasic,
+      activePro,
+      paidActiveUsers: activeBasic + activePro,
+      trialsActive,
+      expiring7d,
+      expiring30d,
+      overduePaid,
+      payingUsers,
+      avgLtv: payingUsers ? Math.round((totalLtv / payingUsers) * 100) / 100 : 0,
+    }
+  })
+
+  app.get('/payments', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:read'))) return
+
+    const { page, limit, skip } = getPagination(req.query, 30)
+    const { status = 'all', plan, userId } = req.query
+    const { from, to } = parseDateRange(req.query, 30)
+    const where = {
+      createdAt: { gte: from, lte: to },
+      ...(status !== 'all' ? { status } : {}),
+      ...(plan ? { plan } : {}),
+      ...(userId ? { userId } : {}),
+    }
+
+    const [total, amount, payments] = await Promise.all([
+      db.payment.count({ where }),
+      db.payment.aggregate({ where, _sum: { amount: true } }),
+      db.payment.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip,
+        include: { user: { select: { id: true, email: true, contactPhone: true, plan: true, trialExpiresAt: true, status: true } } },
+      }),
+    ])
+
+    await writeAdminAuditLog(req, { action: 'admin.payments.list', resource: 'payment' })
+
+    return {
+      total,
+      page,
+      limit,
+      amount: amount._sum.amount ?? 0,
+      payments: payments.map(payment => ({ ...payment, user: sanitizeUser(payment.user, req.admin.role) })),
+    }
+  })
+
+  app.get('/subscriptions', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:read'))) return
+
+    const { page, limit, skip } = getPagination(req.query, 30)
+    const { plan, status = 'all', search } = req.query
+    const now = new Date()
+    const where = {
+      ...(plan ? { plan } : {}),
+      ...(search ? { email: { contains: String(search).trim() } } : {}),
+      ...(status === 'active' ? { status: 'active', OR: [{ trialExpiresAt: null }, { trialExpiresAt: { gt: now } }] } : {}),
+      ...(status === 'expired' ? { trialExpiresAt: { lt: now } } : {}),
+      ...(status === 'expiring_soon' ? { trialExpiresAt: { gt: now, lte: addDays(now, 7) } } : {}),
+    }
+
+    const [total, users, ltvRows] = await Promise.all([
+      db.user.count({ where }),
+      db.user.findMany({
+        where,
+        orderBy: { trialExpiresAt: 'asc' },
+        take: limit,
+        skip,
+        select: {
+          id: true,
+          email: true,
+          contactPhone: true,
+          status: true,
+          plan: true,
+          trialExpiresAt: true,
+          createdAt: true,
+          lastActivityAt: true,
+          supportStatus: true,
+          payments: { orderBy: { createdAt: 'desc' }, take: 1 },
+        },
+      }),
+      db.payment.groupBy({ by: ['userId'], where: { status: 'approved' }, _sum: { amount: true } }),
+    ])
+    const ltvMap = new Map(ltvRows.map(row => [row.userId, row._sum.amount ?? 0]))
+
+    await writeAdminAuditLog(req, { action: 'admin.subscriptions.list', resource: 'subscription' })
+
+    return {
+      total,
+      page,
+      limit,
+      subscriptions: users.map(user => sanitizeUser({
+        ...user,
+        subscriptionStatus: getSubscriptionStatus(user, now),
+        daysRemaining: getDaysRemaining(user.trialExpiresAt, now),
+        ltv: ltvMap.get(user.id) ?? 0,
+        lastPayment: user.payments?.[0] ?? null,
+      }, req.admin.role)),
+    }
+  })
+
+  app.post('/users/:id/access', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:write'))) return
+
+    const validation = parseManualAccessInput(req.body)
+    if (!validation.ok) return reply.code(400).send({ error: validation.error })
+
+    const before = await db.user.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, email: true, plan: true, trialExpiresAt: true, status: true, supportStatus: true },
+    })
+    if (!before) return reply.code(404).send({ error: 'Cliente não encontrado' })
+
+    const { plan, days, expiresAt, reason } = validation.data
+    const data = {}
+    if (plan !== undefined) data.plan = plan
+    if (expiresAt !== undefined) data.trialExpiresAt = expiresAt
+    if (days !== undefined) {
+      const base = before.trialExpiresAt && before.trialExpiresAt > new Date() ? before.trialExpiresAt : new Date()
+      data.trialExpiresAt = addDays(base, days)
+    }
+
+    const after = await db.user.update({
+      where: { id: before.id },
+      data,
+      select: { id: true, email: true, plan: true, trialExpiresAt: true, status: true, supportStatus: true },
+    })
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.user.access.update',
+      resource: 'user',
+      resourceId: before.id,
+      targetUserId: before.id,
+      before,
+      after,
+      reason,
+    })
+
+    return { ok: true, user: after }
   })
 
   app.get('/users/:id', async (req, reply) => {

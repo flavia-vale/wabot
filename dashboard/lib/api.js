@@ -90,12 +90,29 @@ export const api = {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/sessions${query ? `?${query}` : ''}`)
   },
-
-  logs: (status = 'all', page = 1, limit = 20, search = '') => {
-    const query = new URLSearchParams({ status, page: String(page), limit: String(limit) })
-    if (search) query.set('search', search)
-    return apiFetch(`/api/logs?${query}`)
+  adminSystemHealth: () => apiFetch('/api/admin/system/health'),
+  adminSystemMetrics: () => apiFetch('/api/admin/system/metrics'),
+  adminSuccessOverview: () => apiFetch('/api/admin/success/overview'),
+  adminSuccessQueue: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/success/queue${query ? `?${query}` : ''}`)
   },
+  adminCreateContactLog: (id, data) =>
+    apiFetch(`/api/admin/users/${id}/contact-log`, { method: 'POST', body: JSON.stringify(data) }),
+  adminFinanceOverview: () => apiFetch('/api/admin/finance/overview'),
+  adminPayments: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/payments${query ? `?${query}` : ''}`)
+  },
+  adminSubscriptions: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/subscriptions${query ? `?${query}` : ''}`)
+  },
+  adminUpdateAccess: (id, data) =>
+    apiFetch(`/api/admin/users/${id}/access`, { method: 'POST', body: JSON.stringify(data) }),
+
+  logs: (status = 'all', page = 1, limit = 20) =>
+    apiFetch(`/api/logs?status=${status}&page=${page}&limit=${limit}`),
   logsClear: () => apiFetch('/api/logs/clear', { method: 'DELETE' }),
 }
 
