@@ -1,4 +1,5 @@
 import db from '../../db.js'
+import { trackAnalyticsEventSafe } from '../../analytics.js'
 
 const PLATFORMS = ['shopee', 'amazon', 'mercadolivre', 'magazineluiza']
 
@@ -27,6 +28,7 @@ export async function credentialsRoutes(app) {
       create: { userId: req.user.sub, platform, data: JSON.stringify(req.body) },
       update: { data: JSON.stringify(req.body) },
     })
+    trackAnalyticsEventSafe({ userId: req.user.sub, event: 'credential_saved', metadata: { platform } })
     return { ...cred, data: JSON.parse(cred.data) }
   })
 }
