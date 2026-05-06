@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs'
 import { randomBytes } from 'crypto'
 import db from '../../db.js'
-import { trackAnalyticsEventSafe } from '../../analytics.js'
+import { normalizeEmail } from '../auth-utils.js'
 
 function setAuthCookie(reply, token) {
   const secure = process.env.COOKIE_SECURE !== 'false'
@@ -28,6 +28,20 @@ function normalizeContactPhone(rawPhone) {
 function isPrismaShapeMismatch(err) {
   const message = String(err?.message ?? '')
   return message.includes('Unknown argument') || message.includes('Unknown field') || message.includes('no such column') || message.includes('does not exist in the current database')
+}
+
+async function findUserByNormalizedEmail(email) {
+  const exactUser = await db.user.findUnique({ where: { email } })
+  if (exactUser) return exactUser
+
+  try {
+    return await db.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+    })
+  } catch (err) {
+    if (!isPrismaShapeMismatch(err)) throw err
+    return null
+  }
 }
 
 async function createUserWithSecureFields(data) {
@@ -129,13 +143,13 @@ function publicUser(user) {
 export async function authRoutes(app) {
   app.post('/register', async (req, reply) => {
     const { email: rawEmail, password, contactPhone: rawContactPhone, ref } = req.body ?? {}
-    const email = rawEmail?.toLowerCase()
+    const email = normalizeEmail(rawEmail)
     const contactPhone = normalizeContactPhone(rawContactPhone)
     if (!email || !password || !contactPhone) return reply.code(400).send({ error: 'email, password e celular obrigatórios' })
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply.code(400).send({ error: 'Formato de email inválido' })
     if (password.length < 8) return reply.code(400).send({ error: 'Senha deve ter no mínimo 8 caracteres' })
 
-    const existing = await db.user.findUnique({ where: { email } })
+    const existing = await findUserByNormalizedEmail(email)
     if (existing) return reply.code(409).send({ error: 'Email já cadastrado' })
 
     const passwordHash = await bcrypt.hash(password, 10)
@@ -184,10 +198,10 @@ export async function authRoutes(app) {
 
   app.post('/login', async (req, reply) => {
     const { email: rawEmail, password } = req.body ?? {}
-    const email = rawEmail?.toLowerCase()
+    const email = normalizeEmail(rawEmail)
     if (!email || !password) return reply.code(400).send({ error: 'email e password obrigatórios' })
 
-    const user = await db.user.findUnique({ where: { email } })
+    const user = await findUserByNormalizedEmail(email)
     if (!user) return reply.code(401).send({ error: 'Credenciais inválidas' })
     if (user.status === 'banned' || user.status === 'suspended') {
       return reply.code(403).send({ error: 'Conta bloqueada. Entre em contato com o suporte.' })
