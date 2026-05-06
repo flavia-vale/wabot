@@ -1,0 +1,5 @@
+ALTER TABLE "Group" ADD COLUMN "blockedKeywords" TEXT;
+ALTER TABLE "Group" ADD COLUMN "allowedPlatforms" TEXT;
+ALTER TABLE "Group" ADD COLUMN "welcomeMsg" TEXT;
+ALTER TABLE "BotConfig" ADD COLUMN "feedGlobal" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "BotConfig" ADD COLUMN "postToStatus" BOOLEAN NOT NULL DEFAULT false;

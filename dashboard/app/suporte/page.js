@@ -7,10 +7,14 @@ export const metadata = {
 }
 
 const faqs = [
-  ['Como começo?', 'Crie sua conta, acesse o painel, conecte o WhatsApp por QR Code ou número, cadastre suas credenciais de afiliado e configure os grupos monitorados e de destino.'],
-  ['O QR Code não aparece. O que faço?', 'Atualize a página, confirme se sua sessão não expirou e tente reconectar. Se persistir, envie ao suporte o e-mail da conta e o horário aproximado da tentativa.'],
-  ['Como sei se o bot está enviando?', 'Use a tela de envio para testar uma mensagem e acompanhe a tela de logs para confirmar sucesso ou identificar erros.'],
-  ['Meu pagamento está pendente.', 'A ativação só aparece após confirmação do pagamento pelo backend. Aguarde o processamento do provedor e consulte a tela de planos novamente.'],
+  ['como-conectar-whatsapp-qr-code', 'Como conectar WhatsApp por QR Code?', 'No painel, abra Conexão WhatsApp, clique em Conectar via QR Code e escaneie pelo WhatsApp em Dispositivos vinculados.'],
+  ['como-conectar-pelo-numero', 'Como conectar pelo número?', 'No painel, escolha Conectar pelo número, informe DDI + DDD + número sem símbolos e use o código gerado em Dispositivos vinculados.'],
+  ['como-cadastrar-grupos', 'Como cadastrar grupos?', 'Conecte o WhatsApp, carregue grupos existentes e marque grupos de origem como monitorados e grupos de destino como postagem.'],
+  ['como-configurar-credenciais', 'Como configurar credenciais?', 'Abra Credenciais e preencha os campos obrigatórios de cada plataforma. Nunca envie chaves, cookies ou tokens por canais não oficiais.'],
+  ['como-testar-envio', 'Como testar se o bot está enviando?', 'Use Envio para disparar uma mensagem teste para os grupos de destino e confira a tela de Logs para confirmar sucesso ou erro.'],
+  ['qr-nao-aparece', 'O QR Code não aparece. O que faço?', 'Atualize a página, tente gerar novamente, confirme sua conexão e verifique se a sessão não ficou presa em outro dispositivo.'],
+  ['pagamento-pendente', 'Meu pagamento está pendente.', 'A ativação só aparece após confirmação do pagamento pelo backend. Aguarde o processamento do provedor e consulte Planos novamente.'],
+  ['renovar-acesso', 'Como renovar acesso/plano?', 'Acesse Planos, escolha Basic ou Pro e finalize uma nova compra. No MVP o acesso é por 30 dias renovável manualmente.'],
 ]
 
 export default function SupportPage() {
@@ -30,8 +34,8 @@ export default function SupportPage() {
         <section>
           <h2 className="text-xl font-bold text-gray-900">Perguntas frequentes</h2>
           <div className="mt-4 space-y-4">
-            {faqs.map(([question, answer]) => (
-              <article key={question} className="rounded-2xl border border-green-100 p-4">
+            {faqs.map(([id, question, answer]) => (
+              <article id={id} key={id} className="scroll-mt-20 rounded-2xl border border-green-100 p-4">
                 <h3 className="font-bold text-gray-900">{question}</h3>
                 <p className="mt-2">{answer}</p>
               </article>

@@ -2,6 +2,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { api } from '@/lib/api'
+import { HelpLink } from '@/components/HelpLink'
 
 const PLAN_LABELS = { trial: 'Trial', basic: 'Basic', pro: 'Pro' }
 const STATUS_LABELS = { pending: 'Pendente', approved: 'Aprovado', rejected: 'Rejeitado', cancelled: 'Cancelado' }
@@ -93,7 +94,10 @@ function PlanosContent() {
 
   return (
     <div className="max-w-xl">
-      <h2 className="text-2xl font-bold text-gray-800 mb-1">Planos</h2>
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="text-2xl font-bold text-gray-800 mb-1">Planos</h2>
+        <HelpLink topic="pagamento-pendente">Ajuda</HelpLink>
+      </div>
       <p className="text-gray-500 text-sm mb-6">Compre ou renove acesso por 30 dias. A ativação só aparece após confirmação do pagamento.</p>
 
       {redirectStatus === 'success' && hasConfirmedPaidAccess && (
@@ -167,6 +171,16 @@ function PlanosContent() {
       </div>
 
       {checkoutError && <p className="text-red-500 text-sm mb-4">{checkoutError}</p>}
+
+
+      <div className="bg-white rounded-2xl shadow p-5 mb-5 text-sm text-gray-600">
+        <h3 className="font-semibold text-gray-700 mb-3">Dúvidas rápidas</h3>
+        <div className="space-y-3">
+          <p><strong>Quando ativa?</strong> Após confirmação do pagamento pelo backend/webhook do Mercado Pago.</p>
+          <p><strong>É recorrente?</strong> Não. No MVP o acesso dura 30 dias e pode ser renovado manualmente.</p>
+          <p><strong>Qual plano escolher?</strong> Basic para validar a operação; Pro para operar sem anúncios e com maior confiança em campanhas.</p>
+        </div>
+      </div>
 
       {data?.referralCode && (
         <div className="bg-white rounded-2xl shadow p-5 mb-5">

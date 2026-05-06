@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs'
 import { randomBytes } from 'crypto'
 import db from '../../db.js'
+import { trackAnalyticsEventSafe } from '../../analytics.js'
 
 function setAuthCookie(reply, token) {
   const secure = process.env.COOKIE_SECURE !== 'false'

@@ -4,12 +4,55 @@ import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 
+const navGroups = [
+  {
+    title: 'Operação',
+    items: [
+      { href: '/dashboard/inicio', icon: '🏠', label: 'Início' },
+      { href: '/dashboard', icon: '📱', label: 'Conexão WhatsApp' },
+      { href: '/dashboard/envio', icon: '📤', label: 'Envio' },
+      { href: '/dashboard/logs', icon: '📋', label: 'Logs' },
+    ],
+  },
+  {
+    title: 'Configuração',
+    items: [
+      { href: '/dashboard/grupos', icon: '👥', label: 'Grupos' },
+      { href: '/dashboard/credenciais', icon: '🔑', label: 'Credenciais' },
+      { href: '/dashboard/configuracoes', icon: '⚙️', label: 'Configurações' },
+    ],
+  },
+  {
+    title: 'Conta',
+    items: [
+      { href: '/dashboard/planos', icon: '💳', label: 'Planos' },
+      { href: '/suporte', icon: '🆘', label: 'Suporte' },
+    ],
+  },
+]
+
+const focusClasses = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-green-700'
+
+
+function LogoutButton({ mobile = false, loggingOut, onLogout }) {
+  return (
+    <button
+      onClick={onLogout}
+      disabled={loggingOut}
+      className={`${mobile ? 'w-full rounded-lg bg-green-800 px-3 py-2 text-left text-sm text-green-100 hover:text-white' : 'w-full text-sm text-green-200 hover:text-white text-left'} disabled:cursor-wait disabled:opacity-70 ${focusClasses}`}
+    >
+      {loggingOut ? 'Saindo...' : 'Sair da conta'}
+    </button>
+  )
+}
+
 export default function DashboardLayout({ children }) {
   const router = useRouter()
   const pathname = usePathname()
 
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -19,37 +62,21 @@ export default function DashboardLayout({ children }) {
     return () => { active = false }
   }, [router])
 
+  useEffect(() => {
+    if (!menuOpen) return undefined
+    function onKeyDown(event) {
+      if (event.key === 'Escape') setMenuOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [menuOpen])
+
   async function logout() {
+    if (loggingOut) return
+    setLoggingOut(true)
     await api.logout().catch(() => {})
     router.push('/login')
   }
-
-  const navGroups = [
-    {
-      title: 'Operação',
-      items: [
-        { href: '/dashboard/inicio', label: '🏠 Início' },
-        { href: '/dashboard', label: '📱 Conexão WhatsApp' },
-        { href: '/dashboard/envio', label: '📤 Envio' },
-        { href: '/dashboard/logs', label: '📋 Logs' },
-      ],
-    },
-    {
-      title: 'Configuração',
-      items: [
-        { href: '/dashboard/grupos', label: '👥 Grupos' },
-        { href: '/dashboard/credenciais', label: '🔑 Credenciais' },
-        { href: '/dashboard/configuracoes', label: '⚙️ Configurações' },
-      ],
-    },
-    {
-      title: 'Conta',
-      items: [
-        { href: '/dashboard/planos', label: '💳 Planos' },
-        { href: '/suporte', label: '🆘 Suporte' },
-      ],
-    },
-  ]
 
   const isActive = (href) => href === '/dashboard' ? pathname === href : pathname.startsWith(href)
 
@@ -62,69 +89,86 @@ export default function DashboardLayout({ children }) {
       <div key={group.title}>
         <p className="text-xs font-semibold uppercase tracking-wide text-green-100 mb-2">{group.title}</p>
         <div className="flex flex-col gap-1">
-          {group.items.map(item => (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={handleNavigate}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
-                isActive(item.href)
-                  ? 'bg-white text-green-700'
-                  : 'hover:bg-green-600'
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
+          {group.items.map(item => {
+            const active = isActive(item.href)
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={handleNavigate}
+                aria-current={active ? 'page' : undefined}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition ${focusClasses} ${
+                  active
+                    ? 'bg-white text-green-700'
+                    : 'hover:bg-green-600'
+                }`}
+              >
+                <span aria-hidden="true">{item.icon}</span>
+                <span>{item.label}</span>
+              </Link>
+            )
+          })}
         </div>
       </div>
     ))
   }
 
-  if (checkingAuth) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-sm text-gray-600">Validando sessão...</div>
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 text-sm text-gray-600" role="status" aria-live="polite">
+        <span className="mr-2 h-2 w-2 animate-pulse rounded-full bg-green-600" aria-hidden="true" />
+        Validando sua sessão...
+      </div>
+    )
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 md:flex">
+    <div className="min-h-screen overflow-x-hidden bg-gray-50 md:flex">
       <header className="md:hidden sticky top-0 z-30 bg-green-700 text-white border-b border-green-600">
         <div className="flex items-center justify-between px-4 py-3">
-          <h1 className="text-base font-bold">🤖 Bot Conversor</h1>
+          <Link href="/dashboard/inicio" className={`text-base font-bold ${focusClasses}`} onClick={handleNavigate}>
+            <span aria-hidden="true">🤖</span> Bot Conversor
+          </Link>
           <button
             type="button"
-            onClick={() => setMenuOpen(open => !open)}
+            onClick={() => setMenuOpen(true)}
             aria-expanded={menuOpen}
             aria-controls="mobile-dashboard-menu"
-            className="rounded-lg border border-green-500 px-3 py-1.5 text-sm font-semibold hover:bg-green-600"
+            className={`rounded-lg border border-green-500 px-3 py-1.5 text-sm font-semibold hover:bg-green-600 ${focusClasses}`}
           >
-            {menuOpen ? 'Fechar' : 'Menu'}
+            Menu
           </button>
         </div>
-        {menuOpen && (
-          <nav id="mobile-dashboard-menu" className="p-4 flex flex-col gap-4 border-t border-green-600">
-            {renderNavItems()}
-            <button
-              onClick={logout}
-              className="w-full rounded-lg bg-green-800 px-3 py-2 text-left text-sm text-green-100 hover:text-white"
-            >
-              Sair →
-            </button>
-          </nav>
-        )}
       </header>
+
+      {menuOpen && (
+        <div className="fixed inset-0 z-40 md:hidden" role="presentation">
+          <button type="button" aria-label="Fechar menu" className="absolute inset-0 bg-black/40" onClick={() => setMenuOpen(false)} />
+          <nav id="mobile-dashboard-menu" aria-label="Navegação do dashboard" className="absolute left-0 top-0 flex h-full w-72 max-w-[85vw] flex-col gap-4 overflow-y-auto bg-green-700 p-4 text-white shadow-2xl">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-base font-bold"><span aria-hidden="true">🤖</span> Bot Conversor</p>
+              <button type="button" onClick={() => setMenuOpen(false)} className={`rounded-lg border border-green-500 px-3 py-1.5 text-sm font-semibold hover:bg-green-600 ${focusClasses}`}>Fechar</button>
+            </div>
+            {renderNavItems()}
+            <div className="border-t border-green-600 pt-4">
+              <LogoutButton mobile loggingOut={loggingOut} onLogout={logout} />
+            </div>
+          </nav>
+        </div>
+      )}
 
       <aside className="hidden md:flex md:w-56 md:min-h-screen bg-green-700 text-white flex-col">
         <div className="p-5 border-b border-green-600">
-          <h1 className="text-xl font-bold">🤖 Bot Conversor para Afiliados</h1>
+          <Link href="/dashboard/inicio" className={`block text-xl font-bold ${focusClasses}`}>
+            <span aria-hidden="true">🤖</span> Bot Conversor para Afiliados
+          </Link>
         </div>
-        <nav className="flex-1 p-4 flex flex-col gap-4">
+        <nav className="flex-1 p-4 flex flex-col gap-4" aria-label="Navegação do dashboard">
           {renderNavItems()}
         </nav>
         <div className="p-4 border-t border-green-600">
-          <button
-            onClick={logout}
-            className="w-full text-sm text-green-200 hover:text-white text-left"
-          >
-            Sair →
-          </button>
+          <LogoutButton loggingOut={loggingOut} onLogout={logout} />
         </div>
       </aside>
       <main className="p-4 md:flex-1 md:p-8">{children}</main>
