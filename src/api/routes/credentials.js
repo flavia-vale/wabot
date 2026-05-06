@@ -5,8 +5,8 @@ const PLATFORMS = ['shopee', 'amazon', 'mercadolivre', 'magazineluiza']
 
 const REQUIRED_FIELDS = {
   shopee:        ['appId', 'secretKey'],
-  amazon:        ['tag'],
-  mercadolivre:  ['tag'],
+  amazon:        ['tag', 'ubid-acbbr', 'at-acbbr', 'x-acbbr'],
+  mercadolivre:  ['tag', 'ssid'],
   magazineluiza: ['tag'],
 }
 
