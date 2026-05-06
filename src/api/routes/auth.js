@@ -35,11 +35,15 @@ async function findUserByNormalizedEmail(email) {
   if (exactUser) return exactUser
 
   try {
-    return await db.user.findFirst({
-      where: { email: { equals: email, mode: 'insensitive' } },
-    })
-  } catch (err) {
-    if (!isPrismaShapeMismatch(err)) throw err
+    const rows = await db.$queryRaw`
+      SELECT id FROM "User"
+      WHERE lower(trim(email)) = ${email}
+      LIMIT 1
+    `
+    const legacyUserId = rows?.[0]?.id
+    if (!legacyUserId) return null
+    return db.user.findUnique({ where: { id: legacyUserId } })
+  } catch {
     return null
   }
 }

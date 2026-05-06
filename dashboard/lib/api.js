@@ -10,14 +10,18 @@ async function apiFetch(path, options = {}) {
       ...(options.headers ?? {}),
     },
   })
-  const data = await res.json().catch(() => ({}))
+  const contentType = res.headers.get('content-type') || ''
+  const data = contentType.includes('application/json')
+    ? await res.json().catch(() => ({}))
+    : { error: await res.text().catch(() => '') }
   if (res.status === 401 && !path.startsWith('/api/auth/')) {
     sessionStorage.setItem('loginRedirectMessage', SESSION_EXPIRED_MESSAGE)
     window.location.replace('/login?reason=session-expired')
     return
   }
   if (!res.ok) {
-    const message = data.message || data.error || `HTTP ${res.status}`
+    const rawMessage = data.message || data.error || ''
+    const message = rawMessage && !rawMessage.trim().startsWith('<') ? rawMessage : `HTTP ${res.status}`
     const err = new Error(message)
     if (data.code) err.code = data.code
     if (typeof data.retryable === 'boolean') err.retryable = data.retryable
