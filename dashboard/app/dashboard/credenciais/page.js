@@ -31,8 +31,8 @@ const PLATFORMS = [
     platformWarning: 'Para gerar link curto correto (meli.la), preencha Tag, SSID e CSRF.',
     fields: [
       { key: 'tag', label: 'Tag numérica', hint: 'Somente números da sua afiliação.', help: 'Copie a tag exibida no painel de afiliados do Mercado Livre.' },
-      { key: 'ssid', label: 'SSID (cookie)', hint: 'Valor do cookie ssid da conta afiliada.', sensitive: true, help: 'No navegador, acesse os cookies do Mercado Livre na sua sessão ativa e copie apenas o valor do cookie ssid. Não compartilhe esse valor fora do painel.' },
-      { key: 'csrf', label: 'CSRF (cookie _csrf)', hint: 'Valor do cookie _csrf da sessão ativa.', sensitive: true, help: 'No navegador, localize o cookie _csrf da sessão ativa do Mercado Livre e copie o valor completo. Trate como credencial sensível.' },
+      { key: 'ssid', label: 'SSID (cookie)', hint: 'Opcional. Necessário apenas para gerar link curto meli.la com sua tag.', sensitive: true, required: false, help: 'No navegador, acesse os cookies do Mercado Livre na sua sessão ativa e copie apenas o valor do cookie ssid. Não compartilhe esse valor fora do painel.' },
+      { key: 'csrf', label: 'CSRF (cookie _csrf)', hint: 'Opcional. Necessário apenas para gerar link curto meli.la com sua tag.', sensitive: true, required: false, help: 'No navegador, localize o cookie _csrf da sessão ativa do Mercado Livre e copie o valor completo. Trate como credencial sensível.' },
     ]
   },
   {
