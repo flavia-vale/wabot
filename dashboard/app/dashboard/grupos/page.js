@@ -1,8 +1,21 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
+import { Alert } from '@/components/Alert'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { HelpLink } from '@/components/HelpLink'
+import { LoadingState } from '@/components/States'
+
+const IMAGE_MODE_HELP = {
+  none: 'Não envia imagem.',
+  original: 'Reusa a imagem recebida no grupo de origem.',
+  fetch: 'Tenta encontrar a imagem do produto no link.',
+}
+
+const roleLabels = {
+  monitor: 'Monitorar (origem)',
+  post: 'Postar (destino)',
+}
 
 const ALL_PLATFORMS = [
   { id: 'shopee', label: 'Shopee' },
@@ -14,6 +27,7 @@ const ALL_PLATFORMS = [
 export default function GruposPage() {
   const [groups, setGroups] = useState([])
   const [actionError, setActionError] = useState('')
+  const [loadingGroups, setLoadingGroups] = useState(true)
   const [waGroups, setWaGroups] = useState(null)
   const [loadingWA, setLoadingWA] = useState(false)
   const [waError, setWaError] = useState('')
@@ -21,18 +35,28 @@ export default function GruposPage() {
   const [manualForm, setManualForm] = useState({ waJid: '', name: '', role: 'monitor' })
   const [manualLoading, setManualLoading] = useState(false)
   const [manualError, setManualError] = useState('')
-  const [deleteTargetId, setDeleteTargetId] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [addingKey, setAddingKey] = useState('')
+  const [savingGroupId, setSavingGroupId] = useState(null)
+  const [savedGroupId, setSavedGroupId] = useState(null)
+  const [groupErrors, setGroupErrors] = useState({})
   const [targetEditorId, setTargetEditorId] = useState(null)
   const [targetPostIds, setTargetPostIds] = useState([])
   const [targetLoading, setTargetLoading] = useState(false)
 
   async function load() {
-    try { setGroups(await api.groups()) } catch (err) { setActionError(err.message) }
+    setLoadingGroups(true)
+    setActionError('')
+    try { setGroups(await api.groups()) } catch (err) { setActionError(err.message) } finally { setLoadingGroups(false) }
   }
 
   useEffect(() => {
     let active = true
-    api.groups().then((data) => { if (active) setGroups(data) }).catch((err) => { if (active) setActionError(err.message) })
+    setLoadingGroups(true)
+    api.groups()
+      .then((data) => { if (active) setGroups(data) })
+      .catch((err) => { if (active) setActionError(err.message) })
+      .finally(() => { if (active) setLoadingGroups(false) })
     return () => { active = false }
   }, [])
 
@@ -43,7 +67,20 @@ export default function GruposPage() {
 
   async function handleUpdateGroup(id, data) {
     setGroups(prev => prev.map(g => g.id === id ? { ...g, ...data } : g))
-    try { await api.updateGroup(id, data) } catch (err) { setActionError(err.message); await load() }
+    setSavingGroupId(id)
+    setSavedGroupId(null)
+    setGroupErrors(prev => ({ ...prev, [id]: '' }))
+    try {
+      await api.updateGroup(id, data)
+      setSavedGroupId(id)
+      window.setTimeout(() => setSavedGroupId(current => current === id ? null : current), 1500)
+    } catch (err) {
+      setGroupErrors(prev => ({ ...prev, [id]: err.message }))
+      setActionError(err.message)
+      await load()
+    } finally {
+      setSavingGroupId(current => current === id ? null : current)
+    }
   }
 
   function toggleGroupPlatform(group, platformId) {
@@ -106,20 +143,32 @@ export default function GruposPage() {
   }
 
   async function handleAddFromWA(g, role) {
+    const key = `${g.waJid}::${role}`
+    setAddingKey(key)
     setActionError('')
     try {
       await api.addGroup(g.waJid, g.name, role)
       await load()
-    } catch (err) { setActionError(err.message) }
+    } catch (err) {
+      setActionError(err.message)
+    } finally {
+      setAddingKey('')
+    }
   }
 
   async function handleManualAdd(e) {
     e.preventDefault()
     setManualError('')
     setActionError('')
+    const jid = manualForm.waJid.trim()
+    if (!jid.endsWith('@g.us')) {
+      setManualError('Informe um JID de grupo válido terminado em @g.us, por exemplo 120363421377996844@g.us.')
+      return
+    }
+
     setManualLoading(true)
     try {
-      await api.addGroup(manualForm.waJid.trim(), manualForm.name.trim(), manualForm.role)
+      await api.addGroup(jid, manualForm.name.trim(), manualForm.role)
       setManualForm({ waJid: '', name: '', role: 'monitor' })
       await load()
     } catch (err) {
@@ -141,7 +190,7 @@ export default function GruposPage() {
       </div>
       <p className="text-gray-500 text-sm mb-6">Configure quais grupos monitorar e onde postar</p>
 
-      {actionError && <p className="text-red-500 text-sm mb-4">{actionError}</p>}
+      {actionError && <div className="mb-4"><Alert type="error" title="Falha ao atualizar grupos" message={actionError} /></div>}
 
       {/* Carregar grupos do WhatsApp */}
       <div className="bg-white rounded-2xl shadow p-5 mb-4">
@@ -157,7 +206,7 @@ export default function GruposPage() {
         </div>
         <p className="text-xs text-gray-400 mb-3">O bot precisa estar conectado para listar os grupos.</p>
 
-        {waError && <p className="text-red-500 text-sm mb-2">{waError}</p>}
+        {waError && <div className="mb-3"><Alert type="error" title="Falha ao carregar grupos do WhatsApp" message={`${waError} Confirme se o bot está conectado ao WhatsApp e tente novamente.`} /></div>}
 
         {waGroups && waGroups.length === 0 && (
           <p className="text-gray-400 text-sm">Nenhum grupo encontrado.</p>
@@ -170,27 +219,29 @@ export default function GruposPage() {
               const postAlready = existingJidRoles.has(`${g.waJid}::post`)
               const bothAlready = monitorAlready && postAlready
               return (
-                <li key={g.waJid} className="flex items-center justify-between text-sm border-b pb-2 last:border-0">
-                  <span className={`font-medium ${bothAlready ? 'text-gray-400' : 'text-gray-700'}`}>
+                <li key={g.waJid} className="flex flex-col gap-2 text-sm border-b pb-2 last:border-0 sm:flex-row sm:items-center sm:justify-between">
+                  <span className={`min-w-0 break-words font-medium ${bothAlready ? 'text-gray-400' : 'text-gray-700'}`}>
                     {g.name}
                     {bothAlready && <span className="ml-2 text-xs text-gray-400">(já cadastrado)</span>}
                   </span>
                   {!bothAlready && (
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       {!monitorAlready && (
                         <button
                           onClick={() => handleAddFromWA(g, 'monitor')}
-                          className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition"
+                          disabled={addingKey === `${g.waJid}::monitor`}
+                          className="min-h-9 text-xs bg-blue-100 text-blue-700 px-3 py-2 rounded hover:bg-blue-200 disabled:opacity-60 transition"
                         >
-                          👀 Monitorar
+                          <span aria-hidden="true">👀</span> {addingKey === `${g.waJid}::monitor` ? 'Adicionando...' : 'Monitorar'}
                         </button>
                       )}
                       {!postAlready && (
                         <button
                           onClick={() => handleAddFromWA(g, 'post')}
-                          className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200 transition"
+                          disabled={addingKey === `${g.waJid}::post`}
+                          className="min-h-9 text-xs bg-purple-100 text-purple-700 px-3 py-2 rounded hover:bg-purple-200 disabled:opacity-60 transition"
                         >
-                          📢 Postar
+                          <span aria-hidden="true">📢</span> {addingKey === `${g.waJid}::post` ? 'Adicionando...' : 'Postar'}
                         </button>
                       )}
                     </div>
@@ -204,15 +255,18 @@ export default function GruposPage() {
 
       {/* Grupos monitorados */}
       <div className="bg-white rounded-2xl shadow p-5 mb-4">
-        <h3 className="font-semibold text-gray-700 mb-3">👀 Monitorar (origem)</h3>
-        {monitor.length === 0 ? (
+        <h3 className="font-semibold text-gray-700 mb-1"><span aria-hidden="true">👀</span> Monitorar (origem)</h3>
+        <p className="mb-3 text-xs text-gray-500">O bot lê mensagens desses grupos e procura links para converter.</p>
+        {loadingGroups ? (
+          <LoadingState message="Carregando grupos configurados..." />
+        ) : monitor.length === 0 ? (
           <p className="text-gray-400 text-sm">Nenhum grupo cadastrado</p>
         ) : (
           <ul className="flex flex-col gap-4">
             {monitor.map(g => (
               <li key={g.id} className="text-sm border border-gray-100 rounded-xl p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <div>
+                <div className="flex flex-col gap-2 mb-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 break-words">
                     <span className="font-medium text-gray-700">{g.name}</span>
                     <span className="ml-2 text-gray-400 text-xs">{g.waJid}</span>
                   </div>
@@ -220,14 +274,14 @@ export default function GruposPage() {
                     <button onClick={() => openTargetEditor(g.id)} className="text-blue-500 hover:text-blue-700 text-xs">
                       Configurar alvos
                     </button>
-                    <button onClick={() => setDeleteTargetId(g.id)} className="text-red-400 hover:text-red-600 text-xs">
+                    <button onClick={() => setDeleteTarget(g)} className="text-red-400 hover:text-red-600 text-xs">
                       Remover
                     </button>
                   </div>
                 </div>
                 <div className="border-t border-gray-100 pt-2">
-                  <p className="text-xs text-gray-500 mb-1.5">Imagem da mensagem:</p>
-                  <div className="flex gap-4">
+                  <div className="mb-1.5 flex items-center justify-between gap-2"><p className="text-xs text-gray-500">Imagem da mensagem:</p>{savingGroupId === g.id && <span className="text-[11px] text-blue-600">Salvando...</span>}{savedGroupId === g.id && <span className="text-[11px] text-green-600">Salvo</span>}</div>
+                  <div className="flex flex-wrap gap-4">
                     {[['none', 'Nenhuma'], ['original', 'Original'], ['fetch', 'Buscar no site']].map(([value, label]) => (
                       <label key={value} className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
                         <input
@@ -237,12 +291,14 @@ export default function GruposPage() {
                           checked={(g.imageMode ?? 'none') === value}
                           onChange={() => handleUpdateGroup(g.id, { imageMode: value })}
                         />
-                        {label}
+                        <span>{label}</span>
+                        <span className="sr-only">: {IMAGE_MODE_HELP[value]}</span>
                       </label>
                     ))}
                   </div>
+                  <p className="mt-1 text-[11px] text-gray-400">{IMAGE_MODE_HELP[g.imageMode ?? 'none']}</p>
                   {(g.imageMode ?? 'none') === 'fetch' && (
-                    <div className="flex gap-5 mt-2">
+                    <div className="flex flex-wrap gap-5 mt-2">
                       <label className="text-xs text-gray-500">
                         Usar link:{' '}
                         <select
@@ -260,7 +316,7 @@ export default function GruposPage() {
                           checked={g.fallbackToOriginal ?? false}
                           onChange={e => handleUpdateGroup(g.id, { fallbackToOriginal: e.target.checked })}
                         />
-                        Fallback para original
+                        Se não encontrar imagem no site, usar a imagem original
                       </label>
                     </div>
                   )}
@@ -286,6 +342,7 @@ export default function GruposPage() {
                     })}
                   </div>
                   <p className="mt-1 text-[11px] text-gray-400">Sem seleção manual, usa as plataformas globais.</p>
+                  {groupErrors[g.id] && <p className="mt-2 text-xs text-red-600" role="alert">{groupErrors[g.id]}</p>}
                 </div>
               </li>
             ))}
@@ -295,19 +352,22 @@ export default function GruposPage() {
 
       {/* Grupos de postagem */}
       <div className="bg-white rounded-2xl shadow p-5 mb-4">
-        <h3 className="font-semibold text-gray-700 mb-3">📢 Postar (destino)</h3>
-        {post.length === 0 ? (
+        <h3 className="font-semibold text-gray-700 mb-1"><span aria-hidden="true">📢</span> Postar (destino)</h3>
+        <p className="mb-3 text-xs text-gray-500">O bot publica os links convertidos nesses grupos.</p>
+        {loadingGroups ? (
+          <LoadingState message="Carregando grupos configurados..." />
+        ) : post.length === 0 ? (
           <p className="text-gray-400 text-sm">Nenhum grupo cadastrado</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {post.map(g => (
               <li key={g.id} className="text-sm border border-gray-100 rounded-xl p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 break-words">
                     <span className="font-medium text-gray-700">{g.name}</span>
                     <span className="ml-2 text-gray-400 text-xs">{g.waJid}</span>
                   </div>
-                  <button onClick={() => setDeleteTargetId(g.id)} className="text-red-400 hover:text-red-600 text-xs">
+                  <button onClick={() => setDeleteTarget(g)} className="text-red-400 hover:text-red-600 text-xs">
                     Remover
                   </button>
                 </div>
@@ -336,33 +396,47 @@ export default function GruposPage() {
         {showManual && (
           <>
             <p className="text-xs text-amber-600 mt-3 mb-2">
-              Use apenas se você já tiver o JID técnico do grupo.
+              Prefira carregar os grupos pelo WhatsApp. Use o JID manual apenas para casos de suporte ou migração quando você já tiver o identificador técnico do grupo.
             </p>
             <form onSubmit={handleManualAdd} className="flex flex-col gap-3">
-              <input
-                placeholder="Nome do grupo (ex: Grupo Ofertas)"
+              <div>
+                <label htmlFor="manual-name" className="mb-1 block text-sm font-medium text-gray-700">Nome do grupo</label>
+                <input
+                id="manual-name"
+                placeholder="Ex: Grupo Ofertas"
                 value={manualForm.name}
                 onChange={e => setManualForm(f => ({ ...f, name: e.target.value }))}
                 required
-                className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
-              />
-              <input
-                placeholder="JID do grupo (ex: 120363421377996844@g.us)"
+                className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
+                />
+              </div>
+              <div>
+                <label htmlFor="manual-jid" className="mb-1 block text-sm font-medium text-gray-700">JID do grupo</label>
+                <input
+                id="manual-jid"
+                placeholder="Ex: 120363421377996844@g.us"
                 value={manualForm.waJid}
                 onChange={e => setManualForm(f => ({ ...f, waJid: e.target.value }))}
                 required
-                className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
-              />
-              <select
+                aria-describedby="manual-jid-help"
+                className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
+                />
+                <p id="manual-jid-help" className="mt-1 text-xs text-gray-500">O JID de grupo normalmente termina em @g.us.</p>
+              </div>
+              <div>
+                <label htmlFor="manual-role" className="mb-1 block text-sm font-medium text-gray-700">Papel do grupo</label>
+                <select
+                id="manual-role"
                 value={manualForm.role}
                 onChange={e => setManualForm(f => ({ ...f, role: e.target.value }))}
-                className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
-              >
-                <option value="monitor">👀 Monitorar (origem)</option>
-                <option value="post">📢 Postar (destino)</option>
-              </select>
+                className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
+                >
+                  <option value="monitor">Monitorar (origem)</option>
+                  <option value="post">Postar (destino)</option>
+                </select>
+              </div>
 
-              {manualError && <p className="text-red-500 text-sm">{manualError}</p>}
+              {manualError && <Alert type="error" title="Não foi possível adicionar manualmente" message={manualError} />}
 
               <button
                 type="submit"
@@ -400,7 +474,7 @@ export default function GruposPage() {
         </div>
       )}
 
-      <ConfirmDialog open={!!deleteTargetId} title="Remover grupo" message="O grupo será removido desta configuração." confirmLabel="Remover" danger onCancel={() => setDeleteTargetId(null)} onConfirm={async () => { const id = deleteTargetId; setDeleteTargetId(null); if (id) await handleDelete(id) }} />
+      <ConfirmDialog open={!!deleteTarget} title={deleteTarget ? `Remover “${deleteTarget.name}” de ${roleLabels[deleteTarget.role] ?? 'grupo'}?` : 'Remover grupo'} message="O grupo será removido apenas da configuração do bot. O grupo no WhatsApp não será excluído." confirmLabel="Remover" danger onCancel={() => setDeleteTarget(null)} onConfirm={async () => { const target = deleteTarget; setDeleteTarget(null); if (target?.id) await handleDelete(target.id) }} />
     </div>
   )
 }
