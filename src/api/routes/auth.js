@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs'
 import { randomBytes } from 'crypto'
 import db from '../../db.js'
+import { trackAnalyticsEventSafe } from '../../analytics.js'
 
 function setAuthCookie(reply, token) {
   const secure = process.env.COOKIE_SECURE !== 'false'
@@ -16,11 +17,121 @@ function setAuthCookie(reply, token) {
   reply.header('Set-Cookie', parts.join('; '))
 }
 
+function normalizeContactPhone(rawPhone) {
+  const digits = String(rawPhone ?? '').replace(/\D/g, '')
+  if (!digits) return null
+  if (digits.length < 10 || digits.length > 15) return null
+  return `+${digits}`
+}
+
+
+function isPrismaShapeMismatch(err) {
+  const message = String(err?.message ?? '')
+  return message.includes('Unknown argument') || message.includes('Unknown field') || message.includes('no such column') || message.includes('does not exist in the current database')
+}
+
+async function createUserWithSecureFields(data) {
+  try {
+    return await db.user.create({ data })
+  } catch (err) {
+    if (!isPrismaShapeMismatch(err)) throw err
+    const { contactPhone, contactPhoneOptInAt, status, lastLoginAt, lastActivityAt, supportStatus, ...legacyData } = data
+    return db.user.create({ data: legacyData })
+  }
+}
+
+async function updateLoginActivity(user) {
+  try {
+    return await db.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date(), lastActivityAt: new Date() },
+    })
+  } catch (err) {
+    if (!isPrismaShapeMismatch(err)) throw err
+    return user
+  }
+}
+
+async function findCurrentUser(userId) {
+  const secureSelect = {
+    id: true,
+    email: true,
+    contactPhone: true,
+    contactPhoneVerifiedAt: true,
+    contactPhoneOptInAt: true,
+    plan: true,
+    trialExpiresAt: true,
+    referralCode: true,
+    status: true,
+    supportStatus: true,
+    lastLoginAt: true,
+    lastActivityAt: true,
+    createdAt: true,
+  }
+
+  try {
+    return await db.user.findUnique({ where: { id: userId }, select: secureSelect })
+  } catch (err) {
+    if (!isPrismaShapeMismatch(err)) throw err
+    return db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, plan: true, trialExpiresAt: true, referralCode: true, createdAt: true },
+    })
+  }
+}
+
+async function ensureReferralCode(userId) {
+  const referralCode = randomBytes(4).toString('hex')
+  try {
+    return await db.user.update({
+      where: { id: userId },
+      data: { referralCode },
+      select: {
+        id: true,
+        email: true,
+        contactPhone: true,
+        contactPhoneVerifiedAt: true,
+        contactPhoneOptInAt: true,
+        plan: true,
+        trialExpiresAt: true,
+        referralCode: true,
+        status: true,
+        supportStatus: true,
+        lastLoginAt: true,
+        lastActivityAt: true,
+        createdAt: true,
+      },
+    })
+  } catch (err) {
+    if (!isPrismaShapeMismatch(err)) throw err
+    return db.user.update({
+      where: { id: userId },
+      data: { referralCode },
+      select: { id: true, email: true, plan: true, trialExpiresAt: true, referralCode: true, createdAt: true },
+    })
+  }
+}
+
+function publicUser(user) {
+  return {
+    id: user.id,
+    email: user.email,
+    contactPhone: user.contactPhone,
+    plan: user.plan,
+    trialExpiresAt: user.trialExpiresAt,
+    referralCode: user.referralCode,
+    status: user.status,
+    supportStatus: user.supportStatus,
+    createdAt: user.createdAt,
+  }
+}
+
 export async function authRoutes(app) {
   app.post('/register', async (req, reply) => {
-    const { email: rawEmail, password, ref } = req.body ?? {}
+    const { email: rawEmail, password, contactPhone: rawContactPhone, ref } = req.body ?? {}
     const email = rawEmail?.toLowerCase()
-    if (!email || !password) return reply.code(400).send({ error: 'email e password obrigatórios' })
+    const contactPhone = normalizeContactPhone(rawContactPhone)
+    if (!email || !password || !contactPhone) return reply.code(400).send({ error: 'email, password e celular obrigatórios' })
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply.code(400).send({ error: 'Formato de email inválido' })
     if (password.length < 8) return reply.code(400).send({ error: 'Senha deve ter no mínimo 8 caracteres' })
 
@@ -28,6 +139,7 @@ export async function authRoutes(app) {
     if (existing) return reply.code(409).send({ error: 'Email já cadastrado' })
 
     const passwordHash = await bcrypt.hash(password, 10)
+    const now = new Date()
     const trialExpiresAt = new Date(Date.now() + 3 * 60 * 60 * 1000)
     const referralCode = randomBytes(4).toString('hex')
 
@@ -40,8 +152,19 @@ export async function authRoutes(app) {
       }
     }
 
-    const user = await db.user.create({
-      data: { email, passwordHash, plan: 'trial', trialExpiresAt, referralCode, referredBy: referrer?.id },
+    const user = await createUserWithSecureFields({
+      email,
+      passwordHash,
+      contactPhone,
+      contactPhoneOptInAt: now,
+      status: 'active',
+      plan: 'trial',
+      trialExpiresAt,
+      referralCode,
+      referredBy: referrer?.id,
+      lastLoginAt: now,
+      lastActivityAt: now,
+      supportStatus: 'new',
     })
 
     if (referrer) {
@@ -56,7 +179,7 @@ export async function authRoutes(app) {
 
     const token = app.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: '7d' })
     setAuthCookie(reply, token)
-    return { user: { id: user.id, email: user.email, plan: user.plan, trialExpiresAt } }
+    return { user: publicUser(user) }
   })
 
   app.post('/login', async (req, reply) => {
@@ -66,13 +189,18 @@ export async function authRoutes(app) {
 
     const user = await db.user.findUnique({ where: { email } })
     if (!user) return reply.code(401).send({ error: 'Credenciais inválidas' })
+    if (user.status === 'banned' || user.status === 'suspended') {
+      return reply.code(403).send({ error: 'Conta bloqueada. Entre em contato com o suporte.' })
+    }
 
     const valid = await bcrypt.compare(password, user.passwordHash)
     if (!valid) return reply.code(401).send({ error: 'Credenciais inválidas' })
 
-    const token = app.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: '7d' })
+    const updated = await updateLoginActivity(user)
+
+    const token = app.jwt.sign({ sub: updated.id, email: updated.email }, { expiresIn: '7d' })
     setAuthCookie(reply, token)
-    return { user: { id: user.id, email: user.email, plan: user.plan, trialExpiresAt: user.trialExpiresAt } }
+    return { user: publicUser(updated) }
   })
 
   app.post('/logout', async (_req, reply) => {
@@ -81,17 +209,9 @@ export async function authRoutes(app) {
   })
 
   app.get('/me', { onRequest: [app.authenticate] }, async (req) => {
-    let user = await db.user.findUnique({
-      where: { id: req.user.sub },
-      select: { id: true, email: true, plan: true, trialExpiresAt: true, referralCode: true, createdAt: true },
-    })
+    let user = await findCurrentUser(req.user.sub)
     if (!user.referralCode) {
-      const referralCode = randomBytes(4).toString('hex')
-      user = await db.user.update({
-        where: { id: req.user.sub },
-        data: { referralCode },
-        select: { id: true, email: true, plan: true, trialExpiresAt: true, referralCode: true, createdAt: true },
-      })
+      user = await ensureReferralCode(req.user.sub)
     }
     return user
   })

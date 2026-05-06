@@ -53,6 +53,14 @@ export function startBot(userId) {
         pendingRequests.delete(msg.requestId)
       }
     }
+    if (msg.type === 'metricsResult' && msg.requestId) {
+      const pending = pendingRequests.get(msg.requestId)
+      if (pending) {
+        if (msg.error) pending.reject(new Error(msg.error))
+        else pending.resolve(msg.data)
+        pendingRequests.delete(msg.requestId)
+      }
+    }
   })
 
   proc.on('exit', () => bots.delete(userId))
@@ -69,6 +77,10 @@ export function stopBot(userId) {
 
 export function isRunning(userId) {
   return bots.has(userId)
+}
+
+export function listRunningBots() {
+  return [...bots.keys()]
 }
 
 export function onQR(userId, fn) {
@@ -115,6 +127,23 @@ export function sendBroadcast(userId, text, jids) {
       }
     }, 30000)
     entry.proc.send({ type: 'broadcast', requestId, text, jids })
+  })
+}
+
+
+export function getBotMetrics(userId) {
+  return new Promise((resolve, reject) => {
+    const entry = bots.get(userId)
+    if (!entry) return resolve(null)
+    const requestId = Math.random().toString(36).slice(2)
+    pendingRequests.set(requestId, { resolve, reject })
+    setTimeout(() => {
+      if (pendingRequests.has(requestId)) {
+        pendingRequests.delete(requestId)
+        reject(new Error('Timeout ao buscar métricas'))
+      }
+    }, 5000)
+    entry.proc.send({ type: 'metrics', requestId })
   })
 }
 

@@ -2,12 +2,18 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { api, openQRSocket } from '@/lib/api'
 import { QRCodeCanvas as QRCode } from 'qrcode.react'
+import { Alert } from '@/components/Alert'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { HelpLink } from '@/components/HelpLink'
+import { LoadingState } from '@/components/States'
 
 const QR_TIMEOUT_SECONDS = 20
+const STATUS_ERROR_MESSAGE = 'Não foi possível carregar o status da conexão. Tente novamente.'
 
 export default function DashboardPage() {
   const [status, setStatus] = useState(null)
+  const [statusLoading, setStatusLoading] = useState(true)
+  const [statusError, setStatusError] = useState('')
   const [qr, setQr] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -21,13 +27,20 @@ export default function DashboardPage() {
   const [pairingCode, setPairingCode] = useState('')
   const [showForgetConfirm, setShowForgetConfirm] = useState(false)
 
-  const fetchStatus = useCallback(async () => {
+  const fetchStatus = useCallback(async ({ showLoading = false, recoverable = false } = {}) => {
+    if (showLoading) setStatusLoading(true)
+    if (recoverable) setStatusError('')
+
     try {
       const s = await api.sessionStatus()
       setStatus(s)
+      setStatusError('')
       return s
-    } catch {
+    } catch (err) {
+      if (recoverable) setStatusError(err.message || STATUS_ERROR_MESSAGE)
       return null
+    } finally {
+      if (showLoading) setStatusLoading(false)
     }
   }, [])
 
@@ -42,6 +55,7 @@ export default function DashboardPage() {
         if (msg.type === 'qr') setQr(msg.data)
         if (msg.type === 'status') {
           setStatus((s) => ({ ...s, status: msg.data, phone: msg.phone ?? s?.phone }))
+          setStatusError('')
           if (msg.data === 'connected') {
             setFeedback('WhatsApp conectado com sucesso.')
             setQr(null)
@@ -57,13 +71,24 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let active = true
-    api.sessionStatus()
-      .then((s) => {
-        if (!active || !s) return
+
+    async function loadInitialStatus() {
+      setStatusLoading(true)
+      setStatusError('')
+      try {
+        const s = await api.sessionStatus()
+        if (!active) return
         setStatus(s)
         if (s.running && s.status === 'connecting') openWS().catch(() => setSocketState('error'))
-      })
-      .catch(() => {})
+      } catch (err) {
+        if (active) setStatusError(err.message || STATUS_ERROR_MESSAGE)
+      } finally {
+        if (active) setStatusLoading(false)
+      }
+    }
+
+    loadInitialStatus()
+
     return () => {
       active = false
       wsRef.current?.close()
@@ -79,6 +104,7 @@ export default function DashboardPage() {
   async function handleQRConnect() {
     setError('')
     setFeedback('')
+    setStatusError('')
     setShowPairingInput(false)
     setPairingCode('')
     setQrWaitElapsed(0)
@@ -101,11 +127,16 @@ export default function DashboardPage() {
     }
   }
 
+  function handlePairingPhoneChange(e) {
+    setPairingPhone(e.target.value.replace(/\D/g, ''))
+  }
+
   async function handlePairingSubmit(e) {
     e.preventDefault()
     if (!pairingPhone.trim()) return
     setError('')
     setFeedback('')
+    setStatusError('')
     setLoading(true)
     try {
       if (!status?.running) await api.sessionStart()
@@ -116,7 +147,7 @@ export default function DashboardPage() {
       await openWS()
     } catch (err) {
       setError(err.message)
-      if (!status?.running) await fetchStatus().catch(() => {})
+      if (!status?.running) await fetchStatus()
     } finally {
       setLoading(false)
     }
@@ -125,6 +156,7 @@ export default function DashboardPage() {
   async function handleStop() {
     setError('')
     setFeedback('')
+    setStatusError('')
     setLoading(true)
     try {
       await api.sessionStop()
@@ -144,6 +176,7 @@ export default function DashboardPage() {
   async function handleForget() {
     setError('')
     setFeedback('')
+    setStatusError('')
     setLoading(true)
     try {
       await api.sessionForget()
@@ -152,7 +185,7 @@ export default function DashboardPage() {
       setShowPairingInput(false)
       wsRef.current?.close()
       await fetchStatus()
-      setFeedback('Sessão removida com sucesso. Agora você precisa conectar novamente com um novo QR Code.')
+      setFeedback('Sessão removida com sucesso. Conecte novamente por QR Code ou código de pareamento para usar o bot.')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -173,15 +206,39 @@ export default function DashboardPage() {
   const isConnecting = status?.status === 'connecting'
   const isRunning = status?.running
   const showQrRetry = isRunning && isConnecting && !qr && !pairingCode && qrWaitElapsed >= QR_TIMEOUT_SECONDS
+  const canSubmitPairing = pairingPhone.trim().length >= 10
 
   return (
     <div className="max-w-lg">
       <h2 className="text-2xl font-bold text-gray-800 mb-1">WhatsApp</h2>
-      <p className="text-gray-500 text-sm mb-6">Conecte seu número ao bot</p>
+      <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-gray-500 text-sm">Conecte seu número ao bot</p>
+        <HelpLink topic="como-conectar-whatsapp-qr-code">Ajuda para conectar</HelpLink>
+      </div>
 
-      {socketState === 'error' && <p className="text-amber-600 text-xs mb-3">Conexão de pareamento instável. Tentando reconectar...</p>}
-      {socketState === 'closed' && isConnecting && <p className="text-amber-600 text-xs mb-3">Conexão perdida. Gere novamente o QR ou aguarde reconexão.</p>}
-      {feedback && <p className="text-green-600 text-sm mb-3">{feedback}</p>}
+      <div className="mb-3 flex flex-col gap-2">
+        {statusError && (
+          <Alert
+            type="error"
+            title="Falha ao carregar status"
+            message={statusError || STATUS_ERROR_MESSAGE}
+          />
+        )}
+        {statusError && (
+          <button
+            type="button"
+            onClick={() => fetchStatus({ showLoading: true, recoverable: true })}
+            disabled={statusLoading}
+            className="self-start rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2"
+          >
+            {statusLoading ? 'Tentando...' : 'Tentar novamente'}
+          </button>
+        )}
+        {socketState === 'error' && <Alert type="warning" title="Conexão instável" message="Conexão de pareamento instável. Tentando reconectar..." />}
+        {socketState === 'closed' && isConnecting && <Alert type="warning" title="Conexão perdida" message="Gere novamente o QR ou aguarde reconexão." />}
+        {feedback && <Alert type="success" title="Tudo certo" message={feedback} />}
+        {error && <Alert type="error" title="Falha na conexão" message={error} />}
+      </div>
 
       <div className="bg-white rounded-2xl shadow p-5 mb-4 flex items-center gap-4">
         <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
@@ -190,21 +247,27 @@ export default function DashboardPage() {
           'bg-gray-300'
         }`} />
         <div>
-          <p className="font-semibold text-gray-700">{isConnected ? 'Conectado' : isConnecting ? 'Conectando...' : 'Desconectado'}</p>
+          {statusLoading ? (
+            <LoadingState message="Carregando status do WhatsApp..." />
+          ) : (
+            <p className="font-semibold text-gray-700">{isConnected ? 'Conectado' : isConnecting ? 'Conectando...' : statusError ? 'Status indisponível' : 'Desconectado'}</p>
+          )}
           {status?.phone && <p className="text-xs text-gray-400">+{status.phone}</p>}
         </div>
       </div>
 
       {isRunning && isConnecting && !qr && !pairingCode && (
         <div className="bg-white rounded-2xl shadow p-8 mb-4 flex flex-col items-center gap-4">
-          <svg className="animate-spin w-10 h-10 text-green-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <svg className="animate-spin w-10 h-10 text-green-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
           </svg>
-          <p className="text-sm font-medium text-gray-600">Gerando QR Code... ({qrWaitElapsed}s)</p>
-          <p className="text-xs text-gray-400">Aguarde alguns segundos</p>
+          <div role="status" aria-live="polite" className="text-center">
+            <p className="text-sm font-medium text-gray-600">Gerando QR Code... ({qrWaitElapsed}s)</p>
+            <p className="text-xs text-gray-400">Aguarde alguns segundos enquanto o WhatsApp prepara a conexão.</p>
+          </div>
           {showQrRetry && (
-            <button onClick={handleQRConnect} disabled={loading} className="text-sm text-green-700 underline disabled:opacity-50">
+            <button onClick={handleQRConnect} disabled={loading} className="text-sm text-green-700 underline disabled:opacity-50 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
               Gerar novamente QR
             </button>
           )}
@@ -215,7 +278,10 @@ export default function DashboardPage() {
         <div className="bg-white rounded-2xl shadow p-6 mb-4 flex flex-col items-center gap-3">
           <p className="text-sm text-gray-600">Escaneie o QR Code com o WhatsApp</p>
           <QRCode value={qr} size={200} />
-          <p className="text-xs text-gray-400">Atualiza automaticamente</p>
+          <div className="text-center text-xs text-gray-500">
+            <p>No WhatsApp: <strong>Configurações → Dispositivos conectados → Conectar um dispositivo.</strong></p>
+            <p>Mantenha esta tela aberta até a conexão ser concluída. O QR atualiza automaticamente.</p>
+          </div>
         </div>
       )}
 
@@ -223,24 +289,34 @@ export default function DashboardPage() {
         <div className="bg-white rounded-2xl shadow p-6 mb-4 flex flex-col items-center gap-3">
           <p className="text-sm font-semibold text-gray-700">Código de pareamento</p>
           <p className="text-4xl font-mono font-bold tracking-widest text-green-600">{pairingCode}</p>
-          <button onClick={copyPairingCode} className="text-sm text-blue-700 underline">Copiar código</button>
+          <button onClick={copyPairingCode} className="text-sm text-blue-700 underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">Copiar código</button>
           <p className="text-xs text-gray-500 text-center">No WhatsApp: <strong>Configurações → Dispositivos vinculados → Vincular pelo número</strong></p>
         </div>
       )}
 
-      {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
-
-      {!isRunning && !showPairingInput && (
-        <div className="flex flex-col gap-3">
-          <div className="flex gap-3 flex-wrap">
-            <button onClick={handleQRConnect} disabled={loading} className="flex-1 bg-green-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-green-700 disabled:opacity-50 transition flex items-center justify-center gap-2">
-              <span>📷</span>{loading ? 'Iniciando...' : 'Conectar via QR Code'}
-            </button>
-            <button onClick={() => { setShowPairingInput(true); setError('') }} disabled={loading} className="flex-1 bg-blue-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center gap-2">
-              <span>📱</span>Conectar pelo número
-            </button>
+      {!isRunning && !showPairingInput && !statusLoading && (
+        <div className="flex flex-col gap-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+              <h3 className="font-semibold text-gray-700">Conectar via QR Code</h3>
+              <p className="mt-1 text-xs text-gray-500">Mais rápido se você está com o celular em mãos.</p>
+              <button onClick={handleQRConnect} disabled={loading} className="mt-4 w-full bg-green-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-green-700 disabled:opacity-50 transition flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
+                <span aria-hidden="true">📷</span>{loading ? 'Iniciando...' : 'Gerar QR Code'}
+              </button>
+            </div>
+            <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+              <h3 className="font-semibold text-gray-700">Conectar pelo número</h3>
+              <p className="mt-1 text-xs text-gray-500">Use um código para vincular pelo WhatsApp.</p>
+              <button onClick={() => { setShowPairingInput(true); setError('') }} disabled={loading} className="mt-4 w-full bg-blue-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
+                <span aria-hidden="true">📱</span>Obter código
+              </button>
+            </div>
           </div>
-          <button onClick={() => setShowForgetConfirm(true)} disabled={loading} className="bg-gray-200 text-gray-600 px-5 py-2 rounded-lg font-semibold hover:bg-gray-300 disabled:opacity-50 transition text-sm">Esquecer número salvo</button>
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <h3 className="text-sm font-semibold text-amber-800">Ações avançadas</h3>
+            <p className="mt-1 text-xs text-amber-700">Use “Esquecer número salvo” apenas se quiser remover a sessão deste painel e conectar novamente por QR Code ou código.</p>
+            <button onClick={() => setShowForgetConfirm(true)} disabled={loading} className="mt-3 bg-white text-amber-800 border border-amber-200 px-4 py-2 rounded-lg font-semibold hover:bg-amber-100 disabled:opacity-50 transition text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2">Esquecer número salvo</button>
+          </div>
         </div>
       )}
 
@@ -248,23 +324,31 @@ export default function DashboardPage() {
         <form onSubmit={handlePairingSubmit} className="flex flex-col gap-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Número do WhatsApp (com DDD e código do país)</label>
-            <input type="tel" value={pairingPhone} onChange={e => setPairingPhone(e.target.value)} placeholder="Ex: 5511999999999" className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" disabled={loading} autoFocus />
-            <p className="text-xs text-gray-400 mt-1">Apenas números, sem espaços ou símbolos</p>
+            <input type="tel" inputMode="numeric" autoComplete="tel" value={pairingPhone} onChange={handlePairingPhoneChange} placeholder="Ex: 5511999999999" className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" disabled={loading} autoFocus />
+            <p className="text-xs text-gray-400 mt-1">Cole com +, espaços ou parênteses se quiser; vamos manter apenas os números.</p>
           </div>
           <div className="flex gap-3">
-            <button type="submit" disabled={loading || !pairingPhone.trim()} className="flex-1 bg-blue-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition">{loading ? 'Aguarde...' : 'Obter código'}</button>
-            <button type="button" onClick={() => { setShowPairingInput(false); setPairingPhone(''); setError('') }} disabled={loading} className="px-5 py-3 rounded-xl font-semibold bg-gray-200 text-gray-600 hover:bg-gray-300 disabled:opacity-50 transition">Cancelar</button>
+            <button type="submit" disabled={loading || !canSubmitPairing} className="flex-1 bg-blue-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">{loading ? 'Aguarde...' : 'Obter código'}</button>
+            <button type="button" onClick={() => { setShowPairingInput(false); setPairingPhone(''); setError('') }} disabled={loading} className="px-5 py-3 rounded-xl font-semibold bg-gray-200 text-gray-600 hover:bg-gray-300 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2">Cancelar</button>
           </div>
         </form>
       )}
 
       {isRunning && (
-        <div className="flex gap-3 flex-wrap">
-          <button onClick={handleStop} disabled={loading} className="bg-red-500 text-white px-5 py-2 rounded-lg font-semibold hover:bg-red-600 disabled:opacity-50 transition">{loading ? 'Parando...' : 'Desligar bot'}</button>
-          <button onClick={() => setShowForgetConfirm(true)} disabled={loading} className="bg-gray-200 text-gray-600 px-5 py-2 rounded-lg font-semibold hover:bg-gray-300 disabled:opacity-50 transition">Esquecer número</button>
+        <div className="flex flex-col gap-4">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700">Ação operacional</h3>
+            <p className="text-xs text-gray-500 mb-2">Desliga o bot agora, mas mantém a sessão salva para reconectar depois.</p>
+            <button onClick={handleStop} disabled={loading} className="bg-red-500 text-white px-5 py-2 rounded-lg font-semibold hover:bg-red-600 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2">{loading ? 'Parando...' : 'Desligar bot'}</button>
+          </div>
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <h3 className="text-sm font-semibold text-amber-800">Ações avançadas</h3>
+            <p className="mt-1 text-xs text-amber-700">Esquecer número desconecta o WhatsApp e remove a sessão salva neste painel. Para usar novamente, você precisará conectar por QR Code ou código.</p>
+            <button onClick={() => setShowForgetConfirm(true)} disabled={loading} className="mt-3 bg-white text-amber-800 border border-amber-200 px-4 py-2 rounded-lg font-semibold hover:bg-amber-100 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2">Esquecer número</button>
+          </div>
         </div>
       )}
-      <ConfirmDialog open={showForgetConfirm} title="Esquecer número" message="Vai desconectar o bot e apagar a sessão salva." confirmLabel="Esquecer" danger onCancel={() => setShowForgetConfirm(false)} onConfirm={async () => { setShowForgetConfirm(false); await handleForget() }} />
+      <ConfirmDialog open={showForgetConfirm} title="Esquecer número" message="Isso vai desconectar o WhatsApp e remover a sessão salva neste painel. Para usar novamente, você precisará conectar por QR Code ou código." confirmLabel="Esquecer sessão" danger onCancel={() => setShowForgetConfirm(false)} onConfirm={async () => { setShowForgetConfirm(false); await handleForget() }} />
     </div>
   )
 }

@@ -13,9 +13,12 @@ import { configRoutes } from './routes/config.js'
 import { broadcastRoutes } from './routes/broadcast.js'
 import { dashboardRoutes } from './routes/dashboard.js'
 import { logsRoutes } from './routes/logs.js'
+import { adminRoutes } from './routes/admin.js'
+import { registerApiMetricsHooks } from './metrics.js'
 import db from '../db.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
+registerApiMetricsHooks(app)
 
 const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:3000',
@@ -41,6 +44,26 @@ function isOriginAllowed(origin) {
   return allowedOrigins.has(origin)
 }
 
+
+function isPrismaShapeMismatch(err) {
+  const message = String(err?.message ?? '')
+  return message.includes('Unknown argument') || message.includes('Unknown field') || message.includes('no such column') || message.includes('does not exist in the current database')
+}
+
+async function verifyAuthenticatedUser(userId) {
+  try {
+    const activity = await db.user.updateMany({
+      where: { id: userId, status: { notIn: ['banned', 'suspended'] } },
+      data: { lastActivityAt: new Date() },
+    })
+    return activity.count === 1
+  } catch (err) {
+    if (!isPrismaShapeMismatch(err)) throw err
+    const user = await db.user.findUnique({ where: { id: userId }, select: { id: true } })
+    return Boolean(user)
+  }
+}
+
 function getTokenFromCookie(cookieHeader, cookieName = 'wb_auth') {
   if (!cookieHeader) return null
   const parts = cookieHeader.split(';').map((part) => part.trim())
@@ -53,6 +76,31 @@ async function verifyDatabase() {
   await db.$queryRaw`SELECT 1`
   // Verifica schema esperado (captura banco sem migrations)
   await db.user.count()
+}
+
+
+const LOG_RETENTION_DAYS = process.env.LOG_RETENTION_DAYS === undefined
+  ? 90
+  : Number(process.env.LOG_RETENTION_DAYS)
+const LOG_RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000
+
+async function cleanupOldLogs() {
+  if (LOG_RETENTION_DAYS <= 0) return
+  const cutoff = new Date(Date.now() - LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000)
+  const result = await db.messageLog.deleteMany({ where: { sentAt: { lt: cutoff } } })
+  if (result.count > 0) app.log.info({ deleted: result.count, cutoff }, 'Logs antigos removidos por retenção automática')
+}
+
+function startLogRetentionJob() {
+  if (LOG_RETENTION_DAYS <= 0) {
+    app.log.info('Retenção automática de logs desabilitada')
+    return
+  }
+  cleanupOldLogs().catch(err => app.log.error({ err: err.message }, 'Falha na limpeza automática de logs'))
+  const timer = setInterval(() => {
+    cleanupOldLogs().catch(err => app.log.error({ err: err.message }, 'Falha na limpeza automática de logs'))
+  }, LOG_RETENTION_INTERVAL_MS)
+  timer.unref?.()
 }
 
 async function ensureDatabaseReady() {
@@ -94,6 +142,8 @@ app.decorate('authenticate', async function (req, reply) {
     const token = getTokenFromCookie(req.headers.cookie)
     if (!token) throw new Error('Token ausente')
     req.user = app.jwt.verify(token)
+    const active = await verifyAuthenticatedUser(req.user.sub)
+    if (!active) throw new Error('Usuário inativo ou bloqueado')
   } catch {
     reply.code(401).send({ error: 'Não autorizado' })
   }
@@ -108,6 +158,7 @@ app.register(configRoutes, { prefix: '/api/config' })
 app.register(broadcastRoutes, { prefix: '/api/broadcast' })
 app.register(dashboardRoutes, { prefix: '/api/dashboard' })
 app.register(logsRoutes, { prefix: '/api/logs' })
+app.register(adminRoutes, { prefix: '/api/admin' })
 
 // Liveness: processo está de pé
 app.get('/health', () => ({ ok: true }))
@@ -124,5 +175,6 @@ app.get('/ready', async (req, reply) => {
 
 const port = Number(process.env.API_PORT) || 3001
 await ensureDatabaseReady()
+startLogRetentionJob()
 await app.listen({ port, host: '0.0.0.0' })
 console.log(`API rodando em http://localhost:${port}`)

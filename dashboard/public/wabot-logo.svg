@@ -1,0 +1,14 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Wabot</title>
+  <desc id="desc">Símbolo de robô com balão de conversa e gráfico de crescimento para afiliados no WhatsApp.</desc>
+  <rect width="128" height="128" rx="32" fill="#16A34A"/>
+  <path d="M32 50C32 39.5066 40.5066 31 51 31H77C87.4934 31 96 39.5066 96 50V70C96 80.4934 87.4934 89 77 89H58.5L43.4 99.2C41.4077 100.546 38.75 99.1188 38.75 96.7148V87.2362C34.6642 83.7654 32 78.5952 32 72.75V50Z" fill="white"/>
+  <rect x="43" y="48" width="42" height="28" rx="14" fill="#DCFCE7"/>
+  <circle cx="56" cy="62" r="4" fill="#166534"/>
+  <circle cx="72" cy="62" r="4" fill="#166534"/>
+  <path d="M50 79C54.5 84 73.5 84 78 79" stroke="#166534" stroke-width="5" stroke-linecap="round"/>
+  <path d="M64 31V21" stroke="white" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="64" cy="18" r="6" fill="#BBF7D0"/>
+  <path d="M91 88L102 77" stroke="#BBF7D0" stroke-width="6" stroke-linecap="round"/>
+  <path d="M96 77H102V83" stroke="#BBF7D0" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

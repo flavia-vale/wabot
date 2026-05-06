@@ -1,6 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
+import { Alert } from '@/components/Alert'
 import { ErrorState, LoadingState } from '@/components/States'
 
 const ALL_PLATFORMS = [
@@ -10,6 +11,88 @@ const ALL_PLATFORMS = [
   { id: 'magazineluiza', label: '🛒 Magazine Luiza' },
 ]
 
+const DELAY_PRESETS = [
+  { id: 'fast', label: 'Rápido', min: 2, max: 5, description: 'Para baixo volume e operação acompanhada.' },
+  { id: 'default', label: 'Padrão', min: 5, max: 15, description: 'Recomendado para operações leves do dia a dia.' },
+  { id: 'safe', label: 'Conservador', min: 15, max: 30, description: 'Use em grupos com alto volume ou maior cautela.' },
+]
+
+function normalizeKeywords(text) {
+  return text
+    .split(',')
+    .map((keyword) => keyword.trim().toLowerCase())
+    .filter(Boolean)
+    .filter((keyword, index, list) => list.indexOf(keyword) === index)
+}
+
+function KeywordsEditor({ value, onChange, disabled }) {
+  const [draft, setDraft] = useState('')
+  const keywords = useMemo(() => normalizeKeywords(value), [value])
+
+  function commitDraft(text = draft) {
+    const next = normalizeKeywords([...keywords, ...text.split(',')].join(','))
+    onChange(next.join(','))
+    setDraft('')
+  }
+
+  function removeKeyword(keyword) {
+    onChange(keywords.filter((item) => item !== keyword).join(','))
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex gap-2">
+        <input
+          type="text"
+          placeholder="ex: proibido, spam, fora"
+          value={draft}
+          onChange={(e) => {
+            const text = e.target.value
+            if (text.includes(',')) commitDraft(text)
+            else setDraft(text)
+          }}
+          onBlur={() => { if (draft.trim()) commitDraft() }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              commitDraft()
+            }
+          }}
+          disabled={disabled}
+          className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
+        />
+        <button
+          type="button"
+          onClick={() => commitDraft()}
+          disabled={disabled || !draft.trim()}
+          className="rounded-lg bg-gray-800 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-700 focus-visible:ring-offset-2"
+        >
+          Adicionar
+        </button>
+      </div>
+      <p className="text-xs text-gray-500">Separe por vírgulas. O bot ignora mensagens que contenham qualquer uma dessas palavras, sem diferenciar maiúsculas de minúsculas.</p>
+      {keywords.length > 0 && (
+        <div className="flex flex-wrap gap-2" aria-label="Palavras bloqueadas ativas">
+          {keywords.map((keyword) => (
+            <span key={keyword} className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700">
+              {keyword}
+              <button
+                type="button"
+                onClick={() => removeKeyword(keyword)}
+                disabled={disabled}
+                aria-label={`Remover palavra ${keyword}`}
+                className="font-bold text-gray-500 hover:text-red-600 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ConfigPage() {
   const [form, setForm] = useState({
     delayMin: 5,
@@ -17,6 +100,8 @@ export default function ConfigPage() {
     platforms: 'shopee,amazon,mercadolivre,magazineluiza',
     blockedKeywords: '',
     welcomeMsg: '',
+    feedGlobal: false,
+    postToStatus: false,
   })
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -24,20 +109,28 @@ export default function ConfigPage() {
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
+  const [delayError, setDelayError] = useState('')
+  const [platformError, setPlatformError] = useState('')
+
+  function applyConfig(cfg) {
+    setForm({
+      delayMin: cfg.delayMin ?? 5,
+      delayMax: cfg.delayMax ?? 15,
+      platforms: cfg.platforms ?? 'shopee,amazon,mercadolivre,magazineluiza',
+      blockedKeywords: normalizeKeywords(cfg.blockedKeywords ?? '').join(','),
+      welcomeMsg: cfg.welcomeMsg ?? '',
+      feedGlobal: cfg.feedGlobal ?? false,
+      postToStatus: cfg.postToStatus ?? false,
+    })
+    setLoadedOnce(true)
+  }
 
   async function loadConfig() {
     setLoading(true)
     setLoadError('')
     try {
       const cfg = await api.getConfig()
-      setForm({
-        delayMin: cfg.delayMin ?? 5,
-        delayMax: cfg.delayMax ?? 15,
-        platforms: cfg.platforms ?? 'shopee,amazon,mercadolivre,magazineluiza',
-        blockedKeywords: cfg.blockedKeywords ?? '',
-        welcomeMsg: cfg.welcomeMsg ?? '',
-      })
-      setLoadedOnce(true)
+      applyConfig(cfg)
     } catch (err) {
       setLoadError(err.message || 'Não foi possível carregar as configurações.')
     } finally {
@@ -48,17 +141,7 @@ export default function ConfigPage() {
   useEffect(() => {
     let active = true
     api.getConfig()
-      .then((cfg) => {
-        if (!active) return
-        setForm({
-          delayMin: cfg.delayMin ?? 5,
-          delayMax: cfg.delayMax ?? 15,
-          platforms: cfg.platforms ?? 'shopee,amazon,mercadolivre,magazineluiza',
-          blockedKeywords: cfg.blockedKeywords ?? '',
-          welcomeMsg: cfg.welcomeMsg ?? '',
-        })
-        setLoadedOnce(true)
-      })
+      .then((cfg) => { if (active) applyConfig(cfg) })
       .catch((err) => { if (active) setLoadError(err.message || 'Não foi possível carregar as configurações.') })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
@@ -69,26 +152,75 @@ export default function ConfigPage() {
     const next = current.includes(id)
       ? current.filter(p => p !== id)
       : [...current, id]
+    setPlatformError('')
     setForm(f => ({ ...f, platforms: next.join(',') }))
+  }
+
+  function applyDelayPreset(preset) {
+    setDelayError('')
+    setError('')
+    setForm(f => ({ ...f, delayMin: preset.min, delayMax: preset.max }))
+  }
+
+  function parseDelay(value, label) {
+    const text = String(value).trim()
+    if (!text) return { error: `${label} é obrigatório` }
+
+    const number = Number(text)
+    if (!Number.isInteger(number) || number < 0 || number > 300) {
+      return { error: `${label} deve ser um número inteiro entre 0 e 300` }
+    }
+
+    return { value: number }
   }
 
   async function handleSave(e) {
     e.preventDefault()
     if (!loadedOnce || loadError) return
     setError('')
+    setDelayError('')
+    setPlatformError('')
     setSuccess(false)
-    if (Number(form.delayMin) > Number(form.delayMax)) {
-      setError('Delay mínimo não pode ser maior que o máximo')
+
+    const enabled = form.platforms.split(',').filter(Boolean)
+    if (!enabled.length) {
+      const message = 'Selecione pelo menos uma plataforma para o bot converter links.'
+      setPlatformError(message)
+      setError(message)
       return
     }
+
+    const parsedMin = parseDelay(form.delayMin, 'Delay mínimo')
+    if (parsedMin.error) {
+      setDelayError(parsedMin.error)
+      setError(parsedMin.error)
+      return
+    }
+
+    const parsedMax = parseDelay(form.delayMax, 'Delay máximo')
+    if (parsedMax.error) {
+      setDelayError(parsedMax.error)
+      setError(parsedMax.error)
+      return
+    }
+
+    if (parsedMin.value > parsedMax.value) {
+      const message = 'Delay mínimo não pode ser maior que o máximo'
+      setDelayError(message)
+      setError(message)
+      return
+    }
+
     setSaving(true)
     try {
       await api.saveConfig({
-        delayMin: Number(form.delayMin),
-        delayMax: Number(form.delayMax),
+        delayMin: parsedMin.value,
+        delayMax: parsedMax.value,
         platforms: form.platforms,
-        blockedKeywords: form.blockedKeywords,
+        blockedKeywords: normalizeKeywords(form.blockedKeywords).join(','),
         welcomeMsg: form.welcomeMsg,
+        feedGlobal: form.feedGlobal,
+        postToStatus: form.postToStatus,
       })
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
@@ -99,9 +231,10 @@ export default function ConfigPage() {
     }
   }
 
-  if (loading) return <LoadingState />
+  if (loading) return <LoadingState message="Carregando configurações do bot..." />
 
   const enabledPlatforms = new Set(form.platforms.split(',').filter(Boolean))
+  const welcomePreview = form.welcomeMsg.trim() || 'Exemplo: Bem-vindo(a)! As ofertas convertidas aparecerão por aqui.'
 
   return (
     <div className="max-w-xl">
@@ -113,26 +246,84 @@ export default function ConfigPage() {
       <form onSubmit={handleSave} className="flex flex-col gap-4">
         <div className="bg-white rounded-2xl shadow p-5">
           <h3 className="font-semibold text-gray-700 mb-1">⏱️ Delay entre envios</h3>
-          <p className="text-xs text-gray-400 mb-4">Aguarda um tempo aleatório antes de repostar (evita bloqueios)</p>
-          <div className="flex items-center gap-4">
-            <div className="flex-1"><label className="text-xs text-gray-500 mb-1 block">Mínimo (segundos)</label><input type="number" min="0" max="300" value={form.delayMin} onChange={e => setForm(f => ({ ...f, delayMin: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400" /></div>
-            <div className="flex-1"><label className="text-xs text-gray-500 mb-1 block">Máximo (segundos)</label><input type="number" min="0" max="300" value={form.delayMax} onChange={e => setForm(f => ({ ...f, delayMax: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400" /></div>
+          <p className="text-xs text-gray-500 mb-3">Aguarda um tempo aleatório antes de repostar. Recomendado: 5 a 15 segundos para operações leves; use valores maiores em grupos com alto volume.</p>
+          <div className="grid gap-2 sm:grid-cols-3 mb-4">
+            {DELAY_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => applyDelayPreset(preset)}
+                disabled={saving}
+                className="rounded-xl border border-gray-200 p-3 text-left hover:border-green-400 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2"
+              >
+                <span className="block text-sm font-semibold text-gray-700">{preset.label}</span>
+                <span className="block text-xs text-gray-500">{preset.min}-{preset.max}s</span>
+                <span className="block text-[11px] text-gray-400">{preset.description}</span>
+              </button>
+            ))}
           </div>
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="text-xs text-gray-500 mb-1 block">Mínimo (segundos)</label>
+              <input type="number" min="0" max="300" step="1" required value={form.delayMin} onChange={e => { setDelayError(''); setForm(f => ({ ...f, delayMin: e.target.value })) }} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400" />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs text-gray-500 mb-1 block">Máximo (segundos)</label>
+              <input type="number" min="0" max="300" step="1" required value={form.delayMax} onChange={e => { setDelayError(''); setForm(f => ({ ...f, delayMax: e.target.value })) }} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400" />
+            </div>
+          </div>
+          {delayError && <p className="mt-2 text-xs font-medium text-red-600" role="alert">{delayError}</p>}
         </div>
 
         <div className="bg-white rounded-2xl shadow p-5">
           <h3 className="font-semibold text-gray-700 mb-1">🏪 Plataformas habilitadas</h3>
-          <div className="flex flex-col gap-2">{ALL_PLATFORMS.map(p => <label key={p.id} className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={enabledPlatforms.has(p.id)} onChange={() => togglePlatform(p.id)} className="w-4 h-4 accent-green-600" /><span className="text-sm text-gray-700">{p.label}</span></label>)}</div>
+          <p className="text-xs text-gray-500 mb-3">Links de plataformas desabilitadas serão ignorados pelo conversor.</p>
+          <div className="flex flex-col gap-2">
+            {ALL_PLATFORMS.map(p => (
+              <label key={p.id} className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={enabledPlatforms.has(p.id)} onChange={() => togglePlatform(p.id)} className="w-4 h-4 accent-green-600" />
+                <span className="text-sm text-gray-700">{p.label}</span>
+              </label>
+            ))}
+          </div>
+          {platformError && <p className="mt-2 text-xs font-medium text-red-600" role="alert">{platformError}</p>}
         </div>
 
-        <div className="bg-white rounded-2xl shadow p-5"><h3 className="font-semibold text-gray-700 mb-1">🚫 Palavras bloqueadas</h3><input type="text" placeholder="ex: proibido, spam, fora" value={form.blockedKeywords} onChange={e => setForm(f => ({ ...f, blockedKeywords: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400" /></div>
+        <div className="bg-white rounded-2xl shadow p-5">
+          <h3 className="font-semibold text-gray-700 mb-3">🌐 Cobertura e destinos extras</h3>
+          <div className="flex flex-col gap-3">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input type="checkbox" checked={form.feedGlobal} onChange={e => setForm(f => ({ ...f, feedGlobal: e.target.checked }))} className="mt-1 w-4 h-4 accent-green-600" />
+              <span><span className="block text-sm font-medium text-gray-700">Feed Global</span><span className="block text-xs text-gray-400">Monitorar links em todos os grupos em que o número participa.</span></span>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input type="checkbox" checked={form.postToStatus} onChange={e => setForm(f => ({ ...f, postToStatus: e.target.checked }))} className="mt-1 w-4 h-4 accent-green-600" />
+              <span><span className="block text-sm font-medium text-gray-700">Postar também no Status</span><span className="block text-xs text-gray-400">Além dos grupos de destino, publicar a oferta convertida no Status do WhatsApp.</span></span>
+            </label>
+          </div>
+        </div>
 
-        <div className="bg-white rounded-2xl shadow p-5"><h3 className="font-semibold text-gray-700 mb-1">👋 Mensagem de boas-vindas</h3><textarea rows={3} placeholder="Ex: Bem-vindo(a)!" value={form.welcomeMsg} onChange={e => setForm(f => ({ ...f, welcomeMsg: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 resize-none" /></div>
+        <div className="bg-white rounded-2xl shadow p-5">
+          <h3 className="font-semibold text-gray-700 mb-1">🚫 Palavras bloqueadas</h3>
+          <KeywordsEditor value={form.blockedKeywords} onChange={(blockedKeywords) => setForm(f => ({ ...f, blockedKeywords }))} disabled={saving} />
+        </div>
 
-        <div aria-live="assertive">{error && <p className="text-red-500 text-sm">{error}</p>}</div>
-        <div aria-live="polite">{success && <p className="text-green-600 text-sm font-medium">✓ Configurações salvas com sucesso!</p>}</div>
+        <div className="bg-white rounded-2xl shadow p-5">
+          <h3 className="font-semibold text-gray-700 mb-1">👋 Mensagem de boas-vindas</h3>
+          <p className="text-xs text-gray-500 mb-3">Enviada para grupos de destino configurados quando o bot identifica entrada/boas-vindas no WhatsApp. Variáveis dinâmicas não são suportadas no momento.</p>
+          <textarea rows={3} placeholder="Ex: Bem-vindo(a)!" value={form.welcomeMsg} onChange={e => setForm(f => ({ ...f, welcomeMsg: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 resize-none" />
+          <div className="mt-3 rounded-2xl bg-green-50 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-green-700">Prévia no WhatsApp</p>
+            <p className="mt-2 whitespace-pre-wrap rounded-2xl bg-white px-3 py-2 text-sm text-gray-700 shadow-sm">{welcomePreview}</p>
+          </div>
+        </div>
 
-        <button type="submit" disabled={saving || !!loadError || !loadedOnce} className="bg-green-600 text-white rounded-xl py-3 font-semibold hover:bg-green-700 disabled:opacity-50 transition">{saving ? 'Salvando...' : 'Salvar configurações'}</button>
+        <div className="flex flex-col gap-2">
+          {error && <Alert type="error" title="Não foi possível salvar" message={error} />}
+          {success && <Alert type="success" title="Configurações salvas" message="Suas alterações foram aplicadas com sucesso." />}
+        </div>
+
+        <button type="submit" disabled={saving || !!loadError || !loadedOnce} className="bg-green-600 text-white rounded-xl py-3 font-semibold hover:bg-green-700 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">{saving ? 'Salvando...' : 'Salvar configurações'}</button>
       </form>
     </div>
   )

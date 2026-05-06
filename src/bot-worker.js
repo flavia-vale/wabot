@@ -5,32 +5,72 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
-import { rm } from 'fs/promises'
-import { resolve } from 'path'
+import { readFileSync, mkdirSync } from 'fs'
+import { rm, writeFile } from 'fs/promises'
+import { dirname, resolve } from 'path'
 
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
 import { fetchProductImage } from './converters/imageScrapers.js'
 import db from './db.js'
+import { trackAnalyticsEventSafe } from './analytics.js'
 
 const userId = process.env.BOT_USER_ID
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
 
 let activeSock = null
 let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
+let shuttingDown = false
 
 const AUTH_DIR = resolve(`./auth_info/${userId}`)
 const DEDUP_FILE = resolve(`./logs/dedup_${userId}.json`)
+const DEDUP_FLUSH_DEBOUNCE_MS = 1_000
+
+let pendingDedupStore = null
+let dedupFlushTimer = null
+let dedupFlushPromise = Promise.resolve()
+
+function normalizeDedup(store) {
+  return {
+    msgIds: Array.isArray(store?.msgIds) ? store.msgIds : [],
+    links: store?.links && typeof store.links === 'object' ? store.links : {},
+  }
+}
 
 function loadDedup() {
-  try { return JSON.parse(readFileSync(DEDUP_FILE, 'utf8')) }
+  try { return normalizeDedup(JSON.parse(readFileSync(DEDUP_FILE, 'utf8'))) }
   catch { return { msgIds: [], links: {} } }
 }
 
-function saveDedup(store) {
-  writeFileSync(DEDUP_FILE, JSON.stringify(store), 'utf8')
+function scheduleDedupSave(store) {
+  pendingDedupStore = store
+  if (dedupFlushTimer) return
+
+  dedupFlushTimer = setTimeout(() => {
+    dedupFlushTimer = null
+    flushDedupNow().catch(err => {
+      logger.error({ err: err.message }, 'Erro ao persistir deduplicação')
+    })
+  }, DEDUP_FLUSH_DEBOUNCE_MS)
+  dedupFlushTimer.unref?.()
+}
+
+async function flushDedupNow() {
+  if (dedupFlushTimer) {
+    clearTimeout(dedupFlushTimer)
+    dedupFlushTimer = null
+  }
+  if (!pendingDedupStore) return dedupFlushPromise
+
+  const snapshot = JSON.stringify(pendingDedupStore)
+  pendingDedupStore = null
+  const writePromise = dedupFlushPromise.catch(() => {}).then(async () => {
+    mkdirSync(dirname(DEDUP_FILE), { recursive: true })
+    await writeFile(DEDUP_FILE, snapshot, 'utf8')
+  })
+  dedupFlushPromise = writePromise.catch(() => {})
+  return writePromise
 }
 
 const sleep = ms => new Promise(res => setTimeout(res, ms))
@@ -42,7 +82,7 @@ let configCacheTime = 0
 async function loadConfig() {
   const user = await db.user.findUnique({
     where: { id: userId },
-    include: { groups: true, credentials: true, botConfig: true },
+    include: { groups: true, credentials: true, botConfig: true, groupTargets: { include: { post: true } } },
   })
   if (!user) throw new Error(`Usuário ${userId} não encontrado`)
 
@@ -61,15 +101,26 @@ async function loadConfig() {
     }
   }
 
+  const targetsByMonitor = new Map()
+  for (const target of user.groupTargets) {
+    if (!targetsByMonitor.has(target.monitorId)) targetsByMonitor.set(target.monitorId, [])
+    if (target.post?.waJid) targetsByMonitor.get(target.monitorId).push(target.post.waJid)
+  }
+
   const groups = {
     monitor: user.groups.filter(g => g.role === 'monitor').map(g => ({
+      id: g.id,
       waJid: g.waJid,
       imageMode: g.imageMode,
       imageLinkTarget: g.imageLinkTarget,
       fallbackToOriginal: g.fallbackToOriginal,
+      blockedKeywords: g.blockedKeywords,
+      allowedPlatforms: g.allowedPlatforms,
+      targetPostJids: targetsByMonitor.get(g.id) ?? [],
     })),
     monitorJids: user.groups.filter(g => g.role === 'monitor').map(g => g.waJid),
     post: user.groups.filter(g => g.role === 'post').map(g => g.waJid),
+    postDetails: user.groups.filter(g => g.role === 'post').map(g => ({ waJid: g.waJid, welcomeMsg: g.welcomeMsg })),
   }
 
   const botConfig = user.botConfig ?? {
@@ -78,6 +129,8 @@ async function loadConfig() {
     platforms: 'shopee,amazon,mercadolivre,magazineluiza',
     blockedKeywords: '',
     welcomeMsg: '',
+    feedGlobal: false,
+    postToStatus: false,
   }
 
   return { credentials, groups, plan: user.plan, botConfig }
@@ -91,32 +144,84 @@ async function getConfig() {
   return configCache
 }
 
-// Checa e envia mensagens agendadas pendentes
+// Checa e enfileira mensagens agendadas pendentes
+let scheduledCheckRunning = false
 async function checkScheduledMessages() {
-  if (!activeSock) return
+  if (!activeSock || scheduledCheckRunning) return
+  scheduledCheckRunning = true
   try {
     const pending = await db.scheduledMessage.findMany({
       where: { userId, status: 'pending', scheduledAt: { lte: new Date() } },
+      take: 50,
+      orderBy: { scheduledAt: 'asc' },
     })
+
     for (const msg of pending) {
+      const claimed = await db.scheduledMessage.updateMany({
+        where: { id: msg.id, userId, status: 'pending' },
+        data: { status: 'queued' },
+      })
+      if (claimed.count !== 1) continue
+
       const jids = JSON.parse(msg.targetJids)
-      let allOk = true
+      const state = { remaining: jids.length, hasError: false }
+
       for (const jid of jids) {
-        try {
-          await activeSock.sendMessage(jid, { text: msg.text })
-          logger.info({ jid }, 'Mensagem agendada enviada')
-        } catch (err) {
-          logger.error({ jid, err: err.message }, 'Erro ao enviar mensagem agendada')
-          allOk = false
+        const log = await db.messageLog.create({
+          data: {
+            userId,
+            platform: 'scheduled',
+            sourceGroup: 'scheduled',
+            destGroup: jid,
+            originalUrl: '',
+            convertedUrl: '',
+            messageText: msg.text,
+            status: 'queued',
+          },
+        })
+
+        const accepted = enqueueSendJob({
+          type: 'scheduled',
+          logId: log.id,
+          destJid: jid,
+          platforms: 'scheduled',
+          imageMode: 'none',
+          plan: 'scheduled',
+          delayMs: 0,
+          buildPayload: async () => ({ text: msg.text }),
+          onDone: async (result) => {
+            state.remaining--
+            if (!result.ok) state.hasError = true
+            if (state.remaining === 0) {
+              await db.scheduledMessage.update({
+                where: { id: msg.id },
+                data: { status: state.hasError ? 'failed' : 'sent', sentAt: new Date() },
+              })
+            }
+          },
+        })
+
+        if (!accepted) {
+          state.remaining--
+          state.hasError = true
+          await db.messageLog.update({
+            where: { id: log.id },
+            data: { status: 'error', errorMsg: 'Fila interna de envios cheia ou worker encerrando', sentAt: new Date() },
+          }).catch(() => {})
         }
       }
-      await db.scheduledMessage.update({
-        where: { id: msg.id },
-        data: { status: allOk ? 'sent' : 'failed', sentAt: new Date() },
-      })
+
+      if (state.remaining === 0) {
+        await db.scheduledMessage.update({
+          where: { id: msg.id },
+          data: { status: 'failed', sentAt: new Date() },
+        })
+      }
     }
   } catch (err) {
     logger.error({ err: err.message }, 'Erro ao processar agendamentos')
+  } finally {
+    scheduledCheckRunning = false
   }
 }
 
@@ -137,10 +242,207 @@ function buildMessage(originalText, convertedUrl, originalUrl, groupInvite) {
 }
 
 const AD_TEXT = '💡 Bot gerenciado pelo Bot Conversor para Afiliados — automatize seus grupos de afiliados'
+function envNumber(name, fallback) {
+  if (process.env[name] === undefined) return fallback
+  const value = Number(process.env[name])
+  return Number.isFinite(value) ? value : fallback
+}
+
+const SEND_QUEUE_MAX_SIZE = envNumber('SEND_QUEUE_MAX_SIZE', 1_000)
+const SEND_MAX_ATTEMPTS = Math.max(1, envNumber('SEND_MAX_ATTEMPTS', 3))
+const SEND_RETRY_BASE_MS = Math.max(0, envNumber('SEND_RETRY_BASE_MS', 2_000))
+const SEND_RETRY_MAX_MS = Math.max(SEND_RETRY_BASE_MS, envNumber('SEND_RETRY_MAX_MS', 30_000))
+const DEST_RATE_LIMIT_MS = Math.max(0, envNumber('DEST_RATE_LIMIT_MS', 1_000))
+const sendQueue = []
+const lastSendByDest = new Map()
+let sendQueueProcessing = false
+let interruptedSendLogsMarked = false
 let adSendCount = 0
 
+const sendMetrics = {
+  queuedTotal: 0,
+  sendingTotal: 0,
+  successTotal: 0,
+  errorTotal: 0,
+  retryTotal: 0,
+  rejectedTotal: 0,
+  broadcastQueuedTotal: 0,
+  scheduledQueuedTotal: 0,
+  convertedQueuedTotal: 0,
+  lastSuccessAt: null,
+  lastErrorAt: null,
+  lastError: null,
+  latencyTotalMs: 0,
+  latencyCount: 0,
+}
+
+function getSendQueueMetrics() {
+  return {
+    backend: 'memory',
+    queueSize: sendQueue.length,
+    processing: sendQueueProcessing,
+    maxSize: SEND_QUEUE_MAX_SIZE,
+    maxAttempts: SEND_MAX_ATTEMPTS,
+    retryBaseMs: SEND_RETRY_BASE_MS,
+    retryMaxMs: SEND_RETRY_MAX_MS,
+    destinationRateLimitMs: DEST_RATE_LIMIT_MS,
+    ...sendMetrics,
+    avgLatencyMs: sendMetrics.latencyCount ? Math.round(sendMetrics.latencyTotalMs / sendMetrics.latencyCount) : 0,
+  }
+}
+
+function canAcceptSendJob() {
+  return !shuttingDown && sendQueue.length < SEND_QUEUE_MAX_SIZE
+}
+
+function enqueueSendJob(job) {
+  if (!canAcceptSendJob()) {
+    sendMetrics.rejectedTotal++
+    return false
+  }
+  sendQueue.push({ attempts: 0, enqueuedAt: Date.now(), ...job })
+  sendMetrics.queuedTotal++
+  if (job.type === 'broadcast') sendMetrics.broadcastQueuedTotal++
+  else if (job.type === 'scheduled') sendMetrics.scheduledQueuedTotal++
+  else sendMetrics.convertedQueuedTotal++
+  processSendQueue().catch(err => {
+    logger.error({ err: err.message }, 'Erro fatal na fila interna de envios')
+  })
+  return true
+}
+
+async function processSendQueue() {
+  if (sendQueueProcessing) return
+  sendQueueProcessing = true
+
+  try {
+    while (!shuttingDown && sendQueue.length) {
+      const job = sendQueue.shift()
+      await processSendJob(job)
+    }
+  } finally {
+    sendQueueProcessing = false
+    if (!shuttingDown && sendQueue.length) {
+      processSendQueue().catch(err => {
+        logger.error({ err: err.message }, 'Erro ao retomar fila interna de envios')
+      })
+    }
+  }
+}
+
+function getRetryDelayMs(attempt) {
+  const exponential = SEND_RETRY_BASE_MS * 2 ** Math.max(0, attempt - 1)
+  const jitter = Math.floor(Math.random() * SEND_RETRY_BASE_MS)
+  return Math.min(SEND_RETRY_MAX_MS, exponential + jitter)
+}
+
+async function waitDestinationRateLimit(destJid) {
+  if (!DEST_RATE_LIMIT_MS) return
+  const lastSentAt = lastSendByDest.get(destJid) ?? 0
+  const waitMs = DEST_RATE_LIMIT_MS - (Date.now() - lastSentAt)
+  if (waitMs > 0) await sleep(waitMs)
+}
+
+async function finishSendJob(job, result) {
+  if (typeof job.onDone === 'function') {
+    await job.onDone(result).catch(err => {
+      logger.error({ err: err.message, destJid: job.destJid, type: job.type }, 'Erro ao finalizar job da fila')
+    })
+  }
+}
+
+async function processSendJob(job) {
+  const startedAt = Date.now()
+  let payload = null
+
+  try {
+    await db.messageLog.update({
+      where: { id: job.logId },
+      data: { status: 'sending', errorMsg: null },
+    })
+    sendMetrics.sendingTotal++
+
+    if (job.delayMs > 0) await sleep(job.delayMs)
+
+    for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt++) {
+      try {
+        if (!activeSock) throw new Error('Bot não conectado')
+        if (!payload) payload = await job.buildPayload()
+        await waitDestinationRateLimit(job.destJid)
+        await activeSock.sendMessage(job.destJid, payload)
+        lastSendByDest.set(job.destJid, Date.now())
+        logger.info({ destJid: job.destJid, platforms: job.platforms, imageMode: job.imageMode, attempt, type: job.type }, 'Mensagem enviada')
+
+        await db.messageLog.update({
+          where: { id: job.logId },
+          data: { status: 'success', errorMsg: null, sentAt: new Date() },
+        })
+
+        sendMetrics.successTotal++
+        sendMetrics.lastSuccessAt = new Date().toISOString()
+        sendMetrics.latencyTotalMs += Date.now() - startedAt
+        sendMetrics.latencyCount++
+        await finishSendJob(job, { ok: true })
+
+        if (job.plan === 'basic') {
+          adSendCount++
+          if (adSendCount % 50 === 0) {
+            await activeSock.sendMessage(job.destJid, { text: AD_TEXT }).catch(() => {})
+          }
+        }
+        return
+      } catch (err) {
+        if (attempt < SEND_MAX_ATTEMPTS && !shuttingDown) {
+          const retryDelayMs = getRetryDelayMs(attempt)
+          sendMetrics.retryTotal++
+          await db.messageLog.update({
+            where: { id: job.logId },
+            data: { errorMsg: `Tentativa ${attempt} falhou: ${err.message}. Nova tentativa em ${Math.round(retryDelayMs / 1000)}s.` },
+          }).catch(() => {})
+          logger.warn({ destJid: job.destJid, err: err.message, attempt, retryDelayMs, type: job.type }, 'Falha transitória no envio — tentando novamente')
+          await sleep(retryDelayMs)
+          continue
+        }
+        throw err
+      }
+    }
+  } catch (err) {
+    logger.error({ destJid: job.destJid, err: err.message, type: job.type }, 'Erro ao enviar mensagem da fila')
+    await db.messageLog.update({
+      where: { id: job.logId },
+      data: { status: 'error', errorMsg: err.message, sentAt: new Date() },
+    }).catch(() => {})
+    sendMetrics.errorTotal++
+    sendMetrics.lastErrorAt = new Date().toISOString()
+    sendMetrics.lastError = err.message
+    await finishSendJob(job, { ok: false, error: err.message })
+  }
+}
+
+async function markInterruptedSendLogs() {
+  const now = new Date()
+  await Promise.all([
+    db.messageLog.updateMany({
+      where: { userId, status: { in: ['queued', 'sending'] } },
+      data: {
+        status: 'error',
+        errorMsg: 'Envio interrompido por reinício do worker antes da conclusão',
+        sentAt: now,
+      },
+    }),
+    db.scheduledMessage.updateMany({
+      where: { userId, status: { in: ['queued', 'sending'] } },
+      data: { status: 'failed', sentAt: now },
+    }),
+  ])
+}
+
 async function startBot() {
-  const { credentials, groups, plan, botConfig } = await getConfig()
+  await getConfig()
+  if (!interruptedSendLogsMarked) {
+    interruptedSendLogsMarked = true
+    await markInterruptedSendLogs()
+  }
 
   const dedupeWindowMs = 300_000
   const dedup = loadDedup()
@@ -149,7 +451,7 @@ async function startBot() {
   for (const key of Object.keys(dedup.links || {})) {
     if (now - dedup.links[key] >= dedupeWindowMs) delete dedup.links[key]
   }
-  saveDedup(dedup)
+  scheduleDedupSave(dedup)
 
   mkdirSync(AUTH_DIR, { recursive: true })
 
@@ -187,6 +489,7 @@ async function startBot() {
         create: { userId, status: 'connected', phone },
         update: { status: 'connected', phone },
       })
+      trackAnalyticsEventSafe({ userId, event: 'whatsapp_connected' })
     }
 
     if (connection === 'close') {
@@ -214,11 +517,13 @@ async function startBot() {
   sock.ev.on('group-participants.update', async ({ id: groupJid, participants, action }) => {
     if (action !== 'add') return
     const cfg = await getConfig()
-    if (!cfg.botConfig.welcomeMsg || !cfg.groups.post.includes(groupJid)) return
+    const postGroup = cfg.groups.postDetails.find(g => g.waJid === groupJid)
+    const welcomeMsg = postGroup?.welcomeMsg?.trim() || cfg.botConfig.welcomeMsg
+    if (!welcomeMsg || !cfg.groups.post.includes(groupJid)) return
     for (const participantJid of participants) {
       try {
         await sock.sendMessage(groupJid, {
-          text: cfg.botConfig.welcomeMsg,
+          text: welcomeMsg,
           mentions: [participantJid],
         })
         logger.info({ groupJid, participantJid }, 'Welcome msg enviada')
@@ -240,12 +545,14 @@ async function startBot() {
       const msgId = msg.key.id
       if (dedup.msgIds.some(e => e.id === msgId)) continue
       dedup.msgIds.push({ id: msgId, ts: Date.now() })
-      saveDedup(dedup)
+      scheduleDedupSave(dedup)
 
       const jid = msg.key.remoteJid
       const cfg = await getConfig()
-      logger.info({ jid, monitorGroups: cfg.groups.monitor }, 'mensagem recebida')
-      if (!cfg.groups.monitorJids.includes(jid)) continue
+      logger.info({ jid, monitorGroups: cfg.groups.monitor, feedGlobal: cfg.botConfig.feedGlobal }, 'mensagem recebida')
+      const monitorGroup = cfg.groups.monitor.find(m => m.waJid === jid)
+      if (!cfg.botConfig.feedGlobal && !monitorGroup) continue
+      if (cfg.botConfig.feedGlobal && !String(jid).endsWith('@g.us')) continue
 
       const text =
         msg.message?.conversation ||
@@ -254,9 +561,10 @@ async function startBot() {
 
       if (!text) continue
 
-      // Filtro por palavras bloqueadas
-      if (cfg.botConfig.blockedKeywords) {
-        const blocked = cfg.botConfig.blockedKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean)
+      // Filtro por palavras bloqueadas (override por grupo monitorado quando preenchido)
+      const blockedKeywords = monitorGroup?.blockedKeywords?.trim() || cfg.botConfig.blockedKeywords
+      if (blockedKeywords) {
+        const blocked = blockedKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean)
         const lower = text.toLowerCase()
         if (blocked.some(kw => lower.includes(kw))) {
           logger.info({ blocked }, 'Mensagem bloqueada por keyword'); continue
@@ -266,9 +574,9 @@ async function startBot() {
       const links = detectLinks(text)
       if (!links.length) continue
 
-      // Filtro por plataforma
-      const enabledPlatforms = new Set(cfg.botConfig.platforms.split(',').filter(Boolean))
-      const monitorGroup = cfg.groups.monitor.find(m => m.waJid === jid)
+      // Filtro por plataforma (override por grupo monitorado quando preenchido)
+      const platformCsv = monitorGroup?.allowedPlatforms?.trim() || cfg.botConfig.platforms
+      const enabledPlatforms = new Set(platformCsv.split(',').filter(Boolean))
 
       // Pre-fetch image URL uma vez por mensagem (lazy, com cache)
       let cachedImageUrl
@@ -318,19 +626,25 @@ async function startBot() {
 
       const primary = conversions[0]
 
-      for (const destJid of cfg.groups.post) {
+      const baseDestinations = monitorGroup?.targetPostJids?.length ? monitorGroup.targetPostJids : cfg.groups.post
+      const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
+      for (const destJid of destinations) {
         const key = `${destJid}:${primary.converted}`
         if (dedup.links[key] && Date.now() - dedup.links[key] < dedupeWindowMs) {
           logger.info({ destJid }, 'Duplicata ignorada'); continue
         }
         dedup.links[key] = Date.now()
-        saveDedup(dedup)
+        scheduleDedupSave(dedup)
 
-        // Delay configurável antes de cada envio
-        const { delayMin, delayMax } = cfg.botConfig
-        if (delayMax > 0) {
-          const ms = (delayMin + Math.random() * Math.max(0, delayMax - delayMin)) * 1000
-          await sleep(ms)
+        const platforms = conversions.map(c => c.platform).join('+')
+        const logData = {
+          userId,
+          platform: platforms,
+          sourceGroup: jid,
+          destGroup: destJid,
+          originalUrl: primary.url,
+          convertedUrl: primary.converted,
+          messageText: finalText,
         }
 
         const imageUrl = monitorGroup?.imageMode !== 'none' ? await getImageUrl() : null
@@ -342,8 +656,11 @@ async function startBot() {
         try {
           await sock.sendMessage(destJid, msgPayload)
           logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode }, 'Mensagem enviada')
+          const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
           db.messageLog.create({
             data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: finalText, status: 'success' },
+          }).then(() => {
+            if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
           }).catch(() => {})
           if (cfg.plan === 'basic') {
             adSendCount++
@@ -355,17 +672,38 @@ async function startBot() {
           logger.error({ destJid, err: err.message }, 'Erro ao enviar')
           db.messageLog.create({
             data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: finalText, status: 'error', errorMsg: err.message },
+          }).then(() => {
+            trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: err.name } })
           }).catch(() => {})
+          logger.warn({ destJid, queueSize: sendQueue.length }, 'Envio recusado após criação do log queued')
         }
       }
     }
   })
 }
 
+
+async function shutdown(code = 0) {
+  if (shuttingDown) return
+  shuttingDown = true
+  await Promise.all([
+    flushDedupNow().catch(err => {
+      logger.error({ err: err.message }, 'Erro ao persistir deduplicação antes de encerrar')
+    }),
+    markInterruptedSendLogs().catch(err => {
+      logger.error({ err: err.message }, 'Erro ao marcar envios pendentes como interrompidos')
+    }),
+  ])
+  process.exit(code)
+}
+
+process.once('SIGTERM', () => { void shutdown(0) })
+process.once('SIGINT', () => { void shutdown(0) })
+
 process.on('message', async msg => {
   if (msg?.type === 'stop') {
     logger.info('Bot parando por solicitação do manager')
-    process.exit(0)
+    await shutdown(0)
   }
 
   if (msg?.type === 'reloadConfig') {
@@ -411,23 +749,52 @@ process.on('message', async msg => {
     tryRequest()
   }
 
+  if (msg?.type === 'metrics') {
+    process.send({ type: 'metricsResult', requestId: msg.requestId, data: getSendQueueMetrics() })
+  }
+
   if (msg?.type === 'broadcast') {
     if (!activeSock) {
       process.send({ type: 'broadcastResult', requestId: msg.requestId, error: 'Bot não conectado' })
       return
     }
-    let sent = 0
+    let queued = 0
     const errors = []
     for (const jid of msg.jids) {
-      try {
-        await activeSock.sendMessage(jid, { text: msg.text })
-        sent++
-      } catch (err) {
-        errors.push({ jid, error: err.message })
-        logger.error({ jid, err: err.message }, 'Erro no broadcast')
+      const log = await db.messageLog.create({
+        data: {
+          userId,
+          platform: 'broadcast',
+          sourceGroup: 'manual',
+          destGroup: jid,
+          originalUrl: '',
+          convertedUrl: '',
+          messageText: msg.text,
+          status: 'queued',
+        },
+      })
+      const accepted = enqueueSendJob({
+        type: 'broadcast',
+        logId: log.id,
+        destJid: jid,
+        platforms: 'broadcast',
+        imageMode: 'none',
+        plan: 'broadcast',
+        delayMs: 0,
+        buildPayload: async () => ({ text: msg.text }),
+      })
+      if (accepted) {
+        queued++
+      } else {
+        const error = 'Fila interna de envios cheia ou worker encerrando'
+        errors.push({ jid, error })
+        await db.messageLog.update({
+          where: { id: log.id },
+          data: { status: 'error', errorMsg: error, sentAt: new Date() },
+        }).catch(() => {})
       }
     }
-    process.send({ type: 'broadcastResult', requestId: msg.requestId, data: { sent, errors } })
+    process.send({ type: 'broadcastResult', requestId: msg.requestId, data: { queued, rejected: errors.length, errors } })
   }
 })
 
