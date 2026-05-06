@@ -24,6 +24,94 @@ function normalizeContactPhone(rawPhone) {
   return `+${digits}`
 }
 
+
+function isPrismaShapeMismatch(err) {
+  const message = String(err?.message ?? '')
+  return message.includes('Unknown argument') || message.includes('Unknown field') || message.includes('no such column') || message.includes('does not exist in the current database')
+}
+
+async function createUserWithSecureFields(data) {
+  try {
+    return await db.user.create({ data })
+  } catch (err) {
+    if (!isPrismaShapeMismatch(err)) throw err
+    const { contactPhone, contactPhoneOptInAt, status, lastLoginAt, lastActivityAt, supportStatus, ...legacyData } = data
+    return db.user.create({ data: legacyData })
+  }
+}
+
+async function updateLoginActivity(user) {
+  try {
+    return await db.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date(), lastActivityAt: new Date() },
+    })
+  } catch (err) {
+    if (!isPrismaShapeMismatch(err)) throw err
+    return user
+  }
+}
+
+async function findCurrentUser(userId) {
+  const secureSelect = {
+    id: true,
+    email: true,
+    contactPhone: true,
+    contactPhoneVerifiedAt: true,
+    contactPhoneOptInAt: true,
+    plan: true,
+    trialExpiresAt: true,
+    referralCode: true,
+    status: true,
+    supportStatus: true,
+    lastLoginAt: true,
+    lastActivityAt: true,
+    createdAt: true,
+  }
+
+  try {
+    return await db.user.findUnique({ where: { id: userId }, select: secureSelect })
+  } catch (err) {
+    if (!isPrismaShapeMismatch(err)) throw err
+    return db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, plan: true, trialExpiresAt: true, referralCode: true, createdAt: true },
+    })
+  }
+}
+
+async function ensureReferralCode(userId) {
+  const referralCode = randomBytes(4).toString('hex')
+  try {
+    return await db.user.update({
+      where: { id: userId },
+      data: { referralCode },
+      select: {
+        id: true,
+        email: true,
+        contactPhone: true,
+        contactPhoneVerifiedAt: true,
+        contactPhoneOptInAt: true,
+        plan: true,
+        trialExpiresAt: true,
+        referralCode: true,
+        status: true,
+        supportStatus: true,
+        lastLoginAt: true,
+        lastActivityAt: true,
+        createdAt: true,
+      },
+    })
+  } catch (err) {
+    if (!isPrismaShapeMismatch(err)) throw err
+    return db.user.update({
+      where: { id: userId },
+      data: { referralCode },
+      select: { id: true, email: true, plan: true, trialExpiresAt: true, referralCode: true, createdAt: true },
+    })
+  }
+}
+
 function publicUser(user) {
   return {
     id: user.id,
@@ -64,21 +152,19 @@ export async function authRoutes(app) {
       }
     }
 
-    const user = await db.user.create({
-      data: {
-        email,
-        passwordHash,
-        contactPhone,
-        contactPhoneOptInAt: now,
-        status: 'active',
-        plan: 'trial',
-        trialExpiresAt,
-        referralCode,
-        referredBy: referrer?.id,
-        lastLoginAt: now,
-        lastActivityAt: now,
-        supportStatus: 'new',
-      },
+    const user = await createUserWithSecureFields({
+      email,
+      passwordHash,
+      contactPhone,
+      contactPhoneOptInAt: now,
+      status: 'active',
+      plan: 'trial',
+      trialExpiresAt,
+      referralCode,
+      referredBy: referrer?.id,
+      lastLoginAt: now,
+      lastActivityAt: now,
+      supportStatus: 'new',
     })
 
     if (referrer) {
@@ -110,10 +196,7 @@ export async function authRoutes(app) {
     const valid = await bcrypt.compare(password, user.passwordHash)
     if (!valid) return reply.code(401).send({ error: 'Credenciais inválidas' })
 
-    const updated = await db.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date(), lastActivityAt: new Date() },
-    })
+    const updated = await updateLoginActivity(user)
 
     const token = app.jwt.sign({ sub: updated.id, email: updated.email }, { expiresIn: '7d' })
     setAuthCookie(reply, token)
@@ -126,45 +209,9 @@ export async function authRoutes(app) {
   })
 
   app.get('/me', { onRequest: [app.authenticate] }, async (req) => {
-    let user = await db.user.findUnique({
-      where: { id: req.user.sub },
-      select: {
-        id: true,
-        email: true,
-        contactPhone: true,
-        contactPhoneVerifiedAt: true,
-        contactPhoneOptInAt: true,
-        plan: true,
-        trialExpiresAt: true,
-        referralCode: true,
-        status: true,
-        supportStatus: true,
-        lastLoginAt: true,
-        lastActivityAt: true,
-        createdAt: true,
-      },
-    })
+    let user = await findCurrentUser(req.user.sub)
     if (!user.referralCode) {
-      const referralCode = randomBytes(4).toString('hex')
-      user = await db.user.update({
-        where: { id: req.user.sub },
-        data: { referralCode },
-        select: {
-          id: true,
-          email: true,
-          contactPhone: true,
-          contactPhoneVerifiedAt: true,
-          contactPhoneOptInAt: true,
-          plan: true,
-          trialExpiresAt: true,
-          referralCode: true,
-          status: true,
-          supportStatus: true,
-          lastLoginAt: true,
-          lastActivityAt: true,
-          createdAt: true,
-        },
-      })
+      user = await ensureReferralCode(req.user.sub)
     }
     return user
   })
