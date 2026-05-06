@@ -2,6 +2,14 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { HelpLink } from '@/components/HelpLink'
+
+const ALL_PLATFORMS = [
+  { id: 'shopee', label: 'Shopee' },
+  { id: 'amazon', label: 'Amazon' },
+  { id: 'mercadolivre', label: 'Mercado Livre' },
+  { id: 'magazineluiza', label: 'Magazine Luiza' },
+]
 
 export default function GruposPage() {
   const [groups, setGroups] = useState([])
@@ -14,6 +22,9 @@ export default function GruposPage() {
   const [manualLoading, setManualLoading] = useState(false)
   const [manualError, setManualError] = useState('')
   const [deleteTargetId, setDeleteTargetId] = useState(null)
+  const [targetEditorId, setTargetEditorId] = useState(null)
+  const [targetPostIds, setTargetPostIds] = useState([])
+  const [targetLoading, setTargetLoading] = useState(false)
 
   async function load() {
     try { setGroups(await api.groups()) } catch (err) { setActionError(err.message) }
@@ -33,6 +44,51 @@ export default function GruposPage() {
   async function handleUpdateGroup(id, data) {
     setGroups(prev => prev.map(g => g.id === id ? { ...g, ...data } : g))
     try { await api.updateGroup(id, data) } catch (err) { setActionError(err.message); await load() }
+  }
+
+  function toggleGroupPlatform(group, platformId) {
+    const current = group.allowedPlatforms
+      ? group.allowedPlatforms.split(',').filter(Boolean)
+      : ALL_PLATFORMS.map(p => p.id)
+    const next = current.includes(platformId)
+      ? current.filter(p => p !== platformId)
+      : [...current, platformId]
+    handleUpdateGroup(group.id, { allowedPlatforms: next.join(',') })
+  }
+
+  async function openTargetEditor(groupId) {
+    setActionError('')
+    setTargetLoading(true)
+    setTargetEditorId(groupId)
+    try {
+      const data = await api.groupTargets(groupId)
+      setTargetPostIds(data.postIds ?? [])
+    } catch (err) {
+      setActionError(err.message)
+      setTargetEditorId(null)
+    } finally {
+      setTargetLoading(false)
+    }
+  }
+
+  function toggleTargetPost(postId) {
+    setTargetPostIds(current => current.includes(postId)
+      ? current.filter(id => id !== postId)
+      : [...current, postId])
+  }
+
+  async function saveTargetPosts() {
+    if (!targetEditorId) return
+    setTargetLoading(true)
+    setActionError('')
+    try {
+      await api.updateGroupTargets(targetEditorId, targetPostIds)
+      setTargetEditorId(null)
+    } catch (err) {
+      setActionError(err.message)
+    } finally {
+      setTargetLoading(false)
+    }
   }
 
   async function handleLoadWA() {
@@ -79,7 +135,10 @@ export default function GruposPage() {
 
   return (
     <div className="max-w-xl">
-      <h2 className="text-2xl font-bold text-gray-800 mb-1">Grupos</h2>
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="text-2xl font-bold text-gray-800 mb-1">Grupos</h2>
+        <HelpLink topic="como-cadastrar-grupos">Ajuda</HelpLink>
+      </div>
       <p className="text-gray-500 text-sm mb-6">Configure quais grupos monitorar e onde postar</p>
 
       {actionError && <p className="text-red-500 text-sm mb-4">{actionError}</p>}
@@ -157,9 +216,14 @@ export default function GruposPage() {
                     <span className="font-medium text-gray-700">{g.name}</span>
                     <span className="ml-2 text-gray-400 text-xs">{g.waJid}</span>
                   </div>
-                  <button onClick={() => setDeleteTargetId(g.id)} className="text-red-400 hover:text-red-600 text-xs">
-                    Remover
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => openTargetEditor(g.id)} className="text-blue-500 hover:text-blue-700 text-xs">
+                      Configurar alvos
+                    </button>
+                    <button onClick={() => setDeleteTargetId(g.id)} className="text-red-400 hover:text-red-600 text-xs">
+                      Remover
+                    </button>
+                  </div>
                 </div>
                 <div className="border-t border-gray-100 pt-2">
                   <p className="text-xs text-gray-500 mb-1.5">Imagem da mensagem:</p>
@@ -201,6 +265,28 @@ export default function GruposPage() {
                     </div>
                   )}
                 </div>
+                <div className="mt-3 border-t border-gray-100 pt-3">
+                  <p className="text-xs font-medium text-gray-500 mb-2">Filtros deste grupo (opcional):</p>
+                  <input
+                    value={g.blockedKeywords ?? ''}
+                    onChange={e => handleUpdateGroup(g.id, { blockedKeywords: e.target.value })}
+                    placeholder="Palavras bloqueadas só neste grupo"
+                    className="mb-2 w-full border border-gray-200 rounded-lg px-3 py-2 text-xs"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    {ALL_PLATFORMS.map(platform => {
+                      const selected = new Set((g.allowedPlatforms || '').split(',').filter(Boolean))
+                      const checked = g.allowedPlatforms ? selected.has(platform.id) : true
+                      return (
+                        <label key={platform.id} className="flex items-center gap-1 text-xs text-gray-500">
+                          <input type="checkbox" checked={checked} onChange={() => toggleGroupPlatform(g, platform.id)} />
+                          {platform.label}
+                        </label>
+                      )
+                    })}
+                  </div>
+                  <p className="mt-1 text-[11px] text-gray-400">Sem seleção manual, usa as plataformas globais.</p>
+                </div>
               </li>
             ))}
           </ul>
@@ -215,14 +301,23 @@ export default function GruposPage() {
         ) : (
           <ul className="flex flex-col gap-2">
             {post.map(g => (
-              <li key={g.id} className="flex items-center justify-between text-sm">
-                <div>
-                  <span className="font-medium text-gray-700">{g.name}</span>
-                  <span className="ml-2 text-gray-400 text-xs">{g.waJid}</span>
+              <li key={g.id} className="text-sm border border-gray-100 rounded-xl p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <span className="font-medium text-gray-700">{g.name}</span>
+                    <span className="ml-2 text-gray-400 text-xs">{g.waJid}</span>
+                  </div>
+                  <button onClick={() => setDeleteTargetId(g.id)} className="text-red-400 hover:text-red-600 text-xs">
+                    Remover
+                  </button>
                 </div>
-                <button onClick={() => setDeleteTargetId(g.id)} className="text-red-400 hover:text-red-600 text-xs">
-                  Remover
-                </button>
+                <textarea
+                  rows={2}
+                  value={g.welcomeMsg ?? ''}
+                  onChange={e => handleUpdateGroup(g.id, { welcomeMsg: e.target.value })}
+                  placeholder="Mensagem de boas-vindas específica deste grupo (opcional)"
+                  className="mt-3 w-full border border-gray-200 rounded-lg px-3 py-2 text-xs"
+                />
               </li>
             ))}
           </ul>
@@ -280,6 +375,31 @@ export default function GruposPage() {
           </>
         )}
       </div>
+      {targetEditorId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">Configurar alvos</h3>
+            <p className="text-sm text-gray-500 mb-4">Escolha quais grupos de destino recebem mensagens deste grupo monitorado. Se nenhum for selecionado, o bot envia para todos.</p>
+            {post.length === 0 ? (
+              <p className="text-sm text-amber-600 mb-4">Cadastre ao menos um grupo de postagem para configurar alvos.</p>
+            ) : (
+              <div className="mb-4 flex max-h-64 flex-col gap-2 overflow-y-auto">
+                {post.map(group => (
+                  <label key={group.id} className="flex items-center gap-2 rounded-lg border border-gray-100 p-2 text-sm text-gray-600">
+                    <input type="checkbox" checked={targetPostIds.includes(group.id)} onChange={() => toggleTargetPost(group.id)} />
+                    <span>{group.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setTargetEditorId(null)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button>
+              <button onClick={saveTargetPosts} disabled={targetLoading} className="rounded-lg bg-green-600 px-4 py-2 text-sm text-white disabled:opacity-50">{targetLoading ? 'Salvando...' : 'Salvar alvos'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ConfirmDialog open={!!deleteTargetId} title="Remover grupo" message="O grupo será removido desta configuração." confirmLabel="Remover" danger onCancel={() => setDeleteTargetId(null)} onConfirm={async () => { const id = deleteTargetId; setDeleteTargetId(null); if (id) await handleDelete(id) }} />
     </div>
   )

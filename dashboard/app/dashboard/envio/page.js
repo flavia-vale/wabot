@@ -58,6 +58,7 @@ export default function EnvioPage() {
   const [cancelLoadingId, setCancelLoadingId] = useState(null)
   const [statusFilter, setStatusFilter] = useState('all')
   const [cancelTargetId, setCancelTargetId] = useState(null)
+  const [broadcastConfirmOpen, setBroadcastConfirmOpen] = useState(false)
 
   const timezoneLabel = Intl.DateTimeFormat().resolvedOptions().timeZone
   const [minDateTime] = useState(() => new Date(Date.now() + 60_000).toISOString().slice(0, 16))
@@ -93,34 +94,35 @@ export default function EnvioPage() {
     }
   }, [])
 
-  async function handleBroadcast(e) {
-    e.preventDefault()
-    setBroadcastError('')
-    setBroadcastResult(null)
+  async function sendBroadcastNow() {
     setBroadcastLoading(true)
-
-    const confirmKey = 'broadcastConfirmShown'
-    const hasConfirmedBefore = localStorage.getItem(confirmKey) === '1'
-    const shouldConfirm = !hasConfirmedBefore || broadcastText.trim().length > 280
-
-    if (shouldConfirm) {
-      const confirmed = confirm('Confirmar envio imediato para todos os grupos de destino?')
-      if (!confirmed) {
-        setBroadcastLoading(false)
-        return
-      }
-      localStorage.setItem(confirmKey, '1')
-    }
-
     try {
       const res = await api.broadcastSend(broadcastText.trim())
+      localStorage.setItem('broadcastConfirmShown', '1')
       setBroadcastResult(res)
       setBroadcastText('')
     } catch (err) {
       setBroadcastError(err.message)
     } finally {
       setBroadcastLoading(false)
+      setBroadcastConfirmOpen(false)
     }
+  }
+
+  async function handleBroadcast(e) {
+    e.preventDefault()
+    setBroadcastError('')
+    setBroadcastResult(null)
+
+    const hasConfirmedBefore = localStorage.getItem('broadcastConfirmShown') === '1'
+    const shouldConfirm = !hasConfirmedBefore || broadcastText.trim().length > 280
+
+    if (shouldConfirm) {
+      setBroadcastConfirmOpen(true)
+      return
+    }
+
+    await sendBroadcastNow()
   }
 
   async function handleSchedule(e) {
@@ -293,6 +295,7 @@ export default function EnvioPage() {
           </ul>
         )}
       </div>
+      <ConfirmDialog open={broadcastConfirmOpen} title="Confirmar envio imediato" message="Esta mensagem será enviada agora para todos os grupos de destino configurados." confirmLabel="Enviar agora" onCancel={() => setBroadcastConfirmOpen(false)} onConfirm={sendBroadcastNow} />
       <ConfirmDialog open={!!cancelTargetId} title="Cancelar agendamento" message="Esta ação interrompe o envio futuro dessa mensagem." confirmLabel="Sim, cancelar" danger onCancel={() => setCancelTargetId(null)} onConfirm={async () => { const id = cancelTargetId; setCancelTargetId(null); if (id) await handleCancel(id) }} />
     </div>
   )
