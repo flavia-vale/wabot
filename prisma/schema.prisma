@@ -8,23 +8,40 @@ datasource db {
 }
 
 model User {
-  id             String    @id @default(cuid())
-  email          String    @unique
-  passwordHash   String
-  plan           String    @default("trial")
-  trialExpiresAt DateTime?
-  sendCount      Int       @default(0)
-  referralCode   String?   @unique
-  referredBy     String?
-  createdAt      DateTime  @default(now())
+  id                     String    @id @default(cuid())
+  email                  String    @unique
+  passwordHash           String
+  contactPhone           String?
+  contactPhoneVerifiedAt DateTime?
+  contactPhoneOptInAt    DateTime?
+  status                 String    @default("active")
+  plan                   String    @default("trial")
+  trialExpiresAt         DateTime?
+  sendCount              Int       @default(0)
+  referralCode           String?   @unique
+  referredBy             String?
+  lastLoginAt            DateTime?
+  lastActivityAt         DateTime?
+  lastSupportContactAt   DateTime?
+  supportStatus          String    @default("new")
+  createdAt              DateTime  @default(now())
 
-  waSession   WaSession?
-  groups      Group[]
-  credentials Credential[]
-  payments    Payment[]
-  botConfig   BotConfig?
-  scheduled   ScheduledMessage[]
-  messageLogs MessageLog[]
+  waSession             WaSession?
+  groups                Group[]
+  credentials           Credential[]
+  payments              Payment[]
+  botConfig             BotConfig?
+  scheduled             ScheduledMessage[]
+  messageLogs           MessageLog[]
+  adminUser             AdminUser?
+  adminAuditActors      AdminAuditLog[]      @relation("AdminAuditActor")
+  adminAuditTargets     AdminAuditLog[]      @relation("AdminAuditTarget")
+  customerContacts      CustomerContactLog[]
+  customerContactActors CustomerContactLog[] @relation("CustomerContactActor")
+
+  @@index([status, plan, trialExpiresAt])
+  @@index([lastActivityAt])
+  @@index([supportStatus])
 }
 
 model WaSession {
@@ -114,4 +131,66 @@ model MessageLog {
 
   @@index([userId, sentAt])
   @@index([userId, status, sentAt])
+}
+
+model AdminUser {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   @default("support")
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  auditLogs        AdminAuditLog[]
+  customerContacts CustomerContactLog[]
+
+  @@index([role, status])
+}
+
+model AdminAuditLog {
+  id           String     @id @default(cuid())
+  adminUserId  String?
+  adminUser    AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
+  actorUserId  String?
+  actorUser    User?      @relation("AdminAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  targetUserId String?
+  targetUser   User?      @relation("AdminAuditTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  action       String
+  resource     String
+  resourceId   String?
+  before       String?
+  after        String?
+  reason       String?
+  ip           String?
+  userAgent    String?
+  status       String     @default("success")
+  createdAt    DateTime   @default(now())
+
+  @@index([createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([targetUserId, createdAt])
+  @@index([action, createdAt])
+}
+
+model CustomerContactLog {
+  id             String     @id @default(cuid())
+  userId         String
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  adminUserId    String?
+  adminUser      AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
+  actorUserId    String?
+  actorUser      User?      @relation("CustomerContactActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  channel        String     @default("whatsapp")
+  reason         String
+  outcome        String     @default("contacted")
+  notes          String?
+  nextFollowUpAt DateTime?
+  createdAt      DateTime   @default(now())
+
+  @@index([userId, createdAt])
+  @@index([adminUserId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([reason, createdAt])
+  @@index([outcome, nextFollowUpAt])
 }
