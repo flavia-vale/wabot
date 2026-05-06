@@ -7,13 +7,14 @@ import makeWASocket, {
 import { Boom } from '@hapi/boom'
 import { readFileSync, mkdirSync } from 'fs'
 import { rm, writeFile } from 'fs/promises'
-import { dirname, resolve } from 'path'
+import { dirname } from 'path'
 
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
 import { fetchProductImage } from './converters/imageScrapers.js'
 import db from './db.js'
+import { getAuthInfoDir, getDedupFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 
 const userId = process.env.BOT_USER_ID
@@ -23,8 +24,8 @@ let activeSock = null
 let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
 let shuttingDown = false
 
-const AUTH_DIR = resolve(`./auth_info/${userId}`)
-const DEDUP_FILE = resolve(`./logs/dedup_${userId}.json`)
+const AUTH_DIR = getAuthInfoDir(userId)
+const DEDUP_FILE = getDedupFile(userId)
 const DEDUP_FLUSH_DEBOUNCE_MS = 1_000
 
 let pendingDedupStore = null
@@ -652,7 +653,6 @@ async function startBot() {
           ? { image: { url: imageUrl }, caption: finalText }
           : { text: finalText }
 
-        const platforms = conversions.map(c => c.platform).join('+')
         try {
           await sock.sendMessage(destJid, msgPayload)
           logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode }, 'Mensagem enviada')

@@ -9,6 +9,45 @@ const workerPath = join(__dirname, 'bot-worker.js')
 const bots = new Map()
 const pendingRequests = new Map() // requestId -> { resolve, reject }
 
+
+function shouldAutoStartPersistedBots() {
+  if (process.env.AUTO_START_WHATSAPP_SESSIONS === 'false') return false
+  // Em PM2 cluster, apenas a instância 0 pode supervisionar bots para evitar sockets duplicados.
+  return !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === '0'
+}
+
+export async function resumePersistedBots(db, log = console) {
+  if (!shouldAutoStartPersistedBots()) {
+    log.info?.('Auto-start de sessões WhatsApp desabilitado para esta instância')
+    return { attempted: 0, started: 0, skipped: 0 }
+  }
+
+  const sessions = await db.waSession.findMany({
+    where: { status: { in: ['connected', 'connecting'] } },
+    select: { userId: true, status: true },
+  })
+
+  let started = 0
+  let skipped = 0
+  for (const session of sessions) {
+    if (bots.has(session.userId)) {
+      skipped++
+      continue
+    }
+    if (startBot(session.userId)) started++
+    else skipped++
+  }
+
+  log.info?.({ attempted: sessions.length, started, skipped }, 'Sessões WhatsApp persistidas retomadas')
+  return { attempted: sessions.length, started, skipped }
+}
+
+export function stopAllBots() {
+  const userIds = listRunningBots()
+  for (const userId of userIds) stopBot(userId)
+  return userIds.length
+}
+
 export function startBot(userId) {
   if (bots.has(userId)) return false
 
