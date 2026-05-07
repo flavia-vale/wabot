@@ -630,7 +630,7 @@ async function startBot() {
       const baseDestinations = monitorGroup?.targetPostJids?.length ? monitorGroup.targetPostJids : cfg.groups.post
       const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
       for (const destJid of destinations) {
-        const key = `${destJid}:${primary.converted}`
+        const key = `${destJid}:${primary.url}`
         if (dedup.links[key] && Date.now() - dedup.links[key] < dedupeWindowMs) {
           logger.info({ destJid }, 'Duplicata ignorada'); continue
         }
