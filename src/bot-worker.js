@@ -3,6 +3,7 @@ import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
+  downloadMediaMessage,
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import { readFileSync, mkdirSync } from 'fs'
@@ -579,25 +580,56 @@ async function startBot() {
       const platformCsv = monitorGroup?.allowedPlatforms?.trim() || cfg.botConfig.platforms
       const enabledPlatforms = new Set(platformCsv.split(',').filter(Boolean))
 
-      // Pre-fetch image URL uma vez por mensagem (lazy, com cache)
-      let cachedImageUrl
+      // Baixa a imagem original do anúncio (mensagem do grupo monitorado) já
+      // decifrada via Baileys, retornando { buffer, mimetype }.
+      async function downloadOriginalImage() {
+        if (!msg.message?.imageMessage) return null
+        try {
+          const buf = await downloadMediaMessage(msg, 'buffer', {}, {
+            logger,
+            reuploadRequest: sock.updateMediaMessage,
+          })
+          if (!buf?.length) return null
+          return {
+            buffer: buf,
+            mimetype: msg.message.imageMessage.mimetype || 'image/jpeg',
+          }
+        } catch (err) {
+          logger.warn({ err: err.message }, 'Falha ao baixar imagem original')
+          return null
+        }
+      }
+
+      // Pre-fetch da imagem (lazy, uma vez por mensagem). Retorna
+      // { buffer, mimetype } pronto para enviar à Baileys.
+      let cachedImage
       let imageFetched = false
-      async function getImageUrl() {
-        if (imageFetched) return cachedImageUrl
+      async function getImage() {
+        if (imageFetched) return cachedImage
         imageFetched = true
         if (!monitorGroup || monitorGroup.imageMode === 'none') return null
         if (monitorGroup.imageMode === 'original') {
-          cachedImageUrl = msg.message?.imageMessage?.url || null
-          return cachedImageUrl
+          cachedImage = await downloadOriginalImage()
+          return cachedImage
         }
         if (monitorGroup.imageMode === 'fetch') {
           const enabled = links.filter(l => enabledPlatforms.has(l.platform))
           const target = monitorGroup.imageLinkTarget === 'first' ? enabled[0] : enabled[enabled.length - 1]
-          if (target) cachedImageUrl = await fetchProductImage(target.platform, target.url, cfg.credentials)
-          if (!cachedImageUrl && monitorGroup.fallbackToOriginal) {
-            cachedImageUrl = msg.message?.imageMessage?.url || null
+          // Para Shopee, o CDN bloqueia o servidor de mídia do WhatsApp e a
+          // imagem chega quebrada no destino. Usamos sempre a imagem original
+          // do anúncio do grupo monitorado, que já vem decifrável via Baileys.
+          if (target?.platform === 'shopee') {
+            cachedImage = await downloadOriginalImage()
+            return cachedImage
           }
-          return cachedImageUrl
+          if (target) {
+            const url = await fetchProductImage(target.platform, target.url, cfg.credentials)
+            if (url) cachedImage = await fetchImageBuffer(url, target.url)
+          }
+          if (!cachedImage && monitorGroup.fallbackToOriginal) {
+            cachedImage = await downloadOriginalImage()
+          }
+          return cachedImage
         }
         return null
       }
@@ -648,23 +680,10 @@ async function startBot() {
           messageText: finalText,
         }
 
-        const imageUrl = monitorGroup?.imageMode !== 'none' ? await getImageUrl() : null
-        let msgPayload = { text: finalText }
-        if (imageUrl) {
-          // Baixamos os bytes diretamente: se passarmos só a URL, a Baileys
-          // repassa para o servidor de mídia do WhatsApp, que é bloqueado por
-          // CDNs como o da Shopee — resultando em imagem quebrada no destino.
-          const downloaded = await fetchImageBuffer(imageUrl, primary.url)
-          if (downloaded) {
-            msgPayload = {
-              image: downloaded.buffer,
-              mimetype: downloaded.mimetype,
-              caption: finalText,
-            }
-          } else {
-            logger.warn({ imageUrl, platform: primary.platform }, 'Falha ao baixar imagem — enviando sem mídia')
-          }
-        }
+        const image = monitorGroup?.imageMode !== 'none' ? await getImage() : null
+        const msgPayload = image
+          ? { image: image.buffer, mimetype: image.mimetype, caption: finalText }
+          : { text: finalText }
 
         try {
           await sock.sendMessage(destJid, msgPayload)
