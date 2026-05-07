@@ -16,6 +16,7 @@ import { fetchProductImage, fetchImageBuffer } from './converters/imageScrapers.
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
+import { createMessageQueue } from './messageQueue.js'
 
 const userId = process.env.BOT_USER_ID
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
@@ -254,6 +255,19 @@ const SEND_MAX_ATTEMPTS = Math.max(1, envNumber('SEND_MAX_ATTEMPTS', 3))
 const SEND_RETRY_BASE_MS = Math.max(0, envNumber('SEND_RETRY_BASE_MS', 2_000))
 const SEND_RETRY_MAX_MS = Math.max(SEND_RETRY_BASE_MS, envNumber('SEND_RETRY_MAX_MS', 30_000))
 const DEST_RATE_LIMIT_MS = Math.max(0, envNumber('DEST_RATE_LIMIT_MS', 1_000))
+const MSG_QUEUE_CONCURRENCY = Math.max(1, envNumber('MSG_QUEUE_CONCURRENCY', 2))
+const MSG_QUEUE_TIMEOUT_MS = Math.max(1_000, envNumber('MSG_QUEUE_TIMEOUT_MS', 15_000))
+const MSG_QUEUE_WATCHDOG_MS = Math.max(5_000, envNumber('MSG_QUEUE_WATCHDOG_MS', 30_000))
+const MSG_QUEUE_MAX_SIZE = Math.max(10, envNumber('MSG_QUEUE_MAX_SIZE', 500))
+
+const incomingQueue = createMessageQueue({
+  name: 'incoming-messages',
+  concurrency: MSG_QUEUE_CONCURRENCY,
+  taskTimeoutMs: MSG_QUEUE_TIMEOUT_MS,
+  watchdogStallMs: MSG_QUEUE_WATCHDOG_MS,
+  maxSize: MSG_QUEUE_MAX_SIZE,
+})
+
 const sendQueue = []
 const lastSendByDest = new Map()
 let sendQueueProcessing = false
@@ -534,33 +548,20 @@ async function startBot() {
     }
   })
 
-  sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    logger.info({ type, count: messages.length }, 'messages.upsert recebido')
-    if (type !== 'notify' && type !== 'append') return
-    const cutoff = Date.now() - 30_000
-
-    for (const msg of messages) {
-      if (msg.key.fromMe) continue
-      const msgTs = (msg.messageTimestamp ?? 0) * 1000
-      if (msgTs < cutoff) continue
-      const msgId = msg.key.id
-      if (dedup.msgIds.some(e => e.id === msgId)) continue
-      dedup.msgIds.push({ id: msgId, ts: Date.now() })
-      scheduleDedupSave(dedup)
-
+  async function processIncomingMessage(msg, sock) {
       const jid = msg.key.remoteJid
       const cfg = await getConfig()
       logger.info({ jid, monitorGroups: cfg.groups.monitor, feedGlobal: cfg.botConfig.feedGlobal }, 'mensagem recebida')
       const monitorGroup = cfg.groups.monitor.find(m => m.waJid === jid)
-      if (!cfg.botConfig.feedGlobal && !monitorGroup) continue
-      if (cfg.botConfig.feedGlobal && !String(jid).endsWith('@g.us')) continue
+      if (!cfg.botConfig.feedGlobal && !monitorGroup) return
+      if (cfg.botConfig.feedGlobal && !String(jid).endsWith('@g.us')) return
 
       const text =
         msg.message?.conversation ||
         msg.message?.extendedTextMessage?.text ||
         msg.message?.imageMessage?.caption || ''
 
-      if (!text) continue
+      if (!text) return
 
       // Filtro por palavras bloqueadas (override por grupo monitorado quando preenchido)
       const blockedKeywords = monitorGroup?.blockedKeywords?.trim() || cfg.botConfig.blockedKeywords
@@ -568,12 +569,12 @@ async function startBot() {
         const blocked = blockedKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean)
         const lower = text.toLowerCase()
         if (blocked.some(kw => lower.includes(kw))) {
-          logger.info({ blocked }, 'Mensagem bloqueada por keyword'); continue
+          logger.info({ blocked }, 'Mensagem bloqueada por keyword'); return
         }
       }
 
       const links = detectLinks(text)
-      if (!links.length) continue
+      if (!links.length) return
 
       // Filtro por plataforma (override por grupo monitorado quando preenchido)
       const platformCsv = monitorGroup?.allowedPlatforms?.trim() || cfg.botConfig.platforms
@@ -616,7 +617,7 @@ async function startBot() {
         conversions.push({ platform, url, converted })
       }
 
-      if (!conversions.length) continue
+      if (!conversions.length) return
 
       // Substituir todos os links convertidos no texto original de uma vez
       let finalText = text
@@ -683,6 +684,32 @@ async function startBot() {
           }).catch(() => {})
           logger.warn({ destJid, queueSize: sendQueue.length }, 'Envio recusado após criação do log queued')
         }
+      }
+  }
+
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    logger.info({ type, count: messages.length }, 'messages.upsert recebido')
+    if (type !== 'notify' && type !== 'append') return
+    const cutoff = Date.now() - 30_000
+
+    for (const msg of messages) {
+      if (msg.key.fromMe) continue
+      const msgTs = (msg.messageTimestamp ?? 0) * 1000
+      if (msgTs < cutoff) continue
+      const msgId = msg.key.id
+      if (dedup.msgIds.some(e => e.id === msgId)) continue
+      dedup.msgIds.push({ id: msgId, ts: Date.now() })
+      scheduleDedupSave(dedup)
+
+      const accepted = incomingQueue.enqueue(() => processIncomingMessage(msg, sock), {
+        label: `msg:${msgId}`,
+        orderKey: msg.key.remoteJid,
+        onError: async (err) => {
+          logger.error({ msgId, err: err.message }, 'Mensagem descartada após erro/timeout — fila continua')
+        },
+      })
+      if (!accepted) {
+        logger.warn({ msgId, jid: msg.key.remoteJid }, 'Mensagem rejeitada pela fila (cheia ou worker encerrando)')
       }
     }
   })
@@ -756,7 +783,7 @@ process.on('message', async msg => {
   }
 
   if (msg?.type === 'metrics') {
-    process.send({ type: 'metricsResult', requestId: msg.requestId, data: getSendQueueMetrics() })
+    process.send({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats() } })
   }
 
   if (msg?.type === 'broadcast') {
