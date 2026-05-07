@@ -235,6 +235,7 @@ model LpPlan {
   title       String
   description String
   price       String
+  features    String   @default("[]")
   position    Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
