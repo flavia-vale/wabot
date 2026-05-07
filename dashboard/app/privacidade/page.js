@@ -2,8 +2,8 @@ import Link from 'next/link'
 import { PublicPage } from '@/components/PublicShell'
 
 export const metadata = {
-  title: 'Política de Privacidade | Wabot',
-  description: 'Política mínima de privacidade do Wabot para usuários e visitantes.',
+  title: 'Política de Privacidade | BOTinho',
+  description: 'Política mínima de privacidade do BOTinho para usuários e visitantes.',
 }
 
 const privacyItems = [
@@ -20,7 +20,7 @@ export default function PrivacyPage() {
     <PublicPage
       eyebrow="Privacidade"
       title="Política de Privacidade"
-      description="Resumo transparente sobre quais dados usamos para operar o Wabot e prestar suporte."
+      description="Resumo transparente sobre quais dados usamos para operar o BOTinho e prestar suporte."
     >
       <div className="space-y-6 text-sm leading-7 text-gray-600">
         <p className="rounded-2xl bg-green-50 p-4 text-green-800">
@@ -33,7 +33,7 @@ export default function PrivacyPage() {
           </section>
         ))}
         <p>
-          Para dúvidas, solicitações de acesso, correção ou exclusão de dados, fale com o <Link href="/suporte" className="font-semibold text-green-700 hover:underline">suporte do Wabot</Link>.
+          Para dúvidas, solicitações de acesso, correção ou exclusão de dados, fale com o <Link href="/suporte" className="font-semibold text-green-700 hover:underline">suporte do BOTinho</Link>.
         </p>
       </div>
     </PublicPage>
