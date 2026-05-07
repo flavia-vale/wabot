@@ -116,6 +116,24 @@ function parseManualAccessInput(body = {}) {
 }
 
 
+
+function parseLpPlanInput(body = {}, existing = null) {
+  const title = String(body.title ?? existing?.title ?? '').trim()
+  const description = String(body.description ?? existing?.description ?? '').trim()
+  const price = String(body.price ?? existing?.price ?? '').trim()
+  const position = Number.isFinite(Number(body.position)) ? Number(body.position) : (existing?.position ?? 0)
+
+  if (!title || !description || !price) {
+    return { ok: false, error: 'Título, descrição e valor do plano são obrigatórios.' }
+  }
+
+  if (!['trial', 'basic', 'pro'].includes(existing?.id ?? body.id)) {
+    return { ok: false, error: 'Plano inválido. Use trial, basic ou pro.' }
+  }
+
+  return { ok: true, data: { title, description, price, position } }
+}
+
 function parseContactLogInput(body = {}) {
   const channel = String(body.channel ?? 'whatsapp').trim()
   const reason = String(body.reason ?? '').trim()
@@ -892,6 +910,51 @@ export async function adminRoutes(app) {
     }
   })
 
+
+
+  app.get('/lp-content', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:read'))) return
+
+    const [plans, faqItems] = await Promise.all([
+      db.lpPlan.findMany({ orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] }),
+      db.faqItem.findMany({ orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] }),
+    ])
+
+    await writeAdminAuditLog(req, { action: 'admin.lpContent.view', resource: 'landingPageContent' })
+
+    return { plans, faq: { items: faqItems } }
+  })
+
+  app.put('/lp-content/plans/:id', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:write'))) return
+
+    const existing = await db.lpPlan.findUnique({ where: { id: req.params.id } })
+    if (!existing) {
+      reply.code(404).send({ error: 'Plano da LP não encontrado.' })
+      return
+    }
+
+    const parsed = parseLpPlanInput(req.body, existing)
+    if (!parsed.ok) {
+      reply.code(400).send({ error: parsed.error })
+      return
+    }
+
+    const plan = await db.lpPlan.update({
+      where: { id: existing.id },
+      data: parsed.data,
+    })
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.lpPlan.update',
+      resource: 'lpPlan',
+      resourceId: plan.id,
+      before: JSON.stringify(existing),
+      after: JSON.stringify(plan),
+    })
+
+    return { plan }
+  })
 
   app.get('/faq', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'admin:read'))) return
