@@ -3,15 +3,15 @@ import "./globals.css";
 export const metadata = {
   metadataBase: new URL('http://178.105.54.0'),
   title: {
-    default: 'Bot para Afiliados no WhatsApp | Wabot',
-    template: '%s | Wabot',
+    default: 'Bot para Afiliados no WhatsApp | BOTinho',
+    template: '%s | BOTinho',
   },
   description: 'Automatize a conversão de links de afiliado, organize grupos de WhatsApp e envie ofertas com menos trabalho manual.',
   openGraph: {
-    title: 'Bot para Afiliados no WhatsApp | Wabot',
+    title: 'Bot para Afiliados no WhatsApp | BOTinho',
     description: 'Converta links de afiliado e automatize envios de ofertas para seus grupos de WhatsApp.',
     url: '/',
-    siteName: 'Wabot',
+    siteName: 'BOTinho',
     locale: 'pt_BR',
     type: 'website',
   },

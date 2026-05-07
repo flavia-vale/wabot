@@ -1,4 +1,4 @@
-# Backlog de Issues SRE — wabot
+# Backlog de Issues SRE — BOTinho
 
 Gerado durante a auditoria de performance, fila de envios e escalabilidade.
 **Status:** `open` · `in-progress` · `done`
@@ -30,7 +30,7 @@ Adicionar Redis + BullMQ quando o registry/deploy permitir instalar dependência
 ```env
 QUEUE_BACKEND=bullmq
 REDIS_URL=redis://127.0.0.1:6379
-BULLMQ_QUEUE_NAME=wabot-send-production
+BULLMQ_QUEUE_NAME=BOTinho-send-production
 ```
 Usar `MessageLog.id` como `jobId`, configurar `attempts`, backoff exponencial, rate limit por destino e worker dedicado.
 

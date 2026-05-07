@@ -38,7 +38,7 @@ async function req(method, path, body) {
 
 async function setup() {
   // Register or login test user via API to get a real HttpOnly auth cookie
-  const email = 'test-logs@wabot.com'
+  const email = 'test-logs@BOTinho.com'
   const password = 'TestLogs123!'
 
   let res = await fetch(`${BASE}/api/auth/register`, {

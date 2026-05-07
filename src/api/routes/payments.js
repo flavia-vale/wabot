@@ -15,8 +15,8 @@ function sendError(reply, statusCode, code, message) {
 }
 
 const PLANS = {
-  basic: { title: 'Wabot Basic - acesso por 30 dias', price: 50,  checkoutUrl: 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=7417a34c47be40fdbc4bc1decc0233e0' },
-  pro:   { title: 'Wabot Pro - acesso por 30 dias',   price: 100, checkoutUrl: 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=251ba8b89a8a483a89e4e6ba336adb5c' },
+  basic: { title: 'BOTinho Basic - acesso por 30 dias', price: 50,  checkoutUrl: 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=7417a34c47be40fdbc4bc1decc0233e0' },
+  pro:   { title: 'BOTinho Pro - acesso por 30 dias',   price: 100, checkoutUrl: 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=251ba8b89a8a483a89e4e6ba336adb5c' },
 }
 
 function inferPlanFromAmount(amount) {

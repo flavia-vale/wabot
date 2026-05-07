@@ -206,7 +206,7 @@ index c550a07..57b088b 100644
  export function openQRSocket(token, handlers = {}) {
    const wsBase = BASE.replace('http', 'ws')
 -  const ws = new WebSocket(`${wsBase}/api/session/qr?token=${token}`)
-+  const ws = new WebSocket(`${wsBase}/api/session/qr`, ['wabot-auth', token])
++  const ws = new WebSocket(`${wsBase}/api/session/qr`, ['BOTinho-auth', token])
  
    if (typeof handlers === 'function') {
      ws.onmessage = (e) => { try { handlers(JSON.parse(e.data)) } catch {} }
@@ -287,7 +287,7 @@ index 602eb69..6a89768 100644
 +      const rawProtocols = req.headers['sec-websocket-protocol'] ?? ''
 +      const protocols = rawProtocols.split(',').map((value) => value.trim()).filter(Boolean)
 +      const [scheme, token] = protocols
-+      if (scheme !== 'wabot-auth' || !token) throw new Error('Token WS ausente')
++      if (scheme !== 'BOTinho-auth' || !token) throw new Error('Token WS ausente')
        const decoded = app.jwt.verify(token)
 +      if (decoded.purpose !== 'qr_ws') throw new Error('Ticket WS inválido')
        userId = decoded.sub
