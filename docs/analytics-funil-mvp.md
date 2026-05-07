@@ -1,8 +1,8 @@
-# Analytics de funil — MVP Wabot
+# Analytics de funil — MVP BOTinho
 
 ## Ferramenta escolhida
 
-Para o MVP, o Wabot usa **eventos internos simples** gravados na tabela `AnalyticsEvent`.
+Para o MVP, o BOTinho usa **eventos internos simples** gravados na tabela `AnalyticsEvent`.
 
 Motivos:
 - não depende de ferramenta externa para começar;
@@ -35,7 +35,7 @@ O sanitizador de analytics remove chaves sensíveis por padrão, incluindo `toke
 Na VPS, após deploy e migration:
 
 ```bash
-cd /home/deploy/wabot
+cd /home/deploy/BOTinho
 sqlite3 prisma/dev.db "SELECT event, COUNT(*) FROM AnalyticsEvent GROUP BY event ORDER BY COUNT(*) DESC;"
 sqlite3 prisma/dev.db "SELECT event, metadata, createdAt FROM AnalyticsEvent ORDER BY createdAt DESC LIMIT 20;"
 ```
