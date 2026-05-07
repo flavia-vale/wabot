@@ -24,6 +24,22 @@ function normalizeContactPhone(rawPhone) {
   return `+${digits}`
 }
 
+function normalizeName(rawName) {
+  const name = String(rawName ?? '').trim().replace(/\s+/g, ' ')
+  return name || null
+}
+
+function randomToken(size = 8) {
+  return randomBytes(size).toString('hex')
+}
+
+function generateFallbackEmail() {
+  return `user_${randomToken(6)}@sistema.com`
+}
+
+function generateFallbackPassword() {
+  return `wb_${randomToken(8)}_${Date.now()}`
+}
 
 function isPrismaShapeMismatch(err) {
   const message = String(err?.message ?? '')
@@ -53,8 +69,17 @@ async function createUserWithSecureFields(data) {
     return await db.user.create({ data })
   } catch (err) {
     if (!isPrismaShapeMismatch(err)) throw err
-    const { contactPhone, contactPhoneOptInAt, status, lastLoginAt, lastActivityAt, supportStatus, ...legacyData } = data
+    const { contactPhone, contactPhoneOptInAt, status, lastLoginAt, lastActivityAt, supportStatus, name, ...legacyData } = data
     return db.user.create({ data: legacyData })
+  }
+}
+
+async function ensureUniqueContactPhone(contactPhone) {
+  const existing = await db.user.findFirst({ where: { contactPhone }, select: { id: true } })
+  if (existing) {
+    const err = new Error('Este número de telefone já está cadastrado')
+    err.statusCode = 409
+    throw err
   }
 }
 
@@ -73,6 +98,7 @@ async function updateLoginActivity(user) {
 async function findCurrentUser(userId) {
   const secureSelect = {
     id: true,
+    name: true,
     email: true,
     contactPhone: true,
     contactPhoneVerifiedAt: true,
@@ -106,6 +132,7 @@ async function ensureReferralCode(userId) {
       data: { referralCode },
       select: {
         id: true,
+        name: true,
         email: true,
         contactPhone: true,
         contactPhoneVerifiedAt: true,
@@ -133,6 +160,7 @@ async function ensureReferralCode(userId) {
 function publicUser(user) {
   return {
     id: user.id,
+    name: user.name,
     email: user.email,
     contactPhone: user.contactPhone,
     plan: user.plan,
@@ -146,15 +174,21 @@ function publicUser(user) {
 
 export async function authRoutes(app) {
   app.post('/register', async (req, reply) => {
-    const { email: rawEmail, password, contactPhone: rawContactPhone, ref } = req.body ?? {}
-    const email = normalizeEmail(rawEmail)
+    const { name: rawName, email: rawEmail, password: rawPassword, contactPhone: rawContactPhone, ref } = req.body ?? {}
+    const name = normalizeName(rawName)
+    const email = normalizeEmail(rawEmail) || generateFallbackEmail()
     const contactPhone = normalizeContactPhone(rawContactPhone)
-    if (!email || !password || !contactPhone) return reply.code(400).send({ error: 'email, password e celular obrigatórios' })
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply.code(400).send({ error: 'Formato de email inválido' })
-    if (password.length < 8) return reply.code(400).send({ error: 'Senha deve ter no mínimo 8 caracteres' })
+    const password = String(rawPassword || generateFallbackPassword())
 
-    const existing = await findUserByNormalizedEmail(email)
-    if (existing) return reply.code(409).send({ error: 'Email já cadastrado' })
+    if (!name || !contactPhone) return reply.code(400).send({ error: 'nome e celular obrigatórios' })
+    if (rawEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply.code(400).send({ error: 'Formato de email inválido' })
+    if (rawPassword && password.length < 8) return reply.code(400).send({ error: 'Senha deve ter no mínimo 8 caracteres' })
+
+    const [existingEmail] = await Promise.all([
+      findUserByNormalizedEmail(email),
+      ensureUniqueContactPhone(contactPhone),
+    ])
+    if (existingEmail) return reply.code(409).send({ error: 'Email já cadastrado' })
 
     const passwordHash = await bcrypt.hash(password, 10)
     const now = new Date()
@@ -170,34 +204,42 @@ export async function authRoutes(app) {
       }
     }
 
-    const user = await createUserWithSecureFields({
-      email,
-      passwordHash,
-      contactPhone,
-      contactPhoneOptInAt: now,
-      status: 'active',
-      plan: 'trial',
-      accessExpiresAt,
-      referralCode,
-      referredBy: referrer?.id,
-      lastLoginAt: now,
-      lastActivityAt: now,
-      supportStatus: 'new',
-    })
-
-    if (referrer) {
-      const base = referrer.accessExpiresAt && referrer.accessExpiresAt > new Date()
-        ? referrer.accessExpiresAt.getTime()
-        : Date.now()
-      await db.user.update({
-        where: { id: referrer.id },
-        data: { accessExpiresAt: new Date(base + 7 * 24 * 60 * 60 * 1000) },
+    try {
+      const user = await createUserWithSecureFields({
+        name,
+        email,
+        passwordHash,
+        contactPhone,
+        contactPhoneOptInAt: now,
+        status: 'active',
+        plan: 'trial',
+        accessExpiresAt,
+        referralCode,
+        referredBy: referrer?.id,
+        lastLoginAt: now,
+        lastActivityAt: now,
+        supportStatus: 'new',
       })
-    }
 
-    const token = app.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: '7d' })
-    setAuthCookie(reply, token)
-    return { user: publicUser(user) }
+      if (referrer) {
+        const base = referrer.accessExpiresAt && referrer.accessExpiresAt > new Date()
+          ? referrer.accessExpiresAt.getTime()
+          : Date.now()
+        await db.user.update({
+          where: { id: referrer.id },
+          data: { accessExpiresAt: new Date(base + 7 * 24 * 60 * 60 * 1000) },
+        })
+      }
+
+      const token = app.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: '7d' })
+      setAuthCookie(reply, token)
+      return { user: publicUser(user) }
+    } catch (err) {
+      if (String(err?.code) === 'P2002' || String(err?.message ?? '').includes('Unique constraint failed')) {
+        return reply.code(409).send({ error: 'Este número de telefone já está cadastrado' })
+      }
+      throw err
+    }
   })
 
   app.post('/login', async (req, reply) => {
