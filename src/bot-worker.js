@@ -583,25 +583,60 @@ async function startBot() {
 
       // Baixa a imagem original do anúncio (mensagem do grupo monitorado) já
       // decifrada via Baileys, retornando { buffer, mimetype }. Lida com
-      // wrappers comuns (ephemeralMessage, viewOnceMessage, documentWithCaption).
+      // wrappers (ephemeralMessage etc.), link preview (jpegThumbnail embutido)
+      // e mensagens citadas (quotedMessage com imageMessage).
       async function downloadOriginalImage() {
         const inner = extractMessageContent(msg.message)
-        const imageNode = inner?.imageMessage
-        if (!imageNode) return null
-        try {
-          const buf = await downloadMediaMessage(msg, 'buffer', {}, {
-            logger,
-            reuploadRequest: sock.updateMediaMessage,
-          })
-          if (!buf?.length) return null
-          return {
-            buffer: buf,
-            mimetype: imageNode.mimetype || 'image/jpeg',
+        const presentTypes = inner ? Object.keys(inner) : []
+        const ext = inner?.extendedTextMessage
+        const quoted = ext?.contextInfo?.quotedMessage
+
+        // 1) imageMessage direto na própria mensagem — caso ideal, full-res e decifrável.
+        if (inner?.imageMessage) {
+          try {
+            const buf = await downloadMediaMessage(msg, 'buffer', {}, {
+              logger, reuploadRequest: sock.updateMediaMessage,
+            })
+            if (buf?.length) {
+              logger.info({ msgId: msg.key.id, size: buf.length, source: 'imageMessage' }, 'Imagem original baixada')
+              return { buffer: buf, mimetype: inner.imageMessage.mimetype || 'image/jpeg' }
+            }
+          } catch (err) {
+            logger.warn({ err: err.message, msgId: msg.key.id }, 'Falha ao baixar imageMessage original')
           }
-        } catch (err) {
-          logger.warn({ err: err.message, msgId: msg.key.id }, 'Falha ao baixar imagem original')
-          return null
         }
+
+        // 2) imageMessage dentro de uma mensagem citada (quoted) — comum quando
+        // bots upstream republicam ofertas como reply de uma mensagem com foto.
+        if (quoted?.imageMessage) {
+          try {
+            const stub = {
+              key: { ...msg.key, id: ext.contextInfo.stanzaId || msg.key.id },
+              message: quoted,
+            }
+            const buf = await downloadMediaMessage(stub, 'buffer', {}, {
+              logger, reuploadRequest: sock.updateMediaMessage,
+            })
+            if (buf?.length) {
+              logger.info({ msgId: msg.key.id, size: buf.length, source: 'quotedImage' }, 'Imagem original baixada')
+              return { buffer: buf, mimetype: quoted.imageMessage.mimetype || 'image/jpeg' }
+            }
+          } catch (err) {
+            logger.warn({ err: err.message, msgId: msg.key.id }, 'Falha ao baixar imagem citada')
+          }
+        }
+
+        // 3) jpegThumbnail embutido em link preview (extendedTextMessage). Baixa qualidade
+        // mas sempre presente quando há preview, e não exige rede — bytes já vêm decifrados.
+        const thumb = ext?.jpegThumbnail
+        if (thumb && thumb.length) {
+          const buf = Buffer.isBuffer(thumb) ? thumb : Buffer.from(thumb)
+          logger.info({ msgId: msg.key.id, size: buf.length, source: 'jpegThumbnail' }, 'Usando thumbnail do link preview')
+          return { buffer: buf, mimetype: 'image/jpeg' }
+        }
+
+        logger.warn({ msgId: msg.key.id, presentTypes }, 'Mensagem sem imagem para reaproveitar')
+        return null
       }
 
       // Pre-fetch da imagem (lazy, uma vez por mensagem). Retorna
