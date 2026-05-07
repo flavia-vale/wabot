@@ -450,7 +450,7 @@ index 6a8ed532d52338205c2110293ff1855019fd95ba..570fe3f47b62f3bc3db53210e068adec
  ---
  
  ## ISSUE 09 — Revisar consistência de marca em mensagens operacionais
-+**Status:** Concluída em 05 de maio de 2026 — copy pública e operacional revisada para Wabot e modelo de 30 dias.
++**Status:** Concluída em 05 de maio de 2026 — copy pública e operacional revisada para BOTinho e modelo de 30 dias.
 +
  
  **Problema**
@@ -1617,7 +1617,7 @@ index 0000000000000000000000000000000000000000..c658f34b695759591c5ef12e160b1bbd
 @@ -0,0 +1,12 @@
 +export const metadata = {
 +  title: 'Planos de Acesso por 30 Dias',
-+  description: 'Escolha ou renove seu acesso ao Wabot por 30 dias com confirmação segura de pagamento.',
++  description: 'Escolha ou renove seu acesso ao BOTinho por 30 dias com confirmação segura de pagamento.',
 +  robots: {
 +    index: false,
 +    follow: false,
@@ -2042,7 +2042,7 @@ index da06cfc3716e2b32c9040b48e1d9538832a46952..9b09201d06997e458fb3c4a1f5ccaa81
              Automatize seus links de afiliado e ganhe tempo para vender mais
            </h1>
            <p className="mt-5 max-w-2xl text-lg leading-8 text-gray-600">
-             O Wabot ajuda afiliados a converter links, organizar grupos de WhatsApp e enviar ofertas pelo painel, reduzindo tarefas manuais na sua operação.
+             O BOTinho ajuda afiliados a converter links, organizar grupos de WhatsApp e enviar ofertas pelo painel, reduzindo tarefas manuais na sua operação.
            </p>
            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
              <Link
@@ -2069,7 +2069,7 @@ index da06cfc3716e2b32c9040b48e1d9538832a46952..9b09201d06997e458fb3c4a1f5ccaa81
            <div className="rounded-2xl bg-gray-950 p-5 text-white">
              <div className="mb-5 flex items-center justify-between border-b border-white/10 pb-4">
                <div>
-                 <p className="text-sm text-green-300">Painel Wabot</p>
+                 <p className="text-sm text-green-300">Painel BOTinho</p>
                  <h2 className="text-2xl font-bold">Operação de afiliados</h2>
                </div>
                <span className="rounded-full bg-green-500/20 px-3 py-1 text-xs font-semibold text-green-200">Online</span>
@@ -2134,7 +2134,7 @@ index da06cfc3716e2b32c9040b48e1d9538832a46952..9b09201d06997e458fb3c4a1f5ccaa81
          <div className="rounded-3xl bg-green-700 p-8 text-center text-white md:p-10">
            <h2 className="text-3xl font-bold">Pronto para automatizar sua rotina de afiliado?</h2>
            <p className="mx-auto mt-3 max-w-2xl text-green-50">
-             Crie sua conta, conecte o WhatsApp e comece a organizar seus envios de ofertas pelo painel do Wabot.
+             Crie sua conta, conecte o WhatsApp e comece a organizar seus envios de ofertas pelo painel do BOTinho.
            </p>
            <Link
              href="/login"
@@ -2160,8 +2160,8 @@ index 0000000000000000000000000000000000000000..7ff25a6c74e8b92f442e891aec796e73
 +import { PublicPage } from '@/components/PublicShell'
 +
 +export const metadata = {
-+  title: 'Política de Privacidade | Wabot',
-+  description: 'Política mínima de privacidade do Wabot para usuários e visitantes.',
++  title: 'Política de Privacidade | BOTinho',
++  description: 'Política mínima de privacidade do BOTinho para usuários e visitantes.',
 +}
 +
 +const privacyItems = [
@@ -2178,7 +2178,7 @@ index 0000000000000000000000000000000000000000..7ff25a6c74e8b92f442e891aec796e73
 +    <PublicPage
 +      eyebrow="Privacidade"
 +      title="Política de Privacidade"
-+      description="Resumo transparente sobre quais dados usamos para operar o Wabot e prestar suporte."
++      description="Resumo transparente sobre quais dados usamos para operar o BOTinho e prestar suporte."
 +    >
 +      <div className="space-y-6 text-sm leading-7 text-gray-600">
 +        <p className="rounded-2xl bg-green-50 p-4 text-green-800">
@@ -2191,7 +2191,7 @@ index 0000000000000000000000000000000000000000..7ff25a6c74e8b92f442e891aec796e73
 +          </section>
 +        ))}
 +        <p>
-+          Para dúvidas, solicitações de acesso, correção ou exclusão de dados, fale com o <Link href="/suporte" className="font-semibold text-green-700 hover:underline">suporte do Wabot</Link>.
++          Para dúvidas, solicitações de acesso, correção ou exclusão de dados, fale com o <Link href="/suporte" className="font-semibold text-green-700 hover:underline">suporte do BOTinho</Link>.
 +        </p>
 +      </div>
 +    </PublicPage>
@@ -2207,20 +2207,20 @@ index 0000000000000000000000000000000000000000..ad469c7cdee124809724ea9a9612dc3b
 +import { PublicPage } from '@/components/PublicShell'
 +
 +export const metadata = {
-+  title: 'Quem Somos | Wabot',
-+  description: 'Conheça o Wabot, bot conversor para afiliados no WhatsApp.',
++  title: 'Quem Somos | BOTinho',
++  description: 'Conheça o BOTinho, bot conversor para afiliados no WhatsApp.',
 +}
 +
 +export default function AboutPage() {
 +  return (
 +    <PublicPage
 +      eyebrow="Quem somos"
-+      title="Wabot ajuda afiliados a operar com mais consistência no WhatsApp"
++      title="BOTinho ajuda afiliados a operar com mais consistência no WhatsApp"
 +      description="Somos um produto criado para reduzir tarefas repetitivas de quem trabalha com ofertas, grupos e links de afiliado."
 +    >
 +      <div className="space-y-5 text-sm leading-7 text-gray-600">
 +        <p>
-+          O Wabot nasceu para apoiar afiliados que precisam converter links, organizar grupos de origem e destino e acompanhar envios sem depender de planilhas ou processos manuais repetitivos.
++          O BOTinho nasceu para apoiar afiliados que precisam converter links, organizar grupos de origem e destino e acompanhar envios sem depender de planilhas ou processos manuais repetitivos.
 +        </p>
 +        <p>
 +          Nosso foco no MVP é entregar uma operação simples: conectar o WhatsApp, cadastrar credenciais das plataformas suportadas, escolher grupos e acompanhar logs para validar se o bot está funcionando corretamente.
@@ -2284,8 +2284,8 @@ index 0000000000000000000000000000000000000000..30ba9c26238298580f75c99175b1ef86
 +import { PublicPage } from '@/components/PublicShell'
 +
 +export const metadata = {
-+  title: 'Suporte | Wabot',
-+  description: 'Canais de suporte e orientações iniciais para usar o Wabot.',
++  title: 'Suporte | BOTinho',
++  description: 'Canais de suporte e orientações iniciais para usar o BOTinho.',
 +}
 +
 +const faqs = [
@@ -2309,7 +2309,7 @@ index 0000000000000000000000000000000000000000..30ba9c26238298580f75c99175b1ef86
 +      <div className="space-y-8 text-sm leading-7 text-gray-600">
 +        <section className="rounded-2xl bg-green-50 p-5 text-green-900">
 +          <h2 className="text-xl font-bold">Canal oficial</h2>
-+          <p className="mt-2">Atendimento por e-mail: <a href="mailto:suporte@wabot.app" className="font-bold underline">suporte@wabot.app</a></p>
++          <p className="mt-2">Atendimento por e-mail: <a href="mailto:suporte@BOTinho.app" className="font-bold underline">suporte@BOTinho.app</a></p>
 +          <p className="mt-2">Expectativa de resposta: assim que possível em dias úteis. Ainda não há SLA formal na fase MVP.</p>
 +        </section>
 +
@@ -2346,14 +2346,14 @@ index 0000000000000000000000000000000000000000..066162e0bde9e0367d4c130c03593c9c
 +import { PublicPage } from '@/components/PublicShell'
 +
 +export const metadata = {
-+  title: 'Termos de Uso | Wabot',
-+  description: 'Termos mínimos para uso do Wabot, bot conversor para afiliados no WhatsApp.',
++  title: 'Termos de Uso | BOTinho',
++  description: 'Termos mínimos para uso do BOTinho, bot conversor para afiliados no WhatsApp.',
 +}
 +
 +const sections = [
 +  {
 +    title: '1. Uso do produto',
-+    text: 'O Wabot é uma ferramenta de apoio para afiliados automatizarem conversão de links, organização de grupos e envios autorizados no WhatsApp. O usuário é responsável por usar o produto conforme as regras das plataformas de afiliados, do WhatsApp e da legislação aplicável.',
++    text: 'O BOTinho é uma ferramenta de apoio para afiliados automatizarem conversão de links, organização de grupos e envios autorizados no WhatsApp. O usuário é responsável por usar o produto conforme as regras das plataformas de afiliados, do WhatsApp e da legislação aplicável.',
 +  },
 +  {
 +    title: '2. Conta e segurança',
@@ -2365,7 +2365,7 @@ index 0000000000000000000000000000000000000000..066162e0bde9e0367d4c130c03593c9c
 +  },
 +  {
 +    title: '4. Limites e responsabilidades',
-+    text: 'Não é permitido usar o Wabot para spam, golpes, conteúdo ilegal, violação de direitos, coleta indevida de dados ou mensagens sem autorização. Resultados comerciais dependem da operação do usuário e não são garantidos.',
++    text: 'Não é permitido usar o BOTinho para spam, golpes, conteúdo ilegal, violação de direitos, coleta indevida de dados ou mensagens sem autorização. Resultados comerciais dependem da operação do usuário e não são garantidos.',
 +  },
 +  {
 +    title: '5. Disponibilidade e suporte',
@@ -2378,7 +2378,7 @@ index 0000000000000000000000000000000000000000..066162e0bde9e0367d4c130c03593c9c
 +    <PublicPage
 +      eyebrow="Legal"
 +      title="Termos de Uso"
-+      description="Condições mínimas para uso responsável do Wabot durante a fase MVP."
++      description="Condições mínimas para uso responsável do BOTinho durante a fase MVP."
 +    >
 +      <div className="space-y-6 text-sm leading-7 text-gray-600">
 +        <p className="rounded-2xl bg-green-50 p-4 text-green-800">
@@ -2433,7 +2433,7 @@ index 0000000000000000000000000000000000000000..ffadde64473ace76ea4b204882bae3c3
 +    <header className="border-b border-green-100 bg-white/90 backdrop-blur">
 +      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between md:px-8">
 +        <Link href="/" className="text-xl font-black text-green-700">
-+          🤖 Wabot
++          🤖 BOTinho
 +        </Link>
 +        <nav className="flex flex-wrap items-center gap-4 text-sm font-semibold text-gray-600">
 +          <Link href="/#planos" className="hover:text-green-700">Planos</Link>
@@ -2450,7 +2450,7 @@ index 0000000000000000000000000000000000000000..ffadde64473ace76ea4b204882bae3c3
 +  return (
 +    <footer className="border-t border-green-100 bg-white">
 +      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-5 py-8 text-sm text-gray-500 md:flex-row md:items-center md:justify-between md:px-8">
-+        <p>© {new Date().getFullYear()} Wabot. Bot conversor para afiliados no WhatsApp.</p>
++        <p>© {new Date().getFullYear()} BOTinho. Bot conversor para afiliados no WhatsApp.</p>
 +        <nav className="flex flex-wrap gap-4">
 +          {footerLinks.map(link => (
 +            <Link key={link.href} href={link.href} className="font-medium text-gray-600 hover:text-green-700">
@@ -2553,11 +2553,11 @@ index 0000000000000000000000000000000000000000..ba4b49dac54b5e2b2379baf56c06fc23
 --- /dev/null
 +++ b/docs/analytics-funil-mvp.md
 @@ -0,0 +1,47 @@
-+# Analytics de funil — MVP Wabot
++# Analytics de funil — MVP BOTinho
 +
 +## Ferramenta escolhida
 +
-+Para o MVP, o Wabot usa **eventos internos simples** gravados na tabela `AnalyticsEvent`.
++Para o MVP, o BOTinho usa **eventos internos simples** gravados na tabela `AnalyticsEvent`.
 +
 +Motivos:
 +- não depende de ferramenta externa para começar;
@@ -2590,7 +2590,7 @@ index 0000000000000000000000000000000000000000..ba4b49dac54b5e2b2379baf56c06fc23
 +Na VPS, após deploy e migration:
 +
 +```bash
-+cd /home/deploy/wabot
++cd /home/deploy/BOTinho
 +sqlite3 prisma/dev.db "SELECT event, COUNT(*) FROM AnalyticsEvent GROUP BY event ORDER BY COUNT(*) DESC;"
 +sqlite3 prisma/dev.db "SELECT event, metadata, createdAt FROM AnalyticsEvent ORDER BY createdAt DESC LIMIT 20;"
 +```
@@ -2606,11 +2606,11 @@ index 0000000000000000000000000000000000000000..fe9947649e1f21b0f27d208fbc13ea3b
 --- /dev/null
 +++ b/docs/deploy/pagamentos-mercado-pago.md
 @@ -0,0 +1,34 @@
-+# Pagamentos Mercado Pago — MVP Wabot
++# Pagamentos Mercado Pago — MVP BOTinho
 +
 +## Modelo comercial definido
 +
-+O MVP do Wabot usa **acesso por 30 dias renovável manualmente**.
++O MVP do BOTinho usa **acesso por 30 dias renovável manualmente**.
 +
 +- `Basic`: R$50 por 30 dias de acesso.
 +- `Pro`: R$100 por 30 dias de acesso.
@@ -2652,7 +2652,7 @@ index 7a6d0119e82ac855ad54a6b761bb6735479a682b..80c1013232b4489ecad4d86893c83fbc
  Hoje a raiz do dashboard redireciona direto para `/dashboard`, sem uma camada pública mínima para venda, confiança e validação legal. Para abrir vendas com tráfego frio ou checkout público, precisamos de páginas públicas básicas.
  
  ## Objetivo
- Criar uma camada pública mínima de confiança para permitir venda profissional do wabot.
+ Criar uma camada pública mínima de confiança para permitir venda profissional do BOTinho.
  
  ## Escopo
  - Criar landing pública em `/` com proposta de valor clara, público-alvo, benefícios, CTA para login/cadastro e CTA para planos.
@@ -2947,14 +2947,14 @@ index 0000000000000000000000000000000000000000..550578e54467b5d8599ab7b4116b2f4a
 +
 +| Pauta | Intenção de busca | CTA final |
 +| --- | --- | --- |
-+| Como automatizar ofertas no WhatsApp sem perder controle | Informacional/comercial | Criar conta no Wabot |
-+| Como converter links de afiliado para grupos de WhatsApp | Informacional | Testar conversão no Wabot |
++| Como automatizar ofertas no WhatsApp sem perder controle | Informacional/comercial | Criar conta no BOTinho |
++| Como converter links de afiliado para grupos de WhatsApp | Informacional | Testar conversão no BOTinho |
 +| Checklist de operação para afiliados no WhatsApp | Informacional | Baixar checklist/abrir painel |
-+| Como organizar grupos de origem e destino para ofertas | Informacional | Configurar grupos no Wabot |
++| Como organizar grupos de origem e destino para ofertas | Informacional | Configurar grupos no BOTinho |
 +| O que medir em uma operação de afiliados no WhatsApp | Informacional | Ativar analytics interno |
 +| Como reduzir retrabalho em campanhas de afiliado | Comercial | Conhecer planos de 30 dias |
 +| Erros comuns ao divulgar ofertas em grupos | Informacional | Abrir suporte/FAQ |
-+| Como testar se um bot de afiliados está enviando corretamente | Informacional | Validar logs no Wabot |
++| Como testar se um bot de afiliados está enviando corretamente | Informacional | Validar logs no BOTinho |
 +| Diferença entre automação manual e bot de afiliados | Comercial | Criar conta |
 +| Como preparar uma campanha de ofertas para datas sazonais | Informacional/comercial | Escolher plano Pro |
 diff --git a/prisma/migrations/20260505120000_add_analytics_events/migration.sql b/prisma/migrations/20260505120000_add_analytics_events/migration.sql
@@ -3611,8 +3611,8 @@ index 88d9fbbb5dc73e0bd68672aff5c89deeac5f4335..962c583226b8af75b4d455b53ab6bc1c
  const PLANS = {
 -  basic: { title: 'Bot Conversor para Afiliados Basic', price: 50 },
 -  pro:   { title: 'Bot Conversor para Afiliados Pro',   price: 100 },
-+  basic: { title: 'Wabot Basic - acesso por 30 dias', price: 50 },
-+  pro:   { title: 'Wabot Pro - acesso por 30 dias',   price: 100 },
++  basic: { title: 'BOTinho Basic - acesso por 30 dias', price: 50 },
++  pro:   { title: 'BOTinho Pro - acesso por 30 dias',   price: 100 },
 +}
 +
 +export function shouldEnforceWebhookSignature({ isProduction = IS_PRODUCTION, secret = MP_WEBHOOK_SECRET } = {}) {

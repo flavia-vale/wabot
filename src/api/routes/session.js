@@ -120,7 +120,7 @@ export async function sessionRoutes(app) {
       const rawProtocols = req.headers['sec-websocket-protocol'] ?? ''
       const protocols = rawProtocols.split(',').map((value) => value.trim()).filter(Boolean)
       const [scheme, token] = protocols
-      if (scheme !== 'wabot-auth' || !token) throw new Error('Token WS ausente')
+      if (scheme !== 'BOTinho-auth' || !token) throw new Error('Token WS ausente')
       const decoded = app.jwt.verify(token)
       if (decoded.purpose !== 'qr_ws') throw new Error('Ticket WS inválido')
       userId = decoded.sub

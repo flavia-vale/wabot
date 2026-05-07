@@ -1,4 +1,4 @@
-# Levantamento de backlog — wabot
+# Levantamento de backlog — BOTinho
 
 Este documento foi atualizado para evitar ambiguidade: o arquivo `BACKLOG.md` contém issues em **3 status** (`open`, `in-progress`, `done`).
 

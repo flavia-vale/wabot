@@ -8,8 +8,8 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         API_PORT: '3001',
-        AUTH_INFO_DIR: '/home/deploy/wabot-shared/auth_info',
-        BOT_LOG_DIR: '/home/deploy/wabot-shared/logs',
+        AUTH_INFO_DIR: '/home/deploy/BOTinho-shared/auth_info',
+        BOT_LOG_DIR: '/home/deploy/BOTinho-shared/logs',
         AUTO_START_WHATSAPP_SESSIONS: 'true',
       },
       max_memory_restart: '500M',

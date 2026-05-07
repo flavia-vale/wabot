@@ -5,7 +5,7 @@ Concluída em 05 de maio de 2026. Implementada e testada no repositório.
 Hoje a raiz do dashboard redireciona direto para `/dashboard`, sem uma camada pública mínima para venda, confiança e validação legal. Para abrir vendas com tráfego frio ou checkout público, precisamos de páginas públicas básicas.
 
 ## Objetivo
-Criar uma camada pública mínima de confiança para permitir venda profissional do wabot.
+Criar uma camada pública mínima de confiança para permitir venda profissional do BOTinho.
 
 ## Escopo
 - Criar landing pública em `/` com proposta de valor clara, público-alvo, benefícios, CTA para login/cadastro e CTA para planos.

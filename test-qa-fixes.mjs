@@ -38,7 +38,7 @@ async function req(method, path, body) {
 }
 
 async function setup() {
-  const email = `qa-fixes-${Date.now()}@wabot.com`
+  const email = `qa-fixes-${Date.now()}@BOTinho.com`
   const password = 'QaFixes123!'
   const res = await fetch(`${BASE}/api/auth/register`, {
     method: 'POST',
