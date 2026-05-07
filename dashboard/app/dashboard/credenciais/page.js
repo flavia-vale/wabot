@@ -18,21 +18,23 @@ const PLATFORMS = [
   {
     id: 'amazon',
     label: 'Amazon',
-    instructions: 'Onde obter: affiliate-program.amazon.com.br → Gerenciar → Tracking IDs. Informe também o marketplace correto dos links.',
+    instructions: 'Onde obter: affiliate-program.amazon.com.br. A Tag vem do painel. Os cookies ubid-acbbr, at-acbbr e x-acbbr precisam ser copiados da sessão ativa logada na Amazon Brasil.',
+    platformWarning: 'Para gerar link curto (amzn.to), preencha Tag e os 3 cookies da sua sessão Amazon.',
     fields: [
       { key: 'tag', label: 'Tag de afiliado', hint: 'Ex.: suatag-20' },
-      { key: 'marketplace', label: 'Marketplace', placeholder: 'amazon.com.br', hint: 'Domínio da loja Amazon alvo.' },
+      { key: 'ubid-acbbr', label: 'Cookie ubid-acbbr', hint: 'Cookie de sessão da Amazon Brasil.', sensitive: true, help: 'Acesse amazon.com.br logado, abra o DevTools → Application → Cookies → amazon.com.br e copie o valor do cookie ubid-acbbr.' },
+      { key: 'at-acbbr', label: 'Cookie at-acbbr', hint: 'Cookie de autenticação da Amazon Brasil.', sensitive: true, help: 'Mesmo painel do DevTools: copie o valor do cookie at-acbbr.' },
+      { key: 'x-acbbr', label: 'Cookie x-acbbr', hint: 'Cookie de identificação da Amazon Brasil.', sensitive: true, help: 'Mesmo painel do DevTools: copie o valor do cookie x-acbbr.' },
     ]
   },
   {
     id: 'mercadolivre',
     label: 'Mercado Livre',
-    instructions: 'Onde obter: afiliados.mercadolivre.com.br. A Tag vem do painel; SSID e CSRF são cookies da sessão ativa e devem ser tratados como dados sensíveis.',
-    platformWarning: 'Para gerar link curto correto (meli.la), preencha Tag, SSID e CSRF.',
+    instructions: 'Onde obter: afiliados.mercadolivre.com.br. A Tag vem do painel; SSID é o cookie da sessão ativa e deve ser tratado como dado sensível.',
+    platformWarning: 'Para gerar link curto (meli.la), preencha Tag e SSID.',
     fields: [
       { key: 'tag', label: 'Tag numérica', hint: 'Somente números da sua afiliação.', help: 'Copie a tag exibida no painel de afiliados do Mercado Livre.' },
-      { key: 'ssid', label: 'SSID (cookie)', hint: 'Opcional. Necessário apenas para gerar link curto meli.la com sua tag.', sensitive: true, required: false, help: 'No navegador, acesse os cookies do Mercado Livre na sua sessão ativa e copie apenas o valor do cookie ssid. Não compartilhe esse valor fora do painel.' },
-      { key: 'csrf', label: 'CSRF (cookie _csrf)', hint: 'Opcional. Necessário apenas para gerar link curto meli.la com sua tag.', sensitive: true, required: false, help: 'No navegador, localize o cookie _csrf da sessão ativa do Mercado Livre e copie o valor completo. Trate como credencial sensível.' },
+      { key: 'ssid', label: 'SSID (cookie)', hint: 'Cookie da sessão ativa do Mercado Livre.', sensitive: true, help: 'No navegador, acesse os cookies do Mercado Livre na sua sessão ativa e copie apenas o valor do cookie ssid. Não compartilhe esse valor fora do painel.' },
     ]
   },
   {
