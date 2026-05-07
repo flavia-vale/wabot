@@ -892,6 +892,104 @@ export async function adminRoutes(app) {
     }
   })
 
+
+  app.get('/faq', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:read'))) return
+
+    const items = await db.faqItem.findMany({
+      orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+    })
+
+    await writeAdminAuditLog(req, { action: 'admin.faq.list', resource: 'faqItem' })
+
+    return { items }
+  })
+
+  app.post('/faq', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:write'))) return
+
+    const body = req.body ?? {}
+    const question = String(body.question ?? '').trim()
+    const answer = String(body.answer ?? '').trim()
+    const position = Number.isFinite(Number(body.position)) ? Number(body.position) : 0
+    const isActive = body.isActive === undefined ? true : Boolean(body.isActive)
+
+    if (!question || !answer) {
+      reply.code(400).send({ error: 'Pergunta e resposta são obrigatórias.' })
+      return
+    }
+
+    const item = await db.faqItem.create({
+      data: { question, answer, position, isActive },
+    })
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.faq.create',
+      resource: 'faqItem',
+      resourceId: item.id,
+      after: JSON.stringify(item),
+    })
+
+    reply.code(201).send({ item })
+  })
+
+  app.put('/faq/:id', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:write'))) return
+
+    const existing = await db.faqItem.findUnique({ where: { id: req.params.id } })
+    if (!existing) {
+      reply.code(404).send({ error: 'FAQ não encontrado.' })
+      return
+    }
+
+    const body = req.body ?? {}
+    const question = String(body.question ?? '').trim()
+    const answer = String(body.answer ?? '').trim()
+    const position = Number.isFinite(Number(body.position)) ? Number(body.position) : existing.position
+    const isActive = body.isActive === undefined ? existing.isActive : Boolean(body.isActive)
+
+    if (!question || !answer) {
+      reply.code(400).send({ error: 'Pergunta e resposta são obrigatórias.' })
+      return
+    }
+
+    const item = await db.faqItem.update({
+      where: { id: existing.id },
+      data: { question, answer, position, isActive },
+    })
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.faq.update',
+      resource: 'faqItem',
+      resourceId: item.id,
+      before: JSON.stringify(existing),
+      after: JSON.stringify(item),
+    })
+
+    return { item }
+  })
+
+  app.delete('/faq/:id', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:write'))) return
+
+    const existing = await db.faqItem.findUnique({ where: { id: req.params.id } })
+    if (!existing) {
+      reply.code(404).send({ error: 'FAQ não encontrado.' })
+      return
+    }
+
+    await db.faqItem.delete({ where: { id: existing.id } })
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.faq.delete',
+      resource: 'faqItem',
+      resourceId: existing.id,
+      before: JSON.stringify(existing),
+    })
+
+    return { ok: true }
+  })
+
   app.get('/sessions', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'support:read'))) return
 

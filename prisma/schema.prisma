@@ -216,3 +216,15 @@ model CustomerContactLog {
   @@index([reason, createdAt])
   @@index([outcome, nextFollowUpAt])
 }
+
+model FaqItem {
+  id        String   @id @default(cuid())
+  question  String
+  answer    String
+  position  Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, position])
+}

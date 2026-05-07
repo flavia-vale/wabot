@@ -9,7 +9,6 @@ const PLATFORM_COLORS = {
   amazon:        'bg-yellow-100 text-yellow-700',
   mercadolivre:  'bg-blue-100 text-blue-700',
   magazineluiza: 'bg-purple-100 text-purple-700',
-  aliexpress:    'bg-red-100 text-red-700',
 }
 
 const STATUS_TABS = [

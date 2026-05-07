@@ -80,8 +80,13 @@ export const api = {
   scheduledCancel: (id) => apiFetch(`/api/broadcast/scheduled/${id}`, { method: 'DELETE' }),
 
   dashboardStatus: () => apiFetch('/api/dashboard/status'),
+  publicFaq: () => apiFetch('/api/public/faq'),
 
   adminMe: () => apiFetch('/api/admin/me'),
+  adminFaq: () => apiFetch('/api/admin/faq'),
+  adminCreateFaq: (data) => apiFetch('/api/admin/faq', { method: 'POST', body: JSON.stringify(data) }),
+  adminUpdateFaq: (id, data) => apiFetch(`/api/admin/faq/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  adminDeleteFaq: (id) => apiFetch(`/api/admin/faq/${id}`, { method: 'DELETE' }),
   adminOverview: () => apiFetch('/api/admin/overview'),
   adminUsers: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()

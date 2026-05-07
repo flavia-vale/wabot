@@ -103,7 +103,7 @@ export function Hero({ tone }) {
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent-strong)' }} />
             <div>
               <div style={{ fontWeight: 600, fontSize: 12.5 }}>Link interceptado</div>
-              <div style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>de "Promoções Brasil" · 0,3s</div>
+              <div style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>{'de "Promoções Brasil" · 0,3s'}</div>
             </div>
           </div>
           <div style={{ ...s.floatNote, bottom: 80, right: -50, transform: 'rotate(2deg)', background: 'color-mix(in oklab, var(--accent) 18%, var(--surface))' }}>

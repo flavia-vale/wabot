@@ -1,8 +1,12 @@
-import { useState } from 'react';
+'use client';
+import { useEffect, useState } from 'react';
 import { Icon } from './Icon';
 
+const SUPPORT_WHATSAPP_URL = 'https://wa.me/5532999844020';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 const s = {
-  wrap: { display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 64, alignItems: 'flex-start' },
+  wrap: { display: 'grid', gridTemplateColumns: '0.8fr 1.2fr', gap: 64, alignItems: 'flex-start' },
   h2: { fontSize: 'clamp(36px, 4vw, 56px)', lineHeight: 1.05, marginBottom: 16 },
   sub: { fontSize: 16, color: 'var(--ink-soft)', lineHeight: 1.6, maxWidth: 380 },
   list: { display: 'flex', flexDirection: 'column', gap: 4 },
@@ -33,22 +37,32 @@ const s = {
     transition: 'transform 0.25s ease',
     flexShrink: 0,
   }),
+  empty: { padding: 24, border: '1px dashed var(--line)', borderRadius: 18, color: 'var(--ink-soft)', background: 'var(--surface)' },
 };
-
-const items = [
-  { q: 'Vou ser banida do WhatsApp?', a: 'Não. O bot usa o protocolo oficial do WhatsApp Web (o mesmo que você usa no computador) e respeita os limites de envio. Como ele só reposta com base em links que existem em outros grupos, o comportamento parece humano. Tem mais de 1.200 contas ativas há meses sem incidentes.' },
-  { q: 'Posso cancelar quando quiser?', a: 'Sim, a qualquer momento, direto no painel. Sem multa, sem ligação para call center. Se cancelar antes dos 30 dias grátis acabarem, não cobramos nada.' },
-  { q: 'Preciso deixar meu celular ligado?', a: 'Não. A sessão fica em nossos servidores. Depois de conectar via QR Code, você pode desligar o celular, viajar, dormir — o bot continua trabalhando.' },
-  { q: 'Funciona com quais programas de afiliados?', a: 'Hoje suportamos Shopee, Mercado Livre, Amazon, Magalu e AliExpress. Você só precisa colar seu ID de afiliada de cada plataforma no painel uma vez.' },
-  { q: 'O texto vai parecer robotizado?', a: 'Você escreve seus próprios modelos de mensagem promocional (ou usa os nossos prontos por categoria). Pode usar emoji, hashtags, gírias — o bot mantém exatamente sua voz. Tem também opção de gerar variações com IA para não repetir mensagem.' },
-  { q: 'Os admins dos grupos monitorados podem perceber?', a: 'O bot só lê — ele não posta nada nos grupos de origem (os que você monitora). Ele só reposta no SEU grupo de destino, com o seu link de afiliada. Para os outros admins, você é só mais uma membro do grupo deles.' },
-  { q: 'Posso escolher para qual grupo cada link vai?', a: 'Sim. Você pode ter um grupo de destino único ou vários. Por exemplo: links de moda vão para "Achadinhos Fashion", links de eletrônico vão para "Achadinhos Tech". Você define as regras por categoria ou por grupo de origem.' },
-  { q: 'E se eu já tenho admin de outro bot no grupo de destino?', a: 'Funciona normal. O nosso só posta links das lojas suportadas, então não conflita com bots de mensagem ou moderação. Pode coexistir.' },
-  { q: 'Os dados dos meus grupos ficam seguros?', a: 'A gente nunca lê mensagens fora dos links. As conversas não são armazenadas. Cada conta tem sessão isolada, criptografada, e você pode pedir exclusão completa em 1 clique.' },
-];
 
 export function FAQ() {
   const [open, setOpen] = useState(0);
+  const [items, setItems] = useState([]);
+  const [status, setStatus] = useState('loading');
+
+  useEffect(() => {
+    let active = true;
+    fetch(`${API_BASE}/api/public/faq`, { cache: 'no-store' })
+      .then((res) => {
+        if (!res.ok) throw new Error('Falha ao carregar FAQ');
+        return res.json();
+      })
+      .then((data) => {
+        if (!active) return;
+        setItems(Array.isArray(data.items) ? data.items : []);
+        setOpen(0);
+        setStatus('ready');
+      })
+      .catch(() => {
+        if (active) setStatus('error');
+      });
+    return () => { active = false; };
+  }, []);
 
   return (
     <section id="faq">
@@ -60,18 +74,21 @@ export function FAQ() {
               Antes de você <span className="serif" style={{ fontStyle: 'italic' }}>perguntar</span>.
             </h2>
             <p style={s.sub}>Se ficar alguma dúvida, fala com a gente no WhatsApp. Respondemos em minutos no horário comercial.</p>
-            <a className="btn btn-ghost" href="#" style={{ marginTop: 24 }}>
+            <a className="btn btn-ghost" href={SUPPORT_WHATSAPP_URL} target="_blank" rel="noopener noreferrer" style={{ marginTop: 24 }}>
               <Icon name="whatsapp" size={16} /> Conversar agora
             </a>
           </div>
           <div style={s.list}>
-            {items.map((it, i) => (
-              <div key={i} style={s.item(open === i)}>
+            {status === 'loading' && <div style={s.empty}>Carregando perguntas frequentes...</div>}
+            {status === 'error' && <div style={s.empty}>Não foi possível carregar o FAQ agora. Chame nosso suporte pelo WhatsApp.</div>}
+            {status === 'ready' && items.length === 0 && <div style={s.empty}>FAQ em atualização. Enquanto isso, fale com nosso suporte.</div>}
+            {status === 'ready' && items.map((it, i) => (
+              <div key={it.id ?? i} style={s.item(open === i)}>
                 <button style={s.q} onClick={() => setOpen(open === i ? -1 : i)}>
-                  <span>{it.q}</span>
+                  <span>{it.question}</span>
                   <span style={s.toggle(open === i)}><Icon name="plus" size={14} /></span>
                 </button>
-                <div style={s.a(open === i)}>{it.a}</div>
+                <div style={s.a(open === i)}>{it.answer}</div>
               </div>
             ))}
           </div>

@@ -36,7 +36,7 @@ export function FinalCTA() {
           <div style={s.blob('var(--accent-2)', { k: 'right', v: '-10%' }, { k: 'bottom', v: '-40%' }, 420)} />
           <div style={{ position: 'relative', zIndex: 1 }}>
             <span className="pill" style={{ background: 'rgba(255,255,255,0.1)', borderColor: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.85)' }}>
-              <span className="dot" />30 dias grátis
+              <span className="dot" />Teste grátis
             </span>
             <h2 style={{ ...s.h2, marginTop: 16 }}>
               Sua próxima venda<br /><span className="serif" style={{ fontStyle: 'italic' }}>já está no grupo.</span>

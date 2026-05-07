@@ -1,5 +1,3 @@
-import { Icon } from './Icon';
-
 const s = {
   section: { background: 'var(--bg-soft)', borderRadius: 48, margin: '0 auto', maxWidth: 1380 },
   inner: { padding: '88px 64px' },
@@ -31,7 +29,7 @@ const steps = [
     body: 'Conecte seu WhatsApp via QR Code e marque quais grupos de promoção, ofertas ou achadinhos o bot vai escutar. Pode ser 1 grupo ou 20.',
     visual: (
       <div style={s.visual}>
-        <div style={{ color: 'var(--ink-soft)' }}>// grupos monitorados</div>
+        <div style={{ color: 'var(--ink-soft)' }}>{'// grupos monitorados'}</div>
         <div style={{ color: 'var(--ink)', marginTop: 6 }}>✓ Promoções Brasil 🔥</div>
         <div style={{ color: 'var(--ink)' }}>✓ Ofertas Relâmpago</div>
         <div style={{ color: 'var(--ink)' }}>✓ Achadinhos do dia</div>
@@ -42,10 +40,10 @@ const steps = [
   {
     n: '02',
     title: 'O bot detecta e converte o link',
-    body: 'Toda mensagem com link de Shopee, Mercado Livre, Amazon, Magalu ou AliExpress é interceptada. O bot troca o ID original pelo seu código de afiliada.',
+    body: 'Toda mensagem com link de Shopee, Mercado Livre, Amazon ou Magalu é interceptada. O bot troca o ID original pelo seu código de afiliada.',
     visual: (
       <div style={s.visual}>
-        <div style={{ color: 'var(--ink-soft)' }}>// detectado em "Promoções Brasil"</div>
+        <div style={{ color: 'var(--ink-soft)' }}>{'// detectado em "Promoções Brasil"'}</div>
         <div style={{ color: 'var(--ink)', marginTop: 6, textDecoration: 'line-through', opacity: 0.5 }}>shopee.com.br/...?aff=outraPessoa</div>
         <div style={{ color: 'var(--accent-strong)', marginTop: 4 }}>↓ convertendo</div>
         <div style={{ color: 'var(--ink)', marginTop: 4 }}>s.shopee.com.br/seu-id-afiliada</div>
@@ -58,7 +56,7 @@ const steps = [
     body: 'O link convertido vai direto para o seu grupo de achadinhos, com a mensagem promocional do seu jeito. Você dorme, ele trabalha.',
     visual: (
       <div style={s.visual}>
-        <div style={{ color: 'var(--ink-soft)' }}>// publicado em "Achados da Sol"</div>
+        <div style={{ color: 'var(--ink-soft)' }}>{'// publicado em "Achados da Sol"'}</div>
         <div style={{ color: 'var(--ink)', marginTop: 6 }}>✨ Achadinho do dia</div>
         <div style={{ color: 'var(--ink-soft)', marginTop: 2 }}>R$ 39,90 · frete grátis</div>
         <div style={{ color: 'var(--accent-strong)', marginTop: 4 }}>s.shopee.com.br/3As9XkLp2</div>

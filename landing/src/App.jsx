@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { Hero } from './components/Hero';
 import { How } from './components/How';
 import { Features } from './components/Features';
@@ -15,9 +15,7 @@ const DEFAULTS = {
 };
 
 export default function App() {
-  const [tweaks, setTweaks] = useState(DEFAULTS);
-
-  const setTweak = (key, value) => setTweaks(prev => ({ ...prev, [key]: value }));
+  const tweaks = DEFAULTS;
 
   useEffect(() => {
     document.documentElement.setAttribute('data-palette', tweaks.palette);

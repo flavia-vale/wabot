@@ -4,10 +4,20 @@ import { useSearchParams } from 'next/navigation'
 import { api } from '@/lib/api'
 import { HelpLink } from '@/components/HelpLink'
 
-const PLAN_LABELS = { trial: 'Trial', basic: 'Basic', pro: 'Pro' }
+const PLAN_LABELS = { trial: 'Teste grátis', basic: 'Basic', pro: 'Pro' }
 const STATUS_LABELS = { pending: 'Pendente', approved: 'Aprovado', rejected: 'Rejeitado', cancelled: 'Cancelado' }
 
 const PLAN_CARDS = [
+  {
+    id: 'trial',
+    name: 'Teste grátis',
+    price: 'R$0',
+    priceClass: 'text-gray-700',
+    buttonClass: 'bg-gray-700 hover:bg-gray-800',
+    cardClass: 'border border-gray-100',
+    description: 'Experimente o fluxo principal antes de escolher um plano pago.',
+    features: ['Conversão de links suportados', 'Monitoramento de grupos', 'Envio para grupos de destino', 'Histórico de logs', 'Com anúncios'],
+  },
   {
     id: 'basic',
     name: 'Basic',
@@ -15,8 +25,8 @@ const PLAN_CARDS = [
     priceClass: 'text-blue-600',
     buttonClass: 'bg-blue-600 hover:bg-blue-700',
     cardClass: 'border border-transparent',
-    description: 'Acesso por 30 dias para começar e validar sua operação.',
-    features: ['Bot ilimitado', 'Todos os conversores', 'Anúncio a cada 50 envios'],
+    description: 'Mesmos recursos técnicos do Pro, com anúncios durante o uso.',
+    features: ['Conversão de links suportados', 'Monitoramento de grupos', 'Envio para grupos de destino', 'Histórico de logs', 'Com anúncios'],
   },
   {
     id: 'pro',
@@ -26,8 +36,8 @@ const PLAN_CARDS = [
     buttonClass: 'bg-purple-600 hover:bg-purple-700',
     cardClass: 'border-2 border-purple-300',
     badge: 'Mais escolhido',
-    description: 'Acesso por 30 dias para operar com mais volume e sem anúncios.',
-    features: ['Bot ilimitado', 'Todos os conversores', 'Sem anúncios'],
+    description: 'Mesmos recursos técnicos do Basic, sem anúncios durante o uso.',
+    features: ['Conversão de links suportados', 'Monitoramento de grupos', 'Envio para grupos de destino', 'Histórico de logs', 'Sem anúncios'],
   },
 ]
 
@@ -126,7 +136,7 @@ function PlanosContent() {
         <h2 className="text-2xl font-bold text-gray-800 mb-1">Planos</h2>
         <HelpLink topic="pagamento-pendente">Ajuda</HelpLink>
       </div>
-      <p className="text-gray-500 text-sm mb-6">Compre ou renove acesso por 30 dias. Após pagar, informe o ID do pagamento abaixo para ativar.</p>
+      <p className="text-gray-500 text-sm mb-6">Escolha entre Teste grátis, Basic e Pro. Após pagar um plano pago, informe o ID do pagamento abaixo para ativar.</p>
 
       {redirectStatus === 'success' && hasConfirmedPaidAccess && (
         <div className="bg-green-50 border border-green-200 text-green-700 rounded-xl p-4 mb-5 text-sm">
@@ -169,10 +179,10 @@ function PlanosContent() {
 
       <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 mb-5 text-xs text-indigo-800">
         <p className="font-semibold mb-2">Comparativo rápido</p>
-        <ul className="space-y-1"><li><strong>Basic</strong>: ideal para começar e validar operação por 30 dias.</li><li><strong>Pro</strong>: recomendado para volume maior e operação sem anúncios por 30 dias.</li><li><strong>Renovação</strong>: ao fim do período, faça uma nova compra pelo checkout.</li></ul>
+        <ul className="space-y-1"><li><strong>Teste grátis</strong>: permite experimentar o fluxo principal sem informar duração no painel público.</li><li><strong>Basic</strong>: mesmos recursos técnicos do Pro, com anúncios.</li><li><strong>Pro</strong>: mesmos recursos técnicos do Basic, sem anúncios.</li></ul>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
         {PLAN_CARDS.map(plan => {
           const isCurrentPlan = data?.plan === plan.id && data?.isActive
           return (
@@ -181,17 +191,17 @@ function PlanosContent() {
                 <h3 className="font-bold text-gray-800">{plan.name}</h3>
                 {plan.badge && <span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">{plan.badge}</span>}
               </div>
-              <p className={`text-3xl font-bold ${plan.priceClass} mb-1`}>{plan.price}<span className="text-sm font-normal text-gray-400"> / 30 dias</span></p>
+              <p className={`text-3xl font-bold ${plan.priceClass} mb-1`}>{plan.price}{plan.id !== 'trial' && <span className="text-sm font-normal text-gray-400"> / 30 dias</span>}</p>
               <p className="text-xs text-gray-500 mb-3">{plan.description}</p>
               <ul className="text-xs text-gray-500 space-y-1 mb-4">
                 {plan.features.map(feature => <li key={feature}>✅ {feature}</li>)}
               </ul>
               <button
                 onClick={() => handleCheckout(plan.id)}
-                disabled={!!checkoutLoading || isCurrentPlan}
+                disabled={!!checkoutLoading || isCurrentPlan || plan.id === 'trial'}
                 className={`w-full ${plan.buttonClass} text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition`}
               >
-                {checkoutLoading === plan.id ? 'Redirecionando...' : isCurrentPlan ? 'Acesso atual' : `Comprar ${plan.name}`}
+                {checkoutLoading === plan.id ? 'Redirecionando...' : isCurrentPlan ? 'Acesso atual' : plan.id === 'trial' ? 'Plano gratuito' : `Comprar ${plan.name}`}
               </button>
             </div>
           )
@@ -231,7 +241,7 @@ function PlanosContent() {
           <p><strong>Quando ativa?</strong> Após pagar no Mercado Pago, cole o ID do pagamento no formulário acima — a ativação é imediata.</p>
           <p><strong>Onde encontro o ID?</strong> Na tela de confirmação do Mercado Pago e no e-mail recebido após o pagamento.</p>
           <p><strong>É recorrente?</strong> Não. No MVP o acesso dura 30 dias e pode ser renovado manualmente.</p>
-          <p><strong>Qual plano escolher?</strong> Basic para validar a operação; Pro para operar sem anúncios e com maior confiança em campanhas.</p>
+          <p><strong>Qual plano escolher?</strong> Basic e Pro têm os mesmos recursos técnicos; escolha Pro apenas se quiser operar sem anúncios.</p>
         </div>
       </div>
 
