@@ -1,8 +1,8 @@
-# Pagamentos Mercado Pago — MVP Wabot
+# Pagamentos Mercado Pago — MVP BOTinho
 
 ## Modelo comercial
 
-O Wabot usa **links de assinatura fixos do Mercado Pago** para checkout.
+O BOTinho usa **links de assinatura fixos do Mercado Pago** para checkout.
 
 | Plano | Preço | Link |
 | --- | --- | --- |

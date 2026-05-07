@@ -67,8 +67,8 @@ function LoginContent() {
         <div className="mb-5 flex justify-center">
           <div className={`rounded-2xl p-3 shadow-sm ${isRegister ? 'bg-emerald-900' : 'bg-green-50'}`}>
             <Image
-              src="/wabot-logo.svg"
-              alt="Logo do Wabot, bot conversor para afiliados no WhatsApp"
+              src="/BOTinho-logo.svg"
+              alt="Logo do BOTinho, bot conversor para afiliados no WhatsApp"
               width={64}
               height={64}
               priority
@@ -154,7 +154,7 @@ function LoginContent() {
               <label htmlFor="password" className={`block text-sm font-medium ${isRegister ? 'text-emerald-100' : 'text-gray-700'}`}>Senha</label>
               {!isRegister && (
                 <a
-                  href="mailto:suporte@wabot.app?subject=Recuperar%20senha%20do%20Wabot"
+                  href="mailto:suporte@BOTinho.app?subject=Recuperar%20senha%20do%20BOTinho"
                   className="text-xs font-medium text-green-600 hover:underline"
                 >
                   Esqueci minha senha

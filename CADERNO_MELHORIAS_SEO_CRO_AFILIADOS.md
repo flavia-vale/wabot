@@ -226,7 +226,7 @@ Estabelecer ciclo contínuo de otimização de conversão.
 ---
 
 ## ISSUE 09 — Revisar consistência de marca em mensagens operacionais
-**Status:** Concluída em 05 de maio de 2026 — copy pública e operacional revisada para Wabot e modelo de 30 dias.
+**Status:** Concluída em 05 de maio de 2026 — copy pública e operacional revisada para BOTinho e modelo de 30 dias.
 
 
 **Problema**
