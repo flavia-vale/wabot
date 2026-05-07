@@ -61,7 +61,21 @@ export function isValidMercadoPagoWebhookSignature({ signature = '', requestId =
   return expected === v1
 }
 
+function warnMissingProductionEnv(log) {
+  if (!IS_PRODUCTION) return
+  const missing = []
+  if (!getMpAccessToken()) missing.push('MP_ACCESS_TOKEN')
+  if (!process.env.MP_WEBHOOK_SECRET) missing.push('MP_WEBHOOK_SECRET')
+  if (process.env.API_URL === 'http://localhost:3001') missing.push('API_URL (ainda em valor padrão)')
+  if (process.env.FRONTEND_URL === 'http://localhost:3000') missing.push('FRONTEND_URL (ainda em valor padrão)')
+  if (missing.length > 0) {
+    log.error({ missing }, 'PAGAMENTOS: variáveis de ambiente obrigatórias não configuradas em produção — pagamentos não funcionarão corretamente')
+  }
+}
+
 export async function paymentsRoutes(app) {
+  warnMissingProductionEnv(app.log)
+
   app.post('/checkout', { onRequest: [app.authenticate] }, async (req, reply) => {
     const validation = validateCheckoutInput(req.body)
     if (!validation.ok) return sendError(reply, validation.error.statusCode, validation.error.code, validation.error.message)
@@ -165,7 +179,7 @@ export async function paymentsRoutes(app) {
         if (userExists) {
           await db.user.update({
             where: { id: userId },
-            data: { plan, trialExpiresAt: expiresAt },
+            data: { plan, accessExpiresAt: expiresAt },
           })
         }
       }
@@ -181,14 +195,66 @@ export async function paymentsRoutes(app) {
     const userId = req.user.sub
     const user = await db.user.findUnique({
       where: { id: userId },
-      select: { plan: true, trialExpiresAt: true, referralCode: true },
+      select: { plan: true, accessExpiresAt: true, referralCode: true },
     })
     const payments = await db.payment.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
       take: 10,
     })
-    const isActive = !user.trialExpiresAt || user.trialExpiresAt > new Date()
-    return { plan: user.plan, accessExpiresAt: user.trialExpiresAt, referralCode: user.referralCode, isActive, payments }
+    const isActive = !user.accessExpiresAt || user.accessExpiresAt > new Date()
+    return { plan: user.plan, accessExpiresAt: user.accessExpiresAt, referralCode: user.referralCode, isActive, payments }
+  })
+
+  // Recuperação manual: aplica acesso quando o webhook falhou
+  app.post('/recover', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const { paymentId } = req.body ?? {}
+    if (!paymentId) return sendError(reply, 400, 'MISSING_PAYMENT_ID', 'paymentId obrigatório')
+
+    const accessToken = getMpAccessToken()
+    if (!accessToken) return sendError(reply, 500, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'MP não configurado')
+
+    const userId = req.user.sub
+
+    const existing = await db.payment.findUnique({ where: { mpPaymentId: String(paymentId) } })
+    if (existing?.status === 'approved' && existing.userId === userId) {
+      const user = await db.user.findUnique({ where: { id: userId }, select: { plan: true, accessExpiresAt: true } })
+      return { alreadyApplied: true, plan: user.plan, accessExpiresAt: user.accessExpiresAt }
+    }
+
+    const mpPayRes = await axios.get(
+      `https://api.mercadopago.com/v1/payments/${paymentId}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    ).catch(() => null)
+
+    if (!mpPayRes) return sendError(reply, 404, 'PAYMENT_NOT_FOUND', 'Pagamento não encontrado no Mercado Pago')
+
+    const { status, metadata } = mpPayRes.data
+    const { userId: mpUserId, plan } = metadata ?? {}
+
+    if (mpUserId !== userId) return sendError(reply, 403, 'PAYMENT_NOT_YOURS', 'Este pagamento não pertence à sua conta')
+    if (!PLANS[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido no pagamento')
+    if (status !== 'approved') return sendError(reply, 402, 'PAYMENT_NOT_APPROVED', `Pagamento com status: ${status}`)
+
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+
+    try {
+      await db.$transaction(async (tx) => {
+        if (existing) {
+          await tx.payment.update({ where: { id: existing.id }, data: { status: 'approved', expiresAt } })
+        } else {
+          await tx.payment.create({
+            data: { userId, mpPaymentId: String(paymentId), plan, status: 'approved', amount: PLANS[plan].price, expiresAt },
+          })
+        }
+        await tx.user.update({ where: { id: userId }, data: { plan, accessExpiresAt: expiresAt } })
+      })
+    } catch (err) {
+      req.log.error({ err: err.message }, 'Recover db error')
+      return reply.code(500).send({ error: 'Erro interno ao recuperar pagamento' })
+    }
+
+    trackAnalyticsEventSafe({ userId, event: 'payment_recovered', metadata: { plan, paymentId: String(paymentId) } })
+    return { recovered: true, plan, accessExpiresAt: expiresAt }
   })
 }

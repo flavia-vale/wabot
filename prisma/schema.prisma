@@ -16,7 +16,7 @@ model User {
   contactPhoneOptInAt    DateTime?
   status                 String    @default("active")
   plan                   String    @default("trial")
-  trialExpiresAt         DateTime?
+  accessExpiresAt        DateTime?
   sendCount              Int       @default(0)
   referralCode           String?   @unique
   referredBy             String?
@@ -40,7 +40,7 @@ model User {
   customerContacts      CustomerContactLog[]
   customerContactActors CustomerContactLog[] @relation("CustomerContactActor")
 
-  @@index([status, plan, trialExpiresAt])
+  @@index([status, plan, accessExpiresAt])
   @@index([lastActivityAt])
   @@index([supportStatus])
 }
