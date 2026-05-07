@@ -88,10 +88,10 @@ async function readLimitedText(res) {
   return new TextDecoder().decode(body)
 }
 
-async function fetchHtml(url) {
+async function fetchHtml(url, { ua = 'Mozilla/5.0 (compatible; BotConversorAfiliados/1.0)' } = {}) {
   const res = await fetch(url, {
     headers: {
-      'User-Agent': BROWSER_UA,
+      'User-Agent': ua,
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
     },
@@ -107,8 +107,8 @@ async function fetchHtml(url) {
   return { html, finalUrl: res.url || url }
 }
 
-async function resolveByHtmlLayers(url) {
-  const { html } = await fetchHtml(url)
+async function resolveByHtmlLayers(url, opts) {
+  const { html } = await fetchHtml(url, opts)
   if (!html) return null
 
   for (const re of OG_IMAGE_RE) {
@@ -154,8 +154,25 @@ function shopeeImageUrl(hash) {
   return `https://down-br.img.susercontent.com/file/${hash}`
 }
 
+// User-Agents que a Shopee atende com SSR (renderizando og:image no HTML).
+// O SPA não embute og:image para UAs comuns, então UA de browser ou bot retorna
+// página vazia. facebookexternalhit/WhatsApp são whitelisted pela Shopee.
+const SHOPEE_CRAWLER_UAS = [
+  'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+  'WhatsApp/2.24.10.85 A',
+  'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+]
+
 async function resolveShopeeImage(url) {
   const canonical = await resolveShopeeShortLink(url)
+
+  for (const ua of SHOPEE_CRAWLER_UAS) {
+    const img = await resolveByHtmlLayers(canonical, { ua }).catch(() => null)
+    if (img) return img
+  }
+
+  // Fallback: API v4 de itens (público) — pode ser bloqueado por anti-bot,
+  // mas tentamos antes de desistir.
   const ids = parseShopeeIds(canonical)
   if (ids) {
     try {
@@ -178,10 +195,10 @@ async function resolveShopeeImage(url) {
         if (built) return built
       }
     } catch {
-      // cai no fallback de HTML
+      // segue para retorno nulo
     }
   }
-  return resolveByHtmlLayers(canonical)
+  return null
 }
 
 export function getImageResolverMetrics() {
