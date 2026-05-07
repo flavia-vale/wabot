@@ -175,6 +175,25 @@ async function listLpPlansSafe() {
   }
 }
 
+async function getTutorialContentSafe() {
+  try {
+    const tutorial = await db.tutorialContent.findUnique({ where: { id: 'dashboard_tutorial' } })
+    if (!tutorial) return null
+    let images = []
+    try { images = JSON.parse(String(tutorial.images ?? '[]')) } catch {}
+    return { ...tutorial, images: Array.isArray(images) ? images : [] }
+  } catch (err) {
+    const message = String(err?.message ?? '')
+    const knownSchemaError =
+      message.includes('no such table') ||
+      message.includes('does not exist in the current database') ||
+      message.includes('Unknown field') ||
+      message.includes('Unknown argument')
+    if (knownSchemaError) return null
+    throw err
+  }
+}
+
 function parseContactLogInput(body = {}) {
   const channel = String(body.channel ?? 'whatsapp').trim()
   const reason = String(body.reason ?? '').trim()
@@ -956,14 +975,51 @@ export async function adminRoutes(app) {
   app.get('/lp-content', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'admin:read'))) return
 
-    const [plans, faqItems] = await Promise.all([
+    const [plans, faqItems, tutorial] = await Promise.all([
       listLpPlansSafe(),
       db.faqItem.findMany({ orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] }),
+      getTutorialContentSafe(),
     ])
 
     await writeAdminAuditLog(req, { action: 'admin.lpContent.view', resource: 'landingPageContent' })
 
-    return { plans: (plans ?? []).map(plan => ({ ...plan, features: parseStoredPlanFeatures(plan.features) })), faq: { items: faqItems } }
+    return { plans: (plans ?? []).map(plan => ({ ...plan, features: parseStoredPlanFeatures(plan.features) })), faq: { items: faqItems }, tutorial }
+  })
+
+  app.put('/lp-content/tutorial', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:write'))) return
+
+    const body = req.body ?? {}
+    const title = String(body.title ?? '').trim()
+    const bodyText = String(body.body ?? '').trim()
+    const images = (Array.isArray(body.images) ? body.images : []).slice(0, 20).map((item, index) => ({
+      id: String(item?.id || `img-${index + 1}`),
+      label: String(item?.label || `PRINT ${index + 1}`),
+      url: String(item?.url || '').trim(),
+      note: String(item?.note || '').trim(),
+    }))
+
+    if (!title || !bodyText) {
+      reply.code(400).send({ error: 'Título e conteúdo do tutorial são obrigatórios.' })
+      return
+    }
+
+    const existing = await getTutorialContentSafe()
+    const tutorial = await db.tutorialContent.upsert({
+      where: { id: 'dashboard_tutorial' },
+      create: { id: 'dashboard_tutorial', title, body: bodyText, images: JSON.stringify(images) },
+      update: { title, body: bodyText, images: JSON.stringify(images) },
+    })
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.tutorial.update',
+      resource: 'tutorialContent',
+      resourceId: tutorial.id,
+      before: existing ? JSON.stringify(existing) : undefined,
+      after: JSON.stringify(tutorial),
+    })
+
+    return { tutorial: { ...tutorial, images } }
   })
 
   app.put('/lp-content/plans/:id', async (req, reply) => {

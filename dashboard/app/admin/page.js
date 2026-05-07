@@ -314,7 +314,33 @@ function FaqEditor({ faq, onSave, onDelete }) {
   )
 }
 
-function LandingPageContentAccordion({ plans, faq, onSavePlan, onSaveFaq, onDeleteFaq }) {
+function TutorialEditor({ tutorial, onSave }) {
+  const [title, setTitle] = useState(tutorial?.title ?? '')
+  const [body, setBody] = useState(tutorial?.body ?? '')
+  const [imagesText, setImagesText] = useState(JSON.stringify(tutorial?.images ?? [], null, 2))
+  const [saving, setSaving] = useState(false)
+
+  async function submit(e) {
+    e.preventDefault()
+    let images = []
+    try { images = JSON.parse(imagesText || '[]') } catch { throw new Error('JSON de prints inválido.') }
+    setSaving(true)
+    try { await onSave({ title, body, images }) } finally { setSaving(false) }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3 rounded-xl border border-gray-100 bg-gray-50 p-4">
+      <h3 className="text-base font-black text-gray-900">Tutorial (Dashboard)</h3>
+      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título do tutorial" className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" required />
+      <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Texto principal do tutorial" className="min-h-32 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" required />
+      <textarea value={imagesText} onChange={(e) => setImagesText(e.target.value)} placeholder='[{"id":"print1","label":"PRINT 1","url":"https://...","note":"..."}]' className="min-h-32 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-emerald-400" />
+      <p className="text-xs text-gray-500">Use JSON para os prints: id, label, url e note.</p>
+      <button type="submit" disabled={saving} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">{saving ? 'Salvando...' : 'Salvar tutorial'}</button>
+    </form>
+  )
+}
+
+function LandingPageContentAccordion({ plans, faq, tutorial, onSavePlan, onSaveFaq, onDeleteFaq, onSaveTutorial }) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -350,6 +376,7 @@ function LandingPageContentAccordion({ plans, faq, onSavePlan, onSaveFaq, onDele
           </div>
 
           <FaqEditor faq={faq} onSave={onSaveFaq} onDelete={onDeleteFaq} />
+          <TutorialEditor key={`tutorial-${tutorial?.updatedAt ?? 'empty'}`} tutorial={tutorial} onSave={onSaveTutorial} />
         </div>
       )}
     </section>
@@ -371,6 +398,7 @@ export default function AdminPage() {
   const [systemMetrics, setSystemMetrics] = useState(null)
   const [faq, setFaq] = useState(null)
   const [plans, setPlans] = useState([])
+  const [tutorial, setTutorial] = useState(null)
   const [selectedUser, setSelectedUser] = useState(null)
   const [risk, setRisk] = useState('')
   const [search, setSearch] = useState('')
@@ -408,6 +436,7 @@ export default function AdminPage() {
     setSystemMetrics(systemMetricsData)
     setFaq(lpContentData?.faq ?? null)
     setPlans(lpContentData?.plans ?? [])
+    setTutorial(lpContentData?.tutorial ?? null)
   }
 
   useEffect(() => {
@@ -443,6 +472,7 @@ export default function AdminPage() {
         setSystemMetrics(systemMetricsData)
         setFaq(lpContentData?.faq ?? null)
         setPlans(lpContentData?.plans ?? [])
+        setTutorial(lpContentData?.tutorial ?? null)
       })
       .catch((err) => { if (active) setError(err.message || 'Não foi possível carregar o painel admin.') })
       .finally(() => { if (active) setLoading(false) })
@@ -490,6 +520,7 @@ export default function AdminPage() {
     const data = await api.adminLpContent()
     setFaq(data?.faq ?? null)
     setPlans(data?.plans ?? [])
+    setTutorial(data?.tutorial ?? null)
   }
 
   async function saveLpPlan(id, form) {
@@ -529,6 +560,17 @@ export default function AdminPage() {
       await refreshLpContent()
     } catch (err) {
       setError(err.message || 'Falha ao excluir pergunta do FAQ.')
+    }
+  }
+
+  async function saveTutorialContent(form) {
+    setError('')
+    try {
+      await api.adminUpdateTutorialContent(form)
+      await refreshLpContent()
+    } catch (err) {
+      setError(err.message || 'Falha ao salvar tutorial.')
+      throw err
     }
   }
 
@@ -818,7 +860,7 @@ export default function AdminPage() {
           </section>
         </div>
 
-        <LandingPageContentAccordion plans={plans} faq={faq} onSavePlan={saveLpPlan} onSaveFaq={saveFaqItem} onDeleteFaq={deleteFaqItem} />
+        <LandingPageContentAccordion plans={plans} faq={faq} tutorial={tutorial} onSavePlan={saveLpPlan} onSaveFaq={saveFaqItem} onDeleteFaq={deleteFaqItem} onSaveTutorial={saveTutorialContent} />
       </div>
     </main>
   )
