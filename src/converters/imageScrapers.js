@@ -163,7 +163,18 @@ const SHOPEE_CRAWLER_UAS = [
   'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
 ]
 
-async function resolveShopeeImage(url) {
+async function resolveShopeeImage(url, creds) {
+  // 1) Caminho preferencial: API de afiliado (GraphQL) — usa creds que já temos.
+  if (creds?.shopee?.appId && creds?.shopee?.secretKey) {
+    try {
+      const { fetchShopeeImage } = await import('./shopee.js')
+      const img = await fetchShopeeImage(url, creds.shopee)
+      if (img) return img
+    } catch {
+      // segue para fallbacks
+    }
+  }
+
   const canonical = await resolveShopeeShortLink(url)
 
   for (const ua of SHOPEE_CRAWLER_UAS) {
@@ -205,14 +216,14 @@ export function getImageResolverMetrics() {
   return Object.fromEntries(domainFailureMetrics)
 }
 
-export async function fetchProductImage(platform, productUrl) {
+export async function fetchProductImage(platform, productUrl, creds) {
   const cached = getCached(productUrl)
   if (cached !== null) return cached
 
   try {
     let image = null
     if (platform === 'shopee') {
-      image = await resolveShopeeImage(productUrl)
+      image = await resolveShopeeImage(productUrl, creds)
     }
     if (!image) image = await resolveByHtmlLayers(productUrl)
 
