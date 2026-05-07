@@ -27,9 +27,21 @@ async function getActiveFaqItems() {
 }
 
 async function getLpPlans() {
-  return db.lpPlan.findMany({
-    orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
-  })
+  try {
+    return await db.lpPlan.findMany({
+      orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+    })
+  } catch (err) {
+    const message = String(err?.message ?? '')
+    const knownSchemaError =
+      message.includes('no such table') ||
+      message.includes('does not exist in the current database') ||
+      message.includes('Unknown field') ||
+      message.includes('Unknown argument')
+
+    if (knownSchemaError) return []
+    throw err
+  }
 }
 
 export async function publicRoutes(app) {
