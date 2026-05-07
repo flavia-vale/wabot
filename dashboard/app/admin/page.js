@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
+import AdminTutorialAccordion from '@/components/AdminTutorialAccordion'
 
 const STAT_LABELS = {
   totalUsers: 'Clientes totais',
@@ -986,7 +987,7 @@ export default function AdminPage() {
         </div>
 
         <LandingPageContentAccordion plans={plans} faq={faq} onSavePlan={saveLpPlan} onSaveFaq={saveFaqItem} onDeleteFaq={deleteFaqItem} />
-        <AdminTutorialAccordion tutorial={tutorial} onSaveTutorial={saveTutorialContent} />
+        <AdminTutorialAccordion tutorial={tutorial} onSaveTutorial={saveTutorialContent} TutorialEditor={TutorialEditor} />
       </div>
     </main>
   )
