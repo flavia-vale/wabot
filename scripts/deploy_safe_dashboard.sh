@@ -29,8 +29,14 @@ pm2 restart api --update-env
 echo "[6/7] PM2 status"
 pm2 status
 
-echo "[7/7] Smoke tests"
-curl -I --max-time 10 http://178.105.54.0/admin || true
-curl -I --max-time 10 http://178.105.54.0/dashboard || true
+echo "[7/7] Smoke tests (hard gate)"
+for path in /login /admin /dashboard; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://178.105.54.0${path}")
+  echo "  ${path} -> HTTP ${code}"
+  if [[ "$code" != "200" && "$code" != "302" && "$code" != "307" ]]; then
+    echo "Smoke test falhou para ${path} (HTTP ${code})."
+    exit 1
+  fi
+done
 
 echo "Deploy safe concluído."
