@@ -9,7 +9,7 @@ const s = {
     gridColumn: `span ${cols}`,
     background: accent ? 'color-mix(in oklab, var(--accent) 22%, var(--surface))' : 'var(--surface)',
     border: '1px solid var(--line)',
-    borderRadius: 24, padding: 32, minHeight: 260,
+    borderRadius: 24, padding: 32, minHeight: 240,
     display: 'flex', flexDirection: 'column',
   }),
   iconBox: {
@@ -24,6 +24,47 @@ const s = {
   storeRow: { display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 20 },
   store: { padding: '8px 14px', borderRadius: 999, background: 'var(--bg-soft)', border: '1px solid var(--line)', fontSize: 13, fontWeight: 500, color: 'var(--ink)' },
 };
+
+const featureCards = [
+  {
+    title: 'Conversão Instantânea',
+    body: 'Links de lojas suportadas são detectados e convertidos em tempo real com o seu código de afiliada, sem copiar e colar manualmente.',
+    icon: 'bolt',
+    cols: 4,
+    accent: true,
+  },
+  {
+    title: 'Monitoramento 24/7',
+    body: 'O bot acompanha seus grupos de origem continuamente e mantém a operação rodando mesmo quando você não está no painel.',
+    icon: 'users',
+    cols: 4,
+  },
+  {
+    title: 'Anti-Spam Inteligente',
+    body: 'Regras de intervalo, filtros por palavras e controle por grupo reduzem disparos repetidos e protegem a saúde do seu número.',
+    icon: 'shield',
+    cols: 4,
+  },
+  {
+    title: 'Envio manual',
+    body: 'Envie uma oferta pontual para seus grupos quando quiser reforçar uma campanha ou publicar um achadinho específico.',
+    icon: 'chat',
+    cols: 4,
+  },
+  {
+    title: 'Broadcast em Massa',
+    body: 'Distribua mensagens para múltiplos grupos de destino de uma só vez, mantendo controle sobre quais públicos recebem cada oferta.',
+    icon: 'sparkles',
+    cols: 4,
+    accent: true,
+  },
+  {
+    title: 'Histórico de Logs',
+    body: 'Acompanhe o que foi convertido, enviado ou bloqueado para validar a operação e diagnosticar falhas rapidamente.',
+    icon: 'chart',
+    cols: 4,
+  },
+];
 
 export function Features() {
   return (
@@ -56,47 +97,24 @@ export function Features() {
 
           <div style={s.card(5)}>
             <div style={s.iconBox}><Icon name="link" size={22} /></div>
-            <div style={s.cardTitle}>5 lojas, mais chegando</div>
+            <div style={s.cardTitle}>4 lojas, mais chegando</div>
             <p style={s.cardBody}>Suporta as principais plataformas que mais convertem no público brasileiro.</p>
             <div style={s.storeRow}>
               <span style={s.store}>Shopee</span>
               <span style={s.store}>Mercado Livre</span>
               <span style={s.store}>Amazon</span>
               <span style={s.store}>Magalu</span>
-              <span style={s.store}>AliExpress</span>
-              <span style={{ ...s.store, color: 'var(--ink-soft)', borderStyle: 'dashed' }}>+ Americanas em breve</span>
+              <span style={{ ...s.store, color: 'var(--ink-soft)', borderStyle: 'dashed' }}>+ novas integrações em breve</span>
             </div>
           </div>
 
-          <div style={s.card(4)}>
-            <div style={s.iconBox}><Icon name="chat" size={22} /></div>
-            <div style={s.cardTitle}>Texto promocional do seu jeito</div>
-            <p style={s.cardBody}>Modelos prontos por categoria (moda, casa, eletrônicos) ou escreva o seu. O bot mantém sua voz e suas hashtags.</p>
-          </div>
-
-          <div style={s.card(4)}>
-            <div style={s.iconBox}><Icon name="users" size={22} /></div>
-            <div style={s.cardTitle}>Monitore quantos grupos quiser</div>
-            <p style={s.cardBody}>Aponte 1, 5, 20 grupos de promoção como fontes. Defina para qual dos seus grupos cada link vai (moda → grupo A, eletrônicos → grupo B).</p>
-          </div>
-
-          <div style={s.card(4)}>
-            <div style={s.iconBox}><Icon name="chart" size={22} /></div>
-            <div style={s.cardTitle}>Painel com o que rendeu</div>
-            <p style={s.cardBody}>Veja cliques, conversões e comissões por grupo. Sabe qual achadinho bombou e qual precisa repostar.</p>
-          </div>
-
-          <div style={s.card(6)}>
-            <div style={s.iconBox}><Icon name="shield" size={22} /></div>
-            <div style={s.cardTitle}>Seguro e dentro das regras</div>
-            <p style={s.cardBody}>Conexão criptografada, sessão isolada por usuária, e respeita os limites do WhatsApp para nunca colocar seu número em risco. Você pode desconectar a qualquer momento.</p>
-          </div>
-
-          <div style={s.card(6, true)}>
-            <div style={s.iconBox}><Icon name="sparkles" size={22} /></div>
-            <div style={s.cardTitle}>Modo "achadinho do dia"</div>
-            <p style={s.cardBody}>Programe um horário fixo (ex: 9h da manhã) e o bot escolhe o produto com melhor margem dos últimos dias e reposta como destaque.</p>
-          </div>
+          {featureCards.map((card) => (
+            <div key={card.title} style={s.card(card.cols, card.accent)}>
+              <div style={s.iconBox}><Icon name={card.icon} size={22} /></div>
+              <div style={s.cardTitle}>{card.title}</div>
+              <p style={s.cardBody}>{card.body}</p>
+            </div>
+          ))}
         </div>
       </div>
     </section>

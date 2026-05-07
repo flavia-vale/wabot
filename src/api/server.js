@@ -14,6 +14,7 @@ import { broadcastRoutes } from './routes/broadcast.js'
 import { dashboardRoutes } from './routes/dashboard.js'
 import { logsRoutes } from './routes/logs.js'
 import { adminRoutes } from './routes/admin.js'
+import { publicRoutes } from './routes/public.js'
 import { registerApiMetricsHooks } from './metrics.js'
 import db from '../db.js'
 import { resumePersistedBots, stopAllBots } from '../manager.js'
@@ -24,6 +25,8 @@ registerApiMetricsHooks(app)
 const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173',
+  'http://localhost:5173',
   'http://178.105.54.0',
   'https://178.105.54.0',
 ]
@@ -160,6 +163,7 @@ app.register(broadcastRoutes, { prefix: '/api/broadcast' })
 app.register(dashboardRoutes, { prefix: '/api/dashboard' })
 app.register(logsRoutes, { prefix: '/api/logs' })
 app.register(adminRoutes, { prefix: '/api/admin' })
+app.register(publicRoutes, { prefix: '/api/public' })
 
 // Liveness: processo está de pé
 app.get('/health', () => ({ ok: true }))

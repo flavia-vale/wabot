@@ -152,6 +152,100 @@ function DetailPanel({ detail, onClose }) {
   )
 }
 
+
+function AdminFaqPanel({ faq, onSave, onDelete }) {
+  const emptyForm = { id: '', question: '', answer: '', position: 0, isActive: true }
+  const [form, setForm] = useState(emptyForm)
+  const [saving, setSaving] = useState(false)
+
+  function editItem(item) {
+    setForm({
+      id: item.id,
+      question: item.question,
+      answer: item.answer,
+      position: item.position ?? 0,
+      isActive: item.isActive ?? true,
+    })
+  }
+
+  async function submit(e) {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      await onSave(form)
+      setForm(emptyForm)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section id="admin-faq" className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Conteúdo da LP</p>
+          <h2 className="text-lg font-black text-gray-900">FAQ dinâmico</h2>
+          <p className="text-sm text-gray-500">Crie, edite e exclua perguntas exibidas instantaneamente na Landing Page.</p>
+        </div>
+        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">{faq?.items?.length ?? 0} perguntas</span>
+      </div>
+
+      <form onSubmit={submit} className="mb-5 grid gap-3 lg:grid-cols-[1fr_1fr_110px_120px]">
+        <input
+          value={form.question}
+          onChange={event => setForm({ ...form, question: event.target.value })}
+          placeholder="Pergunta"
+          className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400"
+          required
+        />
+        <textarea
+          value={form.answer}
+          onChange={event => setForm({ ...form, answer: event.target.value })}
+          placeholder="Resposta"
+          className="min-h-11 rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400"
+          required
+        />
+        <input
+          type="number"
+          value={form.position}
+          onChange={event => setForm({ ...form, position: Number(event.target.value) })}
+          placeholder="Ordem"
+          className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400"
+        />
+        <div className="flex gap-2">
+          <button type="submit" disabled={saving} className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
+            {saving ? 'Salvando...' : form.id ? 'Atualizar' : 'Criar'}
+          </button>
+          {form.id && <button type="button" onClick={() => setForm(emptyForm)} className="rounded-xl bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-200">Limpar</button>}
+        </div>
+        <label className="flex items-center gap-2 text-sm text-gray-600 lg:col-span-4">
+          <input type="checkbox" checked={form.isActive} onChange={event => setForm({ ...form, isActive: event.target.checked })} />
+          Exibir na Landing Page
+        </label>
+      </form>
+
+      <div className="space-y-3">
+        {(faq?.items ?? []).map(item => (
+          <div key={item.id} className="rounded-xl border border-gray-100 p-3 text-sm">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="font-bold text-gray-900">{item.position}. {item.question}</p>
+                <p className="mt-1 text-gray-500">{item.answer}</p>
+                <span className={`mt-2 inline-flex rounded-full px-2 py-1 text-[11px] font-bold ${item.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{item.isActive ? 'Ativo' : 'Oculto'}</span>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => editItem(item)} className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100">Editar</button>
+                <button onClick={() => onDelete(item)} className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-100">Excluir</button>
+              </div>
+            </div>
+          </div>
+        ))}
+        {!faq?.items?.length && <p className="text-sm text-gray-400">Nenhuma pergunta cadastrada.</p>}
+      </div>
+    </section>
+  )
+}
+
 export default function AdminPage() {
   const [overview, setOverview] = useState(null)
   const [admin, setAdmin] = useState(null)
@@ -165,6 +259,7 @@ export default function AdminPage() {
   const [successQueue, setSuccessQueue] = useState(null)
   const [systemHealth, setSystemHealth] = useState(null)
   const [systemMetrics, setSystemMetrics] = useState(null)
+  const [faq, setFaq] = useState(null)
   const [selectedUser, setSelectedUser] = useState(null)
   const [risk, setRisk] = useState('')
   const [search, setSearch] = useState('')
@@ -173,7 +268,7 @@ export default function AdminPage() {
 
   async function loadAdminData(nextRisk = risk, nextSearch = search) {
     setError('')
-    const [adminData, overviewData, usersData, sessionsData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData] = await Promise.all([
+    const [adminData, overviewData, usersData, sessionsData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, faqData] = await Promise.all([
       api.adminMe(),
       api.adminOverview(),
       api.adminUsers({ risk: nextRisk, search: nextSearch, limit: 20 }),
@@ -186,6 +281,7 @@ export default function AdminPage() {
       api.adminSuccessQueue({ limit: 8 }).catch(() => null),
       api.adminSystemHealth().catch(() => null),
       api.adminSystemMetrics().catch(() => null),
+      api.adminFaq().catch(() => null),
     ])
     setAdmin(adminData)
     setOverview(overviewData)
@@ -199,6 +295,7 @@ export default function AdminPage() {
     setSuccessQueue(successQueueData)
     setSystemHealth(systemHealthData)
     setSystemMetrics(systemMetricsData)
+    setFaq(faqData)
   }
 
   useEffect(() => {
@@ -216,8 +313,9 @@ export default function AdminPage() {
       api.adminSuccessQueue({ limit: 8 }).catch(() => null),
       api.adminSystemHealth().catch(() => null),
       api.adminSystemMetrics().catch(() => null),
+      api.adminFaq().catch(() => null),
     ])
-      .then(([adminData, overviewData, usersData, sessionsData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData]) => {
+      .then(([adminData, overviewData, usersData, sessionsData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, faqData]) => {
         if (!active) return
         setAdmin(adminData)
         setOverview(overviewData)
@@ -231,6 +329,7 @@ export default function AdminPage() {
         setSuccessQueue(successQueueData)
         setSystemHealth(systemHealthData)
         setSystemMetrics(systemMetricsData)
+        setFaq(faqData)
       })
       .catch((err) => { if (active) setError(err.message || 'Não foi possível carregar o painel admin.') })
       .finally(() => { if (active) setLoading(false) })
@@ -270,6 +369,40 @@ export default function AdminPage() {
       if (selectedUser?.id === user.id) setSelectedUser(await api.adminUserDetail(user.id))
     } catch (err) {
       setError(err.message || 'Falha ao registrar contato.')
+    }
+  }
+
+
+  async function refreshFaq() {
+    setFaq(await api.adminFaq())
+  }
+
+  async function saveFaqItem(form) {
+    setError('')
+    try {
+      const payload = {
+        question: form.question,
+        answer: form.answer,
+        position: form.position,
+        isActive: form.isActive,
+      }
+      if (form.id) await api.adminUpdateFaq(form.id, payload)
+      else await api.adminCreateFaq(payload)
+      await refreshFaq()
+    } catch (err) {
+      setError(err.message || 'Falha ao salvar pergunta do FAQ.')
+      throw err
+    }
+  }
+
+  async function deleteFaqItem(item) {
+    if (!window.confirm(`Excluir a pergunta "${item.question}"?`)) return
+    setError('')
+    try {
+      await api.adminDeleteFaq(item.id)
+      await refreshFaq()
+    } catch (err) {
+      setError(err.message || 'Falha ao excluir pergunta do FAQ.')
     }
   }
 
@@ -316,6 +449,8 @@ export default function AdminPage() {
 
 
 
+
+        <AdminFaqPanel faq={faq} onSave={saveFaqItem} onDelete={deleteFaqItem} />
 
         {systemHealth && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">

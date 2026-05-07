@@ -55,7 +55,7 @@ export function Social() {
               <div style={s.stars}>
                 {[...Array(5)].map((_, j) => <Icon key={j} name="star" size={16} />)}
               </div>
-              <p style={s.quote}>"{t.q}"</p>
+              <p style={s.quote}>{`“${t.q}”`}</p>
               <div style={s.who}>
                 <div style={s.ava(t.g)} />
                 <div>
