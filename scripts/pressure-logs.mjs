@@ -5,7 +5,7 @@ import { performance } from 'node:perf_hooks'
 const db = new PrismaClient()
 const total = Number(process.env.LOG_PRESSURE_TOTAL) || Number(process.argv[2]) || 10_000
 const batchSize = Number(process.env.LOG_PRESSURE_BATCH) || 500
-const email = `pressure-${Date.now()}@wabot.local`
+const email = `pressure-${Date.now()}@BOTinho.local`
 
 function nowMinus(index) {
   return new Date(Date.now() - index * 1000)

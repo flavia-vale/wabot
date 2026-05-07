@@ -609,7 +609,7 @@ export default function AdminPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Visão operacional · Etapa 2</p>
-            <h1 className="text-3xl font-black text-gray-900">Admin Wabot</h1>
+            <h1 className="text-3xl font-black text-gray-900">Admin BOTinho</h1>
             <p className="mt-1 text-sm text-gray-500">Cockpit executivo, clientes em risco, sessões, logs e drill-down operacional.</p>
           </div>
           <div className="flex gap-2">

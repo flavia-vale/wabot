@@ -2,20 +2,20 @@ import Link from 'next/link'
 import { PublicPage } from '@/components/PublicShell'
 
 export const metadata = {
-  title: 'Quem Somos | Wabot',
-  description: 'Conheça o Wabot, bot conversor para afiliados no WhatsApp.',
+  title: 'Quem Somos | BOTinho',
+  description: 'Conheça o BOTinho, bot conversor para afiliados no WhatsApp.',
 }
 
 export default function AboutPage() {
   return (
     <PublicPage
       eyebrow="Quem somos"
-      title="Wabot ajuda afiliados a operar com mais consistência no WhatsApp"
+      title="BOTinho ajuda afiliados a operar com mais consistência no WhatsApp"
       description="Somos um produto criado para reduzir tarefas repetitivas de quem trabalha com ofertas, grupos e links de afiliado."
     >
       <div className="space-y-5 text-sm leading-7 text-gray-600">
         <p>
-          O Wabot nasceu para apoiar afiliados que precisam converter links, organizar grupos de origem e destino e acompanhar envios sem depender de planilhas ou processos manuais repetitivos.
+          O BOTinho nasceu para apoiar afiliados que precisam converter links, organizar grupos de origem e destino e acompanhar envios sem depender de planilhas ou processos manuais repetitivos.
         </p>
         <p>
           Nosso foco no MVP é entregar uma operação simples: conectar o WhatsApp, cadastrar credenciais das plataformas suportadas, escolher grupos e acompanhar logs para validar se o bot está funcionando corretamente.

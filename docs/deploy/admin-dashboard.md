@@ -1,12 +1,12 @@
 # Admin dashboard deploy notes
 
-The admin dashboard is protected by authenticated Wabot users that have either an active `AdminUser` record or a bootstrap email configured in the API process.
+The admin dashboard is protected by authenticated BOTinho users that have either an active `AdminUser` record or a bootstrap email configured in the API process.
 
 ## Bootstrap owner
 
 The production owner bootstrap email is `flavia.vale@usp.br`.
 
-This email is included as the built-in bootstrap owner so the first production admin can access `/admin` after logging in with the same regular Wabot account email. Additional bootstrap emails can be added with the `ADMIN_EMAILS` environment variable as a comma-separated list.
+This email is included as the built-in bootstrap owner so the first production admin can access `/admin` after logging in with the same regular BOTinho account email. Additional bootstrap emails can be added with the `ADMIN_EMAILS` environment variable as a comma-separated list.
 
 If an `AdminUser` row already exists for a user, its `status` is authoritative: inactive admin rows are not bypassed by the bootstrap email list. This prevents a disabled admin record from regaining access through bootstrap configuration.
 

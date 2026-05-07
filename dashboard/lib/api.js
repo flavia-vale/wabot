@@ -138,7 +138,7 @@ export const api = {
 
 export function openQRSocket(token, handlers = {}) {
   const wsBase = BASE.replace('http', 'ws')
-  const ws = new WebSocket(`${wsBase}/api/session/qr`, ['wabot-auth', token])
+  const ws = new WebSocket(`${wsBase}/api/session/qr`, ['BOTinho-auth', token])
 
   if (typeof handlers === 'function') {
     ws.onmessage = (e) => { try { handlers(JSON.parse(e.data)) } catch {} }

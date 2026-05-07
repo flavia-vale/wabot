@@ -1,4 +1,4 @@
-# Auditorias SEO, Marketing e Conversão — Dashboard Wabot
+# Auditorias SEO, Marketing e Conversão — Dashboard BOTinho
 
 Este diretório registra issues geradas a partir da auditoria das páginas autenticadas do dashboard. Cada arquivo agrupa oportunidades de melhoria por página, com diagnóstico, impacto, sugestão, critérios de aceite e testes sugeridos.
 

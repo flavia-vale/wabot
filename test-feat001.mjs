@@ -40,7 +40,7 @@ async function req(method, path, body) {
 }
 
 async function setup() {
-  const email = 'test-feat001@wabot.com'
+  const email = 'test-feat001@BOTinho.com'
   const password = 'TestFeat001!'
 
   let res = await fetch(`${BASE}/api/auth/register`, {
@@ -140,13 +140,13 @@ async function testOwnership() {
   let otherRes = await fetch(`${BASE}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'other-feat001@wabot.com', password: 'Other1234!' }),
+    body: JSON.stringify({ email: 'other-feat001@BOTinho.com', password: 'Other1234!' }),
   })
   if (otherRes.status === 409 || otherRes.status === 400) {
     otherRes = await fetch(`${BASE}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'other-feat001@wabot.com', password: 'Other1234!' }),
+      body: JSON.stringify({ email: 'other-feat001@BOTinho.com', password: 'Other1234!' }),
     })
   }
   const otherCookie = captureAuthCookie(otherRes)
