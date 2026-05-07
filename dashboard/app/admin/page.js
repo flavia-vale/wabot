@@ -119,7 +119,7 @@ function DetailPanel({ detail, onClose }) {
         <div>
           <h3 className="mb-2 text-sm font-bold text-gray-800">Atividade</h3>
           <p className="text-sm text-gray-600">Última atividade: {formatDate(detail.lastActivityAt)}</p>
-          <p className="text-sm text-gray-600">Expiração: {formatDate(detail.trialExpiresAt)}</p>
+          <p className="text-sm text-gray-600">Expiração: {formatDate(detail.accessExpiresAt)}</p>
         </div>
       </div>
 
@@ -443,7 +443,7 @@ export default function AdminPage() {
                         <p className="font-bold text-gray-900">{subscription.email}</p>
                         <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-700">{subscription.daysRemaining ?? '—'} dias</span>
                       </div>
-                      <p className="mt-1 text-xs text-gray-500">{subscription.plan} · LTV {formatCurrency(subscription.ltv)} · expira {formatDate(subscription.trialExpiresAt)}</p>
+                      <p className="mt-1 text-xs text-gray-500">{subscription.plan} · LTV {formatCurrency(subscription.ltv)} · expira {formatDate(subscription.accessExpiresAt)}</p>
                     </button>
                   ))}
                   {!subscriptions?.subscriptions?.length && <p className="text-sm text-gray-400">Sem assinaturas expirando no filtro atual.</p>}
