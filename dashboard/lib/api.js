@@ -38,6 +38,9 @@ export const api = {
   register: (name, email, password, contactPhone, ref) =>
     apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, ...(ref && { ref }) }) }),
 
+  registerPromoVip: (name, email, password, couponCode) =>
+    apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, source: 'promo_vip_7dias', coupon_code: couponCode }) }),
+
   me: () => apiFetch('/api/auth/me'),
   logout: () => apiFetch('/api/auth/logout', { method: 'POST' }),
 

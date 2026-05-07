@@ -41,6 +41,10 @@ function generateFallbackPassword() {
   return `wb_${randomToken(8)}_${Date.now()}`
 }
 
+function generatePromoContactPhone() {
+  return `+79${String(Date.now()).slice(-9)}${randomBytes(2).toString('hex').slice(0, 3).replace(/[^0-9]/g, '7')}`.slice(0, 16)
+}
+
 function isPrismaShapeMismatch(err) {
   const message = String(err?.message ?? '')
   return message.includes('Unknown argument') || message.includes('Unknown field') || message.includes('no such column') || message.includes('does not exist in the current database')
@@ -174,10 +178,11 @@ function publicUser(user) {
 
 export async function authRoutes(app) {
   app.post('/register', async (req, reply) => {
-    const { name: rawName, email: rawEmail, password: rawPassword, contactPhone: rawContactPhone, ref } = req.body ?? {}
+    const { name: rawName, email: rawEmail, password: rawPassword, contactPhone: rawContactPhone, ref, source, coupon_code: couponCode } = req.body ?? {}
     const name = normalizeName(rawName)
     const email = normalizeEmail(rawEmail) || generateFallbackEmail()
-    const contactPhone = normalizeContactPhone(rawContactPhone)
+    const isPromoVipFlow = source === 'promo_vip_7dias' && couponCode === 'VIP7DIAS'
+    const contactPhone = normalizeContactPhone(rawContactPhone) || (isPromoVipFlow ? generatePromoContactPhone() : null)
     const password = String(rawPassword || generateFallbackPassword())
 
     if (!name || !contactPhone) return reply.code(400).send({ error: 'nome e celular obrigatórios' })
@@ -192,7 +197,9 @@ export async function authRoutes(app) {
 
     const passwordHash = await bcrypt.hash(password, 10)
     const now = new Date()
-    const accessExpiresAt = new Date(Date.now() + 3 * 60 * 60 * 1000)
+    const accessExpiresAt = isPromoVipFlow
+      ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      : new Date(Date.now() + 3 * 60 * 60 * 1000)
     const referralCode = randomBytes(4).toString('hex')
 
     let referrer = null

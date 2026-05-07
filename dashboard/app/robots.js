@@ -4,7 +4,7 @@ export default function robots() {
       {
         userAgent: '*',
         allow: ['/', '/termos', '/privacidade', '/quem-somos', '/suporte'],
-        disallow: ['/dashboard', '/dashboard/', '/dashboard/*', '/api/*'],
+        disallow: ['/dashboard', '/dashboard/', '/dashboard/*', '/api/*', '/promo-vip-7dias'],
       },
     ],
     sitemap: 'http://178.105.54.0/sitemap.xml',
