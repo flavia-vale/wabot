@@ -3,6 +3,8 @@ import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
+  downloadMediaMessage,
+  extractMessageContent,
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import { readFileSync, mkdirSync } from 'fs'
@@ -12,7 +14,7 @@ import { dirname } from 'path'
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
-import { fetchProductImage, fetchImageBuffer } from './converters/imageScrapers.js'
+import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
@@ -580,25 +582,120 @@ async function startBot() {
       const platformCsv = monitorGroup?.allowedPlatforms?.trim() || cfg.botConfig.platforms
       const enabledPlatforms = new Set(platformCsv.split(',').filter(Boolean))
 
-      // Pre-fetch image URL uma vez por mensagem (lazy, com cache)
-      let cachedImageUrl
+      // Retorna o proto imageMessage (ou videoMessage) original sem baixar.
+      // Permite reaproveitar a mídia já hospedada nos servidores do WhatsApp,
+      // trocando apenas o caption — caminho mais confiável que upload+sharp.
+      function getOriginalMediaMessage() {
+        const inner = extractMessageContent(msg.message)
+        const ext = inner?.extendedTextMessage
+        const quoted = ext?.contextInfo?.quotedMessage
+        if (inner?.imageMessage) return { type: 'imageMessage', proto: inner.imageMessage }
+        if (quoted?.imageMessage) return { type: 'imageMessage', proto: quoted.imageMessage }
+        if (inner?.videoMessage) return { type: 'videoMessage', proto: inner.videoMessage }
+        if (quoted?.videoMessage) return { type: 'videoMessage', proto: quoted.videoMessage }
+        return null
+      }
+
+      // Baixa a imagem original do anúncio (mensagem do grupo monitorado) já
+      // decifrada via Baileys, retornando { buffer, mimetype }. Lida com
+      // wrappers (ephemeralMessage etc.), link preview (jpegThumbnail embutido)
+      // e mensagens citadas (quotedMessage com imageMessage).
+      async function downloadOriginalImage() {
+        const inner = extractMessageContent(msg.message)
+        const presentTypes = inner ? Object.keys(inner) : []
+        const ext = inner?.extendedTextMessage
+        const quoted = ext?.contextInfo?.quotedMessage
+
+        // 1) imageMessage direto na própria mensagem — caso ideal, full-res e decifrável.
+        if (inner?.imageMessage) {
+          try {
+            const buf = await downloadMediaMessage(msg, 'buffer', {}, {
+              logger, reuploadRequest: sock.updateMediaMessage,
+            })
+            if (buf?.length) {
+              logger.info({ msgId: msg.key.id, size: buf.length, source: 'imageMessage' }, 'Imagem original baixada')
+              return { buffer: buf, mimetype: inner.imageMessage.mimetype || 'image/jpeg' }
+            }
+          } catch (err) {
+            logger.warn({ err: err.message, msgId: msg.key.id }, 'Falha ao baixar imageMessage original')
+          }
+        }
+
+        // 2) imageMessage dentro de uma mensagem citada (quoted) — comum quando
+        // bots upstream republicam ofertas como reply de uma mensagem com foto.
+        if (quoted?.imageMessage) {
+          try {
+            const stub = {
+              key: { ...msg.key, id: ext.contextInfo.stanzaId || msg.key.id },
+              message: quoted,
+            }
+            const buf = await downloadMediaMessage(stub, 'buffer', {}, {
+              logger, reuploadRequest: sock.updateMediaMessage,
+            })
+            if (buf?.length) {
+              logger.info({ msgId: msg.key.id, size: buf.length, source: 'quotedImage' }, 'Imagem original baixada')
+              return { buffer: buf, mimetype: quoted.imageMessage.mimetype || 'image/jpeg' }
+            }
+          } catch (err) {
+            logger.warn({ err: err.message, msgId: msg.key.id }, 'Falha ao baixar imagem citada')
+          }
+        }
+
+        // 3) jpegThumbnail embutido em link preview (extendedTextMessage). Baixa qualidade
+        // mas sempre presente quando há preview, e não exige rede — bytes já vêm decifrados.
+        const thumb = ext?.jpegThumbnail
+        if (thumb && thumb.length) {
+          const buf = Buffer.isBuffer(thumb) ? thumb : Buffer.from(thumb)
+          logger.info({ msgId: msg.key.id, size: buf.length, source: 'jpegThumbnail' }, 'Usando thumbnail do link preview')
+          return { buffer: buf, mimetype: 'image/jpeg' }
+        }
+
+        logger.warn({ msgId: msg.key.id, presentTypes }, 'Mensagem sem imagem para reaproveitar')
+        return null
+      }
+
+      // Pre-fetch da imagem (lazy, uma vez por mensagem). Retorna
+      // { buffer, mimetype } pronto para enviar à Baileys.
+      let cachedImage
       let imageFetched = false
-      async function getImageUrl() {
-        if (imageFetched) return cachedImageUrl
+      async function getImage() {
+        if (imageFetched) return cachedImage
         imageFetched = true
         if (!monitorGroup || monitorGroup.imageMode === 'none') return null
+
+        const enabled = links.filter(l => enabledPlatforms.has(l.platform))
+        const target = monitorGroup.imageLinkTarget === 'first' ? enabled[0] : enabled[enabled.length - 1]
+        const platform = target?.platform || 'unknown'
+        logger.info({ msgId: msg.key.id, imageMode: monitorGroup.imageMode, platform }, 'getImage: iniciando resolução de imagem')
+
         if (monitorGroup.imageMode === 'original') {
-          cachedImageUrl = msg.message?.imageMessage?.url || null
-          return cachedImageUrl
+          cachedImage = await downloadOriginalImage()
+          return cachedImage
         }
+
         if (monitorGroup.imageMode === 'fetch') {
-          const enabled = links.filter(l => enabledPlatforms.has(l.platform))
-          const target = monitorGroup.imageLinkTarget === 'first' ? enabled[0] : enabled[enabled.length - 1]
-          if (target) cachedImageUrl = await fetchProductImage(target.platform, target.url)
-          if (!cachedImageUrl && monitorGroup.fallbackToOriginal) {
-            cachedImageUrl = msg.message?.imageMessage?.url || null
+          // Para Shopee, preferimos a imagem original do anúncio: o CDN da
+          // Shopee bloqueia o servidor de mídia do WhatsApp, o que produz
+          // imagem quebrada quando passamos URL para Baileys.
+          if (platform === 'shopee') {
+            cachedImage = await downloadOriginalImage()
+            if (cachedImage) return cachedImage
+            logger.info({ msgId: msg.key.id }, 'Shopee sem imagem original — tentando resolver via API')
           }
-          return cachedImageUrl
+
+          if (target) {
+            const url = await fetchProductImage(target.platform, target.url, cfg.credentials)
+            logger.info({ msgId: msg.key.id, platform, resolvedUrl: url }, 'fetchProductImage resultado')
+            if (url) {
+              cachedImage = await fetchImageBuffer(url, target.url)
+              logger.info({ msgId: msg.key.id, downloaded: !!cachedImage, size: cachedImage?.buffer?.length }, 'fetchImageBuffer resultado')
+            }
+          }
+
+          if (!cachedImage && monitorGroup.fallbackToOriginal) {
+            cachedImage = await downloadOriginalImage()
+          }
+          return cachedImage
         }
         return null
       }
@@ -649,20 +746,37 @@ async function startBot() {
           messageText: finalText,
         }
 
-        const imageUrl = monitorGroup?.imageMode !== 'none' ? await getImageUrl() : null
-        let msgPayload = { text: finalText }
-        if (imageUrl) {
-          // Baixa o buffer com UA/Referer reais — CDNs (ex.: Shopee) rejeitam
-          // o UA padrão da Baileys e resultam em imagem quebrada no destino.
-          const buffer = await fetchImageBuffer(imageUrl, primary.url)
-          msgPayload = buffer
-            ? { image: buffer, caption: finalText }
-            : { image: { url: imageUrl }, caption: finalText }
-        }
+        // Estratégia preferencial: reaproveitar o proto da mídia original
+        // (imageMessage/videoMessage) trocando só o caption e usando relayMessage.
+        // Evita sharp/upload (root cause da imagem quebrada) e mantém a mídia
+        // já hospedada nos servidores do WhatsApp — recipients decifram com a
+        // mediaKey original, exatamente como num forward.
+        const wantImage = monitorGroup?.imageMode !== 'none'
+        const original = wantImage ? getOriginalMediaMessage() : null
 
+        let sentVia = 'text'
         try {
-          await sock.sendMessage(destJid, msgPayload)
-          logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode }, 'Mensagem enviada')
+          if (original) {
+            const replayProto = { ...original.proto, caption: finalText }
+            await sock.relayMessage(destJid, { [original.type]: replayProto }, {})
+            sentVia = `relay:${original.type}`
+          } else if (wantImage) {
+            // Sem mídia original (ex.: msg só de texto). Tenta resolver via CDN
+            // do produto, baixar bytes e re-encodar como JPEG antes de enviar.
+            const fetched = await getImage()
+            const image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
+            if (fetched && !image) {
+              logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
+            }
+            const payload = image
+              ? { image: image.buffer, mimetype: image.mimetype, jpegThumbnail: image.jpegThumbnail, caption: finalText }
+              : { text: finalText }
+            await sock.sendMessage(destJid, payload)
+            sentVia = image ? 'upload:image' : 'text'
+          } else {
+            await sock.sendMessage(destJid, { text: finalText })
+          }
+          logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
           const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
           db.messageLog.create({
             data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: finalText, status: 'success' },

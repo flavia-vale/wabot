@@ -1,3 +1,5 @@
+import sharp from 'sharp'
+
 const OG_IMAGE_RE = [
   /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
   /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
@@ -88,10 +90,10 @@ async function readLimitedText(res) {
   return new TextDecoder().decode(body)
 }
 
-async function fetchHtml(url) {
+async function fetchHtml(url, { ua = 'Mozilla/5.0 (compatible; BotConversorAfiliados/1.0)' } = {}) {
   const res = await fetch(url, {
     headers: {
-      'User-Agent': BROWSER_UA,
+      'User-Agent': ua,
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
     },
@@ -107,8 +109,8 @@ async function fetchHtml(url) {
   return { html, finalUrl: res.url || url }
 }
 
-async function resolveByHtmlLayers(url) {
-  const { html } = await fetchHtml(url)
+async function resolveByHtmlLayers(url, opts) {
+  const { html } = await fetchHtml(url, opts)
   if (!html) return null
 
   for (const re of OG_IMAGE_RE) {
@@ -154,8 +156,36 @@ function shopeeImageUrl(hash) {
   return `https://down-br.img.susercontent.com/file/${hash}`
 }
 
-async function resolveShopeeImage(url) {
+// User-Agents que a Shopee atende com SSR (renderizando og:image no HTML).
+// O SPA não embute og:image para UAs comuns, então UA de browser ou bot retorna
+// página vazia. facebookexternalhit/WhatsApp são whitelisted pela Shopee.
+const SHOPEE_CRAWLER_UAS = [
+  'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+  'WhatsApp/2.24.10.85 A',
+  'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+]
+
+async function resolveShopeeImage(url, creds) {
+  // 1) Caminho preferencial: API de afiliado (GraphQL) — usa creds que já temos.
+  if (creds?.shopee?.appId && creds?.shopee?.secretKey) {
+    try {
+      const { fetchShopeeImage } = await import('./shopee.js')
+      const img = await fetchShopeeImage(url, creds.shopee)
+      if (img) return img
+    } catch {
+      // segue para fallbacks
+    }
+  }
+
   const canonical = await resolveShopeeShortLink(url)
+
+  for (const ua of SHOPEE_CRAWLER_UAS) {
+    const img = await resolveByHtmlLayers(canonical, { ua }).catch(() => null)
+    if (img) return img
+  }
+
+  // Fallback: API v4 de itens (público) — pode ser bloqueado por anti-bot,
+  // mas tentamos antes de desistir.
   const ids = parseShopeeIds(canonical)
   if (ids) {
     try {
@@ -178,24 +208,24 @@ async function resolveShopeeImage(url) {
         if (built) return built
       }
     } catch {
-      // cai no fallback de HTML
+      // segue para retorno nulo
     }
   }
-  return resolveByHtmlLayers(canonical)
+  return null
 }
 
 export function getImageResolverMetrics() {
   return Object.fromEntries(domainFailureMetrics)
 }
 
-export async function fetchProductImage(platform, productUrl) {
+export async function fetchProductImage(platform, productUrl, creds) {
   const cached = getCached(productUrl)
   if (cached !== null) return cached
 
   try {
     let image = null
     if (platform === 'shopee') {
-      image = await resolveShopeeImage(productUrl)
+      image = await resolveShopeeImage(productUrl, creds)
     }
     if (!image) image = await resolveByHtmlLayers(productUrl)
 
@@ -209,10 +239,57 @@ export async function fetchProductImage(platform, productUrl) {
   }
 }
 
+// Re-encoda a imagem como JPEG e gera um thumbnail JPEG (~100kb).
+// Necessário porque a Baileys chama sharp.metadata() para gerar thumbnail
+// automaticamente; quando os bytes vêm em formato não suportado pelo sharp
+// (HEIC sem libheif, AVIF, ou bytes corrompidos), o sharp falha e a imagem
+// chega quebrada no WhatsApp. Pré-gerando o thumbnail aqui, a Baileys pula
+// sua chamada interna ao sharp (messages.js:132).
+export async function normalizeImageForWhatsApp(buf) {
+  if (!buf?.length) return null
+  try {
+    const meta = await sharp(buf, { failOn: 'none' }).metadata()
+    if (!meta?.width || !meta?.height) return null
+
+    // Converte para JPEG; redimensiona se for absurdamente grande.
+    const main = await sharp(buf, { failOn: 'none' })
+      .rotate()
+      .resize({ width: 1280, height: 1280, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 85, mozjpeg: true })
+      .toBuffer()
+
+    const thumbnail = await sharp(buf, { failOn: 'none' })
+      .rotate()
+      .resize({ width: 200, height: 200, fit: 'inside' })
+      .jpeg({ quality: 60 })
+      .toBuffer()
+
+    return { buffer: main, mimetype: 'image/jpeg', jpegThumbnail: thumbnail }
+  } catch {
+    return null
+  }
+}
+
+// Detecta mimetype a partir dos magic bytes do buffer.
+// Retorna null se não for um formato de imagem reconhecido (sinal de download corrompido).
+export function detectImageMime(buf) {
+  if (!buf || buf.length < 12) return null
+  // JPEG: FF D8 FF
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg'
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png'
+  // GIF: 47 49 46 38
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38) return 'image/gif'
+  // WebP: RIFF....WEBP
+  if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+      buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) return 'image/webp'
+  return null
+}
+
 // Baixa o conteúdo da imagem como Buffer enviando User-Agent/Referer adequados.
-// Necessário para o WhatsApp porque a Baileys, ao receber `{ image: { url } }`,
-// usa um UA padrão que CDNs como o da Shopee podem rejeitar — resultando em
-// "imagem quebrada" no destino.
+// Necessário para o WhatsApp porque a Baileys, ao passar `{ image: { url } }`,
+// repassa a URL para o servidor de mídia do WhatsApp, que pode ser bloqueado
+// pelo CDN da Shopee — resultando em imagem quebrada no destino.
 export async function fetchImageBuffer(imageUrl, refererUrl) {
   if (!imageUrl) return null
   try {
@@ -229,8 +306,6 @@ export async function fetchImageBuffer(imageUrl, refererUrl) {
       redirect: 'follow',
     })
     if (!res.ok) return null
-    const contentType = res.headers.get('content-type') || ''
-    if (contentType && !contentType.startsWith('image/')) return null
     const contentLength = Number(res.headers.get('content-length'))
     if (contentLength && contentLength > IMAGE_BUFFER_MAX_BYTES) return null
 
@@ -238,7 +313,9 @@ export async function fetchImageBuffer(imageUrl, refererUrl) {
     if (!reader) {
       const ab = await res.arrayBuffer()
       if (ab.byteLength > IMAGE_BUFFER_MAX_BYTES) return null
-      return Buffer.from(ab)
+      const buf = Buffer.from(ab)
+      const mime = detectImageMime(buf)
+      return mime ? { buffer: buf, mimetype: mime } : null
     }
     const chunks = []
     let received = 0
@@ -252,7 +329,9 @@ export async function fetchImageBuffer(imageUrl, refererUrl) {
       }
       chunks.push(value)
     }
-    return Buffer.concat(chunks.map(c => Buffer.from(c)), received)
+    const buf = Buffer.concat(chunks.map(c => Buffer.from(c)), received)
+    const mime = detectImageMime(buf)
+    return mime ? { buffer: buf, mimetype: mime } : null
   } catch {
     return null
   }
