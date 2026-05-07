@@ -66,6 +66,8 @@ export const api = {
   paymentsStatus: () => apiFetch('/api/payments/status'),
   paymentsCheckout: (plan) =>
     apiFetch('/api/payments/checkout', { method: 'POST', body: JSON.stringify({ plan }) }),
+  paymentsRecover: (paymentId) =>
+    apiFetch('/api/payments/recover', { method: 'POST', body: JSON.stringify({ paymentId }) }),
 
   getConfig: () => apiFetch('/api/config'),
   saveConfig: (data) => apiFetch('/api/config', { method: 'PUT', body: JSON.stringify(data) }),
