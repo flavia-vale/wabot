@@ -68,6 +68,7 @@ function mergePlanContent(plans) {
       name: dynamicPlan?.title || defaultPlan.name,
       price: dynamicPlan?.price || defaultPlan.price,
       desc: dynamicPlan?.description || defaultPlan.desc,
+      features: Array.isArray(dynamicPlan?.features) && dynamicPlan.features.length ? dynamicPlan.features : defaultPlan.features,
       position: dynamicPlan?.position ?? defaultPlan.position,
     };
   });

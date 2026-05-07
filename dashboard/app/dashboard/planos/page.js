@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useMemo, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { api } from '@/lib/api'
 import { HelpLink } from '@/components/HelpLink'
@@ -7,7 +7,7 @@ import { HelpLink } from '@/components/HelpLink'
 const PLAN_LABELS = { trial: 'Teste grátis', basic: 'Basic', pro: 'Pro' }
 const STATUS_LABELS = { pending: 'Pendente', approved: 'Aprovado', rejected: 'Rejeitado', cancelled: 'Cancelado' }
 
-const PLAN_CARDS = [
+const DEFAULT_PLAN_CARDS = [
   {
     id: 'trial',
     name: 'Teste grátis',
@@ -41,6 +41,20 @@ const PLAN_CARDS = [
   },
 ]
 
+
+function mergePlanCards(plans) {
+  const byId = new Map((plans ?? []).map(plan => [plan.id, plan]))
+  return DEFAULT_PLAN_CARDS.map((card) => {
+    const dynamicPlan = byId.get(card.id)
+    return {
+      ...card,
+      name: dynamicPlan?.title || card.name,
+      price: dynamicPlan?.price || card.price,
+      description: dynamicPlan?.description || card.description,
+      features: Array.isArray(dynamicPlan?.features) && dynamicPlan.features.length ? dynamicPlan.features : card.features,
+    }
+  })
+}
 function daysLeft(dateStr) {
   if (!dateStr) return null
   const diff = new Date(dateStr) - new Date()
@@ -52,6 +66,7 @@ function PlanosContent() {
   const redirectStatus = searchParams.get('status')
 
   const [data, setData] = useState(null)
+  const [publicPlans, setPublicPlans] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [checkoutLoading, setCheckoutLoading] = useState('')
@@ -65,8 +80,8 @@ function PlanosContent() {
 
   useEffect(() => {
     let active = true
-    api.paymentsStatus()
-      .then((res) => { if (active) setData(res) })
+    Promise.all([api.paymentsStatus(), api.publicPlans().catch(() => ({ plans: [] }))])
+      .then(([res, plansRes]) => { if (active) { setData(res); setPublicPlans(Array.isArray(plansRes?.plans) ? plansRes.plans : []) } })
       .catch((err) => { if (active) setLoadError(err.message) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
@@ -122,6 +137,8 @@ function PlanosContent() {
       if (input) { input.focus(); input.select() }
     }
   }
+
+  const planCards = useMemo(() => mergePlanCards(publicPlans), [publicPlans])
 
   if (loading) return <p className="text-gray-500">Carregando...</p>
   if (loadError) return <p className="text-red-500 text-sm">{loadError}</p>
@@ -183,7 +200,7 @@ function PlanosContent() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
-        {PLAN_CARDS.map(plan => {
+        {planCards.map(plan => {
           const isCurrentPlan = data?.plan === plan.id && data?.isActive
           return (
             <div key={plan.id} className={`bg-white rounded-2xl shadow p-5 ${plan.cardClass}`}>

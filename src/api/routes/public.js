@@ -9,12 +9,22 @@ function serializeFaqItem(item) {
   }
 }
 
+function parsePlanFeatures(rawFeatures) {
+  try {
+    const parsed = JSON.parse(String(rawFeatures ?? '[]'))
+    return Array.isArray(parsed) ? parsed.map(item => String(item).trim()).filter(Boolean) : []
+  } catch {
+    return []
+  }
+}
+
 function serializeLpPlan(plan) {
   return {
     id: plan.id,
     title: plan.title,
     description: plan.description,
     price: plan.price,
+    features: parsePlanFeatures(plan.features),
     position: plan.position,
   }
 }
