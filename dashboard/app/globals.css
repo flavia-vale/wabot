@@ -42,3 +42,80 @@ html, body {
 :where([aria-disabled="true"]) {
   cursor: not-allowed;
 }
+
+/* ===== Responsive safety layer (non-destructive) ===== */
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+img,
+video {
+  max-width: 100%;
+  height: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+/* mobile-first touch targets */
+@media (max-width: 480px) {
+  :where(
+    a[href],
+    button,
+    [role="button"],
+    input[type="button"],
+    input[type="submit"],
+    input[type="reset"]
+  ):not(:disabled):not([aria-disabled="true"]) {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  :where(input, select, textarea) {
+    width: 100%;
+    max-width: 100%;
+    font-size: 16px;
+  }
+
+  :where(.overflow-x-auto) {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  :where(nav ul, nav .menu, nav .links) {
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: thin;
+    gap: 0.5rem;
+  }
+}
+
+@media (max-width: 768px) {
+  :where(main, section, article, aside, header, footer, .container, .content, .wrapper) {
+    max-width: 100%;
+  }
+
+  :where(.grid, [class*="grid-cols-"]) {
+    grid-template-columns: 1fr;
+  }
+
+  :where(.flex) {
+    flex-wrap: wrap;
+  }
+
+  :where(table) {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (max-width: 1024px) {
+  :where(.wrap, .container, .content, .wrapper) {
+    padding-inline: clamp(0.75rem, 2.5vw, 1.25rem);
+  }
+}
