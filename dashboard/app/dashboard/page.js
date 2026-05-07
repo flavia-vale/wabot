@@ -112,7 +112,7 @@ export default function DashboardPage() {
     try {
       await api.sessionStart()
       const s = await fetchStatus()
-      if (s?.running && s.status === 'connecting') await openWS()
+      if (s?.running) await openWS()
       setTimeout(async () => {
         const s = await api.sessionStatus().catch(() => null)
         if (s && !s.running && s.status === 'disconnected') {
