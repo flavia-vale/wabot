@@ -242,3 +242,12 @@ model LpPlan {
 
   @@index([position])
 }
+
+
+model TutorialContent {
+  id        String   @id
+  title     String
+  body      String
+  images    String   @default("[]")
+  updatedAt DateTime @updatedAt
+}
