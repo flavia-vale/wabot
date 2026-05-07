@@ -35,8 +35,8 @@ export const api = {
   login: (email, password) =>
     apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
 
-  register: (email, password, contactPhone, ref) =>
-    apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password, contactPhone, ...(ref && { ref }) }) }),
+  register: (name, email, password, contactPhone, ref) =>
+    apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, ...(ref && { ref }) }) }),
 
   me: () => apiFetch('/api/auth/me'),
   logout: () => apiFetch('/api/auth/logout', { method: 'POST' }),
