@@ -4,6 +4,7 @@ import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
   downloadMediaMessage,
+  extractMessageContent,
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import { readFileSync, mkdirSync } from 'fs'
@@ -581,9 +582,12 @@ async function startBot() {
       const enabledPlatforms = new Set(platformCsv.split(',').filter(Boolean))
 
       // Baixa a imagem original do anúncio (mensagem do grupo monitorado) já
-      // decifrada via Baileys, retornando { buffer, mimetype }.
+      // decifrada via Baileys, retornando { buffer, mimetype }. Lida com
+      // wrappers comuns (ephemeralMessage, viewOnceMessage, documentWithCaption).
       async function downloadOriginalImage() {
-        if (!msg.message?.imageMessage) return null
+        const inner = extractMessageContent(msg.message)
+        const imageNode = inner?.imageMessage
+        if (!imageNode) return null
         try {
           const buf = await downloadMediaMessage(msg, 'buffer', {}, {
             logger,
@@ -592,10 +596,10 @@ async function startBot() {
           if (!buf?.length) return null
           return {
             buffer: buf,
-            mimetype: msg.message.imageMessage.mimetype || 'image/jpeg',
+            mimetype: imageNode.mimetype || 'image/jpeg',
           }
         } catch (err) {
-          logger.warn({ err: err.message }, 'Falha ao baixar imagem original')
+          logger.warn({ err: err.message, msgId: msg.key.id }, 'Falha ao baixar imagem original')
           return null
         }
       }
