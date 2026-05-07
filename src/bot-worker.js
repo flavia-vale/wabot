@@ -652,12 +652,19 @@ async function startBot() {
         const imageUrl = monitorGroup?.imageMode !== 'none' ? await getImageUrl() : null
         let msgPayload = { text: finalText }
         if (imageUrl) {
-          // Baixa o buffer com UA/Referer reais — CDNs (ex.: Shopee) rejeitam
-          // o UA padrão da Baileys e resultam em imagem quebrada no destino.
-          const buffer = await fetchImageBuffer(imageUrl, primary.url)
-          msgPayload = buffer
-            ? { image: buffer, caption: finalText }
-            : { image: { url: imageUrl }, caption: finalText }
+          // Baixamos os bytes diretamente: se passarmos só a URL, a Baileys
+          // repassa para o servidor de mídia do WhatsApp, que é bloqueado por
+          // CDNs como o da Shopee — resultando em imagem quebrada no destino.
+          const downloaded = await fetchImageBuffer(imageUrl, primary.url)
+          if (downloaded) {
+            msgPayload = {
+              image: downloaded.buffer,
+              mimetype: downloaded.mimetype,
+              caption: finalText,
+            }
+          } else {
+            logger.warn({ imageUrl, platform: primary.platform }, 'Falha ao baixar imagem — enviando sem mídia')
+          }
         }
 
         try {
