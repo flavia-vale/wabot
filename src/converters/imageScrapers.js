@@ -237,10 +237,26 @@ export async function fetchProductImage(platform, productUrl, creds) {
   }
 }
 
+// Detecta mimetype a partir dos magic bytes do buffer.
+// Retorna null se não for um formato de imagem reconhecido (sinal de download corrompido).
+export function detectImageMime(buf) {
+  if (!buf || buf.length < 12) return null
+  // JPEG: FF D8 FF
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg'
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png'
+  // GIF: 47 49 46 38
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38) return 'image/gif'
+  // WebP: RIFF....WEBP
+  if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+      buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) return 'image/webp'
+  return null
+}
+
 // Baixa o conteúdo da imagem como Buffer enviando User-Agent/Referer adequados.
-// Necessário para o WhatsApp porque a Baileys, ao receber `{ image: { url } }`,
-// usa um UA padrão que CDNs como o da Shopee podem rejeitar — resultando em
-// "imagem quebrada" no destino.
+// Necessário para o WhatsApp porque a Baileys, ao passar `{ image: { url } }`,
+// repassa a URL para o servidor de mídia do WhatsApp, que pode ser bloqueado
+// pelo CDN da Shopee — resultando em imagem quebrada no destino.
 export async function fetchImageBuffer(imageUrl, refererUrl) {
   if (!imageUrl) return null
   try {
@@ -257,8 +273,6 @@ export async function fetchImageBuffer(imageUrl, refererUrl) {
       redirect: 'follow',
     })
     if (!res.ok) return null
-    const contentType = res.headers.get('content-type') || ''
-    if (contentType && !contentType.startsWith('image/')) return null
     const contentLength = Number(res.headers.get('content-length'))
     if (contentLength && contentLength > IMAGE_BUFFER_MAX_BYTES) return null
 
@@ -266,7 +280,9 @@ export async function fetchImageBuffer(imageUrl, refererUrl) {
     if (!reader) {
       const ab = await res.arrayBuffer()
       if (ab.byteLength > IMAGE_BUFFER_MAX_BYTES) return null
-      return Buffer.from(ab)
+      const buf = Buffer.from(ab)
+      const mime = detectImageMime(buf)
+      return mime ? { buffer: buf, mimetype: mime } : null
     }
     const chunks = []
     let received = 0
@@ -280,7 +296,9 @@ export async function fetchImageBuffer(imageUrl, refererUrl) {
       }
       chunks.push(value)
     }
-    return Buffer.concat(chunks.map(c => Buffer.from(c)), received)
+    const buf = Buffer.concat(chunks.map(c => Buffer.from(c)), received)
+    const mime = detectImageMime(buf)
+    return mime ? { buffer: buf, mimetype: mime } : null
   } catch {
     return null
   }
