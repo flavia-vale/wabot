@@ -48,6 +48,10 @@ function PlanosContent() {
   const [checkoutError, setCheckoutError] = useState('')
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState('')
+  const [recoverPaymentId, setRecoverPaymentId] = useState('')
+  const [recoverLoading, setRecoverLoading] = useState(false)
+  const [recoverError, setRecoverError] = useState('')
+  const [recoverSuccess, setRecoverSuccess] = useState('')
 
   useEffect(() => {
     let active = true
@@ -68,6 +72,30 @@ function PlanosContent() {
       setCheckoutError(err.message)
     } finally {
       setCheckoutLoading('')
+    }
+  }
+
+  async function handleRecover(e) {
+    e.preventDefault()
+    const trimmed = recoverPaymentId.trim()
+    if (!trimmed) return
+    setRecoverError('')
+    setRecoverSuccess('')
+    setRecoverLoading(true)
+    try {
+      const res = await api.paymentsRecover(trimmed)
+      const days = daysLeft(res.accessExpiresAt)
+      const planLabel = PLAN_LABELS[res.plan] ?? res.plan
+      setRecoverSuccess(res.alreadyApplied
+        ? `Esse pagamento já está aplicado. Plano ${planLabel} ativo por mais ${days} dia${days !== 1 ? 's' : ''}.`
+        : `Acesso ${planLabel} ativado por 30 dias.`)
+      setRecoverPaymentId('')
+      const refreshed = await api.paymentsStatus().catch(() => null)
+      if (refreshed) setData(refreshed)
+    } catch (err) {
+      setRecoverError(err.message)
+    } finally {
+      setRecoverLoading(false)
     }
   }
 
@@ -98,16 +126,16 @@ function PlanosContent() {
         <h2 className="text-2xl font-bold text-gray-800 mb-1">Planos</h2>
         <HelpLink topic="pagamento-pendente">Ajuda</HelpLink>
       </div>
-      <p className="text-gray-500 text-sm mb-6">Compre ou renove acesso por 30 dias. A ativação só aparece após confirmação do pagamento.</p>
+      <p className="text-gray-500 text-sm mb-6">Compre ou renove acesso por 30 dias. Após pagar, informe o ID do pagamento abaixo para ativar.</p>
 
       {redirectStatus === 'success' && hasConfirmedPaidAccess && (
         <div className="bg-green-50 border border-green-200 text-green-700 rounded-xl p-4 mb-5 text-sm">
-          Pagamento confirmado pelo backend. Seu acesso de 30 dias está ativo.
+          Acesso de 30 dias ativo.
         </div>
       )}
       {redirectStatus === 'success' && !hasConfirmedPaidAccess && (
         <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-xl p-4 mb-5 text-sm">
-          Pagamento recebido pelo Mercado Pago e aguardando confirmação do webhook. Atualize esta tela em alguns instantes para validar a ativação.
+          Pagamento recebido pelo Mercado Pago. Cole o ID do pagamento (recebido por e-mail ou na tela de confirmação do MP) no formulário abaixo para ativar seu acesso.
         </div>
       )}
       {redirectStatus === 'failure' && (
@@ -172,11 +200,36 @@ function PlanosContent() {
 
       {checkoutError && <p className="text-red-500 text-sm mb-4">{checkoutError}</p>}
 
+      <div className="bg-white rounded-2xl shadow p-5 mb-5">
+        <h3 className="font-semibold text-gray-700 mb-1">Já paguei — ativar acesso</h3>
+        <p className="text-xs text-gray-500 mb-3">Cole o ID do pagamento (payment_id) que o Mercado Pago enviou por e-mail ou exibiu na confirmação.</p>
+        <form onSubmit={handleRecover} className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="text"
+            inputMode="numeric"
+            value={recoverPaymentId}
+            onChange={e => setRecoverPaymentId(e.target.value)}
+            placeholder="Ex.: 123456789012"
+            className="flex-1 text-sm border rounded-lg px-3 py-2"
+            disabled={recoverLoading}
+          />
+          <button
+            type="submit"
+            disabled={recoverLoading || !recoverPaymentId.trim()}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition"
+          >
+            {recoverLoading ? 'Ativando...' : 'Ativar acesso'}
+          </button>
+        </form>
+        {recoverError && <p className="text-red-500 text-sm mt-2">{recoverError}</p>}
+        {recoverSuccess && <p className="text-green-700 text-sm mt-2">{recoverSuccess}</p>}
+      </div>
 
       <div className="bg-white rounded-2xl shadow p-5 mb-5 text-sm text-gray-600">
         <h3 className="font-semibold text-gray-700 mb-3">Dúvidas rápidas</h3>
         <div className="space-y-3">
-          <p><strong>Quando ativa?</strong> Após confirmação do pagamento pelo backend/webhook do Mercado Pago.</p>
+          <p><strong>Quando ativa?</strong> Após pagar no Mercado Pago, cole o ID do pagamento no formulário acima — a ativação é imediata.</p>
+          <p><strong>Onde encontro o ID?</strong> Na tela de confirmação do Mercado Pago e no e-mail recebido após o pagamento.</p>
           <p><strong>É recorrente?</strong> Não. No MVP o acesso dura 30 dias e pode ser renovado manualmente.</p>
           <p><strong>Qual plano escolher?</strong> Basic para validar a operação; Pro para operar sem anúncios e com maior confiança em campanhas.</p>
         </div>
