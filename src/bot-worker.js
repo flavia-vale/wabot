@@ -594,7 +594,7 @@ async function startBot() {
         if (monitorGroup.imageMode === 'fetch') {
           const enabled = links.filter(l => enabledPlatforms.has(l.platform))
           const target = monitorGroup.imageLinkTarget === 'first' ? enabled[0] : enabled[enabled.length - 1]
-          if (target) cachedImageUrl = await fetchProductImage(target.platform, target.url)
+          if (target) cachedImageUrl = await fetchProductImage(target.platform, target.url, cfg.credentials)
           if (!cachedImageUrl && monitorGroup.fallbackToOriginal) {
             cachedImageUrl = msg.message?.imageMessage?.url || null
           }
