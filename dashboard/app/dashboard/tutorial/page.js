@@ -115,21 +115,28 @@ export default function TutorialPage() {
         </ul>
       </div>
 
-      <div className="space-y-3">
-        {FALLBACK_TUTORIAL.sections.map((section) => (
-          <article key={section.title} className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-            <h2 className="text-base font-black text-gray-900">{section.icon} {section.title}</h2>
-            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-gray-700">
-              {section.steps.map((step) => <li key={step}>{step}</li>)}
-            </ol>
-            {section.prints?.length ? (
-              <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-gray-600">
-                {section.prints.map((hint) => <li key={hint}>{hint}</li>)}
-              </ul>
-            ) : null}
-          </article>
-        ))}
-      </div>
+      {!tutorial?.body ? (
+        <div className="space-y-3">
+          {FALLBACK_TUTORIAL.sections.map((section) => (
+            <article key={section.title} className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <h2 className="text-base font-black text-gray-900">{section.icon} {section.title}</h2>
+              <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-gray-700">
+                {section.steps.map((step) => <li key={step}>{step}</li>)}
+              </ol>
+              {section.prints?.length ? (
+                <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-gray-600">
+                  {section.prints.map((hint) => <li key={hint}>{hint}</li>)}
+                </ul>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      ) : (
+        <article className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+          <h2 className="text-base font-black text-gray-900">Conteúdo personalizado do Admin</h2>
+          <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700">{tutorial.body}</p>
+        </article>
+      )}
 
       <details className="rounded-xl border border-gray-200 bg-gray-50 p-3">
         <summary className="cursor-pointer text-sm font-bold text-gray-800">Prints configurados no Admin</summary>
