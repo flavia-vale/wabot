@@ -581,6 +581,20 @@ async function startBot() {
       const platformCsv = monitorGroup?.allowedPlatforms?.trim() || cfg.botConfig.platforms
       const enabledPlatforms = new Set(platformCsv.split(',').filter(Boolean))
 
+      // Retorna o proto imageMessage (ou videoMessage) original sem baixar.
+      // Permite reaproveitar a mídia já hospedada nos servidores do WhatsApp,
+      // trocando apenas o caption — caminho mais confiável que upload+sharp.
+      function getOriginalMediaMessage() {
+        const inner = extractMessageContent(msg.message)
+        const ext = inner?.extendedTextMessage
+        const quoted = ext?.contextInfo?.quotedMessage
+        if (inner?.imageMessage) return { type: 'imageMessage', proto: inner.imageMessage }
+        if (quoted?.imageMessage) return { type: 'imageMessage', proto: quoted.imageMessage }
+        if (inner?.videoMessage) return { type: 'videoMessage', proto: inner.videoMessage }
+        if (quoted?.videoMessage) return { type: 'videoMessage', proto: quoted.videoMessage }
+        return null
+      }
+
       // Baixa a imagem original do anúncio (mensagem do grupo monitorado) já
       // decifrada via Baileys, retornando { buffer, mimetype }. Lida com
       // wrappers (ephemeralMessage etc.), link preview (jpegThumbnail embutido)
@@ -731,20 +745,37 @@ async function startBot() {
           messageText: finalText,
         }
 
-        const rawImage = monitorGroup?.imageMode !== 'none' ? await getImage() : null
-        // Re-encoda como JPEG e pré-gera o thumbnail para evitar a falha
-        // 'failed to obtain extra info' (sharp) que produz imagem quebrada.
-        const image = rawImage ? await normalizeImageForWhatsApp(rawImage.buffer) : null
-        if (rawImage && !image) {
-          logger.warn({ msgId: msg.key.id, srcMime: rawImage.mimetype, size: rawImage.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
-        }
-        const msgPayload = image
-          ? { image: image.buffer, mimetype: image.mimetype, jpegThumbnail: image.jpegThumbnail, caption: finalText }
-          : { text: finalText }
+        // Estratégia preferencial: reaproveitar o proto da mídia original
+        // (imageMessage/videoMessage) trocando só o caption e usando relayMessage.
+        // Evita sharp/upload (root cause da imagem quebrada) e mantém a mídia
+        // já hospedada nos servidores do WhatsApp — recipients decifram com a
+        // mediaKey original, exatamente como num forward.
+        const wantImage = monitorGroup?.imageMode !== 'none'
+        const original = wantImage ? getOriginalMediaMessage() : null
 
+        let sentVia = 'text'
         try {
-          await sock.sendMessage(destJid, msgPayload)
-          logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode }, 'Mensagem enviada')
+          if (original) {
+            const replayProto = { ...original.proto, caption: finalText }
+            await sock.relayMessage(destJid, { [original.type]: replayProto }, {})
+            sentVia = `relay:${original.type}`
+          } else if (wantImage) {
+            // Sem mídia original (ex.: msg só de texto). Tenta resolver via CDN
+            // do produto, baixar bytes e re-encodar como JPEG antes de enviar.
+            const fetched = await getImage()
+            const image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
+            if (fetched && !image) {
+              logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
+            }
+            const payload = image
+              ? { image: image.buffer, mimetype: image.mimetype, jpegThumbnail: image.jpegThumbnail, caption: finalText }
+              : { text: finalText }
+            await sock.sendMessage(destJid, payload)
+            sentVia = image ? 'upload:image' : 'text'
+          } else {
+            await sock.sendMessage(destJid, { text: finalText })
+          }
+          logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
           const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
           db.messageLog.create({
             data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: finalText, status: 'success' },
