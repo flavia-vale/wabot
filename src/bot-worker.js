@@ -14,7 +14,7 @@ import { dirname } from 'path'
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
-import { fetchProductImage, fetchImageBuffer } from './converters/imageScrapers.js'
+import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
@@ -731,9 +731,15 @@ async function startBot() {
           messageText: finalText,
         }
 
-        const image = monitorGroup?.imageMode !== 'none' ? await getImage() : null
+        const rawImage = monitorGroup?.imageMode !== 'none' ? await getImage() : null
+        // Re-encoda como JPEG e pré-gera o thumbnail para evitar a falha
+        // 'failed to obtain extra info' (sharp) que produz imagem quebrada.
+        const image = rawImage ? await normalizeImageForWhatsApp(rawImage.buffer) : null
+        if (rawImage && !image) {
+          logger.warn({ msgId: msg.key.id, srcMime: rawImage.mimetype, size: rawImage.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
+        }
         const msgPayload = image
-          ? { image: image.buffer, mimetype: image.mimetype, caption: finalText }
+          ? { image: image.buffer, mimetype: image.mimetype, jpegThumbnail: image.jpegThumbnail, caption: finalText }
           : { text: finalText }
 
         try {
