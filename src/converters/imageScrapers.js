@@ -1,3 +1,5 @@
+import sharp from 'sharp'
+
 const OG_IMAGE_RE = [
   /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
   /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
@@ -233,6 +235,37 @@ export async function fetchProductImage(platform, productUrl, creds) {
   } catch {
     incFailure(productUrl)
     setCached(productUrl, null)
+    return null
+  }
+}
+
+// Re-encoda a imagem como JPEG e gera um thumbnail JPEG (~100kb).
+// Necessário porque a Baileys chama sharp.metadata() para gerar thumbnail
+// automaticamente; quando os bytes vêm em formato não suportado pelo sharp
+// (HEIC sem libheif, AVIF, ou bytes corrompidos), o sharp falha e a imagem
+// chega quebrada no WhatsApp. Pré-gerando o thumbnail aqui, a Baileys pula
+// sua chamada interna ao sharp (messages.js:132).
+export async function normalizeImageForWhatsApp(buf) {
+  if (!buf?.length) return null
+  try {
+    const meta = await sharp(buf, { failOn: 'none' }).metadata()
+    if (!meta?.width || !meta?.height) return null
+
+    // Converte para JPEG; redimensiona se for absurdamente grande.
+    const main = await sharp(buf, { failOn: 'none' })
+      .rotate()
+      .resize({ width: 1280, height: 1280, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 85, mozjpeg: true })
+      .toBuffer()
+
+    const thumbnail = await sharp(buf, { failOn: 'none' })
+      .rotate()
+      .resize({ width: 200, height: 200, fit: 'inside' })
+      .jpeg({ quality: 60 })
+      .toBuffer()
+
+    return { buffer: main, mimetype: 'image/jpeg', jpegThumbnail: thumbnail }
+  } catch {
     return null
   }
 }
