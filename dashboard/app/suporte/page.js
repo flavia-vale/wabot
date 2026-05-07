@@ -2,8 +2,8 @@ import Link from 'next/link'
 import { PublicPage } from '@/components/PublicShell'
 
 export const metadata = {
-  title: 'Suporte | Wabot',
-  description: 'Canais de suporte e orientações iniciais para usar o Wabot.',
+  title: 'Suporte | BOTinho',
+  description: 'Canais de suporte e orientações iniciais para usar o BOTinho.',
 }
 
 const faqs = [
@@ -28,7 +28,7 @@ export default function SupportPage() {
         <section className="rounded-2xl bg-green-50 p-5 text-green-900">
           <h2 className="text-xl font-bold">Canal oficial</h2>
           <p className="mt-2">WhatsApp oficial: <a href="https://wa.me/5532999844020" target="_blank" rel="noopener noreferrer" className="font-bold underline">5532999844020</a></p>
-          <p className="mt-2">Atendimento por e-mail: <a href="mailto:suporte@wabot.app" className="font-bold underline">suporte@wabot.app</a></p>
+          <p className="mt-2">Atendimento por e-mail: <a href="mailto:suporte@BOTinho.app" className="font-bold underline">suporte@BOTinho.app</a></p>
           <p className="mt-2">Expectativa de resposta: assim que possível em dias úteis. Ainda não há SLA formal na fase MVP.</p>
         </section>
 

@@ -2,14 +2,14 @@ import Link from 'next/link'
 import { PublicPage } from '@/components/PublicShell'
 
 export const metadata = {
-  title: 'Termos de Uso | Wabot',
-  description: 'Termos mínimos para uso do Wabot, bot conversor para afiliados no WhatsApp.',
+  title: 'Termos de Uso | BOTinho',
+  description: 'Termos mínimos para uso do BOTinho, bot conversor para afiliados no WhatsApp.',
 }
 
 const sections = [
   {
     title: '1. Uso do produto',
-    text: 'O Wabot é uma ferramenta de apoio para afiliados automatizarem conversão de links, organização de grupos e envios autorizados no WhatsApp. O usuário é responsável por usar o produto conforme as regras das plataformas de afiliados, do WhatsApp e da legislação aplicável.',
+    text: 'O BOTinho é uma ferramenta de apoio para afiliados automatizarem conversão de links, organização de grupos e envios autorizados no WhatsApp. O usuário é responsável por usar o produto conforme as regras das plataformas de afiliados, do WhatsApp e da legislação aplicável.',
   },
   {
     title: '2. Conta e segurança',
@@ -21,7 +21,7 @@ const sections = [
   },
   {
     title: '4. Limites e responsabilidades',
-    text: 'Não é permitido usar o Wabot para spam, golpes, conteúdo ilegal, violação de direitos, coleta indevida de dados ou mensagens sem autorização. Resultados comerciais dependem da operação do usuário e não são garantidos.',
+    text: 'Não é permitido usar o BOTinho para spam, golpes, conteúdo ilegal, violação de direitos, coleta indevida de dados ou mensagens sem autorização. Resultados comerciais dependem da operação do usuário e não são garantidos.',
   },
   {
     title: '5. Disponibilidade e suporte',
@@ -34,7 +34,7 @@ export default function TermsPage() {
     <PublicPage
       eyebrow="Legal"
       title="Termos de Uso"
-      description="Condições mínimas para uso responsável do Wabot durante a fase MVP."
+      description="Condições mínimas para uso responsável do BOTinho durante a fase MVP."
     >
       <div className="space-y-6 text-sm leading-7 text-gray-600">
         <p className="rounded-2xl bg-green-50 p-4 text-green-800">

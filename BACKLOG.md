@@ -1,4 +1,4 @@
-# Backlog de Issues — wabot
+# Backlog de Issues — BOTinho
 flaviateste
 
 Gerado durante processo de QA. Issues ordenadas por módulo e prioridade.  
@@ -47,7 +47,7 @@ O endpoint aceita senhas de qualquer tamanho, incluindo senhas de 1 caractere. N
 ```bash
 curl -X POST /api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"teste@wabot.com","password":"1"}'
+  -d '{"email":"teste@BOTinho.com","password":"1"}'
 # → 200 OK, usuário criado com senha "1"
 ```
 
@@ -66,14 +66,14 @@ if (password.length < 8) return reply.code(400).send({ error: 'Senha deve ter no
 **Arquivo:** `src/api/routes/auth.js` — `POST /login`
 
 **Descrição:**  
-O login diferencia maiúsculas/minúsculas no email. Um usuário cadastrado como `teste@wabot.com` não consegue logar com `TESTE@WABOT.COM` ou `Teste@Wabot.Com`.
+O login diferencia maiúsculas/minúsculas no email. Um usuário cadastrado como `teste@BOTinho.com` não consegue logar com `TESTE@BOTinho.COM` ou `Teste@BOTinho.Com`.
 
 **Reprodução:**
 ```bash
 # Cadastro com minúsculo → OK
 # Login com maiúsculo → 401 "Credenciais inválidas"
 curl -X POST /api/auth/login \
-  -d '{"email":"TESTE@WABOT.COM","password":"senha123"}'
+  -d '{"email":"TESTE@BOTinho.COM","password":"senha123"}'
 ```
 
 **Impacto:** UX ruim — comportamento não esperado pelo usuário médio. Emails são case-insensitive por RFC 5321.
@@ -632,7 +632,7 @@ O build de produção do dashboard (`.next/`) foi gerado antes do commit `d96489
 **Correção:**
 Rodar os comandos de rebuild no servidor SSH:
 ```bash
-cd ~/wabot && git pull
+cd ~/BOTinho && git pull
 cd dashboard && npm run build && cd ..
 pm2 restart all
 ```
