@@ -1,0 +1,65 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { api } from '@/lib/api'
+import { Alert } from '@/components/Alert'
+
+const COUPON_CODE = 'VIP7DIAS'
+
+export default function PromoVipPage() {
+  const router = useRouter()
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      await api.registerPromoVip(name, email, password, COUPON_CODE)
+      router.push('/dashboard/inicio')
+    } catch (err) {
+      setError(err.message || 'Não foi possível concluir seu cadastro agora.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-black text-white px-6 py-12">
+      <section className="mx-auto max-w-xl rounded-2xl border border-emerald-500/30 bg-emerald-950/40 p-8">
+        <h1 className="text-3xl font-bold">Acesso VIP · 7 dias grátis</h1>
+        <p className="mt-3 text-emerald-100">Complete seu cadastro e entre direto no painel, sem passar pela tela de login.</p>
+
+        <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
+          <input type="hidden" name="coupon_code" value={COUPON_CODE} />
+
+          <div>
+            <label htmlFor="name" className="block text-sm mb-1">Nome</label>
+            <input id="name" value={name} onChange={(e) => setName(e.target.value)} required className="w-full rounded-lg border border-emerald-300/40 bg-white px-3 py-2 text-gray-900" />
+          </div>
+
+          <div>
+            <label htmlFor="email" className="block text-sm mb-1">Email</label>
+            <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full rounded-lg border border-emerald-300/40 bg-white px-3 py-2 text-gray-900" />
+          </div>
+
+          <div>
+            <label htmlFor="password" className="block text-sm mb-1">Senha</label>
+            <input id="password" type="password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full rounded-lg border border-emerald-300/40 bg-white px-3 py-2 text-gray-900" />
+          </div>
+
+          {error && <Alert type="error" title="Falha no cadastro" message={error} />}
+
+          <button disabled={loading} type="submit" className="w-full rounded-lg bg-emerald-500 py-2 font-semibold text-black disabled:opacity-70">
+            {loading ? 'Criando sua conta...' : 'Começar agora'}
+          </button>
+        </form>
+      </section>
+    </main>
+  )
+}

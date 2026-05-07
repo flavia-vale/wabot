@@ -17,6 +17,7 @@ function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const ref = searchParams.get('ref')
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [contactPhone, setContactPhone] = useState('')
@@ -41,7 +42,7 @@ function LoginContent() {
     setSuccess('')
     setLoading(true)
     try {
-      if (isRegister) await api.register(email, password, contactPhone, ref)
+      if (isRegister) await api.register(name, email, password, contactPhone, ref)
       else await api.login(email, password)
       setSuccess(isRegister ? 'Conta criada com sucesso. Redirecionando para o checklist...' : 'Login realizado. Redirecionando para o checklist...')
       setTimeout(() => router.push('/dashboard/inicio'), 300)
@@ -101,6 +102,21 @@ function LoginContent() {
         </ul>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {isRegister && (
+            <div>
+              <label htmlFor="name" className="block text-sm font-medium mb-1 text-emerald-100">Nome completo</label>
+              <input
+                id="name"
+                type="text"
+                placeholder="Como podemos te chamar"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                required={isRegister}
+                autoComplete="name"
+                className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 w-full"
+              />
+            </div>
+          )}
           <div>
             <label htmlFor="email" className={`block text-sm font-medium mb-1 ${isRegister ? 'text-emerald-100' : 'text-gray-700'}`}>Email</label>
             <input
@@ -109,7 +125,7 @@ function LoginContent() {
               placeholder="seuemail@exemplo.com"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              required
+              required={!isRegister}
               autoComplete="email"
               className="border bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-400 w-full rounded-lg"
             />
@@ -152,8 +168,8 @@ function LoginContent() {
                 placeholder="Digite sua senha"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                required
-                minLength={isRegister ? 8 : undefined}
+                required={!isRegister}
+                minLength={isRegister ? 0 : undefined}
                 autoComplete={isRegister ? 'new-password' : 'current-password'}
                 className="w-full rounded-lg border bg-white px-3 py-2 pr-24 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-400"
               />
