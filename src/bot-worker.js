@@ -12,7 +12,7 @@ import { dirname } from 'path'
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
-import { fetchProductImage } from './converters/imageScrapers.js'
+import { fetchProductImage, fetchImageBuffer } from './converters/imageScrapers.js'
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
@@ -649,9 +649,15 @@ async function startBot() {
         }
 
         const imageUrl = monitorGroup?.imageMode !== 'none' ? await getImageUrl() : null
-        const msgPayload = imageUrl
-          ? { image: { url: imageUrl }, caption: finalText }
-          : { text: finalText }
+        let msgPayload = { text: finalText }
+        if (imageUrl) {
+          // Baixa o buffer com UA/Referer reais — CDNs (ex.: Shopee) rejeitam
+          // o UA padrão da Baileys e resultam em imagem quebrada no destino.
+          const buffer = await fetchImageBuffer(imageUrl, primary.url)
+          msgPayload = buffer
+            ? { image: buffer, caption: finalText }
+            : { image: { url: imageUrl }, caption: finalText }
+        }
 
         try {
           await sock.sendMessage(destJid, msgPayload)

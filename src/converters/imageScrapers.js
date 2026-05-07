@@ -7,6 +7,13 @@ const JSON_LD_RE = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*
 const IMAGE_CACHE_TTL_MS = 5 * 60 * 1000
 const IMAGE_FETCH_TIMEOUT_MS = Number(process.env.IMAGE_FETCH_TIMEOUT_MS) || 2_500
 const IMAGE_HTML_MAX_BYTES = Number(process.env.IMAGE_HTML_MAX_BYTES) || 512 * 1024
+const IMAGE_BUFFER_TIMEOUT_MS = Number(process.env.IMAGE_BUFFER_TIMEOUT_MS) || 5_000
+const IMAGE_BUFFER_MAX_BYTES = Number(process.env.IMAGE_BUFFER_MAX_BYTES) || 5 * 1024 * 1024
+
+// User-Agent de browser real: Shopee e outros sites bloqueiam UAs de bot e
+// devolvem HTML sem og:image, causando "sem imagem" nos anúncios.
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+
 const imageCache = new Map()
 const domainFailureMetrics = new Map()
 
@@ -83,18 +90,25 @@ async function readLimitedText(res) {
 
 async function fetchHtml(url) {
   const res = await fetch(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BotConversorAfiliados/1.0)' },
+    headers: {
+      'User-Agent': BROWSER_UA,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+    },
     signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS),
     redirect: 'follow',
   })
-  if (!res.ok) return null
+  if (!res.ok) return { html: null, finalUrl: url }
   const contentType = res.headers.get('content-type') || ''
-  if (contentType && !contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) return null
-  return readLimitedText(res)
+  if (contentType && !contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) {
+    return { html: null, finalUrl: res.url || url }
+  }
+  const html = await readLimitedText(res)
+  return { html, finalUrl: res.url || url }
 }
 
 async function resolveByHtmlLayers(url) {
-  const html = await fetchHtml(url)
+  const { html } = await fetchHtml(url)
   if (!html) return null
 
   for (const re of OG_IMAGE_RE) {
@@ -105,8 +119,69 @@ async function resolveByHtmlLayers(url) {
   return extractJsonLdImage(html)
 }
 
-async function resolveFromOfficialApi(_platform, _url) {
-  return null
+// Extrai (shopid, itemid) de URLs Shopee no formato:
+//   https://shopee.com.br/produto-i.{shopid}.{itemid}
+//   https://shopee.com.br/product/{shopid}/{itemid}
+function parseShopeeIds(url) {
+  try {
+    const u = new URL(url)
+    if (!/shopee\.com\.br$/.test(u.hostname)) return null
+    const m1 = u.pathname.match(/-i\.(\d+)\.(\d+)(?:\/|$)/)
+    if (m1) return { shopid: m1[1], itemid: m1[2] }
+    const m2 = u.pathname.match(/^\/product\/(\d+)\/(\d+)(?:\/|$)/)
+    if (m2) return { shopid: m2[1], itemid: m2[2] }
+    return null
+  } catch { return null }
+}
+
+// Resolve short links da Shopee (shope.ee, s.shopee.com.br) para a URL canônica.
+async function resolveShopeeShortLink(url) {
+  try {
+    const u = new URL(url)
+    if (!/^(shope\.ee|s\.shopee\.com\.br)$/.test(u.hostname)) return url
+    const res = await fetch(url, {
+      headers: { 'User-Agent': BROWSER_UA },
+      signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS),
+      redirect: 'follow',
+    })
+    return res.url || url
+  } catch { return url }
+}
+
+function shopeeImageUrl(hash) {
+  if (!hash) return null
+  if (/^https?:\/\//i.test(hash)) return hash
+  return `https://down-br.img.susercontent.com/file/${hash}`
+}
+
+async function resolveShopeeImage(url) {
+  const canonical = await resolveShopeeShortLink(url)
+  const ids = parseShopeeIds(canonical)
+  if (ids) {
+    try {
+      const apiUrl = `https://shopee.com.br/api/v4/item/get?itemid=${ids.itemid}&shopid=${ids.shopid}`
+      const res = await fetch(apiUrl, {
+        headers: {
+          'User-Agent': BROWSER_UA,
+          'Accept': 'application/json',
+          'Referer': canonical,
+          'X-API-SOURCE': 'pc',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS),
+      })
+      if (res.ok) {
+        const json = await res.json()
+        const item = json?.data || json?.item
+        const hash = item?.image || item?.images?.[0]
+        const built = shopeeImageUrl(hash)
+        if (built) return built
+      }
+    } catch {
+      // cai no fallback de HTML
+    }
+  }
+  return resolveByHtmlLayers(canonical)
 }
 
 export function getImageResolverMetrics() {
@@ -118,9 +193,11 @@ export async function fetchProductImage(platform, productUrl) {
   if (cached !== null) return cached
 
   try {
-    const image = await resolveByHtmlLayers(productUrl)
-      ?? await resolveFromOfficialApi(platform, productUrl)
-      ?? null
+    let image = null
+    if (platform === 'shopee') {
+      image = await resolveShopeeImage(productUrl)
+    }
+    if (!image) image = await resolveByHtmlLayers(productUrl)
 
     if (!image) incFailure(productUrl)
     setCached(productUrl, image)
@@ -128,6 +205,55 @@ export async function fetchProductImage(platform, productUrl) {
   } catch {
     incFailure(productUrl)
     setCached(productUrl, null)
+    return null
+  }
+}
+
+// Baixa o conteúdo da imagem como Buffer enviando User-Agent/Referer adequados.
+// Necessário para o WhatsApp porque a Baileys, ao receber `{ image: { url } }`,
+// usa um UA padrão que CDNs como o da Shopee podem rejeitar — resultando em
+// "imagem quebrada" no destino.
+export async function fetchImageBuffer(imageUrl, refererUrl) {
+  if (!imageUrl) return null
+  try {
+    const headers = {
+      'User-Agent': BROWSER_UA,
+      'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+    }
+    if (refererUrl) {
+      try { headers['Referer'] = new URL(refererUrl).origin + '/' } catch {}
+    }
+    const res = await fetch(imageUrl, {
+      headers,
+      signal: AbortSignal.timeout(IMAGE_BUFFER_TIMEOUT_MS),
+      redirect: 'follow',
+    })
+    if (!res.ok) return null
+    const contentType = res.headers.get('content-type') || ''
+    if (contentType && !contentType.startsWith('image/')) return null
+    const contentLength = Number(res.headers.get('content-length'))
+    if (contentLength && contentLength > IMAGE_BUFFER_MAX_BYTES) return null
+
+    const reader = res.body?.getReader()
+    if (!reader) {
+      const ab = await res.arrayBuffer()
+      if (ab.byteLength > IMAGE_BUFFER_MAX_BYTES) return null
+      return Buffer.from(ab)
+    }
+    const chunks = []
+    let received = 0
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      received += value.byteLength
+      if (received > IMAGE_BUFFER_MAX_BYTES) {
+        await reader.cancel().catch(() => {})
+        return null
+      }
+      chunks.push(value)
+    }
+    return Buffer.concat(chunks.map(c => Buffer.from(c)), received)
+  } catch {
     return null
   }
 }
