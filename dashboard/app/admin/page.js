@@ -376,6 +376,7 @@ function LandingPageContentAccordion({ plans, faq, onSavePlan, onSaveFaq, onDele
           </div>
 
           <FaqEditor faq={faq} onSave={onSaveFaq} onDelete={onDeleteFaq} />
+          <TutorialEditor key={`tutorial-${tutorial?.updatedAt ?? 'empty'}`} tutorial={tutorial} onSave={onSaveTutorial} />
         </div>
       )}
     </section>
