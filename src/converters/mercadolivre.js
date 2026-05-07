@@ -153,6 +153,7 @@ async function createAffiliateLink(mlUrl, tag, creds) {
       timeout: 10000,
     }
   )
+  console.log("🔧 DEBUG API Response:", {status: res.status, hasData: !!res.data, urlsCount: res.data?.urls?.length, firstShortUrl: res.data?.urls?.[0]?.short_url});
   const result = res.data?.urls?.[0]
   if (result?.short_url) return result.short_url
   return null
@@ -217,7 +218,8 @@ export async function convert(url, creds) {
           if (!expectedMlbId || await validateAffiliateRedirect(affiliateUrl, expectedMlbId)) {
             return affiliateUrl
           }
-        } catch {
+        } catch (err) {
+          console.log("🔧 DEBUG API Error (candidate):", {candidate, message: err.message, status: err.response?.status, responseData: err.response?.data});
           // tenta próximo candidato
         }
       }
@@ -235,7 +237,8 @@ export async function convert(url, creds) {
             return affiliateUrl
           }
         }
-      } catch {
+      } catch (err) {
+        console.log("🔧 DEBUG API Error (clean1):", {message: err.message, status: err.response?.status, responseData: err.response?.data});
         // cai no fallback
       }
 
@@ -252,7 +255,8 @@ export async function convert(url, creds) {
             return affiliateUrl
           }
         }
-      } catch {
+      } catch (err) {
+        console.log("🔧 DEBUG API Error (clean2):", {message: err.message, status: err.response?.status, responseData: err.response?.data});
         // cai no fallback
       }
     }
