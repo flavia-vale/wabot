@@ -54,6 +54,18 @@ async function getLpPlans() {
   }
 }
 
+async function getTutorialContent() {
+  try {
+    const tutorial = await db.tutorialContent.findUnique({ where: { id: 'dashboard_tutorial' } })
+    if (!tutorial) return null
+    let images = []
+    try { images = JSON.parse(String(tutorial.images ?? '[]')) } catch {}
+    return { ...tutorial, images: Array.isArray(images) ? images : [] }
+  } catch {
+    return null
+  }
+}
+
 export async function publicRoutes(app) {
   app.get('/faq', async (_req, reply) => {
     reply.header('Cache-Control', 'no-store, max-age=0')
@@ -64,12 +76,19 @@ export async function publicRoutes(app) {
 
   app.get('/lp-content', async (_req, reply) => {
     reply.header('Cache-Control', 'no-store, max-age=0')
-    const [plans, faqItems] = await Promise.all([getLpPlans(), getActiveFaqItems()])
+    const [plans, faqItems, tutorial] = await Promise.all([getLpPlans(), getActiveFaqItems(), getTutorialContent()])
 
     return {
       plans: plans.map(serializeLpPlan),
       faq: faqItems.map(serializeFaqItem),
+      tutorial,
     }
+  })
+
+  app.get('/tutorial-content', async (_req, reply) => {
+    reply.header('Cache-Control', 'no-store, max-age=0')
+    const tutorial = await getTutorialContent()
+    return { tutorial }
   })
 
   app.get('/plans', async (_req, reply) => {

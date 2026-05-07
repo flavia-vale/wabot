@@ -314,6 +314,32 @@ function FaqEditor({ faq, onSave, onDelete }) {
   )
 }
 
+function TutorialEditor({ tutorial, onSave }) {
+  const [title, setTitle] = useState(tutorial?.title ?? '')
+  const [body, setBody] = useState(tutorial?.body ?? '')
+  const [imagesText, setImagesText] = useState(JSON.stringify(tutorial?.images ?? [], null, 2))
+  const [saving, setSaving] = useState(false)
+
+  async function submit(e) {
+    e.preventDefault()
+    let images = []
+    try { images = JSON.parse(imagesText || '[]') } catch { throw new Error('JSON de prints inválido.') }
+    setSaving(true)
+    try { await onSave({ title, body, images }) } finally { setSaving(false) }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3 rounded-xl border border-gray-100 bg-gray-50 p-4">
+      <h3 className="text-base font-black text-gray-900">Tutorial (Dashboard)</h3>
+      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título do tutorial" className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" required />
+      <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Texto principal do tutorial" className="min-h-32 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" required />
+      <textarea value={imagesText} onChange={(e) => setImagesText(e.target.value)} placeholder='[{"id":"print1","label":"PRINT 1","url":"https://...","note":"..."}]' className="min-h-32 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-emerald-400" />
+      <p className="text-xs text-gray-500">Use JSON para os prints: id, label, url e note.</p>
+      <button type="submit" disabled={saving} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">{saving ? 'Salvando...' : 'Salvar tutorial'}</button>
+    </form>
+  )
+}
+
 function LandingPageContentAccordion({ plans, faq, onSavePlan, onSaveFaq, onDeleteFaq }) {
   const [open, setOpen] = useState(false)
 
@@ -356,6 +382,33 @@ function LandingPageContentAccordion({ plans, faq, onSavePlan, onSaveFaq, onDele
   )
 }
 
+function TutorialContentAccordion({ tutorial, onSaveTutorial }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <section id="admin-tutorial-content" className="rounded-2xl bg-white shadow-sm ring-1 ring-gray-100">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full flex-col gap-3 p-5 text-left sm:flex-row sm:items-center sm:justify-between"
+        aria-expanded={open}
+        aria-controls="admin-tutorial-content-panel"
+      >
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Conteúdo do Dashboard · último bloco</p>
+          <h2 className="text-lg font-black text-gray-900">Tutorial (Dashboard)</h2>
+          <p className="text-sm text-gray-500">Edite aqui o texto e os prints exibidos em /dashboard/tutorial.</p>
+        </div>
+        <span className="inline-flex items-center justify-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">{open ? 'Recolher' : 'Expandir'}</span>
+      </button>
+      {open && (
+        <div id="admin-tutorial-content-panel" className="border-t border-gray-100 p-5">
+          <TutorialEditor key={`tutorial-${tutorial?.updatedAt ?? 'empty'}`} tutorial={tutorial} onSave={onSaveTutorial} />
+        </div>
+      )}
+    </section>
+  )
+}
+
 export default function AdminPage() {
   const [overview, setOverview] = useState(null)
   const [admin, setAdmin] = useState(null)
@@ -371,6 +424,7 @@ export default function AdminPage() {
   const [systemMetrics, setSystemMetrics] = useState(null)
   const [faq, setFaq] = useState(null)
   const [plans, setPlans] = useState([])
+  const [tutorial, setTutorial] = useState(null)
   const [selectedUser, setSelectedUser] = useState(null)
   const [risk, setRisk] = useState('')
   const [search, setSearch] = useState('')
@@ -408,6 +462,7 @@ export default function AdminPage() {
     setSystemMetrics(systemMetricsData)
     setFaq(lpContentData?.faq ?? null)
     setPlans(lpContentData?.plans ?? [])
+    setTutorial(lpContentData?.tutorial ?? null)
   }
 
   useEffect(() => {
@@ -443,6 +498,7 @@ export default function AdminPage() {
         setSystemMetrics(systemMetricsData)
         setFaq(lpContentData?.faq ?? null)
         setPlans(lpContentData?.plans ?? [])
+        setTutorial(lpContentData?.tutorial ?? null)
       })
       .catch((err) => { if (active) setError(err.message || 'Não foi possível carregar o painel admin.') })
       .finally(() => { if (active) setLoading(false) })
@@ -490,6 +546,7 @@ export default function AdminPage() {
     const data = await api.adminLpContent()
     setFaq(data?.faq ?? null)
     setPlans(data?.plans ?? [])
+    setTutorial(data?.tutorial ?? null)
   }
 
   async function saveLpPlan(id, form) {
@@ -529,6 +586,17 @@ export default function AdminPage() {
       await refreshLpContent()
     } catch (err) {
       setError(err.message || 'Falha ao excluir pergunta do FAQ.')
+    }
+  }
+
+  async function saveTutorialContent(form) {
+    setError('')
+    try {
+      await api.adminUpdateTutorialContent(form)
+      await refreshLpContent()
+    } catch (err) {
+      setError(err.message || 'Falha ao salvar tutorial.')
+      throw err
     }
   }
 
@@ -819,6 +887,7 @@ export default function AdminPage() {
         </div>
 
         <LandingPageContentAccordion plans={plans} faq={faq} onSavePlan={saveLpPlan} onSaveFaq={saveFaqItem} onDeleteFaq={deleteFaqItem} />
+        <TutorialContentAccordion tutorial={tutorial} onSaveTutorial={saveTutorialContent} />
       </div>
     </main>
   )
