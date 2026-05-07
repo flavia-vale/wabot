@@ -195,12 +195,16 @@ function PlanEditor({ plan, onSave }) {
           className="min-h-24 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400 md:col-span-2"
           required
         />
-        <textarea
-          value={form.features}
-          onChange={event => setForm({ ...form, features: event.target.value })}
-          placeholder="Características (uma por linha)"
-          className="min-h-24 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400 md:col-span-2"
-        />
+        <label className="md:col-span-2">
+          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-600">Bullet points do plano</span>
+          <textarea
+            value={form.features}
+            onChange={event => setForm({ ...form, features: event.target.value })}
+            placeholder={'Conversão de links suportados\nMonitoramento de grupos\nEnvio para grupos de destino\nHistórico de logs\nCom anúncios'}
+            className="min-h-28 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400"
+          />
+          <p className="mt-1 text-xs text-gray-500">Digite uma característica por linha. Esses bullet points aparecem na Landing Page e na aba Planos do Dashboard.</p>
+        </label>
         <div className="flex flex-col gap-3 sm:flex-row md:col-span-2">
           <input
             type="number"
@@ -209,9 +213,9 @@ function PlanEditor({ plan, onSave }) {
             placeholder="Ordem"
             className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400 sm:w-28"
           />
-          <button type="submit" disabled={saving} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
-            {saving ? 'Salvando...' : 'Salvar plano'}
-          </button>
+            <button type="submit" disabled={saving} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
+              {saving ? 'Salvando...' : 'Salvar plano'}
+            </button>
         </div>
       </div>
     </form>
@@ -337,7 +341,7 @@ function LandingPageContentAccordion({ plans, faq, onSavePlan, onSaveFaq, onDele
           <div>
             <div className="mb-4">
               <h3 className="text-base font-black text-gray-900">Planos</h3>
-              <p className="text-sm text-gray-500">Edite título, descrição e valor dos planos Trial, Basic e Pro da LP.</p>
+              <p className="text-sm text-gray-500">Edite título, descrição, valor e bullet points dos planos Trial, Basic e Pro (sincronizado com LP e Dashboard).</p>
             </div>
             <div className="grid gap-4 lg:grid-cols-3">
               {(plans ?? []).map(plan => <PlanEditor key={`${plan.id}-${plan.updatedAt ?? ''}`} plan={plan} onSave={onSavePlan} />)}
