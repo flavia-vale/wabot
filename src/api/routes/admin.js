@@ -134,6 +134,22 @@ function parseLpPlanInput(body = {}, existing = null) {
   return { ok: true, data: { title, description, price, position } }
 }
 
+async function listLpPlansSafe() {
+  try {
+    return await db.lpPlan.findMany({ orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] })
+  } catch (err) {
+    const message = String(err?.message ?? '')
+    const knownSchemaError =
+      message.includes('no such table') ||
+      message.includes('does not exist in the current database') ||
+      message.includes('Unknown field') ||
+      message.includes('Unknown argument')
+
+    if (knownSchemaError) return null
+    throw err
+  }
+}
+
 function parseContactLogInput(body = {}) {
   const channel = String(body.channel ?? 'whatsapp').trim()
   const reason = String(body.reason ?? '').trim()
@@ -916,17 +932,23 @@ export async function adminRoutes(app) {
     if (!(await requireAdmin(req, reply, 'admin:read'))) return
 
     const [plans, faqItems] = await Promise.all([
-      db.lpPlan.findMany({ orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] }),
+      listLpPlansSafe(),
       db.faqItem.findMany({ orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] }),
     ])
 
     await writeAdminAuditLog(req, { action: 'admin.lpContent.view', resource: 'landingPageContent' })
 
-    return { plans, faq: { items: faqItems } }
+    return { plans: plans ?? [], faq: { items: faqItems } }
   })
 
   app.put('/lp-content/plans/:id', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'admin:write'))) return
+
+    const plansAvailable = await listLpPlansSafe()
+    if (plansAvailable === null) {
+      reply.code(503).send({ error: 'Planos da LP indisponíveis. Aplique as migrations pendentes e tente novamente.' })
+      return
+    }
 
     const existing = await db.lpPlan.findUnique({ where: { id: req.params.id } })
     if (!existing) {
