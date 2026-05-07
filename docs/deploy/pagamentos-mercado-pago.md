@@ -1,34 +1,44 @@
 # Pagamentos Mercado Pago — MVP Wabot
 
-## Modelo comercial definido
+## Modelo comercial
 
-O MVP do Wabot usa **acesso por 30 dias renovável manualmente**.
+O Wabot usa **links de assinatura fixos do Mercado Pago** para checkout.
 
-- `Basic`: R$50 por 30 dias de acesso.
-- `Pro`: R$100 por 30 dias de acesso.
-- Não há assinatura recorrente automática nesta fase.
-- A tela de planos só deve comunicar acesso ativo depois de confirmação do backend.
+| Plano | Preço | Link |
+| --- | --- | --- |
+| Basic | R$50 / 30 dias | `preapproval_plan_id=7417a34c47be40fdbc4bc1decc0233e0` |
+| Pro | R$100 / 30 dias | `preapproval_plan_id=251ba8b89a8a483a89e4e6ba336adb5c` |
+
+Os links estão hardcoded em `src/api/routes/payments.js` (campo `checkoutUrl` de cada plano).
 
 ## Variáveis de ambiente obrigatórias para produção
 
-Configure estas variáveis no ambiente do processo `api` no PM2/VPS:
+Configure no processo `api` no PM2/VPS:
 
-| Variável | Obrigatória | Uso |
-| --- | --- | --- |
-| `MP_ACCESS_TOKEN` | Sim | Token privado do Mercado Pago usado para criar preferências e consultar pagamentos. |
-| `MP_WEBHOOK_SECRET` | Sim em produção | Segredo usado para validar a assinatura `x-signature` dos webhooks do Mercado Pago. Webhooks sem assinatura válida são rejeitados em produção. |
-| `FRONTEND_URL` | Sim | URL pública do dashboard usada nos retornos do checkout. Ex.: `http://178.105.54.0`. |
-| `API_URL` | Sim | URL pública da API usada como `notification_url`. Ex.: `http://178.105.54.0` quando API e dashboard estão no mesmo domínio/proxy. |
+| Variável | Uso |
+| --- | --- |
+| `MP_ACCESS_TOKEN` | Token privado do MP — usado pelo `/recover` para consultar o pagamento na API. |
+| `MP_WEBHOOK_SECRET` | Segredo para validar a assinatura `x-signature` dos webhooks. Sem ele em produção o webhook rejeita todas as requisições. |
 
-## Fluxo esperado pós-checkout
+`FRONTEND_URL` e `API_URL` não são mais necessárias para o fluxo de checkout.
 
-1. Usuário clica em comprar `Basic` ou `Pro`.
-2. Backend cria preferência no Mercado Pago com metadados `userId` e `plan`.
-3. Mercado Pago redireciona para `/dashboard/planos?status=success`, `failure` ou `pending`.
-4. A tela consulta `/api/payments/status`.
-5. A mensagem de acesso ativo só aparece se o backend retornar plano pago ativo.
-6. Se o webhook ainda não processou, a tela mostra estado de confirmação pendente.
+## Fluxo de ativação pós-pagamento
+
+Como os links são fixos (sem metadados de usuário), o acesso é ativado manualmente pelo usuário após o pagamento:
+
+1. Usuário clica em comprar → frontend redireciona para o link do MP.
+2. Usuário paga no MP.
+3. MP exibe o `payment_id` na página de confirmação e o envia por e-mail.
+4. Usuário volta ao dashboard, informa o `payment_id` no campo de ativação.
+5. Frontend chama `POST /api/payments/recover` com `{ paymentId }`.
+6. Backend consulta o MP, confirma status `approved`, infere o plano pelo valor (R$50 = basic, R$100 = pro) e libera o acesso por 30 dias.
+
+## Segurança do endpoint `/recover`
+
+- Requer autenticação JWT — o acesso é concedido ao usuário logado.
+- O `mpPaymentId` é único no banco — o mesmo pagamento não pode ativar duas contas.
+- Se o `payment_id` já foi usado por outra conta, retorna `409 PAYMENT_ALREADY_USED`.
 
 ## Segurança do webhook
 
-Em produção (`NODE_ENV=production`), `MP_WEBHOOK_SECRET` deve estar configurado. Sem esse segredo, o webhook responde com erro e não processa pagamentos. Com segredo configurado, assinaturas ausentes ou inválidas retornam `401`.
+Em produção (`NODE_ENV=production`), `MP_WEBHOOK_SECRET` deve estar configurado. Com links fixos o webhook não processa acesso automaticamente (sem `metadata.userId`), mas a validação de assinatura protege o endpoint contra requisições falsas.
