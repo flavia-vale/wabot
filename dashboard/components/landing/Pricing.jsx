@@ -1,5 +1,8 @@
 'use client';
+import { useEffect, useMemo, useState } from 'react';
 import { Icon } from './Icon';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 const s = {
   head: { textAlign: 'center', marginBottom: 56 },
@@ -28,8 +31,9 @@ const s = {
   list: { listStyle: 'none', padding: 0, margin: '0 0 28px', display: 'flex', flexDirection: 'column', gap: 12, flex: 1 },
 };
 
-const plans = [
+const defaultPlans = [
   {
+    id: 'trial',
     name: 'Teste grátis',
     price: 'R$0',
     desc: 'Experimente o fluxo principal antes de escolher um plano pago.',
@@ -37,6 +41,7 @@ const plans = [
     features: ['Conversão de links suportados', 'Monitoramento de grupos', 'Envio para grupos de destino', 'Histórico de logs', 'Com anúncios'],
   },
   {
+    id: 'basic',
     name: 'Basic',
     price: 'R$50',
     desc: 'Para operar com os mesmos recursos essenciais do Pro mantendo anúncios no uso.',
@@ -44,6 +49,7 @@ const plans = [
     features: ['Conversão de links suportados', 'Monitoramento de grupos', 'Envio para grupos de destino', 'Histórico de logs', 'Com anúncios'],
   },
   {
+    id: 'pro',
     name: 'Pro',
     price: 'R$100',
     desc: 'Para operar com os mesmos recursos do Basic, sem anúncios na experiência.',
@@ -53,7 +59,41 @@ const plans = [
   },
 ];
 
+function mergePlanContent(plans) {
+  const byId = new Map((plans ?? []).map(plan => [plan.id, plan]));
+  return defaultPlans.map(defaultPlan => {
+    const dynamicPlan = byId.get(defaultPlan.id);
+    return {
+      ...defaultPlan,
+      name: dynamicPlan?.title || defaultPlan.name,
+      price: dynamicPlan?.price || defaultPlan.price,
+      desc: dynamicPlan?.description || defaultPlan.desc,
+      position: dynamicPlan?.position ?? defaultPlan.position,
+    };
+  });
+}
+
 export function Pricing() {
+  const [dynamicPlans, setDynamicPlans] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`${API_BASE}/api/public/plans`, { cache: 'no-store' })
+      .then((res) => {
+        if (!res.ok) throw new Error('Falha ao carregar planos');
+        return res.json();
+      })
+      .then((data) => {
+        if (active) setDynamicPlans(Array.isArray(data.plans) ? data.plans : []);
+      })
+      .catch(() => {
+        if (active) setDynamicPlans([]);
+      });
+    return () => { active = false; };
+  }, []);
+
+  const plans = useMemo(() => mergePlanContent(dynamicPlans), [dynamicPlans]);
+
   return (
     <section id="planos">
       <div className="wrap">
@@ -67,12 +107,12 @@ export function Pricing() {
 
         <div style={s.grid}>
           {plans.map(p => (
-            <div key={p.name} style={s.card(p.highlight)}>
+            <div key={p.id} style={s.card(p.highlight)}>
               {p.highlight && <div style={s.badge}>Sem anúncios</div>}
               <div style={s.planName}>{p.name}</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 8, color: p.highlight ? 'var(--surface)' : 'var(--ink)' }}>
                 <span style={s.priceBig}>{p.price}</span>
-                {p.name !== 'Teste grátis' && <span style={s.priceUnit}>/mês</span>}
+                {p.id !== 'trial' && <span style={s.priceUnit}>/mês</span>}
               </div>
               <p style={{ fontSize: 14.5, lineHeight: 1.55, color: p.highlight ? 'rgba(255,255,255,0.7)' : 'var(--ink-soft)', marginBottom: 24, minHeight: 68 }}>
                 {p.desc}

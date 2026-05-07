@@ -153,7 +153,66 @@ function DetailPanel({ detail, onClose }) {
 }
 
 
-function AdminFaqPanel({ faq, onSave, onDelete }) {
+function PlanEditor({ plan, onSave }) {
+  const [form, setForm] = useState({ title: plan.title, description: plan.description, price: plan.price, position: plan.position ?? 0 })
+  const [saving, setSaving] = useState(false)
+
+  async function submit(e) {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      await onSave(plan.id, form)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="text-sm font-black uppercase tracking-wide text-gray-900">{plan.id}</h3>
+        <span className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-gray-500">Ordem {form.position}</span>
+      </div>
+      <div className="grid gap-3 md:grid-cols-[1fr_120px]">
+        <input
+          value={form.title}
+          onChange={event => setForm({ ...form, title: event.target.value })}
+          placeholder="Título do plano"
+          className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400"
+          required
+        />
+        <input
+          value={form.price}
+          onChange={event => setForm({ ...form, price: event.target.value })}
+          placeholder="Valor"
+          className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400"
+          required
+        />
+        <textarea
+          value={form.description}
+          onChange={event => setForm({ ...form, description: event.target.value })}
+          placeholder="Descrição do plano"
+          className="min-h-24 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400 md:col-span-2"
+          required
+        />
+        <div className="flex flex-col gap-3 sm:flex-row md:col-span-2">
+          <input
+            type="number"
+            value={form.position}
+            onChange={event => setForm({ ...form, position: Number(event.target.value) })}
+            placeholder="Ordem"
+            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400 sm:w-28"
+          />
+          <button type="submit" disabled={saving} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
+            {saving ? 'Salvando...' : 'Salvar plano'}
+          </button>
+        </div>
+      </div>
+    </form>
+  )
+}
+
+function FaqEditor({ faq, onSave, onDelete }) {
   const emptyForm = { id: '', question: '', answer: '', position: 0, isActive: true }
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
@@ -180,12 +239,11 @@ function AdminFaqPanel({ faq, onSave, onDelete }) {
   }
 
   return (
-    <section id="admin-faq" className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+    <div>
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Conteúdo da LP</p>
-          <h2 className="text-lg font-black text-gray-900">FAQ dinâmico</h2>
-          <p className="text-sm text-gray-500">Crie, edite e exclua perguntas exibidas instantaneamente na Landing Page.</p>
+          <h3 className="text-base font-black text-gray-900">FAQ</h3>
+          <p className="text-sm text-gray-500">Adicione, edite e exclua perguntas exibidas na Landing Page.</p>
         </div>
         <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">{faq?.items?.length ?? 0} perguntas</span>
       </div>
@@ -242,6 +300,48 @@ function AdminFaqPanel({ faq, onSave, onDelete }) {
         ))}
         {!faq?.items?.length && <p className="text-sm text-gray-400">Nenhuma pergunta cadastrada.</p>}
       </div>
+    </div>
+  )
+}
+
+function LandingPageContentAccordion({ plans, faq, onSavePlan, onSaveFaq, onDeleteFaq }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <section id="admin-lp-content" className="rounded-2xl bg-white shadow-sm ring-1 ring-gray-100">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full flex-col gap-3 p-5 text-left sm:flex-row sm:items-center sm:justify-between"
+        aria-expanded={open}
+        aria-controls="admin-lp-content-panel"
+      >
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Conteúdo da LP · último bloco</p>
+          <h2 className="text-lg font-black text-gray-900">Configurações da Landing Page</h2>
+          <p className="text-sm text-gray-500">Edite planos e FAQ consumidos dinamicamente pela página pública.</p>
+        </div>
+        <span className="inline-flex items-center justify-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+          {open ? 'Recolher' : 'Expandir'}
+        </span>
+      </button>
+
+      {open && (
+        <div id="admin-lp-content-panel" className="space-y-6 border-t border-gray-100 p-5">
+          <div>
+            <div className="mb-4">
+              <h3 className="text-base font-black text-gray-900">Planos</h3>
+              <p className="text-sm text-gray-500">Edite título, descrição e valor dos planos Trial, Basic e Pro da LP.</p>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-3">
+              {(plans ?? []).map(plan => <PlanEditor key={`${plan.id}-${plan.updatedAt ?? ''}`} plan={plan} onSave={onSavePlan} />)}
+              {!plans?.length && <p className="text-sm text-gray-400">Nenhum plano cadastrado.</p>}
+            </div>
+          </div>
+
+          <FaqEditor faq={faq} onSave={onSaveFaq} onDelete={onDeleteFaq} />
+        </div>
+      )}
     </section>
   )
 }
@@ -260,6 +360,7 @@ export default function AdminPage() {
   const [systemHealth, setSystemHealth] = useState(null)
   const [systemMetrics, setSystemMetrics] = useState(null)
   const [faq, setFaq] = useState(null)
+  const [plans, setPlans] = useState([])
   const [selectedUser, setSelectedUser] = useState(null)
   const [risk, setRisk] = useState('')
   const [search, setSearch] = useState('')
@@ -268,7 +369,7 @@ export default function AdminPage() {
 
   async function loadAdminData(nextRisk = risk, nextSearch = search) {
     setError('')
-    const [adminData, overviewData, usersData, sessionsData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, faqData] = await Promise.all([
+    const [adminData, overviewData, usersData, sessionsData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, lpContentData] = await Promise.all([
       api.adminMe(),
       api.adminOverview(),
       api.adminUsers({ risk: nextRisk, search: nextSearch, limit: 20 }),
@@ -281,7 +382,7 @@ export default function AdminPage() {
       api.adminSuccessQueue({ limit: 8 }).catch(() => null),
       api.adminSystemHealth().catch(() => null),
       api.adminSystemMetrics().catch(() => null),
-      api.adminFaq().catch(() => null),
+      api.adminLpContent().catch(() => null),
     ])
     setAdmin(adminData)
     setOverview(overviewData)
@@ -295,7 +396,8 @@ export default function AdminPage() {
     setSuccessQueue(successQueueData)
     setSystemHealth(systemHealthData)
     setSystemMetrics(systemMetricsData)
-    setFaq(faqData)
+    setFaq(lpContentData?.faq ?? null)
+    setPlans(lpContentData?.plans ?? [])
   }
 
   useEffect(() => {
@@ -313,9 +415,9 @@ export default function AdminPage() {
       api.adminSuccessQueue({ limit: 8 }).catch(() => null),
       api.adminSystemHealth().catch(() => null),
       api.adminSystemMetrics().catch(() => null),
-      api.adminFaq().catch(() => null),
+      api.adminLpContent().catch(() => null),
     ])
-      .then(([adminData, overviewData, usersData, sessionsData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, faqData]) => {
+      .then(([adminData, overviewData, usersData, sessionsData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, lpContentData]) => {
         if (!active) return
         setAdmin(adminData)
         setOverview(overviewData)
@@ -329,7 +431,8 @@ export default function AdminPage() {
         setSuccessQueue(successQueueData)
         setSystemHealth(systemHealthData)
         setSystemMetrics(systemMetricsData)
-        setFaq(faqData)
+        setFaq(lpContentData?.faq ?? null)
+        setPlans(lpContentData?.plans ?? [])
       })
       .catch((err) => { if (active) setError(err.message || 'Não foi possível carregar o painel admin.') })
       .finally(() => { if (active) setLoading(false) })
@@ -373,8 +476,21 @@ export default function AdminPage() {
   }
 
 
-  async function refreshFaq() {
-    setFaq(await api.adminFaq())
+  async function refreshLpContent() {
+    const data = await api.adminLpContent()
+    setFaq(data?.faq ?? null)
+    setPlans(data?.plans ?? [])
+  }
+
+  async function saveLpPlan(id, form) {
+    setError('')
+    try {
+      await api.adminUpdateLpPlan(id, form)
+      await refreshLpContent()
+    } catch (err) {
+      setError(err.message || 'Falha ao salvar plano da LP.')
+      throw err
+    }
   }
 
   async function saveFaqItem(form) {
@@ -388,7 +504,7 @@ export default function AdminPage() {
       }
       if (form.id) await api.adminUpdateFaq(form.id, payload)
       else await api.adminCreateFaq(payload)
-      await refreshFaq()
+      await refreshLpContent()
     } catch (err) {
       setError(err.message || 'Falha ao salvar pergunta do FAQ.')
       throw err
@@ -400,7 +516,7 @@ export default function AdminPage() {
     setError('')
     try {
       await api.adminDeleteFaq(item.id)
-      await refreshFaq()
+      await refreshLpContent()
     } catch (err) {
       setError(err.message || 'Falha ao excluir pergunta do FAQ.')
     }
@@ -449,8 +565,6 @@ export default function AdminPage() {
 
 
 
-
-        <AdminFaqPanel faq={faq} onSave={saveFaqItem} onDelete={deleteFaqItem} />
 
         {systemHealth && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
@@ -693,6 +807,8 @@ export default function AdminPage() {
             </div>
           </section>
         </div>
+
+        <LandingPageContentAccordion plans={plans} faq={faq} onSavePlan={saveLpPlan} onSaveFaq={saveFaqItem} onDeleteFaq={deleteFaqItem} />
       </div>
     </main>
   )

@@ -81,8 +81,12 @@ export const api = {
 
   dashboardStatus: () => apiFetch('/api/dashboard/status'),
   publicFaq: () => apiFetch('/api/public/faq'),
+  publicPlans: () => apiFetch('/api/public/plans'),
+  publicLpContent: () => apiFetch('/api/public/lp-content'),
 
   adminMe: () => apiFetch('/api/admin/me'),
+  adminLpContent: () => apiFetch('/api/admin/lp-content'),
+  adminUpdateLpPlan: (id, data) => apiFetch(`/api/admin/lp-content/plans/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   adminFaq: () => apiFetch('/api/admin/faq'),
   adminCreateFaq: (data) => apiFetch('/api/admin/faq', { method: 'POST', body: JSON.stringify(data) }),
   adminUpdateFaq: (id, data) => apiFetch(`/api/admin/faq/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
