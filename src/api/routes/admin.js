@@ -117,11 +117,36 @@ function parseManualAccessInput(body = {}) {
 
 
 
+function sanitizePlanFeatures(featuresInput, fallback = []) {
+  const fromFallback = Array.isArray(fallback) ? fallback : []
+  if (featuresInput === undefined) return fromFallback
+
+  if (Array.isArray(featuresInput)) {
+    return featuresInput.map(item => String(item).trim()).filter(Boolean)
+  }
+
+  const text = String(featuresInput ?? '').trim()
+  if (!text) return []
+
+  try {
+    const parsed = JSON.parse(text)
+    if (Array.isArray(parsed)) return parsed.map(item => String(item).trim()).filter(Boolean)
+  } catch {}
+
+  return text.split('\n').map(item => item.trim()).filter(Boolean)
+}
+
+function parseStoredPlanFeatures(featuresRaw) {
+  return sanitizePlanFeatures(featuresRaw, [])
+}
+
 function parseLpPlanInput(body = {}, existing = null) {
   const title = String(body.title ?? existing?.title ?? '').trim()
   const description = String(body.description ?? existing?.description ?? '').trim()
   const price = String(body.price ?? existing?.price ?? '').trim()
   const position = Number.isFinite(Number(body.position)) ? Number(body.position) : (existing?.position ?? 0)
+  const existingFeatures = parseStoredPlanFeatures(existing?.features)
+  const features = sanitizePlanFeatures(body.features, existingFeatures)
 
   if (!title || !description || !price) {
     return { ok: false, error: 'Título, descrição e valor do plano são obrigatórios.' }
@@ -131,7 +156,7 @@ function parseLpPlanInput(body = {}, existing = null) {
     return { ok: false, error: 'Plano inválido. Use trial, basic ou pro.' }
   }
 
-  return { ok: true, data: { title, description, price, position } }
+  return { ok: true, data: { title, description, price, features: JSON.stringify(features), position } }
 }
 
 async function listLpPlansSafe() {
@@ -938,7 +963,7 @@ export async function adminRoutes(app) {
 
     await writeAdminAuditLog(req, { action: 'admin.lpContent.view', resource: 'landingPageContent' })
 
-    return { plans: plans ?? [], faq: { items: faqItems } }
+    return { plans: (plans ?? []).map(plan => ({ ...plan, features: parseStoredPlanFeatures(plan.features) })), faq: { items: faqItems } }
   })
 
   app.put('/lp-content/plans/:id', async (req, reply) => {
@@ -975,7 +1000,7 @@ export async function adminRoutes(app) {
       after: JSON.stringify(plan),
     })
 
-    return { plan }
+    return { plan: { ...plan, features: parseStoredPlanFeatures(plan.features) } }
   })
 
   app.get('/faq', async (req, reply) => {

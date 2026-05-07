@@ -154,7 +154,7 @@ function DetailPanel({ detail, onClose }) {
 
 
 function PlanEditor({ plan, onSave }) {
-  const [form, setForm] = useState({ title: plan.title, description: plan.description, price: plan.price, position: plan.position ?? 0 })
+  const [form, setForm] = useState({ title: plan.title, description: plan.description, price: plan.price, features: Array.isArray(plan.features) ? plan.features.join('\n') : '', position: plan.position ?? 0 })
   const [saving, setSaving] = useState(false)
 
   async function submit(e) {
@@ -194,6 +194,12 @@ function PlanEditor({ plan, onSave }) {
           placeholder="Descrição do plano"
           className="min-h-24 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400 md:col-span-2"
           required
+        />
+        <textarea
+          value={form.features}
+          onChange={event => setForm({ ...form, features: event.target.value })}
+          placeholder="Características (uma por linha)"
+          className="min-h-24 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400 md:col-span-2"
         />
         <div className="flex flex-col gap-3 sm:flex-row md:col-span-2">
           <input

@@ -84,7 +84,7 @@ export const api = {
 
   dashboardStatus: () => apiFetch('/api/dashboard/status'),
   publicFaq: () => apiFetch('/api/public/faq'),
-  publicPlans: () => apiFetch('/api/public/plans'),
+  publicPlans: () => apiFetch('/api/public/plans', { cache: 'no-store' }),
   publicLpContent: () => apiFetch('/api/public/lp-content'),
 
   adminMe: () => apiFetch('/api/admin/me'),
