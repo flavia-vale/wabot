@@ -177,6 +177,7 @@ async function listLpPlansSafe() {
 
 async function getTutorialContentSafe() {
   try {
+    if (!db.tutorialContent || typeof db.tutorialContent.findUnique !== 'function') return null
     const tutorial = await db.tutorialContent.findUnique({ where: { id: 'dashboard_tutorial' } })
     if (!tutorial) return null
     let images = []
@@ -988,6 +989,10 @@ export async function adminRoutes(app) {
 
   app.put('/lp-content/tutorial', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'admin:write'))) return
+    if (!db.tutorialContent || typeof db.tutorialContent.upsert !== 'function') {
+      reply.code(503).send({ error: 'Tutorial indisponível no momento. Rode prisma generate/migrate no servidor.' })
+      return
+    }
 
     const body = req.body ?? {}
     const title = String(body.title ?? '').trim()

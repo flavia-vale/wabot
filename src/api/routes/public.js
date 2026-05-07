@@ -56,6 +56,7 @@ async function getLpPlans() {
 
 async function getTutorialContent() {
   try {
+    if (!db.tutorialContent || typeof db.tutorialContent.findUnique !== 'function') return null
     const tutorial = await db.tutorialContent.findUnique({ where: { id: 'dashboard_tutorial' } })
     if (!tutorial) return null
     let images = []
