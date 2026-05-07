@@ -11,10 +11,10 @@ function isPrismaShapeMismatch(err) {
 
 async function findSessionStartUser(userId) {
   try {
-    return await db.user.findUnique({ where: { id: userId }, select: { plan: true, trialExpiresAt: true, status: true } })
+    return await db.user.findUnique({ where: { id: userId }, select: { plan: true, accessExpiresAt: true, status: true } })
   } catch (err) {
     if (!isPrismaShapeMismatch(err)) throw err
-    return db.user.findUnique({ where: { id: userId }, select: { plan: true, trialExpiresAt: true } })
+    return db.user.findUnique({ where: { id: userId }, select: { plan: true, accessExpiresAt: true } })
   }
 }
 
@@ -27,7 +27,7 @@ export async function sessionRoutes(app) {
     if (user.status === 'banned' || user.status === 'suspended') {
       return reply.code(403).send({ error: 'Conta bloqueada. Entre em contato com o suporte.' })
     }
-    if (user.trialExpiresAt && user.trialExpiresAt < new Date()) {
+    if (user.accessExpiresAt && user.accessExpiresAt < new Date()) {
       const msg = user.plan === 'trial'
         ? 'Seu trial expirou. Assine um plano em Planos.'
         : 'Sua assinatura expirou. Renove em Planos.'

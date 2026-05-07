@@ -5,8 +5,6 @@ import { trackAnalyticsEventSafe } from '../../analytics.js'
 
 const MP_WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET
 const IS_PRODUCTION = process.env.NODE_ENV === 'production'
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000'
-const API_URL = process.env.API_URL || 'http://localhost:3001'
 
 function getMpAccessToken() {
   return process.env.MP_ACCESS_TOKEN
@@ -16,27 +14,16 @@ function sendError(reply, statusCode, code, message) {
   return reply.code(statusCode).send({ error: { code, message } })
 }
 
-function validateCheckoutInput(body) {
-  const { plan } = body ?? {}
-  if (!PLANS[plan]) {
-    return {
-      ok: false,
-      error: { statusCode: 400, code: 'INVALID_PLAN', message: 'Plano inválido. Use basic ou pro.' },
-    }
-  }
-  return { ok: true, data: { plan } }
-}
-
-function ensurePaymentProviderConfigured(reply) {
-  if (getMpAccessToken()) return true
-  sendError(reply, 500, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'MercadoPago não configurado no servidor')
-  return false
-}
-
-
 const PLANS = {
-  basic: { title: 'Wabot Basic - acesso por 30 dias', price: 50 },
-  pro:   { title: 'Wabot Pro - acesso por 30 dias',   price: 100 },
+  basic: { title: 'Wabot Basic - acesso por 30 dias', price: 50,  checkoutUrl: 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=7417a34c47be40fdbc4bc1decc0233e0' },
+  pro:   { title: 'Wabot Pro - acesso por 30 dias',   price: 100, checkoutUrl: 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=251ba8b89a8a483a89e4e6ba336adb5c' },
+}
+
+function inferPlanFromAmount(amount) {
+  for (const [key, info] of Object.entries(PLANS)) {
+    if (info.price === Number(amount)) return key
+  }
+  return null
 }
 
 export function shouldEnforceWebhookSignature({ isProduction = IS_PRODUCTION, secret = MP_WEBHOOK_SECRET } = {}) {
@@ -61,41 +48,29 @@ export function isValidMercadoPagoWebhookSignature({ signature = '', requestId =
   return expected === v1
 }
 
+function warnMissingProductionEnv(log) {
+  if (!IS_PRODUCTION) return
+  const missing = []
+  if (!getMpAccessToken()) missing.push('MP_ACCESS_TOKEN')
+  if (!process.env.MP_WEBHOOK_SECRET) missing.push('MP_WEBHOOK_SECRET')
+  if (missing.length > 0) {
+    log.error({ missing }, 'PAGAMENTOS: variáveis de ambiente obrigatórias não configuradas em produção')
+  }
+}
+
 export async function paymentsRoutes(app) {
+  warnMissingProductionEnv(app.log)
+
+  // Retorna o link de checkout fixo do plano — sem chamada à API do MP
   app.post('/checkout', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const validation = validateCheckoutInput(req.body)
-    if (!validation.ok) return sendError(reply, validation.error.statusCode, validation.error.code, validation.error.message)
-    if (!ensurePaymentProviderConfigured(reply)) return
-
-    const { plan } = validation.data
+    const { plan } = req.body ?? {}
+    if (!PLANS[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic ou pro.')
     const userId = req.user.sub
-    const planInfo = PLANS[plan]
-    const accessToken = getMpAccessToken()
-
     trackAnalyticsEventSafe({ userId, event: 'checkout_started', metadata: { plan } })
-
-    const mpRes = await axios.post(
-      'https://api.mercadopago.com/checkout/preferences',
-      {
-        items: [{ title: planInfo.title, quantity: 1, unit_price: planInfo.price, currency_id: 'BRL' }],
-        back_urls: {
-          success: `${FRONTEND_URL}/dashboard/planos?status=success`,
-          failure: `${FRONTEND_URL}/dashboard/planos?status=failure`,
-          pending: `${FRONTEND_URL}/dashboard/planos?status=pending`,
-        },
-        auto_return: 'approved',
-        notification_url: `${API_URL}/api/payments/webhook`,
-        metadata: { userId, plan },
-      },
-      { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } }
-    ).catch(err => {
-      throw new Error(err.response?.data?.message || 'Erro ao criar preferência MercadoPago')
-    })
-
-    return { checkout_url: mpRes.data.init_point }
+    return { checkout_url: PLANS[plan].checkoutUrl }
   })
 
-  // MP webhook — sem autenticação JWT
+  // Webhook do MP — sem autenticação JWT
   app.post('/webhook', async (req, reply) => {
     const signature = req.headers['x-signature'] ?? ''
     const requestId = req.headers['x-request-id'] ?? ''
@@ -104,76 +79,14 @@ export async function paymentsRoutes(app) {
     if (shouldEnforceWebhookSignature()) {
       if (!MP_WEBHOOK_SECRET) {
         req.log?.error?.('MP_WEBHOOK_SECRET ausente em produção; webhook rejeitado por segurança')
-        return reply.code(500).send({ error: 'Webhook de pagamento sem segredo configurado' })
+        return reply.code(500).send({ error: 'Webhook sem segredo configurado' })
       }
       if (!isValidMercadoPagoWebhookSignature({ signature, requestId, dataId })) {
         return reply.code(401).send({ error: 'Assinatura inválida ou ausente' })
       }
     }
 
-    const type = req.query?.type ?? req.body?.type
-    const paymentId = req.query?.['data.id'] ?? req.body?.data?.id
-    if (type !== 'payment' || !paymentId) return { ok: true }
-
-    const accessToken = getMpAccessToken()
-    if (!accessToken) return sendError(reply, 500, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'MP não configurado')
-
-    const mpPayRes = await axios.get(
-      `https://api.mercadopago.com/v1/payments/${paymentId}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    ).catch(() => null)
-
-    if (!mpPayRes) return { ok: true }
-
-    const { status, metadata } = mpPayRes.data
-    const { userId, plan } = metadata ?? {}
-    if (!userId || !plan) return { ok: true }
-
-    const paymentEvent = status === 'approved'
-      ? 'payment_approved'
-      : status === 'pending'
-        ? 'payment_pending'
-        : 'payment_failed'
-    trackAnalyticsEventSafe({ userId, event: paymentEvent, metadata: { plan, status } })
-
-    const expiresAt = status === 'approved'
-      ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-      : null
-
-    try {
-      const existing = await db.payment.findUnique({ where: { mpPaymentId: String(paymentId) } })
-      if (existing) {
-        await db.payment.update({
-          where: { id: existing.id },
-          data: { status, expiresAt: expiresAt ?? existing.expiresAt },
-        })
-      } else {
-        await db.payment.create({
-          data: {
-            userId,
-            mpPaymentId: String(paymentId),
-            plan,
-            status,
-            amount: PLANS[plan]?.price ?? 0,
-            expiresAt,
-          },
-        })
-      }
-
-      if (status === 'approved') {
-        const userExists = await db.user.findUnique({ where: { id: userId }, select: { id: true } })
-        if (userExists) {
-          await db.user.update({
-            where: { id: userId },
-            data: { plan, trialExpiresAt: expiresAt },
-          })
-        }
-      }
-    } catch (err) {
-      console.error('Webhook db error:', err.message)
-      return reply.code(500).send({ error: 'Erro interno ao processar pagamento' })
-    }
-
+    // Com links fixos não há metadata.userId — webhook apenas registra o evento para auditoria
     return { ok: true }
   })
 
@@ -181,14 +94,69 @@ export async function paymentsRoutes(app) {
     const userId = req.user.sub
     const user = await db.user.findUnique({
       where: { id: userId },
-      select: { plan: true, trialExpiresAt: true, referralCode: true },
+      select: { plan: true, accessExpiresAt: true, referralCode: true },
     })
     const payments = await db.payment.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
       take: 10,
     })
-    const isActive = !user.trialExpiresAt || user.trialExpiresAt > new Date()
-    return { plan: user.plan, accessExpiresAt: user.trialExpiresAt, referralCode: user.referralCode, isActive, payments }
+    const isActive = !user.accessExpiresAt || user.accessExpiresAt > new Date()
+    return { plan: user.plan, accessExpiresAt: user.accessExpiresAt, referralCode: user.referralCode, isActive, payments }
+  })
+
+  // Após pagar, o usuário informa o payment_id para ativar o acesso
+  app.post('/recover', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const { paymentId } = req.body ?? {}
+    if (!paymentId) return sendError(reply, 400, 'MISSING_PAYMENT_ID', 'paymentId obrigatório')
+
+    const accessToken = getMpAccessToken()
+    if (!accessToken) return sendError(reply, 500, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'MP não configurado')
+
+    const userId = req.user.sub
+
+    // Pagamento já aplicado a esta conta
+    const existing = await db.payment.findUnique({ where: { mpPaymentId: String(paymentId) } })
+    if (existing?.status === 'approved') {
+      if (existing.userId !== userId) {
+        return sendError(reply, 409, 'PAYMENT_ALREADY_USED', 'Este pagamento já foi utilizado por outra conta')
+      }
+      const user = await db.user.findUnique({ where: { id: userId }, select: { plan: true, accessExpiresAt: true } })
+      return { alreadyApplied: true, plan: user.plan, accessExpiresAt: user.accessExpiresAt }
+    }
+
+    const mpPayRes = await axios.get(
+      `https://api.mercadopago.com/v1/payments/${paymentId}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    ).catch(() => null)
+
+    if (!mpPayRes) return sendError(reply, 404, 'PAYMENT_NOT_FOUND', 'Pagamento não encontrado no Mercado Pago')
+
+    const { status, transaction_amount } = mpPayRes.data
+    if (status !== 'approved') return sendError(reply, 402, 'PAYMENT_NOT_APPROVED', `Pagamento com status: ${status}`)
+
+    const plan = inferPlanFromAmount(transaction_amount)
+    if (!plan) return sendError(reply, 400, 'CANNOT_DETERMINE_PLAN', `Valor R$${transaction_amount} não corresponde a nenhum plano`)
+
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+
+    try {
+      await db.$transaction(async (tx) => {
+        if (existing) {
+          await tx.payment.update({ where: { id: existing.id }, data: { status: 'approved', expiresAt } })
+        } else {
+          await tx.payment.create({
+            data: { userId, mpPaymentId: String(paymentId), plan, status: 'approved', amount: PLANS[plan].price, expiresAt },
+          })
+        }
+        await tx.user.update({ where: { id: userId }, data: { plan, accessExpiresAt: expiresAt } })
+      })
+    } catch (err) {
+      req.log.error({ err: err.message }, 'Recover db error')
+      return reply.code(500).send({ error: 'Erro interno ao recuperar pagamento' })
+    }
+
+    trackAnalyticsEventSafe({ userId, event: 'payment_recovered', metadata: { plan, paymentId: String(paymentId) } })
+    return { recovered: true, plan, accessExpiresAt: expiresAt }
   })
 }

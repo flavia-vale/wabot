@@ -84,9 +84,9 @@ function getDaysRemaining(expiresAt, now = new Date()) {
 
 function getSubscriptionStatus(user, now = new Date()) {
   if (user.status === 'banned' || user.status === 'suspended') return user.status
-  if (!user.trialExpiresAt) return 'active'
-  if (user.trialExpiresAt < now) return 'expired'
-  if (user.trialExpiresAt <= addDays(now, 7)) return 'expiring_soon'
+  if (!user.accessExpiresAt) return 'active'
+  if (user.accessExpiresAt < now) return 'expired'
+  if (user.accessExpiresAt <= addDays(now, 7)) return 'expiring_soon'
   return 'active'
 }
 
@@ -154,7 +154,7 @@ function getCustomerSuccessReasons({ user, riskFlags = [], errorCount24h = 0 }) 
 
 function getAccessStatus(user, now = new Date()) {
   if (user.status === 'banned' || user.status === 'suspended') return user.status
-  if (user.trialExpiresAt && user.trialExpiresAt < now) return 'expired'
+  if (user.accessExpiresAt && user.accessExpiresAt < now) return 'expired'
   if (user.plan === 'trial') return 'trial'
   return 'active'
 }
@@ -162,12 +162,12 @@ function getAccessStatus(user, now = new Date()) {
 function buildRiskFlags({ user, groups, successCount = 0, errorCount = 0, now = new Date(), running = false }) {
   const groupCounts = getGroupCounts(groups)
   const flags = []
-  const expiresSoon = user.trialExpiresAt && user.trialExpiresAt > now && user.trialExpiresAt <= addDays(now, 7)
+  const expiresSoon = user.accessExpiresAt && user.accessExpiresAt > now && user.accessExpiresAt <= addDays(now, 7)
   const stale = !user.lastActivityAt || user.lastActivityAt < addDays(now, -2)
 
   if (!user.contactPhone) flags.push('missing_phone')
   if (user.status === 'banned' || user.status === 'suspended') flags.push(user.status)
-  if (user.trialExpiresAt && user.trialExpiresAt < now) flags.push('expired')
+  if (user.accessExpiresAt && user.accessExpiresAt < now) flags.push('expired')
   if (expiresSoon) flags.push('expiring_soon')
   if (PAID_PLANS.includes(user.plan) && stale) flags.push('paid_stale_48h')
   if (!running && PAID_PLANS.includes(user.plan)) flags.push('bot_not_running')
@@ -286,8 +286,8 @@ async function getOperationalOverview(now = new Date()) {
     db.user.count(),
     db.user.count({ where: { status: 'active' } }),
     db.user.count({ where: { contactPhone: null } }),
-    db.user.count({ where: { status: 'active', plan: { in: PAID_PLANS }, trialExpiresAt: { gt: now } } }),
-    db.user.count({ where: { status: 'active', trialExpiresAt: { gt: now, lte: inSevenDays } } }),
+    db.user.count({ where: { status: 'active', plan: { in: PAID_PLANS }, accessExpiresAt: { gt: now } } }),
+    db.user.count({ where: { status: 'active', accessExpiresAt: { gt: now, lte: inSevenDays } } }),
     db.user.count({ where: { status: 'active', plan: { in: PAID_PLANS }, OR: [{ lastActivityAt: null }, { lastActivityAt: { lt: twoDaysAgo } }] } }),
     db.payment.count({ where: { status: 'pending' } }),
     db.payment.aggregate({ where: { status: 'approved', createdAt: { gte: addDays(now, -30) } }, _sum: { amount: true } }),
@@ -352,7 +352,7 @@ export async function adminRoutes(app) {
       ...(search ? { email: { contains: String(search).trim() } } : {}),
       ...(risk === 'stale' ? { OR: [{ lastActivityAt: null }, { lastActivityAt: { lt: twoDaysAgo } }] } : {}),
       ...(risk === 'missing_phone' ? { contactPhone: null } : {}),
-      ...(risk === 'expiring_soon' ? { trialExpiresAt: { gt: now, lte: addDays(now, 7) } } : {}),
+      ...(risk === 'expiring_soon' ? { accessExpiresAt: { gt: now, lte: addDays(now, 7) } } : {}),
       ...(risk === 'missing_credentials' ? { credentials: { none: {} } } : {}),
       ...(risk === 'missing_monitor' ? { groups: { none: { role: 'monitor' } } } : {}),
       ...(risk === 'missing_post' ? { groups: { none: { role: 'post' } } } : {}),
@@ -372,7 +372,7 @@ export async function adminRoutes(app) {
           contactPhone: true,
           status: true,
           plan: true,
-          trialExpiresAt: true,
+          accessExpiresAt: true,
           lastLoginAt: true,
           lastActivityAt: true,
           lastSupportContactAt: true,
@@ -483,7 +483,7 @@ export async function adminRoutes(app) {
       db.user.count({ where: { status: 'active', contactPhone: null } }),
       db.user.count({ where: { status: 'active', plan: { in: PAID_PLANS }, OR: [{ lastActivityAt: null }, { lastActivityAt: { lt: addDays(now, -2) } }] } }),
       db.user.count({ where: { status: 'active', OR: [{ credentials: { none: {} } }, { groups: { none: { role: 'monitor' } } }, { groups: { none: { role: 'post' } } }] } }),
-      db.user.count({ where: { status: 'active', trialExpiresAt: { gt: now, lte: addDays(now, 7) } } }),
+      db.user.count({ where: { status: 'active', accessExpiresAt: { gt: now, lte: addDays(now, 7) } } }),
       db.messageLog.groupBy({ by: ['userId'], where: { status: 'error', sentAt: { gte: since24h } }, _count: { _all: true } }),
     ])
 
@@ -520,7 +520,7 @@ export async function adminRoutes(app) {
           contactPhone: true,
           status: true,
           plan: true,
-          trialExpiresAt: true,
+          accessExpiresAt: true,
           lastActivityAt: true,
           lastSupportContactAt: true,
           supportStatus: true,
@@ -627,12 +627,12 @@ export async function adminRoutes(app) {
       db.payment.groupBy({ by: ['userId'], where: { status: 'approved' }, _sum: { amount: true } }),
       db.payment.count({ where: { status: 'pending' } }),
       db.payment.count({ where: { status: { notIn: ['approved', 'pending'] } } }),
-      db.user.count({ where: { status: 'active', plan: 'basic', trialExpiresAt: { gt: now } } }),
-      db.user.count({ where: { status: 'active', plan: 'pro', trialExpiresAt: { gt: now } } }),
-      db.user.count({ where: { status: 'active', plan: 'trial', OR: [{ trialExpiresAt: null }, { trialExpiresAt: { gt: now } }] } }),
-      db.user.count({ where: { status: 'active', trialExpiresAt: { gt: now, lte: addDays(now, 7) } } }),
-      db.user.count({ where: { status: 'active', trialExpiresAt: { gt: now, lte: addDays(now, 30) } } }),
-      db.user.count({ where: { status: 'active', plan: { in: PAID_PLANS }, trialExpiresAt: { lt: now } } }),
+      db.user.count({ where: { status: 'active', plan: 'basic', accessExpiresAt: { gt: now } } }),
+      db.user.count({ where: { status: 'active', plan: 'pro', accessExpiresAt: { gt: now } } }),
+      db.user.count({ where: { status: 'active', plan: 'trial', OR: [{ accessExpiresAt: null }, { accessExpiresAt: { gt: now } }] } }),
+      db.user.count({ where: { status: 'active', accessExpiresAt: { gt: now, lte: addDays(now, 7) } } }),
+      db.user.count({ where: { status: 'active', accessExpiresAt: { gt: now, lte: addDays(now, 30) } } }),
+      db.user.count({ where: { status: 'active', plan: { in: PAID_PLANS }, accessExpiresAt: { lt: now } } }),
     ])
 
     const activeMrr = activeBasic * PLAN_PRICES.basic + activePro * PLAN_PRICES.pro
@@ -682,7 +682,7 @@ export async function adminRoutes(app) {
         orderBy: { createdAt: 'desc' },
         take: limit,
         skip,
-        include: { user: { select: { id: true, email: true, contactPhone: true, plan: true, trialExpiresAt: true, status: true } } },
+        include: { user: { select: { id: true, email: true, contactPhone: true, plan: true, accessExpiresAt: true, status: true } } },
       }),
     ])
 
@@ -706,16 +706,16 @@ export async function adminRoutes(app) {
     const where = {
       ...(plan ? { plan } : {}),
       ...(search ? { email: { contains: String(search).trim() } } : {}),
-      ...(status === 'active' ? { status: 'active', OR: [{ trialExpiresAt: null }, { trialExpiresAt: { gt: now } }] } : {}),
-      ...(status === 'expired' ? { trialExpiresAt: { lt: now } } : {}),
-      ...(status === 'expiring_soon' ? { trialExpiresAt: { gt: now, lte: addDays(now, 7) } } : {}),
+      ...(status === 'active' ? { status: 'active', OR: [{ accessExpiresAt: null }, { accessExpiresAt: { gt: now } }] } : {}),
+      ...(status === 'expired' ? { accessExpiresAt: { lt: now } } : {}),
+      ...(status === 'expiring_soon' ? { accessExpiresAt: { gt: now, lte: addDays(now, 7) } } : {}),
     }
 
     const [total, users, ltvRows] = await Promise.all([
       db.user.count({ where }),
       db.user.findMany({
         where,
-        orderBy: { trialExpiresAt: 'asc' },
+        orderBy: { accessExpiresAt: 'asc' },
         take: limit,
         skip,
         select: {
@@ -724,7 +724,7 @@ export async function adminRoutes(app) {
           contactPhone: true,
           status: true,
           plan: true,
-          trialExpiresAt: true,
+          accessExpiresAt: true,
           createdAt: true,
           lastActivityAt: true,
           supportStatus: true,
@@ -744,7 +744,7 @@ export async function adminRoutes(app) {
       subscriptions: users.map(user => sanitizeUser({
         ...user,
         subscriptionStatus: getSubscriptionStatus(user, now),
-        daysRemaining: getDaysRemaining(user.trialExpiresAt, now),
+        daysRemaining: getDaysRemaining(user.accessExpiresAt, now),
         ltv: ltvMap.get(user.id) ?? 0,
         lastPayment: user.payments?.[0] ?? null,
       }, req.admin.role)),
@@ -759,23 +759,23 @@ export async function adminRoutes(app) {
 
     const before = await db.user.findUnique({
       where: { id: req.params.id },
-      select: { id: true, email: true, plan: true, trialExpiresAt: true, status: true, supportStatus: true },
+      select: { id: true, email: true, plan: true, accessExpiresAt: true, status: true, supportStatus: true },
     })
     if (!before) return reply.code(404).send({ error: 'Cliente não encontrado' })
 
     const { plan, days, expiresAt, reason } = validation.data
     const data = {}
     if (plan !== undefined) data.plan = plan
-    if (expiresAt !== undefined) data.trialExpiresAt = expiresAt
+    if (expiresAt !== undefined) data.accessExpiresAt = expiresAt
     if (days !== undefined) {
-      const base = before.trialExpiresAt && before.trialExpiresAt > new Date() ? before.trialExpiresAt : new Date()
-      data.trialExpiresAt = addDays(base, days)
+      const base = before.accessExpiresAt && before.accessExpiresAt > new Date() ? before.accessExpiresAt : new Date()
+      data.accessExpiresAt = addDays(base, days)
     }
 
     const after = await db.user.update({
       where: { id: before.id },
       data,
-      select: { id: true, email: true, plan: true, trialExpiresAt: true, status: true, supportStatus: true },
+      select: { id: true, email: true, plan: true, accessExpiresAt: true, status: true, supportStatus: true },
     })
 
     await writeAdminAuditLog(req, {
@@ -806,7 +806,7 @@ export async function adminRoutes(app) {
         contactPhoneOptInAt: true,
         status: true,
         plan: true,
-        trialExpiresAt: true,
+        accessExpiresAt: true,
         sendCount: true,
         referralCode: true,
         referredBy: true,
@@ -915,7 +915,7 @@ export async function adminRoutes(app) {
               contactPhone: true,
               status: true,
               plan: true,
-              trialExpiresAt: true,
+              accessExpiresAt: true,
               lastActivityAt: true,
               supportStatus: true,
             },

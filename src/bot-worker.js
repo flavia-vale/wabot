@@ -88,7 +88,7 @@ async function loadConfig() {
   })
   if (!user) throw new Error(`Usuário ${userId} não encontrado`)
 
-  if (user.trialExpiresAt && user.trialExpiresAt < new Date()) {
+  if (user.accessExpiresAt && user.accessExpiresAt < new Date()) {
     if (process.send) process.send({ type: 'status', data: 'blocked' })
     logger.error('Acesso expirado — bot bloqueado')
     process.exit(0)

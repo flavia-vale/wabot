@@ -78,7 +78,7 @@ async function findCurrentUser(userId) {
     contactPhoneVerifiedAt: true,
     contactPhoneOptInAt: true,
     plan: true,
-    trialExpiresAt: true,
+    accessExpiresAt: true,
     referralCode: true,
     status: true,
     supportStatus: true,
@@ -93,7 +93,7 @@ async function findCurrentUser(userId) {
     if (!isPrismaShapeMismatch(err)) throw err
     return db.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, plan: true, trialExpiresAt: true, referralCode: true, createdAt: true },
+      select: { id: true, email: true, plan: true, accessExpiresAt: true, referralCode: true, createdAt: true },
     })
   }
 }
@@ -111,7 +111,7 @@ async function ensureReferralCode(userId) {
         contactPhoneVerifiedAt: true,
         contactPhoneOptInAt: true,
         plan: true,
-        trialExpiresAt: true,
+        accessExpiresAt: true,
         referralCode: true,
         status: true,
         supportStatus: true,
@@ -125,7 +125,7 @@ async function ensureReferralCode(userId) {
     return db.user.update({
       where: { id: userId },
       data: { referralCode },
-      select: { id: true, email: true, plan: true, trialExpiresAt: true, referralCode: true, createdAt: true },
+      select: { id: true, email: true, plan: true, accessExpiresAt: true, referralCode: true, createdAt: true },
     })
   }
 }
@@ -136,7 +136,7 @@ function publicUser(user) {
     email: user.email,
     contactPhone: user.contactPhone,
     plan: user.plan,
-    trialExpiresAt: user.trialExpiresAt,
+    accessExpiresAt: user.accessExpiresAt,
     referralCode: user.referralCode,
     status: user.status,
     supportStatus: user.supportStatus,
@@ -158,7 +158,7 @@ export async function authRoutes(app) {
 
     const passwordHash = await bcrypt.hash(password, 10)
     const now = new Date()
-    const trialExpiresAt = new Date(Date.now() + 3 * 60 * 60 * 1000)
+    const accessExpiresAt = new Date(Date.now() + 3 * 60 * 60 * 1000)
     const referralCode = randomBytes(4).toString('hex')
 
     let referrer = null
@@ -177,7 +177,7 @@ export async function authRoutes(app) {
       contactPhoneOptInAt: now,
       status: 'active',
       plan: 'trial',
-      trialExpiresAt,
+      accessExpiresAt,
       referralCode,
       referredBy: referrer?.id,
       lastLoginAt: now,
@@ -186,12 +186,12 @@ export async function authRoutes(app) {
     })
 
     if (referrer) {
-      const base = referrer.trialExpiresAt && referrer.trialExpiresAt > new Date()
-        ? referrer.trialExpiresAt.getTime()
+      const base = referrer.accessExpiresAt && referrer.accessExpiresAt > new Date()
+        ? referrer.accessExpiresAt.getTime()
         : Date.now()
       await db.user.update({
         where: { id: referrer.id },
-        data: { trialExpiresAt: new Date(base + 7 * 24 * 60 * 60 * 1000) },
+        data: { accessExpiresAt: new Date(base + 7 * 24 * 60 * 60 * 1000) },
       })
     }
 
