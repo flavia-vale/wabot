@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const ASIN_RE = /\/dp\/([A-Z0-9]{10})/i
+const ASIN_RE = /(?:\/dp\/|\/gp\/product\/|\/exec\/obidos\/ASIN\/)([A-Z0-9]{10})/i
 
 // Resolve short URL (amzn.to / a.co) to full URL
 async function resolve(url) {
@@ -27,10 +27,7 @@ export async function convert(url, creds) {
       return `https://www.${marketplace}/dp/${asinMatch[1]}?tag=${tag}`
     }
 
-    // No ASIN found — inject tag into existing URL
-    const u = new URL(target)
-    u.searchParams.set('tag', tag)
-    return u.toString()
+    return null
   } catch {
     return null
   }
