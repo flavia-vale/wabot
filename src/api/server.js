@@ -43,6 +43,10 @@ function getAllowedOrigins() {
 const allowedOrigins = new Set(getAllowedOrigins())
 app.log.info({ allowedOrigins: [...allowedOrigins] }, 'CORS allowlist carregada')
 
+function resolveJwtSecret() {
+  return process.env.JWT_SECRET || process.env.AUTH_JWT_SECRET || process.env.JWT_TOKEN || null
+}
+
 function isOriginAllowed(origin) {
   if (!origin) return true
   return allowedOrigins.has(origin)
@@ -111,9 +115,10 @@ async function ensureDatabaseReady() {
   try {
     await verifyDatabase()
     app.log.info('Banco de dados pronto para receber tráfego')
+    return true
   } catch (err) {
     app.log.error({ err: err.message }, 'Banco de dados indisponível ou sem migrations aplicadas')
-    throw new Error('Falha na inicialização do banco. Execute: npx prisma migrate deploy e reinicie a API.')
+    return false
   }
 }
 
@@ -138,7 +143,12 @@ app.addHook('onSend', async (req, reply) => {
   }
 })
 
-await app.register(fastifyJwt, { secret: process.env.JWT_SECRET })
+const jwtSecret = resolveJwtSecret()
+if (!jwtSecret) {
+  app.log.fatal('JWT secret ausente. Configure JWT_SECRET (ou AUTH_JWT_SECRET/JWT_TOKEN) e reinicie a API.')
+  process.exit(1)
+}
+await app.register(fastifyJwt, { secret: jwtSecret })
 await app.register(fastifyWebsocket)
 
 app.decorate('authenticate', async function (req, reply) {
@@ -179,7 +189,10 @@ app.get('/ready', async (req, reply) => {
 })
 
 const port = Number(process.env.API_PORT) || 3001
-await ensureDatabaseReady()
+const databaseReadyAtBoot = await ensureDatabaseReady()
+if (!databaseReadyAtBoot) {
+  app.log.warn('API iniciada em modo degradado: execute "npx prisma migrate deploy" e reinicie quando o banco estiver pronto')
+}
 startLogRetentionJob()
 await app.listen({ port, host: '0.0.0.0' })
 console.log(`API rodando em http://localhost:${port}`)
