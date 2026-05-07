@@ -9,9 +9,10 @@ datasource db {
 
 model User {
   id                     String    @id @default(cuid())
+  name                   String
   email                  String    @unique
   passwordHash           String
-  contactPhone           String?
+  contactPhone           String?   @unique
   contactPhoneVerifiedAt DateTime?
   contactPhoneOptInAt    DateTime?
   status                 String    @default("active")
