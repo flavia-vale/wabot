@@ -647,24 +647,36 @@ async function startBot() {
         if (imageFetched) return cachedImage
         imageFetched = true
         if (!monitorGroup || monitorGroup.imageMode === 'none') return null
+
+        const enabled = links.filter(l => enabledPlatforms.has(l.platform))
+        const target = monitorGroup.imageLinkTarget === 'first' ? enabled[0] : enabled[enabled.length - 1]
+        const platform = target?.platform || 'unknown'
+        logger.info({ msgId: msg.key.id, imageMode: monitorGroup.imageMode, platform }, 'getImage: iniciando resolução de imagem')
+
         if (monitorGroup.imageMode === 'original') {
           cachedImage = await downloadOriginalImage()
           return cachedImage
         }
+
         if (monitorGroup.imageMode === 'fetch') {
-          const enabled = links.filter(l => enabledPlatforms.has(l.platform))
-          const target = monitorGroup.imageLinkTarget === 'first' ? enabled[0] : enabled[enabled.length - 1]
-          // Para Shopee, o CDN bloqueia o servidor de mídia do WhatsApp e a
-          // imagem chega quebrada no destino. Usamos sempre a imagem original
-          // do anúncio do grupo monitorado, que já vem decifrável via Baileys.
-          if (target?.platform === 'shopee') {
+          // Para Shopee, preferimos a imagem original do anúncio: o CDN da
+          // Shopee bloqueia o servidor de mídia do WhatsApp, o que produz
+          // imagem quebrada quando passamos URL para Baileys.
+          if (platform === 'shopee') {
             cachedImage = await downloadOriginalImage()
-            return cachedImage
+            if (cachedImage) return cachedImage
+            logger.info({ msgId: msg.key.id }, 'Shopee sem imagem original — tentando resolver via API')
           }
+
           if (target) {
             const url = await fetchProductImage(target.platform, target.url, cfg.credentials)
-            if (url) cachedImage = await fetchImageBuffer(url, target.url)
+            logger.info({ msgId: msg.key.id, platform, resolvedUrl: url }, 'fetchProductImage resultado')
+            if (url) {
+              cachedImage = await fetchImageBuffer(url, target.url)
+              logger.info({ msgId: msg.key.id, downloaded: !!cachedImage, size: cachedImage?.buffer?.length }, 'fetchImageBuffer resultado')
+            }
           }
+
           if (!cachedImage && monitorGroup.fallbackToOriginal) {
             cachedImage = await downloadOriginalImage()
           }
