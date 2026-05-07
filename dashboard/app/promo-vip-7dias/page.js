@@ -12,6 +12,7 @@ export default function PromoVipPage() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [contactPhone, setContactPhone] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -20,7 +21,7 @@ export default function PromoVipPage() {
     setError('')
     setLoading(true)
     try {
-      await api.registerPromoVip(name, email, password, COUPON_CODE)
+      await api.registerPromoVip(name, email, password, contactPhone, COUPON_CODE)
       router.push('/dashboard/inicio')
     } catch (err) {
       setError(err.message || 'Não foi possível concluir seu cadastro agora.')
@@ -46,6 +47,11 @@ export default function PromoVipPage() {
           <div>
             <label htmlFor="email" className="block text-sm mb-1">Email</label>
             <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full rounded-lg border border-emerald-300/40 bg-white px-3 py-2 text-gray-900" />
+          </div>
+
+          <div>
+            <label htmlFor="contactPhone" className="block text-sm mb-1">Telefone (WhatsApp)</label>
+            <input id="contactPhone" type="tel" inputMode="tel" placeholder="5511999999999" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} required className="w-full rounded-lg border border-emerald-300/40 bg-white px-3 py-2 text-gray-900" />
           </div>
 
           <div>
