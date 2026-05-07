@@ -43,6 +43,10 @@ function getAllowedOrigins() {
 const allowedOrigins = new Set(getAllowedOrigins())
 app.log.info({ allowedOrigins: [...allowedOrigins] }, 'CORS allowlist carregada')
 
+function resolveJwtSecret() {
+  return process.env.JWT_SECRET || process.env.AUTH_JWT_SECRET || process.env.JWT_TOKEN || null
+}
+
 function isOriginAllowed(origin) {
   if (!origin) return true
   return allowedOrigins.has(origin)
@@ -139,7 +143,12 @@ app.addHook('onSend', async (req, reply) => {
   }
 })
 
-await app.register(fastifyJwt, { secret: process.env.JWT_SECRET })
+const jwtSecret = resolveJwtSecret()
+if (!jwtSecret) {
+  app.log.fatal('JWT secret ausente. Configure JWT_SECRET (ou AUTH_JWT_SECRET/JWT_TOKEN) e reinicie a API.')
+  process.exit(1)
+}
+await app.register(fastifyJwt, { secret: jwtSecret })
 await app.register(fastifyWebsocket)
 
 app.decorate('authenticate', async function (req, reply) {
