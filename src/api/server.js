@@ -111,9 +111,10 @@ async function ensureDatabaseReady() {
   try {
     await verifyDatabase()
     app.log.info('Banco de dados pronto para receber tráfego')
+    return true
   } catch (err) {
     app.log.error({ err: err.message }, 'Banco de dados indisponível ou sem migrations aplicadas')
-    throw new Error('Falha na inicialização do banco. Execute: npx prisma migrate deploy e reinicie a API.')
+    return false
   }
 }
 
@@ -179,7 +180,10 @@ app.get('/ready', async (req, reply) => {
 })
 
 const port = Number(process.env.API_PORT) || 3001
-await ensureDatabaseReady()
+const databaseReadyAtBoot = await ensureDatabaseReady()
+if (!databaseReadyAtBoot) {
+  app.log.warn('API iniciada em modo degradado: execute "npx prisma migrate deploy" e reinicie quando o banco estiver pronto')
+}
 startLogRetentionJob()
 await app.listen({ port, host: '0.0.0.0' })
 console.log(`API rodando em http://localhost:${port}`)
