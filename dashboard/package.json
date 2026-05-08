@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node ../scripts/check_no_shadow_modules.mjs dashboard",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint"

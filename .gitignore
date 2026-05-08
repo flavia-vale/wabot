@@ -3,7 +3,28 @@ auth_info/
 /logs/
 config.json
 .env
+.env.bak
+.env.bak*
 prisma/dev.db
+prisma/dev.db-journal
+prisma/*.db.before-*
+prisma/backup-*.db
 dashboard/.next/
 
 /src/generated/prisma
+
+# Backups e arquivos temporários — nunca commitar.
+# Em maio/2026 um Footer.js órfão (cópia obsoleta) sequestrou o import
+# do Footer.jsx e derrubou produção. Mantenha o working tree limpo.
+*.bak
+*.bak.*
+*.backup
+*.orig
+*.rej
+*~
+*.swp
+*.swo
+
+# Scripts de teste/admin one-shot que não devem ir para o repo
+/check-ml.mjs
+/create-admin.mjs

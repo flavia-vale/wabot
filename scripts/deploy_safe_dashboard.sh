@@ -15,6 +15,18 @@ echo "[2/7] Install dashboard dependencies"
 cd "$DASHBOARD_DIR"
 npm ci
 
+# Detecta shadow modules (ex.: Footer.js + Footer.jsx). Caso clássico de
+# build silenciosamente quebrado: webpack pega a versão errada por ordem
+# de extensão. Aborta o deploy se encontrar.
+echo "[2b/7] Verificando shadow modules"
+node "$ROOT_DIR/scripts/check_no_shadow_modules.mjs" dashboard
+
+# Limpa lockfile parasita em $HOME que confunde o workspace root do Next.
+if [[ -f "$HOME/package-lock.json" && ! -f "$HOME/package.json" ]]; then
+  echo "  Removendo lockfile órfão em $HOME/package-lock.json"
+  rm -f "$HOME/package-lock.json"
+fi
+
 echo "[3/7] Build dashboard (hard gate)"
 rm -rf .next
 npm run build
