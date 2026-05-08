@@ -57,7 +57,7 @@ export function FinalCTA() {
   );
 }
 
-export function Footer() {
+function Footer() {
   return (
     <footer style={s.foot}>
       <div className="wrap">
@@ -98,3 +98,6 @@ export function Footer() {
     </footer>
   );
 }
+
+
+export default Footer;
