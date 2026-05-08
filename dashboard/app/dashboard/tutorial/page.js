@@ -154,51 +154,86 @@ export default function TutorialPage() {
       {/* Amazon */}
       <PlatformCard color="yellow" icon="🟡" title="Amazon — Pegando suas Credenciais">
         <p className="text-sm text-gray-700">
-          Para a Amazon, você vai usar a Cookie-Editor da mesma forma — mas no portal de associados.
+          Para a Amazon, você vai usar a Cookie-Editor no portal de associados. Os cookies que você precisa copiar estão listados abaixo.
         </p>
         <StepList steps={[
           <><ExternalLink href={LINKS.amazonAssociados}>Acesse o portal Amazon Associados</ExternalLink> e certifique-se de estar logado na sua conta.</>,
-          <>Com a página aberta, clique no ícone da extensão <strong>Cookie-Editor</strong> no canto superior direito do Chrome.</>,
-          <>O BOTinho vai te dizer exatamente quais cookies buscar (normalmente <strong>session-id</strong> e <strong>x-main</strong>). Procure-os na lista e copie os valores.</>,
+          <>Com a página aberta, clique no ícone da <strong>Cookie-Editor</strong> 🍪 no canto superior direito do Chrome.</>,
+          <>Uma lista de cookies vai aparecer. Você precisa copiar os valores dos seguintes cookies:
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {['session-id', 'session-token', 'sess-at-acbbr', 'at-acbbr', 'ubid-acbbr'].map(c => (
+                <code key={c} className="rounded bg-yellow-100 px-2 py-0.5 text-xs font-bold text-yellow-900">{c}</code>
+              ))}
+            </div>
+          </>,
+          <>Para cada um: clique no nome do cookie na lista para expandir e copie o valor que aparece no campo <strong>Value</strong>.</>,
           <>Cole cada valor no campo correspondente na tela de <strong>Credenciais</strong> do BOTinho.</>,
         ]} />
         <Tip>
-          Se estiver com dificuldade de localizar os cookies, use o campo de busca no topo da Cookie-Editor para filtrar pelo nome.
+          Use o campo de <strong>busca (Search)</strong> no topo da Cookie-Editor para encontrar cada cookie rapidamente sem precisar rolar a lista toda.
         </Tip>
       </PlatformCard>
 
       {/* Shopee */}
       <PlatformCard color="orange" icon="🟠" title="Shopee — Solicitando Acesso à API">
         <p className="text-sm text-gray-700">
-          A Shopee funciona diferente: você precisa <strong>solicitar acesso à API</strong> pelo suporte deles. Depois que aprovarem, você pega uma <strong>Key</strong> e um <strong>Secret</strong>.
+          A Shopee funciona diferente das outras: você precisa <strong>pedir autorização manualmente</strong> pelo suporte deles. Depois que aprovarem (leva alguns dias), você pega uma <strong>Key</strong> e um <strong>Secret</strong>.
         </p>
 
         <div className="space-y-1">
           <Badge color="orange">Parte 1 — Fazendo a solicitação</Badge>
         </div>
         <StepList steps={[
-          <><ExternalLink href={LINKS.shopeeApiForm}>Acesse o formulário de solicitação de API da Shopee</ExternalLink>.</>,
-          <>Siga este caminho no formulário: <strong>AFILIADO → Dúvidas sobre o Programa de Afiliados → Próximo → SIM → Não, estou com outras dificuldades/dúvidas</strong>.</>,
-          <>Preencha os campos assim:<br />
-            <ul className="mt-2 space-y-1 pl-4 text-xs text-gray-600 list-disc">
-              <li><strong>ID do afiliado:</strong> seu ID Shopee (encontrado no painel de afiliados)</li>
-              <li><strong>Tema:</strong> Tenho dúvidas/dificuldades com meu cadastro/conta</li>
-              <li><strong>Cenário:</strong> Quero ativar a API</li>
+          <><ExternalLink href={LINKS.shopeeApiForm}>Acesse o Formulário de Solicitação da API</ExternalLink>.</>,
+          <>Preencha o formulário exatamente assim:
+            <ul className="mt-2 space-y-2 pl-1 text-sm text-gray-700">
+              <li className="flex gap-2 items-start">
+                <span className="text-orange-500 font-bold">›</span>
+                <span><strong>Você é comprador, vendedor ou afiliado?</strong> Selecione <strong>AFILIADO</strong>.</span>
+              </li>
+              <li className="flex gap-2 items-start">
+                <span className="text-orange-500 font-bold">›</span>
+                <span><strong>Qual é o principal assunto?</strong> Selecione <strong>Dúvidas sobre o Programa de Afiliados</strong>.</span>
+              </li>
+              <li className="flex gap-2 items-start">
+                <span className="text-orange-500 font-bold">›</span>
+                <span><em>Clique em <strong>Próximo</strong>.</em></span>
+              </li>
+              <li className="flex gap-2 items-start">
+                <span className="text-orange-500 font-bold">›</span>
+                <span><strong>Você já é Afiliado?</strong> Marque <strong>SIM</strong>.</span>
+              </li>
+              <li className="flex gap-2 items-start">
+                <span className="text-orange-500 font-bold">›</span>
+                <span><strong>Está com problemas de login?</strong> Selecione <strong>Não, estou com outras dificuldades/dúvidas</strong>.</span>
+              </li>
+              <li className="flex gap-2 items-start">
+                <span className="text-orange-500 font-bold">›</span>
+                <span><strong>ID do Afiliado:</strong> informe seu ID Shopee. Se não souber, <ExternalLink href={LINKS.shopeeOpenApi}>acesse este link</ExternalLink> para consultar.</span>
+              </li>
+              <li className="flex gap-2 items-start">
+                <span className="text-orange-500 font-bold">›</span>
+                <span><strong>Tema da dificuldade:</strong> Tenho dúvidas/dificuldades com meu cadastro/conta.</span>
+              </li>
+              <li className="flex gap-2 items-start">
+                <span className="text-orange-500 font-bold">›</span>
+                <span><strong>Cenário:</strong> Quero ativar a API.</span>
+              </li>
             </ul>
           </>,
-          <>Clique em <strong>ENVIAR</strong> e aguarde. A Shopee normalmente responde em alguns dias úteis.</>,
+          <>Clique em <strong>ENVIAR</strong>. A Shopee leva alguns dias úteis para liberar o acesso.</>,
         ]} />
 
         <div className="space-y-1 pt-2">
           <Badge color="orange">Parte 2 — Pegando Key e Secret (após aprovação)</Badge>
         </div>
         <StepList steps={[
-          <><ExternalLink href={LINKS.shopeeOpenApi}>Acesse o painel Shopee Open API</ExternalLink> diariamente até a aprovação aparecer.</>,
-          <>Quando aparecer o botão <strong>"Redefinir"</strong>, clique nele — a <strong>Key</strong> e o <strong>Secret</strong> serão revelados.</>,
+          <><ExternalLink href={LINKS.shopeeOpenApi}>Acesse o painel Shopee Open API</ExternalLink> diariamente até o acesso ser liberado.</>,
+          <>Quando aparecer o botão <strong>"Redefinir"</strong>, clique nele — a <strong>Key</strong> e o <strong>Secret</strong> serão exibidos na tela.</>,
           <>Copie os dois valores e cole nos campos correspondentes na tela de <strong>Credenciais</strong> do BOTinho.</>,
         ]} />
         <Tip>
-          A Key e o Secret da Shopee só aparecem uma vez após clicar em "Redefinir". Guarde-os em local seguro antes de fechar a página!
+          ⏳ <strong>E agora?</strong> A Shopee leva alguns dias para liberar. Verifique o painel diariamente. Quando o botão <strong>Redefinir</strong> aparecer, clique nele e os dados (Key/Secret) aparecerão para você copiar.
         </Tip>
       </PlatformCard>
 
