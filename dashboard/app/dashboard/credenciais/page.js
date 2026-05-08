@@ -226,6 +226,9 @@ export default function CredenciaisPage() {
         <HelpLink topic="como-configurar-credenciais">Ajuda</HelpLink>
       </div>
       <p className="text-gray-500 text-sm mb-3">Adicione suas credenciais para que o bot converta links usando suas tags de afiliado.</p>
+      <div className="mb-4 flex flex-wrap gap-2">
+        <a href="/dashboard/credenciais/tutorial" className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100">📘 Ver tutorial de credenciais</a>
+      </div>
       <div className="mb-4">
         <Alert
           type="info"
