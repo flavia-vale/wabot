@@ -67,6 +67,7 @@ function PlanosContent() {
 
   const [data, setData] = useState(null)
   const [publicPlans, setPublicPlans] = useState([])
+  const [overview, setOverview] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [checkoutLoading, setCheckoutLoading] = useState('')
@@ -80,8 +81,8 @@ function PlanosContent() {
 
   useEffect(() => {
     let active = true
-    Promise.all([api.paymentsStatus(), api.publicPlans().catch(() => ({ plans: [] }))])
-      .then(([res, plansRes]) => { if (active) { setData(res); setPublicPlans(Array.isArray(plansRes?.plans) ? plansRes.plans : []) } })
+    Promise.all([api.paymentsStatus(), api.paymentsOverview().catch(() => null), api.publicPlans().catch(() => ({ plans: [] }))])
+      .then(([res, overviewRes, plansRes]) => { if (active) { setData(res); setOverview(overviewRes); setPublicPlans(Array.isArray(plansRes?.plans) ? plansRes.plans : []) } })
       .catch((err) => { if (active) setLoadError(err.message) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
@@ -193,6 +194,20 @@ function PlanosContent() {
           </p>
         )}
       </div>
+
+      {overview && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5 text-sm text-amber-900">
+          <p className="font-semibold mb-2">Status de cobrança</p>
+          <ul className="space-y-1 text-xs">
+            <li><strong>Modelo:</strong> {overview.billingModel}</li>
+            <li><strong>Renovação automática:</strong> {overview.autoRenew ? 'Sim' : 'Não'}</li>
+            <li><strong>Método de pagamento:</strong> {overview.paymentMethod}</li>
+            <li><strong>Último pagamento aprovado:</strong> {overview.lastApprovedPayment?.createdAt ? new Date(overview.lastApprovedPayment.createdAt).toLocaleString('pt-BR') : 'Não identificado'}</li>
+            <li><strong>Vencimento do acesso:</strong> {overview.accessExpiresAt ? new Date(overview.accessExpiresAt).toLocaleString('pt-BR') : 'Não definido'}</li>
+          </ul>
+          {overview.actionRequired && <p className="mt-2 font-medium">Ação necessária: {overview.actionRequired}</p>}
+        </div>
+      )}
 
       <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 mb-5 text-xs text-indigo-800">
         <p className="font-semibold mb-2">Comparativo rápido</p>

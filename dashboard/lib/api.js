@@ -67,6 +67,7 @@ export const api = {
     apiFetch(`/api/credentials/${platform}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   paymentsStatus: () => apiFetch('/api/payments/status'),
+  paymentsOverview: () => apiFetch('/api/payments/overview'),
   paymentsCheckout: (plan) =>
     apiFetch('/api/payments/checkout', { method: 'POST', body: JSON.stringify({ plan }) }),
   paymentsRecover: (paymentId) =>
@@ -123,6 +124,10 @@ export const api = {
   adminPayments: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/payments${query ? `?${query}` : ''}`)
+  },
+  adminBillingWebhooks: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/billing/webhooks${query ? `?${query}` : ''}`)
   },
   adminSubscriptions: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
