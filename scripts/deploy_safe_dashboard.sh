@@ -19,6 +19,17 @@ echo "[3/7] Build dashboard (hard gate)"
 rm -rf .next
 npm run build
 
+# Verifica que o build produziu os artefatos essenciais antes de reiniciar PM2.
+# Um .next incompleto causa crash loop imediato no next start → 502 contínuo.
+echo "[3b/7] Verificando integridade do build"
+for artifact in .next/BUILD_ID .next/prerender-manifest.json; do
+  if [[ ! -f "$artifact" ]]; then
+    echo "ERRO: artefato de build ausente: $artifact — abortando deploy."
+    exit 1
+  fi
+done
+echo "  Build íntegro: BUILD_ID=$(cat .next/BUILD_ID)"
+
 echo "[4/7] Return to project root"
 cd "$ROOT_DIR"
 

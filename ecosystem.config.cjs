@@ -28,8 +28,12 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: '3000',
       },
-      max_memory_restart: '500M',
+      max_memory_restart: '768M',
       kill_timeout: 10000,
+      // Exponential backoff: evita crash loop que causa 502 contínuo quando .next está quebrado
+      exp_backoff_restart_delay: 100,
+      max_restarts: 8,
+      min_uptime: 15000,
     },
   ],
 }
