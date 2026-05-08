@@ -3,7 +3,12 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   isValidMercadoPagoWebhookSignature,
+  normalizeWebhookPayload,
   parseMercadoPagoSignature,
+  resolveWebhookEventId,
+  resolveWebhookProcessorConfig,
+  shouldReconcilePayment,
+  summarizeWebhookEvent,
   shouldEnforceWebhookSignature,
 } from '../src/api/routes/payments.js'
 
@@ -33,4 +38,49 @@ test('validates Mercado Pago webhook signature', () => {
 
   assert.equal(isValidMercadoPagoWebhookSignature({ signature: `ts=${ts},v1=${v1}`, requestId, dataId, secret }), true)
   assert.equal(isValidMercadoPagoWebhookSignature({ signature: `ts=${ts},v1=invalid`, requestId, dataId, secret }), false)
+})
+
+test('resolveWebhookEventId reads ID using priority order', () => {
+  assert.equal(resolveWebhookEventId({ body: { id: 'body-id' }, query: { id: 'query-id' }, dataId: 'fallback' }), 'body-id')
+  assert.equal(resolveWebhookEventId({ body: { data: { id: 'data-id' } }, query: { id: 'query-id' }, dataId: 'fallback' }), 'data-id')
+  assert.equal(resolveWebhookEventId({ body: {}, query: { id: 'query-id' }, dataId: 'fallback' }), 'query-id')
+  assert.equal(resolveWebhookEventId({ body: {}, query: { 'data.id': 'query-data-id' }, dataId: 'fallback' }), 'query-data-id')
+  assert.equal(resolveWebhookEventId({ body: {}, query: {}, dataId: 'fallback' }), 'fallback')
+  assert.equal(resolveWebhookEventId({ body: {}, query: {}, dataId: '' }), '')
+})
+
+test('normalizeWebhookPayload always returns valid JSON', () => {
+  assert.equal(normalizeWebhookPayload({ id: 123 }), '{"id":123}')
+  const circular = {}
+  circular.self = circular
+  assert.equal(normalizeWebhookPayload(circular), '{}')
+})
+
+test('summarizeWebhookEvent returns canonical summary fields', () => {
+  assert.deepEqual(
+    summarizeWebhookEvent({ type: 'payment', action: 'updated', data: { id: '987' } }),
+    { type: 'payment', action: 'updated', dataResourceId: '987' }
+  )
+  assert.deepEqual(
+    summarizeWebhookEvent({ topic: 'merchant_order' }),
+    { type: 'merchant_order', action: 'unknown', dataResourceId: '' }
+  )
+})
+
+test('resolveWebhookProcessorConfig enforces safe defaults and limits', () => {
+  assert.deepEqual(resolveWebhookProcessorConfig({}), { enabled: false, intervalMs: 30000, batchSize: 50 })
+  assert.deepEqual(
+    resolveWebhookProcessorConfig({ BILLING_WEBHOOK_AUTOPROCESS: 'true', BILLING_WEBHOOK_PROCESS_INTERVAL_MS: '4000', BILLING_WEBHOOK_PROCESS_BATCH: '999' }),
+    { enabled: true, intervalMs: 30000, batchSize: 200 }
+  )
+  assert.deepEqual(
+    resolveWebhookProcessorConfig({ BILLING_WEBHOOK_AUTOPROCESS: 'TRUE', BILLING_WEBHOOK_PROCESS_INTERVAL_MS: '6000', BILLING_WEBHOOK_PROCESS_BATCH: '20' }),
+    { enabled: true, intervalMs: 6000, batchSize: 20 }
+  )
+})
+
+test('shouldReconcilePayment only for payment events with data id', () => {
+  assert.equal(shouldReconcilePayment({ type: 'payment', dataResourceId: '123' }), true)
+  assert.equal(shouldReconcilePayment({ type: 'payment', dataResourceId: '' }), false)
+  assert.equal(shouldReconcilePayment({ type: 'merchant_order', dataResourceId: '123' }), false)
 })

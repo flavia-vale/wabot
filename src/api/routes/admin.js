@@ -776,6 +776,44 @@ export async function adminRoutes(app) {
     }
   })
 
+  app.get('/billing/webhooks', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:read'))) return
+
+    const { page, limit, skip } = getPagination(req.query, 30)
+    const { status = 'all', provider = 'mercado_pago' } = req.query
+    const { from, to } = parseDateRange(req.query, 7)
+    const where = {
+      createdAt: { gte: from, lte: to },
+      ...(status !== 'all' ? { processingStatus: status } : {}),
+      ...(provider ? { provider: String(provider) } : {}),
+    }
+
+    const [total, rows] = await Promise.all([
+      db.webhookEvent.count({ where }),
+      db.webhookEvent.findMany({ where, orderBy: { createdAt: 'desc' }, take: limit, skip }),
+    ])
+
+    await writeAdminAuditLog(req, { action: 'admin.billing.webhooks.list', resource: 'webhookEvent' })
+
+    return {
+      total,
+      page,
+      limit,
+      webhooks: rows.map((row) => ({
+        id: row.id,
+        provider: row.provider,
+        eventId: row.eventId,
+        eventType: row.eventType,
+        processingStatus: row.processingStatus,
+        signatureValid: row.signatureValid,
+        createdAt: row.createdAt,
+        processedAt: row.processedAt,
+        processingResult: row.processingResult,
+        error: row.error,
+      })),
+    }
+  })
+
   app.get('/subscriptions', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'billing:read'))) return
 
