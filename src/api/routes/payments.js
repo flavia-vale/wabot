@@ -323,7 +323,7 @@ export async function paymentsRoutes(app) {
       if (err?.code === 'PAYMENT_PROVIDER_NOT_CONFIGURED') {
         return sendError(reply, 500, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'Pagamentos temporariamente indisponíveis.')
       }
-      req.log.error({ err: err?.message, plan, userId }, 'Falha ao criar preferência MP')
+      req.log.error({ err: err?.message, mpStatus: err?.response?.status, mpError: err?.response?.data, plan, userId }, 'Falha ao criar preferência MP')
       return sendError(reply, 502, 'CHECKOUT_CREATION_FAILED', 'Não foi possível iniciar o checkout. Tente novamente.')
     }
   })
