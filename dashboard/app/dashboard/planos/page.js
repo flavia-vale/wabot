@@ -74,11 +74,6 @@ function PlanosContent() {
   const [checkoutError, setCheckoutError] = useState('')
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState('')
-  const [recoverOpen, setRecoverOpen] = useState(false)
-  const [recoverPaymentId, setRecoverPaymentId] = useState('')
-  const [recoverLoading, setRecoverLoading] = useState(false)
-  const [recoverError, setRecoverError] = useState('')
-  const [recoverSuccess, setRecoverSuccess] = useState('')
 
   useEffect(() => {
     let active = true
@@ -102,29 +97,6 @@ function PlanosContent() {
     }
   }
 
-  async function handleRecover(e) {
-    e.preventDefault()
-    const trimmed = recoverPaymentId.trim()
-    if (!trimmed) return
-    setRecoverError('')
-    setRecoverSuccess('')
-    setRecoverLoading(true)
-    try {
-      const res = await api.paymentsRecover(trimmed)
-      const days = daysLeft(res.accessExpiresAt)
-      const planLabel = PLAN_LABELS[res.plan] ?? res.plan
-      setRecoverSuccess(res.alreadyApplied
-        ? `Esse pagamento já está aplicado. Plano ${planLabel} ativo por mais ${days} dia${days !== 1 ? 's' : ''}.`
-        : `Acesso ${planLabel} ativado por 30 dias.`)
-      setRecoverPaymentId('')
-      const refreshed = await api.paymentsStatus().catch(() => null)
-      if (refreshed) setData(refreshed)
-    } catch (err) {
-      setRecoverError(err.message)
-    } finally {
-      setRecoverLoading(false)
-    }
-  }
 
   async function copyRef() {
     const url = `${window.location.origin}/login?ref=${data.referralCode}`
@@ -331,43 +303,6 @@ function PlanosContent() {
         </div>
       )}
 
-      {/* Recuperação manual — fallback para casos onde o callback automático falhou */}
-      <div className="border border-gray-200 rounded-2xl p-5">
-        <button
-          onClick={() => setRecoverOpen(v => !v)}
-          className="w-full flex items-center justify-between text-sm text-gray-500 hover:text-gray-700 transition"
-        >
-          <span>Pagamento feito mas acesso não ativou?</span>
-          <span className="text-lg leading-none">{recoverOpen ? '−' : '+'}</span>
-        </button>
-        {recoverOpen && (
-          <div className="mt-4">
-            <p className="text-xs text-gray-500 mb-3">
-              Em casos raros o acesso pode não ativar automaticamente. Cole o ID do pagamento (enviado por e-mail pelo Mercado Pago) para ativar manualmente.
-            </p>
-            <form onSubmit={handleRecover} className="flex flex-col sm:flex-row gap-2">
-              <input
-                type="text"
-                inputMode="numeric"
-                value={recoverPaymentId}
-                onChange={e => setRecoverPaymentId(e.target.value)}
-                placeholder="Ex.: 123456789012"
-                className="flex-1 text-sm border rounded-lg px-3 py-2"
-                disabled={recoverLoading}
-              />
-              <button
-                type="submit"
-                disabled={recoverLoading || !recoverPaymentId.trim()}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition"
-              >
-                {recoverLoading ? 'Ativando...' : 'Ativar acesso'}
-              </button>
-            </form>
-            {recoverError && <p className="text-red-500 text-sm mt-2">{recoverError}</p>}
-            {recoverSuccess && <p className="text-green-700 text-sm mt-2">{recoverSuccess}</p>}
-          </div>
-        )}
-      </div>
     </div>
   )
 }
