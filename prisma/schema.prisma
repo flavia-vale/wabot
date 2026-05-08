@@ -110,6 +110,26 @@ model Payment {
   createdAt   DateTime  @default(now())
 }
 
+model WebhookEvent {
+  id               String    @id @default(cuid())
+  provider         String
+  eventId          String
+  eventType        String?
+  signatureValid   Boolean   @default(false)
+  requestId        String?
+  dataId           String?
+  payload          String
+  processingStatus String    @default("received")
+  processedAt      DateTime?
+  processingResult String?
+  error            String?
+  createdAt        DateTime  @default(now())
+
+  @@unique([provider, eventId])
+  @@index([provider, createdAt])
+  @@index([processingStatus, createdAt])
+}
+
 model BotConfig {
   id              String   @id @default(cuid())
   userId          String   @unique
