@@ -20,10 +20,11 @@ async function apiFetch(path, options = {}) {
     return
   }
   if (!res.ok) {
-    const rawMessage = data.message || data.error || ''
+    const rawMessage = data.message || (typeof data.error === 'string' ? data.error : data.error?.message) || ''
     const message = rawMessage && !rawMessage.trim().startsWith('<') ? rawMessage : `HTTP ${res.status}`
     const err = new Error(message)
-    if (data.code) err.code = data.code
+    const errCode = data.code || (typeof data.error === 'object' ? data.error?.code : null)
+    if (errCode) err.code = errCode
     if (typeof data.retryable === 'boolean') err.retryable = data.retryable
     err.status = res.status
     throw err
