@@ -41,7 +41,6 @@ const DEFAULT_PLAN_CARDS = [
   },
 ]
 
-
 function mergePlanCards(plans) {
   const byId = new Map((plans ?? []).map(plan => [plan.id, plan]))
   return DEFAULT_PLAN_CARDS.map((card) => {
@@ -55,6 +54,7 @@ function mergePlanCards(plans) {
     }
   })
 }
+
 function daysLeft(dateStr) {
   if (!dateStr) return null
   const diff = new Date(dateStr) - new Date()
@@ -74,6 +74,7 @@ function PlanosContent() {
   const [checkoutError, setCheckoutError] = useState('')
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState('')
+  const [recoverOpen, setRecoverOpen] = useState(false)
   const [recoverPaymentId, setRecoverPaymentId] = useState('')
   const [recoverLoading, setRecoverLoading] = useState(false)
   const [recoverError, setRecoverError] = useState('')
@@ -95,7 +96,7 @@ function PlanosContent() {
       const { checkout_url } = await api.paymentsCheckout(plan)
       window.location.assign(checkout_url)
     } catch (err) {
-      setCheckoutError(err.message)
+      setCheckoutError(err.message || 'Não foi possível iniciar o checkout. Tente novamente.')
     } finally {
       setCheckoutLoading('')
     }
@@ -147,6 +148,7 @@ function PlanosContent() {
   const days = daysLeft(data?.accessExpiresAt)
   const planLabel = PLAN_LABELS[data?.plan] ?? data?.plan
   const hasConfirmedPaidAccess = ['basic', 'pro'].includes(data?.plan) && data?.isActive
+  const isExpired = data?.accessExpiresAt && !data?.isActive
 
   return (
     <div className="max-w-xl">
@@ -154,30 +156,35 @@ function PlanosContent() {
         <h2 className="text-2xl font-bold text-gray-800 mb-1">Planos</h2>
         <HelpLink topic="pagamento-pendente">Ajuda</HelpLink>
       </div>
-      <p className="text-gray-500 text-sm mb-6">Escolha entre Teste grátis, Basic e Pro. Após pagar um plano pago, informe o ID do pagamento abaixo para ativar.</p>
+      <p className="text-gray-500 text-sm mb-6">Escolha entre Teste grátis, Basic e Pro. O pagamento é feito via Mercado Pago (PIX ou cartão) e o acesso é ativado automaticamente após a confirmação.</p>
 
+      {/* Retorno do Mercado Pago após pagamento */}
       {redirectStatus === 'success' && hasConfirmedPaidAccess && (
-        <div className="bg-green-50 border border-green-200 text-green-700 rounded-xl p-4 mb-5 text-sm">
-          Acesso de 30 dias ativo.
+        <div className="bg-green-50 border border-green-200 text-green-700 rounded-xl p-4 mb-5 text-sm font-medium">
+          ✅ Acesso de 30 dias ativado com sucesso!
         </div>
       )}
       {redirectStatus === 'success' && !hasConfirmedPaidAccess && (
         <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-xl p-4 mb-5 text-sm">
-          Pagamento recebido pelo Mercado Pago. Cole o ID do pagamento (recebido por e-mail ou na tela de confirmação do MP) no formulário abaixo para ativar seu acesso.
+          <p className="font-semibold mb-1">Pagamento recebido, aguardando confirmação</p>
+          <p>Se pagou via PIX, aguarde até 2 minutos e recarregue a página. Se o acesso não ativar automaticamente, use o formulário de recuperação no final desta página.</p>
         </div>
       )}
       {redirectStatus === 'failure' && (
         <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl p-4 mb-5 text-sm">
-          Pagamento não aprovado. Tente novamente.
+          <p className="font-semibold mb-1">Pagamento não aprovado</p>
+          <p>Verifique os dados do cartão ou saldo disponível e tente novamente. Se o valor já foi debitado, entre em contato com o suporte.</p>
         </div>
       )}
       {redirectStatus === 'pending' && (
         <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-xl p-4 mb-5 text-sm">
-          Pagamento em análise. Você será notificado quando aprovado.
+          <p className="font-semibold mb-1">Pagamento em análise</p>
+          <p>Para PIX, a confirmação ocorre em até 2 minutos. Para cartão, pode levar alguns instantes. Recarregue a página após o prazo.</p>
         </div>
       )}
 
-      <div className="bg-white rounded-2xl shadow p-5 mb-5">
+      {/* Status do plano atual */}
+      <div className={`rounded-2xl shadow p-5 mb-5 ${isExpired ? 'bg-red-50 border border-red-200' : 'bg-white'}`}>
         <div className="flex items-center justify-between mb-1">
           <span className="font-semibold text-gray-700">Plano atual</span>
           <span className={`text-xs font-bold px-2 py-1 rounded-full ${
@@ -186,35 +193,45 @@ function PlanosContent() {
             'bg-gray-100 text-gray-600'
           }`}>{planLabel}</span>
         </div>
-        {data?.accessExpiresAt && (
-          <p className="text-sm text-gray-500">
+        {data?.accessExpiresAt ? (
+          <p className={`text-sm ${isExpired ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
             {data.isActive
               ? `Acesso válido por mais ${days} dia${days !== 1 ? 's' : ''}`
-              : 'Acesso expirado'}
+              : 'Acesso expirado — renove seu plano abaixo'}
           </p>
+        ) : null}
+        {isExpired && (
+          <button
+            onClick={() => document.getElementById('planos-cards')?.scrollIntoView({ behavior: 'smooth' })}
+            className="mt-3 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 px-4 py-1.5 rounded-lg transition"
+          >
+            Renovar acesso →
+          </button>
         )}
       </div>
 
+      {/* Informações de cobrança (sem jargão técnico) */}
       {overview && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5 text-sm text-amber-900">
-          <p className="font-semibold mb-2">Status de cobrança</p>
-          <ul className="space-y-1 text-xs">
-            <li><strong>Modelo:</strong> {overview.billingModel}</li>
-            <li><strong>Renovação automática:</strong> {overview.autoRenew ? 'Sim' : 'Não'}</li>
-            <li><strong>Método de pagamento:</strong> {overview.paymentMethod}</li>
-            <li><strong>Último pagamento aprovado:</strong> {overview.lastApprovedPayment?.createdAt ? new Date(overview.lastApprovedPayment.createdAt).toLocaleString('pt-BR') : 'Não identificado'}</li>
-            <li><strong>Vencimento do acesso:</strong> {overview.accessExpiresAt ? new Date(overview.accessExpiresAt).toLocaleString('pt-BR') : 'Não definido'}</li>
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-5 text-sm text-gray-700">
+          <p className="font-semibold mb-2 text-gray-800">Informações de cobrança</p>
+          <ul className="space-y-1 text-xs text-gray-600">
+            <li><strong>Renovação:</strong> {overview.billingModel}</li>
+            <li><strong>Método aceito:</strong> {overview.paymentMethod}</li>
+            {overview.lastApprovedPayment?.createdAt && (
+              <li><strong>Último pagamento:</strong> {new Date(overview.lastApprovedPayment.createdAt).toLocaleDateString('pt-BR')}</li>
+            )}
+            {overview.accessExpiresAt && (
+              <li><strong>Acesso válido até:</strong> {new Date(overview.accessExpiresAt).toLocaleDateString('pt-BR')}</li>
+            )}
           </ul>
-          {overview.actionRequired && <p className="mt-2 font-medium">Ação necessária: {overview.actionRequired}</p>}
+          {overview.actionRequired && (
+            <p className="mt-2 text-xs font-medium text-red-600">{overview.actionRequired}</p>
+          )}
         </div>
       )}
 
-      <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 mb-5 text-xs text-indigo-800">
-        <p className="font-semibold mb-2">Comparativo rápido</p>
-        <ul className="space-y-1"><li><strong>Teste grátis</strong>: permite experimentar o fluxo principal sem informar duração no painel público.</li><li><strong>Basic</strong>: mesmos recursos técnicos do Pro, com anúncios.</li><li><strong>Pro</strong>: mesmos recursos técnicos do Basic, sem anúncios.</li></ul>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+      {/* Cards de planos */}
+      <div id="planos-cards" className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
         {planCards.map(plan => {
           const isCurrentPlan = data?.plan === plan.id && data?.isActive
           return (
@@ -233,55 +250,40 @@ function PlanosContent() {
                 disabled={!!checkoutLoading || isCurrentPlan || plan.id === 'trial'}
                 className={`w-full ${plan.buttonClass} text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition`}
               >
-                {checkoutLoading === plan.id ? 'Redirecionando...' : isCurrentPlan ? 'Acesso atual' : plan.id === 'trial' ? 'Plano gratuito' : `Comprar ${plan.name}`}
+                {checkoutLoading === plan.id ? 'Abrindo checkout seguro...' : isCurrentPlan ? 'Acesso atual' : plan.id === 'trial' ? 'Plano gratuito' : `Comprar ${plan.name}`}
               </button>
             </div>
           )
         })}
       </div>
 
-      {checkoutError && <p className="text-red-500 text-sm mb-4">{checkoutError}</p>}
+      {checkoutLoading && (
+        <p className="text-gray-500 text-xs text-center mb-4">Você será redirecionado para o checkout seguro do Mercado Pago (PIX ou cartão).</p>
+      )}
+      {checkoutError && (
+        <div className="bg-red-50 border border-red-200 text-red-600 rounded-lg p-3 mb-4 text-sm">
+          {checkoutError}
+          <button onClick={() => setCheckoutError('')} className="ml-2 underline text-xs">Fechar</button>
+        </div>
+      )}
 
-      <div className="bg-white rounded-2xl shadow p-5 mb-5">
-        <h3 className="font-semibold text-gray-700 mb-1">Já paguei — ativar acesso</h3>
-        <p className="text-xs text-gray-500 mb-3">Cole o ID do pagamento (payment_id) que o Mercado Pago enviou por e-mail ou exibiu na confirmação.</p>
-        <form onSubmit={handleRecover} className="flex flex-col sm:flex-row gap-2">
-          <input
-            type="text"
-            inputMode="numeric"
-            value={recoverPaymentId}
-            onChange={e => setRecoverPaymentId(e.target.value)}
-            placeholder="Ex.: 123456789012"
-            className="flex-1 text-sm border rounded-lg px-3 py-2"
-            disabled={recoverLoading}
-          />
-          <button
-            type="submit"
-            disabled={recoverLoading || !recoverPaymentId.trim()}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition"
-          >
-            {recoverLoading ? 'Ativando...' : 'Ativar acesso'}
-          </button>
-        </form>
-        {recoverError && <p className="text-red-500 text-sm mt-2">{recoverError}</p>}
-        {recoverSuccess && <p className="text-green-700 text-sm mt-2">{recoverSuccess}</p>}
-      </div>
-
+      {/* Dúvidas rápidas */}
       <div className="bg-white rounded-2xl shadow p-5 mb-5 text-sm text-gray-600">
         <h3 className="font-semibold text-gray-700 mb-3">Dúvidas rápidas</h3>
         <div className="space-y-3">
-          <p><strong>Quando ativa?</strong> Após pagar no Mercado Pago, cole o ID do pagamento no formulário acima — a ativação é imediata.</p>
-          <p><strong>Onde encontro o ID?</strong> Na tela de confirmação do Mercado Pago e no e-mail recebido após o pagamento.</p>
-          <p><strong>É recorrente?</strong> Não. No MVP o acesso dura 30 dias e pode ser renovado manualmente.</p>
-          <p><strong>Qual plano escolher?</strong> Basic e Pro têm os mesmos recursos técnicos; escolha Pro apenas se quiser operar sem anúncios.</p>
+          <p><strong>Como funciona o pagamento?</strong> Ao clicar em "Comprar", você é direcionado para o Mercado Pago onde pode pagar com PIX ou cartão. O acesso é ativado automaticamente após a confirmação.</p>
+          <p><strong>É recorrente?</strong> Não. O acesso dura 30 dias e você renova manualmente quando quiser continuar.</p>
+          <p><strong>Basic ou Pro?</strong> Basic e Pro têm os mesmos recursos técnicos; a única diferença é que o Pro opera sem anúncios.</p>
+          <p><strong>Quanto tempo leva para ativar?</strong> Com cartão, é imediato. Com PIX, pode levar até 2 minutos após o pagamento.</p>
         </div>
       </div>
 
+      {/* Indicação */}
       {data?.referralCode && (
         <div className="bg-white rounded-2xl shadow p-5 mb-5">
           <h3 className="font-semibold text-gray-700 mb-1">Indique e ganhe</h3>
           <p className="text-xs text-gray-500 mb-3">Cada amigo que se cadastrar pelo seu link te dá +7 dias de acesso.</p>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <input
               id="ref-link-input"
               readOnly
@@ -291,6 +293,7 @@ function PlanosContent() {
             <button
               onClick={copyRef}
               className="bg-green-600 text-white px-3 py-2 rounded-lg text-xs font-semibold hover:bg-green-700 transition"
+              aria-live="polite"
             >
               {copied ? 'Copiado!' : 'Copiar'}
             </button>
@@ -299,8 +302,9 @@ function PlanosContent() {
         </div>
       )}
 
-      {data?.payments?.length > 0 && (
-        <div className="bg-white rounded-2xl shadow p-5">
+      {/* Histórico de pagamentos */}
+      {data?.payments?.length > 0 ? (
+        <div className="bg-white rounded-2xl shadow p-5 mb-5">
           <h3 className="font-semibold text-gray-700 mb-3">Histórico</h3>
           <div className="space-y-2">
             {data.payments.map(p => (
@@ -321,7 +325,49 @@ function PlanosContent() {
             ))}
           </div>
         </div>
+      ) : (
+        <div className="bg-white rounded-2xl shadow p-5 mb-5 text-sm text-gray-400 text-center">
+          Nenhum pagamento registrado ainda.
+        </div>
       )}
+
+      {/* Recuperação manual — fallback para casos onde o callback automático falhou */}
+      <div className="border border-gray-200 rounded-2xl p-5">
+        <button
+          onClick={() => setRecoverOpen(v => !v)}
+          className="w-full flex items-center justify-between text-sm text-gray-500 hover:text-gray-700 transition"
+        >
+          <span>Pagamento feito mas acesso não ativou?</span>
+          <span className="text-lg leading-none">{recoverOpen ? '−' : '+'}</span>
+        </button>
+        {recoverOpen && (
+          <div className="mt-4">
+            <p className="text-xs text-gray-500 mb-3">
+              Em casos raros o acesso pode não ativar automaticamente. Cole o ID do pagamento (enviado por e-mail pelo Mercado Pago) para ativar manualmente.
+            </p>
+            <form onSubmit={handleRecover} className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                inputMode="numeric"
+                value={recoverPaymentId}
+                onChange={e => setRecoverPaymentId(e.target.value)}
+                placeholder="Ex.: 123456789012"
+                className="flex-1 text-sm border rounded-lg px-3 py-2"
+                disabled={recoverLoading}
+              />
+              <button
+                type="submit"
+                disabled={recoverLoading || !recoverPaymentId.trim()}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition"
+              >
+                {recoverLoading ? 'Ativando...' : 'Ativar acesso'}
+              </button>
+            </form>
+            {recoverError && <p className="text-red-500 text-sm mt-2">{recoverError}</p>}
+            {recoverSuccess && <p className="text-green-700 text-sm mt-2">{recoverSuccess}</p>}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
