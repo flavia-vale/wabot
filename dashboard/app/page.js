@@ -6,7 +6,7 @@ import { Features } from '@/components/landing/Features'
 import { Social } from '@/components/landing/Social'
 import { Pricing } from '@/components/landing/Pricing'
 import { FAQ } from '@/components/landing/FAQ'
-import { FinalCTA, Footer } from '@/components/landing/Footer'
+import Footer, { FinalCTA } from '@/components/landing/Footer'
 
 export const metadata = {
   title: 'Bot para Afiliados no WhatsApp',
