@@ -251,6 +251,13 @@ async function createMercadoPagoPreference({ userId, plan }) {
     // Back URL shown after payment for manual navigation
     statement_descriptor: 'BOTinho',
   }
+  const debugUrls = {
+    dashboardUrl,
+    apiUrl,
+    callbackBase,
+    backUrls: preference.back_urls,
+    notificationUrl: preference.notification_url,
+  }
 
   try {
     const response = await axios.post(
@@ -270,6 +277,8 @@ async function createMercadoPagoPreference({ userId, plan }) {
     const wrapped = new Error(String(providerCause))
     wrapped.code = 'CHECKOUT_PROVIDER_ERROR'
     wrapped.providerStatus = providerStatus
+    wrapped.providerPayload = err?.response?.data || null
+    wrapped.debugUrls = debugUrls
     throw wrapped
   }
 }
@@ -411,7 +420,7 @@ export async function paymentsRoutes(app) {
         return sendError(reply, 500, 'PAYMENT_PROVIDER_MISCONFIGURED', 'Configuração de pagamento inválida no servidor. Contate o suporte.')
       }
       if (err?.code === 'CHECKOUT_PROVIDER_ERROR') {
-        req.log.warn({ providerStatus: err?.providerStatus, reason: err?.message, plan, userId }, 'Mercado Pago rejeitou criação de preferência')
+        req.log.warn({ providerStatus: err?.providerStatus, reason: err?.message, providerPayload: err?.providerPayload, debugUrls: err?.debugUrls, plan, userId }, 'Mercado Pago rejeitou criação de preferência')
       }
       req.log.error({ err: err?.message, plan, userId }, 'Falha ao criar preferência MP')
       return sendError(reply, 502, 'CHECKOUT_CREATION_FAILED', 'Não foi possível iniciar o checkout. Tente novamente.')
