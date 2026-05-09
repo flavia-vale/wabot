@@ -106,9 +106,9 @@ export function Pricing() {
           <p style={s.sub}>Basic e Pro têm os mesmos recursos técnicos. A diferença visível entre eles é a presença ou ausência de anúncios.</p>
         </div>
 
-        <div style={s.grid}>
+        <div style={s.grid} className="landing-pricing-grid">
           {plans.map(p => (
-            <div key={p.id} style={s.card(p.highlight)}>
+            <div key={p.id} style={s.card(p.highlight)} className="landing-pricing-card">
               {p.highlight && <div style={s.badge}>Sem anúncios</div>}
               <div style={s.planName}>{p.name}</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 8, color: p.highlight ? 'var(--surface)' : 'var(--ink)' }}>
@@ -128,6 +128,7 @@ export function Pricing() {
               </ul>
               <a
                 href="/login"
+                className="landing-pricing-cta"
                 style={{
                   display: 'block', textAlign: 'center', padding: '14px 22px', borderRadius: 999,
                   fontWeight: 600, fontSize: 15, textDecoration: 'none',
