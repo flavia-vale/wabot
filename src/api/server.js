@@ -80,6 +80,26 @@ function getTokenFromCookie(cookieHeader, cookieName = 'wb_auth') {
   return decodeURIComponent(target.slice(cookieName.length + 1))
 }
 
+const revokedTokens = new Map()
+
+function revokeTokenJti(jti, exp) {
+  if (!jti) return
+  const expiresAtMs = Number.isFinite(exp) ? exp * 1000 : Date.now() + (7 * 24 * 60 * 60 * 1000)
+  revokedTokens.set(String(jti), expiresAtMs)
+}
+
+function isTokenRevoked(jti) {
+  if (!jti) return false
+  const key = String(jti)
+  const expiresAtMs = revokedTokens.get(key)
+  if (!expiresAtMs) return false
+  if (Date.now() > expiresAtMs) {
+    revokedTokens.delete(key)
+    return false
+  }
+  return true
+}
+
 async function verifyDatabase() {
   await db.$queryRaw`SELECT 1`
   // Verifica schema esperado (captura banco sem migrations)
@@ -150,12 +170,14 @@ if (!jwtSecret) {
 }
 await app.register(fastifyJwt, { secret: jwtSecret })
 await app.register(fastifyWebsocket)
+app.decorate('revokeTokenJti', revokeTokenJti)
 
 app.decorate('authenticate', async function (req, reply) {
   try {
     const token = getTokenFromCookie(req.headers.cookie)
     if (!token) throw new Error('Token ausente')
     req.user = app.jwt.verify(token)
+    if (isTokenRevoked(req.user.jti)) throw new Error('Token revogado')
     const active = await verifyAuthenticatedUser(req.user.sub)
     if (!active) throw new Error('Usuário inativo ou bloqueado')
   } catch {

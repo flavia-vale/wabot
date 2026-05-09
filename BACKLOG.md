@@ -1606,3 +1606,413 @@ Risco de overflow, baixa usabilidade em smartphones e interação comprometida.
 
 **Correção sugerida:**
 Criar navegação responsiva (drawer/hamburger), preservando contexto de tela ativa e ação de logout.
+
+---
+
+## Módulo 10 — Segurança (Threat Modeling)
+
+### SEC-001 · Cadastro permite senha fallback automática
+**Status:** open  
+**Prioridade:** crítica  
+**Arquivo:** `src/api/routes/auth.js` — `POST /api/auth/register`
+
+**Descrição:**
+Quando `password` não é enviada, o backend gera senha fallback (`generateFallbackPassword`) e segue com criação da conta.
+
+**Impacto:**
+Risco de governança de identidade fraca, suporte inseguro e possibilidade de takeover por fluxo operacional.
+
+**Correção sugerida:**
+Exigir senha explícita válida no cadastro, com política mínima e rejeição quando ausente.
+
+---
+
+### SEC-002 · Fluxo promocional aceita telefone sintético
+**Status:** open  
+**Prioridade:** alta  
+**Arquivo:** `src/api/routes/auth.js` — `POST /api/auth/register`
+
+**Descrição:**
+No fluxo `promo_vip_7dias`, quando não há telefone informado, o backend cria `contactPhone` sintético (`generatePromoContactPhone`).
+
+**Impacto:**
+Compromete antifraude, rastreabilidade e qualidade de dados pessoais (LGPD).
+
+**Correção sugerida:**
+Tornar telefone obrigatório em todos os fluxos e validar posse (OTP) antes de liberar acesso.
+
+---
+
+### SEC-003 · Área administrativa sem MFA obrigatório
+**Status:** open  
+**Prioridade:** crítica  
+**Arquivo:** `src/api/routes/admin.js`
+
+**Descrição:**
+Rotas administrativas dependem de sessão JWT + RBAC, sem segundo fator obrigatório para perfis privilegiados.
+
+**Impacto:**
+Comprometimento de uma credencial admin pode resultar em acesso total a PII, finanças e operações.
+
+**Correção sugerida:**
+Implementar MFA obrigatório para perfis admin e step-up auth para ações sensíveis.
+
+---
+
+### SEC-004 · Bootstrap admin por email aumenta superfície de privilégio
+**Status:** open  
+**Prioridade:** alta  
+**Arquivo:** `src/api/routes/admin.js`
+
+**Descrição:**
+Usuário ativo com email na lista de bootstrap pode assumir papel `owner` sem provisionamento explícito em `AdminUser`.
+
+**Impacto:**
+Maior risco de elevação de privilégio por comprometimento de conta de email listada.
+
+**Correção sugerida:**
+Remover bootstrap hardcoded em produção e exigir provisionamento explícito + trilha de aprovação.
+
+---
+
+### SEC-005 · Login sem controles claros de rate limit/lockout
+**Status:** open  
+**Prioridade:** alta  
+**Arquivo:** `src/api/server.js`, `src/api/routes/auth.js`
+
+**Descrição:**
+Não há evidência de rate-limit/lockout para `/api/auth/login` na configuração atual da API.
+
+**Impacto:**
+Facilita brute force e credential stuffing.
+
+**Correção sugerida:**
+Rate limit por IP e identidade, lock temporário progressivo e desafio adaptativo.
+
+---
+
+### SEC-006 · Sessão JWT sem estratégia explícita de rotação/revogação
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `src/api/server.js`, `src/api/routes/auth.js`
+
+**Descrição:**
+Autenticação baseada em cookie JWT sem mecanismo explícito de revogação granular/rotação contínua de sessão.
+
+**Impacto:**
+Se token for comprometido, pode permanecer válido até expirar.
+
+**Correção sugerida:**
+Adotar access token curto + refresh rotativo com revogação server-side.
+
+---
+
+### SEC-007 · Exposição de PII ainda ampla para alguns papéis
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `src/api/routes/admin.js`
+
+**Descrição:**
+Mascaramento de telefone existe, mas ainda há papéis com visibilidade ampla de PII sem critério contextual forte.
+
+**Impacto:**
+Risco de acesso excessivo a dados pessoais (privilégio mínimo/LGPD).
+
+**Correção sugerida:**
+Refinar RBAC para ABAC + desbloqueio temporário auditado de dados sensíveis.
+
+---
+
+## Módulo 11 — Segurança (Pagamentos/Webhooks)
+
+### PAY-001 · Persistência de payload bruto de webhook sem minimização
+**Status:** open  
+**Prioridade:** alta  
+**Arquivo:** `src/api/routes/payments.js`, `prisma/schema.prisma`
+
+**Descrição:**
+O payload completo do webhook é serializado e salvo em `WebhookEvent.payload` sem minimização por allowlist.
+
+**Impacto:**
+Aumenta risco LGPD e impacto em caso de vazamento, com possível retenção de dados pessoais/financeiros além do necessário.
+
+**Correção sugerida:**
+Persistir apenas campos necessários para reconciliação/auditoria, mascarar identificadores sensíveis e definir retenção curta.
+
+---
+
+### PAY-002 · Inferência de plano por valor pode gerar classificação incorreta
+**Status:** open  
+**Prioridade:** alta  
+**Arquivo:** `src/api/routes/payments.js`
+
+**Descrição:**
+A identificação do plano depende de `transaction_amount`, que pode divergir por promoções, arredondamentos ou alterações de preço.
+
+**Impacto:**
+Ativação de plano incorreto ou falha de ativação de pagamento legítimo.
+
+**Correção sugerida:**
+Vincular o plano a metadado assinado/imutável da preferência (ex.: `external_reference` com contexto validado).
+
+---
+
+### PAY-003 · Reprocessamento manual de webhooks sem step-up auth
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `src/api/routes/payments.js` — `POST /api/payments/webhook/process-pending`
+
+**Descrição:**
+O endpoint exige usuário `owner`, mas não exige MFA/step-up para operação financeira sensível.
+
+**Impacto:**
+Conta `owner` comprometida pode reprocessar lotes e causar mudanças operacionais em pagamentos/acessos.
+
+**Correção sugerida:**
+Exigir step-up auth com MFA, adicionar trilha auditável detalhada e controle de frequência/volume.
+
+---
+
+### PAY-004 · Segurança do webhook depende de configuração de ambiente
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `src/api/routes/payments.js`
+
+**Descrição:**
+A obrigatoriedade da assinatura depende de ambiente/segredo, podendo gerar postura fraca em ambientes expostos mal configurados.
+
+**Impacto:**
+Risco de aceitação de eventos não confiáveis em cenários de configuração inadequada.
+
+**Correção sugerida:**
+Fail-fast no boot quando webhook estiver ativo sem segredo; exigir assinatura para qualquer ambiente acessível externamente.
+
+---
+
+### PAY-005 · `processingResult` pode armazenar detalhes excessivos
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `src/api/routes/payments.js`
+
+**Descrição:**
+`processingResult` salva detalhes de reconciliação/ativação que podem exceder necessidade operacional.
+
+**Impacto:**
+Superexposição de metadados operacionais e possível ampliação de risco de privacidade.
+
+**Correção sugerida:**
+Restringir campos persistidos, aplicar mascaramento e política de retenção específica.
+
+---
+
+## Módulo 12 — Segurança (Infraestrutura / Exposição)
+
+### INFRA-001 · URLs de produção configuradas em HTTP
+**Status:** open  
+**Prioridade:** crítica  
+**Arquivo:** `ecosystem.config.cjs`, `scripts/deploy_safe_dashboard.sh`, `src/api/routes/payments.js`
+
+**Descrição:**
+Há uso explícito de endpoints `http://178.105.54.0` em variáveis de ambiente e smoke tests. Também existem fallbacks HTTP para `API_URL`/`DASHBOARD_URL`.
+
+**Impacto:**
+Risco de downgrade/integridade em tráfego, exposição de sessão e callbacks de pagamento sem garantia de TLS ponta a ponta.
+
+**Correção sugerida:**
+Migrar URLs públicas para HTTPS com domínio canônico e certificado válido; remover fallback HTTP em produção.
+
+---
+
+### INFRA-002 · HSTS condicionado ao protocolo detectado no app
+**Status:** open  
+**Prioridade:** alta  
+**Arquivo:** `src/api/server.js`
+
+**Descrição:**
+`Strict-Transport-Security` só é enviado quando `req.protocol === 'https'`, dependente de proxy/header corretos.
+
+**Impacto:**
+Em cenários de proxy mal configurado, cliente pode não receber HSTS e continuar vulnerável a downgrade.
+
+**Correção sugerida:**
+Garantir terminação TLS/proxy com headers confiáveis e validar `X-Forwarded-Proto`; considerar política de HSTS no proxy reverso.
+
+---
+
+### INFRA-003 · API ouvindo em 0.0.0.0 sem evidência de restrição de borda no repositório
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `src/api/server.js`
+
+**Descrição:**
+A API escuta em todas as interfaces (`host: '0.0.0.0'`).
+
+**Impacto:**
+Se firewall/Nginx estiver permissivo, aumenta superfície de ataque direta ao serviço interno.
+
+**Correção sugerida:**
+Restringir exposição por firewall/security groups e aceitar tráfego apenas pela camada de borda esperada.
+
+---
+
+### INFRA-004 · Política de CORS depende de variável única e allowlist com IP bruto
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `src/api/server.js`
+
+**Descrição:**
+Allowlist CORS inclui IP bruto e configuração por string única (`CORS_ORIGINS`), suscetível a erro operacional.
+
+**Impacto:**
+Misconfiguração pode abrir acesso cross-origin indevido a rotas com credenciais.
+
+**Correção sugerida:**
+Usar domínio canônico por ambiente, validação de configuração no boot e testes automatizados de CORS.
+
+---
+
+### INFRA-005 · Cookie de sessão sem política explícita de domínio e com SameSite=Lax
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `src/api/routes/auth.js`
+
+**Descrição:**
+Cookie `wb_auth` usa `SameSite=Lax` e não define `Domain` explicitamente.
+
+**Impacto:**
+Pode haver comportamento inconsistente entre subdomínios/ambientes e brechas de fluxo CSRF em cenários de navegação com top-level requests.
+
+**Correção sugerida:**
+Definir estratégia de domínio/cookie por ambiente e avaliar endurecimento para `SameSite=Strict` onde possível.
+
+---
+
+## Módulo 13 — Segurança (LGPD / Governança de Dados)
+
+### LGPD-001 · Coleta e retenção extensa de conteúdo de mensagens
+**Status:** open  
+**Prioridade:** alta  
+**Arquivo:** `prisma/schema.prisma`, `src/api/routes/logs.js`
+
+**Descrição:**
+`MessageLog` armazena `messageText`, URLs originais/convertidas e grupos de origem/destino, com busca textual ampla na API de logs.
+
+**Impacto:**
+Aumento da exposição de dados potencialmente pessoais/sensíveis e risco regulatório por minimização insuficiente.
+
+**Correção sugerida:**
+Classificar campos sensíveis, reduzir escopo de persistência, aplicar mascaramento/tokenização e retenção diferenciada por tipo de dado.
+
+---
+
+### LGPD-002 · Base legal e consentimento não evidenciados no fluxo de analytics
+**Status:** open  
+**Prioridade:** alta  
+**Arquivo:** `src/analytics.js`
+
+**Descrição:**
+Há sanitização de metadata e flag global de enable/disable, porém não há evidência de consentimento granular por usuário/finalidade.
+
+**Impacto:**
+Risco de tratamento de dados sem transparência/consentimento adequado (quando aplicável).
+
+**Correção sugerida:**
+Adicionar controle de consentimento por usuário/finalidade, registro auditável de consentimento e política de opt-out.
+
+---
+
+### LGPD-003 · Retenção de trilhas administrativas sem política explícita por categoria
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `prisma/schema.prisma`, `src/api/routes/admin.js`
+
+**Descrição:**
+`AdminAuditLog` e `CustomerContactLog` guardam histórico operacional detalhado sem regra explícita de retenção no código inspecionado.
+
+**Impacto:**
+Retenção excessiva de dados pessoais e metadados de suporte/atendimento.
+
+**Correção sugerida:**
+Definir janelas de retenção por categoria, expurgo automático e base legal documentada para cada trilha.
+
+---
+
+### LGPD-004 · Logout não força revogação server-side de sessão
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `src/api/routes/auth.js`, `src/api/server.js`
+
+**Descrição:**
+`/logout` limpa cookie no cliente, mas não há mecanismo explícito de invalidação server-side do JWT emitido.
+
+**Impacto:**
+Token comprometido pode seguir válido até expiração, afetando segurança e direitos de controle do titular.
+
+**Correção sugerida:**
+Implementar revogação por sessão (jti/versionamento), lista de bloqueio e rotação de tokens.
+
+---
+
+### LGPD-005 · Exposição de dados de saúde operacional com potencial de inteligência interna
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `src/api/routes/admin.js`
+
+**Descrição:**
+Endpoints de saúde/métricas retornam dados detalhados de ambiente, contagens e performance.
+
+**Impacto:**
+Em caso de comprometimento de conta admin, amplia inteligência para movimento lateral e exploração.
+
+**Correção sugerida:**
+Aplicar princípio de necessidade mínima, mascarar campos operacionais sensíveis e registrar acesso com alerta.
+
+---
+
+## Módulo 14 — Segurança (Dependências / Supply Chain)
+
+### DEP-001 · Auditoria automatizada de vulnerabilidades indisponível no ambiente atual
+**Status:** open  
+**Prioridade:** alta  
+**Arquivo:** `package-lock.json`, `dashboard/package-lock.json`
+
+**Descrição:**
+A execução de `npm audit` falhou com `403 Forbidden` para endpoint de advisories no ambiente analisado, impedindo mapeamento automático de CVEs.
+
+**Impacto:**
+Risco de dependências vulneráveis sem visibilidade contínua, comprometendo resposta rápida a CVEs críticos.
+
+**Correção sugerida:**
+Habilitar acesso ao endpoint de advisories em CI/CD (ou mirror interno) e tornar `npm audit` gate periódico com severidade mínima definida.
+
+---
+
+### DEP-002 · Configuração de ambiente com aviso de `http-proxy` desconhecido no npm
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** ambiente de execução/CI (config npm)
+
+**Descrição:**
+Durante auditoria, o npm reporta `Unknown env config "http-proxy"`, indicando configuração legada/ambígua.
+
+**Impacto:**
+Pode causar comportamento inconsistente em resolução de pacotes/auditoria e reduzir confiabilidade do pipeline de segurança.
+
+**Correção sugerida:**
+Padronizar configuração npm (`proxy`/`https-proxy`) e remover variáveis obsoletas no ambiente de build.
+
+---
+
+### DEP-003 · Projeto `landing` sem lockfile para rastreabilidade reprodutível
+**Status:** open  
+**Prioridade:** média  
+**Arquivo:** `landing/package.json` (sem `landing/package-lock.json`)
+
+**Descrição:**
+`npm audit` no `landing` retornou `ENOLOCK`; sem lockfile não há resolução determinística de dependências.
+
+**Impacto:**
+Maior risco de drift de versões e dificuldade de rastrear/mitigar CVEs de forma consistente.
+
+**Correção sugerida:**
+Gerar e versionar lockfile do `landing`, com atualização controlada por PR e scanner de vulnerabilidades.

@@ -14,7 +14,7 @@ const ROLE_PERMISSIONS = {
 const PAID_PLANS = ['basic', 'pro']
 const PLAN_PRICES = { trial: 0, basic: 40, pro: 70 }
 const EXPORT_LIMIT = 100
-const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = ['flavia.vale@usp.br']
+const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = []
 
 function getBootstrapAdminEmails() {
   return new Set(
@@ -32,7 +32,18 @@ function hasPermission(role, permission) {
 }
 
 function canSeePhone(role) {
-  return hasPermission(role, 'support:write') || hasPermission(role, 'billing:read')
+  return hasPermission(role, 'support:write')
+}
+
+function requiresStepUpMfa(permission) {
+  return permission.endsWith(':write')
+}
+
+function isMfaVerified(req) {
+  const configuredToken = String(process.env.ADMIN_MFA_TOKEN ?? '').trim()
+  if (!configuredToken) return true
+  const providedToken = String(req.headers['x-admin-mfa-token'] ?? '').trim()
+  return providedToken && providedToken === configuredToken
 }
 
 function maskPhone(phone) {
@@ -334,7 +345,8 @@ async function requireAdmin(req, reply, permission = 'admin:read') {
   })
 
   const bootstrapEmails = getBootstrapAdminEmails()
-  const bootstrapAllowed = !user?.adminUser && bootstrapEmails.has(user?.email?.toLowerCase())
+  const bootstrapEnabled = process.env.ALLOW_ADMIN_EMAIL_BOOTSTRAP === 'true'
+  const bootstrapAllowed = bootstrapEnabled && !user?.adminUser && bootstrapEmails.has(user?.email?.toLowerCase())
   const role = user?.adminUser?.status === 'active'
     ? user.adminUser.role
     : bootstrapAllowed
@@ -349,6 +361,16 @@ async function requireAdmin(req, reply, permission = 'admin:read') {
       status: 'denied',
     })
     reply.code(403).send({ error: 'Acesso admin negado' })
+    return false
+  }
+  if (requiresStepUpMfa(permission) && !isMfaVerified(req)) {
+    await writeAdminAuditLog(req, {
+      action: 'admin.mfa_required',
+      resource: 'admin',
+      reason: `MFA obrigatória para permissão: ${permission}`,
+      status: 'denied',
+    })
+    reply.code(401).send({ error: 'MFA obrigatória para esta operação administrativa' })
     return false
   }
 
