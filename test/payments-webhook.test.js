@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  activatePaymentAccess,
   isValidMercadoPagoWebhookSignature,
   normalizeWebhookPayload,
   parseMercadoPagoSignature,
@@ -83,4 +84,28 @@ test('shouldReconcilePayment only for payment events with data id', () => {
   assert.equal(shouldReconcilePayment({ type: 'payment', dataResourceId: '123' }), true)
   assert.equal(shouldReconcilePayment({ type: 'payment', dataResourceId: '' }), false)
   assert.equal(shouldReconcilePayment({ type: 'merchant_order', dataResourceId: '123' }), false)
+})
+
+test('activatePaymentAccess extends from active expiry by 30 days', async () => {
+  const future = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000)
+  let updatedUser = null
+
+  const tx = {
+    user: {
+      findUnique: async () => ({ accessExpiresAt: future }),
+      update: async ({ data }) => { updatedUser = data; return data },
+    },
+    payment: {
+      findUnique: async () => null,
+      create: async () => ({}),
+    },
+  }
+
+  const result = await activatePaymentAccess(tx, { userId: 'u1', plan: 'basic', mpPaymentId: 'p1', amount: 40 })
+  const expectedMin = future.getTime() + (30 * 24 * 60 * 60 * 1000) - 1000
+  const expectedMax = future.getTime() + (30 * 24 * 60 * 60 * 1000) + 1000
+
+  assert.equal(result.alreadyActivated, false)
+  assert.ok(updatedUser.accessExpiresAt.getTime() >= expectedMin)
+  assert.ok(updatedUser.accessExpiresAt.getTime() <= expectedMax)
 })

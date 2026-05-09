@@ -6,6 +6,22 @@ import { trackAnalyticsEventSafe } from '../../analytics.js'
 const MP_WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET
 const IS_PRODUCTION = process.env.NODE_ENV === 'production'
 
+const OFFICIAL_PUBLIC_ORIGIN = 'http://espelhagrupos.com.br'
+
+function isIpHost(hostname = '') {
+  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(String(hostname || '').trim())
+}
+
+function normalizePublicOrigin(value, fallback = OFFICIAL_PUBLIC_ORIGIN) {
+  try {
+    const parsed = new URL(String(value ?? ''))
+    if (isIpHost(parsed.hostname)) return fallback
+    return parsed.toString().replace(/\/$/, '')
+  } catch {
+    return fallback
+  }
+}
+
 function getMpAccessToken() {
   return process.env.MP_ACCESS_TOKEN
 }
@@ -18,6 +34,10 @@ function getApiUrl() {
   return (process.env.API_URL || 'http://localhost:3001').replace(/\/$/, '')
 }
 
+function stripApiSuffix(url) {
+  return String(url || '').replace(/\/api\/?$/i, '')
+}
+
 function isPublicHttpUrl(value) {
   try {
     const parsed = new URL(String(value ?? ''))
@@ -27,6 +47,12 @@ function isPublicHttpUrl(value) {
   } catch {
     return false
   }
+}
+
+function forceHttpsUrl(value) {
+  const parsed = new URL(String(value ?? ''))
+  parsed.protocol = 'https:'
+  return parsed.toString().replace(/\/$/, '')
 }
 
 function sendError(reply, statusCode, code, message) {
@@ -146,7 +172,11 @@ export function shouldReconcilePayment(summary = {}) {
 // Activates a payment and grants 30-day access. Shared by /recover, /callback and webhook processor.
 // Must be called inside a db.$transaction — tx is a Prisma transaction client.
 export async function activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount }) {
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+  const now = new Date()
+  const user = await tx.user.findUnique({ where: { id: userId }, select: { accessExpiresAt: true } })
+  const currentExpiry = user?.accessExpiresAt ? new Date(user.accessExpiresAt) : null
+  const baseDate = currentExpiry && currentExpiry > now ? currentExpiry : now
+  const expiresAt = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000)
   const existing = await tx.payment.findUnique({ where: { mpPaymentId: String(mpPaymentId) } })
 
   if (existing?.status === 'approved') {
@@ -218,16 +248,19 @@ async function createMercadoPagoPreference({ userId, plan }) {
     err.code = 'INVALID_PLAN_CONFIG'
     throw err
   }
-  const dashboardUrl = getDashboardUrl()
-  const apiUrl = getApiUrl()
+  const dashboardUrl = normalizePublicOrigin(stripApiSuffix(getDashboardUrl()))
+  const apiUrl = normalizePublicOrigin(stripApiSuffix(getApiUrl()))
   if (IS_PRODUCTION && (!isPublicHttpUrl(apiUrl) || !isPublicHttpUrl(dashboardUrl))) {
     const err = new Error('API_URL/DASHBOARD_URL inválidos para produção')
     err.code = 'PAYMENT_PROVIDER_MISCONFIGURED'
     throw err
   }
+  const callbackOrigin = IS_PRODUCTION ? forceHttpsUrl(dashboardUrl) : dashboardUrl
+  const notificationOrigin = IS_PRODUCTION ? forceHttpsUrl(apiUrl) : apiUrl
+
   // Mercado Pago validates `back_urls` as user-facing return URLs.
-  // Prefer DASHBOARD_URL (public domain) to avoid provider rejection when API_URL uses raw IP/internal host.
-  const callbackBase = `${dashboardUrl}/api/payments/callback`
+  // In production always enforce HTTPS for return/webhook URLs.
+  const callbackBase = `${callbackOrigin}/api/payments/callback`
 
   const preference = {
     items: [{
@@ -243,9 +276,16 @@ async function createMercadoPagoPreference({ userId, plan }) {
       pending: `${callbackBase}?collection_status=pending`,
     },
     auto_return: 'approved',
-    notification_url: `${apiUrl}/api/payments/webhook`,
+    notification_url: `${notificationOrigin}/api/payments/webhook`,
     // Back URL shown after payment for manual navigation
     statement_descriptor: 'BOTinho',
+  }
+  const debugUrls = {
+    dashboardUrl: callbackOrigin,
+    apiUrl: notificationOrigin,
+    callbackBase,
+    backUrls: preference.back_urls,
+    notificationUrl: preference.notification_url,
   }
 
   try {
@@ -266,6 +306,8 @@ async function createMercadoPagoPreference({ userId, plan }) {
     const wrapped = new Error(String(providerCause))
     wrapped.code = 'CHECKOUT_PROVIDER_ERROR'
     wrapped.providerStatus = providerStatus
+    wrapped.providerPayload = err?.response?.data || null
+    wrapped.debugUrls = debugUrls
     throw wrapped
   }
 }
@@ -407,7 +449,7 @@ export async function paymentsRoutes(app) {
         return sendError(reply, 500, 'PAYMENT_PROVIDER_MISCONFIGURED', 'Configuração de pagamento inválida no servidor. Contate o suporte.')
       }
       if (err?.code === 'CHECKOUT_PROVIDER_ERROR') {
-        req.log.warn({ providerStatus: err?.providerStatus, reason: err?.message, plan, userId }, 'Mercado Pago rejeitou criação de preferência')
+        req.log.warn({ providerStatus: err?.providerStatus, reason: err?.message, providerPayload: err?.providerPayload, debugUrls: err?.debugUrls, plan, userId }, 'Mercado Pago rejeitou criação de preferência')
       }
       req.log.error({ err: err?.message, plan, userId }, 'Falha ao criar preferência MP')
       return sendError(reply, 502, 'CHECKOUT_CREATION_FAILED', 'Não foi possível iniciar o checkout. Tente novamente.')
@@ -473,7 +515,7 @@ export async function paymentsRoutes(app) {
   // Callback de retorno do Mercado Pago após pagamento — ativa o acesso automaticamente
   // Não requer JWT; a identidade do usuário vem do external_reference salvo na Preference
   app.get('/callback', async (req, reply) => {
-    const dashboardUrl = getDashboardUrl()
+    const dashboardUrl = stripApiSuffix(getDashboardUrl())
     const { collection_id, collection_status, payment_id, status, external_reference } = req.query
 
     const mpPaymentId = String(payment_id ?? collection_id ?? '').trim()
@@ -520,7 +562,7 @@ export async function paymentsRoutes(app) {
         activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount: plans[plan].price })
       )
       trackAnalyticsEventSafe({ userId, event: 'payment_approved', metadata: { plan, source: 'callback' } })
-      return reply.redirect(`${dashboardUrl}/dashboard/planos?status=success`)
+      return reply.redirect(`${dashboardUrl}/dashboard/pagamento/sucesso`)
     } catch (err) {
       if (err?.code === 'PAYMENT_ALREADY_USED') {
         return reply.redirect(`${dashboardUrl}/dashboard/planos?status=failure&reason=already_used`)
