@@ -170,6 +170,7 @@ export default function EnvioPage() {
   async function sendBroadcastNow() {
     if (broadcastLoading) return
     setBroadcastLoading(true)
+    setBroadcastConfirmOpen(false)
     try {
       const res = await api.broadcastSend(broadcastText.trim())
       setBroadcastResult(res)
@@ -178,7 +179,6 @@ export default function EnvioPage() {
       setBroadcastError(err.message)
     } finally {
       setBroadcastLoading(false)
-      setBroadcastConfirmOpen(false)
     }
   }
 
