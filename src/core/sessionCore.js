@@ -11,6 +11,7 @@ const workerPath = join(__dirname, '..', 'bot-worker.js')
 
 const bots = new Map()
 const pendingRequests = new Map()
+const MAX_PENDING_REQUESTS = Math.max(10, Number(process.env.MANAGER_MAX_PENDING_REQUESTS || 500))
 let healthTimer = null
 
 function shouldAutoStartPersistedBots() {
@@ -100,6 +101,9 @@ function requestWithTimeout(userId, type, payload = {}, timeout = 10000, timeout
   return new Promise((resolve, reject) => {
     const entry = bots.get(userId)
     if (!entry) return reject(new Error('Bot não está rodando'))
+    if (pendingRequests.size >= MAX_PENDING_REQUESTS) {
+      return reject(new Error('Sistema ocupado: muitas requisições pendentes, tente novamente em instantes'))
+    }
     const requestId = Math.random().toString(36).slice(2)
     pendingRequests.set(requestId, { resolve, reject })
     setTimeout(() => { if (pendingRequests.has(requestId)) { pendingRequests.delete(requestId); reject(new Error(timeoutMessage)) } }, timeout)

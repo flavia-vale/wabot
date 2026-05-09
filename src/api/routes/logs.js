@@ -6,7 +6,8 @@ export async function logsRoutes(app) {
     const { status = 'all', page = '1', limit = '20', search = '' } = req.query
     const pageNum = Math.max(1, parseInt(page) || 1)
     const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20))
-    const query = String(search).trim()
+    const rawQuery = String(search).trim()
+    const query = rawQuery.length >= 3 ? rawQuery : ''
 
     const normalizedQuery = query.toLowerCase()
     const statusSearchMap = {
@@ -21,7 +22,7 @@ export async function logsRoutes(app) {
       .filter(([label, value]) => label.includes(normalizedQuery) || value.includes(normalizedQuery))
       .map(([, value]) => value)
 
-    const groups = await db.group.findMany({ where: { userId } })
+    const groups = query ? await db.group.findMany({ where: { userId } }) : []
     const groupMap = Object.fromEntries(groups.map(g => [g.waJid, g.name]))
     const matchingGroupJids = query
       ? groups

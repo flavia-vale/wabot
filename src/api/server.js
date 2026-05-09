@@ -21,6 +21,8 @@ import { resumePersistedBots, startSessionHealthMonitor, stopAllBots } from '../
 
 const app = Fastify({ logger: true, trustProxy: true })
 registerApiMetricsHooks(app)
+const activityWriteThrottleMs = Math.max(0, Number(process.env.ACTIVITY_WRITE_THROTTLE_MS || 60_000))
+const lastActivityWriteByUser = new Map()
 
 const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:3000',
@@ -64,11 +66,22 @@ function isPrismaShapeMismatch(err) {
 
 async function verifyAuthenticatedUser(userId) {
   try {
-    const activity = await db.user.updateMany({
+    const now = Date.now()
+    const lastWrite = lastActivityWriteByUser.get(userId) ?? 0
+    const shouldWrite = activityWriteThrottleMs === 0 || (now - lastWrite) >= activityWriteThrottleMs
+    if (shouldWrite) {
+      const activity = await db.user.updateMany({
+        where: { id: userId, status: { notIn: ['banned', 'suspended'] } },
+        data: { lastActivityAt: new Date(now) },
+      })
+      if (activity.count === 1) lastActivityWriteByUser.set(userId, now)
+      return activity.count === 1
+    }
+    const user = await db.user.findFirst({
       where: { id: userId, status: { notIn: ['banned', 'suspended'] } },
-      data: { lastActivityAt: new Date() },
+      select: { id: true },
     })
-    return activity.count === 1
+    return Boolean(user)
   } catch (err) {
     if (!isPrismaShapeMismatch(err)) throw err
     const user = await db.user.findUnique({ where: { id: userId }, select: { id: true } })

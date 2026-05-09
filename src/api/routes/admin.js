@@ -292,10 +292,15 @@ function sanitizeUser(user, role) {
   }
 }
 
-async function getLogCountMap({ status, since }) {
+async function getLogCountMap({ status, since, userIds = null }) {
+  if (Array.isArray(userIds) && userIds.length === 0) return new Map()
   const rows = await db.messageLog.groupBy({
     by: ['userId'],
-    where: { ...(status ? { status } : {}), ...(since ? { sentAt: { gte: since } } : {}) },
+    where: {
+      ...(status ? { status } : {}),
+      ...(since ? { sentAt: { gte: since } } : {}),
+      ...(Array.isArray(userIds) ? { userId: { in: userIds } } : {}),
+    },
     _count: { _all: true },
   })
   return new Map(rows.map(row => [row.userId, row._count._all]))
@@ -460,7 +465,7 @@ export async function adminRoutes(app) {
     }
 
     const since24h = addDays(now, -1)
-    const [total, users, successMap, errorMap] = await Promise.all([
+    const [total, users] = await Promise.all([
       db.user.count({ where }),
       db.user.findMany({
         where,
@@ -485,8 +490,11 @@ export async function adminRoutes(app) {
           _count: { select: { payments: true, credentials: true, messageLogs: true } },
         },
       }),
-      getLogCountMap({ status: 'success' }),
-      getLogCountMap({ status: 'error', since: since24h }),
+    ])
+    const userIds = users.map(user => user.id)
+    const [successMap, errorMap] = await Promise.all([
+      getLogCountMap({ status: 'success', userIds }),
+      getLogCountMap({ status: 'error', since: since24h, userIds }),
     ])
 
     const running = new Set(listRunningBots())
