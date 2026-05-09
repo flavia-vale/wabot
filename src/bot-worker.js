@@ -27,6 +27,40 @@ let activeSock = null
 let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
 let shuttingDown = false
 
+const OWNER_INSTANCE = process.env.pm_id != null
+  ? `pm2:${process.env.pm_id}`
+  : (process.env.NODE_APP_INSTANCE != null ? `app:${process.env.NODE_APP_INSTANCE}` : `pid:${process.pid}`)
+
+let heartbeatTimer = null
+
+async function persistSessionPatch(data) {
+  await db.waSession.upsert({
+    where: { userId },
+    create: { userId, ...data },
+    update: data,
+  })
+}
+
+function startHeartbeat() {
+  if (heartbeatTimer) return
+  const intervalMs = Math.max(Number(process.env.WA_HEARTBEAT_INTERVAL_MS || 15000), 5000)
+  heartbeatTimer = setInterval(() => {
+    persistSessionPatch({
+      lastHeartbeatAt: new Date(),
+      ownerInstance: OWNER_INSTANCE,
+      lifecycle: activeSock ? 'ready' : (pendingSock ? 'authenticating' : 'disconnected'),
+    }).catch(() => {})
+  }, intervalMs)
+  heartbeatTimer.unref?.()
+}
+
+function stopHeartbeat() {
+  if (!heartbeatTimer) return
+  clearInterval(heartbeatTimer)
+  heartbeatTimer = null
+}
+
+
 const AUTH_DIR = getAuthInfoDir(userId)
 const DEDUP_FILE = getDedupFile(userId)
 const DEDUP_FLUSH_DEBOUNCE_MS = 1_000
@@ -490,6 +524,7 @@ async function startBot() {
 
   setLifecycleState(WA_LIFECYCLE.INITIALIZING, { reason: 'start_bot' })
   mkdirSync(AUTH_DIR, { recursive: true })
+  startHeartbeat()
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR)
   const { version } = await fetchLatestBaileysVersion()
@@ -509,11 +544,7 @@ async function startBot() {
     if (qr) {
       setLifecycleState(WA_LIFECYCLE.AUTHENTICATING, { reason: 'qr_generated' })
       if (process.send) process.send({ type: 'qr', data: qr })
-      await db.waSession.upsert({
-        where: { userId },
-        create: { userId, status: 'connecting' },
-        update: { status: 'connecting' },
-      })
+await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date() })
     }
 
     if (connection === 'open') {
@@ -522,11 +553,7 @@ async function startBot() {
       pendingSock = null
       const phone = sock.user?.id?.split(':')[0] ?? null
       if (process.send) process.send({ type: 'status', data: 'connected', phone })
-      await db.waSession.upsert({
-        where: { userId },
-        create: { userId, status: 'connected', phone },
-        update: { status: 'connected', phone },
-      })
+await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: null })
       trackAnalyticsEventSafe({ userId, event: 'whatsapp_connected' })
     }
 
@@ -537,11 +564,7 @@ async function startBot() {
       activeSock = null
       pendingSock = null
       if (process.send) process.send({ type: 'status', data: 'disconnected' })
-      await db.waSession.upsert({
-        where: { userId },
-        create: { userId, status: 'disconnected' },
-        update: { status: 'disconnected' },
-      }).catch(() => {})
+await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: code != null ? String(code) : null }).catch(() => {})
       if (isLoggedOut) {
         // Sessão revogada/expirada — limpar auth para que próximo start gere QR limpo
         await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
