@@ -8,7 +8,8 @@ const workerPath = join(__dirname, 'bot-worker.js')
 // userId -> { proc, qrListeners: Set, statusListeners: Set }
 const bots = new Map()
 const pendingRequests = new Map() // requestId -> { resolve, reject }
-let zombieMonitorTimer = null
+let healthTimer = null
+
 
 function shouldAutoStartPersistedBots() {
   if (process.env.AUTO_START_WHATSAPP_SESSIONS === 'false') return false
@@ -35,6 +36,7 @@ export async function resumePersistedBots(db, log = console) {
   return { attempted: sessions.length, started, skipped }
 }
 
+
 export function startSessionHealthMonitor(db, log = console) {
   if (!shouldAutoStartPersistedBots()) return () => {}
   const intervalMs = Math.max(Number(process.env.WA_ZOMBIE_CHECK_INTERVAL_MS || 15000), 5000)
@@ -42,35 +44,29 @@ export function startSessionHealthMonitor(db, log = console) {
 
   const tick = async () => {
     const now = Date.now()
-    const sessions = await db.waSession.findMany({
+    for (const [userId, entry] of bots.entries()) {
+      if (!entry?.proc || entry.proc.killed) continue
+      const hbAge = now - (entry.lastHeartbeatAt || 0)
+      if (hbAge <= staleMs) continue
+      log.warn?.({ userId, hbAge }, 'Worker com heartbeat estagnado — reiniciando sessão silenciosamente')
+      stopBot(userId)
+      setTimeout(() => startBot(userId), 1000).unref?.()
+    }
+
+    const persisted = await db.waSession.findMany({
       where: { status: { in: ['connected', 'connecting'] } },
-      select: { userId: true, lastHeartbeatAt: true, ownerInstance: true, lifecycle: true },
+      select: { userId: true },
     })
-    for (const s of sessions) {
-      const isRunning = bots.has(s.userId)
-      const hbAge = s.lastHeartbeatAt ? (now - new Date(s.lastHeartbeatAt).getTime()) : Number.POSITIVE_INFINITY
-      const stale = hbAge > staleMs
-      if (!isRunning && stale) {
-        log.warn?.({ userId: s.userId, hbAge, lifecycle: s.lifecycle }, 'Sessão zumbi detectada (sem processo local) — restart silencioso')
-        startBot(s.userId)
-        continue
-      }
-      if (isRunning && stale) {
-        log.warn?.({ userId: s.userId, hbAge, lifecycle: s.lifecycle }, 'Heartbeat estagnado — reiniciando worker')
-        stopBot(s.userId)
-        setTimeout(() => startBot(s.userId), 1000)
-      }
+    for (const s of persisted) {
+      if (!bots.has(s.userId)) startBot(s.userId)
     }
   }
 
-  zombieMonitorTimer = setInterval(() => {
-    tick().catch(err => log.error?.({ err: err.message }, 'Falha no monitor de saúde das sessões'))
+  healthTimer = setInterval(() => {
+    tick().catch(err => log.error?.({ err: err.message }, 'Falha no monitor de saúde de sessão'))
   }, intervalMs)
-  zombieMonitorTimer.unref?.()
-  return () => {
-    if (zombieMonitorTimer) clearInterval(zombieMonitorTimer)
-    zombieMonitorTimer = null
-  }
+  healthTimer.unref?.()
+  return () => { if (healthTimer) clearInterval(healthTimer); healthTimer = null }
 }
 
 export function stopAllBots() {
@@ -79,15 +75,29 @@ export function stopAllBots() {
   return userIds.length
 }
 
-export function startBot(userId) { if (bots.has(userId)) return false
-  const proc = fork(workerPath, [], { env: { ...process.env, BOT_USER_ID: userId } })
-  const entry = { proc, qrListeners: new Set(), statusListeners: new Set(), lastQR: null }
+export function startBot(userId) {
+  if (bots.has(userId)) return false
+
+  const proc = fork(workerPath, [], {
+    env: { ...process.env, BOT_USER_ID: userId },
+  })
+
+  const entry = { proc, qrListeners: new Set(), statusListeners: new Set(), lastQR: null, lastHeartbeatAt: Date.now() }
   bots.set(userId, entry)
   proc.on('message', msg => {
     if (!msg?.type) return
-    if (msg.type === 'qr') { entry.lastQR = msg.data; entry.qrListeners.forEach(fn => fn(msg.data)) }
-    if (msg.type === 'status') { if (msg.data === 'connected' || msg.data === 'disconnected') entry.lastQR = null; entry.statusListeners.forEach(fn => fn(msg.data, msg.phone)) }
-    if ((msg.type === 'groups' || msg.type === 'broadcastResult' || msg.type === 'pairingCode' || msg.type === 'metricsResult') && msg.requestId) {
+    if (msg.type === 'qr') {
+      entry.lastQR = msg.data
+      entry.qrListeners.forEach(fn => fn(msg.data))
+    }
+    if (msg.type === 'heartbeat') {
+      entry.lastHeartbeatAt = Date.now()
+    }
+    if (msg.type === 'status') {
+      if (msg.data === 'connected' || msg.data === 'disconnected') entry.lastQR = null
+      entry.statusListeners.forEach(fn => fn(msg.data, msg.phone))
+    }
+    if (msg.type === 'groups' && msg.requestId) {
       const pending = pendingRequests.get(msg.requestId)
       if (!pending) return
       if (msg.error) pending.reject(new Error(msg.error))

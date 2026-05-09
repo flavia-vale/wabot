@@ -27,39 +27,20 @@ let activeSock = null
 let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
 let shuttingDown = false
 
-const OWNER_INSTANCE = process.env.pm_id != null
-  ? `pm2:${process.env.pm_id}`
-  : (process.env.NODE_APP_INSTANCE != null ? `app:${process.env.NODE_APP_INSTANCE}` : `pid:${process.pid}`)
-
 let heartbeatTimer = null
-
-async function persistSessionPatch(data) {
-  await db.waSession.upsert({
-    where: { userId },
-    create: { userId, ...data },
-    update: data,
-  })
-}
-
-function startHeartbeat() {
+function startHeartbeatIpc() {
   if (heartbeatTimer) return
   const intervalMs = Math.max(Number(process.env.WA_HEARTBEAT_INTERVAL_MS || 15000), 5000)
   heartbeatTimer = setInterval(() => {
-    persistSessionPatch({
-      lastHeartbeatAt: new Date(),
-      ownerInstance: OWNER_INSTANCE,
-      lifecycle: activeSock ? 'ready' : (pendingSock ? 'authenticating' : 'disconnected'),
-    }).catch(() => {})
+    if (process.send) process.send({ type: 'heartbeat', ts: Date.now(), state: activeSock ? 'connected' : (pendingSock ? 'connecting' : 'idle') })
   }, intervalMs)
   heartbeatTimer.unref?.()
 }
-
-function stopHeartbeat() {
+function stopHeartbeatIpc() {
   if (!heartbeatTimer) return
   clearInterval(heartbeatTimer)
   heartbeatTimer = null
 }
-
 
 const AUTH_DIR = getAuthInfoDir(userId)
 const DEDUP_FILE = getDedupFile(userId)
@@ -490,6 +471,7 @@ async function processSendJob(job) {
 
 async function markInterruptedSendLogs() {
   const now = new Date()
+  stopHeartbeatIpc()
   await Promise.all([
     db.messageLog.updateMany({
       where: { userId, status: { in: ['queued', 'sending'] } },
@@ -524,7 +506,7 @@ async function startBot() {
 
   setLifecycleState(WA_LIFECYCLE.INITIALIZING, { reason: 'start_bot' })
   mkdirSync(AUTH_DIR, { recursive: true })
-  startHeartbeat()
+  startHeartbeatIpc()
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR)
   const { version } = await fetchLatestBaileysVersion()
@@ -879,6 +861,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 async function shutdown(code = 0) {
   if (shuttingDown) return
   shuttingDown = true
+  stopHeartbeatIpc()
   await Promise.all([
     flushDedupNow().catch(err => {
       logger.error({ err: err.message }, 'Erro ao persistir deduplicação antes de encerrar')
