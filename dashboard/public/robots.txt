@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Allow: /termos
+Allow: /privacidade
+Allow: /quem-somos
+Allow: /suporte
+Disallow: /dashboard
+Disallow: /dashboard/
+Disallow: /dashboard/*
+Disallow: /api/*
+Disallow: /promo-vip-7dias
+
+Sitemap: https://espelhagrupos.com.br/sitemap.xml
+Host: https://espelhagrupos.com.br
