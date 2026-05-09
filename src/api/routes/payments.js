@@ -347,7 +347,8 @@ export async function paymentsRoutes(app) {
   // Creates a dynamic Mercado Pago Preference (supports PIX + credit card) and returns the checkout URL
   app.post('/checkout', { onRequest: [app.authenticate] }, async (req, reply) => {
     const { plan } = req.body ?? {}
-    if (!PLANS[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic ou pro.')
+    const plans = await getBillingPlans()
+    if (!plans[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic ou pro.')
 
     const userId = req.user.sub
     trackAnalyticsEventSafe({ userId, event: 'checkout_started', metadata: { plan } })
