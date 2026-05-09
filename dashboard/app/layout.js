@@ -1,7 +1,10 @@
 import "./globals.css";
+import { getSiteUrl } from "../lib/site-url";
+
+const siteUrl = getSiteUrl()
 
 export const metadata = {
-  metadataBase: new URL('http://espelhagrupos.com.br'),
+  metadataBase: new URL(siteUrl),
   title: {
     default: 'Bot para Afiliados no WhatsApp | BOTinho',
     template: '%s | BOTinho',
