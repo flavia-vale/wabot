@@ -6,7 +6,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
-import { trackEvent } from '@/lib/analytics'
+import { mapAuthError, trackEvent, TRACKING_EVENTS } from '@/lib/analytics'
 
 const LOGIN_BENEFITS = [
   'Conversão automática de links de afiliado',
@@ -43,20 +43,25 @@ function LoginContent() {
     setSuccess('')
     setLoading(true)
     try {
+      trackEvent(TRACKING_EVENTS.AUTH_SUBMIT_ATTEMPT, {
+        origin: 'login_page',
+        mode: isRegister ? 'register' : 'login',
+        has_ref: Boolean(ref),
+      })
       if (isRegister) {
         await api.register(name, email, password, contactPhone, ref)
-        trackEvent('signup_success', { origin: 'login_page', has_ref: Boolean(ref) })
+        trackEvent(TRACKING_EVENTS.SIGNUP_SUCCESS, { origin: 'login_page', has_ref: Boolean(ref) })
       } else {
         await api.login(email, password)
-        trackEvent('login_success', { origin: 'login_page' })
+        trackEvent(TRACKING_EVENTS.LOGIN_SUCCESS, { origin: 'login_page' })
       }
       setSuccess(isRegister ? 'Conta criada com sucesso. Redirecionando para o checklist...' : 'Login realizado. Redirecionando para o checklist...')
       setTimeout(() => router.push('/dashboard/inicio'), 300)
     } catch (err) {
-      trackEvent('auth_error', {
+      trackEvent(TRACKING_EVENTS.AUTH_ERROR, {
         origin: 'login_page',
         mode: isRegister ? 'register' : 'login',
-        message: err?.message || 'unknown_error',
+        error_type: mapAuthError(err),
       })
       setError(err.message)
     } finally {
@@ -225,7 +230,7 @@ function LoginContent() {
         <button
           onClick={() => {
             const nextMode = !isRegister
-            trackEvent('auth_mode_switch', {
+            trackEvent(TRACKING_EVENTS.AUTH_MODE_SWITCH, {
               origin: 'login_page',
               mode: nextMode ? 'register' : 'login',
             })
