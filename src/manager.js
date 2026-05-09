@@ -137,6 +137,11 @@ export function onStatus(userId, fn) {
   return () => entry.statusListeners.delete(fn)
 }
 
+export function getLastQR(userId) {
+  const entry = bots.get(userId)
+  return entry?.lastQR ?? null
+}
+
 export function listGroups(userId) {
   return new Promise((resolve, reject) => {
     const entry = bots.get(userId)

@@ -21,7 +21,10 @@ export default function DashboardPage() {
   const [feedback, setFeedback] = useState('')
   const [socketState, setSocketState] = useState('idle')
   const [qrWaitElapsed, setQrWaitElapsed] = useState(0)
+  const [wsErrorMessage, setWsErrorMessage] = useState('')
   const wsRef = useRef(null)
+  const wsQrTimeoutRef = useRef(null)
+  const qrPollingRef = useRef(null)
 
   const [showPairingInput, setShowPairingInput] = useState(false)
   const [pairingPhone, setPairingPhone] = useState('')
@@ -51,6 +54,7 @@ export default function DashboardPage() {
   }, [])
 
   const openWS = useCallback(async () => {
+    if (wsQrTimeoutRef.current) clearTimeout(wsQrTimeoutRef.current)
     if (wsRef.current) wsRef.current.close()
     const { ticket } = await api.sessionQRTicket()
     const ws = openQRSocket(ticket, {
@@ -58,7 +62,13 @@ export default function DashboardPage() {
       onError: () => setSocketState('error'),
       onClose: () => setSocketState('closed'),
       onMessage: (msg) => {
+        if (msg.type === 'error') {
+          setWsErrorMessage(msg.message || 'Falha ao conectar no canal de QR Code')
+          trackTelemetry({ stage: 'authenticating', event: 'ws_error_message', detail: msg.message || 'unknown' })
+        }
         if (msg.type === 'qr') {
+          if (wsQrTimeoutRef.current) clearTimeout(wsQrTimeoutRef.current)
+          setWsErrorMessage('')
           setQr(msg.data)
           trackTelemetry({ stage: 'authenticating', event: 'qr_received' })
         }
@@ -77,7 +87,37 @@ export default function DashboardPage() {
       },
     })
     wsRef.current = ws
-  }, [fetchStatus, trackTelemetry])
+    wsQrTimeoutRef.current = setTimeout(async () => {
+      const latest = await api.sessionStatus().catch(() => null)
+      const stillConnecting = latest?.running && latest?.status === 'connecting'
+      if (stillConnecting && !qr && !pairingCode) {
+        setWsErrorMessage('QR não foi recebido em até 25s (conexão possivelmente presa)')
+        trackTelemetry({ stage: 'authenticating', event: 'qr_timeout_25s' })
+      }
+    }, 25_000)
+  }, [fetchStatus, trackTelemetry, qr, pairingCode])
+
+  useEffect(() => {
+    const shouldPoll = status?.running && status?.status === 'connecting' && !qr
+    if (!shouldPoll) {
+      if (qrPollingRef.current) clearInterval(qrPollingRef.current)
+      qrPollingRef.current = null
+      return
+    }
+    if (qrPollingRef.current) return
+    qrPollingRef.current = setInterval(async () => {
+      const result = await api.sessionQRLatest().catch(() => null)
+      if (result?.qr) {
+        setQr(result.qr)
+        setWsErrorMessage('')
+        trackTelemetry({ stage: 'authenticating', event: 'qr_received_polling_fallback' })
+      }
+    }, 3000)
+    return () => {
+      if (qrPollingRef.current) clearInterval(qrPollingRef.current)
+      qrPollingRef.current = null
+    }
+  }, [status?.running, status?.status, qr, trackTelemetry])
 
   useEffect(() => {
     let active = true
@@ -101,6 +141,8 @@ export default function DashboardPage() {
 
     return () => {
       active = false
+      if (wsQrTimeoutRef.current) clearTimeout(wsQrTimeoutRef.current)
+      if (qrPollingRef.current) clearInterval(qrPollingRef.current)
       wsRef.current?.close()
     }
   }, [openWS])
@@ -116,6 +158,7 @@ export default function DashboardPage() {
     setError('')
     setFeedback('')
     setStatusError('')
+    setWsErrorMessage('')
     setShowPairingInput(false)
     setPairingCode('')
     setQrWaitElapsed(0)
@@ -201,6 +244,34 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleRestart() {
+    if (loading) return
+    setError('')
+    setFeedback('')
+    setStatusError('')
+    setWsErrorMessage('')
+    setLoading(true)
+    setActionLoading('restart')
+    trackTelemetry({ stage: 'initializing', event: 'restart_click' })
+    try {
+      await api.sessionStop().catch(() => {})
+      await api.sessionStart()
+      setQr(null)
+      setPairingCode('')
+      setQrWaitElapsed(0)
+      await openWS()
+      await fetchStatus()
+      setFeedback('Reinício solicitado. Aguarde o novo QR Code.')
+      trackTelemetry({ stage: 'initializing', event: 'restart_requested' })
+    } catch (err) {
+      setError(err.message)
+      trackTelemetry({ stage: 'initializing', event: 'restart_failed', detail: err.message })
+    } finally {
+      setLoading(false)
+      setActionLoading('')
+    }
+  }
+
   async function handleForget() {
     if (loading) return
     setError('')
@@ -279,6 +350,7 @@ export default function DashboardPage() {
         )}
         {socketState === 'error' && <Alert type="warning" title="Conexão instável" message="Conexão de pareamento instável. Tentando reconectar..." />}
         {socketState === 'closed' && isConnecting && <Alert type="warning" title="Conexão perdida" message="Gere novamente o QR ou aguarde reconexão." />}
+        {wsErrorMessage && <Alert type="warning" title="Falha no canal de QR Code" message={`${wsErrorMessage}. Verifique URL/API atual e tente reiniciar a conexão.`} />}
         {feedback && <Alert type="success" title="Tudo certo" message={feedback} />}
         {error && <Alert type="error" title="Falha na conexão" message={`Não foi possível concluir a ação. ${error}`} />}
       </div>
@@ -382,7 +454,10 @@ export default function DashboardPage() {
           <div>
             <h3 className="text-sm font-semibold text-gray-700">Ação operacional</h3>
             <p className="text-xs text-gray-500 mb-2">Desliga o bot agora, mas mantém a sessão salva para reconectar depois.</p>
-            <button onClick={handleStop} disabled={loading} className="bg-red-500 text-white px-5 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-red-600 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2">{actionLoading === 'stop' ? 'Desconectando...' : 'Desligar bot'}</button>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={handleStop} disabled={loading} className="bg-red-500 text-white px-5 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-red-600 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2">{actionLoading === 'stop' ? 'Desconectando...' : 'Desligar bot'}</button>
+              <button onClick={handleRestart} disabled={loading} className="bg-amber-500 text-white px-5 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-amber-600 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2">{actionLoading === 'restart' ? 'Reiniciando...' : 'Reiniciar conexão'}</button>
+            </div>
           </div>
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <h3 className="text-sm font-semibold text-amber-800">Ações avançadas</h3>
