@@ -262,6 +262,24 @@ const MSG_QUEUE_TIMEOUT_MS = Math.max(1_000, envNumber('MSG_QUEUE_TIMEOUT_MS', 1
 const MSG_QUEUE_WATCHDOG_MS = Math.max(5_000, envNumber('MSG_QUEUE_WATCHDOG_MS', 30_000))
 const MSG_QUEUE_MAX_SIZE = Math.max(10, envNumber('MSG_QUEUE_MAX_SIZE', 500))
 
+
+const WA_LIFECYCLE = Object.freeze({
+  INITIALIZING: 'initializing',
+  AUTHENTICATING: 'authenticating',
+  READY: 'ready',
+  DISCONNECTED: 'disconnected',
+})
+
+let lifecycleState = WA_LIFECYCLE.DISCONNECTED
+
+function setLifecycleState(next, meta = {}) {
+  if (lifecycleState === next) return
+  const prev = lifecycleState
+  lifecycleState = next
+  logger.info({ prev, next, ...meta }, 'WA lifecycle transition')
+  if (process.send) process.send({ type: 'lifecycle', data: next, prev, meta })
+}
+
 const incomingQueue = createMessageQueue({
   name: 'incoming-messages',
   concurrency: MSG_QUEUE_CONCURRENCY,
@@ -470,6 +488,7 @@ async function startBot() {
   }
   scheduleDedupSave(dedup)
 
+  setLifecycleState(WA_LIFECYCLE.INITIALIZING, { reason: 'start_bot' })
   mkdirSync(AUTH_DIR, { recursive: true })
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR)
@@ -488,6 +507,7 @@ async function startBot() {
 
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
+      setLifecycleState(WA_LIFECYCLE.AUTHENTICATING, { reason: 'qr_generated' })
       if (process.send) process.send({ type: 'qr', data: qr })
       await db.waSession.upsert({
         where: { userId },
@@ -497,6 +517,7 @@ async function startBot() {
     }
 
     if (connection === 'open') {
+      setLifecycleState(WA_LIFECYCLE.READY, { reason: 'connection_open' })
       activeSock = sock
       pendingSock = null
       const phone = sock.user?.id?.split(':')[0] ?? null
@@ -510,6 +531,7 @@ async function startBot() {
     }
 
     if (connection === 'close') {
+      setLifecycleState(WA_LIFECYCLE.DISCONNECTED, { reason: 'connection_close' })
       const code = new Boom(lastDisconnect?.error)?.output?.statusCode
       const isLoggedOut = code === DisconnectReason.loggedOut
       activeSock = null
@@ -525,6 +547,7 @@ async function startBot() {
         await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
         logger.info('Sessão encerrada pelo servidor WA — auth_info limpo automaticamente')
       } else {
+        logger.warn({ code }, 'WA conexão fechada, agendando restart automático em 5s')
         setTimeout(startBot, 5_000)
       }
     }
