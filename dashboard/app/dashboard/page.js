@@ -165,6 +165,24 @@ export default function DashboardPage() {
   }, [openWS])
 
 
+
+  useEffect(() => {
+    if (!status?.running) return
+    const interval = setInterval(async () => {
+      const latest = await api.sessionStatus().catch(() => null)
+      if (!latest) return
+      setStatus(latest)
+      if (latest.status === 'connected') {
+        setQr(null)
+        setPairingCode('')
+        setSocketState('idle')
+        setStatusError('')
+        setWsErrorMessage('')
+      }
+    }, 8000)
+    return () => clearInterval(interval)
+  }, [status?.running])
+
   useEffect(() => {
     if (!(status?.running && status?.status === 'connecting')) return
     const interval = setInterval(async () => {
@@ -391,7 +409,7 @@ export default function DashboardPage() {
           </button>
         )}
         {socketState === 'error' && <Alert type="warning" title="Conexão instável" message="Conexão de pareamento instável. Tentando reconectar..." />}
-        {socketState === 'closed' && isConnecting && <Alert type="warning" title="Conexão perdida" message="Gere novamente o QR ou aguarde reconexão." />}
+        {socketState === 'closed' && isConnecting && !qr && !pairingCode && <Alert type="warning" title="Conexão perdida" message="Gere novamente o QR ou aguarde reconexão." />}
         {wsErrorMessage && <Alert type="warning" title="Falha no canal de QR Code" message={`${wsErrorMessage}. Verifique URL/API atual e tente reiniciar a conexão.`} />}
         {feedback && <Alert type="success" title="Tudo certo" message={feedback} />}
         {error && <Alert type="error" title="Falha na conexão" message={`Não foi possível concluir a ação. ${error}`} />}
