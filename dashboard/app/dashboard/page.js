@@ -6,6 +6,7 @@ import { Alert } from '@/components/Alert'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { HelpLink } from '@/components/HelpLink'
 import { LoadingState } from '@/components/States'
+import { useToast } from '@/components/ToastProvider'
 
 const QR_TIMEOUT_SECONDS = 20
 const STATUS_ERROR_MESSAGE = 'Não foi possível carregar o status da conexão. Tente novamente.'
@@ -16,16 +17,43 @@ export default function DashboardPage() {
   const [statusError, setStatusError] = useState('')
   const [qr, setQr] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [actionLoading, setActionLoading] = useState('')
   const [error, setError] = useState('')
+  const toast = useToast()
   const [feedback, setFeedback] = useState('')
   const [socketState, setSocketState] = useState('idle')
   const [qrWaitElapsed, setQrWaitElapsed] = useState(0)
+  const [wsErrorMessage, setWsErrorMessage] = useState('')
   const wsRef = useRef(null)
+  const wsQrTimeoutRef = useRef(null)
+  const qrPollingRef = useRef(null)
 
   const [showPairingInput, setShowPairingInput] = useState(false)
   const [pairingPhone, setPairingPhone] = useState('')
   const [pairingCode, setPairingCode] = useState('')
   const [showForgetConfirm, setShowForgetConfirm] = useState(false)
+
+
+  const trackTelemetry = useCallback((payload) => {
+    api.sessionTelemetry(payload).catch(() => {})
+  }, [])
+
+
+  const waitForRunningSession = useCallback(async (timeoutMs = 12000) => {
+    const startedAt = Date.now()
+    let latest = null
+    while (Date.now() - startedAt < timeoutMs) {
+      latest = await api.sessionStatus().catch(() => null)
+      if (latest?.running) {
+        setStatus(latest)
+        return latest
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+    }
+    if (latest) setStatus(latest)
+    return latest
+  }, [])
+
 
   const fetchStatus = useCallback(async ({ showLoading = false, recoverable = false } = {}) => {
     if (showLoading) setStatusLoading(true)
@@ -45,6 +73,7 @@ export default function DashboardPage() {
   }, [])
 
   const openWS = useCallback(async () => {
+    if (wsQrTimeoutRef.current) clearTimeout(wsQrTimeoutRef.current)
     if (wsRef.current) wsRef.current.close()
     const { ticket } = await api.sessionQRTicket()
     const ws = openQRSocket(ticket, {
@@ -52,11 +81,21 @@ export default function DashboardPage() {
       onError: () => setSocketState('error'),
       onClose: () => setSocketState('closed'),
       onMessage: (msg) => {
-        if (msg.type === 'qr') setQr(msg.data)
+        if (msg.type === 'error') {
+          setWsErrorMessage(msg.message || 'Falha ao conectar no canal de QR Code')
+          trackTelemetry({ stage: 'authenticating', event: 'ws_error_message', detail: msg.message || 'unknown' })
+        }
+        if (msg.type === 'qr') {
+          if (wsQrTimeoutRef.current) clearTimeout(wsQrTimeoutRef.current)
+          setWsErrorMessage('')
+          setQr(msg.data)
+          trackTelemetry({ stage: 'authenticating', event: 'qr_received' })
+        }
         if (msg.type === 'status') {
           setStatus((s) => ({ ...s, status: msg.data, phone: msg.phone ?? s?.phone }))
           setStatusError('')
           if (msg.data === 'connected') {
+            trackTelemetry({ stage: 'ready', event: 'connected' })
             setFeedback('WhatsApp conectado com sucesso.')
             setQr(null)
             setPairingCode('')
@@ -67,7 +106,37 @@ export default function DashboardPage() {
       },
     })
     wsRef.current = ws
-  }, [fetchStatus])
+    wsQrTimeoutRef.current = setTimeout(async () => {
+      const latest = await api.sessionStatus().catch(() => null)
+      const stillConnecting = latest?.running && latest?.status === 'connecting'
+      if (stillConnecting && !qr && !pairingCode) {
+        setWsErrorMessage('QR não foi recebido em até 25s (conexão possivelmente presa)')
+        trackTelemetry({ stage: 'authenticating', event: 'qr_timeout_25s' })
+      }
+    }, 25_000)
+  }, [fetchStatus, trackTelemetry, qr, pairingCode])
+
+  useEffect(() => {
+    const shouldPoll = status?.running && status?.status === 'connecting' && !qr
+    if (!shouldPoll) {
+      if (qrPollingRef.current) clearInterval(qrPollingRef.current)
+      qrPollingRef.current = null
+      return
+    }
+    if (qrPollingRef.current) return
+    qrPollingRef.current = setInterval(async () => {
+      const result = await api.sessionQRLatest().catch(() => null)
+      if (result?.qr) {
+        setQr(result.qr)
+        setWsErrorMessage('')
+        trackTelemetry({ stage: 'authenticating', event: 'qr_received_polling_fallback' })
+      }
+    }, 3000)
+    return () => {
+      if (qrPollingRef.current) clearInterval(qrPollingRef.current)
+      qrPollingRef.current = null
+    }
+  }, [status?.running, status?.status, qr, trackTelemetry])
 
   useEffect(() => {
     let active = true
@@ -91,9 +160,49 @@ export default function DashboardPage() {
 
     return () => {
       active = false
+      if (wsQrTimeoutRef.current) clearTimeout(wsQrTimeoutRef.current)
+      if (qrPollingRef.current) clearInterval(qrPollingRef.current)
       wsRef.current?.close()
     }
   }, [openWS])
+
+
+
+  useEffect(() => {
+    if (!status?.running) return
+    const interval = setInterval(async () => {
+      const latest = await api.sessionStatus().catch(() => null)
+      if (!latest) return
+      setStatus(latest)
+      if (latest.status === 'connected') {
+        setQr(null)
+        setPairingCode('')
+        setSocketState('idle')
+        setStatusError('')
+        setWsErrorMessage('')
+      }
+    }, 8000)
+    return () => clearInterval(interval)
+  }, [status?.running])
+
+  useEffect(() => {
+    if (!(status?.running && status?.status === 'connecting')) return
+    const interval = setInterval(async () => {
+      const latest = await api.sessionStatus().catch(() => null)
+      if (!latest) return
+      setStatus(latest)
+      if (latest.status === 'connected') {
+        setQr(null)
+        setPairingCode('')
+        setSocketState('idle')
+        setStatusError('')
+        setWsErrorMessage('')
+        setFeedback('WhatsApp conectado com sucesso.')
+        wsRef.current?.close()
+      }
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [status?.running, status?.status])
 
   useEffect(() => {
     if (!(status?.running && status?.status === 'connecting') || qr || pairingCode) return
@@ -102,17 +211,27 @@ export default function DashboardPage() {
   }, [status?.running, status?.status, qr, pairingCode])
 
   async function handleQRConnect() {
+    if (loading) return
     setError('')
     setFeedback('')
     setStatusError('')
+    setWsErrorMessage('')
     setShowPairingInput(false)
     setPairingCode('')
     setQrWaitElapsed(0)
     setLoading(true)
+    setActionLoading('connect')
+    trackTelemetry({ stage: 'initializing', event: 'connect_click' })
     try {
-      await api.sessionStart()
+      await api.sessionStart().catch(async (err) => {
+        if (err?.status === 409) return
+        throw err
+      })
+      await openWS()
       const s = await fetchStatus()
-      if (s?.running) await openWS()
+      if (s?.running && s?.status === 'connecting' && !qr) {
+        trackTelemetry({ stage: 'authenticating', event: 'waiting_qr_after_connect_click' })
+      }
       setTimeout(async () => {
         const s = await api.sessionStatus().catch(() => null)
         if (s && !s.running && s.status === 'disconnected') {
@@ -122,8 +241,11 @@ export default function DashboardPage() {
       }, 6000)
     } catch (err) {
       setError(err.message)
+      toast.error(err.message, 'Falha na conexão')
+      trackTelemetry({ stage: 'initializing', event: 'connect_failed', detail: err.message })
     } finally {
       setLoading(false)
+      setActionLoading('')
     }
   }
 
@@ -137,7 +259,10 @@ export default function DashboardPage() {
     setError('')
     setFeedback('')
     setStatusError('')
+    if (loading) return
     setLoading(true)
+    setActionLoading('pairing')
+    trackTelemetry({ stage: 'authenticating', event: 'pairing_request' })
     try {
       if (!status?.running) await api.sessionStart()
       const { code } = await api.sessionPairingCode(pairingPhone.trim())
@@ -147,17 +272,21 @@ export default function DashboardPage() {
       await openWS()
     } catch (err) {
       setError(err.message)
+      toast.error(err.message, 'Falha na conexão')
       if (!status?.running) await fetchStatus()
     } finally {
       setLoading(false)
+      setActionLoading('')
     }
   }
 
   async function handleStop() {
+    if (loading) return
     setError('')
     setFeedback('')
     setStatusError('')
     setLoading(true)
+    setActionLoading('stop')
     try {
       await api.sessionStop()
       setQr(null)
@@ -168,16 +297,54 @@ export default function DashboardPage() {
       setFeedback('Bot desligado. Para voltar, gere um novo QR Code ou código de pareamento.')
     } catch (err) {
       setError(err.message)
+      toast.error(err.message, 'Falha na conexão')
     } finally {
       setLoading(false)
+      setActionLoading('')
+    }
+  }
+
+  async function handleRestart() {
+    if (loading) return
+    setError('')
+    setFeedback('')
+    setStatusError('')
+    setWsErrorMessage('')
+    setLoading(true)
+    setActionLoading('restart')
+    trackTelemetry({ stage: 'initializing', event: 'restart_click' })
+    try {
+      await api.sessionStop().catch(() => {})
+      await api.sessionStart()
+      setQr(null)
+      setPairingCode('')
+      setQrWaitElapsed(0)
+      const latest = await waitForRunningSession()
+      if (latest?.running) {
+        await openWS()
+        const fallbackQr = await api.sessionQRLatest().catch(() => null)
+        if (fallbackQr?.qr) setQr(fallbackQr.qr)
+      }
+      await fetchStatus()
+      setFeedback('Reinício solicitado. Aguarde o novo QR Code.')
+      trackTelemetry({ stage: 'initializing', event: 'restart_requested' })
+    } catch (err) {
+      setError(err.message)
+      toast.error(err.message, 'Falha na conexão')
+      trackTelemetry({ stage: 'initializing', event: 'restart_failed', detail: err.message })
+    } finally {
+      setLoading(false)
+      setActionLoading('')
     }
   }
 
   async function handleForget() {
+    if (loading) return
     setError('')
     setFeedback('')
     setStatusError('')
     setLoading(true)
+    setActionLoading('forget')
     try {
       await api.sessionForget()
       setQr(null)
@@ -188,8 +355,10 @@ export default function DashboardPage() {
       setFeedback('Sessão removida com sucesso. Conecte novamente por QR Code ou código de pareamento para usar o bot.')
     } catch (err) {
       setError(err.message)
+      toast.error(err.message, 'Falha na conexão')
     } finally {
       setLoading(false)
+      setActionLoading('')
     }
   }
 
@@ -198,9 +367,23 @@ export default function DashboardPage() {
       await navigator.clipboard.writeText(pairingCode)
       setFeedback('Código copiado para a área de transferência.')
     } catch {
-      setError('Não foi possível copiar o código. Copie manualmente.')
+      const msg = 'Não foi possível copiar o código. Copie manualmente.'
+      setError(msg)
+      toast.error(msg, 'Falha ao copiar')
     }
   }
+
+
+  useEffect(() => {
+    const onHidden = () => {
+      if (document.visibilityState !== 'hidden') return
+      if (status?.running && status?.status === 'connecting' && !qr) {
+        trackTelemetry({ stage: 'authenticating', event: 'possible_abandon', elapsedSec: qrWaitElapsed })
+      }
+    }
+    document.addEventListener('visibilitychange', onHidden)
+    return () => document.removeEventListener('visibilitychange', onHidden)
+  }, [status?.running, status?.status, qr, qrWaitElapsed, trackTelemetry])
 
   const isConnected = status?.status === 'connected'
   const isConnecting = status?.status === 'connecting'
@@ -209,7 +392,7 @@ export default function DashboardPage() {
   const canSubmitPairing = pairingPhone.trim().length >= 10
 
   return (
-    <div className="max-w-lg">
+    <div className="max-w-2xl">
       <h2 className="text-2xl font-bold text-gray-800 mb-1">WhatsApp</h2>
       <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-gray-500 text-sm">Conecte seu número ao bot</p>
@@ -235,9 +418,10 @@ export default function DashboardPage() {
           </button>
         )}
         {socketState === 'error' && <Alert type="warning" title="Conexão instável" message="Conexão de pareamento instável. Tentando reconectar..." />}
-        {socketState === 'closed' && isConnecting && <Alert type="warning" title="Conexão perdida" message="Gere novamente o QR ou aguarde reconexão." />}
+        {socketState === 'closed' && isConnecting && !qr && !pairingCode && <Alert type="warning" title="Conexão perdida" message="Gere novamente o QR ou aguarde reconexão." />}
+        {wsErrorMessage && <Alert type="warning" title="Falha no canal de QR Code" message={`${wsErrorMessage}. Verifique URL/API atual e tente reiniciar a conexão.`} />}
         {feedback && <Alert type="success" title="Tudo certo" message={feedback} />}
-        {error && <Alert type="error" title="Falha na conexão" message={error} />}
+        {error && <Alert type="error" title="Falha na conexão" message={`Não foi possível concluir a ação. ${error}`} />}
       </div>
 
       <div className="bg-white rounded-2xl shadow p-5 mb-4 flex items-center gap-4">
@@ -264,11 +448,11 @@ export default function DashboardPage() {
           </svg>
           <div role="status" aria-live="polite" className="text-center">
             <p className="text-sm font-medium text-gray-600">Gerando QR Code... ({qrWaitElapsed}s)</p>
-            <p className="text-xs text-gray-400">Aguarde alguns segundos enquanto o WhatsApp prepara a conexão.</p>
+            <p className="text-xs text-gray-400">Aguarde alguns segundos enquanto o WhatsApp prepara a conexão. Se passar de 20s, toque em "Tentar novamente".</p>
           </div>
           {showQrRetry && (
             <button onClick={handleQRConnect} disabled={loading} className="text-sm text-green-700 underline disabled:opacity-50 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
-              Gerar novamente QR
+              Tentar novamente
             </button>
           )}
         </div>
@@ -301,7 +485,7 @@ export default function DashboardPage() {
               <h3 className="font-semibold text-gray-700">Conectar via QR Code</h3>
               <p className="mt-1 text-xs text-gray-500">Mais rápido se você está com o celular em mãos.</p>
               <button onClick={handleQRConnect} disabled={loading} className="mt-4 w-full bg-green-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-green-700 disabled:opacity-50 transition flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
-                <span aria-hidden="true">📷</span>{loading ? 'Iniciando...' : 'Gerar QR Code'}
+                <span aria-hidden="true">📷</span>{actionLoading === 'connect' ? 'Conectando...' : 'Gerar QR Code'}
               </button>
             </div>
             <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -315,7 +499,7 @@ export default function DashboardPage() {
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <h3 className="text-sm font-semibold text-amber-800">Ações avançadas</h3>
             <p className="mt-1 text-xs text-amber-700">Use “Esquecer número salvo” apenas se quiser remover a sessão deste painel e conectar novamente por QR Code ou código.</p>
-            <button onClick={() => setShowForgetConfirm(true)} disabled={loading} className="mt-3 bg-white text-amber-800 border border-amber-200 px-4 py-2 rounded-lg font-semibold hover:bg-amber-100 disabled:opacity-50 transition text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2">Esquecer número salvo</button>
+            <button onClick={() => setShowForgetConfirm(true)} disabled={loading} className="mt-3 bg-white text-amber-800 border border-amber-200 px-4 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-amber-100 disabled:opacity-50 transition text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2">Esquecer número salvo</button>
           </div>
         </div>
       )}
@@ -339,12 +523,15 @@ export default function DashboardPage() {
           <div>
             <h3 className="text-sm font-semibold text-gray-700">Ação operacional</h3>
             <p className="text-xs text-gray-500 mb-2">Desliga o bot agora, mas mantém a sessão salva para reconectar depois.</p>
-            <button onClick={handleStop} disabled={loading} className="bg-red-500 text-white px-5 py-2 rounded-lg font-semibold hover:bg-red-600 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2">{loading ? 'Parando...' : 'Desligar bot'}</button>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={handleStop} disabled={loading} className="bg-red-500 text-white px-5 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-red-600 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2">{actionLoading === 'stop' ? 'Desconectando...' : 'Desligar bot'}</button>
+              <button onClick={handleRestart} disabled={loading} className="bg-amber-500 text-white px-5 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-amber-600 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2">{actionLoading === 'restart' ? 'Reiniciando...' : 'Reiniciar conexão'}</button>
+            </div>
           </div>
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <h3 className="text-sm font-semibold text-amber-800">Ações avançadas</h3>
             <p className="mt-1 text-xs text-amber-700">Esquecer número desconecta o WhatsApp e remove a sessão salva neste painel. Para usar novamente, você precisará conectar por QR Code ou código.</p>
-            <button onClick={() => setShowForgetConfirm(true)} disabled={loading} className="mt-3 bg-white text-amber-800 border border-amber-200 px-4 py-2 rounded-lg font-semibold hover:bg-amber-100 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2">Esquecer número</button>
+            <button onClick={() => setShowForgetConfirm(true)} disabled={loading} className="mt-3 bg-white text-amber-800 border border-amber-200 px-4 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-amber-100 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2">Esquecer número</button>
           </div>
         </div>
       )}

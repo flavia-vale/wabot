@@ -1,5 +1,18 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const BASE = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001')
 const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou ou foi invalidada. Faça login novamente para continuar.'
+const AUTH_TOKEN_KEY = 'wb_auth_token'
+
+function getAuthToken() {
+  if (typeof window === 'undefined') return ''
+  return localStorage.getItem(AUTH_TOKEN_KEY) || ''
+}
+
+function setAuthToken(token) {
+  if (typeof window === 'undefined') return
+  if (token) localStorage.setItem(AUTH_TOKEN_KEY, token)
+  else localStorage.removeItem(AUTH_TOKEN_KEY)
+}
+
 
 async function apiFetch(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {
@@ -7,6 +20,7 @@ async function apiFetch(path, options = {}) {
     credentials: 'include',
     headers: {
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {}),
       ...(options.headers ?? {}),
     },
   })
@@ -16,12 +30,15 @@ async function apiFetch(path, options = {}) {
     : { error: await res.text().catch(() => '') }
   if (res.status === 401 && !path.startsWith('/api/auth/')) {
     sessionStorage.setItem('loginRedirectMessage', SESSION_EXPIRED_MESSAGE)
+    setAuthToken('')
     window.location.replace('/login?reason=session-expired')
     return
   }
   if (!res.ok) {
-    const rawMessage = data.message || data.error || ''
-    const message = rawMessage && !rawMessage.trim().startsWith('<') ? rawMessage : `HTTP ${res.status}`
+    const rawMessage = data?.message ?? data?.error ?? ''
+    const normalizedMessage = typeof rawMessage === 'string' ? rawMessage : JSON.stringify(rawMessage)
+    const safeMessage = String(normalizedMessage ?? '').trim()
+    const message = safeMessage && !safeMessage.startsWith('<') ? safeMessage : `HTTP ${res.status}`
     const err = new Error(message)
     if (data.code) err.code = data.code
     if (typeof data.retryable === 'boolean') err.retryable = data.retryable
@@ -32,17 +49,30 @@ async function apiFetch(path, options = {}) {
 }
 
 export const api = {
-  login: (email, password) =>
-    apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  login: async (email, password) => {
+    const data = await apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
+    setAuthToken(data?.token || '')
+    return data
+  },
 
-  register: (name, email, password, contactPhone, ref) =>
-    apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, ...(ref && { ref }) }) }),
+  register: async (name, email, password, contactPhone, ref) => {
+    const data = await apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, ...(ref && { ref }) }) })
+    setAuthToken(data?.token || '')
+    return data
+  },
 
-  registerPromoVip: (name, email, password, contactPhone, couponCode) =>
-    apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, source: 'promo_vip_7dias', coupon_code: couponCode }) }),
+  registerPromoVip: async (name, email, password, contactPhone, couponCode) => {
+    const data = await apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, source: 'promo_vip_7dias', coupon_code: couponCode }) })
+    setAuthToken(data?.token || '')
+    return data
+  },
 
   me: () => apiFetch('/api/auth/me'),
-  logout: () => apiFetch('/api/auth/logout', { method: 'POST' }),
+  logout: async () => {
+    const data = await apiFetch('/api/auth/logout', { method: 'POST' })
+    setAuthToken('')
+    return data
+  },
 
   sessionStatus: () => apiFetch('/api/session/status'),
   sessionStart: () => apiFetch('/api/session/start', { method: 'POST' }),
@@ -50,6 +80,8 @@ export const api = {
   sessionForget: () => apiFetch('/api/session/forget', { method: 'POST' }),
   sessionPairingCode: (phone) => apiFetch('/api/session/pairing-code', { method: 'POST', body: JSON.stringify({ phone }) }),
   sessionQRTicket: () => apiFetch('/api/session/qr-ticket', { method: 'POST' }),
+  sessionQRLatest: () => apiFetch('/api/session/qr-latest'),
+  sessionTelemetry: (payload) => apiFetch('/api/session/telemetry', { method: 'POST', body: JSON.stringify(payload) }),
   sessionWAGroups: () => apiFetch('/api/session/wa-groups'),
 
   groups: () => apiFetch('/api/groups'),
@@ -111,6 +143,10 @@ export const api = {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/sessions${query ? `?${query}` : ''}`)
   },
+  adminSessionTelemetry: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/session-telemetry${query ? `?${query}` : ''}`)
+  },
   adminSystemHealth: () => apiFetch('/api/admin/system/health'),
   adminSystemMetrics: () => apiFetch('/api/admin/system/metrics'),
   adminSuccessOverview: () => apiFetch('/api/admin/success/overview'),
@@ -142,8 +178,14 @@ export const api = {
 }
 
 export function openQRSocket(token, handlers = {}) {
-  const wsBase = BASE.replace('http', 'ws')
-  const ws = new WebSocket(`${wsBase}/api/session/qr`, ['BOTinho-auth', token])
+  const browserOrigin = typeof window !== 'undefined' ? window.location.origin : BASE
+  const apiOrigin = new URL(BASE, browserOrigin).origin
+  const browserIsHttps = browserOrigin.startsWith('https://')
+  const shouldFallbackToCurrentHost = apiOrigin !== browserOrigin
+  const fallbackOrigin = browserOrigin
+  const wsUrl = new URL('/api/session/qr', apiOrigin)
+  wsUrl.protocol = browserIsHttps ? 'wss:' : 'ws:'
+  const ws = new WebSocket(wsUrl.toString(), ['BOTinho-auth', token])
 
   if (typeof handlers === 'function') {
     ws.onmessage = (e) => { try { handlers(JSON.parse(e.data)) } catch {} }
@@ -152,7 +194,23 @@ export function openQRSocket(token, handlers = {}) {
 
   const { onMessage, onError, onClose, onOpen } = handlers
   ws.onmessage = (e) => { try { onMessage?.(JSON.parse(e.data)) } catch {} }
-  ws.onerror = (event) => onError?.(event)
+  ws.onerror = (event) => {
+    if (!shouldFallbackToCurrentHost) {
+      onError?.(event)
+      return
+    }
+    try {
+      const fallbackUrl = new URL('/api/session/qr', fallbackOrigin)
+      fallbackUrl.protocol = browserIsHttps ? 'wss:' : 'ws:'
+      const fallbackWs = new WebSocket(fallbackUrl.toString(), ['BOTinho-auth', token])
+      fallbackWs.onmessage = (e) => { try { onMessage?.(JSON.parse(e.data)) } catch {} }
+      fallbackWs.onerror = (fallbackEvent) => onError?.(fallbackEvent)
+      fallbackWs.onclose = (fallbackEvent) => onClose?.(fallbackEvent)
+      fallbackWs.onopen = (fallbackEvent) => onOpen?.(fallbackEvent)
+    } catch {
+      onError?.(event)
+    }
+  }
   ws.onclose = (event) => onClose?.(event)
   ws.onopen = (event) => onOpen?.(event)
 

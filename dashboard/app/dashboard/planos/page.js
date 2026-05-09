@@ -239,6 +239,21 @@ function PlanosContent() {
         </div>
       )}
 
+
+      {/* Card de contingência para suporte de pagamento */}
+      <div className="bg-white border border-emerald-200 rounded-2xl shadow p-5 mb-5">
+        <p className="text-sm font-semibold text-gray-800 mb-2">Se tiver problemas com seu pagamento nos acione no número: (32) 99984-4020</p>
+        <p className="text-xs text-gray-600 mb-4">Se não conseguir pagar, você pode fazer um pix do valor para a chave: [INSERIR CHAVE AQUI] e enviar o comprovante neste wpp: (32) 99984-4020</p>
+        <a
+          href="https://wa.me/5532999844020?text=Ol%C3%A1%2C%20tive%20um%20problema%20com%20meu%20pagamento%20no%20Cuponito"
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition"
+        >
+          Falar no WhatsApp
+        </a>
+      </div>
+
       {/* Dúvidas rápidas */}
       <div className="bg-white rounded-2xl shadow p-5 mb-5 text-sm text-gray-600">
         <h3 className="font-semibold text-gray-700 mb-3">Dúvidas rápidas</h3>
@@ -260,7 +275,7 @@ function PlanosContent() {
               id="ref-link-input"
               readOnly
               value={`${typeof window !== 'undefined' ? window.location.origin : ''}/login?ref=${data.referralCode}`}
-              className="flex-1 text-xs border rounded-lg px-3 py-2 bg-gray-50 text-gray-600"
+              className="flex-1 text-xs border rounded-lg px-3 py-2.5 min-h-11 bg-gray-50 text-gray-600"
             />
             <button
               onClick={copyRef}

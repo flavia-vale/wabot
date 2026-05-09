@@ -78,7 +78,7 @@ function LoginContent() {
 
         <div className="mb-2 text-center">
           <p className={`text-sm font-semibold ${isRegister ? 'text-emerald-200' : 'text-green-700'}`}><span aria-hidden="true">🤖</span> Bot Conversor para Afiliados</p>
-          <h1 className={`mt-2 text-2xl font-bold ${isRegister ? 'text-emerald-100' : 'text-gray-900'}`}>{isRegister ? 'Criar sua conta' : 'Entrar na sua conta'}</h1>
+          <h1 className={`mt-2 text-xl sm:text-2xl font-bold leading-tight ${isRegister ? 'text-emerald-100' : 'text-gray-900'}`}>{isRegister ? 'Criar sua conta' : 'Entrar na sua conta'}</h1>
         </div>
         <p className={`text-center text-sm mb-4 ${isRegister ? 'text-emerald-200' : 'text-gray-500'}`}>
           {isRegister ? 'Comece configurando seu WhatsApp e suas credenciais de afiliado.' : 'Acesse seu painel para conectar o WhatsApp e gerenciar seus grupos.'}

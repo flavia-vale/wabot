@@ -42,9 +42,9 @@ pm2 status
 
 echo "[7/7] Smoke tests (hard gate)"
 for path in /login /admin /dashboard; do
-  code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://178.105.54.0${path}")
+  code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://espelhagrupos.com.br${path}")
   echo "  ${path} -> HTTP ${code}"
-  if [[ "$code" != "200" && "$code" != "302" && "$code" != "307" ]]; then
+  if [[ "$code" != "200" && "$code" != "302" && "$code" != "307" && "$code" != "301" && "$code" != "308" ]]; then
     echo "Smoke test falhou para ${path} (HTTP ${code})."
     exit 1
   fi

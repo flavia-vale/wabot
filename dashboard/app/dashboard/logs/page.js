@@ -128,10 +128,16 @@ export default function LogsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [expandedErrorIds, setExpandedErrorIds] = useState(() => new Set())
 
-  const query = search.trim()
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(handle)
+  }, [search])
+
+  const query = debouncedSearch.trim()
 
   useEffect(() => {
     let active = true

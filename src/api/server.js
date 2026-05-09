@@ -17,19 +17,27 @@ import { adminRoutes } from './routes/admin.js'
 import { publicRoutes } from './routes/public.js'
 import { registerApiMetricsHooks } from './metrics.js'
 import db from '../db.js'
-import { resumePersistedBots, stopAllBots } from '../manager.js'
+import { resumePersistedBots, startSessionHealthMonitor, stopAllBots } from '../manager.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
 registerApiMetricsHooks(app)
+const activityWriteThrottleMs = Math.max(0, Number(process.env.ACTIVITY_WRITE_THROTTLE_MS || 60_000))
+const lastActivityWriteByUser = new Map()
+const activityCacheMaxEntries = Math.max(1000, Number(process.env.ACTIVITY_CACHE_MAX_ENTRIES || 50_000))
+const activityCacheCleanupIntervalMs = Math.max(30_000, Number(process.env.ACTIVITY_CACHE_CLEANUP_INTERVAL_MS || 300_000))
+let activityCacheCleanupTimer = null
 
 const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:5173',
   'http://localhost:5173',
-  'http://178.105.54.0',
-  'https://178.105.54.0',
+  'http://espelhagrupos.com.br',
+  'https://espelhagrupos.com.br',
+  'http://www.espelhagrupos.com.br',
+  'https://www.espelhagrupos.com.br',
 ]
+
 
 function getAllowedOrigins() {
   const configured = process.env.CORS_ORIGINS
@@ -37,7 +45,8 @@ function getAllowedOrigins() {
     .map((origin) => origin.trim())
     .filter(Boolean)
 
-  return configured?.length ? configured : DEFAULT_ALLOWED_ORIGINS
+  if (!configured?.length) return DEFAULT_ALLOWED_ORIGINS
+  return [...new Set([...DEFAULT_ALLOWED_ORIGINS, ...configured])]
 }
 
 const allowedOrigins = new Set(getAllowedOrigins())
@@ -60,16 +69,50 @@ function isPrismaShapeMismatch(err) {
 
 async function verifyAuthenticatedUser(userId) {
   try {
-    const activity = await db.user.updateMany({
+    const now = Date.now()
+    const lastWrite = lastActivityWriteByUser.get(userId) ?? 0
+    const shouldWrite = activityWriteThrottleMs === 0 || (now - lastWrite) >= activityWriteThrottleMs
+    if (shouldWrite) {
+      const activity = await db.user.updateMany({
+        where: { id: userId, status: { notIn: ['banned', 'suspended'] } },
+        data: { lastActivityAt: new Date(now) },
+      })
+      if (activity.count === 1) lastActivityWriteByUser.set(userId, now)
+      if (lastActivityWriteByUser.size > activityCacheMaxEntries) {
+        const oldestKey = lastActivityWriteByUser.keys().next().value
+        if (oldestKey) lastActivityWriteByUser.delete(oldestKey)
+      }
+      return activity.count === 1
+    }
+    const user = await db.user.findFirst({
       where: { id: userId, status: { notIn: ['banned', 'suspended'] } },
-      data: { lastActivityAt: new Date() },
+      select: { id: true },
     })
-    return activity.count === 1
+    return Boolean(user)
   } catch (err) {
     if (!isPrismaShapeMismatch(err)) throw err
     const user = await db.user.findUnique({ where: { id: userId }, select: { id: true } })
     return Boolean(user)
   }
+}
+
+function startActivityCacheCleanup() {
+  activityCacheCleanupTimer = setInterval(() => {
+    const cutoff = Date.now() - Math.max(activityWriteThrottleMs * 4, 10 * 60_000)
+    for (const [userId, lastWrite] of lastActivityWriteByUser.entries()) {
+      if (lastWrite < cutoff) lastActivityWriteByUser.delete(userId)
+    }
+  }, activityCacheCleanupIntervalMs)
+  activityCacheCleanupTimer.unref?.()
+}
+
+
+function getTokenFromAuthorizationHeader(value) {
+  if (!value) return null
+  const [scheme, token] = String(value).split(' ')
+  if (!scheme || !token) return null
+  if (scheme.toLowerCase() !== 'bearer') return null
+  return token.trim() || null
 }
 
 function getTokenFromCookie(cookieHeader, cookieName = 'wb_auth') {
@@ -174,7 +217,7 @@ app.decorate('revokeTokenJti', revokeTokenJti)
 
 app.decorate('authenticate', async function (req, reply) {
   try {
-    const token = getTokenFromCookie(req.headers.cookie)
+    const token = getTokenFromCookie(req.headers.cookie) || getTokenFromAuthorizationHeader(req.headers.authorization)
     if (!token) throw new Error('Token ausente')
     req.user = app.jwt.verify(token)
     if (isTokenRevoked(req.user.jti)) throw new Error('Token revogado')
@@ -216,15 +259,19 @@ if (!databaseReadyAtBoot) {
   app.log.warn('API iniciada em modo degradado: execute "npx prisma migrate deploy" e reinicie quando o banco estiver pronto')
 }
 startLogRetentionJob()
+startActivityCacheCleanup()
 await app.listen({ port, host: '0.0.0.0' })
 console.log(`API rodando em http://localhost:${port}`)
+const stopSessionHealthMonitor = startSessionHealthMonitor(db, app.log)
 await resumePersistedBots(db, app.log).catch(err => {
   app.log.error({ err: err.message }, 'Falha ao retomar sessões WhatsApp persistidas')
 })
 
 async function shutdown(signal) {
   app.log.info({ signal }, 'Encerrando API com parada graciosa')
+  stopSessionHealthMonitor()
   stopAllBots()
+  if (activityCacheCleanupTimer) clearInterval(activityCacheCleanupTimer)
   await app.close()
   await db.$disconnect()
 }
