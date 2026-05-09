@@ -1,12 +1,15 @@
 import "./globals.css";
 
 export const metadata = {
-  metadataBase: new URL('http://178.105.54.0'),
+  metadataBase: new URL('http://espelhagrupos.com.br'),
   title: {
     default: 'Bot para Afiliados no WhatsApp | BOTinho',
     template: '%s | BOTinho',
   },
   description: 'Automatize a conversão de links de afiliado, organize grupos de WhatsApp e envie ofertas com menos trabalho manual.',
+  alternates: {
+    canonical: '/',
+  },
   openGraph: {
     title: 'Bot para Afiliados no WhatsApp | BOTinho',
     description: 'Converta links de afiliado e automatize envios de ofertas para seus grupos de WhatsApp.',
