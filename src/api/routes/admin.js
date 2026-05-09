@@ -12,7 +12,7 @@ const ROLE_PERMISSIONS = {
 }
 
 const PAID_PLANS = ['basic', 'pro']
-const PLAN_PRICES = { trial: 0, basic: 50, pro: 100 }
+const PLAN_PRICES = { trial: 0, basic: 40, pro: 70 }
 const EXPORT_LIMIT = 100
 const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = ['flavia.vale@usp.br']
 
@@ -88,6 +88,28 @@ function getSubscriptionStatus(user, now = new Date()) {
   if (user.accessExpiresAt < now) return 'expired'
   if (user.accessExpiresAt <= addDays(now, 7)) return 'expiring_soon'
   return 'active'
+}
+
+
+function parseCurrencyAmount(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  const normalized = String(value ?? '').replace(/\s/g, '').replace('R$', '').replace(/\./g, '').replace(',', '.')
+  const numeric = Number(normalized)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+async function getCurrentPlanPrices() {
+  try {
+    const rows = await db.lpPlan.findMany({ where: { id: { in: ['basic', 'pro'] } } })
+    const prices = { ...PLAN_PRICES }
+    for (const row of rows) {
+      const parsed = parseCurrencyAmount(row.price)
+      if (parsed !== null && (row.id === 'basic' || row.id === 'pro')) prices[row.id] = parsed
+    }
+    return prices
+  } catch {
+    return PLAN_PRICES
+  }
 }
 
 function parseManualAccessInput(body = {}) {
@@ -714,7 +736,8 @@ export async function adminRoutes(app) {
       db.user.count({ where: { status: 'active', plan: { in: PAID_PLANS }, accessExpiresAt: { lt: now } } }),
     ])
 
-    const activeMrr = activeBasic * PLAN_PRICES.basic + activePro * PLAN_PRICES.pro
+    const currentPrices = await getCurrentPlanPrices()
+    const activeMrr = activeBasic * currentPrices.basic + activePro * currentPrices.pro
     const totalLtv = approvedAll._sum.amount ?? 0
     const payingUsers = approvedPayingUsers.length
 

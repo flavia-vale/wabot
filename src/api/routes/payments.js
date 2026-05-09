@@ -22,13 +22,47 @@ function sendError(reply, statusCode, code, message) {
   return reply.code(statusCode).send({ error: { code, message } })
 }
 
-const PLANS = {
-  basic: { title: 'BOTinho Basic - acesso por 30 dias', price: 50 },
-  pro:   { title: 'BOTinho Pro - acesso por 30 dias',   price: 100 },
+const DEFAULT_PLANS = {
+  basic: { title: 'BOTinho Basic - acesso por 30 dias', price: 40 },
+  pro:   { title: 'BOTinho Pro - acesso por 30 dias',   price: 70 },
+}
+
+function parseCurrencyAmount(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  const normalized = String(value ?? '').replace(/\s/g, '').replace('R$', '').replace(/\./g, '').replace(',', '.')
+  const numeric = Number(normalized)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+async function getBillingPlans() {
+  try {
+    const rows = await db.lpPlan.findMany({ where: { id: { in: ['basic', 'pro'] } } })
+    if (!rows.length) return DEFAULT_PLANS
+    const dynamic = { ...DEFAULT_PLANS }
+    for (const row of rows) {
+      const fallback = DEFAULT_PLANS[row.id]
+      if (!fallback) continue
+      const parsedPrice = parseCurrencyAmount(row.price)
+      dynamic[row.id] = {
+        title: String(row.title || fallback.title),
+        price: parsedPrice ?? fallback.price,
+      }
+    }
+    return dynamic
+  } catch {
+    return DEFAULT_PLANS
+  }
 }
 
 function inferPlanFromAmount(amount) {
-  for (const [key, info] of Object.entries(PLANS)) {
+  for (const [key, info] of Object.entries(DEFAULT_PLANS)) {
+    if (info.price === Number(amount)) return key
+  }
+  return null
+}
+
+function inferPlanFromAmountWithPlans(amount, plans) {
+  for (const [key, info] of Object.entries(plans || {})) {
     if (info.price === Number(amount)) return key
   }
   return null
@@ -162,7 +196,8 @@ async function createMercadoPagoPreference({ userId, plan }) {
     throw err
   }
 
-  const planInfo = PLANS[plan]
+  const plans = await getBillingPlans()
+  const planInfo = plans[plan]
   const dashboardUrl = getDashboardUrl()
   const apiUrl = getApiUrl()
   const callbackBase = `${apiUrl}/api/payments/callback`
@@ -218,7 +253,8 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
         // Auto-activate access when the payment is approved and has a user reference
         if (reconciliation.ok && reconciliation.providerStatus === 'approved' && reconciliation.externalReference) {
           const userId = reconciliation.externalReference
-          const plan = inferPlanFromAmount(reconciliation.transactionAmount)
+      const plans = await getBillingPlans()
+      const plan = inferPlanFromAmountWithPlans(reconciliation.transactionAmount, plans)
 
           if (plan) {
             try {
@@ -227,7 +263,7 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
                   userId,
                   plan,
                   mpPaymentId: String(summary.dataResourceId),
-                  amount: PLANS[plan].price,
+                  amount: plans[plan].price,
                 })
               )
               activation = { triggered: true, ...result }
@@ -422,7 +458,8 @@ export async function paymentsRoutes(app) {
       return reply.redirect(`${dashboardUrl}/dashboard/planos?status=pending`)
     }
 
-    const plan = inferPlanFromAmount(snapshot.transactionAmount)
+    const plans = await getBillingPlans()
+    const plan = inferPlanFromAmountWithPlans(snapshot.transactionAmount, plans)
     if (!plan) {
       req.log.warn({ mpPaymentId, amount: snapshot.transactionAmount }, 'Valor do pagamento não corresponde a nenhum plano')
       return reply.redirect(`${dashboardUrl}/dashboard/planos?status=pending`)
@@ -430,7 +467,7 @@ export async function paymentsRoutes(app) {
 
     try {
       await db.$transaction(async (tx) =>
-        activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount: PLANS[plan].price })
+        activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount: plans[plan].price })
       )
       trackAnalyticsEventSafe({ userId, event: 'payment_approved', metadata: { plan, source: 'callback' } })
       return reply.redirect(`${dashboardUrl}/dashboard/planos?status=success`)
@@ -543,12 +580,13 @@ export async function paymentsRoutes(app) {
     const { status, transaction_amount } = mpPayRes.data
     if (status !== 'approved') return sendError(reply, 402, 'PAYMENT_NOT_APPROVED', `Pagamento com status: ${status}`)
 
-    const plan = inferPlanFromAmount(transaction_amount)
+    const plans = await getBillingPlans()
+    const plan = inferPlanFromAmountWithPlans(transaction_amount, plans)
     if (!plan) return sendError(reply, 400, 'CANNOT_DETERMINE_PLAN', `Valor R$${transaction_amount} não corresponde a nenhum plano`)
 
     try {
       const result = await db.$transaction(async (tx) =>
-        activatePaymentAccess(tx, { userId, plan, mpPaymentId: String(paymentId), amount: PLANS[plan].price })
+        activatePaymentAccess(tx, { userId, plan, mpPaymentId: String(paymentId), amount: plans[plan].price })
       )
 
       if (result.alreadyActivated) {
