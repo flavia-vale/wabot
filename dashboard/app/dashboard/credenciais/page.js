@@ -4,6 +4,7 @@ import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { ErrorState, LoadingState } from '@/components/States'
 import { HelpLink } from '@/components/HelpLink'
+import { useToast } from '@/components/ToastProvider'
 
 const PLATFORMS = [
   {
@@ -66,6 +67,7 @@ function PlatformCard({ platform, initialData, onSave, disabled }) {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
+  const toast = useToast()
   const [fieldErrors, setFieldErrors] = useState({})
 
   const values = dirty ? draftValues : (initialData ?? {})
@@ -86,7 +88,9 @@ function PlatformCard({ platform, initialData, onSave, disabled }) {
 
     const nextErrors = Object.fromEntries(missing.map((field) => [field.key, `${field.label} é obrigatório.`]))
     setFieldErrors(nextErrors)
-    setError(`Preencha os campos obrigatórios de ${platform.label} e tente novamente.`)
+    const msg = `Preencha os campos obrigatórios de ${platform.label} e tente novamente.`
+    setError(msg)
+    toast.warning(msg, 'Campos obrigatórios')
     return false
   }
 
@@ -105,7 +109,9 @@ function PlatformCard({ platform, initialData, onSave, disabled }) {
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err) {
-      setError(`${err.message || 'Não foi possível salvar.'} Verifique os campos e tente novamente.`)
+      const msg = `${err.message || 'Não foi possível salvar.'} Verifique os campos e tente novamente.`
+      setError(msg)
+      toast.error(msg, `Falha ao salvar ${platform.label}`)
     } finally {
       setSaving(false)
     }

@@ -17,7 +17,7 @@ import { adminRoutes } from './routes/admin.js'
 import { publicRoutes } from './routes/public.js'
 import { registerApiMetricsHooks } from './metrics.js'
 import db from '../db.js'
-import { resumePersistedBots, stopAllBots } from '../manager.js'
+import { resumePersistedBots, startSessionHealthMonitor, stopAllBots } from '../manager.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
 registerApiMetricsHooks(app)
@@ -32,6 +32,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'http://www.espelhagrupos.com.br',
   'https://www.espelhagrupos.com.br',
 ]
+
 
 function getAllowedOrigins() {
   const configured = process.env.CORS_ORIGINS
@@ -208,12 +209,14 @@ if (!databaseReadyAtBoot) {
 startLogRetentionJob()
 await app.listen({ port, host: '0.0.0.0' })
 console.log(`API rodando em http://localhost:${port}`)
+const stopSessionHealthMonitor = startSessionHealthMonitor(db, app.log)
 await resumePersistedBots(db, app.log).catch(err => {
   app.log.error({ err: err.message }, 'Falha ao retomar sessões WhatsApp persistidas')
 })
 
 async function shutdown(signal) {
   app.log.info({ signal }, 'Encerrando API com parada graciosa')
+  stopSessionHealthMonitor()
   stopAllBots()
   await app.close()
   await db.$disconnect()

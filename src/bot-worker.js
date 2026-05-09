@@ -8,7 +8,7 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import { readFileSync, mkdirSync } from 'fs'
-import { rm, writeFile } from 'fs/promises'
+import { rm, writeFile, readdir } from 'fs/promises'
 import { dirname } from 'path'
 
 import logger from './logger.js'
@@ -22,10 +22,57 @@ import { createMessageQueue } from './messageQueue.js'
 
 const userId = process.env.BOT_USER_ID
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
+const OWNER_INSTANCE = process.env.NODE_APP_INSTANCE ?? '0'
 
 let activeSock = null
 let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
 let shuttingDown = false
+
+let heartbeatTimer = null
+async function persistSessionPatch(data = {}) {
+  const fallbackData = {
+    ...(data.status ? { status: data.status } : {}),
+    ...(Object.prototype.hasOwnProperty.call(data, 'phone') ? { phone: data.phone ?? null } : {}),
+    updatedAt: new Date(),
+  }
+
+  try {
+    await db.waSession.upsert({
+      where: { userId },
+      update: data,
+      create: { userId, ...data },
+    })
+  } catch (err) {
+    const message = String(err?.message ?? '')
+    const shapeMismatch = message.includes('Unknown argument') || message.includes('Unknown field') || message.includes('does not exist in the current database')
+
+    if (shapeMismatch) {
+      try {
+        const updated = await db.waSession.updateMany({ where: { userId }, data: fallbackData })
+        if (!updated.count) await db.waSession.create({ data: { userId, ...fallbackData } })
+      } catch (fallbackErr) {
+        logger.warn({ err: String(fallbackErr?.message ?? fallbackErr) }, 'Falha ao persistir sessão com fallback simplificado')
+      }
+      return
+    }
+
+    logger.warn({ err: message }, 'Falha ao persistir patch de sessão WA')
+  }
+}
+
+function startHeartbeatIpc() {
+  if (heartbeatTimer) return
+  const intervalMs = Math.max(Number(process.env.WA_HEARTBEAT_INTERVAL_MS || 15000), 5000)
+  heartbeatTimer = setInterval(() => {
+    if (process.send) process.send({ type: 'heartbeat', ts: Date.now(), state: activeSock ? 'connected' : (pendingSock ? 'connecting' : 'idle') })
+  }, intervalMs)
+  heartbeatTimer.unref?.()
+}
+function stopHeartbeatIpc() {
+  if (!heartbeatTimer) return
+  clearInterval(heartbeatTimer)
+  heartbeatTimer = null
+}
 
 const AUTH_DIR = getAuthInfoDir(userId)
 const DEDUP_FILE = getDedupFile(userId)
@@ -75,6 +122,28 @@ async function flushDedupNow() {
   })
   dedupFlushPromise = writePromise.catch(() => {})
   return writePromise
+}
+
+
+async function clearAppStateSyncKeys() {
+  const shouldClear = String(process.env.WA_CLEAR_SYNC_KEYS_ON_START ?? '0') === '1'
+  if (!shouldClear) return
+
+  let entries = []
+  try {
+    entries = await readdir(AUTH_DIR, { withFileTypes: true })
+  } catch {
+    return
+  }
+
+  const targets = entries
+    .filter(entry => entry.isFile() && entry.name.startsWith('app-state-sync-key-'))
+    .map(entry => `${AUTH_DIR}/${entry.name}`)
+
+  if (!targets.length) return
+
+  await Promise.all(targets.map(path => rm(path, { force: true })))
+  logger.warn({ count: targets.length }, 'App state sync keys limpas para evitar loop de resync corrompido')
 }
 
 const sleep = ms => new Promise(res => setTimeout(res, ms))
@@ -262,6 +331,24 @@ const MSG_QUEUE_TIMEOUT_MS = Math.max(1_000, envNumber('MSG_QUEUE_TIMEOUT_MS', 1
 const MSG_QUEUE_WATCHDOG_MS = Math.max(5_000, envNumber('MSG_QUEUE_WATCHDOG_MS', 30_000))
 const MSG_QUEUE_MAX_SIZE = Math.max(10, envNumber('MSG_QUEUE_MAX_SIZE', 500))
 
+
+const WA_LIFECYCLE = Object.freeze({
+  INITIALIZING: 'initializing',
+  AUTHENTICATING: 'authenticating',
+  READY: 'ready',
+  DISCONNECTED: 'disconnected',
+})
+
+let lifecycleState = WA_LIFECYCLE.DISCONNECTED
+
+function setLifecycleState(next, meta = {}) {
+  if (lifecycleState === next) return
+  const prev = lifecycleState
+  lifecycleState = next
+  logger.info({ prev, next, ...meta }, 'WA lifecycle transition')
+  if (process.send) process.send({ type: 'lifecycle', data: next, prev, meta })
+}
+
 const incomingQueue = createMessageQueue({
   name: 'incoming-messages',
   concurrency: MSG_QUEUE_CONCURRENCY,
@@ -438,6 +525,7 @@ async function processSendJob(job) {
 
 async function markInterruptedSendLogs() {
   const now = new Date()
+  stopHeartbeatIpc()
   await Promise.all([
     db.messageLog.updateMany({
       where: { userId, status: { in: ['queued', 'sending'] } },
@@ -470,7 +558,10 @@ async function startBot() {
   }
   scheduleDedupSave(dedup)
 
+  setLifecycleState(WA_LIFECYCLE.INITIALIZING, { reason: 'start_bot' })
   mkdirSync(AUTH_DIR, { recursive: true })
+  await clearAppStateSyncKeys()
+  startHeartbeatIpc()
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR)
   const { version } = await fetchLatestBaileysVersion()
@@ -488,43 +579,35 @@ async function startBot() {
 
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
+      setLifecycleState(WA_LIFECYCLE.AUTHENTICATING, { reason: 'qr_generated' })
       if (process.send) process.send({ type: 'qr', data: qr })
-      await db.waSession.upsert({
-        where: { userId },
-        create: { userId, status: 'connecting' },
-        update: { status: 'connecting' },
-      })
+await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date() })
     }
 
     if (connection === 'open') {
+      setLifecycleState(WA_LIFECYCLE.READY, { reason: 'connection_open' })
       activeSock = sock
       pendingSock = null
       const phone = sock.user?.id?.split(':')[0] ?? null
       if (process.send) process.send({ type: 'status', data: 'connected', phone })
-      await db.waSession.upsert({
-        where: { userId },
-        create: { userId, status: 'connected', phone },
-        update: { status: 'connected', phone },
-      })
+await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: null })
       trackAnalyticsEventSafe({ userId, event: 'whatsapp_connected' })
     }
 
     if (connection === 'close') {
+      setLifecycleState(WA_LIFECYCLE.DISCONNECTED, { reason: 'connection_close' })
       const code = new Boom(lastDisconnect?.error)?.output?.statusCode
       const isLoggedOut = code === DisconnectReason.loggedOut
       activeSock = null
       pendingSock = null
       if (process.send) process.send({ type: 'status', data: 'disconnected' })
-      await db.waSession.upsert({
-        where: { userId },
-        create: { userId, status: 'disconnected' },
-        update: { status: 'disconnected' },
-      }).catch(() => {})
+await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: code != null ? String(code) : null }).catch(() => {})
       if (isLoggedOut) {
         // Sessão revogada/expirada — limpar auth para que próximo start gere QR limpo
         await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
         logger.info('Sessão encerrada pelo servidor WA — auth_info limpo automaticamente')
       } else {
+        logger.warn({ code }, 'WA conexão fechada, agendando restart automático em 5s')
         setTimeout(startBot, 5_000)
       }
     }
@@ -804,12 +887,14 @@ async function startBot() {
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     logger.info({ type, count: messages.length }, 'messages.upsert recebido')
     if (type !== 'notify' && type !== 'append') return
-    const cutoff = Date.now() - 30_000
+    const cutoff = Date.now() - 5 * 60_000
 
     for (const msg of messages) {
       if (msg.key.fromMe) continue
-      const msgTs = (msg.messageTimestamp ?? 0) * 1000
-      if (msgTs < cutoff) continue
+      const msgTsRaw = Number(msg.messageTimestamp ?? 0)
+      const hasValidTimestamp = Number.isFinite(msgTsRaw) && msgTsRaw > 0
+      const msgTs = hasValidTimestamp ? msgTsRaw * 1000 : null
+      if (msgTs && msgTs < cutoff) continue
       const msgId = msg.key.id
       if (dedup.msgIds.some(e => e.id === msgId)) continue
       dedup.msgIds.push({ id: msgId, ts: Date.now() })
@@ -833,6 +918,7 @@ async function startBot() {
 async function shutdown(code = 0) {
   if (shuttingDown) return
   shuttingDown = true
+  stopHeartbeatIpc()
   await Promise.all([
     flushDedupNow().catch(err => {
       logger.error({ err: err.message }, 'Erro ao persistir deduplicação antes de encerrar')
