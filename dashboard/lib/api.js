@@ -1,5 +1,18 @@
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou ou foi invalidada. Faça login novamente para continuar.'
+const AUTH_TOKEN_KEY = 'wb_auth_token'
+
+function getAuthToken() {
+  if (typeof window === 'undefined') return ''
+  return localStorage.getItem(AUTH_TOKEN_KEY) || ''
+}
+
+function setAuthToken(token) {
+  if (typeof window === 'undefined') return
+  if (token) localStorage.setItem(AUTH_TOKEN_KEY, token)
+  else localStorage.removeItem(AUTH_TOKEN_KEY)
+}
+
 
 async function apiFetch(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {
@@ -7,6 +20,7 @@ async function apiFetch(path, options = {}) {
     credentials: 'include',
     headers: {
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {}),
       ...(options.headers ?? {}),
     },
   })
@@ -16,6 +30,7 @@ async function apiFetch(path, options = {}) {
     : { error: await res.text().catch(() => '') }
   if (res.status === 401 && !path.startsWith('/api/auth/')) {
     sessionStorage.setItem('loginRedirectMessage', SESSION_EXPIRED_MESSAGE)
+    setAuthToken('')
     window.location.replace('/login?reason=session-expired')
     return
   }
@@ -34,17 +49,30 @@ async function apiFetch(path, options = {}) {
 }
 
 export const api = {
-  login: (email, password) =>
-    apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  login: async (email, password) => {
+    const data = await apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
+    setAuthToken(data?.token || '')
+    return data
+  },
 
-  register: (name, email, password, contactPhone, ref) =>
-    apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, ...(ref && { ref }) }) }),
+  register: async (name, email, password, contactPhone, ref) => {
+    const data = await apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, ...(ref && { ref }) }) })
+    setAuthToken(data?.token || '')
+    return data
+  },
 
-  registerPromoVip: (name, email, password, contactPhone, couponCode) =>
-    apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, source: 'promo_vip_7dias', coupon_code: couponCode }) }),
+  registerPromoVip: async (name, email, password, contactPhone, couponCode) => {
+    const data = await apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, source: 'promo_vip_7dias', coupon_code: couponCode }) })
+    setAuthToken(data?.token || '')
+    return data
+  },
 
   me: () => apiFetch('/api/auth/me'),
-  logout: () => apiFetch('/api/auth/logout', { method: 'POST' }),
+  logout: async () => {
+    const data = await apiFetch('/api/auth/logout', { method: 'POST' })
+    setAuthToken('')
+    return data
+  },
 
   sessionStatus: () => apiFetch('/api/session/status'),
   sessionStart: () => apiFetch('/api/session/start', { method: 'POST' }),
