@@ -50,6 +50,9 @@ const RISK_FILTERS = [
   ['missing_monitor', 'Sem origem'],
   ['missing_post', 'Sem destino'],
 ]
+const CS_ALLOWED_EMAILS = ['flavia.vale@usp.br', 'flaviaroberta.1496@gmail.com', 'tacianeaas02@gmail.com']
+const CS_PERMISSION_KEYS = ['customer_success', 'customer_success_ops', 'success']
+const resolveAdminEmail = (admin) => String(admin?.email || admin?.user?.email || admin?.profile?.email || '').toLowerCase().trim()
 
 const SUCCESS_REASON_LABELS = {
   missing_phone: 'Sem celular',
@@ -498,6 +501,12 @@ export default function AdminPage() {
   }, [])
 
   const atRiskUsers = useMemo(() => users?.users?.filter(user => user.riskFlags?.length) ?? [], [users])
+  const canAccessCustomerSuccess = useMemo(() => {
+    const email = resolveAdminEmail(admin)
+    const permissions = Array.isArray(admin?.permissions) ? admin.permissions : []
+    const hasPermission = permissions.some(permission => CS_PERMISSION_KEYS.includes(String(permission).toLowerCase().trim()))
+    return CS_ALLOWED_EMAILS.includes(email) || hasPermission || admin?.role === 'owner'
+  }, [admin])
 
   async function applyFilters(e) {
     e?.preventDefault()
@@ -605,6 +614,7 @@ export default function AdminPage() {
           </div>
           <div className="flex gap-2">
             <button onClick={() => applyFilters()} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Atualizar</button>
+            {canAccessCustomerSuccess && <Link href="/admin/sucesso-cliente" className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Aba CS</Link>}
             <Link href="/dashboard" className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-100">Voltar ao painel</Link>
           </div>
         </div>
