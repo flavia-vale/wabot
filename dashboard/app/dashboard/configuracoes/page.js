@@ -293,10 +293,6 @@ export default function ConfigPage() {
           <h3 className="font-semibold text-gray-700 mb-3">🌐 Cobertura e destinos extras</h3>
           <div className="flex flex-col gap-3">
             <label className="flex items-start gap-3 cursor-pointer">
-              <input type="checkbox" checked={form.feedGlobal} onChange={e => setForm(f => ({ ...f, feedGlobal: e.target.checked }))} className="mt-1 w-4 h-4 accent-green-600" />
-              <span><span className="block text-sm font-medium text-gray-700">Feed Global</span><span className="block text-xs text-gray-400">Monitorar links em todos os grupos em que o número participa.</span></span>
-            </label>
-            <label className="flex items-start gap-3 cursor-pointer">
               <input type="checkbox" checked={form.postToStatus} onChange={e => setForm(f => ({ ...f, postToStatus: e.target.checked }))} className="mt-1 w-4 h-4 accent-green-600" />
               <span><span className="block text-sm font-medium text-gray-700">Postar também no Status</span><span className="block text-xs text-gray-400">Além dos grupos de destino, publicar a oferta convertida no Status do WhatsApp.</span></span>
             </label>

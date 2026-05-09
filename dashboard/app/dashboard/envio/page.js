@@ -170,6 +170,7 @@ export default function EnvioPage() {
   async function sendBroadcastNow() {
     if (broadcastLoading) return
     setBroadcastLoading(true)
+    setBroadcastConfirmOpen(false)
     try {
       const res = await api.broadcastSend(broadcastText.trim())
       setBroadcastResult(res)
@@ -178,7 +179,6 @@ export default function EnvioPage() {
       setBroadcastError(err.message)
     } finally {
       setBroadcastLoading(false)
-      setBroadcastConfirmOpen(false)
     }
   }
 
@@ -315,117 +315,8 @@ export default function EnvioPage() {
         </form>
       </div>
 
-      <div className="bg-white rounded-2xl shadow p-5 mb-4">
-        <h3 className="font-semibold text-gray-700 mb-1">🗓️ Agendar mensagem</h3>
-        <p className="text-xs text-gray-500 mb-2">Fuso detectado: <strong>{timezoneLabel}</strong>. O horário abaixo será salvo no fuso detectado deste navegador.</p>
 
-        <div className="mb-3 flex flex-wrap gap-2">
-          {MESSAGE_TEMPLATES.map((template) => (
-            <button
-              key={template.label}
-              type="button"
-              onClick={() => setSchedText(template.text)}
-              className="rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 hover:border-blue-400 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-            >
-              {template.label}
-            </button>
-          ))}
-        </div>
-
-        <form onSubmit={handleSchedule} className="flex flex-col gap-3">
-          <textarea
-            rows={3}
-            placeholder="Digite a mensagem..."
-            value={schedText}
-            onChange={(e) => setSchedText(e.target.value)}
-            required
-            className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm"
-          />
-          <input
-            id="scheduled-at"
-            type="datetime-local"
-            min={minDateTime}
-            value={schedAt}
-            onChange={(e) => setSchedAt(e.target.value)}
-            required
-            aria-describedby="scheduled-at-help"
-            aria-invalid={scheduleInvalid}
-            className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm"
-          />
-          <div id="scheduled-at-help" className="text-xs">
-            {schedAt && !scheduleInvalid && <p className="text-blue-700">{schedulePreview}</p>}
-            {schedAt && scheduleInvalid && <p className="text-red-600" role="alert">Escolha um horário futuro no fuso {timezoneLabel}.</p>}
-          </div>
-
-          <MessagePreview text={schedText} title="Prévia do agendamento" />
-
-          {schedError && (
-            <Alert type="error" title={`Erro de ${classifyError(schedError)}`} message={schedError} />
-          )}
-
-          <button
-            type="submit"
-            disabled={schedLoading || !schedText.trim() || !schedAt || scheduleInvalid}
-            className="bg-blue-600 text-white rounded-xl py-2.5 font-semibold disabled:opacity-50"
-          >
-            {schedLoading ? 'Agendando...' : <><span aria-hidden="true">🗓️</span> Agendar</>}
-          </button>
-        </form>
-      </div>
-
-      <div className="bg-white rounded-2xl shadow p-5">
-        <h3 className="font-semibold text-gray-700 mb-3">📋 Mensagens agendadas</h3>
-
-        <div className="mb-3 flex flex-wrap gap-2">
-          {[['all', 'Todos'], ['pending', 'Pendentes'], ['queued', 'Na fila'], ['sending', 'Enviando'], ['sent', 'Enviados'], ['failed', 'Falhos'], ['cancelled', 'Cancelados']].map(([value, label]) => (
-            <button
-              key={value}
-              onClick={() => setStatusFilter(value)}
-              aria-pressed={statusFilter === value}
-              className={`min-h-9 px-3 py-2 text-xs rounded-full border transition ${statusFilter === value ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {listError && <Alert type="error" title={`Erro de ${classifyError(listError)}`} message={listError} />}
-        {listInfo && <Alert type="warning" title="Aviso" message={listInfo} />}
-        {listLoading && <LoadingState />}
-
-        {!listLoading && filtered.length === 0 && <EmptyState message="Nenhuma mensagem agendada" />}
-
-        {!listLoading && filtered.length > 0 && (
-          <ul className="flex flex-col gap-3">
-            {filtered.map((m) => (
-              <li key={m.id} className="border rounded-xl p-3">
-                <div className="flex justify-between gap-2">
-                  <p className="text-sm text-gray-700 line-clamp-2 flex-1">{m.text}</p>
-                  <StatusBadge status={m.status} />
-                </div>
-                <div className="flex items-center justify-between mt-1">
-                  <span className="text-xs text-gray-400">
-                    {m.status === 'sent' && m.sentAt
-                      ? `Enviado em ${formatDateTime(m.sentAt)}`
-                      : `Agendado para ${formatDateTime(m.scheduledAt)}`}
-                  </span>
-                  {m.status === 'pending' && (
-                    <button
-                      disabled={cancelLoadingId === m.id}
-                      onClick={() => setCancelTarget(m)}
-                      className="text-xs text-red-500 disabled:opacity-50"
-                    >
-                      {cancelLoadingId === m.id ? 'Cancelando...' : 'Cancelar'}
-                    </button>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
       <ConfirmDialog open={broadcastConfirmOpen} title="Confirmar envio imediato" message={broadcastConfirmMessage} confirmLabel={broadcastLoading ? 'Enviando...' : 'Enviar agora'} onCancel={() => setBroadcastConfirmOpen(false)} onConfirm={sendBroadcastNow} />
-      <ConfirmDialog open={!!cancelTarget} title="Cancelar agendamento" message={cancelConfirmMessage} confirmLabel={cancelLoadingId === cancelTarget?.id ? 'Cancelando...' : 'Sim, cancelar'} danger onCancel={() => setCancelTarget(null)} onConfirm={async () => { const target = cancelTarget; setCancelTarget(null); if (target?.id) await handleCancel(target.id) }} />
     </div>
   )
 }

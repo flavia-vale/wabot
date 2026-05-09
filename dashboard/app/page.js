@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import './landing.css'
 import { Hero } from '@/components/landing/Hero'
 import { How } from '@/components/landing/How'
@@ -23,11 +22,6 @@ export default function LandingPage() {
   return (
     <div className="landing-root">
       <Hero tone="amigavel" />
-      <div className="flex justify-center px-4 pb-6">
-        <Link href="/promocao" className="inline-flex min-h-11 items-center rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-600">
-          Ver página promocional
-        </Link>
-      </div>
       <How />
       <Features />
       <Social />

@@ -17,10 +17,12 @@ import { adminRoutes } from './routes/admin.js'
 import { publicRoutes } from './routes/public.js'
 import { registerApiMetricsHooks } from './metrics.js'
 import db from '../db.js'
-import { resumePersistedBots, stopAllBots } from '../manager.js'
+import { resumePersistedBots, startSessionHealthMonitor, stopAllBots } from '../manager.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
 registerApiMetricsHooks(app)
+const activityWriteThrottleMs = Math.max(0, Number(process.env.ACTIVITY_WRITE_THROTTLE_MS || 60_000))
+const lastActivityWriteByUser = new Map()
 
 const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:3000',
@@ -32,6 +34,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'http://www.espelhagrupos.com.br',
   'https://www.espelhagrupos.com.br',
 ]
+
 
 function getAllowedOrigins() {
   const configured = process.env.CORS_ORIGINS
@@ -63,11 +66,22 @@ function isPrismaShapeMismatch(err) {
 
 async function verifyAuthenticatedUser(userId) {
   try {
-    const activity = await db.user.updateMany({
+    const now = Date.now()
+    const lastWrite = lastActivityWriteByUser.get(userId) ?? 0
+    const shouldWrite = activityWriteThrottleMs === 0 || (now - lastWrite) >= activityWriteThrottleMs
+    if (shouldWrite) {
+      const activity = await db.user.updateMany({
+        where: { id: userId, status: { notIn: ['banned', 'suspended'] } },
+        data: { lastActivityAt: new Date(now) },
+      })
+      if (activity.count === 1) lastActivityWriteByUser.set(userId, now)
+      return activity.count === 1
+    }
+    const user = await db.user.findFirst({
       where: { id: userId, status: { notIn: ['banned', 'suspended'] } },
-      data: { lastActivityAt: new Date() },
+      select: { id: true },
     })
-    return activity.count === 1
+    return Boolean(user)
   } catch (err) {
     if (!isPrismaShapeMismatch(err)) throw err
     const user = await db.user.findUnique({ where: { id: userId }, select: { id: true } })
@@ -208,12 +222,14 @@ if (!databaseReadyAtBoot) {
 startLogRetentionJob()
 await app.listen({ port, host: '0.0.0.0' })
 console.log(`API rodando em http://localhost:${port}`)
+const stopSessionHealthMonitor = startSessionHealthMonitor(db, app.log)
 await resumePersistedBots(db, app.log).catch(err => {
   app.log.error({ err: err.message }, 'Falha ao retomar sessões WhatsApp persistidas')
 })
 
 async function shutdown(signal) {
   app.log.info({ signal }, 'Encerrando API com parada graciosa')
+  stopSessionHealthMonitor()
   stopAllBots()
   await app.close()
   await db.$disconnect()

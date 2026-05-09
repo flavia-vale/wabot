@@ -292,10 +292,15 @@ function sanitizeUser(user, role) {
   }
 }
 
-async function getLogCountMap({ status, since }) {
+async function getLogCountMap({ status, since, userIds = null }) {
+  if (Array.isArray(userIds) && userIds.length === 0) return new Map()
   const rows = await db.messageLog.groupBy({
     by: ['userId'],
-    where: { ...(status ? { status } : {}), ...(since ? { sentAt: { gte: since } } : {}) },
+    where: {
+      ...(status ? { status } : {}),
+      ...(since ? { sentAt: { gte: since } } : {}),
+      ...(Array.isArray(userIds) ? { userId: { in: userIds } } : {}),
+    },
     _count: { _all: true },
   })
   return new Map(rows.map(row => [row.userId, row._count._all]))
@@ -460,7 +465,7 @@ export async function adminRoutes(app) {
     }
 
     const since24h = addDays(now, -1)
-    const [total, users, successMap, errorMap] = await Promise.all([
+    const [total, users] = await Promise.all([
       db.user.count({ where }),
       db.user.findMany({
         where,
@@ -485,8 +490,11 @@ export async function adminRoutes(app) {
           _count: { select: { payments: true, credentials: true, messageLogs: true } },
         },
       }),
-      getLogCountMap({ status: 'success' }),
-      getLogCountMap({ status: 'error', since: since24h }),
+    ])
+    const userIds = users.map(user => user.id)
+    const [successMap, errorMap] = await Promise.all([
+      getLogCountMap({ status: 'success', userIds }),
+      getLogCountMap({ status: 'error', since: since24h, userIds }),
     ])
 
     const running = new Set(listRunningBots())
@@ -1223,7 +1231,31 @@ export async function adminRoutes(app) {
     return { ok: true }
   })
 
-  app.get('/sessions', async (req, reply) => {
+  
+  app.get('/session-telemetry', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const limit = Math.min(Math.max(Number(req.query?.limit ?? 100), 1), 300)
+    const events = await db.adminAuditLog.findMany({
+      where: { action: 'session.telemetry', resource: 'wa_session' },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: { id: true, actorUserId: true, createdAt: true, after: true, actorUser: { select: { email: true, name: true } } },
+    })
+    const parsed = events.map((item) => {
+      let payload = {}
+      try { payload = item.after ? JSON.parse(item.after) : {} } catch {}
+      return { id: item.id, createdAt: item.createdAt, userId: item.actorUserId, user: item.actorUser, ...payload }
+    })
+    const summary = parsed.reduce((acc, item) => {
+      const key = `${item.stage || 'unknown'}:${item.event || 'unknown'}`
+      acc[key] = (acc[key] || 0) + 1
+      return acc
+    }, {})
+    await writeAdminAuditLog(req, { action: 'admin.session.telemetry.read', resource: 'waSessionTelemetry' })
+    return { total: parsed.length, summary, events: parsed }
+  })
+
+app.get('/sessions', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'support:read'))) return
 
     const { page, limit, skip } = getPagination(req.query, 30)
