@@ -77,8 +77,8 @@ function LoginContent() {
         </div>
 
         <div className="mb-2 text-center">
-          <p className={`text-sm font-semibold ${isRegister ? 'text-emerald-200' : 'text-green-700'}`}><span aria-hidden="true">🤖</span> Bot Conversor para Afiliados</p>
-          <h1 className={`mt-2 text-xl sm:text-2xl font-bold leading-tight ${isRegister ? 'text-emerald-100' : 'text-gray-900'}`}>{isRegister ? 'Criar sua conta' : 'Entrar na sua conta'}</h1>
+          <p className={`text-sm font-semibold ${isRegister ? 'text-emerald-200' : 'text-green-700'}`}><span aria-hidden="true">🤖</span> BOTinho para afiliados no WhatsApp</p>
+          <h1 className={`mt-2 text-2xl font-bold ${isRegister ? 'text-emerald-100' : 'text-gray-900'}`}>{isRegister ? 'Criar conta e começar no BOTinho' : 'Entrar na sua conta'}</h1>
         </div>
         <p className={`text-center text-sm leading-5 mb-4 ${isRegister ? 'text-emerald-200' : 'text-gray-500'}`}>
           {isRegister ? 'Comece configurando seu WhatsApp e suas credenciais de afiliado.' : 'Acesse seu painel para conectar o WhatsApp e gerenciar seus grupos.'}
@@ -198,6 +198,10 @@ function LoginContent() {
             Ao continuar, você concorda com os <Link href="/termos" className="font-semibold underline">Termos de Uso</Link> e a <Link href="/privacidade" className="font-semibold underline">Política de Privacidade</Link>.
           </p>
 
+          {isRegister && (
+            <p className="text-xs text-emerald-200">Cadastro rápido, sem burocracia. Você acessa o painel após concluir.</p>
+          )}
+
           <button
             type="submit"
             disabled={loading}
@@ -207,7 +211,7 @@ function LoginContent() {
                 : 'bg-green-600 hover:bg-green-700'
             }`}
           >
-            {loading ? (isRegister ? 'Criando conta...' : 'Entrando...') : isRegister ? 'Criar conta e acessar painel' : 'Entrar no painel'}
+            {loading ? (isRegister ? 'Criando conta...' : 'Entrando...') : isRegister ? 'Criar conta e começar' : 'Entrar no painel'}
           </button>
         </form>
 
