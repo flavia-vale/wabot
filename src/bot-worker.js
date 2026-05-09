@@ -22,12 +22,34 @@ import { createMessageQueue } from './messageQueue.js'
 
 const userId = process.env.BOT_USER_ID
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
+const OWNER_INSTANCE = process.env.NODE_APP_INSTANCE ?? '0'
 
 let activeSock = null
 let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
 let shuttingDown = false
 
 let heartbeatTimer = null
+async function persistSessionPatch(data = {}) {
+  try {
+    await db.waSession.upsert({
+      where: { userId },
+      update: data,
+      create: { userId, ...data },
+    })
+  } catch (err) {
+    const message = String(err?.message ?? '')
+    const shapeMismatch = message.includes('Unknown argument') || message.includes('Unknown field') || message.includes('does not exist in the current database')
+    if (!shapeMismatch) throw err
+    const fallbackData = {
+      ...(data.status ? { status: data.status } : {}),
+      ...(Object.prototype.hasOwnProperty.call(data, 'phone') ? { phone: data.phone ?? null } : {}),
+      updatedAt: new Date(),
+    }
+    await db.waSession.updateMany({ where: { userId }, data: fallbackData }).catch(() => {})
+    await db.waSession.create({ data: { userId, ...fallbackData } }).catch(() => {})
+  }
+}
+
 function startHeartbeatIpc() {
   if (heartbeatTimer) return
   const intervalMs = Math.max(Number(process.env.WA_HEARTBEAT_INTERVAL_MS || 15000), 5000)
