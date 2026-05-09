@@ -7,7 +7,7 @@ export default function robots() {
         disallow: ['/dashboard', '/dashboard/', '/dashboard/*', '/api/*', '/promo-vip-7dias'],
       },
     ],
-    sitemap: 'http://178.105.54.0/sitemap.xml',
-    host: 'http://178.105.54.0',
+    sitemap: 'https://espelhagrupos.com.br/sitemap.xml',
+    host: 'https://espelhagrupos.com.br',
   }
 }
