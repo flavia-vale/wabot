@@ -225,7 +225,9 @@ async function createMercadoPagoPreference({ userId, plan }) {
     err.code = 'PAYMENT_PROVIDER_MISCONFIGURED'
     throw err
   }
-  const callbackBase = `${apiUrl}/api/payments/callback`
+  // Mercado Pago validates `back_urls` as user-facing return URLs.
+  // Prefer DASHBOARD_URL (public domain) to avoid provider rejection when API_URL uses raw IP/internal host.
+  const callbackBase = `${dashboardUrl}/api/payments/callback`
 
   const preference = {
     items: [{
