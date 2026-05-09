@@ -27,9 +27,12 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'http://127.0.0.1:3000',
   'http://127.0.0.1:5173',
   'http://localhost:5173',
-  'http://178.105.54.0',
-  'https://178.105.54.0',
+  'http://espelhagrupos.com.br',
+  'https://espelhagrupos.com.br',
+  'http://www.espelhagrupos.com.br',
+  'https://www.espelhagrupos.com.br',
 ]
+
 
 function getAllowedOrigins() {
   const configured = process.env.CORS_ORIGINS
@@ -37,7 +40,8 @@ function getAllowedOrigins() {
     .map((origin) => origin.trim())
     .filter(Boolean)
 
-  return configured?.length ? configured : DEFAULT_ALLOWED_ORIGINS
+  if (!configured?.length) return DEFAULT_ALLOWED_ORIGINS
+  return [...new Set([...DEFAULT_ALLOWED_ORIGINS, ...configured])]
 }
 
 const allowedOrigins = new Set(getAllowedOrigins())
@@ -70,6 +74,15 @@ async function verifyAuthenticatedUser(userId) {
     const user = await db.user.findUnique({ where: { id: userId }, select: { id: true } })
     return Boolean(user)
   }
+}
+
+
+function getTokenFromAuthorizationHeader(value) {
+  if (!value) return null
+  const [scheme, token] = String(value).split(' ')
+  if (!scheme || !token) return null
+  if (scheme.toLowerCase() !== 'bearer') return null
+  return token.trim() || null
 }
 
 function getTokenFromCookie(cookieHeader, cookieName = 'wb_auth') {
@@ -153,7 +166,7 @@ await app.register(fastifyWebsocket)
 
 app.decorate('authenticate', async function (req, reply) {
   try {
-    const token = getTokenFromCookie(req.headers.cookie)
+    const token = getTokenFromCookie(req.headers.cookie) || getTokenFromAuthorizationHeader(req.headers.authorization)
     if (!token) throw new Error('Token ausente')
     req.user = app.jwt.verify(token)
     const active = await verifyAuthenticatedUser(req.user.sub)

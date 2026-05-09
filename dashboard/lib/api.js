@@ -1,5 +1,18 @@
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou ou foi invalidada. Faça login novamente para continuar.'
+const AUTH_TOKEN_KEY = 'wb_auth_token'
+
+function getAuthToken() {
+  if (typeof window === 'undefined') return ''
+  return localStorage.getItem(AUTH_TOKEN_KEY) || ''
+}
+
+function setAuthToken(token) {
+  if (typeof window === 'undefined') return
+  if (token) localStorage.setItem(AUTH_TOKEN_KEY, token)
+  else localStorage.removeItem(AUTH_TOKEN_KEY)
+}
+
 
 async function apiFetch(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {
@@ -7,6 +20,7 @@ async function apiFetch(path, options = {}) {
     credentials: 'include',
     headers: {
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {}),
       ...(options.headers ?? {}),
     },
   })
@@ -16,12 +30,15 @@ async function apiFetch(path, options = {}) {
     : { error: await res.text().catch(() => '') }
   if (res.status === 401 && !path.startsWith('/api/auth/')) {
     sessionStorage.setItem('loginRedirectMessage', SESSION_EXPIRED_MESSAGE)
+    setAuthToken('')
     window.location.replace('/login?reason=session-expired')
     return
   }
   if (!res.ok) {
-    const rawMessage = data.message || data.error || ''
-    const message = rawMessage && !rawMessage.trim().startsWith('<') ? rawMessage : `HTTP ${res.status}`
+    const rawMessage = data?.message ?? data?.error ?? ''
+    const normalizedMessage = typeof rawMessage === 'string' ? rawMessage : JSON.stringify(rawMessage)
+    const safeMessage = String(normalizedMessage ?? '').trim()
+    const message = safeMessage && !safeMessage.startsWith('<') ? safeMessage : `HTTP ${res.status}`
     const err = new Error(message)
     if (data.code) err.code = data.code
     if (typeof data.retryable === 'boolean') err.retryable = data.retryable
@@ -32,17 +49,30 @@ async function apiFetch(path, options = {}) {
 }
 
 export const api = {
-  login: (email, password) =>
-    apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  login: async (email, password) => {
+    const data = await apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
+    setAuthToken(data?.token || '')
+    return data
+  },
 
-  register: (name, email, password, contactPhone, ref) =>
-    apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, ...(ref && { ref }) }) }),
+  register: async (name, email, password, contactPhone, ref) => {
+    const data = await apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, ...(ref && { ref }) }) })
+    setAuthToken(data?.token || '')
+    return data
+  },
 
-  registerPromoVip: (name, email, password, contactPhone, couponCode) =>
-    apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, source: 'promo_vip_7dias', coupon_code: couponCode }) }),
+  registerPromoVip: async (name, email, password, contactPhone, couponCode) => {
+    const data = await apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, source: 'promo_vip_7dias', coupon_code: couponCode }) })
+    setAuthToken(data?.token || '')
+    return data
+  },
 
   me: () => apiFetch('/api/auth/me'),
-  logout: () => apiFetch('/api/auth/logout', { method: 'POST' }),
+  logout: async () => {
+    const data = await apiFetch('/api/auth/logout', { method: 'POST' })
+    setAuthToken('')
+    return data
+  },
 
   sessionStatus: () => apiFetch('/api/session/status'),
   sessionStart: () => apiFetch('/api/session/start', { method: 'POST' }),
@@ -50,6 +80,7 @@ export const api = {
   sessionForget: () => apiFetch('/api/session/forget', { method: 'POST' }),
   sessionPairingCode: (phone) => apiFetch('/api/session/pairing-code', { method: 'POST', body: JSON.stringify({ phone }) }),
   sessionQRTicket: () => apiFetch('/api/session/qr-ticket', { method: 'POST' }),
+  sessionTelemetry: (payload) => apiFetch('/api/session/telemetry', { method: 'POST', body: JSON.stringify(payload) }),
   sessionWAGroups: () => apiFetch('/api/session/wa-groups'),
 
   groups: () => apiFetch('/api/groups'),
@@ -142,8 +173,10 @@ export const api = {
 }
 
 export function openQRSocket(token, handlers = {}) {
-  const wsBase = BASE.replace('http', 'ws')
-  const ws = new WebSocket(`${wsBase}/api/session/qr`, ['BOTinho-auth', token])
+  const apiUrl = new URL(BASE, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
+  const browserIsHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
+  apiUrl.protocol = browserIsHttps ? 'wss:' : (apiUrl.protocol === 'https:' ? 'wss:' : 'ws:')
+  const ws = new WebSocket(`${apiUrl.origin}/api/session/qr`, ['BOTinho-auth', token])
 
   if (typeof handlers === 'function') {
     ws.onmessage = (e) => { try { handlers(JSON.parse(e.data)) } catch {} }

@@ -1,3 +1,7 @@
+import { getSiteUrl } from '../lib/site-url'
+
+const baseUrl = getSiteUrl()
+
 export default function robots() {
   return {
     rules: [
@@ -7,7 +11,7 @@ export default function robots() {
         disallow: ['/dashboard', '/dashboard/', '/dashboard/*', '/api/*', '/promo-vip-7dias'],
       },
     ],
-    sitemap: 'http://178.105.54.0/sitemap.xml',
-    host: 'http://178.105.54.0',
+    sitemap: `${baseUrl}/sitemap.xml`,
+    host: baseUrl,
   }
 }

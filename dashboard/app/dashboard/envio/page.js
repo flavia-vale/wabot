@@ -58,7 +58,7 @@ function MessagePreview({ text, title = 'Prévia da mensagem' }) {
         <span className="text-xs text-gray-400">{text.length} caractere(s)</span>
       </div>
       {trimmed ? (
-        <p className="whitespace-pre-wrap rounded-2xl bg-white px-3 py-2 text-sm text-gray-700 shadow-sm">{text}</p>
+        <p className="whitespace-pre-wrap rounded-2xl bg-white px-3 py-2.5 min-h-11 text-sm text-gray-700 shadow-sm">{text}</p>
       ) : (
         <p className="text-sm text-gray-400">Digite uma mensagem para visualizar a prévia antes de enviar.</p>
       )}
@@ -284,7 +284,7 @@ export default function EnvioPage() {
             value={broadcastText}
             onChange={(e) => setBroadcastText(e.target.value)}
             required
-            className="w-full border rounded-lg px-3 py-2 text-sm"
+            className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm"
           />
 
           <MessagePreview text={broadcastText} />
@@ -339,7 +339,7 @@ export default function EnvioPage() {
             value={schedText}
             onChange={(e) => setSchedText(e.target.value)}
             required
-            className="w-full border rounded-lg px-3 py-2 text-sm"
+            className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm"
           />
           <input
             id="scheduled-at"
@@ -350,7 +350,7 @@ export default function EnvioPage() {
             required
             aria-describedby="scheduled-at-help"
             aria-invalid={scheduleInvalid}
-            className="w-full border rounded-lg px-3 py-2 text-sm"
+            className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm"
           />
           <div id="scheduled-at-help" className="text-xs">
             {schedAt && !scheduleInvalid && <p className="text-blue-700">{schedulePreview}</p>}

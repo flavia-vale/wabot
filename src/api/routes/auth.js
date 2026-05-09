@@ -3,8 +3,10 @@ import { randomBytes } from 'crypto'
 import db from '../../db.js'
 import { normalizeEmail } from '../auth-utils.js'
 
-function setAuthCookie(reply, token) {
-  const secure = process.env.COOKIE_SECURE !== 'false'
+function setAuthCookie(reply, req, token) {
+  const secureByEnv = process.env.COOKIE_SECURE !== 'false'
+  const requestIsHttps = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https'
+  const secure = secureByEnv && requestIsHttps
   const maxAge = 60 * 60 * 24 * 7
   const parts = [
     `wb_auth=${encodeURIComponent(token)}`,
@@ -239,8 +241,8 @@ export async function authRoutes(app) {
       }
 
       const token = app.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: '7d' })
-      setAuthCookie(reply, token)
-      return { user: publicUser(user) }
+      setAuthCookie(reply, req, token)
+      return { user: publicUser(user), token }
     } catch (err) {
       if (String(err?.code) === 'P2002' || String(err?.message ?? '').includes('Unique constraint failed')) {
         return reply.code(409).send({ error: 'Este número de telefone já está cadastrado' })
@@ -266,8 +268,8 @@ export async function authRoutes(app) {
     const updated = await updateLoginActivity(user)
 
     const token = app.jwt.sign({ sub: updated.id, email: updated.email }, { expiresIn: '7d' })
-    setAuthCookie(reply, token)
-    return { user: publicUser(updated) }
+    setAuthCookie(reply, req, token)
+    return { user: publicUser(updated), token }
   })
 
   app.post('/logout', async (_req, reply) => {

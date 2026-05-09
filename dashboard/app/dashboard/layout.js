@@ -40,7 +40,7 @@ function LogoutButton({ mobile = false, loggingOut, onLogout }) {
     <button
       onClick={onLogout}
       disabled={loggingOut}
-      className={`${mobile ? 'w-full rounded-lg bg-green-800 px-3 py-2 text-left text-sm text-green-100 hover:text-white' : 'w-full text-sm text-green-200 hover:text-white text-left'} disabled:cursor-wait disabled:opacity-70 ${focusClasses}`}
+      className={`${mobile ? 'w-full min-h-11 rounded-lg bg-green-800 px-3 py-2 text-left text-sm text-green-100 hover:text-white' : 'w-full min-h-11 text-sm text-green-200 hover:text-white text-left'} disabled:cursor-wait disabled:opacity-70 ${focusClasses}`}
     >
       {loggingOut ? 'Saindo...' : 'Sair da conta'}
     </button>
@@ -98,7 +98,7 @@ export default function DashboardLayout({ children }) {
                 href={item.href}
                 onClick={handleNavigate}
                 aria-current={active ? 'page' : undefined}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition ${focusClasses} ${
+                className={`flex min-h-11 items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition ${focusClasses} ${
                   active
                     ? 'bg-white text-green-700'
                     : 'hover:bg-green-600'
@@ -136,7 +136,7 @@ export default function DashboardLayout({ children }) {
             onClick={() => setMenuOpen(true)}
             aria-expanded={menuOpen}
             aria-controls="mobile-dashboard-menu"
-            className={`rounded-lg border border-green-500 px-3 py-1.5 text-sm font-semibold hover:bg-green-600 ${focusClasses}`}
+            className={`rounded-lg border border-green-500 px-3 py-2.5 min-h-11 text-sm font-semibold hover:bg-green-600 ${focusClasses}`}
           >
             Menu
           </button>
@@ -146,10 +146,10 @@ export default function DashboardLayout({ children }) {
       {menuOpen && (
         <div className="fixed inset-0 z-40 md:hidden" role="presentation">
           <button type="button" aria-label="Fechar menu" className="absolute inset-0 bg-black/40" onClick={() => setMenuOpen(false)} />
-          <nav id="mobile-dashboard-menu" aria-label="Navegação do dashboard" className="absolute left-0 top-0 flex h-full w-72 max-w-[85vw] flex-col gap-4 overflow-y-auto bg-green-700 p-4 text-white shadow-2xl">
+          <nav id="mobile-dashboard-menu" aria-label="Navegação do dashboard" className="absolute left-0 top-0 flex h-full w-80 max-w-[90vw] flex-col gap-4 overflow-y-auto bg-green-700 p-4 text-white shadow-2xl">
             <div className="mb-2 flex items-center justify-between gap-3">
               <p className="text-base font-bold"><span aria-hidden="true">🤖</span> Bot Conversor</p>
-              <button type="button" onClick={() => setMenuOpen(false)} className={`rounded-lg border border-green-500 px-3 py-1.5 text-sm font-semibold hover:bg-green-600 ${focusClasses}`}>Fechar</button>
+              <button type="button" onClick={() => setMenuOpen(false)} className={`rounded-lg border border-green-500 px-3 py-2.5 min-h-11 text-sm font-semibold hover:bg-green-600 ${focusClasses}`}>Fechar</button>
             </div>
             {renderNavItems()}
             <div className="border-t border-green-600 pt-4">

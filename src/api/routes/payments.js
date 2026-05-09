@@ -18,6 +18,17 @@ function getApiUrl() {
   return (process.env.API_URL || 'http://localhost:3001').replace(/\/$/, '')
 }
 
+function isPublicHttpUrl(value) {
+  try {
+    const parsed = new URL(String(value ?? ''))
+    const host = parsed.hostname.toLowerCase()
+    const isLocalHost = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0'
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && !isLocalHost
+  } catch {
+    return false
+  }
+}
+
 function sendError(reply, statusCode, code, message) {
   return reply.code(statusCode).send({ error: { code, message } })
 }
@@ -198,15 +209,31 @@ async function createMercadoPagoPreference({ userId, plan }) {
 
   const plans = await getBillingPlans()
   const planInfo = plans[plan]
+  const normalizedPlan = {
+    title: String(planInfo?.title ?? '').trim() || DEFAULT_PLANS[plan]?.title,
+    price: Number(planInfo?.price),
+  }
+  if (!normalizedPlan.title || !Number.isFinite(normalizedPlan.price) || normalizedPlan.price <= 0) {
+    const err = new Error('Configuração de plano inválida para checkout')
+    err.code = 'INVALID_PLAN_CONFIG'
+    throw err
+  }
   const dashboardUrl = getDashboardUrl()
   const apiUrl = getApiUrl()
-  const callbackBase = `${apiUrl}/api/payments/callback`
+  if (IS_PRODUCTION && (!isPublicHttpUrl(apiUrl) || !isPublicHttpUrl(dashboardUrl))) {
+    const err = new Error('API_URL/DASHBOARD_URL inválidos para produção')
+    err.code = 'PAYMENT_PROVIDER_MISCONFIGURED'
+    throw err
+  }
+  // Mercado Pago validates `back_urls` as user-facing return URLs.
+  // Prefer DASHBOARD_URL (public domain) to avoid provider rejection when API_URL uses raw IP/internal host.
+  const callbackBase = `${dashboardUrl}/api/payments/callback`
 
   const preference = {
     items: [{
-      title: planInfo.title,
+      title: normalizedPlan.title,
       quantity: 1,
-      unit_price: planInfo.price,
+      unit_price: normalizedPlan.price,
       currency_id: 'BRL',
     }],
     external_reference: userId,
@@ -221,13 +248,26 @@ async function createMercadoPagoPreference({ userId, plan }) {
     statement_descriptor: 'BOTinho',
   }
 
-  const response = await axios.post(
-    'https://api.mercadopago.com/checkout/preferences',
-    preference,
-    { headers: { Authorization: `Bearer ${accessToken}` }, timeout: 10000 }
-  )
+  try {
+    const response = await axios.post(
+      'https://api.mercadopago.com/checkout/preferences',
+      preference,
+      { headers: { Authorization: `Bearer ${accessToken}` }, timeout: 10000 }
+    )
 
-  return response.data.init_point
+    return response.data.init_point
+  } catch (err) {
+    const providerStatus = err?.response?.status
+    const providerCause = err?.response?.data?.cause?.[0]?.description
+      || err?.response?.data?.message
+      || err?.response?.data?.error
+      || err?.message
+      || 'provider_error'
+    const wrapped = new Error(String(providerCause))
+    wrapped.code = 'CHECKOUT_PROVIDER_ERROR'
+    wrapped.providerStatus = providerStatus
+    throw wrapped
+  }
 }
 
 async function processPendingWebhookEvents({ limit = 50, log } = {}) {
@@ -347,7 +387,8 @@ export async function paymentsRoutes(app) {
   // Creates a dynamic Mercado Pago Preference (supports PIX + credit card) and returns the checkout URL
   app.post('/checkout', { onRequest: [app.authenticate] }, async (req, reply) => {
     const { plan } = req.body ?? {}
-    if (!PLANS[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic ou pro.')
+    const plans = await getBillingPlans()
+    if (!plans[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic ou pro.')
 
     const userId = req.user.sub
     trackAnalyticsEventSafe({ userId, event: 'checkout_started', metadata: { plan } })
@@ -356,8 +397,17 @@ export async function paymentsRoutes(app) {
       const checkoutUrl = await createMercadoPagoPreference({ userId, plan })
       return { checkout_url: checkoutUrl }
     } catch (err) {
+      if (err?.code === 'INVALID_PLAN_CONFIG') {
+        return sendError(reply, 400, 'INVALID_PLAN_CONFIG', 'Configuração do plano inválida no Admin. Revise título e preço do plano.')
+      }
       if (err?.code === 'PAYMENT_PROVIDER_NOT_CONFIGURED') {
         return sendError(reply, 500, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'Pagamentos temporariamente indisponíveis.')
+      }
+      if (err?.code === 'PAYMENT_PROVIDER_MISCONFIGURED') {
+        return sendError(reply, 500, 'PAYMENT_PROVIDER_MISCONFIGURED', 'Configuração de pagamento inválida no servidor. Contate o suporte.')
+      }
+      if (err?.code === 'CHECKOUT_PROVIDER_ERROR') {
+        req.log.warn({ providerStatus: err?.providerStatus, reason: err?.message, plan, userId }, 'Mercado Pago rejeitou criação de preferência')
       }
       req.log.error({ err: err?.message, plan, userId }, 'Falha ao criar preferência MP')
       return sendError(reply, 502, 'CHECKOUT_CREATION_FAILED', 'Não foi possível iniciar o checkout. Tente novamente.')

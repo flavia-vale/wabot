@@ -50,6 +50,9 @@ const RISK_FILTERS = [
   ['missing_monitor', 'Sem origem'],
   ['missing_post', 'Sem destino'],
 ]
+const CS_ALLOWED_EMAILS = ['flavia.vale@usp.br', 'flaviaroberta.1496@gmail.com', 'tacianeaas02@gmail.com']
+const CS_PERMISSION_KEYS = ['customer_success', 'customer_success_ops', 'success']
+const resolveAdminEmail = (admin) => String(admin?.email || admin?.user?.email || admin?.profile?.email || '').toLowerCase().trim()
 
 const SUCCESS_REASON_LABELS = {
   missing_phone: 'Sem celular',
@@ -406,6 +409,7 @@ export default function AdminPage() {
   const [admin, setAdmin] = useState(null)
   const [users, setUsers] = useState(null)
   const [sessions, setSessions] = useState(null)
+  const [sessionTelemetry, setSessionTelemetry] = useState(null)
   const [logs, setLogs] = useState(null)
   const [finance, setFinance] = useState(null)
   const [payments, setPayments] = useState(null)
@@ -425,11 +429,12 @@ export default function AdminPage() {
 
   async function loadAdminData(nextRisk = risk, nextSearch = search) {
     setError('')
-    const [adminData, overviewData, usersData, sessionsData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, lpContentData] = await Promise.all([
+    const [adminData, overviewData, usersData, sessionsData, sessionTelemetryData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, lpContentData] = await Promise.all([
       api.adminMe(),
       api.adminOverview(),
       api.adminUsers({ risk: nextRisk, search: nextSearch, limit: 20 }),
       api.adminSessions({ limit: 10 }),
+      api.adminSessionTelemetry({ limit: 60 }).catch(() => null),
       api.adminLogs({ limit: 10, status: 'all' }),
       api.adminFinanceOverview().catch(() => null),
       api.adminPayments({ limit: 10 }).catch(() => null),
@@ -444,6 +449,7 @@ export default function AdminPage() {
     setOverview(overviewData)
     setUsers(usersData)
     setSessions(sessionsData)
+    setSessionTelemetry(sessionTelemetryData)
     setLogs(logsData)
     setFinance(financeData)
     setPayments(paymentsData)
@@ -464,6 +470,7 @@ export default function AdminPage() {
       api.adminOverview(),
       api.adminUsers({ limit: 20 }),
       api.adminSessions({ limit: 10 }),
+      api.adminSessionTelemetry({ limit: 60 }).catch(() => null),
       api.adminLogs({ limit: 10, status: 'all' }),
       api.adminFinanceOverview().catch(() => null),
       api.adminPayments({ limit: 10 }).catch(() => null),
@@ -474,12 +481,13 @@ export default function AdminPage() {
       api.adminSystemMetrics().catch(() => null),
       api.adminLpContent().catch(() => null),
     ])
-      .then(([adminData, overviewData, usersData, sessionsData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, lpContentData]) => {
+      .then(([adminData, overviewData, usersData, sessionsData, sessionTelemetryData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, lpContentData]) => {
         if (!active) return
         setAdmin(adminData)
         setOverview(overviewData)
         setUsers(usersData)
         setSessions(sessionsData)
+        setSessionTelemetry(sessionTelemetryData)
         setLogs(logsData)
         setFinance(financeData)
         setPayments(paymentsData)
@@ -498,6 +506,12 @@ export default function AdminPage() {
   }, [])
 
   const atRiskUsers = useMemo(() => users?.users?.filter(user => user.riskFlags?.length) ?? [], [users])
+  const canAccessCustomerSuccess = useMemo(() => {
+    const email = resolveAdminEmail(admin)
+    const permissions = Array.isArray(admin?.permissions) ? admin.permissions : []
+    const hasPermission = permissions.some(permission => CS_PERMISSION_KEYS.includes(String(permission).toLowerCase().trim()))
+    return CS_ALLOWED_EMAILS.includes(email) || hasPermission || admin?.role === 'owner'
+  }, [admin])
 
   async function applyFilters(e) {
     e?.preventDefault()
@@ -605,6 +619,7 @@ export default function AdminPage() {
           </div>
           <div className="flex gap-2">
             <button onClick={() => applyFilters()} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Atualizar</button>
+            {canAccessCustomerSuccess && <Link href="/admin/sucesso-cliente" className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Aba CS</Link>}
             <Link href="/dashboard" className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-100">Voltar ao painel</Link>
           </div>
         </div>
@@ -856,8 +871,18 @@ export default function AdminPage() {
                   <p className="mt-1 text-xs text-gray-500">Bot: {session.botRunning ? 'rodando' : 'parado'} · Atualizado: {formatDate(session.updatedAt)}</p>
                 </div>
               ))}
+
               {!sessions?.sessions?.length && <p className="text-sm text-gray-400">Sem sessões.</p>}
             </div>
+          </section>
+
+          <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-800">Telemetria de conexão WhatsApp</h3>
+              <span className="text-xs text-gray-500">Últimos {sessionTelemetry?.total ?? 0} eventos</span>
+            </div>
+            <div className="mb-3 flex flex-wrap gap-2">{Object.entries(sessionTelemetry?.summary || {}).slice(0, 8).map(([key, count]) => <span key={key} className="rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">{key}: {count}</span>)}</div>
+            <div className="space-y-2">{(sessionTelemetry?.events || []).slice(0, 12).map((evt) => <div key={evt.id} className="rounded-lg border border-gray-100 p-2 text-xs text-gray-700"><p className="font-semibold">{evt.user?.email || evt.userId || 'usuário'} · {evt.stage || 'unknown'} / {evt.event || 'unknown'}</p><p className="text-gray-500">{formatDate(evt.createdAt)}{evt.elapsedSec != null ? ` · ${evt.elapsedSec}s` : ''}{evt.detail ? ` · ${evt.detail}` : ''}</p></div>)}{!sessionTelemetry?.events?.length && <p className="text-sm text-gray-400">Sem telemetria recente.</p>}</div>
           </section>
 
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">

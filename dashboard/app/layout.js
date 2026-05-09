@@ -1,4 +1,7 @@
 import "./globals.css";
+import { getSiteUrl } from "../lib/site-url";
+
+const siteUrl = getSiteUrl()
 
 export const metadata = {
   metadataBase: new URL('https://178.105.54.0'),

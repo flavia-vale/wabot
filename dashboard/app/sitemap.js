@@ -1,4 +1,6 @@
-const baseUrl = 'http://178.105.54.0'
+import { getSiteUrl } from '../lib/site-url'
+
+const baseUrl = getSiteUrl()
 
 export default function sitemap() {
   return ['/', '/termos', '/privacidade', '/quem-somos', '/suporte'].map((route) => ({

@@ -141,7 +141,7 @@ function PlatformCard({ platform, initialData, onSave, disabled }) {
                   onChange={e => updateValue(f.key, e.target.value)}
                   disabled={isDisabled}
                   aria-invalid={!!fieldErrors[f.key]}
-                  className="min-w-0 flex-1 border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
+                  className="min-w-0 flex-1 border rounded-lg px-3 py-2.5 min-h-11 text-sm outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
                 />
                 {f.sensitive && (
                   <button
@@ -171,7 +171,7 @@ function PlatformCard({ platform, initialData, onSave, disabled }) {
         <button
           type="submit"
           disabled={saving || disabled}
-          className="bg-green-600 text-white rounded-lg py-2 font-semibold hover:bg-green-700 disabled:opacity-50 transition text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+          className="bg-green-600 text-white rounded-lg py-3 min-h-11 font-semibold hover:bg-green-700 disabled:opacity-50 transition text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
         >
           {saving ? 'Salvando...' : 'Salvar'}
         </button>
