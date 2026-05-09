@@ -52,6 +52,7 @@ const RISK_FILTERS = [
 ]
 const CS_ALLOWED_EMAILS = ['flavia.vale@usp.br', 'flaviaroberta.1496@gmail.com', 'tacianeaas02@gmail.com']
 const CS_PERMISSION_KEYS = ['customer_success', 'customer_success_ops', 'success']
+const resolveAdminEmail = (admin) => String(admin?.email || admin?.user?.email || admin?.profile?.email || '').toLowerCase().trim()
 
 const SUCCESS_REASON_LABELS = {
   missing_phone: 'Sem celular',
@@ -501,7 +502,7 @@ export default function AdminPage() {
 
   const atRiskUsers = useMemo(() => users?.users?.filter(user => user.riskFlags?.length) ?? [], [users])
   const canAccessCustomerSuccess = useMemo(() => {
-    const email = String(admin?.email || '').toLowerCase().trim()
+    const email = resolveAdminEmail(admin)
     const permissions = Array.isArray(admin?.permissions) ? admin.permissions : []
     const hasPermission = permissions.some(permission => CS_PERMISSION_KEYS.includes(String(permission).toLowerCase().trim()))
     return CS_ALLOWED_EMAILS.includes(email) || hasPermission || admin?.role === 'owner'
