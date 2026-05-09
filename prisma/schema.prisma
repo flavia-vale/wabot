@@ -47,12 +47,18 @@ model User {
 }
 
 model WaSession {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  phone     String?
-  status    String   @default("disconnected")
-  updatedAt DateTime @updatedAt
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone            String?
+  status           String   @default("disconnected")
+  lifecycle        String   @default("idle")
+  ownerInstance    String?
+  lastHeartbeatAt  DateTime?
+  lastDisconnectCode String?
+  updatedAt        DateTime @updatedAt
+
+  @@index([status, lastHeartbeatAt])
 }
 
 model Group {

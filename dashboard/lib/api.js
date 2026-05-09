@@ -186,7 +186,23 @@ export function openQRSocket(token, handlers = {}) {
 
   const { onMessage, onError, onClose, onOpen } = handlers
   ws.onmessage = (e) => { try { onMessage?.(JSON.parse(e.data)) } catch {} }
-  ws.onerror = (event) => onError?.(event)
+  ws.onerror = (event) => {
+    if (!shouldFallbackToCurrentHost) {
+      onError?.(event)
+      return
+    }
+    try {
+      const fallbackUrl = new URL('/api/session/qr', fallbackOrigin)
+      fallbackUrl.protocol = browserIsHttps ? 'wss:' : 'ws:'
+      const fallbackWs = new WebSocket(fallbackUrl.toString(), ['BOTinho-auth', token])
+      fallbackWs.onmessage = (e) => { try { onMessage?.(JSON.parse(e.data)) } catch {} }
+      fallbackWs.onerror = (fallbackEvent) => onError?.(fallbackEvent)
+      fallbackWs.onclose = (fallbackEvent) => onClose?.(fallbackEvent)
+      fallbackWs.onopen = (fallbackEvent) => onOpen?.(fallbackEvent)
+    } catch {
+      onError?.(event)
+    }
+  }
   ws.onclose = (event) => onClose?.(event)
   ws.onopen = (event) => onOpen?.(event)
 
