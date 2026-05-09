@@ -1,4 +1,9 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001')
+function resolveApiBase() {
+  if (typeof window !== 'undefined') return ''
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+}
+
+const BASE = resolveApiBase()
 const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou ou foi invalidada. Faça login novamente para continuar.'
 const AUTH_TOKEN_KEY = 'wb_auth_token'
 
