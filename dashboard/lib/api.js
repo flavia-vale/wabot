@@ -20,8 +20,10 @@ async function apiFetch(path, options = {}) {
     return
   }
   if (!res.ok) {
-    const rawMessage = data.message || data.error || ''
-    const message = rawMessage && !rawMessage.trim().startsWith('<') ? rawMessage : `HTTP ${res.status}`
+    const rawMessage = data?.message ?? data?.error ?? ''
+    const normalizedMessage = typeof rawMessage === 'string' ? rawMessage : JSON.stringify(rawMessage)
+    const safeMessage = String(normalizedMessage ?? '').trim()
+    const message = safeMessage && !safeMessage.startsWith('<') ? safeMessage : `HTTP ${res.status}`
     const err = new Error(message)
     if (data.code) err.code = data.code
     if (typeof data.retryable === 'boolean') err.retryable = data.retryable

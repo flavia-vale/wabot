@@ -37,7 +37,18 @@ function getAllowedOrigins() {
     .map((origin) => origin.trim())
     .filter(Boolean)
 
-  return configured?.length ? configured : DEFAULT_ALLOWED_ORIGINS
+  const defaults = configured?.length ? configured : DEFAULT_ALLOWED_ORIGINS
+  const inferred = [process.env.DASHBOARD_URL, process.env.API_URL]
+    .map((value) => {
+      try {
+        return new URL(String(value ?? '')).origin
+      } catch {
+        return null
+      }
+    })
+    .filter(Boolean)
+
+  return Array.from(new Set([...defaults, ...inferred]))
 }
 
 const allowedOrigins = new Set(getAllowedOrigins())
