@@ -133,7 +133,7 @@ export function getLastQR(userId) {
   return entry?.lastQR ?? null
 }
 
-export function listGroups(userId) {
+function requestWithTimeout(userId, type, payload = {}, timeout = 10000, timeoutMessage = 'Timeout') {
   return new Promise((resolve, reject) => {
     const entry = bots.get(userId)
     if (!entry) return reject(new Error('Bot não está rodando'))
