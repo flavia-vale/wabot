@@ -6,6 +6,7 @@ import { Alert } from '@/components/Alert'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { HelpLink } from '@/components/HelpLink'
 import { LoadingState } from '@/components/States'
+import { useToast } from '@/components/ToastProvider'
 
 const QR_TIMEOUT_SECONDS = 20
 const STATUS_ERROR_MESSAGE = 'Não foi possível carregar o status da conexão. Tente novamente.'
@@ -18,6 +19,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState('')
   const [error, setError] = useState('')
+  const toast = useToast()
   const [feedback, setFeedback] = useState('')
   const [socketState, setSocketState] = useState('idle')
   const [qrWaitElapsed, setQrWaitElapsed] = useState(0)
@@ -239,6 +241,7 @@ export default function DashboardPage() {
       }, 6000)
     } catch (err) {
       setError(err.message)
+      toast.error(err.message, 'Falha na conexão')
       trackTelemetry({ stage: 'initializing', event: 'connect_failed', detail: err.message })
     } finally {
       setLoading(false)
@@ -269,6 +272,7 @@ export default function DashboardPage() {
       await openWS()
     } catch (err) {
       setError(err.message)
+      toast.error(err.message, 'Falha na conexão')
       if (!status?.running) await fetchStatus()
     } finally {
       setLoading(false)
@@ -293,6 +297,7 @@ export default function DashboardPage() {
       setFeedback('Bot desligado. Para voltar, gere um novo QR Code ou código de pareamento.')
     } catch (err) {
       setError(err.message)
+      toast.error(err.message, 'Falha na conexão')
     } finally {
       setLoading(false)
       setActionLoading('')
@@ -325,6 +330,7 @@ export default function DashboardPage() {
       trackTelemetry({ stage: 'initializing', event: 'restart_requested' })
     } catch (err) {
       setError(err.message)
+      toast.error(err.message, 'Falha na conexão')
       trackTelemetry({ stage: 'initializing', event: 'restart_failed', detail: err.message })
     } finally {
       setLoading(false)
@@ -349,6 +355,7 @@ export default function DashboardPage() {
       setFeedback('Sessão removida com sucesso. Conecte novamente por QR Code ou código de pareamento para usar o bot.')
     } catch (err) {
       setError(err.message)
+      toast.error(err.message, 'Falha na conexão')
     } finally {
       setLoading(false)
       setActionLoading('')
@@ -360,7 +367,9 @@ export default function DashboardPage() {
       await navigator.clipboard.writeText(pairingCode)
       setFeedback('Código copiado para a área de transferência.')
     } catch {
-      setError('Não foi possível copiar o código. Copie manualmente.')
+      const msg = 'Não foi possível copiar o código. Copie manualmente.'
+      setError(msg)
+      toast.error(msg, 'Falha ao copiar')
     }
   }
 
