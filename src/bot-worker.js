@@ -22,12 +22,21 @@ import { createMessageQueue } from './messageQueue.js'
 
 const userId = process.env.BOT_USER_ID
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
+const OWNER_INSTANCE = process.env.NODE_APP_INSTANCE ?? '0'
 
 let activeSock = null
 let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
 let shuttingDown = false
 
 let heartbeatTimer = null
+async function persistSessionPatch(data = {}) {
+  await db.waSession.upsert({
+    where: { userId },
+    update: data,
+    create: { userId, ...data },
+  })
+}
+
 function startHeartbeatIpc() {
   if (heartbeatTimer) return
   const intervalMs = Math.max(Number(process.env.WA_HEARTBEAT_INTERVAL_MS || 15000), 5000)
