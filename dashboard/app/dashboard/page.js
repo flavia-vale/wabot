@@ -35,6 +35,7 @@ export default function DashboardPage() {
   const [pairingPhone, setPairingPhone] = useState('')
   const [pairingCode, setPairingCode] = useState('')
   const [showForgetConfirm, setShowForgetConfirm] = useState(false)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
 
 
   const trackTelemetry = useCallback((payload) => {
@@ -377,6 +378,35 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleResetInstance() {
+    if (loading) return
+    setError('')
+    setFeedback('')
+    setStatusError('')
+    setWsErrorMessage('')
+    setQr(null)
+    setPairingCode('')
+    setShowResetConfirm(false)
+    setLoading(true)
+    setActionLoading('reset')
+    trackTelemetry({ stage: 'authenticating', event: 'reset_instance_click' })
+    try {
+      wsRef.current?.close()
+      await api.sessionStop().catch(() => null)
+      await api.sessionForget().catch(() => null)
+      await fetchStatus({ showLoading: true, recoverable: true })
+      setFeedback('Tentativas anteriores foram limpas. Gerando uma nova conexão segura...')
+      await handleQRConnect('retry')
+    } catch (err) {
+      setError(err.message)
+      toast.error(err.message, 'Falha ao resetar instância')
+      trackTelemetry({ stage: 'authenticating', event: 'reset_instance_failed', detail: err.message })
+    } finally {
+      setLoading(false)
+      if (actionLoading === 'reset') setActionLoading('')
+    }
+  }
+
   async function copyPairingCode() {
     try {
       await navigator.clipboard.writeText(pairingCode)
@@ -477,6 +507,16 @@ export default function DashboardPage() {
               {actionLoading === 'retry_qr' ? 'Tentando novamente...' : 'Tentar novamente'}
             </button>
           )}
+          {showQrRetry && (
+            <button
+              type="button"
+              onClick={() => setShowResetConfirm(true)}
+              disabled={loading}
+              className="text-sm text-amber-700 underline disabled:opacity-50 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2"
+            >
+              {actionLoading === 'reset' ? 'Resetando instância...' : 'Resetar instância (seguro)'}
+            </button>
+          )}
         </div>
       )}
 
@@ -558,6 +598,15 @@ export default function DashboardPage() {
         </div>
       )}
       <ConfirmDialog open={showForgetConfirm} title="Esquecer número" message="Isso vai desconectar o WhatsApp e remover a sessão salva neste painel. Para usar novamente, você precisará conectar por QR Code ou código." confirmLabel="Esquecer sessão" danger onCancel={() => setShowForgetConfirm(false)} onConfirm={async () => { setShowForgetConfirm(false); await handleForget() }} />
+      <ConfirmDialog
+        open={showResetConfirm}
+        title="Resetar instância"
+        message='Isso limpará tentativas anteriores e abrirá um novo caminho seguro para conexão do WhatsApp.'
+        confirmLabel="Resetar e continuar"
+        danger
+        onCancel={() => setShowResetConfirm(false)}
+        onConfirm={handleResetInstance}
+      />
     </div>
   )
 }
