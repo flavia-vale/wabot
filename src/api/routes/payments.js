@@ -18,6 +18,10 @@ function getApiUrl() {
   return (process.env.API_URL || 'http://localhost:3001').replace(/\/$/, '')
 }
 
+function stripApiSuffix(url) {
+  return String(url || '').replace(/\/api\/?$/i, '')
+}
+
 function isPublicHttpUrl(value) {
   try {
     const parsed = new URL(String(value ?? ''))
@@ -27,6 +31,12 @@ function isPublicHttpUrl(value) {
   } catch {
     return false
   }
+}
+
+function forceHttpsUrl(value) {
+  const parsed = new URL(String(value ?? ''))
+  parsed.protocol = 'https:'
+  return parsed.toString().replace(/\/$/, '')
 }
 
 function sendError(reply, statusCode, code, message) {
@@ -218,14 +228,19 @@ async function createMercadoPagoPreference({ userId, plan }) {
     err.code = 'INVALID_PLAN_CONFIG'
     throw err
   }
-  const dashboardUrl = getDashboardUrl()
-  const apiUrl = getApiUrl()
+  const dashboardUrl = stripApiSuffix(getDashboardUrl())
+  const apiUrl = stripApiSuffix(getApiUrl())
   if (IS_PRODUCTION && (!isPublicHttpUrl(apiUrl) || !isPublicHttpUrl(dashboardUrl))) {
     const err = new Error('API_URL/DASHBOARD_URL inválidos para produção')
     err.code = 'PAYMENT_PROVIDER_MISCONFIGURED'
     throw err
   }
-  const callbackBase = `${apiUrl}/api/payments/callback`
+  const callbackOrigin = IS_PRODUCTION ? forceHttpsUrl(dashboardUrl) : dashboardUrl
+  const notificationOrigin = IS_PRODUCTION ? forceHttpsUrl(apiUrl) : apiUrl
+
+  // Mercado Pago validates `back_urls` as user-facing return URLs.
+  // In production always enforce HTTPS for return/webhook URLs.
+  const callbackBase = `${callbackOrigin}/api/payments/callback`
 
   const preference = {
     items: [{
@@ -241,9 +256,16 @@ async function createMercadoPagoPreference({ userId, plan }) {
       pending: `${callbackBase}?collection_status=pending`,
     },
     auto_return: 'approved',
-    notification_url: `${apiUrl}/api/payments/webhook`,
+    notification_url: `${notificationOrigin}/api/payments/webhook`,
     // Back URL shown after payment for manual navigation
     statement_descriptor: 'BOTinho',
+  }
+  const debugUrls = {
+    dashboardUrl: callbackOrigin,
+    apiUrl: notificationOrigin,
+    callbackBase,
+    backUrls: preference.back_urls,
+    notificationUrl: preference.notification_url,
   }
 
   try {
@@ -264,6 +286,8 @@ async function createMercadoPagoPreference({ userId, plan }) {
     const wrapped = new Error(String(providerCause))
     wrapped.code = 'CHECKOUT_PROVIDER_ERROR'
     wrapped.providerStatus = providerStatus
+    wrapped.providerPayload = err?.response?.data || null
+    wrapped.debugUrls = debugUrls
     throw wrapped
   }
 }
@@ -405,7 +429,7 @@ export async function paymentsRoutes(app) {
         return sendError(reply, 500, 'PAYMENT_PROVIDER_MISCONFIGURED', 'Configuração de pagamento inválida no servidor. Contate o suporte.')
       }
       if (err?.code === 'CHECKOUT_PROVIDER_ERROR') {
-        req.log.warn({ providerStatus: err?.providerStatus, reason: err?.message, plan, userId }, 'Mercado Pago rejeitou criação de preferência')
+        req.log.warn({ providerStatus: err?.providerStatus, reason: err?.message, providerPayload: err?.providerPayload, debugUrls: err?.debugUrls, plan, userId }, 'Mercado Pago rejeitou criação de preferência')
       }
       req.log.error({ err: err?.message, plan, userId }, 'Falha ao criar preferência MP')
       return sendError(reply, 502, 'CHECKOUT_CREATION_FAILED', 'Não foi possível iniciar o checkout. Tente novamente.')
@@ -471,7 +495,7 @@ export async function paymentsRoutes(app) {
   // Callback de retorno do Mercado Pago após pagamento — ativa o acesso automaticamente
   // Não requer JWT; a identidade do usuário vem do external_reference salvo na Preference
   app.get('/callback', async (req, reply) => {
-    const dashboardUrl = getDashboardUrl()
+    const dashboardUrl = stripApiSuffix(getDashboardUrl())
     const { collection_id, collection_status, payment_id, status, external_reference } = req.query
 
     const mpPaymentId = String(payment_id ?? collection_id ?? '').trim()
