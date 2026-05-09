@@ -36,6 +36,23 @@ export default function DashboardPage() {
     api.sessionTelemetry(payload).catch(() => {})
   }, [])
 
+
+  const waitForRunningSession = useCallback(async (timeoutMs = 12000) => {
+    const startedAt = Date.now()
+    let latest = null
+    while (Date.now() - startedAt < timeoutMs) {
+      latest = await api.sessionStatus().catch(() => null)
+      if (latest?.running) {
+        setStatus(latest)
+        return latest
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+    }
+    if (latest) setStatus(latest)
+    return latest
+  }, [])
+
+
   const fetchStatus = useCallback(async ({ showLoading = false, recoverable = false } = {}) => {
     if (showLoading) setStatusLoading(true)
     if (recoverable) setStatusError('')
@@ -279,7 +296,12 @@ export default function DashboardPage() {
       setQr(null)
       setPairingCode('')
       setQrWaitElapsed(0)
-      await openWS()
+      const latest = await waitForRunningSession()
+      if (latest?.running) {
+        await openWS()
+        const fallbackQr = await api.sessionQRLatest().catch(() => null)
+        if (fallbackQr?.qr) setQr(fallbackQr.qr)
+      }
       await fetchStatus()
       setFeedback('Reinício solicitado. Aguarde o novo QR Code.')
       trackTelemetry({ stage: 'initializing', event: 'restart_requested' })
