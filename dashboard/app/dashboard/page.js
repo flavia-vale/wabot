@@ -147,6 +147,26 @@ export default function DashboardPage() {
     }
   }, [openWS])
 
+
+  useEffect(() => {
+    if (!(status?.running && status?.status === 'connecting')) return
+    const interval = setInterval(async () => {
+      const latest = await api.sessionStatus().catch(() => null)
+      if (!latest) return
+      setStatus(latest)
+      if (latest.status === 'connected') {
+        setQr(null)
+        setPairingCode('')
+        setSocketState('idle')
+        setStatusError('')
+        setWsErrorMessage('')
+        setFeedback('WhatsApp conectado com sucesso.')
+        wsRef.current?.close()
+      }
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [status?.running, status?.status])
+
   useEffect(() => {
     if (!(status?.running && status?.status === 'connecting') || qr || pairingCode) return
     const interval = setInterval(() => setQrWaitElapsed((prev) => prev + 1), 1000)
