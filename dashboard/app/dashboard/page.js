@@ -26,6 +26,7 @@ export default function DashboardPage() {
   const [socketState, setSocketState] = useState('idle')
   const [qrWaitElapsed, setQrWaitElapsed] = useState(0)
   const [wsErrorMessage, setWsErrorMessage] = useState('')
+  const [qrRetrying, setQrRetrying] = useState(false)
   const wsRef = useRef(null)
   const wsQrTimeoutRef = useRef(null)
   const qrPollingRef = useRef(null)
@@ -66,6 +67,7 @@ export default function DashboardPage() {
       const s = await api.sessionStatus()
       setStatus(s)
       setStatusError('')
+      setStatusLoadingTimedOut(false)
       return s
     } catch (err) {
       if (recoverable) setStatusError(err.message || STATUS_ERROR_MESSAGE)
@@ -76,10 +78,7 @@ export default function DashboardPage() {
   }, [])
 
   useEffect(() => {
-    if (!statusLoading) {
-      setStatusLoadingTimedOut(false)
-      return
-    }
+    if (!statusLoading) return
     const timeoutId = setTimeout(() => {
       setStatusLoadingTimedOut(true)
     }, STATUS_LOADING_TIMEOUT_SECONDS * 1000)
@@ -224,7 +223,7 @@ export default function DashboardPage() {
     return () => clearInterval(interval)
   }, [status?.running, status?.status, qr, pairingCode])
 
-  async function handleQRConnect() {
+  async function handleQRConnect(mode = 'connect') {
     if (loading) return
     setError('')
     setFeedback('')
@@ -233,9 +232,10 @@ export default function DashboardPage() {
     setShowPairingInput(false)
     setPairingCode('')
     setQrWaitElapsed(0)
+    setQrRetrying(mode === 'retry')
     setLoading(true)
-    setActionLoading('connect')
-    trackTelemetry({ stage: 'initializing', event: 'connect_click' })
+    setActionLoading(mode === 'retry' ? 'retry_qr' : 'connect')
+    trackTelemetry({ stage: 'initializing', event: mode === 'retry' ? 'retry_click' : 'connect_click' })
     try {
       await api.sessionStart().catch(async (err) => {
         if (err?.status === 409) return
@@ -244,7 +244,7 @@ export default function DashboardPage() {
       await openWS()
       const s = await fetchStatus()
       if (s?.running && s?.status === 'connecting' && !qr) {
-        trackTelemetry({ stage: 'authenticating', event: 'waiting_qr_after_connect_click' })
+        trackTelemetry({ stage: 'authenticating', event: mode === 'retry' ? 'waiting_qr_after_retry_click' : 'waiting_qr_after_connect_click' })
       }
       setTimeout(async () => {
         const s = await api.sessionStatus().catch(() => null)
@@ -256,8 +256,9 @@ export default function DashboardPage() {
     } catch (err) {
       setError(err.message)
       toast.error(err.message, 'Falha na conexão')
-      trackTelemetry({ stage: 'initializing', event: 'connect_failed', detail: err.message })
+      trackTelemetry({ stage: 'initializing', event: mode === 'retry' ? 'retry_failed' : 'connect_failed', detail: err.message })
     } finally {
+      setQrRetrying(false)
       setLoading(false)
       setActionLoading('')
     }
@@ -469,11 +470,11 @@ export default function DashboardPage() {
           </svg>
           <div role="status" aria-live="polite" className="text-center">
             <p className="text-sm font-medium text-gray-600">Gerando QR Code... ({qrWaitElapsed}s)</p>
-            <p className="text-xs text-gray-400">Aguarde alguns segundos enquanto o WhatsApp prepara a conexão. Se passar de 20s, toque em "Tentar novamente".</p>
+            <p className="text-xs text-gray-400">{qrRetrying ? 'Tentando novamente gerar o QR Code...' : 'Aguarde alguns segundos enquanto o WhatsApp prepara a conexão. Se passar de 20s, toque em "Tentar novamente".'}</p>
           </div>
           {showQrRetry && (
-            <button onClick={handleQRConnect} disabled={loading} className="text-sm text-green-700 underline disabled:opacity-50 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
-              Tentar novamente
+            <button onClick={() => handleQRConnect('retry')} disabled={loading} className="text-sm text-green-700 underline disabled:opacity-50 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
+              {actionLoading === 'retry_qr' ? 'Tentando novamente...' : 'Tentar novamente'}
             </button>
           )}
         </div>
@@ -505,7 +506,7 @@ export default function DashboardPage() {
             <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
               <h3 className="font-semibold text-gray-700">Conectar via QR Code</h3>
               <p className="mt-1 text-xs text-gray-500">Mais rápido se você está com o celular em mãos.</p>
-              <button onClick={handleQRConnect} disabled={loading} className="mt-4 w-full bg-green-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-green-700 disabled:opacity-50 transition flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
+              <button onClick={() => handleQRConnect('connect')} disabled={loading} className="mt-4 w-full bg-green-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-green-700 disabled:opacity-50 transition flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
                 <span aria-hidden="true">📷</span>{actionLoading === 'connect' ? 'Conectando...' : 'Gerar QR Code'}
               </button>
             </div>
