@@ -27,6 +27,21 @@ let activeSock = null
 let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
 let shuttingDown = false
 
+let heartbeatTimer = null
+function startHeartbeatIpc() {
+  if (heartbeatTimer) return
+  const intervalMs = Math.max(Number(process.env.WA_HEARTBEAT_INTERVAL_MS || 15000), 5000)
+  heartbeatTimer = setInterval(() => {
+    if (process.send) process.send({ type: 'heartbeat', ts: Date.now(), state: activeSock ? 'connected' : (pendingSock ? 'connecting' : 'idle') })
+  }, intervalMs)
+  heartbeatTimer.unref?.()
+}
+function stopHeartbeatIpc() {
+  if (!heartbeatTimer) return
+  clearInterval(heartbeatTimer)
+  heartbeatTimer = null
+}
+
 const AUTH_DIR = getAuthInfoDir(userId)
 const DEDUP_FILE = getDedupFile(userId)
 const DEDUP_FLUSH_DEBOUNCE_MS = 1_000
@@ -456,6 +471,7 @@ async function processSendJob(job) {
 
 async function markInterruptedSendLogs() {
   const now = new Date()
+  stopHeartbeatIpc()
   await Promise.all([
     db.messageLog.updateMany({
       where: { userId, status: { in: ['queued', 'sending'] } },
@@ -490,6 +506,7 @@ async function startBot() {
 
   setLifecycleState(WA_LIFECYCLE.INITIALIZING, { reason: 'start_bot' })
   mkdirSync(AUTH_DIR, { recursive: true })
+  startHeartbeatIpc()
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR)
   const { version } = await fetchLatestBaileysVersion()
@@ -856,6 +873,7 @@ async function startBot() {
 async function shutdown(code = 0) {
   if (shuttingDown) return
   shuttingDown = true
+  stopHeartbeatIpc()
   await Promise.all([
     flushDedupNow().catch(err => {
       logger.error({ err: err.message }, 'Erro ao persistir deduplicação antes de encerrar')

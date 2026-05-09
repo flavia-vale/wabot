@@ -8,6 +8,7 @@ const workerPath = join(__dirname, 'bot-worker.js')
 // userId -> { proc, qrListeners: Set, statusListeners: Set }
 const bots = new Map()
 const pendingRequests = new Map() // requestId -> { resolve, reject }
+let healthTimer = null
 
 
 function shouldAutoStartPersistedBots() {
@@ -42,6 +43,39 @@ export async function resumePersistedBots(db, log = console) {
   return { attempted: sessions.length, started, skipped }
 }
 
+
+export function startSessionHealthMonitor(db, log = console) {
+  if (!shouldAutoStartPersistedBots()) return () => {}
+  const intervalMs = Math.max(Number(process.env.WA_ZOMBIE_CHECK_INTERVAL_MS || 15000), 5000)
+  const staleMs = Math.max(Number(process.env.WA_HEARTBEAT_STALE_MS || 90000), 30000)
+
+  const tick = async () => {
+    const now = Date.now()
+    for (const [userId, entry] of bots.entries()) {
+      if (!entry?.proc || entry.proc.killed) continue
+      const hbAge = now - (entry.lastHeartbeatAt || 0)
+      if (hbAge <= staleMs) continue
+      log.warn?.({ userId, hbAge }, 'Worker com heartbeat estagnado — reiniciando sessão silenciosamente')
+      stopBot(userId)
+      setTimeout(() => startBot(userId), 1000).unref?.()
+    }
+
+    const persisted = await db.waSession.findMany({
+      where: { status: { in: ['connected', 'connecting'] } },
+      select: { userId: true },
+    })
+    for (const s of persisted) {
+      if (!bots.has(s.userId)) startBot(s.userId)
+    }
+  }
+
+  healthTimer = setInterval(() => {
+    tick().catch(err => log.error?.({ err: err.message }, 'Falha no monitor de saúde de sessão'))
+  }, intervalMs)
+  healthTimer.unref?.()
+  return () => { if (healthTimer) clearInterval(healthTimer); healthTimer = null }
+}
+
 export function stopAllBots() {
   const userIds = listRunningBots()
   for (const userId of userIds) stopBot(userId)
@@ -55,7 +89,7 @@ export function startBot(userId) {
     env: { ...process.env, BOT_USER_ID: userId },
   })
 
-  const entry = { proc, qrListeners: new Set(), statusListeners: new Set(), lastQR: null }
+  const entry = { proc, qrListeners: new Set(), statusListeners: new Set(), lastQR: null, lastHeartbeatAt: Date.now() }
   bots.set(userId, entry)
 
   proc.on('message', msg => {
@@ -63,6 +97,9 @@ export function startBot(userId) {
     if (msg.type === 'qr') {
       entry.lastQR = msg.data
       entry.qrListeners.forEach(fn => fn(msg.data))
+    }
+    if (msg.type === 'heartbeat') {
+      entry.lastHeartbeatAt = Date.now()
     }
     if (msg.type === 'status') {
       if (msg.data === 'connected' || msg.data === 'disconnected') entry.lastQR = null
