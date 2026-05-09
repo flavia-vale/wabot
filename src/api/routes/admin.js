@@ -469,6 +469,7 @@ export async function adminRoutes(app) {
         skip,
         select: {
           id: true,
+          name: true,
           email: true,
           contactPhone: true,
           status: true,
