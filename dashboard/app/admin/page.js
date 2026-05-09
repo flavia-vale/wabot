@@ -358,7 +358,7 @@ function TutorialEditor({ tutorial, onSave }) {
   )
 }
 
-function LandingPageContentAccordion({ plans, faq, onSavePlan, onSaveFaq, onDeleteFaq }) {
+function LandingPageContentAccordion({ plans, faq, tutorial, onSavePlan, onSaveFaq, onDeleteFaq, onSaveTutorial }) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -878,7 +878,7 @@ export default function AdminPage() {
           </section>
         </div>
 
-        <LandingPageContentAccordion plans={plans} faq={faq} onSavePlan={saveLpPlan} onSaveFaq={saveFaqItem} onDeleteFaq={deleteFaqItem} />
+        <LandingPageContentAccordion plans={plans} faq={faq} tutorial={tutorial} onSavePlan={saveLpPlan} onSaveFaq={saveFaqItem} onDeleteFaq={deleteFaqItem} onSaveTutorial={saveTutorialContent} />
         <AdminTutorialAccordion tutorial={tutorial} onSaveTutorial={saveTutorialContent} TutorialEditor={TutorialEditor} />
       </div>
     </main>
