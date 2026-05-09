@@ -1223,7 +1223,31 @@ export async function adminRoutes(app) {
     return { ok: true }
   })
 
-  app.get('/sessions', async (req, reply) => {
+  
+  app.get('/session-telemetry', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const limit = Math.min(Math.max(Number(req.query?.limit ?? 100), 1), 300)
+    const events = await db.adminAuditLog.findMany({
+      where: { action: 'session.telemetry', resource: 'wa_session' },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: { id: true, actorUserId: true, createdAt: true, after: true, actorUser: { select: { email: true, name: true } } },
+    })
+    const parsed = events.map((item) => {
+      let payload = {}
+      try { payload = item.after ? JSON.parse(item.after) : {} } catch {}
+      return { id: item.id, createdAt: item.createdAt, userId: item.actorUserId, user: item.actorUser, ...payload }
+    })
+    const summary = parsed.reduce((acc, item) => {
+      const key = `${item.stage || 'unknown'}:${item.event || 'unknown'}`
+      acc[key] = (acc[key] || 0) + 1
+      return acc
+    }, {})
+    await writeAdminAuditLog(req, { action: 'admin.session.telemetry.read', resource: 'waSessionTelemetry' })
+    return { total: parsed.length, summary, events: parsed }
+  })
+
+app.get('/sessions', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'support:read'))) return
 
     const { page, limit, skip } = getPagination(req.query, 30)

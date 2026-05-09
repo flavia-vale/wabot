@@ -107,6 +107,25 @@ export async function sessionRoutes(app) {
     return { ok: true }
   })
 
+
+  app.post('/telemetry', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const userId = req.user.sub
+    const { stage = 'unknown', event = 'unknown', detail = null, elapsedSec = null } = req.body ?? {}
+    req.log.info({ userId, stage, event, detail, elapsedSec }, 'Session telemetry')
+    await db.adminAuditLog.create({
+      data: {
+        actorUserId: userId,
+        targetUserId: userId,
+        action: 'session.telemetry',
+        resource: 'wa_session',
+        resourceId: userId,
+        after: JSON.stringify({ stage, event, detail, elapsedSec }),
+        reason: 'dashboard_session_observability',
+      },
+    }).catch(() => {})
+    return reply.code(202).send({ ok: true })
+  })
+
   app.post('/qr-ticket', { onRequest: [app.authenticate] }, async (req) => {
     return {
       ticket: app.jwt.sign({ sub: req.user.sub, purpose: 'qr_ws' }, { expiresIn: '2m' }),
