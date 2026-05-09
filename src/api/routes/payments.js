@@ -33,6 +33,12 @@ function isPublicHttpUrl(value) {
   }
 }
 
+function forceHttpsUrl(value) {
+  const parsed = new URL(String(value ?? ''))
+  parsed.protocol = 'https:'
+  return parsed.toString().replace(/\/$/, '')
+}
+
 function sendError(reply, statusCode, code, message) {
   return reply.code(statusCode).send({ error: { code, message } })
 }
@@ -229,9 +235,12 @@ async function createMercadoPagoPreference({ userId, plan }) {
     err.code = 'PAYMENT_PROVIDER_MISCONFIGURED'
     throw err
   }
+  const callbackOrigin = IS_PRODUCTION ? forceHttpsUrl(dashboardUrl) : dashboardUrl
+  const notificationOrigin = IS_PRODUCTION ? forceHttpsUrl(apiUrl) : apiUrl
+
   // Mercado Pago validates `back_urls` as user-facing return URLs.
-  // Prefer DASHBOARD_URL (public domain) to avoid provider rejection when API_URL uses raw IP/internal host.
-  const callbackBase = `${dashboardUrl}/api/payments/callback`
+  // In production always enforce HTTPS for return/webhook URLs.
+  const callbackBase = `${callbackOrigin}/api/payments/callback`
 
   const preference = {
     items: [{
@@ -247,13 +256,13 @@ async function createMercadoPagoPreference({ userId, plan }) {
       pending: `${callbackBase}?collection_status=pending`,
     },
     auto_return: 'approved',
-    notification_url: `${apiUrl}/api/payments/webhook`,
+    notification_url: `${notificationOrigin}/api/payments/webhook`,
     // Back URL shown after payment for manual navigation
     statement_descriptor: 'BOTinho',
   }
   const debugUrls = {
-    dashboardUrl,
-    apiUrl,
+    dashboardUrl: callbackOrigin,
+    apiUrl: notificationOrigin,
     callbackBase,
     backUrls: preference.back_urls,
     notificationUrl: preference.notification_url,
