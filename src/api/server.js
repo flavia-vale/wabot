@@ -77,6 +77,15 @@ async function verifyAuthenticatedUser(userId) {
   }
 }
 
+
+function getTokenFromAuthorizationHeader(value) {
+  if (!value) return null
+  const [scheme, token] = String(value).split(' ')
+  if (!scheme || !token) return null
+  if (scheme.toLowerCase() !== 'bearer') return null
+  return token.trim() || null
+}
+
 function getTokenFromCookie(cookieHeader, cookieName = 'wb_auth') {
   if (!cookieHeader) return null
   const parts = cookieHeader.split(';').map((part) => part.trim())
@@ -158,7 +167,7 @@ await app.register(fastifyWebsocket)
 
 app.decorate('authenticate', async function (req, reply) {
   try {
-    const token = getTokenFromCookie(req.headers.cookie)
+    const token = getTokenFromCookie(req.headers.cookie) || getTokenFromAuthorizationHeader(req.headers.authorization)
     if (!token) throw new Error('Token ausente')
     req.user = app.jwt.verify(token)
     const active = await verifyAuthenticatedUser(req.user.sub)

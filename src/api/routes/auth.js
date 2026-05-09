@@ -242,7 +242,7 @@ export async function authRoutes(app) {
 
       const token = app.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: '7d' })
       setAuthCookie(reply, req, token)
-      return { user: publicUser(user) }
+      return { user: publicUser(user), token }
     } catch (err) {
       if (String(err?.code) === 'P2002' || String(err?.message ?? '').includes('Unique constraint failed')) {
         return reply.code(409).send({ error: 'Este número de telefone já está cadastrado' })
@@ -269,7 +269,7 @@ export async function authRoutes(app) {
 
     const token = app.jwt.sign({ sub: updated.id, email: updated.email }, { expiresIn: '7d' })
     setAuthCookie(reply, req, token)
-    return { user: publicUser(updated) }
+    return { user: publicUser(updated), token }
   })
 
   app.post('/logout', async (_req, reply) => {
