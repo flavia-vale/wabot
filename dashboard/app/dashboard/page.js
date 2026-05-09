@@ -28,6 +28,11 @@ export default function DashboardPage() {
   const [pairingCode, setPairingCode] = useState('')
   const [showForgetConfirm, setShowForgetConfirm] = useState(false)
 
+
+  const trackTelemetry = useCallback((payload) => {
+    api.sessionTelemetry(payload).catch(() => {})
+  }, [])
+
   const fetchStatus = useCallback(async ({ showLoading = false, recoverable = false } = {}) => {
     if (showLoading) setStatusLoading(true)
     if (recoverable) setStatusError('')
@@ -53,11 +58,15 @@ export default function DashboardPage() {
       onError: () => setSocketState('error'),
       onClose: () => setSocketState('closed'),
       onMessage: (msg) => {
-        if (msg.type === 'qr') setQr(msg.data)
+        if (msg.type === 'qr') {
+          setQr(msg.data)
+          trackTelemetry({ stage: 'authenticating', event: 'qr_received' })
+        }
         if (msg.type === 'status') {
           setStatus((s) => ({ ...s, status: msg.data, phone: msg.phone ?? s?.phone }))
           setStatusError('')
           if (msg.data === 'connected') {
+            trackTelemetry({ stage: 'ready', event: 'connected' })
             setFeedback('WhatsApp conectado com sucesso.')
             setQr(null)
             setPairingCode('')
@@ -68,7 +77,7 @@ export default function DashboardPage() {
       },
     })
     wsRef.current = ws
-  }, [fetchStatus])
+  }, [fetchStatus, trackTelemetry])
 
   useEffect(() => {
     let active = true
@@ -112,6 +121,7 @@ export default function DashboardPage() {
     setQrWaitElapsed(0)
     setLoading(true)
     setActionLoading('connect')
+    trackTelemetry({ stage: 'initializing', event: 'connect_click' })
     try {
       await api.sessionStart()
       const s = await fetchStatus()
@@ -125,6 +135,7 @@ export default function DashboardPage() {
       }, 6000)
     } catch (err) {
       setError(err.message)
+      trackTelemetry({ stage: 'initializing', event: 'connect_failed', detail: err.message })
     } finally {
       setLoading(false)
       setActionLoading('')
@@ -144,6 +155,7 @@ export default function DashboardPage() {
     if (loading) return
     setLoading(true)
     setActionLoading('pairing')
+    trackTelemetry({ stage: 'authenticating', event: 'pairing_request' })
     try {
       if (!status?.running) await api.sessionStart()
       const { code } = await api.sessionPairingCode(pairingPhone.trim())
@@ -215,6 +227,18 @@ export default function DashboardPage() {
     }
   }
 
+
+  useEffect(() => {
+    const onHidden = () => {
+      if (document.visibilityState !== 'hidden') return
+      if (status?.running && status?.status === 'connecting' && !qr) {
+        trackTelemetry({ stage: 'authenticating', event: 'possible_abandon', elapsedSec: qrWaitElapsed })
+      }
+    }
+    document.addEventListener('visibilitychange', onHidden)
+    return () => document.removeEventListener('visibilitychange', onHidden)
+  }, [status?.running, status?.status, qr, qrWaitElapsed, trackTelemetry])
+
   const isConnected = status?.status === 'connected'
   const isConnecting = status?.status === 'connecting'
   const isRunning = status?.running
@@ -277,7 +301,7 @@ export default function DashboardPage() {
           </svg>
           <div role="status" aria-live="polite" className="text-center">
             <p className="text-sm font-medium text-gray-600">Gerando QR Code... ({qrWaitElapsed}s)</p>
-            <p className="text-xs text-gray-400">Aguarde alguns segundos enquanto o WhatsApp prepara a conexão.</p>
+            <p className="text-xs text-gray-400">Aguarde alguns segundos enquanto o WhatsApp prepara a conexão. Se passar de 20s, toque em "Tentar novamente".</p>
           </div>
           {showQrRetry && (
             <button onClick={handleQRConnect} disabled={loading} className="text-sm text-green-700 underline disabled:opacity-50 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
