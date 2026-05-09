@@ -27,7 +27,7 @@ const supportFaqSchema = {
       '@type': 'Answer',
       text: answer,
     },
-    url: `https://178.105.54.0/suporte#${id}`,
+    url: `https://espelhagrupos.com.br/suporte#${id}`,
   })),
 }
 
