@@ -1,4 +1,4 @@
-const baseUrl = 'http://178.105.54.0'
+const baseUrl = 'https://espelhagrupos.com.br'
 
 export default function sitemap() {
   return ['/', '/termos', '/privacidade', '/quem-somos', '/suporte'].map((route) => ({
