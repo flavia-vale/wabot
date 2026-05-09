@@ -116,7 +116,7 @@ async function flushDedupNow() {
 
 
 async function clearAppStateSyncKeys() {
-  const shouldClear = String(process.env.WA_CLEAR_SYNC_KEYS_ON_START ?? '1') === '1'
+  const shouldClear = String(process.env.WA_CLEAR_SYNC_KEYS_ON_START ?? '0') === '1'
   if (!shouldClear) return
 
   let entries = []
@@ -877,12 +877,14 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     logger.info({ type, count: messages.length }, 'messages.upsert recebido')
     if (type !== 'notify' && type !== 'append') return
-    const cutoff = Date.now() - 30_000
+    const cutoff = Date.now() - 5 * 60_000
 
     for (const msg of messages) {
       if (msg.key.fromMe) continue
-      const msgTs = (msg.messageTimestamp ?? 0) * 1000
-      if (msgTs < cutoff) continue
+      const msgTsRaw = Number(msg.messageTimestamp ?? 0)
+      const hasValidTimestamp = Number.isFinite(msgTsRaw) && msgTsRaw > 0
+      const msgTs = hasValidTimestamp ? msgTsRaw * 1000 : null
+      if (msgTs && msgTs < cutoff) continue
       const msgId = msg.key.id
       if (dedup.msgIds.some(e => e.id === msgId)) continue
       dedup.msgIds.push({ id: msgId, ts: Date.now() })
