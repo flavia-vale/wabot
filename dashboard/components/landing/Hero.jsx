@@ -40,21 +40,32 @@ const s = {
 
 function Nav() {
   return (
-    <nav style={s.nav}>
+    <nav style={s.nav} className="landing-nav">
       <div style={s.logo}>
         <div style={s.logoMark}>b</div>
         <span>bot conversor<span className="serif" style={{ fontStyle: 'italic', marginLeft: 6, color: 'var(--accent-strong)' }}>.afiliados</span></span>
       </div>
-      <div style={s.navLinks}>
+      <div style={s.navLinks} className="landing-nav-links">
         <a style={s.navLink} href="#como">Como funciona</a>
         <a style={s.navLink} href="#features">Recursos</a>
         <a style={s.navLink} href="#planos">Planos</a>
         <a style={s.navLink} href="#faq">Perguntas</a>
       </div>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }} className="landing-nav-cta">
         <a className="btn btn-ghost" href="/login" style={{ padding: '10px 18px', fontSize: 14 }}>Entrar</a>
         <a className="btn btn-primary" href="#planos" style={{ padding: '10px 18px', fontSize: 14 }}>Começar grátis</a>
       </div>
+      <details className="landing-mobile-menu">
+        <summary className="landing-mobile-menu-trigger">Menu</summary>
+        <div className="landing-mobile-menu-panel">
+          <a style={s.navLink} href="#como">Como funciona</a>
+          <a style={s.navLink} href="#features">Recursos</a>
+          <a style={s.navLink} href="#planos">Planos</a>
+          <a style={s.navLink} href="#faq">Perguntas</a>
+          <a className="btn btn-ghost" href="/login">Entrar</a>
+          <a className="btn btn-primary" href="#planos">Começar grátis</a>
+        </div>
+      </details>
     </nav>
   );
 }
@@ -75,38 +86,42 @@ export function Hero({ tone }) {
   return (
     <div className="wrap" style={{ position: 'relative' }}>
       <Nav />
+      <div className="landing-mobile-priority">
+        <a className="btn btn-ghost" href="/login">Entrar</a>
+        <a className="btn btn-accent" href="/promocao">Ver cupom</a>
+      </div>
       <div style={{ ...s.decor, width: 380, height: 380, background: 'var(--accent-2)', top: -40, right: -80 }} />
       <div style={{ ...s.decor, width: 280, height: 280, background: 'var(--accent-3)', bottom: -60, left: -40 }} />
 
-      <header style={s.hero}>
+      <header style={s.hero} className="landing-hero">
         <div style={{ position: 'relative', zIndex: 1 }}>
           <div style={s.eyebrow}>
             <span className="pill"><span className="dot" />Experimente grátis!</span>
           </div>
           <h1 style={s.h1}>{headline}</h1>
           <p style={s.sub}>{sub}</p>
-          <div style={s.cta}>
+          <div style={s.cta} className="landing-hero-cta">
             <a className="btn btn-accent" href="#planos">
               Conectar meu WhatsApp <Icon name="arrow" size={16} />
             </a>
             <a className="btn btn-ghost" href="#como">Ver como funciona</a>
           </div>
-          <div style={s.trust}>
-            <div style={s.trustItem}><Icon name="check" size={16} /> Sem cartão para testar</div>
-            <div style={s.trustItem}><Icon name="check" size={16} /> Configura em 4 minutos</div>
-            <div style={s.trustItem}><Icon name="check" size={16} /> Cancela quando quiser</div>
+          <div style={s.trust} className="landing-trust">
+            <div style={s.trustItem} className="landing-trust-item"><Icon name="check" size={16} /> Sem cartão para testar</div>
+            <div style={s.trustItem} className="landing-trust-item"><Icon name="check" size={16} /> Configura em 4 minutos</div>
+            <div style={s.trustItem} className="landing-trust-item"><Icon name="check" size={16} /> Cancela quando quiser</div>
           </div>
         </div>
 
-        <div style={s.mockWrap}>
-          <div style={{ ...s.floatNote, top: 24, left: -40, transform: 'rotate(-3deg)' }}>
+        <div style={s.mockWrap} className="landing-mock-wrap">
+          <div style={{ ...s.floatNote, top: 24, left: -40, transform: 'rotate(-3deg)' }} className="landing-float-note">
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent-strong)' }} />
             <div>
               <div style={{ fontWeight: 600, fontSize: 12.5 }}>Link interceptado</div>
               <div style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>{'de "Promoções Brasil" · 0,3s'}</div>
             </div>
           </div>
-          <div style={{ ...s.floatNote, bottom: 80, right: -50, transform: 'rotate(2deg)', background: 'color-mix(in oklab, var(--accent) 18%, var(--surface))' }}>
+          <div style={{ ...s.floatNote, bottom: 80, right: -50, transform: 'rotate(2deg)', background: 'color-mix(in oklab, var(--accent) 18%, var(--surface))' }} className="landing-float-note">
             <Icon name="chart" size={18} />
             <div>
               <div style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>Comissões hoje</div>
