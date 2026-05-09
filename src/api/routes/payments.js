@@ -230,13 +230,26 @@ async function createMercadoPagoPreference({ userId, plan }) {
     statement_descriptor: 'BOTinho',
   }
 
-  const response = await axios.post(
-    'https://api.mercadopago.com/checkout/preferences',
-    preference,
-    { headers: { Authorization: `Bearer ${accessToken}` }, timeout: 10000 }
-  )
+  try {
+    const response = await axios.post(
+      'https://api.mercadopago.com/checkout/preferences',
+      preference,
+      { headers: { Authorization: `Bearer ${accessToken}` }, timeout: 10000 }
+    )
 
-  return response.data.init_point
+    return response.data.init_point
+  } catch (err) {
+    const providerStatus = err?.response?.status
+    const providerCause = err?.response?.data?.cause?.[0]?.description
+      || err?.response?.data?.message
+      || err?.response?.data?.error
+      || err?.message
+      || 'provider_error'
+    const wrapped = new Error(String(providerCause))
+    wrapped.code = 'CHECKOUT_PROVIDER_ERROR'
+    wrapped.providerStatus = providerStatus
+    throw wrapped
+  }
 }
 
 async function processPendingWebhookEvents({ limit = 50, log } = {}) {
@@ -371,6 +384,9 @@ export async function paymentsRoutes(app) {
       }
       if (err?.code === 'PAYMENT_PROVIDER_NOT_CONFIGURED') {
         return sendError(reply, 500, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'Pagamentos temporariamente indisponíveis.')
+      }
+      if (err?.code === 'CHECKOUT_PROVIDER_ERROR') {
+        req.log.warn({ providerStatus: err?.providerStatus, reason: err?.message, plan, userId }, 'Mercado Pago rejeitou criação de preferência')
       }
       req.log.error({ err: err?.message, plan, userId }, 'Falha ao criar preferência MP')
       return sendError(reply, 502, 'CHECKOUT_CREATION_FAILED', 'Não foi possível iniciar o checkout. Tente novamente.')
