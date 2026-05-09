@@ -29,6 +29,10 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'http://178.105.54.0',
   'https://178.105.54.0',
+  'http://espelhagrupos.com.br',
+  'https://espelhagrupos.com.br',
+  'http://www.espelhagrupos.com.br',
+  'https://www.espelhagrupos.com.br',
 ]
 
 function getAllowedOrigins() {
