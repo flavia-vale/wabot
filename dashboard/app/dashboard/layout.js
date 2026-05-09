@@ -10,7 +10,6 @@ const navGroups = [
     items: [
       { href: '/dashboard/inicio', icon: '🏠', label: 'Início' },
       { href: '/dashboard', icon: '📱', label: 'Conexão WhatsApp' },
-      { href: '/dashboard/envio', icon: '📤', label: 'Envio' },
       { href: '/dashboard/logs', icon: '📋', label: 'Logs' },
     ],
   },
