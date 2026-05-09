@@ -18,6 +18,10 @@ function getApiUrl() {
   return (process.env.API_URL || 'http://localhost:3001').replace(/\/$/, '')
 }
 
+function stripApiSuffix(url) {
+  return String(url || '').replace(/\/api\/?$/i, '')
+}
+
 function isPublicHttpUrl(value) {
   try {
     const parsed = new URL(String(value ?? ''))
@@ -218,14 +222,16 @@ async function createMercadoPagoPreference({ userId, plan }) {
     err.code = 'INVALID_PLAN_CONFIG'
     throw err
   }
-  const dashboardUrl = getDashboardUrl()
-  const apiUrl = getApiUrl()
+  const dashboardUrl = stripApiSuffix(getDashboardUrl())
+  const apiUrl = stripApiSuffix(getApiUrl())
   if (IS_PRODUCTION && (!isPublicHttpUrl(apiUrl) || !isPublicHttpUrl(dashboardUrl))) {
     const err = new Error('API_URL/DASHBOARD_URL inválidos para produção')
     err.code = 'PAYMENT_PROVIDER_MISCONFIGURED'
     throw err
   }
-  const callbackBase = `${apiUrl}/api/payments/callback`
+  // Mercado Pago validates `back_urls` as user-facing return URLs.
+  // Prefer DASHBOARD_URL (public domain) to avoid provider rejection when API_URL uses raw IP/internal host.
+  const callbackBase = `${dashboardUrl}/api/payments/callback`
 
   const preference = {
     items: [{
@@ -471,7 +477,7 @@ export async function paymentsRoutes(app) {
   // Callback de retorno do Mercado Pago após pagamento — ativa o acesso automaticamente
   // Não requer JWT; a identidade do usuário vem do external_reference salvo na Preference
   app.get('/callback', async (req, reply) => {
-    const dashboardUrl = getDashboardUrl()
+    const dashboardUrl = stripApiSuffix(getDashboardUrl())
     const { collection_id, collection_status, payment_id, status, external_reference } = req.query
 
     const mpPaymentId = String(payment_id ?? collection_id ?? '').trim()
