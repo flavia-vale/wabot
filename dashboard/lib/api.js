@@ -174,9 +174,12 @@ export const api = {
 
 export function openQRSocket(token, handlers = {}) {
   const apiUrl = new URL(BASE, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
+  const fallbackOrigin = typeof window !== 'undefined' ? window.location.origin : null
+  const shouldFallbackToCurrentHost = fallbackOrigin && apiUrl.host !== window.location.host
   const browserIsHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
   apiUrl.protocol = browserIsHttps ? 'wss:' : (apiUrl.protocol === 'https:' ? 'wss:' : 'ws:')
-  const ws = new WebSocket(`${apiUrl.origin}/api/session/qr`, ['BOTinho-auth', token])
+  const wsUrl = `${apiUrl.origin}/api/session/qr`
+  const ws = new WebSocket(wsUrl, ['BOTinho-auth', token])
 
   if (typeof handlers === 'function') {
     ws.onmessage = (e) => { try { handlers(JSON.parse(e.data)) } catch {} }
@@ -185,7 +188,23 @@ export function openQRSocket(token, handlers = {}) {
 
   const { onMessage, onError, onClose, onOpen } = handlers
   ws.onmessage = (e) => { try { onMessage?.(JSON.parse(e.data)) } catch {} }
-  ws.onerror = (event) => onError?.(event)
+  ws.onerror = (event) => {
+    if (!shouldFallbackToCurrentHost) {
+      onError?.(event)
+      return
+    }
+    try {
+      const fallbackUrl = new URL('/api/session/qr', fallbackOrigin)
+      fallbackUrl.protocol = browserIsHttps ? 'wss:' : 'ws:'
+      const fallbackWs = new WebSocket(fallbackUrl.toString(), ['BOTinho-auth', token])
+      fallbackWs.onmessage = (e) => { try { onMessage?.(JSON.parse(e.data)) } catch {} }
+      fallbackWs.onerror = (fallbackEvent) => onError?.(fallbackEvent)
+      fallbackWs.onclose = (fallbackEvent) => onClose?.(fallbackEvent)
+      fallbackWs.onopen = (fallbackEvent) => onOpen?.(fallbackEvent)
+    } catch {
+      onError?.(event)
+    }
+  }
   ws.onclose = (event) => onClose?.(event)
   ws.onopen = (event) => onOpen?.(event)
 
