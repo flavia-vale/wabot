@@ -198,15 +198,24 @@ async function createMercadoPagoPreference({ userId, plan }) {
 
   const plans = await getBillingPlans()
   const planInfo = plans[plan]
+  const normalizedPlan = {
+    title: String(planInfo?.title ?? '').trim() || DEFAULT_PLANS[plan]?.title,
+    price: Number(planInfo?.price),
+  }
+  if (!normalizedPlan.title || !Number.isFinite(normalizedPlan.price) || normalizedPlan.price <= 0) {
+    const err = new Error('Configuração de plano inválida para checkout')
+    err.code = 'INVALID_PLAN_CONFIG'
+    throw err
+  }
   const dashboardUrl = getDashboardUrl()
   const apiUrl = getApiUrl()
   const callbackBase = `${apiUrl}/api/payments/callback`
 
   const preference = {
     items: [{
-      title: planInfo.title,
+      title: normalizedPlan.title,
       quantity: 1,
-      unit_price: planInfo.price,
+      unit_price: normalizedPlan.price,
       currency_id: 'BRL',
     }],
     external_reference: userId,
@@ -357,6 +366,9 @@ export async function paymentsRoutes(app) {
       const checkoutUrl = await createMercadoPagoPreference({ userId, plan })
       return { checkout_url: checkoutUrl }
     } catch (err) {
+      if (err?.code === 'INVALID_PLAN_CONFIG') {
+        return sendError(reply, 400, 'INVALID_PLAN_CONFIG', 'Configuração do plano inválida no Admin. Revise título e preço do plano.')
+      }
       if (err?.code === 'PAYMENT_PROVIDER_NOT_CONFIGURED') {
         return sendError(reply, 500, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'Pagamentos temporariamente indisponíveis.')
       }
