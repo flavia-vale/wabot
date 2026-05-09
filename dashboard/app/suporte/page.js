@@ -38,10 +38,6 @@ export default function SupportPage() {
       title="Como podemos ajudar?"
       description="Encontre o canal oficial de atendimento e respostas rápidas para configurar sua operação."
     >
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(supportFaqSchema) }}
-      />
       <div className="space-y-8 text-sm leading-7 text-gray-600">
         <section className="rounded-2xl bg-green-50 p-5 text-green-900">
           <h2 className="text-xl font-bold">Canal oficial</h2>
@@ -65,14 +61,9 @@ export default function SupportPage() {
         <section className="rounded-2xl bg-gray-50 p-5">
           <h2 className="text-xl font-bold text-gray-900">Já tem conta?</h2>
           <p className="mt-2">Entre no painel para verificar conexão, credenciais, grupos, planos e logs da sua operação.</p>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <Link href="/dashboard/inicio" className="inline-flex rounded-xl bg-green-600 px-5 py-3 font-bold text-white hover:bg-green-700">
-              Acessar painel
-            </Link>
-            <Link href="/login" className="inline-flex rounded-xl border border-gray-300 px-5 py-3 font-bold text-gray-700 hover:bg-gray-100">
-              Criar conta no BOTinho
-            </Link>
-          </div>
+          <Link href="/dashboard/inicio" className="mt-4 inline-flex rounded-xl bg-green-600 px-5 py-3 font-bold text-white hover:bg-green-700">
+            Acessar painel
+          </Link>
         </section>
       </div>
     </PublicPage>

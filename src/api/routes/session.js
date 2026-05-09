@@ -1,4 +1,4 @@
-import { startBot, stopBot, isRunning, onQR, onStatus, listGroups, requestPairingCode, getBotMetrics } from '../../manager.js'
+import { startBot, stopBot, isRunning, onQR, onStatus, listGroups, requestPairingCode, getBotMetrics, getLastQR } from '../../manager.js'
 import db from '../../db.js'
 import { rm } from 'fs/promises'
 import { getAuthInfoDir } from '../../paths.js'
@@ -130,6 +130,14 @@ export async function sessionRoutes(app) {
     return {
       ticket: app.jwt.sign({ sub: req.user.sub, purpose: 'qr_ws' }, { expiresIn: '2m' }),
     }
+  })
+
+  app.get('/qr-latest', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const userId = req.user.sub
+    if (!isRunning(userId)) {
+      return reply.code(400).send({ error: 'Bot não está rodando' })
+    }
+    return { qr: getLastQR(userId) }
   })
 
   // WebSocket: emite QR em tempo real (ticket efêmero via subprotocol para não expor segredo na URL)
