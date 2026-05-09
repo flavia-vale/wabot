@@ -143,6 +143,10 @@ export const api = {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/sessions${query ? `?${query}` : ''}`)
   },
+  adminSessionTelemetry: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/session-telemetry${query ? `?${query}` : ''}`)
+  },
   adminSystemHealth: () => apiFetch('/api/admin/system/health'),
   adminSystemMetrics: () => apiFetch('/api/admin/system/metrics'),
   adminSuccessOverview: () => apiFetch('/api/admin/success/overview'),
