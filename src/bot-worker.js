@@ -526,11 +526,7 @@ async function startBot() {
     if (qr) {
       setLifecycleState(WA_LIFECYCLE.AUTHENTICATING, { reason: 'qr_generated' })
       if (process.send) process.send({ type: 'qr', data: qr })
-      await db.waSession.upsert({
-        where: { userId },
-        create: { userId, status: 'connecting' },
-        update: { status: 'connecting' },
-      })
+await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date() })
     }
 
     if (connection === 'open') {
@@ -539,11 +535,7 @@ async function startBot() {
       pendingSock = null
       const phone = sock.user?.id?.split(':')[0] ?? null
       if (process.send) process.send({ type: 'status', data: 'connected', phone })
-      await db.waSession.upsert({
-        where: { userId },
-        create: { userId, status: 'connected', phone },
-        update: { status: 'connected', phone },
-      })
+await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: null })
       trackAnalyticsEventSafe({ userId, event: 'whatsapp_connected' })
     }
 
@@ -554,11 +546,7 @@ async function startBot() {
       activeSock = null
       pendingSock = null
       if (process.send) process.send({ type: 'status', data: 'disconnected' })
-      await db.waSession.upsert({
-        where: { userId },
-        create: { userId, status: 'disconnected' },
-        update: { status: 'disconnected' },
-      }).catch(() => {})
+await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: code != null ? String(code) : null }).catch(() => {})
       if (isLoggedOut) {
         // Sessão revogada/expirada — limpar auth para que próximo start gere QR limpo
         await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
