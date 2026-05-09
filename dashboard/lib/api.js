@@ -80,6 +80,7 @@ export const api = {
   sessionForget: () => apiFetch('/api/session/forget', { method: 'POST' }),
   sessionPairingCode: (phone) => apiFetch('/api/session/pairing-code', { method: 'POST', body: JSON.stringify({ phone }) }),
   sessionQRTicket: () => apiFetch('/api/session/qr-ticket', { method: 'POST' }),
+  sessionTelemetry: (payload) => apiFetch('/api/session/telemetry', { method: 'POST', body: JSON.stringify(payload) }),
   sessionWAGroups: () => apiFetch('/api/session/wa-groups'),
 
   groups: () => apiFetch('/api/groups'),
@@ -172,8 +173,10 @@ export const api = {
 }
 
 export function openQRSocket(token, handlers = {}) {
-  const wsBase = BASE.replace('http', 'ws')
-  const ws = new WebSocket(`${wsBase}/api/session/qr`, ['BOTinho-auth', token])
+  const apiUrl = new URL(BASE, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
+  const browserIsHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
+  apiUrl.protocol = browserIsHttps ? 'wss:' : (apiUrl.protocol === 'https:' ? 'wss:' : 'ws:')
+  const ws = new WebSocket(`${apiUrl.origin}/api/session/qr`, ['BOTinho-auth', token])
 
   if (typeof handlers === 'function') {
     ws.onmessage = (e) => { try { handlers(JSON.parse(e.data)) } catch {} }
