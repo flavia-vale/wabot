@@ -54,7 +54,7 @@ cd /home/deploy/BOTinho
 pm2 startOrReload ecosystem.config.cjs --only dashboard --update-env
 pm2 save
 curl -f http://127.0.0.1:3001/ready
-curl -f http://178.105.54.0/health || true
+curl -f https://espelhagrupos.com.br/health || true
 ```
 
 ## Nginx como reverse proxy
@@ -74,7 +74,7 @@ upstream BOTinho_dashboard {
 
 server {
   listen 80;
-  server_name 178.105.54.0;
+  server_name espelhagrupos.com.br www.espelhagrupos.com.br;
 
   proxy_http_version 1.1;
   proxy_set_header Host $host;

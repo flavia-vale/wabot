@@ -1,7 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
-  metadataBase: new URL('http://178.105.54.0'),
+  metadataBase: new URL('https://espelhagrupos.com.br'),
   title: {
     default: 'Bot para Afiliados no WhatsApp | BOTinho',
     template: '%s | BOTinho',
