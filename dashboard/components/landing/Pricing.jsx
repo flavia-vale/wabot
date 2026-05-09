@@ -127,7 +127,7 @@ export function Pricing() {
                 ))}
               </ul>
               <a
-                href="/login"
+                href="/login?mode=register"
                 className="landing-pricing-cta"
                 style={{
                   display: 'block', textAlign: 'center', padding: '14px 22px', borderRadius: 999,

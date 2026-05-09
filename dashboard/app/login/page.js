@@ -1,5 +1,5 @@
 'use client'
-import { useState, Suspense } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSearchParams } from 'next/navigation'
 import Image from 'next/image'
@@ -23,6 +23,12 @@ function LoginContent() {
   const [password, setPassword] = useState('')
   const [contactPhone, setContactPhone] = useState('')
   const [isRegister, setIsRegister] = useState(false)
+
+  useEffect(() => {
+    const mode = searchParams.get('mode')
+    if (mode === 'register') setIsRegister(true)
+    if (mode === 'login') setIsRegister(false)
+  }, [searchParams])
   const [error, setError] = useState(() => {
     if (typeof window === 'undefined') return ''
     const reason = new URLSearchParams(window.location.search).get('reason')
