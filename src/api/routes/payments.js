@@ -172,7 +172,11 @@ export function shouldReconcilePayment(summary = {}) {
 // Activates a payment and grants 30-day access. Shared by /recover, /callback and webhook processor.
 // Must be called inside a db.$transaction — tx is a Prisma transaction client.
 export async function activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount }) {
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+  const now = new Date()
+  const user = await tx.user.findUnique({ where: { id: userId }, select: { accessExpiresAt: true } })
+  const currentExpiry = user?.accessExpiresAt ? new Date(user.accessExpiresAt) : null
+  const baseDate = currentExpiry && currentExpiry > now ? currentExpiry : now
+  const expiresAt = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000)
   const existing = await tx.payment.findUnique({ where: { mpPaymentId: String(mpPaymentId) } })
 
   if (existing?.status === 'approved') {
