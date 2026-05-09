@@ -30,6 +30,7 @@ export default function DashboardPage() {
   const wsRef = useRef(null)
   const wsQrTimeoutRef = useRef(null)
   const qrPollingRef = useRef(null)
+  const qrWaitElapsedRef = useRef(0)
 
   const [showPairingInput, setShowPairingInput] = useState(false)
   const [pairingPhone, setPairingPhone] = useState('')
@@ -92,7 +93,7 @@ export default function DashboardPage() {
           if (wsQrTimeoutRef.current) clearTimeout(wsQrTimeoutRef.current)
           setWsErrorMessage('')
           setQr(msg.data)
-          setQrStartElapsed(qrWaitElapsed)
+          setQrStartElapsed(qrWaitElapsedRef.current)
           trackTelemetry({ stage: 'authenticating', event: 'qr_received' })
         }
         if (msg.type === 'status') {
@@ -130,18 +131,22 @@ export default function DashboardPage() {
     if (qrPollingRef.current) return
     qrPollingRef.current = setInterval(async () => {
       const result = await api.sessionQRLatest().catch(() => null)
-        if (result?.qr) {
-          setQr(result.qr)
-          setQrStartElapsed(qrWaitElapsed)
-          setWsErrorMessage('')
-          trackTelemetry({ stage: 'authenticating', event: 'qr_received_polling_fallback' })
-        }
+      if (result?.qr) {
+        setQr(result.qr)
+        setQrStartElapsed(qrWaitElapsedRef.current)
+        setWsErrorMessage('')
+        trackTelemetry({ stage: 'authenticating', event: 'qr_received_polling_fallback' })
+      }
     }, 3000)
     return () => {
       if (qrPollingRef.current) clearInterval(qrPollingRef.current)
       qrPollingRef.current = null
     }
   }, [status?.running, status?.status, qr, trackTelemetry])
+
+  useEffect(() => {
+    qrWaitElapsedRef.current = qrWaitElapsed
+  }, [qrWaitElapsed])
 
   useEffect(() => {
     let active = true
