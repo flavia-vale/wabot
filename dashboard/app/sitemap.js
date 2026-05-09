@@ -1,4 +1,6 @@
-const baseUrl = 'https://espelhagrupos.com.br'
+import { getSiteUrl } from '../lib/site-url'
+
+const baseUrl = getSiteUrl()
 
 export default function sitemap() {
   return ['/', '/termos', '/privacidade', '/quem-somos', '/suporte'].map((route) => ({
