@@ -1,11 +1,13 @@
 'use client'
-import { useEffect, useMemo, useState, Suspense } from 'react'
+import { useEffect, useCallback, useMemo, useRef, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { api } from '@/lib/api'
 import { HelpLink } from '@/components/HelpLink'
 
 const PLAN_LABELS = { trial: 'Teste grátis', basic: 'Basic', pro: 'Pro' }
 const STATUS_LABELS = { pending: 'Pendente', approved: 'Aprovado', rejected: 'Rejeitado', cancelled: 'Cancelado' }
+const POLL_INTERVAL_MS = 5000
+const POLL_TIMEOUT_MS = 20 * 60 * 1000 // 20 min
 
 const DEFAULT_PLAN_CARDS = [
   {
@@ -61,6 +63,129 @@ function daysLeft(dateStr) {
   return Math.max(0, Math.ceil(diff / 86400000))
 }
 
+function PixPayment({ pix, onSuccess, onCancel }) {
+  const [copied, setCopied] = useState(false)
+  const [pollStatus, setPollStatus] = useState('waiting') // waiting | confirmed | expired
+  const pollRef = useRef(null)
+  const timeoutRef = useRef(null)
+
+  const stopPolling = useCallback(() => {
+    clearInterval(pollRef.current)
+    clearTimeout(timeoutRef.current)
+  }, [])
+
+  useEffect(() => {
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await api.pixStatus(pix.payment_id)
+        if (res.activated) {
+          stopPolling()
+          setPollStatus('confirmed')
+          setTimeout(() => onSuccess(res), 1500)
+        }
+      } catch (_) {}
+    }, POLL_INTERVAL_MS)
+
+    timeoutRef.current = setTimeout(() => {
+      stopPolling()
+      setPollStatus('expired')
+    }, POLL_TIMEOUT_MS)
+
+    return stopPolling
+  }, [pix.payment_id, stopPolling, onSuccess])
+
+  async function copyCode() {
+    try {
+      await navigator.clipboard.writeText(pix.qr_code)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 3000)
+    } catch (_) {}
+  }
+
+  if (pollStatus === 'confirmed') {
+    return (
+      <div className="bg-green-50 border border-green-200 rounded-2xl p-6 text-center">
+        <p className="text-3xl mb-2">✅</p>
+        <p className="font-bold text-green-700 text-lg">Pagamento confirmado!</p>
+        <p className="text-green-600 text-sm mt-1">Ativando seu acesso...</p>
+      </div>
+    )
+  }
+
+  if (pollStatus === 'expired') {
+    return (
+      <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-5 text-center">
+        <p className="font-semibold text-yellow-800 mb-2">QR Code expirado</p>
+        <p className="text-yellow-700 text-sm mb-4">O tempo para pagamento expirou. Gere um novo QR Code para tentar novamente.</p>
+        <button onClick={onCancel} className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">
+          Gerar novo QR Code
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="font-bold text-gray-800 text-lg">Pague via PIX</h3>
+          <p className="text-sm text-gray-500">Plano {PLAN_LABELS[pix.plan]} — R${pix.amount}</p>
+        </div>
+        <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 text-sm transition">Cancelar</button>
+      </div>
+
+      {/* QR Code */}
+      {pix.qr_code_base64 && (
+        <div className="flex justify-center mb-4">
+          <img
+            src={`data:image/png;base64,${pix.qr_code_base64}`}
+            alt="QR Code PIX"
+            className="w-48 h-48 border border-gray-200 rounded-xl"
+          />
+        </div>
+      )}
+
+      {/* Copia e cola */}
+      {pix.qr_code && (
+        <div className="mb-4">
+          <p className="text-xs text-gray-500 mb-1 font-medium">PIX Copia e Cola</p>
+          <div className="flex gap-2">
+            <input
+              readOnly
+              value={pix.qr_code}
+              className="flex-1 text-xs border rounded-lg px-3 py-2 bg-gray-50 text-gray-600 font-mono"
+            />
+            <button
+              onClick={copyCode}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-xs font-semibold transition whitespace-nowrap"
+            >
+              {copied ? 'Copiado!' : 'Copiar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Status de aguardo */}
+      <div className="flex items-center gap-2 text-sm text-gray-500 bg-gray-50 rounded-lg p-3">
+        <span className="inline-block w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+        <span>Aguardando confirmação do pagamento...</span>
+      </div>
+
+      <p className="text-xs text-gray-400 text-center mt-3">
+        O acesso é ativado automaticamente após o pagamento ser confirmado. QR Code válido por 30 minutos.
+      </p>
+
+      {pix.ticket_url && (
+        <p className="text-xs text-center mt-2">
+          <a href={pix.ticket_url} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">
+            Abrir no Mercado Pago
+          </a>
+        </p>
+      )}
+    </div>
+  )
+}
+
 function PlanosContent() {
   const searchParams = useSearchParams()
   const redirectStatus = searchParams.get('status')
@@ -72,31 +197,51 @@ function PlanosContent() {
   const [loadError, setLoadError] = useState('')
   const [checkoutLoading, setCheckoutLoading] = useState('')
   const [checkoutError, setCheckoutError] = useState('')
+  const [pixData, setPixData] = useState(null)
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState('')
 
+  const loadData = useCallback(async () => {
+    const [res, overviewRes, plansRes] = await Promise.all([
+      api.paymentsStatus(),
+      api.paymentsOverview().catch(() => null),
+      api.publicPlans().catch(() => ({ plans: [] })),
+    ])
+    setData(res)
+    setOverview(overviewRes)
+    setPublicPlans(Array.isArray(plansRes?.plans) ? plansRes.plans : [])
+  }, [])
+
   useEffect(() => {
     let active = true
-    Promise.all([api.paymentsStatus(), api.paymentsOverview().catch(() => null), api.publicPlans().catch(() => ({ plans: [] }))])
-      .then(([res, overviewRes, plansRes]) => { if (active) { setData(res); setOverview(overviewRes); setPublicPlans(Array.isArray(plansRes?.plans) ? plansRes.plans : []) } })
+    loadData()
       .catch((err) => { if (active) setLoadError(err.message) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [])
+  }, [loadData])
 
   async function handleCheckout(plan) {
     setCheckoutError('')
     setCheckoutLoading(plan)
+    setPixData(null)
     try {
-      const { checkout_url } = await api.paymentsCheckout(plan)
-      window.location.assign(checkout_url)
+      const res = await api.paymentsCheckout(plan)
+      if (res.type === 'pix') {
+        setPixData(res)
+        document.getElementById('pix-section')?.scrollIntoView({ behavior: 'smooth' })
+      }
     } catch (err) {
-      setCheckoutError(err.message || 'Não foi possível iniciar o checkout. Tente novamente.')
+      setCheckoutError(err.message || 'Não foi possível gerar o PIX. Tente novamente.')
     } finally {
       setCheckoutLoading('')
     }
   }
 
+  function handlePixSuccess(result) {
+    setPixData(null)
+    setData(prev => prev ? { ...prev, plan: result.plan, accessExpiresAt: result.accessExpiresAt, isActive: true } : prev)
+    loadData().catch(() => {})
+  }
 
   async function copyRef() {
     const url = `${window.location.origin}/login?ref=${data.referralCode}`
@@ -128,30 +273,17 @@ function PlanosContent() {
         <h2 className="text-2xl font-bold text-gray-800 mb-1">Planos</h2>
         <HelpLink topic="pagamento-pendente">Ajuda</HelpLink>
       </div>
-      <p className="text-gray-500 text-sm mb-6">Escolha entre Teste grátis, Basic e Pro. O pagamento é feito via Mercado Pago (PIX ou cartão) e o acesso é ativado automaticamente após a confirmação.</p>
+      <p className="text-gray-500 text-sm mb-6">Escolha seu plano e pague via PIX. O acesso é ativado automaticamente após a confirmação do pagamento.</p>
 
-      {/* Retorno do Mercado Pago após pagamento */}
       {redirectStatus === 'success' && hasConfirmedPaidAccess && (
         <div className="bg-green-50 border border-green-200 text-green-700 rounded-xl p-4 mb-5 text-sm font-medium">
           ✅ Acesso de 30 dias ativado com sucesso!
         </div>
       )}
-      {redirectStatus === 'success' && !hasConfirmedPaidAccess && (
-        <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-xl p-4 mb-5 text-sm">
-          <p className="font-semibold mb-1">Pagamento recebido, aguardando confirmação</p>
-          <p>Se pagou via PIX, aguarde até 2 minutos e recarregue a página. Se o acesso não ativar automaticamente, use o formulário de recuperação no final desta página.</p>
-        </div>
-      )}
       {redirectStatus === 'failure' && (
         <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl p-4 mb-5 text-sm">
           <p className="font-semibold mb-1">Pagamento não aprovado</p>
-          <p>Verifique os dados do cartão ou saldo disponível e tente novamente. Se o valor já foi debitado, entre em contato com o suporte.</p>
-        </div>
-      )}
-      {redirectStatus === 'pending' && (
-        <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-xl p-4 mb-5 text-sm">
-          <p className="font-semibold mb-1">Pagamento em análise</p>
-          <p>Para PIX, a confirmação ocorre em até 2 minutos. Para cartão, pode levar alguns instantes. Recarregue a página após o prazo.</p>
+          <p>Tente gerar um novo QR Code abaixo.</p>
         </div>
       )}
 
@@ -182,23 +314,14 @@ function PlanosContent() {
         )}
       </div>
 
-      {/* Informações de cobrança (sem jargão técnico) */}
-      {overview && (
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-5 text-sm text-gray-700">
-          <p className="font-semibold mb-2 text-gray-800">Informações de cobrança</p>
-          <ul className="space-y-1 text-xs text-gray-600">
-            <li><strong>Renovação:</strong> {overview.billingModel}</li>
-            <li><strong>Método aceito:</strong> {overview.paymentMethod}</li>
-            {overview.lastApprovedPayment?.createdAt && (
-              <li><strong>Último pagamento:</strong> {new Date(overview.lastApprovedPayment.createdAt).toLocaleDateString('pt-BR')}</li>
-            )}
-            {overview.accessExpiresAt && (
-              <li><strong>Acesso válido até:</strong> {new Date(overview.accessExpiresAt).toLocaleDateString('pt-BR')}</li>
-            )}
-          </ul>
-          {overview.actionRequired && (
-            <p className="mt-2 text-xs font-medium text-red-600">{overview.actionRequired}</p>
-          )}
+      {/* PIX QR Code */}
+      {pixData && (
+        <div id="pix-section" className="mb-5">
+          <PixPayment
+            pix={pixData}
+            onSuccess={handlePixSuccess}
+            onCancel={() => setPixData(null)}
+          />
         </div>
       )}
 
@@ -222,16 +345,13 @@ function PlanosContent() {
                 disabled={!!checkoutLoading || isCurrentPlan || plan.id === 'trial'}
                 className={`w-full ${plan.buttonClass} text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition`}
               >
-                {checkoutLoading === plan.id ? 'Abrindo checkout seguro...' : isCurrentPlan ? 'Acesso atual' : plan.id === 'trial' ? 'Plano gratuito' : `Comprar ${plan.name}`}
+                {checkoutLoading === plan.id ? 'Gerando PIX...' : isCurrentPlan ? 'Acesso atual' : plan.id === 'trial' ? 'Plano gratuito' : `Pagar ${plan.name} via PIX`}
               </button>
             </div>
           )
         })}
       </div>
 
-      {checkoutLoading && (
-        <p className="text-gray-500 text-xs text-center mb-4">Você será redirecionado para o checkout seguro do Mercado Pago (PIX ou cartão).</p>
-      )}
       {checkoutError && (
         <div className="bg-red-50 border border-red-200 text-red-600 rounded-lg p-3 mb-4 text-sm">
           {checkoutError}
@@ -239,14 +359,30 @@ function PlanosContent() {
         </div>
       )}
 
+      {/* Informações de cobrança */}
+      {overview && (
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-5 text-sm text-gray-700">
+          <p className="font-semibold mb-2 text-gray-800">Informações de cobrança</p>
+          <ul className="space-y-1 text-xs text-gray-600">
+            <li><strong>Renovação:</strong> {overview.billingModel}</li>
+            <li><strong>Método aceito:</strong> {overview.paymentMethod}</li>
+            {overview.lastApprovedPayment?.createdAt && (
+              <li><strong>Último pagamento:</strong> {new Date(overview.lastApprovedPayment.createdAt).toLocaleDateString('pt-BR')}</li>
+            )}
+            {overview.accessExpiresAt && (
+              <li><strong>Acesso válido até:</strong> {new Date(overview.accessExpiresAt).toLocaleDateString('pt-BR')}</li>
+            )}
+          </ul>
+        </div>
+      )}
+
       {/* Dúvidas rápidas */}
       <div className="bg-white rounded-2xl shadow p-5 mb-5 text-sm text-gray-600">
         <h3 className="font-semibold text-gray-700 mb-3">Dúvidas rápidas</h3>
         <div className="space-y-3">
-          <p><strong>Como funciona o pagamento?</strong> Ao clicar em "Comprar", você é direcionado para o Mercado Pago onde pode pagar com PIX ou cartão. O acesso é ativado automaticamente após a confirmação.</p>
-          <p><strong>É recorrente?</strong> Não. O acesso dura 30 dias e você renova manualmente quando quiser continuar.</p>
-          <p><strong>Basic ou Pro?</strong> Basic e Pro têm os mesmos recursos técnicos; a única diferença é que o Pro opera sem anúncios.</p>
-          <p><strong>Quanto tempo leva para ativar?</strong> Com cartão, é imediato. Com PIX, pode levar até 2 minutos após o pagamento.</p>
+          <p><strong>Como funciona?</strong> Clique em "Pagar via PIX", escaneie o QR Code ou copie o código, e pague pelo app do seu banco. O acesso é ativado automaticamente em segundos.</p>
+          <p><strong>É recorrente?</strong> Não. O acesso dura 30 dias e você renova quando quiser.</p>
+          <p><strong>Basic ou Pro?</strong> Mesmos recursos técnicos — a única diferença é que o Pro opera sem anúncios.</p>
         </div>
       </div>
 
@@ -262,11 +398,7 @@ function PlanosContent() {
               value={`${typeof window !== 'undefined' ? window.location.origin : ''}/login?ref=${data.referralCode}`}
               className="flex-1 text-xs border rounded-lg px-3 py-2 bg-gray-50 text-gray-600"
             />
-            <button
-              onClick={copyRef}
-              className="bg-green-600 text-white px-3 py-2 rounded-lg text-xs font-semibold hover:bg-green-700 transition"
-              aria-live="polite"
-            >
+            <button onClick={copyRef} className="bg-green-600 text-white px-3 py-2 rounded-lg text-xs font-semibold hover:bg-green-700 transition" aria-live="polite">
               {copied ? 'Copiado!' : 'Copiar'}
             </button>
           </div>
@@ -276,7 +408,7 @@ function PlanosContent() {
 
       {/* Histórico de pagamentos */}
       {data?.payments?.length > 0 ? (
-        <div className="bg-white rounded-2xl shadow p-5 mb-5">
+        <div className="bg-white rounded-2xl shadow p-5">
           <h3 className="font-semibold text-gray-700 mb-3">Histórico</h3>
           <div className="space-y-2">
             {data.payments.map(p => (
@@ -298,11 +430,10 @@ function PlanosContent() {
           </div>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl shadow p-5 mb-5 text-sm text-gray-400 text-center">
+        <div className="bg-white rounded-2xl shadow p-5 text-sm text-gray-400 text-center">
           Nenhum pagamento registrado ainda.
         </div>
       )}
-
     </div>
   )
 }

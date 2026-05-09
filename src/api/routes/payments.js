@@ -152,9 +152,9 @@ async function fetchMercadoPagoPaymentSnapshot(paymentId) {
   }
 }
 
-// Creates a Mercado Pago Preference (supports PIX + card, one-time payment).
-// Returns the init_point URL to redirect the user to.
-async function createMercadoPagoPreference({ userId, plan }) {
+// Creates a PIX payment via Mercado Pago direct payments API.
+// Returns QR code data to display inline — no redirect needed.
+async function createPixPayment({ userId, plan, userEmail }) {
   const accessToken = getMpAccessToken()
   if (!accessToken) {
     const err = new Error('MP_ACCESS_TOKEN não configurado')
@@ -163,36 +163,40 @@ async function createMercadoPagoPreference({ userId, plan }) {
   }
 
   const planInfo = PLANS[plan]
-  const dashboardUrl = getDashboardUrl()
   const apiUrl = getApiUrl()
-  const callbackBase = `${apiUrl}/api/payments/callback`
-
-  const preference = {
-    items: [{
-      title: planInfo.title,
-      quantity: 1,
-      unit_price: planInfo.price,
-      currency_id: 'BRL',
-    }],
-    external_reference: userId,
-    back_urls: {
-      success: `${callbackBase}?collection_status=approved`,
-      failure: `${callbackBase}?collection_status=rejected`,
-      pending: `${callbackBase}?collection_status=pending`,
-    },
-    auto_return: 'approved',
-    notification_url: `${apiUrl}/api/payments/webhook`,
-    // Back URL shown after payment for manual navigation
-    statement_descriptor: 'BOTinho',
-  }
+  // Day-scoped idempotency key: retries on same day return the same payment
+  const idempotencyKey = `${userId}-${plan}-${Math.floor(Date.now() / 86400000)}`
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString() // 30 min
 
   const response = await axios.post(
-    'https://api.mercadopago.com/checkout/preferences',
-    preference,
-    { headers: { Authorization: `Bearer ${accessToken}` }, timeout: 10000 }
+    'https://api.mercadopago.com/v1/payments',
+    {
+      transaction_amount: planInfo.price,
+      description: planInfo.title,
+      payment_method_id: 'pix',
+      external_reference: userId,
+      notification_url: `${apiUrl}/api/payments/webhook`,
+      date_of_expiration: expiresAt,
+      payer: { email: userEmail },
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'X-Idempotency-Key': idempotencyKey,
+        'Content-Type': 'application/json',
+      },
+      timeout: 10000,
+    }
   )
 
-  return response.data.init_point
+  const data = response.data
+  return {
+    paymentId: String(data.id),
+    qrCode: data.point_of_interaction?.transaction_data?.qr_code ?? null,
+    qrCodeBase64: data.point_of_interaction?.transaction_data?.qr_code_base64 ?? null,
+    ticketUrl: data.point_of_interaction?.transaction_data?.ticket_url ?? null,
+    expiresAt: data.date_of_expiration ?? expiresAt,
+  }
 }
 
 async function processPendingWebhookEvents({ limit = 50, log } = {}) {
@@ -308,24 +312,81 @@ export async function paymentsRoutes(app) {
   warnMissingProductionEnv(app.log)
   startWebhookProcessor(app)
 
-  // Creates a dynamic Mercado Pago Preference (supports PIX + credit card) and returns the checkout URL
+  // Gera um pagamento PIX via API do MP e retorna QR code para exibir inline
   app.post('/checkout', { onRequest: [app.authenticate] }, async (req, reply) => {
     const { plan } = req.body ?? {}
     if (!PLANS[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic ou pro.')
 
     const userId = req.user.sub
+    const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } })
     trackAnalyticsEventSafe({ userId, event: 'checkout_started', metadata: { plan } })
 
     try {
-      const checkoutUrl = await createMercadoPagoPreference({ userId, plan })
-      return { checkout_url: checkoutUrl }
+      const pix = await createPixPayment({ userId, plan, userEmail: user.email })
+
+      // Registra pagamento pendente para rastreamento
+      await db.payment.upsert({
+        where: { mpPaymentId: pix.paymentId },
+        create: { userId, mpPaymentId: pix.paymentId, plan, status: 'pending', amount: PLANS[plan].price },
+        update: {},
+      })
+
+      return {
+        type: 'pix',
+        payment_id: pix.paymentId,
+        qr_code: pix.qrCode,
+        qr_code_base64: pix.qrCodeBase64,
+        ticket_url: pix.ticketUrl,
+        expires_at: pix.expiresAt,
+        amount: PLANS[plan].price,
+        plan,
+      }
     } catch (err) {
       if (err?.code === 'PAYMENT_PROVIDER_NOT_CONFIGURED') {
         return sendError(reply, 500, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'Pagamentos temporariamente indisponíveis.')
       }
-      req.log.error({ err: err?.message, mpStatus: err?.response?.status, mpError: err?.response?.data, plan, userId }, 'Falha ao criar preferência MP')
-      return sendError(reply, 502, 'CHECKOUT_CREATION_FAILED', 'Não foi possível iniciar o checkout. Tente novamente.')
+      req.log.error({ err: err?.message, mpStatus: err?.response?.status, mpError: err?.response?.data, plan, userId }, 'Falha ao criar PIX')
+      return sendError(reply, 502, 'CHECKOUT_CREATION_FAILED', 'Não foi possível gerar o PIX. Tente novamente.')
     }
+  })
+
+  // Polling de status do PIX — chamado pelo frontend a cada 5s após gerar o QR code
+  app.get('/pix/:paymentId/status', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const { paymentId } = req.params
+    const userId = req.user.sub
+
+    // Verifica se já está ativado no banco local
+    const existing = await db.payment.findUnique({ where: { mpPaymentId: String(paymentId) } })
+    if (existing?.status === 'approved' && existing.userId === userId) {
+      const user = await db.user.findUnique({ where: { id: userId }, select: { plan: true, accessExpiresAt: true } })
+      return { status: 'approved', activated: true, plan: user.plan, accessExpiresAt: user.accessExpiresAt }
+    }
+
+    // Verifica status diretamente na API do MP
+    const snapshot = await fetchMercadoPagoPaymentSnapshot(paymentId)
+    if (!snapshot.ok) return { status: 'pending', activated: false }
+
+    if (snapshot.providerStatus === 'approved') {
+      const plan = inferPlanFromAmount(snapshot.transactionAmount)
+      if (plan) {
+        try {
+          const result = await db.$transaction(async (tx) =>
+            activatePaymentAccess(tx, { userId, plan, mpPaymentId: String(paymentId), amount: PLANS[plan].price })
+          )
+          trackAnalyticsEventSafe({ userId, event: 'payment_approved', metadata: { plan, source: 'pix_poll' } })
+          const user = await db.user.findUnique({ where: { id: userId }, select: { plan: true, accessExpiresAt: true } })
+          return { status: 'approved', activated: true, plan: user.plan, accessExpiresAt: user.accessExpiresAt }
+        } catch (err) {
+          if (err?.code === 'PAYMENT_ALREADY_USED') {
+            return { status: 'approved', activated: false, error: 'PAYMENT_ALREADY_USED' }
+          }
+          req.log.error({ err: err?.message, paymentId, userId }, 'Erro ao ativar acesso no polling PIX')
+          return { status: 'approved', activated: false, error: 'activation_failed' }
+        }
+      }
+    }
+
+    return { status: snapshot.providerStatus ?? 'pending', activated: false }
   })
 
   // Webhook do MP — sem autenticação JWT
