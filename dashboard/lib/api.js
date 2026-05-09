@@ -1,4 +1,4 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const BASE = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001')
 const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou ou foi invalidada. Faça login novamente para continuar.'
 const AUTH_TOKEN_KEY = 'wb_auth_token'
 
@@ -175,8 +175,12 @@ export const api = {
 
 export function openQRSocket(token, handlers = {}) {
   const browserOrigin = typeof window !== 'undefined' ? window.location.origin : BASE
-  const wsUrl = new URL('/api/session/qr', browserOrigin)
-  wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:'
+  const apiOrigin = new URL(BASE, browserOrigin).origin
+  const browserIsHttps = browserOrigin.startsWith('https://')
+  const shouldFallbackToCurrentHost = apiOrigin !== browserOrigin
+  const fallbackOrigin = browserOrigin
+  const wsUrl = new URL('/api/session/qr', apiOrigin)
+  wsUrl.protocol = browserIsHttps ? 'wss:' : 'ws:'
   const ws = new WebSocket(wsUrl.toString(), ['BOTinho-auth', token])
 
   if (typeof handlers === 'function') {
