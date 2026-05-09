@@ -17,6 +17,20 @@ const faqs = [
   ['renovar-acesso', 'Como renovar acesso/plano?', 'Acesse Planos, escolha Basic ou Pro e finalize uma nova compra. No MVP o acesso é por 30 dias renovável manualmente.'],
 ]
 
+const supportFaqSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faqs.map(([id, question, answer]) => ({
+    '@type': 'Question',
+    name: question,
+    acceptedAnswer: {
+      '@type': 'Answer',
+      text: answer,
+    },
+    url: `https://espelhagrupos.com.br/suporte#${id}`,
+  })),
+}
+
 export default function SupportPage() {
   return (
     <PublicPage
