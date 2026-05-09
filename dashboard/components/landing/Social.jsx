@@ -49,7 +49,7 @@ export function Social() {
             Mais de <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>1.200 afiliadas</span> deixaram o copia-e-cola.
           </h2>
         </div>
-        <div style={s.grid}>
+        <div style={s.grid} className="landing-social-grid">
           {testimonials.map((t, i) => (
             <div key={i} style={s.card}>
               <div style={s.stars}>
@@ -67,7 +67,7 @@ export function Social() {
           ))}
         </div>
 
-        <div style={s.numbers}>
+        <div style={s.numbers} className="landing-social-numbers">
           {stats.map(([n, l], i, a) => (
             <div key={n} style={{ ...s.numItem, borderRight: i === a.length - 1 ? 'none' : s.numItem.borderRight }}>
               <div style={s.numBig}>{n}</div>
