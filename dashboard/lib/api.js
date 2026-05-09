@@ -173,10 +173,10 @@ export const api = {
 }
 
 export function openQRSocket(token, handlers = {}) {
-  const apiUrl = new URL(BASE, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
-  const browserIsHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
-  apiUrl.protocol = browserIsHttps ? 'wss:' : (apiUrl.protocol === 'https:' ? 'wss:' : 'ws:')
-  const ws = new WebSocket(`${apiUrl.origin}/api/session/qr`, ['BOTinho-auth', token])
+  const browserOrigin = typeof window !== 'undefined' ? window.location.origin : BASE
+  const wsUrl = new URL('/api/session/qr', browserOrigin)
+  wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:'
+  const ws = new WebSocket(wsUrl.toString(), ['BOTinho-auth', token])
 
   if (typeof handlers === 'function') {
     ws.onmessage = (e) => { try { handlers(JSON.parse(e.data)) } catch {} }
