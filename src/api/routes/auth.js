@@ -5,8 +5,10 @@ import { normalizeEmail } from '../auth-utils.js'
 
 const loginAttempts = new Map()
 
-function setAuthCookie(reply, token) {
-  const secure = process.env.COOKIE_SECURE !== 'false'
+function setAuthCookie(reply, token, req) {
+  const secureOverride = process.env.COOKIE_SECURE
+  const requestProtocol = String(req?.protocol ?? '').toLowerCase()
+  const secure = secureOverride === 'true' || (secureOverride !== 'false' && requestProtocol === 'https')
   const maxAge = 60 * 60 * 24 * 7
   const parts = [
     `wb_auth=${encodeURIComponent(token)}`,
@@ -278,7 +280,7 @@ export async function authRoutes(app) {
       }
 
       const token = app.jwt.sign({ sub: user.id, email: user.email, jti: randomToken(12) }, { expiresIn: '7d' })
-      setAuthCookie(reply, token)
+      setAuthCookie(reply, token, req)
       return { user: publicUser(user) }
     } catch (err) {
       if (String(err?.code) === 'P2002' || String(err?.message ?? '').includes('Unique constraint failed')) {
@@ -312,7 +314,7 @@ export async function authRoutes(app) {
     const updated = await updateLoginActivity(user)
 
     const token = app.jwt.sign({ sub: updated.id, email: updated.email, jti: randomToken(12) }, { expiresIn: '7d' })
-    setAuthCookie(reply, token)
+    setAuthCookie(reply, token, req)
     return { user: publicUser(updated) }
   })
 
