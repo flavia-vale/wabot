@@ -59,13 +59,13 @@ function KeywordsEditor({ value, onChange, disabled }) {
             }
           }}
           disabled={disabled}
-          className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
+          className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
         />
         <button
           type="button"
           onClick={() => commitDraft()}
           disabled={disabled || !draft.trim()}
-          className="rounded-lg bg-gray-800 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-700 focus-visible:ring-offset-2"
+          className="rounded-lg bg-gray-800 px-3 py-2.5 min-h-11 text-sm font-semibold text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-700 focus-visible:ring-offset-2"
         >
           Adicionar
         </button>
@@ -265,11 +265,11 @@ export default function ConfigPage() {
           <div className="flex items-center gap-4">
             <div className="flex-1">
               <label className="text-xs text-gray-500 mb-1 block">Mínimo (segundos)</label>
-              <input type="number" min="0" max="300" step="1" required value={form.delayMin} onChange={e => { setDelayError(''); setForm(f => ({ ...f, delayMin: e.target.value })) }} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400" />
+              <input type="number" min="0" max="300" step="1" required value={form.delayMin} onChange={e => { setDelayError(''); setForm(f => ({ ...f, delayMin: e.target.value })) }} className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm outline-none focus:ring-2 focus:ring-green-400" />
             </div>
             <div className="flex-1">
               <label className="text-xs text-gray-500 mb-1 block">Máximo (segundos)</label>
-              <input type="number" min="0" max="300" step="1" required value={form.delayMax} onChange={e => { setDelayError(''); setForm(f => ({ ...f, delayMax: e.target.value })) }} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400" />
+              <input type="number" min="0" max="300" step="1" required value={form.delayMax} onChange={e => { setDelayError(''); setForm(f => ({ ...f, delayMax: e.target.value })) }} className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm outline-none focus:ring-2 focus:ring-green-400" />
             </div>
           </div>
           {delayError && <p className="mt-2 text-xs font-medium text-red-600" role="alert">{delayError}</p>}
@@ -311,10 +311,10 @@ export default function ConfigPage() {
         <div className="bg-white rounded-2xl shadow p-5">
           <h3 className="font-semibold text-gray-700 mb-1">👋 Mensagem de boas-vindas</h3>
           <p className="text-xs text-gray-500 mb-3">Enviada para grupos de destino configurados quando o bot identifica entrada/boas-vindas no WhatsApp. Variáveis dinâmicas não são suportadas no momento.</p>
-          <textarea rows={3} placeholder="Ex: Bem-vindo(a)!" value={form.welcomeMsg} onChange={e => setForm(f => ({ ...f, welcomeMsg: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 resize-none" />
+          <textarea rows={3} placeholder="Ex: Bem-vindo(a)!" value={form.welcomeMsg} onChange={e => setForm(f => ({ ...f, welcomeMsg: e.target.value }))} className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm outline-none focus:ring-2 focus:ring-green-400 resize-none" />
           <div className="mt-3 rounded-2xl bg-green-50 p-3">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-green-700">Prévia no WhatsApp</p>
-            <p className="mt-2 whitespace-pre-wrap rounded-2xl bg-white px-3 py-2 text-sm text-gray-700 shadow-sm">{welcomePreview}</p>
+            <p className="mt-2 whitespace-pre-wrap rounded-2xl bg-white px-3 py-2.5 min-h-11 text-sm text-gray-700 shadow-sm">{welcomePreview}</p>
           </div>
         </div>
 

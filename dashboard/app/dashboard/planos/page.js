@@ -260,7 +260,7 @@ function PlanosContent() {
               id="ref-link-input"
               readOnly
               value={`${typeof window !== 'undefined' ? window.location.origin : ''}/login?ref=${data.referralCode}`}
-              className="flex-1 text-xs border rounded-lg px-3 py-2 bg-gray-50 text-gray-600"
+              className="flex-1 text-xs border rounded-lg px-3 py-2.5 min-h-11 bg-gray-50 text-gray-600"
             />
             <button
               onClick={copyRef}

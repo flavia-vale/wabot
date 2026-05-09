@@ -230,7 +230,7 @@ export default function GruposPage() {
                         <button
                           onClick={() => handleAddFromWA(g, 'monitor')}
                           disabled={addingKey === `${g.waJid}::monitor`}
-                          className="min-h-9 text-xs bg-blue-100 text-blue-700 px-3 py-2 rounded hover:bg-blue-200 disabled:opacity-60 transition"
+                          className="min-h-11 text-xs bg-blue-100 text-blue-700 px-3 py-2 rounded hover:bg-blue-200 disabled:opacity-60 transition"
                         >
                           <span aria-hidden="true">👀</span> {addingKey === `${g.waJid}::monitor` ? 'Adicionando...' : 'Monitorar'}
                         </button>
@@ -239,7 +239,7 @@ export default function GruposPage() {
                         <button
                           onClick={() => handleAddFromWA(g, 'post')}
                           disabled={addingKey === `${g.waJid}::post`}
-                          className="min-h-9 text-xs bg-purple-100 text-purple-700 px-3 py-2 rounded hover:bg-purple-200 disabled:opacity-60 transition"
+                          className="min-h-11 text-xs bg-purple-100 text-purple-700 px-3 py-2 rounded hover:bg-purple-200 disabled:opacity-60 transition"
                         >
                           <span aria-hidden="true">📢</span> {addingKey === `${g.waJid}::post` ? 'Adicionando...' : 'Postar'}
                         </button>
@@ -407,7 +407,7 @@ export default function GruposPage() {
                 value={manualForm.name}
                 onChange={e => setManualForm(f => ({ ...f, name: e.target.value }))}
                 required
-                className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
+                className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm outline-none focus:ring-2 focus:ring-green-400"
                 />
               </div>
               <div>
@@ -419,7 +419,7 @@ export default function GruposPage() {
                 onChange={e => setManualForm(f => ({ ...f, waJid: e.target.value }))}
                 required
                 aria-describedby="manual-jid-help"
-                className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
+                className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm outline-none focus:ring-2 focus:ring-green-400"
                 />
                 <p id="manual-jid-help" className="mt-1 text-xs text-gray-500">O JID de grupo normalmente termina em @g.us.</p>
               </div>
@@ -429,7 +429,7 @@ export default function GruposPage() {
                 id="manual-role"
                 value={manualForm.role}
                 onChange={e => setManualForm(f => ({ ...f, role: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
+                className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm outline-none focus:ring-2 focus:ring-green-400"
                 >
                   <option value="monitor">Monitorar (origem)</option>
                   <option value="post">Postar (destino)</option>
@@ -441,7 +441,7 @@ export default function GruposPage() {
               <button
                 type="submit"
                 disabled={manualLoading}
-                className="bg-gray-700 text-white rounded-lg py-2 font-semibold hover:bg-gray-800 disabled:opacity-50 transition"
+                className="bg-gray-700 text-white rounded-lg py-3 min-h-11 font-semibold hover:bg-gray-800 disabled:opacity-50 transition"
               >
                 {manualLoading ? 'Salvando...' : 'Adicionar manualmente'}
               </button>

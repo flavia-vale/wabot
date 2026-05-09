@@ -209,7 +209,7 @@ export default function DashboardPage() {
   const canSubmitPairing = pairingPhone.trim().length >= 10
 
   return (
-    <div className="max-w-lg">
+    <div className="max-w-2xl">
       <h2 className="text-2xl font-bold text-gray-800 mb-1">WhatsApp</h2>
       <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-gray-500 text-sm">Conecte seu número ao bot</p>
@@ -315,7 +315,7 @@ export default function DashboardPage() {
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <h3 className="text-sm font-semibold text-amber-800">Ações avançadas</h3>
             <p className="mt-1 text-xs text-amber-700">Use “Esquecer número salvo” apenas se quiser remover a sessão deste painel e conectar novamente por QR Code ou código.</p>
-            <button onClick={() => setShowForgetConfirm(true)} disabled={loading} className="mt-3 bg-white text-amber-800 border border-amber-200 px-4 py-2 rounded-lg font-semibold hover:bg-amber-100 disabled:opacity-50 transition text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2">Esquecer número salvo</button>
+            <button onClick={() => setShowForgetConfirm(true)} disabled={loading} className="mt-3 bg-white text-amber-800 border border-amber-200 px-4 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-amber-100 disabled:opacity-50 transition text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2">Esquecer número salvo</button>
           </div>
         </div>
       )}
@@ -339,12 +339,12 @@ export default function DashboardPage() {
           <div>
             <h3 className="text-sm font-semibold text-gray-700">Ação operacional</h3>
             <p className="text-xs text-gray-500 mb-2">Desliga o bot agora, mas mantém a sessão salva para reconectar depois.</p>
-            <button onClick={handleStop} disabled={loading} className="bg-red-500 text-white px-5 py-2 rounded-lg font-semibold hover:bg-red-600 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2">{loading ? 'Parando...' : 'Desligar bot'}</button>
+            <button onClick={handleStop} disabled={loading} className="bg-red-500 text-white px-5 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-red-600 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2">{loading ? 'Parando...' : 'Desligar bot'}</button>
           </div>
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <h3 className="text-sm font-semibold text-amber-800">Ações avançadas</h3>
             <p className="mt-1 text-xs text-amber-700">Esquecer número desconecta o WhatsApp e remove a sessão salva neste painel. Para usar novamente, você precisará conectar por QR Code ou código.</p>
-            <button onClick={() => setShowForgetConfirm(true)} disabled={loading} className="mt-3 bg-white text-amber-800 border border-amber-200 px-4 py-2 rounded-lg font-semibold hover:bg-amber-100 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2">Esquecer número</button>
+            <button onClick={() => setShowForgetConfirm(true)} disabled={loading} className="mt-3 bg-white text-amber-800 border border-amber-200 px-4 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-amber-100 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2">Esquecer número</button>
           </div>
         </div>
       )}
