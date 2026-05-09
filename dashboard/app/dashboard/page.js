@@ -123,9 +123,15 @@ export default function DashboardPage() {
     setActionLoading('connect')
     trackTelemetry({ stage: 'initializing', event: 'connect_click' })
     try {
-      await api.sessionStart()
+      await api.sessionStart().catch(async (err) => {
+        if (err?.status === 409) return
+        throw err
+      })
+      await openWS()
       const s = await fetchStatus()
-      if (s?.running) await openWS()
+      if (s?.running && s?.status === 'connecting' && !qr) {
+        trackTelemetry({ stage: 'authenticating', event: 'waiting_qr_after_connect_click' })
+      }
       setTimeout(async () => {
         const s = await api.sessionStatus().catch(() => null)
         if (s && !s.running && s.status === 'disconnected') {
