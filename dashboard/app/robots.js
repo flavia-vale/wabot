@@ -1,4 +1,6 @@
-const baseUrl = 'http://espelhagrupos.com.br'
+import { getSiteUrl } from '../lib/site-url'
+
+const baseUrl = getSiteUrl()
 
 export default function robots() {
   return {
