@@ -41,7 +41,8 @@ function getAllowedOrigins() {
     .map((origin) => origin.trim())
     .filter(Boolean)
 
-  return configured?.length ? configured : DEFAULT_ALLOWED_ORIGINS
+  if (!configured?.length) return DEFAULT_ALLOWED_ORIGINS
+  return [...new Set([...DEFAULT_ALLOWED_ORIGINS, ...configured])]
 }
 
 const allowedOrigins = new Set(getAllowedOrigins())
