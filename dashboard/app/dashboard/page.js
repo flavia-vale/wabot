@@ -9,12 +9,14 @@ import { LoadingState } from '@/components/States'
 import { useToast } from '@/components/ToastProvider'
 
 const QR_TIMEOUT_SECONDS = 20
+const STATUS_LOADING_TIMEOUT_SECONDS = 15
 const STATUS_ERROR_MESSAGE = 'Não foi possível carregar o status da conexão. Tente novamente.'
 
 export default function DashboardPage() {
   const [status, setStatus] = useState(null)
   const [statusLoading, setStatusLoading] = useState(true)
   const [statusError, setStatusError] = useState('')
+  const [statusLoadingTimedOut, setStatusLoadingTimedOut] = useState(false)
   const [qr, setQr] = useState(null)
   const [loading, setLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState('')
@@ -57,6 +59,7 @@ export default function DashboardPage() {
 
   const fetchStatus = useCallback(async ({ showLoading = false, recoverable = false } = {}) => {
     if (showLoading) setStatusLoading(true)
+    if (showLoading) setStatusLoadingTimedOut(false)
     if (recoverable) setStatusError('')
 
     try {
@@ -71,6 +74,17 @@ export default function DashboardPage() {
       if (showLoading) setStatusLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    if (!statusLoading) {
+      setStatusLoadingTimedOut(false)
+      return
+    }
+    const timeoutId = setTimeout(() => {
+      setStatusLoadingTimedOut(true)
+    }, STATUS_LOADING_TIMEOUT_SECONDS * 1000)
+    return () => clearTimeout(timeoutId)
+  }, [statusLoading])
 
   const openWS = useCallback(async () => {
     if (wsQrTimeoutRef.current) clearTimeout(wsQrTimeoutRef.current)
@@ -400,6 +414,13 @@ export default function DashboardPage() {
       </div>
 
       <div className="mb-3 flex flex-col gap-2">
+        {statusLoadingTimedOut && (
+          <Alert
+            type="warning"
+            title="Status demorando para carregar"
+            message='Não conseguimos atualizar o status do WhatsApp em 15s. Toque em "Tentar novamente" para continuar.'
+          />
+        )}
         {statusError && (
           <Alert
             type="error"
@@ -407,12 +428,12 @@ export default function DashboardPage() {
             message={statusError || STATUS_ERROR_MESSAGE}
           />
         )}
-        {statusError && (
+        {(statusError || statusLoadingTimedOut) && (
           <button
             type="button"
             onClick={() => fetchStatus({ showLoading: true, recoverable: true })}
             disabled={statusLoading}
-            className="self-start rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2"
+            className="self-start rounded-lg border border-amber-200 px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2"
           >
             {statusLoading ? 'Tentando...' : 'Tentar novamente'}
           </button>
@@ -432,7 +453,7 @@ export default function DashboardPage() {
         }`} />
         <div>
           {statusLoading ? (
-            <LoadingState message="Carregando status do WhatsApp..." />
+            <LoadingState message={statusLoadingTimedOut ? 'Status demorando mais do que o esperado...' : 'Carregando status do WhatsApp...'} />
           ) : (
             <p className="font-semibold text-gray-700">{isConnected ? 'Conectado' : isConnecting ? 'Conectando...' : statusError ? 'Status indisponível' : 'Desconectado'}</p>
           )}
