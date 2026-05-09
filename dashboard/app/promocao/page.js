@@ -1,8 +1,8 @@
 import { PromocaoPage } from '@/components/promocao/PromocaoPage'
 
 export const metadata = {
-  title: 'Oferta BOTinho para afiliados no WhatsApp',
-  description: 'Garanta condição promocional no BOTinho para converter links, organizar grupos e acelerar envios de ofertas.',
+  title: 'Promoção Especial BOTinho',
+  description: 'Página promocional para novos cadastros do BOTinho com foco em afiliados de WhatsApp.',
   alternates: { canonical: '/promocao' },
 }
 

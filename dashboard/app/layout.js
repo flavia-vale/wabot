@@ -4,15 +4,18 @@ import { getSiteUrl } from "../lib/site-url";
 const siteUrl = getSiteUrl()
 
 export const metadata = {
-  metadataBase: new URL('https://178.105.54.0'),
+  metadataBase: new URL(siteUrl),
   title: {
-    default: 'BOTinho | Bot para afiliados no WhatsApp',
+    default: 'Bot para Afiliados no WhatsApp | BOTinho',
     template: '%s | BOTinho',
   },
-  description: 'Converta links de afiliado, organize grupos de WhatsApp e automatize envios de ofertas com o BOTinho.',
+  description: 'Automatize a conversão de links de afiliado, organize grupos de WhatsApp e envie ofertas com menos trabalho manual.',
+  alternates: {
+    canonical: '/',
+  },
   openGraph: {
-    title: 'BOTinho | Bot para afiliados no WhatsApp',
-    description: 'Converta links de afiliado e automatize envios de ofertas para seus grupos de WhatsApp com BOTinho.',
+    title: 'Bot para Afiliados no WhatsApp | BOTinho',
+    description: 'Converta links de afiliado e automatize envios de ofertas para seus grupos de WhatsApp.',
     url: '/',
     siteName: 'BOTinho',
     locale: 'pt_BR',
