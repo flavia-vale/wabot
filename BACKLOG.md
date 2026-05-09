@@ -1606,3 +1606,194 @@ Risco de overflow, baixa usabilidade em smartphones e interação comprometida.
 
 **Correção sugerida:**
 Criar navegação responsiva (drawer/hamburger), preservando contexto de tela ativa e ação de logout.
+
+---
+
+## Módulo 9 — Marketing, Naming e SEO de Conversão
+
+### MKT-043 · Padronização de naming para SEO + Conversão (BOTinho vs Espelha Grupos)
+**Status:** open  
+**Prioridade:** alta  
+**Tipo:** epic  
+**Arquivos-alvo (fase de execução):**
+- `dashboard/app/layout.js`
+- `dashboard/app/page.js`
+- `dashboard/app/promocao/page.js`
+- `dashboard/app/promocional/page.js`
+- `dashboard/app/promo-vip-7dias/page.js`
+- `dashboard/app/login/page.js`
+- `dashboard/app/suporte/page.js`
+
+**Contexto:**  
+O projeto possui boa base de produto, mas sofre com inconsistência de posicionamento entre linguagem funcional (“Espelha Grupos”) e linguagem de benefício (“automação”). Em alguns casos, as frases ficam sem naturalidade (ex.: misturas semânticas), reduzindo clareza para usuário e potencial de CTR em SEO.
+
+**Objetivo da issue:**  
+Criar e aplicar uma convenção única de naming/copy para todas as páginas públicas e pontos de conversão, maximizando:
+1. **Clareza da promessa** (usuário entende em 3 segundos o que o produto faz).
+2. **Consistência de marca** (BOTinho como marca principal).
+3. **Intenção de busca** (Espelha Grupos como termo funcional quando apropriado).
+4. **Conversão** (CTAs mais diretos e sem ambiguidade).
+
+---
+
+## Regra editorial obrigatória (não negociável)
+
+### Princípio central
+- **Ou usa “automação/automatize”, ou usa “espelha grupos”.**
+- Não combinar os dois no mesmo núcleo frasal.
+
+### Exemplos válidos
+- “Espelhe grupos no WhatsApp com BOTinho.”
+- “Automatize seus envios de ofertas com BOTinho.”
+
+### Exemplos inválidos
+- “Automatize seu Espelha Grupos...”
+- “Automação de espelha grupos...”
+
+---
+
+## Arquitetura de naming (padrão oficial)
+
+### 1) Marca
+- **BOTinho** = marca/memória/relacionamento.
+
+### 2) Funcionalidade
+- **Espelha Grupos** = mecanismo funcional (quando foco é explicar operação).
+
+### 3) Benefício
+- **Automação de ofertas no WhatsApp** = ganho percebido (tempo/escala/consistência).
+
+---
+
+## Dicionário oficial
+
+### Termos principais aprovados
+- BOTinho
+- Espelha Grupos
+- Espelhar grupos no WhatsApp
+- Automação de ofertas no WhatsApp
+- Bot para afiliados no WhatsApp
+
+### Cauda longa aprovada
+- organizar grupos de origem e destino
+- envio automático de ofertas
+- conversão de links de afiliado
+
+### Termos banidos
+- automatizar espelha grupos
+- automação de espelha grupos
+- espelhamento automatizado de espelha grupos
+
+---
+
+## Aplicação por página (copy alvo)
+
+### Home (`/`)
+**Trilha funcional (Espelha Grupos):**
+- **Title:** `Espelha Grupos no WhatsApp com BOTinho | Bot para afiliados`
+- **Meta description:** `Espelhe grupos no WhatsApp, converta links de afiliado e organize sua operação com BOTinho.`
+- **H1:** `Espelha Grupos no WhatsApp com BOTinho`
+- **CTA primário:** `Quero espelhar meus grupos`
+
+**Trilha benefício (Automação):**
+- **Title:** `Automação de ofertas no WhatsApp com BOTinho | Para afiliados`
+- **Meta description:** `Automatize envios de ofertas, converta links e mantenha sua rotina de afiliado ativa com BOTinho.`
+- **H1:** `Automação de ofertas para afiliados no WhatsApp`
+- **CTA primário:** `Quero automatizar meus envios`
+
+> Observação: escolher **uma trilha por versão de página** e evitar mistura no hero.
+
+### Promoção (`/promocao` e `/promocional`)
+**Trilha funcional:**
+- `Oferta BOTinho para Espelha Grupos no WhatsApp`
+- CTA: `Ativar Espelha Grupos`
+
+**Trilha benefício:**
+- `Oferta BOTinho para automação de ofertas`
+- CTA: `Ativar automação`
+
+### VIP 7 dias (`/promo-vip-7dias`)
+**Trilha funcional:**
+- H1: `Teste VIP: Espelha Grupos por 7 dias`
+- CTA: `Iniciar teste de Espelha Grupos`
+
+**Trilha benefício:**
+- H1: `Teste VIP: automação de ofertas por 7 dias`
+- CTA: `Iniciar teste de automação`
+
+### Login/Cadastro (`/login`)
+- Login: `Entrar no BOTinho`
+- Cadastro (funcional): `Criar conta para Espelha Grupos`
+- Cadastro (benefício): `Criar conta para automação de ofertas`
+- CTA final: `Criar conta e começar`
+
+### Suporte (`/suporte`)
+- H1: `Suporte BOTinho`
+- Subheadline funcional: `Tire dúvidas para espelhar grupos no WhatsApp.`
+- Subheadline benefício: `Tire dúvidas para automatizar seus envios de ofertas.`
+- FAQ orientada a SEO com perguntas distintas por trilha.
+
+---
+
+## Critérios de aceite (Definition of Done)
+
+1. **Consistência semântica:** nenhuma ocorrência de frases híbridas inválidas.
+2. **Marca consistente:** BOTinho presente em metadados/títulos principais.
+3. **H1 por página:** claro e alinhado à trilha escolhida.
+4. **CTAs diretas:** verbo de ação + objetivo único.
+5. **SEO on-page:** title + description revisados nas rotas públicas prioritárias.
+6. **Revisão cruzada:** validação de linguagem por checklist editorial antes do merge.
+
+---
+
+## Checklist de execução
+
+- [ ] Definir trilha principal por página (funcional ou benefício).
+- [ ] Atualizar metadata da home.
+- [ ] Atualizar metadata/copy da promoção.
+- [ ] Atualizar copy da VIP 7 dias.
+- [ ] Ajustar títulos e microcopy do login/cadastro.
+- [ ] Ajustar H1/subheadline/FAQ do suporte.
+- [ ] Validar coerência semântica final (busca por termos banidos).
+- [ ] Revisar CTR esperada com snippet preview (title + description).
+
+---
+
+## Riscos mapeados
+
+### Risco 1 — Diluição de mensagem por mistura de trilhas
+**Mitigação:** usar uma trilha principal por página e separar testes A/B por rota/campanha.
+
+### Risco 2 — Queda temporária de CTR ao trocar snippets
+**Mitigação:** lançar por etapas (home > promo > login) e monitorar Search Console.
+
+### Risco 3 — Inconsistência em componentes compartilhados
+**Mitigação:** checklist final com varredura textual de termos banidos e revisão editorial.
+
+---
+
+## Plano de rollout sugerido
+
+1. **Fase 1:** Home (`/`) e Layout global (maior impacto em SEO de marca).
+2. **Fase 2:** Promoções (`/promocao`, `/promocional`, `/promo-vip-7dias`).
+3. **Fase 3:** Login e Suporte (fricção de fundo de funil + confiança).
+4. **Fase 4:** Revisão de consistência e documentação interna.
+
+---
+
+## Métricas de sucesso (30 dias)
+
+- CTR orgânico da Home (Search Console).
+- Taxa de clique em CTA primário por página pública.
+- Conversão Home → Cadastro.
+- Conversão Promo → Cadastro.
+- Taxa de abandono no Login/Cadastro.
+- Tempo médio até primeira ação útil no dashboard.
+
+---
+
+## Notas para implementação futura
+
+- Evitar mudanças simultâneas de layout + copy no mesmo deploy quando possível.
+- Se houver teste A/B, versionar naming por rota ou por parâmetro de campanha.
+- Registrar baseline de métricas antes de publicar alterações de metadata.
