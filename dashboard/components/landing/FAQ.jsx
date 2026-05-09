@@ -67,7 +67,7 @@ export function FAQ() {
   return (
     <section id="faq">
       <div className="wrap">
-        <div style={s.wrap}>
+        <div style={s.wrap} className="landing-faq-wrap">
           <div>
             <span className="pill"><span className="dot" />Perguntas</span>
             <h2 style={{ ...s.h2, marginTop: 16 }}>
