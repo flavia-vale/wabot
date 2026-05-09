@@ -18,6 +18,17 @@ function getApiUrl() {
   return (process.env.API_URL || 'http://localhost:3001').replace(/\/$/, '')
 }
 
+function isPublicHttpUrl(value) {
+  try {
+    const parsed = new URL(String(value ?? ''))
+    const host = parsed.hostname.toLowerCase()
+    const isLocalHost = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0'
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && !isLocalHost
+  } catch {
+    return false
+  }
+}
+
 function sendError(reply, statusCode, code, message) {
   return reply.code(statusCode).send({ error: { code, message } })
 }
@@ -209,6 +220,11 @@ async function createMercadoPagoPreference({ userId, plan }) {
   }
   const dashboardUrl = getDashboardUrl()
   const apiUrl = getApiUrl()
+  if (IS_PRODUCTION && (!isPublicHttpUrl(apiUrl) || !isPublicHttpUrl(dashboardUrl))) {
+    const err = new Error('API_URL/DASHBOARD_URL inválidos para produção')
+    err.code = 'PAYMENT_PROVIDER_MISCONFIGURED'
+    throw err
+  }
   const callbackBase = `${apiUrl}/api/payments/callback`
 
   const preference = {
@@ -384,6 +400,9 @@ export async function paymentsRoutes(app) {
       }
       if (err?.code === 'PAYMENT_PROVIDER_NOT_CONFIGURED') {
         return sendError(reply, 500, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'Pagamentos temporariamente indisponíveis.')
+      }
+      if (err?.code === 'PAYMENT_PROVIDER_MISCONFIGURED') {
+        return sendError(reply, 500, 'PAYMENT_PROVIDER_MISCONFIGURED', 'Configuração de pagamento inválida no servidor. Contate o suporte.')
       }
       if (err?.code === 'CHECKOUT_PROVIDER_ERROR') {
         req.log.warn({ providerStatus: err?.providerStatus, reason: err?.message, plan, userId }, 'Mercado Pago rejeitou criação de preferência')
