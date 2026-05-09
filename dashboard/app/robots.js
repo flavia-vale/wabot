@@ -1,4 +1,4 @@
-const baseUrl = 'https://espelhagrupos.com.br'
+const baseUrl = 'http://espelhagrupos.com.br'
 
 export default function robots() {
   return {

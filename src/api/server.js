@@ -33,6 +33,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'https://www.espelhagrupos.com.br',
 ]
 
+
 function getAllowedOrigins() {
   const configured = process.env.CORS_ORIGINS
     ?.split(',')
