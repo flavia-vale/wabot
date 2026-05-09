@@ -116,7 +116,7 @@ async function flushDedupNow() {
 
 
 async function clearAppStateSyncKeys() {
-  const shouldClear = String(process.env.WA_CLEAR_SYNC_KEYS_ON_START ?? '1') === '1'
+  const shouldClear = String(process.env.WA_CLEAR_SYNC_KEYS_ON_START ?? '0') === '1'
   if (!shouldClear) return
 
   let entries = []
