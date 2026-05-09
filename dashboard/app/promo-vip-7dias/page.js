@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
+import { trackEvent } from '@/lib/analytics'
 
 const COUPON_CODE = 'VIP7DIAS'
 
@@ -22,8 +23,14 @@ export default function PromoVipPage() {
     setLoading(true)
     try {
       await api.registerPromoVip(name, email, password, contactPhone, COUPON_CODE)
+      trackEvent('signup_success', { origin: 'promo_vip_7dias', coupon: COUPON_CODE })
       router.push('/dashboard/inicio')
     } catch (err) {
+      trackEvent('auth_error', {
+        origin: 'promo_vip_7dias',
+        mode: 'register',
+        message: err?.message || 'unknown_error',
+      })
       setError(err.message || 'Não foi possível concluir seu cadastro agora.')
     } finally {
       setLoading(false)

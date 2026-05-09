@@ -6,6 +6,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
+import { trackEvent } from '@/lib/analytics'
 
 const LOGIN_BENEFITS = [
   'Conversão automática de links de afiliado',
@@ -42,11 +43,21 @@ function LoginContent() {
     setSuccess('')
     setLoading(true)
     try {
-      if (isRegister) await api.register(name, email, password, contactPhone, ref)
-      else await api.login(email, password)
+      if (isRegister) {
+        await api.register(name, email, password, contactPhone, ref)
+        trackEvent('signup_success', { origin: 'login_page', has_ref: Boolean(ref) })
+      } else {
+        await api.login(email, password)
+        trackEvent('login_success', { origin: 'login_page' })
+      }
       setSuccess(isRegister ? 'Conta criada com sucesso. Redirecionando para o checklist...' : 'Login realizado. Redirecionando para o checklist...')
       setTimeout(() => router.push('/dashboard/inicio'), 300)
     } catch (err) {
+      trackEvent('auth_error', {
+        origin: 'login_page',
+        mode: isRegister ? 'register' : 'login',
+        message: err?.message || 'unknown_error',
+      })
       setError(err.message)
     } finally {
       setLoading(false)
@@ -212,7 +223,17 @@ function LoginContent() {
         </form>
 
         <button
-          onClick={() => { setIsRegister(!isRegister); setError(''); setSuccess(''); setContactPhone('') }}
+          onClick={() => {
+            const nextMode = !isRegister
+            trackEvent('auth_mode_switch', {
+              origin: 'login_page',
+              mode: nextMode ? 'register' : 'login',
+            })
+            setIsRegister(nextMode)
+            setError('')
+            setSuccess('')
+            setContactPhone('')
+          }}
           className={`mt-4 text-sm hover:underline w-full text-center ${isRegister ? 'text-emerald-200' : 'text-green-600'}`}
         >
           {isRegister ? 'Já tenho conta — Entrar' : 'Ainda não tenho conta — começar agora'}
