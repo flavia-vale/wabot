@@ -4,7 +4,7 @@ import { ToastProvider } from "@/components/ToastProvider";
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || "http://espelhagrupos.com.br";
 
 export const metadata = {
-  metadataBase: new URL(siteUrl),
+  metadataBase: new URL('https://espelhagrupos.com.br'),
   title: {
     default: 'Bot para Afiliados no WhatsApp | BOTinho',
     template: '%s | BOTinho',
