@@ -30,6 +30,12 @@ let shuttingDown = false
 
 let heartbeatTimer = null
 async function persistSessionPatch(data = {}) {
+  const fallbackData = {
+    ...(data.status ? { status: data.status } : {}),
+    ...(Object.prototype.hasOwnProperty.call(data, 'phone') ? { phone: data.phone ?? null } : {}),
+    updatedAt: new Date(),
+  }
+
   try {
     await db.waSession.upsert({
       where: { userId },
@@ -39,14 +45,18 @@ async function persistSessionPatch(data = {}) {
   } catch (err) {
     const message = String(err?.message ?? '')
     const shapeMismatch = message.includes('Unknown argument') || message.includes('Unknown field') || message.includes('does not exist in the current database')
-    if (!shapeMismatch) throw err
-    const fallbackData = {
-      ...(data.status ? { status: data.status } : {}),
-      ...(Object.prototype.hasOwnProperty.call(data, 'phone') ? { phone: data.phone ?? null } : {}),
-      updatedAt: new Date(),
+
+    if (shapeMismatch) {
+      try {
+        const updated = await db.waSession.updateMany({ where: { userId }, data: fallbackData })
+        if (!updated.count) await db.waSession.create({ data: { userId, ...fallbackData } })
+      } catch (fallbackErr) {
+        logger.warn({ err: String(fallbackErr?.message ?? fallbackErr) }, 'Falha ao persistir sessão com fallback simplificado')
+      }
+      return
     }
-    await db.waSession.updateMany({ where: { userId }, data: fallbackData }).catch(() => {})
-    await db.waSession.create({ data: { userId, ...fallbackData } }).catch(() => {})
+
+    logger.warn({ err: message }, 'Falha ao persistir patch de sessão WA')
   }
 }
 
