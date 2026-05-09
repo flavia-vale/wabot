@@ -1,4 +1,5 @@
 import "./globals.css";
+import { ToastProvider } from "@/components/ToastProvider";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || "http://espelhagrupos.com.br";
 
@@ -25,7 +26,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="pt-br">
-      <body style={{ background: '#EEF6F2' }}>{children}</body>
+      <body style={{ background: '#EEF6F2' }}><ToastProvider>{children}</ToastProvider></body>
     </html>
   );
 }
