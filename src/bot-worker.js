@@ -8,7 +8,7 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import { readFileSync, mkdirSync } from 'fs'
-import { rm, writeFile } from 'fs/promises'
+import { rm, writeFile, readdir } from 'fs/promises'
 import { dirname } from 'path'
 
 import logger from './logger.js'
@@ -112,6 +112,28 @@ async function flushDedupNow() {
   })
   dedupFlushPromise = writePromise.catch(() => {})
   return writePromise
+}
+
+
+async function clearAppStateSyncKeys() {
+  const shouldClear = String(process.env.WA_CLEAR_SYNC_KEYS_ON_START ?? '1') === '1'
+  if (!shouldClear) return
+
+  let entries = []
+  try {
+    entries = await readdir(AUTH_DIR, { withFileTypes: true })
+  } catch {
+    return
+  }
+
+  const targets = entries
+    .filter(entry => entry.isFile() && entry.name.startsWith('app-state-sync-key-'))
+    .map(entry => `${AUTH_DIR}/${entry.name}`)
+
+  if (!targets.length) return
+
+  await Promise.all(targets.map(path => rm(path, { force: true })))
+  logger.warn({ count: targets.length }, 'App state sync keys limpas para evitar loop de resync corrompido')
 }
 
 const sleep = ms => new Promise(res => setTimeout(res, ms))
@@ -528,6 +550,7 @@ async function startBot() {
 
   setLifecycleState(WA_LIFECYCLE.INITIALIZING, { reason: 'start_bot' })
   mkdirSync(AUTH_DIR, { recursive: true })
+  await clearAppStateSyncKeys()
   startHeartbeatIpc()
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR)
