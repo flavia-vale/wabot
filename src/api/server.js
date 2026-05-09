@@ -21,6 +21,11 @@ import { resumePersistedBots, startSessionHealthMonitor, stopAllBots } from '../
 
 const app = Fastify({ logger: true, trustProxy: true })
 registerApiMetricsHooks(app)
+const activityWriteThrottleMs = Math.max(0, Number(process.env.ACTIVITY_WRITE_THROTTLE_MS || 60_000))
+const lastActivityWriteByUser = new Map()
+const activityCacheMaxEntries = Math.max(1000, Number(process.env.ACTIVITY_CACHE_MAX_ENTRIES || 50_000))
+const activityCacheCleanupIntervalMs = Math.max(30_000, Number(process.env.ACTIVITY_CACHE_CLEANUP_INTERVAL_MS || 300_000))
+let activityCacheCleanupTimer = null
 
 const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:3000',
@@ -64,16 +69,41 @@ function isPrismaShapeMismatch(err) {
 
 async function verifyAuthenticatedUser(userId) {
   try {
-    const activity = await db.user.updateMany({
+    const now = Date.now()
+    const lastWrite = lastActivityWriteByUser.get(userId) ?? 0
+    const shouldWrite = activityWriteThrottleMs === 0 || (now - lastWrite) >= activityWriteThrottleMs
+    if (shouldWrite) {
+      const activity = await db.user.updateMany({
+        where: { id: userId, status: { notIn: ['banned', 'suspended'] } },
+        data: { lastActivityAt: new Date(now) },
+      })
+      if (activity.count === 1) lastActivityWriteByUser.set(userId, now)
+      if (lastActivityWriteByUser.size > activityCacheMaxEntries) {
+        const oldestKey = lastActivityWriteByUser.keys().next().value
+        if (oldestKey) lastActivityWriteByUser.delete(oldestKey)
+      }
+      return activity.count === 1
+    }
+    const user = await db.user.findFirst({
       where: { id: userId, status: { notIn: ['banned', 'suspended'] } },
-      data: { lastActivityAt: new Date() },
+      select: { id: true },
     })
-    return activity.count === 1
+    return Boolean(user)
   } catch (err) {
     if (!isPrismaShapeMismatch(err)) throw err
     const user = await db.user.findUnique({ where: { id: userId }, select: { id: true } })
     return Boolean(user)
   }
+}
+
+function startActivityCacheCleanup() {
+  activityCacheCleanupTimer = setInterval(() => {
+    const cutoff = Date.now() - Math.max(activityWriteThrottleMs * 4, 10 * 60_000)
+    for (const [userId, lastWrite] of lastActivityWriteByUser.entries()) {
+      if (lastWrite < cutoff) lastActivityWriteByUser.delete(userId)
+    }
+  }, activityCacheCleanupIntervalMs)
+  activityCacheCleanupTimer.unref?.()
 }
 
 
@@ -91,6 +121,26 @@ function getTokenFromCookie(cookieHeader, cookieName = 'wb_auth') {
   const target = parts.find((part) => part.startsWith(`${cookieName}=`))
   if (!target) return null
   return decodeURIComponent(target.slice(cookieName.length + 1))
+}
+
+const revokedTokens = new Map()
+
+function revokeTokenJti(jti, exp) {
+  if (!jti) return
+  const expiresAtMs = Number.isFinite(exp) ? exp * 1000 : Date.now() + (7 * 24 * 60 * 60 * 1000)
+  revokedTokens.set(String(jti), expiresAtMs)
+}
+
+function isTokenRevoked(jti) {
+  if (!jti) return false
+  const key = String(jti)
+  const expiresAtMs = revokedTokens.get(key)
+  if (!expiresAtMs) return false
+  if (Date.now() > expiresAtMs) {
+    revokedTokens.delete(key)
+    return false
+  }
+  return true
 }
 
 async function verifyDatabase() {
@@ -163,12 +213,14 @@ if (!jwtSecret) {
 }
 await app.register(fastifyJwt, { secret: jwtSecret })
 await app.register(fastifyWebsocket)
+app.decorate('revokeTokenJti', revokeTokenJti)
 
 app.decorate('authenticate', async function (req, reply) {
   try {
     const token = getTokenFromCookie(req.headers.cookie) || getTokenFromAuthorizationHeader(req.headers.authorization)
     if (!token) throw new Error('Token ausente')
     req.user = app.jwt.verify(token)
+    if (isTokenRevoked(req.user.jti)) throw new Error('Token revogado')
     const active = await verifyAuthenticatedUser(req.user.sub)
     if (!active) throw new Error('Usuário inativo ou bloqueado')
   } catch {
@@ -207,6 +259,7 @@ if (!databaseReadyAtBoot) {
   app.log.warn('API iniciada em modo degradado: execute "npx prisma migrate deploy" e reinicie quando o banco estiver pronto')
 }
 startLogRetentionJob()
+startActivityCacheCleanup()
 await app.listen({ port, host: '0.0.0.0' })
 console.log(`API rodando em http://localhost:${port}`)
 const stopSessionHealthMonitor = startSessionHealthMonitor(db, app.log)
@@ -218,6 +271,7 @@ async function shutdown(signal) {
   app.log.info({ signal }, 'Encerrando API com parada graciosa')
   stopSessionHealthMonitor()
   stopAllBots()
+  if (activityCacheCleanupTimer) clearInterval(activityCacheCleanupTimer)
   await app.close()
   await db.$disconnect()
 }

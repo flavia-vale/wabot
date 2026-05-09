@@ -1,5 +1,6 @@
 const startedAt = new Date()
 const MAX_RECENT_ERRORS = 50
+const MAX_ROUTE_METRICS = Math.max(50, Number(process.env.MAX_ROUTE_METRICS || 1000))
 const routeMetrics = new Map()
 const recentErrors = []
 
@@ -9,6 +10,10 @@ function getRouteKey(req) {
 
 function ensureRouteMetric(method, route) {
   const key = `${method} ${route}`
+  if (routeMetrics.size >= MAX_ROUTE_METRICS && !routeMetrics.has(key)) {
+    const oldestKey = routeMetrics.keys().next().value
+    if (oldestKey) routeMetrics.delete(oldestKey)
+  }
   if (!routeMetrics.has(key)) {
     routeMetrics.set(key, {
       method,

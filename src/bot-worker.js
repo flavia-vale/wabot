@@ -19,6 +19,7 @@ import db from './db.js'
 import { getAuthInfoDir, getDedupFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { createMessageQueue } from './messageQueue.js'
+import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } from './sendQueueBackend.js'
 
 const userId = process.env.BOT_USER_ID
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
@@ -253,7 +254,7 @@ async function checkScheduledMessages() {
           },
         })
 
-        const accepted = enqueueSendJob({
+        const accepted = await enqueueSendJob({
           type: 'scheduled',
           logId: log.id,
           destJid: jid,
@@ -326,6 +327,9 @@ const SEND_MAX_ATTEMPTS = Math.max(1, envNumber('SEND_MAX_ATTEMPTS', 3))
 const SEND_RETRY_BASE_MS = Math.max(0, envNumber('SEND_RETRY_BASE_MS', 2_000))
 const SEND_RETRY_MAX_MS = Math.max(SEND_RETRY_BASE_MS, envNumber('SEND_RETRY_MAX_MS', 30_000))
 const DEST_RATE_LIMIT_MS = Math.max(0, envNumber('DEST_RATE_LIMIT_MS', 1_000))
+const SEND_QUEUE_BACKEND = String(process.env.QUEUE_BACKEND || 'memory').toLowerCase()
+const REDIS_URL = process.env.REDIS_URL || ''
+const BULLMQ_QUEUE_NAME = process.env.BULLMQ_QUEUE_NAME || `wabot-send-${userId}`
 const MSG_QUEUE_CONCURRENCY = Math.max(1, envNumber('MSG_QUEUE_CONCURRENCY', 2))
 const MSG_QUEUE_TIMEOUT_MS = Math.max(1_000, envNumber('MSG_QUEUE_TIMEOUT_MS', 15_000))
 const MSG_QUEUE_WATCHDOG_MS = Math.max(5_000, envNumber('MSG_QUEUE_WATCHDOG_MS', 30_000))
@@ -357,11 +361,11 @@ const incomingQueue = createMessageQueue({
   maxSize: MSG_QUEUE_MAX_SIZE,
 })
 
-const sendQueue = []
 const lastSendByDest = new Map()
-let sendQueueProcessing = false
 let interruptedSendLogsMarked = false
 let adSendCount = 0
+const doneCallbacks = new Map()
+let sendBackend = null
 
 const sendMetrics = {
   queuedTotal: 0,
@@ -381,10 +385,11 @@ const sendMetrics = {
 }
 
 function getSendQueueMetrics() {
+  const queueSize = typeof sendBackend?.getQueueSize === 'function' ? sendBackend.getQueueSize() : 0
   return {
-    backend: 'memory',
-    queueSize: sendQueue.length,
-    processing: sendQueueProcessing,
+    backend: sendBackend?.backend || 'memory',
+    queueSize: typeof queueSize === 'number' ? queueSize : 0,
+    processing: sendBackend?.getProcessing?.() || false,
     maxSize: SEND_QUEUE_MAX_SIZE,
     maxAttempts: SEND_MAX_ATTEMPTS,
     retryBaseMs: SEND_RETRY_BASE_MS,
@@ -396,42 +401,21 @@ function getSendQueueMetrics() {
 }
 
 function canAcceptSendJob() {
-  return !shuttingDown && sendQueue.length < SEND_QUEUE_MAX_SIZE
+  return !shuttingDown
 }
 
-function enqueueSendJob(job) {
+async function enqueueSendJob(job) {
   if (!canAcceptSendJob()) {
     sendMetrics.rejectedTotal++
     return false
   }
-  sendQueue.push({ attempts: 0, enqueuedAt: Date.now(), ...job })
+  const normalizedJob = { attempts: 0, enqueuedAt: Date.now(), ...job, onDone: undefined }
+  if (typeof job.onDone === 'function') doneCallbacks.set(job.logId, job.onDone)
   sendMetrics.queuedTotal++
   if (job.type === 'broadcast') sendMetrics.broadcastQueuedTotal++
   else if (job.type === 'scheduled') sendMetrics.scheduledQueuedTotal++
   else sendMetrics.convertedQueuedTotal++
-  processSendQueue().catch(err => {
-    logger.error({ err: err.message }, 'Erro fatal na fila interna de envios')
-  })
-  return true
-}
-
-async function processSendQueue() {
-  if (sendQueueProcessing) return
-  sendQueueProcessing = true
-
-  try {
-    while (!shuttingDown && sendQueue.length) {
-      const job = sendQueue.shift()
-      await processSendJob(job)
-    }
-  } finally {
-    sendQueueProcessing = false
-    if (!shuttingDown && sendQueue.length) {
-      processSendQueue().catch(err => {
-        logger.error({ err: err.message }, 'Erro ao retomar fila interna de envios')
-      })
-    }
-  }
+  return sendBackend.enqueue(normalizedJob)
 }
 
 function getRetryDelayMs(attempt) {
@@ -448,11 +432,9 @@ async function waitDestinationRateLimit(destJid) {
 }
 
 async function finishSendJob(job, result) {
-  if (typeof job.onDone === 'function') {
-    await job.onDone(result).catch(err => {
-      logger.error({ err: err.message, destJid: job.destJid, type: job.type }, 'Erro ao finalizar job da fila')
-    })
-  }
+  const onDone = doneCallbacks.get(job.logId)
+  doneCallbacks.delete(job.logId)
+  await finalizeSendJob(onDone, job, result)
 }
 
 async function processSendJob(job) {
@@ -542,7 +524,32 @@ async function markInterruptedSendLogs() {
   ])
 }
 
+async function createSendBackend() {
+  const onRejected = () => { sendMetrics.rejectedTotal++ }
+  const onDequeued = async (job) => { await processSendJob(job) }
+  if (SEND_QUEUE_BACKEND !== 'bullmq') {
+    return createMemorySendBackend({ maxSize: SEND_QUEUE_MAX_SIZE, onRejected, onDequeued })
+  }
+  if (!REDIS_URL) {
+    logger.warn('QUEUE_BACKEND=bullmq definido sem REDIS_URL; fallback para memória')
+    return createMemorySendBackend({ maxSize: SEND_QUEUE_MAX_SIZE, onRejected, onDequeued })
+  }
+  try {
+    return await createBullmqSendBackend({
+      redisUrl: REDIS_URL,
+      queueName: BULLMQ_QUEUE_NAME,
+      onRejected,
+      onDequeued,
+      concurrency: 1,
+    })
+  } catch (err) {
+    logger.error({ err: err.message }, 'Falha ao iniciar BullMQ; fallback para memória')
+    return createMemorySendBackend({ maxSize: SEND_QUEUE_MAX_SIZE, onRejected, onDequeued })
+  }
+}
+
 async function startBot() {
+  if (!sendBackend) sendBackend = await createSendBackend()
   await getConfig()
   if (!interruptedSendLogsMarked) {
     interruptedSendLogsMarked = true
@@ -926,6 +933,9 @@ async function shutdown(code = 0) {
     markInterruptedSendLogs().catch(err => {
       logger.error({ err: err.message }, 'Erro ao marcar envios pendentes como interrompidos')
     }),
+    sendBackend?.close?.().catch(err => {
+      logger.error({ err: err.message }, 'Erro ao encerrar backend da fila de envios')
+    }),
   ])
   process.exit(code)
 }
@@ -1006,7 +1016,7 @@ process.on('message', async msg => {
           status: 'queued',
         },
       })
-      const accepted = enqueueSendJob({
+      const accepted = await enqueueSendJob({
         type: 'broadcast',
         logId: log.id,
         destJid: jid,

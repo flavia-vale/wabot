@@ -3,10 +3,12 @@ import { randomBytes } from 'crypto'
 import db from '../../db.js'
 import { normalizeEmail } from '../auth-utils.js'
 
-function setAuthCookie(reply, req, token) {
-  const secureByEnv = process.env.COOKIE_SECURE !== 'false'
-  const requestIsHttps = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https'
-  const secure = secureByEnv && requestIsHttps
+const loginAttempts = new Map()
+
+function setAuthCookie(reply, token, req) {
+  const secureOverride = process.env.COOKIE_SECURE
+  const requestProtocol = String(req?.protocol ?? '').toLowerCase()
+  const secure = secureOverride === 'true' || (secureOverride !== 'false' && requestProtocol === 'https')
   const maxAge = 60 * 60 * 24 * 7
   const parts = [
     `wb_auth=${encodeURIComponent(token)}`,
@@ -43,8 +45,32 @@ function generateFallbackPassword() {
   return `wb_${randomToken(8)}_${Date.now()}`
 }
 
+function canUseLegacyFallbackPassword() {
+  return process.env.ALLOW_LEGACY_FALLBACK_PASSWORD === 'true'
+}
+
 function generatePromoContactPhone() {
   return `+79${String(Date.now()).slice(-9)}${randomBytes(2).toString('hex').slice(0, 3).replace(/[^0-9]/g, '7')}`.slice(0, 16)
+}
+
+function canUseLegacyPromoSyntheticPhone() {
+  return process.env.ALLOW_LEGACY_PROMO_SYNTHETIC_PHONE === 'true'
+}
+
+function consumeLoginAttempt({ email, ip }) {
+  const key = `${email}|${ip ?? 'unknown'}`
+  const now = Date.now()
+  const windowMs = Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MS ?? 15 * 60 * 1000)
+  const maxAttempts = Number(process.env.LOGIN_RATE_LIMIT_MAX_ATTEMPTS ?? 8)
+  const existing = loginAttempts.get(key)
+  const item = !existing || now > existing.resetAt ? { attempts: 0, resetAt: now + windowMs } : existing
+  item.attempts += 1
+  loginAttempts.set(key, item)
+  return { blocked: item.attempts > maxAttempts, resetAt: item.resetAt, attempts: item.attempts }
+}
+
+function clearLoginAttempts({ email, ip }) {
+  loginAttempts.delete(`${email}|${ip ?? 'unknown'}`)
 }
 
 function isPrismaShapeMismatch(err) {
@@ -184,12 +210,25 @@ export async function authRoutes(app) {
     const name = normalizeName(rawName)
     const email = normalizeEmail(rawEmail) || generateFallbackEmail()
     const isPromoVipFlow = source === 'promo_vip_7dias' && couponCode === 'VIP7DIAS'
-    const contactPhone = normalizeContactPhone(rawContactPhone) || (isPromoVipFlow ? generatePromoContactPhone() : null)
-    const password = String(rawPassword || generateFallbackPassword())
+    const normalizedPhone = normalizeContactPhone(rawContactPhone)
+    const useLegacyPromoSyntheticPhone = !normalizedPhone && isPromoVipFlow && canUseLegacyPromoSyntheticPhone()
+    const contactPhone = normalizedPhone || (useLegacyPromoSyntheticPhone ? generatePromoContactPhone() : null)
+    const hasPassword = typeof rawPassword === 'string' && rawPassword.trim().length > 0
+    const usingLegacyFallbackPassword = !hasPassword && canUseLegacyFallbackPassword()
+    const password = hasPassword ? String(rawPassword) : generateFallbackPassword()
 
     if (!name || !contactPhone) return reply.code(400).send({ error: 'nome e celular obrigatórios' })
+    if (useLegacyPromoSyntheticPhone) {
+      req.log.warn({ source, route: '/register' }, 'legacy synthetic promo phone flow used')
+    }
     if (rawEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply.code(400).send({ error: 'Formato de email inválido' })
-    if (rawPassword && password.length < 8) return reply.code(400).send({ error: 'Senha deve ter no mínimo 8 caracteres' })
+    if (!hasPassword && !usingLegacyFallbackPassword) {
+      return reply.code(400).send({ error: 'Senha obrigatória' })
+    }
+    if (hasPassword && password.length < 8) return reply.code(400).send({ error: 'Senha deve ter no mínimo 8 caracteres' })
+    if (usingLegacyFallbackPassword) {
+      req.log.warn({ source, route: '/register' }, 'legacy fallback password flow used')
+    }
 
     const [existingEmail] = await Promise.all([
       findUserByNormalizedEmail(email),
@@ -240,9 +279,9 @@ export async function authRoutes(app) {
         })
       }
 
-      const token = app.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: '7d' })
-      setAuthCookie(reply, req, token)
-      return { user: publicUser(user), token }
+      const token = app.jwt.sign({ sub: user.id, email: user.email, jti: randomToken(12) }, { expiresIn: '7d' })
+      setAuthCookie(reply, token, req)
+      return { user: publicUser(user) }
     } catch (err) {
       if (String(err?.code) === 'P2002' || String(err?.message ?? '').includes('Unique constraint failed')) {
         return reply.code(409).send({ error: 'Este número de telefone já está cadastrado' })
@@ -255,6 +294,12 @@ export async function authRoutes(app) {
     const { email: rawEmail, password } = req.body ?? {}
     const email = normalizeEmail(rawEmail)
     if (!email || !password) return reply.code(400).send({ error: 'email e password obrigatórios' })
+    const attempt = consumeLoginAttempt({ email, ip: req.ip })
+    if (attempt.blocked) {
+      const retryAfter = Math.max(1, Math.ceil((attempt.resetAt - Date.now()) / 1000))
+      reply.header('Retry-After', String(retryAfter))
+      return reply.code(429).send({ error: 'Muitas tentativas. Tente novamente mais tarde.' })
+    }
 
     const user = await findUserByNormalizedEmail(email)
     if (!user) return reply.code(401).send({ error: 'Credenciais inválidas' })
@@ -264,15 +309,29 @@ export async function authRoutes(app) {
 
     const valid = await bcrypt.compare(password, user.passwordHash)
     if (!valid) return reply.code(401).send({ error: 'Credenciais inválidas' })
+    clearLoginAttempts({ email, ip: req.ip })
 
     const updated = await updateLoginActivity(user)
 
-    const token = app.jwt.sign({ sub: updated.id, email: updated.email }, { expiresIn: '7d' })
-    setAuthCookie(reply, req, token)
-    return { user: publicUser(updated), token }
+    const token = app.jwt.sign({ sub: updated.id, email: updated.email, jti: randomToken(12) }, { expiresIn: '7d' })
+    setAuthCookie(reply, token, req)
+    return { user: publicUser(updated) }
   })
 
-  app.post('/logout', async (_req, reply) => {
+  app.post('/logout', async (req, reply) => {
+    try {
+      const cookieToken = String(req.headers?.cookie ?? '')
+        .split(';')
+        .map(part => part.trim())
+        .find(part => part.startsWith('wb_auth='))
+        ?.slice('wb_auth='.length)
+      if (cookieToken) {
+        const decoded = app.jwt.verify(decodeURIComponent(cookieToken))
+        app.revokeTokenJti?.(decoded?.jti, decoded?.exp)
+      }
+    } catch (err) {
+      req.log.warn({ err: err?.message }, 'Falha ao revogar token no logout')
+    }
     reply.header('Set-Cookie', 'wb_auth=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0')
     return { ok: true }
   })

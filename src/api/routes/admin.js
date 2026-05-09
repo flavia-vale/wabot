@@ -14,7 +14,7 @@ const ROLE_PERMISSIONS = {
 const PAID_PLANS = ['basic', 'pro']
 const PLAN_PRICES = { trial: 0, basic: 40, pro: 70 }
 const EXPORT_LIMIT = 100
-const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = ['flavia.vale@usp.br', 'flaviaroberta.1496@gmail.com', 'tacianeaas02@gmail.com']
+const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = []
 
 function getBootstrapAdminEmails() {
   return new Set(
@@ -32,7 +32,18 @@ function hasPermission(role, permission) {
 }
 
 function canSeePhone(role) {
-  return hasPermission(role, 'support:write') || hasPermission(role, 'billing:read')
+  return hasPermission(role, 'support:write')
+}
+
+function requiresStepUpMfa(permission) {
+  return permission.endsWith(':write')
+}
+
+function isMfaVerified(req) {
+  const configuredToken = String(process.env.ADMIN_MFA_TOKEN ?? '').trim()
+  if (!configuredToken) return true
+  const providedToken = String(req.headers['x-admin-mfa-token'] ?? '').trim()
+  return providedToken && providedToken === configuredToken
 }
 
 function maskPhone(phone) {
@@ -292,10 +303,15 @@ function sanitizeUser(user, role) {
   }
 }
 
-async function getLogCountMap({ status, since }) {
+async function getLogCountMap({ status, since, userIds = null }) {
+  if (Array.isArray(userIds) && userIds.length === 0) return new Map()
   const rows = await db.messageLog.groupBy({
     by: ['userId'],
-    where: { ...(status ? { status } : {}), ...(since ? { sentAt: { gte: since } } : {}) },
+    where: {
+      ...(status ? { status } : {}),
+      ...(since ? { sentAt: { gte: since } } : {}),
+      ...(Array.isArray(userIds) ? { userId: { in: userIds } } : {}),
+    },
     _count: { _all: true },
   })
   return new Map(rows.map(row => [row.userId, row._count._all]))
@@ -334,7 +350,8 @@ async function requireAdmin(req, reply, permission = 'admin:read') {
   })
 
   const bootstrapEmails = getBootstrapAdminEmails()
-  const bootstrapAllowed = !user?.adminUser && bootstrapEmails.has(user?.email?.toLowerCase())
+  const bootstrapEnabled = process.env.ALLOW_ADMIN_EMAIL_BOOTSTRAP === 'true'
+  const bootstrapAllowed = bootstrapEnabled && !user?.adminUser && bootstrapEmails.has(user?.email?.toLowerCase())
   const role = user?.adminUser?.status === 'active'
     ? user.adminUser.role
     : bootstrapAllowed
@@ -349,6 +366,16 @@ async function requireAdmin(req, reply, permission = 'admin:read') {
       status: 'denied',
     })
     reply.code(403).send({ error: 'Acesso admin negado' })
+    return false
+  }
+  if (requiresStepUpMfa(permission) && !isMfaVerified(req)) {
+    await writeAdminAuditLog(req, {
+      action: 'admin.mfa_required',
+      resource: 'admin',
+      reason: `MFA obrigatória para permissão: ${permission}`,
+      status: 'denied',
+    })
+    reply.code(401).send({ error: 'MFA obrigatória para esta operação administrativa' })
     return false
   }
 
@@ -460,7 +487,7 @@ export async function adminRoutes(app) {
     }
 
     const since24h = addDays(now, -1)
-    const [total, users, successMap, errorMap] = await Promise.all([
+    const [total, users] = await Promise.all([
       db.user.count({ where }),
       db.user.findMany({
         where,
@@ -485,8 +512,11 @@ export async function adminRoutes(app) {
           _count: { select: { payments: true, credentials: true, messageLogs: true } },
         },
       }),
-      getLogCountMap({ status: 'success' }),
-      getLogCountMap({ status: 'error', since: since24h }),
+    ])
+    const userIds = users.map(user => user.id)
+    const [successMap, errorMap] = await Promise.all([
+      getLogCountMap({ status: 'success', userIds }),
+      getLogCountMap({ status: 'error', since: since24h, userIds }),
     ])
 
     const running = new Set(listRunningBots())
