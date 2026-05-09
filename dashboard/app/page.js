@@ -9,12 +9,12 @@ import { FAQ } from '@/components/landing/FAQ'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
 
 export const metadata = {
-  title: 'Bot para Afiliados no WhatsApp',
-  description: 'Converta links de Shopee, Amazon, Mercado Livre e Magalu e organize ofertas em grupos do WhatsApp com menos trabalho manual.',
+  title: 'Espelha Grupos no WhatsApp com BOTinho',
+  description: 'Espelhe grupos no WhatsApp, converta links de afiliado e organize ofertas com o BOTinho.',
   alternates: { canonical: '/' },
   openGraph: {
-    title: 'Bot para Afiliados no WhatsApp',
-    description: 'Automatize a conversão de links e o envio de ofertas para grupos do WhatsApp.',
+    title: 'Espelha Grupos no WhatsApp com BOTinho',
+    description: 'Espelhe grupos, converta links e publique ofertas com BOTinho.',
     url: '/',
   },
 }
