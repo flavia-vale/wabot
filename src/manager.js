@@ -128,7 +128,12 @@ export const listRunningBots = () => [...bots.keys()]
 export function onQR(userId, fn) { const e = bots.get(userId); if (!e) return () => {}; if (e.lastQR) fn(e.lastQR); e.qrListeners.add(fn); return () => e.qrListeners.delete(fn) }
 export function onStatus(userId, fn) { const e = bots.get(userId); if (!e) return () => {}; e.statusListeners.add(fn); return () => e.statusListeners.delete(fn) }
 
-function requestWithTimeout(userId, type, payload, timeout, timeoutMessage) {
+export function getLastQR(userId) {
+  const entry = bots.get(userId)
+  return entry?.lastQR ?? null
+}
+
+export function listGroups(userId) {
   return new Promise((resolve, reject) => {
     const entry = bots.get(userId)
     if (!entry) return reject(new Error('Bot não está rodando'))
