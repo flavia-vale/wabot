@@ -6,6 +6,22 @@ import { trackAnalyticsEventSafe } from '../../analytics.js'
 const MP_WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET
 const IS_PRODUCTION = process.env.NODE_ENV === 'production'
 
+const OFFICIAL_PUBLIC_ORIGIN = 'http://espelhagrupos.com.br'
+
+function isIpHost(hostname = '') {
+  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(String(hostname || '').trim())
+}
+
+function normalizePublicOrigin(value, fallback = OFFICIAL_PUBLIC_ORIGIN) {
+  try {
+    const parsed = new URL(String(value ?? ''))
+    if (isIpHost(parsed.hostname)) return fallback
+    return parsed.toString().replace(/\/$/, '')
+  } catch {
+    return fallback
+  }
+}
+
 function getMpAccessToken() {
   return process.env.MP_ACCESS_TOKEN
 }
@@ -156,7 +172,11 @@ export function shouldReconcilePayment(summary = {}) {
 // Activates a payment and grants 30-day access. Shared by /recover, /callback and webhook processor.
 // Must be called inside a db.$transaction — tx is a Prisma transaction client.
 export async function activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount }) {
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+  const now = new Date()
+  const user = await tx.user.findUnique({ where: { id: userId }, select: { accessExpiresAt: true } })
+  const currentExpiry = user?.accessExpiresAt ? new Date(user.accessExpiresAt) : null
+  const baseDate = currentExpiry && currentExpiry > now ? currentExpiry : now
+  const expiresAt = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000)
   const existing = await tx.payment.findUnique({ where: { mpPaymentId: String(mpPaymentId) } })
 
   if (existing?.status === 'approved') {
@@ -228,8 +248,8 @@ async function createMercadoPagoPreference({ userId, plan }) {
     err.code = 'INVALID_PLAN_CONFIG'
     throw err
   }
-  const dashboardUrl = stripApiSuffix(getDashboardUrl())
-  const apiUrl = stripApiSuffix(getApiUrl())
+  const dashboardUrl = normalizePublicOrigin(stripApiSuffix(getDashboardUrl()))
+  const apiUrl = normalizePublicOrigin(stripApiSuffix(getApiUrl()))
   if (IS_PRODUCTION && (!isPublicHttpUrl(apiUrl) || !isPublicHttpUrl(dashboardUrl))) {
     const err = new Error('API_URL/DASHBOARD_URL inválidos para produção')
     err.code = 'PAYMENT_PROVIDER_MISCONFIGURED'
@@ -542,7 +562,7 @@ export async function paymentsRoutes(app) {
         activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount: plans[plan].price })
       )
       trackAnalyticsEventSafe({ userId, event: 'payment_approved', metadata: { plan, source: 'callback' } })
-      return reply.redirect(`${dashboardUrl}/dashboard/planos?status=success`)
+      return reply.redirect(`${dashboardUrl}/dashboard/pagamento/sucesso`)
     } catch (err) {
       if (err?.code === 'PAYMENT_ALREADY_USED') {
         return reply.redirect(`${dashboardUrl}/dashboard/planos?status=failure&reason=already_used`)
