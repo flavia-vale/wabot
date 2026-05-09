@@ -16,6 +16,7 @@ export default function DashboardPage() {
   const [statusError, setStatusError] = useState('')
   const [qr, setQr] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [actionLoading, setActionLoading] = useState('')
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState('')
   const [socketState, setSocketState] = useState('idle')
@@ -102,6 +103,7 @@ export default function DashboardPage() {
   }, [status?.running, status?.status, qr, pairingCode])
 
   async function handleQRConnect() {
+    if (loading) return
     setError('')
     setFeedback('')
     setStatusError('')
@@ -109,6 +111,7 @@ export default function DashboardPage() {
     setPairingCode('')
     setQrWaitElapsed(0)
     setLoading(true)
+    setActionLoading('connect')
     try {
       await api.sessionStart()
       const s = await fetchStatus()
@@ -124,6 +127,7 @@ export default function DashboardPage() {
       setError(err.message)
     } finally {
       setLoading(false)
+      setActionLoading('')
     }
   }
 
@@ -137,7 +141,9 @@ export default function DashboardPage() {
     setError('')
     setFeedback('')
     setStatusError('')
+    if (loading) return
     setLoading(true)
+    setActionLoading('pairing')
     try {
       if (!status?.running) await api.sessionStart()
       const { code } = await api.sessionPairingCode(pairingPhone.trim())
@@ -150,14 +156,17 @@ export default function DashboardPage() {
       if (!status?.running) await fetchStatus()
     } finally {
       setLoading(false)
+      setActionLoading('')
     }
   }
 
   async function handleStop() {
+    if (loading) return
     setError('')
     setFeedback('')
     setStatusError('')
     setLoading(true)
+    setActionLoading('stop')
     try {
       await api.sessionStop()
       setQr(null)
@@ -170,14 +179,17 @@ export default function DashboardPage() {
       setError(err.message)
     } finally {
       setLoading(false)
+      setActionLoading('')
     }
   }
 
   async function handleForget() {
+    if (loading) return
     setError('')
     setFeedback('')
     setStatusError('')
     setLoading(true)
+    setActionLoading('forget')
     try {
       await api.sessionForget()
       setQr(null)
@@ -190,6 +202,7 @@ export default function DashboardPage() {
       setError(err.message)
     } finally {
       setLoading(false)
+      setActionLoading('')
     }
   }
 
@@ -237,7 +250,7 @@ export default function DashboardPage() {
         {socketState === 'error' && <Alert type="warning" title="Conexão instável" message="Conexão de pareamento instável. Tentando reconectar..." />}
         {socketState === 'closed' && isConnecting && <Alert type="warning" title="Conexão perdida" message="Gere novamente o QR ou aguarde reconexão." />}
         {feedback && <Alert type="success" title="Tudo certo" message={feedback} />}
-        {error && <Alert type="error" title="Falha na conexão" message={error} />}
+        {error && <Alert type="error" title="Falha na conexão" message={`Não foi possível concluir a ação. ${error}`} />}
       </div>
 
       <div className="bg-white rounded-2xl shadow p-5 mb-4 flex items-center gap-4">
@@ -268,7 +281,7 @@ export default function DashboardPage() {
           </div>
           {showQrRetry && (
             <button onClick={handleQRConnect} disabled={loading} className="text-sm text-green-700 underline disabled:opacity-50 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
-              Gerar novamente QR
+              Tentar novamente
             </button>
           )}
         </div>
@@ -301,7 +314,7 @@ export default function DashboardPage() {
               <h3 className="font-semibold text-gray-700">Conectar via QR Code</h3>
               <p className="mt-1 text-xs text-gray-500">Mais rápido se você está com o celular em mãos.</p>
               <button onClick={handleQRConnect} disabled={loading} className="mt-4 w-full bg-green-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-green-700 disabled:opacity-50 transition flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
-                <span aria-hidden="true">📷</span>{loading ? 'Iniciando...' : 'Gerar QR Code'}
+                <span aria-hidden="true">📷</span>{actionLoading === 'connect' ? 'Conectando...' : 'Gerar QR Code'}
               </button>
             </div>
             <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -339,7 +352,7 @@ export default function DashboardPage() {
           <div>
             <h3 className="text-sm font-semibold text-gray-700">Ação operacional</h3>
             <p className="text-xs text-gray-500 mb-2">Desliga o bot agora, mas mantém a sessão salva para reconectar depois.</p>
-            <button onClick={handleStop} disabled={loading} className="bg-red-500 text-white px-5 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-red-600 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2">{loading ? 'Parando...' : 'Desligar bot'}</button>
+            <button onClick={handleStop} disabled={loading} className="bg-red-500 text-white px-5 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-red-600 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2">{actionLoading === 'stop' ? 'Desconectando...' : 'Desligar bot'}</button>
           </div>
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <h3 className="text-sm font-semibold text-amber-800">Ações avançadas</h3>
