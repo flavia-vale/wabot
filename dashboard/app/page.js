@@ -23,10 +23,8 @@ export default function LandingPage() {
   return (
     <div className="landing-root">
       <Hero tone="amigavel" />
-      <div className="flex justify-center px-4 pb-6">
-        <Link href="/promocao" className="inline-flex min-h-11 items-center rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-600">
-          Ver página promocional
-        </Link>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '0 16px 24px' }}>
+        <Link href="/promocao" style={{ background: '#10b981', color: '#fff', padding: '10px 16px', borderRadius: 10, fontWeight: 700 }}>Ver página promocional</Link>
       </div>
       <How />
       <Features />
