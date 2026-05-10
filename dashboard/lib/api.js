@@ -1,6 +1,9 @@
 function resolveApiBase() {
   const configured = process.env.NEXT_PUBLIC_API_URL?.trim()
-  if (configured) return configured
+  if (configured) {
+    const isAbsoluteHttp = /^https?:\/\//i.test(configured)
+    if (isAbsoluteHttp) return configured
+  }
 
   if (typeof window !== 'undefined') {
     const { protocol, hostname, port } = window.location
