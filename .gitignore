@@ -7,3 +7,6 @@ prisma/dev.db
 dashboard/.next/
 
 /src/generated/prisma
+
+*.db
+*.db-journal
