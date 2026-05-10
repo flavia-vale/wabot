@@ -33,7 +33,7 @@ jobs:
           script: |
             if [ "${{ github.ref }}" = "refs/heads/main" ]; then
               echo "🚀 Enviando para PRODUÇÃO..."
-              cd ~/wabot-prod
+              cd ~/wabot
               git pull origin main
               npm install
               npx prisma migrate deploy
