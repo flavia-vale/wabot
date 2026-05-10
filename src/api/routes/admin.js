@@ -12,7 +12,7 @@ const ROLE_PERMISSIONS = {
 }
 
 const PAID_PLANS = ['basic', 'pro']
-const PLAN_PRICES = { trial: 0, basic: 40, pro: 70 }
+const PLAN_PRICES = { trial: 0, basic: 1, pro: 2 }
 const EXPORT_LIMIT = 100
 const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = ['flavia.vale@usp.br', 'flaviaroberta.1496@gmail.com', 'tacianeaas02@gmail.com']
 
@@ -351,7 +351,8 @@ async function requireAdmin(req, reply, permission = 'admin:read') {
 
   const bootstrapEmails = getBootstrapAdminEmails()
   const bootstrapEnabled = process.env.ALLOW_ADMIN_EMAIL_BOOTSTRAP === 'true'
-  const bootstrapAllowed = bootstrapEnabled && !user?.adminUser && bootstrapEmails.has(user?.email?.toLowerCase())
+  const hasActiveAdminUser = user?.adminUser?.status === 'active'
+  const bootstrapAllowed = bootstrapEnabled && !hasActiveAdminUser && bootstrapEmails.has(user?.email?.toLowerCase())
   const role = user?.adminUser?.status === 'active'
     ? user.adminUser.role
     : bootstrapAllowed
