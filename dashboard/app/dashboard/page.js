@@ -9,7 +9,8 @@ import { LoadingState } from '@/components/States'
 import { useToast } from '@/components/ToastProvider'
 
 const QR_TIMEOUT_SECONDS = 20
-const STATUS_LOADING_TIMEOUT_SECONDS = 15
+const QR_EXPIRY_SECONDS = 60
+const INACTIVITY_RESET_SECONDS = 45
 const STATUS_ERROR_MESSAGE = 'Não foi possível carregar o status da conexão. Tente novamente.'
 
 export default function DashboardPage() {
@@ -26,10 +27,11 @@ export default function DashboardPage() {
   const [socketState, setSocketState] = useState('idle')
   const [qrWaitElapsed, setQrWaitElapsed] = useState(0)
   const [wsErrorMessage, setWsErrorMessage] = useState('')
-  const [qrRetrying, setQrRetrying] = useState(false)
+  const [qrStartElapsed, setQrStartElapsed] = useState(0)
   const wsRef = useRef(null)
   const wsQrTimeoutRef = useRef(null)
   const qrPollingRef = useRef(null)
+  const qrWaitElapsedRef = useRef(0)
 
   const [showPairingInput, setShowPairingInput] = useState(false)
   const [pairingPhone, setPairingPhone] = useState('')
@@ -104,6 +106,7 @@ export default function DashboardPage() {
           if (wsQrTimeoutRef.current) clearTimeout(wsQrTimeoutRef.current)
           setWsErrorMessage('')
           setQr(msg.data)
+          setQrStartElapsed(qrWaitElapsedRef.current)
           trackTelemetry({ stage: 'authenticating', event: 'qr_received' })
         }
         if (msg.type === 'status') {
@@ -143,6 +146,7 @@ export default function DashboardPage() {
       const result = await api.sessionQRLatest().catch(() => null)
       if (result?.qr) {
         setQr(result.qr)
+        setQrStartElapsed(qrWaitElapsedRef.current)
         setWsErrorMessage('')
         trackTelemetry({ stage: 'authenticating', event: 'qr_received_polling_fallback' })
       }
@@ -152,6 +156,10 @@ export default function DashboardPage() {
       qrPollingRef.current = null
     }
   }, [status?.running, status?.status, qr, trackTelemetry])
+
+  useEffect(() => {
+    qrWaitElapsedRef.current = qrWaitElapsed
+  }, [qrWaitElapsed])
 
   useEffect(() => {
     let active = true
@@ -225,7 +233,13 @@ export default function DashboardPage() {
     return () => clearInterval(interval)
   }, [status?.running, status?.status, qr, pairingCode])
 
-  async function handleQRConnect(mode = 'connect') {
+  useEffect(() => {
+    if (!qr) return
+    const interval = setInterval(() => setQrWaitElapsed((prev) => prev + 1), 1000)
+    return () => clearInterval(interval)
+  }, [qr])
+
+  async function handleQRConnect() {
     if (loading) return
     setError('')
     setFeedback('')
@@ -446,7 +460,10 @@ export default function DashboardPage() {
   const isRunning = status?.running
   const isBootstrappingSession = isRunning && !isConnected && status?.status === 'disconnected'
   const showQrRetry = isRunning && isConnecting && !qr && !pairingCode && qrWaitElapsed >= QR_TIMEOUT_SECONDS
-  const isAwaitingConnectStart = (actionLoading === 'connect' || actionLoading === 'retry_qr' || actionLoading === 'reset') && !qr && !pairingCode
+  const qrAgeSeconds = qr ? Math.max(qrWaitElapsed - qrStartElapsed, 0) : 0
+  const qrExpiresIn = Math.max(QR_EXPIRY_SECONDS - qrAgeSeconds, 0)
+  const showQrExpired = Boolean(qr) && qrExpiresIn === 0
+  const showInactivityReset = isRunning && isConnecting && !isConnected && qrWaitElapsed >= INACTIVITY_RESET_SECONDS
   const canSubmitPairing = pairingPhone.trim().length >= 10
 
   return (
@@ -513,15 +530,7 @@ export default function DashboardPage() {
           </svg>
           <div role="status" aria-live="polite" className="text-center">
             <p className="text-sm font-medium text-gray-600">Gerando QR Code... ({qrWaitElapsed}s)</p>
-            <p className="text-xs text-gray-400">
-              {isBootstrappingSession
-                ? 'Bot iniciado. Preparando sessão do WhatsApp para emitir o QR Code...'
-                : actionLoading === 'connect'
-                  ? 'Iniciando conexão segura e preparando o QR Code...'
-                  : qrRetrying
-                    ? 'Tentando novamente gerar o QR Code...'
-                    : 'Aguarde alguns segundos enquanto o WhatsApp prepara a conexão. Se passar de 20s, toque em "Tentar novamente".'}
-            </p>
+            <p className="text-xs text-gray-400">Aguarde alguns segundos enquanto o WhatsApp prepara a conexão. Se passar de 20s, toque em &quot;Tentar novamente&quot;.</p>
           </div>
           {showQrRetry && (
             <button onClick={() => handleQRConnect('retry')} disabled={loading} className="text-sm text-green-700 underline disabled:opacity-50 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
@@ -545,10 +554,18 @@ export default function DashboardPage() {
         <div className="bg-white rounded-2xl shadow p-6 mb-4 flex flex-col items-center gap-3">
           <p className="text-sm text-gray-600">Escaneie o QR Code com o WhatsApp</p>
           <QRCode value={qr} size={200} />
+          <p className={`text-xs font-medium ${showQrExpired ? 'text-red-600' : 'text-gray-500'}`}>
+            {showQrExpired ? 'QR expirado. Gere um novo QR para continuar.' : `QR expira em ${qrExpiresIn}s`}
+          </p>
           <div className="text-center text-xs text-gray-500">
             <p>No WhatsApp: <strong>Configurações → Dispositivos conectados → Conectar um dispositivo.</strong></p>
             <p>Mantenha esta tela aberta até a conexão ser concluída. O QR atualiza automaticamente.</p>
           </div>
+          {showQrExpired && (
+            <button onClick={handleQRConnect} disabled={loading} className="text-sm text-green-700 underline disabled:opacity-50 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
+              Gerar novo QR
+            </button>
+          )}
         </div>
       )}
 
@@ -603,6 +620,15 @@ export default function DashboardPage() {
 
       {isRunning && (
         <div className="flex flex-col gap-4">
+          {showInactivityReset && (
+            <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4">
+              <h3 className="text-sm font-semibold text-amber-800">Conexão sem progresso</h3>
+              <p className="mt-1 text-xs text-amber-700">Detectamos inatividade no pareamento. Resetar instância limpará tentativas anteriores e abrirá um novo caminho seguro.</p>
+              <button onClick={handleRestart} disabled={loading} className="mt-3 bg-amber-500 text-white px-4 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-amber-600 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2">
+                {actionLoading === 'restart' ? 'Resetando...' : 'Resetar instância'}
+              </button>
+            </div>
+          )}
           <div>
             <h3 className="text-sm font-semibold text-gray-700">Ação operacional</h3>
             <p className="text-xs text-gray-500 mb-2">Desliga o bot agora, mas mantém a sessão salva para reconectar depois.</p>

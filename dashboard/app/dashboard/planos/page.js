@@ -258,7 +258,7 @@ function PlanosContent() {
       <div className="bg-white rounded-2xl shadow p-5 mb-5 text-sm text-gray-600">
         <h3 className="font-semibold text-gray-700 mb-3">Dúvidas rápidas</h3>
         <div className="space-y-3">
-          <p><strong>Como funciona o pagamento?</strong> Ao clicar em "Comprar", você é direcionado para o Mercado Pago onde pode pagar com PIX ou cartão. O acesso é ativado automaticamente após a confirmação.</p>
+          <p><strong>Como funciona o pagamento?</strong> Ao clicar em &quot;Comprar&quot;, você é direcionado para o Mercado Pago onde pode pagar com PIX ou cartão. O acesso é ativado automaticamente após a confirmação.</p>
           <p><strong>É recorrente?</strong> Não. O acesso dura 30 dias e você renova manualmente quando quiser continuar.</p>
           <p><strong>Basic ou Pro?</strong> Basic e Pro têm os mesmos recursos técnicos; a única diferença é que o Pro opera sem anúncios.</p>
           <p><strong>Quanto tempo leva para ativar?</strong> Com cartão, é imediato. Com PIX, pode levar até 2 minutos após o pagamento.</p>
