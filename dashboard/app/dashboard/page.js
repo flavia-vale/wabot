@@ -11,6 +11,7 @@ import { useToast } from '@/components/ToastProvider'
 const QR_TIMEOUT_SECONDS = 20
 const QR_EXPIRY_SECONDS = 60
 const INACTIVITY_RESET_SECONDS = 45
+const STATUS_LOADING_TIMEOUT_SECONDS = 15
 const STATUS_ERROR_MESSAGE = 'Não foi possível carregar o status da conexão. Tente novamente.'
 
 export default function DashboardPage() {
@@ -28,6 +29,7 @@ export default function DashboardPage() {
   const [qrWaitElapsed, setQrWaitElapsed] = useState(0)
   const [wsErrorMessage, setWsErrorMessage] = useState('')
   const [qrStartElapsed, setQrStartElapsed] = useState(0)
+  const [qrRetrying, setQrRetrying] = useState(false)
   const wsRef = useRef(null)
   const wsQrTimeoutRef = useRef(null)
   const qrPollingRef = useRef(null)
@@ -239,7 +241,7 @@ export default function DashboardPage() {
     return () => clearInterval(interval)
   }, [qr])
 
-  async function handleQRConnect() {
+  async function handleQRConnect(mode = 'connect') {
     if (loading) return
     setError('')
     setFeedback('')
@@ -459,6 +461,7 @@ export default function DashboardPage() {
   const isConnecting = status?.status === 'connecting'
   const isRunning = status?.running
   const isBootstrappingSession = isRunning && !isConnected && status?.status === 'disconnected'
+  const isAwaitingConnectStart = qrRetrying || actionLoading === 'connect' || actionLoading === 'retry_qr'
   const showQrRetry = isRunning && isConnecting && !qr && !pairingCode && qrWaitElapsed >= QR_TIMEOUT_SECONDS
   const qrAgeSeconds = qr ? Math.max(qrWaitElapsed - qrStartElapsed, 0) : 0
   const qrExpiresIn = Math.max(QR_EXPIRY_SECONDS - qrAgeSeconds, 0)
