@@ -426,8 +426,10 @@ export default function AdminPage() {
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [accessDenied, setAccessDenied] = useState(false)
 
   async function loadAdminData(nextRisk = risk, nextSearch = search) {
+    if (accessDenied) return
     setError('')
     const [adminData, overviewData, usersData, sessionsData, sessionTelemetryData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, lpContentData] = await Promise.all([
       api.adminMe(),
@@ -465,24 +467,31 @@ export default function AdminPage() {
 
   useEffect(() => {
     let active = true
-    Promise.all([
-      api.adminMe(),
-      api.adminOverview(),
-      api.adminUsers({ limit: 20 }),
-      api.adminSessions({ limit: 10 }),
-      api.adminSessionTelemetry({ limit: 60 }).catch(() => null),
-      api.adminLogs({ limit: 10, status: 'all' }),
-      api.adminFinanceOverview().catch(() => null),
-      api.adminPayments({ limit: 10 }).catch(() => null),
-      api.adminSubscriptions({ limit: 10, status: 'expiring_soon' }).catch(() => null),
-      api.adminSuccessOverview().catch(() => null),
-      api.adminSuccessQueue({ limit: 8 }).catch(() => null),
-      api.adminSystemHealth().catch(() => null),
-      api.adminSystemMetrics().catch(() => null),
-      api.adminLpContent().catch(() => null),
-    ])
-      .then(([adminData, overviewData, usersData, sessionsData, sessionTelemetryData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, lpContentData]) => {
+    api.adminMe()
+      .then((adminData) => {
         if (!active) return
+        setAdmin(adminData)
+        setAccessDenied(false)
+        return Promise.all([
+          Promise.resolve(adminData),
+          api.adminOverview(),
+          api.adminUsers({ limit: 20 }),
+          api.adminSessions({ limit: 10 }),
+          api.adminSessionTelemetry({ limit: 60 }).catch(() => null),
+          api.adminLogs({ limit: 10, status: 'all' }),
+          api.adminFinanceOverview().catch(() => null),
+          api.adminPayments({ limit: 10 }).catch(() => null),
+          api.adminSubscriptions({ limit: 10, status: 'expiring_soon' }).catch(() => null),
+          api.adminSuccessOverview().catch(() => null),
+          api.adminSuccessQueue({ limit: 8 }).catch(() => null),
+          api.adminSystemHealth().catch(() => null),
+          api.adminSystemMetrics().catch(() => null),
+          api.adminLpContent().catch(() => null),
+        ])
+      })
+      .then((result) => {
+        if (!active || !result) return
+        const [adminData, overviewData, usersData, sessionsData, sessionTelemetryData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, lpContentData] = result
         setAdmin(adminData)
         setOverview(overviewData)
         setUsers(usersData)
@@ -500,7 +509,15 @@ export default function AdminPage() {
         setPlans(lpContentData?.plans ?? [])
         setTutorial(lpContentData?.tutorial ?? null)
       })
-      .catch((err) => { if (active) setError(err.message || 'Não foi possível carregar o painel admin.') })
+      .catch((err) => {
+        if (!active) return
+        if (String(err?.message || '').toLowerCase().includes('acesso admin negado')) {
+          setAccessDenied(true)
+          setError('')
+          return
+        }
+        setError(err.message || 'Não foi possível carregar o painel admin.')
+      })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [])
@@ -607,6 +624,15 @@ export default function AdminPage() {
   }
 
   if (loading) return <LoadingState />
+  if (accessDenied) {
+    return (
+      <main className="min-h-screen bg-gray-50 px-5 py-8">
+        <div className="mx-auto max-w-7xl">
+          <Alert type="warning" title="Acesso restrito" message="VOCÊ NÃO TEM PERMISSÃO" />
+        </div>
+      </main>
+    )
+  }
 
   return (
     <main className="min-h-screen bg-gray-50 px-5 py-8">
