@@ -47,7 +47,7 @@ export default function DashboardPage() {
     const startedAt = Date.now()
     let latest = null
     while (Date.now() - startedAt < timeoutMs) {
-      latest = await api.sessionStatus().catch(() => null)
+      latest = await api.sessionStatusFast().catch(() => null)
       if (latest?.running) {
         setStatus(latest)
         return latest
@@ -65,7 +65,7 @@ export default function DashboardPage() {
     if (recoverable) setStatusError('')
 
     try {
-      const s = await api.sessionStatus()
+      const s = await api.sessionStatusFast()
       setStatus(s)
       setStatusError('')
       setStatusLoadingTimedOut(false)
@@ -121,7 +121,7 @@ export default function DashboardPage() {
     })
     wsRef.current = ws
     wsQrTimeoutRef.current = setTimeout(async () => {
-      const latest = await api.sessionStatus().catch(() => null)
+      const latest = await api.sessionStatusFast().catch(() => null)
       const stillConnecting = latest?.running && latest?.status === 'connecting'
       if (stillConnecting && !qr && !pairingCode) {
         setWsErrorMessage('QR não foi recebido em até 25s (conexão possivelmente presa)')
@@ -159,7 +159,7 @@ export default function DashboardPage() {
       setStatusLoading(true)
       setStatusError('')
       try {
-        const s = await api.sessionStatus()
+        const s = await api.sessionStatusFast()
         if (!active) return
         setStatus(s)
         if (s.running && s.status === 'connecting') openWS().catch(() => setSocketState('error'))
@@ -185,7 +185,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!status?.running) return
     const interval = setInterval(async () => {
-      const latest = await api.sessionStatus().catch(() => null)
+      const latest = await api.sessionStatusFast().catch(() => null)
       if (!latest) return
       setStatus(latest)
       if (latest.status === 'connected') {
@@ -202,7 +202,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!(status?.running && status?.status === 'connecting')) return
     const interval = setInterval(async () => {
-      const latest = await api.sessionStatus().catch(() => null)
+      const latest = await api.sessionStatusFast().catch(() => null)
       if (!latest) return
       setStatus(latest)
       if (latest.status === 'connected') {
@@ -248,7 +248,7 @@ export default function DashboardPage() {
         trackTelemetry({ stage: 'authenticating', event: mode === 'retry' ? 'waiting_qr_after_retry_click' : 'waiting_qr_after_connect_click' })
       }
       setTimeout(async () => {
-        const s = await api.sessionStatus().catch(() => null)
+        const s = await api.sessionStatusFast().catch(() => null)
         if (s && !s.running && s.status === 'disconnected') {
           setQr(null)
           setStatus(s)
@@ -396,6 +396,8 @@ export default function DashboardPage() {
       await api.sessionForget().catch(() => null)
       await fetchStatus({ showLoading: true, recoverable: true })
       setFeedback('Tentativas anteriores foram limpas. Gerando uma nova conexão segura...')
+      setLoading(false)
+      setActionLoading('')
       await handleQRConnect('retry')
     } catch (err) {
       setError(err.message)
@@ -403,7 +405,7 @@ export default function DashboardPage() {
       trackTelemetry({ stage: 'authenticating', event: 'reset_instance_failed', detail: err.message })
     } finally {
       setLoading(false)
-      if (actionLoading === 'reset') setActionLoading('')
+      setActionLoading('')
     }
   }
 
