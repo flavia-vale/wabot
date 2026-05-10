@@ -306,12 +306,19 @@ export default function DashboardPage() {
     setConnectMethod('pairing')
     trackTelemetry({ stage: 'authenticating', event: 'pairing_request' })
     try {
+      let activeSession = status
       if (!status?.running) {
         await api.sessionStart().catch(async (err) => {
           if (err?.status === 409) return
           throw err
         })
+        activeSession = await waitForRunningSession()
       }
+
+      if (!activeSession?.running) {
+        throw new Error('Não conseguimos iniciar o serviço do WhatsApp para gerar o código. Tente novamente em alguns segundos.')
+      }
+
       const { code } = await api.sessionPairingCode(pairingPhone.trim())
       setPairingCode(code)
       setQrWaitElapsed(0)
@@ -683,9 +690,6 @@ export default function DashboardPage() {
             <div className="flex flex-wrap gap-2">
               <button onClick={handleStop} disabled={loading} className="bg-red-500 text-white px-5 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-red-600 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2">{actionLoading === 'stop' ? 'Desconectando...' : 'Desligar bot'}</button>
               <button onClick={handleRestart} disabled={loading} className="bg-amber-500 text-white px-5 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-amber-600 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2">{actionLoading === 'restart' ? 'Reiniciando...' : 'Reiniciar conexão'}</button>
-              {connectMethod === 'pairing'
-                ? <button onClick={() => handleQRConnect('retry')} disabled={loading} className="bg-green-600 text-white px-5 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">{actionLoading === 'retry_qr' ? 'Tentando QRCode...' : 'Tentar obter QRCode'}</button>
-                : <button onClick={() => { setConnectMethod('pairing'); setShowPairingInput(true); setError('') }} disabled={loading} className="bg-blue-600 text-white px-5 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">{actionLoading === 'pairing' ? 'Obtendo código...' : 'Tentar obter código'}</button>}
             </div>
           </div>
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
