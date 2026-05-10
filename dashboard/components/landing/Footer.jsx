@@ -31,7 +31,7 @@ export function FinalCTA() {
   return (
     <section>
       <div className="wrap">
-        <div style={s.cta}>
+        <div style={s.cta} className="landing-final-cta">
           <div style={s.blob('var(--accent-strong)', { k: 'left', v: '-10%' }, { k: 'top', v: '-30%' }, 480)} />
           <div style={s.blob('var(--accent-2)', { k: 'right', v: '-10%' }, { k: 'bottom', v: '-40%' }, 420)} />
           <div style={{ position: 'relative', zIndex: 1 }}>
@@ -42,8 +42,8 @@ export function FinalCTA() {
               Sua próxima venda<br /><span className="serif" style={{ fontStyle: 'italic' }}>já está no grupo.</span>
             </h2>
             <p style={s.sub}>Conecta o WhatsApp em 4 minutos. Sem cartão, sem letrinha miúda. Se não converter para você, é só desconectar.</p>
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <a className="btn" href="/login" style={{ background: 'var(--accent-2)', color: 'var(--ink)' }}>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }} className="landing-final-cta-actions">
+              <a className="btn" href="/login?mode=register" style={{ background: 'var(--accent-2)', color: 'var(--ink)' }}>
                 <Icon name="whatsapp" size={16} /> Conectar meu WhatsApp <Icon name="arrow" size={16} />
               </a>
               <a className="btn" href="/suporte" style={{ background: 'transparent', color: 'var(--surface)', border: '1px solid rgba(255,255,255,0.2)' }}>
@@ -61,7 +61,7 @@ function Footer() {
   return (
     <footer style={s.foot}>
       <div className="wrap">
-        <div style={s.footGrid}>
+        <div style={s.footGrid} className="landing-footer-grid">
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 600, fontSize: 17 }}>
               <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 14 }}>b</div>
@@ -90,7 +90,7 @@ function Footer() {
             <a style={s.colLink} href="#">LGPD</a>
           </div>
         </div>
-        <div style={s.bottom}>
+        <div style={s.bottom} className="landing-footer-bottom">
           <span>© 2026 Bot Conversor. Feito no Brasil 💜</span>
           <span>Não somos afiliados oficialmente ao WhatsApp Inc.</span>
         </div>

@@ -40,7 +40,7 @@ const s = {
 
 function Nav() {
   return (
-    <nav style={s.nav} className="landing-nav">
+    <nav style={s.nav} className="landing-nav" aria-label="Navegação principal da página inicial">
       <div style={s.logo}>
         <div style={s.logoMark}>b</div>
         <span>bot conversor<span className="serif" style={{ fontStyle: 'italic', marginLeft: 6, color: 'var(--accent-strong)' }}>.afiliados</span></span>
@@ -56,7 +56,7 @@ function Nav() {
         <a className="btn btn-primary" href="#planos" style={{ padding: '10px 18px', fontSize: 14 }}>Começar grátis</a>
       </div>
       <details className="landing-mobile-menu">
-        <summary className="landing-mobile-menu-trigger">Menu</summary>
+        <summary className="landing-mobile-menu-trigger" aria-label="Abrir menu de navegação">Menu</summary>
         <div className="landing-mobile-menu-panel">
           <a style={s.navLink} href="#como">Como funciona</a>
           <a style={s.navLink} href="#features">Recursos</a>
@@ -88,7 +88,6 @@ export function Hero({ tone }) {
       <Nav />
       <div className="landing-mobile-priority">
         <a className="btn btn-ghost" href="/login">Entrar</a>
-        <a className="btn btn-accent" href="/promocao">Ver cupom</a>
       </div>
       <div style={{ ...s.decor, width: 380, height: 380, background: 'var(--accent-2)', top: -40, right: -80 }} />
       <div style={{ ...s.decor, width: 280, height: 280, background: 'var(--accent-3)', bottom: -60, left: -40 }} />
