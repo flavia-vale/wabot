@@ -65,7 +65,7 @@ function Footer() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 600, fontSize: 17 }}>
               <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 14 }}>b</div>
-              <span>bot conversor<span className="serif" style={{ fontStyle: 'italic', marginLeft: 4, color: 'var(--accent-strong)' }}>.afiliados</span></span>
+              <span>botinho espelha grupos</span>
             </div>
             <p style={s.brand}>Bot de WhatsApp que transforma os links dos seus grupos em comissões de afiliada — automaticamente, 24h por dia.</p>
           </div>
