@@ -234,6 +234,7 @@ export default function DashboardPage() {
     setPairingCode('')
     setQrWaitElapsed(0)
     setQrRetrying(mode === 'retry')
+    setStatus((prev) => ({ ...(prev || {}), running: true, status: 'connecting' }))
     setLoading(true)
     setActionLoading(mode === 'retry' ? 'retry_qr' : 'connect')
     trackTelemetry({ stage: 'initializing', event: mode === 'retry' ? 'retry_click' : 'connect_click' })
@@ -436,6 +437,7 @@ export default function DashboardPage() {
   const isConnecting = status?.status === 'connecting'
   const isRunning = status?.running
   const showQrRetry = isRunning && isConnecting && !qr && !pairingCode && qrWaitElapsed >= QR_TIMEOUT_SECONDS
+  const isAwaitingConnectStart = (actionLoading === 'connect' || actionLoading === 'retry_qr' || actionLoading === 'reset') && !qr && !pairingCode
   const canSubmitPairing = pairingPhone.trim().length >= 10
 
   return (
@@ -488,13 +490,13 @@ export default function DashboardPage() {
           {statusLoading ? (
             <LoadingState message={statusLoadingTimedOut ? 'Status demorando mais do que o esperado...' : 'Carregando status do WhatsApp...'} />
           ) : (
-            <p className="font-semibold text-gray-700">{isConnected ? 'Conectado' : isConnecting ? 'Conectando...' : statusError ? 'Status indisponível' : 'Desconectado'}</p>
+            <p className="font-semibold text-gray-700">{isConnected ? 'Conectado' : (isConnecting || isAwaitingConnectStart) ? 'Conectando...' : statusError ? 'Status indisponível' : 'Desconectado'}</p>
           )}
           {status?.phone && <p className="text-xs text-gray-400">+{status.phone}</p>}
         </div>
       </div>
 
-      {isRunning && isConnecting && !qr && !pairingCode && (
+      {(isRunning && isConnecting && !qr && !pairingCode) || isAwaitingConnectStart ? (
         <div className="bg-white rounded-2xl shadow p-8 mb-4 flex flex-col items-center gap-4">
           <svg className="animate-spin w-10 h-10 text-green-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -502,7 +504,7 @@ export default function DashboardPage() {
           </svg>
           <div role="status" aria-live="polite" className="text-center">
             <p className="text-sm font-medium text-gray-600">Gerando QR Code... ({qrWaitElapsed}s)</p>
-            <p className="text-xs text-gray-400">{qrRetrying ? 'Tentando novamente gerar o QR Code...' : 'Aguarde alguns segundos enquanto o WhatsApp prepara a conexão. Se passar de 20s, toque em "Tentar novamente".'}</p>
+            <p className="text-xs text-gray-400">{actionLoading === 'connect' ? 'Iniciando conexão segura e preparando o QR Code...' : qrRetrying ? 'Tentando novamente gerar o QR Code...' : 'Aguarde alguns segundos enquanto o WhatsApp prepara a conexão. Se passar de 20s, toque em "Tentar novamente".'}</p>
           </div>
           {showQrRetry && (
             <button onClick={() => handleQRConnect('retry')} disabled={loading} className="text-sm text-green-700 underline disabled:opacity-50 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
@@ -520,7 +522,7 @@ export default function DashboardPage() {
             </button>
           )}
         </div>
-      )}
+      ) : null}
 
       {qr && (
         <div className="bg-white rounded-2xl shadow p-6 mb-4 flex flex-col items-center gap-3">
@@ -542,7 +544,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {!isRunning && !showPairingInput && !statusLoading && (
+      {!isRunning && !showPairingInput && !statusLoading && !isAwaitingConnectStart && (
         <div className="flex flex-col gap-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
