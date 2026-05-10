@@ -112,8 +112,31 @@ model Payment {
   plan        String
   status      String    @default("pending")
   amount      Float
-  expiresAt   DateTime?
-  createdAt   DateTime  @default(now())
+  expiresAt      DateTime?
+  gatewayEventId String?
+  lastSyncedAt   DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([status, createdAt])
+  @@index([gatewayEventId])
+}
+
+
+model PaymentWebhookDlq {
+  id             String   @id @default(cuid())
+  provider       String
+  eventId        String
+  requestId      String?
+  payload        String
+  error          String
+  retryCount     Int      @default(0)
+  lastRetryAt    DateTime?
+  resolvedAt     DateTime?
+  createdAt      DateTime @default(now())
+
+  @@index([provider, createdAt])
+  @@index([resolvedAt, createdAt])
+  @@unique([provider, eventId])
 }
 
 model WebhookEvent {
