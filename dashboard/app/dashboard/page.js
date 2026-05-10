@@ -289,9 +289,11 @@ export default function DashboardPage() {
           if (err?.status === 409) return
           throw err
         })
+        await waitForRunningSession(20_000)
       }
       const { code } = await api.sessionPairingCode(pairingPhone.trim())
       setPairingCode(code)
+      setShowPairingInput(false)
       setQrWaitElapsed(0)
       setFeedback('Código de pareamento gerado.')
       await openWS()
@@ -587,7 +589,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {!isRunning && showPairingInput && (
+      {showPairingInput && (
         <form onSubmit={handlePairingSubmit} className="flex flex-col gap-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Número do WhatsApp (com DDD e código do país)</label>
