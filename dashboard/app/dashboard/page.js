@@ -34,6 +34,7 @@ export default function DashboardPage() {
   const [showPairingInput, setShowPairingInput] = useState(false)
   const [pairingPhone, setPairingPhone] = useState('')
   const [pairingCode, setPairingCode] = useState('')
+  const [connectMethod, setConnectMethod] = useState('qr')
   const [showForgetConfirm, setShowForgetConfirm] = useState(false)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
 
@@ -219,7 +220,7 @@ export default function DashboardPage() {
   }, [status?.running, status?.status])
 
   useEffect(() => {
-    if (!(status?.running && status?.status === 'connecting') || qr || pairingCode) return
+    if (!(status?.running && status?.status !== 'connected') || qr || pairingCode) return
     const interval = setInterval(() => setQrWaitElapsed((prev) => prev + 1), 1000)
     return () => clearInterval(interval)
   }, [status?.running, status?.status, qr, pairingCode])
@@ -231,6 +232,7 @@ export default function DashboardPage() {
     setStatusError('')
     setWsErrorMessage('')
     setShowPairingInput(false)
+    setConnectMethod('qr')
     setPairingCode('')
     setQrWaitElapsed(0)
     setQrRetrying(mode === 'retry')
@@ -279,9 +281,15 @@ export default function DashboardPage() {
     if (loading) return
     setLoading(true)
     setActionLoading('pairing')
+    setConnectMethod('pairing')
     trackTelemetry({ stage: 'authenticating', event: 'pairing_request' })
     try {
-      if (!status?.running) await api.sessionStart()
+      if (!status?.running) {
+        await api.sessionStart().catch(async (err) => {
+          if (err?.status === 409) return
+          throw err
+        })
+      }
       const { code } = await api.sessionPairingCode(pairingPhone.trim())
       setPairingCode(code)
       setQrWaitElapsed(0)
@@ -436,6 +444,7 @@ export default function DashboardPage() {
   const isConnected = status?.status === 'connected'
   const isConnecting = status?.status === 'connecting'
   const isRunning = status?.running
+  const isBootstrappingSession = isRunning && !isConnected && status?.status === 'disconnected'
   const showQrRetry = isRunning && isConnecting && !qr && !pairingCode && qrWaitElapsed >= QR_TIMEOUT_SECONDS
   const isAwaitingConnectStart = (actionLoading === 'connect' || actionLoading === 'retry_qr' || actionLoading === 'reset') && !qr && !pairingCode
   const canSubmitPairing = pairingPhone.trim().length >= 10
@@ -490,13 +499,13 @@ export default function DashboardPage() {
           {statusLoading ? (
             <LoadingState message={statusLoadingTimedOut ? 'Status demorando mais do que o esperado...' : 'Carregando status do WhatsApp...'} />
           ) : (
-            <p className="font-semibold text-gray-700">{isConnected ? 'Conectado' : (isConnecting || isAwaitingConnectStart) ? 'Conectando...' : statusError ? 'Status indisponível' : 'Desconectado'}</p>
+            <p className="font-semibold text-gray-700">{isConnected ? 'Conectado' : (isConnecting || isAwaitingConnectStart || isBootstrappingSession) ? 'Conectando...' : statusError ? 'Status indisponível' : 'Desconectado'}</p>
           )}
           {status?.phone && <p className="text-xs text-gray-400">+{status.phone}</p>}
         </div>
       </div>
 
-      {(isRunning && isConnecting && !qr && !pairingCode) || isAwaitingConnectStart ? (
+      {(isRunning && !isConnected && !qr && !pairingCode) || isAwaitingConnectStart ? (
         <div className="bg-white rounded-2xl shadow p-8 mb-4 flex flex-col items-center gap-4">
           <svg className="animate-spin w-10 h-10 text-green-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -504,7 +513,15 @@ export default function DashboardPage() {
           </svg>
           <div role="status" aria-live="polite" className="text-center">
             <p className="text-sm font-medium text-gray-600">Gerando QR Code... ({qrWaitElapsed}s)</p>
-            <p className="text-xs text-gray-400">{actionLoading === 'connect' ? 'Iniciando conexão segura e preparando o QR Code...' : qrRetrying ? 'Tentando novamente gerar o QR Code...' : 'Aguarde alguns segundos enquanto o WhatsApp prepara a conexão. Se passar de 20s, toque em "Tentar novamente".'}</p>
+            <p className="text-xs text-gray-400">
+              {isBootstrappingSession
+                ? 'Bot iniciado. Preparando sessão do WhatsApp para emitir o QR Code...'
+                : actionLoading === 'connect'
+                  ? 'Iniciando conexão segura e preparando o QR Code...'
+                  : qrRetrying
+                    ? 'Tentando novamente gerar o QR Code...'
+                    : 'Aguarde alguns segundos enquanto o WhatsApp prepara a conexão. Se passar de 20s, toque em "Tentar novamente".'}
+            </p>
           </div>
           {showQrRetry && (
             <button onClick={() => handleQRConnect('retry')} disabled={loading} className="text-sm text-green-700 underline disabled:opacity-50 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
@@ -557,7 +574,7 @@ export default function DashboardPage() {
             <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
               <h3 className="font-semibold text-gray-700">Conectar pelo número</h3>
               <p className="mt-1 text-xs text-gray-500">Use um código para vincular pelo WhatsApp.</p>
-              <button onClick={() => { setShowPairingInput(true); setError('') }} disabled={loading} className="mt-4 w-full bg-blue-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
+              <button onClick={() => { setConnectMethod('pairing'); setShowPairingInput(true); setError('') }} disabled={loading} className="mt-4 w-full bg-blue-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
                 <span aria-hidden="true">📱</span>Obter código
               </button>
             </div>
@@ -592,6 +609,9 @@ export default function DashboardPage() {
             <div className="flex flex-wrap gap-2">
               <button onClick={handleStop} disabled={loading} className="bg-red-500 text-white px-5 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-red-600 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2">{actionLoading === 'stop' ? 'Desconectando...' : 'Desligar bot'}</button>
               <button onClick={handleRestart} disabled={loading} className="bg-amber-500 text-white px-5 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-amber-600 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2">{actionLoading === 'restart' ? 'Reiniciando...' : 'Reiniciar conexão'}</button>
+              {connectMethod === 'pairing'
+                ? <button onClick={() => handleQRConnect('retry')} disabled={loading} className="bg-green-600 text-white px-5 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">{actionLoading === 'retry_qr' ? 'Tentando QRCode...' : 'Tentar obter QRCode'}</button>
+                : <button onClick={() => { setConnectMethod('pairing'); setShowPairingInput(true); setError('') }} disabled={loading} className="bg-blue-600 text-white px-5 py-2.5 min-h-11 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">{actionLoading === 'pairing' ? 'Obtendo código...' : 'Tentar obter código'}</button>}
             </div>
           </div>
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
