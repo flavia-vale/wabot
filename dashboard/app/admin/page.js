@@ -79,6 +79,24 @@ function statValue(key, value) {
   return value ?? '—'
 }
 
+
+function severityTone(value, warning = 1, critical = 5) {
+  const safeValue = Number(value || 0)
+  if (safeValue >= critical) return 'critical'
+  if (safeValue >= warning) return 'warning'
+  return 'ok'
+}
+
+function toneClasses(tone) {
+  if (tone === 'critical') return 'bg-red-50 text-red-700 ring-red-200'
+  if (tone === 'warning') return 'bg-amber-50 text-amber-700 ring-amber-200'
+  return 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+}
+
+function CommandCard({ label, value, tone = 'ok', helper }) {
+  return <article className={`rounded-2xl p-4 ring-1 shadow-sm ${toneClasses(tone)}`}><p className="text-[11px] font-black uppercase tracking-wide opacity-80">{label}</p><p className="mt-1 text-2xl font-black">{value}</p>{helper && <p className="mt-1 text-xs opacity-80">{helper}</p>}</article>
+}
+
 function RiskBadges({ flags = [] }) {
   if (!flags.length) return <span className="rounded-full bg-green-100 px-2 py-1 text-[11px] font-bold text-green-700">OK</span>
   return (
@@ -626,7 +644,7 @@ export default function AdminPage() {
   if (loading) return <LoadingState />
   if (accessDenied) {
     return (
-      <main className="min-h-screen bg-gray-50 px-5 py-8">
+      <main className="min-h-screen bg-gradient-to-b from-slate-50 to-white px-5 py-8">
         <div className="mx-auto max-w-7xl">
           <Alert type="warning" title="Acesso restrito" message="VOCÊ NÃO TEM PERMISSÃO" />
         </div>
@@ -637,7 +655,7 @@ export default function AdminPage() {
   return (
     <main className="min-h-screen bg-gray-50 px-5 py-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="sticky top-0 z-10 rounded-2xl border border-emerald-100 bg-white/95 p-4 shadow-sm backdrop-blur flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Visão operacional · Etapa 2</p>
             <h1 className="text-3xl font-black text-gray-900">Admin BOTinho</h1>
@@ -651,6 +669,25 @@ export default function AdminPage() {
         </div>
 
         {error && <Alert type="error" title="Painel admin" message={error} />}
+
+        {(overview || success || finance) && (
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Semáforo executivo</p>
+                <h2 className="text-lg font-black text-gray-900">Estado operacional em 5 segundos</h2>
+              </div>
+              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-600">Atualização em tempo real</span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <CommandCard label="Erros 24h" value={overview?.errors24h ?? 0} tone={severityTone(overview?.errors24h, 1, 10)} helper="Acima de 10 = crítico" />
+              <CommandCard label="Pagamentos pendentes" value={overview?.pendingPayments ?? 0} tone={severityTone(overview?.pendingPayments, 1, 5)} helper="Cobrança / retenção" />
+              <CommandCard label="WA desconectado" value={Math.max((overview?.paidActiveUsers ?? 0) - (overview?.connectedSessions ?? 0), 0)} tone={severityTone(Math.max((overview?.paidActiveUsers ?? 0) - (overview?.connectedSessions ?? 0), 0), 1, 5)} helper="Pagante sem sessão" />
+              <CommandCard label="Expiram em 7 dias" value={overview?.expiringInSevenDays ?? 0} tone={severityTone(overview?.expiringInSevenDays, 1, 8)} helper="Ação preventiva CS" />
+              <CommandCard label="Receita 30d" value={formatCurrency(overview?.revenue30d)} tone="ok" helper={`MRR ativo: ${formatCurrency(finance?.activeMrr ?? 0)}`} />
+            </div>
+          </section>
+        )}
 
         {admin && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
@@ -858,7 +895,7 @@ export default function AdminPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {(users?.users ?? []).map(user => (
-                  <tr key={user.id} className="align-top">
+                  <tr key={user.id} className={`align-top ${user.riskFlags?.length ? 'bg-amber-50/40' : ''}`}>
                     <td className="px-3 py-3">
                       <p className="font-bold text-gray-900">{user.email}</p>
                       <p className="text-xs text-gray-500">{user.contactPhone || 'Sem celular'} · {user.status}</p>
