@@ -75,6 +75,7 @@ export const api = {
   },
 
   sessionStatus: () => apiFetch('/api/session/status'),
+  sessionStatusFast: () => apiFetch('/api/session/status?metrics=0'),
   sessionStart: () => apiFetch('/api/session/start', { method: 'POST' }),
   sessionStop: () => apiFetch('/api/session/stop', { method: 'POST' }),
   sessionForget: () => apiFetch('/api/session/forget', { method: 'POST' }),
