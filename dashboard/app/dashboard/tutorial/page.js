@@ -114,8 +114,8 @@ export default function TutorialPage() {
         </p>
         <StepList steps={[
           <>Abra o Google Chrome no computador (não funciona no celular).</>,
-          <><ExternalLink href={LINKS.cookieEditor}>Clique aqui para abrir a Cookie-Editor na Chrome Web Store</ExternalLink> e depois clique no botão <strong>"Usar no Chrome"</strong>.</>,
-          <>Confirme a instalação clicando em <strong>"Adicionar extensão"</strong> na janelinha que aparecer.</>,
+          <><ExternalLink href={LINKS.cookieEditor}>Clique aqui para abrir a Cookie-Editor na Chrome Web Store</ExternalLink> e depois clique no botão <strong>&quot;Usar no Chrome&quot;</strong>.</>,
+          <>Confirme a instalação clicando em <strong>&quot;Adicionar extensão&quot;</strong> na janelinha que aparecer.</>,
           <>Pronto! O ícone da extensão (uma bolachinha 🍪) vai aparecer no canto superior direito do navegador.</>,
         ]} />
         <Tip>
@@ -135,7 +135,7 @@ export default function TutorialPage() {
         <StepList steps={[
           <>Faça login na sua conta do Mercado Livre com o perfil de afiliado.</>,
           <><ExternalLink href={LINKS.mercadoLivreLinkBuilder}>Acesse o Gerador de Links ML</ExternalLink> — ou navegue por: <strong>Minha Conta → Afiliados e Criadores → Gerador de links</strong>.</>,
-          <>Na página do Gerador de Links, você vai ver um campo chamado <strong>"Etiqueta em uso"</strong> com um código numérico (ex: <code className="bg-gray-100 px-1 rounded text-xs">47xxxxx</code>). Esse é o seu <strong>ID</strong>. Copie-o.</>,
+          <>Na página do Gerador de Links, você vai ver um campo chamado <strong>&quot;Etiqueta em uso&quot;</strong> com um código numérico (ex: <code className="bg-gray-100 px-1 rounded text-xs">47xxxxx</code>). Esse é o seu <strong>ID</strong>. Copie-o.</>,
         ]} />
 
         <div className="space-y-1 pt-2">
@@ -229,7 +229,7 @@ export default function TutorialPage() {
         </div>
         <StepList steps={[
           <><ExternalLink href={LINKS.shopeeOpenApi}>Acesse o painel Shopee Open API</ExternalLink> diariamente até o acesso ser liberado.</>,
-          <>Quando aparecer o botão <strong>"Redefinir"</strong>, clique nele — a <strong>Key</strong> e o <strong>Secret</strong> serão exibidos na tela.</>,
+          <>Quando aparecer o botão <strong>&quot;Redefinir&quot;</strong>, clique nele — a <strong>Key</strong> e o <strong>Secret</strong> serão exibidos na tela.</>,
           <>Copie os dois valores e cole nos campos correspondentes na tela de <strong>Credenciais</strong> do BOTinho.</>,
         ]} />
         <Tip>

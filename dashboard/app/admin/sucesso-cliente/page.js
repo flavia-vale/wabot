@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
@@ -42,10 +42,10 @@ export default function CustomerSuccessPage() {
   const [saving, setSaving] = useState(false)
   const [selectedUser, setSelectedUser] = useState(null)
 
-  async function loadUsers(search = query) {
+  const loadUsers = useCallback(async (search = query) => {
     const data = await api.adminUsers({ limit: 200, search })
     setUsers(data?.users ?? [])
-  }
+  }, [query])
 
   useEffect(() => {
     api.adminMe()
@@ -63,8 +63,11 @@ export default function CustomerSuccessPage() {
 
   useEffect(() => {
     if (!admin || !hasCustomerSuccessAccess) return
-    loadUsers().catch(err => setError(err.message || 'Erro ao carregar clientes.'))
-  }, [admin, hasCustomerSuccessAccess])
+    const timer = setTimeout(() => {
+      loadUsers().catch(err => setError(err.message || 'Erro ao carregar clientes.'))
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [admin, hasCustomerSuccessAccess, loadUsers])
 
   const prioritizedUsers = useMemo(() => [...users].sort((a, b) => (daysUntil(a.accessExpiresAt) ?? 99) - (daysUntil(b.accessExpiresAt) ?? 99)), [users])
   const metrics = useMemo(() => ({
