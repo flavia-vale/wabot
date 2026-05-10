@@ -12,7 +12,7 @@ const ROLE_PERMISSIONS = {
 }
 
 const PAID_PLANS = ['basic', 'pro']
-const PLAN_PRICES = { trial: 0, basic: 40, pro: 70 }
+const PLAN_PRICES = { trial: 0, basic: 1, pro: 2 }
 const EXPORT_LIMIT = 100
 const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = ['flavia.vale@usp.br', 'flaviaroberta.1496@gmail.com', 'tacianeaas02@gmail.com']
 
@@ -25,6 +25,12 @@ function getBootstrapAdminEmails() {
       .map(email => email.trim().toLowerCase())
       .filter(Boolean)
   )
+}
+
+export function isAdminEmailBootstrapEnabled() {
+  const raw = String(process.env.ALLOW_ADMIN_EMAIL_BOOTSTRAP ?? '').trim().toLowerCase()
+  if (!raw) return true
+  return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
 }
 
 function hasPermission(role, permission) {

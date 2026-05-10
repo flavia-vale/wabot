@@ -30,12 +30,15 @@ let activityCacheCleanupTimer = null
 const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
+  'http://localhost:3006',
+  'http://127.0.0.1:3006',
   'http://127.0.0.1:5173',
   'http://localhost:5173',
   'http://espelhagrupos.com.br',
   'https://espelhagrupos.com.br',
   'http://www.espelhagrupos.com.br',
   'https://www.espelhagrupos.com.br',
+  'http://178.105.54.0:3006',
 ]
 
 

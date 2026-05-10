@@ -21,7 +21,7 @@ const DEFAULT_PLAN_CARDS = [
   {
     id: 'basic',
     name: 'Basic',
-    price: 'R$40',
+    price: 'R$1',
     priceClass: 'text-blue-600',
     buttonClass: 'bg-blue-600 hover:bg-blue-700',
     cardClass: 'border border-transparent',
@@ -31,7 +31,7 @@ const DEFAULT_PLAN_CARDS = [
   {
     id: 'pro',
     name: 'Pro',
-    price: 'R$70',
+    price: 'R$2',
     priceClass: 'text-purple-600',
     buttonClass: 'bg-purple-600 hover:bg-purple-700',
     cardClass: 'border-2 border-purple-300',
