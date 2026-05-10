@@ -53,7 +53,10 @@ async function apiFetch(path, options = {}) {
     : { error: await res.text().catch(() => '') }
   if (res.status === 401 && !path.startsWith('/api/auth/')) {
     handleSessionExpiredRedirect()
-    return
+    const err = new Error(SESSION_EXPIRED_MESSAGE)
+    err.code = 'SESSION_EXPIRED'
+    err.status = 401
+    throw err
   }
   if (!res.ok) {
     const rawMessage = data?.message ?? data?.error ?? ''
