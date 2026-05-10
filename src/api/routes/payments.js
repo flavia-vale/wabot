@@ -5,6 +5,10 @@ import { trackAnalyticsEventSafe } from '../../analytics.js'
 
 const MP_WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET
 const IS_PRODUCTION = process.env.NODE_ENV === 'production'
+const PAYMENT_RECONCILIATION_ENABLED = String(process.env.PAYMENT_RECONCILIATION_ENABLED ?? 'true').toLowerCase() === 'true'
+const PAYMENT_RECONCILIATION_INTERVAL_MS = Math.max(60000, Number(process.env.PAYMENT_RECONCILIATION_INTERVAL_MS ?? 3600000))
+const PAYMENT_RECONCILIATION_PENDING_MINUTES = Math.max(5, Number(process.env.PAYMENT_RECONCILIATION_PENDING_MINUTES ?? 15))
+const PAYMENT_RECONCILIATION_BATCH = Math.min(200, Math.max(1, Number(process.env.PAYMENT_RECONCILIATION_BATCH ?? 50)))
 
 const OFFICIAL_PUBLIC_ORIGIN = 'http://espelhagrupos.com.br'
 
@@ -189,10 +193,10 @@ export async function activatePaymentAccess(tx, { userId, plan, mpPaymentId, amo
   }
 
   if (existing) {
-    await tx.payment.update({ where: { id: existing.id }, data: { status: 'approved', expiresAt } })
+    await tx.payment.update({ where: { id: existing.id }, data: { status: 'approved', expiresAt, lastSyncedAt: new Date() } })
   } else {
     await tx.payment.create({
-      data: { userId, mpPaymentId: String(mpPaymentId), plan, status: 'approved', amount, expiresAt },
+      data: { userId, mpPaymentId: String(mpPaymentId), plan, status: 'approved', amount, expiresAt, lastSyncedAt: new Date() },
     })
   }
   await tx.user.update({ where: { id: userId }, data: { plan, accessExpiresAt: expiresAt } })
@@ -312,6 +316,46 @@ async function createMercadoPagoPreference({ userId, plan }) {
   }
 }
 
+async function markWebhookDlq({ eventId, requestId, payload, error }) {
+  await db.paymentWebhookDlq.upsert({
+    where: { provider_eventId: { provider: 'mercado_pago', eventId: String(eventId) } },
+    update: { error: String(error).slice(0, 500), payload, requestId: requestId || null, retryCount: { increment: 1 }, lastRetryAt: new Date() },
+    create: { provider: 'mercado_pago', eventId: String(eventId), requestId: requestId || null, payload, error: String(error).slice(0, 500), retryCount: 0 },
+  })
+}
+
+async function invalidatePaymentCache(userId, log) {
+  log?.info?.({ userId }, 'payment_cache_invalidation_requested')
+}
+
+async function runPaymentReconciliation({ log } = {}) {
+  const cutoff = new Date(Date.now() - PAYMENT_RECONCILIATION_PENDING_MINUTES * 60 * 1000)
+  const pending = await db.payment.findMany({
+    where: { status: 'pending', createdAt: { lte: cutoff }, mpPaymentId: { not: null } },
+    take: PAYMENT_RECONCILIATION_BATCH,
+    orderBy: { createdAt: 'asc' },
+  })
+  let fixed = 0
+  for (const payment of pending) {
+    const snapshot = await fetchMercadoPagoPaymentSnapshot(payment.mpPaymentId)
+    if (!snapshot.ok) continue
+    if (snapshot.providerStatus !== 'approved' || !snapshot.externalReference) {
+      await db.payment.update({ where: { id: payment.id }, data: { lastSyncedAt: new Date() } }).catch(() => {})
+      continue
+    }
+    const plans = await getBillingPlans()
+    const plan = inferPlanFromAmountWithPlans(snapshot.transactionAmount, plans)
+    if (!plan) continue
+    await db.$transaction(async (tx) => {
+      await activatePaymentAccess(tx, { userId: snapshot.externalReference, plan, mpPaymentId: String(payment.mpPaymentId), amount: plans[plan].price })
+      await tx.payment.updateMany({ where: { mpPaymentId: String(payment.mpPaymentId) }, data: { gatewayEventId: payment.gatewayEventId ?? null, lastSyncedAt: new Date() } })
+    })
+    await invalidatePaymentCache(snapshot.externalReference, log)
+    fixed++
+  }
+  return { checked: pending.length, fixed }
+}
+
 async function processPendingWebhookEvents({ limit = 50, log } = {}) {
   const pending = await db.webhookEvent.findMany({
     where: { provider: 'mercado_pago', processingStatus: 'received' },
@@ -362,6 +406,7 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
         }
       }
 
+      await markWebhookDlq({ eventId: event.eventId, requestId: event.requestId, payload: event.payload, error: err?.message ?? 'processing_error' }).catch(() => {})
       await db.webhookEvent.update({
         where: { id: event.id },
         data: {
@@ -373,6 +418,7 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
       })
       processed++
     } catch (err) {
+      await markWebhookDlq({ eventId: event.eventId, requestId: event.requestId, payload: event.payload, error: err?.message ?? 'processing_error' }).catch(() => {})
       await db.webhookEvent.update({
         where: { id: event.id },
         data: {
@@ -420,6 +466,19 @@ function startWebhookProcessor(app) {
 
   timer.unref?.()
   app.log.info({ cfg }, 'Billing webhook processor enabled')
+
+  if (PAYMENT_RECONCILIATION_ENABLED) {
+    const reconciliationTimer = setInterval(async () => {
+      try {
+        const result = await runPaymentReconciliation({ log: app.log })
+        if (result.checked > 0) app.log.info({ result }, 'payment_reconciliation_cycle_completed')
+      } catch (err) {
+        app.log.error({ err: err?.message }, 'payment_reconciliation_cycle_failed')
+      }
+    }, PAYMENT_RECONCILIATION_INTERVAL_MS)
+    reconciliationTimer.unref?.()
+    app.log.info({ intervalMs: PAYMENT_RECONCILIATION_INTERVAL_MS, pendingMinutes: PAYMENT_RECONCILIATION_PENDING_MINUTES }, 'Payment reconciliation worker enabled')
+  }
 }
 
 export async function paymentsRoutes(app) {
@@ -489,6 +548,8 @@ export async function paymentsRoutes(app) {
     const eventType = String(req.body?.type ?? req.body?.topic ?? '').trim() || null
     const payload = normalizeWebhookPayload(req.body)
 
+    const requestCorrelationId = String(requestId || req.id || '')
+    req.log.info({ requestId: requestCorrelationId, eventId, eventType }, 'payment_webhook_received')
     try {
       await db.webhookEvent.create({
         data: {
@@ -496,7 +557,7 @@ export async function paymentsRoutes(app) {
           eventId,
           eventType,
           signatureValid,
-          requestId: String(requestId || '') || null,
+          requestId: requestCorrelationId || null,
           dataId: String(dataId || '') || null,
           payload,
           processingStatus: 'received',
@@ -586,6 +647,31 @@ export async function paymentsRoutes(app) {
 
     const result = await processPendingWebhookEvents({ limit, log: req.log })
     return { ok: true, ...result }
+  })
+
+  app.get('/health', { onRequest: [app.authenticate] }, async (req) => {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    const [pending, dlqOpen] = await Promise.all([
+      db.payment.count({ where: { status: 'pending', createdAt: { gte: since } } }),
+      db.paymentWebhookDlq.count({ where: { resolvedAt: null } }),
+    ])
+    return { ok: dlqOpen === 0, provider: 'mercado_pago', pendingLast24h: pending, dlqOpen, checkedAt: new Date().toISOString() }
+  })
+
+  app.post('/dlq/reprocess', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const userId = req.user?.sub
+    const adminUser = await db.adminUser.findUnique({ where: { userId }, select: { role: true, status: true } }).catch(() => null)
+    if (!adminUser || adminUser.status !== 'active' || adminUser.role !== 'owner') return reply.code(403).send({ error: 'Acesso negado' })
+    const items = await db.paymentWebhookDlq.findMany({ where: { resolvedAt: null }, take: 20, orderBy: { createdAt: 'asc' } })
+    let resolved = 0
+    for (const item of items) {
+      try {
+        await db.webhookEvent.upsert({ where: { provider_eventId: { provider: 'mercado_pago', eventId: item.eventId } }, update: { processingStatus: 'received', error: null }, create: { provider: 'mercado_pago', eventId: item.eventId, payload: item.payload, processingStatus: 'received', signatureValid: true } })
+        await db.paymentWebhookDlq.update({ where: { id: item.id }, data: { resolvedAt: new Date(), lastRetryAt: new Date(), retryCount: { increment: 1 } } })
+        resolved++
+      } catch {}
+    }
+    return { ok: true, picked: items.length, resolved }
   })
 
   app.get('/status', { onRequest: [app.authenticate] }, async (req) => {
