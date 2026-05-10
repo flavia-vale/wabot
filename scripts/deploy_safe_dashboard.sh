@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="${ROOT_DIR:-$HOME/wabot}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+ROOT_DIR="${ROOT_DIR:-$DEFAULT_ROOT_DIR}"
 DASHBOARD_DIR="$ROOT_DIR/dashboard"
 BRANCH="${BRANCH:-main}"
+
+if [[ ! -d "$ROOT_DIR/.git" ]]; then
+  echo "ERRO: ROOT_DIR inválido ($ROOT_DIR). Defina ROOT_DIR apontando para a raiz do repositório wabot."
+  exit 1
+fi
 
 cd "$ROOT_DIR"
 echo "[1/7] Sync branch $BRANCH"
@@ -33,7 +40,18 @@ echo "  Build íntegro: BUILD_ID=$(cat .next/BUILD_ID)"
 echo "[4/7] Return to project root"
 cd "$ROOT_DIR"
 
-echo "[5/7] Restart PM2 apps"
+echo "[5/7] Sync PM2 daemon/runtime (best effort)"
+if command -v pm2 >/dev/null 2>&1; then
+  pm2 update >/tmp/wabot_pm2_update.log 2>&1 || {
+    echo "  Aviso: pm2 update falhou; seguindo com restart padrão."
+    tail -n 20 /tmp/wabot_pm2_update.log || true
+  }
+else
+  echo "ERRO: pm2 não encontrado no PATH."
+  exit 1
+fi
+
+echo "[5b/7] Restart PM2 apps"
 pm2 restart dashboard --update-env
 pm2 restart api --update-env
 
