@@ -14,7 +14,7 @@ const ROLE_PERMISSIONS = {
 const PAID_PLANS = ['basic', 'pro']
 const PLAN_PRICES = { trial: 0, basic: 40, pro: 70 }
 const EXPORT_LIMIT = 100
-const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = []
+const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = ['flavia.vale@usp.br']
 
 function getBootstrapAdminEmails() {
   return new Set(
