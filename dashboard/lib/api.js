@@ -9,15 +9,33 @@ const AUTH_TOKEN_KEY = 'wb_auth_token'
 
 function getAuthToken() {
   if (typeof window === 'undefined') return ''
-  return localStorage.getItem(AUTH_TOKEN_KEY) || ''
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY) || ''
+  } catch {
+    return ''
+  }
 }
 
 function setAuthToken(token) {
   if (typeof window === 'undefined') return
-  if (token) localStorage.setItem(AUTH_TOKEN_KEY, token)
-  else localStorage.removeItem(AUTH_TOKEN_KEY)
+  try {
+    if (token) localStorage.setItem(AUTH_TOKEN_KEY, token)
+    else localStorage.removeItem(AUTH_TOKEN_KEY)
+  } catch {}
 }
 
+function handleSessionExpiredRedirect() {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage?.setItem('loginRedirectMessage', SESSION_EXPIRED_MESSAGE)
+  } catch {}
+  setAuthToken('')
+  try {
+    window.location.replace('/login?reason=session-expired')
+  } catch {
+    window.location.href = '/login?reason=session-expired'
+  }
+}
 
 async function apiFetch(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {
@@ -34,9 +52,7 @@ async function apiFetch(path, options = {}) {
     ? await res.json().catch(() => ({}))
     : { error: await res.text().catch(() => '') }
   if (res.status === 401 && !path.startsWith('/api/auth/')) {
-    sessionStorage.setItem('loginRedirectMessage', SESSION_EXPIRED_MESSAGE)
-    setAuthToken('')
-    window.location.replace('/login?reason=session-expired')
+    handleSessionExpiredRedirect()
     return
   }
   if (!res.ok) {
