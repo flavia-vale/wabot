@@ -78,8 +78,8 @@ export function Features() {
           <p style={s.sub}>Você aponta os grupos de promoção que quer monitorar e o seu grupo de destino. O resto é com a gente.</p>
         </div>
 
-        <div style={s.grid}>
-          <div style={s.card(7, true)}>
+        <div style={s.grid} className="landing-features-grid">
+          <div style={s.card(7, true)} className="landing-feature-card landing-feature-card-primary">
             <div style={s.iconBox}><Icon name="bolt" size={22} /></div>
             <div style={s.cardTitle}>Detecção em menos de 1 segundo</div>
             <p style={s.cardBody}>O bot escuta seus grupos em tempo real. Quando aparece um link de loja parceira, ele já dispara a versão sua antes da mensagem original sair de vista.</p>
@@ -95,7 +95,7 @@ export function Features() {
             </div>
           </div>
 
-          <div style={s.card(5)}>
+          <div style={s.card(5)} className="landing-feature-card landing-feature-card-secondary">
             <div style={s.iconBox}><Icon name="link" size={22} /></div>
             <div style={s.cardTitle}>4 lojas, mais chegando</div>
             <p style={s.cardBody}>Suporta as principais plataformas que mais convertem no público brasileiro.</p>
@@ -109,7 +109,7 @@ export function Features() {
           </div>
 
           {featureCards.map((card) => (
-            <div key={card.title} style={s.card(card.cols, card.accent)}>
+            <div key={card.title} style={s.card(card.cols, card.accent)} className="landing-feature-card">
               <div style={s.iconBox}><Icon name={card.icon} size={22} /></div>
               <div style={s.cardTitle}>{card.title}</div>
               <p style={s.cardBody}>{card.body}</p>

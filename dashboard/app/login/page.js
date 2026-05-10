@@ -1,11 +1,12 @@
 'use client'
-import { useState, Suspense } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
+import { mapAuthError, trackEvent, TRACKING_EVENTS } from '@/lib/analytics'
 
 const LOGIN_BENEFITS = [
   'Conversão automática de links de afiliado',
@@ -22,6 +23,12 @@ function LoginContent() {
   const [password, setPassword] = useState('')
   const [contactPhone, setContactPhone] = useState('')
   const [isRegister, setIsRegister] = useState(false)
+
+  useEffect(() => {
+    const mode = searchParams.get('mode')
+    if (mode === 'register') setIsRegister(true)
+    if (mode === 'login') setIsRegister(false)
+  }, [searchParams])
   const [error, setError] = useState(() => {
     if (typeof window === 'undefined') return ''
     const reason = new URLSearchParams(window.location.search).get('reason')
@@ -42,11 +49,26 @@ function LoginContent() {
     setSuccess('')
     setLoading(true)
     try {
-      if (isRegister) await api.register(name, email, password, contactPhone, ref)
-      else await api.login(email, password)
+      trackEvent(TRACKING_EVENTS.AUTH_SUBMIT_ATTEMPT, {
+        origin: 'login_page',
+        mode: isRegister ? 'register' : 'login',
+        has_ref: Boolean(ref),
+      })
+      if (isRegister) {
+        await api.register(name, email, password, contactPhone, ref)
+        trackEvent(TRACKING_EVENTS.SIGNUP_SUCCESS, { origin: 'login_page', has_ref: Boolean(ref) })
+      } else {
+        await api.login(email, password)
+        trackEvent(TRACKING_EVENTS.LOGIN_SUCCESS, { origin: 'login_page' })
+      }
       setSuccess(isRegister ? 'Conta criada com sucesso. Redirecionando para o checklist...' : 'Login realizado. Redirecionando para o checklist...')
       setTimeout(() => router.push('/dashboard/inicio'), 300)
     } catch (err) {
+      trackEvent(TRACKING_EVENTS.AUTH_ERROR, {
+        origin: 'login_page',
+        mode: isRegister ? 'register' : 'login',
+        error_type: mapAuthError(err),
+      })
       setError(err.message)
     } finally {
       setLoading(false)
@@ -113,7 +135,7 @@ function LoginContent() {
                 onChange={e => setName(e.target.value)}
                 required={isRegister}
                 autoComplete="name"
-                className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 w-full"
+                className="border rounded-lg px-3 py-2 text-sm placeholder:text-white outline-none focus:ring-2 focus:ring-green-400 w-full"
               />
             </div>
           )}
@@ -141,7 +163,7 @@ function LoginContent() {
                 value={contactPhone}
                 onChange={e => setContactPhone(e.target.value)}
                 required={isRegister}
-                className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 w-full"
+                className="border rounded-lg px-3 py-2 text-sm placeholder:text-white outline-none focus:ring-2 focus:ring-green-400 w-full"
               />
               <p className="mt-1 text-[11px] leading-4 text-emerald-200">
                 Usaremos este contato para suporte proativo, como avisar se seu robô ficar parado por 2 dias ou se detectarmos dificuldade na configuração.
@@ -212,7 +234,17 @@ function LoginContent() {
         </form>
 
         <button
-          onClick={() => { setIsRegister(!isRegister); setError(''); setSuccess(''); setContactPhone('') }}
+          onClick={() => {
+            const nextMode = !isRegister
+            trackEvent(TRACKING_EVENTS.AUTH_MODE_SWITCH, {
+              origin: 'login_page',
+              mode: nextMode ? 'register' : 'login',
+            })
+            setIsRegister(nextMode)
+            setError('')
+            setSuccess('')
+            setContactPhone('')
+          }}
           className={`mt-4 text-sm hover:underline w-full text-center ${isRegister ? 'text-emerald-200' : 'text-green-600'}`}
         >
           {isRegister ? 'Já tenho conta — Entrar' : 'Ainda não tenho conta — começar agora'}
