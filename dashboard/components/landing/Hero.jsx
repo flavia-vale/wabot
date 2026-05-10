@@ -43,7 +43,7 @@ function Nav() {
     <nav style={s.nav} className="landing-nav" aria-label="Navegação principal da página inicial">
       <div style={s.logo}>
         <div style={s.logoMark}>b</div>
-        <span>BOTinho Espelha Grupos</span>
+        <span>botinho espelha grupos</span>
       </div>
       <div style={s.navLinks} className="landing-nav-links">
         <a style={s.navLink} href="#como">Como funciona</a>
