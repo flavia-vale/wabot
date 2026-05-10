@@ -43,7 +43,7 @@ function Nav() {
     <nav style={s.nav} className="landing-nav" aria-label="Navegação principal da página inicial">
       <div style={s.logo}>
         <div style={s.logoMark}>b</div>
-        <span>bot conversor<span className="serif" style={{ fontStyle: 'italic', marginLeft: 6, color: 'var(--accent-strong)' }}>.afiliados</span></span>
+        <span>BOTinho Espelha Grupos</span>
       </div>
       <div style={s.navLinks} className="landing-nav-links">
         <a style={s.navLink} href="#como">Como funciona</a>
