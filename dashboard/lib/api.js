@@ -1,6 +1,18 @@
 function resolveApiBase() {
-  if (typeof window !== 'undefined') return ''
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+  const configured = process.env.NEXT_PUBLIC_API_URL?.trim()
+  if (configured) return configured
+
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname, port } = window.location
+    const apiPortByDashboardPort = {
+      '3000': '3001',
+      '3006': '3004',
+    }
+    const apiPort = apiPortByDashboardPort[port] || '3001'
+    return `${protocol}//${hostname}:${apiPort}`
+  }
+
+  return 'http://localhost:3001'
 }
 
 const BASE = resolveApiBase()
