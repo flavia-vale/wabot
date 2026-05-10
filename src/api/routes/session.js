@@ -52,9 +52,10 @@ export async function sessionRoutes(app) {
   app.get('/status', { onRequest: [app.authenticate] }, async (req) => {
     const userId = req.user.sub
     const running = isRunning(userId)
+    const includeMetrics = String(req.query?.metrics ?? '1') !== '0'
     const [session, metrics] = await Promise.all([
       db.waSession.findUnique({ where: { userId } }),
-      running ? getBotMetrics(userId).catch(() => null) : Promise.resolve(null),
+      includeMetrics && running ? getBotMetrics(userId).catch(() => null) : Promise.resolve(null),
     ])
     return {
       running,
