@@ -70,8 +70,8 @@ export function How() {
   return (
     <section id="como" data-screen-label="03 Como funciona">
       <div className="wrap">
-        <div style={s.section}>
-          <div style={s.inner}>
+        <div style={s.section} className="landing-how-shell">
+          <div style={s.inner} className="landing-how-inner">
             <div style={s.head}>
               <div>
                 <span className="pill" style={{ marginBottom: 16 }}><span className="dot" />Como funciona</span>
@@ -81,9 +81,9 @@ export function How() {
                 Você configura uma vez, o bot trabalha 24h. Ideal para quem tem mais de um grupo e não quer ficar copiando link toda hora.
               </p>
             </div>
-            <div style={s.steps}>
+            <div style={s.steps} className="landing-how-steps">
               {steps.map(step => (
-                <div key={step.n} style={s.step}>
+                <div key={step.n} style={s.step} className="landing-how-step">
                   <div style={s.num}>{step.n}</div>
                   <div style={s.stepTitle}>{step.title}</div>
                   <p style={s.stepBody}>{step.body}</p>
