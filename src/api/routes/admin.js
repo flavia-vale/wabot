@@ -356,7 +356,7 @@ async function requireAdmin(req, reply, permission = 'admin:read') {
   })
 
   const bootstrapEmails = getBootstrapAdminEmails()
-  const bootstrapEnabled = isAdminEmailBootstrapEnabled()
+  const bootstrapEnabled = String(process.env.ALLOW_ADMIN_EMAIL_BOOTSTRAP ?? 'true').trim().toLowerCase() !== 'false'
   const hasActiveAdminUser = user?.adminUser?.status === 'active'
   const bootstrapAllowed = bootstrapEnabled && !hasActiveAdminUser && bootstrapEmails.has(user?.email?.toLowerCase())
   const role = user?.adminUser?.status === 'active'
