@@ -54,6 +54,9 @@ for artifact in .next/BUILD_ID .next/prerender-manifest.json; do
   fi
 done
 echo "  Build íntegro: BUILD_ID=$(cat .next/BUILD_ID)"
+cd "$ROOT_DIR"
+node scripts/verify-dashboard-api-proxy.mjs
+cd "$DASHBOARD_DIR"
 
 echo "[4/7] Return to project root"
 cd "$ROOT_DIR"
@@ -80,5 +83,24 @@ echo "[7/7] Smoke tests (hard gate com retry)"
 for path in /login /admin /dashboard; do
   check_http_with_retry "$path" 8 2
 done
+
+echo "  Validando proxy /api/auth/login (não pode ser 404/prerender do Next.js)"
+api_code=$(curl -s -o /tmp/wabot_login_smoke_body.txt -D /tmp/wabot_login_smoke_headers.txt -w "%{http_code}" \
+  --max-time 10 \
+  -X POST \
+  -H "Content-Type: application/json" \
+  --data '{"email":"smoke@example.invalid","password":"invalid"}' \
+  http://espelhagrupos.com.br/api/auth/login || echo "000")
+echo "  POST /api/auth/login -> HTTP ${api_code}"
+if [[ "$api_code" == "404" || "$api_code" == "000" ]]; then
+  echo "ERRO: /api/auth/login não chegou à API (HTTP ${api_code}). Headers:"
+  cat /tmp/wabot_login_smoke_headers.txt || true
+  exit 1
+fi
+if grep -qi "x-nextjs-prerender" /tmp/wabot_login_smoke_headers.txt; then
+  echo "ERRO: /api/auth/login foi atendido pelo prerender/404 do Next.js em vez do proxy/API."
+  cat /tmp/wabot_login_smoke_headers.txt || true
+  exit 1
+fi
 
 echo "Deploy safe concluído."
