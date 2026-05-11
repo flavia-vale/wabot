@@ -10,7 +10,7 @@ const PAYMENT_RECONCILIATION_INTERVAL_MS = Math.max(60000, Number(process.env.PA
 const PAYMENT_RECONCILIATION_PENDING_MINUTES = Math.max(5, Number(process.env.PAYMENT_RECONCILIATION_PENDING_MINUTES ?? 15))
 const PAYMENT_RECONCILIATION_BATCH = Math.min(200, Math.max(1, Number(process.env.PAYMENT_RECONCILIATION_BATCH ?? 50)))
 
-const OFFICIAL_PUBLIC_ORIGIN = 'https://espelhagrupos.com.br'
+const OFFICIAL_PUBLIC_ORIGIN = 'http://espelhagrupos.com.br'
 
 function isIpHost(hostname = '') {
   return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(String(hostname || '').trim())
