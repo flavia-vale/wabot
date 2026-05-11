@@ -15,20 +15,26 @@ const LP_ROUTES = [
 ]
 
 const CORE_ROUTES = ['/', '/termos', '/privacidade', '/quem-somos', '/suporte', '/promo-vip-7dias']
+const CONTENT_ROUTES = [
+  '/blog/como-escalar-grupos-sem-operacao-manual',
+  '/blog/checklist-padronizar-divulgacao-whatsapp',
+  '/materiais/checklist-operacao-whatsapp',
+]
 
 export default function sitemap() {
   const now = new Date('2026-05-11')
-  const allRoutes = [...CORE_ROUTES, ...LP_ROUTES]
+  const allRoutes = [...CORE_ROUTES, ...LP_ROUTES, ...CONTENT_ROUTES]
 
   return allRoutes.map((route) => {
     const isHome = route === '/'
     const isLp = LP_ROUTES.includes(route)
+    const isContent = CONTENT_ROUTES.includes(route)
 
     return {
       url: `${baseUrl}${route === '/' ? '' : route}`,
       lastModified: now,
-      changeFrequency: isHome ? 'weekly' : isLp ? 'weekly' : 'monthly',
-      priority: isHome ? 1 : isLp ? 0.9 : 0.6,
+      changeFrequency: isHome ? 'weekly' : isLp || isContent ? 'weekly' : 'monthly',
+      priority: isHome ? 1 : isLp ? 0.9 : isContent ? 0.8 : 0.6,
     }
   })
 }
