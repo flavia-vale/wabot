@@ -984,6 +984,10 @@ process.on('message', async msg => {
         return
       }
       try {
+        if (pendingSock && lifecycleState === WA_LIFECYCLE.INITIALIZING) {
+          logger.info({ requestId: msg.requestId }, 'Aguardando estado AUTHENTICATING antes de solicitar pairing code')
+          await new Promise(resolve => setTimeout(resolve, 1200))
+        }
         logger.info({ requestId: msg.requestId, attempts, using: pendingSock ? 'pendingSock' : 'activeSock' }, 'Solicitando pairing code ao WhatsApp')
         const code = await Promise.race([
           sock.requestPairingCode(msg.phone),
