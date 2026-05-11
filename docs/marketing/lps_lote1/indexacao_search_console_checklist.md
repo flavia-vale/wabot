@@ -3,16 +3,16 @@
 Data: 2026-05-11
 
 ## URLs para inspeção e solicitação de indexação
-- https://espelhagrupos.com.br/espelhar-grupos-whatsapp-sao-paulo
-- https://espelhagrupos.com.br/espelhar-grupos-whatsapp-rio-de-janeiro
-- https://espelhagrupos.com.br/espelhar-grupos-whatsapp-belo-horizonte
-- https://espelhagrupos.com.br/espelhar-grupos-whatsapp-curitiba
-- https://espelhagrupos.com.br/espelhar-grupos-whatsapp-porto-alegre
-- https://espelhagrupos.com.br/bot-ofertas-supermercado-whatsapp
-- https://espelhagrupos.com.br/bot-ofertas-farmacia-whatsapp
-- https://espelhagrupos.com.br/bot-ofertas-eletronicos-whatsapp
-- https://espelhagrupos.com.br/bot-ofertas-moda-whatsapp
-- https://espelhagrupos.com.br/bot-ofertas-beleza-whatsapp
+- http://espelhagrupos.com.br/espelhar-grupos-whatsapp-sao-paulo
+- http://espelhagrupos.com.br/espelhar-grupos-whatsapp-rio-de-janeiro
+- http://espelhagrupos.com.br/espelhar-grupos-whatsapp-belo-horizonte
+- http://espelhagrupos.com.br/espelhar-grupos-whatsapp-curitiba
+- http://espelhagrupos.com.br/espelhar-grupos-whatsapp-porto-alegre
+- http://espelhagrupos.com.br/bot-ofertas-supermercado-whatsapp
+- http://espelhagrupos.com.br/bot-ofertas-farmacia-whatsapp
+- http://espelhagrupos.com.br/bot-ofertas-eletronicos-whatsapp
+- http://espelhagrupos.com.br/bot-ofertas-moda-whatsapp
+- http://espelhagrupos.com.br/bot-ofertas-beleza-whatsapp
 
 ## Procedimento
 1. Abrir Google Search Console da propriedade `espelhagrupos.com.br`.
