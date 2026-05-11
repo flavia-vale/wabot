@@ -21,6 +21,33 @@ export const LP_CONFIG = {
   'bot-ofertas-beleza-whatsapp': { title: 'Bot de ofertas para beleza no WhatsApp | wabot', description: 'Acelere campanhas de beleza no WhatsApp com processos de distribuição em escala.', uniqueHeadline: 'Beleza: operação contínua para campanhas de alta recorrência.', uniqueBody: 'Produtos de beleza pedem constância e timing promocional. O wabot automatiza a rotina para manter presença e conversão.', uniqueBullets: ['Rotina de divulgação para skincare, make e haircare.', 'Padronização de mensagens para aumentar confiança.', 'Escala com menos esforço no dia a dia.'], faq: [{ q: 'Como começar rápido no nicho beleza?', a: 'Comece com poucos grupos, valide resposta e amplie com dados.' }, { q: 'Como medir ROI inicial?', a: 'Acompanhe cliques, comissão e frequência por categoria.' }], howTo: ['Crie trilhas por categoria de beleza.', 'Ative distribuição para grupos com maior engajamento.', 'Ajuste ofertas por sazonalidade e campanhas temáticas.'] },
 }
 
+const LP_TYPE_THEME = {
+  city: {
+    badge: 'Operação por cidade',
+    tone: 'direto',
+    panelBg: 'color-mix(in oklab, var(--accent) 18%, var(--surface))',
+    panelBorder: 'color-mix(in oklab, var(--accent-strong) 35%, var(--line))',
+  },
+  niche: {
+    badge: 'Operação por nicho',
+    tone: 'animado',
+    panelBg: 'color-mix(in oklab, var(--accent-3) 50%, var(--surface))',
+    panelBorder: 'color-mix(in oklab, var(--accent-2) 30%, var(--line))',
+  },
+  default: {
+    badge: 'Operação programática',
+    tone: 'amigavel',
+    panelBg: 'var(--surface)',
+    panelBorder: 'var(--line)',
+  },
+}
+
+function getLpType(slug) {
+  if (slug?.startsWith('espelhar-grupos-whatsapp-')) return 'city'
+  if (slug?.startsWith('bot-ofertas-')) return 'niche'
+  return 'default'
+}
+
 export function getLpMetadata(slug) {
   const cfg = LP_CONFIG[slug]
   if (!cfg) return {}
@@ -50,6 +77,8 @@ export function getLpMetadata(slug) {
 
 export function LpTemplate({ slug }) {
   const cfg = LP_CONFIG[slug]
+  const lpType = getLpType(slug)
+  const theme = LP_TYPE_THEME[lpType] ?? LP_TYPE_THEME.default
   const faqJsonLd = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: cfg.faq.map((item) => ({ '@type': 'Question', name: item.q, acceptedAnswer: { '@type': 'Answer', text: item.a } })) }
   const howToJsonLd = { '@context': 'https://schema.org', '@type': 'HowTo', name: `Como configurar ${cfg.title.replace(' | wabot', '')}`, step: cfg.howTo.map((text, index) => ({ '@type': 'HowToStep', name: `Passo ${index + 1}`, text })) }
   const productJsonLd = { '@context': 'https://schema.org', '@type': 'Product', name: 'wabot', description: cfg.description, image: [`${getSiteUrl()}/wabot-logo.svg`], brand: { '@type': 'Brand', name: 'wabot' }, offers: { '@type': 'Offer', url: `${getSiteUrl()}/login?mode=register`, priceCurrency: 'BRL', price: '0.00', availability: 'https://schema.org/InStock', category: 'SoftwareSubscription', shippingDetails: { '@type': 'OfferShippingDetails', shippingRate: { '@type': 'MonetaryAmount', value: '0', currency: 'BRL' }, shippingDestination: { '@type': 'DefinedRegion', addressCountry: 'BR' }, deliveryTime: { '@type': 'ShippingDeliveryTime', handlingTime: { '@type': 'QuantitativeValue', minValue: 0, maxValue: 0, unitCode: 'DAY' }, transitTime: { '@type': 'QuantitativeValue', minValue: 0, maxValue: 0, unitCode: 'DAY' } } }, hasMerchantReturnPolicy: { '@type': 'MerchantReturnPolicy', returnPolicyCategory: 'https://schema.org/MerchantReturnNotPermitted', applicableCountry: 'BR' } }, aggregateRating: { '@type': 'AggregateRating', ratingValue: 4.8, reviewCount: 127, bestRating: 5, worstRating: 1 } }
@@ -59,10 +88,11 @@ export function LpTemplate({ slug }) {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(howToJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }} />
-      <Hero tone="amigavel" primaryCtaLabel="Entrar na Lista VIP" />
+      <Hero tone={theme.tone} primaryCtaLabel="Entrar na Lista VIP" />
       <section>
         <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: '28px 28px 22px' }}>
+          <div style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}`, borderRadius: 24, padding: '28px 28px 22px', boxShadow: 'var(--shadow-soft)' }}>
+            <span className="pill" style={{ marginBottom: 12 }}><span className="dot" />{theme.badge}</span>
             <h2 style={{ fontSize: 'clamp(28px, 3vw, 42px)', lineHeight: 1.1, marginBottom: 10 }}>{cfg.uniqueHeadline}</h2>
             <p style={{ color: 'var(--ink-soft)', lineHeight: 1.6, marginBottom: 14 }}>{cfg.uniqueBody}</p>
             <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.7 }}>
