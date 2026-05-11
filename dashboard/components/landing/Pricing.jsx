@@ -2,8 +2,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Icon } from './Icon';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
 const s = {
   head: { textAlign: 'center', marginBottom: 56 },
   h2: { fontSize: 'clamp(36px, 4vw, 56px)', lineHeight: 1.05 },
@@ -79,7 +77,7 @@ export function Pricing() {
 
   useEffect(() => {
     let active = true;
-    fetch(`${API_BASE}/api/public/plans`, { cache: 'no-store' })
+    fetch('/api/public/plans', { cache: 'no-store' })
       .then((res) => {
         if (!res.ok) throw new Error('Falha ao carregar planos');
         return res.json();

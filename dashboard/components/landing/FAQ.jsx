@@ -3,8 +3,6 @@ import { useEffect, useState } from 'react';
 import { Icon } from './Icon';
 
 const SUPPORT_WHATSAPP_URL = 'https://wa.me/5532999844020';
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
 const s = {
   wrap: { display: 'grid', gridTemplateColumns: '0.8fr 1.2fr', gap: 64, alignItems: 'flex-start' },
   h2: { fontSize: 'clamp(36px, 4vw, 56px)', lineHeight: 1.05, marginBottom: 16 },
@@ -47,7 +45,7 @@ export function FAQ() {
 
   useEffect(() => {
     let active = true;
-    fetch(`${API_BASE}/api/public/faq`, { cache: 'no-store' })
+    fetch('/api/public/faq', { cache: 'no-store' })
       .then((res) => {
         if (!res.ok) throw new Error('Falha ao carregar FAQ');
         return res.json();
