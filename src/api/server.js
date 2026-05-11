@@ -219,16 +219,24 @@ await app.register(fastifyWebsocket)
 app.decorate('revokeTokenJti', revokeTokenJti)
 
 app.decorate('authenticate', async function (req, reply) {
-  try {
-    const token = getTokenFromCookie(req.headers.cookie) || getTokenFromAuthorizationHeader(req.headers.authorization)
-    if (!token) throw new Error('Token ausente')
-    req.user = app.jwt.verify(token)
-    if (isTokenRevoked(req.user.jti)) throw new Error('Token revogado')
-    const active = await verifyAuthenticatedUser(req.user.sub)
-    if (!active) throw new Error('Usuário inativo ou bloqueado')
-  } catch {
-    reply.code(401).send({ error: 'Não autorizado' })
+  const cookieToken = getTokenFromCookie(req.headers.cookie)
+  const headerToken = getTokenFromAuthorizationHeader(req.headers.authorization)
+  const candidates = [cookieToken, headerToken].filter(Boolean)
+
+  for (const token of candidates) {
+    try {
+      const user = app.jwt.verify(token)
+      if (isTokenRevoked(user.jti)) continue
+      const active = await verifyAuthenticatedUser(user.sub)
+      if (!active) continue
+      req.user = user
+      return
+    } catch {
+      continue
+    }
   }
+
+  reply.code(401).send({ error: 'Não autorizado' })
 })
 
 app.register(authRoutes, { prefix: '/api/auth' })
