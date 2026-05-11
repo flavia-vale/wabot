@@ -8,7 +8,8 @@ function resolveApiBase() {
           const configuredUrl = new URL(configured)
           const currentUrl = new URL(window.location.origin)
           const isCrossOrigin = configuredUrl.origin !== currentUrl.origin
-          const preferSameOrigin = String(process.env.NEXT_PUBLIC_FORCE_SAME_ORIGIN_API ?? 'true') === 'true'
+          // Staging roda Next.js em 3006 e API em 3004; respeite NEXT_PUBLIC_API_URL por padrão.
+          const preferSameOrigin = String(process.env.NEXT_PUBLIC_FORCE_SAME_ORIGIN_API ?? 'false') === 'true'
           if (isCrossOrigin && preferSameOrigin) return currentUrl.origin
         } catch {
           // fallback para comportamento padrão
