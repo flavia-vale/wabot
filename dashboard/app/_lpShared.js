@@ -6,6 +6,7 @@ import { Social } from '@/components/landing/Social'
 import { Pricing } from '@/components/landing/Pricing'
 import { FAQ } from '@/components/landing/FAQ'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
+import { getSiteUrl } from '@/lib/site-url'
 
 export const LP_CONFIG = {
   'espelhar-grupos-whatsapp-sao-paulo': { title: 'Espelhar grupos WhatsApp em São Paulo | wabot', description: 'Automatize sua rotina de ofertas em grupos de São Paulo com o wabot e reduza trabalho manual.' },
@@ -23,7 +24,28 @@ export const LP_CONFIG = {
 export function getLpMetadata(slug) {
   const cfg = LP_CONFIG[slug]
   if (!cfg) return {}
-  return { title: cfg.title, description: cfg.description, alternates: { canonical: `/${slug}` } }
+
+  const siteUrl = getSiteUrl()
+  const canonicalUrl = `${siteUrl}/${slug}`
+
+  return {
+    title: cfg.title,
+    description: cfg.description,
+    alternates: { canonical: `/${slug}` },
+    openGraph: {
+      title: cfg.title,
+      description: cfg.description,
+      url: canonicalUrl,
+      siteName: 'BOTinho',
+      locale: 'pt_BR',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary',
+      title: cfg.title,
+      description: cfg.description,
+    },
+  }
 }
 
 export function LpTemplate({ slug }) {
