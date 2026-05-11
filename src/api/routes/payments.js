@@ -11,6 +11,7 @@ const PAYMENT_RECONCILIATION_PENDING_MINUTES = Math.max(5, Number(process.env.PA
 const PAYMENT_RECONCILIATION_BATCH = Math.min(200, Math.max(1, Number(process.env.PAYMENT_RECONCILIATION_BATCH ?? 50)))
 
 const OFFICIAL_PUBLIC_ORIGIN = 'http://espelhagrupos.com.br'
+const OFFICIAL_SECURE_PUBLIC_ORIGIN = 'https://espelhagrupos.com.br'
 
 function isIpHost(hostname = '') {
   return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(String(hostname || '').trim())
@@ -55,7 +56,9 @@ function isPublicHttpUrl(value) {
 
 function getCheckoutPublicOrigins() {
   if (IS_PRODUCTION) {
-    return { dashboardUrl: OFFICIAL_PUBLIC_ORIGIN, apiUrl: OFFICIAL_PUBLIC_ORIGIN }
+    // Mercado Pago requires HTTPS for callback/webhook URLs in production.
+    // Keep internal app protocol independent from the externally exposed origin.
+    return { dashboardUrl: OFFICIAL_SECURE_PUBLIC_ORIGIN, apiUrl: OFFICIAL_SECURE_PUBLIC_ORIGIN }
   }
 
   const rawDashboardUrl = stripApiSuffix(getDashboardUrl())
