@@ -139,7 +139,7 @@ export default function DashboardPage() {
   }, [fetchStatus, trackTelemetry, qr, pairingCode])
 
   useEffect(() => {
-    const shouldPoll = status?.running && status?.status === 'connecting' && !qr
+    const shouldPoll = connectMethod === 'qr' && status?.running && status?.status === 'connecting' && !qr
     if (!shouldPoll) {
       if (qrPollingRef.current) clearInterval(qrPollingRef.current)
       qrPollingRef.current = null
@@ -160,7 +160,7 @@ export default function DashboardPage() {
       if (qrPollingRef.current) clearInterval(qrPollingRef.current)
       qrPollingRef.current = null
     }
-  }, [status?.running, status?.status, qr, trackTelemetry])
+  }, [status?.running, status?.status, qr, trackTelemetry, connectMethod])
 
   useEffect(() => {
     qrWaitElapsedRef.current = qrWaitElapsed
@@ -267,7 +267,7 @@ export default function DashboardPage() {
       })
       trackTelemetry({ stage: 'initializing', event: 'service_start_ok' })
       trackTelemetry({ stage: 'authenticating', event: 'qr_requested' })
-      await openWS()
+      // no fluxo de pairing, evitamos abrir WS de QR imediatamente para não disputar handshake
       const s = await fetchStatus()
       if (s?.running && s?.status === 'connecting' && !qr) {
         trackTelemetry({ stage: 'authenticating', event: mode === 'retry' ? 'waiting_qr_after_retry_click' : 'waiting_qr_after_connect_click' })
@@ -291,7 +291,7 @@ export default function DashboardPage() {
   }
 
   function handlePairingPhoneChange(e) {
-    setPairingPhone(e.target.value.replace(/\D/g, ''))
+    setPairingPhone(e.target.value.replace(/\D/g, '').slice(0, 13))
   }
 
   async function handlePairingSubmit(e) {
@@ -325,7 +325,7 @@ export default function DashboardPage() {
       setFeedback('Código de pareamento gerado.')
       trackTelemetry({ stage: 'initializing', event: 'service_start_ok' })
       trackTelemetry({ stage: 'authenticating', event: 'qr_requested' })
-      await openWS()
+      // no fluxo de pairing, evitamos abrir WS de QR imediatamente para nao disputar handshake
     } catch (err) {
       setError(err.message)
       toast.error(err.message, 'Falha na conexão')
@@ -664,6 +664,7 @@ export default function DashboardPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Número do WhatsApp (com DDD e código do país)</label>
             <input type="tel" inputMode="numeric" autoComplete="tel" value={pairingPhone} onChange={handlePairingPhoneChange} placeholder="Ex: 5511999999999" className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" disabled={loading} autoFocus />
+            <p className="mt-2 text-xs text-gray-500">Informe no padrão internacional (55 + DDD + número).</p>
             <p className="text-xs text-gray-400 mt-1">Cole com +, espaços ou parênteses se quiser; vamos manter apenas os números.</p>
           </div>
           <div className="flex gap-3">

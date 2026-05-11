@@ -70,7 +70,7 @@ export function startBot(userId) {
       if (msg.data === 'connected' || msg.data === 'disconnected') entry.lastQR = null
       entry.statusListeners.forEach(fn => fn(msg.data, msg.phone))
     }
-    if (msg.type === 'groups' && msg.requestId) {
+    if (msg.requestId) {
       const pending = pendingRequests.get(msg.requestId)
       if (!pending) return
       if (msg.error) pending.reject(new Error(msg.error)); else pending.resolve(msg.data ?? msg.code)
