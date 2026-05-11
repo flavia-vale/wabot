@@ -1,3 +1,14 @@
+const apiPortByDashboardPort = {
+  '3000': '3001',
+  '3006': '3004',
+}
+
+function resolveSplitPortApiBase({ protocol, hostname, port }) {
+  const apiPort = apiPortByDashboardPort[port]
+  if (!apiPort) return ''
+  return `${protocol}//${hostname}:${apiPort}`
+}
+
 function resolveApiBase() {
   const configured = process.env.NEXT_PUBLIC_API_URL?.trim()
   if (configured) {
@@ -8,9 +19,11 @@ function resolveApiBase() {
           const configuredUrl = new URL(configured)
           const currentUrl = new URL(window.location.origin)
           const isCrossOrigin = configuredUrl.origin !== currentUrl.origin
-          // Staging roda Next.js em 3006 e API em 3004; respeite NEXT_PUBLIC_API_URL por padrão.
+          const splitPortApiBase = resolveSplitPortApiBase(window.location)
+          // Staging roda Next.js em 3006 e API em 3004; nunca envie auth para a porta visual.
+          if (splitPortApiBase && configuredUrl.origin === currentUrl.origin) return splitPortApiBase
           const preferSameOrigin = String(process.env.NEXT_PUBLIC_FORCE_SAME_ORIGIN_API ?? 'false') === 'true'
-          if (isCrossOrigin && preferSameOrigin) return currentUrl.origin
+          if (isCrossOrigin && preferSameOrigin) return splitPortApiBase || currentUrl.origin
         } catch {
           // fallback para comportamento padrão
         }
@@ -21,10 +34,6 @@ function resolveApiBase() {
 
   if (typeof window !== 'undefined') {
     const { protocol, hostname, port } = window.location
-    const apiPortByDashboardPort = {
-      '3000': '3001',
-      '3006': '3004',
-    }
     const apiPort = apiPortByDashboardPort[port] || '3001'
     const isDefaultHttp = protocol === 'http:' && !port
     const isDefaultHttps = protocol === 'https:' && !port
