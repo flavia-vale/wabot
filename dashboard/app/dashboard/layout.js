@@ -25,7 +25,7 @@ const navGroups = [
   {
     title: 'Conta',
     items: [
-      { href: '/dashboard/planos', icon: '💳', label: 'Planos' },
+      { href: '/dashboard/assinaturas', icon: '💳', label: 'Assinaturas' },
       { href: '/suporte', icon: '🆘', label: 'Suporte' },
     ],
   },
