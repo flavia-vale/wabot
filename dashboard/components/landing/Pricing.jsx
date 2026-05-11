@@ -2,8 +2,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Icon } from './Icon';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
 const s = {
   head: { textAlign: 'center', marginBottom: 56 },
   h2: { fontSize: 'clamp(36px, 4vw, 56px)', lineHeight: 1.05 },
@@ -35,7 +33,7 @@ const defaultPlans = [
   {
     id: 'trial',
     name: 'Teste grátis',
-    price: 'R$0',
+    price: 'Consulte no painel',
     desc: 'Experimente o fluxo principal antes de escolher um plano pago.',
     cta: 'Começar teste grátis',
     features: ['Conversão de links suportados', 'Monitoramento de grupos', 'Envio para grupos de destino', 'Histórico de logs', 'Com anúncios'],
@@ -43,7 +41,7 @@ const defaultPlans = [
   {
     id: 'basic',
     name: 'Basic',
-    price: 'R$40',
+    price: 'Consulte no painel',
     desc: 'Para operar com os mesmos recursos essenciais do Pro mantendo anúncios no uso.',
     cta: 'Assinar Basic',
     features: ['Conversão de links suportados', 'Monitoramento de grupos', 'Envio para grupos de destino', 'Histórico de logs', 'Com anúncios'],
@@ -51,7 +49,7 @@ const defaultPlans = [
   {
     id: 'pro',
     name: 'Pro',
-    price: 'R$70',
+    price: 'Consulte no painel',
     desc: 'Para operar com os mesmos recursos do Basic, sem anúncios na experiência.',
     cta: 'Assinar Pro',
     highlight: true,
@@ -79,7 +77,7 @@ export function Pricing() {
 
   useEffect(() => {
     let active = true;
-    fetch(`${API_BASE}/api/public/plans`, { cache: 'no-store' })
+    fetch('/api/public/plans', { cache: 'no-store' })
       .then((res) => {
         if (!res.ok) throw new Error('Falha ao carregar planos');
         return res.json();
@@ -113,7 +111,7 @@ export function Pricing() {
               <div style={s.planName}>{p.name}</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 8, color: p.highlight ? 'var(--surface)' : 'var(--ink)' }}>
                 <span style={s.priceBig}>{p.price}</span>
-                {p.id !== 'trial' && <span style={s.priceUnit}>/mês</span>}
+                {String(p.price).startsWith('R$') && p.id !== 'trial' && <span style={s.priceUnit}>/mês</span>}
               </div>
               <p style={{ fontSize: 14.5, lineHeight: 1.55, color: p.highlight ? 'rgba(255,255,255,0.7)' : 'var(--ink-soft)', marginBottom: 24, minHeight: 68 }}>
                 {p.desc}
