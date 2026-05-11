@@ -3,6 +3,7 @@ import Fastify from 'fastify'
 import fastifyJwt from '@fastify/jwt'
 import fastifyWebsocket from '@fastify/websocket'
 import fastifyCors from '@fastify/cors'
+import { createCorsOriginChecker, getAllowedOrigins } from './cors.js'
 
 import { authRoutes } from './routes/auth.js'
 import { sessionRoutes } from './routes/session.js'
@@ -27,72 +28,12 @@ const activityCacheMaxEntries = Math.max(1000, Number(process.env.ACTIVITY_CACHE
 const activityCacheCleanupIntervalMs = Math.max(30_000, Number(process.env.ACTIVITY_CACHE_CLEANUP_INTERVAL_MS || 300_000))
 let activityCacheCleanupTimer = null
 
-const DEFAULT_ALLOWED_ORIGINS = [
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-  'http://localhost:3006',
-  'http://127.0.0.1:3006',
-  'http://127.0.0.1:5173',
-  'http://localhost:5173',
-  'http://espelhagrupos.com.br',
-  'https://espelhagrupos.com.br',
-  'http://www.espelhagrupos.com.br',
-  'https://www.espelhagrupos.com.br',
-  'http://178.105.54.0:3006',
-]
-
-
-
-function isIpHost(hostname = '') {
-  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(String(hostname || '').trim())
-}
-
-function normalizeOrigin(origin) {
-  try {
-    const parsed = new URL(origin)
-    if (!['http:', 'https:'].includes(parsed.protocol)) return null
-    return `${parsed.protocol}//${parsed.host}`
-  } catch {
-    return null
-  }
-}
-
-function getAllowedOrigins() {
-  const configured = process.env.CORS_ORIGINS
-    ?.split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean)
-    .map((origin) => normalizeOrigin(origin))
-    .filter(Boolean)
-
-  const base = [...new Set(DEFAULT_ALLOWED_ORIGINS.map((origin) => normalizeOrigin(origin)).filter(Boolean))]
-  if (!configured?.length) return base
-
-  const merged = [...new Set([...base, ...configured])]
-  const isProd = String(process.env.NODE_ENV ?? '').toLowerCase() === 'production'
-  if (isProd) {
-    return merged.filter((origin) => {
-      try {
-        const host = new URL(origin).hostname
-        return !isIpHost(host)
-      } catch {
-        return false
-      }
-    })
-  }
-  return merged
-}
-
 const allowedOrigins = new Set(getAllowedOrigins())
+const isOriginAllowed = createCorsOriginChecker(allowedOrigins)
 app.log.info({ allowedOrigins: [...allowedOrigins] }, 'CORS allowlist carregada')
 
 function resolveJwtSecret() {
   return process.env.JWT_SECRET || process.env.AUTH_JWT_SECRET || process.env.JWT_TOKEN || null
-}
-
-function isOriginAllowed(origin) {
-  if (!origin) return true
-  return allowedOrigins.has(origin)
 }
 
 
