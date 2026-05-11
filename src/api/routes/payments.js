@@ -16,10 +16,10 @@ function isIpHost(hostname = '') {
   return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(String(hostname || '').trim())
 }
 
-function normalizePublicOrigin(value, fallback = OFFICIAL_PUBLIC_ORIGIN) {
+function normalizePublicOrigin(value, { fallback = OFFICIAL_PUBLIC_ORIGIN, allowIpHost = false } = {}) {
   try {
     const parsed = new URL(String(value ?? ''))
-    if (isIpHost(parsed.hostname)) return fallback
+    if (!allowIpHost && isIpHost(parsed.hostname)) return fallback
     return parsed.toString().replace(/\/$/, '')
   } catch {
     return fallback
@@ -53,10 +53,25 @@ function isPublicHttpUrl(value) {
   }
 }
 
-function forceHttpsUrl(value) {
-  const parsed = new URL(String(value ?? ''))
-  parsed.protocol = 'https:'
-  return parsed.toString().replace(/\/$/, '')
+function getCheckoutPublicOrigins() {
+  if (IS_PRODUCTION) {
+    return { dashboardUrl: OFFICIAL_PUBLIC_ORIGIN, apiUrl: OFFICIAL_PUBLIC_ORIGIN }
+  }
+
+  const rawDashboardUrl = stripApiSuffix(getDashboardUrl())
+  const rawApiUrl = stripApiSuffix(getApiUrl())
+  const publicOriginFallback = 'http://localhost:3006'
+
+  const dashboardUrl = normalizePublicOrigin(rawDashboardUrl, {
+    fallback: publicOriginFallback,
+    allowIpHost: !IS_PRODUCTION,
+  })
+  const apiUrl = normalizePublicOrigin(rawApiUrl, {
+    fallback: publicOriginFallback,
+    allowIpHost: !IS_PRODUCTION,
+  })
+
+  return { dashboardUrl, apiUrl }
 }
 
 function sendError(reply, statusCode, code, message) {
@@ -252,18 +267,18 @@ async function createMercadoPagoPreference({ userId, plan }) {
     err.code = 'INVALID_PLAN_CONFIG'
     throw err
   }
-  const dashboardUrl = normalizePublicOrigin(stripApiSuffix(getDashboardUrl()))
-  const apiUrl = normalizePublicOrigin(stripApiSuffix(getApiUrl()))
+  const { dashboardUrl, apiUrl } = getCheckoutPublicOrigins()
   if (IS_PRODUCTION && (!isPublicHttpUrl(apiUrl) || !isPublicHttpUrl(dashboardUrl))) {
     const err = new Error('API_URL/DASHBOARD_URL inválidos para produção')
     err.code = 'PAYMENT_PROVIDER_MISCONFIGURED'
     throw err
   }
-  const callbackOrigin = IS_PRODUCTION ? forceHttpsUrl(dashboardUrl) : dashboardUrl
-  const notificationOrigin = IS_PRODUCTION ? forceHttpsUrl(apiUrl) : apiUrl
+  // Keep protocol from configured origins. Some deployments intentionally run
+  // behind HTTP-only reverse proxies and forcing HTTPS here breaks MP redirects.
+  const callbackOrigin = dashboardUrl
+  const notificationOrigin = apiUrl
 
   // Mercado Pago validates `back_urls` as user-facing return URLs.
-  // In production always enforce HTTPS for return/webhook URLs.
   const callbackBase = `${callbackOrigin}/api/payments/callback`
 
   const preference = {
