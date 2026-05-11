@@ -139,7 +139,7 @@ export default function DashboardPage() {
   }, [fetchStatus, trackTelemetry, qr, pairingCode])
 
   useEffect(() => {
-    const shouldPoll = status?.running && status?.status === 'connecting' && !qr
+    const shouldPoll = connectMethod === 'qr' && status?.running && status?.status === 'connecting' && !qr
     if (!shouldPoll) {
       if (qrPollingRef.current) clearInterval(qrPollingRef.current)
       qrPollingRef.current = null
@@ -160,7 +160,7 @@ export default function DashboardPage() {
       if (qrPollingRef.current) clearInterval(qrPollingRef.current)
       qrPollingRef.current = null
     }
-  }, [status?.running, status?.status, qr, trackTelemetry])
+  }, [status?.running, status?.status, qr, trackTelemetry, connectMethod])
 
   useEffect(() => {
     qrWaitElapsedRef.current = qrWaitElapsed
@@ -267,7 +267,7 @@ export default function DashboardPage() {
       })
       trackTelemetry({ stage: 'initializing', event: 'service_start_ok' })
       trackTelemetry({ stage: 'authenticating', event: 'qr_requested' })
-      await openWS()
+      // no fluxo de pairing, evitamos abrir WS de QR imediatamente para não disputar handshake
       const s = await fetchStatus()
       if (s?.running && s?.status === 'connecting' && !qr) {
         trackTelemetry({ stage: 'authenticating', event: mode === 'retry' ? 'waiting_qr_after_retry_click' : 'waiting_qr_after_connect_click' })
@@ -325,7 +325,7 @@ export default function DashboardPage() {
       setFeedback('Código de pareamento gerado.')
       trackTelemetry({ stage: 'initializing', event: 'service_start_ok' })
       trackTelemetry({ stage: 'authenticating', event: 'qr_requested' })
-      await openWS()
+      // no fluxo de pairing, evitamos abrir WS de QR imediatamente para nao disputar handshake
     } catch (err) {
       setError(err.message)
       toast.error(err.message, 'Falha na conexão')
