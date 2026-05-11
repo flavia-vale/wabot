@@ -5,18 +5,42 @@ import { normalizeEmail } from '../auth-utils.js'
 
 const loginAttempts = new Map()
 
+function getLoginAttemptMaxEntries() {
+  const value = Number(process.env.LOGIN_RATE_LIMIT_MAX_ENTRIES ?? 20000)
+  return Number.isFinite(value) && value > 100 ? Math.trunc(value) : 20000
+}
+
+function pruneLoginAttempts(now = Date.now()) {
+  for (const [key, value] of loginAttempts.entries()) {
+    if (!value || now > value.resetAt) loginAttempts.delete(key)
+  }
+  const maxEntries = getLoginAttemptMaxEntries()
+  if (loginAttempts.size <= maxEntries) return
+  const overflow = loginAttempts.size - maxEntries
+  let dropped = 0
+  for (const key of loginAttempts.keys()) {
+    loginAttempts.delete(key)
+    dropped += 1
+    if (dropped >= overflow) break
+  }
+}
+
+
 function setAuthCookie(reply, token, req) {
   const secureOverride = process.env.COOKIE_SECURE
   const requestProtocol = String(req?.protocol ?? '').toLowerCase()
   const secure = secureOverride === 'true' || (secureOverride !== 'false' && requestProtocol === 'https')
   const maxAge = 60 * 60 * 24 * 7
+  const sameSite = String(process.env.COOKIE_SAMESITE ?? (secure ? 'Strict' : 'Lax')).trim()
+  const cookieDomain = String(process.env.COOKIE_DOMAIN ?? '').trim()
   const parts = [
     `wb_auth=${encodeURIComponent(token)}`,
     'Path=/',
     'HttpOnly',
-    'SameSite=Lax',
+    `SameSite=${sameSite}`,
     `Max-Age=${maxAge}`,
   ]
+  if (cookieDomain) parts.push(`Domain=${cookieDomain}`)
   if (secure) parts.push('Secure')
   reply.header('Set-Cookie', parts.join('; '))
 }
@@ -41,25 +65,10 @@ function generateFallbackEmail() {
   return `user_${randomToken(6)}@sistema.com`
 }
 
-function generateFallbackPassword() {
-  return `wb_${randomToken(8)}_${Date.now()}`
-}
-
-function canUseLegacyFallbackPassword() {
-  return process.env.ALLOW_LEGACY_FALLBACK_PASSWORD === 'true'
-}
-
-function generatePromoContactPhone() {
-  return `+79${String(Date.now()).slice(-9)}${randomBytes(2).toString('hex').slice(0, 3).replace(/[^0-9]/g, '7')}`.slice(0, 16)
-}
-
-function canUseLegacyPromoSyntheticPhone() {
-  return process.env.ALLOW_LEGACY_PROMO_SYNTHETIC_PHONE === 'true'
-}
-
-function consumeLoginAttempt({ email, ip }) {
+export function consumeLoginAttempt({ email, ip }) {
   const key = `${email}|${ip ?? 'unknown'}`
   const now = Date.now()
+  pruneLoginAttempts(now)
   const windowMs = Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MS ?? 15 * 60 * 1000)
   const maxAttempts = Number(process.env.LOGIN_RATE_LIMIT_MAX_ATTEMPTS ?? 8)
   const existing = loginAttempts.get(key)
@@ -69,7 +78,7 @@ function consumeLoginAttempt({ email, ip }) {
   return { blocked: item.attempts > maxAttempts, resetAt: item.resetAt, attempts: item.attempts }
 }
 
-function clearLoginAttempts({ email, ip }) {
+export function clearLoginAttempts({ email, ip }) {
   loginAttempts.delete(`${email}|${ip ?? 'unknown'}`)
 }
 
@@ -211,24 +220,14 @@ export async function authRoutes(app) {
     const email = normalizeEmail(rawEmail) || generateFallbackEmail()
     const isPromoVipFlow = source === 'promo_vip_7dias' && couponCode === 'VIP7DIAS'
     const normalizedPhone = normalizeContactPhone(rawContactPhone)
-    const useLegacyPromoSyntheticPhone = !normalizedPhone && isPromoVipFlow && canUseLegacyPromoSyntheticPhone()
-    const contactPhone = normalizedPhone || (useLegacyPromoSyntheticPhone ? generatePromoContactPhone() : null)
+    const contactPhone = normalizedPhone
     const hasPassword = typeof rawPassword === 'string' && rawPassword.trim().length > 0
-    const usingLegacyFallbackPassword = !hasPassword && canUseLegacyFallbackPassword()
-    const password = hasPassword ? String(rawPassword) : generateFallbackPassword()
+    const password = hasPassword ? String(rawPassword) : ''
 
     if (!name || !contactPhone) return reply.code(400).send({ error: 'nome e celular obrigatórios' })
-    if (useLegacyPromoSyntheticPhone) {
-      req.log.warn({ source, route: '/register' }, 'legacy synthetic promo phone flow used')
-    }
     if (rawEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply.code(400).send({ error: 'Formato de email inválido' })
-    if (!hasPassword && !usingLegacyFallbackPassword) {
-      return reply.code(400).send({ error: 'Senha obrigatória' })
-    }
-    if (hasPassword && password.length < 8) return reply.code(400).send({ error: 'Senha deve ter no mínimo 8 caracteres' })
-    if (usingLegacyFallbackPassword) {
-      req.log.warn({ source, route: '/register' }, 'legacy fallback password flow used')
-    }
+    if (!hasPassword) return reply.code(400).send({ error: 'Senha obrigatória' })
+    if (password.length < 8) return reply.code(400).send({ error: 'Senha deve ter no mínimo 8 caracteres' })
 
     const [existingEmail] = await Promise.all([
       findUserByNormalizedEmail(email),
@@ -332,7 +331,11 @@ export async function authRoutes(app) {
     } catch (err) {
       req.log.warn({ err: err?.message }, 'Falha ao revogar token no logout')
     }
-    reply.header('Set-Cookie', 'wb_auth=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0')
+    const sameSite = String(process.env.COOKIE_SAMESITE ?? 'Lax').trim()
+    const cookieDomain = String(process.env.COOKIE_DOMAIN ?? '').trim()
+    const parts = ['wb_auth=','Path=/','HttpOnly',`SameSite=${sameSite}`,'Max-Age=0']
+    if (cookieDomain) parts.push(`Domain=${cookieDomain}`)
+    reply.header('Set-Cookie', parts.join('; '))
     return { ok: true }
   })
 
@@ -344,3 +347,5 @@ export async function authRoutes(app) {
     return user
   })
 }
+
+export function __debugLoginAttemptsSize() { return loginAttempts.size }
