@@ -6,6 +6,7 @@ import { Social } from '@/components/landing/Social'
 import { Pricing } from '@/components/landing/Pricing'
 import { FAQ } from '@/components/landing/FAQ'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
+import { getSiteUrl } from '@/lib/site-url'
 
 export const LP_CONFIG = {
   'espelhar-grupos-whatsapp-sao-paulo': { title: 'Espelhar grupos WhatsApp em São Paulo | wabot', description: 'Automatize sua rotina de ofertas em grupos de São Paulo com o wabot e reduza trabalho manual.' },
@@ -23,14 +24,35 @@ export const LP_CONFIG = {
 export function getLpMetadata(slug) {
   const cfg = LP_CONFIG[slug]
   if (!cfg) return {}
-  return { title: cfg.title, description: cfg.description, alternates: { canonical: `/${slug}` } }
+
+  const siteUrl = getSiteUrl()
+  const canonicalUrl = `${siteUrl}/${slug}`
+
+  return {
+    title: cfg.title,
+    description: cfg.description,
+    alternates: { canonical: `/${slug}` },
+    openGraph: {
+      title: cfg.title,
+      description: cfg.description,
+      url: canonicalUrl,
+      siteName: 'BOTinho',
+      locale: 'pt_BR',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary',
+      title: cfg.title,
+      description: cfg.description,
+    },
+  }
 }
 
 export function LpTemplate({ slug }) {
   const cfg = LP_CONFIG[slug]
   const faqJsonLd = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: [{ '@type': 'Question', name: 'Como começar com o wabot?', acceptedAnswer: { '@type': 'Answer', text: 'Cadastre-se na Lista VIP e siga o onboarding guiado para ativar seu primeiro espelhamento.' } }] }
   const howToJsonLd = { '@context': 'https://schema.org', '@type': 'HowTo', name: 'Como espelhar grupos com o wabot', step: [{ '@type': 'HowToStep', name: 'Criar conta', text: 'Cadastre-se e acesse o painel do wabot.' }, { '@type': 'HowToStep', name: 'Conectar grupos', text: 'Conecte seus grupos e valide permissões.' }, { '@type': 'HowToStep', name: 'Ativar espelhamento', text: 'Configure as regras e publique automaticamente.' }] }
-  const productJsonLd = { '@context': 'https://schema.org', '@type': 'Product', name: 'wabot', description: cfg.description, brand: { '@type': 'Brand', name: 'wabot' } }
+  const productJsonLd = { '@context': 'https://schema.org', '@type': 'Product', name: 'wabot', description: cfg.description, brand: { '@type': 'Brand', name: 'wabot' }, offers: { '@type': 'Offer', url: `${getSiteUrl()}/login?mode=register`, priceCurrency: 'BRL', price: '0.00', availability: 'https://schema.org/InStock', category: 'SoftwareSubscription' } }
 
   return (
     <div className="landing-root">
