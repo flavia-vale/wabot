@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
@@ -48,6 +49,15 @@ export default function PromoVipPage() {
       <section className="mx-auto max-w-xl rounded-2xl border border-emerald-500/30 bg-emerald-950/40 p-8">
         <h1 className="text-3xl font-bold">Acesso VIP · 7 dias grátis</h1>
         <p className="mt-3 text-emerald-100">Complete seu cadastro e entre direto no painel, sem passar pela tela de login.</p>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-2" aria-label="Navegação rápida">
+          <Link href="/" className="rounded-lg border border-emerald-300/60 px-4 py-2 text-center font-semibold text-emerald-50 transition hover:border-emerald-200 hover:bg-emerald-400/10">
+            Página inicial
+          </Link>
+          <Link href="/login" className="rounded-lg border border-emerald-300/60 px-4 py-2 text-center font-semibold text-emerald-50 transition hover:border-emerald-200 hover:bg-emerald-400/10">
+            Login
+          </Link>
+        </div>
 
         <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
           <input type="hidden" name="coupon_code" value={COUPON_CODE} />
