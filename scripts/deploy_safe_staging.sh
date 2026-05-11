@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+ROOT_DIR="${ROOT_DIR:-$DEFAULT_ROOT_DIR}"
+DASHBOARD_DIR="$ROOT_DIR/dashboard"
+BRANCH="${BRANCH:-develop}"
+SYNC_GIT="${SYNC_GIT:-0}"
+VISUAL_APP="${VISUAL_APP:-visual-staging}"
+API_APP="${API_APP:-api-staging}"
+VISUAL_BASE_URL="${VISUAL_BASE_URL:-http://178.105.54.0:3006}"
+API_BASE_URL="${API_BASE_URL:-http://127.0.0.1:3004}"
+
+if [[ ! -d "$ROOT_DIR/.git" ]]; then
+  echo "ERRO: ROOT_DIR inválido ($ROOT_DIR). Defina ROOT_DIR apontando para ~/wabot-staging."
+  exit 1
+fi
+
+check_http_with_retry() {
+  local label="$1"
+  local url="$2"
+  local attempts="${3:-8}"
+  local sleep_seconds="${4:-2}"
+
+  for ((i=1; i<=attempts; i++)); do
+    local code
+    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$url" || echo "000")
+    echo "  tentativa ${i}/${attempts} ${label} -> HTTP ${code}"
+    if [[ "$code" == "200" || "$code" == "301" || "$code" == "302" || "$code" == "307" || "$code" == "308" ]]; then
+      return 0
+    fi
+    sleep "$sleep_seconds"
+  done
+
+  echo "Smoke test falhou para ${label} após ${attempts} tentativas."
+  return 1
+}
+
+assert_login_api_not_next_404() {
+  local url="${VISUAL_BASE_URL%/}/api/auth/login"
+  local headers_file="/tmp/wabot_staging_login_headers.txt"
+  local body_file="/tmp/wabot_staging_login_body.txt"
+  local code
+
+  code=$(curl -s -o "$body_file" -D "$headers_file" -w "%{http_code}" \
+    --max-time 10 \
+    -X POST \
+    -H "Content-Type: application/json" \
+    --data '{"email":"smoke@example.invalid","password":"invalid"}' \
+    "$url" || echo "000")
+  echo "  POST ${url} -> HTTP ${code}"
+
+  if [[ "$code" == "000" || "$code" == "404" ]]; then
+    echo "ERRO: /api/auth/login não chegou corretamente ao proxy/API (HTTP ${code}). Headers:"
+    cat "$headers_file" || true
+    exit 1
+  fi
+
+  if [[ "$code" =~ ^5 ]]; then
+    echo "ERRO: /api/auth/login retornou erro 5xx. Headers/body:"
+    cat "$headers_file" || true
+    head -c 1200 "$body_file" || true
+    echo
+    exit 1
+  fi
+
+  if grep -qi "x-nextjs-prerender" "$headers_file"; then
+    echo "ERRO: /api/auth/login foi atendido pelo prerender/404 do Next.js em vez do proxy/API."
+    cat "$headers_file" || true
+    exit 1
+  fi
+
+  if ! grep -qi "content-type: .*application/json" "$headers_file"; then
+    echo "ERRO: /api/auth/login não retornou JSON. Headers/body:"
+    cat "$headers_file" || true
+    head -c 1200 "$body_file" || true
+    echo
+    exit 1
+  fi
+}
+
+cd "$ROOT_DIR"
+echo "[1/9] Preflight staging"
+echo "  root=$ROOT_DIR"
+echo "  branch alvo=$BRANCH"
+echo "  visual=$VISUAL_APP ($VISUAL_BASE_URL)"
+echo "  api=$API_APP ($API_BASE_URL)"
+git status --short --branch
+git log --oneline -n 3
+
+if [[ "$SYNC_GIT" == "1" ]]; then
+  echo "[2/9] Sync branch $BRANCH"
+  if [[ -n "$(git status --porcelain)" ]]; then
+    echo "ERRO: working tree possui alterações locais. Resolva antes de SYNC_GIT=1 para evitar sobrescrever staging."
+    exit 1
+  fi
+  git fetch origin
+  git checkout "$BRANCH"
+  git pull --ff-only origin "$BRANCH"
+else
+  echo "[2/9] Sync git pulado (SYNC_GIT=0). Usando checkout atual."
+fi
+
+echo "[3/9] Install root dependencies sem alterar lockfile"
+npm ci
+
+echo "[4/9] Apply database migrations no banco isolado de staging"
+npx prisma migrate deploy
+
+echo "[5/9] Install dashboard dependencies sem alterar lockfile"
+cd "$DASHBOARD_DIR"
+npm ci
+
+echo "[6/9] Build dashboard staging do zero (hard gate)"
+rm -rf .next
+npm run build
+
+for artifact in .next/BUILD_ID .next/prerender-manifest.json .next/server/app-paths-manifest.json; do
+  if [[ ! -f "$artifact" ]]; then
+    echo "ERRO: artefato de build ausente: $artifact — abortando staging."
+    exit 1
+  fi
+done
+
+echo "  Build íntegro: BUILD_ID=$(cat .next/BUILD_ID)"
+cd "$ROOT_DIR"
+node scripts/verify-dashboard-api-proxy.mjs
+
+echo "[7/9] Restart PM2 staging apps"
+if ! command -v pm2 >/dev/null 2>&1; then
+  echo "ERRO: pm2 não encontrado no PATH."
+  exit 1
+fi
+pm2 restart "$API_APP" --update-env
+pm2 restart "$VISUAL_APP" --update-env
+
+echo "[8/9] PM2 status"
+pm2 status
+
+echo "[9/9] Smoke tests staging"
+check_http_with_retry "visual /login" "${VISUAL_BASE_URL%/}/login" 8 2
+check_http_with_retry "api /health" "${API_BASE_URL%/}/health" 8 2
+assert_login_api_not_next_404
+
+echo "Deploy safe staging concluído. Valide login real em ${VISUAL_BASE_URL%/}/login antes de qualquer produção."
