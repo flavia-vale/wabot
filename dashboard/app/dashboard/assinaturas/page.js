@@ -8,8 +8,8 @@ const SUPPORT_WA_NUMBER = '5532999844020'
 const PIX_KEY = 'd80c705f-3893-4802-939b-cce5c9338c66'
 
 const PLAN_CARDS = [
-  { id: 'basic', name: 'Plano Basic', price: 'R$1', description: 'Acesso por 30 dias com anúncios durante o uso.' },
-  { id: 'pro', name: 'Plano Pro', price: 'R$2', description: 'Acesso por 30 dias sem anúncios durante o uso.' },
+  { id: 'basic', name: 'Plano Basic', price: 'R$39', description: 'Acesso por 30 dias com anúncios durante o uso.' },
+  { id: 'pro', name: 'Plano Pro', price: 'R$69', description: 'Acesso por 30 dias sem anúncios durante o uso.' },
 ]
 
 export default function AssinaturasPage() {
@@ -53,7 +53,7 @@ export default function AssinaturasPage() {
   return (
     <section className="mx-auto w-full max-w-3xl">
       <header className="mb-5 rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
-        <h1 className="text-xl font-bold text-gray-800 md:text-2xl">Pagamento Direto (Plano B)</h1>
+        <h1 className="text-xl font-bold text-gray-800 md:text-2xl">Pagamento via PIX</h1>
         <p className="mt-2 text-sm text-gray-600">Enquanto finalizamos a integração automática, escolha seu plano e pague via PIX Copia e Cola para ativação assistida.</p>
       </header>
 
