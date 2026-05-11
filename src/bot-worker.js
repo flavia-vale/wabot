@@ -973,19 +973,30 @@ process.on('message', async msg => {
     let attempts = 0
     const tryRequest = async () => {
       const sock = pendingSock || activeSock
-      if (!sock && attempts < 20) {
+      if (!sock && attempts < 60) {
         attempts++
         setTimeout(tryRequest, 500)
         return
       }
       if (!sock) {
+        logger.warn({ requestId: msg.requestId, attempts }, 'Pairing code indisponível: socket não pronto')
         process.send({ type: 'pairingCode', requestId: msg.requestId, error: 'Bot não disponível' })
         return
       }
       try {
-        const code = await sock.requestPairingCode(msg.phone)
+        if (pendingSock && lifecycleState === WA_LIFECYCLE.INITIALIZING) {
+          logger.info({ requestId: msg.requestId }, 'Aguardando estado AUTHENTICATING antes de solicitar pairing code')
+          await new Promise(resolve => setTimeout(resolve, 1200))
+        }
+        logger.info({ requestId: msg.requestId, attempts, using: pendingSock ? 'pendingSock' : 'activeSock' }, 'Solicitando pairing code ao WhatsApp')
+        const code = await Promise.race([
+          sock.requestPairingCode(msg.phone),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout interno ao gerar pairing code no WhatsApp')), 20000)),
+        ])
+        logger.info({ requestId: msg.requestId }, 'Pairing code recebido do WhatsApp')
         process.send({ type: 'pairingCode', requestId: msg.requestId, code })
       } catch (err) {
+        logger.error({ err, requestId: msg.requestId }, 'Falha ao solicitar pairing code no socket WA')
         process.send({ type: 'pairingCode', requestId: msg.requestId, error: err.message })
       }
     }

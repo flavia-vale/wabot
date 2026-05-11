@@ -70,7 +70,7 @@ export function startBot(userId) {
       if (msg.data === 'connected' || msg.data === 'disconnected') entry.lastQR = null
       entry.statusListeners.forEach(fn => fn(msg.data, msg.phone))
     }
-    if (msg.type === 'groups' && msg.requestId) {
+    if (msg.requestId) {
       const pending = pendingRequests.get(msg.requestId)
       if (!pending) return
       if (msg.error) pending.reject(new Error(msg.error)); else pending.resolve(msg.data ?? msg.code)
@@ -114,6 +114,6 @@ function requestWithTimeout(userId, type, payload = {}, timeout = 10000, timeout
 export const listGroups = userId => requestWithTimeout(userId, 'listGroups', {}, 10000, 'Timeout ao buscar grupos')
 export const sendBroadcast = (userId, text, jids) => requestWithTimeout(userId, 'broadcast', { text, jids }, 30000, 'Timeout ao enviar mensagem')
 export const getBotMetrics = userId => bots.has(userId) ? requestWithTimeout(userId, 'metrics', {}, 5000, 'Timeout ao buscar métricas') : Promise.resolve(null)
-export const requestPairingCode = (userId, phone) => requestWithTimeout(userId, 'requestPairingCode', { phone }, 15000, 'Timeout ao solicitar código de pareamento')
+export const requestPairingCode = (userId, phone) => requestWithTimeout(userId, 'requestPairingCode', { phone }, 45000, 'Timeout ao solicitar código de pareamento')
 export function reloadConfig(userId) { const e = bots.get(userId); if (!e) return false; try { e.proc.send({ type: 'reloadConfig' }) } catch {}; return true }
 export function stopAllBots() { const ids = listRunningBots(); for (const id of ids) stopBot(id); return ids.length }
