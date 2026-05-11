@@ -53,17 +53,14 @@ function isPublicHttpUrl(value) {
   }
 }
 
-function forceHttpsUrl(value) {
-  const parsed = new URL(String(value ?? ''))
-  parsed.protocol = 'https:'
-  return parsed.toString().replace(/\/$/, '')
-}
-
-
 function getCheckoutPublicOrigins() {
+  if (IS_PRODUCTION) {
+    return { dashboardUrl: OFFICIAL_PUBLIC_ORIGIN, apiUrl: OFFICIAL_PUBLIC_ORIGIN }
+  }
+
   const rawDashboardUrl = stripApiSuffix(getDashboardUrl())
   const rawApiUrl = stripApiSuffix(getApiUrl())
-  const publicOriginFallback = IS_PRODUCTION ? OFFICIAL_PUBLIC_ORIGIN : 'http://localhost:3006'
+  const publicOriginFallback = 'http://localhost:3006'
 
   const dashboardUrl = normalizePublicOrigin(rawDashboardUrl, {
     fallback: publicOriginFallback,
@@ -276,11 +273,12 @@ async function createMercadoPagoPreference({ userId, plan }) {
     err.code = 'PAYMENT_PROVIDER_MISCONFIGURED'
     throw err
   }
-  const callbackOrigin = IS_PRODUCTION ? forceHttpsUrl(dashboardUrl) : dashboardUrl
-  const notificationOrigin = IS_PRODUCTION ? forceHttpsUrl(apiUrl) : apiUrl
+  // Keep protocol from configured origins. Some deployments intentionally run
+  // behind HTTP-only reverse proxies and forcing HTTPS here breaks MP redirects.
+  const callbackOrigin = dashboardUrl
+  const notificationOrigin = apiUrl
 
   // Mercado Pago validates `back_urls` as user-facing return URLs.
-  // In production always enforce HTTPS for return/webhook URLs.
   const callbackBase = `${callbackOrigin}/api/payments/callback`
 
   const preference = {
