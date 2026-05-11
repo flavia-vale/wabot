@@ -52,7 +52,7 @@ export function LpTemplate({ slug }) {
   const cfg = LP_CONFIG[slug]
   const faqJsonLd = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: [{ '@type': 'Question', name: 'Como começar com o wabot?', acceptedAnswer: { '@type': 'Answer', text: 'Cadastre-se na Lista VIP e siga o onboarding guiado para ativar seu primeiro espelhamento.' } }] }
   const howToJsonLd = { '@context': 'https://schema.org', '@type': 'HowTo', name: 'Como espelhar grupos com o wabot', step: [{ '@type': 'HowToStep', name: 'Criar conta', text: 'Cadastre-se e acesse o painel do wabot.' }, { '@type': 'HowToStep', name: 'Conectar grupos', text: 'Conecte seus grupos e valide permissões.' }, { '@type': 'HowToStep', name: 'Ativar espelhamento', text: 'Configure as regras e publique automaticamente.' }] }
-  const productJsonLd = { '@context': 'https://schema.org', '@type': 'Product', name: 'wabot', description: cfg.description, brand: { '@type': 'Brand', name: 'wabot' } }
+  const productJsonLd = { '@context': 'https://schema.org', '@type': 'Product', name: 'wabot', description: cfg.description, brand: { '@type': 'Brand', name: 'wabot' }, offers: { '@type': 'Offer', url: `${getSiteUrl()}/login?mode=register`, priceCurrency: 'BRL', price: '0.00', availability: 'https://schema.org/InStock', category: 'SoftwareSubscription' } }
 
   return (
     <div className="landing-root">
