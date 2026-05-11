@@ -127,6 +127,13 @@ function inferPlanFromAmountWithPlans(amount, plans) {
   return null
 }
 
+
+export function resolvePlanForPayment({ preferredPlan = null, amount = null, plans = {} } = {}) {
+  const plan = String(preferredPlan ?? '').trim().toLowerCase()
+  if (plan && plans[plan]) return plan
+  return inferPlanFromAmountWithPlans(amount, plans)
+}
+
 export function shouldEnforceWebhookSignature({ isProduction = IS_PRODUCTION, secret = MP_WEBHOOK_SECRET } = {}) {
   return Boolean(secret) || isProduction
 }
@@ -149,6 +156,14 @@ export function isValidMercadoPagoWebhookSignature({ signature = '', requestId =
   return expected === v1
 }
 
+
+export function hasStepUpMfa(req) {
+  const configuredToken = String(process.env.ADMIN_MFA_TOKEN ?? '').trim()
+  if (!configuredToken) return false
+  const providedToken = String(req.headers['x-admin-mfa-token'] ?? '').trim()
+  return providedToken && providedToken === configuredToken
+}
+
 function warnMissingProductionEnv(log) {
   if (!IS_PRODUCTION) return
   const missing = []
@@ -161,9 +176,27 @@ function warnMissingProductionEnv(log) {
   }
 }
 
+function toSafeString(value, max = 120) {
+  const text = String(value ?? '').trim()
+  if (!text) return null
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
+
 export function normalizeWebhookPayload(payload) {
   try {
-    return JSON.stringify(payload ?? {})
+    const safe = {
+      id: toSafeString(payload?.id),
+      type: toSafeString(payload?.type ?? payload?.topic),
+      action: toSafeString(payload?.action),
+      api_version: toSafeString(payload?.api_version),
+      date_created: toSafeString(payload?.date_created),
+      data: {
+        id: toSafeString(payload?.data?.id),
+      },
+      live_mode: payload?.live_mode === true,
+      user_id: typeof payload?.user_id === 'number' ? payload.user_id : null,
+    }
+    return JSON.stringify(safe)
   } catch {
     return '{}'
   }
@@ -238,6 +271,7 @@ async function fetchMercadoPagoPaymentSnapshot(paymentId) {
       payerEmail: response.data?.payer?.email ?? null,
       externalReference: response.data?.external_reference ?? null,
       paymentTypeId: response.data?.payment_type_id ?? null,
+      preferredPlan: response.data?.metadata?.plan ?? null,
     }
   } catch (err) {
     return {
@@ -292,6 +326,7 @@ async function createMercadoPagoPreference({ userId, plan }) {
       currency_id: 'BRL',
     }],
     external_reference: userId,
+    metadata: { plan },
     back_urls: {
       success: `${callbackBase}?collection_status=approved`,
       failure: `${callbackBase}?collection_status=rejected`,
@@ -362,7 +397,7 @@ async function runPaymentReconciliation({ log } = {}) {
       continue
     }
     const plans = await getBillingPlans()
-    const plan = inferPlanFromAmountWithPlans(snapshot.transactionAmount, plans)
+    const plan = resolvePlanForPayment({ preferredPlan: snapshot.preferredPlan, amount: snapshot.transactionAmount, plans })
     if (!plan) continue
     await db.$transaction(async (tx) => {
       await activatePaymentAccess(tx, { userId: snapshot.externalReference, plan, mpPaymentId: String(payment.mpPaymentId), amount: plans[plan].price })
@@ -398,7 +433,7 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
         if (reconciliation.ok && reconciliation.providerStatus === 'approved' && reconciliation.externalReference) {
           const userId = reconciliation.externalReference
       const plans = await getBillingPlans()
-      const plan = inferPlanFromAmountWithPlans(reconciliation.transactionAmount, plans)
+      const plan = resolvePlanForPayment({ preferredPlan: reconciliation.preferredPlan, amount: reconciliation.transactionAmount, plans })
 
           if (plan) {
             try {
@@ -430,7 +465,7 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
         data: {
           processingStatus: 'processed',
           processedAt: new Date(),
-          processingResult: JSON.stringify({ summary, reconciliation, activation }),
+          processingResult: JSON.stringify({ summary, activation: { triggered: Boolean(activation?.triggered), alreadyActivated: Boolean(activation?.alreadyActivated), error: activation?.error ?? null }, reconciliation: { status: reconciliation?.status ?? null, amount: reconciliation?.transactionAmount ?? null } }),
           error: null,
         },
       })
@@ -630,7 +665,7 @@ export async function paymentsRoutes(app) {
     }
 
     const plans = await getBillingPlans()
-    const plan = inferPlanFromAmountWithPlans(snapshot.transactionAmount, plans)
+    const plan = resolvePlanForPayment({ preferredPlan: snapshot.preferredPlan, amount: snapshot.transactionAmount, plans })
     if (!plan) {
       req.log.warn({ mpPaymentId, amount: snapshot.transactionAmount }, 'Valor do pagamento não corresponde a nenhum plano')
       return reply.redirect(`${dashboardUrl}/dashboard/planos?status=pending`)
@@ -656,6 +691,10 @@ export async function paymentsRoutes(app) {
     const adminUser = await db.adminUser.findUnique({ where: { userId }, select: { role: true, status: true } }).catch(() => null)
     if (!adminUser || adminUser.status !== 'active' || adminUser.role !== 'owner') {
       return reply.code(403).send({ error: 'Acesso negado' })
+    }
+    if (!hasStepUpMfa(req)) {
+      req.log.warn({ userId }, 'Step-up MFA obrigatório em webhook/process-pending')
+      return reply.code(401).send({ error: 'MFA obrigatória para reprocessamento financeiro' })
     }
 
     const requestedLimit = Number(req.body?.limit)
@@ -777,7 +816,7 @@ export async function paymentsRoutes(app) {
     if (status !== 'approved') return sendError(reply, 402, 'PAYMENT_NOT_APPROVED', `Pagamento com status: ${status}`)
 
     const plans = await getBillingPlans()
-    const plan = inferPlanFromAmountWithPlans(transaction_amount, plans)
+    const plan = resolvePlanForPayment({ amount: transaction_amount, plans })
     if (!plan) return sendError(reply, 400, 'CANNOT_DETERMINE_PLAN', `Valor R$${transaction_amount} não corresponde a nenhum plano`)
 
     try {

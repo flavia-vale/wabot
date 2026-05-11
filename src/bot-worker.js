@@ -249,7 +249,7 @@ async function checkScheduledMessages() {
             destGroup: jid,
             originalUrl: '',
             convertedUrl: '',
-            messageText: msg.text,
+            messageText: sanitizeMessageForLog(msg.text),
             status: 'queued',
           },
         })
@@ -300,6 +300,16 @@ async function checkScheduledMessages() {
 }
 
 setInterval(checkScheduledMessages, 30_000)
+
+
+const MESSAGE_LOG_MAX_CHARS = Math.max(40, Number(process.env.MESSAGE_LOG_MAX_CHARS || 240))
+
+function sanitizeMessageForLog(text) {
+  const raw = String(text ?? '').replace(/\s+/g, ' ').trim()
+  if (!raw) return ''
+  if (raw.length <= MESSAGE_LOG_MAX_CHARS) return raw
+  return `${raw.slice(0, MESSAGE_LOG_MAX_CHARS)}…`
+}
 
 const INVITE_RE = /🚀?\s*Participe do Grupo[:\s]+https:\/\/chat\.whatsapp\.com\/\S+/gi
 
@@ -833,7 +843,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           destGroup: destJid,
           originalUrl: primary.url,
           convertedUrl: primary.converted,
-          messageText: finalText,
+          messageText: sanitizeMessageForLog(finalText),
         }
 
         // Estratégia preferencial: reaproveitar o proto da mídia original
@@ -869,7 +879,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
           const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
           db.messageLog.create({
-            data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: finalText, status: 'success' },
+            data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: sanitizeMessageForLog(finalText), status: 'success' },
           }).then(() => {
             if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
           }).catch(() => {})
@@ -882,7 +892,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         } catch (err) {
           logger.error({ destJid, err: err.message }, 'Erro ao enviar')
           db.messageLog.create({
-            data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: finalText, status: 'error', errorMsg: err.message },
+            data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: sanitizeMessageForLog(finalText), status: 'error', errorMsg: err.message },
           }).then(() => {
             trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: err.name } })
           }).catch(() => {})
@@ -1023,7 +1033,7 @@ process.on('message', async msg => {
           destGroup: jid,
           originalUrl: '',
           convertedUrl: '',
-          messageText: msg.text,
+          messageText: sanitizeMessageForLog(msg.text),
           status: 'queued',
         },
       })

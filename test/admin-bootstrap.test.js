@@ -2,11 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { isAdminEmailBootstrapEnabled } from '../src/api/routes/admin.js'
 
-test('admin email bootstrap defaults to enabled when env is missing', () => {
+test('admin email bootstrap defaults to disabled when env is missing', () => {
   const previous = process.env.ALLOW_ADMIN_EMAIL_BOOTSTRAP
   delete process.env.ALLOW_ADMIN_EMAIL_BOOTSTRAP
   try {
-    assert.equal(isAdminEmailBootstrapEnabled(), true)
+    assert.equal(isAdminEmailBootstrapEnabled(), false)
   } finally {
     if (previous === undefined) delete process.env.ALLOW_ADMIN_EMAIL_BOOTSTRAP
     else process.env.ALLOW_ADMIN_EMAIL_BOOTSTRAP = previous
