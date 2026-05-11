@@ -8,7 +8,7 @@ export default function robots() {
       {
         userAgent: '*',
         allow: ['/', '/termos', '/privacidade', '/quem-somos', '/suporte', '/api/public/faq', '/api/public/plans'],
-        disallow: ['/dashboard', '/dashboard/', '/dashboard/*', '/api/*', '/promo-vip-7dias'],
+        disallow: ['/dashboard', '/dashboard/', '/dashboard/*', '/api/admin/*', '/api/auth/*', '/api/dashboard/*', '/api/payments/*', '/promo-vip-7dias'],
       },
     ],
     sitemap: `${baseUrl}/sitemap.xml`,
