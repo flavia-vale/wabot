@@ -70,18 +70,18 @@ function Nav() {
   );
 }
 
-export function Hero({ tone }) {
-  const headline = tone === 'direto'
+export function Hero({ tone, primaryCtaLabel = 'Conectar meu WhatsApp', eyebrowLabel = 'Experimente grátis!', headlineOverride, subOverride, heroStyle }) {
+  const headline = headlineOverride ?? (tone === 'direto'
     ? <><span>Promoção dos outros,</span><br /><span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>comissão sua.</span></>
     : tone === 'animado'
     ? <><span>Os grupos postam.</span><br /><span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>Você fatura.</span> 💜</>
-    : <><span>Promoções de outros grupos</span><br />viram <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>vendas no seu.</span></>;
+    : <><span>Promoções de outros grupos</span><br />viram <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>vendas no seu.</span></>);
 
-  const sub = tone === 'direto'
+  const sub = subOverride ?? (tone === 'direto'
     ? 'Você escolhe os grupos de promoção que quer monitorar. O bot pega cada link da Shopee, ML ou Amazon, troca pelo seu código de afiliada e posta no seu grupo de achadinhos. Em segundos.'
     : tone === 'animado'
     ? 'Aqueles grupos lotados de promoção que você acompanha? O bot fica de olho neles 24h. Cada link vira o seu link de afiliada e cai direto no seu grupo. ✨'
-    : 'Você indica os grupos que quer monitorar (de promoções, ofertas, achadinhos). O bot detecta cada link da Shopee, ML ou Amazon, converte para o seu código de afiliada e reposta no seu próprio grupo de clientes.';
+    : 'Você indica os grupos que quer monitorar (de promoções, ofertas, achadinhos). O bot detecta cada link da Shopee, ML ou Amazon, converte para o seu código de afiliada e reposta no seu próprio grupo de clientes.');
 
   return (
     <div className="wrap" style={{ position: 'relative' }}>
@@ -92,16 +92,16 @@ export function Hero({ tone }) {
       <div style={{ ...s.decor, width: 380, height: 380, background: 'var(--accent-2)', top: -40, right: -80 }} />
       <div style={{ ...s.decor, width: 280, height: 280, background: 'var(--accent-3)', bottom: -60, left: -40 }} />
 
-      <header style={s.hero} className="landing-hero">
+      <header style={{ ...s.hero, ...heroStyle }} className="landing-hero">
         <div style={{ position: 'relative', zIndex: 1 }}>
           <div style={s.eyebrow}>
-            <span className="pill"><span className="dot" />Experimente grátis!</span>
+            <span className="pill"><span className="dot" />{eyebrowLabel}</span>
           </div>
           <h1 style={s.h1}>{headline}</h1>
           <p style={s.sub}>{sub}</p>
           <div style={s.cta} className="landing-hero-cta">
             <a className="btn btn-accent" href="#planos">
-              Conectar meu WhatsApp <Icon name="arrow" size={16} />
+              {primaryCtaLabel} <Icon name="arrow" size={16} />
             </a>
             <a className="btn btn-ghost" href="#como">Ver como funciona</a>
           </div>
