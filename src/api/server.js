@@ -3,6 +3,7 @@ import Fastify from 'fastify'
 import fastifyJwt from '@fastify/jwt'
 import fastifyWebsocket from '@fastify/websocket'
 import fastifyCors from '@fastify/cors'
+import { createCorsOriginChecker, getAllowedOrigins } from './cors.js'
 
 import { authRoutes } from './routes/auth.js'
 import { sessionRoutes } from './routes/session.js'
@@ -27,41 +28,12 @@ const activityCacheMaxEntries = Math.max(1000, Number(process.env.ACTIVITY_CACHE
 const activityCacheCleanupIntervalMs = Math.max(30_000, Number(process.env.ACTIVITY_CACHE_CLEANUP_INTERVAL_MS || 300_000))
 let activityCacheCleanupTimer = null
 
-const DEFAULT_ALLOWED_ORIGINS = [
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-  'http://localhost:3006',
-  'http://127.0.0.1:3006',
-  'http://127.0.0.1:5173',
-  'http://localhost:5173',
-  'http://espelhagrupos.com.br',
-  'https://espelhagrupos.com.br',
-  'http://www.espelhagrupos.com.br',
-  'https://www.espelhagrupos.com.br',
-  'http://178.105.54.0:3006',
-]
-
-
-function getAllowedOrigins() {
-  const configured = process.env.CORS_ORIGINS
-    ?.split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean)
-
-  if (!configured?.length) return DEFAULT_ALLOWED_ORIGINS
-  return [...new Set([...DEFAULT_ALLOWED_ORIGINS, ...configured])]
-}
-
 const allowedOrigins = new Set(getAllowedOrigins())
+const isOriginAllowed = createCorsOriginChecker(allowedOrigins)
 app.log.info({ allowedOrigins: [...allowedOrigins] }, 'CORS allowlist carregada')
 
 function resolveJwtSecret() {
   return process.env.JWT_SECRET || process.env.AUTH_JWT_SECRET || process.env.JWT_TOKEN || null
-}
-
-function isOriginAllowed(origin) {
-  if (!origin) return true
-  return allowedOrigins.has(origin)
 }
 
 
@@ -153,26 +125,34 @@ async function verifyDatabase() {
 }
 
 
-const LOG_RETENTION_DAYS = process.env.LOG_RETENTION_DAYS === undefined
-  ? 90
-  : Number(process.env.LOG_RETENTION_DAYS)
+const MESSAGE_LOG_RETENTION_DAYS = process.env.LOG_RETENTION_DAYS === undefined ? 90 : Number(process.env.LOG_RETENTION_DAYS)
+const WEBHOOK_RETENTION_DAYS = process.env.WEBHOOK_RETENTION_DAYS === undefined ? 30 : Number(process.env.WEBHOOK_RETENTION_DAYS)
+const ADMIN_AUDIT_RETENTION_DAYS = process.env.ADMIN_AUDIT_RETENTION_DAYS === undefined ? 180 : Number(process.env.ADMIN_AUDIT_RETENTION_DAYS)
 const LOG_RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000
 
+async function cleanupByRetentionDays(model, dateField, retentionDays, logLabel) {
+  if (!Number.isFinite(retentionDays) || retentionDays <= 0) return
+  const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000)
+  const result = await model.deleteMany({ where: { [dateField]: { lt: cutoff } } })
+  if (result.count > 0) app.log.info({ deleted: result.count, cutoff, retentionDays }, `${logLabel} removidos por retenção automática`)
+}
+
 async function cleanupOldLogs() {
-  if (LOG_RETENTION_DAYS <= 0) return
-  const cutoff = new Date(Date.now() - LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000)
-  const result = await db.messageLog.deleteMany({ where: { sentAt: { lt: cutoff } } })
-  if (result.count > 0) app.log.info({ deleted: result.count, cutoff }, 'Logs antigos removidos por retenção automática')
+  await cleanupByRetentionDays(db.messageLog, 'sentAt', MESSAGE_LOG_RETENTION_DAYS, 'Message logs').catch(err => {
+    app.log.error({ err: err.message }, 'Falha na limpeza automática de message logs')
+  })
+  await cleanupByRetentionDays(db.webhookEvent, 'createdAt', WEBHOOK_RETENTION_DAYS, 'Webhook events').catch(err => {
+    app.log.error({ err: err.message }, 'Falha na limpeza automática de webhook events')
+  })
+  await cleanupByRetentionDays(db.adminAuditLog, 'createdAt', ADMIN_AUDIT_RETENTION_DAYS, 'Admin audit logs').catch(err => {
+    app.log.error({ err: err.message }, 'Falha na limpeza automática de admin audit logs')
+  })
 }
 
 function startLogRetentionJob() {
-  if (LOG_RETENTION_DAYS <= 0) {
-    app.log.info('Retenção automática de logs desabilitada')
-    return
-  }
-  cleanupOldLogs().catch(err => app.log.error({ err: err.message }, 'Falha na limpeza automática de logs'))
+  cleanupOldLogs().catch(err => app.log.error({ err: err.message }, 'Falha na limpeza automática de retenção'))
   const timer = setInterval(() => {
-    cleanupOldLogs().catch(err => app.log.error({ err: err.message }, 'Falha na limpeza automática de logs'))
+    cleanupOldLogs().catch(err => app.log.error({ err: err.message }, 'Falha na limpeza automática de retenção'))
   }, LOG_RETENTION_INTERVAL_MS)
   timer.unref?.()
 }
@@ -186,6 +166,14 @@ async function ensureDatabaseReady() {
     app.log.error({ err: err.message }, 'Banco de dados indisponível ou sem migrations aplicadas')
     return false
   }
+}
+
+
+function shouldSetHsts(req) {
+  const force = String(process.env.FORCE_HSTS ?? '').trim().toLowerCase()
+  if (['1', 'true', 'yes', 'on'].includes(force)) return true
+  const forwardedProto = String(req.headers['x-forwarded-proto'] ?? '').split(',')[0].trim().toLowerCase()
+  return req.protocol === 'https' || forwardedProto === 'https'
 }
 
 await app.register(fastifyCors, {
@@ -204,7 +192,7 @@ app.addHook('onSend', async (req, reply) => {
   reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
   reply.header('Content-Security-Policy', "default-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
 
-  if (req.protocol === 'https') {
+  if (shouldSetHsts(req)) {
     reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
   }
 })

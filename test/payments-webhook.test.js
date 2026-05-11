@@ -11,6 +11,8 @@ import {
   shouldReconcilePayment,
   summarizeWebhookEvent,
   shouldEnforceWebhookSignature,
+  hasStepUpMfa,
+  resolvePlanForPayment,
 } from '../src/api/routes/payments.js'
 
 test('requires webhook signature when production is true even without a secret', () => {
@@ -41,6 +43,24 @@ test('validates Mercado Pago webhook signature', () => {
   assert.equal(isValidMercadoPagoWebhookSignature({ signature: `ts=${ts},v1=invalid`, requestId, dataId, secret }), false)
 })
 
+
+test('hasStepUpMfa validates x-admin-mfa-token when configured', () => {
+  const prev = process.env.ADMIN_MFA_TOKEN
+  process.env.ADMIN_MFA_TOKEN = '123456'
+  assert.equal(hasStepUpMfa({ headers: { 'x-admin-mfa-token': '123456' } }), true)
+  assert.equal(hasStepUpMfa({ headers: { 'x-admin-mfa-token': '000000' } }), false)
+  delete process.env.ADMIN_MFA_TOKEN
+  assert.equal(hasStepUpMfa({ headers: { 'x-admin-mfa-token': '123456' } }), false)
+  if (prev !== undefined) process.env.ADMIN_MFA_TOKEN = prev
+})
+
+
+test('resolvePlanForPayment prefers explicit plan metadata when valid', () => {
+  const plans = { basic: { price: 1 }, pro: { price: 2 } }
+  assert.equal(resolvePlanForPayment({ preferredPlan: 'pro', amount: 1, plans }), 'pro')
+  assert.equal(resolvePlanForPayment({ preferredPlan: 'unknown', amount: 1, plans }), 'basic')
+})
+
 test('resolveWebhookEventId reads ID using priority order', () => {
   assert.equal(resolveWebhookEventId({ body: { id: 'body-id' }, query: { id: 'query-id' }, dataId: 'fallback' }), 'body-id')
   assert.equal(resolveWebhookEventId({ body: { data: { id: 'data-id' } }, query: { id: 'query-id' }, dataId: 'fallback' }), 'data-id')
@@ -51,10 +71,10 @@ test('resolveWebhookEventId reads ID using priority order', () => {
 })
 
 test('normalizeWebhookPayload always returns valid JSON', () => {
-  assert.equal(normalizeWebhookPayload({ id: 123 }), '{"id":123}')
+  assert.equal(normalizeWebhookPayload({ id: 123 }), '{"id":"123","type":null,"action":null,"api_version":null,"date_created":null,"data":{"id":null},"live_mode":false,"user_id":null}')
   const circular = {}
   circular.self = circular
-  assert.equal(normalizeWebhookPayload(circular), '{}')
+  assert.equal(normalizeWebhookPayload(circular), '{"id":null,"type":null,"action":null,"api_version":null,"date_created":null,"data":{"id":null},"live_mode":false,"user_id":null}')
 })
 
 test('summarizeWebhookEvent returns canonical summary fields', () => {

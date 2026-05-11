@@ -29,7 +29,7 @@ function getBootstrapAdminEmails() {
 
 export function isAdminEmailBootstrapEnabled() {
   const raw = String(process.env.ALLOW_ADMIN_EMAIL_BOOTSTRAP ?? '').trim().toLowerCase()
-  if (!raw) return true
+  if (!raw) return false
   return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
 }
 
@@ -356,7 +356,7 @@ async function requireAdmin(req, reply, permission = 'admin:read') {
   })
 
   const bootstrapEmails = getBootstrapAdminEmails()
-  const bootstrapEnabled = String(process.env.ALLOW_ADMIN_EMAIL_BOOTSTRAP ?? 'true').trim().toLowerCase() !== 'false'
+  const bootstrapEnabled = isAdminEmailBootstrapEnabled()
   const hasActiveAdminUser = user?.adminUser?.status === 'active'
   const bootstrapAllowed = bootstrapEnabled && !hasActiveAdminUser && bootstrapEmails.has(user?.email?.toLowerCase())
   const role = user?.adminUser?.status === 'active'

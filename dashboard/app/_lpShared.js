@@ -25,20 +25,26 @@ const LP_TYPE_THEME = {
   city: {
     badge: 'Operação por cidade',
     tone: 'direto',
+    eyebrow: 'Modo Cidade',
     panelBg: 'color-mix(in oklab, var(--accent) 18%, var(--surface))',
     panelBorder: 'color-mix(in oklab, var(--accent-strong) 35%, var(--line))',
+    heroBg: 'linear-gradient(180deg, color-mix(in oklab, var(--accent-3) 42%, white), transparent)',
   },
   niche: {
     badge: 'Operação por nicho',
     tone: 'animado',
+    eyebrow: 'Modo Nicho',
     panelBg: 'color-mix(in oklab, var(--accent-3) 50%, var(--surface))',
     panelBorder: 'color-mix(in oklab, var(--accent-2) 30%, var(--line))',
+    heroBg: 'linear-gradient(180deg, color-mix(in oklab, var(--accent) 24%, white), transparent)',
   },
   default: {
     badge: 'Operação programática',
     tone: 'amigavel',
+    eyebrow: 'Experimente grátis!',
     panelBg: 'var(--surface)',
     panelBorder: 'var(--line)',
+    heroBg: 'transparent',
   },
 }
 
@@ -46,6 +52,25 @@ function getLpType(slug) {
   if (slug?.startsWith('espelhar-grupos-whatsapp-')) return 'city'
   if (slug?.startsWith('bot-ofertas-')) return 'niche'
   return 'default'
+}
+
+function getHeroCopy(cfg, lpType) {
+  if (lpType === 'city') {
+    return {
+      headline: <><span>Escala local com execução</span><br /><span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>consistente todo dia.</span></>,
+      sub: `${cfg.description} Fluxo pensado para operação regional com menor retrabalho.`,
+    }
+  }
+  if (lpType === 'niche') {
+    return {
+      headline: <><span>Seu nicho com campanhas</span><br /><span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>mais rápidas e previsíveis.</span></>,
+      sub: `${cfg.description} Estruture rotinas por categoria e publique com frequência sem sobrecarga manual.`,
+    }
+  }
+  return {
+    headline: null,
+    sub: null,
+  }
 }
 
 export function getLpMetadata(slug) {
@@ -79,6 +104,7 @@ export function LpTemplate({ slug }) {
   const cfg = LP_CONFIG[slug]
   const lpType = getLpType(slug)
   const theme = LP_TYPE_THEME[lpType] ?? LP_TYPE_THEME.default
+  const heroCopy = getHeroCopy(cfg, lpType)
   const faqJsonLd = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: cfg.faq.map((item) => ({ '@type': 'Question', name: item.q, acceptedAnswer: { '@type': 'Answer', text: item.a } })) }
   const howToJsonLd = { '@context': 'https://schema.org', '@type': 'HowTo', name: `Como configurar ${cfg.title.replace(' | wabot', '')}`, step: cfg.howTo.map((text, index) => ({ '@type': 'HowToStep', name: `Passo ${index + 1}`, text })) }
   const productJsonLd = { '@context': 'https://schema.org', '@type': 'Product', name: 'wabot', description: cfg.description, image: [`${getSiteUrl()}/wabot-logo.svg`], brand: { '@type': 'Brand', name: 'wabot' }, offers: { '@type': 'Offer', url: `${getSiteUrl()}/login?mode=register`, priceCurrency: 'BRL', price: '0.00', availability: 'https://schema.org/InStock', category: 'SoftwareSubscription', shippingDetails: { '@type': 'OfferShippingDetails', shippingRate: { '@type': 'MonetaryAmount', value: '0', currency: 'BRL' }, shippingDestination: { '@type': 'DefinedRegion', addressCountry: 'BR' }, deliveryTime: { '@type': 'ShippingDeliveryTime', handlingTime: { '@type': 'QuantitativeValue', minValue: 0, maxValue: 0, unitCode: 'DAY' }, transitTime: { '@type': 'QuantitativeValue', minValue: 0, maxValue: 0, unitCode: 'DAY' } } }, hasMerchantReturnPolicy: { '@type': 'MerchantReturnPolicy', returnPolicyCategory: 'https://schema.org/MerchantReturnNotPermitted', applicableCountry: 'BR' } }, aggregateRating: { '@type': 'AggregateRating', ratingValue: 4.8, reviewCount: 127, bestRating: 5, worstRating: 1 } }
@@ -88,7 +114,14 @@ export function LpTemplate({ slug }) {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(howToJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }} />
-      <Hero tone={theme.tone} primaryCtaLabel="Entrar na Lista VIP" />
+      <Hero
+        tone={theme.tone}
+        primaryCtaLabel="Entrar na Lista VIP"
+        eyebrowLabel={theme.eyebrow}
+        headlineOverride={heroCopy.headline}
+        subOverride={heroCopy.sub}
+        heroStyle={{ background: theme.heroBg, borderRadius: 24, paddingInline: 20 }}
+      />
       <section>
         <div className="wrap" style={{ marginTop: 28 }}>
           <div style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}`, borderRadius: 24, padding: '28px 28px 22px', boxShadow: 'var(--shadow-soft)' }}>
