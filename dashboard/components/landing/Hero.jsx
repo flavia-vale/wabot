@@ -70,7 +70,7 @@ function Nav() {
   );
 }
 
-export function Hero({ tone }) {
+export function Hero({ tone, primaryCtaLabel = 'Conectar meu WhatsApp' }) {
   const headline = tone === 'direto'
     ? <><span>Promoção dos outros,</span><br /><span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>comissão sua.</span></>
     : tone === 'animado'
@@ -101,7 +101,7 @@ export function Hero({ tone }) {
           <p style={s.sub}>{sub}</p>
           <div style={s.cta} className="landing-hero-cta">
             <a className="btn btn-accent" href="#planos">
-              Conectar meu WhatsApp <Icon name="arrow" size={16} />
+              {primaryCtaLabel} <Icon name="arrow" size={16} />
             </a>
             <a className="btn btn-ghost" href="#como">Ver como funciona</a>
           </div>

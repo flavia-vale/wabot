@@ -1,0 +1,5 @@
+lead_id,nome,canal,etapa_crm,data_entrada,mql_score,trial_started,first_connection_success,first_mirror_success,owner,proxima_acao
+,,lp-cidade,Lead,,0,false,false,false,growth,
+,,meta-ads,MQL,,55,false,false,false,sdr,
+,,google-ads,Trial,,70,true,true,false,cs,
+,,parceiro,Ativado,,85,true,true,true,csm,
