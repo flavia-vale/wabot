@@ -635,19 +635,12 @@ export default function DashboardPage() {
 
       {!isRunning && !showPairingInput && !statusLoading && !isAwaitingConnectStart && (
         <div className="flex flex-col gap-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-              <h3 className="font-semibold text-gray-700">Conectar via QR Code</h3>
-              <p className="mt-1 text-xs text-gray-500">Mais rápido se você está com o celular em mãos.</p>
+          <div className="mx-auto w-full max-w-xl">
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm text-center">
+              <h3 className="font-semibold text-gray-700">Escaneie o QR Code abaixo para conectar seu WhatsApp</h3>
+              <p className="mt-1 text-xs text-gray-500">Abra o WhatsApp no celular e mantenha esta tela aberta até finalizar.</p>
               <button onClick={() => handleQRConnect('connect')} disabled={loading} className="mt-4 w-full bg-green-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-green-700 disabled:opacity-50 transition flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
                 <span aria-hidden="true">📷</span>{actionLoading === 'connect' ? 'Conectando...' : 'Gerar QR Code'}
-              </button>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-              <h3 className="font-semibold text-gray-700">Conectar pelo número</h3>
-              <p className="mt-1 text-xs text-gray-500">Use um código para vincular pelo WhatsApp.</p>
-              <button onClick={() => { setConnectMethod('pairing'); setShowPairingInput(true); setError('') }} disabled={loading} className="mt-4 w-full bg-blue-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
-                <span aria-hidden="true">📱</span>Obter código
               </button>
             </div>
           </div>
@@ -659,6 +652,7 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Fluxo de pareamento por código temporariamente desativado.
       {!isRunning && showPairingInput && (
         <form onSubmit={handlePairingSubmit} className="flex flex-col gap-3">
           <div>
@@ -673,6 +667,7 @@ export default function DashboardPage() {
           </div>
         </form>
       )}
+      */}
 
       {isRunning && (
         <div className="flex flex-col gap-4">
