@@ -2,7 +2,20 @@ function resolveApiBase() {
   const configured = process.env.NEXT_PUBLIC_API_URL?.trim()
   if (configured) {
     const isAbsoluteHttp = /^https?:\/\//i.test(configured)
-    if (isAbsoluteHttp) return configured
+    if (isAbsoluteHttp) {
+      if (typeof window !== 'undefined') {
+        try {
+          const configuredUrl = new URL(configured)
+          const currentUrl = new URL(window.location.origin)
+          const isCrossOrigin = configuredUrl.origin !== currentUrl.origin
+          const preferSameOrigin = String(process.env.NEXT_PUBLIC_FORCE_SAME_ORIGIN_API ?? 'true') === 'true'
+          if (isCrossOrigin && preferSameOrigin) return currentUrl.origin
+        } catch {
+          // fallback para comportamento padrão
+        }
+      }
+      return configured
+    }
   }
 
   if (typeof window !== 'undefined') {
@@ -12,6 +25,9 @@ function resolveApiBase() {
       '3006': '3004',
     }
     const apiPort = apiPortByDashboardPort[port] || '3001'
+    const isDefaultHttp = protocol === 'http:' && !port
+    const isDefaultHttps = protocol === 'https:' && !port
+    if (isDefaultHttp || isDefaultHttps) return `${protocol}//${hostname}`
     return `${protocol}//${hostname}:${apiPort}`
   }
 
