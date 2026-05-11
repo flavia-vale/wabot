@@ -54,9 +54,13 @@ function isPublicHttpUrl(value) {
 }
 
 function getCheckoutPublicOrigins() {
+  if (IS_PRODUCTION) {
+    return { dashboardUrl: OFFICIAL_PUBLIC_ORIGIN, apiUrl: OFFICIAL_PUBLIC_ORIGIN }
+  }
+
   const rawDashboardUrl = stripApiSuffix(getDashboardUrl())
   const rawApiUrl = stripApiSuffix(getApiUrl())
-  const publicOriginFallback = IS_PRODUCTION ? OFFICIAL_PUBLIC_ORIGIN : 'http://localhost:3006'
+  const publicOriginFallback = 'http://localhost:3006'
 
   const dashboardUrl = normalizePublicOrigin(rawDashboardUrl, {
     fallback: publicOriginFallback,
