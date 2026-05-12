@@ -121,7 +121,8 @@ echo "[5/9] Install dashboard dependencies sem alterar lockfile"
 cd "$DASHBOARD_DIR"
 npm ci
 
-echo "[6/9] Build dashboard staging do zero (hard gate)"
+echo "[6/9] Guardrail + build dashboard staging (hard gate)"
+npm run guard:config-page
 rm -rf .next
 npm run build
 

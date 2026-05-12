@@ -42,11 +42,9 @@ jobs:
         working-directory: dashboard
         run: npm ci
 
-      - name: Diagnosticar página de configurações antes do lint
-        run: |
-          echo "commit=$(git rev-parse --short HEAD)"
-          nl -ba dashboard/app/dashboard/configuracoes/page.js | sed -n '1,40p'
-          node -e "const fs=require('node:fs'); const p='dashboard/app/dashboard/configuracoes/page.js'; const text=fs.readFileSync(p,'utf8'); if (text.includes('URL_PROTOCOL_RE')) { console.error('ERRO: URL_PROTOCOL_RE não deve existir em '+p+'; use hasHttpProtocol().'); process.exit(1); }"
+      - name: Guardrail da página de configurações
+        working-directory: dashboard
+        run: npm run guard:config-page
 
       - name: Lint do dashboard
         working-directory: dashboard
