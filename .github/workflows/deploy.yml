@@ -34,7 +34,7 @@ jobs:
             set -e
             if [ "${{ github.ref }}" = "refs/heads/main" ]; then
               echo "🚀 Enviando para PRODUÇÃO..."
-              cd ~/wabot-prod
+              cd ~/wabot
               git remote set-url origin git@github.com:flavia-vale/wabot.git
               git reset --hard HEAD
               git pull origin main
