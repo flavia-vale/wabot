@@ -57,7 +57,8 @@ echo "[4/9] Install dashboard dependencies"
 cd "$DASHBOARD_DIR"
 npm ci
 
-echo "[5/9] Build dashboard (hard gate)"
+echo "[5/9] Guardrail + build dashboard (hard gate)"
+npm run guard:config-page
 rm -rf .next
 npm run build
 
