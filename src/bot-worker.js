@@ -18,6 +18,7 @@ import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from '
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
+import { validateCredentialData } from './credentialHealth.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } from './sendQueueBackend.js'
 
@@ -800,6 +801,27 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         return null
       }
 
+
+      async function recordConversionIssue({ platform, url, jid, text, reason }) {
+        logger.warn({ platform, url, reason }, 'Conversão ignorada com diagnóstico para o painel')
+        await db.messageLog.create({
+          data: {
+            userId,
+            platform,
+            sourceGroup: jid,
+            destGroup: 'conversion',
+            originalUrl: url,
+            convertedUrl: '',
+            messageText: sanitizeMessageForLog(text),
+            status: 'error',
+            errorMsg: reason,
+          },
+        }).catch(err => {
+          logger.warn({ err: err.message, platform }, 'Falha ao gravar diagnóstico de conversão')
+        })
+        trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform, errorType: 'conversion_diagnostic' } })
+      }
+
       // Converter todos os links habilitados de uma vez
       const conversions = []
       for (const { platform, url } of links) {
@@ -808,10 +830,29 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           continue
         }
         logger.info({ platform, url }, 'Link detectado')
-        const converted = await convertLink(platform, url, cfg.credentials)
-        if (!converted) { logger.warn({ platform, url }, 'Conversão falhou'); continue }
-        logger.info({ platform, converted }, 'Link convertido')
-        conversions.push({ platform, url, converted })
+        const credentialValidation = validateCredentialData(platform, cfg.credentials[platform])
+        if (!credentialValidation.configured) {
+          await recordConversionIssue({
+            platform,
+            url,
+            jid,
+            text,
+            reason: `Credenciais de ${credentialValidation.label} ausentes ou incompletas: ${credentialValidation.missing.join(', ')}`,
+          })
+          continue
+        }
+
+        try {
+          const converted = await convertLink(platform, url, cfg.credentials)
+          if (!converted) {
+            await recordConversionIssue({ platform, url, jid, text, reason: `Conversor de ${credentialValidation.label} não retornou link convertido. Confira se as credenciais estão válidas.` })
+            continue
+          }
+          logger.info({ platform, converted }, 'Link convertido')
+          conversions.push({ platform, url, converted })
+        } catch (err) {
+          await recordConversionIssue({ platform, url, jid, text, reason: `Falha na conversão de ${credentialValidation.label}: ${err.message}` })
+        }
       }
 
       if (!conversions.length) return
@@ -855,7 +896,24 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const original = wantImage ? getOriginalMediaMessage() : null
 
         let sentVia = 'text'
+        const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
+        const log = await db.messageLog.create({
+          data: {
+            ...logData,
+            status: 'queued',
+          },
+        }).catch(err => {
+          logger.error({ err: err.message, destJid, platforms }, 'Falha ao criar log queued para envio convertido')
+          return null
+        })
+
         try {
+          if (log) {
+            await db.messageLog.update({ where: { id: log.id }, data: { status: 'sending', errorMsg: null } }).catch(err => {
+              logger.warn({ err: err.message, logId: log.id }, 'Falha ao marcar envio convertido como sending')
+            })
+          }
+
           if (original) {
             const replayProto = { ...original.proto, caption: finalText }
             await sock.relayMessage(destJid, { [original.type]: replayProto }, {})
@@ -877,12 +935,20 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             await sock.sendMessage(destJid, { text: finalText })
           }
           logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
-          const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
-          db.messageLog.create({
-            data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: sanitizeMessageForLog(finalText), status: 'success' },
-          }).then(() => {
-            if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
-          }).catch(() => {})
+
+          const sentAt = new Date()
+          await Promise.all([
+            log
+              ? db.messageLog.update({ where: { id: log.id }, data: { status: 'success', errorMsg: null, sentAt } })
+              : db.messageLog.create({ data: { ...logData, status: 'success', sentAt } }),
+            db.user.update({
+              where: { id: userId },
+              data: { lastActivityAt: sentAt, sendCount: { increment: 1 } },
+            }),
+          ]).catch(err => {
+            logger.error({ err: err.message, destJid, platforms, logId: log?.id }, 'Mensagem enviada, mas falha ao persistir log/atividade')
+          })
+          if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
           if (cfg.plan === 'basic') {
             adSendCount++
             if (adSendCount % 50 === 0) {
@@ -891,12 +957,14 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           }
         } catch (err) {
           logger.error({ destJid, err: err.message }, 'Erro ao enviar')
-          db.messageLog.create({
-            data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: sanitizeMessageForLog(finalText), status: 'error', errorMsg: err.message },
-          }).then(() => {
-            trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: err.name } })
-          }).catch(() => {})
-          logger.warn({ destJid, queueSize: sendQueue.length }, 'Envio recusado após criação do log queued')
+          const sentAt = new Date()
+          const persistError = log
+            ? db.messageLog.update({ where: { id: log.id }, data: { status: 'error', errorMsg: err.message, sentAt } })
+            : db.messageLog.create({ data: { ...logData, status: 'error', errorMsg: err.message, sentAt } })
+          await persistError.catch(logErr => {
+            logger.error({ err: logErr.message, destJid, platforms, logId: log?.id }, 'Falha ao persistir erro de envio convertido')
+          })
+          trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: err.name } })
         }
       }
   }
