@@ -17,6 +17,14 @@ if [[ ! -d "$ROOT_DIR/.git" ]]; then
   exit 1
 fi
 
+configure_public_git_dependencies() {
+  # Baileys/libsignal pode aparecer no lockfile como git+ssh; em GitHub Actions/VPS
+  # sem chave SSH para GitHub, isso falha antes do build. Reescreve apenas GitHub
+  # público para HTTPS sem alterar package-lock.
+  git config --global --replace-all url."https://github.com/".insteadOf "ssh://git@github.com/"
+  git config --global --add url."https://github.com/".insteadOf "git@github.com:"
+}
+
 check_http_with_retry() {
   local label="$1"
   local url="$2"
@@ -81,6 +89,7 @@ assert_login_api_not_next_404() {
 }
 
 cd "$ROOT_DIR"
+configure_public_git_dependencies
 echo "[1/9] Preflight staging"
 echo "  root=$ROOT_DIR"
 echo "  branch alvo=$BRANCH"
