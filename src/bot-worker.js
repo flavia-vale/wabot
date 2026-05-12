@@ -14,6 +14,7 @@ import { dirname } from 'path'
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
+import { applyConversionsAndBranding, normalizeBrandingLink, sanitizeInviteLinks } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile } from './paths.js'
@@ -149,9 +150,12 @@ async function clearAppStateSyncKeys() {
 
 const sleep = ms => new Promise(res => setTimeout(res, ms))
 
-// Config cache com TTL de 60s
+const CONFIG_CACHE_TTL_MS = Math.max(1_000, Number(process.env.CONFIG_CACHE_TTL_MS || 60_000))
+
+// Config cache com TTL configurável e promessa compartilhada para evitar stampede no DB.
 let configCache = null
 let configCacheTime = 0
+let configCachePromise = null
 
 async function loadConfig() {
   const user = await db.user.findUnique({
@@ -197,7 +201,7 @@ async function loadConfig() {
     postDetails: user.groups.filter(g => g.role === 'post').map(g => ({ waJid: g.waJid, welcomeMsg: g.welcomeMsg })),
   }
 
-  const botConfig = user.botConfig ?? {
+  const botConfig = {
     delayMin: 5,
     delayMax: 15,
     platforms: 'shopee,amazon,mercadolivre,magazineluiza',
@@ -205,17 +209,30 @@ async function loadConfig() {
     welcomeMsg: '',
     feedGlobal: false,
     postToStatus: false,
+    brandingGroupLink: '',
+    ...(user.botConfig ?? {}),
   }
+  botConfig.brandingGroupLink = normalizeBrandingLink(botConfig.brandingGroupLink)
 
   return { credentials, groups, plan: user.plan, botConfig }
 }
 
 async function getConfig() {
-  if (!configCache || Date.now() - configCacheTime > 60_000) {
-    configCache = await loadConfig()
-    configCacheTime = Date.now()
+  const now = Date.now()
+  if (configCache && now - configCacheTime <= CONFIG_CACHE_TTL_MS) return configCache
+
+  if (!configCachePromise) {
+    configCachePromise = loadConfig()
+      .then(cfg => {
+        configCache = cfg
+        configCacheTime = Date.now()
+        return cfg
+      })
+      .finally(() => {
+        configCachePromise = null
+      })
   }
-  return configCache
+  return configCachePromise
 }
 
 // Checa e enfileira mensagens agendadas pendentes
@@ -311,20 +328,6 @@ function sanitizeMessageForLog(text) {
   return `${raw.slice(0, MESSAGE_LOG_MAX_CHARS)}…`
 }
 
-const INVITE_RE = /🚀?\s*Participe do Grupo[:\s]+https:\/\/chat\.whatsapp\.com\/\S+/gi
-
-function buildMessage(originalText, convertedUrl, originalUrl, groupInvite) {
-  let text = originalText.replace(originalUrl, convertedUrl).trimEnd()
-  if (!groupInvite) return text
-  if (INVITE_RE.test(text)) {
-    INVITE_RE.lastIndex = 0
-    text = text.replace(INVITE_RE, `🚀 Participe do Grupo: ${groupInvite}`)
-  } else {
-    text = `${text}\n🚀 Participe do Grupo: ${groupInvite}`
-  }
-  return text
-}
-
 const AD_TEXT = '💡 Bot gerenciado pelo Bot Conversor para Afiliados — automatize seus grupos de afiliados'
 function envNumber(name, fallback) {
   if (process.env[name] === undefined) return fallback
@@ -344,6 +347,7 @@ const MSG_QUEUE_CONCURRENCY = Math.max(1, envNumber('MSG_QUEUE_CONCURRENCY', 2))
 const MSG_QUEUE_TIMEOUT_MS = Math.max(1_000, envNumber('MSG_QUEUE_TIMEOUT_MS', 15_000))
 const MSG_QUEUE_WATCHDOG_MS = Math.max(5_000, envNumber('MSG_QUEUE_WATCHDOG_MS', 30_000))
 const MSG_QUEUE_MAX_SIZE = Math.max(10, envNumber('MSG_QUEUE_MAX_SIZE', 500))
+const MAX_INCOMING_MESSAGE_CHARS = Math.max(500, envNumber('MAX_INCOMING_MESSAGE_CHARS', 8_000))
 
 
 const WA_LIFECYCLE = Object.freeze({
@@ -664,6 +668,10 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         msg.message?.imageMessage?.caption || ''
 
       if (!text) return
+      if (text.length > MAX_INCOMING_MESSAGE_CHARS) {
+        logger.warn({ msgId: msg.key.id, chars: text.length, limit: MAX_INCOMING_MESSAGE_CHARS }, 'Mensagem grande demais — processamento ignorado para preservar latência')
+        return
+      }
 
       // Filtro por palavras bloqueadas (override por grupo monitorado quando preenchido)
       const blockedKeywords = monitorGroup?.blockedKeywords?.trim() || cfg.botConfig.blockedKeywords
@@ -675,7 +683,10 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }
       }
 
-      const links = detectLinks(text)
+      const sanitizedText = sanitizeInviteLinks(text)
+      if (!sanitizedText) return
+
+      const links = detectLinks(sanitizedText)
       if (!links.length) return
 
       // Filtro por plataforma (override por grupo monitorado quando preenchido)
@@ -816,12 +827,12 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 
       if (!conversions.length) return
 
-      // Substituir todos os links convertidos no texto original de uma vez
-      let finalText = text
-      for (const { url, converted } of conversions) {
-        finalText = finalText.replace(url, converted)
+      // Processa a mensagem em ordem defensiva: sanitização já aplicada, conversão e branding.
+      const finalText = applyConversionsAndBranding(sanitizedText, conversions, cfg.botConfig.brandingGroupLink)
+      if (!finalText) {
+        logger.warn({ msgId: msg.key.id }, 'Mensagem vazia após processamento — envio ignorado')
+        return
       }
-      finalText = finalText.trimEnd()
 
       const primary = conversions[0]
 
@@ -961,6 +972,7 @@ process.on('message', async msg => {
 
   if (msg?.type === 'reloadConfig') {
     configCache = null
+    configCachePromise = null
     logger.info('Config recarregada')
   }
 
