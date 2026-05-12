@@ -310,6 +310,25 @@ function sanitizeUser(user, role) {
   }
 }
 
+
+async function getLogActivityMap({ userIds = null }) {
+  if (Array.isArray(userIds) && userIds.length === 0) return new Map()
+  const rows = await db.messageLog.groupBy({
+    by: ['userId'],
+    where: {
+      ...(Array.isArray(userIds) ? { userId: { in: userIds } } : {}),
+    },
+    _max: { sentAt: true },
+  })
+  return new Map(rows.map(row => [row.userId, row._max.sentAt]))
+}
+
+function resolveEffectiveLastActivity(user, lastMessageAt = null) {
+  if (!lastMessageAt) return user.lastActivityAt ?? null
+  if (!user.lastActivityAt) return lastMessageAt
+  return user.lastActivityAt > lastMessageAt ? user.lastActivityAt : lastMessageAt
+}
+
 async function getLogCountMap({ status, since, userIds = null }) {
   if (Array.isArray(userIds) && userIds.length === 0) return new Map()
   const rows = await db.messageLog.groupBy({
@@ -523,9 +542,10 @@ export async function adminRoutes(app) {
       }),
     ])
     const userIds = users.map(user => user.id)
-    const [successMap, errorMap] = await Promise.all([
+    const [successMap, errorMap, lastMessageMap] = await Promise.all([
       getLogCountMap({ status: 'success', userIds }),
       getLogCountMap({ status: 'error', since: since24h, userIds }),
+      getLogActivityMap({ userIds }),
     ])
 
     const running = new Set(listRunningBots())
@@ -540,17 +560,22 @@ export async function adminRoutes(app) {
         const successCount = successMap.get(user.id) ?? 0
         const errorCount24h = errorMap.get(user.id) ?? 0
         const userRunning = running.has(user.id)
+        const lastMessageAt = lastMessageMap.get(user.id) ?? null
+        const effectiveLastActivityAt = resolveEffectiveLastActivity(user, lastMessageAt)
+        const riskUser = { ...user, lastActivityAt: effectiveLastActivityAt }
         return sanitizeUser({
           ...user,
           groups: undefined,
           groupCounts,
           accessStatus: getAccessStatus(user, now),
           botRunning: userRunning,
+          lastMessageAt,
+          effectiveLastActivityAt,
           successCount,
           errorCount24h,
           credentialHealth: summarizeCredentialHealth(user.credentials),
           credentials: undefined,
-          riskFlags: buildRiskFlags({ user, groups: user.groups, successCount, errorCount: errorCount24h, now, running: userRunning }),
+          riskFlags: buildRiskFlags({ user: riskUser, groups: user.groups, successCount, errorCount: errorCount24h, now, running: userRunning }),
         }, req.admin.role)
       }),
     }
@@ -1008,15 +1033,19 @@ export async function adminRoutes(app) {
 
     if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
 
-    const [successCount, errorCount24h, logStats, platformStats, recentLogs, ltv] = await Promise.all([
+    const [successCount, errorCount24h, logStats, platformStats, recentLogs, lastMessage, ltv] = await Promise.all([
       db.messageLog.count({ where: { userId: user.id, status: 'success' } }),
       db.messageLog.count({ where: { userId: user.id, status: 'error', sentAt: { gte: since24h } } }),
       db.messageLog.groupBy({ by: ['status'], where: { userId: user.id, sentAt: { gte: addDays(now, -7) } }, _count: { _all: true } }),
       db.messageLog.groupBy({ by: ['platform', 'status'], where: { userId: user.id, sentAt: { gte: addDays(now, -7) } }, _count: { _all: true } }),
       db.messageLog.findMany({ where: { userId: user.id }, orderBy: { sentAt: 'desc' }, take: 20 }),
+      db.messageLog.findFirst({ where: { userId: user.id }, orderBy: { sentAt: 'desc' }, select: { sentAt: true } }),
       db.payment.aggregate({ where: { userId: user.id, status: 'approved' }, _sum: { amount: true } }),
     ])
     const running = listRunningBots().includes(user.id)
+    const lastMessageAt = lastMessage?.sentAt ?? null
+    const effectiveLastActivityAt = resolveEffectiveLastActivity(user, lastMessageAt)
+    const riskUser = { ...user, lastActivityAt: effectiveLastActivityAt }
 
     await writeAdminAuditLog(req, { action: 'admin.users.detail', resource: 'user', resourceId: user.id, targetUserId: user.id })
 
@@ -1030,6 +1059,8 @@ export async function adminRoutes(app) {
       accessStatus: getAccessStatus(user, now),
       botRunning: running,
       groupCounts: getGroupCounts(user.groups),
+      lastMessageAt,
+      effectiveLastActivityAt,
       logStats7d: Object.fromEntries(logStats.map(row => [row.status, row._count._all])),
       platformStats7d: platformStats.map(row => ({ platform: row.platform, status: row.status, count: row._count._all })),
       credentialHealth: summarizeCredentialHealth(user.credentials),
@@ -1037,7 +1068,7 @@ export async function adminRoutes(app) {
       recentLogs,
       successCount,
       errorCount24h,
-      riskFlags: buildRiskFlags({ user, groups: user.groups, successCount, errorCount: errorCount24h, now, running }),
+      riskFlags: buildRiskFlags({ user: riskUser, groups: user.groups, successCount, errorCount: errorCount24h, now, running }),
     }, req.admin.role)
   })
 
@@ -1050,7 +1081,7 @@ export async function adminRoutes(app) {
     const where = {
       sentAt: { gte: from, lte: to },
       ...(status !== 'all' ? { status } : {}),
-      ...(platform ? { platform } : {}),
+      ...(platform ? { platform: { contains: String(platform) } } : {}),
       ...(userId ? { userId } : {}),
     }
 

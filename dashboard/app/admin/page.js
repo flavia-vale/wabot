@@ -164,7 +164,8 @@ function DetailPanel({ detail, onClose }) {
         </div>
         <div>
           <h3 className="mb-2 text-sm font-bold text-gray-800">Atividade</h3>
-          <p className="text-sm text-gray-600">Última atividade: {formatDate(detail.lastActivityAt)}</p>
+          <p className="text-sm text-gray-600">Atividade efetiva: {formatDate(detail.effectiveLastActivityAt)}</p>
+          <p className="text-sm text-gray-500">Último log: {formatDate(detail.lastMessageAt)} · Cadastro: {formatDate(detail.lastActivityAt)}</p>
           <p className="text-sm text-gray-600">Expiração: {formatDate(detail.accessExpiresAt)}</p>
         </div>
       </div>
@@ -192,6 +193,8 @@ function DetailPanel({ detail, onClose }) {
             {(detail.recentLogs || []).slice(0, 5).map(log => (
               <div key={log.id} className="rounded-xl border border-gray-100 p-3 text-xs text-gray-600">
                 <span className={`font-bold ${log.status === 'error' ? 'text-red-600' : 'text-green-700'}`}>{log.status}</span> · {log.platform} · {formatDate(log.sentAt)}
+                <p className="mt-1 text-gray-500">Origem: {log.sourceGroupName || log.sourceGroup || '—'} · Destino: {log.destGroupName || log.destGroup || '—'}</p>
+                {log.messageText && <p className="mt-1 text-gray-500 line-clamp-2">{log.messageText}</p>}
                 {log.errorMsg && <p className="mt-1 text-red-500">{log.errorMsg}</p>}
               </div>
             ))}
@@ -484,7 +487,7 @@ export default function AdminPage() {
       api.adminUsers({ risk: nextRisk, search: nextSearch, limit: 20 }),
       api.adminSessions({ limit: 10 }),
       api.adminSessionTelemetry({ limit: 60 }).catch(() => null),
-      api.adminLogs({ limit: 10, status: 'all' }),
+      api.adminLogs({ limit: 25, status: 'all' }),
       api.adminFinanceOverview().catch(() => null),
       api.adminPayments({ limit: 10 }).catch(() => null),
       api.adminSubscriptions({ limit: 10, status: 'expiring_soon' }).catch(() => null),
@@ -525,7 +528,7 @@ export default function AdminPage() {
           api.adminUsers({ limit: 20 }),
           api.adminSessions({ limit: 10 }),
           api.adminSessionTelemetry({ limit: 60 }).catch(() => null),
-          api.adminLogs({ limit: 10, status: 'all' }),
+          api.adminLogs({ limit: 25, status: 'all' }),
           api.adminFinanceOverview().catch(() => null),
           api.adminPayments({ limit: 10 }).catch(() => null),
           api.adminSubscriptions({ limit: 10, status: 'expiring_soon' }).catch(() => null),
@@ -936,7 +939,8 @@ export default function AdminPage() {
                       <p>Origem/Destino: {user.groupCounts?.monitor ?? 0}/{user.groupCounts?.post ?? 0}</p><div className="mt-1"><CredentialHealthBadges health={user.credentialHealth} compact /></div>
                     </td>
                     <td className="px-3 py-3 text-xs text-gray-600">
-                      <p>Última: {formatDate(user.lastActivityAt)}</p>
+                      <p>Atividade: {formatDate(user.effectiveLastActivityAt)}</p>
+                      <p>Último log: {formatDate(user.lastMessageAt)}</p>
                       <p>Erros 24h: {user.errorCount24h}</p>
                     </td>
                     <td className="px-3 py-3"><RiskBadges flags={user.riskFlags} /></td>
@@ -978,7 +982,7 @@ export default function AdminPage() {
           </section>
 
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
-            <h2 className="mb-4 text-lg font-black text-gray-900">Logs recentes</h2>
+            <div className="mb-4 flex items-center justify-between gap-3"><div><h2 className="text-lg font-black text-gray-900">Logs recentes</h2><p className="text-xs text-gray-500">Últimos {logs?.logs?.length ?? 0} registros carregados de {logs?.total ?? 0} no período.</p></div><button onClick={applyFilters} className="rounded-lg bg-gray-100 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-200">Atualizar agora</button></div>
             <div className="space-y-3">
               {(logs?.logs ?? []).map(log => (
                 <div key={log.id} className="rounded-xl border border-gray-100 p-3 text-sm">
@@ -986,7 +990,8 @@ export default function AdminPage() {
                     <p className="font-bold text-gray-900">{log.user?.email}</p>
                     <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${log.status === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{log.status}</span>
                   </div>
-                  <p className="mt-1 text-xs text-gray-500">{log.platform} · {formatDate(log.sentAt)}</p>
+                  <p className="mt-1 text-xs text-gray-500">{log.platform} · {formatDate(log.sentAt)} · Destino: {log.destGroup || '—'}</p>
+                  {log.messageText && <p className="mt-1 text-xs text-gray-500 line-clamp-2">{log.messageText}</p>}
                   {log.errorMsg && <p className="mt-1 text-xs text-red-500">{log.errorMsg}</p>}
                 </div>
               ))}

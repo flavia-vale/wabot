@@ -896,7 +896,24 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const original = wantImage ? getOriginalMediaMessage() : null
 
         let sentVia = 'text'
+        const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
+        const log = await db.messageLog.create({
+          data: {
+            ...logData,
+            status: 'queued',
+          },
+        }).catch(err => {
+          logger.error({ err: err.message, destJid, platforms }, 'Falha ao criar log queued para envio convertido')
+          return null
+        })
+
         try {
+          if (log) {
+            await db.messageLog.update({ where: { id: log.id }, data: { status: 'sending', errorMsg: null } }).catch(err => {
+              logger.warn({ err: err.message, logId: log.id }, 'Falha ao marcar envio convertido como sending')
+            })
+          }
+
           if (original) {
             const replayProto = { ...original.proto, caption: finalText }
             await sock.relayMessage(destJid, { [original.type]: replayProto }, {})
@@ -918,12 +935,20 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             await sock.sendMessage(destJid, { text: finalText })
           }
           logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
-          const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
-          db.messageLog.create({
-            data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: sanitizeMessageForLog(finalText), status: 'success' },
-          }).then(() => {
-            if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
-          }).catch(() => {})
+
+          const sentAt = new Date()
+          await Promise.all([
+            log
+              ? db.messageLog.update({ where: { id: log.id }, data: { status: 'success', errorMsg: null, sentAt } })
+              : db.messageLog.create({ data: { ...logData, status: 'success', sentAt } }),
+            db.user.update({
+              where: { id: userId },
+              data: { lastActivityAt: sentAt, sendCount: { increment: 1 } },
+            }),
+          ]).catch(err => {
+            logger.error({ err: err.message, destJid, platforms, logId: log?.id }, 'Mensagem enviada, mas falha ao persistir log/atividade')
+          })
+          if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
           if (cfg.plan === 'basic') {
             adSendCount++
             if (adSendCount % 50 === 0) {
@@ -932,12 +957,14 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           }
         } catch (err) {
           logger.error({ destJid, err: err.message }, 'Erro ao enviar')
-          db.messageLog.create({
-            data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: sanitizeMessageForLog(finalText), status: 'error', errorMsg: err.message },
-          }).then(() => {
-            trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: err.name } })
-          }).catch(() => {})
-          logger.warn({ destJid, queueSize: sendQueue.length }, 'Envio recusado após criação do log queued')
+          const sentAt = new Date()
+          const persistError = log
+            ? db.messageLog.update({ where: { id: log.id }, data: { status: 'error', errorMsg: err.message, sentAt } })
+            : db.messageLog.create({ data: { ...logData, status: 'error', errorMsg: err.message, sentAt } })
+          await persistError.catch(logErr => {
+            logger.error({ err: logErr.message, destJid, platforms, logId: log?.id }, 'Falha ao persistir erro de envio convertido')
+          })
+          trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: err.name } })
         }
       }
   }

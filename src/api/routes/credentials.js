@@ -5,7 +5,10 @@ import { getCredentialSaveMessage, parseCredentialData, PLATFORMS, validateCrede
 export async function credentialsRoutes(app) {
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
     const creds = await db.credential.findMany({ where: { userId: req.user.sub } })
-    return creds.map(c => ({ ...c, data: parseCredentialData(c.data), validation: validateCredentialData(c.platform, parseCredentialData(c.data)) }))
+    return creds.map(c => {
+      const data = parseCredentialData(c.data)
+      return { ...c, data, validation: validateCredentialData(c.platform, data) }
+    })
   })
 
   app.put('/:platform', { onRequest: [app.authenticate] }, async (req, reply) => {
