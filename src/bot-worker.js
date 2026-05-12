@@ -18,6 +18,7 @@ import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from '
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
+import { validateCredentialData } from './credentialHealth.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } from './sendQueueBackend.js'
 
@@ -800,6 +801,27 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         return null
       }
 
+
+      async function recordConversionIssue({ platform, url, jid, text, reason }) {
+        logger.warn({ platform, url, reason }, 'Conversão ignorada com diagnóstico para o painel')
+        await db.messageLog.create({
+          data: {
+            userId,
+            platform,
+            sourceGroup: jid,
+            destGroup: 'conversion',
+            originalUrl: url,
+            convertedUrl: '',
+            messageText: sanitizeMessageForLog(text),
+            status: 'error',
+            errorMsg: reason,
+          },
+        }).catch(err => {
+          logger.warn({ err: err.message, platform }, 'Falha ao gravar diagnóstico de conversão')
+        })
+        trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform, errorType: 'conversion_diagnostic' } })
+      }
+
       // Converter todos os links habilitados de uma vez
       const conversions = []
       for (const { platform, url } of links) {
@@ -808,10 +830,29 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           continue
         }
         logger.info({ platform, url }, 'Link detectado')
-        const converted = await convertLink(platform, url, cfg.credentials)
-        if (!converted) { logger.warn({ platform, url }, 'Conversão falhou'); continue }
-        logger.info({ platform, converted }, 'Link convertido')
-        conversions.push({ platform, url, converted })
+        const credentialValidation = validateCredentialData(platform, cfg.credentials[platform])
+        if (!credentialValidation.configured) {
+          await recordConversionIssue({
+            platform,
+            url,
+            jid,
+            text,
+            reason: `Credenciais de ${credentialValidation.label} ausentes ou incompletas: ${credentialValidation.missing.join(', ')}`,
+          })
+          continue
+        }
+
+        try {
+          const converted = await convertLink(platform, url, cfg.credentials)
+          if (!converted) {
+            await recordConversionIssue({ platform, url, jid, text, reason: `Conversor de ${credentialValidation.label} não retornou link convertido. Confira se as credenciais estão válidas.` })
+            continue
+          }
+          logger.info({ platform, converted }, 'Link convertido')
+          conversions.push({ platform, url, converted })
+        } catch (err) {
+          await recordConversionIssue({ platform, url, jid, text, reason: `Falha na conversão de ${credentialValidation.label}: ${err.message}` })
+        }
       }
 
       if (!conversions.length) return
