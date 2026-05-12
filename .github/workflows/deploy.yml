@@ -32,22 +32,29 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
+            
+            # Função para garantir que o Git use SSH e não peça senha
+            prepare_git() {
+              git config --local --unset-all url."https://github.com/".insteadOf || true
+              git remote set-url origin git@github.com:flavia-vale/wabot.git
+            }
+
             if [ "${{ github.ref }}" = "refs/heads/main" ]; then
               echo "🚀 Enviando para PRODUÇÃO..."
               cd ~/wabot
-              git remote set-url origin git@github.com:flavia-vale/wabot.git
+              prepare_git
               git reset --hard HEAD
-              git pull origin main
+              git pull git@github.com:flavia-vale/wabot.git main
               npm install
               npx prisma migrate deploy
               pm2 restart api dashboard
             else
               echo "🧪 Enviando para STAGING..."
               cd ~/wabot-staging
-              git remote set-url origin git@github.com:flavia-vale/wabot.git
+              prepare_git
               git reset --hard HEAD
               git clean -fd
-              git pull origin develop
+              git pull git@github.com:flavia-vale/wabot.git develop
               npm install
               cd dashboard && npm install && cd ..
               npx prisma migrate deploy
