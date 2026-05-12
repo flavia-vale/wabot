@@ -1,15 +1,8 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { ErrorState, LoadingState } from '@/components/States'
-
-const ALL_PLATFORMS = [
-  { id: 'shopee', label: '🛍️ Shopee' },
-  { id: 'amazon', label: '📦 Amazon' },
-  { id: 'mercadolivre', label: '🛒 Mercado Livre' },
-  { id: 'magazineluiza', label: '🛒 Magazine Luiza' },
-]
 
 const URL_PROTOCOL_RE = /^https?:\/\//i
 
@@ -19,91 +12,10 @@ const DELAY_PRESETS = [
   { id: 'safe', label: 'Conservador', min: 15, max: 30, description: 'Use em grupos com alto volume ou maior cautela.' },
 ]
 
-function normalizeKeywords(text) {
-  return text
-    .split(',')
-    .map((keyword) => keyword.trim().toLowerCase())
-    .filter(Boolean)
-    .filter((keyword, index, list) => list.indexOf(keyword) === index)
-}
-
-function KeywordsEditor({ value, onChange, disabled }) {
-  const [draft, setDraft] = useState('')
-  const keywords = useMemo(() => normalizeKeywords(value), [value])
-
-  function commitDraft(text = draft) {
-    const next = normalizeKeywords([...keywords, ...text.split(',')].join(','))
-    onChange(next.join(','))
-    setDraft('')
-  }
-
-  function removeKeyword(keyword) {
-    onChange(keywords.filter((item) => item !== keyword).join(','))
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex gap-2">
-        <input
-          type="text"
-          placeholder="ex: proibido, spam, fora"
-          value={draft}
-          onChange={(e) => {
-            const text = e.target.value
-            if (text.includes(',')) commitDraft(text)
-            else setDraft(text)
-          }}
-          onBlur={() => { if (draft.trim()) commitDraft() }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              commitDraft()
-            }
-          }}
-          disabled={disabled}
-          className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
-        />
-        <button
-          type="button"
-          onClick={() => commitDraft()}
-          disabled={disabled || !draft.trim()}
-          className="rounded-lg bg-gray-800 px-3 py-2.5 min-h-11 text-sm font-semibold text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-700 focus-visible:ring-offset-2"
-        >
-          Adicionar
-        </button>
-      </div>
-      <p className="text-xs text-gray-500">Separe por vírgulas. O bot ignora mensagens que contenham qualquer uma dessas palavras, sem diferenciar maiúsculas de minúsculas.</p>
-      {keywords.length > 0 && (
-        <div className="flex flex-wrap gap-2" aria-label="Palavras bloqueadas ativas">
-          {keywords.map((keyword) => (
-            <span key={keyword} className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700">
-              {keyword}
-              <button
-                type="button"
-                onClick={() => removeKeyword(keyword)}
-                disabled={disabled}
-                aria-label={`Remover palavra ${keyword}`}
-                className="font-bold text-gray-500 hover:text-red-600 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 export default function ConfigPage() {
   const [form, setForm] = useState({
     delayMin: 5,
     delayMax: 15,
-    platforms: 'shopee,amazon,mercadolivre,magazineluiza',
-    blockedKeywords: '',
-    welcomeMsg: '',
-    feedGlobal: false,
-    postToStatus: false,
     brandingGroupLink: '',
   })
   const [loading, setLoading] = useState(true)
@@ -113,18 +25,12 @@ export default function ConfigPage() {
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
   const [delayError, setDelayError] = useState('')
-  const [platformError, setPlatformError] = useState('')
   const [brandingError, setBrandingError] = useState('')
 
   function applyConfig(cfg) {
     setForm({
       delayMin: cfg.delayMin ?? 5,
       delayMax: cfg.delayMax ?? 15,
-      platforms: cfg.platforms ?? 'shopee,amazon,mercadolivre,magazineluiza',
-      blockedKeywords: normalizeKeywords(cfg.blockedKeywords ?? '').join(','),
-      welcomeMsg: cfg.welcomeMsg ?? '',
-      feedGlobal: cfg.feedGlobal ?? false,
-      postToStatus: cfg.postToStatus ?? false,
       brandingGroupLink: cfg.brandingGroupLink ?? '',
     })
     setLoadedOnce(true)
@@ -152,15 +58,6 @@ export default function ConfigPage() {
     return () => { active = false }
   }, [])
 
-  function togglePlatform(id) {
-    const current = form.platforms.split(',').filter(Boolean)
-    const next = current.includes(id)
-      ? current.filter(p => p !== id)
-      : [...current, id]
-    setPlatformError('')
-    setForm(f => ({ ...f, platforms: next.join(',') }))
-  }
-
   function applyDelayPreset(preset) {
     setDelayError('')
     setError('')
@@ -184,17 +81,8 @@ export default function ConfigPage() {
     if (!loadedOnce || loadError) return
     setError('')
     setDelayError('')
-    setPlatformError('')
     setBrandingError('')
     setSuccess(false)
-
-    const enabled = form.platforms.split(',').filter(Boolean)
-    if (!enabled.length) {
-      const message = 'Selecione pelo menos uma plataforma para o bot converter links.'
-      setPlatformError(message)
-      setError(message)
-      return
-    }
 
     const parsedMin = parseDelay(form.delayMin, 'Delay mínimo')
     if (parsedMin.error) {
@@ -230,11 +118,6 @@ export default function ConfigPage() {
       await api.saveConfig({
         delayMin: parsedMin.value,
         delayMax: parsedMax.value,
-        platforms: form.platforms,
-        blockedKeywords: normalizeKeywords(form.blockedKeywords).join(','),
-        welcomeMsg: form.welcomeMsg,
-        feedGlobal: form.feedGlobal,
-        postToStatus: form.postToStatus,
         brandingGroupLink,
       })
       setSuccess(true)
@@ -248,8 +131,6 @@ export default function ConfigPage() {
 
   if (loading) return <LoadingState message="Carregando configurações do bot..." />
 
-  const enabledPlatforms = new Set(form.platforms.split(',').filter(Boolean))
-  const welcomePreview = form.welcomeMsg.trim() || 'Exemplo: Bem-vindo(a)! As ofertas convertidas aparecerão por aqui.'
   const brandingPreview = form.brandingGroupLink.trim()
     ? `Oferta convertida com seu link de afiliado\n\nParticipe do grupo: ${form.brandingGroupLink.trim()}`
     : 'Oferta convertida com seu link de afiliado'
@@ -257,7 +138,7 @@ export default function ConfigPage() {
   return (
     <div className="max-w-xl">
       <h2 className="text-2xl font-bold text-gray-800 mb-1">Configurações do Bot</h2>
-      <p className="text-gray-500 text-sm mb-6">Ajuste o comportamento do bot</p>
+      <p className="text-gray-500 text-sm mb-6">Ajuste o delay e o branding das mensagens do bot</p>
 
       {loadError && <div className="mb-4"><ErrorState title="Falha ao carregar configurações" message={loadError} actionLabel="Tentar novamente" onAction={loadConfig} /></div>}
 
@@ -294,35 +175,6 @@ export default function ConfigPage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow p-5">
-          <h3 className="font-semibold text-gray-700 mb-1">🏪 Plataformas habilitadas</h3>
-          <p className="text-xs text-gray-500 mb-3">Links de plataformas desabilitadas serão ignorados pelo conversor.</p>
-          <div className="flex flex-col gap-2">
-            {ALL_PLATFORMS.map(p => (
-              <label key={p.id} className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={enabledPlatforms.has(p.id)} onChange={() => togglePlatform(p.id)} className="w-4 h-4 accent-green-600" />
-                <span className="text-sm text-gray-700">{p.label}</span>
-              </label>
-            ))}
-          </div>
-          {platformError && <p className="mt-2 text-xs font-medium text-red-600" role="alert">{platformError}</p>}
-        </div>
-
-        <div className="bg-white rounded-2xl shadow p-5">
-          <h3 className="font-semibold text-gray-700 mb-3">🌐 Cobertura e destinos extras</h3>
-          <div className="flex flex-col gap-3">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input type="checkbox" checked={form.postToStatus} onChange={e => setForm(f => ({ ...f, postToStatus: e.target.checked }))} className="mt-1 w-4 h-4 accent-green-600" />
-              <span><span className="block text-sm font-medium text-gray-700">Postar também no Status</span><span className="block text-xs text-gray-400">Além dos grupos de destino, publicar a oferta convertida no Status do WhatsApp.</span></span>
-            </label>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow p-5">
-          <h3 className="font-semibold text-gray-700 mb-1">🚫 Palavras bloqueadas</h3>
-          <KeywordsEditor value={form.blockedKeywords} onChange={(blockedKeywords) => setForm(f => ({ ...f, blockedKeywords }))} disabled={saving} />
-        </div>
-
-        <div className="bg-white rounded-2xl shadow p-5">
           <h3 className="font-semibold text-gray-700 mb-1">🏷️ Branding das mensagens</h3>
           <p className="text-xs text-gray-500 mb-3">Deseja anexar o link do seu grupo no final das mensagens? Preencha o campo abaixo para adicionar automaticamente o rodapé personalizado.</p>
           <label className="text-xs text-gray-500 mb-1 block" htmlFor="brandingGroupLink">Link do seu grupo (opcional)</label>
@@ -339,16 +191,6 @@ export default function ConfigPage() {
           <div className="mt-3 rounded-2xl bg-green-50 p-3">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-green-700">Prévia do rodapé</p>
             <p className="mt-2 whitespace-pre-wrap rounded-2xl bg-white px-3 py-2.5 min-h-11 text-sm text-gray-700 shadow-sm">{brandingPreview}</p>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow p-5">
-          <h3 className="font-semibold text-gray-700 mb-1">👋 Mensagem de boas-vindas</h3>
-          <p className="text-xs text-gray-500 mb-3">Enviada para grupos de destino configurados quando o bot identifica entrada/boas-vindas no WhatsApp. Variáveis dinâmicas não são suportadas no momento.</p>
-          <textarea rows={3} placeholder="Ex: Bem-vindo(a)!" value={form.welcomeMsg} onChange={e => setForm(f => ({ ...f, welcomeMsg: e.target.value }))} className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm outline-none focus:ring-2 focus:ring-green-400 resize-none" />
-          <div className="mt-3 rounded-2xl bg-green-50 p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-green-700">Prévia no WhatsApp</p>
-            <p className="mt-2 whitespace-pre-wrap rounded-2xl bg-white px-3 py-2.5 min-h-11 text-sm text-gray-700 shadow-sm">{welcomePreview}</p>
           </div>
         </div>
 
