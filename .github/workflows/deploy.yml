@@ -1,6 +1,6 @@
 - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
+uses: appleboy/ssh-action@v1.0.3
+with:
           host: ${{ secrets.REMOTE_HOST }}
           username: ${{ secrets.REMOTE_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -9,6 +9,7 @@
             if [ "${{ github.ref }}" = "refs/heads/main" ]; then
               echo "🚀 Enviando para PRODUÇÃO..."
               cd ~/wabot-prod
+              # Garante SSH e limpa o ambiente
               git remote set-url origin git@github.com:flavia-vale/wabot.git
               git reset --hard HEAD
               git pull origin main
@@ -18,6 +19,7 @@
             else
               echo "🧪 Enviando para STAGING..."
               cd ~/wabot-staging
+              # Garante SSH e limpa arquivos como o dev.db-journal
               git remote set-url origin git@github.com:flavia-vale/wabot.git
               git reset --hard HEAD
               git clean -fd
