@@ -97,6 +97,30 @@ function CommandCard({ label, value, tone = 'ok', helper }) {
   return <article className={`rounded-2xl p-4 ring-1 shadow-sm ${toneClasses(tone)}`}><p className="text-[11px] font-black uppercase tracking-wide opacity-80">{label}</p><p className="mt-1 text-2xl font-black">{value}</p>{helper && <p className="mt-1 text-xs opacity-80">{helper}</p>}</article>
 }
 
+
+const CREDENTIAL_STATUS_META = {
+  configured: { label: 'OK', className: 'bg-emerald-100 text-emerald-700' },
+  warning: { label: 'Revisar', className: 'bg-amber-100 text-amber-700' },
+  incomplete: { label: 'Incompleta', className: 'bg-red-100 text-red-700' },
+  missing: { label: 'Ausente', className: 'bg-gray-100 text-gray-600' },
+}
+
+function CredentialHealthBadges({ health = [], compact = false }) {
+  if (!health.length) return <span className="text-xs text-gray-400">Sem diagnóstico</span>
+  return (
+    <div className="flex flex-wrap gap-1">
+      {health.map(item => {
+        const meta = CREDENTIAL_STATUS_META[item.status] ?? CREDENTIAL_STATUS_META.missing
+        return (
+          <span key={item.platform} title={[...(item.missing || []).map(field => `Falta ${field}`), ...(item.warnings || [])].join(' | ')} className={`rounded-full px-2 py-1 text-[11px] font-bold ${meta.className}`}>
+            {compact ? item.label : `${item.label}: ${meta.label}`}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
 function RiskBadges({ flags = [] }) {
   if (!flags.length) return <span className="rounded-full bg-green-100 px-2 py-1 text-[11px] font-bold text-green-700">OK</span>
   return (
@@ -136,7 +160,7 @@ function DetailPanel({ detail, onClose }) {
         </div>
         <div>
           <h3 className="mb-2 text-sm font-bold text-gray-800">Configuração</h3>
-          <p className="text-sm text-gray-600">Origem: {detail.groupCounts?.monitor ?? 0} · Destino: {detail.groupCounts?.post ?? 0} · Credenciais: {detail.credentials?.length ?? 0}</p>
+          <p className="text-sm text-gray-600">Origem: {detail.groupCounts?.monitor ?? 0} · Destino: {detail.groupCounts?.post ?? 0} · Credenciais: {detail.credentials?.length ?? 0}</p><div className="mt-2"><CredentialHealthBadges health={detail.credentialHealth} /></div>
         </div>
         <div>
           <h3 className="mb-2 text-sm font-bold text-gray-800">Atividade</h3>
@@ -159,6 +183,11 @@ function DetailPanel({ detail, onClose }) {
         </div>
         <div>
           <h3 className="mb-2 text-sm font-bold text-gray-800">Últimos logs</h3>
+          <div className="mb-2 flex flex-wrap gap-1">
+            {(detail.platformStats7d || []).map(stat => (
+              <span key={`${stat.platform}-${stat.status}`} className={`rounded-full px-2 py-1 text-[11px] font-bold ${stat.status === 'error' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>{stat.platform}: {stat.status} {stat.count}</span>
+            ))}
+          </div>
           <div className="space-y-2">
             {(detail.recentLogs || []).slice(0, 5).map(log => (
               <div key={log.id} className="rounded-xl border border-gray-100 p-3 text-xs text-gray-600">
@@ -904,7 +933,7 @@ export default function AdminPage() {
                     <td className="px-3 py-3 text-xs text-gray-600">
                       <p>Bot: {user.botRunning ? 'rodando' : 'parado'}</p>
                       <p>WA: {user.waSession?.status || '—'}</p>
-                      <p>Origem/Destino: {user.groupCounts?.monitor ?? 0}/{user.groupCounts?.post ?? 0}</p>
+                      <p>Origem/Destino: {user.groupCounts?.monitor ?? 0}/{user.groupCounts?.post ?? 0}</p><div className="mt-1"><CredentialHealthBadges health={user.credentialHealth} compact /></div>
                     </td>
                     <td className="px-3 py-3 text-xs text-gray-600">
                       <p>Última: {formatDate(user.lastActivityAt)}</p>

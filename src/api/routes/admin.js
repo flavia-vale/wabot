@@ -1,6 +1,7 @@
 import db from '../../db.js'
 import { listRunningBots } from '../../manager.js'
 import { getApiMetricsSnapshot } from '../metrics.js'
+import { summarizeCredentialHealth } from '../../credentialHealth.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -516,6 +517,7 @@ export async function adminRoutes(app) {
           createdAt: true,
           waSession: { select: { status: true, phone: true, updatedAt: true } },
           groups: { select: { role: true } },
+          credentials: { select: { platform: true, data: true } },
           _count: { select: { payments: true, credentials: true, messageLogs: true } },
         },
       }),
@@ -546,6 +548,8 @@ export async function adminRoutes(app) {
           botRunning: userRunning,
           successCount,
           errorCount24h,
+          credentialHealth: summarizeCredentialHealth(user.credentials),
+          credentials: undefined,
           riskFlags: buildRiskFlags({ user, groups: user.groups, successCount, errorCount: errorCount24h, now, running: userRunning }),
         }, req.admin.role)
       }),
@@ -995,7 +999,7 @@ export async function adminRoutes(app) {
         createdAt: true,
         waSession: { select: { status: true, phone: true, updatedAt: true } },
         groups: { orderBy: { name: 'asc' }, select: { id: true, name: true, role: true, waJid: true, imageMode: true } },
-        credentials: { select: { id: true, platform: true } },
+        credentials: { select: { id: true, platform: true, data: true } },
         botConfig: true,
         scheduled: { orderBy: { scheduledAt: 'desc' }, take: 10 },
         payments: { orderBy: { createdAt: 'desc' }, take: 10 },
@@ -1004,10 +1008,11 @@ export async function adminRoutes(app) {
 
     if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
 
-    const [successCount, errorCount24h, logStats, recentLogs, ltv] = await Promise.all([
+    const [successCount, errorCount24h, logStats, platformStats, recentLogs, ltv] = await Promise.all([
       db.messageLog.count({ where: { userId: user.id, status: 'success' } }),
       db.messageLog.count({ where: { userId: user.id, status: 'error', sentAt: { gte: since24h } } }),
       db.messageLog.groupBy({ by: ['status'], where: { userId: user.id, sentAt: { gte: addDays(now, -7) } }, _count: { _all: true } }),
+      db.messageLog.groupBy({ by: ['platform', 'status'], where: { userId: user.id, sentAt: { gte: addDays(now, -7) } }, _count: { _all: true } }),
       db.messageLog.findMany({ where: { userId: user.id }, orderBy: { sentAt: 'desc' }, take: 20 }),
       db.payment.aggregate({ where: { userId: user.id, status: 'approved' }, _sum: { amount: true } }),
     ])
@@ -1026,6 +1031,9 @@ export async function adminRoutes(app) {
       botRunning: running,
       groupCounts: getGroupCounts(user.groups),
       logStats7d: Object.fromEntries(logStats.map(row => [row.status, row._count._all])),
+      platformStats7d: platformStats.map(row => ({ platform: row.platform, status: row.status, count: row._count._all })),
+      credentialHealth: summarizeCredentialHealth(user.credentials),
+      credentials: user.credentials.map(credential => ({ id: credential.id, platform: credential.platform })),
       recentLogs,
       successCount,
       errorCount24h,
