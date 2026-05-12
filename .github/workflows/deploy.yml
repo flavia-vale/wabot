@@ -9,7 +9,6 @@
             if [ "${{ github.ref }}" = "refs/heads/main" ]; then
               echo "🚀 Enviando para PRODUÇÃO..."
               cd ~/wabot-prod
-              # Garante que o remote é SSH e limpa arquivos temporários
               git remote set-url origin git@github.com:flavia-vale/wabot.git
               git reset --hard HEAD
               git pull origin main
@@ -19,19 +18,12 @@
             else
               echo "🧪 Enviando para STAGING..."
               cd ~/wabot-staging
-              # Garante que o remote é SSH
               git remote set-url origin git@github.com:flavia-vale/wabot.git
-              
-              # Limpa arquivos que travam o deploy (como o dev.db-journal)
               git reset --hard HEAD
               git clean -fd
-              
               git pull origin develop
-              
-              # Instala dependências da raiz e do dashboard
               npm install
               cd dashboard && npm install && cd ..
-              
               npx prisma migrate deploy
               pm2 restart api-staging visual-staging
             fi
