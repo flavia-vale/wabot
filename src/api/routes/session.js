@@ -4,6 +4,65 @@ import { rm } from 'fs/promises'
 import { getAuthInfoDir } from '../../paths.js'
 import { mapInfraError } from '../../errors.js'
 
+const WA_GROUPS_RECOVERY_TIMEOUT_MS = Math.max(Number(process.env.WA_GROUPS_RECOVERY_TIMEOUT_MS || 15000), 0)
+const WA_GROUPS_RECOVERY_RETRY_MS = Math.max(Number(process.env.WA_GROUPS_RECOVERY_RETRY_MS || 1000), 100)
+const RESUMABLE_SESSION_STATUSES = new Set(['connected', 'connecting'])
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+function isRecoverableGroupLoadError(err) {
+  const message = String(err?.message ?? err ?? '')
+  return message.includes('Bot não está rodando') || message.includes('Bot não conectado') || message.includes('Timeout ao buscar grupos')
+}
+
+async function findResumableWaSession(userId) {
+  const session = await db.waSession.findUnique({ where: { userId }, select: { status: true } })
+  return RESUMABLE_SESSION_STATUSES.has(session?.status) ? session : null
+}
+
+export async function loadWaGroupsWithRecovery(userId, deps = {}) {
+  const {
+    isRunningFn = isRunning,
+    startBotFn = startBot,
+    listGroupsFn = listGroups,
+    findResumableSessionFn = findResumableWaSession,
+    timeoutMs = WA_GROUPS_RECOVERY_TIMEOUT_MS,
+    retryMs = WA_GROUPS_RECOVERY_RETRY_MS,
+    sleepFn = sleep,
+  } = deps
+
+  let recoveredProcess = false
+  if (!isRunningFn(userId)) {
+    const resumableSession = await findResumableSessionFn(userId)
+    if (!resumableSession) throw new Error('Bot não está rodando')
+    startBotFn(userId)
+    recoveredProcess = true
+  }
+
+  const startedAt = Date.now()
+  let lastError = null
+
+  do {
+    try {
+      const groups = await listGroupsFn(userId)
+      return { groups, recoveredProcess }
+    } catch (err) {
+      lastError = err
+      if (!isRecoverableGroupLoadError(err)) throw err
+      if (Date.now() - startedAt >= timeoutMs) break
+      await sleepFn(retryMs)
+    }
+  } while (Date.now() - startedAt < timeoutMs)
+
+  const message = recoveredProcess
+    ? 'Estamos retomando sua conexão com o WhatsApp. Aguarde alguns segundos e tente carregar os grupos novamente.'
+    : lastError?.message || 'Falha ao buscar grupos do WhatsApp'
+  const error = new Error(message)
+  error.code = recoveredProcess ? 'WA_SESSION_RECOVERING' : 'WA_GROUPS_LOAD_FAILED'
+  error.retryable = true
+  throw error
+}
+
 function normalizePairingPhone(rawPhone) {
   const digits = String(rawPhone ?? '').replace(/\D/g, '')
   if (!digits) return { ok: false, message: 'Número de telefone obrigatório' }
@@ -89,10 +148,15 @@ export async function sessionRoutes(app) {
   app.get('/wa-groups', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
     try {
-      const groups = await listGroups(userId)
+      const { groups } = await loadWaGroupsWithRecovery(userId)
       return groups
     } catch (err) {
-      return reply.code(400).send({ error: err.message })
+      const statusCode = err.code === 'WA_SESSION_RECOVERING' ? 503 : 400
+      return reply.code(statusCode).send({
+        error: err.message,
+        code: err.code,
+        retryable: Boolean(err.retryable),
+      })
     }
   })
 
