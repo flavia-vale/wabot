@@ -11,11 +11,18 @@ const ALL_PLATFORMS = [
   { id: 'magazineluiza', label: '🛒 Magazine Luiza' },
 ]
 
+const DEFAULT_BRANDING_CTA_TEXT = 'Participe do grupo:'
+const MAX_BRANDING_CTA_CHARS = 80
+
 const DELAY_PRESETS = [
   { id: 'fast', label: 'Rápido', min: 2, max: 5, description: 'Para baixo volume e operação acompanhada.' },
   { id: 'default', label: 'Padrão', min: 5, max: 15, description: 'Recomendado para operações leves do dia a dia.' },
   { id: 'safe', label: 'Conservador', min: 15, max: 30, description: 'Use em grupos com alto volume ou maior cautela.' },
 ]
+
+function hasHttpProtocol(value) {
+  return /^https?:\/\//i.test(String(value ?? '').trim())
+}
 
 function normalizeKeywords(text) {
   return text
@@ -102,6 +109,8 @@ export default function ConfigPage() {
     welcomeMsg: '',
     feedGlobal: false,
     postToStatus: false,
+    brandingGroupLink: '',
+    brandingCtaText: DEFAULT_BRANDING_CTA_TEXT,
   })
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -111,6 +120,7 @@ export default function ConfigPage() {
   const [error, setError] = useState('')
   const [delayError, setDelayError] = useState('')
   const [platformError, setPlatformError] = useState('')
+  const [brandingError, setBrandingError] = useState('')
 
   function applyConfig(cfg) {
     setForm({
@@ -121,6 +131,8 @@ export default function ConfigPage() {
       welcomeMsg: cfg.welcomeMsg ?? '',
       feedGlobal: cfg.feedGlobal ?? false,
       postToStatus: cfg.postToStatus ?? false,
+      brandingGroupLink: cfg.brandingGroupLink ?? '',
+      brandingCtaText: cfg.brandingCtaText ?? DEFAULT_BRANDING_CTA_TEXT,
     })
     setLoadedOnce(true)
   }
@@ -180,6 +192,7 @@ export default function ConfigPage() {
     setError('')
     setDelayError('')
     setPlatformError('')
+    setBrandingError('')
     setSuccess(false)
 
     const enabled = form.platforms.split(',').filter(Boolean)
@@ -211,6 +224,22 @@ export default function ConfigPage() {
       return
     }
 
+    const brandingGroupLink = form.brandingGroupLink.trim()
+    const brandingCtaText = form.brandingCtaText.trim() || DEFAULT_BRANDING_CTA_TEXT
+    if (brandingGroupLink && !hasHttpProtocol(brandingGroupLink)) {
+      const message = 'Informe um link válido começando com http:// ou https://'
+      setBrandingError(message)
+      setError(message)
+      return
+    }
+
+    if (brandingCtaText.length > MAX_BRANDING_CTA_CHARS) {
+      const message = `Texto do CTA deve ter no máximo ${MAX_BRANDING_CTA_CHARS} caracteres`
+      setBrandingError(message)
+      setError(message)
+      return
+    }
+
     setSaving(true)
     try {
       await api.saveConfig({
@@ -221,6 +250,8 @@ export default function ConfigPage() {
         welcomeMsg: form.welcomeMsg,
         feedGlobal: form.feedGlobal,
         postToStatus: form.postToStatus,
+        brandingGroupLink,
+        brandingCtaText,
       })
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
@@ -235,6 +266,9 @@ export default function ConfigPage() {
 
   const enabledPlatforms = new Set(form.platforms.split(',').filter(Boolean))
   const welcomePreview = form.welcomeMsg.trim() || 'Exemplo: Bem-vindo(a)! As ofertas convertidas aparecerão por aqui.'
+  const brandingCtaText = form.brandingCtaText.trim() || DEFAULT_BRANDING_CTA_TEXT
+  const brandingPreviewLink = form.brandingGroupLink.trim() || '[Link do seu grupo]'
+  const brandingPreview = `${brandingCtaText} ${brandingPreviewLink}`
 
   return (
     <div className="max-w-xl">
@@ -302,6 +336,38 @@ export default function ConfigPage() {
         <div className="bg-white rounded-2xl shadow p-5">
           <h3 className="font-semibold text-gray-700 mb-1">🚫 Palavras bloqueadas</h3>
           <KeywordsEditor value={form.blockedKeywords} onChange={(blockedKeywords) => setForm(f => ({ ...f, blockedKeywords }))} disabled={saving} />
+        </div>
+
+        <div className="bg-white rounded-2xl shadow p-5">
+          <h3 className="font-semibold text-gray-700 mb-1">🏷️ Branding das mensagens</h3>
+          <p className="text-xs text-gray-500 mb-3">Deseja anexar o link do seu grupo no final das mensagens? Preencha o campo abaixo para adicionar automaticamente o rodapé personalizado.</p>
+          <label className="text-xs text-gray-500 mb-1 block" htmlFor="brandingCtaText">Mensagem antes do link</label>
+          <input
+            id="brandingCtaText"
+            type="text"
+            maxLength={MAX_BRANDING_CTA_CHARS}
+            placeholder={DEFAULT_BRANDING_CTA_TEXT}
+            value={form.brandingCtaText}
+            onChange={e => { setBrandingError(''); setForm(f => ({ ...f, brandingCtaText: e.target.value })) }}
+            className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm outline-none focus:ring-2 focus:ring-green-400"
+          />
+          <p className="mt-1 text-xs text-gray-500">Pré-preenchido como “{DEFAULT_BRANDING_CTA_TEXT}”. Se apagar, esse texto padrão será usado.</p>
+
+          <label className="text-xs text-gray-500 mb-1 mt-3 block" htmlFor="brandingGroupLink">Link do seu grupo (opcional)</label>
+          <input
+            id="brandingGroupLink"
+            type="url"
+            placeholder="https://chat.whatsapp.com/seu-grupo"
+            value={form.brandingGroupLink}
+            onChange={e => { setBrandingError(''); setForm(f => ({ ...f, brandingGroupLink: e.target.value })) }}
+            className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm outline-none focus:ring-2 focus:ring-green-400"
+          />
+          <p className="mt-2 text-xs text-gray-500">Se o link ficar vazio, o bot mantém apenas o conteúdo original sanitizado e o link de afiliado convertido.</p>
+          {brandingError && <p className="mt-2 text-xs font-medium text-red-600" role="alert">{brandingError}</p>}
+          <div className="mt-3 rounded-2xl bg-green-50 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-green-700">Prévia do rodapé</p>
+            <p className="mt-2 whitespace-pre-wrap rounded-2xl bg-white px-3 py-2.5 min-h-11 text-sm text-gray-700 shadow-sm">{brandingPreview}</p>
+          </div>
         </div>
 
         <div className="bg-white rounded-2xl shadow p-5">

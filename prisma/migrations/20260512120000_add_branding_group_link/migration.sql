@@ -1,0 +1,1 @@
+ALTER TABLE "BotConfig" ADD COLUMN "brandingGroupLink" TEXT NOT NULL DEFAULT '';

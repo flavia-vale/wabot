@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { Icon } from './Icon';
 
 const s = {
@@ -124,7 +125,7 @@ export function Pricing() {
                   </li>
                 ))}
               </ul>
-              <a
+              <Link
                 href="/login?mode=register"
                 className="landing-pricing-cta"
                 style={{
@@ -136,7 +137,7 @@ export function Pricing() {
                 }}
               >
                 {p.cta}
-              </a>
+              </Link>
             </div>
           ))}
         </div>
