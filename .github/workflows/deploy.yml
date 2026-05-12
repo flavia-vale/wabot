@@ -70,6 +70,7 @@ jobs:
             if [ "${{ github.ref }}" = "refs/heads/main" ]; then
               echo "🚀 Enviando para PRODUÇÃO..."
               cd ~/wabot-prod
+              git remote set-url origin "git@github.com:${{ github.repository }}.git"
               chmod +x ./scripts/deploy_safe_dashboard.sh
               ROOT_DIR=~/wabot-prod BRANCH=main ./scripts/deploy_safe_dashboard.sh
             else
@@ -77,6 +78,8 @@ jobs:
               cd ~/wabot-staging
               if [ -n "${{ secrets.REPO_PULL_TOKEN }}" ]; then
                 git remote set-url origin "https://x-access-token:${{ secrets.REPO_PULL_TOKEN }}@github.com/${{ github.repository }}.git"
+              else
+                git remote set-url origin "git@github.com:${{ github.repository }}.git"
               fi
               chmod +x ./scripts/deploy_safe_staging.sh
               ROOT_DIR=~/wabot-staging BRANCH=develop SYNC_GIT=1 AUTO_STASH_ON_DIRTY=1 ./scripts/deploy_safe_staging.sh
