@@ -21,6 +21,7 @@ import { getAuthInfoDir, getDedupFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } from './sendQueueBackend.js'
+import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 
 const userId = process.env.BOT_USER_ID
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
@@ -278,7 +279,8 @@ async function checkScheduledMessages() {
           platforms: 'scheduled',
           imageMode: 'none',
           plan: 'scheduled',
-          delayMs: 0,
+          delayMs: buildSmartDelayMs((await getConfig()).botConfig),
+          typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           buildPayload: async () => ({ text: msg.text }),
           onDone: async (result) => {
             state.remaining--
@@ -340,6 +342,15 @@ const SEND_MAX_ATTEMPTS = Math.max(1, envNumber('SEND_MAX_ATTEMPTS', 3))
 const SEND_RETRY_BASE_MS = Math.max(0, envNumber('SEND_RETRY_BASE_MS', 2_000))
 const SEND_RETRY_MAX_MS = Math.max(SEND_RETRY_BASE_MS, envNumber('SEND_RETRY_MAX_MS', 30_000))
 const DEST_RATE_LIMIT_MS = Math.max(0, envNumber('DEST_RATE_LIMIT_MS', 1_000))
+const SMART_DELAY_PROGRESSIVE_THRESHOLD = Math.max(1, envNumber('SMART_DELAY_PROGRESSIVE_THRESHOLD', 20))
+const SMART_DELAY_PROGRESSIVE_STEP_MS = Math.max(0, envNumber('SMART_DELAY_PROGRESSIVE_STEP_MS', 5_000))
+const SMART_DELAY_PROGRESSIVE_MAX_EXTRA_MS = Math.max(0, envNumber('SMART_DELAY_PROGRESSIVE_MAX_EXTRA_MS', 60_000))
+const SMART_DELAY_REST_EVERY = Math.max(0, envNumber('SMART_DELAY_REST_EVERY', 0))
+const SMART_DELAY_REST_MS = Math.max(0, envNumber('SMART_DELAY_REST_MS', 0))
+const SMART_DELAY_TYPING_ENABLED = String(process.env.SMART_DELAY_TYPING_ENABLED ?? '1') !== '0'
+const SMART_DELAY_TYPING_MIN_MS = Math.max(0, envNumber('SMART_DELAY_TYPING_MIN_MS', 1_200))
+const SMART_DELAY_TYPING_MAX_MS = Math.max(SMART_DELAY_TYPING_MIN_MS, envNumber('SMART_DELAY_TYPING_MAX_MS', 7_000))
+const SMART_DELAY_TYPING_CHARS_PER_SECOND = Math.max(1, envNumber('SMART_DELAY_TYPING_CHARS_PER_SECOND', 18))
 const SEND_QUEUE_BACKEND = String(process.env.QUEUE_BACKEND || 'memory').toLowerCase()
 const REDIS_URL = process.env.REDIS_URL || ''
 const BULLMQ_QUEUE_NAME = process.env.BULLMQ_QUEUE_NAME || `wabot-send-${userId}`
@@ -409,6 +420,16 @@ function getSendQueueMetrics() {
     retryBaseMs: SEND_RETRY_BASE_MS,
     retryMaxMs: SEND_RETRY_MAX_MS,
     destinationRateLimitMs: DEST_RATE_LIMIT_MS,
+    smartDelay: {
+      progressiveThreshold: SMART_DELAY_PROGRESSIVE_THRESHOLD,
+      progressiveStepMs: SMART_DELAY_PROGRESSIVE_STEP_MS,
+      progressiveMaxExtraMs: SMART_DELAY_PROGRESSIVE_MAX_EXTRA_MS,
+      restEvery: SMART_DELAY_REST_EVERY,
+      restMs: SMART_DELAY_REST_MS,
+      typingEnabled: SMART_DELAY_TYPING_ENABLED,
+      typingMinMs: SMART_DELAY_TYPING_MIN_MS,
+      typingMaxMs: SMART_DELAY_TYPING_MAX_MS,
+    },
     ...sendMetrics,
     avgLatencyMs: sendMetrics.latencyCount ? Math.round(sendMetrics.latencyTotalMs / sendMetrics.latencyCount) : 0,
   }
@@ -418,12 +439,33 @@ function canAcceptSendJob() {
   return !shuttingDown
 }
 
+function getSendBackendQueueSize() {
+  const size = typeof sendBackend?.getQueueSize === 'function' ? sendBackend.getQueueSize() : 0
+  return typeof size === 'number' ? size : 0
+}
+
+function buildSmartDelayMs(botConfig, queueSize = getSendBackendQueueSize()) {
+  const jitterDelayMs = calculateJitterDelayMs({
+    delayMin: botConfig?.delayMin,
+    delayMax: botConfig?.delayMax,
+  })
+  return calculateProgressiveDelayMs({
+    baseDelayMs: jitterDelayMs,
+    queueSize,
+    threshold: SMART_DELAY_PROGRESSIVE_THRESHOLD,
+    stepMs: SMART_DELAY_PROGRESSIVE_STEP_MS,
+    maxExtraMs: SMART_DELAY_PROGRESSIVE_MAX_EXTRA_MS,
+  })
+}
+
 async function enqueueSendJob(job) {
   if (!canAcceptSendJob()) {
     sendMetrics.rejectedTotal++
     return false
   }
   const normalizedJob = { attempts: 0, enqueuedAt: Date.now(), ...job, onDone: undefined }
+  if (normalizedJob.delayMs === undefined) normalizedJob.delayMs = 0
+  if (normalizedJob.typingDelayMs === undefined) normalizedJob.typingDelayMs = 0
   if (typeof job.onDone === 'function') doneCallbacks.set(job.logId, job.onDone)
   sendMetrics.queuedTotal++
   if (job.type === 'broadcast') sendMetrics.broadcastQueuedTotal++
@@ -462,14 +504,32 @@ async function processSendJob(job) {
     })
     sendMetrics.sendingTotal++
 
-    if (job.delayMs > 0) await sleep(job.delayMs)
+    const restDelayMs = calculateRestWindowDelayMs({
+      sentCount: sendMetrics.successTotal,
+      every: SMART_DELAY_REST_EVERY,
+      durationMs: SMART_DELAY_REST_MS,
+    })
+    const totalDelayMs = Math.max(0, job.delayMs || 0) + restDelayMs
+    if (totalDelayMs > 0) {
+      logger.info({ destJid: job.destJid, delayMs: totalDelayMs, baseDelayMs: job.delayMs || 0, restDelayMs, type: job.type }, 'Smart delay antes do envio')
+      await sleep(totalDelayMs)
+    }
 
     for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt++) {
       try {
         if (!activeSock) throw new Error('Bot não conectado')
         if (!payload) payload = await job.buildPayload()
         await waitDestinationRateLimit(job.destJid)
-        await activeSock.sendMessage(job.destJid, payload)
+        if (SMART_DELAY_TYPING_ENABLED && job.typingDelayMs > 0 && !job.skipTyping) {
+          await Promise.resolve(activeSock.sendPresenceUpdate?.('composing', job.destJid)).catch(() => {})
+          await sleep(job.typingDelayMs)
+          await Promise.resolve(activeSock.sendPresenceUpdate?.('paused', job.destJid)).catch(() => {})
+        }
+        if (typeof job.send === 'function') {
+          await job.send({ sock: activeSock, payload })
+        } else {
+          await activeSock.sendMessage(job.destJid, payload)
+        }
         lastSendByDest.set(job.destJid, Date.now())
         logger.info({ destJid: job.destJid, platforms: job.platforms, imageMode: job.imageMode, attempt, type: job.type }, 'Mensagem enviada')
 
@@ -865,49 +925,62 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const wantImage = monitorGroup?.imageMode !== 'none'
         const original = wantImage ? getOriginalMediaMessage() : null
 
+        const log = await db.messageLog.create({
+          data: { ...logData, status: 'queued' },
+        })
+        const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         let sentVia = 'text'
-        try {
-          if (original) {
-            const replayProto = { ...original.proto, caption: finalText }
-            await sock.relayMessage(destJid, { [original.type]: replayProto }, {})
-            sentVia = `relay:${original.type}`
-          } else if (wantImage) {
-            // Sem mídia original (ex.: msg só de texto). Tenta resolver via CDN
-            // do produto, baixar bytes e re-encodar como JPEG antes de enviar.
-            const fetched = await getImage()
-            const image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
-            if (fetched && !image) {
-              logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
+        const accepted = await enqueueSendJob({
+          type: 'converted',
+          logId: log.id,
+          destJid,
+          platforms,
+          imageMode: monitorGroup?.imageMode,
+          plan: cfg.plan,
+          delayMs: buildSmartDelayMs(cfg.botConfig),
+          typingDelayMs: calculateTypingDelayMs({ text: finalText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
+          buildPayload: async () => {
+            if (original) return null
+            if (wantImage) {
+              const fetched = await getImage()
+              const image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
+              if (fetched && !image) {
+                logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
+              }
+              if (image) {
+                sentVia = 'upload:image'
+                return { image: image.buffer, mimetype: image.mimetype, jpegThumbnail: image.jpegThumbnail, caption: finalText }
+              }
             }
-            const payload = image
-              ? { image: image.buffer, mimetype: image.mimetype, jpegThumbnail: image.jpegThumbnail, caption: finalText }
-              : { text: finalText }
-            await sock.sendMessage(destJid, payload)
-            sentVia = image ? 'upload:image' : 'text'
-          } else {
-            await sock.sendMessage(destJid, { text: finalText })
-          }
-          logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
-          const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
-          db.messageLog.create({
-            data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: sanitizeMessageForLog(finalText), status: 'success' },
-          }).then(() => {
-            if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
-          }).catch(() => {})
-          if (cfg.plan === 'basic') {
-            adSendCount++
-            if (adSendCount % 50 === 0) {
-              await sock.sendMessage(destJid, { text: AD_TEXT }).catch(() => {})
+            sentVia = 'text'
+            return { text: finalText }
+          },
+          send: async ({ sock: sendSock, payload }) => {
+            if (original) {
+              const replayProto = { ...original.proto, caption: finalText }
+              await sendSock.relayMessage(destJid, { [original.type]: replayProto }, {})
+              sentVia = `relay:${original.type}`
+              return
             }
-          }
-        } catch (err) {
-          logger.error({ destJid, err: err.message }, 'Erro ao enviar')
-          db.messageLog.create({
-            data: { userId, platform: platforms, sourceGroup: jid, destGroup: destJid, originalUrl: primary.url, convertedUrl: primary.converted, messageText: sanitizeMessageForLog(finalText), status: 'error', errorMsg: err.message },
-          }).then(() => {
-            trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: err.name } })
+            await sendSock.sendMessage(destJid, payload)
+          },
+          onDone: async (result) => {
+            if (result.ok) {
+              logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
+              if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
+            } else {
+              trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: result.error } })
+            }
+          },
+        })
+
+        if (!accepted) {
+          const error = 'Fila interna de envios cheia ou worker encerrando'
+          await db.messageLog.update({
+            where: { id: log.id },
+            data: { status: 'error', errorMsg: error, sentAt: new Date() },
           }).catch(() => {})
-          logger.warn({ destJid, queueSize: sendQueue.length }, 'Envio recusado após criação do log queued')
+          logger.warn({ destJid, queueSize: getSendBackendQueueSize() }, 'Envio recusado após criação do log queued')
         }
       }
   }
@@ -1056,7 +1129,8 @@ process.on('message', async msg => {
         platforms: 'broadcast',
         imageMode: 'none',
         plan: 'broadcast',
-        delayMs: 0,
+        delayMs: buildSmartDelayMs((await getConfig()).botConfig),
+        typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
         buildPayload: async () => ({ text: msg.text }),
       })
       if (accepted) {
