@@ -7,6 +7,7 @@ ROOT_DIR="${ROOT_DIR:-$DEFAULT_ROOT_DIR}"
 DASHBOARD_DIR="$ROOT_DIR/dashboard"
 BRANCH="${BRANCH:-develop}"
 SYNC_GIT="${SYNC_GIT:-0}"
+AUTO_STASH_ON_DIRTY="${AUTO_STASH_ON_DIRTY:-0}"
 VISUAL_APP="${VISUAL_APP:-visual-staging}"
 API_APP="${API_APP:-api-staging}"
 VISUAL_BASE_URL="${VISUAL_BASE_URL:-http://178.105.54.0:3006}"
@@ -101,8 +102,15 @@ git log --oneline -n 3
 if [[ "$SYNC_GIT" == "1" ]]; then
   echo "[2/9] Sync branch $BRANCH"
   if [[ -n "$(git status --porcelain)" ]]; then
-    echo "ERRO: working tree possui alterações locais. Resolva antes de SYNC_GIT=1 para evitar sobrescrever staging."
-    exit 1
+    if [[ "$AUTO_STASH_ON_DIRTY" == "1" ]]; then
+      echo "  Aviso: working tree sujo detectado. Aplicando stash automático para seguir com deploy de staging."
+      git stash push --include-untracked --message "auto-stash deploy_safe_staging $(date -u +%Y-%m-%dT%H:%M:%SZ)" >/tmp/wabot_staging_autostash.log || true
+      git status --short --branch
+    else
+      echo "ERRO: working tree possui alterações locais. Resolva antes de SYNC_GIT=1 para evitar sobrescrever staging."
+      echo "Dica: rode com AUTO_STASH_ON_DIRTY=1 para stash automático (somente staging)."
+      exit 1
+    fi
   fi
   git fetch origin
   git checkout "$BRANCH"
@@ -121,7 +129,8 @@ echo "[5/9] Install dashboard dependencies sem alterar lockfile"
 cd "$DASHBOARD_DIR"
 npm ci
 
-echo "[6/9] Build dashboard staging do zero (hard gate)"
+echo "[6/9] Guardrail + build dashboard staging (hard gate)"
+npm run guard:config-page
 rm -rf .next
 npm run build
 
