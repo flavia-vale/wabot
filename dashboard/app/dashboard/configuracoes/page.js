@@ -17,11 +17,94 @@ const URL_PROTOCOL_RE = /^https?:\/\//i
 const DEFAULT_BRANDING_CTA_TEXT = 'Participe do grupo:'
 const MAX_BRANDING_CTA_CHARS = 80
 
+const DEFAULT_BRANDING_CTA_TEXT = 'Participe do grupo:'
+const MAX_BRANDING_CTA_CHARS = 80
+
 const DELAY_PRESETS = [
   { id: 'fast', label: 'Rápido', min: 2, max: 5, description: 'Para baixo volume e operação acompanhada.' },
   { id: 'default', label: 'Padrão', min: 5, max: 15, description: 'Recomendado para operações leves do dia a dia.' },
   { id: 'safe', label: 'Conservador', min: 15, max: 30, description: 'Use em grupos com alto volume ou maior cautela.' },
 ]
+
+function hasHttpProtocol(value) {
+  return /^https?:\/\//i.test(String(value ?? '').trim())
+}
+
+function normalizeKeywords(text) {
+  return text
+    .split(',')
+    .map((keyword) => keyword.trim().toLowerCase())
+    .filter(Boolean)
+    .filter((keyword, index, list) => list.indexOf(keyword) === index)
+}
+
+function KeywordsEditor({ value, onChange, disabled }) {
+  const [draft, setDraft] = useState('')
+  const keywords = useMemo(() => normalizeKeywords(value), [value])
+
+  function commitDraft(text = draft) {
+    const next = normalizeKeywords([...keywords, ...text.split(',')].join(','))
+    onChange(next.join(','))
+    setDraft('')
+  }
+
+  function removeKeyword(keyword) {
+    onChange(keywords.filter((item) => item !== keyword).join(','))
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex gap-2">
+        <input
+          type="text"
+          placeholder="ex: proibido, spam, fora"
+          value={draft}
+          onChange={(e) => {
+            const text = e.target.value
+            if (text.includes(',')) commitDraft(text)
+            else setDraft(text)
+          }}
+          onBlur={() => { if (draft.trim()) commitDraft() }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              commitDraft()
+            }
+          }}
+          disabled={disabled}
+          className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
+        />
+        <button
+          type="button"
+          onClick={() => commitDraft()}
+          disabled={disabled || !draft.trim()}
+          className="rounded-lg bg-gray-800 px-3 py-2.5 min-h-11 text-sm font-semibold text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-700 focus-visible:ring-offset-2"
+        >
+          Adicionar
+        </button>
+      </div>
+      <p className="text-xs text-gray-500">Separe por vírgulas. O bot ignora mensagens que contenham qualquer uma dessas palavras, sem diferenciar maiúsculas de minúsculas.</p>
+      {keywords.length > 0 && (
+        <div className="flex flex-wrap gap-2" aria-label="Palavras bloqueadas ativas">
+          {keywords.map((keyword) => (
+            <span key={keyword} className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700">
+              {keyword}
+              <button
+                type="button"
+                onClick={() => removeKeyword(keyword)}
+                disabled={disabled}
+                aria-label={`Remover palavra ${keyword}`}
+                className="font-bold text-gray-500 hover:text-red-600 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function ConfigPage() {
   const [form, setForm] = useState({
@@ -132,7 +215,7 @@ export default function ConfigPage() {
 
     const brandingGroupLink = form.brandingGroupLink.trim()
     const brandingCtaText = form.brandingCtaText.trim() || DEFAULT_BRANDING_CTA_TEXT
-    if (brandingGroupLink && !URL_PROTOCOL_RE.test(brandingGroupLink)) {
+    if (brandingGroupLink && !hasHttpProtocol(brandingGroupLink)) {
       const message = 'Informe um link válido começando com http:// ou https://'
       setBrandingError(message)
       setError(message)
@@ -260,6 +343,38 @@ export default function ConfigPage() {
             className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm outline-none focus:ring-2 focus:ring-green-400"
           />
           <p className="mt-2 text-xs text-gray-500">Se ficar vazio, o bot mantém apenas o conteúdo original sanitizado e o link de afiliado convertido.</p>
+          {brandingError && <p className="mt-2 text-xs font-medium text-red-600" role="alert">{brandingError}</p>}
+          <div className="mt-3 rounded-2xl bg-green-50 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-green-700">Prévia do rodapé</p>
+            <p className="mt-2 whitespace-pre-wrap rounded-2xl bg-white px-3 py-2.5 min-h-11 text-sm text-gray-700 shadow-sm">{brandingPreview}</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow p-5">
+          <h3 className="font-semibold text-gray-700 mb-1">🏷️ Branding das mensagens</h3>
+          <p className="text-xs text-gray-500 mb-3">Deseja anexar o link do seu grupo no final das mensagens? Preencha o campo abaixo para adicionar automaticamente o rodapé personalizado.</p>
+          <label className="text-xs text-gray-500 mb-1 block" htmlFor="brandingCtaText">Mensagem antes do link</label>
+          <input
+            id="brandingCtaText"
+            type="text"
+            maxLength={MAX_BRANDING_CTA_CHARS}
+            placeholder={DEFAULT_BRANDING_CTA_TEXT}
+            value={form.brandingCtaText}
+            onChange={e => { setBrandingError(''); setForm(f => ({ ...f, brandingCtaText: e.target.value })) }}
+            className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm outline-none focus:ring-2 focus:ring-green-400"
+          />
+          <p className="mt-1 text-xs text-gray-500">Pré-preenchido como “{DEFAULT_BRANDING_CTA_TEXT}”. Se apagar, esse texto padrão será usado.</p>
+
+          <label className="text-xs text-gray-500 mb-1 mt-3 block" htmlFor="brandingGroupLink">Link do seu grupo (opcional)</label>
+          <input
+            id="brandingGroupLink"
+            type="url"
+            placeholder="https://chat.whatsapp.com/seu-grupo"
+            value={form.brandingGroupLink}
+            onChange={e => { setBrandingError(''); setForm(f => ({ ...f, brandingGroupLink: e.target.value })) }}
+            className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm outline-none focus:ring-2 focus:ring-green-400"
+          />
+          <p className="mt-2 text-xs text-gray-500">Se o link ficar vazio, o bot mantém apenas o conteúdo original sanitizado e o link de afiliado convertido.</p>
           {brandingError && <p className="mt-2 text-xs font-medium text-red-600" role="alert">{brandingError}</p>}
           <div className="mt-3 rounded-2xl bg-green-50 p-3">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-green-700">Prévia do rodapé</p>
