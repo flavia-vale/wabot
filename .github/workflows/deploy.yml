@@ -9,20 +9,51 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      
+      NEXT_TELEMETRY_DISABLED: '1'
+      DATABASE_URL: file:./prisma/ci.db
+
     steps:
       - name: Checkout do Código
         uses: actions/checkout@v4
 
-      - name: Instalar Node.js e Testar Build
+      - name: Instalar Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            dashboard/package-lock.json
 
-      - name: Instalar Dependências e Build Check
+      - name: Forçar dependências Git públicas via HTTPS
         run: |
-          npm install
-          cd dashboard && npm install && npm run build --if-present
+          git config --global --replace-all url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global --add url."https://github.com/".insteadOf "git@github.com:"
+
+      - name: Instalar dependências da API sem alterar lockfile
+        run: npm ci
+
+      - name: Validar Prisma e gerar client
+        run: |
+          npx prisma validate
+          npx prisma generate
+
+      - name: Instalar dependências do dashboard sem alterar lockfile
+        working-directory: dashboard
+        run: npm ci
+
+      - name: Lint do dashboard
+        working-directory: dashboard
+        run: npm run lint
+
+      - name: Build Check do dashboard (hard gate)
+        working-directory: dashboard
+        run: |
+          rm -rf .next
+          npm run build
+
+      - name: Verificar artefatos críticos do build
+        run: node scripts/verify-dashboard-api-proxy.mjs
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -31,19 +62,15 @@ jobs:
           username: ${{ secrets.REMOTE_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            set -euo pipefail
             if [ "${{ github.ref }}" = "refs/heads/main" ]; then
               echo "🚀 Enviando para PRODUÇÃO..."
-              cd ~/wabot
-              git pull origin main
-              npm install
-              npx prisma migrate deploy
-              pm2 restart api dashboard
+              cd ~/wabot-prod
+              chmod +x ./scripts/deploy_safe_dashboard.sh
+              ROOT_DIR=~/wabot-prod BRANCH=main ./scripts/deploy_safe_dashboard.sh
             else
               echo "🧪 Enviando para STAGING..."
               cd ~/wabot-staging
-              git pull origin develop
-              npm install
-              cd dashboard && npm install && cd ..
-              npx prisma migrate deploy
-              pm2 restart api-staging visual-staging
+              chmod +x ./scripts/deploy_safe_staging.sh
+              ROOT_DIR=~/wabot-staging BRANCH=develop SYNC_GIT=1 ./scripts/deploy_safe_staging.sh
             fi

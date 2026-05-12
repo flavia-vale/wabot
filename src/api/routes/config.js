@@ -1,5 +1,6 @@
 import db from '../../db.js'
 import { reloadConfig } from '../../manager.js'
+import { DEFAULT_BRANDING_CTA_TEXT, MAX_BRANDING_CTA_CHARS, normalizeBrandingCtaText, normalizeBrandingLink } from '../../messageProcessor.js'
 
 const DEFAULTS = {
   delayMin: 5,
@@ -9,6 +10,8 @@ const DEFAULTS = {
   welcomeMsg: '',
   feedGlobal: false,
   postToStatus: false,
+  brandingGroupLink: '',
+  brandingCtaText: DEFAULT_BRANDING_CTA_TEXT,
 }
 
 function isIntegerInRange(value) {
@@ -23,7 +26,7 @@ export async function configRoutes(app) {
 
   app.put('/', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
-    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg, feedGlobal, postToStatus } = req.body ?? {}
+    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg, feedGlobal, postToStatus, brandingGroupLink, brandingCtaText } = req.body ?? {}
 
     if (delayMin !== undefined && !isIntegerInRange(delayMin)) {
       return reply.code(400).send({ error: 'delayMin deve ser um número inteiro entre 0 e 300' })
@@ -36,6 +39,15 @@ export async function configRoutes(app) {
     }
     if (postToStatus !== undefined && typeof postToStatus !== 'boolean') {
       return reply.code(400).send({ error: 'postToStatus deve ser boolean' })
+    }
+    const rawBrandingGroupLink = String(brandingGroupLink ?? '').trim()
+    const normalizedBrandingGroupLink = normalizeBrandingLink(rawBrandingGroupLink)
+    if (brandingGroupLink !== undefined && rawBrandingGroupLink && !normalizedBrandingGroupLink) {
+      return reply.code(400).send({ error: 'Informe um link válido começando com http:// ou https://' })
+    }
+    const normalizedBrandingCtaText = normalizeBrandingCtaText(brandingCtaText)
+    if (brandingCtaText !== undefined && String(brandingCtaText ?? '').trim().length > MAX_BRANDING_CTA_CHARS) {
+      return reply.code(400).send({ error: `Texto do CTA deve ter no máximo ${MAX_BRANDING_CTA_CHARS} caracteres` })
     }
 
     const existing = await db.botConfig.findUnique({ where: { userId } })
@@ -56,6 +68,8 @@ export async function configRoutes(app) {
         welcomeMsg: welcomeMsg ?? '',
         feedGlobal: feedGlobal ?? DEFAULTS.feedGlobal,
         postToStatus: postToStatus ?? DEFAULTS.postToStatus,
+        brandingGroupLink: normalizedBrandingGroupLink,
+        brandingCtaText: normalizedBrandingCtaText,
       },
       update: {
         ...(delayMin !== undefined && { delayMin }),
@@ -65,6 +79,8 @@ export async function configRoutes(app) {
         ...(welcomeMsg !== undefined && { welcomeMsg }),
         ...(feedGlobal !== undefined && { feedGlobal }),
         ...(postToStatus !== undefined && { postToStatus }),
+        ...(brandingGroupLink !== undefined && { brandingGroupLink: normalizedBrandingGroupLink }),
+        ...(brandingCtaText !== undefined && { brandingCtaText: normalizedBrandingCtaText }),
       },
     })
     reloadConfig(userId)

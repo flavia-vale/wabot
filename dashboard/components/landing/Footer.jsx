@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Icon } from './Icon';
 
 const s = {
@@ -43,12 +44,12 @@ export function FinalCTA() {
             </h2>
             <p style={s.sub}>Conecta o WhatsApp em 4 minutos. Sem cartão, sem letrinha miúda. Se não converter para você, é só desconectar.</p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }} className="landing-final-cta-actions">
-              <a className="btn" href="/login?mode=register" style={{ background: 'var(--accent-2)', color: 'var(--ink)' }}>
+              <Link className="btn" href="/login?mode=register" style={{ background: 'var(--accent-2)', color: 'var(--ink)' }}>
                 <Icon name="whatsapp" size={16} /> Conectar meu WhatsApp <Icon name="arrow" size={16} />
-              </a>
-              <a className="btn" href="/suporte" style={{ background: 'transparent', color: 'var(--surface)', border: '1px solid rgba(255,255,255,0.2)' }}>
+              </Link>
+              <Link className="btn" href="/suporte" style={{ background: 'transparent', color: 'var(--surface)', border: '1px solid rgba(255,255,255,0.2)' }}>
                 Falar com suporte
-              </a>
+              </Link>
             </div>
           </div>
         </div>
