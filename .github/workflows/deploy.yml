@@ -1,39 +1,17 @@
-name: Deploy Automático Wabot
-
-on:
-  push:
-    branches: [ main, develop ]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      
-    steps:
-      - name: Checkout do Código
-        uses: actions/checkout@v4
-
-      - name: Instalar Node.js e Testar Build
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-
-      - name: Instalar Dependências e Build Check
-        run: |
-          npm install
-          cd dashboard && npm install && npm run build --if-present
-
-      - name: Deploy via SSH
+- name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.REMOTE_HOST }}
           username: ${{ secrets.REMOTE_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            set -e
             if [ "${{ github.ref }}" = "refs/heads/main" ]; then
               echo "🚀 Enviando para PRODUÇÃO..."
-              cd ~/wabot
+              cd ~/wabot-prod
+              # Garante que o remote é SSH e limpa arquivos temporários
+              git remote set-url origin git@github.com:flavia-vale/wabot.git
+              git reset --hard HEAD
               git pull origin main
               npm install
               npx prisma migrate deploy
@@ -41,9 +19,19 @@ jobs:
             else
               echo "🧪 Enviando para STAGING..."
               cd ~/wabot-staging
+              # Garante que o remote é SSH
+              git remote set-url origin git@github.com:flavia-vale/wabot.git
+              
+              # Limpa arquivos que travam o deploy (como o dev.db-journal)
+              git reset --hard HEAD
+              git clean -fd
+              
               git pull origin develop
+              
+              # Instala dependências da raiz e do dashboard
               npm install
               cd dashboard && npm install && cd ..
+              
               npx prisma migrate deploy
               pm2 restart api-staging visual-staging
             fi
