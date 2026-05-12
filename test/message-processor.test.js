@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { applyConversionsAndBranding, appendBrandingFooter, buildProcessedMessage, isValidBrandingLink, normalizeBrandingLink, sanitizeInviteLinks } from '../src/messageProcessor.js'
+import { applyConversionsAndBranding, appendBrandingFooter, buildProcessedMessage, DEFAULT_BRANDING_CTA_TEXT, isValidBrandingLink, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from '../src/messageProcessor.js'
 
 test('sanitizeInviteLinks remove convites WhatsApp e Telegram preservando oferta', () => {
   const original = 'Oferta top https://produto.example/item\nEntre no grupo https://chat.whatsapp.com/AbCdEf12345 e t.me/+ConviteXYZ'
@@ -82,6 +82,25 @@ test('branding vazio ou inválido não altera a mensagem', () => {
   assert.equal(isValidBrandingLink('https://t.me/+GrupoValido'), true)
   assert.equal(normalizeBrandingLink(' https://t.me/+GrupoValido '), 'https://t.me/+GrupoValido')
   assert.equal(isValidBrandingLink('nota'), false)
+})
+
+test('appendBrandingFooter permite CTA personalizado e normaliza texto vazio para o padrao', () => {
+  assert.equal(
+    appendBrandingFooter('Oferta convertida', 'https://chat.whatsapp.com/meu-grupo', 'Entre na comunidade:'),
+    'Oferta convertida\n\nEntre na comunidade: https://chat.whatsapp.com/meu-grupo',
+  )
+  assert.equal(normalizeBrandingCtaText('   '), DEFAULT_BRANDING_CTA_TEXT)
+})
+
+test('buildProcessedMessage usa CTA personalizado no rodape', () => {
+  const finalText = buildProcessedMessage(
+    'Oferta https://produto.example/item',
+    [{ url: 'https://produto.example/item', converted: 'https://afiliado.example/item' }],
+    'https://t.me/meu_grupo',
+    'Receba mais ofertas:',
+  )
+
+  assert.equal(finalText.endsWith('Receba mais ofertas: https://t.me/meu_grupo'), true)
 })
 
 test('mensagem composta apenas por convite vira vazia sem lançar erro', () => {

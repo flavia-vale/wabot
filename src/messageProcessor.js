@@ -1,3 +1,5 @@
+const DEFAULT_BRANDING_CTA_TEXT = 'Participe do grupo:'
+const MAX_BRANDING_CTA_CHARS = 80
 const URL_TOKEN_CHARS = "[^\\s<>\"'`]+"
 const GROUP_INVITE_URL_RE = new RegExp(
   String.raw`(?:https?:\/\/)?(?:` +
@@ -61,6 +63,12 @@ export function sanitizeInviteLinks(text) {
   return normalizeMessageWhitespace(removeOrphanInviteCtas(withoutInviteLinks))
 }
 
+export function normalizeBrandingCtaText(text) {
+  const normalized = String(text ?? '').replace(/\s+/g, ' ').trim()
+  if (!normalized) return DEFAULT_BRANDING_CTA_TEXT
+  return normalized.slice(0, MAX_BRANDING_CTA_CHARS)
+}
+
 export function normalizeBrandingLink(link) {
   const value = String(link ?? '').trim()
   if (!value) return ''
@@ -77,23 +85,24 @@ export function isValidBrandingLink(link) {
   return Boolean(normalizeBrandingLink(link))
 }
 
-export function appendBrandingFooter(text, brandingLink) {
+export function appendBrandingFooter(text, brandingLink, brandingCtaText = DEFAULT_BRANDING_CTA_TEXT) {
   const message = normalizeMessageWhitespace(text)
   const link = normalizeBrandingLink(brandingLink)
   if (!message || !link) return message
-  return `${message}\n\nParticipe do grupo: ${link}`
+  const cta = normalizeBrandingCtaText(brandingCtaText)
+  return `${message}\n\n${cta} ${link}`
 }
 
-export function applyConversionsAndBranding(sanitizedText, conversions, brandingLink) {
+export function applyConversionsAndBranding(sanitizedText, conversions, brandingLink, brandingCtaText = DEFAULT_BRANDING_CTA_TEXT) {
   let finalText = String(sanitizedText ?? '')
   for (const { url, converted } of conversions) {
     finalText = finalText.replace(url, converted)
   }
-  return appendBrandingFooter(finalText, brandingLink)
+  return appendBrandingFooter(finalText, brandingLink, brandingCtaText)
 }
 
-export function buildProcessedMessage(originalText, conversions, brandingLink) {
-  return applyConversionsAndBranding(sanitizeInviteLinks(originalText), conversions, brandingLink)
+export function buildProcessedMessage(originalText, conversions, brandingLink, brandingCtaText = DEFAULT_BRANDING_CTA_TEXT) {
+  return applyConversionsAndBranding(sanitizeInviteLinks(originalText), conversions, brandingLink, brandingCtaText)
 }
 
-export { GROUP_INVITE_URL_RE }
+export { DEFAULT_BRANDING_CTA_TEXT, GROUP_INVITE_URL_RE, MAX_BRANDING_CTA_CHARS }

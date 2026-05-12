@@ -171,6 +171,7 @@ model BotConfig {
   feedGlobal      Boolean  @default(false)
   postToStatus    Boolean  @default(false)
   brandingGroupLink String   @default("")
+  brandingCtaText String   @default("Participe do grupo:")
   updatedAt       DateTime @updatedAt
 }
 

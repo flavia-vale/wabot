@@ -14,7 +14,7 @@ import { dirname } from 'path'
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
-import { applyConversionsAndBranding, normalizeBrandingLink, sanitizeInviteLinks } from './messageProcessor.js'
+import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile } from './paths.js'
@@ -211,9 +211,11 @@ async function loadConfig() {
     feedGlobal: false,
     postToStatus: false,
     brandingGroupLink: '',
+    brandingCtaText: DEFAULT_BRANDING_CTA_TEXT,
     ...(user.botConfig ?? {}),
   }
   botConfig.brandingGroupLink = normalizeBrandingLink(botConfig.brandingGroupLink)
+  botConfig.brandingCtaText = normalizeBrandingCtaText(botConfig.brandingCtaText)
 
   return { credentials, groups, plan: user.plan, botConfig }
 }
@@ -888,7 +890,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       if (!conversions.length) return
 
       // Processa a mensagem em ordem defensiva: sanitização já aplicada, conversão e branding.
-      const finalText = applyConversionsAndBranding(sanitizedText, conversions, cfg.botConfig.brandingGroupLink)
+      const finalText = applyConversionsAndBranding(sanitizedText, conversions, cfg.botConfig.brandingGroupLink, cfg.botConfig.brandingCtaText)
       if (!finalText) {
         logger.warn({ msgId: msg.key.id }, 'Mensagem vazia após processamento — envio ignorado')
         return
