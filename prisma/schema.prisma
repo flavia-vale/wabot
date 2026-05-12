@@ -170,6 +170,7 @@ model BotConfig {
   welcomeMsg      String   @default("")
   feedGlobal      Boolean  @default(false)
   postToStatus    Boolean  @default(false)
+  brandingGroupLink String   @default("")
   updatedAt       DateTime @updatedAt
 }
 

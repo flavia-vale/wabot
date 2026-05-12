@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { ErrorState, LoadingState } from '@/components/States'
@@ -233,7 +234,7 @@ export default function CredenciaisPage() {
       </div>
       <p className="text-gray-500 text-sm mb-3">Adicione suas credenciais para que o bot converta links usando suas tags de afiliado.</p>
       <div className="mb-4 flex flex-wrap gap-2">
-        <a href="/dashboard/tutorial" className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100">📘 Ver tutorial de credenciais</a>
+        <Link href="/dashboard/tutorial" className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100">📘 Ver tutorial de credenciais</Link>
       </div>
       <div className="mb-4">
         <Alert
