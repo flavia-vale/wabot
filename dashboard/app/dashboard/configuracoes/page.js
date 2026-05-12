@@ -5,21 +5,6 @@ import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { ErrorState, LoadingState } from '@/components/States'
 
-const URL_PROTOCOL_RE = /^https?:\/\//i
-
-const URL_PROTOCOL_RE = /^https?:\/\//i
-
-const URL_PROTOCOL_RE = /^https?:\/\//i
-const DEFAULT_BRANDING_CTA_TEXT = 'Participe do grupo:'
-const MAX_BRANDING_CTA_CHARS = 80
-
-const URL_PROTOCOL_RE = /^https?:\/\//i
-const DEFAULT_BRANDING_CTA_TEXT = 'Participe do grupo:'
-const MAX_BRANDING_CTA_CHARS = 80
-
-const DEFAULT_BRANDING_CTA_TEXT = 'Participe do grupo:'
-const MAX_BRANDING_CTA_CHARS = 80
-
 const DEFAULT_BRANDING_CTA_TEXT = 'Participe do grupo:'
 const MAX_BRANDING_CTA_CHARS = 80
 
