@@ -76,8 +76,9 @@ jobs:
             else
               echo "🧪 Enviando para STAGING..."
               cd ~/wabot-staging
-              if [ -n "${{ secrets.REPO_PULL_TOKEN }}" ]; then
-                git remote set-url origin "https://x-access-token:${{ secrets.REPO_PULL_TOKEN }}@github.com/${{ github.repository }}.git"
+              REPO_PULL_TOKEN_CLEAN="$(printf '%s' "${{ secrets.REPO_PULL_TOKEN }}" | tr -d '[:space:]')"
+              if [ -n "$REPO_PULL_TOKEN_CLEAN" ]; then
+                git remote set-url origin "https://x-access-token:${REPO_PULL_TOKEN_CLEAN}@github.com/${{ github.repository }}.git"
               else
                 git remote set-url origin "git@github.com:${{ github.repository }}.git"
               fi
