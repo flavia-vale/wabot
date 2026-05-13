@@ -7,6 +7,16 @@ const LP_ROUTES = [
   '/espelhar-grupos-whatsapp-belo-horizonte',
   '/espelhar-grupos-whatsapp-curitiba',
   '/espelhar-grupos-whatsapp-porto-alegre',
+  '/espelhar-grupos-whatsapp-recife',
+  '/espelhar-grupos-whatsapp-salvador',
+  '/espelhar-grupos-whatsapp-fortaleza',
+  '/espelhar-grupos-whatsapp-brasilia',
+  '/espelhar-grupos-whatsapp-goiania',
+  '/espelhar-grupos-whatsapp-campinas',
+  '/espelhar-grupos-whatsapp-manaus',
+  '/espelhar-grupos-whatsapp-belem',
+  '/espelhar-grupos-whatsapp-florianopolis',
+  '/espelhar-grupos-whatsapp-vitoria',
   '/bot-ofertas-supermercado-whatsapp',
   '/bot-ofertas-farmacia-whatsapp',
   '/bot-ofertas-eletronicos-whatsapp',
@@ -22,7 +32,7 @@ const CONTENT_ROUTES = [
 ]
 
 export default function sitemap() {
-  const now = new Date('2026-05-11')
+  const now = new Date('2026-05-13')
   const allRoutes = [...CORE_ROUTES, ...LP_ROUTES, ...CONTENT_ROUTES]
 
   return allRoutes.map((route) => {

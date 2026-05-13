@@ -952,19 +952,16 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const log = await db.messageLog.create({
           data: { ...logData, status: 'queued' },
         })
+        const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
+        let sentVia = 'text'
 
         try {
           await db.messageLog.update({ where: { id: log.id }, data: { status: 'sending', errorMsg: null } }).catch(err => {
             logger.warn({ err: err.message, logId: log.id }, 'Falha ao marcar envio convertido como sending')
           })
 
-          const fetched = await getImage()
-          const image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
-          if (fetched && !image) {
-            logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
-          }
+            if (!image) return { text: finalText }
 
-          if (image) {
             const firstLine = finalText.split('\n').map(l => l.trim()).find(Boolean) || 'Oferta'
             const title = firstLine.slice(0, 80)
             const imagePayload = {
