@@ -926,11 +926,12 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           messageText: sanitizeMessageForLog(finalText),
         }
 
-        // Estratégia: enviar a oferta como card clicável (externalAdReply).
-        // A imagem do produto vira o thumbnail grande do card e tocá-la abre
-        // o link convertido — mesmo comportamento dos demais grupos de ofertas.
-        // Se o sendMessage com externalAdReply falhar (ex.: proto rejeitada
-        // pelo WA), faz fallback para envio de texto puro para não bloquear.
+        // Estratégia: enviar a oferta como imageMessage nativo para preservar
+        // tamanho/qualidade no WhatsApp. O externalAdReply continua no
+        // contextInfo apenas como enriquecimento/atribuição quando o cliente
+        // suportar, sem depender do thumbnail pequeno do card para exibir a foto.
+        let sentVia = 'text'
+        const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         const log = await db.messageLog.create({
           data: { ...logData, status: 'queued' },
         })
@@ -942,6 +943,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           logId: log.id,
           destJid,
           platforms,
+          imageMode: monitorGroup?.imageMode || 'native-image',
           plan: cfg.plan,
           delayMs: buildSmartDelayMs(cfg.botConfig),
           typingDelayMs: calculateTypingDelayMs({ text: finalText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
@@ -951,46 +953,56 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             if (fetched && !image) {
               logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
             }
-            // Usa o buffer principal (até 1280x1280, JPEG q=85) como thumbnail
-            // do card — combinado com renderLargerThumbnail produz a foto
-            // grande e nítida. jpegThumbnail (200x200) ficaria pixelado.
-            const thumbBuf = image?.buffer || image?.jpegThumbnail || null
-            if (thumbBuf && primary?.converted) {
-              sentVia = 'externalAdReply'
-              return {
-                text: finalText,
-                linkPreview: null,
-                contextInfo: {
-                  externalAdReply: {
-                    title: (finalText.split('\n').map(l => l.trim()).find(Boolean) || 'Oferta').slice(0, 80),
-                    mediaType: 1,
-                    thumbnail: thumbBuf,
-                    sourceUrl: primary.converted,
-                    renderLargerThumbnail: true,
-                    showAdAttribution: false,
-                  },
+
+            if (!image) return { text: finalText }
+
+            const firstLine = finalText.split('\n').map(l => l.trim()).find(Boolean) || 'Oferta'
+            const title = firstLine.slice(0, 80)
+            return {
+              image: image.buffer,
+              mimetype: image.mimetype,
+              jpegThumbnail: image.jpegThumbnail,
+              caption: finalText,
+              contextInfo: {
+                externalAdReply: {
+                  title,
+                  body: '',
+                  mediaType: 1,
+                  previewType: 0,
+                  thumbnail: image.jpegThumbnail,
+                  sourceUrl: primary.converted,
+                  renderLargerThumbnail: true,
+                  showAdAttribution: false,
                 },
-              }
+              },
             }
-            sentVia = 'text'
-            return { text: finalText, linkPreview: null }
           },
           send: async ({ sock: sendSock, payload }) => {
-            try {
-              await sendSock.sendMessage(destJid, payload)
-            } catch (err) {
-              if (payload?.contextInfo?.externalAdReply) {
-                logger.warn({ err: err.message, destJid }, 'externalAdReply falhou — fallback para texto')
-                await sendSock.sendMessage(destJid, { text: finalText, linkPreview: null })
-                sentVia = 'text'
+            if (payload?.image) {
+              try {
+                await sendSock.sendMessage(destJid, payload)
+                sentVia = 'imageMessage'
+                return
+              } catch (err) {
+                sentVia = 'textFallback'
+                logger.warn({ err: err.message, destJid, platforms }, 'Falha ao enviar imageMessage — fallback para texto puro')
+                await sendSock.sendMessage(destJid, { text: finalText })
                 return
               }
-              throw err
             }
+
+            await sendSock.sendMessage(destJid, payload)
+            sentVia = 'text'
           },
           onDone: async (result) => {
             if (result.ok) {
-              logger.info({ destJid, platforms, sentVia }, 'Mensagem enviada')
+              logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
+              await db.user.update({
+                where: { id: userId },
+                data: { lastActivityAt: new Date(), sendCount: { increment: 1 } },
+              }).catch(err => {
+                logger.error({ err: err.message, destJid, platforms, logId: log.id }, 'Mensagem enviada, mas falha ao persistir atividade do usuário')
+              })
               if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
             } else {
               trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: result.error } })

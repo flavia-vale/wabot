@@ -239,7 +239,7 @@ export async function fetchProductImage(platform, productUrl, creds) {
   }
 }
 
-// Re-encoda a imagem como JPEG e gera um thumbnail JPEG (~100kb).
+// Re-encoda a imagem como JPEG de alta qualidade e gera preview JPEG.
 // Necessário porque a Baileys chama sharp.metadata() para gerar thumbnail
 // automaticamente; quando os bytes vêm em formato não suportado pelo sharp
 // (HEIC sem libheif, AVIF, ou bytes corrompidos), o sharp falha e a imagem
@@ -254,14 +254,14 @@ export async function normalizeImageForWhatsApp(buf) {
     // Converte para JPEG; redimensiona se for absurdamente grande.
     const main = await sharp(buf, { failOn: 'none' })
       .rotate()
-      .resize({ width: 1280, height: 1280, fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 85, mozjpeg: true })
+      .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 90, mozjpeg: true })
       .toBuffer()
 
     const thumbnail = await sharp(buf, { failOn: 'none' })
       .rotate()
-      .resize({ width: 200, height: 200, fit: 'inside' })
-      .jpeg({ quality: 60 })
+      .resize({ width: 400, height: 400, fit: 'inside' })
+      .jpeg({ quality: 75 })
       .toBuffer()
 
     return { buffer: main, mimetype: 'image/jpeg', jpegThumbnail: thumbnail }
