@@ -67,16 +67,7 @@ export async function groupsRoutes(app) {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo não encontrado' })
 
-    const { imageMode, imageLinkTarget, fallbackToOriginal, blockedKeywords, allowedPlatforms, welcomeMsg } = req.body ?? {}
-    if (imageMode !== undefined && !['none', 'original', 'fetch'].includes(imageMode)) {
-      return reply.code(400).send({ error: 'imageMode deve ser none, original ou fetch' })
-    }
-    if (imageLinkTarget !== undefined && !['first', 'last'].includes(imageLinkTarget)) {
-      return reply.code(400).send({ error: 'imageLinkTarget deve ser first ou last' })
-    }
-    if (fallbackToOriginal !== undefined && typeof fallbackToOriginal !== 'boolean') {
-      return reply.code(400).send({ error: 'fallbackToOriginal deve ser boolean' })
-    }
+    const { blockedKeywords, allowedPlatforms, welcomeMsg } = req.body ?? {}
     if (allowedPlatforms !== undefined) {
       const platforms = String(allowedPlatforms).split(',').filter(Boolean)
       const invalid = platforms.find(p => !['shopee', 'amazon', 'mercadolivre', 'magazineluiza'].includes(p))
@@ -86,9 +77,6 @@ export async function groupsRoutes(app) {
     const updated = await db.group.update({
       where: { id: req.params.id },
       data: {
-        ...(imageMode !== undefined ? { imageMode } : {}),
-        ...(imageLinkTarget !== undefined ? { imageLinkTarget } : {}),
-        ...(fallbackToOriginal !== undefined ? { fallbackToOriginal } : {}),
         ...(blockedKeywords !== undefined ? { blockedKeywords: String(blockedKeywords).trim() || null } : {}),
         ...(allowedPlatforms !== undefined ? { allowedPlatforms: String(allowedPlatforms).trim() || null } : {}),
         ...(welcomeMsg !== undefined ? { welcomeMsg: String(welcomeMsg).trim() || null } : {}),
