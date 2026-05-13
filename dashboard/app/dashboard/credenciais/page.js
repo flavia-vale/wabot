@@ -67,6 +67,7 @@ function PlatformCard({ platform, initialData, onSave, disabled }) {
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveFeedback, setSaveFeedback] = useState(null)
   const [error, setError] = useState('')
   const toast = useToast()
   const [fieldErrors, setFieldErrors] = useState({})
@@ -78,6 +79,7 @@ function PlatformCard({ platform, initialData, onSave, disabled }) {
 
   function updateValue(key, value) {
     setSaved(false)
+    setSaveFeedback(null)
     setFieldErrors((current) => ({ ...current, [key]: '' }))
     setDraftValues((current) => ({ ...(dirty ? current : (initialData ?? {})), [key]: value }))
     setDirty(true)
@@ -99,16 +101,17 @@ function PlatformCard({ platform, initialData, onSave, disabled }) {
     e.preventDefault()
     setError('')
     setSaved(false)
+    setSaveFeedback(null)
 
     if (!validate()) return
 
     setSaving(true)
     try {
-      await onSave(platform.id, values)
+      const result = await onSave(platform.id, values)
+      setSaveFeedback(result?.validation ? { message: result.message, validation: result.validation } : null)
       setDraftValues({})
       setDirty(false)
       setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
     } catch (err) {
       const msg = `${err.message || 'Não foi possível salvar.'} Verifique os campos e tente novamente.`
       setError(msg)
@@ -174,7 +177,12 @@ function PlatformCard({ platform, initialData, onSave, disabled }) {
           )
         })}
         {error && <Alert type="error" title={`Falha ao salvar ${platform.label}`} message={error} />}
-        {saved && <Alert type="success" title={`${platform.label} salvo`} message="Credenciais atualizadas com sucesso." />}
+        {saved && <Alert type={saveFeedback?.validation?.warnings?.length ? 'warning' : 'success'} title={`${platform.label} salvo`} message={saveFeedback?.message || 'Credenciais atualizadas com sucesso.'} />}
+        {saved && !!saveFeedback?.validation?.warnings?.length && (
+          <ul className="rounded-xl bg-amber-50 px-4 py-3 text-xs text-amber-800">
+            {saveFeedback.validation.warnings.map((warning) => <li key={warning}>• {warning}</li>)}
+          </ul>
+        )}
         <button
           type="submit"
           disabled={saving || disabled}
@@ -222,8 +230,9 @@ export default function CredenciaisPage() {
   }, [])
 
   async function handleSave(platform, data) {
-    await api.saveCredential(platform, data)
-    setCredMap(m => ({ ...m, [platform]: data }))
+    const result = await api.saveCredential(platform, data)
+    setCredMap(m => ({ ...m, [platform]: result?.data ?? data }))
+    return result
   }
 
   return (
