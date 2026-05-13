@@ -4,11 +4,11 @@ The admin dashboard is protected by authenticated BOTinho users that have either
 
 ## Bootstrap owner
 
-The production owner bootstrap email is `flavia.vale@usp.br`.
+The canonical owner bootstrap emails are `flavia.vale@usp.br`, `flaviaroberta.1496@gmail.com`, and `tacianeaas02@gmail.com`.
 
-This email is included as the built-in bootstrap owner so the first production admin can access `/admin` after logging in with the same regular BOTinho account email. Additional bootstrap emails can be added with the `ADMIN_EMAILS` environment variable as a comma-separated list.
+These emails are included as built-in bootstrap owners so the canonical admins can access `/admin` after logging in with the same regular BOTinho account email. Additional bootstrap emails can be added with the `ADMIN_EMAILS` environment variable as a comma-separated list.
 
-If an `AdminUser` row already exists for a user, its `status` is authoritative: inactive admin rows are not bypassed by the bootstrap email list. This prevents a disabled admin record from regaining access through bootstrap configuration.
+If an `AdminUser` row already exists for a user, its `status` is authoritative: inactive admin rows are not bypassed by the bootstrap email list. This prevents a disabled admin record from regaining access through bootstrap configuration. Emergency owner restoration for the canonical admin emails must be done through an explicit, reviewed migration so staging validates the data change before production.
 
 ## Required deployment steps
 
