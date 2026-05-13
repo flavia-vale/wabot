@@ -375,7 +375,7 @@ const MSG_QUEUE_TIMEOUT_MS = Math.max(1_000, envNumber('MSG_QUEUE_TIMEOUT_MS', 1
 const MSG_QUEUE_WATCHDOG_MS = Math.max(5_000, envNumber('MSG_QUEUE_WATCHDOG_MS', 30_000))
 const MSG_QUEUE_MAX_SIZE = Math.max(10, envNumber('MSG_QUEUE_MAX_SIZE', 500))
 const MAX_INCOMING_MESSAGE_CHARS = Math.max(500, envNumber('MAX_INCOMING_MESSAGE_CHARS', 8_000))
-const SEND_IMAGE_MESSAGE_TIMEOUT_MS = Math.max(5_000, envNumber('SEND_IMAGE_MESSAGE_TIMEOUT_MS', 20_000))
+const SEND_EXTERNAL_AD_REPLY_TIMEOUT_MS = Math.max(5_000, envNumber('SEND_EXTERNAL_AD_REPLY_TIMEOUT_MS', 20_000))
 
 
 const WA_LIFECYCLE = Object.freeze({
@@ -940,13 +940,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           messageText: sanitizeMessageForLog(finalText),
         }
 
-        // Estratégia: enviar a oferta como imageMessage nativo para preservar
-        // tamanho/qualidade no WhatsApp. O externalAdReply continua no
-        // contextInfo apenas como enriquecimento/atribuição quando o cliente
-        // suportar, sem depender do thumbnail pequeno do card para exibir a foto.
-        // Mantemos este envio direto: colocar closures/buffers da imagem na fila
-        // de backend pode travar o envio em ambientes com serialização (BullMQ) ou
-        // deixar a fila parada se um upload de mídia nunca resolver.
+        // Estratégia: enviar a oferta como texto + externalAdReply para
+        // manter a imagem clicável (tocar na foto abre o sourceUrl). O buffer é
+        // gerado só neste ponto, fora da fila, evitando serialização de imagem.
         let sentVia = 'text'
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         const log = await db.messageLog.create({
@@ -960,23 +956,28 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             logger.warn({ err: err.message, logId: log.id }, 'Falha ao marcar envio convertido como sending')
           })
 
-            if (!image) return { text: finalText }
+          const textWithConvertedLink = finalText.includes(primary.converted)
+            ? finalText
+            : `${finalText}\n\n${primary.converted}`
+          const fetched = await getImage()
+          const image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
+          if (fetched && !image) {
+            logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
+          }
 
-            const firstLine = finalText.split('\n').map(l => l.trim()).find(Boolean) || 'Oferta'
-            const title = firstLine.slice(0, 80)
-            const imagePayload = {
-              image: image.buffer,
-              mimetype: image.mimetype,
-              jpegThumbnail: image.jpegThumbnail,
-              caption: finalText,
+          if (image) {
+            const textLines = textWithConvertedLink.split('\n').map(l => l.trim()).filter(Boolean)
+            const title = (textLines[0] || 'Oferta').slice(0, 80)
+            const body = (textLines.find(line => line !== textLines[0] && !line.includes(primary.converted)) || '').slice(0, 80)
+            const textPayload = {
+              text: textWithConvertedLink,
               contextInfo: {
                 externalAdReply: {
                   title,
-                  body: '',
+                  body,
                   mediaType: 1,
-                  previewType: 0,
-                  thumbnail: image.jpegThumbnail,
                   sourceUrl: primary.converted,
+                  thumbnail: image.buffer,
                   renderLargerThumbnail: true,
                   showAdAttribution: false,
                 },
@@ -985,18 +986,18 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 
             try {
               await withSendTimeout(
-                sock.sendMessage(destJid, imagePayload),
-                SEND_IMAGE_MESSAGE_TIMEOUT_MS,
-                `Timeout ao enviar imageMessage após ${SEND_IMAGE_MESSAGE_TIMEOUT_MS}ms`,
+                sock.sendMessage(destJid, textPayload),
+                SEND_EXTERNAL_AD_REPLY_TIMEOUT_MS,
+                `Timeout ao enviar externalAdReply após ${SEND_EXTERNAL_AD_REPLY_TIMEOUT_MS}ms`,
               )
-              sentVia = 'imageMessage'
+              sentVia = 'externalAdReply'
             } catch (err) {
               sentVia = 'textFallback'
-              logger.warn({ err: err.message, destJid, platforms }, 'Falha ao enviar imageMessage — fallback para texto puro')
-              await sock.sendMessage(destJid, { text: finalText })
+              logger.warn({ err: err.message, destJid, platforms }, 'Falha ao enviar externalAdReply — fallback para texto puro')
+              await sock.sendMessage(destJid, { text: textWithConvertedLink })
             }
           } else {
-            await sock.sendMessage(destJid, { text: finalText })
+            await sock.sendMessage(destJid, { text: textWithConvertedLink })
             sentVia = 'text'
           }
 
