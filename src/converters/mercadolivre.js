@@ -342,11 +342,17 @@ export async function resolveToCleanProductUrl(url) {
       target = await resolve(url)
     }
 
+    // Para landings /social/..., o ?ref= identifica QUAL produto a share
+    // representa (sem ele, ML serve o perfil genérico do vendedor com um
+    // produto destacado aleatório). canonicalizeMlProductUrl remove ref
+    // como tracking comum, então preservamos a URL pré-canonicalize aqui
+    // para usar na extração da landing.
+    const preCanonical = target
     target = canonicalizeMlProductUrl(target)
     if (!extractMlbId(target)) {
       const u = new URL(target)
       if (/^\/social\//i.test(u.pathname)) {
-        const extracted = await tryExtractProductFromLanding(target)
+        const extracted = await tryExtractProductFromLanding(preCanonical)
         if (extracted) target = extracted
       }
     }
