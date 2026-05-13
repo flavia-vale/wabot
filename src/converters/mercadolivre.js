@@ -106,6 +106,21 @@ async function tryExtractProductFromLanding(url) {
       headers: { 'User-Agent': 'Mozilla/5.0' },
     })
     const html = typeof res?.data === 'string' ? res.data : ''
+
+    // Primeiro: tags que apontam para o produto da PRÓPRIA página
+    // (canonical, og:url, twitter:url). Evita pegar MLB de carrossel
+    // de recomendações que aparece antes do link real no HTML.
+    const anchored = [
+      html.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1],
+      html.match(/<meta[^>]*property=["']og:url["'][^>]*content=["']([^"']+)["']/i)?.[1],
+      html.match(/<meta[^>]*name=["']twitter:url["'][^>]*content=["']([^"']+)["']/i)?.[1],
+    ]
+    for (const candidate of anchored) {
+      if (!candidate) continue
+      if (!extractMlbId(candidate)) continue
+      try { return canonicalizeMlProductUrl(candidate) } catch { /* ignore */ }
+    }
+
     const patterns = [
       /https?:\/\/www\.mercadolivre\.com\.br\/p\/MLB[0-9]{6,}/i,
       /https?:\/\/produto\.mercadolivre\.com\.br\/MLB[-_][0-9]{6,}[^"'\\\s<]*/i,
@@ -248,6 +263,11 @@ export async function convert(url, creds) {
     const target = cleanTarget
     const candidates = buildCanonicalCandidates(target)
 
+    // Âncora: MLB esperado é o do target resolvido (não do candidate enviado à API).
+    // Sem essa âncora, se um candidate vier com MLB errado a validação compararia
+    // errado-com-errado e passaria.
+    const anchorMlbId = extractMlbId(target)
+
     // Gerar link de afiliado real via API (retorna novo meli.la com a tag do usuário)
     if (ssid) {
       const tries = [...candidates]
@@ -266,14 +286,22 @@ export async function convert(url, creds) {
       for (const candidate of tries) {
         if (seen.has(candidate)) continue
         seen.add(candidate)
+        // Não enviar para a API um candidate que já diverge do MLB esperado
+        if (anchorMlbId) {
+          const candidateMlbId = extractMlbId(candidate)
+          if (candidateMlbId && candidateMlbId !== anchorMlbId) {
+            logger.warn({ candidate, anchorMlbId, candidateMlbId }, 'ML createLink: candidate diverge do MLB esperado — pulando')
+            continue
+          }
+        }
         try {
           const affiliateUrl = await createAffiliateLink(candidate, tag, creds)
           if (!affiliateUrl) continue
-          const expectedMlbId = extractMlbId(candidate) || extractMlbId(target)
-          if (expectedMlbId) {
-            const valid = await validateAffiliateRedirect(affiliateUrl, expectedMlbId)
+          if (anchorMlbId) {
+            const valid = await validateAffiliateRedirect(affiliateUrl, anchorMlbId)
             if (!valid) {
-              logger.warn({ affiliateUrl, expectedMlbId }, 'ML createLink: short_url não validou redirect — usando assim mesmo')
+              logger.warn({ affiliateUrl, anchorMlbId, candidate }, 'ML createLink: short_url resolveu para produto diferente — descartando')
+              continue
             }
           }
           return affiliateUrl
@@ -282,8 +310,8 @@ export async function convert(url, creds) {
         }
       }
 
-      logger.warn({ url, target }, 'ML createLink: todas as tentativas falharam — abortando (ssid preenchido, partner_id desativado)')
-      return null
+      logger.warn({ url, target }, 'ML createLink: todas as tentativas falharam — usando fallback partner_id')
+      // Cai no fallback partner_id abaixo (preserva ao menos o MLB correto)
     }
 
     let fallbackTarget = target
