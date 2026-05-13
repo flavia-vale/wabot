@@ -219,9 +219,27 @@ async function validateAffiliateRedirect(affiliateUrl, expectedMlbId) {
   if (!affiliateUrl || !expectedMlbId) return false
   try {
     const resolved = await resolve(affiliateUrl)
-    const finalId = extractMlbId(resolved)
-    return finalId === expectedMlbId
-  } catch {
+    // Tentar extrair MLB direto da URL final (cobre URLs de produto e
+    // também /social/...?go=...MLB123... porque o regex pega dentro de
+    // qualquer parte da string).
+    let finalId = extractMlbId(resolved)
+    if (!finalId) {
+      // Aplica canonicalização (resolve /gz/webdevice/config?go=, etc).
+      try {
+        const canon = canonicalizeMlProductUrl(resolved)
+        finalId = extractMlbId(canon)
+      } catch { /* ignore */ }
+    }
+    if (!finalId) {
+      // Última tentativa: extrair do HTML da landing (canonical/og:url).
+      const fromLanding = await tryExtractProductFromLanding(resolved)
+      if (fromLanding) finalId = extractMlbId(fromLanding)
+    }
+    if (finalId === expectedMlbId) return true
+    logger.warn({ affiliateUrl, resolved, finalId, expectedMlbId }, 'ML validate: short_url resolveu para MLB diferente do esperado')
+    return false
+  } catch (err) {
+    logger.warn({ affiliateUrl, expectedMlbId, err: err.message }, 'ML validate: erro ao resolver short_url')
     return false
   }
 }
