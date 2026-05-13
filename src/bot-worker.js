@@ -929,72 +929,68 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // Estratégia: enviar a oferta como card clicável (externalAdReply).
         // A imagem do produto vira o thumbnail grande do card e tocá-la abre
         // o link convertido — mesmo comportamento dos demais grupos de ofertas.
-        let sentVia = 'text'
-        const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
+        // Se o sendMessage com externalAdReply falhar (ex.: proto rejeitada
+        // pelo WA), faz fallback para envio de texto puro para não bloquear.
         const log = await db.messageLog.create({
           data: { ...logData, status: 'queued' },
         })
+        const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
+        let sentVia = 'text'
 
-        try {
-          if (log) {
-            await db.messageLog.update({ where: { id: log.id }, data: { status: 'sending', errorMsg: null } }).catch(err => {
-              logger.warn({ err: err.message, logId: log.id }, 'Falha ao marcar envio convertido como sending')
-            })
-          }
-
-          const fetched = await getImage()
-          const image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
-          if (fetched && !image) {
-            logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
-          }
-
-          if (image) {
-            const firstLine = finalText.split('\n').map(l => l.trim()).find(Boolean) || 'Oferta'
-            const title = firstLine.slice(0, 80)
-            await sock.sendMessage(destJid, {
-              text: finalText,
-              contextInfo: {
-                externalAdReply: {
-                  title,
-                  body: '',
-                  mediaType: 1,
-                  previewType: 0,
-                  thumbnail: image.buffer,
-                  sourceUrl: primary.converted,
-                  renderLargerThumbnail: true,
-                  showAdAttribution: false,
-                },
-              },
-            })
-            sentVia = 'externalAdReply'
-          } else {
-            await sock.sendMessage(destJid, { text: finalText })
-          }
-          logger.info({ destJid, platforms, sentVia }, 'Mensagem enviada')
-
-          const sentAt = new Date()
-          await Promise.all([
-            log
-              ? db.messageLog.update({ where: { id: log.id }, data: { status: 'success', errorMsg: null, sentAt } })
-              : db.messageLog.create({ data: { ...logData, status: 'success', sentAt } }),
-            db.user.update({
-              where: { id: userId },
-              data: { lastActivityAt: sentAt, sendCount: { increment: 1 } },
-            }),
-          ]).catch(err => {
-            logger.error({ err: err.message, destJid, platforms, logId: log?.id }, 'Mensagem enviada, mas falha ao persistir log/atividade')
-          })
-          if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
-          if (cfg.plan === 'basic') {
-            adSendCount++
-            if (adSendCount % 50 === 0) {
-              await sock.sendMessage(destJid, { text: AD_TEXT }).catch(() => {})
+        const accepted = await enqueueSendJob({
+          type: 'converted',
+          logId: log.id,
+          destJid,
+          platforms,
+          plan: cfg.plan,
+          delayMs: buildSmartDelayMs(cfg.botConfig),
+          typingDelayMs: calculateTypingDelayMs({ text: finalText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
+          buildPayload: async () => {
+            const fetched = await getImage()
+            const image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
+            if (fetched && !image) {
+              logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
             }
-            await sendSock.sendMessage(destJid, payload)
+            // Usa o buffer principal (até 1280x1280, JPEG q=85) como thumbnail
+            // do card — combinado com renderLargerThumbnail produz a foto
+            // grande e nítida. jpegThumbnail (200x200) ficaria pixelado.
+            const thumbBuf = image?.buffer || image?.jpegThumbnail || null
+            if (thumbBuf && primary?.converted) {
+              sentVia = 'externalAdReply'
+              return {
+                text: finalText,
+                linkPreview: null,
+                contextInfo: {
+                  externalAdReply: {
+                    title: (finalText.split('\n').map(l => l.trim()).find(Boolean) || 'Oferta').slice(0, 80),
+                    mediaType: 1,
+                    thumbnail: thumbBuf,
+                    sourceUrl: primary.converted,
+                    renderLargerThumbnail: true,
+                    showAdAttribution: false,
+                  },
+                },
+              }
+            }
+            sentVia = 'text'
+            return { text: finalText, linkPreview: null }
+          },
+          send: async ({ sock: sendSock, payload }) => {
+            try {
+              await sendSock.sendMessage(destJid, payload)
+            } catch (err) {
+              if (payload?.contextInfo?.externalAdReply) {
+                logger.warn({ err: err.message, destJid }, 'externalAdReply falhou — fallback para texto')
+                await sendSock.sendMessage(destJid, { text: finalText, linkPreview: null })
+                sentVia = 'text'
+                return
+              }
+              throw err
+            }
           },
           onDone: async (result) => {
             if (result.ok) {
-              logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
+              logger.info({ destJid, platforms, sentVia }, 'Mensagem enviada')
               if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
             } else {
               trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: result.error } })
