@@ -948,6 +948,8 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const log = await db.messageLog.create({
           data: { ...logData, status: 'queued' },
         })
+        const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
+        let sentVia = 'text'
 
         try {
           await db.messageLog.update({ where: { id: log.id }, data: { status: 'sending', errorMsg: null } }).catch(err => {

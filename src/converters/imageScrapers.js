@@ -260,8 +260,8 @@ export async function normalizeImageForWhatsApp(buf) {
 
     const thumbnail = await sharp(buf, { failOn: 'none' })
       .rotate()
-      .resize({ width: 200, height: 200, fit: 'inside' })
-      .jpeg({ quality: 60 })
+      .resize({ width: 400, height: 400, fit: 'inside' })
+      .jpeg({ quality: 75 })
       .toBuffer()
 
     return { buffer: main, mimetype: 'image/jpeg', jpegThumbnail: thumbnail }
