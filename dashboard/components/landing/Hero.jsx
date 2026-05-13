@@ -76,7 +76,7 @@ export function Hero({ tone, primaryCtaLabel = 'Conectar meu WhatsApp', eyebrowL
     ? <><span>Promoção dos outros,</span><br /><span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>comissão sua.</span></>
     : tone === 'animado'
     ? <><span>Os grupos postam.</span><br /><span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>Você fatura.</span> 💜</>
-    : <><span>Promoções de outros grupos</span><br />viram <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>vendas no seu.</span></>);
+    : <>Promoções de outros grupos viram vendas no seu..</>);
 
   const sub = subOverride ?? (tone === 'direto'
     ? 'Você escolhe os grupos de promoção que quer monitorar. O bot pega cada link da Shopee, ML ou Amazon, troca pelo seu código de afiliada e posta no seu grupo de achadinhos. Em segundos.'
