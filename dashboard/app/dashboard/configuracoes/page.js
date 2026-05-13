@@ -242,7 +242,6 @@ export default function ConfigPage() {
   if (loading) return <LoadingState message="Carregando configurações do bot..." />
 
   const enabledPlatforms = new Set(form.platforms.split(',').filter(Boolean))
-  const welcomePreview = form.welcomeMsg.trim() || 'Exemplo: Bem-vindo(a)! As ofertas convertidas aparecerão por aqui.'
   const brandingCtaText = form.brandingCtaText.trim() || DEFAULT_BRANDING_CTA_TEXT
   const brandingPreviewLink = form.brandingGroupLink.trim() || '[Link do seu grupo]'
   const brandingPreview = `${brandingCtaText} ${brandingPreviewLink}`
@@ -344,16 +343,6 @@ export default function ConfigPage() {
           />
           <p className="mt-2 text-xs text-gray-500">Se o link ficar vazio, o bot mantém apenas o conteúdo original sanitizado e o link de afiliado convertido.</p>
           {brandingError && <p className="mt-2 text-xs font-medium text-red-600" role="alert">{brandingError}</p>}
-          <div className="mt-3 rounded-2xl bg-green-50 p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-green-700">Prévia do rodapé</p>
-            <p className="mt-2 whitespace-pre-wrap rounded-2xl bg-white px-3 py-2.5 min-h-11 text-sm text-gray-700 shadow-sm">{brandingPreview}</p>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow p-5">
-          <h3 className="font-semibold text-gray-700 mb-1">👋 Mensagem de boas-vindas</h3>
-          <p className="text-xs text-gray-500 mb-3">Enviada para grupos de destino configurados quando o bot identifica entrada/boas-vindas no WhatsApp. Variáveis dinâmicas não são suportadas no momento.</p>
-          <textarea rows={3} placeholder="Ex: Bem-vindo(a)!" value={form.welcomeMsg} onChange={e => setForm(f => ({ ...f, welcomeMsg: e.target.value }))} className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm outline-none focus:ring-2 focus:ring-green-400 resize-none" />
           <div className="mt-3 rounded-2xl bg-green-50 p-3">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-green-700">Prévia do rodapé</p>
             <p className="mt-2 whitespace-pre-wrap rounded-2xl bg-white px-3 py-2.5 min-h-11 text-sm text-gray-700 shadow-sm">{brandingPreview}</p>
