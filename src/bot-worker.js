@@ -683,20 +683,6 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       const platformCsv = monitorGroup?.allowedPlatforms?.trim() || cfg.botConfig.platforms
       const enabledPlatforms = new Set(platformCsv.split(',').filter(Boolean))
 
-      // Retorna o proto imageMessage (ou videoMessage) original sem baixar.
-      // Permite reaproveitar a mídia já hospedada nos servidores do WhatsApp,
-      // trocando apenas o caption — caminho mais confiável que upload+sharp.
-      function getOriginalMediaMessage() {
-        const inner = extractMessageContent(msg.message)
-        const ext = inner?.extendedTextMessage
-        const quoted = ext?.contextInfo?.quotedMessage
-        if (inner?.imageMessage) return { type: 'imageMessage', proto: inner.imageMessage }
-        if (quoted?.imageMessage) return { type: 'imageMessage', proto: quoted.imageMessage }
-        if (inner?.videoMessage) return { type: 'videoMessage', proto: inner.videoMessage }
-        if (quoted?.videoMessage) return { type: 'videoMessage', proto: quoted.videoMessage }
-        return null
-      }
-
       // Baixa a imagem original do anúncio (mensagem do grupo monitorado) já
       // decifrada via Baileys, retornando { buffer, mimetype }. Lida com
       // wrappers (ephemeralMessage etc.), link preview (jpegThumbnail embutido)
@@ -762,43 +748,23 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       async function getImage() {
         if (imageFetched) return cachedImage
         imageFetched = true
-        if (!monitorGroup || monitorGroup.imageMode === 'none') return null
 
+        // 1) Imagem original da mensagem (mais confiável, sem rede externa).
+        cachedImage = await downloadOriginalImage()
+        if (cachedImage) return cachedImage
+
+        // 2) Resolve pelo CDN do produto (último link convertido habilitado).
         const enabled = links.filter(l => enabledPlatforms.has(l.platform))
-        const target = monitorGroup.imageLinkTarget === 'first' ? enabled[0] : enabled[enabled.length - 1]
-        const platform = target?.platform || 'unknown'
-        logger.info({ msgId: msg.key.id, imageMode: monitorGroup.imageMode, platform }, 'getImage: iniciando resolução de imagem')
+        const target = enabled[enabled.length - 1]
+        if (!target) return null
 
-        if (monitorGroup.imageMode === 'original') {
-          cachedImage = await downloadOriginalImage()
-          return cachedImage
+        const url = await fetchProductImage(target.platform, target.url, cfg.credentials)
+        logger.info({ msgId: msg.key.id, platform: target.platform, resolvedUrl: url }, 'fetchProductImage resultado')
+        if (url) {
+          cachedImage = await fetchImageBuffer(url, target.url)
+          logger.info({ msgId: msg.key.id, downloaded: !!cachedImage, size: cachedImage?.buffer?.length }, 'fetchImageBuffer resultado')
         }
-
-        if (monitorGroup.imageMode === 'fetch') {
-          // Para Shopee, preferimos a imagem original do anúncio: o CDN da
-          // Shopee bloqueia o servidor de mídia do WhatsApp, o que produz
-          // imagem quebrada quando passamos URL para Baileys.
-          if (platform === 'shopee') {
-            cachedImage = await downloadOriginalImage()
-            if (cachedImage) return cachedImage
-            logger.info({ msgId: msg.key.id }, 'Shopee sem imagem original — tentando resolver via API')
-          }
-
-          if (target) {
-            const url = await fetchProductImage(target.platform, target.url, cfg.credentials)
-            logger.info({ msgId: msg.key.id, platform, resolvedUrl: url }, 'fetchProductImage resultado')
-            if (url) {
-              cachedImage = await fetchImageBuffer(url, target.url)
-              logger.info({ msgId: msg.key.id, downloaded: !!cachedImage, size: cachedImage?.buffer?.length }, 'fetchImageBuffer resultado')
-            }
-          }
-
-          if (!cachedImage && monitorGroup.fallbackToOriginal) {
-            cachedImage = await downloadOriginalImage()
-          }
-          return cachedImage
-        }
-        return null
+        return cachedImage
       }
 
 
@@ -887,14 +853,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           messageText: sanitizeMessageForLog(finalText),
         }
 
-        // Estratégia preferencial: reaproveitar o proto da mídia original
-        // (imageMessage/videoMessage) trocando só o caption e usando relayMessage.
-        // Evita sharp/upload (root cause da imagem quebrada) e mantém a mídia
-        // já hospedada nos servidores do WhatsApp — recipients decifram com a
-        // mediaKey original, exatamente como num forward.
-        const wantImage = monitorGroup?.imageMode !== 'none'
-        const original = wantImage ? getOriginalMediaMessage() : null
-
+        // Estratégia: enviar a oferta como card clicável (externalAdReply).
+        // A imagem do produto vira o thumbnail grande do card e tocá-la abre
+        // o link convertido — mesmo comportamento dos demais grupos de ofertas.
         let sentVia = 'text'
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         const log = await db.messageLog.create({
@@ -914,27 +875,35 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             })
           }
 
-          if (original) {
-            const replayProto = { ...original.proto, caption: finalText }
-            await sock.relayMessage(destJid, { [original.type]: replayProto }, {})
-            sentVia = `relay:${original.type}`
-          } else if (wantImage) {
-            // Sem mídia original (ex.: msg só de texto). Tenta resolver via CDN
-            // do produto, baixar bytes e re-encodar como JPEG antes de enviar.
-            const fetched = await getImage()
-            const image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
-            if (fetched && !image) {
-              logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
-            }
-            const payload = image
-              ? { image: image.buffer, mimetype: image.mimetype, jpegThumbnail: image.jpegThumbnail, caption: finalText }
-              : { text: finalText }
-            await sock.sendMessage(destJid, payload)
-            sentVia = image ? 'upload:image' : 'text'
+          const fetched = await getImage()
+          const image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
+          if (fetched && !image) {
+            logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
+          }
+
+          if (image) {
+            const firstLine = finalText.split('\n').map(l => l.trim()).find(Boolean) || 'Oferta'
+            const title = firstLine.slice(0, 80)
+            await sock.sendMessage(destJid, {
+              text: finalText,
+              contextInfo: {
+                externalAdReply: {
+                  title,
+                  body: '',
+                  mediaType: 1,
+                  previewType: 0,
+                  thumbnail: image.buffer,
+                  sourceUrl: primary.converted,
+                  renderLargerThumbnail: true,
+                  showAdAttribution: false,
+                },
+              },
+            })
+            sentVia = 'externalAdReply'
           } else {
             await sock.sendMessage(destJid, { text: finalText })
           }
-          logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
+          logger.info({ destJid, platforms, sentVia }, 'Mensagem enviada')
 
           const sentAt = new Date()
           await Promise.all([
