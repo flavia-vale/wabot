@@ -152,6 +152,19 @@ async function clearAppStateSyncKeys() {
 
 const sleep = ms => new Promise(res => setTimeout(res, ms))
 
+async function withSendTimeout(promise, timeoutMs, message) {
+  let timer = null
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), timeoutMs)
+    timer.unref?.()
+  })
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 const CONFIG_CACHE_TTL_MS = Math.max(1_000, Number(process.env.CONFIG_CACHE_TTL_MS || 60_000))
 
 // Config cache com TTL configurável e promessa compartilhada para evitar stampede no DB.
@@ -362,6 +375,7 @@ const MSG_QUEUE_TIMEOUT_MS = Math.max(1_000, envNumber('MSG_QUEUE_TIMEOUT_MS', 1
 const MSG_QUEUE_WATCHDOG_MS = Math.max(5_000, envNumber('MSG_QUEUE_WATCHDOG_MS', 30_000))
 const MSG_QUEUE_MAX_SIZE = Math.max(10, envNumber('MSG_QUEUE_MAX_SIZE', 500))
 const MAX_INCOMING_MESSAGE_CHARS = Math.max(500, envNumber('MAX_INCOMING_MESSAGE_CHARS', 8_000))
+const SEND_EXTERNAL_AD_REPLY_TIMEOUT_MS = Math.max(5_000, envNumber('SEND_EXTERNAL_AD_REPLY_TIMEOUT_MS', 20_000))
 
 
 const WA_LIFECYCLE = Object.freeze({
@@ -926,22 +940,25 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           messageText: sanitizeMessageForLog(finalText),
         }
 
-        // Estratégia: enviar a oferta como card clicável (externalAdReply).
-        // A imagem do produto vira o thumbnail grande do card e tocá-la abre
-        // o link convertido — mesmo comportamento dos demais grupos de ofertas.
+        // Estratégia: enviar a oferta como texto + externalAdReply para
+        // manter a imagem clicável (tocar na foto abre o sourceUrl). O buffer é
+        // gerado só neste ponto, fora da fila, evitando serialização de imagem.
         let sentVia = 'text'
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         const log = await db.messageLog.create({
           data: { ...logData, status: 'queued' },
         })
+        const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
+        let sentVia = 'text'
 
         try {
-          if (log) {
-            await db.messageLog.update({ where: { id: log.id }, data: { status: 'sending', errorMsg: null } }).catch(err => {
-              logger.warn({ err: err.message, logId: log.id }, 'Falha ao marcar envio convertido como sending')
-            })
-          }
+          await db.messageLog.update({ where: { id: log.id }, data: { status: 'sending', errorMsg: null } }).catch(err => {
+            logger.warn({ err: err.message, logId: log.id }, 'Falha ao marcar envio convertido como sending')
+          })
 
+          const textWithConvertedLink = finalText.includes(primary.converted)
+            ? finalText
+            : `${finalText}\n\n${primary.converted}`
           const fetched = await getImage()
           const image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
           if (fetched && !image) {
@@ -949,66 +966,67 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           }
 
           if (image) {
-            const firstLine = finalText.split('\n').map(l => l.trim()).find(Boolean) || 'Oferta'
-            const title = firstLine.slice(0, 80)
-            await sock.sendMessage(destJid, {
-              text: finalText,
+            const textLines = textWithConvertedLink.split('\n').map(l => l.trim()).filter(Boolean)
+            const title = (textLines[0] || 'Oferta').slice(0, 80)
+            const body = (textLines.find(line => line !== textLines[0] && !line.includes(primary.converted)) || '').slice(0, 80)
+            const textPayload = {
+              text: textWithConvertedLink,
               contextInfo: {
                 externalAdReply: {
                   title,
-                  body: '',
+                  body,
                   mediaType: 1,
-                  previewType: 0,
-                  thumbnail: image.buffer,
                   sourceUrl: primary.converted,
+                  thumbnail: image.buffer,
                   renderLargerThumbnail: true,
                   showAdAttribution: false,
                 },
               },
-            })
-            sentVia = 'externalAdReply'
-          } else {
-            await sock.sendMessage(destJid, { text: finalText })
-          }
-          logger.info({ destJid, platforms, sentVia }, 'Mensagem enviada')
+            }
 
+            try {
+              await withSendTimeout(
+                sock.sendMessage(destJid, textPayload),
+                SEND_EXTERNAL_AD_REPLY_TIMEOUT_MS,
+                `Timeout ao enviar externalAdReply após ${SEND_EXTERNAL_AD_REPLY_TIMEOUT_MS}ms`,
+              )
+              sentVia = 'externalAdReply'
+            } catch (err) {
+              sentVia = 'textFallback'
+              logger.warn({ err: err.message, destJid, platforms }, 'Falha ao enviar externalAdReply — fallback para texto puro')
+              await sock.sendMessage(destJid, { text: textWithConvertedLink })
+            }
+          } else {
+            await sock.sendMessage(destJid, { text: textWithConvertedLink })
+            sentVia = 'text'
+          }
+
+          logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
           const sentAt = new Date()
           await Promise.all([
-            log
-              ? db.messageLog.update({ where: { id: log.id }, data: { status: 'success', errorMsg: null, sentAt } })
-              : db.messageLog.create({ data: { ...logData, status: 'success', sentAt } }),
+            db.messageLog.update({ where: { id: log.id }, data: { status: 'success', errorMsg: null, sentAt } }),
             db.user.update({
               where: { id: userId },
               data: { lastActivityAt: sentAt, sendCount: { increment: 1 } },
             }),
           ]).catch(err => {
-            logger.error({ err: err.message, destJid, platforms, logId: log?.id }, 'Mensagem enviada, mas falha ao persistir log/atividade')
+            logger.error({ err: err.message, destJid, platforms, logId: log.id }, 'Mensagem enviada, mas falha ao persistir log/atividade')
           })
+
           if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
           if (cfg.plan === 'basic') {
             adSendCount++
             if (adSendCount % 50 === 0) {
               await sock.sendMessage(destJid, { text: AD_TEXT }).catch(() => {})
             }
-            await sendSock.sendMessage(destJid, payload)
-          },
-          onDone: async (result) => {
-            if (result.ok) {
-              logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
-              if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
-            } else {
-              trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: result.error } })
-            }
-          },
-        })
-
-        if (!accepted) {
-          const error = 'Fila interna de envios cheia ou worker encerrando'
+          }
+        } catch (err) {
           await db.messageLog.update({
             where: { id: log.id },
-            data: { status: 'error', errorMsg: error, sentAt: new Date() },
+            data: { status: 'error', errorMsg: err.message, sentAt: new Date() },
           }).catch(() => {})
-          logger.warn({ destJid, queueSize: getSendBackendQueueSize() }, 'Envio recusado após criação do log queued')
+          logger.error({ err: err.message, destJid, platforms, logId: log.id }, 'Erro ao enviar mensagem convertida')
+          trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: err.message } })
         }
       }
   }
