@@ -9,7 +9,7 @@
    `develop`, PM2 apps `api-staging` + `visual-staging`).
 4. Validação manual em `http://178.105.54.0:3006`.
 5. Só depois de validado em staging, abrir PR de `develop` → `main`. O merge
-   em `main` dispara o mesmo workflow para **produção** (`~/wabot-prod`,
+   em `main` dispara o mesmo workflow para **produção** (`~/wabot`,
    branch `main`, PM2 apps `api` + `dashboard`).
 
 Nunca pular staging. Nunca subir direto em `main`.
@@ -19,7 +19,7 @@ Nunca pular staging. Nunca subir direto em `main`.
 | Ambiente | Branch  | Diretório no VPS   | PM2 apps                   | Dashboard PORT | API_PORT | URL pública                 |
 |----------|---------|--------------------|----------------------------|----------------|----------|-----------------------------|
 | Staging  | develop | `~/wabot-staging`  | `visual-staging`, `api-staging` | `3006`     | `3004`   | `http://178.105.54.0:3006`  |
-| Produção | main    | `~/wabot-prod`     | `dashboard`, `api`         | `3000`         | `3001`   | `http://espelhagrupos.com.br` |
+| Produção | main    | `~/wabot`          | `dashboard`, `api`         | `3000`         | `3001`   | `http://espelhagrupos.com.br` |
 
 O proxy do Next (`dashboard/app/api/[...path]/route.js`) já mapeia
 `3006 → 3004` e `3000 → 3001` automaticamente via header `host`.
@@ -48,7 +48,7 @@ PORT=3006
 NEXT_PUBLIC_FORCE_SAME_ORIGIN_API=true
 ```
 
-### `~/wabot-prod/.env` (produção — referência)
+### `~/wabot/.env` (produção — referência)
 ```
 NODE_ENV=production
 APP_ENV=production
@@ -62,7 +62,7 @@ DASHBOARD_URL=http://espelhagrupos.com.br
 API_URL=http://espelhagrupos.com.br
 ```
 
-### `~/wabot-prod/dashboard/.env.local`
+### `~/wabot/dashboard/.env.local`
 ```
 PORT=3000
 NEXT_PUBLIC_FORCE_SAME_ORIGIN_API=true

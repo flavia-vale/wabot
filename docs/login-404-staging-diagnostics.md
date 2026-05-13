@@ -9,7 +9,7 @@ Se `cd ~/wabot-staging && bash scripts/collect-login-404-diagnostics.sh ...` ret
 - **Erros fatais:** os comandos abaixo são somente leitura, exceto escrever o log em `/tmp`; não reiniciam PM2 e não alteram banco.
 - **Breaking changes:** nenhum contrato de API, schema ou prop é alterado.
 - **Efeito cascata:** nenhuma dependência global é modificada.
-- **Isolamento:** executar em `~/wabot-staging`; não usar `~/wabot-prod` para este diagnóstico.
+- **Isolamento:** executar em `~/wabot-staging`; não usar `~/wabot` (produção) para este diagnóstico.
 - **Bloqueio:** se os comandos mostrarem que o staging está em branch/commit antigo, atualizar apenas staging/develop antes de qualquer ação em produção.
 
 ## Comando imediato quando o script ainda não existe no staging
