@@ -6,12 +6,6 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { HelpLink } from '@/components/HelpLink'
 import { LoadingState } from '@/components/States'
 
-const IMAGE_MODE_HELP = {
-  none: 'Não envia imagem.',
-  original: 'Reusa a imagem recebida no grupo de origem.',
-  fetch: 'Tenta encontrar a imagem do produto no link.',
-}
-
 const roleLabels = {
   monitor: 'Monitorar (origem)',
   post: 'Postar (destino)',
@@ -271,6 +265,8 @@ export default function GruposPage() {
                     <span className="ml-2 text-gray-400 text-xs">{g.waJid}</span>
                   </div>
                   <div className="flex items-center gap-2">
+                    {savingGroupId === g.id && <span className="text-[11px] text-blue-600">Salvando...</span>}
+                    {savedGroupId === g.id && <span className="text-[11px] text-green-600">Salvo</span>}
                     <button onClick={() => openTargetEditor(g.id)} className="text-blue-500 hover:text-blue-700 text-xs">
                       Configurar alvos
                     </button>
@@ -279,49 +275,7 @@ export default function GruposPage() {
                     </button>
                   </div>
                 </div>
-                <div className="border-t border-gray-100 pt-2">
-                  <div className="mb-1.5 flex items-center justify-between gap-2"><p className="text-xs text-gray-500">Imagem da mensagem:</p>{savingGroupId === g.id && <span className="text-[11px] text-blue-600">Salvando...</span>}{savedGroupId === g.id && <span className="text-[11px] text-green-600">Salvo</span>}</div>
-                  <div className="flex flex-wrap gap-4">
-                    {[['none', 'Nenhuma'], ['original', 'Original'], ['fetch', 'Buscar no site']].map(([value, label]) => (
-                      <label key={value} className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
-                        <input
-                          type="radio"
-                          name={`imageMode-${g.id}`}
-                          value={value}
-                          checked={(g.imageMode ?? 'none') === value}
-                          onChange={() => handleUpdateGroup(g.id, { imageMode: value })}
-                        />
-                        <span>{label}</span>
-                        <span className="sr-only">: {IMAGE_MODE_HELP[value]}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <p className="mt-1 text-[11px] text-gray-400">{IMAGE_MODE_HELP[g.imageMode ?? 'none']}</p>
-                  {(g.imageMode ?? 'none') === 'fetch' && (
-                    <div className="flex flex-wrap gap-5 mt-2">
-                      <label className="text-xs text-gray-500">
-                        Usar link:{' '}
-                        <select
-                          value={g.imageLinkTarget ?? 'first'}
-                          onChange={e => handleUpdateGroup(g.id, { imageLinkTarget: e.target.value })}
-                          className="ml-1 border border-gray-200 rounded px-1.5 py-0.5 text-xs"
-                        >
-                          <option value="first">Primeiro</option>
-                          <option value="last">Último</option>
-                        </select>
-                      </label>
-                      <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={g.fallbackToOriginal ?? false}
-                          onChange={e => handleUpdateGroup(g.id, { fallbackToOriginal: e.target.checked })}
-                        />
-                        Se não encontrar imagem no site, usar a imagem original
-                      </label>
-                    </div>
-                  )}
-                </div>
-                <div className="mt-3 border-t border-gray-100 pt-3">
+                <div className="border-t border-gray-100 pt-3">
                   <p className="text-xs font-medium text-gray-500 mb-2">Filtros deste grupo (opcional):</p>
                   <input
                     value={g.blockedKeywords ?? ''}

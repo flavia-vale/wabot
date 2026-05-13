@@ -23,7 +23,7 @@ const PLATFORMS = [
     instructions: 'Onde obter: affiliate-program.amazon.com.br. A Tag vem do painel. Os cookies ubid-acbbr, at-acbbr e x-acbbr precisam ser copiados da sessão ativa logada na Amazon Brasil.',
     platformWarning: 'Para gerar link curto (amzn.to), preencha Tag e os 3 cookies da sua sessão Amazon.',
     fields: [
-      { key: 'tag', label: 'Tag de afiliado', hint: 'Ex.: suatag-20' },
+      { key: 'tag', label: 'ID de associado/StoreID', hint: 'Ex.: suatag-20' },
       { key: 'ubid-acbbr', label: 'Cookie ubid-acbbr', hint: 'Cookie de sessão da Amazon Brasil.', sensitive: true, help: 'Acesse amazon.com.br logado, abra o DevTools → Application → Cookies → amazon.com.br e copie o valor do cookie ubid-acbbr.' },
       { key: 'at-acbbr', label: 'Cookie at-acbbr', hint: 'Cookie de autenticação da Amazon Brasil.', sensitive: true, help: 'Mesmo painel do DevTools: copie o valor do cookie at-acbbr.' },
       { key: 'x-acbbr', label: 'Cookie x-acbbr', hint: 'Cookie de identificação da Amazon Brasil.', sensitive: true, help: 'Mesmo painel do DevTools: copie o valor do cookie x-acbbr.' },
@@ -67,6 +67,7 @@ function PlatformCard({ platform, initialData, onSave, disabled }) {
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveFeedback, setSaveFeedback] = useState(null)
   const [error, setError] = useState('')
   const toast = useToast()
   const [fieldErrors, setFieldErrors] = useState({})
@@ -78,6 +79,7 @@ function PlatformCard({ platform, initialData, onSave, disabled }) {
 
   function updateValue(key, value) {
     setSaved(false)
+    setSaveFeedback(null)
     setFieldErrors((current) => ({ ...current, [key]: '' }))
     setDraftValues((current) => ({ ...(dirty ? current : (initialData ?? {})), [key]: value }))
     setDirty(true)
@@ -99,16 +101,17 @@ function PlatformCard({ platform, initialData, onSave, disabled }) {
     e.preventDefault()
     setError('')
     setSaved(false)
+    setSaveFeedback(null)
 
     if (!validate()) return
 
     setSaving(true)
     try {
-      await onSave(platform.id, values)
+      const result = await onSave(platform.id, values)
+      setSaveFeedback(result?.validation ? { message: result.message, validation: result.validation } : null)
       setDraftValues({})
       setDirty(false)
       setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
     } catch (err) {
       const msg = `${err.message || 'Não foi possível salvar.'} Verifique os campos e tente novamente.`
       setError(msg)
@@ -174,7 +177,12 @@ function PlatformCard({ platform, initialData, onSave, disabled }) {
           )
         })}
         {error && <Alert type="error" title={`Falha ao salvar ${platform.label}`} message={error} />}
-        {saved && <Alert type="success" title={`${platform.label} salvo`} message="Credenciais atualizadas com sucesso." />}
+        {saved && <Alert type={saveFeedback?.validation?.warnings?.length ? 'warning' : 'success'} title={`${platform.label} salvo`} message={saveFeedback?.message || 'Credenciais atualizadas com sucesso.'} />}
+        {saved && !!saveFeedback?.validation?.warnings?.length && (
+          <ul className="rounded-xl bg-amber-50 px-4 py-3 text-xs text-amber-800">
+            {saveFeedback.validation.warnings.map((warning) => <li key={warning}>• {warning}</li>)}
+          </ul>
+        )}
         <button
           type="submit"
           disabled={saving || disabled}
@@ -222,8 +230,9 @@ export default function CredenciaisPage() {
   }, [])
 
   async function handleSave(platform, data) {
-    await api.saveCredential(platform, data)
-    setCredMap(m => ({ ...m, [platform]: data }))
+    const result = await api.saveCredential(platform, data)
+    setCredMap(m => ({ ...m, [platform]: result?.data ?? data }))
+    return result
   }
 
   return (
