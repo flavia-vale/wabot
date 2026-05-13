@@ -110,15 +110,20 @@ async function tryExtractProductFromLanding(url) {
     // Primeiro: tags que apontam para o produto da PRÓPRIA página
     // (canonical, og:url, twitter:url). Evita pegar MLB de carrossel
     // de recomendações que aparece antes do link real no HTML.
-    const anchored = [
-      html.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1],
-      html.match(/<meta[^>]*property=["']og:url["'][^>]*content=["']([^"']+)["']/i)?.[1],
-      html.match(/<meta[^>]*name=["']twitter:url["'][^>]*content=["']([^"']+)["']/i)?.[1],
+    const sources = [
+      { label: 'canonical', value: html.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1] },
+      { label: 'og:url', value: html.match(/<meta[^>]*property=["']og:url["'][^>]*content=["']([^"']+)["']/i)?.[1] },
+      { label: 'twitter:url', value: html.match(/<meta[^>]*name=["']twitter:url["'][^>]*content=["']([^"']+)["']/i)?.[1] },
     ]
-    for (const candidate of anchored) {
-      if (!candidate) continue
-      if (!extractMlbId(candidate)) continue
-      try { return canonicalizeMlProductUrl(candidate) } catch { /* ignore */ }
+    for (const src of sources) {
+      if (!src.value) continue
+      const mlb = extractMlbId(src.value)
+      if (!mlb) continue
+      try {
+        const canon = canonicalizeMlProductUrl(src.value)
+        logger.info({ landingUrl: url, source: src.label, value: src.value, mlb }, 'ML landing: extraído de tag ancorada')
+        return canon
+      } catch { /* ignore */ }
     }
 
     const patterns = [
@@ -131,10 +136,14 @@ async function tryExtractProductFromLanding(url) {
       const found = html.match(p)?.[0]
       if (!found) continue
       const normalized = found.replace(/\\\//g, '/')
-      return canonicalizeMlProductUrl(normalized)
+      const canon = canonicalizeMlProductUrl(normalized)
+      logger.warn({ landingUrl: url, found: normalized, mlb: extractMlbId(canon) }, 'ML landing: fallback para regex no HTML (sem tag ancorada)')
+      return canon
     }
+    logger.warn({ landingUrl: url }, 'ML landing: nenhum MLB extraído')
     return null
-  } catch {
+  } catch (err) {
+    logger.warn({ landingUrl: url, err: err.message }, 'ML landing: erro ao buscar HTML')
     return null
   }
 }
@@ -219,25 +228,28 @@ async function validateAffiliateRedirect(affiliateUrl, expectedMlbId) {
   if (!affiliateUrl || !expectedMlbId) return false
   try {
     const resolved = await resolve(affiliateUrl)
-    // Tentar extrair MLB direto da URL final (cobre URLs de produto e
-    // também /social/...?go=...MLB123... porque o regex pega dentro de
-    // qualquer parte da string).
     let finalId = extractMlbId(resolved)
+    let path = 'direct'
     if (!finalId) {
-      // Aplica canonicalização (resolve /gz/webdevice/config?go=, etc).
       try {
         const canon = canonicalizeMlProductUrl(resolved)
         finalId = extractMlbId(canon)
+        if (finalId) path = 'canonicalize'
       } catch { /* ignore */ }
     }
     if (!finalId) {
-      // Última tentativa: extrair do HTML da landing (canonical/og:url).
       const fromLanding = await tryExtractProductFromLanding(resolved)
-      if (fromLanding) finalId = extractMlbId(fromLanding)
+      if (fromLanding) {
+        finalId = extractMlbId(fromLanding)
+        if (finalId) path = 'landing'
+      }
     }
-    if (finalId === expectedMlbId) return true
-    logger.warn({ affiliateUrl, resolved, finalId, expectedMlbId }, 'ML validate: short_url resolveu para MLB diferente do esperado')
-    return false
+    const ok = finalId === expectedMlbId
+    logger[ok ? 'info' : 'warn'](
+      { affiliateUrl, resolved, finalId, expectedMlbId, path, ok },
+      ok ? 'ML validate: short_url confere' : 'ML validate: short_url resolveu para MLB diferente do esperado'
+    )
+    return ok
   } catch (err) {
     logger.warn({ affiliateUrl, expectedMlbId, err: err.message }, 'ML validate: erro ao resolver short_url')
     return false
@@ -285,9 +297,14 @@ export async function convert(url, creds) {
     // Sem essa âncora, se um candidate vier com MLB errado a validação compararia
     // errado-com-errado e passaria.
     const anchorMlbId = extractMlbId(target)
+    logger.info({ inputUrl: url, target, anchorMlbId, hasSsid: !!ssid }, 'ML convert: target resolvido')
 
-    // Gerar link de afiliado real via API (retorna novo meli.la com a tag do usuário)
-    if (ssid) {
+    // Sem MLB no target, não há como validar — chamar a API neste caso é
+    // tiro no escuro (o ML pode devolver short para produto qualquer).
+    // Pular API e cair direto no fallback partner_id.
+    if (ssid && !anchorMlbId) {
+      logger.warn({ inputUrl: url, target }, 'ML convert: anchorMlbId nulo — pulando API de afiliados (fallback partner_id)')
+    } else if (ssid) {
       const tries = [...candidates]
       try {
         const clean = new URL(candidates[0] ?? target)
