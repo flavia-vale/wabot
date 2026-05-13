@@ -948,27 +948,35 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
           }
 
-          if (image) {
-            const firstLine = finalText.split('\n').map(l => l.trim()).find(Boolean) || 'Oferta'
-            const title = firstLine.slice(0, 80)
-            await sock.sendMessage(destJid, {
-              text: finalText,
-              contextInfo: {
-                externalAdReply: {
-                  title,
-                  body: '',
-                  mediaType: 1,
-                  previewType: 0,
-                  thumbnail: image.buffer,
-                  sourceUrl: primary.converted,
-                  renderLargerThumbnail: true,
-                  showAdAttribution: false,
+          // Monta o card clicável. Usa o jpegThumbnail (≤200x200) para não
+          // estourar o limite de payload do WhatsApp e para garantir que o
+          // thumbnail caiba na proto do extendedTextMessage.
+          const thumbBuf = image?.jpegThumbnail || image?.buffer || null
+          const adReplySent = thumbBuf && primary?.converted
+            ? await sock.sendMessage(destJid, {
+                text: finalText,
+                linkPreview: null,
+                contextInfo: {
+                  externalAdReply: {
+                    title: (finalText.split('\n').map(l => l.trim()).find(Boolean) || 'Oferta').slice(0, 80),
+                    mediaType: 1,
+                    thumbnail: thumbBuf,
+                    sourceUrl: primary.converted,
+                    renderLargerThumbnail: true,
+                    showAdAttribution: false,
+                  },
                 },
-              },
-            })
+              }).then(() => true).catch(err => {
+                logger.warn({ err: err.message, destJid, thumbSize: thumbBuf?.length }, 'externalAdReply falhou — fallback para texto')
+                return false
+              })
+            : false
+
+          if (adReplySent) {
             sentVia = 'externalAdReply'
           } else {
-            await sock.sendMessage(destJid, { text: finalText })
+            await sock.sendMessage(destJid, { text: finalText, linkPreview: null })
+            sentVia = 'text'
           }
           logger.info({ destJid, platforms, sentVia }, 'Mensagem enviada')
 
