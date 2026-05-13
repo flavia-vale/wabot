@@ -377,6 +377,75 @@ const MSG_QUEUE_MAX_SIZE = Math.max(10, envNumber('MSG_QUEUE_MAX_SIZE', 500))
 const MAX_INCOMING_MESSAGE_CHARS = Math.max(500, envNumber('MAX_INCOMING_MESSAGE_CHARS', 8_000))
 const SEND_EXTERNAL_AD_REPLY_TIMEOUT_MS = Math.max(5_000, envNumber('SEND_EXTERNAL_AD_REPLY_TIMEOUT_MS', 20_000))
 
+const OFFER_CARD_TITLE_MAX_CHARS = 80
+const OFFER_CARD_BODY_MAX_CHARS = 80
+
+function ensureTextContainsLink(text, link) {
+  const message = String(text ?? '').trim()
+  if (!link || message.includes(link)) return message
+  return `${message}\n\n${link}`
+}
+
+function buildOfferCardTextParts(messageText, sourceUrl) {
+  const lines = String(messageText ?? '')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+
+  const titleLine = lines.find(line => !sourceUrl || !line.includes(sourceUrl)) || 'Oferta'
+  const bodyLine = lines.find(line => line !== titleLine && (!sourceUrl || !line.includes(sourceUrl))) || titleLine
+
+  return {
+    title: titleLine.slice(0, OFFER_CARD_TITLE_MAX_CHARS),
+    body: bodyLine.slice(0, OFFER_CARD_BODY_MAX_CHARS),
+  }
+}
+
+async function sendConvertedOfferAsLargeClickableCard({ sock, destJid, messageText, sourceUrl, getImage, msgId, platforms }) {
+  const text = ensureTextContainsLink(messageText, sourceUrl)
+  const { title, body } = buildOfferCardTextParts(text, sourceUrl)
+
+  try {
+    const fetched = await getImage()
+    const image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
+    if (!image?.buffer?.length) {
+      if (fetched) {
+        logger.warn({ msgId, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — fallback para texto puro')
+      } else {
+        logger.warn({ msgId }, 'Oferta sem imagem disponível — fallback para texto puro')
+      }
+      await sock.sendMessage(destJid, { text })
+      return 'text'
+    }
+
+    const payload = {
+      text,
+      contextInfo: {
+        externalAdReply: {
+          title,
+          body,
+          mediaType: 1,
+          sourceUrl,
+          thumbnail: image.buffer,
+          renderLargerThumbnail: true,
+          showAdAttribution: false,
+        },
+      },
+    }
+
+    await withSendTimeout(
+      sock.sendMessage(destJid, payload),
+      SEND_EXTERNAL_AD_REPLY_TIMEOUT_MS,
+      `Timeout ao enviar externalAdReply após ${SEND_EXTERNAL_AD_REPLY_TIMEOUT_MS}ms`,
+    )
+    return 'externalAdReply'
+  } catch (err) {
+    logger.warn({ err: err.message, destJid, platforms }, 'Falha ao gerar/enviar card grande clicável — fallback para texto puro')
+    await sock.sendMessage(destJid, { text })
+    return 'textFallback'
+  }
+}
+
 
 const WA_LIFECYCLE = Object.freeze({
   INITIALIZING: 'initializing',
@@ -942,13 +1011,11 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 
         // Estratégia: enviar a oferta como texto + externalAdReply para
         // manter a imagem clicável (tocar na foto abre o sourceUrl). O buffer é
-        // gerado só neste ponto, fora da fila, evitando serialização de imagem.
-        let sentVia = 'text'
+        // gerado só neste ponto, fora da fila/BullMQ, evitando serialização de imagem.
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         const log = await db.messageLog.create({
           data: { ...logData, status: 'queued' },
         })
-        const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         let sentVia = 'text'
 
         try {
@@ -956,50 +1023,15 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             logger.warn({ err: err.message, logId: log.id }, 'Falha ao marcar envio convertido como sending')
           })
 
-          const textWithConvertedLink = finalText.includes(primary.converted)
-            ? finalText
-            : `${finalText}\n\n${primary.converted}`
-          const fetched = await getImage()
-          const image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
-          if (fetched && !image) {
-            logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
-          }
-
-          if (image) {
-            const textLines = textWithConvertedLink.split('\n').map(l => l.trim()).filter(Boolean)
-            const title = (textLines[0] || 'Oferta').slice(0, 80)
-            const body = (textLines.find(line => line !== textLines[0] && !line.includes(primary.converted)) || '').slice(0, 80)
-            const textPayload = {
-              text: textWithConvertedLink,
-              contextInfo: {
-                externalAdReply: {
-                  title,
-                  body,
-                  mediaType: 1,
-                  sourceUrl: primary.converted,
-                  thumbnail: image.buffer,
-                  renderLargerThumbnail: true,
-                  showAdAttribution: false,
-                },
-              },
-            }
-
-            try {
-              await withSendTimeout(
-                sock.sendMessage(destJid, textPayload),
-                SEND_EXTERNAL_AD_REPLY_TIMEOUT_MS,
-                `Timeout ao enviar externalAdReply após ${SEND_EXTERNAL_AD_REPLY_TIMEOUT_MS}ms`,
-              )
-              sentVia = 'externalAdReply'
-            } catch (err) {
-              sentVia = 'textFallback'
-              logger.warn({ err: err.message, destJid, platforms }, 'Falha ao enviar externalAdReply — fallback para texto puro')
-              await sock.sendMessage(destJid, { text: textWithConvertedLink })
-            }
-          } else {
-            await sock.sendMessage(destJid, { text: textWithConvertedLink })
-            sentVia = 'text'
-          }
+          sentVia = await sendConvertedOfferAsLargeClickableCard({
+            sock,
+            destJid,
+            messageText: finalText,
+            sourceUrl: primary.converted,
+            getImage,
+            msgId: msg.key.id,
+            platforms,
+          })
 
           logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
           const sentAt = new Date()
