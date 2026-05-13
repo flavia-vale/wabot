@@ -55,9 +55,14 @@ async function resolve(url) {
 function canonicalizeMlProductUrl(raw) {
   const normalizedRaw = String(raw).replace(/&amp;/gi, '&')
   const u = new URL(normalizedRaw)
-  if (u.pathname === '/gz/webdevice/config') {
-    const go = u.searchParams.get('go')
-    if (go) return canonicalizeMlProductUrl(go)
+  // ML usa `go=` em vários paths (/gz/webdevice/config, /social/..., afiliados etc.)
+  // como destino real. Se o `go` é uma URL ML com MLB, esse é o produto verdadeiro.
+  const goParam = u.searchParams.get('go')
+  if (goParam && /MLB[-_]?[0-9]{6,}/i.test(goParam)) {
+    try { return canonicalizeMlProductUrl(goParam) } catch { /* ignore */ }
+  }
+  if (u.pathname === '/gz/webdevice/config' && goParam) {
+    return canonicalizeMlProductUrl(goParam)
   }
   u.hash = ''
   const removableParams = new Set([
@@ -99,6 +104,15 @@ function buildCanonicalCandidates(targetUrl) {
   return [...new Set(candidates)]
 }
 
+// Extrai MLB do HTML usando SÓ fontes estruturadas (que apontam para o
+// produto da própria página, não para recomendações).
+// Em ordem de confiança:
+//   1) tags <link rel=canonical>, <meta og:url>, <meta twitter:url>
+//   2) landing social: recommended_items[0] e/ou parâmetro wid=
+//   3) JSON-LD com @type Product
+//   4) blobs __PRELOADED_STATE__ / __NEXT_DATA__ com itemId/productId/MLB
+// O regex genérico "primeira ocorrência de MLB no HTML" foi removido por
+// ser instável: o ML serve carrosséis de recomendações antes do produto.
 async function tryExtractProductFromLanding(url) {
   try {
     const res = await axios.get(url, {
@@ -106,20 +120,105 @@ async function tryExtractProductFromLanding(url) {
       headers: { 'User-Agent': 'Mozilla/5.0' },
     })
     const html = typeof res?.data === 'string' ? res.data : ''
-    const patterns = [
-      /https?:\/\/www\.mercadolivre\.com\.br\/p\/MLB[0-9]{6,}/i,
-      /https?:\/\/produto\.mercadolivre\.com\.br\/MLB[-_][0-9]{6,}[^"'\\\s<]*/i,
-      /https?:\\\/\\\/www\.mercadolivre\.com\.br\\\/p\\\/MLB[0-9]{6,}/i,
-      /https?:\\\/\\\/produto\.mercadolivre\.com\.br\\\/MLB[-_][0-9]{6,}[^"'\\\s<]*/i,
+
+    // 1) tags <head> ancoradas
+    const tagSources = [
+      { label: 'canonical', value: html.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1] },
+      { label: 'og:url', value: html.match(/<meta[^>]*property=["']og:url["'][^>]*content=["']([^"']+)["']/i)?.[1] },
+      { label: 'twitter:url', value: html.match(/<meta[^>]*name=["']twitter:url["'][^>]*content=["']([^"']+)["']/i)?.[1] },
     ]
-    for (const p of patterns) {
-      const found = html.match(p)?.[0]
-      if (!found) continue
-      const normalized = found.replace(/\\\//g, '/')
-      return canonicalizeMlProductUrl(normalized)
+    for (const src of tagSources) {
+      if (!src.value) continue
+      const mlb = extractMlbId(src.value)
+      if (!mlb) continue
+      try {
+        const canon = canonicalizeMlProductUrl(src.value)
+        logger.info({ landingUrl: url, source: src.label, value: src.value, mlb }, 'ML landing: extraído de tag ancorada')
+        return canon
+      } catch { /* ignore */ }
     }
+
+    // 2) landings sociais do ML (mostram vários produtos do vendedor):
+    //    a) recommended_items[0] — primeiro item é o destacado pela share
+    //    b) parâmetro wid= (watched item id) nas URLs internas — id global
+    //       do produto compartilhado, com lookup do product_id correspondente
+    const recoMatch = html.match(/"recommended_items"\s*:\s*\[\s*\{\s*"id"\s*:\s*"(MLB[-_]?[0-9]+)"(?:[^{}]*?"product_id"\s*:\s*"(MLB[-_]?[0-9]+)")?/i)
+    if (recoMatch) {
+      const productMlb = recoMatch[2] ? extractMlbId(recoMatch[2]) : null
+      const listingMlb = extractMlbId(recoMatch[1])
+      if (productMlb) {
+        const canonical = `https://www.mercadolivre.com.br/p/${productMlb}`
+        logger.info({ landingUrl: url, productMlb, listingMlb, source: 'recommended_items[0]' }, 'ML landing: extraído de recommended_items[0]')
+        return canonical
+      }
+      if (listingMlb) {
+        const canonical = `https://produto.mercadolivre.com.br/${listingMlb}-x-_JM`
+        logger.info({ landingUrl: url, mlb: listingMlb, source: 'recommended_items[0]:id' }, 'ML landing: extraído de recommended_items[0] (listagem)')
+        return canonical
+      }
+    }
+    const widMatch = html.match(/[?&;]wid=(MLB[-_]?[0-9]+)/i)
+    if (widMatch?.[1]) {
+      const listingMlb = extractMlbId(widMatch[1])
+      if (listingMlb) {
+        const productLookup = new RegExp(`"id"\\s*:\\s*"${listingMlb}"\\s*,\\s*"product_id"\\s*:\\s*"(MLB[-_]?[0-9]+)"`, 'i')
+        const productMatch = html.match(productLookup)
+        if (productMatch?.[1]) {
+          const productMlb = extractMlbId(productMatch[1])
+          if (productMlb) {
+            const canonical = `https://www.mercadolivre.com.br/p/${productMlb}`
+            logger.info({ landingUrl: url, productMlb, listingMlb, source: 'wid+lookup' }, 'ML landing: extraído de wid com lookup de product_id')
+            return canonical
+          }
+        }
+        const canonical = `https://produto.mercadolivre.com.br/${listingMlb}-x-_JM`
+        logger.info({ landingUrl: url, mlb: listingMlb, source: 'wid' }, 'ML landing: extraído de wid (sem catalog product_id)')
+        return canonical
+      }
+    }
+
+    // 3) JSON-LD com @type Product
+    const ldBlocks = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || []
+    for (const block of ldBlocks) {
+      const inner = block.replace(/^<script[^>]*>/i, '').replace(/<\/script>$/i, '')
+      try {
+        const data = JSON.parse(inner)
+        const items = Array.isArray(data) ? data : [data]
+        for (const item of items) {
+          if (!item || typeof item !== 'object') continue
+          const isProduct = String(item['@type'] || '').toLowerCase().includes('product')
+          if (!isProduct) continue
+          const candidateStr = [item.url, item['@id'], item.sku, item.productID, item.mpn]
+            .filter(Boolean)
+            .map(String)
+            .join(' ')
+          const mlb = extractMlbId(candidateStr)
+          if (!mlb) continue
+          const canonical = `https://www.mercadolivre.com.br/p/${mlb}`
+          logger.info({ landingUrl: url, mlb, source: 'json-ld' }, 'ML landing: extraído de JSON-LD Product')
+          return canonical
+        }
+      } catch { /* json inválido, próximo bloco */ }
+    }
+
+    // 4) blobs JSON inline (__PRELOADED_STATE__, __NEXT_DATA__, etc.)
+    // Procura ocorrências do padrão "itemId":"MLB..." ou "productId":"MLB..."
+    // que tipicamente aparecem só na descrição do produto da página, não
+    // em cards de recomendação (recomendações usam ids diferentes).
+    const blobMatch = html.match(/"(?:itemId|productId|catalog_product_id|product_id|item_id|mlbId|MLB)"\s*:\s*"(MLB[-_]?[0-9]{6,})"/i)
+    if (blobMatch?.[1]) {
+      const mlb = extractMlbId(blobMatch[1])
+      if (mlb) {
+        const canonical = `https://www.mercadolivre.com.br/p/${mlb}`
+        logger.info({ landingUrl: url, mlb, source: 'json-blob' }, 'ML landing: extraído de blob JSON inline')
+        return canonical
+      }
+    }
+
+    logger.warn({ landingUrl: url }, 'ML landing: nenhuma fonte estruturada produziu MLB — desistindo')
     return null
-  } catch {
+  } catch (err) {
+    logger.warn({ landingUrl: url, err: err.message }, 'ML landing: erro ao buscar HTML')
     return null
   }
 }
@@ -204,9 +303,30 @@ async function validateAffiliateRedirect(affiliateUrl, expectedMlbId) {
   if (!affiliateUrl || !expectedMlbId) return false
   try {
     const resolved = await resolve(affiliateUrl)
-    const finalId = extractMlbId(resolved)
-    return finalId === expectedMlbId
-  } catch {
+    let finalId = extractMlbId(resolved)
+    let path = 'direct'
+    if (!finalId) {
+      try {
+        const canon = canonicalizeMlProductUrl(resolved)
+        finalId = extractMlbId(canon)
+        if (finalId) path = 'canonicalize'
+      } catch { /* ignore */ }
+    }
+    if (!finalId) {
+      const fromLanding = await tryExtractProductFromLanding(resolved)
+      if (fromLanding) {
+        finalId = extractMlbId(fromLanding)
+        if (finalId) path = 'landing'
+      }
+    }
+    const ok = finalId === expectedMlbId
+    logger[ok ? 'info' : 'warn'](
+      { affiliateUrl, resolved, finalId, expectedMlbId, path, ok },
+      ok ? 'ML validate: short_url confere' : 'ML validate: short_url resolveu para MLB diferente do esperado'
+    )
+    return ok
+  } catch (err) {
+    logger.warn({ affiliateUrl, expectedMlbId, err: err.message }, 'ML validate: erro ao resolver short_url')
     return false
   }
 }
@@ -222,11 +342,17 @@ export async function resolveToCleanProductUrl(url) {
       target = await resolve(url)
     }
 
+    // Para landings /social/..., o ?ref= identifica QUAL produto a share
+    // representa (sem ele, ML serve o perfil genérico do vendedor com um
+    // produto destacado aleatório). canonicalizeMlProductUrl remove ref
+    // como tracking comum, então preservamos a URL pré-canonicalize aqui
+    // para usar na extração da landing.
+    const preCanonical = target
     target = canonicalizeMlProductUrl(target)
     if (!extractMlbId(target)) {
       const u = new URL(target)
       if (/^\/social\//i.test(u.pathname)) {
-        const extracted = await tryExtractProductFromLanding(target)
+        const extracted = await tryExtractProductFromLanding(preCanonical)
         if (extracted) target = extracted
       }
     }
@@ -248,8 +374,18 @@ export async function convert(url, creds) {
     const target = cleanTarget
     const candidates = buildCanonicalCandidates(target)
 
-    // Gerar link de afiliado real via API (retorna novo meli.la com a tag do usuário)
-    if (ssid) {
+    // Âncora: MLB esperado é o do target resolvido (não do candidate enviado à API).
+    // Sem essa âncora, se um candidate vier com MLB errado a validação compararia
+    // errado-com-errado e passaria.
+    const anchorMlbId = extractMlbId(target)
+    logger.info({ inputUrl: url, target, anchorMlbId, hasSsid: !!ssid }, 'ML convert: target resolvido')
+
+    // Sem MLB no target, não há como validar — chamar a API neste caso é
+    // tiro no escuro (o ML pode devolver short para produto qualquer).
+    // Pular API e cair direto no fallback partner_id.
+    if (ssid && !anchorMlbId) {
+      logger.warn({ inputUrl: url, target }, 'ML convert: anchorMlbId nulo — pulando API de afiliados (fallback partner_id)')
+    } else if (ssid) {
       const tries = [...candidates]
       try {
         const clean = new URL(candidates[0] ?? target)
@@ -266,14 +402,22 @@ export async function convert(url, creds) {
       for (const candidate of tries) {
         if (seen.has(candidate)) continue
         seen.add(candidate)
+        // Não enviar para a API um candidate que já diverge do MLB esperado
+        if (anchorMlbId) {
+          const candidateMlbId = extractMlbId(candidate)
+          if (candidateMlbId && candidateMlbId !== anchorMlbId) {
+            logger.warn({ candidate, anchorMlbId, candidateMlbId }, 'ML createLink: candidate diverge do MLB esperado — pulando')
+            continue
+          }
+        }
         try {
           const affiliateUrl = await createAffiliateLink(candidate, tag, creds)
           if (!affiliateUrl) continue
-          const expectedMlbId = extractMlbId(candidate) || extractMlbId(target)
-          if (expectedMlbId) {
-            const valid = await validateAffiliateRedirect(affiliateUrl, expectedMlbId)
+          if (anchorMlbId) {
+            const valid = await validateAffiliateRedirect(affiliateUrl, anchorMlbId)
             if (!valid) {
-              logger.warn({ affiliateUrl, expectedMlbId }, 'ML createLink: short_url não validou redirect — usando assim mesmo')
+              logger.warn({ affiliateUrl, anchorMlbId, candidate }, 'ML createLink: short_url resolveu para produto diferente — descartando')
+              continue
             }
           }
           return affiliateUrl
@@ -282,8 +426,8 @@ export async function convert(url, creds) {
         }
       }
 
-      logger.warn({ url, target }, 'ML createLink: todas as tentativas falharam — abortando (ssid preenchido, partner_id desativado)')
-      return null
+      logger.warn({ url, target }, 'ML createLink: todas as tentativas falharam — usando fallback partner_id')
+      // Cai no fallback partner_id abaixo (preserva ao menos o MLB correto)
     }
 
     let fallbackTarget = target
