@@ -152,6 +152,19 @@ async function clearAppStateSyncKeys() {
 
 const sleep = ms => new Promise(res => setTimeout(res, ms))
 
+async function withSendTimeout(promise, timeoutMs, message) {
+  let timer = null
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), timeoutMs)
+    timer.unref?.()
+  })
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 const CONFIG_CACHE_TTL_MS = Math.max(1_000, Number(process.env.CONFIG_CACHE_TTL_MS || 60_000))
 
 // Config cache com TTL configurável e promessa compartilhada para evitar stampede no DB.
@@ -362,6 +375,7 @@ const MSG_QUEUE_TIMEOUT_MS = Math.max(1_000, envNumber('MSG_QUEUE_TIMEOUT_MS', 1
 const MSG_QUEUE_WATCHDOG_MS = Math.max(5_000, envNumber('MSG_QUEUE_WATCHDOG_MS', 30_000))
 const MSG_QUEUE_MAX_SIZE = Math.max(10, envNumber('MSG_QUEUE_MAX_SIZE', 500))
 const MAX_INCOMING_MESSAGE_CHARS = Math.max(500, envNumber('MAX_INCOMING_MESSAGE_CHARS', 8_000))
+const SEND_IMAGE_MESSAGE_TIMEOUT_MS = Math.max(5_000, envNumber('SEND_IMAGE_MESSAGE_TIMEOUT_MS', 20_000))
 
 
 const WA_LIFECYCLE = Object.freeze({
@@ -930,6 +944,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // tamanho/qualidade no WhatsApp. O externalAdReply continua no
         // contextInfo apenas como enriquecimento/atribuição quando o cliente
         // suportar, sem depender do thumbnail pequeno do card para exibir a foto.
+        // Mantemos este envio direto: colocar closures/buffers da imagem na fila
+        // de backend pode travar o envio em ambientes com serialização (BullMQ) ou
+        // deixar a fila parada se um upload de mídia nunca resolver.
         let sentVia = 'text'
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         const log = await db.messageLog.create({
@@ -938,27 +955,16 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         let sentVia = 'text'
 
-        const accepted = await enqueueSendJob({
-          type: 'converted',
-          logId: log.id,
-          destJid,
-          platforms,
-          imageMode: monitorGroup?.imageMode || 'native-image',
-          plan: cfg.plan,
-          delayMs: buildSmartDelayMs(cfg.botConfig),
-          typingDelayMs: calculateTypingDelayMs({ text: finalText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
-          buildPayload: async () => {
-            const fetched = await getImage()
-            const image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
-            if (fetched && !image) {
-              logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
-            }
+        try {
+          await db.messageLog.update({ where: { id: log.id }, data: { status: 'sending', errorMsg: null } }).catch(err => {
+            logger.warn({ err: err.message, logId: log.id }, 'Falha ao marcar envio convertido como sending')
+          })
 
             if (!image) return { text: finalText }
 
             const firstLine = finalText.split('\n').map(l => l.trim()).find(Boolean) || 'Oferta'
             const title = firstLine.slice(0, 80)
-            return {
+            const imagePayload = {
               image: image.buffer,
               mimetype: image.mimetype,
               jpegThumbnail: image.jpegThumbnail,
@@ -976,47 +982,50 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
                 },
               },
             }
-          },
-          send: async ({ sock: sendSock, payload }) => {
-            if (payload?.image) {
-              try {
-                await sendSock.sendMessage(destJid, payload)
-                sentVia = 'imageMessage'
-                return
-              } catch (err) {
-                sentVia = 'textFallback'
-                logger.warn({ err: err.message, destJid, platforms }, 'Falha ao enviar imageMessage — fallback para texto puro')
-                await sendSock.sendMessage(destJid, { text: finalText })
-                return
-              }
-            }
 
-            await sendSock.sendMessage(destJid, payload)
+            try {
+              await withSendTimeout(
+                sock.sendMessage(destJid, imagePayload),
+                SEND_IMAGE_MESSAGE_TIMEOUT_MS,
+                `Timeout ao enviar imageMessage após ${SEND_IMAGE_MESSAGE_TIMEOUT_MS}ms`,
+              )
+              sentVia = 'imageMessage'
+            } catch (err) {
+              sentVia = 'textFallback'
+              logger.warn({ err: err.message, destJid, platforms }, 'Falha ao enviar imageMessage — fallback para texto puro')
+              await sock.sendMessage(destJid, { text: finalText })
+            }
+          } else {
+            await sock.sendMessage(destJid, { text: finalText })
             sentVia = 'text'
-          },
-          onDone: async (result) => {
-            if (result.ok) {
-              logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
-              await db.user.update({
-                where: { id: userId },
-                data: { lastActivityAt: new Date(), sendCount: { increment: 1 } },
-              }).catch(err => {
-                logger.error({ err: err.message, destJid, platforms, logId: log.id }, 'Mensagem enviada, mas falha ao persistir atividade do usuário')
-              })
-              if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
-            } else {
-              trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: result.error } })
-            }
-          },
-        })
+          }
 
-        if (!accepted) {
-          const error = 'Fila interna de envios cheia ou worker encerrando'
+          logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
+          const sentAt = new Date()
+          await Promise.all([
+            db.messageLog.update({ where: { id: log.id }, data: { status: 'success', errorMsg: null, sentAt } }),
+            db.user.update({
+              where: { id: userId },
+              data: { lastActivityAt: sentAt, sendCount: { increment: 1 } },
+            }),
+          ]).catch(err => {
+            logger.error({ err: err.message, destJid, platforms, logId: log.id }, 'Mensagem enviada, mas falha ao persistir log/atividade')
+          })
+
+          if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
+          if (cfg.plan === 'basic') {
+            adSendCount++
+            if (adSendCount % 50 === 0) {
+              await sock.sendMessage(destJid, { text: AD_TEXT }).catch(() => {})
+            }
+          }
+        } catch (err) {
           await db.messageLog.update({
             where: { id: log.id },
-            data: { status: 'error', errorMsg: error, sentAt: new Date() },
+            data: { status: 'error', errorMsg: err.message, sentAt: new Date() },
           }).catch(() => {})
-          logger.warn({ destJid, queueSize: getSendBackendQueueSize() }, 'Envio recusado após criação do log queued')
+          logger.error({ err: err.message, destJid, platforms, logId: log.id }, 'Erro ao enviar mensagem convertida')
+          trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: err.message } })
         }
       }
   }
