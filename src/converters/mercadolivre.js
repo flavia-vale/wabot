@@ -55,9 +55,14 @@ async function resolve(url) {
 function canonicalizeMlProductUrl(raw) {
   const normalizedRaw = String(raw).replace(/&amp;/gi, '&')
   const u = new URL(normalizedRaw)
-  if (u.pathname === '/gz/webdevice/config') {
-    const go = u.searchParams.get('go')
-    if (go) return canonicalizeMlProductUrl(go)
+  // ML usa `go=` em vários paths (/gz/webdevice/config, /social/..., afiliados etc.)
+  // como destino real. Se o `go` é uma URL ML com MLB, esse é o produto verdadeiro.
+  const goParam = u.searchParams.get('go')
+  if (goParam && /MLB[-_]?[0-9]{6,}/i.test(goParam)) {
+    try { return canonicalizeMlProductUrl(goParam) } catch { /* ignore */ }
+  }
+  if (u.pathname === '/gz/webdevice/config' && goParam) {
+    return canonicalizeMlProductUrl(goParam)
   }
   u.hash = ''
   const removableParams = new Set([
@@ -99,6 +104,14 @@ function buildCanonicalCandidates(targetUrl) {
   return [...new Set(candidates)]
 }
 
+// Extrai MLB do HTML usando SÓ fontes estruturadas (que apontam para o
+// produto da própria página, não para recomendações).
+// Em ordem de confiança:
+//   1) tags <link rel=canonical>, <meta og:url>, <meta twitter:url>
+//   2) JSON-LD com @type Product
+//   3) blobs __PRELOADED_STATE__ / __NEXT_DATA__ com itemId/productId/MLB
+// O regex genérico "primeira ocorrência de MLB no HTML" foi removido por
+// ser instável: o ML serve carrosséis de recomendações antes do produto.
 async function tryExtractProductFromLanding(url) {
   try {
     const res = await axios.get(url, {
@@ -107,15 +120,13 @@ async function tryExtractProductFromLanding(url) {
     })
     const html = typeof res?.data === 'string' ? res.data : ''
 
-    // Primeiro: tags que apontam para o produto da PRÓPRIA página
-    // (canonical, og:url, twitter:url). Evita pegar MLB de carrossel
-    // de recomendações que aparece antes do link real no HTML.
-    const sources = [
+    // 1) tags <head> ancoradas
+    const tagSources = [
       { label: 'canonical', value: html.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1] },
       { label: 'og:url', value: html.match(/<meta[^>]*property=["']og:url["'][^>]*content=["']([^"']+)["']/i)?.[1] },
       { label: 'twitter:url', value: html.match(/<meta[^>]*name=["']twitter:url["'][^>]*content=["']([^"']+)["']/i)?.[1] },
     ]
-    for (const src of sources) {
+    for (const src of tagSources) {
       if (!src.value) continue
       const mlb = extractMlbId(src.value)
       if (!mlb) continue
@@ -126,21 +137,45 @@ async function tryExtractProductFromLanding(url) {
       } catch { /* ignore */ }
     }
 
-    const patterns = [
-      /https?:\/\/www\.mercadolivre\.com\.br\/p\/MLB[0-9]{6,}/i,
-      /https?:\/\/produto\.mercadolivre\.com\.br\/MLB[-_][0-9]{6,}[^"'\\\s<]*/i,
-      /https?:\\\/\\\/www\.mercadolivre\.com\.br\\\/p\\\/MLB[0-9]{6,}/i,
-      /https?:\\\/\\\/produto\.mercadolivre\.com\.br\\\/MLB[-_][0-9]{6,}[^"'\\\s<]*/i,
-    ]
-    for (const p of patterns) {
-      const found = html.match(p)?.[0]
-      if (!found) continue
-      const normalized = found.replace(/\\\//g, '/')
-      const canon = canonicalizeMlProductUrl(normalized)
-      logger.warn({ landingUrl: url, found: normalized, mlb: extractMlbId(canon) }, 'ML landing: fallback para regex no HTML (sem tag ancorada)')
-      return canon
+    // 2) JSON-LD com @type Product
+    const ldBlocks = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || []
+    for (const block of ldBlocks) {
+      const inner = block.replace(/^<script[^>]*>/i, '').replace(/<\/script>$/i, '')
+      try {
+        const data = JSON.parse(inner)
+        const items = Array.isArray(data) ? data : [data]
+        for (const item of items) {
+          if (!item || typeof item !== 'object') continue
+          const isProduct = String(item['@type'] || '').toLowerCase().includes('product')
+          if (!isProduct) continue
+          const candidateStr = [item.url, item['@id'], item.sku, item.productID, item.mpn]
+            .filter(Boolean)
+            .map(String)
+            .join(' ')
+          const mlb = extractMlbId(candidateStr)
+          if (!mlb) continue
+          const canonical = `https://www.mercadolivre.com.br/p/${mlb}`
+          logger.info({ landingUrl: url, mlb, source: 'json-ld' }, 'ML landing: extraído de JSON-LD Product')
+          return canonical
+        }
+      } catch { /* json inválido, próximo bloco */ }
     }
-    logger.warn({ landingUrl: url }, 'ML landing: nenhum MLB extraído')
+
+    // 3) blobs JSON inline (__PRELOADED_STATE__, __NEXT_DATA__, etc.)
+    // Procura ocorrências do padrão "itemId":"MLB..." ou "productId":"MLB..."
+    // que tipicamente aparecem só na descrição do produto da página, não
+    // em cards de recomendação (recomendações usam ids diferentes).
+    const blobMatch = html.match(/"(?:itemId|productId|catalog_product_id|product_id|item_id|mlbId|MLB)"\s*:\s*"(MLB[-_]?[0-9]{6,})"/i)
+    if (blobMatch?.[1]) {
+      const mlb = extractMlbId(blobMatch[1])
+      if (mlb) {
+        const canonical = `https://www.mercadolivre.com.br/p/${mlb}`
+        logger.info({ landingUrl: url, mlb, source: 'json-blob' }, 'ML landing: extraído de blob JSON inline')
+        return canonical
+      }
+    }
+
+    logger.warn({ landingUrl: url }, 'ML landing: nenhuma fonte estruturada produziu MLB — desistindo')
     return null
   } catch (err) {
     logger.warn({ landingUrl: url, err: err.message }, 'ML landing: erro ao buscar HTML')
