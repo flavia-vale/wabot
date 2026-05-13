@@ -14,12 +14,35 @@ const SLUGS = [
   'espelhar-grupos-whatsapp-belem',
   'espelhar-grupos-whatsapp-florianopolis',
   'espelhar-grupos-whatsapp-vitoria',
+  'automatizar-divulgacao-em-grupos-whatsapp',
+  'escalar-grupos-ofertas-sem-equipe',
+  'postar-em-varios-grupos-whatsapp-ao-mesmo-tempo',
+  'padronizar-divulgacao-afiliado-whatsapp',
+  'aumentar-conversao-em-grupos-de-cupons',
+  'consistencia-postagens-em-grupos',
+  'reduzir-tempo-operacional-em-grupos-whatsapp',
+  'organizar-calendario-de-ofertas-no-whatsapp',
+  'melhorar-alcance-em-grupos-de-promocoes',
+  'rastrear-resultados-de-divulgacao-em-grupos',
   'bot-ofertas-supermercado-whatsapp',
   'bot-ofertas-farmacia-whatsapp',
   'bot-ofertas-eletronicos-whatsapp',
   'bot-ofertas-moda-whatsapp',
   'bot-ofertas-beleza-whatsapp',
 ]
+
+const PAIN_SLUGS = new Set([
+  'automatizar-divulgacao-em-grupos-whatsapp',
+  'escalar-grupos-ofertas-sem-equipe',
+  'postar-em-varios-grupos-whatsapp-ao-mesmo-tempo',
+  'padronizar-divulgacao-afiliado-whatsapp',
+  'aumentar-conversao-em-grupos-de-cupons',
+  'consistencia-postagens-em-grupos',
+  'reduzir-tempo-operacional-em-grupos-whatsapp',
+  'organizar-calendario-de-ofertas-no-whatsapp',
+  'melhorar-alcance-em-grupos-de-promocoes',
+  'rastrear-resultados-de-divulgacao-em-grupos',
+])
 
 const baseUrl = (process.env.LP_BASE_URL || process.argv[2] || 'http://localhost:3006').replace(/\/$/, '')
 
@@ -48,7 +71,7 @@ async function validateSlug(slug) {
   const blocks = extractJsonLdBlocks(html)
   const types = new Set(blocks.map((b) => b?.['@type']).filter(Boolean))
 
-  const required = ['FAQPage', 'HowTo', 'Product']
+  const required = PAIN_SLUGS.has(slug) ? ['FAQPage', 'HowTo', 'Product', 'BreadcrumbList'] : ['FAQPage', 'HowTo', 'Product']
   const missing = required.filter((t) => !types.has(t))
 
   return {
