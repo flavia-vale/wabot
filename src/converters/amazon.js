@@ -2,7 +2,8 @@ import axios from 'axios'
 import logger from '../logger.js'
 
 const ASIN_RE = /(?:\/dp\/|\/gp\/product\/|\/product-reviews\/|\/exec\/obidos\/ASIN\/)([A-Z0-9]{10})/i
-const AMAZON_HOST = /amazon\.com\.br|amzn\.to|a\.co/
+const AMAZON_HOST = /amazon\.com\.br|amzn\.to|a\.co|amzn\.divulgador\.link/
+const SHORT_HOST = /amzn\.to|a\.co|amzn\.divulgador\.link/
 
 async function resolveShortUrl(url) {
   try {
@@ -81,7 +82,7 @@ export async function convert(url, creds) {
     if (!AMAZON_HOST.test(new URL(url).hostname)) return null
 
     let target = url
-    if (/amzn\.to|a\.co/.test(url)) target = await resolveShortUrl(url)
+    if (SHORT_HOST.test(url)) target = await resolveShortUrl(url)
 
     const asin = extractAsin(target)
     if (!asin) {

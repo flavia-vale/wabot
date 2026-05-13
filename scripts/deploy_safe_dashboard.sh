@@ -12,6 +12,14 @@ if [[ ! -d "$ROOT_DIR/.git" ]]; then
   exit 1
 fi
 
+configure_public_git_dependencies() {
+  # Baileys/libsignal pode aparecer no lockfile como git+ssh; em GitHub Actions/VPS
+  # sem chave SSH para GitHub, isso falha antes do build. Reescreve apenas GitHub
+  # público para HTTPS sem alterar package-lock.
+  git config --global --replace-all url."https://github.com/".insteadOf "ssh://git@github.com/"
+  git config --global --add url."https://github.com/".insteadOf "git@github.com:"
+}
+
 check_http_with_retry() {
   local path="$1"
   local attempts="${2:-8}"
@@ -33,20 +41,28 @@ check_http_with_retry() {
 }
 
 cd "$ROOT_DIR"
-echo "[1/7] Sync branch $BRANCH"
+configure_public_git_dependencies
+echo "[1/9] Sync branch $BRANCH"
 git fetch origin
 git checkout "$BRANCH"
 git pull --ff-only origin "$BRANCH"
 
-echo "[2/7] Install dashboard dependencies"
+echo "[2/9] Install root dependencies sem alterar lockfile"
+npm ci
+
+echo "[3/9] Apply database migrations"
+npx prisma migrate deploy
+
+echo "[4/9] Install dashboard dependencies"
 cd "$DASHBOARD_DIR"
 npm ci
 
-echo "[3/7] Build dashboard (hard gate)"
+echo "[5/9] Guardrail + build dashboard (hard gate)"
+npm run guard:config-page
 rm -rf .next
 npm run build
 
-echo "[3b/7] Verificando integridade do build"
+echo "[5b/9] Verificando integridade do build"
 for artifact in .next/BUILD_ID .next/prerender-manifest.json; do
   if [[ ! -f "$artifact" ]]; then
     echo "ERRO: artefato de build ausente: $artifact — abortando deploy."
@@ -58,10 +74,10 @@ cd "$ROOT_DIR"
 node scripts/verify-dashboard-api-proxy.mjs
 cd "$DASHBOARD_DIR"
 
-echo "[4/7] Return to project root"
+echo "[6/9] Return to project root"
 cd "$ROOT_DIR"
 
-echo "[5/7] Sync PM2 daemon/runtime (best effort)"
+echo "[7/9] Sync PM2 daemon/runtime (best effort)"
 if command -v pm2 >/dev/null 2>&1; then
   pm2 update >/tmp/wabot_pm2_update.log 2>&1 || {
     echo "  Aviso: pm2 update falhou; seguindo com restart padrão."
@@ -72,14 +88,14 @@ else
   exit 1
 fi
 
-echo "[5b/7] Restart PM2 apps"
+echo "[7b/9] Restart PM2 apps"
 pm2 restart dashboard --update-env
 pm2 restart api --update-env
 
-echo "[6/7] PM2 status"
+echo "[8/9] PM2 status"
 pm2 status
 
-echo "[7/7] Smoke tests (hard gate com retry)"
+echo "[9/9] Smoke tests (hard gate com retry)"
 for path in /login /admin /dashboard; do
   check_http_with_retry "$path" 8 2
 done

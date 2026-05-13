@@ -14,6 +14,7 @@ import { dirname } from 'path'
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
+import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile } from './paths.js'
@@ -21,6 +22,7 @@ import { trackAnalyticsEventSafe } from './analytics.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } from './sendQueueBackend.js'
+import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 
 const userId = process.env.BOT_USER_ID
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
@@ -150,9 +152,12 @@ async function clearAppStateSyncKeys() {
 
 const sleep = ms => new Promise(res => setTimeout(res, ms))
 
-// Config cache com TTL de 60s
+const CONFIG_CACHE_TTL_MS = Math.max(1_000, Number(process.env.CONFIG_CACHE_TTL_MS || 60_000))
+
+// Config cache com TTL configurável e promessa compartilhada para evitar stampede no DB.
 let configCache = null
 let configCacheTime = 0
+let configCachePromise = null
 
 async function loadConfig() {
   const user = await db.user.findUnique({
@@ -198,7 +203,7 @@ async function loadConfig() {
     postDetails: user.groups.filter(g => g.role === 'post').map(g => ({ waJid: g.waJid, welcomeMsg: g.welcomeMsg })),
   }
 
-  const botConfig = user.botConfig ?? {
+  const botConfig = {
     delayMin: 5,
     delayMax: 15,
     platforms: 'shopee,amazon,mercadolivre,magazineluiza',
@@ -206,17 +211,32 @@ async function loadConfig() {
     welcomeMsg: '',
     feedGlobal: false,
     postToStatus: false,
+    brandingGroupLink: '',
+    brandingCtaText: DEFAULT_BRANDING_CTA_TEXT,
+    ...(user.botConfig ?? {}),
   }
+  botConfig.brandingGroupLink = normalizeBrandingLink(botConfig.brandingGroupLink)
+  botConfig.brandingCtaText = normalizeBrandingCtaText(botConfig.brandingCtaText)
 
   return { credentials, groups, plan: user.plan, botConfig }
 }
 
 async function getConfig() {
-  if (!configCache || Date.now() - configCacheTime > 60_000) {
-    configCache = await loadConfig()
-    configCacheTime = Date.now()
+  const now = Date.now()
+  if (configCache && now - configCacheTime <= CONFIG_CACHE_TTL_MS) return configCache
+
+  if (!configCachePromise) {
+    configCachePromise = loadConfig()
+      .then(cfg => {
+        configCache = cfg
+        configCacheTime = Date.now()
+        return cfg
+      })
+      .finally(() => {
+        configCachePromise = null
+      })
   }
-  return configCache
+  return configCachePromise
 }
 
 // Checa e enfileira mensagens agendadas pendentes
@@ -262,7 +282,8 @@ async function checkScheduledMessages() {
           platforms: 'scheduled',
           imageMode: 'none',
           plan: 'scheduled',
-          delayMs: 0,
+          delayMs: buildSmartDelayMs((await getConfig()).botConfig),
+          typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           buildPayload: async () => ({ text: msg.text }),
           onDone: async (result) => {
             state.remaining--
@@ -312,20 +333,6 @@ function sanitizeMessageForLog(text) {
   return `${raw.slice(0, MESSAGE_LOG_MAX_CHARS)}…`
 }
 
-const INVITE_RE = /🚀?\s*Participe do Grupo[:\s]+https:\/\/chat\.whatsapp\.com\/\S+/gi
-
-function buildMessage(originalText, convertedUrl, originalUrl, groupInvite) {
-  let text = originalText.replace(originalUrl, convertedUrl).trimEnd()
-  if (!groupInvite) return text
-  if (INVITE_RE.test(text)) {
-    INVITE_RE.lastIndex = 0
-    text = text.replace(INVITE_RE, `🚀 Participe do Grupo: ${groupInvite}`)
-  } else {
-    text = `${text}\n🚀 Participe do Grupo: ${groupInvite}`
-  }
-  return text
-}
-
 const AD_TEXT = '💡 Bot gerenciado pelo Bot Conversor para Afiliados — automatize seus grupos de afiliados'
 function envNumber(name, fallback) {
   if (process.env[name] === undefined) return fallback
@@ -338,6 +345,15 @@ const SEND_MAX_ATTEMPTS = Math.max(1, envNumber('SEND_MAX_ATTEMPTS', 3))
 const SEND_RETRY_BASE_MS = Math.max(0, envNumber('SEND_RETRY_BASE_MS', 2_000))
 const SEND_RETRY_MAX_MS = Math.max(SEND_RETRY_BASE_MS, envNumber('SEND_RETRY_MAX_MS', 30_000))
 const DEST_RATE_LIMIT_MS = Math.max(0, envNumber('DEST_RATE_LIMIT_MS', 1_000))
+const SMART_DELAY_PROGRESSIVE_THRESHOLD = Math.max(1, envNumber('SMART_DELAY_PROGRESSIVE_THRESHOLD', 20))
+const SMART_DELAY_PROGRESSIVE_STEP_MS = Math.max(0, envNumber('SMART_DELAY_PROGRESSIVE_STEP_MS', 5_000))
+const SMART_DELAY_PROGRESSIVE_MAX_EXTRA_MS = Math.max(0, envNumber('SMART_DELAY_PROGRESSIVE_MAX_EXTRA_MS', 60_000))
+const SMART_DELAY_REST_EVERY = Math.max(0, envNumber('SMART_DELAY_REST_EVERY', 0))
+const SMART_DELAY_REST_MS = Math.max(0, envNumber('SMART_DELAY_REST_MS', 0))
+const SMART_DELAY_TYPING_ENABLED = String(process.env.SMART_DELAY_TYPING_ENABLED ?? '1') !== '0'
+const SMART_DELAY_TYPING_MIN_MS = Math.max(0, envNumber('SMART_DELAY_TYPING_MIN_MS', 1_200))
+const SMART_DELAY_TYPING_MAX_MS = Math.max(SMART_DELAY_TYPING_MIN_MS, envNumber('SMART_DELAY_TYPING_MAX_MS', 7_000))
+const SMART_DELAY_TYPING_CHARS_PER_SECOND = Math.max(1, envNumber('SMART_DELAY_TYPING_CHARS_PER_SECOND', 18))
 const SEND_QUEUE_BACKEND = String(process.env.QUEUE_BACKEND || 'memory').toLowerCase()
 const REDIS_URL = process.env.REDIS_URL || ''
 const BULLMQ_QUEUE_NAME = process.env.BULLMQ_QUEUE_NAME || `wabot-send-${userId}`
@@ -345,6 +361,7 @@ const MSG_QUEUE_CONCURRENCY = Math.max(1, envNumber('MSG_QUEUE_CONCURRENCY', 2))
 const MSG_QUEUE_TIMEOUT_MS = Math.max(1_000, envNumber('MSG_QUEUE_TIMEOUT_MS', 15_000))
 const MSG_QUEUE_WATCHDOG_MS = Math.max(5_000, envNumber('MSG_QUEUE_WATCHDOG_MS', 30_000))
 const MSG_QUEUE_MAX_SIZE = Math.max(10, envNumber('MSG_QUEUE_MAX_SIZE', 500))
+const MAX_INCOMING_MESSAGE_CHARS = Math.max(500, envNumber('MAX_INCOMING_MESSAGE_CHARS', 8_000))
 
 
 const WA_LIFECYCLE = Object.freeze({
@@ -406,6 +423,16 @@ function getSendQueueMetrics() {
     retryBaseMs: SEND_RETRY_BASE_MS,
     retryMaxMs: SEND_RETRY_MAX_MS,
     destinationRateLimitMs: DEST_RATE_LIMIT_MS,
+    smartDelay: {
+      progressiveThreshold: SMART_DELAY_PROGRESSIVE_THRESHOLD,
+      progressiveStepMs: SMART_DELAY_PROGRESSIVE_STEP_MS,
+      progressiveMaxExtraMs: SMART_DELAY_PROGRESSIVE_MAX_EXTRA_MS,
+      restEvery: SMART_DELAY_REST_EVERY,
+      restMs: SMART_DELAY_REST_MS,
+      typingEnabled: SMART_DELAY_TYPING_ENABLED,
+      typingMinMs: SMART_DELAY_TYPING_MIN_MS,
+      typingMaxMs: SMART_DELAY_TYPING_MAX_MS,
+    },
     ...sendMetrics,
     avgLatencyMs: sendMetrics.latencyCount ? Math.round(sendMetrics.latencyTotalMs / sendMetrics.latencyCount) : 0,
   }
@@ -415,12 +442,33 @@ function canAcceptSendJob() {
   return !shuttingDown
 }
 
+function getSendBackendQueueSize() {
+  const size = typeof sendBackend?.getQueueSize === 'function' ? sendBackend.getQueueSize() : 0
+  return typeof size === 'number' ? size : 0
+}
+
+function buildSmartDelayMs(botConfig, queueSize = getSendBackendQueueSize()) {
+  const jitterDelayMs = calculateJitterDelayMs({
+    delayMin: botConfig?.delayMin,
+    delayMax: botConfig?.delayMax,
+  })
+  return calculateProgressiveDelayMs({
+    baseDelayMs: jitterDelayMs,
+    queueSize,
+    threshold: SMART_DELAY_PROGRESSIVE_THRESHOLD,
+    stepMs: SMART_DELAY_PROGRESSIVE_STEP_MS,
+    maxExtraMs: SMART_DELAY_PROGRESSIVE_MAX_EXTRA_MS,
+  })
+}
+
 async function enqueueSendJob(job) {
   if (!canAcceptSendJob()) {
     sendMetrics.rejectedTotal++
     return false
   }
   const normalizedJob = { attempts: 0, enqueuedAt: Date.now(), ...job, onDone: undefined }
+  if (normalizedJob.delayMs === undefined) normalizedJob.delayMs = 0
+  if (normalizedJob.typingDelayMs === undefined) normalizedJob.typingDelayMs = 0
   if (typeof job.onDone === 'function') doneCallbacks.set(job.logId, job.onDone)
   sendMetrics.queuedTotal++
   if (job.type === 'broadcast') sendMetrics.broadcastQueuedTotal++
@@ -459,14 +507,32 @@ async function processSendJob(job) {
     })
     sendMetrics.sendingTotal++
 
-    if (job.delayMs > 0) await sleep(job.delayMs)
+    const restDelayMs = calculateRestWindowDelayMs({
+      sentCount: sendMetrics.successTotal,
+      every: SMART_DELAY_REST_EVERY,
+      durationMs: SMART_DELAY_REST_MS,
+    })
+    const totalDelayMs = Math.max(0, job.delayMs || 0) + restDelayMs
+    if (totalDelayMs > 0) {
+      logger.info({ destJid: job.destJid, delayMs: totalDelayMs, baseDelayMs: job.delayMs || 0, restDelayMs, type: job.type }, 'Smart delay antes do envio')
+      await sleep(totalDelayMs)
+    }
 
     for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt++) {
       try {
         if (!activeSock) throw new Error('Bot não conectado')
         if (!payload) payload = await job.buildPayload()
         await waitDestinationRateLimit(job.destJid)
-        await activeSock.sendMessage(job.destJid, payload)
+        if (SMART_DELAY_TYPING_ENABLED && job.typingDelayMs > 0 && !job.skipTyping) {
+          await Promise.resolve(activeSock.sendPresenceUpdate?.('composing', job.destJid)).catch(() => {})
+          await sleep(job.typingDelayMs)
+          await Promise.resolve(activeSock.sendPresenceUpdate?.('paused', job.destJid)).catch(() => {})
+        }
+        if (typeof job.send === 'function') {
+          await job.send({ sock: activeSock, payload })
+        } else {
+          await activeSock.sendMessage(job.destJid, payload)
+        }
         lastSendByDest.set(job.destJid, Date.now())
         logger.info({ destJid: job.destJid, platforms: job.platforms, imageMode: job.imageMode, attempt, type: job.type }, 'Mensagem enviada')
 
@@ -665,6 +731,10 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         msg.message?.imageMessage?.caption || ''
 
       if (!text) return
+      if (text.length > MAX_INCOMING_MESSAGE_CHARS) {
+        logger.warn({ msgId: msg.key.id, chars: text.length, limit: MAX_INCOMING_MESSAGE_CHARS }, 'Mensagem grande demais — processamento ignorado para preservar latência')
+        return
+      }
 
       // Filtro por palavras bloqueadas (override por grupo monitorado quando preenchido)
       const blockedKeywords = monitorGroup?.blockedKeywords?.trim() || cfg.botConfig.blockedKeywords
@@ -676,7 +746,10 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }
       }
 
-      const links = detectLinks(text)
+      const sanitizedText = sanitizeInviteLinks(text)
+      if (!sanitizedText) return
+
+      const links = detectLinks(sanitizedText)
       if (!links.length) return
 
       // Filtro por plataforma (override por grupo monitorado quando preenchido)
@@ -823,12 +896,12 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 
       if (!conversions.length) return
 
-      // Substituir todos os links convertidos no texto original de uma vez
-      let finalText = text
-      for (const { url, converted } of conversions) {
-        finalText = finalText.replace(url, converted)
+      // Processa a mensagem em ordem defensiva: sanitização já aplicada, conversão e branding.
+      const finalText = applyConversionsAndBranding(sanitizedText, conversions, cfg.botConfig.brandingGroupLink, cfg.botConfig.brandingCtaText)
+      if (!finalText) {
+        logger.warn({ msgId: msg.key.id }, 'Mensagem vazia após processamento — envio ignorado')
+        return
       }
-      finalText = finalText.trimEnd()
 
       const primary = conversions[0]
 
@@ -859,13 +932,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         let sentVia = 'text'
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         const log = await db.messageLog.create({
-          data: {
-            ...logData,
-            status: 'queued',
-          },
-        }).catch(err => {
-          logger.error({ err: err.message, destJid, platforms }, 'Falha ao criar log queued para envio convertido')
-          return null
+          data: { ...logData, status: 'queued' },
         })
 
         try {
@@ -923,17 +990,25 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             if (adSendCount % 50 === 0) {
               await sock.sendMessage(destJid, { text: AD_TEXT }).catch(() => {})
             }
-          }
-        } catch (err) {
-          logger.error({ destJid, err: err.message }, 'Erro ao enviar')
-          const sentAt = new Date()
-          const persistError = log
-            ? db.messageLog.update({ where: { id: log.id }, data: { status: 'error', errorMsg: err.message, sentAt } })
-            : db.messageLog.create({ data: { ...logData, status: 'error', errorMsg: err.message, sentAt } })
-          await persistError.catch(logErr => {
-            logger.error({ err: logErr.message, destJid, platforms, logId: log?.id }, 'Falha ao persistir erro de envio convertido')
-          })
-          trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: err.name } })
+            await sendSock.sendMessage(destJid, payload)
+          },
+          onDone: async (result) => {
+            if (result.ok) {
+              logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
+              if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
+            } else {
+              trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: result.error } })
+            }
+          },
+        })
+
+        if (!accepted) {
+          const error = 'Fila interna de envios cheia ou worker encerrando'
+          await db.messageLog.update({
+            where: { id: log.id },
+            data: { status: 'error', errorMsg: error, sentAt: new Date() },
+          }).catch(() => {})
+          logger.warn({ destJid, queueSize: getSendBackendQueueSize() }, 'Envio recusado após criação do log queued')
         }
       }
   }
@@ -998,6 +1073,7 @@ process.on('message', async msg => {
 
   if (msg?.type === 'reloadConfig') {
     configCache = null
+    configCachePromise = null
     logger.info('Config recarregada')
   }
 
@@ -1081,7 +1157,8 @@ process.on('message', async msg => {
         platforms: 'broadcast',
         imageMode: 'none',
         plan: 'broadcast',
-        delayMs: 0,
+        delayMs: buildSmartDelayMs((await getConfig()).botConfig),
+        typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
         buildPayload: async () => ({ text: msg.text }),
       })
       if (accepted) {

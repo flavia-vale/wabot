@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Icon } from './Icon';
 import { WhatsAppMockup } from './WhatsAppMockup';
 
@@ -52,7 +53,7 @@ function Nav() {
         <a style={s.navLink} href="#faq">Perguntas</a>
       </div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center' }} className="landing-nav-cta">
-        <a className="btn btn-ghost" href="/login" style={{ padding: '10px 18px', fontSize: 14 }}>Entrar</a>
+        <Link className="btn btn-ghost" href="/login" style={{ padding: '10px 18px', fontSize: 14 }}>Entrar</Link>
         <a className="btn btn-primary" href="#planos" style={{ padding: '10px 18px', fontSize: 14 }}>Começar grátis</a>
       </div>
       <details className="landing-mobile-menu">
@@ -62,7 +63,7 @@ function Nav() {
           <a style={s.navLink} href="#features">Recursos</a>
           <a style={s.navLink} href="#planos">Planos</a>
           <a style={s.navLink} href="#faq">Perguntas</a>
-          <a className="btn btn-ghost" href="/login">Entrar</a>
+          <Link className="btn btn-ghost" href="/login">Entrar</Link>
           <a className="btn btn-primary" href="#planos">Começar grátis</a>
         </div>
       </details>
@@ -87,7 +88,7 @@ export function Hero({ tone, primaryCtaLabel = 'Conectar meu WhatsApp', eyebrowL
     <div className="wrap" style={{ position: 'relative' }}>
       <Nav />
       <div className="landing-mobile-priority">
-        <a className="btn btn-ghost" href="/login">Entrar</a>
+        <Link className="btn btn-ghost" href="/login">Entrar</Link>
       </div>
       <div style={{ ...s.decor, width: 380, height: 380, background: 'var(--accent-2)', top: -40, right: -80 }} />
       <div style={{ ...s.decor, width: 280, height: 280, background: 'var(--accent-3)', bottom: -60, left: -40 }} />
