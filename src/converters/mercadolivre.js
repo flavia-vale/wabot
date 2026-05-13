@@ -108,8 +108,9 @@ function buildCanonicalCandidates(targetUrl) {
 // produto da própria página, não para recomendações).
 // Em ordem de confiança:
 //   1) tags <link rel=canonical>, <meta og:url>, <meta twitter:url>
-//   2) JSON-LD com @type Product
-//   3) blobs __PRELOADED_STATE__ / __NEXT_DATA__ com itemId/productId/MLB
+//   2) landing social: recommended_items[0] e/ou parâmetro wid=
+//   3) JSON-LD com @type Product
+//   4) blobs __PRELOADED_STATE__ / __NEXT_DATA__ com itemId/productId/MLB
 // O regex genérico "primeira ocorrência de MLB no HTML" foi removido por
 // ser instável: o ML serve carrosséis de recomendações antes do produto.
 async function tryExtractProductFromLanding(url) {
@@ -137,7 +138,46 @@ async function tryExtractProductFromLanding(url) {
       } catch { /* ignore */ }
     }
 
-    // 2) JSON-LD com @type Product
+    // 2) landings sociais do ML (mostram vários produtos do vendedor):
+    //    a) recommended_items[0] — primeiro item é o destacado pela share
+    //    b) parâmetro wid= (watched item id) nas URLs internas — id global
+    //       do produto compartilhado, com lookup do product_id correspondente
+    const recoMatch = html.match(/"recommended_items"\s*:\s*\[\s*\{\s*"id"\s*:\s*"(MLB[-_]?[0-9]+)"(?:[^{}]*?"product_id"\s*:\s*"(MLB[-_]?[0-9]+)")?/i)
+    if (recoMatch) {
+      const productMlb = recoMatch[2] ? extractMlbId(recoMatch[2]) : null
+      const listingMlb = extractMlbId(recoMatch[1])
+      if (productMlb) {
+        const canonical = `https://www.mercadolivre.com.br/p/${productMlb}`
+        logger.info({ landingUrl: url, productMlb, listingMlb, source: 'recommended_items[0]' }, 'ML landing: extraído de recommended_items[0]')
+        return canonical
+      }
+      if (listingMlb) {
+        const canonical = `https://produto.mercadolivre.com.br/${listingMlb}-x-_JM`
+        logger.info({ landingUrl: url, mlb: listingMlb, source: 'recommended_items[0]:id' }, 'ML landing: extraído de recommended_items[0] (listagem)')
+        return canonical
+      }
+    }
+    const widMatch = html.match(/[?&;]wid=(MLB[-_]?[0-9]+)/i)
+    if (widMatch?.[1]) {
+      const listingMlb = extractMlbId(widMatch[1])
+      if (listingMlb) {
+        const productLookup = new RegExp(`"id"\\s*:\\s*"${listingMlb}"\\s*,\\s*"product_id"\\s*:\\s*"(MLB[-_]?[0-9]+)"`, 'i')
+        const productMatch = html.match(productLookup)
+        if (productMatch?.[1]) {
+          const productMlb = extractMlbId(productMatch[1])
+          if (productMlb) {
+            const canonical = `https://www.mercadolivre.com.br/p/${productMlb}`
+            logger.info({ landingUrl: url, productMlb, listingMlb, source: 'wid+lookup' }, 'ML landing: extraído de wid com lookup de product_id')
+            return canonical
+          }
+        }
+        const canonical = `https://produto.mercadolivre.com.br/${listingMlb}-x-_JM`
+        logger.info({ landingUrl: url, mlb: listingMlb, source: 'wid' }, 'ML landing: extraído de wid (sem catalog product_id)')
+        return canonical
+      }
+    }
+
+    // 3) JSON-LD com @type Product
     const ldBlocks = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || []
     for (const block of ldBlocks) {
       const inner = block.replace(/^<script[^>]*>/i, '').replace(/<\/script>$/i, '')
@@ -161,7 +201,7 @@ async function tryExtractProductFromLanding(url) {
       } catch { /* json inválido, próximo bloco */ }
     }
 
-    // 3) blobs JSON inline (__PRELOADED_STATE__, __NEXT_DATA__, etc.)
+    // 4) blobs JSON inline (__PRELOADED_STATE__, __NEXT_DATA__, etc.)
     // Procura ocorrências do padrão "itemId":"MLB..." ou "productId":"MLB..."
     // que tipicamente aparecem só na descrição do produto da página, não
     // em cards de recomendação (recomendações usam ids diferentes).
