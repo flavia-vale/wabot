@@ -926,75 +926,81 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           messageText: sanitizeMessageForLog(finalText),
         }
 
-        // Estratégia: enviar a oferta como card clicável (externalAdReply).
-        // A imagem do produto vira o thumbnail grande do card e tocá-la abre
-        // o link convertido — mesmo comportamento dos demais grupos de ofertas.
+        // Estratégia: enviar a oferta como imageMessage nativo para preservar
+        // tamanho/qualidade no WhatsApp. O externalAdReply continua no
+        // contextInfo apenas como enriquecimento/atribuição quando o cliente
+        // suportar, sem depender do thumbnail pequeno do card para exibir a foto.
         let sentVia = 'text'
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         const log = await db.messageLog.create({
           data: { ...logData, status: 'queued' },
         })
 
-        try {
-          if (log) {
-            await db.messageLog.update({ where: { id: log.id }, data: { status: 'sending', errorMsg: null } }).catch(err => {
-              logger.warn({ err: err.message, logId: log.id }, 'Falha ao marcar envio convertido como sending')
-            })
-          }
+        const accepted = await enqueueSendJob({
+          type: 'converted',
+          logId: log.id,
+          destJid,
+          platforms,
+          imageMode: monitorGroup?.imageMode || 'native-image',
+          plan: cfg.plan,
+          delayMs: buildSmartDelayMs(cfg.botConfig),
+          typingDelayMs: calculateTypingDelayMs({ text: finalText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
+          buildPayload: async () => {
+            const fetched = await getImage()
+            const image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
+            if (fetched && !image) {
+              logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
+            }
 
-          const fetched = await getImage()
-          const image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
-          if (fetched && !image) {
-            logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
-          }
+            if (!image) return { text: finalText }
 
-          if (image) {
             const firstLine = finalText.split('\n').map(l => l.trim()).find(Boolean) || 'Oferta'
             const title = firstLine.slice(0, 80)
-            await sock.sendMessage(destJid, {
-              text: finalText,
+            return {
+              image: image.buffer,
+              mimetype: image.mimetype,
+              jpegThumbnail: image.jpegThumbnail,
+              caption: finalText,
               contextInfo: {
                 externalAdReply: {
                   title,
                   body: '',
                   mediaType: 1,
                   previewType: 0,
-                  thumbnail: image.buffer,
+                  thumbnail: image.jpegThumbnail,
                   sourceUrl: primary.converted,
                   renderLargerThumbnail: true,
                   showAdAttribution: false,
                 },
               },
-            })
-            sentVia = 'externalAdReply'
-          } else {
-            await sock.sendMessage(destJid, { text: finalText })
-          }
-          logger.info({ destJid, platforms, sentVia }, 'Mensagem enviada')
-
-          const sentAt = new Date()
-          await Promise.all([
-            log
-              ? db.messageLog.update({ where: { id: log.id }, data: { status: 'success', errorMsg: null, sentAt } })
-              : db.messageLog.create({ data: { ...logData, status: 'success', sentAt } }),
-            db.user.update({
-              where: { id: userId },
-              data: { lastActivityAt: sentAt, sendCount: { increment: 1 } },
-            }),
-          ]).catch(err => {
-            logger.error({ err: err.message, destJid, platforms, logId: log?.id }, 'Mensagem enviada, mas falha ao persistir log/atividade')
-          })
-          if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
-          if (cfg.plan === 'basic') {
-            adSendCount++
-            if (adSendCount % 50 === 0) {
-              await sock.sendMessage(destJid, { text: AD_TEXT }).catch(() => {})
             }
+          },
+          send: async ({ sock: sendSock, payload }) => {
+            if (payload?.image) {
+              try {
+                await sendSock.sendMessage(destJid, payload)
+                sentVia = 'imageMessage'
+                return
+              } catch (err) {
+                sentVia = 'textFallback'
+                logger.warn({ err: err.message, destJid, platforms }, 'Falha ao enviar imageMessage — fallback para texto puro')
+                await sendSock.sendMessage(destJid, { text: finalText })
+                return
+              }
+            }
+
             await sendSock.sendMessage(destJid, payload)
+            sentVia = 'text'
           },
           onDone: async (result) => {
             if (result.ok) {
               logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
+              await db.user.update({
+                where: { id: userId },
+                data: { lastActivityAt: new Date(), sendCount: { increment: 1 } },
+              }).catch(err => {
+                logger.error({ err: err.message, destJid, platforms, logId: log.id }, 'Mensagem enviada, mas falha ao persistir atividade do usuário')
+              })
               if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
             } else {
               trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: result.error } })
