@@ -135,7 +135,7 @@ export default function TutorialPage() {
         <StepList steps={[
           <>Faça login na sua conta do Mercado Livre com o perfil de afiliado.</>,
           <><ExternalLink href={LINKS.mercadoLivreLinkBuilder}>Acesse o Gerador de Links ML</ExternalLink> — ou navegue por: <strong>Minha Conta → Afiliados e Criadores → Gerador de links</strong>.</>,
-          <>Na página do Gerador de Links, você vai ver um campo chamado <strong>&quot;Etiqueta em uso&quot;</strong> com um código numérico (ex: <code className="bg-gray-100 px-1 rounded text-xs">47xxxxx</code>). Esse é o seu <strong>ID</strong>. Copie-o.</>,
+          <>Na página do Gerador de Links, você vai ver um campo chamado <strong>&quot;Etiqueta em uso&quot;</strong> com um código (ex: <code className="bg-gray-100 px-1 rounded text-xs">47xxxxx</code> ou <code className="bg-gray-100 px-1 rounded text-xs">faxxxxx</code>). Esse é o seu <strong>ID</strong>. Copie-o.</>,
         ]} />
 
         <div className="space-y-1 pt-2">
