@@ -23,6 +23,7 @@ import { validateCredentialData } from './credentialHealth.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } from './sendQueueBackend.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
+import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 
 const userId = process.env.BOT_USER_ID
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
@@ -942,33 +943,15 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           messageText: sanitizeMessageForLog(finalText),
         }
 
-        // Card grande clicável igual à concorrência (Urubu etc.):
-        //
-        //   [ imageMessage full-width ]
-        //   [ chip "🔗 meli.la"      ]   ← externalAdReply minimal
-        //   [ caption com o texto    ]
-        //
-        // Estratégia: imageMessage entrega a foto em tamanho real como mídia
-        // principal (não como thumbnail de um card de preview), e
-        // contextInfo.externalAdReply minimalista (só title + sourceUrl, sem
-        // body, sem thumbnail full-res) injeta o chip entre a foto e a
-        // caption tornando a área clicável para o link convertido.
-        //
-        // Diferenças críticas vs tentativas anteriores que falharam:
-        //   - PR #347 (b949a1f) usava extendedTextMessage previewType=VIDEO
-        //     via proto manual + relayMessage → drop silencioso. Aqui o
-        //     envio é via sendMessage normal.
-        //   - 0cd5a18/e9c90c6 punham buffer full-res em externalAdReply.thumbnail
-        //     estourando o protobuf → drop silencioso. Aqui nem mandamos
-        //     thumbnail (chip simples só com title).
-        //   - ef04873 setava body+thumb+mediaType=1 → renderizava como ad
-        //     "quote acima da imagem". Aqui só title + sourceUrl com mediaType=0
-        //     renderiza como chip inline pequeno (mesmo visual do Urubu).
+        // Envio monitorado usa payload conservador. O teste
+        // test/monitored-message-payload.test.js impede reintroduzir
+        // contextInfo.externalAdReply em imageMessage, pois no WhatsApp/Baileys
+        // essa combinação já causou drop silencioso no staging: sendMessage
+        // resolvia, o log virava success, mas a mensagem não chegava ao grupo.
         //
         // Cadeia de fallback dentro de `send`:
-        //   1) imageMessage + externalAdReply minimal (chip clicável)
-        //   2) imageMessage + caption simples (sem chip)
-        //   3) texto puro com linkPreview:null
+        //   1) imageMessage + caption simples com URL convertida no topo
+        //   2) texto puro com linkPreview:null
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         const log = await db.messageLog.create({
           data: { ...logData, status: 'queued' },
@@ -990,35 +973,11 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
               logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
             }
 
-            const textPayload = { text: finalText, linkPreview: null }
-            if (!image || !primary?.converted) {
-              return { _route: 'text', primary: textPayload, fallbacks: [] }
-            }
-
-            const plainImagePayload = {
-              image: image.buffer,
-              mimetype: 'image/jpeg',
-              jpegThumbnail: image.jpegThumbnail,
-              caption: finalText,
-            }
-
-            let hostLabel = 'link'
-            try { hostLabel = new URL(primary.converted).hostname.replace(/^www\./, '') } catch {}
-
-            const chipImagePayload = {
-              ...plainImagePayload,
-              contextInfo: {
-                externalAdReply: {
-                  title: hostLabel,
-                  sourceUrl: primary.converted,
-                  mediaType: 0,
-                  renderLargerThumbnail: false,
-                  showAdAttribution: false,
-                },
-              },
-            }
-
-            return { _route: 'chip', primary: chipImagePayload, fallbacks: [plainImagePayload, textPayload] }
+            return buildMonitoredMessagePayload({
+              finalText,
+              primaryConvertedUrl: primary?.converted,
+              image,
+            })
           },
           send: async ({ sock: sendSock, payload }) => {
             const routes = [
