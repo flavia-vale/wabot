@@ -6,6 +6,18 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { HelpLink } from '@/components/HelpLink'
 import { LoadingState } from '@/components/States'
 
+const IMAGE_MODE_HELP = {
+  none: 'Não envia imagem.',
+  original: 'Usa a imagem que veio na mensagem monitorada.',
+  fetch: 'Busca a imagem na página do produto.',
+}
+
+const IMAGE_MODE_OPTIONS = [
+  ['none', 'Nenhuma'],
+  ['fetch', 'Imagem do site (Scrape)'],
+  ['original', 'Imagem original'],
+]
+
 const roleLabels = {
   monitor: 'Monitorar (origem)',
   post: 'Postar (destino)',
@@ -37,6 +49,7 @@ export default function GruposPage() {
   const [targetEditorId, setTargetEditorId] = useState(null)
   const [targetPostIds, setTargetPostIds] = useState([])
   const [targetLoading, setTargetLoading] = useState(false)
+  const [imageDrafts, setImageDrafts] = useState({})
 
   async function load() {
     setLoadingGroups(true)
@@ -68,13 +81,55 @@ export default function GruposPage() {
       await api.updateGroup(id, data)
       setSavedGroupId(id)
       window.setTimeout(() => setSavedGroupId(current => current === id ? null : current), 1500)
+      return true
     } catch (err) {
       setGroupErrors(prev => ({ ...prev, [id]: err.message }))
       setActionError(err.message)
       await load()
+      return false
     } finally {
       setSavingGroupId(current => current === id ? null : current)
     }
+  }
+
+  function getGroupImageSettings(group) {
+    return {
+      imageMode: group.imageMode ?? 'none',
+      imageLinkTarget: group.imageLinkTarget ?? 'first',
+      fallbackToOriginal: group.fallbackToOriginal ?? false,
+    }
+  }
+
+  function getImageDraft(group) {
+    return imageDrafts[group.id] ?? getGroupImageSettings(group)
+  }
+
+  function updateImageDraft(group, data) {
+    setImageDrafts(prev => ({
+      ...prev,
+      [group.id]: { ...(prev[group.id] ?? getGroupImageSettings(group)), ...data },
+    }))
+    setSavedGroupId(current => current === group.id ? null : current)
+    setGroupErrors(prev => ({ ...prev, [group.id]: '' }))
+  }
+
+  function hasImageDraftChanges(group) {
+    const current = getGroupImageSettings(group)
+    const draft = getImageDraft(group)
+    return current.imageMode !== draft.imageMode ||
+      current.imageLinkTarget !== draft.imageLinkTarget ||
+      current.fallbackToOriginal !== draft.fallbackToOriginal
+  }
+
+  async function saveImageSettings(group) {
+    const draft = getImageDraft(group)
+    const saved = await handleUpdateGroup(group.id, draft)
+    if (!saved) return
+    setImageDrafts(prev => {
+      const next = { ...prev }
+      delete next[group.id]
+      return next
+    })
   }
 
   function toggleGroupPlatform(group, platformId) {
@@ -257,7 +312,10 @@ export default function GruposPage() {
           <p className="text-gray-400 text-sm">Nenhum grupo cadastrado</p>
         ) : (
           <ul className="flex flex-col gap-4">
-            {monitor.map(g => (
+            {monitor.map(g => {
+              const imageDraft = getImageDraft(g)
+              const imageChanged = hasImageDraftChanges(g)
+              return (
               <li key={g.id} className="text-sm border border-gray-100 rounded-xl p-3">
                 <div className="flex flex-col gap-2 mb-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0 break-words">
@@ -296,10 +354,67 @@ export default function GruposPage() {
                     })}
                   </div>
                   <p className="mt-1 text-[11px] text-gray-400">Sem seleção manual, usa as plataformas globais.</p>
+                </div>
+                <div className="mt-3 border-t border-gray-100 pt-3">
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-gray-500">Imagem da mensagem:</p>
+                  </div>
+                  <div className="flex flex-wrap gap-4" role="radiogroup" aria-label={`Imagem da mensagem para ${g.name}`}>
+                    {IMAGE_MODE_OPTIONS.map(([value, label]) => (
+                      <label key={value} className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`imageMode-${g.id}`}
+                          value={value}
+                          checked={imageDraft.imageMode === value}
+                          onChange={() => updateImageDraft(g, { imageMode: value })}
+                        />
+                        <span>{label}</span>
+                        <span className="sr-only">: {IMAGE_MODE_HELP[value]}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="mt-1 text-[11px] text-gray-400">{IMAGE_MODE_HELP[imageDraft.imageMode]}</p>
+                  {imageDraft.imageMode === 'fetch' && (
+                    <div className="flex flex-wrap gap-5 mt-2">
+                      <label className="text-xs text-gray-500">
+                        Link para imagem:{' '}
+                        <select
+                          value={imageDraft.imageLinkTarget}
+                          onChange={e => updateImageDraft(g, { imageLinkTarget: e.target.value })}
+                          className="ml-1 border border-gray-200 rounded px-1.5 py-0.5 text-xs"
+                        >
+                          <option value="first">Primeiro link</option>
+                          <option value="last">Último link</option>
+                        </select>
+                      </label>
+                      <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={imageDraft.fallbackToOriginal}
+                          onChange={e => updateImageDraft(g, { fallbackToOriginal: e.target.checked })}
+                        />
+                        Fallback imagem: usar a original se o scrape falhar
+                      </label>
+                    </div>
+                  )}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => saveImageSettings(g)}
+                      disabled={!imageChanged || savingGroupId === g.id}
+                      className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {savingGroupId === g.id ? 'Salvando imagem...' : 'Salvar imagem'}
+                    </button>
+                    {imageChanged && <span className="text-[11px] text-amber-600">Alteração de imagem ainda não salva.</span>}
+                    {!imageChanged && savedGroupId === g.id && <span className="text-[11px] text-green-600">Configuração de imagem salva.</span>}
+                  </div>
                   {groupErrors[g.id] && <p className="mt-2 text-xs text-red-600" role="alert">{groupErrors[g.id]}</p>}
                 </div>
               </li>
-            ))}
+              )
+            })}
           </ul>
         )}
       </div>

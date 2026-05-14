@@ -1,5 +1,12 @@
 import db from '../../db.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
+import { reloadConfig } from '../../manager.js'
+
+function parseBoolean(value) {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') return value === 'true'
+  return Boolean(value)
+}
 
 function normalizeGroupJid(rawJid) {
   const jid = String(rawJid ?? '').trim()
@@ -67,11 +74,18 @@ export async function groupsRoutes(app) {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo não encontrado' })
 
-    const { blockedKeywords, allowedPlatforms, welcomeMsg } = req.body ?? {}
+    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, imageLinkTarget, fallbackToOriginal } = req.body ?? {}
     if (allowedPlatforms !== undefined) {
       const platforms = String(allowedPlatforms).split(',').filter(Boolean)
       const invalid = platforms.find(p => !['shopee', 'amazon', 'mercadolivre', 'magazineluiza'].includes(p))
       if (invalid) return reply.code(400).send({ error: 'allowedPlatforms contém plataforma inválida' })
+    }
+
+    if (imageMode !== undefined && !['none', 'fetch', 'original'].includes(imageMode)) {
+      return reply.code(400).send({ error: 'imageMode inválido' })
+    }
+    if (imageLinkTarget !== undefined && !['first', 'last'].includes(imageLinkTarget)) {
+      return reply.code(400).send({ error: 'imageLinkTarget inválido' })
     }
 
     const updated = await db.group.update({
@@ -80,8 +94,13 @@ export async function groupsRoutes(app) {
         ...(blockedKeywords !== undefined ? { blockedKeywords: String(blockedKeywords).trim() || null } : {}),
         ...(allowedPlatforms !== undefined ? { allowedPlatforms: String(allowedPlatforms).trim() || null } : {}),
         ...(welcomeMsg !== undefined ? { welcomeMsg: String(welcomeMsg).trim() || null } : {}),
+        ...(imageMode !== undefined ? { imageMode } : {}),
+        ...(imageLinkTarget !== undefined ? { imageLinkTarget } : {}),
+        ...(fallbackToOriginal !== undefined ? { fallbackToOriginal: parseBoolean(fallbackToOriginal) } : {}),
       },
     })
+    const configReloaded = reloadConfig(req.user.sub)
+    app.log.info({ groupId: updated.id, imageMode: updated.imageMode, imageLinkTarget: updated.imageLinkTarget, fallbackToOriginal: updated.fallbackToOriginal, configReloaded }, 'Grupo atualizado; configuração do worker recarregada quando disponível')
     return updated
   })
 
