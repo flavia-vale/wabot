@@ -152,19 +152,6 @@ async function clearAppStateSyncKeys() {
 
 const sleep = ms => new Promise(res => setTimeout(res, ms))
 
-async function withSendTimeout(promise, timeoutMs, message) {
-  let timer = null
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(message)), timeoutMs)
-    timer.unref?.()
-  })
-  try {
-    return await Promise.race([promise, timeout])
-  } finally {
-    if (timer) clearTimeout(timer)
-  }
-}
-
 const CONFIG_CACHE_TTL_MS = Math.max(1_000, Number(process.env.CONFIG_CACHE_TTL_MS || 60_000))
 
 // Config cache com TTL configurável e promessa compartilhada para evitar stampede no DB.
@@ -372,75 +359,6 @@ const MSG_QUEUE_TIMEOUT_MS = Math.max(1_000, envNumber('MSG_QUEUE_TIMEOUT_MS', 1
 const MSG_QUEUE_WATCHDOG_MS = Math.max(5_000, envNumber('MSG_QUEUE_WATCHDOG_MS', 30_000))
 const MSG_QUEUE_MAX_SIZE = Math.max(10, envNumber('MSG_QUEUE_MAX_SIZE', 500))
 const MAX_INCOMING_MESSAGE_CHARS = Math.max(500, envNumber('MAX_INCOMING_MESSAGE_CHARS', 8_000))
-const SEND_EXTERNAL_AD_REPLY_TIMEOUT_MS = Math.max(5_000, envNumber('SEND_EXTERNAL_AD_REPLY_TIMEOUT_MS', 20_000))
-
-const OFFER_CARD_TITLE_MAX_CHARS = 80
-const OFFER_CARD_BODY_MAX_CHARS = 80
-
-function buildOfferCardTextParts(messageText, sourceUrl) {
-  const lines = String(messageText ?? '')
-    .split('\n')
-    .map(line => line.trim())
-    .filter(Boolean)
-
-  const titleLine = lines.find(line => !sourceUrl || !line.includes(sourceUrl)) || 'Oferta'
-  const bodyLine = lines.find(line => line !== titleLine && (!sourceUrl || !line.includes(sourceUrl))) || titleLine
-
-  return {
-    title: titleLine.slice(0, OFFER_CARD_TITLE_MAX_CHARS),
-    body: bodyLine.slice(0, OFFER_CARD_BODY_MAX_CHARS),
-  }
-}
-
-async function sendConvertedOfferAsLargeClickableCard({ sock, destJid, messageText, sourceUrl, getImage, msgId, platforms }) {
-  const text = String(messageText ?? '').trim()
-  const { title, body } = buildOfferCardTextParts(text, sourceUrl)
-
-  try {
-    const fetched = await getImage()
-    const image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
-    if (!image?.buffer?.length) {
-      if (fetched) {
-        logger.warn({ msgId, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — fallback para texto puro')
-      } else {
-        logger.warn({ msgId }, 'Oferta sem imagem disponível — fallback para texto puro')
-      }
-      await sock.sendMessage(destJid, { text, linkPreview: null })
-      return 'text'
-    }
-
-    const payload = {
-      text,
-      // Evita que a Baileys gere matchedText/jpegThumbnail automáticos a partir
-      // dos links do texto; o externalAdReply abaixo deve ser a única fonte de preview.
-      linkPreview: null,
-      contextInfo: {
-        externalAdReply: {
-          title,
-          body,
-          mediaType: 1,
-          sourceUrl,
-          thumbnail: image.buffer,
-          renderLargerThumbnail: true,
-          showAdAttribution: false,
-        },
-      },
-    }
-
-    await withSendTimeout(
-      sock.sendMessage(destJid, payload),
-      SEND_EXTERNAL_AD_REPLY_TIMEOUT_MS,
-      `Timeout ao enviar externalAdReply após ${SEND_EXTERNAL_AD_REPLY_TIMEOUT_MS}ms`,
-    )
-    return 'externalAdReply'
-  } catch (err) {
-    logger.warn({ err: err.message, destJid, platforms }, 'Falha ao gerar/enviar card grande clicável — fallback para texto puro')
-    await sock.sendMessage(destJid, { text, linkPreview: null })
-    return 'textFallback'
-  }
-}
-
-
 const WA_LIFECYCLE = Object.freeze({
   INITIALIZING: 'initializing',
   AUTHENTICATING: 'authenticating',
@@ -892,29 +810,48 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       }
 
       // Pre-fetch da imagem (lazy, uma vez por mensagem). Retorna
-      // { buffer, mimetype } pronto para enviar à Baileys.
+      // { buffer, mimetype } pronto para enviar à Baileys, respeitando a
+      // configuração de imagem do grupo monitorado.
       let cachedImage
       let imageFetched = false
       async function getImage() {
         if (imageFetched) return cachedImage
         imageFetched = true
+        if (!monitorGroup || monitorGroup.imageMode === 'none') return null
 
-        // 1) Imagem original da mensagem (mais confiável, sem rede externa).
-        cachedImage = await downloadOriginalImage()
-        if (cachedImage) return cachedImage
-
-        // 2) Resolve pelo CDN do produto (último link convertido habilitado).
         const enabled = links.filter(l => enabledPlatforms.has(l.platform))
-        const target = enabled[enabled.length - 1]
-        if (!target) return null
+        const target = monitorGroup.imageLinkTarget === 'last' ? enabled[enabled.length - 1] : enabled[0]
+        const platform = target?.platform || 'unknown'
+        logger.info({ msgId: msg.key.id, imageMode: monitorGroup.imageMode, platform }, 'getImage: iniciando resolução de imagem')
 
-        const url = await fetchProductImage(target.platform, target.url, cfg.credentials)
-        logger.info({ msgId: msg.key.id, platform: target.platform, resolvedUrl: url }, 'fetchProductImage resultado')
-        if (url) {
-          cachedImage = await fetchImageBuffer(url, target.url)
-          logger.info({ msgId: msg.key.id, downloaded: !!cachedImage, size: cachedImage?.buffer?.length }, 'fetchImageBuffer resultado')
+        if (monitorGroup.imageMode === 'original') {
+          cachedImage = await downloadOriginalImage()
+          return cachedImage
         }
-        return cachedImage
+
+        if (monitorGroup.imageMode === 'fetch') {
+          if (platform === 'shopee') {
+            cachedImage = await downloadOriginalImage()
+            if (cachedImage) return cachedImage
+            logger.info({ msgId: msg.key.id }, 'Shopee sem imagem original — tentando resolver via API')
+          }
+
+          if (target) {
+            const url = await fetchProductImage(target.platform, target.url, cfg.credentials)
+            logger.info({ msgId: msg.key.id, platform, resolvedUrl: url }, 'fetchProductImage resultado')
+            if (url) {
+              cachedImage = await fetchImageBuffer(url, target.url)
+              logger.info({ msgId: msg.key.id, downloaded: !!cachedImage, size: cachedImage?.buffer?.length }, 'fetchImageBuffer resultado')
+            }
+          }
+
+          if (!cachedImage && monitorGroup.fallbackToOriginal) {
+            cachedImage = await downloadOriginalImage()
+          }
+          return cachedImage
+        }
+
+        return null
       }
 
 
@@ -1003,9 +940,8 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           messageText: sanitizeMessageForLog(finalText),
         }
 
-        // Estratégia: enviar a oferta como texto + externalAdReply para
-        // manter a imagem clicável (tocar na foto abre o sourceUrl). O buffer é
-        // gerado só neste ponto, fora da fila/BullMQ, evitando serialização de imagem.
+        // Envio padrão e estável: respeita a configuração de imagem do grupo.
+        // Quando há imagem, envia como imageMessage com caption; caso contrário, texto puro.
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         const log = await db.messageLog.create({
           data: { ...logData, status: 'queued' },
@@ -1017,17 +953,19 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             logger.warn({ err: err.message, logId: log.id }, 'Falha ao marcar envio convertido como sending')
           })
 
-          sentVia = await sendConvertedOfferAsLargeClickableCard({
-            sock,
-            destJid,
-            messageText: finalText,
-            sourceUrl: primary.converted,
-            getImage,
-            msgId: msg.key.id,
-            platforms,
-          })
+          const rawImage = monitorGroup?.imageMode !== 'none' ? await getImage() : null
+          const image = rawImage ? await normalizeImageForWhatsApp(rawImage.buffer) : null
+          if (rawImage && !image) {
+            logger.warn({ msgId: msg.key.id, srcMime: rawImage.mimetype, size: rawImage.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
+          }
 
-          logger.info({ destJid, platforms, sentVia }, 'Mensagem enviada')
+          const msgPayload = image
+            ? { image: image.buffer, mimetype: image.mimetype, jpegThumbnail: image.jpegThumbnail, caption: finalText }
+            : { text: finalText }
+          sentVia = image ? 'imageMessage' : 'text'
+
+          await sock.sendMessage(destJid, msgPayload)
+          logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
           const sentAt = new Date()
           await Promise.all([
             db.messageLog.update({ where: { id: log.id }, data: { status: 'success', errorMsg: null, sentAt } }),

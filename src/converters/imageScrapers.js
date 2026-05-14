@@ -239,7 +239,7 @@ export async function fetchProductImage(platform, productUrl, creds) {
   }
 }
 
-// Re-encoda a imagem como JPEG leve para externalAdReply clicável.
+// Re-encoda a imagem como JPEG e gera um thumbnail JPEG leve.
 // Necessário porque a Baileys chama sharp.metadata() para gerar thumbnail
 // automaticamente; quando os bytes vêm em formato não suportado pelo sharp
 // (HEIC sem libheif, AVIF, ou bytes corrompidos), o sharp falha e a imagem
@@ -255,12 +255,17 @@ export async function normalizeImageForWhatsApp(buf) {
     // Gera sempre um JPEG quadrado 400x400, leve, com crop central se necessário.
     const main = await sharp(buf, { failOn: 'none' })
       .rotate()
-      .resize({ width: 400, height: 400, fit: 'cover', position: 'centre' })
-      .flatten({ background: '#ffffff' })
-      .jpeg({ quality: 75, mozjpeg: true })
+      .resize({ width: 1280, height: 1280, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 85, mozjpeg: true })
       .toBuffer()
 
-    return { buffer: main, mimetype: 'image/jpeg', jpegThumbnail: main }
+    const thumbnail = await sharp(buf, { failOn: 'none' })
+      .rotate()
+      .resize({ width: 200, height: 200, fit: 'inside' })
+      .jpeg({ quality: 60 })
+      .toBuffer()
+
+    return { buffer: main, mimetype: 'image/jpeg', jpegThumbnail: thumbnail }
   } catch {
     return null
   }
