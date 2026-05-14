@@ -24,6 +24,7 @@ import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } from './sendQueueBackend.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
+import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
 
 const userId = process.env.BOT_USER_ID
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
@@ -632,12 +633,7 @@ async function startBot() {
   }
 
   const dedupeWindowMs = 300_000
-  const dedup = loadDedup()
-  const now = Date.now()
-  dedup.msgIds = (dedup.msgIds || []).filter(e => now - e.ts < dedupeWindowMs)
-  for (const key of Object.keys(dedup.links || {})) {
-    if (now - dedup.links[key] >= dedupeWindowMs) delete dedup.links[key]
-  }
+  const dedup = pruneDedupStore(loadDedup(), Date.now(), dedupeWindowMs)
   scheduleDedupSave(dedup)
 
   setLifecycleState(WA_LIFECYCLE.INITIALIZING, { reason: 'start_bot' })
@@ -1057,16 +1053,22 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       const hasValidTimestamp = Number.isFinite(msgTsRaw) && msgTsRaw > 0
       const msgTs = hasValidTimestamp ? msgTsRaw * 1000 : null
       if (msgTs && msgTs < cutoff) continue
-      const msgId = msg.key.id
-      if (dedup.msgIds.some(e => e.id === msgId)) continue
-      dedup.msgIds.push({ id: msgId, ts: Date.now() })
-      scheduleDedupSave(dedup)
 
+      const now = Date.now()
+      pruneDedupStore(dedup, now, dedupeWindowMs)
+      const dedupKey = buildIncomingDedupKey(msg)
+      if (dedupKey && hasRecentDedupEntry(dedup.msgIds, dedupKey, now, dedupeWindowMs)) {
+        logger.info({ dedupKey, jid: msg.key.remoteJid }, 'Mensagem duplicada ignorada')
+        continue
+      }
+      if (rememberDedupEntry(dedup, dedupKey, now)) scheduleDedupSave(dedup)
+
+      const msgId = msg.key.id || dedupKey || `${msg.key.remoteJid || 'unknown'}:${msgTsRaw || now}`
       const accepted = incomingQueue.enqueue(() => processIncomingMessage(msg, sock), {
         label: `msg:${msgId}`,
         orderKey: msg.key.remoteJid,
         onError: async (err) => {
-          logger.error({ msgId, err: err.message }, 'Mensagem descartada após erro/timeout — fila continua')
+          logger.error({ msgId, dedupKey, err: err.message }, 'Mensagem descartada após erro/timeout — fila continua')
         },
       })
       if (!accepted) {
