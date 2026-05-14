@@ -33,6 +33,66 @@ const navGroups = [
 
 const focusClasses = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-green-700'
 
+const PLAN_LABELS = {
+  trial: 'Trial',
+  basic: 'Basic',
+  pro: 'Pro',
+}
+
+function getExpiredAccessInfo(user) {
+  if (!user?.accessExpiresAt) return null
+  const expiresAt = new Date(user.accessExpiresAt)
+  if (Number.isNaN(expiresAt.getTime()) || expiresAt >= new Date()) return null
+
+  const dateLabel = expiresAt.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+  const planLabel = PLAN_LABELS[user.plan] ?? user.plan ?? 'plano'
+  const isTrial = user.plan === 'trial'
+
+  return {
+    dateLabel,
+    planLabel,
+    title: isTrial ? 'Seu período de teste venceu' : 'Seu plano venceu',
+    message: isTrial
+      ? `Seu trial venceu em ${dateLabel}. Por isso o bot parou de enviar mensagens automaticamente.`
+      : `Seu plano ${planLabel} venceu em ${dateLabel}. Por isso o bot parou de enviar mensagens automaticamente.`,
+  }
+}
+
+function PlanExpiredBanner({ expiredInfo, compact = false, onNavigate }) {
+  if (!expiredInfo) return null
+
+  return (
+    <section
+      role="alert"
+      aria-live="assertive"
+      className={`${compact ? 'border-t border-red-300 px-4 py-3' : 'mb-6 rounded-2xl border border-red-200 p-4 shadow-sm'} bg-red-50 text-red-950`}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex gap-3">
+          <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-100 text-lg" aria-hidden="true">⛔</span>
+          <div>
+            <p className="text-sm font-bold">{expiredInfo.title}: bot pausado por plano vencido</p>
+            <p className="mt-1 text-sm text-red-900">{expiredInfo.message}</p>
+            {!compact && (
+              <p className="mt-1 text-xs font-medium text-red-800">Renove na aba Assinaturas para liberar novamente os envios automáticos.</p>
+            )}
+          </div>
+        </div>
+        <Link
+          href="/dashboard/assinaturas"
+          onClick={onNavigate}
+          className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2 focus-visible:ring-offset-red-50"
+        >
+          Renovar agora
+        </Link>
+      </div>
+    </section>
+  )
+}
 
 function LogoutButton({ mobile = false, loggingOut, onLogout }) {
   return (
@@ -53,11 +113,16 @@ export default function DashboardLayout({ children }) {
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [currentUser, setCurrentUser] = useState(null)
 
   useEffect(() => {
     let active = true
     api.me()
-      .then(() => { if (active) setCheckingAuth(false) })
+      .then((user) => {
+        if (!active) return
+        setCurrentUser(user)
+        setCheckingAuth(false)
+      })
       .catch(() => { if (active) router.replace('/login') })
     return () => { active = false }
   }, [router])
@@ -77,6 +142,8 @@ export default function DashboardLayout({ children }) {
     await api.logout().catch(() => {})
     router.push('/login')
   }
+
+  const expiredInfo = getExpiredAccessInfo(currentUser)
 
   const isActive = (href) => href === '/dashboard' ? pathname === href : pathname.startsWith(href)
 
@@ -105,6 +172,9 @@ export default function DashboardLayout({ children }) {
               >
                 <span aria-hidden="true">{item.icon}</span>
                 <span>{item.label}</span>
+                {expiredInfo && item.href === '/dashboard/assinaturas' && (
+                  <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold ${active ? 'bg-red-100 text-red-700' : 'bg-red-500 text-white'}`}>Vencido</span>
+                )}
               </Link>
             )
           })}
@@ -130,6 +200,7 @@ export default function DashboardLayout({ children }) {
           <Link href="/dashboard/inicio" className={`text-base font-bold ${focusClasses}`} onClick={handleNavigate}>
             <span aria-hidden="true">🤖</span> Bot Conversor
           </Link>
+          {expiredInfo && <span className="rounded-full bg-red-100 px-2 py-1 text-xs font-bold text-red-700">Plano vencido</span>}
           <button
             type="button"
             onClick={() => setMenuOpen(true)}
@@ -150,6 +221,7 @@ export default function DashboardLayout({ children }) {
               <p className="text-base font-bold"><span aria-hidden="true">🤖</span> Bot Conversor</p>
               <button type="button" onClick={() => setMenuOpen(false)} className={`rounded-lg border border-green-500 px-3 py-2.5 min-h-11 text-sm font-semibold hover:bg-green-600 ${focusClasses}`}>Fechar</button>
             </div>
+            <PlanExpiredBanner expiredInfo={expiredInfo} compact onNavigate={handleNavigate} />
             {renderNavItems()}
             <div className="border-t border-green-600 pt-4">
               <LogoutButton mobile loggingOut={loggingOut} onLogout={logout} />
@@ -171,7 +243,10 @@ export default function DashboardLayout({ children }) {
           <LogoutButton loggingOut={loggingOut} onLogout={logout} />
         </div>
       </aside>
-      <main className="p-4 md:flex-1 md:p-8">{children}</main>
+      <main className="p-4 md:flex-1 md:p-8">
+        <PlanExpiredBanner expiredInfo={expiredInfo} onNavigate={handleNavigate} />
+        {children}
+      </main>
     </div>
   )
 }
