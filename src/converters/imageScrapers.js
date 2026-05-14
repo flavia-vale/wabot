@@ -6,6 +6,12 @@ const OG_IMAGE_RE = [
 ]
 
 const JSON_LD_RE = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi
+const TWITTER_IMAGE_RE = [
+  /<meta[^>]+(?:name|property)=["']twitter:image(?::src)?["'][^>]+content=["']([^"']+)["']/i,
+  /<meta[^>]+content=["']([^"']+)["'][^>]+(?:name|property)=["']twitter:image(?::src)?["']/i,
+]
+const AMAZON_DYNAMIC_IMAGE_RE = /data-a-dynamic-image=["']([^"']+)["']/i
+const AMAZON_INLINE_IMAGE_RE = /\"(?:hiRes|large)\"\s*:\s*\"(https?:\\\/\\\/[^\"]+)\"/gi
 const IMAGE_CACHE_TTL_MS = 5 * 60 * 1000
 const IMAGE_FETCH_TIMEOUT_MS = Number(process.env.IMAGE_FETCH_TIMEOUT_MS) || 2_500
 const IMAGE_HTML_MAX_BYTES = Number(process.env.IMAGE_HTML_MAX_BYTES) || 512 * 1024
@@ -42,6 +48,22 @@ function setCached(url, value) {
   imageCache.set(url, { value, expiresAt: Date.now() + IMAGE_CACHE_TTL_MS })
 }
 
+function decodeHtmlEntities(value = '') {
+  return String(value)
+    .replace(/&quot;/g, '"')
+    .replace(/&#34;/g, '"')
+    .replace(/&#x27;/gi, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+}
+
+function normalizeHtmlImageUrl(value) {
+  if (!value) return null
+  return decodeHtmlEntities(value).replace(/\\\//g, '/').trim() || null
+}
+
 function extractJsonLdImage(html) {
   const scripts = [...html.matchAll(JSON_LD_RE)]
   for (const script of scripts) {
@@ -50,9 +72,9 @@ function extractJsonLdImage(html) {
       const nodes = Array.isArray(parsed) ? parsed : [parsed]
       for (const node of nodes) {
         const image = node?.image
-        if (typeof image === 'string') return image
-        if (Array.isArray(image) && typeof image[0] === 'string') return image[0]
-        if (image?.url) return image.url
+        if (typeof image === 'string') return normalizeHtmlImageUrl(image)
+        if (Array.isArray(image) && typeof image[0] === 'string') return normalizeHtmlImageUrl(image[0])
+        if (image?.url) return normalizeHtmlImageUrl(image.url)
       }
     } catch {
       // ignora json-ld inválido
@@ -109,16 +131,85 @@ async function fetchHtml(url, { ua = 'Mozilla/5.0 (compatible; BotConversorAfili
   return { html, finalUrl: res.url || url }
 }
 
-async function resolveByHtmlLayers(url, opts) {
-  const { html } = await fetchHtml(url, opts)
+function extractImageFromHtmlLayers(html) {
   if (!html) return null
 
   for (const re of OG_IMAGE_RE) {
     const m = html.match(re)
-    if (m?.[1]) return m[1]
+    if (m?.[1]) return normalizeHtmlImageUrl(m[1])
+  }
+
+  for (const re of TWITTER_IMAGE_RE) {
+    const m = html.match(re)
+    if (m?.[1]) return normalizeHtmlImageUrl(m[1])
   }
 
   return extractJsonLdImage(html)
+}
+
+async function resolveByHtmlLayers(url, opts) {
+  const { html } = await fetchHtml(url, opts)
+  return extractImageFromHtmlLayers(html)
+}
+
+const AMAZON_SHORT_HOST_RE = /^(amzn\.to|a\.co|amzn\.divulgador\.link)$/
+
+async function resolveAmazonShortLink(url) {
+  try {
+    const u = new URL(url)
+    if (!AMAZON_SHORT_HOST_RE.test(u.hostname)) return url
+    const res = await fetch(url, {
+      headers: { 'User-Agent': BROWSER_UA },
+      signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS),
+      redirect: 'follow',
+    })
+    return res.url || url
+  } catch { return url }
+}
+
+function pickLargestAmazonDynamicImage(raw) {
+  try {
+    const parsed = JSON.parse(decodeHtmlEntities(raw))
+    let best = null
+    for (const [imageUrl, dimensions] of Object.entries(parsed)) {
+      const width = Number(dimensions?.[0]) || 0
+      const height = Number(dimensions?.[1]) || 0
+      const score = width * height
+      if (!best || score > best.score) best = { url: imageUrl, score }
+    }
+    return normalizeHtmlImageUrl(best?.url)
+  } catch {
+    return null
+  }
+}
+
+function extractAmazonImageFromHtml(html) {
+  const dynamic = html.match(AMAZON_DYNAMIC_IMAGE_RE)
+  const dynamicImage = dynamic?.[1] ? pickLargestAmazonDynamicImage(dynamic[1]) : null
+  if (dynamicImage) return dynamicImage
+
+  for (const match of html.matchAll(AMAZON_INLINE_IMAGE_RE)) {
+    const image = normalizeHtmlImageUrl(match[1])
+    if (image) return image
+  }
+  return null
+}
+
+async function resolveAmazonImage(url) {
+  const target = await resolveAmazonShortLink(url)
+  for (const opts of [{ ua: BROWSER_UA }, { ua: 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)' }]) {
+    try {
+      const { html } = await fetchHtml(target, opts)
+      if (!html) continue
+      const layered = extractImageFromHtmlLayers(html)
+      if (layered) return layered
+      const amazonImage = extractAmazonImageFromHtml(html)
+      if (amazonImage) return amazonImage
+    } catch {
+      // tenta o próximo UA/fallback
+    }
+  }
+  return null
 }
 
 // Extrai (shopid, itemid) de URLs Shopee no formato:
@@ -226,8 +317,10 @@ export async function fetchProductImage(platform, productUrl, creds) {
     let image = null
     if (platform === 'shopee') {
       image = await resolveShopeeImage(productUrl, creds)
+    } else if (platform === 'amazon') {
+      image = await resolveAmazonImage(productUrl)
     }
-    if (!image) image = await resolveByHtmlLayers(productUrl)
+    if (!image) image = await resolveByHtmlLayers(productUrl, { ua: BROWSER_UA })
 
     if (!image) incFailure(productUrl)
     setCached(productUrl, image)
@@ -318,7 +411,7 @@ function upgradeImageUrlResolution(rawUrl) {
     }
     // Shopee: down-br.img.susercontent.com/file/{hash}_tn → sem o sufixo _tn
     if (/susercontent\.com$/.test(u.hostname)) {
-      const upgraded = u.pathname.replace(/_tn$/, '')
+      const upgraded = u.pathname.replace(/_tn(?=(?:\.[a-z0-9]+)?$)/i, '')
       if (upgraded !== u.pathname) {
         u.pathname = upgraded
         return u.toString()
