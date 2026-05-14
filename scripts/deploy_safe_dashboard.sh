@@ -40,6 +40,28 @@ check_http_with_retry() {
   return 1
 }
 
+verify_next_polyfill() {
+  local polyfill="$DASHBOARD_DIR/node_modules/next/dist/build/polyfills/polyfill-nomodule.js"
+  [[ -f "$polyfill" ]]
+}
+
+ensure_dashboard_deps_integrity() {
+  if verify_next_polyfill; then
+    return 0
+  fi
+
+  echo "  Aviso: instalação do Next incompleta (polyfill ausente). Tentando reinstalar dependências do dashboard..."
+  npm cache verify || true
+  npm cache clean --force || true
+  npm ci
+
+  if ! verify_next_polyfill; then
+    echo "ERRO: next/dist/build/polyfills/polyfill-nomodule.js segue ausente após reinstalação."
+    echo "Dica: validar saúde de disco/cache do host de deploy e repetir o pipeline."
+    exit 1
+  fi
+}
+
 cd "$ROOT_DIR"
 configure_public_git_dependencies
 echo "[1/9] Sync branch $BRANCH"
@@ -56,6 +78,7 @@ npx prisma migrate deploy
 echo "[4/9] Install dashboard dependencies"
 cd "$DASHBOARD_DIR"
 npm ci
+ensure_dashboard_deps_integrity
 
 echo "[5/9] Guardrail + build dashboard (hard gate)"
 npm run guard:config-page
