@@ -191,8 +191,6 @@ async function loadConfig() {
     monitor: user.groups.filter(g => g.role === 'monitor').map(g => ({
       id: g.id,
       waJid: g.waJid,
-      imageMode: g.imageMode,
-      imageLinkTarget: g.imageLinkTarget,
       fallbackToOriginal: g.fallbackToOriginal,
       blockedKeywords: g.blockedKeywords,
       allowedPlatforms: g.allowedPlatforms,
@@ -280,7 +278,6 @@ async function checkScheduledMessages() {
           logId: log.id,
           destJid: jid,
           platforms: 'scheduled',
-          imageMode: 'none',
           plan: 'scheduled',
           delayMs: buildSmartDelayMs((await getConfig()).botConfig),
           typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
@@ -532,7 +529,7 @@ async function processSendJob(job) {
           await activeSock.sendMessage(job.destJid, payload)
         }
         lastSendByDest.set(job.destJid, Date.now())
-        logger.info({ destJid: job.destJid, platforms: job.platforms, imageMode: job.imageMode, attempt, type: job.type }, 'Mensagem enviada')
+        logger.info({ destJid: job.destJid, platforms: job.platforms, attempt, type: job.type }, 'Mensagem enviada')
 
         await db.messageLog.update({
           where: { id: job.logId },
@@ -1140,7 +1137,6 @@ process.on('message', async msg => {
         logId: log.id,
         destJid: jid,
         platforms: 'broadcast',
-        imageMode: 'none',
         plan: 'broadcast',
         delayMs: buildSmartDelayMs((await getConfig()).botConfig),
         typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),

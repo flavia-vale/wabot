@@ -251,7 +251,8 @@ export async function normalizeImageForWhatsApp(buf) {
     const meta = await sharp(buf, { failOn: 'none' }).metadata()
     if (!meta?.width || !meta?.height) return null
 
-    // Converte para JPEG; redimensiona se for absurdamente grande.
+    // externalAdReply com renderLargerThumbnail é sensível a dimensão/proporção.
+    // Gera sempre um JPEG quadrado 400x400, leve, com crop central se necessário.
     const main = await sharp(buf, { failOn: 'none' })
       .rotate()
       .resize({ width: 1280, height: 1280, fit: 'inside', withoutEnlargement: true })
