@@ -951,57 +951,58 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             if (fetched && !image) {
               logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
             }
-            // Padrão dos concorrentes (Urubu etc.): imageMessage nativo +
-            // contextInfo.externalAdReply. O imageMessage entrega a foto em
-            // tamanho real; o externalAdReply (com thumbnail PEQUENO, não o
-            // buffer full-res — esse limite estourava o protobuf) injeta o
-            // chip "meli.la" entre a foto e o caption e torna a área da
-            // imagem clicável para o link convertido.
+            // Padrão da concorrência (Urubu, Promoções de iPhones etc.):
+            // mandam DUAS mensagens consecutivas — primeiro um imageMessage
+            // com a foto (sem caption) e logo depois um extendedTextMessage
+            // com o texto + URL. O WhatsApp agrupa visualmente as duas em
+            // uma única bolha (sem repetir nome do remetente) e o link
+            // preview chip ("meli.la") é gerado automaticamente pelo
+            // próprio WhatsApp ao detectar a URL na mensagem de texto.
             //
-            // Quando temos a imagem original da própria mensagem (já vem
-            // como JPEG decifrado pela Baileys), enviamos o buffer original
-            // sem re-encode, evitando generation loss. O sharp só roda
-            // para gerar o jpegThumbnail pequeno do preview.
+            // Por que não usar contextInfo.externalAdReply: o WA renderiza
+            // o externalAdReply como CONTEXTO acima da imagem (estilo
+            // quote/ad), o que cria uma mini-carta duplicada feia antes
+            // da foto. Não funciona para o que queremos.
+            //
+            // Por que não caption no imageMessage: imageMessage com caption
+            // contendo URL não gera o chip de preview — WA só faz auto
+            // preview para extendedTextMessage.
             if (image && primary?.converted) {
-              sentVia = 'image'
+              sentVia = 'image+text'
               const isOriginalJpeg = fetched.mimetype === 'image/jpeg' && fetched.buffer?.length > 0
               const mainBuffer = isOriginalJpeg ? fetched.buffer : image.buffer
               const mainMime = isOriginalJpeg ? 'image/jpeg' : image.mimetype
-              const titleLine = (finalText.split('\n').map(l => l.trim()).find(Boolean) || 'Oferta').slice(0, 80)
-              const hostLabel = (() => {
-                try { return new URL(primary.converted).hostname.replace(/^www\./, '') } catch { return 'link' }
-              })()
               return {
                 image: mainBuffer,
                 mimetype: mainMime,
                 jpegThumbnail: image.jpegThumbnail,
-                caption: finalText,
-                contextInfo: {
-                  externalAdReply: {
-                    title: titleLine,
-                    body: hostLabel,
-                    mediaType: 1,
-                    thumbnail: image.jpegThumbnail,
-                    sourceUrl: primary.converted,
-                    showAdAttribution: false,
-                  },
-                },
               }
             }
             sentVia = 'text'
             return { text: finalText, linkPreview: null }
           },
           send: async ({ sock: sendSock, payload }) => {
+            if (!payload?.image) {
+              await sendSock.sendMessage(destJid, payload)
+              return
+            }
+            // Mensagem 1: foto sem caption.
             try {
               await sendSock.sendMessage(destJid, payload)
             } catch (err) {
-              if (payload?.image) {
-                logger.warn({ err: err.message, destJid }, 'imageMessage falhou — fallback para texto')
-                await sendSock.sendMessage(destJid, { text: finalText, linkPreview: null })
-                sentVia = 'text'
-                return
-              }
-              throw err
+              logger.warn({ err: err.message, destJid }, 'imageMessage falhou — fallback para texto puro')
+              await sendSock.sendMessage(destJid, { text: finalText, linkPreview: null })
+              sentVia = 'text'
+              return
+            }
+            // Mensagem 2: texto + URL, com pequeno delay para preservar
+            // ordem e disparar o auto link preview chip do WA. Se falhar,
+            // a foto já foi enviada — log mas não considera erro total.
+            try {
+              await sleep(400)
+              await sendSock.sendMessage(destJid, { text: finalText })
+            } catch (err) {
+              logger.warn({ err: err.message, destJid }, 'Texto de followup falhou — foto foi entregue')
             }
           },
           onDone: async (result) => {
