@@ -158,6 +158,8 @@ pm2 status
 
 echo "[9/9] Smoke tests staging"
 check_http_with_retry "visual /login" "${VISUAL_BASE_URL%/}/login" 8 2
+echo "  Validando abertura mobile do site (/ e /login)"
+"$ROOT_DIR/scripts/smoke_mobile_dashboard.sh" "$VISUAL_BASE_URL" / /login
 check_http_with_retry "api /health" "${API_BASE_URL%/}/health" 8 2
 assert_login_api_not_next_404
 
