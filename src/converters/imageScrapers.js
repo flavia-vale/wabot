@@ -253,19 +253,26 @@ export async function normalizeImageForWhatsApp(buf) {
 
     // Converte para JPEG; redimensiona se for absurdamente grande.
     // Resolução/qualidade calibradas para o WA: WhatsApp recomprime na
-    // própria infra, então enviar com qualidade folgada (q=92 mozjpeg)
-    // sobrevive melhor à 2ª compressão. Limite de 1600 cobre fotos
-    // grandes do ML/Shopee sem upscale (withoutEnlargement).
+    // própria infra, então enviar com qualidade folgada (q=95 mozjpeg
+    // + sharpen leve) sobrevive melhor à 2ª compressão. Limite de
+    // 1600 cobre fotos grandes do ML/Shopee/Amazon sem upscale.
     const main = await sharp(buf, { failOn: 'none' })
       .rotate()
       .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 92, mozjpeg: true, chromaSubsampling: '4:4:4' })
+      .sharpen({ sigma: 0.6 })
+      .jpeg({ quality: 95, mozjpeg: true, chromaSubsampling: '4:4:4' })
       .toBuffer()
 
+    // jpegThumbnail é o que o WA exibe de cara em link previews e
+    // imageMessages enquanto a mídia full-res é carregada. 200x200 q=60
+    // estourava ao ser renderizado em cards grandes (~800px no retina).
+    // 500x500 q=80 cabe folgado no campo protobuf (~50-80KB) e mantém
+    // a foto nítida desde o primeiro frame.
     const thumbnail = await sharp(buf, { failOn: 'none' })
       .rotate()
-      .resize({ width: 200, height: 200, fit: 'inside' })
-      .jpeg({ quality: 60 })
+      .resize({ width: 500, height: 500, fit: 'inside', withoutEnlargement: true })
+      .sharpen({ sigma: 0.5 })
+      .jpeg({ quality: 80, mozjpeg: true })
       .toBuffer()
 
     return { buffer: main, mimetype: 'image/jpeg', jpegThumbnail: thumbnail }
