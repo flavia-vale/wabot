@@ -317,6 +317,17 @@ function upgradeImageUrlResolution(rawUrl) {
         return u.toString()
       }
     }
+    // Amazon: m.media-amazon.com/images/I/{id}._{SX300|AC_SY679|...}_.jpg
+    // → /images/I/{id}.jpg  (variante original full-res, geralmente
+    // ~1500-2000px). Sufixo `._..._` no nome controla resize do CDN.
+    // Hosts: m.media-amazon.com, images-na.ssl-images-amazon.com etc.
+    if (u.hostname.endsWith('amazon.com') || /amazon\.com\.[a-z]{2}$/.test(u.hostname)) {
+      const upgraded = u.pathname.replace(/\._[^.\/]+_\./, '.')
+      if (upgraded !== u.pathname) {
+        u.pathname = upgraded
+        return u.toString()
+      }
+    }
   } catch {}
   return rawUrl
 }
