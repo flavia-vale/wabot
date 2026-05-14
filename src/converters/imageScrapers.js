@@ -12,11 +12,16 @@ const TWITTER_IMAGE_RE = [
 ]
 const AMAZON_DYNAMIC_IMAGE_RE = /data-a-dynamic-image=["']([^"']+)["']/i
 const AMAZON_INLINE_IMAGE_RE = /\"(?:hiRes|large)\"\s*:\s*\"(https?:\\\/\\\/[^\"]+)\"/gi
+const AMAZON_MEDIA_HOST_RE = /(^|\.)media-amazon\.com$|(^|\.)ssl-images-amazon\.com$/
+const SHOPEE_IMAGE_HOST_RE = /(^|\.)susercontent\.com$|^cf\.shopee\.com\.br$/
 const IMAGE_CACHE_TTL_MS = 5 * 60 * 1000
 const IMAGE_FETCH_TIMEOUT_MS = Number(process.env.IMAGE_FETCH_TIMEOUT_MS) || 2_500
 const IMAGE_HTML_MAX_BYTES = Number(process.env.IMAGE_HTML_MAX_BYTES) || 512 * 1024
 const IMAGE_BUFFER_TIMEOUT_MS = Number(process.env.IMAGE_BUFFER_TIMEOUT_MS) || 5_000
 const IMAGE_BUFFER_MAX_BYTES = Number(process.env.IMAGE_BUFFER_MAX_BYTES) || 5 * 1024 * 1024
+const IMAGE_MIN_DIMENSION_PX = Number(process.env.IMAGE_MIN_DIMENSION_PX) || 180
+const BLANK_IMAGE_STDDEV_MAX = Number(process.env.BLANK_IMAGE_STDDEV_MAX) || 3
+const BLANK_IMAGE_MEAN_MIN = Number(process.env.BLANK_IMAGE_MEAN_MIN) || 245
 
 // User-Agent de browser real: Shopee e outros sites bloqueiam UAs de bot e
 // devolvem HTML sem og:image, causando "sem imagem" nos anúncios.
@@ -212,6 +217,25 @@ async function resolveAmazonImage(url) {
   return null
 }
 
+function isAmazonImageUrl(rawUrl) {
+  try {
+    const u = new URL(rawUrl)
+    return AMAZON_MEDIA_HOST_RE.test(u.hostname)
+  } catch {
+    return false
+  }
+}
+
+function isShopeeImageUrl(rawUrl) {
+  try {
+    const u = new URL(rawUrl)
+    return SHOPEE_IMAGE_HOST_RE.test(u.hostname)
+  } catch {
+    return false
+  }
+}
+
+
 // Extrai (shopid, itemid) de URLs Shopee no formato:
 //   https://shopee.com.br/produto-i.{shopid}.{itemid}
 //   https://shopee.com.br/product/{shopid}/{itemid}
@@ -397,39 +421,78 @@ export function detectImageMime(buf) {
 // Tenta substituir a URL da imagem por uma variante de maior resolução
 // quando o CDN permite. og:image dos marketplaces normalmente devolve uma
 // versão média (~500px) que fica borrada quando o WA exibe em tela cheia.
-function upgradeImageUrlResolution(rawUrl) {
+function uniqueImageUrls(urls) {
+  return [...new Set(urls.filter(Boolean))]
+}
+
+function buildImageUrlCandidates(rawUrl) {
+  const candidates = [rawUrl]
   try {
     const u = new URL(rawUrl)
     // Mercado Livre: D_NQ_NP_{id}-{country}.{ext} → D_NQ_NP_2X_{id}-{country}.{ext}
     // O prefixo 2X dobra a resolução (~500 → ~1000px).
     if (/^https?:\/\/(http2\.)?mlstatic\.com\//.test(rawUrl) && !/D_NQ_NP_2X_/.test(u.pathname)) {
-      const upgraded = u.pathname.replace(/\/D_NQ_NP_/, '/D_NQ_NP_2X_')
-      if (upgraded !== u.pathname) {
-        u.pathname = upgraded
-        return u.toString()
+      const ml = new URL(rawUrl)
+      const upgraded = ml.pathname.replace(/\/D_NQ_NP_/, '/D_NQ_NP_2X_')
+      if (upgraded !== ml.pathname) {
+        ml.pathname = upgraded
+        candidates.unshift(ml.toString())
       }
     }
-    // Shopee: down-br.img.susercontent.com/file/{hash}_tn → sem o sufixo _tn
-    if (/susercontent\.com$/.test(u.hostname)) {
-      const upgraded = u.pathname.replace(/_tn(?=(?:\.[a-z0-9]+)?$)/i, '')
-      if (upgraded !== u.pathname) {
-        u.pathname = upgraded
-        return u.toString()
-      }
+
+    // Shopee: tenta variantes maiores do CDN antes da miniatura. A API/HTML pode
+    // retornar tanto `{hash}_tn`, `{hash}_tn.webp` quanto caminhos `.../webp`.
+    if (isShopeeImageUrl(rawUrl)) {
+      const withoutQuery = new URL(rawUrl)
+      withoutQuery.search = ''
+      if (withoutQuery.toString() !== rawUrl) candidates.unshift(withoutQuery.toString())
+
+      const withoutThumbSuffix = new URL(withoutQuery.toString())
+      withoutThumbSuffix.pathname = withoutThumbSuffix.pathname.replace(/_tn(?=(?:\.[a-z0-9]+)?$)/i, '')
+      if (withoutThumbSuffix.pathname !== u.pathname) candidates.unshift(withoutThumbSuffix.toString())
+
+      const withoutFormatPath = new URL(withoutThumbSuffix.toString())
+      withoutFormatPath.pathname = withoutFormatPath.pathname.replace(/\/(?:webp|jpeg|jpg|png)(?=\/|$)/i, '')
+      if (withoutFormatPath.pathname !== withoutThumbSuffix.pathname) candidates.unshift(withoutFormatPath.toString())
     }
-    // Amazon: m.media-amazon.com/images/I/{id}._{SX300|AC_SY679|...}_.jpg
-    // → /images/I/{id}.jpg  (variante original full-res, geralmente
-    // ~1500-2000px). Sufixo `._..._` no nome controla resize do CDN.
-    // Hosts: m.media-amazon.com, images-na.ssl-images-amazon.com etc.
-    if (u.hostname.endsWith('amazon.com') || /amazon\.com\.[a-z]{2}$/.test(u.hostname)) {
-      const upgraded = u.pathname.replace(/\._[^.\/]+_\./, '.')
-      if (upgraded !== u.pathname) {
-        u.pathname = upgraded
-        return u.toString()
+
+    // Amazon: não tente primeiro a URL sem sufixo. Em alguns ASINs a URL
+    // "original" (`.../ID.jpg`) devolve placeholder pequeno/branco. Baixamos a
+    // URL extraída primeiro e só usamos a variante sem resize como fallback.
+    if (isAmazonImageUrl(rawUrl)) {
+      const original = new URL(rawUrl)
+      const upgraded = original.pathname.replace(/\._[^.\/]+_\./, '.')
+      if (upgraded !== original.pathname) {
+        original.pathname = upgraded
+        candidates.push(original.toString())
       }
     }
   } catch {}
-  return rawUrl
+  return uniqueImageUrls(candidates)
+}
+
+async function validateDownloadedImage(buf) {
+  const mime = detectImageMime(buf)
+  if (!mime) return null
+
+  try {
+    const img = sharp(buf, { failOn: 'none' })
+    const meta = await img.metadata()
+    if (!meta?.width || !meta?.height) return null
+    if (meta.width < IMAGE_MIN_DIMENSION_PX || meta.height < IMAGE_MIN_DIMENSION_PX) return null
+
+    const stats = await sharp(buf, { failOn: 'none' })
+      .resize({ width: 32, height: 32, fit: 'inside', withoutEnlargement: true })
+      .removeAlpha()
+      .stats()
+    const channels = stats.channels.slice(0, 3)
+    const isBlankWhite = channels.length > 0 && channels.every(channel => channel.mean >= BLANK_IMAGE_MEAN_MIN && channel.stdev <= BLANK_IMAGE_STDDEV_MAX)
+    if (isBlankWhite) return null
+  } catch {
+    return null
+  }
+
+  return { buffer: buf, mimetype: mime }
 }
 
 async function fetchImageBufferRaw(imageUrl, refererUrl) {
@@ -455,8 +518,7 @@ async function fetchImageBufferRaw(imageUrl, refererUrl) {
       const ab = await res.arrayBuffer()
       if (ab.byteLength > IMAGE_BUFFER_MAX_BYTES) return null
       const buf = Buffer.from(ab)
-      const mime = detectImageMime(buf)
-      return mime ? { buffer: buf, mimetype: mime } : null
+      return validateDownloadedImage(buf)
     }
     const chunks = []
     let received = 0
@@ -471,8 +533,7 @@ async function fetchImageBufferRaw(imageUrl, refererUrl) {
       chunks.push(value)
     }
     const buf = Buffer.concat(chunks.map(c => Buffer.from(c)), received)
-    const mime = detectImageMime(buf)
-    return mime ? { buffer: buf, mimetype: mime } : null
+    return validateDownloadedImage(buf)
   } catch {
     return null
   }
@@ -480,11 +541,9 @@ async function fetchImageBufferRaw(imageUrl, refererUrl) {
 
 export async function fetchImageBuffer(imageUrlRaw, refererUrl) {
   if (!imageUrlRaw) return null
-  const upgraded = upgradeImageUrlResolution(imageUrlRaw)
-  // Tenta a versão de maior resolução primeiro; cai para a original se falhar.
-  if (upgraded !== imageUrlRaw) {
-    const hi = await fetchImageBufferRaw(upgraded, refererUrl)
-    if (hi) return hi
+  for (const candidate of buildImageUrlCandidates(imageUrlRaw)) {
+    const image = await fetchImageBufferRaw(candidate, refererUrl)
+    if (image) return image
   }
-  return fetchImageBufferRaw(imageUrlRaw, refererUrl)
+  return null
 }
