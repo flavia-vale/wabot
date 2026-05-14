@@ -36,6 +36,8 @@ export async function groupsRoutes(app) {
         event: role === 'monitor' ? 'monitor_group_created' : 'post_group_created',
         metadata: { role },
       })
+      const configReloaded = reloadConfig(req.user.sub)
+      app.log.info({ groupId: group.id, role, configReloaded }, 'Grupo criado; configuração do worker recarregada quando disponível')
       return group
     } catch (err) {
       if (err.code === 'P2002') return reply.code(409).send({ error: 'Grupo já cadastrado com esse role' })
@@ -67,6 +69,8 @@ export async function groupsRoutes(app) {
       ...postIds.map(postId => db.groupTarget.create({ data: { userId: req.user.sub, monitorId: monitor.id, postId } })),
     ])
 
+    const configReloaded = reloadConfig(req.user.sub)
+    app.log.info({ monitorId: monitor.id, postCount: postIds.length, configReloaded }, 'Destinos do grupo monitor atualizados; configuração do worker recarregada quando disponível')
     return { postIds }
   })
 
@@ -108,6 +112,8 @@ export async function groupsRoutes(app) {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo não encontrado' })
     await db.group.delete({ where: { id: req.params.id } })
+    const configReloaded = reloadConfig(req.user.sub)
+    app.log.info({ groupId: group.id, role: group.role, configReloaded }, 'Grupo removido; configuração do worker recarregada quando disponível')
     return { ok: true }
   })
 }

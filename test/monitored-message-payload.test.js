@@ -3,29 +3,29 @@ import assert from 'node:assert/strict'
 
 import { buildMonitoredMessagePayload, __monitoredPayloadInternals } from '../src/monitoredMessagePayload.js'
 
-test('payload monitorado com imagem não usa externalAdReply e mantém fallback texto', () => {
+test('payload monitorado com imagem usa imageMessage simples com caption original convertida', () => {
+  const finalText = 'Oferta convertida https://afiliado.example/produto'
   const payload = buildMonitoredMessagePayload({
-    finalText: 'Oferta convertida https://afiliado.example/produto',
-    primaryConvertedUrl: 'https://afiliado.example/produto',
-    image: { buffer: Buffer.from('img'), jpegThumbnail: Buffer.from('thumb') },
+    finalText,
+    image: { buffer: Buffer.from('img'), mimetype: 'image/jpeg', jpegThumbnail: Buffer.from('thumb') },
   })
 
   assert.equal(payload._route, 'image')
   assert.equal(payload.primary.contextInfo, undefined)
-  assert.match(payload.primary.caption, /^https:\/\/afiliado\.example\/produto\n\n/)
-  assert.deepEqual(payload.fallbacks, [{ text: 'Oferta convertida https://afiliado.example/produto', linkPreview: null }])
+  assert.equal(payload.primary.caption, finalText)
+  assert.equal(payload.primary.mimetype, 'image/jpeg')
+  assert.deepEqual(payload.fallbacks, [{ text: finalText }])
 })
 
-test('payload monitorado sem imagem cai para texto puro sem link preview', () => {
+test('payload monitorado sem imagem cai para texto puro igual ao caminho estável anterior', () => {
   const payload = buildMonitoredMessagePayload({
     finalText: 'Só texto https://afiliado.example/produto',
-    primaryConvertedUrl: 'https://afiliado.example/produto',
     image: null,
   })
 
   assert.deepEqual(payload, {
     _route: 'text',
-    primary: { text: 'Só texto https://afiliado.example/produto', linkPreview: null },
+    primary: { text: 'Só texto https://afiliado.example/produto' },
     fallbacks: [],
   })
 })
