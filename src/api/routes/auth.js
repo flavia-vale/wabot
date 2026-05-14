@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs'
 import { randomBytes } from 'crypto'
 import db from '../../db.js'
+import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { normalizeEmail } from '../auth-utils.js'
 
 const loginAttempts = new Map()
@@ -278,6 +279,11 @@ export async function authRoutes(app) {
         })
       }
 
+      trackAnalyticsEventSafe({
+        userId: user.id,
+        event: 'signup_created',
+        metadata: { source: source || 'direct', ref: ref || null, promo: isPromoVipFlow ? 'vip7dias' : 'none' },
+      })
       const token = app.jwt.sign({ sub: user.id, email: user.email, jti: randomToken(12) }, { expiresIn: '7d' })
       setAuthCookie(reply, token, req)
       return { user: publicUser(user), token }
@@ -311,6 +317,7 @@ export async function authRoutes(app) {
     clearLoginAttempts({ email, ip: req.ip })
 
     const updated = await updateLoginActivity(user)
+    trackAnalyticsEventSafe({ userId: updated.id, event: 'login_completed' })
 
     const token = app.jwt.sign({ sub: updated.id, email: updated.email, jti: randomToken(12) }, { expiresIn: '7d' })
     setAuthCookie(reply, token, req)
