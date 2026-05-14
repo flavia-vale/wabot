@@ -59,6 +59,21 @@ jobs:
       - name: Verificar artefatos críticos do build
         run: node scripts/verify-dashboard-api-proxy.mjs
 
+      - name: Smoke mobile local do dashboard
+        run: |
+          cd dashboard
+          npm run start -- -H 127.0.0.1 -p 4016 > /tmp/wabot-next-start.log 2>&1 &
+          NEXT_PID=$!
+          trap 'kill "$NEXT_PID" 2>/dev/null || true' EXIT
+          for i in {1..20}; do
+            if curl -fsS http://127.0.0.1:4016/login >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          cd ..
+          scripts/smoke_mobile_dashboard.sh http://127.0.0.1:4016 / /login
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
