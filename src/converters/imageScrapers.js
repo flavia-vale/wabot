@@ -14,6 +14,13 @@ const AMAZON_DYNAMIC_IMAGE_RE = /data-a-dynamic-image=["']([^"']+)["']/i
 const AMAZON_INLINE_IMAGE_RE = /\"(?:hiRes|large)\"\s*:\s*\"(https?:\\\/\\\/[^\"]+)\"/gi
 const AMAZON_ATTR_IMAGE_RE = /(?:data-old-hires|data-a-hires|src)=['"](https?:\/\/[^'"]*media-amazon\.com[^'"]+)['"]/gi
 const AMAZON_MEDIA_HOST_RE = /(^|\.)media-amazon\.com$|(^|\.)ssl-images-amazon\.com$/
+// Imagens reais de produto da Amazon ficam em /images/I/. Já /images/G/ é
+// usado para logos, banners, ícones de navegação e placeholders — quando a
+// página vem degradada (captcha, A/B mobile), og:image cai nesse caminho e
+// resulta em "imagem branca" no WhatsApp.
+const AMAZON_PRODUCT_IMAGE_PATH_RE = /\/images\/I\//i
+const AMAZON_NON_PRODUCT_HINT_RE = /amazonlogo|nav-logo|sprite|transparent-pixel|grey-pixel|loading|\/images\/G\//i
+const AMAZON_ASIN_RE = /(?:\/dp\/|\/gp\/product\/|\/product-reviews\/|\/exec\/obidos\/ASIN\/)([A-Z0-9]{10})/i
 const SHOPEE_IMAGE_HOST_RE = /(^|\.)susercontent\.com$|^cf\.shopee\.com\.br$/
 const IMAGE_CACHE_TTL_MS = 5 * 60 * 1000
 const IMAGE_FETCH_TIMEOUT_MS = Number(process.env.IMAGE_FETCH_TIMEOUT_MS) || 2_500
@@ -187,6 +194,18 @@ function pickLargestAmazonDynamicImage(raw) {
   }
 }
 
+function isAmazonProductImage(rawUrl) {
+  if (!rawUrl) return false
+  if (AMAZON_NON_PRODUCT_HINT_RE.test(rawUrl)) return false
+  try {
+    const u = new URL(rawUrl)
+    if (!AMAZON_MEDIA_HOST_RE.test(u.hostname)) return false
+    return AMAZON_PRODUCT_IMAGE_PATH_RE.test(u.pathname)
+  } catch {
+    return false
+  }
+}
+
 function extractAmazonImageFromHtml(html) {
   const candidates = []
   const dynamic = html.match(AMAZON_DYNAMIC_IMAGE_RE)
@@ -200,27 +219,48 @@ function extractAmazonImageFromHtml(html) {
 
   for (const match of html.matchAll(AMAZON_ATTR_IMAGE_RE)) {
     const image = normalizeHtmlImageUrl(match[1])
-    if (image && !/transparent-pixel|grey-pixel|loading/i.test(image)) candidates.push(image)
+    if (image) candidates.push(image)
   }
 
-  return uniqueImageUrls(candidates)[0] || null
+  // Mantém só URLs de produto (/images/I/). og:image em página degradada
+  // (bot detection, mobile redirect) costuma cair em /images/G/ (logo/banner)
+  // e gerar miniatura branca no link preview do WhatsApp.
+  return uniqueImageUrls(candidates).find(isAmazonProductImage) || null
+}
+
+function extractAsinFromUrl(rawUrl) {
+  if (!rawUrl) return null
+  const m = String(rawUrl).match(AMAZON_ASIN_RE)
+  return m ? m[1].toUpperCase() : null
+}
+
+// Endpoint público usado pelos widgets de afiliado da Amazon — entrega a
+// imagem principal do produto a partir do ASIN sem depender do HTML, que
+// é o que costuma falhar quando Bot 3 manda uma oferta amzn.to e a foto
+// chega em branco.
+function buildAmazonAsinImageUrl(asin) {
+  if (!asin) return null
+  return `https://images-na.ssl-images-amazon.com/images/P/${asin}.01._SCLZZZZZZZ_.jpg`
 }
 
 async function resolveAmazonImage(url) {
   const target = await resolveAmazonShortLink(url)
+  const asin = extractAsinFromUrl(target) || extractAsinFromUrl(url)
+
   for (const opts of [{ ua: BROWSER_UA }, { ua: 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)' }]) {
     try {
       const { html } = await fetchHtml(target, opts)
       if (!html) continue
-      const layered = extractImageFromHtmlLayers(html)
-      if (layered) return layered
       const amazonImage = extractAmazonImageFromHtml(html)
       if (amazonImage) return amazonImage
+      const layered = extractImageFromHtmlLayers(html)
+      if (isAmazonProductImage(layered)) return layered
     } catch {
       // tenta o próximo UA/fallback
     }
   }
-  return null
+
+  return buildAmazonAsinImageUrl(asin)
 }
 
 function isAmazonImageUrl(rawUrl) {
@@ -457,6 +497,45 @@ function buildAmazonImageUrlCandidates(rawUrl) {
   return uniqueImageUrls(candidates)
 }
 
+function buildShopeeImageUrlCandidates(rawUrl) {
+  const candidates = [rawUrl]
+  try {
+    const u = new URL(rawUrl)
+
+    const withoutQuery = new URL(rawUrl)
+    withoutQuery.search = ''
+    if (withoutQuery.toString() !== rawUrl) candidates.unshift(withoutQuery.toString())
+
+    // `_tn`, `_xxs`, `_sm`, `_xs` são variantes reduzidas do CDN — sempre
+    // remova para chegar no original. `.webp` no fim é só a extensão do
+    // formato e mantemos como está (sharp decodifica WebP sem problema).
+    const withoutThumbSuffix = new URL(withoutQuery.toString())
+    withoutThumbSuffix.pathname = withoutThumbSuffix.pathname.replace(/_(?:tn|xxs|xs|sm)(?=(?:\.[a-z0-9]+)?$)/i, '')
+    if (withoutThumbSuffix.pathname !== u.pathname) candidates.unshift(withoutThumbSuffix.toString())
+
+    const withoutFormatPath = new URL(withoutThumbSuffix.toString())
+    withoutFormatPath.pathname = withoutFormatPath.pathname.replace(/\/(?:webp|jpeg|jpg|png)(?=\/|$)/i, '')
+    if (withoutFormatPath.pathname !== withoutThumbSuffix.pathname) candidates.unshift(withoutFormatPath.toString())
+
+    // Shopee distribui as mesmas imagens em dois CDNs: `cf.shopee.com.br` e
+    // `down-br.img.susercontent.com`. Quando um responde com placeholder
+    // (ou nada), o outro normalmente entrega a imagem original em melhor
+    // qualidade — então adicionamos os dois como fallback.
+    const cleanest = candidates[0]
+    try {
+      const alt = new URL(cleanest)
+      if (alt.hostname === 'cf.shopee.com.br') {
+        alt.hostname = 'down-br.img.susercontent.com'
+        candidates.push(alt.toString())
+      } else if (/susercontent\.com$/.test(alt.hostname)) {
+        alt.hostname = 'cf.shopee.com.br'
+        candidates.push(alt.toString())
+      }
+    } catch {}
+  } catch {}
+  return uniqueImageUrls(candidates)
+}
+
 function buildImageUrlCandidates(rawUrl) {
   const candidates = [rawUrl]
   try {
@@ -472,20 +551,8 @@ function buildImageUrlCandidates(rawUrl) {
       }
     }
 
-    // Shopee: tenta variantes maiores do CDN antes da miniatura. A API/HTML pode
-    // retornar tanto `{hash}_tn`, `{hash}_tn.webp` quanto caminhos `.../webp`.
     if (isShopeeImageUrl(rawUrl)) {
-      const withoutQuery = new URL(rawUrl)
-      withoutQuery.search = ''
-      if (withoutQuery.toString() !== rawUrl) candidates.unshift(withoutQuery.toString())
-
-      const withoutThumbSuffix = new URL(withoutQuery.toString())
-      withoutThumbSuffix.pathname = withoutThumbSuffix.pathname.replace(/_tn(?=(?:\.[a-z0-9]+)?$)/i, '')
-      if (withoutThumbSuffix.pathname !== u.pathname) candidates.unshift(withoutThumbSuffix.toString())
-
-      const withoutFormatPath = new URL(withoutThumbSuffix.toString())
-      withoutFormatPath.pathname = withoutFormatPath.pathname.replace(/\/(?:webp|jpeg|jpg|png)(?=\/|$)/i, '')
-      if (withoutFormatPath.pathname !== withoutThumbSuffix.pathname) candidates.unshift(withoutFormatPath.toString())
+      return buildShopeeImageUrlCandidates(rawUrl)
     }
 
     // Amazon: gere variantes oficiais com sufixos de resize em alta resolução.

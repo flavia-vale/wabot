@@ -119,3 +119,67 @@ test('fetchImageBuffer remove query de resize da Shopee antes de baixar', async 
   assert.equal(image?.mimetype, 'image/png')
   assert.equal(calls[0], 'https://down-br.img.susercontent.com/file/br-123')
 })
+
+test('fetchImageBuffer alterna entre os CDNs cf.shopee.com.br e susercontent.com quando o primeiro falha', async (t) => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  const valid = await imageBytes({ color: '#ee4d2d' })
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  globalThis.fetch = async (url) => {
+    const urlStr = String(url)
+    calls.push(urlStr)
+    if (urlStr.includes('cf.shopee.com.br')) {
+      return new Response('', { status: 404 })
+    }
+    return imageResponse(valid, urlStr)
+  }
+
+  const image = await fetchImageBuffer('https://cf.shopee.com.br/file/br-abc', 'https://shopee.com.br/produto-i.1.2')
+
+  assert.equal(image?.mimetype, 'image/png')
+  assert.ok(calls.some(u => u.includes('down-br.img.susercontent.com/file/br-abc')), `nao tentou CDN alternativo: ${calls.join(', ')}`)
+})
+
+test('fetchProductImage da Amazon descarta og:image de logo e cai no fallback por ASIN', async (t) => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  // Página servida com bot detection: og:image aponta para uma imagem do
+  // header /images/G/ ao invés do produto. Sem o filtro, esse URL viraria
+  // a "imagem branca" no link preview do WhatsApp.
+  const degradedHtml = `<html><head>
+    <meta property="og:image" content="https://m.media-amazon.com/images/G/01/marketing/nav/PT_BR_FlyOut_amazon_logo._CB659972834_.png" />
+  </head></html>`
+
+  globalThis.fetch = async (url, opts = {}) => {
+    const urlStr = String(url)
+    calls.push(urlStr)
+    if (urlStr.startsWith('https://www.amazon.com.br/dp/')) {
+      return htmlResponse(degradedHtml, urlStr)
+    }
+    return new Response('', { status: 404 })
+  }
+
+  const image = await fetchProductImage('amazon', 'https://www.amazon.com.br/dp/B0XYZ12345?tag=loja-20', {})
+
+  assert.equal(image, 'https://images-na.ssl-images-amazon.com/images/P/B0XYZ12345.01._SCLZZZZZZZ_.jpg')
+})
+
+test('fetchProductImage da Amazon prefere /images/I/ extraido do data-a-dynamic-image quando og:image vem de logo', async (t) => {
+  const originalFetch = globalThis.fetch
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const html = `<html><head>
+    <meta property="og:image" content="https://m.media-amazon.com/images/G/01/marketing/nav/amazon_logo.png" />
+  </head><body>
+    <img id="landingImage" data-a-dynamic-image="{&quot;https://m.media-amazon.com/images/I/91-produto._AC_SL1500_.jpg&quot;:[1500,1500]}" />
+  </body></html>`
+
+  globalThis.fetch = async () => htmlResponse(html, 'https://www.amazon.com.br/dp/B0PROD12345')
+
+  const image = await fetchProductImage('amazon', 'https://www.amazon.com.br/dp/B0PROD12345', {})
+
+  assert.equal(image, 'https://m.media-amazon.com/images/I/91-produto._AC_SL1500_.jpg')
+})
