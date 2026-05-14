@@ -854,20 +854,11 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }
 
         if (monitorGroup.imageMode === 'fetch') {
-          if (target) {
-            const url = await fetchProductImage(target.platform, target.url, cfg.credentials)
-            logger.info({ msgId: msg.key.id, platform, resolvedUrl: url }, 'fetchProductImage resultado')
-            if (url) {
-              cachedImage = await fetchImageBuffer(url, target.url)
-              logger.info({ msgId: msg.key.id, downloaded: !!cachedImage, size: cachedImage?.buffer?.length }, 'fetchImageBuffer resultado')
-            }
-          }
-
-          if (!cachedImage && (platform === 'shopee' || monitorGroup.fallbackToOriginal)) {
-            if (platform === 'shopee') logger.info({ msgId: msg.key.id }, 'Shopee sem imagem via marketplace — usando imagem original como fallback')
-            cachedImage = await downloadOriginalImage()
-          }
-          return cachedImage
+          // No modo "imagem do site" não baixamos mais a imagem como mídia:
+          // confiamos no preview automático do WhatsApp gerado a partir do
+          // link convertido (extendedTextMessage + generateHighQualityLinkPreview).
+          logger.info({ msgId: msg.key.id, platform }, 'imageMode=fetch: usando preview automático do WhatsApp (sem download de mídia)')
+          return null
         }
 
         return null

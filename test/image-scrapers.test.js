@@ -141,30 +141,32 @@ test('fetchImageBuffer alterna entre os CDNs cf.shopee.com.br e susercontent.com
   assert.ok(calls.some(u => u.includes('down-br.img.susercontent.com/file/br-abc')), `nao tentou CDN alternativo: ${calls.join(', ')}`)
 })
 
-test('fetchProductImage da Amazon descarta og:image de logo e cai no fallback por ASIN', async (t) => {
+test('fetchProductImage da Amazon descarta og:image de logo e usa widget de adsystem como fallback', async (t) => {
   const originalFetch = globalThis.fetch
   const calls = []
   t.after(() => { globalThis.fetch = originalFetch })
 
-  // Página servida com bot detection: og:image aponta para uma imagem do
-  // header /images/G/ ao invés do produto. Sem o filtro, esse URL viraria
-  // a "imagem branca" no link preview do WhatsApp.
+  // Página degradada (bot detection): og:image cai em /images/G/ (logo).
   const degradedHtml = `<html><head>
     <meta property="og:image" content="https://m.media-amazon.com/images/G/01/marketing/nav/PT_BR_FlyOut_amazon_logo._CB659972834_.png" />
   </head></html>`
 
+  const widgetHtml = `<html><body><a href="https://www.amazon.com.br/dp/B0XYZ12345">
+    <img src="https://m.media-amazon.com/images/I/71PROD._SL500_.jpg" />
+  </a></body></html>`
+
   globalThis.fetch = async (url, opts = {}) => {
     const urlStr = String(url)
     calls.push(urlStr)
-    if (urlStr.startsWith('https://www.amazon.com.br/dp/')) {
-      return htmlResponse(degradedHtml, urlStr)
-    }
+    if (urlStr.startsWith('https://www.amazon.com.br/dp/')) return htmlResponse(degradedHtml, urlStr)
+    if (urlStr.includes('amazon-adsystem.com')) return htmlResponse(widgetHtml, urlStr)
     return new Response('', { status: 404 })
   }
 
   const image = await fetchProductImage('amazon', 'https://www.amazon.com.br/dp/B0XYZ12345?tag=loja-20', {})
 
-  assert.equal(image, 'https://images-na.ssl-images-amazon.com/images/P/B0XYZ12345.01._SCLZZZZZZZ_.jpg')
+  assert.equal(image, 'https://m.media-amazon.com/images/I/71PROD._SL500_.jpg')
+  assert.ok(calls.some(u => u.includes('amazon-adsystem.com')), `nao tentou widget adsystem: ${calls.join(', ')}`)
 })
 
 test('fetchProductImage da Amazon prefere /images/I/ extraido do data-a-dynamic-image quando og:image vem de logo', async (t) => {
