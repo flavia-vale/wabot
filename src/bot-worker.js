@@ -833,12 +833,6 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }
 
         if (monitorGroup.imageMode === 'fetch') {
-          if (platform === 'shopee') {
-            cachedImage = await downloadOriginalImage()
-            if (cachedImage) return cachedImage
-            logger.info({ msgId: msg.key.id }, 'Shopee sem imagem original — tentando resolver via API')
-          }
-
           if (target) {
             const url = await fetchProductImage(target.platform, target.url, cfg.credentials)
             logger.info({ msgId: msg.key.id, platform, resolvedUrl: url }, 'fetchProductImage resultado')
