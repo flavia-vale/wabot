@@ -16,6 +16,15 @@ const PAID_PLANS = ['basic', 'pro']
 const PLAN_PRICES = { trial: 0, basic: 1, pro: 2 }
 const EXPORT_LIMIT = 100
 const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = ['flavia.vale@usp.br', 'flaviaroberta.1496@gmail.com', 'tacianeaas02@gmail.com']
+const CANONICAL_OWNER_ADMIN_EMAILS = new Set(DEFAULT_BOOTSTRAP_ADMIN_EMAILS)
+
+function normalizeAdminEmail(email) {
+  return String(email ?? '').trim().toLowerCase()
+}
+
+export function isCanonicalOwnerAdminEmail(email) {
+  return CANONICAL_OWNER_ADMIN_EMAILS.has(normalizeAdminEmail(email))
+}
 
 function getBootstrapAdminEmails() {
   return new Set(
@@ -23,7 +32,7 @@ function getBootstrapAdminEmails() {
       ...DEFAULT_BOOTSTRAP_ADMIN_EMAILS,
       ...String(process.env.ADMIN_EMAILS ?? '').split(','),
     ]
-      .map(email => email.trim().toLowerCase())
+      .map(normalizeAdminEmail)
       .filter(Boolean)
   )
 }
@@ -32,6 +41,31 @@ export function isAdminEmailBootstrapEnabled() {
   const raw = String(process.env.ALLOW_ADMIN_EMAIL_BOOTSTRAP ?? '').trim().toLowerCase()
   if (!raw) return false
   return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
+}
+
+export function resolveAdminAccess(user) {
+  if (!user || user.status !== 'active') {
+    return { role: null, adminUserId: null, bootstrap: false }
+  }
+
+  const email = normalizeAdminEmail(user.email)
+  const adminUser = user.adminUser ?? null
+  const hasActiveAdminUser = adminUser?.status === 'active'
+
+  if (hasActiveAdminUser) {
+    return { role: adminUser.role, adminUserId: adminUser.id ?? null, bootstrap: false }
+  }
+
+  if (isCanonicalOwnerAdminEmail(email)) {
+    return { role: 'owner', adminUserId: adminUser?.id ?? null, bootstrap: true }
+  }
+
+  const bootstrapAllowed = isAdminEmailBootstrapEnabled() && !adminUser && getBootstrapAdminEmails().has(email)
+  if (bootstrapAllowed) {
+    return { role: 'owner', adminUserId: null, bootstrap: true }
+  }
+
+  return { role: null, adminUserId: adminUser?.id ?? null, bootstrap: false }
 }
 
 function hasPermission(role, permission) {
@@ -375,17 +409,10 @@ async function requireAdmin(req, reply, permission = 'admin:read') {
     },
   })
 
-  const bootstrapEmails = getBootstrapAdminEmails()
-  const bootstrapEnabled = isAdminEmailBootstrapEnabled()
-  const hasActiveAdminUser = user?.adminUser?.status === 'active'
-  const bootstrapAllowed = bootstrapEnabled && !hasActiveAdminUser && bootstrapEmails.has(user?.email?.toLowerCase())
-  const role = user?.adminUser?.status === 'active'
-    ? user.adminUser.role
-    : bootstrapAllowed
-      ? 'owner'
-      : null
+  const adminAccess = resolveAdminAccess(user)
+  const role = adminAccess.role
 
-  if (!user || user.status !== 'active' || !role || !hasPermission(role, permission)) {
+  if (!role || !hasPermission(role, permission)) {
     await writeAdminAuditLog(req, {
       action: 'admin.access_denied',
       resource: 'admin',
@@ -409,8 +436,8 @@ async function requireAdmin(req, reply, permission = 'admin:read') {
   req.admin = {
     role,
     permissions: ROLE_PERMISSIONS[role],
-    adminUserId: user.adminUser?.id ?? null,
-    bootstrap: !user.adminUser && bootstrapAllowed,
+    adminUserId: adminAccess.adminUserId,
+    bootstrap: adminAccess.bootstrap,
   }
   return true
 }
