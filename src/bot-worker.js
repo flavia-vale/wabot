@@ -953,10 +953,25 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             logger.warn({ err: err.message, logId: log.id }, 'Falha ao marcar envio convertido como sending')
           })
 
+          logger.info({
+            msgId: msg.key.id,
+            destJid,
+            imageMode: monitorGroup?.imageMode ?? 'none',
+            imageLinkTarget: monitorGroup?.imageLinkTarget ?? 'first',
+            fallbackToOriginal: Boolean(monitorGroup?.fallbackToOriginal),
+          }, 'Decidindo imagem da oferta convertida')
+
           const rawImage = monitorGroup?.imageMode !== 'none' ? await getImage() : null
+          if (!rawImage && monitorGroup?.imageMode !== 'none') {
+            logger.warn({ msgId: msg.key.id, imageMode: monitorGroup?.imageMode, imageLinkTarget: monitorGroup?.imageLinkTarget, fallbackToOriginal: monitorGroup?.fallbackToOriginal }, 'Configuração pediu imagem, mas nenhuma imagem foi encontrada')
+          }
+
           const image = rawImage ? await normalizeImageForWhatsApp(rawImage.buffer) : null
           if (rawImage && !image) {
             logger.warn({ msgId: msg.key.id, srcMime: rawImage.mimetype, size: rawImage.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
+          }
+          if (image) {
+            logger.info({ msgId: msg.key.id, size: image.buffer?.length, thumbnailSize: image.jpegThumbnail?.length }, 'Imagem normalizada para envio')
           }
 
           const msgPayload = image

@@ -1,5 +1,12 @@
 import db from '../../db.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
+import { reloadConfig } from '../../manager.js'
+
+function parseBoolean(value) {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') return value === 'true'
+  return Boolean(value)
+}
 
 function parseBoolean(value) {
   if (typeof value === 'boolean') return value
@@ -98,6 +105,8 @@ export async function groupsRoutes(app) {
         ...(fallbackToOriginal !== undefined ? { fallbackToOriginal: parseBoolean(fallbackToOriginal) } : {}),
       },
     })
+    const configReloaded = reloadConfig(req.user.sub)
+    app.log.info({ groupId: updated.id, imageMode: updated.imageMode, imageLinkTarget: updated.imageLinkTarget, fallbackToOriginal: updated.fallbackToOriginal, configReloaded }, 'Grupo atualizado; configuração do worker recarregada quando disponível')
     return updated
   })
 
