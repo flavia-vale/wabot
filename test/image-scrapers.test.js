@@ -1,9 +1,19 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import sharp from 'sharp'
 
 import { fetchImageBuffer, fetchProductImage } from '../src/converters/imageScrapers.js'
 
-const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00])
+async function imageBytes({ width = 256, height = 256, color = '#ff0000' } = {}) {
+  return sharp({
+    create: {
+      width,
+      height,
+      channels: 3,
+      background: color,
+    },
+  }).png().toBuffer()
+}
 
 function htmlResponse(html, url = 'https://www.amazon.com.br/dp/B000000001') {
   const response = new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } })
@@ -11,7 +21,7 @@ function htmlResponse(html, url = 'https://www.amazon.com.br/dp/B000000001') {
   return response
 }
 
-function imageResponse(bytes = PNG_BYTES, url = 'https://down-br.img.susercontent.com/file/produto.webp') {
+function imageResponse(bytes, url = 'https://down-br.img.susercontent.com/file/produto.webp') {
   const response = new Response(bytes, { status: 200, headers: { 'content-type': 'image/png', 'content-length': String(bytes.length) } })
   Object.defineProperty(response, 'url', { value: url })
   return response
@@ -37,18 +47,75 @@ test('fetchProductImage resolve imagem da Amazon via data-a-dynamic-image quando
   assert.match(calls[0].ua, /Chrome\/124/)
 })
 
-test('fetchImageBuffer troca thumbnail _tn.webp da Shopee pela imagem maior antes de baixar', async (t) => {
+test('fetchImageBuffer promove URL pequena da Amazon para variante oficial em alta resolucao', async (t) => {
   const originalFetch = globalThis.fetch
   const calls = []
+  const valid = await imageBytes({ color: '#1f7a1f' })
   t.after(() => { globalThis.fetch = originalFetch })
 
   globalThis.fetch = async (url) => {
     calls.push(String(url))
-    return imageResponse()
+    return imageResponse(valid, String(url))
+  }
+
+  const image = await fetchImageBuffer('https://m.media-amazon.com/images/I/91-produto._SX300_.jpg', 'https://www.amazon.com.br/dp/B000000001')
+
+  assert.equal(image?.mimetype, 'image/png')
+  assert.deepEqual(calls, ['https://m.media-amazon.com/images/I/91-produto._AC_SL1500_.jpg'])
+})
+
+test('fetchImageBuffer rejeita placeholder pequeno da Amazon e tenta proxima variante', async (t) => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  const tiny = await imageBytes({ width: 40, height: 40, color: '#ffffff' })
+  const valid = await imageBytes({ color: '#0044cc' })
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  globalThis.fetch = async (url) => {
+    calls.push(String(url))
+    const bytes = calls.length === 1 ? tiny : valid
+    return imageResponse(bytes, String(url))
+  }
+
+  const image = await fetchImageBuffer('https://m.media-amazon.com/images/I/91-produto.jpg', 'https://www.amazon.com.br/dp/B000000001')
+
+  assert.equal(image?.mimetype, 'image/png')
+  assert.deepEqual(calls, [
+    'https://m.media-amazon.com/images/I/91-produto._AC_SL1500_.jpg',
+    'https://m.media-amazon.com/images/I/91-produto._SL1500_.jpg',
+  ])
+})
+
+test('fetchImageBuffer troca thumbnail _tn.webp da Shopee pela imagem maior antes de baixar', async (t) => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  const valid = await imageBytes({ color: '#ee4d2d' })
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  globalThis.fetch = async (url) => {
+    calls.push(String(url))
+    return imageResponse(valid, String(url))
   }
 
   const image = await fetchImageBuffer('https://down-br.img.susercontent.com/file/br-123_tn.webp', 'https://shopee.com.br/produto-i.1.2')
 
   assert.equal(image?.mimetype, 'image/png')
   assert.equal(calls[0], 'https://down-br.img.susercontent.com/file/br-123.webp')
+})
+
+test('fetchImageBuffer remove query de resize da Shopee antes de baixar', async (t) => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  const valid = await imageBytes({ color: '#ee4d2d' })
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  globalThis.fetch = async (url) => {
+    calls.push(String(url))
+    return imageResponse(valid, String(url))
+  }
+
+  const image = await fetchImageBuffer('https://down-br.img.susercontent.com/file/br-123?x-oss-process=image/resize,w_320', 'https://shopee.com.br/produto-i.1.2')
+
+  assert.equal(image?.mimetype, 'image/png')
+  assert.equal(calls[0], 'https://down-br.img.susercontent.com/file/br-123')
 })

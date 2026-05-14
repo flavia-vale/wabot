@@ -12,10 +12,34 @@ const PLAN_CARDS = [
   { id: 'pro', name: 'Plano Pro', price: 'R$69', description: 'Acesso por 30 dias sem anúncios durante o uso.' },
 ]
 
+const PLAN_LABELS = {
+  trial: 'Trial',
+  basic: 'Basic',
+  pro: 'Pro',
+}
+
+function getExpiredAccessCopy(user) {
+  if (!user?.accessExpiresAt) return null
+  const expiresAt = new Date(user.accessExpiresAt)
+  if (Number.isNaN(expiresAt.getTime()) || expiresAt >= new Date()) return null
+
+  const dateLabel = expiresAt.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+  const planLabel = PLAN_LABELS[user.plan] ?? user.plan ?? 'plano'
+
+  return user.plan === 'trial'
+    ? `Seu trial venceu em ${dateLabel}. O bot fica pausado e não envia novas mensagens até a renovação.`
+    : `Seu plano ${planLabel} venceu em ${dateLabel}. O bot fica pausado e não envia novas mensagens até a renovação.`
+}
+
 export default function AssinaturasPage() {
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState('')
   const [email, setEmail] = useState('')
+  const [expiredAccessCopy, setExpiredAccessCopy] = useState('')
 
   useEffect(() => {
     let active = true
@@ -23,10 +47,12 @@ export default function AssinaturasPage() {
       .then((user) => {
         if (!active) return
         setEmail(user?.email || '')
+        setExpiredAccessCopy(getExpiredAccessCopy(user) || '')
       })
       .catch(() => {
         if (!active) return
         setEmail('')
+        setExpiredAccessCopy('')
       })
 
     return () => {
@@ -56,6 +82,14 @@ export default function AssinaturasPage() {
         <h1 className="text-xl font-bold text-gray-800 md:text-2xl">Pagamento via PIX</h1>
         <p className="mt-2 text-sm text-gray-600">Enquanto finalizamos a integração automática, escolha seu plano e pague via PIX Copia e Cola para ativação assistida.</p>
       </header>
+
+      {expiredAccessCopy && (
+        <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-5 text-red-950 shadow-sm" role="alert">
+          <p className="text-sm font-bold">Plano vencido: seus envios automáticos estão pausados</p>
+          <p className="mt-2 text-sm text-red-900">{expiredAccessCopy}</p>
+          <p className="mt-2 text-xs font-semibold text-red-800">Escolha um plano, faça o PIX e envie o comprovante para reativarmos sua conta.</p>
+        </div>
+      )}
 
       <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
         {PLAN_CARDS.map((plan) => (
