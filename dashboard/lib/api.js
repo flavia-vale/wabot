@@ -10,6 +10,11 @@ function resolveSplitPortApiBase({ protocol, hostname, port }) {
 }
 
 function resolveApiBase() {
+  const forceSameOrigin = String(process.env.NEXT_PUBLIC_FORCE_SAME_ORIGIN_API ?? 'true').toLowerCase() === 'true'
+  if (forceSameOrigin && typeof window !== 'undefined') {
+    return window.location.origin
+  }
+
   const configured = process.env.NEXT_PUBLIC_API_URL?.trim()
   if (configured) {
     const isAbsoluteHttp = /^https?:\/\//i.test(configured)
@@ -20,10 +25,8 @@ function resolveApiBase() {
           const currentUrl = new URL(window.location.origin)
           const isCrossOrigin = configuredUrl.origin !== currentUrl.origin
           const splitPortApiBase = resolveSplitPortApiBase(window.location)
-          // Staging roda Next.js em 3006 e API em 3004; nunca envie auth para a porta visual.
           if (splitPortApiBase && configuredUrl.origin === currentUrl.origin) return splitPortApiBase
-          const preferSameOrigin = String(process.env.NEXT_PUBLIC_FORCE_SAME_ORIGIN_API ?? 'false') === 'true'
-          if (isCrossOrigin && preferSameOrigin) return splitPortApiBase || currentUrl.origin
+          if (isCrossOrigin) return splitPortApiBase || currentUrl.origin
         } catch {
           // fallback para comportamento padrão
         }
