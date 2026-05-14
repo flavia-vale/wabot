@@ -844,20 +844,11 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }
 
         if (monitorGroup.imageMode === 'fetch') {
-          if (target) {
-            const url = await fetchProductImage(target.platform, target.url, cfg.credentials)
-            logger.info({ msgId: msg.key.id, platform, resolvedUrl: url }, 'fetchProductImage resultado')
-            if (url) {
-              cachedImage = await fetchImageBuffer(url, target.url)
-              logger.info({ msgId: msg.key.id, downloaded: !!cachedImage, size: cachedImage?.buffer?.length }, 'fetchImageBuffer resultado')
-            }
-          }
-
-          if (!cachedImage && (platform === 'shopee' || monitorGroup.fallbackToOriginal)) {
-            if (platform === 'shopee') logger.info({ msgId: msg.key.id }, 'Shopee sem imagem via marketplace — usando imagem original como fallback')
-            cachedImage = await downloadOriginalImage()
-          }
-          return cachedImage
+          // No modo "imagem do site" não baixamos mais a imagem como mídia:
+          // confiamos no preview automático do WhatsApp gerado a partir do
+          // link convertido (extendedTextMessage + generateHighQualityLinkPreview).
+          logger.info({ msgId: msg.key.id, platform }, 'imageMode=fetch: usando preview automático do WhatsApp (sem download de mídia)')
+          return null
         }
 
         return null
@@ -953,8 +944,12 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // quando há mídia original, relayMessage reaproveita o proto já hospedado
         // no WhatsApp e troca apenas o caption. Se não houver mídia original, cai
         // para upload simples de imagem com caption e, por último, texto puro.
-        // Sem rich link/linkPreview/externalAdReply no envio monitorado.
-        const wantImage = monitorGroup?.imageMode !== 'none'
+        // No modo "fetch" (imagem do site), quando não há mídia original, o texto
+        // vai com preview automático gerado pelo WhatsApp via link-preview-js
+        // em vez de baixarmos a imagem do site. externalAdReply continua proibido.
+        const imageMode = monitorGroup?.imageMode
+        const wantImage = imageMode !== 'none'
+        const useLinkPreview = imageMode === 'fetch'
         const original = wantImage ? getOriginalMediaMessage() : null
 
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
@@ -986,6 +981,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             return buildMonitoredMessagePayload({
               finalText,
               image,
+              useLinkPreview,
             })
           },
           send: async ({ sock: sendSock, payload }) => {
@@ -997,17 +993,18 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             }
 
             const routes = [
-              { name: payload._route, body: payload.primary },
+              { name: payload._route, body: payload.primary, sendOptions: payload.primarySendOptions },
               ...(payload.fallbacks || []).map((body, idx) => ({
                 name: body.image ? 'image' : 'text',
                 body,
+                sendOptions: payload.fallbackSendOptions?.[idx],
                 fallbackIdx: idx,
               })),
             ]
             let lastErr = null
             for (const route of routes) {
               try {
-                await sendSock.sendMessage(destJid, route.body)
+                await sendSock.sendMessage(destJid, route.body, route.sendOptions || undefined)
                 sentVia = route.name
                 return
               } catch (err) {
