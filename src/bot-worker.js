@@ -194,8 +194,6 @@ async function loadConfig() {
     monitor: user.groups.filter(g => g.role === 'monitor').map(g => ({
       id: g.id,
       waJid: g.waJid,
-      imageMode: g.imageMode,
-      imageLinkTarget: g.imageLinkTarget,
       fallbackToOriginal: g.fallbackToOriginal,
       blockedKeywords: g.blockedKeywords,
       allowedPlatforms: g.allowedPlatforms,
@@ -283,7 +281,6 @@ async function checkScheduledMessages() {
           logId: log.id,
           destJid: jid,
           platforms: 'scheduled',
-          imageMode: 'none',
           plan: 'scheduled',
           delayMs: buildSmartDelayMs((await getConfig()).botConfig),
           typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
@@ -365,8 +362,6 @@ const MSG_QUEUE_TIMEOUT_MS = Math.max(1_000, envNumber('MSG_QUEUE_TIMEOUT_MS', 1
 const MSG_QUEUE_WATCHDOG_MS = Math.max(5_000, envNumber('MSG_QUEUE_WATCHDOG_MS', 30_000))
 const MSG_QUEUE_MAX_SIZE = Math.max(10, envNumber('MSG_QUEUE_MAX_SIZE', 500))
 const MAX_INCOMING_MESSAGE_CHARS = Math.max(500, envNumber('MAX_INCOMING_MESSAGE_CHARS', 8_000))
-
-
 const WA_LIFECYCLE = Object.freeze({
   INITIALIZING: 'initializing',
   AUTHENTICATING: 'authenticating',
@@ -537,7 +532,7 @@ async function processSendJob(job) {
           await activeSock.sendMessage(job.destJid, payload)
         }
         lastSendByDest.set(job.destJid, Date.now())
-        logger.info({ destJid: job.destJid, platforms: job.platforms, imageMode: job.imageMode, attempt, type: job.type }, 'Mensagem enviada')
+        logger.info({ destJid: job.destJid, platforms: job.platforms, attempt, type: job.type }, 'Mensagem enviada')
 
         await db.messageLog.update({
           where: { id: job.logId },
@@ -818,29 +813,48 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       }
 
       // Pre-fetch da imagem (lazy, uma vez por mensagem). Retorna
-      // { buffer, mimetype } pronto para enviar à Baileys.
+      // { buffer, mimetype } pronto para enviar à Baileys, respeitando a
+      // configuração de imagem do grupo monitorado.
       let cachedImage
       let imageFetched = false
       async function getImage() {
         if (imageFetched) return cachedImage
         imageFetched = true
+        if (!monitorGroup || monitorGroup.imageMode === 'none') return null
 
-        // 1) Imagem original da mensagem (mais confiável, sem rede externa).
-        cachedImage = await downloadOriginalImage()
-        if (cachedImage) return cachedImage
-
-        // 2) Resolve pelo CDN do produto (último link convertido habilitado).
         const enabled = links.filter(l => enabledPlatforms.has(l.platform))
-        const target = enabled[enabled.length - 1]
-        if (!target) return null
+        const target = monitorGroup.imageLinkTarget === 'last' ? enabled[enabled.length - 1] : enabled[0]
+        const platform = target?.platform || 'unknown'
+        logger.info({ msgId: msg.key.id, imageMode: monitorGroup.imageMode, platform }, 'getImage: iniciando resolução de imagem')
 
-        const url = await fetchProductImage(target.platform, target.url, cfg.credentials)
-        logger.info({ msgId: msg.key.id, platform: target.platform, resolvedUrl: url }, 'fetchProductImage resultado')
-        if (url) {
-          cachedImage = await fetchImageBuffer(url, target.url)
-          logger.info({ msgId: msg.key.id, downloaded: !!cachedImage, size: cachedImage?.buffer?.length }, 'fetchImageBuffer resultado')
+        if (monitorGroup.imageMode === 'original') {
+          cachedImage = await downloadOriginalImage()
+          return cachedImage
         }
-        return cachedImage
+
+        if (monitorGroup.imageMode === 'fetch') {
+          if (platform === 'shopee') {
+            cachedImage = await downloadOriginalImage()
+            if (cachedImage) return cachedImage
+            logger.info({ msgId: msg.key.id }, 'Shopee sem imagem original — tentando resolver via API')
+          }
+
+          if (target) {
+            const url = await fetchProductImage(target.platform, target.url, cfg.credentials)
+            logger.info({ msgId: msg.key.id, platform, resolvedUrl: url }, 'fetchProductImage resultado')
+            if (url) {
+              cachedImage = await fetchImageBuffer(url, target.url)
+              logger.info({ msgId: msg.key.id, downloaded: !!cachedImage, size: cachedImage?.buffer?.length }, 'fetchImageBuffer resultado')
+            }
+          }
+
+          if (!cachedImage && monitorGroup.fallbackToOriginal) {
+            cachedImage = await downloadOriginalImage()
+          }
+          return cachedImage
+        }
+
+        return null
       }
 
 
@@ -929,15 +943,12 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           messageText: sanitizeMessageForLog(finalText),
         }
 
-        // Estratégia: enviar a oferta como card clicável (externalAdReply).
-        // A imagem do produto vira o thumbnail grande do card e tocá-la abre
-        // o link convertido — mesmo comportamento dos demais grupos de ofertas.
-        // Se o sendMessage com externalAdReply falhar (ex.: proto rejeitada
-        // pelo WA), faz fallback para envio de texto puro para não bloquear.
+        // Envio padrão e estável: respeita a configuração de imagem do grupo.
+        // Quando há imagem, envia como imageMessage com caption; caso contrário, texto puro.
+        const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         const log = await db.messageLog.create({
           data: { ...logData, status: 'queued' },
         })
-        const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         let sentVia = 'text'
 
         const accepted = await enqueueSendJob({
@@ -1060,13 +1071,59 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           },
         })
 
-        if (!accepted) {
-          const error = 'Fila interna de envios cheia ou worker encerrando'
+          logger.info({
+            msgId: msg.key.id,
+            destJid,
+            imageMode: monitorGroup?.imageMode ?? 'none',
+            imageLinkTarget: monitorGroup?.imageLinkTarget ?? 'first',
+            fallbackToOriginal: Boolean(monitorGroup?.fallbackToOriginal),
+          }, 'Decidindo imagem da oferta convertida')
+
+          const rawImage = monitorGroup?.imageMode !== 'none' ? await getImage() : null
+          if (!rawImage && monitorGroup?.imageMode !== 'none') {
+            logger.warn({ msgId: msg.key.id, imageMode: monitorGroup?.imageMode, imageLinkTarget: monitorGroup?.imageLinkTarget, fallbackToOriginal: monitorGroup?.fallbackToOriginal }, 'Configuração pediu imagem, mas nenhuma imagem foi encontrada')
+          }
+
+          const image = rawImage ? await normalizeImageForWhatsApp(rawImage.buffer) : null
+          if (rawImage && !image) {
+            logger.warn({ msgId: msg.key.id, srcMime: rawImage.mimetype, size: rawImage.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
+          }
+          if (image) {
+            logger.info({ msgId: msg.key.id, size: image.buffer?.length, thumbnailSize: image.jpegThumbnail?.length }, 'Imagem normalizada para envio')
+          }
+
+          const msgPayload = image
+            ? { image: image.buffer, mimetype: image.mimetype, jpegThumbnail: image.jpegThumbnail, caption: finalText }
+            : { text: finalText }
+          sentVia = image ? 'imageMessage' : 'text'
+
+          await sock.sendMessage(destJid, msgPayload)
+          logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
+          const sentAt = new Date()
+          await Promise.all([
+            db.messageLog.update({ where: { id: log.id }, data: { status: 'success', errorMsg: null, sentAt } }),
+            db.user.update({
+              where: { id: userId },
+              data: { lastActivityAt: sentAt, sendCount: { increment: 1 } },
+            }),
+          ]).catch(err => {
+            logger.error({ err: err.message, destJid, platforms, logId: log.id }, 'Mensagem enviada, mas falha ao persistir log/atividade')
+          })
+
+          if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
+          if (cfg.plan === 'basic') {
+            adSendCount++
+            if (adSendCount % 50 === 0) {
+              await sock.sendMessage(destJid, { text: AD_TEXT }).catch(() => {})
+            }
+          }
+        } catch (err) {
           await db.messageLog.update({
             where: { id: log.id },
-            data: { status: 'error', errorMsg: error, sentAt: new Date() },
+            data: { status: 'error', errorMsg: err.message, sentAt: new Date() },
           }).catch(() => {})
-          logger.warn({ destJid, queueSize: getSendBackendQueueSize() }, 'Envio recusado após criação do log queued')
+          logger.error({ err: err.message, destJid, platforms, logId: log.id }, 'Erro ao enviar mensagem convertida')
+          trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: err.message } })
         }
       }
   }
@@ -1213,7 +1270,6 @@ process.on('message', async msg => {
         logId: log.id,
         destJid: jid,
         platforms: 'broadcast',
-        imageMode: 'none',
         plan: 'broadcast',
         delayMs: buildSmartDelayMs((await getConfig()).botConfig),
         typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),

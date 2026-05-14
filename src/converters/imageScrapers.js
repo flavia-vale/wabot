@@ -239,7 +239,7 @@ export async function fetchProductImage(platform, productUrl, creds) {
   }
 }
 
-// Re-encoda a imagem como JPEG e gera um thumbnail JPEG (~100kb).
+// Re-encoda a imagem como JPEG e gera um thumbnail JPEG leve.
 // Necessário porque a Baileys chama sharp.metadata() para gerar thumbnail
 // automaticamente; quando os bytes vêm em formato não suportado pelo sharp
 // (HEIC sem libheif, AVIF, ou bytes corrompidos), o sharp falha e a imagem
