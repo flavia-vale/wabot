@@ -23,6 +23,7 @@ import { validateCredentialData } from './credentialHealth.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } from './sendQueueBackend.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
+import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 
 const userId = process.env.BOT_USER_ID
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
@@ -753,6 +754,21 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       const platformCsv = monitorGroup?.allowedPlatforms?.trim() || cfg.botConfig.platforms
       const enabledPlatforms = new Set(platformCsv.split(',').filter(Boolean))
 
+      // Retorna o proto imageMessage/videoMessage original sem baixar.
+      // Esse era o caminho estável em produção: reaproveita a mídia já hospedada
+      // nos servidores do WhatsApp e troca somente o caption convertido, evitando
+      // novo upload/preview para mensagens monitoradas.
+      function getOriginalMediaMessage() {
+        const inner = extractMessageContent(msg.message)
+        const ext = inner?.extendedTextMessage
+        const quoted = ext?.contextInfo?.quotedMessage
+        if (inner?.imageMessage) return { type: 'imageMessage', proto: inner.imageMessage }
+        if (quoted?.imageMessage) return { type: 'imageMessage', proto: quoted.imageMessage }
+        if (inner?.videoMessage) return { type: 'videoMessage', proto: inner.videoMessage }
+        if (quoted?.videoMessage) return { type: 'videoMessage', proto: quoted.videoMessage }
+        return null
+      }
+
       // Baixa a imagem original do anúncio (mensagem do grupo monitorado) já
       // decifrada via Baileys, retornando { buffer, mimetype }. Lida com
       // wrappers (ephemeralMessage etc.), link preview (jpegThumbnail embutido)
@@ -942,33 +958,14 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           messageText: sanitizeMessageForLog(finalText),
         }
 
-        // Card grande clicável igual à concorrência (Urubu etc.):
-        //
-        //   [ imageMessage full-width ]
-        //   [ chip "🔗 meli.la"      ]   ← externalAdReply minimal
-        //   [ caption com o texto    ]
-        //
-        // Estratégia: imageMessage entrega a foto em tamanho real como mídia
-        // principal (não como thumbnail de um card de preview), e
-        // contextInfo.externalAdReply minimalista (só title + sourceUrl, sem
-        // body, sem thumbnail full-res) injeta o chip entre a foto e a
-        // caption tornando a área clicável para o link convertido.
-        //
-        // Diferenças críticas vs tentativas anteriores que falharam:
-        //   - PR #347 (b949a1f) usava extendedTextMessage previewType=VIDEO
-        //     via proto manual + relayMessage → drop silencioso. Aqui o
-        //     envio é via sendMessage normal.
-        //   - 0cd5a18/e9c90c6 punham buffer full-res em externalAdReply.thumbnail
-        //     estourando o protobuf → drop silencioso. Aqui nem mandamos
-        //     thumbnail (chip simples só com title).
-        //   - ef04873 setava body+thumb+mediaType=1 → renderizava como ad
-        //     "quote acima da imagem". Aqui só title + sourceUrl com mediaType=0
-        //     renderiza como chip inline pequeno (mesmo visual do Urubu).
-        //
-        // Cadeia de fallback dentro de `send`:
-        //   1) imageMessage + externalAdReply minimal (chip clicável)
-        //   2) imageMessage + caption simples (sem chip)
-        //   3) texto puro com linkPreview:null
+        // Restaura o caminho estável que continua funcionando em produção:
+        // quando há mídia original, relayMessage reaproveita o proto já hospedado
+        // no WhatsApp e troca apenas o caption. Se não houver mídia original, cai
+        // para upload simples de imagem com caption e, por último, texto puro.
+        // Sem rich link/linkPreview/externalAdReply no envio monitorado.
+        const wantImage = monitorGroup?.imageMode !== 'none'
+        const original = wantImage ? getOriginalMediaMessage() : null
+
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         const log = await db.messageLog.create({
           data: { ...logData, status: 'queued' },
@@ -984,43 +981,30 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           delayMs: buildSmartDelayMs(cfg.botConfig),
           typingDelayMs: calculateTypingDelayMs({ text: finalText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           buildPayload: async () => {
-            const fetched = await getImage()
-            const image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
-            if (fetched && !image) {
-              logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
+            if (original) return null
+
+            let image = null
+            if (wantImage) {
+              const fetched = await getImage()
+              image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
+              if (fetched && !image) {
+                logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
+              }
             }
 
-            const textPayload = { text: finalText, linkPreview: null }
-            if (!image || !primary?.converted) {
-              return { _route: 'text', primary: textPayload, fallbacks: [] }
-            }
-
-            const plainImagePayload = {
-              image: image.buffer,
-              mimetype: 'image/jpeg',
-              jpegThumbnail: image.jpegThumbnail,
-              caption: finalText,
-            }
-
-            let hostLabel = 'link'
-            try { hostLabel = new URL(primary.converted).hostname.replace(/^www\./, '') } catch {}
-
-            const chipImagePayload = {
-              ...plainImagePayload,
-              contextInfo: {
-                externalAdReply: {
-                  title: hostLabel,
-                  sourceUrl: primary.converted,
-                  mediaType: 0,
-                  renderLargerThumbnail: false,
-                  showAdAttribution: false,
-                },
-              },
-            }
-
-            return { _route: 'chip', primary: chipImagePayload, fallbacks: [plainImagePayload, textPayload] }
+            return buildMonitoredMessagePayload({
+              finalText,
+              image,
+            })
           },
           send: async ({ sock: sendSock, payload }) => {
+            if (original) {
+              const replayProto = { ...original.proto, caption: finalText }
+              await sendSock.relayMessage(destJid, { [original.type]: replayProto }, {})
+              sentVia = `relay:${original.type}`
+              return
+            }
+
             const routes = [
               { name: payload._route, body: payload.primary },
               ...(payload.fallbacks || []).map((body, idx) => ({
