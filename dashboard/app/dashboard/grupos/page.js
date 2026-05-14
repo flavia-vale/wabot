@@ -6,6 +6,18 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { HelpLink } from '@/components/HelpLink'
 import { LoadingState } from '@/components/States'
 
+const IMAGE_MODE_HELP = {
+  none: 'Não envia imagem.',
+  original: 'Usa a imagem que veio na mensagem monitorada.',
+  fetch: 'Busca a imagem na página do produto.',
+}
+
+const IMAGE_MODE_OPTIONS = [
+  ['none', 'Nenhuma'],
+  ['fetch', 'Imagem do site (Scrape)'],
+  ['original', 'Imagem original'],
+]
+
 const roleLabels = {
   monitor: 'Monitorar (origem)',
   post: 'Postar (destino)',
@@ -296,6 +308,50 @@ export default function GruposPage() {
                     })}
                   </div>
                   <p className="mt-1 text-[11px] text-gray-400">Sem seleção manual, usa as plataformas globais.</p>
+                </div>
+                <div className="mt-3 border-t border-gray-100 pt-3">
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-gray-500">Imagem da mensagem:</p>
+                  </div>
+                  <div className="flex flex-wrap gap-4" role="radiogroup" aria-label={`Imagem da mensagem para ${g.name}`}>
+                    {IMAGE_MODE_OPTIONS.map(([value, label]) => (
+                      <label key={value} className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`imageMode-${g.id}`}
+                          value={value}
+                          checked={(g.imageMode ?? 'none') === value}
+                          onChange={() => handleUpdateGroup(g.id, { imageMode: value })}
+                        />
+                        <span>{label}</span>
+                        <span className="sr-only">: {IMAGE_MODE_HELP[value]}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="mt-1 text-[11px] text-gray-400">{IMAGE_MODE_HELP[g.imageMode ?? 'none']}</p>
+                  {(g.imageMode ?? 'none') === 'fetch' && (
+                    <div className="flex flex-wrap gap-5 mt-2">
+                      <label className="text-xs text-gray-500">
+                        Link para imagem:{' '}
+                        <select
+                          value={g.imageLinkTarget ?? 'first'}
+                          onChange={e => handleUpdateGroup(g.id, { imageLinkTarget: e.target.value })}
+                          className="ml-1 border border-gray-200 rounded px-1.5 py-0.5 text-xs"
+                        >
+                          <option value="first">Primeiro link</option>
+                          <option value="last">Último link</option>
+                        </select>
+                      </label>
+                      <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={g.fallbackToOriginal ?? false}
+                          onChange={e => handleUpdateGroup(g.id, { fallbackToOriginal: e.target.checked })}
+                        />
+                        Fallback imagem: usar a original se o scrape falhar
+                      </label>
+                    </div>
+                  )}
                   {groupErrors[g.id] && <p className="mt-2 text-xs text-red-600" role="alert">{groupErrors[g.id]}</p>}
                 </div>
               </li>
