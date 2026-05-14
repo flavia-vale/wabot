@@ -942,18 +942,32 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           messageText: sanitizeMessageForLog(finalText),
         }
 
-        // Envio com card grande clicável (rich link preview) quando há imagem
-        // + URL convertida. Usa a API pública do Baileys sock.sendMessage com
-        // linkPreview={previewType:1, highQualityThumbnail}, deixando o
-        // Baileys fazer prepareWAMessageMedia internamente — diferente da
-        // tentativa anterior (PR #347/b949a1f) que montava o proto manual e
-        // chamava relayMessage, pulando normalizações (messageContextInfo,
-        // mediaKeyTimestamp, dimensões), o que fazia o WhatsApp dropar
-        // silenciosamente em prod.
+        // Card grande clicável igual à concorrência (Urubu etc.):
         //
-        // Cadeia de fallback (executada dentro de `send`):
-        //   1) rich link (extendedTextMessage previewType=VIDEO)
-        //   2) imageMessage com caption (rota estável atual)
+        //   [ imageMessage full-width ]
+        //   [ chip "🔗 meli.la"      ]   ← externalAdReply minimal
+        //   [ caption com o texto    ]
+        //
+        // Estratégia: imageMessage entrega a foto em tamanho real como mídia
+        // principal (não como thumbnail de um card de preview), e
+        // contextInfo.externalAdReply minimalista (só title + sourceUrl, sem
+        // body, sem thumbnail full-res) injeta o chip entre a foto e a
+        // caption tornando a área clicável para o link convertido.
+        //
+        // Diferenças críticas vs tentativas anteriores que falharam:
+        //   - PR #347 (b949a1f) usava extendedTextMessage previewType=VIDEO
+        //     via proto manual + relayMessage → drop silencioso. Aqui o
+        //     envio é via sendMessage normal.
+        //   - 0cd5a18/e9c90c6 punham buffer full-res em externalAdReply.thumbnail
+        //     estourando o protobuf → drop silencioso. Aqui nem mandamos
+        //     thumbnail (chip simples só com title).
+        //   - ef04873 setava body+thumb+mediaType=1 → renderizava como ad
+        //     "quote acima da imagem". Aqui só title + sourceUrl com mediaType=0
+        //     renderiza como chip inline pequeno (mesmo visual do Urubu).
+        //
+        // Cadeia de fallback dentro de `send`:
+        //   1) imageMessage + externalAdReply minimal (chip clicável)
+        //   2) imageMessage + caption simples (sem chip)
         //   3) texto puro com linkPreview:null
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         const log = await db.messageLog.create({
@@ -981,7 +995,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
               return { _route: 'text', primary: textPayload, fallbacks: [] }
             }
 
-            const imagePayload = {
+            const plainImagePayload = {
               image: image.buffer,
               mimetype: 'image/jpeg',
               jpegThumbnail: image.jpegThumbnail,
@@ -990,22 +1004,21 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 
             let hostLabel = 'link'
             try { hostLabel = new URL(primary.converted).hostname.replace(/^www\./, '') } catch {}
-            const titleLine = (finalText.split('\n').map(l => l.trim()).find(Boolean) || 'Oferta').slice(0, 80)
 
-            const richPayload = {
-              text: finalText,
-              linkPreview: {
-                'canonical-url': primary.converted,
-                'matched-text': primary.converted,
-                title: titleLine,
-                description: hostLabel,
-                jpegThumbnail: image.jpegThumbnail,
-                highQualityThumbnail: image.buffer,
-                previewType: 1,
+            const chipImagePayload = {
+              ...plainImagePayload,
+              contextInfo: {
+                externalAdReply: {
+                  title: hostLabel,
+                  sourceUrl: primary.converted,
+                  mediaType: 0,
+                  renderLargerThumbnail: false,
+                  showAdAttribution: false,
+                },
               },
             }
 
-            return { _route: 'rich', primary: richPayload, fallbacks: [imagePayload, textPayload] }
+            return { _route: 'chip', primary: chipImagePayload, fallbacks: [plainImagePayload, textPayload] }
           },
           send: async ({ sock: sendSock, payload }) => {
             const routes = [
