@@ -951,10 +951,12 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             if (fetched && !image) {
               logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
             }
-            // Usa o buffer principal (até 1280x1280, JPEG q=85) como thumbnail
-            // do card — combinado com renderLargerThumbnail produz a foto
-            // grande e nítida. jpegThumbnail (200x200) ficaria pixelado.
-            const thumbBuf = image?.buffer || image?.jpegThumbnail || null
+            // Hotfix: usar buffer full-res como thumbnail do externalAdReply
+            // estourava o limite de tamanho do campo `thumbnail` no protobuf,
+            // e o WhatsApp dropa a mensagem em silêncio (sem erro local, sem
+            // entrega). Voltar ao jpegThumbnail pequeno (200x200) restaura
+            // a entrega — mesmo que a imagem fique menor no card.
+            const thumbBuf = image?.jpegThumbnail || null
             if (thumbBuf && primary?.converted) {
               sentVia = 'externalAdReply'
               return {
