@@ -100,6 +100,9 @@ for path in /login /admin /dashboard; do
   check_http_with_retry "$path" 8 2
 done
 
+echo "  Validando abertura mobile do site (/ e /login)"
+"$ROOT_DIR/scripts/smoke_mobile_dashboard.sh" "http://espelhagrupos.com.br" / /login
+
 echo "  Validando proxy /api/auth/login (não pode ser 404/prerender do Next.js)"
 api_code=$(curl -s -o /tmp/wabot_login_smoke_body.txt -D /tmp/wabot_login_smoke_headers.txt -w "%{http_code}" \
   --max-time 10 \

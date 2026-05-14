@@ -8,7 +8,8 @@
     "api": "node src/api/server.js",
     "dashboard": "cd dashboard && npm run dev",
     "pressure:logs": "node scripts/pressure-logs.mjs",
-    "db:readiness": "node scripts/db-migration-readiness.mjs"
+    "db:readiness": "node scripts/db-migration-readiness.mjs",
+    "test": "node --test test/*.test.js test/**/*.test.js"
   },
   "dependencies": {
     "@fastify/cors": "^11.2.0",
