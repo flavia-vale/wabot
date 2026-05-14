@@ -26,12 +26,13 @@ export default function MarketingGrowthAdminPage() {
   const [subscriptions, setSubscriptions] = useState([])
   const [marketingOverview, setMarketingOverview] = useState(null)
   const [marketingCampaigns, setMarketingCampaigns] = useState([])
+  const [marketingFunnel, setMarketingFunnel] = useState(null)
 
   useEffect(() => {
     let active = true
     ;(async () => {
       try {
-        const [adminData, overviewData, financeData, paymentsData, subscriptionsData, mkOverview, mkCampaigns] = await Promise.all([
+        const [adminData, overviewData, financeData, paymentsData, subscriptionsData, mkOverview, mkCampaigns, mkFunnel] = await Promise.all([
           api.adminMe(),
           api.adminOverview(),
           api.adminFinanceOverview().catch(() => null),
@@ -39,6 +40,7 @@ export default function MarketingGrowthAdminPage() {
           api.adminSubscriptions({ limit: 100 }).catch(() => ({ items: [] })),
           api.adminMarketingOverview(dateRangeFromPeriod('30d')).catch(() => null),
           api.adminMarketingCampaigns(dateRangeFromPeriod('30d')).catch(() => ({ campaigns: [] })),
+          api.adminMarketingFunnel(dateRangeFromPeriod('30d')).catch(() => null),
         ])
         if (!active) return
         setAdmin(adminData)
@@ -48,8 +50,10 @@ export default function MarketingGrowthAdminPage() {
         setSubscriptions(Array.isArray(subscriptionsData?.items) ? subscriptionsData.items : [])
       setMarketingOverview(mkOverview)
       setMarketingCampaigns(Array.isArray(mkCampaigns?.campaigns) ? mkCampaigns.campaigns : [])
+      setMarketingFunnel(mkFunnel)
         setMarketingOverview(mkOverview)
         setMarketingCampaigns(Array.isArray(mkCampaigns?.campaigns) ? mkCampaigns.campaigns : [])
+        setMarketingFunnel(mkFunnel)
       } catch (err) {
         if (!active) return
         setError(err.message || 'Não foi possível carregar métricas de marketing.')
@@ -65,8 +69,8 @@ export default function MarketingGrowthAdminPage() {
     setError('')
     try {
       const range = dateRangeFromPeriod(period)
-      const [adminData, overviewData, financeData, paymentsData, subscriptionsData, mkOverview, mkCampaigns] = await Promise.all([
-        api.adminMe(), api.adminOverview(), api.adminFinanceOverview().catch(() => null), api.adminPayments({ limit: 100 }).catch(() => ({ items: [] })), api.adminSubscriptions({ limit: 100 }).catch(() => ({ items: [] })), api.adminMarketingOverview(range).catch(() => null), api.adminMarketingCampaigns(range).catch(() => ({ campaigns: [] })),
+      const [adminData, overviewData, financeData, paymentsData, subscriptionsData, mkOverview, mkCampaigns, mkFunnel] = await Promise.all([
+        api.adminMe(), api.adminOverview(), api.adminFinanceOverview().catch(() => null), api.adminPayments({ limit: 100 }).catch(() => ({ items: [] })), api.adminSubscriptions({ limit: 100 }).catch(() => ({ items: [] })), api.adminMarketingOverview(range).catch(() => null), api.adminMarketingCampaigns(range).catch(() => ({ campaigns: [] })), api.adminMarketingFunnel(range).catch(() => null),
       ])
       setAdmin(adminData); setOverview(overviewData); setFinance(financeData)
       setPayments(Array.isArray(paymentsData?.items) ? paymentsData.items : [])
@@ -92,11 +96,10 @@ export default function MarketingGrowthAdminPage() {
 
   const funnel = useMemo(() => {
     const raw = [
-      { key: 'visitors', label: 'Visitantes', value: metrics.visitors },
-      { key: 'leads', label: 'Leads', value: metrics.leads },
-      { key: 'signups', label: 'Cadastros', value: metrics.signups },
-      { key: 'activations', label: 'Ativações', value: metrics.activations },
-      { key: 'paid', label: 'Assinaturas', value: metrics.paid },
+      { key: 'sessions', label: 'Sessões', value: Number(marketingFunnel?.sessions || metrics.visitors) },
+      { key: 'signups', label: 'Cadastros', value: Number(marketingFunnel?.signups || metrics.signups) },
+      { key: 'activations', label: 'Ativações', value: Number(marketingFunnel?.firstValueActions || metrics.activations) },
+      { key: 'paid', label: 'Assinaturas', value: Number(marketingFunnel?.approvedPayments || metrics.paid) },
     ]
     return raw.map((item, i) => {
       if (i === 0) return { ...item, drop: 0, conversion: 100 }
@@ -104,7 +107,7 @@ export default function MarketingGrowthAdminPage() {
       const conversion = pct(item.value, prev)
       return { ...item, conversion, drop: Math.max(100 - conversion, 0) }
     })
-  }, [metrics])
+  }, [metrics, marketingFunnel])
 
   const channelRows = useMemo(() => {
     const approvedPayments = payments.filter(item => String(item?.status || '').toLowerCase() === 'approved').length
@@ -213,7 +216,7 @@ export default function MarketingGrowthAdminPage() {
         <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
           <h2 className="text-lg font-black text-gray-900">Funil principal</h2>
           <p className="text-xs text-gray-500">Leitura de queda por etapa para priorização de experimentos.</p>
-          <div className="mt-4 grid gap-3 md:grid-cols-5">{funnel.map(step => <div key={step.key} className="rounded-xl border border-gray-100 bg-gray-50 p-4"><p className="text-xs text-gray-500">{step.label}</p><p className="text-2xl font-black text-gray-900">{step.value}</p><p className={`text-xs font-semibold ${step.drop > 35 ? 'text-red-600' : 'text-emerald-700'}`}>{step.key === 'visitors' ? 'Base 100%' : `Conv: ${step.conversion}% · Queda: ${step.drop.toFixed(1)}%`}</p></div>)}</div>
+          <div className="mt-4 grid gap-3 md:grid-cols-5">{funnel.map(step => <div key={step.key} className="rounded-xl border border-gray-100 bg-gray-50 p-4"><p className="text-xs text-gray-500">{step.label}</p><p className="text-2xl font-black text-gray-900">{step.value}</p><p className={`text-xs font-semibold ${step.drop > 35 ? 'text-red-600' : 'text-emerald-700'}`}>{step.key === 'sessions' ? 'Base 100%' : `Conv: ${step.conversion}% · Queda: ${step.drop.toFixed(1)}%`}</p></div>)}</div>
         </section>
 
         <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
