@@ -5,9 +5,6 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   downloadMediaMessage,
   extractMessageContent,
-  prepareWAMessageMedia,
-  generateWAMessageFromContent,
-  proto,
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import { readFileSync, mkdirSync } from 'fs'
@@ -965,100 +962,34 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             if (fetched && !image) {
               logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
             }
-            // Padrão da concorrência: UMA única mensagem extendedTextMessage
-            // com preview type VIDEO (card grande) + highQualityThumbnail
-            // (mídia uploadada via servidor do WA). Resultado visual:
-            //   [imagem grande]
-            //   [chip "meli.la" + URL]
-            //   [texto do caption]
-            // tudo em uma única bolha, com um cabeçalho de remetente e um
-            // timestamp só.
-            //
-            // O Baileys não expõe previewType pela API linkPreview pública
-            // (ela hardcoda 0 = inline pequeno). Por isso construímos o
-            // proto manualmente em `send` via generateWAMessageFromContent.
-            //
-            // Aqui só preparamos os bytes; o upload + montagem do proto
-            // acontece dentro de `send` pra ter acesso ao sock.
+            // Envio confiável: imageMessage com caption quando há imagem,
+            // texto puro caso contrário. A rota de extendedTextMessage com
+            // previewType=VIDEO via relayMessage parecia funcionar localmente
+            // mas o WhatsApp dropava as mensagens silenciosamente em prod
+            // (mesmo padrão da falha do PR #347).
             if (image && primary?.converted) {
-              sentVia = 'richLink'
-              const isOriginalJpeg = fetched.mimetype === 'image/jpeg' && fetched.buffer?.length > 0
-              const mainBuffer = isOriginalJpeg ? fetched.buffer : image.buffer
-              const titleLine = (finalText.split('\n').map(l => l.trim()).find(Boolean) || 'Oferta').slice(0, 80)
-              const hostLabel = (() => {
-                try { return new URL(primary.converted).hostname.replace(/^www\./, '') } catch { return 'link' }
-              })()
+              sentVia = 'image'
               return {
-                _richLink: {
-                  imageBuffer: mainBuffer,
-                  jpegThumbnail: image.jpegThumbnail,
-                  text: finalText,
-                  sourceUrl: primary.converted,
-                  title: titleLine,
-                  hostLabel,
-                },
+                image: image.buffer,
+                mimetype: 'image/jpeg',
+                jpegThumbnail: image.jpegThumbnail,
+                caption: finalText,
               }
             }
             sentVia = 'text'
             return { text: finalText, linkPreview: null }
           },
           send: async ({ sock: sendSock, payload }) => {
-            if (!payload?._richLink) {
+            try {
               await sendSock.sendMessage(destJid, payload)
-              return
-            }
-            const { imageBuffer, jpegThumbnail, text, sourceUrl, title, hostLabel } = payload._richLink
-            try {
-              // 1) Sobe a imagem como mídia para o WA — devolve directPath,
-              //    mediaKey, sha256 etc. necessários para o highQualityThumbnail.
-              const prep = await prepareWAMessageMedia(
-                { image: imageBuffer },
-                { upload: sendSock.waUploadToServer },
-              )
-              const im = prep.imageMessage
-              if (!im?.directPath || !im?.mediaKey) {
-                throw new Error('prepareWAMessageMedia não devolveu directPath/mediaKey')
+            } catch (err) {
+              if (payload?.image) {
+                logger.warn({ err: err.message, destJid }, 'imageMessage falhou — fallback para texto puro')
+                await sendSock.sendMessage(destJid, { text: finalText, linkPreview: null })
+                sentVia = 'text'
+                return
               }
-              // 2) Constrói extendedTextMessage com previewType=VIDEO (card
-              //    grande) referenciando a mídia uploadada como thumbnail.
-              const PreviewType = proto.Message.ExtendedTextMessage.PreviewType
-              const richMsg = generateWAMessageFromContent(destJid, {
-                extendedTextMessage: {
-                  text,
-                  matchedText: sourceUrl,
-                  canonicalUrl: sourceUrl,
-                  title,
-                  description: hostLabel,
-                  previewType: PreviewType?.VIDEO ?? 1,
-                  jpegThumbnail,
-                  thumbnailDirectPath: im.directPath,
-                  thumbnailSha256: im.fileSha256,
-                  thumbnailEncSha256: im.fileEncSha256,
-                  mediaKey: im.mediaKey,
-                  mediaKeyTimestamp: im.mediaKeyTimestamp,
-                  thumbnailHeight: im.height,
-                  thumbnailWidth: im.width,
-                },
-              }, { userJid: sendSock.user?.id })
-              await sendSock.relayMessage(destJid, richMsg.message, { messageId: richMsg.key.id })
-              return
-            } catch (err) {
-              logger.warn({ err: err.message, destJid }, 'Rich link preview falhou — fallback para imageMessage+caption')
-            }
-            // Fallback: imageMessage com caption. Sem chip mas entrega a
-            // foto e o texto numa bolha só.
-            try {
-              await sendSock.sendMessage(destJid, {
-                image: imageBuffer,
-                mimetype: 'image/jpeg',
-                jpegThumbnail,
-                caption: text,
-              })
-              sentVia = 'image'
-            } catch (err) {
-              logger.warn({ err: err.message, destJid }, 'imageMessage também falhou — fallback para texto puro')
-              await sendSock.sendMessage(destJid, { text, linkPreview: null })
-              sentVia = 'text'
+              throw err
             }
           },
           onDone: async (result) => {
@@ -1071,59 +1002,12 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           },
         })
 
-          logger.info({
-            msgId: msg.key.id,
-            destJid,
-            imageMode: monitorGroup?.imageMode ?? 'none',
-            imageLinkTarget: monitorGroup?.imageLinkTarget ?? 'first',
-            fallbackToOriginal: Boolean(monitorGroup?.fallbackToOriginal),
-          }, 'Decidindo imagem da oferta convertida')
-
-          const rawImage = monitorGroup?.imageMode !== 'none' ? await getImage() : null
-          if (!rawImage && monitorGroup?.imageMode !== 'none') {
-            logger.warn({ msgId: msg.key.id, imageMode: monitorGroup?.imageMode, imageLinkTarget: monitorGroup?.imageLinkTarget, fallbackToOriginal: monitorGroup?.fallbackToOriginal }, 'Configuração pediu imagem, mas nenhuma imagem foi encontrada')
-          }
-
-          const image = rawImage ? await normalizeImageForWhatsApp(rawImage.buffer) : null
-          if (rawImage && !image) {
-            logger.warn({ msgId: msg.key.id, srcMime: rawImage.mimetype, size: rawImage.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
-          }
-          if (image) {
-            logger.info({ msgId: msg.key.id, size: image.buffer?.length, thumbnailSize: image.jpegThumbnail?.length }, 'Imagem normalizada para envio')
-          }
-
-          const msgPayload = image
-            ? { image: image.buffer, mimetype: image.mimetype, jpegThumbnail: image.jpegThumbnail, caption: finalText }
-            : { text: finalText }
-          sentVia = image ? 'imageMessage' : 'text'
-
-          await sock.sendMessage(destJid, msgPayload)
-          logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
-          const sentAt = new Date()
-          await Promise.all([
-            db.messageLog.update({ where: { id: log.id }, data: { status: 'success', errorMsg: null, sentAt } }),
-            db.user.update({
-              where: { id: userId },
-              data: { lastActivityAt: sentAt, sendCount: { increment: 1 } },
-            }),
-          ]).catch(err => {
-            logger.error({ err: err.message, destJid, platforms, logId: log.id }, 'Mensagem enviada, mas falha ao persistir log/atividade')
-          })
-
-          if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
-          if (cfg.plan === 'basic') {
-            adSendCount++
-            if (adSendCount % 50 === 0) {
-              await sock.sendMessage(destJid, { text: AD_TEXT }).catch(() => {})
-            }
-          }
-        } catch (err) {
+        if (!accepted) {
           await db.messageLog.update({
             where: { id: log.id },
-            data: { status: 'error', errorMsg: err.message, sentAt: new Date() },
+            data: { status: 'error', errorMsg: 'Fila interna de envios cheia ou worker encerrando', sentAt: new Date() },
           }).catch(() => {})
-          logger.error({ err: err.message, destJid, platforms, logId: log.id }, 'Erro ao enviar mensagem convertida')
-          trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: err.message } })
+          logger.warn({ destJid, platforms, logId: log.id }, 'Mensagem convertida rejeitada pela fila')
         }
       }
   }
