@@ -951,19 +951,41 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             if (fetched && !image) {
               logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
             }
-            // Padrão dos concorrentes (Urubu etc.): imageMessage nativo
-            // (foto grande em tamanho cheio) + caption com texto e URL. O
-            // WhatsApp auto-detecta a URL no caption e renderiza o chip de
-            // preview do link entre a foto e o texto. Mais robusto que
-            // externalAdReply (sem limite de thumbnail) e mostra a imagem
-            // em tamanho real.
+            // Padrão dos concorrentes (Urubu etc.): imageMessage nativo +
+            // contextInfo.externalAdReply. O imageMessage entrega a foto em
+            // tamanho real; o externalAdReply (com thumbnail PEQUENO, não o
+            // buffer full-res — esse limite estourava o protobuf) injeta o
+            // chip "meli.la" entre a foto e o caption e torna a área da
+            // imagem clicável para o link convertido.
+            //
+            // Quando temos a imagem original da própria mensagem (já vem
+            // como JPEG decifrado pela Baileys), enviamos o buffer original
+            // sem re-encode, evitando generation loss. O sharp só roda
+            // para gerar o jpegThumbnail pequeno do preview.
             if (image && primary?.converted) {
               sentVia = 'image'
+              const isOriginalJpeg = fetched.mimetype === 'image/jpeg' && fetched.buffer?.length > 0
+              const mainBuffer = isOriginalJpeg ? fetched.buffer : image.buffer
+              const mainMime = isOriginalJpeg ? 'image/jpeg' : image.mimetype
+              const titleLine = (finalText.split('\n').map(l => l.trim()).find(Boolean) || 'Oferta').slice(0, 80)
+              const hostLabel = (() => {
+                try { return new URL(primary.converted).hostname.replace(/^www\./, '') } catch { return 'link' }
+              })()
               return {
-                image: image.buffer,
-                mimetype: image.mimetype,
+                image: mainBuffer,
+                mimetype: mainMime,
                 jpegThumbnail: image.jpegThumbnail,
                 caption: finalText,
+                contextInfo: {
+                  externalAdReply: {
+                    title: titleLine,
+                    body: hostLabel,
+                    mediaType: 1,
+                    thumbnail: image.jpegThumbnail,
+                    sourceUrl: primary.converted,
+                    showAdAttribution: false,
+                  },
+                },
               }
             }
             sentVia = 'text'
