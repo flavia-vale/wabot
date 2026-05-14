@@ -204,8 +204,6 @@ async function loadConfig() {
     monitor: user.groups.filter(g => g.role === 'monitor').map(g => ({
       id: g.id,
       waJid: g.waJid,
-      imageMode: g.imageMode,
-      imageLinkTarget: g.imageLinkTarget,
       fallbackToOriginal: g.fallbackToOriginal,
       blockedKeywords: g.blockedKeywords,
       allowedPlatforms: g.allowedPlatforms,
@@ -293,7 +291,6 @@ async function checkScheduledMessages() {
           logId: log.id,
           destJid: jid,
           platforms: 'scheduled',
-          imageMode: 'none',
           plan: 'scheduled',
           delayMs: buildSmartDelayMs((await getConfig()).botConfig),
           typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
@@ -380,12 +377,6 @@ const SEND_EXTERNAL_AD_REPLY_TIMEOUT_MS = Math.max(5_000, envNumber('SEND_EXTERN
 const OFFER_CARD_TITLE_MAX_CHARS = 80
 const OFFER_CARD_BODY_MAX_CHARS = 80
 
-function ensureTextContainsLink(text, link) {
-  const message = String(text ?? '').trim()
-  if (!link || message.includes(link)) return message
-  return `${message}\n\n${link}`
-}
-
 function buildOfferCardTextParts(messageText, sourceUrl) {
   const lines = String(messageText ?? '')
     .split('\n')
@@ -402,7 +393,7 @@ function buildOfferCardTextParts(messageText, sourceUrl) {
 }
 
 async function sendConvertedOfferAsLargeClickableCard({ sock, destJid, messageText, sourceUrl, getImage, msgId, platforms }) {
-  const text = ensureTextContainsLink(messageText, sourceUrl)
+  const text = String(messageText ?? '').trim()
   const { title, body } = buildOfferCardTextParts(text, sourceUrl)
 
   try {
@@ -414,12 +405,15 @@ async function sendConvertedOfferAsLargeClickableCard({ sock, destJid, messageTe
       } else {
         logger.warn({ msgId }, 'Oferta sem imagem disponível — fallback para texto puro')
       }
-      await sock.sendMessage(destJid, { text })
+      await sock.sendMessage(destJid, { text, linkPreview: null })
       return 'text'
     }
 
     const payload = {
       text,
+      // Evita que a Baileys gere matchedText/jpegThumbnail automáticos a partir
+      // dos links do texto; o externalAdReply abaixo deve ser a única fonte de preview.
+      linkPreview: null,
       contextInfo: {
         externalAdReply: {
           title,
@@ -441,7 +435,7 @@ async function sendConvertedOfferAsLargeClickableCard({ sock, destJid, messageTe
     return 'externalAdReply'
   } catch (err) {
     logger.warn({ err: err.message, destJid, platforms }, 'Falha ao gerar/enviar card grande clicável — fallback para texto puro')
-    await sock.sendMessage(destJid, { text })
+    await sock.sendMessage(destJid, { text, linkPreview: null })
     return 'textFallback'
   }
 }
@@ -617,7 +611,7 @@ async function processSendJob(job) {
           await activeSock.sendMessage(job.destJid, payload)
         }
         lastSendByDest.set(job.destJid, Date.now())
-        logger.info({ destJid: job.destJid, platforms: job.platforms, imageMode: job.imageMode, attempt, type: job.type }, 'Mensagem enviada')
+        logger.info({ destJid: job.destJid, platforms: job.platforms, attempt, type: job.type }, 'Mensagem enviada')
 
         await db.messageLog.update({
           where: { id: job.logId },
@@ -1033,7 +1027,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             platforms,
           })
 
-          logger.info({ destJid, platforms, imageMode: monitorGroup?.imageMode, sentVia }, 'Mensagem enviada')
+          logger.info({ destJid, platforms, sentVia }, 'Mensagem enviada')
           const sentAt = new Date()
           await Promise.all([
             db.messageLog.update({ where: { id: log.id }, data: { status: 'success', errorMsg: null, sentAt } }),
@@ -1205,7 +1199,6 @@ process.on('message', async msg => {
         logId: log.id,
         destJid: jid,
         platforms: 'broadcast',
-        imageMode: 'none',
         plan: 'broadcast',
         delayMs: buildSmartDelayMs((await getConfig()).botConfig),
         typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),

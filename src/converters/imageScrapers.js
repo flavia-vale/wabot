@@ -252,10 +252,10 @@ export async function normalizeImageForWhatsApp(buf) {
     if (!meta?.width || !meta?.height) return null
 
     // externalAdReply com renderLargerThumbnail é sensível a dimensão/proporção.
-    // Gera sempre um JPEG quadrado 600x600, leve, com crop central se necessário.
+    // Gera sempre um JPEG quadrado 400x400, leve, com crop central se necessário.
     const main = await sharp(buf, { failOn: 'none' })
       .rotate()
-      .resize({ width: 600, height: 600, fit: 'cover', position: 'centre' })
+      .resize({ width: 400, height: 400, fit: 'cover', position: 'centre' })
       .flatten({ background: '#ffffff' })
       .jpeg({ quality: 75, mozjpeg: true })
       .toBuffer()
