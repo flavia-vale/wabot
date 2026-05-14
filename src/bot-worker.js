@@ -853,7 +853,8 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             }
           }
 
-          if (!cachedImage && monitorGroup.fallbackToOriginal) {
+          if (!cachedImage && (platform === 'shopee' || monitorGroup.fallbackToOriginal)) {
+            if (platform === 'shopee') logger.info({ msgId: msg.key.id }, 'Shopee sem imagem via marketplace — usando imagem original como fallback')
             cachedImage = await downloadOriginalImage()
           }
           return cachedImage

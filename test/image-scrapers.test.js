@@ -47,7 +47,7 @@ test('fetchProductImage resolve imagem da Amazon via data-a-dynamic-image quando
   assert.match(calls[0].ua, /Chrome\/124/)
 })
 
-test('fetchImageBuffer baixa primeiro a URL extraida da Amazon e so usa variante sem sufixo como fallback', async (t) => {
+test('fetchImageBuffer promove URL pequena da Amazon para variante oficial em alta resolucao', async (t) => {
   const originalFetch = globalThis.fetch
   const calls = []
   const valid = await imageBytes({ color: '#1f7a1f' })
@@ -58,31 +58,31 @@ test('fetchImageBuffer baixa primeiro a URL extraida da Amazon e so usa variante
     return imageResponse(valid, String(url))
   }
 
-  const image = await fetchImageBuffer('https://m.media-amazon.com/images/I/91-produto._AC_SL1500_.jpg', 'https://www.amazon.com.br/dp/B000000001')
+  const image = await fetchImageBuffer('https://m.media-amazon.com/images/I/91-produto._SX300_.jpg', 'https://www.amazon.com.br/dp/B000000001')
 
   assert.equal(image?.mimetype, 'image/png')
   assert.deepEqual(calls, ['https://m.media-amazon.com/images/I/91-produto._AC_SL1500_.jpg'])
 })
 
-test('fetchImageBuffer rejeita placeholder branco/pequeno da Amazon e tenta fallback', async (t) => {
+test('fetchImageBuffer rejeita placeholder pequeno da Amazon e tenta proxima variante', async (t) => {
   const originalFetch = globalThis.fetch
   const calls = []
-  const blank = await imageBytes({ color: '#ffffff' })
+  const tiny = await imageBytes({ width: 40, height: 40, color: '#ffffff' })
   const valid = await imageBytes({ color: '#0044cc' })
   t.after(() => { globalThis.fetch = originalFetch })
 
   globalThis.fetch = async (url) => {
     calls.push(String(url))
-    const bytes = calls.length === 1 ? blank : valid
+    const bytes = calls.length === 1 ? tiny : valid
     return imageResponse(bytes, String(url))
   }
 
-  const image = await fetchImageBuffer('https://m.media-amazon.com/images/I/91-produto._AC_SL1500_.jpg', 'https://www.amazon.com.br/dp/B000000001')
+  const image = await fetchImageBuffer('https://m.media-amazon.com/images/I/91-produto.jpg', 'https://www.amazon.com.br/dp/B000000001')
 
   assert.equal(image?.mimetype, 'image/png')
   assert.deepEqual(calls, [
     'https://m.media-amazon.com/images/I/91-produto._AC_SL1500_.jpg',
-    'https://m.media-amazon.com/images/I/91-produto.jpg',
+    'https://m.media-amazon.com/images/I/91-produto._SL1500_.jpg',
   ])
 })
 

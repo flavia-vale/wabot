@@ -12,6 +12,7 @@ const TWITTER_IMAGE_RE = [
 ]
 const AMAZON_DYNAMIC_IMAGE_RE = /data-a-dynamic-image=["']([^"']+)["']/i
 const AMAZON_INLINE_IMAGE_RE = /\"(?:hiRes|large)\"\s*:\s*\"(https?:\\\/\\\/[^\"]+)\"/gi
+const AMAZON_ATTR_IMAGE_RE = /(?:data-old-hires|data-a-hires|src)=['"](https?:\/\/[^'"]*media-amazon\.com[^'"]+)['"]/gi
 const AMAZON_MEDIA_HOST_RE = /(^|\.)media-amazon\.com$|(^|\.)ssl-images-amazon\.com$/
 const SHOPEE_IMAGE_HOST_RE = /(^|\.)susercontent\.com$|^cf\.shopee\.com\.br$/
 const IMAGE_CACHE_TTL_MS = 5 * 60 * 1000
@@ -19,9 +20,7 @@ const IMAGE_FETCH_TIMEOUT_MS = Number(process.env.IMAGE_FETCH_TIMEOUT_MS) || 2_5
 const IMAGE_HTML_MAX_BYTES = Number(process.env.IMAGE_HTML_MAX_BYTES) || 512 * 1024
 const IMAGE_BUFFER_TIMEOUT_MS = Number(process.env.IMAGE_BUFFER_TIMEOUT_MS) || 5_000
 const IMAGE_BUFFER_MAX_BYTES = Number(process.env.IMAGE_BUFFER_MAX_BYTES) || 5 * 1024 * 1024
-const IMAGE_MIN_DIMENSION_PX = Number(process.env.IMAGE_MIN_DIMENSION_PX) || 180
-const BLANK_IMAGE_STDDEV_MAX = Number(process.env.BLANK_IMAGE_STDDEV_MAX) || 3
-const BLANK_IMAGE_MEAN_MIN = Number(process.env.BLANK_IMAGE_MEAN_MIN) || 245
+const IMAGE_MIN_DIMENSION_PX = Number(process.env.IMAGE_MIN_DIMENSION_PX) || 120
 
 // User-Agent de browser real: Shopee e outros sites bloqueiam UAs de bot e
 // devolvem HTML sem og:image, causando "sem imagem" nos anúncios.
@@ -189,15 +188,22 @@ function pickLargestAmazonDynamicImage(raw) {
 }
 
 function extractAmazonImageFromHtml(html) {
+  const candidates = []
   const dynamic = html.match(AMAZON_DYNAMIC_IMAGE_RE)
   const dynamicImage = dynamic?.[1] ? pickLargestAmazonDynamicImage(dynamic[1]) : null
-  if (dynamicImage) return dynamicImage
+  if (dynamicImage) candidates.push(dynamicImage)
 
   for (const match of html.matchAll(AMAZON_INLINE_IMAGE_RE)) {
     const image = normalizeHtmlImageUrl(match[1])
-    if (image) return image
+    if (image) candidates.push(image)
   }
-  return null
+
+  for (const match of html.matchAll(AMAZON_ATTR_IMAGE_RE)) {
+    const image = normalizeHtmlImageUrl(match[1])
+    if (image && !/transparent-pixel|grey-pixel|loading/i.test(image)) candidates.push(image)
+  }
+
+  return uniqueImageUrls(candidates)[0] || null
 }
 
 async function resolveAmazonImage(url) {
@@ -425,6 +431,32 @@ function uniqueImageUrls(urls) {
   return [...new Set(urls.filter(Boolean))]
 }
 
+function buildAmazonImageUrlCandidates(rawUrl) {
+  const candidates = []
+  try {
+    const u = new URL(rawUrl)
+    const match = u.pathname.match(/^(.*?)(?:\._[^.\/]+_)?(\.[a-z0-9]+)$/i)
+    if (!match) return [rawUrl]
+
+    const [, base, ext] = match
+    const highResSuffixes = ['._AC_SL1500_', '._SL1500_', '._AC_SY1200_', '._AC_UL1500_']
+    for (const suffix of highResSuffixes) {
+      const variant = new URL(rawUrl)
+      variant.pathname = `${base}${suffix}${ext}`
+      candidates.push(variant.toString())
+    }
+
+    candidates.push(rawUrl)
+
+    const original = new URL(rawUrl)
+    original.pathname = `${base}${ext}`
+    candidates.push(original.toString())
+  } catch {
+    candidates.push(rawUrl)
+  }
+  return uniqueImageUrls(candidates)
+}
+
 function buildImageUrlCandidates(rawUrl) {
   const candidates = [rawUrl]
   try {
@@ -456,16 +488,11 @@ function buildImageUrlCandidates(rawUrl) {
       if (withoutFormatPath.pathname !== withoutThumbSuffix.pathname) candidates.unshift(withoutFormatPath.toString())
     }
 
-    // Amazon: não tente primeiro a URL sem sufixo. Em alguns ASINs a URL
-    // "original" (`.../ID.jpg`) devolve placeholder pequeno/branco. Baixamos a
-    // URL extraída primeiro e só usamos a variante sem resize como fallback.
+    // Amazon: gere variantes oficiais com sufixos de resize em alta resolução.
+    // A URL sem sufixo (`.../ID.jpg`) fica por último porque alguns ASINs/CDNs
+    // devolvem placeholder branco nesse caminho.
     if (isAmazonImageUrl(rawUrl)) {
-      const original = new URL(rawUrl)
-      const upgraded = original.pathname.replace(/\._[^.\/]+_\./, '.')
-      if (upgraded !== original.pathname) {
-        original.pathname = upgraded
-        candidates.push(original.toString())
-      }
+      return buildAmazonImageUrlCandidates(rawUrl)
     }
   } catch {}
   return uniqueImageUrls(candidates)
@@ -481,13 +508,6 @@ async function validateDownloadedImage(buf) {
     if (!meta?.width || !meta?.height) return null
     if (meta.width < IMAGE_MIN_DIMENSION_PX || meta.height < IMAGE_MIN_DIMENSION_PX) return null
 
-    const stats = await sharp(buf, { failOn: 'none' })
-      .resize({ width: 32, height: 32, fit: 'inside', withoutEnlargement: true })
-      .removeAlpha()
-      .stats()
-    const channels = stats.channels.slice(0, 3)
-    const isBlankWhite = channels.length > 0 && channels.every(channel => channel.mean >= BLANK_IMAGE_MEAN_MIN && channel.stdev <= BLANK_IMAGE_STDDEV_MAX)
-    if (isBlankWhite) return null
   } catch {
     return null
   }
