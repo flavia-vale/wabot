@@ -893,6 +893,59 @@ export async function adminRoutes(app) {
     }
   })
 
+
+  app.get('/marketing/overview', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:read'))) return
+    const { from, to } = parseDateRange(req.query, 30)
+
+    const [signups, checkouts, approved, firstSuccess] = await Promise.all([
+      db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event = 'signup_created' AND createdAt >= ${from} AND createdAt <= ${to}`,
+      db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event = 'checkout_started' AND createdAt >= ${from} AND createdAt <= ${to}`,
+      db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event = 'payment_approved' AND createdAt >= ${from} AND createdAt <= ${to}`,
+      db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event = 'first_send_success' AND createdAt >= ${from} AND createdAt <= ${to}`,
+    ])
+
+    await writeAdminAuditLog(req, { action: 'admin.marketing.overview.read', resource: 'marketingOverview' })
+    return {
+      signups: Number(signups?.[0]?.total || 0),
+      checkouts: Number(checkouts?.[0]?.total || 0),
+      approvedPayments: Number(approved?.[0]?.total || 0),
+      firstValueActions: Number(firstSuccess?.[0]?.total || 0),
+      from,
+      to,
+    }
+  })
+
+  app.get('/marketing/campaigns', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:read'))) return
+    const { from, to } = parseDateRange(req.query, 30)
+
+    const rows = await db.$queryRaw`
+      SELECT
+        COALESCE(json_extract(metadata, '$.source'), 'unknown') as source,
+        COALESCE(json_extract(metadata, '$.ref'), 'none') as campaign,
+        COUNT(*) as signups
+      FROM AnalyticsEvent
+      WHERE event = 'signup_created'
+        AND createdAt >= ${from}
+        AND createdAt <= ${to}
+      GROUP BY COALESCE(json_extract(metadata, '$.source'), 'unknown'), COALESCE(json_extract(metadata, '$.ref'), 'none')
+      ORDER BY signups DESC
+      LIMIT 50
+    `
+
+    await writeAdminAuditLog(req, { action: 'admin.marketing.campaigns.read', resource: 'marketingCampaigns' })
+    return {
+      campaigns: rows.map(row => ({
+        source: String(row.source || 'unknown'),
+        campaign: String(row.campaign || 'none'),
+        signups: Number(row.signups || 0),
+      })),
+      from,
+      to,
+    }
+  })
+
   app.get('/billing/webhooks', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'billing:read'))) return
 
