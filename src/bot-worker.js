@@ -839,7 +839,17 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         logger.info({ msgId: msg.key.id, imageMode: monitorGroup.imageMode, platform }, 'getImage: iniciando resolução de imagem')
 
         if (monitorGroup.imageMode === 'original') {
-          cachedImage = await downloadOriginalImage()
+          const downloaded = await downloadOriginalImage()
+          // jpegThumbnail é minúsculo (~5-7KB, ~200-300px) e fica pixelado ao
+          // ser ampliado. Se for só thumbnail (sem imageMessage real), melhor
+          // cair em preview automático do WhatsApp que busca og:image na página.
+          const isThumbnailOnly = downloaded && downloaded.buffer?.length && downloaded.buffer.length < 50_000 && downloaded.mimetype === 'image/jpeg'
+          if (isThumbnailOnly) {
+            logger.info({ msgId: msg.key.id, size: downloaded.buffer.length }, 'downloadOriginalImage retornou só jpegThumbnail; usando preview automático em vez de imagem pixelada')
+            cachedImage = null
+          } else {
+            cachedImage = downloaded
+          }
           return cachedImage
         }
 
@@ -953,9 +963,12 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // quando há mídia original, relayMessage reaproveita o proto já hospedado
         // no WhatsApp e troca apenas o caption. Se não houver mídia original, cai
         // para upload simples de imagem com caption e, por último, texto puro.
-        // Sem rich link/linkPreview/externalAdReply no envio monitorado.
-        const wantImage = monitorGroup?.imageMode !== 'none'
+        // Quando imageMode=original mas só houver jpegThumbnail minúsculo, usa
+        // preview automático do WhatsApp em vez de imagem pixelada.
+        const imageMode = monitorGroup?.imageMode
+        const wantImage = imageMode !== 'none'
         const original = wantImage ? getOriginalMediaMessage() : null
+        let useLinkPreview = false  // será setado a true se jpegThumbnail for descartado
 
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         const log = await db.messageLog.create({
@@ -981,11 +994,17 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
               if (fetched && !image) {
                 logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
               }
+              // Em modo original, se não há imagem (jpegThumbnail foi descartado),
+              // usar preview automático do WhatsApp
+              if (imageMode === 'original' && !image) {
+                useLinkPreview = true
+              }
             }
 
             return buildMonitoredMessagePayload({
               finalText,
               image,
+              useLinkPreview,
             })
           },
           send: async ({ sock: sendSock, payload }) => {
@@ -997,17 +1016,18 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             }
 
             const routes = [
-              { name: payload._route, body: payload.primary },
+              { name: payload._route, body: payload.primary, sendOptions: payload.primarySendOptions },
               ...(payload.fallbacks || []).map((body, idx) => ({
                 name: body.image ? 'image' : 'text',
                 body,
+                sendOptions: payload.fallbackSendOptions?.[idx],
                 fallbackIdx: idx,
               })),
             ]
             let lastErr = null
             for (const route of routes) {
               try {
-                await sendSock.sendMessage(destJid, route.body)
+                await sendSock.sendMessage(destJid, route.body, route.sendOptions || undefined)
                 sentVia = route.name
                 return
               } catch (err) {
