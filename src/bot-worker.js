@@ -951,27 +951,19 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             if (fetched && !image) {
               logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
             }
-            // Hotfix: usar buffer full-res como thumbnail do externalAdReply
-            // estourava o limite de tamanho do campo `thumbnail` no protobuf,
-            // e o WhatsApp dropa a mensagem em silêncio (sem erro local, sem
-            // entrega). Voltar ao jpegThumbnail pequeno (200x200) restaura
-            // a entrega — mesmo que a imagem fique menor no card.
-            const thumbBuf = image?.jpegThumbnail || null
-            if (thumbBuf && primary?.converted) {
-              sentVia = 'externalAdReply'
+            // Padrão dos concorrentes (Urubu etc.): imageMessage nativo
+            // (foto grande em tamanho cheio) + caption com texto e URL. O
+            // WhatsApp auto-detecta a URL no caption e renderiza o chip de
+            // preview do link entre a foto e o texto. Mais robusto que
+            // externalAdReply (sem limite de thumbnail) e mostra a imagem
+            // em tamanho real.
+            if (image && primary?.converted) {
+              sentVia = 'image'
               return {
-                text: finalText,
-                linkPreview: null,
-                contextInfo: {
-                  externalAdReply: {
-                    title: (finalText.split('\n').map(l => l.trim()).find(Boolean) || 'Oferta').slice(0, 80),
-                    mediaType: 1,
-                    thumbnail: thumbBuf,
-                    sourceUrl: primary.converted,
-                    renderLargerThumbnail: true,
-                    showAdAttribution: false,
-                  },
-                },
+                image: image.buffer,
+                mimetype: image.mimetype,
+                jpegThumbnail: image.jpegThumbnail,
+                caption: finalText,
               }
             }
             sentVia = 'text'
@@ -981,8 +973,8 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             try {
               await sendSock.sendMessage(destJid, payload)
             } catch (err) {
-              if (payload?.contextInfo?.externalAdReply) {
-                logger.warn({ err: err.message, destJid }, 'externalAdReply falhou — fallback para texto')
+              if (payload?.image) {
+                logger.warn({ err: err.message, destJid }, 'imageMessage falhou — fallback para texto')
                 await sendSock.sendMessage(destJid, { text: finalText, linkPreview: null })
                 sentVia = 'text'
                 return
