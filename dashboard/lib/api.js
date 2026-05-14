@@ -241,6 +241,16 @@ export const api = {
   adminUpdateAccess: (id, data) =>
     apiFetch(`/api/admin/users/${id}/access`, { method: 'POST', body: JSON.stringify(data) }),
 
+  adminMarketingOverview: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/marketing/overview${query ? `?${query}` : ''}`)
+  },
+  adminMarketingCampaigns: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/marketing/campaigns${query ? `?${query}` : ''}`)
+  },
+
+
   logs: (status = 'all', page = 1, limit = 20) =>
     apiFetch(`/api/logs?status=${status}&page=${page}&limit=${limit}`),
   logsClear: () => apiFetch('/api/logs/clear', { method: 'DELETE' }),
