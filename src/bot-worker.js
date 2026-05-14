@@ -942,8 +942,19 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           messageText: sanitizeMessageForLog(finalText),
         }
 
-        // Envio padrão e estável: respeita a configuração de imagem do grupo.
-        // Quando há imagem, envia como imageMessage com caption; caso contrário, texto puro.
+        // Envio com card grande clicável (rich link preview) quando há imagem
+        // + URL convertida. Usa a API pública do Baileys sock.sendMessage com
+        // linkPreview={previewType:1, highQualityThumbnail}, deixando o
+        // Baileys fazer prepareWAMessageMedia internamente — diferente da
+        // tentativa anterior (PR #347/b949a1f) que montava o proto manual e
+        // chamava relayMessage, pulando normalizações (messageContextInfo,
+        // mediaKeyTimestamp, dimensões), o que fazia o WhatsApp dropar
+        // silenciosamente em prod.
+        //
+        // Cadeia de fallback (executada dentro de `send`):
+        //   1) rich link (extendedTextMessage previewType=VIDEO)
+        //   2) imageMessage com caption (rota estável atual)
+        //   3) texto puro com linkPreview:null
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         const log = await db.messageLog.create({
           data: { ...logData, status: 'queued' },
@@ -964,35 +975,59 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             if (fetched && !image) {
               logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
             }
-            // Envio confiável: imageMessage com caption quando há imagem,
-            // texto puro caso contrário. A rota de extendedTextMessage com
-            // previewType=VIDEO via relayMessage parecia funcionar localmente
-            // mas o WhatsApp dropava as mensagens silenciosamente em prod
-            // (mesmo padrão da falha do PR #347).
-            if (image && primary?.converted) {
-              sentVia = 'image'
-              return {
-                image: image.buffer,
-                mimetype: 'image/jpeg',
-                jpegThumbnail: image.jpegThumbnail,
-                caption: finalText,
-              }
+
+            const textPayload = { text: finalText, linkPreview: null }
+            if (!image || !primary?.converted) {
+              return { _route: 'text', primary: textPayload, fallbacks: [] }
             }
-            sentVia = 'text'
-            return { text: finalText, linkPreview: null }
+
+            const imagePayload = {
+              image: image.buffer,
+              mimetype: 'image/jpeg',
+              jpegThumbnail: image.jpegThumbnail,
+              caption: finalText,
+            }
+
+            let hostLabel = 'link'
+            try { hostLabel = new URL(primary.converted).hostname.replace(/^www\./, '') } catch {}
+            const titleLine = (finalText.split('\n').map(l => l.trim()).find(Boolean) || 'Oferta').slice(0, 80)
+
+            const richPayload = {
+              text: finalText,
+              linkPreview: {
+                'canonical-url': primary.converted,
+                'matched-text': primary.converted,
+                title: titleLine,
+                description: hostLabel,
+                jpegThumbnail: image.jpegThumbnail,
+                highQualityThumbnail: image.buffer,
+                previewType: 1,
+              },
+            }
+
+            return { _route: 'rich', primary: richPayload, fallbacks: [imagePayload, textPayload] }
           },
           send: async ({ sock: sendSock, payload }) => {
-            try {
-              await sendSock.sendMessage(destJid, payload)
-            } catch (err) {
-              if (payload?.image) {
-                logger.warn({ err: err.message, destJid }, 'imageMessage falhou — fallback para texto puro')
-                await sendSock.sendMessage(destJid, { text: finalText, linkPreview: null })
-                sentVia = 'text'
+            const routes = [
+              { name: payload._route, body: payload.primary },
+              ...(payload.fallbacks || []).map((body, idx) => ({
+                name: body.image ? 'image' : 'text',
+                body,
+                fallbackIdx: idx,
+              })),
+            ]
+            let lastErr = null
+            for (const route of routes) {
+              try {
+                await sendSock.sendMessage(destJid, route.body)
+                sentVia = route.name
                 return
+              } catch (err) {
+                lastErr = err
+                logger.warn({ err: err.message, destJid, route: route.name, fallbackIdx: route.fallbackIdx }, 'Envio falhou — tentando próximo fallback')
               }
-              throw err
             }
+            throw lastErr || new Error('Todos os fallbacks de envio falharam')
           },
           onDone: async (result) => {
             if (result.ok) {
