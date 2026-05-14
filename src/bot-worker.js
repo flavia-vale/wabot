@@ -24,6 +24,7 @@ import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } from './sendQueueBackend.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
+import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
 
 const userId = process.env.BOT_USER_ID
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
@@ -632,12 +633,7 @@ async function startBot() {
   }
 
   const dedupeWindowMs = 300_000
-  const dedup = loadDedup()
-  const now = Date.now()
-  dedup.msgIds = (dedup.msgIds || []).filter(e => now - e.ts < dedupeWindowMs)
-  for (const key of Object.keys(dedup.links || {})) {
-    if (now - dedup.links[key] >= dedupeWindowMs) delete dedup.links[key]
-  }
+  const dedup = pruneDedupStore(loadDedup(), Date.now(), dedupeWindowMs)
   scheduleDedupSave(dedup)
 
   setLifecycleState(WA_LIFECYCLE.INITIALIZING, { reason: 'start_bot' })
@@ -753,6 +749,21 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       // Filtro por plataforma (override por grupo monitorado quando preenchido)
       const platformCsv = monitorGroup?.allowedPlatforms?.trim() || cfg.botConfig.platforms
       const enabledPlatforms = new Set(platformCsv.split(',').filter(Boolean))
+
+      // Retorna o proto imageMessage/videoMessage original sem baixar.
+      // Esse era o caminho estável em produção: reaproveita a mídia já hospedada
+      // nos servidores do WhatsApp e troca somente o caption convertido, evitando
+      // novo upload/preview para mensagens monitoradas.
+      function getOriginalMediaMessage() {
+        const inner = extractMessageContent(msg.message)
+        const ext = inner?.extendedTextMessage
+        const quoted = ext?.contextInfo?.quotedMessage
+        if (inner?.imageMessage) return { type: 'imageMessage', proto: inner.imageMessage }
+        if (quoted?.imageMessage) return { type: 'imageMessage', proto: quoted.imageMessage }
+        if (inner?.videoMessage) return { type: 'videoMessage', proto: inner.videoMessage }
+        if (quoted?.videoMessage) return { type: 'videoMessage', proto: quoted.videoMessage }
+        return null
+      }
 
       // Baixa a imagem original do anúncio (mensagem do grupo monitorado) já
       // decifrada via Baileys, retornando { buffer, mimetype }. Lida com
@@ -937,15 +948,14 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           messageText: sanitizeMessageForLog(finalText),
         }
 
-        // Envio monitorado usa payload conservador. O teste
-        // test/monitored-message-payload.test.js impede reintroduzir
-        // contextInfo.externalAdReply em imageMessage, pois no WhatsApp/Baileys
-        // essa combinação já causou drop silencioso no staging: sendMessage
-        // resolvia, o log virava success, mas a mensagem não chegava ao grupo.
-        //
-        // Cadeia de fallback dentro de `send`:
-        //   1) imageMessage + caption simples com URL convertida no topo
-        //   2) texto puro com linkPreview:null
+        // Restaura o caminho estável que continua funcionando em produção:
+        // quando há mídia original, relayMessage reaproveita o proto já hospedado
+        // no WhatsApp e troca apenas o caption. Se não houver mídia original, cai
+        // para upload simples de imagem com caption e, por último, texto puro.
+        // Sem rich link/linkPreview/externalAdReply no envio monitorado.
+        const wantImage = monitorGroup?.imageMode !== 'none'
+        const original = wantImage ? getOriginalMediaMessage() : null
+
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         const log = await db.messageLog.create({
           data: { ...logData, status: 'queued' },
@@ -961,19 +971,30 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           delayMs: buildSmartDelayMs(cfg.botConfig),
           typingDelayMs: calculateTypingDelayMs({ text: finalText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           buildPayload: async () => {
-            const fetched = await getImage()
-            const image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
-            if (fetched && !image) {
-              logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
+            if (original) return null
+
+            let image = null
+            if (wantImage) {
+              const fetched = await getImage()
+              image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
+              if (fetched && !image) {
+                logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
+              }
             }
 
             return buildMonitoredMessagePayload({
               finalText,
-              primaryConvertedUrl: primary?.converted,
               image,
             })
           },
           send: async ({ sock: sendSock, payload }) => {
+            if (original) {
+              const replayProto = { ...original.proto, caption: finalText }
+              await sendSock.relayMessage(destJid, { [original.type]: replayProto }, {})
+              sentVia = `relay:${original.type}`
+              return
+            }
+
             const routes = [
               { name: payload._route, body: payload.primary },
               ...(payload.fallbacks || []).map((body, idx) => ({
@@ -1026,16 +1047,22 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       const hasValidTimestamp = Number.isFinite(msgTsRaw) && msgTsRaw > 0
       const msgTs = hasValidTimestamp ? msgTsRaw * 1000 : null
       if (msgTs && msgTs < cutoff) continue
-      const msgId = msg.key.id
-      if (dedup.msgIds.some(e => e.id === msgId)) continue
-      dedup.msgIds.push({ id: msgId, ts: Date.now() })
-      scheduleDedupSave(dedup)
 
+      const now = Date.now()
+      pruneDedupStore(dedup, now, dedupeWindowMs)
+      const dedupKey = buildIncomingDedupKey(msg)
+      if (dedupKey && hasRecentDedupEntry(dedup.msgIds, dedupKey, now, dedupeWindowMs)) {
+        logger.info({ dedupKey, jid: msg.key.remoteJid }, 'Mensagem duplicada ignorada')
+        continue
+      }
+      if (rememberDedupEntry(dedup, dedupKey, now)) scheduleDedupSave(dedup)
+
+      const msgId = msg.key.id || dedupKey || `${msg.key.remoteJid || 'unknown'}:${msgTsRaw || now}`
       const accepted = incomingQueue.enqueue(() => processIncomingMessage(msg, sock), {
         label: `msg:${msgId}`,
         orderKey: msg.key.remoteJid,
         onError: async (err) => {
-          logger.error({ msgId, err: err.message }, 'Mensagem descartada após erro/timeout — fila continua')
+          logger.error({ msgId, dedupKey, err: err.message }, 'Mensagem descartada após erro/timeout — fila continua')
         },
       })
       if (!accepted) {

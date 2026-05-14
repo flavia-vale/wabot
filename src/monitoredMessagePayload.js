@@ -1,12 +1,5 @@
 const EXTERNAL_AD_REPLY_KEY = 'externalAdReply'
 
-function withConvertedUrlOnTop(finalText, primaryConvertedUrl) {
-  const text = String(finalText || '').trim()
-  const convertedUrl = String(primaryConvertedUrl || '').trim()
-  if (!convertedUrl) return text
-  return `${convertedUrl}\n\n${text}`.trim()
-}
-
 function assertNoExternalAdReply(value, path = 'payload') {
   if (!value || typeof value !== 'object') return
   if (Object.prototype.hasOwnProperty.call(value, EXTERNAL_AD_REPLY_KEY)) {
@@ -17,17 +10,17 @@ function assertNoExternalAdReply(value, path = 'payload') {
   }
 }
 
-export function buildMonitoredMessagePayload({ finalText, primaryConvertedUrl, image }) {
-  const textPayload = { text: String(finalText || ''), linkPreview: null }
-  if (!image?.buffer || !primaryConvertedUrl) {
+export function buildMonitoredMessagePayload({ finalText, image }) {
+  const textPayload = { text: String(finalText || '') }
+  if (!image?.buffer) {
     return { _route: 'text', primary: textPayload, fallbacks: [] }
   }
 
   const imagePayload = {
     image: image.buffer,
-    mimetype: 'image/jpeg',
+    mimetype: image.mimetype || 'image/jpeg',
     jpegThumbnail: image.jpegThumbnail,
-    caption: withConvertedUrlOnTop(finalText, primaryConvertedUrl),
+    caption: String(finalText || ''),
   }
 
   const payload = { _route: 'image', primary: imagePayload, fallbacks: [textPayload] }
@@ -37,5 +30,4 @@ export function buildMonitoredMessagePayload({ finalText, primaryConvertedUrl, i
 
 export const __monitoredPayloadInternals = {
   assertNoExternalAdReply,
-  withConvertedUrlOnTop,
 }
