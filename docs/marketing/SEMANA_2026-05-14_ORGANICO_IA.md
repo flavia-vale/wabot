@@ -216,3 +216,80 @@ UTM para bio/sticker: `http://espelhagrupos.com.br/materiais/checklist-divulgaca
 - [ ] Publicar/agendar posts sociais aprovados.
 - [ ] Aprovar ou corrigir claims comerciais sensíveis.
 - [ ] Só considerar produção depois de staging aprovado.
+
+---
+
+## Continuação da sprint — 2026-05-14 (turno 2)
+
+### O que já existia antes
+
+- Estrutura de sprint orgânica já iniciada com cluster afiliados/conversão e cluster de automação/espelhamento/distribuição.
+- Três ativos indexáveis já publicados no ciclo anterior e checklist de indexação existente.
+
+### O que foi continuado
+
+- Continuidade do cluster de afiliados/conversão com novo ativo pendente do backlog (`bot ofertas afiliados whatsapp`).
+- Manutenção explícita do plano de automação/espelhamento/distribuição no conteúdo da LP (sem substituir por afiliados).
+
+### O que foi criado agora
+
+1. Nova LP indexável: `/bot-ofertas-afiliados-whatsapp`
+   - Keyword principal: `bot ofertas afiliados whatsapp`.
+   - Inclui title, description, canonical, H1 (via template), FAQ visível (via template) e schemas já aplicados no template (`FAQPage`, `HowTo`, `Product`).
+   - Conteúdo inclui: conferência/conversão de link monetizado, tag/código de afiliado, risco de perda de comissão por link errado e sem promessa de integração não aprovada.
+
+2. Sitemap atualizado
+   - Rota nova adicionada em `dashboard/app/sitemap.js`.
+
+### URLs/rotas novas
+
+- `http://espelhagrupos.com.br/bot-ofertas-afiliados-whatsapp`
+
+### Keywords trabalhadas
+
+- `bot ofertas afiliados whatsapp`
+- `como estruturar funil de afiliados em grupos` (apoio semântico)
+- `como automatizar divulgacao em grupos whatsapp` (apoio semântico)
+
+### Links internos adicionados
+
+- Navegação global/template da própria LP (herdada de `LpTemplate`) para rotas centrais e CTA de captura.
+
+### Checklist de indexação (incremental)
+
+- [ ] Validar `http://178.105.54.0:3006/bot-ofertas-afiliados-whatsapp` em staging.
+- [ ] Confirmar presença da rota em `http://178.105.54.0:3006/sitemap.xml`.
+- [ ] Inspecionar URL em Search Console após aprovação e ida para produção.
+
+### Pacote social gerado (incremental)
+
+- Gancho LinkedIn: “Link de afiliado certo + rotina certa = comissão protegida em escala.”
+- URL sugerida com UTM:
+  `http://espelhagrupos.com.br/bot-ofertas-afiliados-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=organic-marketing-sprint-1&utm_content=post-bot-ofertas-afiliados`
+
+### Validações locais
+
+- Atualização de arquivos markdown e rotas Next sem tocar `.env`, banco, portas, Prisma, PM2 ou deploy.
+- Verificação de sintaxe básica por lint local focado nos arquivos alterados.
+
+### Validações esperadas em staging 3006
+
+- Abrir `http://178.105.54.0:3006/bot-ofertas-afiliados-whatsapp` e validar conteúdo/CTA/FAQ.
+- Confirmar sitemap com a nova rota.
+
+### Ações executadas automaticamente pela IA
+
+- Criação de nova rota pública da LP de afiliados.
+- Inclusão de configuração SEO/conteúdo no `LP_CONFIG`.
+- Atualização do sitemap e documentação de sprint.
+
+### AÇÕES HUMANAS pendentes
+
+- [ ] Revisar e aprovar o PR contra `develop`.
+- [ ] Validar as páginas novas em `http://178.105.54.0:3006`.
+- [ ] Conferir visual, copy, CTAs e claims comerciais.
+- [ ] Inspecionar cada URL nova no Google Search Console.
+- [ ] Solicitar indexação das URLs aprovadas no Google Search Console.
+- [ ] Publicar/agendar posts sociais aprovados.
+- [ ] Aprovar ou corrigir claims comerciais sensíveis.
+- [ ] Só considerar produção depois de staging aprovado.
