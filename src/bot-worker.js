@@ -995,30 +995,27 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
               return { _route: 'text', primary: textPayload, fallbacks: [] }
             }
 
-            const plainImagePayload = {
+            // imageMessage + caption simples. Sem externalAdReply: a iteração
+            // anterior (PR #380) mostrou que o WhatsApp sempre renderiza
+            // externalAdReply como "card-quote acima da imagem" — visual
+            // indesejado. O chip "🔗 meli.la" que aparece entre imagem e
+            // caption nos concorrentes é provavelmente auto-link-preview do
+            // WhatsApp, que ele gera quando detecta uma URL na caption.
+            //
+            // A URL convertida é prepended na caption como primeira linha
+            // (em vez do branding ' 🔗 URL' no fim) para maximizar a chance
+            // de o WhatsApp escolher essa URL como anchor do auto-preview e
+            // posicionar o chip imediatamente abaixo da imagem.
+            const captionWithUrlOnTop = `${primary.converted}\n\n${finalText}`
+
+            const imagePayload = {
               image: image.buffer,
               mimetype: 'image/jpeg',
               jpegThumbnail: image.jpegThumbnail,
-              caption: finalText,
+              caption: captionWithUrlOnTop,
             }
 
-            let hostLabel = 'link'
-            try { hostLabel = new URL(primary.converted).hostname.replace(/^www\./, '') } catch {}
-
-            const chipImagePayload = {
-              ...plainImagePayload,
-              contextInfo: {
-                externalAdReply: {
-                  title: hostLabel,
-                  sourceUrl: primary.converted,
-                  mediaType: 0,
-                  renderLargerThumbnail: false,
-                  showAdAttribution: false,
-                },
-              },
-            }
-
-            return { _route: 'chip', primary: chipImagePayload, fallbacks: [plainImagePayload, textPayload] }
+            return { _route: 'image', primary: imagePayload, fallbacks: [textPayload] }
           },
           send: async ({ sock: sendSock, payload }) => {
             const routes = [
