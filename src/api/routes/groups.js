@@ -8,12 +8,6 @@ function parseBoolean(value) {
   return Boolean(value)
 }
 
-function parseBoolean(value) {
-  if (typeof value === 'boolean') return value
-  if (typeof value === 'string') return value === 'true'
-  return Boolean(value)
-}
-
 function normalizeGroupJid(rawJid) {
   const jid = String(rawJid ?? '').trim()
   if (!jid) return null
