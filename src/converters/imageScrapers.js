@@ -252,10 +252,14 @@ export async function normalizeImageForWhatsApp(buf) {
     if (!meta?.width || !meta?.height) return null
 
     // Converte para JPEG; redimensiona se for absurdamente grande.
+    // Resolução/qualidade calibradas para o WA: WhatsApp recomprime na
+    // própria infra, então enviar com qualidade folgada (q=92 mozjpeg)
+    // sobrevive melhor à 2ª compressão. Limite de 1600 cobre fotos
+    // grandes do ML/Shopee sem upscale (withoutEnlargement).
     const main = await sharp(buf, { failOn: 'none' })
       .rotate()
-      .resize({ width: 1280, height: 1280, fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 85, mozjpeg: true })
+      .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 92, mozjpeg: true, chromaSubsampling: '4:4:4' })
       .toBuffer()
 
     const thumbnail = await sharp(buf, { failOn: 'none' })
@@ -290,8 +294,34 @@ export function detectImageMime(buf) {
 // Necessário para o WhatsApp porque a Baileys, ao passar `{ image: { url } }`,
 // repassa a URL para o servidor de mídia do WhatsApp, que pode ser bloqueado
 // pelo CDN da Shopee — resultando em imagem quebrada no destino.
-export async function fetchImageBuffer(imageUrl, refererUrl) {
-  if (!imageUrl) return null
+// Tenta substituir a URL da imagem por uma variante de maior resolução
+// quando o CDN permite. og:image dos marketplaces normalmente devolve uma
+// versão média (~500px) que fica borrada quando o WA exibe em tela cheia.
+function upgradeImageUrlResolution(rawUrl) {
+  try {
+    const u = new URL(rawUrl)
+    // Mercado Livre: D_NQ_NP_{id}-{country}.{ext} → D_NQ_NP_2X_{id}-{country}.{ext}
+    // O prefixo 2X dobra a resolução (~500 → ~1000px).
+    if (/^https?:\/\/(http2\.)?mlstatic\.com\//.test(rawUrl) && !/D_NQ_NP_2X_/.test(u.pathname)) {
+      const upgraded = u.pathname.replace(/\/D_NQ_NP_/, '/D_NQ_NP_2X_')
+      if (upgraded !== u.pathname) {
+        u.pathname = upgraded
+        return u.toString()
+      }
+    }
+    // Shopee: down-br.img.susercontent.com/file/{hash}_tn → sem o sufixo _tn
+    if (/susercontent\.com$/.test(u.hostname)) {
+      const upgraded = u.pathname.replace(/_tn$/, '')
+      if (upgraded !== u.pathname) {
+        u.pathname = upgraded
+        return u.toString()
+      }
+    }
+  } catch {}
+  return rawUrl
+}
+
+async function fetchImageBufferRaw(imageUrl, refererUrl) {
   try {
     const headers = {
       'User-Agent': BROWSER_UA,
@@ -335,4 +365,15 @@ export async function fetchImageBuffer(imageUrl, refererUrl) {
   } catch {
     return null
   }
+}
+
+export async function fetchImageBuffer(imageUrlRaw, refererUrl) {
+  if (!imageUrlRaw) return null
+  const upgraded = upgradeImageUrlResolution(imageUrlRaw)
+  // Tenta a versão de maior resolução primeiro; cai para a original se falhar.
+  if (upgraded !== imageUrlRaw) {
+    const hi = await fetchImageBufferRaw(upgraded, refererUrl)
+    if (hi) return hi
+  }
+  return fetchImageBufferRaw(imageUrlRaw, refererUrl)
 }
