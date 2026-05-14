@@ -5,6 +5,9 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   downloadMediaMessage,
   extractMessageContent,
+  prepareWAMessageMedia,
+  generateWAMessageFromContent,
+  proto,
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import { readFileSync, mkdirSync } from 'fs'
@@ -951,58 +954,100 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             if (fetched && !image) {
               logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
             }
-            // Padrão da concorrência (Urubu, Promoções de iPhones etc.):
-            // mandam DUAS mensagens consecutivas — primeiro um imageMessage
-            // com a foto (sem caption) e logo depois um extendedTextMessage
-            // com o texto + URL. O WhatsApp agrupa visualmente as duas em
-            // uma única bolha (sem repetir nome do remetente) e o link
-            // preview chip ("meli.la") é gerado automaticamente pelo
-            // próprio WhatsApp ao detectar a URL na mensagem de texto.
+            // Padrão da concorrência: UMA única mensagem extendedTextMessage
+            // com preview type VIDEO (card grande) + highQualityThumbnail
+            // (mídia uploadada via servidor do WA). Resultado visual:
+            //   [imagem grande]
+            //   [chip "meli.la" + URL]
+            //   [texto do caption]
+            // tudo em uma única bolha, com um cabeçalho de remetente e um
+            // timestamp só.
             //
-            // Por que não usar contextInfo.externalAdReply: o WA renderiza
-            // o externalAdReply como CONTEXTO acima da imagem (estilo
-            // quote/ad), o que cria uma mini-carta duplicada feia antes
-            // da foto. Não funciona para o que queremos.
+            // O Baileys não expõe previewType pela API linkPreview pública
+            // (ela hardcoda 0 = inline pequeno). Por isso construímos o
+            // proto manualmente em `send` via generateWAMessageFromContent.
             //
-            // Por que não caption no imageMessage: imageMessage com caption
-            // contendo URL não gera o chip de preview — WA só faz auto
-            // preview para extendedTextMessage.
+            // Aqui só preparamos os bytes; o upload + montagem do proto
+            // acontece dentro de `send` pra ter acesso ao sock.
             if (image && primary?.converted) {
-              sentVia = 'image+text'
+              sentVia = 'richLink'
               const isOriginalJpeg = fetched.mimetype === 'image/jpeg' && fetched.buffer?.length > 0
               const mainBuffer = isOriginalJpeg ? fetched.buffer : image.buffer
-              const mainMime = isOriginalJpeg ? 'image/jpeg' : image.mimetype
+              const titleLine = (finalText.split('\n').map(l => l.trim()).find(Boolean) || 'Oferta').slice(0, 80)
+              const hostLabel = (() => {
+                try { return new URL(primary.converted).hostname.replace(/^www\./, '') } catch { return 'link' }
+              })()
               return {
-                image: mainBuffer,
-                mimetype: mainMime,
-                jpegThumbnail: image.jpegThumbnail,
+                _richLink: {
+                  imageBuffer: mainBuffer,
+                  jpegThumbnail: image.jpegThumbnail,
+                  text: finalText,
+                  sourceUrl: primary.converted,
+                  title: titleLine,
+                  hostLabel,
+                },
               }
             }
             sentVia = 'text'
             return { text: finalText, linkPreview: null }
           },
           send: async ({ sock: sendSock, payload }) => {
-            if (!payload?.image) {
+            if (!payload?._richLink) {
               await sendSock.sendMessage(destJid, payload)
               return
             }
-            // Mensagem 1: foto sem caption.
+            const { imageBuffer, jpegThumbnail, text, sourceUrl, title, hostLabel } = payload._richLink
             try {
-              await sendSock.sendMessage(destJid, payload)
+              // 1) Sobe a imagem como mídia para o WA — devolve directPath,
+              //    mediaKey, sha256 etc. necessários para o highQualityThumbnail.
+              const prep = await prepareWAMessageMedia(
+                { image: imageBuffer },
+                { upload: sendSock.waUploadToServer },
+              )
+              const im = prep.imageMessage
+              if (!im?.directPath || !im?.mediaKey) {
+                throw new Error('prepareWAMessageMedia não devolveu directPath/mediaKey')
+              }
+              // 2) Constrói extendedTextMessage com previewType=VIDEO (card
+              //    grande) referenciando a mídia uploadada como thumbnail.
+              const PreviewType = proto.Message.ExtendedTextMessage.PreviewType
+              const richMsg = generateWAMessageFromContent(destJid, {
+                extendedTextMessage: {
+                  text,
+                  matchedText: sourceUrl,
+                  canonicalUrl: sourceUrl,
+                  title,
+                  description: hostLabel,
+                  previewType: PreviewType?.VIDEO ?? 1,
+                  jpegThumbnail,
+                  thumbnailDirectPath: im.directPath,
+                  thumbnailSha256: im.fileSha256,
+                  thumbnailEncSha256: im.fileEncSha256,
+                  mediaKey: im.mediaKey,
+                  mediaKeyTimestamp: im.mediaKeyTimestamp,
+                  thumbnailHeight: im.height,
+                  thumbnailWidth: im.width,
+                },
+              }, { userJid: sendSock.user?.id })
+              await sendSock.relayMessage(destJid, richMsg.message, { messageId: richMsg.key.id })
+              return
             } catch (err) {
-              logger.warn({ err: err.message, destJid }, 'imageMessage falhou — fallback para texto puro')
-              await sendSock.sendMessage(destJid, { text: finalText, linkPreview: null })
+              logger.warn({ err: err.message, destJid }, 'Rich link preview falhou — fallback para imageMessage+caption')
+            }
+            // Fallback: imageMessage com caption. Sem chip mas entrega a
+            // foto e o texto numa bolha só.
+            try {
+              await sendSock.sendMessage(destJid, {
+                image: imageBuffer,
+                mimetype: 'image/jpeg',
+                jpegThumbnail,
+                caption: text,
+              })
+              sentVia = 'image'
+            } catch (err) {
+              logger.warn({ err: err.message, destJid }, 'imageMessage também falhou — fallback para texto puro')
+              await sendSock.sendMessage(destJid, { text, linkPreview: null })
               sentVia = 'text'
-              return
-            }
-            // Mensagem 2: texto + URL, com pequeno delay para preservar
-            // ordem e disparar o auto link preview chip do WA. Se falhar,
-            // a foto já foi enviada — log mas não considera erro total.
-            try {
-              await sleep(400)
-              await sendSock.sendMessage(destJid, { text: finalText })
-            } catch (err) {
-              logger.warn({ err: err.message, destJid }, 'Texto de followup falhou — foto foi entregue')
             }
           },
           onDone: async (result) => {
