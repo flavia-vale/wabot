@@ -839,17 +839,13 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         logger.info({ msgId: msg.key.id, imageMode: monitorGroup.imageMode, platform }, 'getImage: iniciando resolução de imagem')
 
         if (monitorGroup.imageMode === 'original') {
-          const downloaded = await downloadOriginalImage()
-          // jpegThumbnail é minúsculo (~5-7KB, ~200-300px) e fica pixelado ao
-          // ser ampliado. Se for só thumbnail (sem imageMessage real), melhor
-          // cair em preview automático do WhatsApp que busca og:image na página.
-          const isThumbnailOnly = downloaded && downloaded.buffer?.length && downloaded.buffer.length < 50_000 && downloaded.mimetype === 'image/jpeg'
-          if (isThumbnailOnly) {
-            logger.info({ msgId: msg.key.id, size: downloaded.buffer.length }, 'downloadOriginalImage retornou só jpegThumbnail; usando preview automático em vez de imagem pixelada')
-            cachedImage = null
-          } else {
-            cachedImage = downloaded
-          }
+          // Sempre reaproveitar a imagem da mensagem monitorada quando houver —
+          // inclusive jpegThumbnail do link preview. É preferível enviar a
+          // imagem original (mesmo a thumbnail menor) do que cair em preview
+          // automático, que frequentemente falha em URLs de afiliado (sem
+          // og:image acessível ou com redirects via tracker) e resulta em
+          // mensagem sem foto nenhuma.
+          cachedImage = await downloadOriginalImage()
           return cachedImage
         }
 
@@ -985,8 +981,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
               if (fetched && !image) {
                 logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
               }
-              // Em modo original, se não há imagem (jpegThumbnail foi descartado),
-              // usar preview automático do WhatsApp
+              // Em modo original, se não conseguimos imagem alguma da mensagem
+              // monitorada, peça ao WhatsApp para gerar preview automático do
+              // link convertido — assim ainda há chance de aparecer card com foto.
               if (imageMode === 'original' && !image) {
                 useLinkPreview = true
               }
