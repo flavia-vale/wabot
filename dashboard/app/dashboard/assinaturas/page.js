@@ -63,9 +63,7 @@ export default function AssinaturasPage() {
   const [copyError, setCopyError] = useState('')
   const [email, setEmail] = useState('')
   const [expiredAccessCopy, setExpiredAccessCopy] = useState('')
-  const [plans, setPlans] = useState(FALLBACK_PLAN_CARDS)
-  const [checkoutPlan, setCheckoutPlan] = useState('')
-  const [checkoutError, setCheckoutError] = useState('')
+  const [selectedPlanId, setSelectedPlanId] = useState('pro')
 
   useEffect(() => {
     let active = true
@@ -124,10 +122,15 @@ export default function AssinaturasPage() {
     }
   }
 
+  const selectedPlan = useMemo(
+    () => PLAN_CARDS.find((plan) => plan.id === selectedPlanId) ?? PLAN_CARDS[0],
+    [selectedPlanId],
+  )
+
   const whatsappLink = useMemo(() => {
-    const payload = `Olá, acabei de fazer o PIX do meu plano. Segue o comprovante para ativação da conta ${email || '[E-MAIL DO USUÁRIO]'}.`
+    const payload = `Olá, acabei de fazer o PIX do ${selectedPlan.name} (${selectedPlan.price}/30 dias). Segue o comprovante para ativação da conta ${email || '[E-MAIL DO USUÁRIO]'}.`
     return `https://wa.me/${SUPPORT_WA_NUMBER}?text=${encodeURIComponent(payload)}`
-  }, [email])
+  }, [email, selectedPlan])
 
   return (
     <section className="mx-auto w-full max-w-3xl">
@@ -153,31 +156,29 @@ export default function AssinaturasPage() {
       )}
 
       <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {plans.map((plan) => (
-          <article key={plan.id} className="flex flex-col rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-semibold text-gray-800">{plan.name}</h2>
-            <p className="mt-2 text-3xl font-bold text-emerald-600">{plan.price}<span className="ml-1 text-xs font-medium text-gray-500">/ 30 dias</span></p>
-            <p className="mt-2 text-sm text-gray-600">{plan.description}</p>
-            <ul className="mt-4 flex-1 space-y-2 text-xs text-gray-600">
-              {plan.features.slice(0, 5).map((feature) => (
-                <li key={feature} className="flex gap-2"><span className="text-emerald-600" aria-hidden="true">✓</span><span>{feature}</span></li>
-              ))}
-            </ul>
+        {PLAN_CARDS.map((plan) => {
+          const selected = plan.id === selectedPlanId
+          return (
             <button
+              key={plan.id}
               type="button"
-              onClick={() => handleCheckout(plan.id)}
-              disabled={Boolean(checkoutPlan)}
-              className="mt-5 min-h-11 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-70"
+              onClick={() => setSelectedPlanId(plan.id)}
+              aria-pressed={selected}
+              className={`rounded-2xl border p-5 text-left shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 ${selected ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100' : 'border-gray-200 bg-white hover:border-emerald-200'}`}
             >
-              {checkoutPlan === plan.id ? 'Abrindo checkout...' : `Pagar ${plan.name.replace('Plano ', '')} agora`}
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="text-base font-semibold text-gray-800">{plan.name}</h2>
+                <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${selected ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{selected ? 'Selecionado' : 'Escolher'}</span>
+              </div>
+              <p className="mt-2 text-3xl font-bold text-emerald-600">{plan.price}<span className="ml-1 text-xs font-medium text-gray-500">/ 30 dias</span></p>
+              <p className="mt-2 text-sm text-gray-600">{plan.description}</p>
             </button>
-          </article>
-        ))}
+          )
+        })}
       </div>
 
       <div className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
-        <p className="text-sm font-semibold text-gray-800">Fallback: PIX manual</p>
-        <p className="mt-2 text-sm text-gray-600">Use esta opção apenas se o checkout automático não abrir ou se o suporte orientar ativação assistida.</p>
+        <p className="text-sm font-semibold text-gray-800">PIX Copia e Cola · {selectedPlan.name} ({selectedPlan.price}/30 dias)</p>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <input
             readOnly
@@ -196,7 +197,7 @@ export default function AssinaturasPage() {
         </div>
         {copyError && <p className="mt-2 text-xs text-red-600">{copyError}</p>}
 
-        <p className="mt-4 text-sm text-gray-700">Assim que pagar o PIX, envie o comprovante e em minutos sua conta estará ativa.</p>
+        <p className="mt-4 text-sm text-gray-700">Assim que pagar o PIX do {selectedPlan.name}, envie o comprovante pelo botão abaixo. A mensagem já vai com o plano escolhido para reduzir erros de ativação manual.</p>
         <p className="mt-1 text-sm font-medium text-gray-800">Suporte: {SUPPORT_PHONE}</p>
 
         <a

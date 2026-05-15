@@ -4,27 +4,10 @@ export const TRACKING_EVENTS = {
   LOGIN_SUCCESS: 'login_success',
   AUTH_ERROR: 'auth_error',
   AUTH_MODE_SWITCH: 'auth_mode_switch',
-  CONVERSION_PROMPT_VIEWED: 'conversion_prompt_viewed',
-  CONVERSION_PROMPT_DISMISSED: 'conversion_prompt_dismissed',
-  CONVERSION_PROMPT_CTA_CLICKED: 'conversion_prompt_cta_clicked',
-  LEAD_MAGNET_VIEWED: 'lead_magnet_viewed',
-  LEAD_MAGNET_FORM_FOCUSED: 'lead_magnet_form_focused',
-  LEAD_MAGNET_SUBMITTED: 'lead_magnet_submitted',
-  LEAD_MAGNET_PDF_CLICKED: 'lead_magnet_pdf_clicked',
-  LEAD_MAGNET_ONLINE_CLICKED: 'lead_magnet_online_clicked',
+  SIGNUP_FORM_STARTED: 'signup_form_started',
+  SIGNUP_SUBMIT_BLOCKED_CLIENT: 'signup_submit_blocked_client',
 }
 
-export const PROMPT_EXCLUDED_PATH_PREFIXES = [
-  '/login',
-  '/dashboard',
-  '/admin',
-  '/termos',
-  '/privacidade',
-]
-
-export function shouldSuppressConversionPrompt(pathname = resolvePathname()) {
-  return PROMPT_EXCLUDED_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))
-}
 
 function resolvePathname() {
   if (typeof window === 'undefined') return ''

@@ -43,7 +43,7 @@ const defaultPlans = [
   {
     id: 'basic',
     name: 'Basic',
-    price: 'R$50',
+    price: 'R$39',
     desc: 'Para operar com os mesmos recursos essenciais do Pro mantendo anúncios no uso.',
     cta: 'Assinar Basic',
     features: ['Conversão de links suportados', 'Monitoramento de grupos', 'Envio para grupos de destino', 'Histórico de logs', 'Com anúncios'],
@@ -51,7 +51,7 @@ const defaultPlans = [
   {
     id: 'pro',
     name: 'Pro',
-    price: 'R$100',
+    price: 'R$69',
     desc: 'Para operar com os mesmos recursos do Basic, sem anúncios na experiência.',
     cta: 'Assinar Pro',
     highlight: true,

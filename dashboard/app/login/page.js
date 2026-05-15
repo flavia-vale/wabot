@@ -15,6 +15,14 @@ const LOGIN_BENEFITS = [
   'Envio e agendamento de ofertas em menos tempo',
 ]
 
+function normalizePhoneInput(value) {
+  return String(value ?? '').replace(/\D/g, '').slice(0, 15)
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value ?? '').trim())
+}
+
 function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -39,11 +47,50 @@ function LoginContent() {
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [formStarted, setFormStarted] = useState(false)
+
+  function markFormStarted(field) {
+    if (formStarted) return
+    setFormStarted(true)
+    trackEvent(TRACKING_EVENTS.SIGNUP_FORM_STARTED, {
+      origin: 'login_page',
+      mode: isRegister ? 'register' : 'login',
+      first_field: field,
+      has_ref: Boolean(ref),
+    })
+  }
+
+  function blockSubmit(field, message) {
+    trackEvent(TRACKING_EVENTS.SIGNUP_SUBMIT_BLOCKED_CLIENT, {
+      origin: 'login_page',
+      mode: isRegister ? 'register' : 'login',
+      field,
+    })
+    setError(message)
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
     setSuccess('')
+
+    const cleanName = name.trim().replace(/\s+/g, ' ')
+    const cleanEmail = email.trim()
+    const cleanPhone = normalizePhoneInput(contactPhone)
+
+    if (isRegister) {
+      if (!cleanName) return blockSubmit('name', 'Informe seu nome para criar a conta.')
+      if (!cleanEmail) return blockSubmit('email', 'Informe seu email para criar a conta e recuperar acesso depois.')
+      if (!isValidEmail(cleanEmail)) return blockSubmit('email', 'Confira o formato do email antes de continuar.')
+      if (!cleanPhone || cleanPhone.length < 10) return blockSubmit('contactPhone', 'Informe seu WhatsApp com DDD para suporte do teste.')
+      if (!password) return blockSubmit('password', 'Crie uma senha para acessar o painel depois.')
+      if (password.length < 8) return blockSubmit('password', 'Use pelo menos 8 caracteres na senha.')
+    } else {
+      if (!cleanEmail) return blockSubmit('email', 'Informe seu email para entrar.')
+      if (!isValidEmail(cleanEmail)) return blockSubmit('email', 'Confira o formato do email antes de continuar.')
+      if (!password) return blockSubmit('password', 'Informe sua senha para entrar.')
+    }
+
     setLoading(true)
     try {
       trackEvent(TRACKING_EVENTS.AUTH_SUBMIT_ATTEMPT, {
@@ -53,13 +100,13 @@ function LoginContent() {
         ...(isRegister ? trackingAttribution : {}),
       })
       if (isRegister) {
-        await api.register(name, email, password, contactPhone, { ...signupAttribution, ...(ref && { ref }) })
-        trackEvent(TRACKING_EVENTS.SIGNUP_SUCCESS, { origin: 'login_page', has_ref: Boolean(ref), ...trackingAttribution })
+        await api.register(cleanName, cleanEmail, password, cleanPhone, ref)
+        trackEvent(TRACKING_EVENTS.SIGNUP_SUCCESS, { origin: 'login_page', has_ref: Boolean(ref) })
       } else {
-        await api.login(email, password)
+        await api.login(cleanEmail, password)
         trackEvent(TRACKING_EVENTS.LOGIN_SUCCESS, { origin: 'login_page' })
       }
-      setSuccess(isRegister ? 'Conta criada com sucesso. Redirecionando para o checklist...' : 'Login realizado. Redirecionando para o checklist...')
+      setSuccess(isRegister ? 'Conta criada. Agora vamos conectar seu WhatsApp e validar o primeiro teste guiado.' : 'Login realizado. Redirecionando para o checklist...')
       setTimeout(() => router.push('/dashboard/inicio'), 300)
     } catch (err) {
       trackEvent(TRACKING_EVENTS.AUTH_ERROR, {
@@ -102,7 +149,7 @@ function LoginContent() {
           <h1 className={`mt-2 text-xl sm:text-2xl font-bold leading-tight ${isRegister ? 'text-emerald-100' : 'text-gray-900'}`}>{isRegister ? 'Criar sua conta' : 'Entrar na sua conta'}</h1>
         </div>
         <p className={`text-center text-sm mb-4 ${isRegister ? 'text-emerald-200' : 'text-gray-500'}`}>
-          {isRegister ? 'Comece configurando seu WhatsApp e suas credenciais de afiliado.' : 'Acesse seu painel para conectar o WhatsApp e gerenciar seus grupos.'}
+          {isRegister ? 'Teste por 30 dias sem cartão e valide o primeiro envio guiado.' : 'Acesse seu painel para conectar o WhatsApp e gerenciar seus grupos.'}
         </p>
 
         {ref && (
@@ -122,7 +169,7 @@ function LoginContent() {
           ))}
         </ul>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
           {isRegister && (
             <div>
               <label htmlFor="name" className="block text-sm font-medium mb-1 text-emerald-100">Nome completo</label>
@@ -131,10 +178,11 @@ function LoginContent() {
                 type="text"
                 placeholder="Como podemos te chamar"
                 value={name}
+                onFocus={() => markFormStarted('name')}
                 onChange={e => setName(e.target.value)}
                 required={isRegister}
                 autoComplete="name"
-                className="border rounded-lg px-3 py-2 text-sm placeholder:text-white outline-none focus:ring-2 focus:ring-green-400 w-full"
+                className="border rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-400 w-full"
               />
             </div>
           )}
@@ -145,6 +193,7 @@ function LoginContent() {
               type="email"
               placeholder="seuemail@exemplo.com"
               value={email}
+              onFocus={() => markFormStarted('email')}
               onChange={e => setEmail(e.target.value)}
               required
               autoComplete="email"
@@ -160,9 +209,13 @@ function LoginContent() {
                 inputMode="tel"
                 placeholder="Ex: 5511999999999"
                 value={contactPhone}
-                onChange={e => setContactPhone(e.target.value)}
+                onFocus={() => markFormStarted('contactPhone')}
+                onChange={e => setContactPhone(normalizePhoneInput(e.target.value))}
                 required={isRegister}
-                className="border rounded-lg px-3 py-2 text-sm placeholder:text-white outline-none focus:ring-2 focus:ring-green-400 w-full"
+                minLength={10}
+                maxLength={15}
+                autoComplete="tel"
+                className="border rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-400 w-full"
               />
               <p className="mt-1 text-[11px] leading-4 text-emerald-200">
                 Usaremos este contato para suporte proativo, como avisar se seu robô ficar parado por 2 dias ou se detectarmos dificuldade na configuração.
@@ -188,6 +241,7 @@ function LoginContent() {
                 type={showPassword ? 'text' : 'password'}
                 placeholder="Digite sua senha"
                 value={password}
+                onFocus={() => markFormStarted('password')}
                 onChange={e => setPassword(e.target.value)}
                 required
                 minLength={isRegister ? 8 : undefined}
@@ -211,7 +265,7 @@ function LoginContent() {
 
           {isRegister && (
             <p className={`text-xs ${isRegister ? 'text-emerald-200' : 'text-gray-500'}`}>
-              Depois do cadastro, você poderá conectar seu WhatsApp, cadastrar suas credenciais e escolher os grupos do bot.
+Depois do cadastro, você entra no painel para conectar o WhatsApp, escolher grupos e validar o primeiro teste. Sem cartão no trial.
             </p>
           )}
 
@@ -243,6 +297,7 @@ function LoginContent() {
             setError('')
             setSuccess('')
             setContactPhone('')
+            setFormStarted(false)
           }}
           className={`mt-4 text-sm hover:underline w-full text-center ${isRegister ? 'text-emerald-200' : 'text-green-600'}`}
         >
