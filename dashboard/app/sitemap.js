@@ -1,3 +1,4 @@
+import { getIndexableSeoRoutes } from '../lib/seo-registry.mjs'
 import { getSiteUrl } from '../lib/site-url'
 import { getAllLpSlugs } from '../lib/lp-config.mjs'
 
@@ -28,19 +29,10 @@ const LAST_MODIFIED_BY_ROUTE = {
 const DEFAULT_LAST_MODIFIED = '2026-05-15'
 
 export default function sitemap() {
-  const fallbackDate = new Date(DEFAULT_LAST_MODIFIED)
-  const allRoutes = [...CORE_ROUTES, ...LP_ROUTES, ...CONTENT_ROUTES]
-
-  return allRoutes.map((route) => {
-    const isHome = route === '/'
-    const isLp = LP_ROUTES.includes(route)
-    const isContent = CONTENT_ROUTES.includes(route)
-
-    return {
-      url: `${baseUrl}${route === '/' ? '' : route}`,
-      lastModified: LAST_MODIFIED_BY_ROUTE[route] ? new Date(LAST_MODIFIED_BY_ROUTE[route]) : fallbackDate,
-      changeFrequency: isHome ? 'weekly' : isLp || isContent ? 'weekly' : 'monthly',
-      priority: isHome ? 1 : isLp ? 0.9 : isContent ? 0.8 : 0.6,
-    }
-  })
+  return getIndexableSeoRoutes().map((route) => ({
+    url: `${baseUrl}${route.path === '/' ? '' : route.path}`,
+    lastModified: new Date(route.lastModified),
+    changeFrequency: route.changeFrequency,
+    priority: route.priority,
+  }))
 }

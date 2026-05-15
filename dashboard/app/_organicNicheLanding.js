@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
+import { buildRegisterHref } from '@/lib/marketing-attribution'
 
 const pages = {
   'bot-ofertas-restaurantes-whatsapp': {
@@ -163,7 +164,7 @@ export function OrganicNicheLanding({ pageKey }) {
           <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-950 md:text-5xl">{page.h1}</h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-gray-800">{page.directAnswer}</p>
           <div className="mt-6 flex flex-wrap gap-3 text-sm font-bold">
-            <Link href={`/login?mode=register&utm_source=seo&utm_medium=organic&utm_campaign=organic-marketing-sprint&utm_content=${pageKey}`} className="rounded-xl bg-emerald-600 px-4 py-3 text-white hover:bg-emerald-700">
+            <Link href={buildRegisterHref({ source: 'seo', campaign: 'organic-marketing-sprint', content: pageKey })} className="rounded-xl bg-emerald-600 px-4 py-3 text-white hover:bg-emerald-700">
               Entrar na lista VIP
             </Link>
             <Link href="/conteudos" className="rounded-xl border border-emerald-200 px-4 py-3 text-emerald-800 hover:bg-emerald-50">

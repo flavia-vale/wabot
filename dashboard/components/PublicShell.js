@@ -16,6 +16,7 @@ export function PublicHeader() {
         </Link>
         <nav className="flex flex-wrap items-center gap-4 text-sm font-semibold text-gray-600">
           <Link href="/#planos" className="hover:text-green-700">Planos</Link>
+          <Link href="/ferramentas" className="hover:text-green-700">Ferramentas</Link>
           <Link href="/quem-somos" className="hover:text-green-700">Quem somos</Link>
           <Link href="/suporte" className="hover:text-green-700">Suporte</Link>
           <Link href="/login" className="rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700">Entrar</Link>

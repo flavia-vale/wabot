@@ -8,6 +8,7 @@ import { FAQ } from '@/components/landing/FAQ'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
 import { getSiteUrl } from '@/lib/site-url'
 import { BRAND_NAME, BRAND_SHORT_NAME, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION } from '@/lib/marketing-content'
+import { getProgrammaticSeoRoute } from '@/lib/seo-registry.mjs'
 
 import { LP_CONFIG, getLpType } from '@/lib/lp-config.mjs'
 
@@ -116,6 +117,8 @@ export function LpTemplate({ slug }) {
     applicationCategory: 'BusinessApplication',
     operatingSystem: 'Web',
     description: `${cfg.description} ${PRODUCT_DEFINITION}`,
+    url: `${getSiteUrl()}/${slug}`,
+    mainEntityOfPage: `${getSiteUrl()}/${slug}`,
     image: [`${getSiteUrl()}/botinho-logo.svg`],
     brand: { '@type': 'Brand', name: BRAND_SHORT_NAME },
     offers: DEFAULT_LANDING_PLANS.map((plan) => ({
@@ -136,7 +139,7 @@ export function LpTemplate({ slug }) {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(howToJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }} />
-      {lpType === 'pain' && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
       <Hero
         tone={theme.tone}
         primaryCtaLabel="Entrar na Lista VIP"

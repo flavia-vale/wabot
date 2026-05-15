@@ -127,7 +127,6 @@ export default function MarketingGrowthAdminPage() {
         setFinance(financeData)
         setPayments(Array.isArray(paymentsData?.items) ? paymentsData.items : [])
         setSubscriptions(Array.isArray(subscriptionsData?.items) ? subscriptionsData.items : [])
-      setUsers(Array.isArray(usersData?.users) ? usersData.users : [])
         setUsers(Array.isArray(usersData?.users) ? usersData.users : [])
         setMarketingOverview(mkOverview)
         setMarketingCampaigns(Array.isArray(mkCampaigns?.campaigns) ? mkCampaigns.campaigns : [])
