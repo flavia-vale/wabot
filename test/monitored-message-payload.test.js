@@ -15,6 +15,7 @@ test('payload monitorado com imagem usa imageMessage simples com caption origina
   assert.equal(payload.primary.caption, finalText)
   assert.equal(payload.primary.mimetype, 'image/jpeg')
   assert.deepEqual(payload.fallbacks, [{ text: finalText }])
+  assert.equal(payload.primarySendOptions, undefined)
 })
 
 test('payload monitorado sem imagem cai para texto puro igual ao caminho estável anterior', () => {
@@ -23,11 +24,24 @@ test('payload monitorado sem imagem cai para texto puro igual ao caminho estáve
     image: null,
   })
 
-  assert.deepEqual(payload, {
-    _route: 'text',
-    primary: { text: 'Só texto https://afiliado.example/produto' },
-    fallbacks: [],
+  assert.equal(payload._route, 'text')
+  assert.deepEqual(payload.primary, { text: 'Só texto https://afiliado.example/produto' })
+  assert.deepEqual(payload.fallbacks, [])
+  assert.equal(payload.primarySendOptions, undefined)
+})
+
+test('payload monitorado sem imagem + useLinkPreview pede preview automático do WhatsApp', () => {
+  const finalText = 'Oferta convertida https://afiliado.example/produto'
+  const payload = buildMonitoredMessagePayload({
+    finalText,
+    image: null,
+    useLinkPreview: true,
   })
+
+  assert.equal(payload._route, 'text')
+  assert.deepEqual(payload.primary, { text: finalText })
+  assert.deepEqual(payload.primarySendOptions, { generateHighQualityLinkPreview: true })
+  assert.deepEqual(payload.fallbacks, [])
 })
 
 test('guarda rejeita externalAdReply para evitar novo drop silencioso em mensagens monitoradas', () => {

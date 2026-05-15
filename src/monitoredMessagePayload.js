@@ -10,10 +10,18 @@ function assertNoExternalAdReply(value, path = 'payload') {
   }
 }
 
-export function buildMonitoredMessagePayload({ finalText, image }) {
+export function buildMonitoredMessagePayload({ finalText, image, useLinkPreview = false }) {
   const textPayload = { text: String(finalText || '') }
+  const textSendOptions = useLinkPreview ? { generateHighQualityLinkPreview: true } : undefined
+
   if (!image?.buffer) {
-    return { _route: 'text', primary: textPayload, fallbacks: [] }
+    return {
+      _route: 'text',
+      primary: textPayload,
+      primarySendOptions: textSendOptions,
+      fallbacks: [],
+      fallbackSendOptions: [],
+    }
   }
 
   const imagePayload = {
@@ -23,7 +31,13 @@ export function buildMonitoredMessagePayload({ finalText, image }) {
     caption: String(finalText || ''),
   }
 
-  const payload = { _route: 'image', primary: imagePayload, fallbacks: [textPayload] }
+  const payload = {
+    _route: 'image',
+    primary: imagePayload,
+    primarySendOptions: undefined,
+    fallbacks: [textPayload],
+    fallbackSendOptions: [textSendOptions],
+  }
   assertNoExternalAdReply(payload)
   return payload
 }

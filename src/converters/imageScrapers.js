@@ -24,6 +24,9 @@ const AMAZON_ASIN_RE = /(?:\/dp\/|\/gp\/product\/|\/product-reviews\/|\/exec\/ob
 const SHOPEE_IMAGE_HOST_RE = /(^|\.)susercontent\.com$|^cf\.shopee\.com\.br$/
 const IMAGE_CACHE_TTL_MS = 5 * 60 * 1000
 const IMAGE_FETCH_TIMEOUT_MS = Number(process.env.IMAGE_FETCH_TIMEOUT_MS) || 2_500
+// Amazon e Shopee podem demorar 3-5s para responder — timeout separado
+// para não cortar o HTML antes de chegarmos ao og:image do produto.
+const IMAGE_HTML_FETCH_TIMEOUT_MS = Number(process.env.IMAGE_HTML_FETCH_TIMEOUT_MS) || 7_000
 const IMAGE_HTML_MAX_BYTES = Number(process.env.IMAGE_HTML_MAX_BYTES) || 512 * 1024
 const IMAGE_BUFFER_TIMEOUT_MS = Number(process.env.IMAGE_BUFFER_TIMEOUT_MS) || 5_000
 const IMAGE_BUFFER_MAX_BYTES = Number(process.env.IMAGE_BUFFER_MAX_BYTES) || 5 * 1024 * 1024
@@ -123,14 +126,14 @@ async function readLimitedText(res) {
   return new TextDecoder().decode(body)
 }
 
-async function fetchHtml(url, { ua = 'Mozilla/5.0 (compatible; BotConversorAfiliados/1.0)' } = {}) {
+async function fetchHtml(url, { ua = 'Mozilla/5.0 (compatible; BotConversorAfiliados/1.0)', timeoutMs = IMAGE_HTML_FETCH_TIMEOUT_MS } = {}) {
   const res = await fetch(url, {
     headers: {
       'User-Agent': ua,
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
     },
-    signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
     redirect: 'follow',
   })
   if (!res.ok) return { html: null, finalUrl: url }
@@ -234,13 +237,22 @@ function extractAsinFromUrl(rawUrl) {
   return m ? m[1].toUpperCase() : null
 }
 
-// Endpoint público usado pelos widgets de afiliado da Amazon — entrega a
-// imagem principal do produto a partir do ASIN sem depender do HTML, que
-// é o que costuma falhar quando Bot 3 manda uma oferta amzn.to e a foto
-// chega em branco.
-function buildAmazonAsinImageUrl(asin) {
+// Fetcha o HTML do widget de imagem da Amazon via adsystem — endpoint
+// público que NÃO exige auth, funciona para qualquer ASIN (eletrônicos,
+// roupas, etc.) e devolve um img tag com a URL real do produto.
+// Mais confiável que /images/P/ (só funciona para livros).
+async function resolveAmazonImageFromWidget(asin) {
   if (!asin) return null
-  return `https://images-na.ssl-images-amazon.com/images/P/${asin}.01._SCLZZZZZZZ_.jpg`
+  try {
+    const widgetUrl = `https://ws-na.amazon-adsystem.com/widgets/q?_encoding=UTF8&ASIN=${asin}&Format=_SL500_&ID=AsinImage&MarketPlace=BR&ServiceVersion=20070822&WS=1`
+    const { html } = await fetchHtml(widgetUrl, { ua: BROWSER_UA, timeoutMs: IMAGE_FETCH_TIMEOUT_MS * 2 })
+    if (!html) return null
+    const m = html.match(/src=["'](https?:\/\/[^"']*\/images\/I\/[^"']+)["']/i)
+    const imgUrl = m ? normalizeHtmlImageUrl(m[1]) : null
+    return isAmazonProductImage(imgUrl) ? imgUrl : null
+  } catch {
+    return null
+  }
 }
 
 async function resolveAmazonImage(url) {
@@ -260,7 +272,7 @@ async function resolveAmazonImage(url) {
     }
   }
 
-  return buildAmazonAsinImageUrl(asin)
+  return resolveAmazonImageFromWidget(asin)
 }
 
 function isAmazonImageUrl(rawUrl) {
