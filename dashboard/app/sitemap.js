@@ -1,5 +1,6 @@
 import { getIndexableSeoRoutes } from '../lib/seo-registry.mjs'
 import { getSiteUrl } from '../lib/site-url'
+import { EDITORIAL_DATES } from '../lib/editorial-content'
 
 const baseUrl = getSiteUrl()
 

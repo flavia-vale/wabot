@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Icon } from './Icon';
+import { buildRegisterHref } from '@/lib/marketing-attribution';
 
 const s = {
   cta: {
@@ -44,7 +45,7 @@ export function FinalCTA() {
             </h2>
             <p style={s.sub}>Conecte o WhatsApp, valide poucos grupos primeiro e escale apenas rotinas permitidas, com revisão humana e cadência responsável.</p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }} className="landing-final-cta-actions">
-              <Link className="btn" href="/login?mode=register" style={{ background: 'var(--accent-2)', color: 'var(--ink)' }}>
+              <Link className="btn" href={buildRegisterHref({ source: 'landing', campaign: 'home-final-cta', content: 'connect-whatsapp' })} style={{ background: 'var(--accent-2)', color: 'var(--ink)' }}>
                 <Icon name="whatsapp" size={16} /> Conectar meu WhatsApp <Icon name="arrow" size={16} />
               </Link>
               <Link className="btn" href="/suporte" style={{ background: 'transparent', color: 'var(--surface)', border: '1px solid rgba(255,255,255,0.2)' }}>
