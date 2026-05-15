@@ -6,6 +6,11 @@ const title = 'Conteúdos: blog e materiais para afiliados no WhatsApp'
 const description = 'Central de conteúdos do BOTinho com artigos e materiais práticos para padronizar divulgação, validar links de afiliado e escalar grupos no WhatsApp com responsabilidade.'
 const slug = '/conteudos'
 
+const lastUpdated = '2026-05-15'
+const editorialOwner = 'Time editorial WABOT'
+const siteUrl = getSiteUrl()
+const formattedLastUpdated = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(`${lastUpdated}T00:00:00Z`))
+
 const blogPosts = [
   {
     href: '/blog/conferir-converter-link-afiliado-whatsapp',
@@ -63,6 +68,53 @@ const materials = [
   },
 ]
 
+const roadmapTracks = [
+  {
+    id: 'iniciante',
+    title: 'Trilha iniciante',
+    description: 'Base para publicar com consistência sem depender de memória operacional.',
+    links: [
+      { href: '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp', label: 'Checklist principal de divulgação' },
+      { href: '/blog/checklist-padronizar-divulgacao-whatsapp', label: 'Checklist de padronização no WhatsApp' },
+    ],
+  },
+  {
+    id: 'intermediario',
+    title: 'Trilha intermediária',
+    description: 'Reduza erros de afiliado e aumente previsibilidade da operação.',
+    links: [
+      { href: '/blog/conferir-converter-link-afiliado-whatsapp', label: 'Conferir e converter links de afiliado' },
+      { href: '/blog/bot-para-afiliados-whatsapp-grupos-cupons', label: 'Fluxo para afiliados em grupos de cupons' },
+    ],
+  },
+  {
+    id: 'escala',
+    title: 'Trilha de escala',
+    description: 'Evolua da execução manual para uma rotina de alto volume com controle.',
+    links: [
+      { href: '/blog/como-escalar-grupos-sem-operacao-manual', label: 'Escalar grupos sem operação manual' },
+      { href: '/materiais/checklist-operacao-whatsapp', label: 'Checklist de operação para escala' },
+    ],
+  },
+]
+
+const contentItems = [...blogPosts, ...materials]
+
+const faqItems = [
+  {
+    question: 'Para quem é esta central de conteúdos?',
+    answer: 'Para afiliados, admins de grupos e operações locais que publicam ofertas no WhatsApp e querem padronizar rotina sem perder qualidade.',
+  },
+  {
+    question: 'Por onde devo começar?',
+    answer: 'Comece pelo checklist principal de divulgação, depois aplique os guias do blog para revisar links, copy e ordem de execução.',
+  },
+  {
+    question: 'Com que frequência esta central é atualizada?',
+    answer: 'O hub é revisado continuamente para incluir materiais práticos e artigos aplicáveis ao dia a dia operacional.',
+  },
+]
+
 export const metadata = {
   title,
   description,
@@ -70,7 +122,7 @@ export const metadata = {
   openGraph: {
     title,
     description,
-    url: `${getSiteUrl()}${slug}`,
+    url: `${siteUrl}${slug}`,
     type: 'website',
     locale: 'pt_BR',
   },
@@ -82,13 +134,100 @@ function ContentCard({ item }) {
       <h3 className="text-xl font-black tracking-tight text-gray-950">{item.title}</h3>
       <p className="mt-3 text-sm leading-7 text-gray-700">{item.description}</p>
       <Link href={item.href} className="mt-4 inline-flex text-sm font-black text-emerald-700 underline underline-offset-4">
-        Ler conteúdo
+        Ver guia completo
       </Link>
     </li>
   )
 }
 
+function HubSection({ title: sectionTitle, description: sectionDescription, items, ctaHref, ctaLabel }) {
+  return (
+    <section className="mt-8">
+      <h2 className="text-2xl font-black tracking-tight text-gray-950">{sectionTitle}</h2>
+      <p className="mt-2 text-sm leading-7 text-gray-700">{sectionDescription}</p>
+      <ul className="mt-4 grid gap-4 md:grid-cols-2">
+        {items.map((item) => <ContentCard key={item.href} item={item} />)}
+      </ul>
+      <div className="mt-5">
+        <Link href={ctaHref} className="inline-flex rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-700">
+          {ctaLabel}
+        </Link>
+      </div>
+    </section>
+  )
+}
+
 export default function Page() {
+  const experimentId = 'hub-fase4'
+  const heroCta = {
+    label: 'Receber checklist + plano semanal',
+    href: `/login?mode=register&utm_source=conteudos&utm_medium=organic&utm_campaign=content-hub&utm_content=hero-cta-checklist-plano&utm_term=${experimentId}`
+  }
+
+  const hubSections = [
+    {
+      key: 'blog',
+      title: 'Artigos do blog',
+      description: 'Guias para melhorar a qualidade das postagens e reduzir erros antes de escalar.',
+      items: blogPosts,
+      ctaHref: `/login?mode=register&utm_source=conteudos&utm_medium=organic&utm_campaign=content-hub&utm_content=cta-pos-blog&utm_term=${experimentId}`,
+      ctaLabel: 'Receber próximos artigos aplicáveis',
+    },
+    {
+      key: 'materiais',
+      title: 'Materiais práticos',
+      description: 'Checklists acionáveis para executar processo, manter consistência e acompanhar resultado.',
+      items: materials,
+      ctaHref: `/login?mode=register&utm_source=conteudos&utm_medium=organic&utm_campaign=content-hub&utm_content=cta-pos-materiais&utm_term=${experimentId}`,
+      ctaLabel: 'Entrar na lista e receber novos materiais',
+    },
+  ]
+
+  const collectionJsonLd = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'CollectionPage',
+        name: title,
+        description,
+        url: `${siteUrl}${slug}`,
+        inLanguage: 'pt-BR',
+        dateModified: lastUpdated,
+        mainEntityOfPage: `${siteUrl}${slug}`,
+        isPartOf: { '@type': 'WebSite', name: 'WABOT', url: siteUrl },
+        about: { '@type': 'Thing', name: 'Operação de divulgação em grupos de WhatsApp' },
+      },
+      {
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Início', item: siteUrl },
+          { '@type': 'ListItem', position: 2, name: 'Conteúdos', item: `${siteUrl}${slug}` },
+        ],
+      },
+      {
+        '@type': 'ItemList',
+        name: 'Conteúdos recomendados',
+        itemListElement: contentItems.map((item, index) => ({
+          '@type': 'ListItem',
+          position: index + 1,
+          name: item.title,
+          url: `${siteUrl}${item.href}`,
+        })),
+      },
+      {
+        '@type': 'FAQPage',
+        mainEntity: faqItems.map((item) => ({
+          '@type': 'Question',
+          name: item.question,
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: item.answer,
+          },
+        })),
+      },
+    ],
+  }
+
   return (
     <PublicShell>
       <main className="mx-auto w-full max-w-6xl px-5 py-10 md:px-8 md:py-16">
