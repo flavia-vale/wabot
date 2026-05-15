@@ -56,9 +56,9 @@ test('hasStepUpMfa validates x-admin-mfa-token when configured', () => {
 
 
 test('resolvePlanForPayment prefers explicit plan metadata when valid', () => {
-  const plans = { basic: { price: 1 }, pro: { price: 2 } }
-  assert.equal(resolvePlanForPayment({ preferredPlan: 'pro', amount: 1, plans }), 'pro')
-  assert.equal(resolvePlanForPayment({ preferredPlan: 'unknown', amount: 1, plans }), 'basic')
+  const plans = { basic: { price: 39 }, pro: { price: 69 } }
+  assert.equal(resolvePlanForPayment({ preferredPlan: 'pro', amount: 39, plans }), 'pro')
+  assert.equal(resolvePlanForPayment({ preferredPlan: 'unknown', amount: 39, plans }), 'basic')
 })
 
 test('resolveWebhookEventId reads ID using priority order', () => {
