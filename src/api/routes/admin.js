@@ -968,6 +968,61 @@ export async function adminRoutes(app) {
     }
   })
 
+
+  app.get('/marketing/data-trust', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:read'))) return
+    const { from, to } = parseDateRange(req.query, 30)
+    const [totalSignups, withSource, withRef, events24h] = await Promise.all([
+      db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event = 'signup_created' AND createdAt >= ${from} AND createdAt <= ${to}`,
+      db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event = 'signup_created' AND createdAt >= ${from} AND createdAt <= ${to} AND COALESCE(json_extract(metadata, '$.source'), '') <> ''`,
+      db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event = 'signup_created' AND createdAt >= ${from} AND createdAt <= ${to} AND COALESCE(json_extract(metadata, '$.ref'), '') <> ''`,
+      db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE createdAt >= ${new Date(Date.now()-24*60*60*1000)} AND createdAt <= ${new Date()}`,
+    ])
+    const total = Number(totalSignups?.[0]?.total || 0)
+    const sourceCoverage = total ? Math.round((Number(withSource?.[0]?.total || 0) / total) * 1000) / 10 : 0
+    const campaignCoverage = total ? Math.round((Number(withRef?.[0]?.total || 0) / total) * 1000) / 10 : 0
+    const confidence = sourceCoverage >= 80 && campaignCoverage >= 70 ? 'high' : sourceCoverage >= 60 ? 'medium' : 'low'
+    await writeAdminAuditLog(req, { action: 'admin.marketing.data_trust.read', resource: 'marketingDataTrust' })
+    return { totalSignups: total, sourceCoverage, campaignCoverage, confidence, freshnessMinutes: 5, events24h: Number(events24h?.[0]?.total || 0), from, to }
+  })
+
+  app.get('/marketing/cohorts', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:read'))) return
+    const { from, to } = parseDateRange(req.query, 90)
+    const rows = await db.$queryRaw`
+      SELECT strftime('%Y-%W', createdAt) as cohortWeek,
+        COUNT(*) as signups,
+        SUM(CASE WHEN event = 'first_send_success' THEN 1 ELSE 0 END) as activated,
+        SUM(CASE WHEN event = 'payment_approved' THEN 1 ELSE 0 END) as paid
+      FROM AnalyticsEvent
+      WHERE createdAt >= ${from} AND createdAt <= ${to}
+        AND event IN ('signup_created','first_send_success','payment_approved')
+      GROUP BY strftime('%Y-%W', createdAt)
+      ORDER BY cohortWeek DESC
+      LIMIT 24
+    `
+    await writeAdminAuditLog(req, { action: 'admin.marketing.cohorts.read', resource: 'marketingCohorts' })
+    return { cohorts: rows.map(r => ({ cohortWeek: String(r.cohortWeek||''), signups: Number(r.signups||0), activated: Number(r.activated||0), paid: Number(r.paid||0) })), from, to }
+  })
+
+  app.get('/marketing/alerts', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:read'))) return
+    const { from, to } = parseDateRange(req.query, 30)
+    const [pending, successRate] = await Promise.all([
+      db.payment.count({ where: { status: 'pending' } }),
+      db.$queryRaw`SELECT COUNT(*) as total, SUM(CASE WHEN event='first_send_success' THEN 1 ELSE 0 END) as success FROM AnalyticsEvent WHERE createdAt >= ${from} AND createdAt <= ${to} AND event IN ('signup_created','first_send_success')`,
+    ])
+    const total = Number(successRate?.[0]?.total || 0)
+    const success = Number(successRate?.[0]?.success || 0)
+    const rate = total ? Math.round((success / total) * 1000) / 10 : 0
+    const alerts = []
+    if (pending > 5) alerts.push({ tone: 'risk', title: 'Pendências de pagamento elevadas', value: pending })
+    if (rate < 50) alerts.push({ tone: 'risk', title: 'Ativação baixa no período', value: `${rate}%` })
+    if (!alerts.length) alerts.push({ tone: 'good', title: 'Sem alertas críticos', value: 'OK' })
+    await writeAdminAuditLog(req, { action: 'admin.marketing.alerts.read', resource: 'marketingAlerts' })
+    return { alerts, from, to }
+  })
+
   app.get('/billing/webhooks', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'billing:read'))) return
 

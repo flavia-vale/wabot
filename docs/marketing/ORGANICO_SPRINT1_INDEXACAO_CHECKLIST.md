@@ -53,3 +53,10 @@ Ambiente de validação: staging em `http://178.105.54.0:3006`
 - [ ] Confirmar presença em `http://178.105.54.0:3006/sitemap.xml`.
 - [ ] Inspecionar `http://espelhagrupos.com.br/bot-ofertas-afiliados-whatsapp` no Google Search Console após staging aprovado e deploy de produção.
 - [ ] Solicitar indexação da URL nova após inspeção.
+
+## Incremento 2026-05-15 (próximo dia)
+
+- [ ] Validar `http://178.105.54.0:3006/bot-ofertas-pet-shop-whatsapp` (status 200, H1, FAQ, CTA).
+- [ ] Confirmar presença em `http://178.105.54.0:3006/sitemap.xml`.
+- [ ] Inspecionar `http://espelhagrupos.com.br/bot-ofertas-pet-shop-whatsapp` no Google Search Console após staging aprovado e deploy de produção.
+- [ ] Solicitar indexação da URL nova após inspeção.

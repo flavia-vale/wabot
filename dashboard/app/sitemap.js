@@ -32,6 +32,7 @@ const LP_ROUTES = [
   '/bot-ofertas-eletronicos-whatsapp',
   '/bot-ofertas-moda-whatsapp',
   '/bot-ofertas-beleza-whatsapp',
+  '/bot-ofertas-pet-shop-whatsapp',
   '/bot-ofertas-afiliados-whatsapp',
 ]
 
