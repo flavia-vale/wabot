@@ -16,6 +16,7 @@ import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
+import { resolveMonitoredImage } from './monitoredImageResolver.js'
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
@@ -838,30 +839,17 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const platform = target?.platform || 'unknown'
         logger.info({ msgId: msg.key.id, imageMode: monitorGroup.imageMode, platform }, 'getImage: iniciando resolução de imagem')
 
-        if (monitorGroup.imageMode === 'original') {
-          const downloaded = await downloadOriginalImage()
-          // jpegThumbnail é minúsculo (~5-7KB, ~200-300px) e fica pixelado ao
-          // ser ampliado. Se for só thumbnail (sem imageMessage real), melhor
-          // cair em preview automático do WhatsApp que busca og:image na página.
-          const isThumbnailOnly = downloaded && downloaded.buffer?.length && downloaded.buffer.length < 50_000 && downloaded.mimetype === 'image/jpeg'
-          if (isThumbnailOnly) {
-            logger.info({ msgId: msg.key.id, size: downloaded.buffer.length }, 'downloadOriginalImage retornou só jpegThumbnail; usando preview automático em vez de imagem pixelada')
-            cachedImage = null
-          } else {
-            cachedImage = downloaded
-          }
-          return cachedImage
-        }
-
-        if (monitorGroup.imageMode === 'fetch') {
-          // No modo "imagem do site" não baixamos mais a imagem como mídia:
-          // confiamos no preview automático do WhatsApp gerado a partir do
-          // link convertido (extendedTextMessage + generateHighQualityLinkPreview).
-          logger.info({ msgId: msg.key.id, platform }, 'imageMode=fetch: usando preview automático do WhatsApp (sem download de mídia)')
-          return null
-        }
-
-        return null
+        cachedImage = await resolveMonitoredImage({
+          mode: monitorGroup.imageMode,
+          target,
+          credentials: cfg.credentials,
+          downloadOriginalImage,
+          fetchProductImage,
+          fetchImageBuffer,
+          fallbackToOriginal: monitorGroup.fallbackToOriginal !== false,
+          logger,
+        })
+        return cachedImage
       }
 
 
@@ -985,8 +973,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
               if (fetched && !image) {
                 logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
               }
-              // Em modo original, se não há imagem (jpegThumbnail foi descartado),
-              // usar preview automático do WhatsApp
+              // Em modo original, se não conseguimos imagem alguma da mensagem
+              // monitorada, peça ao WhatsApp para gerar preview automático do
+              // link convertido — assim ainda há chance de aparecer card com foto.
               if (imageMode === 'original' && !image) {
                 useLinkPreview = true
               }
