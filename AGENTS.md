@@ -187,6 +187,64 @@ arquivos commitados antes da regra continuam trackeados até `git rm --cached`.
 Confira periodicamente: `git ls-files | grep -E '\.db$|\.db-journal$'` deve
 retornar vazio.
 
+## Image scrapers — configuração canônica (PR #422, não regredir)
+
+`src/converters/imageScrapers.js` entrega imagem hi-res para link preview
+do WhatsApp em **Mercado Livre, Amazon e Shopee**. Ajustes consolidados
+em #422 a partir de fixtures reais de HTML (em `test/fixtures/`).
+Antes de mexer, leia esta seção inteira.
+
+### Regras invioláveis
+
+- **Não mexer no caminho do Mercado Livre.** É a referência de qualidade;
+  já funciona.
+- **Não baixar a barra de qualidade**: `IMAGE_HIRES_MIN_DIMENSION_PX = 800`
+  é o mínimo aceitável no maior eixo para preview do WA.
+- **Não restaurar regex com slashes escapadas** (`https?:\\\/\\\/`) em
+  `AMAZON_INLINE_IMAGE_RE` — a Amazon BR atual serve com slashes normais.
+- **Não baixar `IMAGE_HTML_MAX_BYTES`** para menos de 2MB — a página do
+  produto Amazon passa de 1.3MB e o `data-a-dynamic-image` fica em
+  ~320KB. `readLimitedText` precisa devolver o que coletou ao atingir o
+  teto (e não `null`).
+- **Não enviar URL com badges/overlays** (`_BO`, `_UF`, `_SR`, `_PI*`,
+  `_ZJ*`, `_QL*`) para o WhatsApp. `buildAmazonImageUrlCandidates`
+  extrai o ID base de `/images/I/` e gera variantes `_AC_SL1500_`,
+  `_SL1500_`, `_AC_UL1500_`, `_AC_SX1500_` limpas.
+- **Shopee sem creds devolve `null` e está correto**: o SPA shell (~13KB)
+  não tem `og:image`, a API v4/v2 responde `error: 90309999`. Caminho
+  real em produção é a API de afiliado em `src/converters/shopee.js`
+  (creds `appId`+`secretKey`). Não inventar fallback para "consertar"
+  isso sem creds — vai dar `null` mesmo.
+
+### O que precisa coexistir (em 3 lugares acoplados)
+
+1. `IMAGE_HIRES_MIN_DIMENSION_PX` (default 800) em `imageScrapers.js`
+   determina o "hi-res aceitável" usado pelo `fetchImageBuffer`.
+2. `validateDownloadedImage` precisa devolver `{ buffer, mimetype, width,
+   height }` — o `fetchImageBuffer` usa `width/height` para decidir.
+3. As fixtures em `test/fixtures/` são HTML capturado de produção
+   (Amazon B09VQ39F41 e Shopee SPA shell). Se Amazon/Shopee mudarem
+   layout, recapture **antes** de mexer no scraper, não depois.
+
+### Stripping de CDN canônico
+
+| CDN                                | Sufixos/tokens que SEMPRE removemos para chegar no original              |
+|------------------------------------|--------------------------------------------------------------------------|
+| `m.media-amazon.com/images/I/`     | `_AC_SY*`, `_AC_SX*`, `_SL*`, `_SX*`, `_SY*`, `_BO*`, `_UF*`, `_SR*`, `_PI*`, `_ZJ*`, `_QL*` (substituído por `_AC_SL1500_`) |
+| `down-br.img.susercontent.com`     | `_tn`, `_xxs`, `_xs`, `_sm`, `_md`, `_lg`, `@resize_w<n>[_n[lh]]`, query `?x-oss-process=...` |
+| `cf.shopee.com.br` ↔ susercontent  | Alterna hostnames quando um responde 404                                 |
+| `mlstatic.com`                     | `D_NQ_NP_` → `D_NQ_NP_2X_` (não tocar — referência)                      |
+
+### Prova de funcionamento (PR #422)
+
+```
+Amazon B09VQ39F41 → 1000x1000 jpeg
+Amazon B0CDJ4L7CZ → 1000x679 jpeg
+amzn.to short     → 1500x300 jpeg
+```
+
+`node --test test/image-scrapers.test.js` → 12/12 pass.
+
 ## Regras para qualquer agente de IA neste repo
 
 - **Não trocar portas** sem atualizar os 3 lugares listados acima.
