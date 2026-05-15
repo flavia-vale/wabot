@@ -1,5 +1,6 @@
 import "./globals.css";
 import { ToastProvider } from "@/components/ToastProvider";
+import { ConversionPrompt } from "@/components/marketing/ConversionPrompt";
 
 export const metadata = {
   metadataBase: new URL('https://espelhagrupos.com.br'),
@@ -23,7 +24,7 @@ export const viewport = {
 export default function RootLayout({ children }) {
   return (
     <html lang="pt-br">
-      <body style={{ background: '#EEF6F2' }}><ToastProvider>{children}</ToastProvider></body>
+      <body style={{ background: '#EEF6F2' }}><ToastProvider>{children}<ConversionPrompt /></ToastProvider></body>
     </html>
   );
 }

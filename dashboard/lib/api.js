@@ -123,8 +123,14 @@ export const api = {
     return data
   },
 
-  register: async (name, email, password, contactPhone, ref) => {
-    const data = await apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, ...(ref && { ref }) }) })
+  register: async (name, email, password, contactPhone, refOrAttribution = '') => {
+    const attribution = typeof refOrAttribution === 'object' && refOrAttribution !== null
+      ? refOrAttribution
+      : { ...(refOrAttribution && { ref: refOrAttribution }) }
+    const data = await apiFetch('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ name, email, password, contactPhone, ...attribution }),
+    })
     setAuthToken(data?.token || '')
     return data
   },
@@ -258,6 +264,10 @@ export const api = {
   adminMarketingDataTrust: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/marketing/data-trust${query ? `?${query}` : ''}`)
+  },
+  adminMarketingPrompts: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/marketing/prompts${query ? `?${query}` : ''}`)
   },
   adminMarketingCohorts: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
