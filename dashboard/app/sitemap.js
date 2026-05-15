@@ -1,46 +1,8 @@
 import { getSiteUrl } from '../lib/site-url'
+import { getAllLpSlugs } from '../lib/lp-config.mjs'
 
 const baseUrl = getSiteUrl()
-const LP_ROUTES = [
-  '/espelhar-grupos-whatsapp-sao-paulo',
-  '/espelhar-grupos-whatsapp-rio-de-janeiro',
-  '/espelhar-grupos-whatsapp-belo-horizonte',
-  '/espelhar-grupos-whatsapp-curitiba',
-  '/espelhar-grupos-whatsapp-porto-alegre',
-  '/espelhar-grupos-whatsapp-recife',
-  '/espelhar-grupos-whatsapp-salvador',
-  '/espelhar-grupos-whatsapp-fortaleza',
-  '/espelhar-grupos-whatsapp-brasilia',
-  '/espelhar-grupos-whatsapp-goiania',
-  '/espelhar-grupos-whatsapp-campinas',
-  '/espelhar-grupos-whatsapp-manaus',
-  '/espelhar-grupos-whatsapp-belem',
-  '/espelhar-grupos-whatsapp-florianopolis',
-  '/espelhar-grupos-whatsapp-vitoria',
-  '/automatizar-divulgacao-em-grupos-whatsapp',
-  '/escalar-grupos-ofertas-sem-equipe',
-  '/postar-em-varios-grupos-whatsapp-ao-mesmo-tempo',
-  '/padronizar-divulgacao-afiliado-whatsapp',
-  '/aumentar-conversao-em-grupos-de-cupons',
-  '/consistencia-postagens-em-grupos',
-  '/reduzir-tempo-operacional-em-grupos-whatsapp',
-  '/organizar-calendario-de-ofertas-no-whatsapp',
-  '/melhorar-alcance-em-grupos-de-promocoes',
-  '/rastrear-resultados-de-divulgacao-em-grupos',
-  '/bot-ofertas-supermercado-whatsapp',
-  '/bot-ofertas-farmacia-whatsapp',
-  '/bot-ofertas-eletronicos-whatsapp',
-  '/bot-ofertas-autopecas-whatsapp',
-  '/bot-ofertas-cursos-whatsapp',
-  '/bot-ofertas-infoprodutos-whatsapp',
-  '/bot-ofertas-moda-whatsapp',
-  '/bot-ofertas-beleza-whatsapp',
-  '/bot-ofertas-pet-shop-whatsapp',
-  '/bot-ofertas-turismo-whatsapp',
-  '/bot-ofertas-afiliados-whatsapp',
-  '/bot-ofertas-restaurantes-whatsapp',
-  '/bot-ofertas-marketplace-whatsapp',
-]
+const LP_ROUTES = getAllLpSlugs().map((slug) => `/${slug}`)
 
 const CORE_ROUTES = ['/', '/llms.txt', '/pricing.md', '/termos', '/privacidade', '/quem-somos', '/suporte', '/promo-vip-7dias']
 const CONTENT_ROUTES = [
