@@ -1,4 +1,4 @@
-# Lote extra — Leads com perfis do Instagram — wabot
+# Lote extra — Leads com perfis do Instagram — BOTinho
 
 Data: 2026-05-11
 Owner: Growth/Parcerias

@@ -53,7 +53,7 @@
 - LinkedIn: “Infoproduto converte melhor quando promessa, prova e link monetizado estão alinhados antes da escala.”
 - Instagram: “Sem link certo, não tem comissão. Sem copy clara, não tem clique.”
 - URL sugerida com UTM:
-  `http://espelhagrupos.com.br/bot-ofertas-infoprodutos-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-wabot&utm_content=case-operacao`
+  `http://espelhagrupos.com.br/bot-ofertas-infoprodutos-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-botinho&utm_content=case-operacao`
 
 ## Validações locais
 

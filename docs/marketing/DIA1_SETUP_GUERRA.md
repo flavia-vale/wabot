@@ -1,4 +1,4 @@
-# Dia 1 — Setup de guerra (fundação) — wabot
+# Dia 1 — Setup de guerra (fundação) — BOTinho
 
 Data: 2026-05-10
 Owner: Growth/Marketing
@@ -6,14 +6,14 @@ Owner: Growth/Marketing
 ## 1) Documento “Oferta + Mensagem”
 
 ### Oferta de lançamento (proposta oficial)
-- **Oferta principal:** Trial guiado de 7 dias do wabot.
+- **Oferta principal:** Trial guiado de 7 dias do BOTinho.
 - **Bônus onboarding:** sessão de setup assistido (30 minutos) + 3 templates prontos de operação.
 - **Garantia operacional:** acompanhamento de ativação para alcançar o primeiro espelhamento em até 15 minutos após setup.
 - **CTA padrão:** "Entrar no Trial Guiado".
 
 ### Mensagem central (positioning)
 - **Headline:** "Espelhe grupos com consistência e escale sua operação sem trabalho manual."
-- **Subheadline:** "O wabot automatiza sua distribuição em grupos e acelera seu resultado com menos esforço operacional."
+- **Subheadline:** "O BOTinho automatiza sua distribuição em grupos e acelera seu resultado com menos esforço operacional."
 - **Pilares de valor:**
   1. Economia de tempo
   2. Escala sem equipe adicional
@@ -69,22 +69,22 @@ Owner: Growth/Marketing
 - Meta Ads:
   - `utm_source=meta`
   - `utm_medium=paid-social`
-  - `utm_campaign=launch-wabot-2026q2`
+  - `utm_campaign=launch-botinho-2026q2`
   - `utm_content=video-tempo-a`
 - Google Ads:
   - `utm_source=google`
   - `utm_medium=paid-search`
-  - `utm_campaign=launch-wabot-2026q2`
+  - `utm_campaign=launch-botinho-2026q2`
   - `utm_content=kw-espelhar-grupos`
 - Parceiros:
   - `utm_source=parceiro-nome`
   - `utm_medium=affiliate`
-  - `utm_campaign=launch-wabot-2026q2`
+  - `utm_campaign=launch-botinho-2026q2`
   - `utm_content=convite-direto`
 - Orgânico social:
   - `utm_source=instagram`
   - `utm_medium=social-organic`
-  - `utm_campaign=prelaunch-wabot`
+  - `utm_campaign=prelaunch-botinho`
   - `utm_content=carrossel-dor-escala`
 
 ---

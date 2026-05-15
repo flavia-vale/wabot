@@ -1,10 +1,10 @@
-# Dia 9 — Produção IA de LPs (Lote 2) — wabot
+# Dia 9 — Produção IA de LPs (Lote 2) — BOTinho
 
 Data: 2026-05-13
 Owner: Growth/SEO
 
 ## Plano recuperado antes da produção
-- **Oferta principal:** trial guiado de 7 dias do wabot.
+- **Oferta principal:** trial guiado de 7 dias do BOTinho.
 - **CTA padrão das LPs programáticas:** Entrar na Lista VIP.
 - **Mensagem central:** espelhar grupos com consistência, escalar operação e reduzir trabalho manual.
 - **Template usado:** Template A — LP por Cidade, conforme arquitetura de SEO programático.

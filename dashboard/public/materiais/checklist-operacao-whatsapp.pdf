@@ -6,88 +6,89 @@ endobj
 << /Type /Pages /Kids [3 0 R] /Count 1 >>
 endobj
 3 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
 endobj
 4 0 obj
 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
 endobj
 5 0 obj
-<< /Length 1535 >>
+<< /Length 1353 >>
 stream
 BT
-/F1 18 Tf
-72 760 Td
+/F1 12 Tf
+72 780 Td
+14 TL
+/F1 16 Tf
 (Checklist de operacao para divulgar ofertas no WhatsApp) Tj
-/F1 11 Tf
-0 -28 Td
+/F1 12 Tf
+T*
 () Tj
-0 -18 Td
-(Use antes de escalar campanhas de ofertas, cupons ou links de afiliado em grupos.) Tj
-0 -18 Td
+T*
+(Use este roteiro antes de escalar campanhas de ofertas, cupons ou links de afiliado em grupos.) Tj
+T*
 () Tj
-0 -18 Td
+T*
 (1. Oferta) Tj
-0 -18 Td
+T*
 ([ ] Preco e estoque conferidos) Tj
-0 -18 Td
+T*
 ([ ] Cupom ou beneficio validado) Tj
-0 -18 Td
+T*
 ([ ] Prazo de validade claro) Tj
-0 -18 Td
+T*
 ([ ] Categoria e publico definidos) Tj
-0 -18 Td
+T*
 () Tj
-0 -18 Td
+T*
 (2. Link) Tj
-0 -18 Td
+T*
 ([ ] URL final abre corretamente) Tj
-0 -18 Td
+T*
 ([ ] Parametros de afiliado presentes) Tj
-0 -18 Td
+T*
 ([ ] Link encurtado ou limpo quando necessario) Tj
-0 -18 Td
+T*
 ([ ] Destino testado no celular) Tj
-0 -18 Td
+T*
 () Tj
-0 -18 Td
+T*
 (3. Copy) Tj
-0 -18 Td
+T*
 ([ ] Headline curta com beneficio) Tj
-0 -18 Td
+T*
 ([ ] Preco/condicao visivel) Tj
-0 -18 Td
+T*
 ([ ] Urgencia sem promessa falsa) Tj
-0 -18 Td
+T*
 ([ ] CTA direto para clicar ou salvar) Tj
-0 -18 Td
+T*
 () Tj
-0 -18 Td
+T*
 (4. Grupos) Tj
-0 -18 Td
+T*
 ([ ] Origem e destino identificados) Tj
-0 -18 Td
+T*
 ([ ] Segmento/cidade/nicho registrados) Tj
-0 -18 Td
+T*
 ([ ] Intervalo minimo entre envios definido) Tj
-0 -18 Td
+T*
 ([ ] Grupos sensiveis fora de disparos repetidos) Tj
-0 -18 Td
+T*
 () Tj
-0 -18 Td
+T*
 (5. Metricas) Tj
-0 -18 Td
+T*
 ([ ] UTM ou tag da campanha preenchida) Tj
-0 -18 Td
+T*
 ([ ] Responsavel pelo monitoramento definido) Tj
-0 -18 Td
+T*
 ([ ] Falhas de envio revisadas) Tj
-0 -18 Td
+T*
 ([ ] Aprendizados registrados para o proximo disparo) Tj
-0 -18 Td
+T*
 () Tj
-0 -18 Td
-(Proximo passo: entrar na lista VIP do wabot e configurar o primeiro espelhamento guiado.) Tj
-0 -18 Td
+T*
+(Proximo passo: entrar na lista VIP do BOTinho e configurar o primeiro espelhamento guiado.) Tj
 ET
 endstream
 endobj
@@ -102,5 +103,5 @@ xref
 trailer
 << /Size 6 /Root 1 0 R >>
 startxref
-1898
+1716
 %%EOF
