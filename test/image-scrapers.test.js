@@ -1,10 +1,16 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 
 import { fetchImageBuffer, fetchProductImage } from '../src/converters/imageScrapers.js'
 
-async function imageBytes({ width = 256, height = 256, color = '#ff0000' } = {}) {
+const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures')
+const readFixture = (name) => fs.readFileSync(path.join(fixturesDir, name), 'utf-8')
+
+async function imageBytes({ width = 1200, height = 1200, color = '#ff0000' } = {}) {
   return sharp({
     create: {
       width,
@@ -50,7 +56,7 @@ test('fetchProductImage resolve imagem da Amazon via data-a-dynamic-image quando
 test('fetchImageBuffer promove URL pequena da Amazon para variante oficial em alta resolucao', async (t) => {
   const originalFetch = globalThis.fetch
   const calls = []
-  const valid = await imageBytes({ color: '#1f7a1f' })
+  const valid = await imageBytes({ width: 1200, height: 1200, color: '#1f7a1f' })
   t.after(() => { globalThis.fetch = originalFetch })
 
   globalThis.fetch = async (url) => {
@@ -68,7 +74,7 @@ test('fetchImageBuffer rejeita placeholder pequeno da Amazon e tenta proxima var
   const originalFetch = globalThis.fetch
   const calls = []
   const tiny = await imageBytes({ width: 40, height: 40, color: '#ffffff' })
-  const valid = await imageBytes({ color: '#0044cc' })
+  const valid = await imageBytes({ width: 1500, height: 1500, color: '#0044cc' })
   t.after(() => { globalThis.fetch = originalFetch })
 
   globalThis.fetch = async (url) => {
@@ -86,10 +92,94 @@ test('fetchImageBuffer rejeita placeholder pequeno da Amazon e tenta proxima var
   ])
 })
 
+test('fetchImageBuffer prefere variante hi-res ≥800px e descarta versão pequena como fallback', async (t) => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  const small = await imageBytes({ width: 500, height: 500, color: '#888' })
+  const hires = await imageBytes({ width: 1500, height: 1500, color: '#0044cc' })
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  globalThis.fetch = async (url) => {
+    const urlStr = String(url)
+    calls.push(urlStr)
+    // _AC_SL1500_ devolve 500px (CDN trapaceando); _SL1500_ devolve hi-res real.
+    return imageResponse(urlStr.includes('_AC_SL1500_') ? small : hires, urlStr)
+  }
+
+  const image = await fetchImageBuffer('https://m.media-amazon.com/images/I/91-produto.jpg', 'https://www.amazon.com.br/dp/B0PROD12345')
+
+  assert.equal(image?.width, 1500, `esperava hi-res 1500px, veio ${image?.width}px`)
+  assert.equal(image?.height, 1500)
+  assert.ok(calls.length >= 2, `só tentou ${calls.length} candidato(s)`)
+})
+
+test('extractAmazonImageFromHtml e fetchImageBuffer recuperam imagem limpa quando og:image vem com badge de oferta (fixture real)', async (t) => {
+  const originalFetch = globalThis.fetch
+  const badgedHtml = readFixture('amazon-badged-og-image.html')
+  const hires = await imageBytes({ width: 1500, height: 1500, color: '#ee9900' })
+  const calls = []
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  globalThis.fetch = async (url) => {
+    const urlStr = String(url)
+    calls.push(urlStr)
+    if (urlStr.startsWith('https://www.amazon.com.br/dp/')) return htmlResponse(badgedHtml, urlStr)
+    if (urlStr.includes('amazon-adsystem.com')) return new Response('', { status: 404 })
+    return imageResponse(hires, urlStr)
+  }
+
+  const productUrl = 'https://www.amazon.com.br/dp/B09VQ39F41'
+  const image = await fetchProductImage('amazon', productUrl, {})
+  assert.ok(image, 'nenhuma imagem foi extraída do HTML da Amazon')
+  assert.match(image, /\/images\/I\/[A-Za-z0-9]+/, `URL inesperada: ${image}`)
+
+  const downloaded = await fetchImageBuffer(image, productUrl)
+  assert.ok(downloaded, 'fetchImageBuffer não baixou nada para a Amazon')
+  assert.ok(
+    Math.max(downloaded.width, downloaded.height) >= 800,
+    `esperava ≥800px no maior eixo, veio ${downloaded.width}x${downloaded.height}`,
+  )
+  const firstImageCall = calls.find((u) => u.includes('m.media-amazon.com'))
+  assert.doesNotMatch(firstImageCall || '', /_PIlimited-time-deal|_BO\d|_ZJ/, `tentou baixar URL com badge: ${firstImageCall}`)
+})
+
+test('fetchProductImage da Amazon recupera data-a-dynamic-image mesmo quando o HTML excede o teto de leitura', async (t) => {
+  const originalFetch = globalThis.fetch
+  // HTML real do produto, truncado em 340KB (data-a-dynamic-image está em ~320KB).
+  // No código antigo IMAGE_HTML_MAX_BYTES=512KB já cortava a página de 1.4MB
+  // ANTES desse offset; agora o teto é 2MB e o leitor devolve o que coletou.
+  const html = readFixture('amazon-chrome-dynamic.html')
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  globalThis.fetch = async (url) => {
+    if (String(url).startsWith('https://www.amazon.com.br/dp/')) return htmlResponse(html, String(url))
+    return new Response('', { status: 404 })
+  }
+
+  const image = await fetchProductImage('amazon', 'https://www.amazon.com.br/dp/B09VQ39F41', {})
+  assert.match(image || '', /\/images\/I\/[A-Za-z0-9]+/, `extração falhou: ${image}`)
+})
+
+test('Shopee SPA shell (fixture real, FB UA) não tem og:image e cai no fallback de creds', async (t) => {
+  const originalFetch = globalThis.fetch
+  const spaShell = readFixture('shopee-spa-shell.html')
+  let credsFallbackCalled = false
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  globalThis.fetch = async (url) => htmlResponse(spaShell, String(url))
+
+  // Sem creds, sem og:image no SSR, sem API pública — tem que devolver null
+  // sem travar. O caminho real em produção é a API de afiliado em shopee.js
+  // (creds), que é independente desse fluxo.
+  const image = await fetchProductImage('shopee', 'https://shopee.com.br/produto-i.88201679.22667077055', {})
+  assert.equal(image, null, `Shopee sem creds deveria devolver null, veio ${image}`)
+  assert.equal(credsFallbackCalled, false)
+})
+
 test('fetchImageBuffer troca thumbnail _tn.webp da Shopee pela imagem maior antes de baixar', async (t) => {
   const originalFetch = globalThis.fetch
   const calls = []
-  const valid = await imageBytes({ color: '#ee4d2d' })
+  const valid = await imageBytes({ width: 1200, height: 1200, color: '#ee4d2d' })
   t.after(() => { globalThis.fetch = originalFetch })
 
   globalThis.fetch = async (url) => {
@@ -106,7 +196,7 @@ test('fetchImageBuffer troca thumbnail _tn.webp da Shopee pela imagem maior ante
 test('fetchImageBuffer remove query de resize da Shopee antes de baixar', async (t) => {
   const originalFetch = globalThis.fetch
   const calls = []
-  const valid = await imageBytes({ color: '#ee4d2d' })
+  const valid = await imageBytes({ width: 1200, height: 1200, color: '#ee4d2d' })
   t.after(() => { globalThis.fetch = originalFetch })
 
   globalThis.fetch = async (url) => {
@@ -123,7 +213,7 @@ test('fetchImageBuffer remove query de resize da Shopee antes de baixar', async 
 test('fetchImageBuffer alterna entre os CDNs cf.shopee.com.br e susercontent.com quando o primeiro falha', async (t) => {
   const originalFetch = globalThis.fetch
   const calls = []
-  const valid = await imageBytes({ color: '#ee4d2d' })
+  const valid = await imageBytes({ width: 1200, height: 1200, color: '#ee4d2d' })
   t.after(() => { globalThis.fetch = originalFetch })
 
   globalThis.fetch = async (url) => {

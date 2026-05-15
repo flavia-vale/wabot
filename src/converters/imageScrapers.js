@@ -11,8 +11,17 @@ const TWITTER_IMAGE_RE = [
   /<meta[^>]+content=["']([^"']+)["'][^>]+(?:name|property)=["']twitter:image(?::src)?["']/i,
 ]
 const AMAZON_DYNAMIC_IMAGE_RE = /data-a-dynamic-image=["']([^"']+)["']/i
-const AMAZON_INLINE_IMAGE_RE = /\"(?:hiRes|large)\"\s*:\s*\"(https?:\\\/\\\/[^\"]+)\"/gi
+// Amazon embute as URLs em duas formas no HTML: como JSON inline com slashes
+// escapadas (`https:\/\/`) e como atributos HTML com slashes normais. A regex
+// antiga só pegava a forma escapada — em produção, a página atual da Amazon BR
+// vem com slashes plain e o match nunca acontecia, derrubando a extração para
+// og:image (que vem decorado com badges).
+const AMAZON_INLINE_IMAGE_RE = /"(?:hiRes|large|mainUrl)"\s*:\s*"(https?:(?:\\\/\\\/|\/\/)[^"\\]+)"/gi
 const AMAZON_ATTR_IMAGE_RE = /(?:data-old-hires|data-a-hires|src)=['"](https?:\/\/[^'"]*media-amazon\.com[^'"]+)['"]/gi
+// /images/I/<ID>.<ext> seguido opcionalmente por tokens de overlay
+// (`_BO`, `_UF`, `_SR`, `_PI*`, `_ZJ*`, `_QL*`, `_AC_SY*`, etc). Usado para
+// recuperar o ID base e gerar variantes de alta resolução.
+const AMAZON_IMAGE_ID_RE = /\/images\/I\/([A-Za-z0-9+\-]+)/
 const AMAZON_MEDIA_HOST_RE = /(^|\.)media-amazon\.com$|(^|\.)ssl-images-amazon\.com$/
 // Imagens reais de produto da Amazon ficam em /images/I/. Já /images/G/ é
 // usado para logos, banners, ícones de navegação e placeholders — quando a
@@ -27,10 +36,17 @@ const IMAGE_FETCH_TIMEOUT_MS = Number(process.env.IMAGE_FETCH_TIMEOUT_MS) || 2_5
 // Amazon e Shopee podem demorar 3-5s para responder — timeout separado
 // para não cortar o HTML antes de chegarmos ao og:image do produto.
 const IMAGE_HTML_FETCH_TIMEOUT_MS = Number(process.env.IMAGE_HTML_FETCH_TIMEOUT_MS) || 7_000
-const IMAGE_HTML_MAX_BYTES = Number(process.env.IMAGE_HTML_MAX_BYTES) || 512 * 1024
+// HTML da Amazon BR hoje passa de 1.3MB; com o teto antigo de 512KB o
+// `readLimitedText` cortava ANTES do meta com a imagem (offset ~320KB) e
+// retornava null, descartando o que já havia sido coletado.
+const IMAGE_HTML_MAX_BYTES = Number(process.env.IMAGE_HTML_MAX_BYTES) || 2 * 1024 * 1024
 const IMAGE_BUFFER_TIMEOUT_MS = Number(process.env.IMAGE_BUFFER_TIMEOUT_MS) || 5_000
 const IMAGE_BUFFER_MAX_BYTES = Number(process.env.IMAGE_BUFFER_MAX_BYTES) || 5 * 1024 * 1024
 const IMAGE_MIN_DIMENSION_PX = Number(process.env.IMAGE_MIN_DIMENSION_PX) || 120
+// Resolução mínima "hi-res" para link preview do WhatsApp em cards grandes.
+// Marketplaces costumam ter variantes em 300/500/800/1500 — qualquer coisa
+// abaixo de 800px no maior eixo aparece pixelizada no preview do WA mobile.
+const IMAGE_HIRES_MIN_DIMENSION_PX = Number(process.env.IMAGE_HIRES_MIN_DIMENSION_PX) || 800
 
 // User-Agent de browser real: Shopee e outros sites bloqueiam UAs de bot e
 // devolvem HTML sem og:image, causando "sem imagem" nos anúncios.
@@ -110,11 +126,14 @@ async function readLimitedText(res) {
     const { done, value } = await reader.read()
     if (done) break
     received += value.byteLength
-    if (received > IMAGE_HTML_MAX_BYTES) {
-      await reader.cancel().catch(() => {})
-      return null
-    }
     chunks.push(value)
+    if (received > IMAGE_HTML_MAX_BYTES) {
+      // Para Amazon o meta og:image fica nos primeiros ~50KB e o
+      // data-a-dynamic-image em ~320KB. Em vez de descartar tudo ao atingir
+      // o teto, paramos a leitura e devolvemos o que já temos para extração.
+      await reader.cancel().catch(() => {})
+      break
+    }
   }
 
   const body = new Uint8Array(received)
@@ -484,29 +503,35 @@ function uniqueImageUrls(urls) {
 }
 
 function buildAmazonImageUrlCandidates(rawUrl) {
-  const candidates = []
   try {
     const u = new URL(rawUrl)
-    const match = u.pathname.match(/^(.*?)(?:\._[^.\/]+_)?(\.[a-z0-9]+)$/i)
-    if (!match) return [rawUrl]
-
-    const [, base, ext] = match
-    const highResSuffixes = ['._AC_SL1500_', '._SL1500_', '._AC_SY1200_', '._AC_UL1500_']
-    for (const suffix of highResSuffixes) {
-      const variant = new URL(rawUrl)
-      variant.pathname = `${base}${suffix}${ext}`
-      candidates.push(variant.toString())
+    // O ID do produto é o primeiro segmento após /images/I/. Tudo depois
+    // (`.jpg`, `._AC_SY450_`, badges `_BO/_UF/_SR/_PI/_ZJ/_QL`, ...) é
+    // processamento do CDN e pode ser substituído à vontade.
+    const idMatch = u.pathname.match(AMAZON_IMAGE_ID_RE)
+    if (!idMatch) return [rawUrl]
+    const id = idMatch[1]
+    const baseDir = u.pathname.slice(0, u.pathname.indexOf('/images/I/') + '/images/I/'.length)
+    const build = (suffixPath) => {
+      const v = new URL(rawUrl)
+      v.pathname = baseDir + id + suffixPath
+      v.search = ''
+      return v.toString()
     }
-
-    candidates.push(rawUrl)
-
-    const original = new URL(rawUrl)
-    original.pathname = `${base}${ext}`
-    candidates.push(original.toString())
+    // Ordem importa: primeiro as variantes de alta resolução, depois a forma
+    // crua (`.jpg`) que alguns ASINs servem com placeholder branco, e por
+    // último a URL original com possíveis badges/decorações.
+    return uniqueImageUrls([
+      build('._AC_SL1500_.jpg'),
+      build('._SL1500_.jpg'),
+      build('._AC_UL1500_.jpg'),
+      build('._AC_SX1500_.jpg'),
+      build('.jpg'),
+      rawUrl,
+    ])
   } catch {
-    candidates.push(rawUrl)
+    return [rawUrl]
   }
-  return uniqueImageUrls(candidates)
 }
 
 function buildShopeeImageUrlCandidates(rawUrl) {
@@ -518,16 +543,23 @@ function buildShopeeImageUrlCandidates(rawUrl) {
     withoutQuery.search = ''
     if (withoutQuery.toString() !== rawUrl) candidates.unshift(withoutQuery.toString())
 
-    // `_tn`, `_xxs`, `_sm`, `_xs` são variantes reduzidas do CDN — sempre
-    // remova para chegar no original. `.webp` no fim é só a extensão do
-    // formato e mantemos como está (sharp decodifica WebP sem problema).
+    // `_tn`, `_xxs`, `_sm`, `_xs`, `_md`, `_lg` são variantes reduzidas do
+    // CDN — sempre remova para chegar no original. `.webp` no fim é só a
+    // extensão do formato e mantemos como está (sharp decodifica WebP).
     const withoutThumbSuffix = new URL(withoutQuery.toString())
-    withoutThumbSuffix.pathname = withoutThumbSuffix.pathname.replace(/_(?:tn|xxs|xs|sm)(?=(?:\.[a-z0-9]+)?$)/i, '')
+    withoutThumbSuffix.pathname = withoutThumbSuffix.pathname.replace(/_(?:tn|xxs|xs|sm|md|lg)(?=(?:\.[a-z0-9]+)?$)/i, '')
     if (withoutThumbSuffix.pathname !== u.pathname) candidates.unshift(withoutThumbSuffix.toString())
 
-    const withoutFormatPath = new URL(withoutThumbSuffix.toString())
+    // Sufixo `@resize_w320[_n[lh]]` é o novo formato de processamento do CDN
+    // Shopee (estilo Imgix) — também só serve uma versão pequena. Removendo
+    // chegamos à imagem original.
+    const withoutResize = new URL(withoutThumbSuffix.toString())
+    withoutResize.pathname = withoutResize.pathname.replace(/@resize_w\d+(?:_n[lh])?/i, '')
+    if (withoutResize.pathname !== withoutThumbSuffix.pathname) candidates.unshift(withoutResize.toString())
+
+    const withoutFormatPath = new URL(withoutResize.toString())
     withoutFormatPath.pathname = withoutFormatPath.pathname.replace(/\/(?:webp|jpeg|jpg|png)(?=\/|$)/i, '')
-    if (withoutFormatPath.pathname !== withoutThumbSuffix.pathname) candidates.unshift(withoutFormatPath.toString())
+    if (withoutFormatPath.pathname !== withoutResize.pathname) candidates.unshift(withoutFormatPath.toString())
 
     // Shopee distribui as mesmas imagens em dois CDNs: `cf.shopee.com.br` e
     // `down-br.img.susercontent.com`. Quando um responde com placeholder
@@ -581,17 +613,19 @@ async function validateDownloadedImage(buf) {
   const mime = detectImageMime(buf)
   if (!mime) return null
 
+  let width = 0
+  let height = 0
   try {
-    const img = sharp(buf, { failOn: 'none' })
-    const meta = await img.metadata()
+    const meta = await sharp(buf, { failOn: 'none' }).metadata()
     if (!meta?.width || !meta?.height) return null
     if (meta.width < IMAGE_MIN_DIMENSION_PX || meta.height < IMAGE_MIN_DIMENSION_PX) return null
-
+    width = meta.width
+    height = meta.height
   } catch {
     return null
   }
 
-  return { buffer: buf, mimetype: mime }
+  return { buffer: buf, mimetype: mime, width, height }
 }
 
 async function fetchImageBufferRaw(imageUrl, refererUrl) {
@@ -640,9 +674,19 @@ async function fetchImageBufferRaw(imageUrl, refererUrl) {
 
 export async function fetchImageBuffer(imageUrlRaw, refererUrl) {
   if (!imageUrlRaw) return null
+  let fallback = null
   for (const candidate of buildImageUrlCandidates(imageUrlRaw)) {
     const image = await fetchImageBufferRaw(candidate, refererUrl)
-    if (image) return image
+    if (!image) continue
+    // Marketplaces servem múltiplas variantes da mesma imagem; preferimos a
+    // primeira que atinja resolução hi-res (≥800px no maior eixo) para o
+    // preview do WhatsApp não exibir versão borrada. Guardamos a melhor
+    // variante "pequena" como fallback caso nenhuma hi-res esteja disponível.
+    const largestAxis = Math.max(image.width || 0, image.height || 0)
+    if (largestAxis >= IMAGE_HIRES_MIN_DIMENSION_PX) return image
+    if (!fallback || largestAxis > Math.max(fallback.width || 0, fallback.height || 0)) {
+      fallback = image
+    }
   }
-  return null
+  return fallback
 }
