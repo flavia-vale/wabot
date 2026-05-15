@@ -32,10 +32,13 @@ const LP_ROUTES = [
   '/bot-ofertas-eletronicos-whatsapp',
   '/bot-ofertas-moda-whatsapp',
   '/bot-ofertas-beleza-whatsapp',
+  '/bot-ofertas-pet-shop-whatsapp',
+  '/bot-ofertas-afiliados-whatsapp',
 ]
 
 const CORE_ROUTES = ['/', '/termos', '/privacidade', '/quem-somos', '/suporte', '/promo-vip-7dias']
 const CONTENT_ROUTES = [
+  '/conteudos',
   '/blog/como-escalar-grupos-sem-operacao-manual',
   '/blog/checklist-padronizar-divulgacao-whatsapp',
   '/materiais/checklist-operacao-whatsapp',
