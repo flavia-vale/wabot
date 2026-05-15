@@ -5,6 +5,7 @@ import { getSiteUrl } from '@/lib/site-url'
 export const metadata = {
   title: 'Suporte | BOTinho',
   description: 'Canais de suporte e orientações iniciais para usar o BOTinho.',
+  alternates: { canonical: '/suporte' },
 }
 
 const faqs = [

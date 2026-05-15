@@ -5,7 +5,7 @@ import { EDITORIAL_DATES } from '../lib/editorial-content'
 const baseUrl = getSiteUrl()
 const LP_ROUTES = getAllLpSlugs().map((slug) => `/${slug}`)
 
-const CORE_ROUTES = ['/', '/llms.txt', '/pricing.md', '/termos', '/privacidade', '/quem-somos', '/suporte', '/promo-vip-7dias']
+const CORE_ROUTES = ['/', '/llms.txt', '/pricing.md', '/termos', '/privacidade', '/quem-somos', '/suporte']
 const CONTENT_ROUTES = [
   '/conteudos',
   '/blog/como-escalar-grupos-sem-operacao-manual',

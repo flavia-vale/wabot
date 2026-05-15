@@ -4,6 +4,7 @@ import { PublicPage } from '@/components/PublicShell'
 export const metadata = {
   title: 'Termos de Uso | BOTinho',
   description: 'Termos mínimos para uso do BOTinho, bot conversor para afiliados no WhatsApp.',
+  alternates: { canonical: '/termos' },
 }
 
 const sections = [
