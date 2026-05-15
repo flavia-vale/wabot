@@ -82,8 +82,8 @@ function sendError(reply, statusCode, code, message) {
 }
 
 const DEFAULT_PLANS = {
-  basic: { title: 'BOTinho Basic - acesso por 30 dias', price: 1 },
-  pro:   { title: 'BOTinho Pro - acesso por 30 dias',   price: 2 },
+  basic: { title: 'BOTinho Basic - acesso por 30 dias', price: 39 },
+  pro:   { title: 'BOTinho Pro - acesso por 30 dias',   price: 69 },
 }
 
 function parseCurrencyAmount(value) {

@@ -19,7 +19,7 @@ function LoginContent() {
   const searchParams = useSearchParams()
   const ref = searchParams.get('ref')
   const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(() => searchParams.get('email') || '')
   const [password, setPassword] = useState('')
   const [contactPhone, setContactPhone] = useState('')
   const [isRegister, setIsRegister] = useState(() => searchParams.get('mode') === 'register')
@@ -63,7 +63,7 @@ function LoginContent() {
         mode: isRegister ? 'register' : 'login',
         error_type: mapAuthError(err),
       })
-      setError(err.message)
+      setError(err?.message || 'Não foi possível concluir a autenticação agora.')
     } finally {
       setLoading(false)
     }
@@ -141,7 +141,7 @@ function LoginContent() {
               placeholder="seuemail@exemplo.com"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              required={!isRegister}
+              required
               autoComplete="email"
               className="border bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-400 w-full rounded-lg"
             />
@@ -184,8 +184,8 @@ function LoginContent() {
                 placeholder="Digite sua senha"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                required={!isRegister}
-                minLength={isRegister ? 0 : undefined}
+                required
+                minLength={isRegister ? 8 : undefined}
                 autoComplete={isRegister ? 'new-password' : 'current-password'}
                 className="w-full rounded-lg border bg-white px-3 py-2 pr-24 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-400"
               />
