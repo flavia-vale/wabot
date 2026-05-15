@@ -46,3 +46,45 @@ Ambiente de validação: staging em `http://178.105.54.0:3006`
 - [x] Confirmar que nenhuma página promete integração aprovada com marketplaces, redes de afiliados ou plataformas externas.
 - [x] Confirmar que o CTA está adequado ao estágio de lista VIP/cadastro.
 - [ ] Validar claims sensíveis com responsável humana antes de publicar posts sociais.
+
+## Incremento 2026-05-14 (ativo adicional)
+
+- [ ] Validar `http://178.105.54.0:3006/bot-ofertas-afiliados-whatsapp` (status 200, H1, FAQ visível, CTA).
+- [ ] Confirmar presença em `http://178.105.54.0:3006/sitemap.xml`.
+- [ ] Inspecionar `http://espelhagrupos.com.br/bot-ofertas-afiliados-whatsapp` no Google Search Console após staging aprovado e deploy de produção.
+- [ ] Solicitar indexação da URL nova após inspeção.
+
+## Incremento 2026-05-15 (próximo dia)
+
+- [ ] Validar `http://178.105.54.0:3006/bot-ofertas-pet-shop-whatsapp` (status 200, H1, FAQ, CTA).
+- [ ] Confirmar presença em `http://178.105.54.0:3006/sitemap.xml`.
+- [ ] Inspecionar `http://espelhagrupos.com.br/bot-ofertas-pet-shop-whatsapp` no Google Search Console após staging aprovado e deploy de produção.
+- [ ] Solicitar indexação da URL nova após inspeção.
+
+## Incremento 2026-05-15 (turno 2)
+
+- [ ] Validar `http://178.105.54.0:3006/bot-ofertas-turismo-whatsapp` (status 200, H1, FAQ, CTA).
+- [ ] Confirmar presença em `http://178.105.54.0:3006/sitemap.xml`.
+- [ ] Inspecionar `http://espelhagrupos.com.br/bot-ofertas-turismo-whatsapp` no Google Search Console após staging aprovado e deploy de produção.
+- [ ] Solicitar indexação da URL nova após inspeção.
+
+## Incremento 2026-05-16 (copywriting + nicho autopeças)
+
+- [ ] Validar `http://178.105.54.0:3006/bot-ofertas-autopecas-whatsapp` (status 200, H1, FAQ, CTA).
+- [ ] Confirmar presença em `http://178.105.54.0:3006/sitemap.xml`.
+- [ ] Inspecionar `http://espelhagrupos.com.br/bot-ofertas-autopecas-whatsapp` no Google Search Console após staging aprovado e deploy de produção.
+- [ ] Solicitar indexação da URL nova após inspeção.
+
+## Incremento 2026-05-17 (nicho cursos)
+
+- [ ] Validar `http://178.105.54.0:3006/bot-ofertas-cursos-whatsapp` (status 200, H1, FAQ, CTA).
+- [ ] Confirmar presença em `http://178.105.54.0:3006/sitemap.xml`.
+- [ ] Inspecionar `http://espelhagrupos.com.br/bot-ofertas-cursos-whatsapp` no Google Search Console após staging aprovado e deploy de produção.
+- [ ] Solicitar indexação da URL nova após inspeção.
+
+## Incremento 2026-05-18 (nicho infoprodutos)
+
+- [ ] Validar `http://178.105.54.0:3006/bot-ofertas-infoprodutos-whatsapp` (status 200, H1, FAQ, CTA).
+- [ ] Confirmar presença em `http://178.105.54.0:3006/sitemap.xml`.
+- [ ] Inspecionar `http://espelhagrupos.com.br/bot-ofertas-infoprodutos-whatsapp` no Google Search Console após staging aprovado e deploy de produção.
+- [ ] Solicitar indexação da URL nova após inspeção.

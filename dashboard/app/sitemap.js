@@ -30,8 +30,14 @@ const LP_ROUTES = [
   '/bot-ofertas-supermercado-whatsapp',
   '/bot-ofertas-farmacia-whatsapp',
   '/bot-ofertas-eletronicos-whatsapp',
+  '/bot-ofertas-autopecas-whatsapp',
+  '/bot-ofertas-cursos-whatsapp',
+  '/bot-ofertas-infoprodutos-whatsapp',
   '/bot-ofertas-moda-whatsapp',
   '/bot-ofertas-beleza-whatsapp',
+  '/bot-ofertas-pet-shop-whatsapp',
+  '/bot-ofertas-turismo-whatsapp',
+  '/bot-ofertas-afiliados-whatsapp',
 ]
 
 const CORE_ROUTES = ['/', '/termos', '/privacidade', '/quem-somos', '/suporte', '/promo-vip-7dias']
