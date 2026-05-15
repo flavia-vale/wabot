@@ -35,6 +35,8 @@ BOTinho helps an operator organize WhatsApp source groups and destination groups
 - Privacy: https://espelhagrupos.com.br/privacidade
 - Checklist: https://espelhagrupos.com.br/materiais/checklist-divulgacao-ofertas-grupos-whatsapp
 - Responsible-use methodology: https://espelhagrupos.com.br/metodologia-uso-responsavel-whatsapp
+- Glossary: https://espelhagrupos.com.br/glossario
+- Comparison hub examples: https://espelhagrupos.com.br/alternativas/bot-para-whatsapp-afiliados
 
 ## Main topics covered by the site
 
@@ -45,6 +47,8 @@ BOTinho helps an operator organize WhatsApp source groups and destination groups
 - Padronizar copy, oferta, grupo de destino and UTM.
 - Operação responsável para grupos de cupons e promoções.
 - Metodologia de automação com revisão humana, consentimento e cadência.
+- Comparativos equilibrados entre BOTinho, planilhas e automações genéricas.
+- Glossário de termos para afiliados, UTMs, cadência, espelhamento e anti-spam operacional.
 
 ## Pages suitable for citation
 
@@ -54,6 +58,12 @@ BOTinho helps an operator organize WhatsApp source groups and destination groups
 - https://espelhagrupos.com.br/blog/checklist-padronizar-divulgacao-whatsapp
 - https://espelhagrupos.com.br/materiais/checklist-divulgacao-ofertas-grupos-whatsapp
 - https://espelhagrupos.com.br/metodologia-uso-responsavel-whatsapp
+- https://espelhagrupos.com.br/alternativas/bot-para-whatsapp-afiliados
+- https://espelhagrupos.com.br/botinho-vs-planilha-manual
+- https://espelhagrupos.com.br/botinho-vs-ferramentas-genericas-automacao
+- https://espelhagrupos.com.br/melhores-bots-para-afiliados-whatsapp
+- https://espelhagrupos.com.br/glossario
+- https://espelhagrupos.com.br/estudos-de-caso
 - https://espelhagrupos.com.br/bot-ofertas-marketplace-whatsapp
 - https://espelhagrupos.com.br/bot-ofertas-restaurantes-whatsapp
 
