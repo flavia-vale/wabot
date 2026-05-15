@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildRegisterHref } from '@/lib/marketing-attribution'
@@ -152,9 +153,11 @@ function buildSchema(page) {
 export function OrganicNicheLanding({ pageKey }) {
   const page = pages[pageKey]
   const schemas = buildSchema(page)
+  const trackerRoute = { slug: pageKey, path: page.slug, cluster: 'nichos', intent: page.primaryKeyword, template: 'organic-niche' }
 
   return (
     <PublicShell>
+      <OrganicPageTracker route={trackerRoute} />
       {schemas.map((schema) => (
         <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
       ))}
@@ -164,10 +167,10 @@ export function OrganicNicheLanding({ pageKey }) {
           <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-950 md:text-5xl">{page.h1}</h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-gray-800">{page.directAnswer}</p>
           <div className="mt-6 flex flex-wrap gap-3 text-sm font-bold">
-            <Link href={buildRegisterHref({ source: 'seo', campaign: 'organic-marketing-sprint', content: pageKey })} className="rounded-xl bg-emerald-600 px-4 py-3 text-white hover:bg-emerald-700">
+            <Link href={`/login?mode=register&utm_source=seo&utm_medium=organic&utm_campaign=organic-marketing-sprint&utm_content=${pageKey}`} data-seo-cta="organic-niche-register" className="rounded-xl bg-emerald-600 px-4 py-3 text-white hover:bg-emerald-700">
               Entrar na lista VIP
             </Link>
-            <Link href="/conteudos" className="rounded-xl border border-emerald-200 px-4 py-3 text-emerald-800 hover:bg-emerald-50">
+            <Link href="/conteudos" data-seo-cta="organic-niche-content" className="rounded-xl border border-emerald-200 px-4 py-3 text-emerald-800 hover:bg-emerald-50">
               Ver guias e checklists
             </Link>
           </div>
@@ -218,9 +221,14 @@ export function OrganicNicheLanding({ pageKey }) {
             <h2 className="text-2xl font-black tracking-tight">Links internos</h2>
             <p className="mt-3 text-sm leading-7 text-emerald-50">Continue pelo cluster de automação, afiliados e distribuição em grupos.</p>
             <ul className="mt-5 space-y-3">
+              <li>
+                <Link href="/bot-ofertas-whatsapp" data-seo-cta="organic-niche-parent-hub" className="text-sm font-bold text-emerald-100 underline underline-offset-4 hover:text-white">
+                  Hub: bot de ofertas por nicho
+                </Link>
+              </li>
               {page.internalLinks.map((link) => (
                 <li key={link.href}>
-                  <Link href={link.href} className="text-sm font-bold text-emerald-100 underline underline-offset-4 hover:text-white">
+                  <Link href={link.href} data-seo-cta="organic-niche-internal-link" className="text-sm font-bold text-emerald-100 underline underline-offset-4 hover:text-white">
                     {link.label}
                   </Link>
                 </li>

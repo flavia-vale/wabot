@@ -1,4 +1,5 @@
 import '../app/landing.css'
+import Link from 'next/link'
 import { Hero } from '@/components/landing/Hero'
 import { How } from '@/components/landing/How'
 import { Features } from '@/components/landing/Features'
@@ -8,7 +9,8 @@ import { FAQ } from '@/components/landing/FAQ'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
 import { getSiteUrl } from '@/lib/site-url'
 import { BRAND_NAME, BRAND_SHORT_NAME, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION } from '@/lib/marketing-content'
-import { getLpType } from '@/lib/lp-config.mjs'
+import { getHubSeoRoute, getProgrammaticSeoRoute, getRelatedProgrammaticSeoRoutes } from '@/lib/seo-registry.mjs'
+import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 
 export const LP_CONFIG = {
   'espelhar-grupos-whatsapp-sao-paulo': { title: 'Espelhar grupos WhatsApp em São Paulo | BOTinho', description: 'Automatize sua rotina de ofertas em grupos de São Paulo com o BOTinho e reduza trabalho manual.', uniqueHeadline: 'Operação em São Paulo: volume alto, rotina estável.', uniqueBody: 'Em SP, a disputa por atenção é maior e os grupos giram rápido. O BOTinho ajuda você a manter constância sem perder tempo no copia-e-cola.', uniqueBullets: ['Padronize campanhas em múltiplos bairros e públicos.', 'Evite atrasos nas postagens de ofertas relâmpago.', 'Mantenha frequência diária mesmo em horários de pico.'], faq: [{ q: 'Quanto tempo para ativar em São Paulo?', a: 'Normalmente no mesmo dia: conexão por QR Code, escolha dos grupos e regras básicas.' }, { q: 'Posso separar grupos por bairro?', a: 'Sim. Você pode organizar fontes e destinos por região e tipo de público.' }], howTo: ['Conecte seu WhatsApp de operação e valide os grupos de origem.', 'Defina os grupos de destino e o intervalo ideal para o público paulista.', 'Ative regras por horário para manter consistência nos picos de tráfego.'] },
@@ -87,6 +89,10 @@ const LP_TYPE_THEME = {
   },
 }
 
+function getLpType(slug, cfg) {
+  if (cfg?.lpType) return cfg.lpType
+  return getProgrammaticSeoRoute(slug)?.type ?? 'default'
+}
 
 function getHeroCopy(cfg, lpType) {
   if (lpType === 'city') {
@@ -177,7 +183,10 @@ export function getLpMetadata(slug) {
 
 export function LpTemplate({ slug }) {
   const cfg = LP_CONFIG[slug]
+  const seoRoute = getProgrammaticSeoRoute(slug)
   const lpType = getLpType(slug, cfg)
+  const hubRoute = getHubSeoRoute(seoRoute?.parentPath ?? seoRoute?.cluster)
+  const relatedRoutes = getRelatedProgrammaticSeoRoutes(seoRoute, 3)
   const theme = LP_TYPE_THEME[lpType] ?? LP_TYPE_THEME.default
   const heroCopy = getHeroCopy(cfg, lpType)
   const routineExample = getRoutineExample(slug, cfg, lpType)
@@ -191,6 +200,8 @@ export function LpTemplate({ slug }) {
     applicationCategory: 'BusinessApplication',
     operatingSystem: 'Web',
     description: `${cfg.description} ${PRODUCT_DEFINITION}`,
+    url: `${getSiteUrl()}/${slug}`,
+    mainEntityOfPage: `${getSiteUrl()}/${slug}`,
     image: [`${getSiteUrl()}/botinho-logo.svg`],
     brand: { '@type': 'Brand', name: BRAND_SHORT_NAME },
     offers: DEFAULT_LANDING_PLANS.map((plan) => ({
@@ -208,6 +219,7 @@ export function LpTemplate({ slug }) {
 
   return (
     <div className="landing-root">
+      <OrganicPageTracker route={seoRoute} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(howToJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }} />
@@ -232,16 +244,62 @@ export function LpTemplate({ slug }) {
           </div>
         </div>
       </section>
-
-      <section>
-        <div className="wrap" style={{ marginTop: 24 }}>
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: '24px 28px', boxShadow: 'var(--shadow-soft)' }}>
-            <span className="pill" style={{ marginBottom: 12 }}><span className="dot" />Exemplo único de rotina</span>
-            <h2 style={{ fontSize: 'clamp(24px, 2.4vw, 34px)', lineHeight: 1.15, marginBottom: 10 }}>{routineExample.title}</h2>
-            <p style={{ color: 'var(--ink-soft)', lineHeight: 1.7, marginBottom: 14 }}>{routineExample.body}</p>
-            <ol style={{ margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.7 }}>
-              {routineExample.steps.map((step) => <li key={step}>{step}</li>)}
-            </ol>
+      <section aria-labelledby={`${slug}-roteiro-operacional`}>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 18 }}>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 22, padding: 24, boxShadow: 'var(--shadow-soft)' }}>
+              <span className="pill"><span className="dot" />Roteiro específico</span>
+              <h2 id={`${slug}-roteiro-operacional`} style={{ fontSize: 'clamp(24px, 2.4vw, 34px)', lineHeight: 1.12, margin: '14px 0 12px' }}>Como aplicar neste cenário</h2>
+              <ol style={{ margin: 0, paddingLeft: 20, color: 'var(--ink)', lineHeight: 1.7 }}>
+                {cfg.howTo.map((step) => <li key={step}>{step}</li>)}
+              </ol>
+            </div>
+            <div style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}`, borderRadius: 22, padding: 24, boxShadow: 'var(--shadow-soft)' }}>
+              <span className="pill"><span className="dot" />Critérios de qualidade</span>
+              <h2 style={{ fontSize: 'clamp(24px, 2.4vw, 34px)', lineHeight: 1.12, margin: '14px 0 12px' }}>O que validar antes de escalar</h2>
+              <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.7 }}>
+                {cfg.uniqueBullets.map((bullet) => <li key={`check-${bullet}`}>{bullet}</li>)}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section aria-labelledby={`${slug}-cluster-seo`}>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: '26px 28px', boxShadow: 'var(--shadow-soft)' }}>
+            <span className="pill"><span className="dot" />Hub & próximos passos</span>
+            <h2 id={`${slug}-cluster-seo`} style={{ fontSize: 'clamp(24px, 2.6vw, 36px)', lineHeight: 1.12, margin: '14px 0 12px' }}>Continue pelo cluster certo</h2>
+            <p style={{ color: 'var(--ink-soft)', lineHeight: 1.65, marginBottom: 16 }}>
+              Use a página hub para comparar cenários parecidos e navegue para páginas relacionadas sem depender de URLs soltas.
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+              {hubRoute && (
+                <Link href={hubRoute.path} data-seo-cta="lp-parent-hub" className="btn btn-ghost" style={{ textDecoration: 'none' }}>
+                  Ver hub: {hubRoute.label}
+                </Link>
+              )}
+              {relatedRoutes.map((route) => (
+                <Link key={route.path} href={route.path} data-seo-cta="lp-related-page" className="btn btn-ghost" style={{ textDecoration: 'none' }}>
+                  {route.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+      <section aria-labelledby={`${slug}-faq-especifica`}>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: '28px 28px 22px', boxShadow: 'var(--shadow-soft)' }}>
+            <span className="pill"><span className="dot" />FAQ contextual</span>
+            <h2 id={`${slug}-faq-especifica`} style={{ fontSize: 'clamp(24px, 2.6vw, 36px)', lineHeight: 1.12, margin: '14px 0 16px' }}>Perguntas específicas sobre {cfg.title.replace(' | BOTinho', '')}</h2>
+            <div style={{ display: 'grid', gap: 12 }}>
+              {cfg.faq.map((item) => (
+                <details key={item.q} style={{ border: '1px solid var(--line)', borderRadius: 16, padding: '14px 16px', background: 'color-mix(in oklab, var(--surface) 92%, white)' }}>
+                  <summary style={{ cursor: 'pointer', fontWeight: 800, color: 'var(--ink)' }}>{item.q}</summary>
+                  <p style={{ marginTop: 10, color: 'var(--ink-soft)', lineHeight: 1.65 }}>{item.a}</p>
+                </details>
+              ))}
+            </div>
           </div>
         </div>
       </section>

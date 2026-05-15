@@ -25,7 +25,11 @@ export const ANALYTICS_EVENTS = new Set([
   'payment_failed',
   'first_send_success',
   'send_error',
-  ...PUBLIC_ANALYTICS_EVENTS,
+  'organic_page_view',
+  'organic_cta_click',
+  'lead_magnet_started',
+  'lead_magnet_submitted',
+  'signup_started_from_seo',
 ])
 
 const SENSITIVE_KEY_PATTERN = /(token|secret|password|cookie|credential|csrf|ssid|key|message|text|url|phone|email)/i

@@ -103,10 +103,10 @@ export function Hero({ tone, primaryCtaLabel = 'Conectar meu WhatsApp', eyebrowL
           <h1 style={s.h1}>{headline}</h1>
           <p style={s.sub}>{sub}</p>
           <div style={s.cta} className="landing-hero-cta">
-            <a className="btn btn-accent" href="#planos">
+            <a className="btn btn-accent" href="#planos" data-seo-cta="hero-primary-planos">
               {primaryCtaLabel} <Icon name="arrow" size={16} />
             </a>
-            <a className="btn btn-ghost" href="#como">Ver como funciona</a>
+            <a className="btn btn-ghost" href="#como" data-seo-cta="hero-secondary-como">Ver como funciona</a>
           </div>
           <div style={s.trust} className="landing-trust">
             <div style={s.trustItem} className="landing-trust-item"><Icon name="check" size={16} /> Sem cartão para testar</div>

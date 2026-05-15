@@ -1,5 +1,56 @@
 const DEFAULT_LAST_MODIFIED = '2026-05-15'
 
+const hubRoutes = [
+  {
+    slug: 'espelhar-grupos-whatsapp',
+    path: '/espelhar-grupos-whatsapp',
+    label: 'Espelhar grupos WhatsApp',
+    title: 'Espelhar grupos WhatsApp por cidade e operação regional',
+    description: 'Hub para operações regionais que querem espelhar ofertas em grupos de WhatsApp com cadência, revisão e controle.',
+    type: 'hub',
+    cluster: 'localizacoes',
+    intent: 'espelhar grupos whatsapp',
+    template: 'seo-hub',
+    priority: 0.95,
+    changeFrequency: 'weekly',
+    lastModified: DEFAULT_LAST_MODIFIED,
+    indexable: true,
+    schemaTypes: ['CollectionPage', 'ItemList', 'BreadcrumbList'],
+  },
+  {
+    slug: 'bot-ofertas-whatsapp',
+    path: '/bot-ofertas-whatsapp',
+    label: 'Bot de ofertas WhatsApp',
+    title: 'Bot de ofertas para WhatsApp por nicho',
+    description: 'Hub para nichos que divulgam ofertas no WhatsApp e precisam padronizar campanhas, links e grupos.',
+    type: 'hub',
+    cluster: 'nichos',
+    intent: 'bot de ofertas whatsapp',
+    template: 'seo-hub',
+    priority: 0.95,
+    changeFrequency: 'weekly',
+    lastModified: DEFAULT_LAST_MODIFIED,
+    indexable: true,
+    schemaTypes: ['CollectionPage', 'ItemList', 'BreadcrumbList'],
+  },
+  {
+    slug: 'automacao-whatsapp-afiliados',
+    path: '/automacao-whatsapp-afiliados',
+    label: 'Automação para afiliados',
+    title: 'Automação de WhatsApp para afiliados e grupos de ofertas',
+    description: 'Hub para resolver gargalos de rotina, escala, consistência e rastreamento em grupos de WhatsApp para afiliados.',
+    type: 'hub',
+    cluster: 'dores-operacionais',
+    intent: 'automacao whatsapp afiliados',
+    template: 'seo-hub',
+    priority: 0.95,
+    changeFrequency: 'weekly',
+    lastModified: DEFAULT_LAST_MODIFIED,
+    indexable: true,
+    schemaTypes: ['CollectionPage', 'ItemList', 'BreadcrumbList'],
+  },
+]
+
 const citySlugs = [
   'espelhar-grupos-whatsapp-sao-paulo',
   'espelhar-grupos-whatsapp-rio-de-janeiro',
@@ -45,14 +96,61 @@ const painSlugs = [
   'rastrear-resultados-de-divulgacao-em-grupos',
 ]
 
+const labelBySlug = {
+  'espelhar-grupos-whatsapp-sao-paulo': 'São Paulo',
+  'espelhar-grupos-whatsapp-rio-de-janeiro': 'Rio de Janeiro',
+  'espelhar-grupos-whatsapp-belo-horizonte': 'Belo Horizonte',
+  'espelhar-grupos-whatsapp-curitiba': 'Curitiba',
+  'espelhar-grupos-whatsapp-porto-alegre': 'Porto Alegre',
+  'espelhar-grupos-whatsapp-recife': 'Recife',
+  'espelhar-grupos-whatsapp-salvador': 'Salvador',
+  'espelhar-grupos-whatsapp-fortaleza': 'Fortaleza',
+  'espelhar-grupos-whatsapp-brasilia': 'Brasília',
+  'espelhar-grupos-whatsapp-goiania': 'Goiânia',
+  'espelhar-grupos-whatsapp-campinas': 'Campinas',
+  'espelhar-grupos-whatsapp-manaus': 'Manaus',
+  'espelhar-grupos-whatsapp-belem': 'Belém',
+  'espelhar-grupos-whatsapp-florianopolis': 'Florianópolis',
+  'espelhar-grupos-whatsapp-vitoria': 'Vitória',
+  'bot-ofertas-supermercado-whatsapp': 'Supermercado',
+  'bot-ofertas-farmacia-whatsapp': 'Farmácia',
+  'bot-ofertas-eletronicos-whatsapp': 'Eletrônicos',
+  'bot-ofertas-moda-whatsapp': 'Moda',
+  'bot-ofertas-infoprodutos-whatsapp': 'Infoprodutos',
+  'bot-ofertas-cursos-whatsapp': 'Cursos',
+  'bot-ofertas-autopecas-whatsapp': 'Autopeças',
+  'bot-ofertas-turismo-whatsapp': 'Turismo',
+  'bot-ofertas-pet-shop-whatsapp': 'Pet shop',
+  'bot-ofertas-afiliados-whatsapp': 'Afiliados',
+  'bot-ofertas-beleza-whatsapp': 'Beleza',
+  'automatizar-divulgacao-em-grupos-whatsapp': 'Automatizar divulgação',
+  'escalar-grupos-ofertas-sem-equipe': 'Escalar sem equipe',
+  'postar-em-varios-grupos-whatsapp-ao-mesmo-tempo': 'Postar em vários grupos',
+  'padronizar-divulgacao-afiliado-whatsapp': 'Padronizar divulgação',
+  'aumentar-conversao-em-grupos-de-cupons': 'Aumentar conversão',
+  'consistencia-postagens-em-grupos': 'Consistência de postagens',
+  'reduzir-tempo-operacional-em-grupos-whatsapp': 'Reduzir tempo operacional',
+  'organizar-calendario-de-ofertas-no-whatsapp': 'Calendário de ofertas',
+  'melhorar-alcance-em-grupos-de-promocoes': 'Melhorar alcance',
+  'rastrear-resultados-de-divulgacao-em-grupos': 'Rastrear resultados',
+}
+
+const parentPathByType = {
+  city: '/espelhar-grupos-whatsapp',
+  niche: '/bot-ofertas-whatsapp',
+  pain: '/automacao-whatsapp-afiliados',
+}
+
 const organicNicheRoutes = [
   {
     slug: 'bot-ofertas-restaurantes-whatsapp',
     path: '/bot-ofertas-restaurantes-whatsapp',
+    label: 'Restaurantes',
     type: 'niche',
     cluster: 'nichos',
     intent: 'bot ofertas restaurantes whatsapp',
     template: 'organic-niche',
+    parentPath: '/bot-ofertas-whatsapp',
     priority: 0.9,
     changeFrequency: 'weekly',
     lastModified: DEFAULT_LAST_MODIFIED,
@@ -62,10 +160,12 @@ const organicNicheRoutes = [
   {
     slug: 'bot-ofertas-marketplace-whatsapp',
     path: '/bot-ofertas-marketplace-whatsapp',
+    label: 'Marketplaces',
     type: 'niche',
     cluster: 'nichos',
     intent: 'bot ofertas marketplace whatsapp',
     template: 'organic-niche',
+    parentPath: '/bot-ofertas-whatsapp',
     priority: 0.9,
     changeFrequency: 'weekly',
     lastModified: DEFAULT_LAST_MODIFIED,
@@ -90,10 +190,12 @@ function buildProgrammaticRoute(slug, type) {
   return {
     slug,
     path: `/${slug}`,
+    label: labelBySlug[slug] ?? slug,
     type,
     cluster: clusterByType[type],
     intent: intentByType[type],
     template: 'programmatic-lp',
+    parentPath: parentPathByType[type],
     priority: 0.9,
     changeFrequency: 'weekly',
     lastModified: DEFAULT_LAST_MODIFIED,
@@ -101,6 +203,8 @@ function buildProgrammaticRoute(slug, type) {
     schemaTypes: ['FAQPage', 'HowTo', 'SoftwareApplication', 'BreadcrumbList'],
   }
 }
+
+export const HUB_SEO_ROUTES = hubRoutes
 
 export const PROGRAMMATIC_SEO_ROUTES = [
   ...citySlugs.map((slug) => buildProgrammaticRoute(slug, 'city')),
@@ -121,6 +225,7 @@ export const CORE_SEO_ROUTES = [
 
 export const CONTENT_SEO_ROUTES = [
   { path: '/conteudos', template: 'content-hub', priority: 0.8, changeFrequency: 'weekly', lastModified: '2026-05-15', indexable: true },
+  { path: '/benchmarks/operacao-grupos-ofertas-whatsapp', template: 'benchmark', priority: 0.8, changeFrequency: 'monthly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   { path: '/blog/como-escalar-grupos-sem-operacao-manual', template: 'article', priority: 0.8, changeFrequency: 'weekly', lastModified: '2026-05-11', indexable: true },
   { path: '/blog/checklist-padronizar-divulgacao-whatsapp', template: 'article', priority: 0.8, changeFrequency: 'weekly', lastModified: '2026-05-11', indexable: true },
   { path: '/materiais/checklist-operacao-whatsapp', template: 'lead-magnet', priority: 0.8, changeFrequency: 'weekly', lastModified: '2026-05-12', indexable: true },
@@ -131,6 +236,7 @@ export const CONTENT_SEO_ROUTES = [
 
 export const SEO_ROUTES = [
   ...CORE_SEO_ROUTES,
+  ...HUB_SEO_ROUTES,
   ...PROGRAMMATIC_SEO_ROUTES,
   ...organicNicheRoutes,
   ...CONTENT_SEO_ROUTES,
@@ -142,6 +248,21 @@ export function getProgrammaticSeoSlugs() {
 
 export function getProgrammaticSeoRoute(slug) {
   return PROGRAMMATIC_SEO_ROUTES.find((route) => route.slug === slug) ?? null
+}
+
+export function getHubSeoRoute(pathOrCluster) {
+  return HUB_SEO_ROUTES.find((route) => route.path === pathOrCluster || route.cluster === pathOrCluster) ?? null
+}
+
+export function getSeoRoutesByCluster(cluster) {
+  return SEO_ROUTES.filter((route) => route.cluster === cluster && route.type !== 'hub' && route.indexable !== false)
+}
+
+export function getRelatedProgrammaticSeoRoutes(route, limit = 3) {
+  if (!route?.cluster) return []
+  return getSeoRoutesByCluster(route.cluster)
+    .filter((candidate) => candidate.path !== route.path)
+    .slice(0, limit)
 }
 
 export function getIndexableSeoRoutes() {

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { buildRegisterHref } from '@/lib/marketing-attribution'
+import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 
@@ -106,6 +106,32 @@ const materials = [
   },
 ]
 
+const benchmarkItems = [
+  {
+    href: '/benchmarks/operacao-grupos-ofertas-whatsapp',
+    title: 'Benchmark de operação em grupos de ofertas',
+    description: 'Modelo para medir tempo, revisão, falhas e consistência sem expor dados sensíveis.',
+  },
+]
+
+const hubPages = [
+  {
+    href: '/espelhar-grupos-whatsapp',
+    title: 'Hub: espelhar grupos WhatsApp por cidade',
+    description: 'Rotas regionais para operações que precisam comparar cidades e cadência local.',
+  },
+  {
+    href: '/bot-ofertas-whatsapp',
+    title: 'Hub: bot de ofertas por nicho',
+    description: 'Páginas por categoria para adaptar calendário, copy e validação de ofertas.',
+  },
+  {
+    href: '/automacao-whatsapp-afiliados',
+    title: 'Hub: automação para afiliados',
+    description: 'Diagnósticos de escala, consistência, tempo operacional e rastreamento.',
+  },
+]
+
 const roadmapTracks = [
   {
     id: 'iniciante',
@@ -136,7 +162,7 @@ const roadmapTracks = [
   },
 ]
 
-const contentItems = [...blogPosts, ...materials]
+const contentItems = [...blogPosts, ...materials, ...benchmarkItems, ...hubPages]
 
 const faqItems = [
   {
@@ -171,7 +197,7 @@ function ContentCard({ item }) {
     <li className="rounded-3xl border border-emerald-100 bg-white p-6 shadow-sm">
       <h3 className="text-xl font-black tracking-tight text-gray-950">{item.title}</h3>
       <p className="mt-3 text-sm leading-7 text-gray-700">{item.description}</p>
-      <Link href={item.href} className="mt-4 inline-flex text-sm font-black text-emerald-700 underline underline-offset-4">
+      <Link href={item.href} data-seo-cta="content-card" className="mt-4 inline-flex text-sm font-black text-emerald-700 underline underline-offset-4">
         Ver guia completo
       </Link>
     </li>
@@ -187,7 +213,7 @@ function HubSection({ title: sectionTitle, description: sectionDescription, item
         {items.map((item) => <ContentCard key={item.href} item={item} />)}
       </ul>
       <div className="mt-5">
-        <Link href={ctaHref} className="inline-flex rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-700">
+        <Link href={ctaHref} data-seo-cta="content-section-cta" className="inline-flex rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-700">
           {ctaLabel}
         </Link>
       </div>
@@ -203,6 +229,22 @@ export default function Page() {
   }
 
   const hubSections = [
+    {
+      key: 'hubs',
+      title: 'Hubs programáticos',
+      description: 'Páginas centrais que conectam clusters de localizações, nichos e dores operacionais.',
+      items: hubPages,
+      ctaHref: `/login?mode=register&utm_source=conteudos&utm_medium=organic&utm_campaign=content-hub&utm_content=cta-pos-hubs&utm_term=${experimentId}`,
+      ctaLabel: 'Receber plano por cluster',
+    },
+    {
+      key: 'benchmarks',
+      title: 'Benchmarks e dados operacionais',
+      description: 'Modelos para transformar rotina de grupos em métricas agregadas e seguras.',
+      items: benchmarkItems,
+      ctaHref: `/login?mode=register&utm_source=conteudos&utm_medium=organic&utm_campaign=content-hub&utm_content=cta-pos-benchmarks&utm_term=${experimentId}`,
+      ctaLabel: 'Receber benchmark operacional',
+    },
     {
       key: 'blog',
       title: 'Artigos do blog',
@@ -267,30 +309,17 @@ export default function Page() {
   }
 
   return (
-    <PublicShell>
-      <main className="mx-auto w-full max-w-6xl px-5 py-10 md:px-8 md:py-16">
-        <section className="rounded-[2rem] bg-white p-8 shadow-sm ring-1 ring-emerald-100 md:p-10">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Central de conteúdo</p>
-          <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-950 md:text-5xl">Blog e materiais para crescer com processo</h1>
-          <p className="mt-4 max-w-3xl text-lg leading-8 text-gray-700">
-            Se você publica ofertas em grupos de WhatsApp, esta página centraliza os guias e checklists para validar links, padronizar operação e escalar divulgação sem improviso.
-          </p>
-          <div className="mt-6 flex flex-wrap gap-3 text-sm font-bold text-emerald-800">
-            <Link href="/login?mode=register&utm_source=conteudos&utm_medium=organic&utm_campaign=content-hub&utm_content=hero-cta" className="rounded-xl bg-emerald-600 px-4 py-3 text-white hover:bg-emerald-700">
-              Entrar na lista VIP
-            </Link>
-            <Link href="/materiais/checklist-divulgacao-ofertas-grupos-whatsapp" className="rounded-xl border border-emerald-200 px-4 py-3 hover:bg-emerald-50">
-              Ver checklist principal
-            </Link>
-          </div>
-        </section>
-
-        <section className="mt-8">
-          <h2 className="text-2xl font-black tracking-tight text-gray-950">Artigos do blog</h2>
-          <ul className="mt-4 grid gap-4 md:grid-cols-2">
-            {blogPosts.map((item) => <ContentCard key={item.href} item={item} />)}
-          </ul>
-        </section>
+    <>
+      <OrganicPageTracker route={{ slug: 'conteudos', path: slug, cluster: 'conteudos', intent: 'conteudos afiliados whatsapp', template: 'content-hub' }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(collectionJsonLd) }} />
+      <PublicShell>
+        <main className="mx-auto w-full max-w-6xl px-5 py-10 md:px-8 md:py-16">
+          <section className="rounded-[2rem] bg-white p-8 shadow-sm ring-1 ring-emerald-100 md:p-10">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Central de conteúdo</p>
+            <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-950 md:text-5xl">Blog e materiais para crescer com processo</h1>
+            <p className="mt-4 max-w-3xl text-lg leading-8 text-gray-700">
+              Se você publica ofertas em grupos de WhatsApp, esta página centraliza os guias e checklists para validar links, padronizar operação e escalar divulgação sem improviso.
+            </p>
 
         <section className="mt-10">
           <h2 className="text-2xl font-black tracking-tight text-gray-950">Páginas por nicho</h2>
@@ -306,13 +335,37 @@ export default function Page() {
           </ul>
         </section>
 
+            <div className="mt-6 flex flex-wrap gap-3 text-sm font-bold text-emerald-800">
+              <Link href={heroCta.href} data-seo-cta="content-hero-register" className="rounded-xl bg-emerald-600 px-4 py-3 text-white hover:bg-emerald-700">
+                {heroCta.label}
+              </Link>
+              <Link href={`/materiais/checklist-divulgacao-ofertas-grupos-whatsapp?from=hub&exp_id=${experimentId}`} data-seo-cta="content-primary-checklist" className="rounded-xl border border-emerald-200 px-4 py-3 hover:bg-emerald-50">
+                Ver checklist principal
+              </Link>
+            </div>
+          </section>
 
-        <section className="mt-10">
-          <h2 className="text-2xl font-black tracking-tight text-gray-950">Comparativos e alternativas</h2>
-          <ul className="mt-4 grid gap-4 md:grid-cols-2">
-            {comparisonPages.map((item) => <ContentCard key={item.href} item={item} />)}
-          </ul>
-        </section>
+          <section className="mt-10 rounded-3xl border border-emerald-100 bg-white p-6 shadow-sm">
+            <h2 className="text-2xl font-black tracking-tight text-gray-950">Trilhas por estágio operacional</h2>
+            <p className="mt-2 text-sm leading-7 text-gray-700">Escolha uma trilha de execução e avance da base até escala com sequência orientada.</p>
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              {roadmapTracks.map((track) => (
+                <article key={track.id} className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4">
+                  <h3 className="text-lg font-black text-gray-950">{track.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-gray-700">{track.description}</p>
+                  <ul className="mt-3 space-y-2 text-sm font-bold text-emerald-800">
+                    {track.links.map((link) => (
+                      <li key={link.href}>
+                        <Link href={`${link.href}?from=trilha-${track.id}&exp_id=${experimentId}`} data-seo-cta="content-roadmap-link" className="underline underline-offset-4">
+                          {link.label}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              ))}
+            </div>
+          </section>
 
         <section className="mt-10">
           <h2 className="text-2xl font-black tracking-tight text-gray-950">Autoridade e definições</h2>

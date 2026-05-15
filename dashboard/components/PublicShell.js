@@ -5,6 +5,9 @@ const footerLinks = [
   { href: '/privacidade', label: 'Privacidade' },
   { href: '/quem-somos', label: 'Quem Somos' },
   { href: '/suporte', label: 'Suporte' },
+  { href: '/bot-ofertas-whatsapp', label: 'Nichos' },
+  { href: '/automacao-whatsapp-afiliados', label: 'Automação' },
+  { href: '/espelhar-grupos-whatsapp', label: 'Cidades' },
 ]
 
 export function PublicHeader() {
@@ -15,9 +18,10 @@ export function PublicHeader() {
           🤖 BOTinho
         </Link>
         <nav className="flex flex-wrap items-center gap-4 text-sm font-semibold text-gray-600">
+          <Link href="/bot-ofertas-whatsapp" className="hover:text-green-700">Nichos</Link>
+          <Link href="/automacao-whatsapp-afiliados" className="hover:text-green-700">Automação</Link>
+          <Link href="/conteudos" className="hover:text-green-700">Conteúdos</Link>
           <Link href="/#planos" className="hover:text-green-700">Planos</Link>
-          <Link href="/ferramentas" className="hover:text-green-700">Ferramentas</Link>
-          <Link href="/quem-somos" className="hover:text-green-700">Quem somos</Link>
           <Link href="/suporte" className="hover:text-green-700">Suporte</Link>
           <Link href="/login" className="rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700">Entrar</Link>
         </nav>
