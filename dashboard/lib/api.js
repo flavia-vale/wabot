@@ -250,6 +250,26 @@ export const api = {
     return apiFetch(`/api/admin/marketing/campaigns${query ? `?${query}` : ''}`)
   },
 
+  adminMarketingFunnel: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/marketing/funnel${query ? `?${query}` : ''}`)
+  },
+
+  adminMarketingDataTrust: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/marketing/data-trust${query ? `?${query}` : ''}`)
+  },
+  adminMarketingCohorts: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/marketing/cohorts${query ? `?${query}` : ''}`)
+  },
+  adminMarketingAlerts: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/marketing/alerts${query ? `?${query}` : ''}`)
+  },
+
+
+
 
   logs: (status = 'all', page = 1, limit = 20) =>
     apiFetch(`/api/logs?status=${status}&page=${page}&limit=${limit}`),

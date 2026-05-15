@@ -16,6 +16,7 @@ import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
+import { resolveMonitoredImage } from './monitoredImageResolver.js'
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
@@ -838,20 +839,17 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const platform = target?.platform || 'unknown'
         logger.info({ msgId: msg.key.id, imageMode: monitorGroup.imageMode, platform }, 'getImage: iniciando resolução de imagem')
 
-        if (monitorGroup.imageMode === 'original') {
-          cachedImage = await downloadOriginalImage()
-          return cachedImage
-        }
-
-        if (monitorGroup.imageMode === 'fetch') {
-          // No modo "imagem do site" não baixamos mais a imagem como mídia:
-          // confiamos no preview automático do WhatsApp gerado a partir do
-          // link convertido (extendedTextMessage + generateHighQualityLinkPreview).
-          logger.info({ msgId: msg.key.id, platform }, 'imageMode=fetch: usando preview automático do WhatsApp (sem download de mídia)')
-          return null
-        }
-
-        return null
+        cachedImage = await resolveMonitoredImage({
+          mode: monitorGroup.imageMode,
+          target,
+          credentials: cfg.credentials,
+          downloadOriginalImage,
+          fetchProductImage,
+          fetchImageBuffer,
+          fallbackToOriginal: monitorGroup.fallbackToOriginal !== false,
+          logger,
+        })
+        return cachedImage
       }
 
 
@@ -944,13 +942,12 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // quando há mídia original, relayMessage reaproveita o proto já hospedado
         // no WhatsApp e troca apenas o caption. Se não houver mídia original, cai
         // para upload simples de imagem com caption e, por último, texto puro.
-        // No modo "fetch" (imagem do site), quando não há mídia original, o texto
-        // vai com preview automático gerado pelo WhatsApp via link-preview-js
-        // em vez de baixarmos a imagem do site. externalAdReply continua proibido.
+        // Quando imageMode=original mas só houver jpegThumbnail minúsculo, usa
+        // preview automático do WhatsApp em vez de imagem pixelada.
         const imageMode = monitorGroup?.imageMode
         const wantImage = imageMode !== 'none'
-        const useLinkPreview = imageMode === 'fetch'
         const original = wantImage ? getOriginalMediaMessage() : null
+        let useLinkPreview = false  // será setado a true se jpegThumbnail for descartado
 
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         const log = await db.messageLog.create({
@@ -975,6 +972,12 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
               image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
               if (fetched && !image) {
                 logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
+              }
+              // Em modo original, se não conseguimos imagem alguma da mensagem
+              // monitorada, peça ao WhatsApp para gerar preview automático do
+              // link convertido — assim ainda há chance de aparecer card com foto.
+              if (imageMode === 'original' && !image) {
+                useLinkPreview = true
               }
             }
 
