@@ -45,6 +45,8 @@ const LP_ROUTES = [
 const CORE_ROUTES = ['/', '/llms.txt', '/pricing.md', '/termos', '/privacidade', '/quem-somos', '/suporte', '/promo-vip-7dias']
 const CONTENT_ROUTES = [
   '/conteudos',
+  '/ferramentas',
+  '/ferramentas/calculadora-tempo-grupos-whatsapp',
   '/blog/como-escalar-grupos-sem-operacao-manual',
   '/blog/checklist-padronizar-divulgacao-whatsapp',
   '/materiais/checklist-operacao-whatsapp',
@@ -55,6 +57,8 @@ const CONTENT_ROUTES = [
 
 const LAST_MODIFIED_BY_ROUTE = {
   '/conteudos': '2026-05-15',
+  '/ferramentas': '2026-05-15',
+  '/ferramentas/calculadora-tempo-grupos-whatsapp': '2026-05-15',
   '/blog/como-escalar-grupos-sem-operacao-manual': '2026-05-11',
   '/blog/checklist-padronizar-divulgacao-whatsapp': '2026-05-11',
   '/materiais/checklist-operacao-whatsapp': '2026-05-12',
