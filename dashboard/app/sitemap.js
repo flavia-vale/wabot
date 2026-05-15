@@ -30,10 +30,16 @@ const LP_ROUTES = [
   '/bot-ofertas-supermercado-whatsapp',
   '/bot-ofertas-farmacia-whatsapp',
   '/bot-ofertas-eletronicos-whatsapp',
+  '/bot-ofertas-autopecas-whatsapp',
+  '/bot-ofertas-cursos-whatsapp',
+  '/bot-ofertas-infoprodutos-whatsapp',
   '/bot-ofertas-moda-whatsapp',
   '/bot-ofertas-beleza-whatsapp',
   '/bot-ofertas-pet-shop-whatsapp',
+  '/bot-ofertas-turismo-whatsapp',
   '/bot-ofertas-afiliados-whatsapp',
+  '/bot-ofertas-restaurantes-whatsapp',
+  '/bot-ofertas-marketplace-whatsapp',
 ]
 
 const CORE_ROUTES = ['/', '/termos', '/privacidade', '/quem-somos', '/suporte', '/promo-vip-7dias']
@@ -48,7 +54,7 @@ const CONTENT_ROUTES = [
 ]
 
 export default function sitemap() {
-  const now = new Date('2026-05-14')
+  const now = new Date('2026-05-15')
   const allRoutes = [...CORE_ROUTES, ...LP_ROUTES, ...CONTENT_ROUTES]
 
   return allRoutes.map((route) => {

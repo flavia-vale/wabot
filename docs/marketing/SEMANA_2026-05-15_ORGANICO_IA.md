@@ -84,3 +84,81 @@
 - [ ] Publicar/agendar posts sociais aprovados.
 - [ ] Aprovar ou corrigir claims comerciais sensíveis.
 - [ ] Só considerar produção depois de staging aprovado.
+
+---
+
+## Continuação da execução — 2026-05-15 (turno 2)
+
+### O que já existia antes
+
+- LPs de afiliados e pet shop já publicadas no sprint orgânico.
+- Checklist de indexação incremental já aberto para staging/Search Console.
+
+### O que foi continuado
+
+- Próximo ativo pendente do backlog de nicho: `bot ofertas turismo whatsapp`.
+- Continuidade da estratégia combinada: afiliados/conversão + automação/espelhamento/distribuição.
+
+### O que foi criado agora
+
+1. Nova LP pública indexável: `/bot-ofertas-turismo-whatsapp`
+   - Keyword principal: `bot ofertas turismo whatsapp`.
+   - SEO on-page via `LpTemplate`: title, description, canonical, H1, FAQ visível e CTA.
+   - Schema via template: `FAQPage`, `HowTo`, `Product`.
+   - Conteúdo inclui conferência de link monetizado/tag de afiliado, risco de comissão e sem promessa de integração não aprovada.
+
+2. Sitemap atualizado
+   - Rota adicionada em `dashboard/app/sitemap.js`.
+
+### URLs/rotas novas
+
+- `http://espelhagrupos.com.br/bot-ofertas-turismo-whatsapp`
+
+### Keywords trabalhadas
+
+- `bot ofertas turismo whatsapp`
+- `como automatizar divulgacao em grupos whatsapp` (apoio semântico)
+- `como centralizar links de oferta para grupos` (apoio semântico)
+
+### Links internos adicionados
+
+- Interlinking herdado do `LpTemplate` para páginas centrais e CTA.
+
+### Checklist de indexação (incremental)
+
+- [ ] Validar `http://178.105.54.0:3006/bot-ofertas-turismo-whatsapp` em staging.
+- [ ] Confirmar presença em `http://178.105.54.0:3006/sitemap.xml`.
+- [ ] Inspecionar URL nova no Google Search Console após staging aprovado e deploy de produção.
+- [ ] Solicitar indexação da URL nova.
+
+### Pacote social gerado (incremental)
+
+- LinkedIn: “Turismo em grupos exige timing e link de afiliado conferido: primeiro valida oferta, depois escala distribuição.”
+- URL sugerida com UTM:
+  `http://espelhagrupos.com.br/bot-ofertas-turismo-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-wabot&utm_content=case-operacao`
+
+### Validações locais
+
+- Nova rota pública e atualização de configuração de LP/sitemap sem tocar infraestrutura sensível.
+
+### Validações esperadas em staging 3006
+
+- Abrir `http://178.105.54.0:3006/bot-ofertas-turismo-whatsapp` e validar status 200, H1, FAQ e CTA.
+- Validar presença da rota no `sitemap.xml`.
+
+### Ações executadas automaticamente pela IA
+
+- Criação da rota pública de turismo.
+- Inclusão do bloco de SEO/conteúdo no `LP_CONFIG`.
+- Atualização de sitemap e relatório da sprint.
+
+### AÇÕES HUMANAS pendentes
+
+- [ ] Revisar e aprovar o PR contra `develop`.
+- [ ] Validar as páginas novas em `http://178.105.54.0:3006`.
+- [ ] Conferir visual, copy, CTAs e claims comerciais.
+- [ ] Inspecionar cada URL nova no Google Search Console.
+- [ ] Solicitar indexação das URLs aprovadas no Google Search Console.
+- [ ] Publicar/agendar posts sociais aprovados.
+- [ ] Aprovar ou corrigir claims comerciais sensíveis.
+- [ ] Só considerar produção depois de staging aprovado.
