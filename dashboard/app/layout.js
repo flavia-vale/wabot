@@ -2,7 +2,7 @@ import "./globals.css";
 import { ToastProvider } from "@/components/ToastProvider";
 
 export const metadata = {
-  metadataBase: new URL('http://espelhagrupos.com.br'),
+  metadataBase: new URL('https://espelhagrupos.com.br'),
   title: {
     default: 'Bot para Afiliados no WhatsApp | BOTinho',
     template: '%s | BOTinho',
