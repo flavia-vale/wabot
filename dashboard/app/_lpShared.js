@@ -86,12 +86,6 @@ const LP_TYPE_THEME = {
   },
 }
 
-function getLpType(slug, cfg) {
-  if (cfg?.lpType) return cfg.lpType
-  if (slug?.startsWith('espelhar-grupos-whatsapp-')) return 'city'
-  if (slug?.startsWith('bot-ofertas-')) return 'niche'
-  return 'default'
-}
 
 function getHeroCopy(cfg, lpType) {
   if (lpType === 'city') {
@@ -115,6 +109,41 @@ function getHeroCopy(cfg, lpType) {
   return {
     headline: null,
     sub: null,
+  }
+}
+
+
+function humanizeSlugPart(value) {
+  return String(value || '')
+    .split('-')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function getRoutineExample(slug, cfg, lpType) {
+  if (lpType === 'city') {
+    const city = humanizeSlugPart(slug.replace('espelhar-grupos-whatsapp-', ''))
+    return {
+      title: `Exemplo de rotina em ${city}`,
+      body: `Uma curadoria regional pode separar grupos de origem por categoria e grupos de destino por bairro, cidade ou perfil de compra em ${city}. Antes de espelhar, a pessoa operadora revisa preço, cupom, link monetizado e regra do grupo; depois acompanha logs para corrigir falhas sem prometer alcance ou comissão.`,
+      steps: ['Separar destinos regionais por contexto.', 'Revisar oferta e link no celular.', 'Publicar com intervalo e conferir logs.'],
+    }
+  }
+
+  if (lpType === 'niche') {
+    const niche = humanizeSlugPart(slug.replace('bot-ofertas-', '').replace('-whatsapp', ''))
+    return {
+      title: `Exemplo de rotina para ${niche}`,
+      body: `Uma operação de ${niche.toLowerCase()} pode priorizar ofertas por margem, estoque e urgência real. O BOTinho entra depois da curadoria: organiza origem, destino, filtros e cadência para que a mensagem certa chegue aos grupos adequados com revisão humana.`,
+      steps: ['Escolher categorias de maior aderência.', 'Conferir link, cupom e regras da plataforma.', 'Ajustar frequência conforme resposta dos grupos.'],
+    }
+  }
+
+  return {
+    title: 'Exemplo de rotina operacional',
+    body: `${cfg.uniqueHeadline.replace(/\.$/, '')}. Na prática, a equipe define o problema prioritário, revisa a campanha, escolhe grupos autorizados e usa logs para aprender antes de ampliar volume. O foco é processo consistente, não promessa de resultado garantido.`,
+    steps: ['Mapear gargalo antes de automatizar.', 'Aplicar checklist de oferta, link e destino.', 'Escalar aos poucos com base nos logs.'],
   }
 }
 
@@ -150,6 +179,7 @@ export function LpTemplate({ slug }) {
   const lpType = getLpType(slug, cfg)
   const theme = LP_TYPE_THEME[lpType] ?? LP_TYPE_THEME.default
   const heroCopy = getHeroCopy(cfg, lpType)
+  const routineExample = getRoutineExample(slug, cfg, lpType)
   const faqJsonLd = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: cfg.faq.map((item) => ({ '@type': 'Question', name: item.q, acceptedAnswer: { '@type': 'Answer', text: item.a } })) }
   const howToJsonLd = { '@context': 'https://schema.org', '@type': 'HowTo', name: `Como configurar ${cfg.title.replace(' | BOTinho', '')}`, step: cfg.howTo.map((text, index) => ({ '@type': 'HowToStep', name: `Passo ${index + 1}`, text })) }
   const productJsonLd = {
@@ -180,7 +210,7 @@ export function LpTemplate({ slug }) {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(howToJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }} />
-      {lpType === 'pain' && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
       <Hero
         tone={theme.tone}
         primaryCtaLabel="Entrar na Lista VIP"
@@ -198,6 +228,19 @@ export function LpTemplate({ slug }) {
             <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.7 }}>
               {cfg.uniqueBullets.map((bullet) => <li key={bullet}>{bullet}</li>)}
             </ul>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="wrap" style={{ marginTop: 24 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: '24px 28px', boxShadow: 'var(--shadow-soft)' }}>
+            <span className="pill" style={{ marginBottom: 12 }}><span className="dot" />Exemplo único de rotina</span>
+            <h2 style={{ fontSize: 'clamp(24px, 2.4vw, 34px)', lineHeight: 1.15, marginBottom: 10 }}>{routineExample.title}</h2>
+            <p style={{ color: 'var(--ink-soft)', lineHeight: 1.7, marginBottom: 14 }}>{routineExample.body}</p>
+            <ol style={{ margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.7 }}>
+              {routineExample.steps.map((step) => <li key={step}>{step}</li>)}
+            </ol>
           </div>
         </div>
       </section>

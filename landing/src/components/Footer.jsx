@@ -43,11 +43,11 @@ export function FinalCTA() {
             </h2>
             <p style={s.sub}>Conecta o WhatsApp em 4 minutos. Sem cartão, sem letrinha miúda. Se não converter para você, é só desconectar.</p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <a className="btn" href="#" style={{ background: 'var(--accent-2)', color: 'var(--ink)' }}>
+              <a className="btn" href="/login?mode=register" style={{ background: 'var(--accent-2)', color: 'var(--ink)' }}>
                 <Icon name="whatsapp" size={16} /> Conectar meu WhatsApp <Icon name="arrow" size={16} />
               </a>
-              <a className="btn" href="#" style={{ background: 'transparent', color: 'var(--surface)', border: '1px solid rgba(255,255,255,0.2)' }}>
-                Falar com vendas
+              <a className="btn" href="/suporte" style={{ background: 'transparent', color: 'var(--surface)', border: '1px solid rgba(255,255,255,0.2)' }}>
+                Falar com suporte
               </a>
             </div>
           </div>
@@ -78,16 +78,16 @@ export function Footer() {
           </div>
           <div>
             <div style={s.colTitle}>Empresa</div>
-            <a style={s.colLink} href="#">Sobre</a>
-            <a style={s.colLink} href="#">Blog</a>
-            <a style={s.colLink} href="#">Contato</a>
-            <a style={s.colLink} href="#">Afiliados (do bot)</a>
+            <a style={s.colLink} href="/quem-somos">Sobre</a>
+            <a style={s.colLink} href="/conteudos">Blog</a>
+            <a style={s.colLink} href="/suporte">Contato</a>
+            <a style={s.colLink} href="/suporte">Afiliados (do bot)</a>
           </div>
           <div>
             <div style={s.colTitle}>Legal</div>
-            <a style={s.colLink} href="#">Termos</a>
-            <a style={s.colLink} href="#">Privacidade</a>
-            <a style={s.colLink} href="#">LGPD</a>
+            <a style={s.colLink} href="/termos">Termos</a>
+            <a style={s.colLink} href="/privacidade">Privacidade</a>
+            <a style={s.colLink} href="/privacidade">LGPD</a>
           </div>
         </div>
         <div style={s.bottom}>

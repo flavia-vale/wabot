@@ -37,6 +37,7 @@ export function shouldSuppressConversionPrompt(pathname = resolvePathname()) {
   return PROMPT_EXCLUDED_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))
 }
 
+
 function resolvePathname() {
   if (typeof window === 'undefined') return ''
   return window.location?.pathname || ''

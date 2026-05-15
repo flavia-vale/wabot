@@ -5,6 +5,8 @@ import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { normalizeEmail } from '../auth-utils.js'
 
 const loginAttempts = new Map()
+const STANDARD_TRIAL_DAYS = 30
+const PROMO_VIP_TRIAL_DAYS = 7
 
 function getLoginAttemptMaxEntries() {
   const value = Number(process.env.LOGIN_RATE_LIMIT_MAX_ENTRIES ?? 20000)
@@ -253,9 +255,8 @@ export async function authRoutes(app) {
 
     const passwordHash = await bcrypt.hash(password, 10)
     const now = new Date()
-    const accessExpiresAt = isPromoVipFlow
-      ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-      : new Date(Date.now() + 3 * 60 * 60 * 1000)
+    const trialDays = isPromoVipFlow ? PROMO_VIP_TRIAL_DAYS : STANDARD_TRIAL_DAYS
+    const accessExpiresAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000)
     const referralCode = randomBytes(4).toString('hex')
 
     let referrer = null
