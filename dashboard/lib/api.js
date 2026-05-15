@@ -103,7 +103,7 @@ async function apiFetch(path, options = {}) {
     throw err
   }
   if (!res.ok) {
-    const rawMessage = data?.message ?? data?.error ?? ''
+    const rawMessage = data?.message ?? (typeof data?.error === 'object' ? data.error?.message : data?.error) ?? ''
     const normalizedMessage = typeof rawMessage === 'string' ? rawMessage : JSON.stringify(rawMessage)
     const safeMessage = String(normalizedMessage ?? '').trim()
     const message = safeMessage && !safeMessage.startsWith('<') ? safeMessage : `HTTP ${res.status}`
