@@ -4,6 +4,7 @@ import { PublicPage } from '@/components/PublicShell'
 export const metadata = {
   title: 'Suporte | BOTinho',
   description: 'Canais de suporte e orientações iniciais para usar o BOTinho.',
+  alternates: { canonical: '/suporte' },
 }
 
 const faqs = [
