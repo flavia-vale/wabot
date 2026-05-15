@@ -1,48 +1,10 @@
-const SLUGS = [
-  'espelhar-grupos-whatsapp-sao-paulo',
-  'espelhar-grupos-whatsapp-rio-de-janeiro',
-  'espelhar-grupos-whatsapp-belo-horizonte',
-  'espelhar-grupos-whatsapp-curitiba',
-  'espelhar-grupos-whatsapp-porto-alegre',
-  'espelhar-grupos-whatsapp-recife',
-  'espelhar-grupos-whatsapp-salvador',
-  'espelhar-grupos-whatsapp-fortaleza',
-  'espelhar-grupos-whatsapp-brasilia',
-  'espelhar-grupos-whatsapp-goiania',
-  'espelhar-grupos-whatsapp-campinas',
-  'espelhar-grupos-whatsapp-manaus',
-  'espelhar-grupos-whatsapp-belem',
-  'espelhar-grupos-whatsapp-florianopolis',
-  'espelhar-grupos-whatsapp-vitoria',
-  'automatizar-divulgacao-em-grupos-whatsapp',
-  'escalar-grupos-ofertas-sem-equipe',
-  'postar-em-varios-grupos-whatsapp-ao-mesmo-tempo',
-  'padronizar-divulgacao-afiliado-whatsapp',
-  'aumentar-conversao-em-grupos-de-cupons',
-  'consistencia-postagens-em-grupos',
-  'reduzir-tempo-operacional-em-grupos-whatsapp',
-  'organizar-calendario-de-ofertas-no-whatsapp',
-  'melhorar-alcance-em-grupos-de-promocoes',
-  'rastrear-resultados-de-divulgacao-em-grupos',
-  'bot-ofertas-supermercado-whatsapp',
-  'bot-ofertas-farmacia-whatsapp',
-  'bot-ofertas-eletronicos-whatsapp',
-  'bot-ofertas-moda-whatsapp',
-  'bot-ofertas-beleza-whatsapp',
-]
+import { getAllLpSlugs, getPainLpSlugs } from '../lib/lp-config.mjs'
 
-const PAIN_SLUGS = new Set([
-  'automatizar-divulgacao-em-grupos-whatsapp',
-  'escalar-grupos-ofertas-sem-equipe',
-  'postar-em-varios-grupos-whatsapp-ao-mesmo-tempo',
-  'padronizar-divulgacao-afiliado-whatsapp',
-  'aumentar-conversao-em-grupos-de-cupons',
-  'consistencia-postagens-em-grupos',
-  'reduzir-tempo-operacional-em-grupos-whatsapp',
-  'organizar-calendario-de-ofertas-no-whatsapp',
-  'melhorar-alcance-em-grupos-de-promocoes',
-  'rastrear-resultados-de-divulgacao-em-grupos',
-])
+const PAIN_SLUGS = new Set(getPainLpSlugs())
+const VALIDATION_TARGETS = [
+  ...getAllLpSlugs().map((slug) => ({ path: `/${slug}`, label: slug, requiredTypes: getRequiredTypesForLp(slug) })),
+  { path: '/suporte', label: 'suporte', requiredTypes: ['FAQPage'] },
+]
 
 const baseUrl = (process.env.LP_BASE_URL || process.argv[2] || 'http://localhost:3006').replace(/\/$/, '')
 
@@ -59,35 +21,59 @@ function extractJsonLdBlocks(html) {
     .filter(Boolean)
 }
 
-async function validateSlug(slug) {
-  const url = `${baseUrl}/${slug}`
+function flattenSchemaNodes(block) {
+  if (!block) return []
+  if (Array.isArray(block)) return block.flatMap(flattenSchemaNodes)
+  if (Array.isArray(block['@graph'])) return [block, ...block['@graph'].flatMap(flattenSchemaNodes)]
+  return [block]
+}
+
+function collectSchemaTypes(blocks) {
+  const types = new Set()
+  for (const node of blocks.flatMap(flattenSchemaNodes)) {
+    const rawType = node?.['@type']
+    const values = Array.isArray(rawType) ? rawType : [rawType]
+    for (const value of values) {
+      if (value) types.add(value)
+    }
+  }
+  return types
+}
+
+function getRequiredTypesForLp(slug) {
+  const required = ['FAQPage', 'HowTo', 'SoftwareApplication']
+  if (PAIN_SLUGS.has(slug)) required.push('BreadcrumbList')
+  return required
+}
+
+async function validateTarget(target) {
+  const url = `${baseUrl}${target.path}`
   const response = await fetch(url)
 
   if (!response.ok) {
-    return { slug, ok: false, reason: `HTTP ${response.status}` }
+    return { label: target.label, ok: false, reason: `HTTP ${response.status}` }
   }
 
   const html = await response.text()
   const blocks = extractJsonLdBlocks(html)
-  const types = new Set(blocks.map((b) => b?.['@type']).filter(Boolean))
+  const types = collectSchemaTypes(blocks)
 
-  const required = PAIN_SLUGS.has(slug) ? ['FAQPage', 'HowTo', 'Product', 'BreadcrumbList'] : ['FAQPage', 'HowTo', 'Product']
-  const missing = required.filter((t) => !types.has(t))
+  const missing = target.requiredTypes.filter((t) => !types.has(t))
 
   return {
-    slug,
+    label: target.label,
     ok: missing.length === 0,
     reason: missing.length === 0 ? 'OK' : `Missing: ${missing.join(', ')}`,
   }
 }
 
 async function main() {
-  const results = await Promise.all(SLUGS.map(validateSlug))
+  const results = await Promise.all(VALIDATION_TARGETS.map(validateTarget))
   const failed = results.filter((r) => !r.ok)
 
   for (const result of results) {
     const marker = result.ok ? 'OK' : 'FALHA'
-    console.log(`${marker} - ${result.slug} (${result.reason})`)
+    console.log(`${marker} - ${result.label} (${result.reason})`)
   }
 
   if (failed.length > 0) {

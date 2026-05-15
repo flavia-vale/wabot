@@ -103,7 +103,7 @@ export function Pricing() {
                 ))}
               </ul>
               <Link
-                href="/login?mode=register"
+                href={buildRegisterHref({ source: 'landing', campaign: 'home-pricing', content: `plan-${p.id}` })}
                 className="landing-pricing-cta"
                 style={{
                   display: 'block', textAlign: 'center', padding: '14px 22px', borderRadius: 999,

@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { mapAuthError, trackEvent, TRACKING_EVENTS } from '@/lib/analytics'
+import { attributionForTracking, readAttributionFromSearchParams } from '@/lib/marketing-attribution'
 
 const LOGIN_BENEFITS = [
   'Conversão automática de links de afiliado',
@@ -26,8 +27,10 @@ function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const ref = searchParams.get('ref')
+  const signupAttribution = readAttributionFromSearchParams(searchParams)
+  const trackingAttribution = attributionForTracking(signupAttribution)
   const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(() => searchParams.get('email') || '')
   const [password, setPassword] = useState('')
   const [contactPhone, setContactPhone] = useState('')
   const [isRegister, setIsRegister] = useState(() => searchParams.get('mode') === 'register')
@@ -94,6 +97,7 @@ function LoginContent() {
         origin: 'login_page',
         mode: isRegister ? 'register' : 'login',
         has_ref: Boolean(ref),
+        ...(isRegister ? trackingAttribution : {}),
       })
       if (isRegister) {
         await api.register(cleanName, cleanEmail, password, cleanPhone, ref)
@@ -109,8 +113,9 @@ function LoginContent() {
         origin: 'login_page',
         mode: isRegister ? 'register' : 'login',
         error_type: mapAuthError(err),
+        ...(isRegister ? trackingAttribution : {}),
       })
-      setError(err.message)
+      setError(err?.message || 'Não foi possível concluir a autenticação agora.')
     } finally {
       setLoading(false)
     }
