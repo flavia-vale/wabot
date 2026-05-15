@@ -88,3 +88,13 @@ Ambiente de validação: staging em `http://178.105.54.0:3006`
 - [ ] Confirmar presença em `http://178.105.54.0:3006/sitemap.xml`.
 - [ ] Inspecionar `http://espelhagrupos.com.br/bot-ofertas-infoprodutos-whatsapp` no Google Search Console após staging aprovado e deploy de produção.
 - [ ] Solicitar indexação da URL nova após inspeção.
+
+## Incremento sequencial 2026-05-19 (executado em 2026-05-15)
+
+- [ ] Validar `http://178.105.54.0:3006/bot-ofertas-restaurantes-whatsapp` (status 200, H1, resposta direta, FAQ visível, CTA e links internos).
+- [ ] Validar `http://178.105.54.0:3006/bot-ofertas-marketplace-whatsapp` (status 200, H1, resposta direta, FAQ visível, CTA, bloco de risco de afiliado e links internos).
+- [ ] Confirmar presença das duas rotas em `http://178.105.54.0:3006/sitemap.xml`.
+- [ ] Inspecionar `http://espelhagrupos.com.br/bot-ofertas-restaurantes-whatsapp` no Google Search Console após staging aprovado e deploy de produção.
+- [ ] Inspecionar `http://espelhagrupos.com.br/bot-ofertas-marketplace-whatsapp` no Google Search Console após staging aprovado e deploy de produção.
+- [ ] Solicitar indexação das URLs aprovadas após inspeção.
+- [ ] Validar claims comerciais e posts sociais antes de publicação/agendamento.
