@@ -1,4 +1,4 @@
-# Dia 8 — Cold outreach parceiros (Lote 1) — wabot
+# Dia 8 — Cold outreach parceiros (Lote 1) — BOTinho
 
 Data: 2026-05-11
 Owner: Growth/Parcerias

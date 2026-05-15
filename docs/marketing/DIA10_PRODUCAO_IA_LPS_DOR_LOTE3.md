@@ -1,14 +1,14 @@
-# Dia 10 — Produção IA de LPs de Dor (Lote 3) — wabot
+# Dia 10 — Produção IA de LPs de Dor (Lote 3) — BOTinho
 
 Data: 2026-05-13
 Owner: Growth/SEO
 
 ## Plano recuperado antes da produção
-- **Oferta principal:** trial guiado de 7 dias do wabot.
+- **Oferta principal:** trial guiado de 7 dias do BOTinho.
 - **CTA padrão:** Entrar na Lista VIP.
 - **Mensagem central:** espelhar grupos com consistência, escalar operação e reduzir trabalho manual.
 - **Template usado:** Template C — LP por Dor, conforme arquitetura de SEO programático.
-- **Seções obrigatórias do template:** diagnóstico da dor, solução com wabot, métricas esperadas, FAQ e CTA de onboarding.
+- **Seções obrigatórias do template:** diagnóstico da dor, solução com BOTinho, métricas esperadas, FAQ e CTA de onboarding.
 - **Schema recomendado do template:** `FAQPage` + `BreadcrumbList`; mantido também `HowTo` e `Product` para compatibilidade com o validador e o padrão dos lotes anteriores.
 - **Critério de priorização:** sequência do backlog `seo_backlog_50_keywords.csv`, usando as prioridades de dor 31 a 40.
 
@@ -22,7 +22,7 @@ Owner: Growth/SEO
 ---
 
 ## Objetivo
-Criar 10 LPs de dor para capturar buscas informacionais-comerciais de alta intenção, conectando cada problema operacional ao uso do wabot como solução de automação em grupos.
+Criar 10 LPs de dor para capturar buscas informacionais-comerciais de alta intenção, conectando cada problema operacional ao uso do BOTinho como solução de automação em grupos.
 
 ## LPs priorizadas do lote 3
 1. Automatizar divulgação em grupos WhatsApp
@@ -38,7 +38,7 @@ Criar 10 LPs de dor para capturar buscas informacionais-comerciais de alta inten
 
 ## Padrão aplicado em todas as 10 LPs
 - Diagnóstico específico da dor.
-- Solução prática com wabot.
+- Solução prática com BOTinho.
 - Bullets de benefício e métrica esperada.
 - FAQ específico da dor.
 - Passo a passo operacional (`HowTo`) para ativação.

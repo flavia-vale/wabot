@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from './Icon';
+import { DEFAULT_LANDING_PLANS } from '@/lib/marketing-content';
 
 const s = {
   head: { textAlign: 'center', marginBottom: 56 },
@@ -30,33 +31,7 @@ const s = {
   list: { listStyle: 'none', padding: 0, margin: '0 0 28px', display: 'flex', flexDirection: 'column', gap: 12, flex: 1 },
 };
 
-const defaultPlans = [
-  {
-    id: 'trial',
-    name: 'Teste grátis',
-    price: 'Consulte no painel',
-    desc: 'Experimente o fluxo principal antes de escolher um plano pago.',
-    cta: 'Começar teste grátis',
-    features: ['Conversão de links suportados', 'Monitoramento de grupos', 'Envio para grupos de destino', 'Histórico de logs', 'Com anúncios'],
-  },
-  {
-    id: 'basic',
-    name: 'Basic',
-    price: 'Consulte no painel',
-    desc: 'Para operar com os mesmos recursos essenciais do Pro mantendo anúncios no uso.',
-    cta: 'Assinar Basic',
-    features: ['Conversão de links suportados', 'Monitoramento de grupos', 'Envio para grupos de destino', 'Histórico de logs', 'Com anúncios'],
-  },
-  {
-    id: 'pro',
-    name: 'Pro',
-    price: 'Consulte no painel',
-    desc: 'Para operar com os mesmos recursos do Basic, sem anúncios na experiência.',
-    cta: 'Assinar Pro',
-    highlight: true,
-    features: ['Conversão de links suportados', 'Monitoramento de grupos', 'Envio para grupos de destino', 'Histórico de logs', 'Sem anúncios'],
-  },
-];
+const defaultPlans = DEFAULT_LANDING_PLANS;
 
 function mergePlanContent(plans) {
   const byId = new Map((plans ?? []).map(plan => [plan.id, plan]));
@@ -66,6 +41,8 @@ function mergePlanContent(plans) {
       ...defaultPlan,
       name: dynamicPlan?.title || defaultPlan.name,
       price: dynamicPlan?.price || defaultPlan.price,
+      priceValue: defaultPlan.priceValue,
+      period: dynamicPlan?.period || defaultPlan.period,
       desc: dynamicPlan?.description || defaultPlan.desc,
       features: Array.isArray(dynamicPlan?.features) && dynamicPlan.features.length ? dynamicPlan.features : defaultPlan.features,
       position: dynamicPlan?.position ?? defaultPlan.position,
@@ -102,7 +79,7 @@ export function Pricing() {
           <h2 style={{ ...s.h2, marginTop: 16 }}>
             Escolha o plano para <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>começar e escalar</span> sua operação.
           </h2>
-          <p style={s.sub}>Basic e Pro têm os mesmos recursos técnicos. A diferença visível entre eles é a presença ou ausência de anúncios.</p>
+          <p style={s.sub}>Planos públicos e parseáveis por agentes: teste gratuito, Basic com anúncios e Pro sem anúncios. Valores podem ser atualizados pelo painel administrativo após validação em staging.</p>
         </div>
 
         <div style={s.grid} className="landing-pricing-grid">
@@ -112,7 +89,7 @@ export function Pricing() {
               <div style={s.planName}>{p.name}</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 8, color: p.highlight ? 'var(--surface)' : 'var(--ink)' }}>
                 <span style={s.priceBig}>{p.price}</span>
-                {String(p.price).startsWith('R$') && p.id !== 'trial' && <span style={s.priceUnit}>/mês</span>}
+                {String(p.price).startsWith('R$') && <span style={s.priceUnit}>/ {p.period}</span>}
               </div>
               <p style={{ fontSize: 14.5, lineHeight: 1.55, color: p.highlight ? 'rgba(255,255,255,0.7)' : 'var(--ink-soft)', marginBottom: 24, minHeight: 68 }}>
                 {p.desc}

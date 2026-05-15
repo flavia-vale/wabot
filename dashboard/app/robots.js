@@ -7,7 +7,7 @@ export default function robots() {
     rules: [
       {
         userAgent: '*',
-        allow: ['/', '/termos', '/privacidade', '/quem-somos', '/suporte', '/api/public/faq', '/api/public/plans'],
+        allow: ['/', '/llms.txt', '/pricing.md', '/termos', '/privacidade', '/quem-somos', '/suporte', '/api/public/faq', '/api/public/plans'],
         disallow: ['/dashboard', '/dashboard/', '/dashboard/*', '/api/admin/*', '/api/auth/*', '/api/dashboard/*', '/api/payments/*', '/promo-vip-7dias'],
       },
     ],

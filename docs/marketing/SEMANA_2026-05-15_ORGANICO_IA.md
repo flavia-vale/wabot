@@ -51,7 +51,7 @@
 - LinkedIn: “No nicho pet, consistência operacional + link monetizado conferido protege comissão e escala distribuição.”
 - Instagram: “Antes de escalar oferta pet em grupos: valide estoque, cupom e tag de afiliado. Depois automatize com cadência.”
 - URL com UTM sugerida:
-  `http://espelhagrupos.com.br/bot-ofertas-pet-shop-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-wabot&utm_content=case-operacao`
+  `http://espelhagrupos.com.br/bot-ofertas-pet-shop-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-botinho&utm_content=case-operacao`
 
 ## Validações locais
 
@@ -135,7 +135,7 @@
 
 - LinkedIn: “Turismo em grupos exige timing e link de afiliado conferido: primeiro valida oferta, depois escala distribuição.”
 - URL sugerida com UTM:
-  `http://espelhagrupos.com.br/bot-ofertas-turismo-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-wabot&utm_content=case-operacao`
+  `http://espelhagrupos.com.br/bot-ofertas-turismo-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-botinho&utm_content=case-operacao`
 
 ### Validações locais
 

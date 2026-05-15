@@ -3,7 +3,7 @@ import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 
 const title = 'Conteúdos: blog e materiais para afiliados no WhatsApp'
-const description = 'Central de conteúdos do WABOT com artigos e materiais práticos para padronizar divulgação, validar links de afiliado e escalar grupos no WhatsApp com responsabilidade.'
+const description = 'Central de conteúdos do BOTinho com artigos e materiais práticos para padronizar divulgação, validar links de afiliado e escalar grupos no WhatsApp com responsabilidade.'
 const slug = '/conteudos'
 
 const blogPosts = [
@@ -39,6 +39,14 @@ const nichePages = [
     href: '/bot-ofertas-marketplace-whatsapp',
     title: 'Bot de ofertas para marketplace no WhatsApp',
     description: 'Conferência de link monetizado, tag de afiliado e automação em grupos.',
+  },
+]
+
+const methodologyPages = [
+  {
+    href: '/metodologia-uso-responsavel-whatsapp',
+    title: 'Metodologia de uso responsável no WhatsApp',
+    description: 'Critérios públicos para revisar ofertas, links, grupos, cadência e logs antes de escalar automação.',
   },
 ]
 
@@ -111,6 +119,13 @@ export default function Page() {
           <h2 className="text-2xl font-black tracking-tight text-gray-950">Páginas por nicho</h2>
           <ul className="mt-4 grid gap-4 md:grid-cols-2">
             {nichePages.map((item) => <ContentCard key={item.href} item={item} />)}
+          </ul>
+        </section>
+
+        <section className="mt-10">
+          <h2 className="text-2xl font-black tracking-tight text-gray-950">Metodologia e uso responsável</h2>
+          <ul className="mt-4 grid gap-4 md:grid-cols-2">
+            {methodologyPages.map((item) => <ContentCard key={item.href} item={item} />)}
           </ul>
         </section>
 

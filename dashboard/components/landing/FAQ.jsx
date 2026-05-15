@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Icon } from './Icon';
+import { CORE_FAQ_ITEMS } from '@/lib/marketing-content';
 
 const SUPPORT_WHATSAPP_URL = 'https://wa.me/5532999844020';
 const s = {
@@ -40,8 +41,8 @@ const s = {
 
 export function FAQ() {
   const [open, setOpen] = useState(0);
-  const [items, setItems] = useState([]);
-  const [status, setStatus] = useState('loading');
+  const [items, setItems] = useState(CORE_FAQ_ITEMS);
+  const [status, setStatus] = useState('static');
 
   useEffect(() => {
     let active = true;
@@ -52,12 +53,16 @@ export function FAQ() {
       })
       .then((data) => {
         if (!active) return;
-        setItems(Array.isArray(data.items) ? data.items : []);
+        const dynamicItems = Array.isArray(data.items) ? data.items : [];
+        setItems(dynamicItems.length ? dynamicItems : CORE_FAQ_ITEMS);
         setOpen(0);
         setStatus('ready');
       })
       .catch(() => {
-        if (active) setStatus('error');
+        if (active) {
+          setItems(CORE_FAQ_ITEMS);
+          setStatus('static');
+        }
       });
     return () => { active = false; };
   }, []);
@@ -77,10 +82,9 @@ export function FAQ() {
             </a>
           </div>
           <div style={s.list}>
-            {status === 'loading' && <div style={s.empty}>Carregando perguntas frequentes...</div>}
-            {status === 'error' && <div style={s.empty}>Não foi possível carregar o FAQ agora. Chame nosso suporte pelo WhatsApp.</div>}
+            {status === 'static' && <div style={s.empty}>Perguntas essenciais carregadas. O painel administrativo pode complementar esta FAQ após validação em staging.</div>}
             {status === 'ready' && items.length === 0 && <div style={s.empty}>FAQ em atualização. Enquanto isso, fale com nosso suporte.</div>}
-            {status === 'ready' && items.map((it, i) => (
+            {items.map((it, i) => (
               <div key={it.id ?? i} style={s.item(open === i)}>
                 <button style={s.q} onClick={() => setOpen(open === i ? -1 : i)}>
                   <span>{it.question}</span>

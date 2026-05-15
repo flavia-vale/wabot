@@ -1,11 +1,12 @@
 import Link from 'next/link'
 import { ArticleShell } from '@/components/marketing/ArticleShell'
 import { getSiteUrl } from '@/lib/site-url'
+import { buildArticleJsonLd, getEditorialDates } from '@/lib/editorial-content'
 
 const title = 'Como conferir e converter link de afiliado para WhatsApp'
 const description = 'Guia prático para afiliados validarem link monetizado, tag ou código de afiliado antes de divulgar ofertas em grupos de WhatsApp sem perder comissão por URL errada.'
 const slug = '/blog/conferir-converter-link-afiliado-whatsapp'
-const publishedAt = '2026-05-14'
+const dates = getEditorialDates(slug)
 
 const faq = [
   {
@@ -30,39 +31,21 @@ export const metadata = {
 }
 
 export default function Page() {
-  const articleJsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'Article',
-    headline: title,
-    description,
-    author: { '@type': 'Organization', name: 'wabot' },
-    publisher: { '@type': 'Organization', name: 'wabot' },
-    datePublished: publishedAt,
-    dateModified: publishedAt,
-    mainEntityOfPage: `${getSiteUrl()}${slug}`,
-  }
-  const faqJsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'FAQPage',
-    mainEntity: faq.map((item) => ({
-      '@type': 'Question',
-      name: item.q,
-      acceptedAnswer: { '@type': 'Answer', text: item.a },
-    })),
-  }
+  const schemas = buildArticleJsonLd({ title, description, slug, siteUrl: getSiteUrl(), faq })
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleJsonLd) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
-      <ArticleShell eyebrow="Afiliados · Conversão de links" title={title} description={description} origin="artigo_conferir_converter_link_afiliado_whatsapp">
+      {schemas.map((schema) => (
+        <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
+      ))}
+      <ArticleShell eyebrow="Afiliados · Conversão de links" title={title} description={description} origin="artigo_conferir_converter_link_afiliado_whatsapp" publishedAt={dates.publishedAt} updatedAt={dates.updatedAt}>
         <section>
           <h2>Resposta direta</h2>
           <p>
             Antes de divulgar no WhatsApp, o afiliado deve abrir a URL final no celular, confirmar se a tag ou o código de afiliado aparece no destino esperado e registrar qual link monetizado será enviado. Essa conferência reduz o risco de publicar uma oferta com link sem comissão, cupom errado ou redirecionamento quebrado.
           </p>
           <p>
-            O BOTinho/WABOT ajuda na rotina de organização e distribuição de mensagens em grupos, mas não promete integração aprovada com marketplaces, redes de afiliados ou programas externos. A responsabilidade de validar as regras de cada plataforma continua sendo do operador.
+            O BOTinho ajuda na rotina de organização e distribuição de mensagens em grupos, mas não promete integração aprovada com marketplaces, redes de afiliados ou programas externos. A responsabilidade de validar as regras de cada plataforma continua sendo do operador.
           </p>
         </section>
 

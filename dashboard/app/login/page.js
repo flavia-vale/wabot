@@ -83,7 +83,7 @@ function LoginContent() {
         <div className="mb-5 flex justify-center">
           <div className={`rounded-2xl p-3 shadow-sm ${isRegister ? 'bg-emerald-900' : 'bg-green-50'}`}>
             <Image
-              src="/wabot-logo.svg"
+              src="/botinho-logo.svg"
               alt="Logo do BOTinho, bot conversor para afiliados no WhatsApp"
               width={64}
               height={64}

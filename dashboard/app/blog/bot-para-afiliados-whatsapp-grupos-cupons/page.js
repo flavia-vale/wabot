@@ -1,11 +1,12 @@
 import Link from 'next/link'
 import { ArticleShell } from '@/components/marketing/ArticleShell'
 import { getSiteUrl } from '@/lib/site-url'
+import { buildArticleJsonLd, getEditorialDates } from '@/lib/editorial-content'
 
 const title = 'Bot para afiliados no WhatsApp: grupos de cupons sem copia-e-cola'
 const description = 'Entenda como afiliados e admins de grupos de cupons podem organizar distribuição de ofertas no WhatsApp com espelhamento, rotina e conferência de links.'
 const slug = '/blog/bot-para-afiliados-whatsapp-grupos-cupons'
-const publishedAt = '2026-05-14'
+const dates = getEditorialDates(slug)
 
 const faq = [
   {
@@ -30,36 +31,18 @@ export const metadata = {
 }
 
 export default function Page() {
-  const articleJsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'Article',
-    headline: title,
-    description,
-    author: { '@type': 'Organization', name: 'wabot' },
-    publisher: { '@type': 'Organization', name: 'wabot' },
-    datePublished: publishedAt,
-    dateModified: publishedAt,
-    mainEntityOfPage: `${getSiteUrl()}${slug}`,
-  }
-  const faqJsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'FAQPage',
-    mainEntity: faq.map((item) => ({
-      '@type': 'Question',
-      name: item.q,
-      acceptedAnswer: { '@type': 'Answer', text: item.a },
-    })),
-  }
+  const schemas = buildArticleJsonLd({ title, description, slug, siteUrl: getSiteUrl(), faq })
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleJsonLd) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
-      <ArticleShell eyebrow="Automação · Grupos de cupons" title={title} description={description} origin="artigo_bot_afiliados_whatsapp_grupos_cupons">
+      {schemas.map((schema) => (
+        <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
+      ))}
+      <ArticleShell eyebrow="Automação · Grupos de cupons" title={title} description={description} origin="artigo_bot_afiliados_whatsapp_grupos_cupons" publishedAt={dates.publishedAt} updatedAt={dates.updatedAt}>
         <section>
           <h2>Resposta direta</h2>
           <p>
-            Um bot para afiliados no WhatsApp faz sentido quando a operação já tem ofertas validadas e precisa distribuir mensagens para grupos certos, com menos copia-e-cola e mais controle. O BOTinho/WABOT apoia espelhamento e rotina de publicação; ele não deve ser usado para prometer comissão, burlar regras ou enviar spam.
+            Um bot para afiliados no WhatsApp faz sentido quando a operação já tem ofertas validadas e precisa distribuir mensagens para grupos certos, com menos copia-e-cola e mais controle. O BOTinho apoia espelhamento e rotina de publicação; ele não deve ser usado para prometer comissão, burlar regras ou enviar spam.
           </p>
         </section>
 

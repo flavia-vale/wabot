@@ -5,7 +5,7 @@ import { getSiteUrl } from '@/lib/site-url'
 const pages = {
   'bot-ofertas-restaurantes-whatsapp': {
     slug: '/bot-ofertas-restaurantes-whatsapp',
-    title: 'Bot de ofertas para restaurantes no WhatsApp | WABOT',
+    title: 'Bot de ofertas para restaurantes no WhatsApp | BOTinho',
     description: 'Organize divulgação de ofertas de restaurantes no WhatsApp com curadoria, calendário, grupos certos e automação responsável.',
     eyebrow: 'Nicho restaurantes',
     h1: 'Bot de ofertas para restaurantes no WhatsApp',
@@ -21,7 +21,7 @@ const pages = {
       'Conferir se a oferta ainda está ativa, com preço e disponibilidade corretos.',
       'Separar grupos por região, perfil de compra e momento de consumo.',
       'Padronizar a mensagem com benefício direto, validade e instrução de pedido.',
-      'Automatizar a distribuição no WABOT/BOTinho mantendo revisão humana das campanhas.',
+      'Automatizar a distribuição no BOTinho mantendo revisão humana das campanhas.',
       'Registrar cliques, pedidos informados e aprendizados para ajustar os próximos envios.',
     ],
     affiliateBox: null,
@@ -33,18 +33,18 @@ const pages = {
     ],
     faq: [
       { q: 'Restaurante precisa revisar cada oferta antes de automatizar?', a: 'Sim. A automação deve começar depois da validação de preço, disponibilidade, área de entrega, horário e regra do cupom.' },
-      { q: 'O WABOT substitui a estratégia comercial do restaurante?', a: 'Não. Ele apoia a rotina de distribuição e padronização; a curadoria da oferta e os claims comerciais continuam sob responsabilidade humana.' },
+      { q: 'O BOTinho substitui a estratégia comercial do restaurante?', a: 'Não. Ele apoia a rotina de distribuição e padronização; a curadoria da oferta e os claims comerciais continuam sob responsabilidade humana.' },
       { q: 'Posso divulgar em vários grupos ao mesmo tempo?', a: 'A recomendação é distribuir com cadência, segmentação e respeito às regras de cada grupo para evitar excesso de repetição.' },
     ],
     social: {
       linkedin: 'Restaurante não precisa depender de lembrete manual para divulgar combo, cupom e promoção de horário fraco. Primeiro valide oferta e região; depois automatize a distribuição com cadência.',
       instagram: 'Promo de restaurante sem processo vira esquecimento. Oferta validada + grupo certo + cadência = rotina de divulgação melhor.',
-      utm: 'http://espelhagrupos.com.br/bot-ofertas-restaurantes-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-wabot&utm_content=nicho-restaurantes',
+      utm: 'http://espelhagrupos.com.br/bot-ofertas-restaurantes-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-botinho&utm_content=nicho-restaurantes',
     },
   },
   'bot-ofertas-marketplace-whatsapp': {
     slug: '/bot-ofertas-marketplace-whatsapp',
-    title: 'Bot de ofertas para marketplace no WhatsApp | WABOT',
+    title: 'Bot de ofertas para marketplace no WhatsApp | BOTinho',
     description: 'Padronize ofertas de marketplace no WhatsApp com conferência de link monetizado, tag de afiliado, copy e distribuição em grupos.',
     eyebrow: 'Marketplace e afiliados',
     h1: 'Bot de ofertas para marketplace no WhatsApp',
@@ -78,14 +78,14 @@ const pages = {
       { href: '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp', label: 'Checklist de divulgação de ofertas' },
     ],
     faq: [
-      { q: 'O bot garante comissão em marketplaces?', a: 'Não. A comissão depende das regras do programa e do link correto. O WABOT/BOTinho ajuda a padronizar conferência, copy e distribuição.' },
+      { q: 'O bot garante comissão em marketplaces?', a: 'Não. A comissão depende das regras do programa e do link correto. O BOTinho ajuda a padronizar conferência, copy e distribuição.' },
       { q: 'Como reduzir o risco de perder comissão?', a: 'Valide o link monetizado no celular, confira tag/código no destino final, teste redirecionamentos e não remova parâmetros antes de divulgar.' },
       { q: 'Existe promessa de integração oficial com marketplaces?', a: 'Não. O conteúdo fala de processo operacional e não promete integração não aprovada com plataformas externas.' },
     ],
     social: {
       linkedin: 'Marketplace exige velocidade, mas afiliado não pode pular conferência. Link monetizado, tag, preço e estoque vêm antes da automação em grupos.',
       instagram: 'Link sem tag = risco de comissão perdida. Confere primeiro. Automatiza depois.',
-      utm: 'http://espelhagrupos.com.br/bot-ofertas-marketplace-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-wabot&utm_content=nicho-marketplace',
+      utm: 'http://espelhagrupos.com.br/bot-ofertas-marketplace-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-botinho&utm_content=nicho-marketplace',
     },
   },
 }
@@ -126,7 +126,7 @@ function buildSchema(page) {
       description: page.description,
       mainEntityOfPage: url,
       author: { '@type': 'Organization', name: 'BOTinho' },
-      publisher: { '@type': 'Organization', name: 'BOTinho', logo: { '@type': 'ImageObject', url: `${siteUrl}/wabot-logo.svg` } },
+      publisher: { '@type': 'Organization', name: 'BOTinho', logo: { '@type': 'ImageObject', url: `${siteUrl}/botinho-logo.svg` } },
     },
     {
       '@context': 'https://schema.org',

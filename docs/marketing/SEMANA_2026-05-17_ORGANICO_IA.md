@@ -53,7 +53,7 @@
 - LinkedIn: “Curso bom converte mais quando o link monetizado está certo e a copy fala de transformação real.”
 - Instagram: “Antes de escalar em grupos: promessa clara, prazo real e tag de afiliado ativa.”
 - URL sugerida com UTM:
-  `http://espelhagrupos.com.br/bot-ofertas-cursos-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-wabot&utm_content=case-operacao`
+  `http://espelhagrupos.com.br/bot-ofertas-cursos-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-botinho&utm_content=case-operacao`
 
 ## Validações locais
 

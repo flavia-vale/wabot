@@ -1,10 +1,18 @@
 import Link from 'next/link'
 import { ArticleShell } from '@/components/marketing/ArticleShell'
 import { getSiteUrl } from '@/lib/site-url'
+import { buildArticleJsonLd, getEditorialDates } from '@/lib/editorial-content'
 
 const title = 'Checklist para padronizar divulgação em WhatsApp'
 const description = 'Um checklist operacional para reduzir erro humano em campanhas de ofertas, cupons e links de afiliado distribuídos em grupos de WhatsApp.'
 const slug = '/blog/checklist-padronizar-divulgacao-whatsapp'
+const dates = getEditorialDates(slug)
+
+const faq = [
+  { q: 'Por que padronizar divulgação antes de automatizar?', a: 'Porque automação amplia o processo existente. Se oferta, link, copy e destino não estiverem padronizados, o erro também escala para mais grupos.' },
+  { q: 'O checklist substitui revisão humana?', a: 'Não. Ele organiza a revisão humana antes da automação e reduz esquecimento de pontos como preço, cupom, tag de afiliado, grupo e horário.' },
+  { q: 'Como usar o checklist com o BOTinho?', a: 'Use o checklist para aprovar a mensagem e os grupos; depois configure origem, destino, filtros e intervalos no BOTinho e revise os primeiros logs.' },
+]
 
 export const metadata = {
   title,
@@ -14,22 +22,21 @@ export const metadata = {
 }
 
 export default function Page() {
-  const articleJsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'Article',
-    headline: title,
-    description,
-    author: { '@type': 'Organization', name: 'wabot' },
-    publisher: { '@type': 'Organization', name: 'wabot' },
-    datePublished: '2026-05-11',
-    dateModified: '2026-05-11',
-    mainEntityOfPage: `${getSiteUrl()}${slug}`,
-  }
+  const schemas = buildArticleJsonLd({ title, description, slug, siteUrl: getSiteUrl(), faq })
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleJsonLd) }} />
-      <ArticleShell eyebrow="Conteúdo de dor · Cluster 1" title={title} description={description} origin="artigo_checklist_padronizar_divulgacao_whatsapp">
+      {schemas.map((schema) => (
+        <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
+      ))}
+      <ArticleShell eyebrow="Conteúdo de dor · Cluster 1" title={title} description={description} origin="artigo_checklist_padronizar_divulgacao_whatsapp" publishedAt={dates.publishedAt} updatedAt={dates.updatedAt}>
+        <section>
+          <h2>Resposta direta</h2>
+          <p>
+            Padronizar divulgação no WhatsApp significa definir uma régua mínima para oferta, link, copy, destino, horário e medição antes de escalar a rotina com automação. O checklist reduz erro humano e ajuda o operador a automatizar apenas mensagens já revisadas.
+          </p>
+        </section>
+
         <section>
           <h2>Por que padronizar antes de automatizar?</h2>
           <p>
@@ -64,7 +71,17 @@ export default function Page() {
         </section>
 
         <section>
-          <h2>Como conectar esse checklist ao wabot</h2>
+          <h2>FAQ</h2>
+          {faq.map((item) => (
+            <details key={item.q} className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5">
+              <summary className="cursor-pointer font-black text-gray-950">{item.q}</summary>
+              <p className="mt-3 text-gray-700">{item.a}</p>
+            </details>
+          ))}
+        </section>
+
+        <section>
+          <h2>Como conectar esse checklist ao BOTinho</h2>
           <ol>
             <li>Use o checklist para definir quais grupos são origem e quais são destino.</li>
             <li>Transforme a copy padrão em modelo de campanha recorrente.</li>
