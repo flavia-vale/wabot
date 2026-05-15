@@ -16,6 +16,7 @@ import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
+import { resolveMonitoredImage } from './monitoredImageResolver.js'
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
@@ -838,26 +839,17 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const platform = target?.platform || 'unknown'
         logger.info({ msgId: msg.key.id, imageMode: monitorGroup.imageMode, platform }, 'getImage: iniciando resolução de imagem')
 
-        if (monitorGroup.imageMode === 'original') {
-          // Sempre reaproveitar a imagem da mensagem monitorada quando houver —
-          // inclusive jpegThumbnail do link preview. É preferível enviar a
-          // imagem original (mesmo a thumbnail menor) do que cair em preview
-          // automático, que frequentemente falha em URLs de afiliado (sem
-          // og:image acessível ou com redirects via tracker) e resulta em
-          // mensagem sem foto nenhuma.
-          cachedImage = await downloadOriginalImage()
-          return cachedImage
-        }
-
-        if (monitorGroup.imageMode === 'fetch') {
-          // No modo "imagem do site" não baixamos mais a imagem como mídia:
-          // confiamos no preview automático do WhatsApp gerado a partir do
-          // link convertido (extendedTextMessage + generateHighQualityLinkPreview).
-          logger.info({ msgId: msg.key.id, platform }, 'imageMode=fetch: usando preview automático do WhatsApp (sem download de mídia)')
-          return null
-        }
-
-        return null
+        cachedImage = await resolveMonitoredImage({
+          mode: monitorGroup.imageMode,
+          target,
+          credentials: cfg.credentials,
+          downloadOriginalImage,
+          fetchProductImage,
+          fetchImageBuffer,
+          fallbackToOriginal: monitorGroup.fallbackToOriginal !== false,
+          logger,
+        })
+        return cachedImage
       }
 
 
