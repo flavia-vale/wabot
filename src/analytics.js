@@ -1,6 +1,17 @@
 import { randomUUID } from 'crypto'
 import db from './db.js'
 
+export const PUBLIC_ANALYTICS_EVENTS = new Set([
+  'conversion_prompt_viewed',
+  'conversion_prompt_dismissed',
+  'conversion_prompt_cta_clicked',
+  'lead_magnet_viewed',
+  'lead_magnet_form_focused',
+  'lead_magnet_submitted',
+  'lead_magnet_pdf_clicked',
+  'lead_magnet_online_clicked',
+])
+
 export const ANALYTICS_EVENTS = new Set([
   'signup_created',
   'login_completed',

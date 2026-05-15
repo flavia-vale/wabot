@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
+import { buildRegisterHref } from '@/lib/marketing-attribution'
 
 const pages = {
   'bot-ofertas-restaurantes-whatsapp': {

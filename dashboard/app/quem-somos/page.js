@@ -4,6 +4,7 @@ import { PublicPage } from '@/components/PublicShell'
 export const metadata = {
   title: 'Quem Somos | BOTinho',
   description: 'Conheça o BOTinho, bot conversor para afiliados no WhatsApp.',
+  alternates: { canonical: '/quem-somos' },
 }
 
 export default function AboutPage() {

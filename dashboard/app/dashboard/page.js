@@ -607,7 +607,7 @@ export default function DashboardPage() {
         <div className="bg-white rounded-2xl shadow p-6 mb-4 flex flex-col items-center gap-3">
           <p className="text-sm text-gray-600">Escaneie o QR Code com o WhatsApp</p>
           {isQrScanned && <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">QR lido ✅</span>}
-          <QRCode value={qr} size={200} />
+          <QRCode value={qr} size={240} />
           <p className={`text-xs font-medium ${showQrExpired ? 'text-red-600' : 'text-gray-500'}`}>
             {showQrExpired ? 'QR expirado. Gere um novo QR para continuar.' : `QR expira em ${qrExpiresIn}s`}
           </p>

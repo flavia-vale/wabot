@@ -59,7 +59,7 @@ async function main() {
 
   for (const result of results) {
     const marker = result.ok ? 'OK' : 'FALHA'
-    console.log(`${marker} - ${result.slug} (${result.reason})`)
+    console.log(`${marker} - ${result.label} (${result.reason})`)
   }
 
   if (failed.length > 0) {

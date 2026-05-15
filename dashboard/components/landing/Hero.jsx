@@ -49,6 +49,7 @@ function Nav() {
       <div style={s.navLinks} className="landing-nav-links">
         <a style={s.navLink} href="#como">Como funciona</a>
         <a style={s.navLink} href="#features">Recursos</a>
+        <Link style={s.navLink} href="/ferramentas">Ferramentas</Link>
         <a style={s.navLink} href="#planos">Planos</a>
         <a style={s.navLink} href="#faq">Perguntas</a>
       </div>
@@ -61,6 +62,7 @@ function Nav() {
         <div className="landing-mobile-menu-panel">
           <a style={s.navLink} href="#como">Como funciona</a>
           <a style={s.navLink} href="#features">Recursos</a>
+          <Link style={s.navLink} href="/ferramentas">Ferramentas</Link>
           <a style={s.navLink} href="#planos">Planos</a>
           <a style={s.navLink} href="#faq">Perguntas</a>
           <Link className="btn btn-ghost" href="/login">Entrar</Link>

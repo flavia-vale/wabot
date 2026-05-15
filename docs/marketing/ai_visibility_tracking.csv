@@ -1,0 +1,21 @@
+query,cluster,platform,checked_at,ai_answer_present,botinho_cited,cited_url,competitors_cited,notes,next_action,owner
+bot para afiliados no WhatsApp,categoria,Google AI Overviews,,,,,,,Monitorar após deploy em staging e indexação,marketing
+bot para afiliados no WhatsApp,categoria,ChatGPT Search,,,,,,,Monitorar após deploy em staging e indexação,marketing
+bot para afiliados no WhatsApp,categoria,Perplexity,,,,,,,Monitorar após deploy em staging e indexação,marketing
+ferramenta para divulgar ofertas em grupos de WhatsApp,categoria,Google AI Overviews,,,,,,,Monitorar citações da home e páginas de dor,marketing
+ferramenta para divulgar ofertas em grupos de WhatsApp,categoria,ChatGPT Search,,,,,,,Monitorar citações da home e páginas de dor,marketing
+ferramenta para divulgar ofertas em grupos de WhatsApp,categoria,Perplexity,,,,,,,Monitorar citações da home e páginas de dor,marketing
+como espelhar mensagens entre grupos de WhatsApp,problema,Google AI Overviews,,,,,,,Verificar se LPs programáticas aparecem como fonte,marketing
+como espelhar mensagens entre grupos de WhatsApp,problema,ChatGPT Search,,,,,,,Verificar se LPs programáticas aparecem como fonte,marketing
+como espelhar mensagens entre grupos de WhatsApp,problema,Perplexity,,,,,,,Verificar se LPs programáticas aparecem como fonte,marketing
+como postar em vários grupos de WhatsApp ao mesmo tempo sem spam,problema,Google AI Overviews,,,,,,,Priorizar página de metodologia como fonte de compliance,marketing
+como postar em vários grupos de WhatsApp ao mesmo tempo sem spam,problema,ChatGPT Search,,,,,,,Priorizar página de metodologia como fonte de compliance,marketing
+como postar em vários grupos de WhatsApp ao mesmo tempo sem spam,problema,Perplexity,,,,,,,Priorizar página de metodologia como fonte de compliance,marketing
+como padronizar divulgação de cupons no WhatsApp,problema,Google AI Overviews,,,,,,,Monitorar artigo e checklist operacional,marketing
+como padronizar divulgação de cupons no WhatsApp,problema,ChatGPT Search,,,,,,,Monitorar artigo e checklist operacional,marketing
+como padronizar divulgação de cupons no WhatsApp,problema,Perplexity,,,,,,,Monitorar artigo e checklist operacional,marketing
+BOTinho preço,marca,Google AI Overviews,,,,,,,Verificar se /pricing.md é citado corretamente,marketing
+BOTinho preço,marca,ChatGPT Search,,,,,,,Verificar se /pricing.md é citado corretamente,marketing
+BOTinho preço,marca,Perplexity,,,,,,,Verificar se /pricing.md é citado corretamente,marketing
+BOTinho metodologia WhatsApp,marca,Google AI Overviews,,,,,,,Verificar se página de metodologia é reconhecida,marketing
+BOTinho metodologia WhatsApp,marca,Perplexity,,,,,,,Verificar se página de metodologia é reconhecida,marketing

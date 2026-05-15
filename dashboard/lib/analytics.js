@@ -30,9 +30,32 @@ export function trackEvent(eventName, params = {}) {
     }
 
     window.dispatchEvent(new CustomEvent('wabot:track', { detail: payload }))
+    persistPublicEvent(payload)
   } catch (error) {
     console.error('[analytics] trackEvent failed', error)
   }
+}
+
+
+function persistPublicEvent(payload) {
+  if (!PUBLIC_PERSISTED_EVENTS.has(payload.event)) return
+  const body = JSON.stringify({ event: payload.event, metadata: payload })
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+      const blob = new Blob([body], { type: 'application/json' })
+      if (navigator.sendBeacon('/api/public/analytics', blob)) return
+    }
+  } catch {}
+
+  try {
+    fetch('/api/public/analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      keepalive: true,
+      credentials: 'same-origin',
+    }).catch(() => {})
+  } catch {}
 }
 
 export function mapAuthError(error) {

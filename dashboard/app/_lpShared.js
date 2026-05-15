@@ -119,6 +119,41 @@ function getHeroCopy(cfg, lpType) {
   }
 }
 
+
+function humanizeSlugPart(value) {
+  return String(value || '')
+    .split('-')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function getRoutineExample(slug, cfg, lpType) {
+  if (lpType === 'city') {
+    const city = humanizeSlugPart(slug.replace('espelhar-grupos-whatsapp-', ''))
+    return {
+      title: `Exemplo de rotina em ${city}`,
+      body: `Uma curadoria regional pode separar grupos de origem por categoria e grupos de destino por bairro, cidade ou perfil de compra em ${city}. Antes de espelhar, a pessoa operadora revisa preço, cupom, link monetizado e regra do grupo; depois acompanha logs para corrigir falhas sem prometer alcance ou comissão.`,
+      steps: ['Separar destinos regionais por contexto.', 'Revisar oferta e link no celular.', 'Publicar com intervalo e conferir logs.'],
+    }
+  }
+
+  if (lpType === 'niche') {
+    const niche = humanizeSlugPart(slug.replace('bot-ofertas-', '').replace('-whatsapp', ''))
+    return {
+      title: `Exemplo de rotina para ${niche}`,
+      body: `Uma operação de ${niche.toLowerCase()} pode priorizar ofertas por margem, estoque e urgência real. O BOTinho entra depois da curadoria: organiza origem, destino, filtros e cadência para que a mensagem certa chegue aos grupos adequados com revisão humana.`,
+      steps: ['Escolher categorias de maior aderência.', 'Conferir link, cupom e regras da plataforma.', 'Ajustar frequência conforme resposta dos grupos.'],
+    }
+  }
+
+  return {
+    title: 'Exemplo de rotina operacional',
+    body: `${cfg.uniqueHeadline.replace(/\.$/, '')}. Na prática, a equipe define o problema prioritário, revisa a campanha, escolhe grupos autorizados e usa logs para aprender antes de ampliar volume. O foco é processo consistente, não promessa de resultado garantido.`,
+    steps: ['Mapear gargalo antes de automatizar.', 'Aplicar checklist de oferta, link e destino.', 'Escalar aos poucos com base nos logs.'],
+  }
+}
+
 export function getLpMetadata(slug) {
   const cfg = LP_CONFIG[slug]
   if (!cfg) return {}
@@ -154,6 +189,7 @@ export function LpTemplate({ slug }) {
   const relatedRoutes = getRelatedProgrammaticSeoRoutes(seoRoute, 3)
   const theme = LP_TYPE_THEME[lpType] ?? LP_TYPE_THEME.default
   const heroCopy = getHeroCopy(cfg, lpType)
+  const routineExample = getRoutineExample(slug, cfg, lpType)
   const faqJsonLd = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: cfg.faq.map((item) => ({ '@type': 'Question', name: item.q, acceptedAnswer: { '@type': 'Answer', text: item.a } })) }
   const howToJsonLd = { '@context': 'https://schema.org', '@type': 'HowTo', name: `Como configurar ${cfg.title.replace(' | BOTinho', '')}`, step: cfg.howTo.map((text, index) => ({ '@type': 'HowToStep', name: `Passo ${index + 1}`, text })) }
   const productJsonLd = {

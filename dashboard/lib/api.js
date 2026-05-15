@@ -103,7 +103,7 @@ async function apiFetch(path, options = {}) {
     throw err
   }
   if (!res.ok) {
-    const rawMessage = data?.message ?? data?.error ?? ''
+    const rawMessage = data?.message ?? (typeof data?.error === 'object' ? data.error?.message : data?.error) ?? ''
     const normalizedMessage = typeof rawMessage === 'string' ? rawMessage : JSON.stringify(rawMessage)
     const safeMessage = String(normalizedMessage ?? '').trim()
     const message = safeMessage && !safeMessage.startsWith('<') ? safeMessage : `HTTP ${res.status}`
@@ -123,8 +123,14 @@ export const api = {
     return data
   },
 
-  register: async (name, email, password, contactPhone, ref) => {
-    const data = await apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, ...(ref && { ref }) }) })
+  register: async (name, email, password, contactPhone, refOrAttribution = '') => {
+    const attribution = typeof refOrAttribution === 'object' && refOrAttribution !== null
+      ? refOrAttribution
+      : { ...(refOrAttribution && { ref: refOrAttribution }) }
+    const data = await apiFetch('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ name, email, password, contactPhone, ...attribution }),
+    })
     setAuthToken(data?.token || '')
     return data
   },
@@ -258,6 +264,10 @@ export const api = {
   adminMarketingDataTrust: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/marketing/data-trust${query ? `?${query}` : ''}`)
+  },
+  adminMarketingPrompts: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/marketing/prompts${query ? `?${query}` : ''}`)
   },
   adminMarketingCohorts: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
