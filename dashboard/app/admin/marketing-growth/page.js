@@ -27,12 +27,15 @@ export default function MarketingGrowthAdminPage() {
   const [marketingOverview, setMarketingOverview] = useState(null)
   const [marketingCampaigns, setMarketingCampaigns] = useState([])
   const [marketingFunnel, setMarketingFunnel] = useState(null)
+  const [dataTrust, setDataTrust] = useState(null)
+  const [cohorts, setCohorts] = useState([])
+  const [backendAlerts, setBackendAlerts] = useState([])
 
   useEffect(() => {
     let active = true
     ;(async () => {
       try {
-        const [adminData, overviewData, financeData, paymentsData, subscriptionsData, mkOverview, mkCampaigns, mkFunnel] = await Promise.all([
+        const [adminData, overviewData, financeData, paymentsData, subscriptionsData, mkOverview, mkCampaigns, mkFunnel, mkTrust, mkCohorts, mkAlerts] = await Promise.all([
           api.adminMe(),
           api.adminOverview(),
           api.adminFinanceOverview().catch(() => null),
@@ -41,6 +44,9 @@ export default function MarketingGrowthAdminPage() {
           api.adminMarketingOverview(dateRangeFromPeriod('30d')).catch(() => null),
           api.adminMarketingCampaigns(dateRangeFromPeriod('30d')).catch(() => ({ campaigns: [] })),
           api.adminMarketingFunnel(dateRangeFromPeriod('30d')).catch(() => null),
+          api.adminMarketingDataTrust(dateRangeFromPeriod('30d')).catch(() => null),
+          api.adminMarketingCohorts(dateRangeFromPeriod('90d')).catch(() => ({ cohorts: [] })),
+          api.adminMarketingAlerts(dateRangeFromPeriod('30d')).catch(() => ({ alerts: [] })),
         ])
         if (!active) return
         setAdmin(adminData)
@@ -51,9 +57,15 @@ export default function MarketingGrowthAdminPage() {
       setMarketingOverview(mkOverview)
       setMarketingCampaigns(Array.isArray(mkCampaigns?.campaigns) ? mkCampaigns.campaigns : [])
       setMarketingFunnel(mkFunnel)
+      setDataTrust(mkTrust)
+      setCohorts(Array.isArray(mkCohorts?.cohorts) ? mkCohorts.cohorts : [])
+      setBackendAlerts(Array.isArray(mkAlerts?.alerts) ? mkAlerts.alerts : [])
         setMarketingOverview(mkOverview)
         setMarketingCampaigns(Array.isArray(mkCampaigns?.campaigns) ? mkCampaigns.campaigns : [])
         setMarketingFunnel(mkFunnel)
+        setDataTrust(mkTrust)
+        setCohorts(Array.isArray(mkCohorts?.cohorts) ? mkCohorts.cohorts : [])
+        setBackendAlerts(Array.isArray(mkAlerts?.alerts) ? mkAlerts.alerts : [])
       } catch (err) {
         if (!active) return
         setError(err.message || 'Não foi possível carregar métricas de marketing.')
@@ -69,8 +81,8 @@ export default function MarketingGrowthAdminPage() {
     setError('')
     try {
       const range = dateRangeFromPeriod(period)
-      const [adminData, overviewData, financeData, paymentsData, subscriptionsData, mkOverview, mkCampaigns, mkFunnel] = await Promise.all([
-        api.adminMe(), api.adminOverview(), api.adminFinanceOverview().catch(() => null), api.adminPayments({ limit: 100 }).catch(() => ({ items: [] })), api.adminSubscriptions({ limit: 100 }).catch(() => ({ items: [] })), api.adminMarketingOverview(range).catch(() => null), api.adminMarketingCampaigns(range).catch(() => ({ campaigns: [] })), api.adminMarketingFunnel(range).catch(() => null),
+      const [adminData, overviewData, financeData, paymentsData, subscriptionsData, mkOverview, mkCampaigns, mkFunnel, mkTrust, mkCohorts, mkAlerts] = await Promise.all([
+        api.adminMe(), api.adminOverview(), api.adminFinanceOverview().catch(() => null), api.adminPayments({ limit: 100 }).catch(() => ({ items: [] })), api.adminSubscriptions({ limit: 100 }).catch(() => ({ items: [] })), api.adminMarketingOverview(range).catch(() => null), api.adminMarketingCampaigns(range).catch(() => ({ campaigns: [] })), api.adminMarketingFunnel(range).catch(() => null), api.adminMarketingDataTrust(range).catch(() => null), api.adminMarketingCohorts(dateRangeFromPeriod('90d')).catch(() => ({ cohorts: [] })), api.adminMarketingAlerts(range).catch(() => ({ alerts: [] })),
       ])
       setAdmin(adminData); setOverview(overviewData); setFinance(financeData)
       setPayments(Array.isArray(paymentsData?.items) ? paymentsData.items : [])
@@ -242,6 +254,31 @@ export default function MarketingGrowthAdminPage() {
           <div className="mt-3 space-y-3">{experiments.map((item, index) => <article key={`${item.hypothesis}-${index}`} className="rounded-xl border border-gray-100 p-4"><p className="text-sm font-bold text-gray-900">{item.hypothesis}</p><p className="mt-1 text-xs text-gray-500">Métrica-alvo: {item.metric} · Janela: {item.window}</p><p className="mt-1 text-sm text-gray-700">Atual: {item.current}</p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-violet-700">Decisão: {item.decision}</p></article>)}</div>
         </section>
 
+
+        <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+          <h2 className="text-lg font-black text-gray-900">Data Trust (Fase 4)</h2>
+          <div className="mt-3 grid gap-3 md:grid-cols-4">
+            <Card label="Confiança" value={String(dataTrust?.confidence || 'unknown').toUpperCase()} hint="Qualidade de coleta" tone={dataTrust?.confidence === 'low' ? 'risk' : 'good'} />
+            <Card label="Cobertura source" value={`${dataTrust?.sourceCoverage ?? 0}%`} />
+            <Card label="Cobertura campaign" value={`${dataTrust?.campaignCoverage ?? 0}%`} />
+            <Card label="Eventos 24h" value={dataTrust?.events24h ?? 0} hint={`Freshness: ${dataTrust?.freshnessMinutes ?? '-'} min`} />
+          </div>
+        </section>
+
+        <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+          <h2 className="text-lg font-black text-gray-900">Coortes (Fase 6)</h2>
+          <div className="mt-4 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead className="text-xs uppercase tracking-wide text-gray-400"><tr><th className="px-3 py-2">Semana</th><th className="px-3 py-2">Signups</th><th className="px-3 py-2">Ativados</th><th className="px-3 py-2">Pagos</th><th className="px-3 py-2">Retenção inicial</th></tr></thead><tbody className="divide-y divide-gray-100">{cohorts.map(row => <tr key={row.cohortWeek}><td className="px-3 py-3 font-semibold text-gray-900">{row.cohortWeek}</td><td className="px-3 py-3">{row.signups}</td><td className="px-3 py-3">{row.activated}</td><td className="px-3 py-3">{row.paid}</td><td className="px-3 py-3">{pct(row.activated, row.signups)}%</td></tr>)}</tbody></table></div>
+        </section>
+
+        <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+          <h2 className="text-lg font-black text-gray-900">Alertas backend (Fase 5)</h2>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">{backendAlerts.map((alert, index) => <article key={`${alert.title}-${index}`} className={`rounded-xl p-4 ring-1 ${alert.tone === 'risk' ? 'bg-red-50 ring-red-200' : 'bg-emerald-50 ring-emerald-200'}`}><p className="text-sm font-black text-gray-900">{alert.title}</p><p className="mt-1 text-sm text-gray-600">Valor: {String(alert.value)}</p></article>)}</div>
+        </section>
+
+        <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+          <h2 className="text-lg font-black text-gray-900">Growth OS (Fase 7)</h2>
+          <p className="text-sm text-gray-600">O quadro de experimentos abaixo representa a primeira camada operacional de Growth OS (hipótese, janela, decisão), pronta para evoluir para workflow com owner e SLA.</p>
+        </section>
         <section className="rounded-2xl border border-dashed border-violet-200 bg-violet-50/50 p-4 text-xs text-violet-800">
           <strong>Nota de fase MVP:</strong> até integrar eventos UTM dedicados, alguns agrupamentos de canal/funil usam aproximações com base nas métricas administrativas atuais.
         </section>
