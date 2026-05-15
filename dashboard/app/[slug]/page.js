@@ -1,8 +1,9 @@
 import { notFound } from 'next/navigation'
 import { LP_CONFIG, LpTemplate, getLpMetadata } from '../_lpShared'
+import { getProgrammaticSeoSlugs } from '@/lib/seo-registry.mjs'
 
 export function generateStaticParams() {
-  return Object.keys(LP_CONFIG).map((slug) => ({ slug }))
+  return getProgrammaticSeoSlugs().map((slug) => ({ slug }))
 }
 
 export async function generateMetadata({ params }) {
