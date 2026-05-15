@@ -100,18 +100,20 @@ export default function MarketingGrowthAdminPage() {
   const [dataTrust, setDataTrust] = useState(null)
   const [cohorts, setCohorts] = useState([])
   const [backendAlerts, setBackendAlerts] = useState([])
+  const [users, setUsers] = useState([])
   const [lastUpdated, setLastUpdated] = useState({ dashboard: '', kpis: '', funnel: '', channels: '', campaigns: '', trust: '' })
 
   useEffect(() => {
     let active = true
     ;(async () => {
       try {
-        const [adminData, overviewData, financeData, paymentsData, subscriptionsData, mkOverview, mkCampaigns, mkFunnel, mkTrust, mkCohorts, mkAlerts] = await Promise.all([
+        const [adminData, overviewData, financeData, paymentsData, subscriptionsData, usersData, mkOverview, mkCampaigns, mkFunnel, mkTrust, mkCohorts, mkAlerts] = await Promise.all([
           api.adminMe(),
           api.adminOverview(),
           api.adminFinanceOverview().catch(() => null),
           api.adminPayments({ limit: 100 }).catch(() => ({ items: [] })),
           api.adminSubscriptions({ limit: 100 }).catch(() => ({ items: [] })),
+          api.adminUsers({ limit: 120 }).catch(() => ({ users: [] })),
           api.adminMarketingOverview(dateRangeFromPeriod('30d')).catch(() => null),
           api.adminMarketingCampaigns(dateRangeFromPeriod('30d')).catch(() => ({ campaigns: [] })),
           api.adminMarketingFunnel(dateRangeFromPeriod('30d')).catch(() => null),
@@ -125,6 +127,7 @@ export default function MarketingGrowthAdminPage() {
         setFinance(financeData)
         setPayments(Array.isArray(paymentsData?.items) ? paymentsData.items : [])
         setSubscriptions(Array.isArray(subscriptionsData?.items) ? subscriptionsData.items : [])
+        setUsers(Array.isArray(usersData?.users) ? usersData.users : [])
         setMarketingOverview(mkOverview)
         setMarketingCampaigns(Array.isArray(mkCampaigns?.campaigns) ? mkCampaigns.campaigns : [])
         setMarketingFunnel(mkFunnel)
@@ -148,12 +151,13 @@ export default function MarketingGrowthAdminPage() {
     setError('')
     try {
       const range = dateRangeFromPeriod(period)
-      const [adminData, overviewData, financeData, paymentsData, subscriptionsData, mkOverview, mkCampaigns, mkFunnel, mkTrust, mkCohorts, mkAlerts] = await Promise.all([
-        api.adminMe(), api.adminOverview(), api.adminFinanceOverview().catch(() => null), api.adminPayments({ limit: 100 }).catch(() => ({ items: [] })), api.adminSubscriptions({ limit: 100 }).catch(() => ({ items: [] })), api.adminMarketingOverview(range).catch(() => null), api.adminMarketingCampaigns(range).catch(() => ({ campaigns: [] })), api.adminMarketingFunnel(range).catch(() => null), api.adminMarketingDataTrust(range).catch(() => null), api.adminMarketingCohorts(dateRangeFromPeriod('90d')).catch(() => ({ cohorts: [] })), api.adminMarketingAlerts(range).catch(() => ({ alerts: [] })),
+      const [adminData, overviewData, financeData, paymentsData, subscriptionsData, usersData, mkOverview, mkCampaigns, mkFunnel, mkTrust, mkCohorts, mkAlerts] = await Promise.all([
+        api.adminMe(), api.adminOverview(), api.adminFinanceOverview().catch(() => null), api.adminPayments({ limit: 100 }).catch(() => ({ items: [] })), api.adminSubscriptions({ limit: 100 }).catch(() => ({ items: [] })), api.adminUsers({ limit: 120 }).catch(() => ({ users: [] })), api.adminMarketingOverview(range).catch(() => null), api.adminMarketingCampaigns(range).catch(() => ({ campaigns: [] })), api.adminMarketingFunnel(range).catch(() => null), api.adminMarketingDataTrust(range).catch(() => null), api.adminMarketingCohorts(dateRangeFromPeriod('90d')).catch(() => ({ cohorts: [] })), api.adminMarketingAlerts(range).catch(() => ({ alerts: [] })),
       ])
       setAdmin(adminData); setOverview(overviewData); setFinance(financeData)
       setPayments(Array.isArray(paymentsData?.items) ? paymentsData.items : [])
       setSubscriptions(Array.isArray(subscriptionsData?.items) ? subscriptionsData.items : [])
+      setUsers(Array.isArray(usersData?.users) ? usersData.users : [])
       setMarketingOverview(mkOverview)
       setMarketingCampaigns(Array.isArray(mkCampaigns?.campaigns) ? mkCampaigns.campaigns : [])
       setMarketingFunnel(mkFunnel)
@@ -407,6 +411,32 @@ export default function MarketingGrowthAdminPage() {
   }, [metrics])
 
 
+  const leadRows = useMemo(() => {
+    const range = dateRangeFromPeriod(period)
+    const from = new Date(range.from)
+    const to = new Date(range.to)
+    return users
+      .filter(user => {
+        const createdAt = new Date(user?.createdAt || 0)
+        if (Number.isNaN(createdAt.getTime())) return false
+        return createdAt >= from && createdAt <= to
+      })
+      .map(user => ({
+        id: user.id,
+        name: user.name || '-',
+        email: user.email || '-',
+        phone: user.contactPhone || '-',
+        createdAt: user.createdAt,
+        status: user.status || '-',
+        plan: user.plan || '-',
+        accessStatus: user.accessStatus || '-',
+        botRunning: user.botRunning ? 'Sim' : 'Não',
+      }))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 80)
+  }, [users, period])
+
+
   const metricTrust = useMemo(() => ({
     leads: trustTag({ source: 'mixed', confidence: marketingOverview?.signups ? 'medium' : 'low', note: 'base users + sinais de signup' }),
     leadRate: trustTag({ source: 'modeled', confidence: 'low', note: 'visitas aproximadas' }),
@@ -569,6 +599,50 @@ export default function MarketingGrowthAdminPage() {
           <div className="mt-4 rounded-xl bg-gray-50 p-3 text-xs text-gray-700">
             <p className="font-semibold">Comando recomendado de atualização em staging</p>
             <p className="mt-1 font-mono">cd ~/wabot-staging && git pull origin develop && npm install && cd dashboard && npm install && cd .. && npx prisma migrate deploy && pm2 restart api-staging visual-staging</p>
+          </div>
+        </section>
+
+
+
+        <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-lg font-black text-gray-900">Leads detalhados (entrada e cadastro)</h2>
+            <p className="text-xs text-gray-500">{leadRows.length} leads no período {period}</p>
+          </div>
+          <p className="text-xs text-gray-500">Visão operacional dos cadastros que chegaram, com horário de entrada e status de avanço.</p>
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="text-xs uppercase tracking-wide text-gray-400">
+                <tr>
+                  <th className="px-3 py-2">Chegada</th>
+                  <th className="px-3 py-2">Nome</th>
+                  <th className="px-3 py-2">Email</th>
+                  <th className="px-3 py-2">Telefone</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Plano</th>
+                  <th className="px-3 py-2">Acesso</th>
+                  <th className="px-3 py-2">Bot rodando</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {leadRows.length ? leadRows.map(row => (
+                  <tr key={row.id}>
+                    <td className="px-3 py-3 text-xs text-gray-600">{formatUpdatedAt(row.createdAt)}</td>
+                    <td className="px-3 py-3 font-semibold text-gray-900">{row.name}</td>
+                    <td className="px-3 py-3">{row.email}</td>
+                    <td className="px-3 py-3">{row.phone}</td>
+                    <td className="px-3 py-3">{row.status}</td>
+                    <td className="px-3 py-3">{row.plan}</td>
+                    <td className="px-3 py-3">{row.accessStatus}</td>
+                    <td className="px-3 py-3">{row.botRunning}</td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td className="px-3 py-4 text-sm text-gray-500" colSpan={8}>Nenhum lead encontrado no período selecionado.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </section>
 

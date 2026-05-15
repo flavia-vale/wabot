@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { PublicPage } from '@/components/PublicShell'
+import { getSiteUrl } from '@/lib/site-url'
 
 export const metadata = {
   title: 'Suporte | BOTinho',
@@ -17,54 +18,62 @@ const faqs = [
   ['renovar-acesso', 'Como renovar acesso/plano?', 'Acesse Planos, escolha Basic ou Pro e finalize uma nova compra. No MVP o acesso é por 30 dias renovável manualmente.'],
 ]
 
-const supportFaqSchema = {
-  '@context': 'https://schema.org',
-  '@type': 'FAQPage',
-  mainEntity: faqs.map(([id, question, answer]) => ({
-    '@type': 'Question',
-    name: question,
-    acceptedAnswer: {
-      '@type': 'Answer',
-      text: answer,
-    },
-    url: `https://espelhagrupos.com.br/suporte#${id}`,
-  })),
+function buildSupportFaqSchema() {
+  const siteUrl = getSiteUrl()
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqs.map(([id, question, answer]) => ({
+      '@type': 'Question',
+      name: question,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: answer,
+      },
+      url: `${siteUrl}/suporte#${id}`,
+    })),
+  }
 }
 
 export default function SupportPage() {
+  const supportFaqSchema = buildSupportFaqSchema()
+
   return (
-    <PublicPage
-      eyebrow="Suporte"
-      title="Como podemos ajudar?"
-      description="Encontre o canal oficial de atendimento e respostas rápidas para configurar sua operação."
-    >
-      <div className="space-y-8 text-sm leading-7 text-gray-600">
-        <section className="rounded-2xl bg-green-50 p-5 text-green-900">
-          <h2 className="text-xl font-bold">Canal oficial</h2>
-          <p className="mt-2">WhatsApp oficial: <a href="https://wa.me/5532999844020" target="_blank" rel="noopener noreferrer" className="font-bold underline">5532999844020</a></p>
-          <p className="mt-2">Expectativa de resposta: assim que possível em dias úteis. Ainda não há SLA formal na fase MVP.</p>
-        </section>
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(supportFaqSchema) }} />
+      <PublicPage
+        eyebrow="Suporte"
+        title="Como podemos ajudar?"
+        description="Encontre o canal oficial de atendimento e respostas rápidas para configurar sua operação."
+      >
+        <div className="space-y-8 text-sm leading-7 text-gray-600">
+          <section className="rounded-2xl bg-green-50 p-5 text-green-900">
+            <h2 className="text-xl font-bold">Canal oficial</h2>
+            <p className="mt-2">WhatsApp oficial: <a href="https://wa.me/5532999844020" target="_blank" rel="noopener noreferrer" className="font-bold underline">5532999844020</a></p>
+            <p className="mt-2">Expectativa de resposta: assim que possível em dias úteis. Ainda não há SLA formal na fase MVP.</p>
+          </section>
 
-        <section>
-          <h2 className="text-xl font-bold text-gray-900">Perguntas frequentes</h2>
-          <div className="mt-4 space-y-4">
-            {faqs.map(([id, question, answer]) => (
-              <article id={id} key={id} className="scroll-mt-20 rounded-2xl border border-green-100 p-4">
-                <h3 className="font-bold text-gray-900">{question}</h3>
-                <p className="mt-2">{answer}</p>
-              </article>
-            ))}
-          </div>
-        </section>
+          <section>
+            <h2 className="text-xl font-bold text-gray-900">Perguntas frequentes</h2>
+            <div className="mt-4 space-y-4">
+              {faqs.map(([id, question, answer]) => (
+                <article id={id} key={id} className="scroll-mt-20 rounded-2xl border border-green-100 p-4">
+                  <h3 className="font-bold text-gray-900">{question}</h3>
+                  <p className="mt-2">{answer}</p>
+                </article>
+              ))}
+            </div>
+          </section>
 
-        <section className="rounded-2xl bg-gray-50 p-5">
-          <h2 className="text-xl font-bold text-gray-900">Já tem conta?</h2>
-          <p className="mt-2">Entre no painel para verificar conexão, credenciais, grupos, planos e logs da sua operação.</p>
-          <Link href="/dashboard/inicio" className="mt-4 inline-flex rounded-xl bg-green-600 px-5 py-3 font-bold text-white hover:bg-green-700">
-            Acessar painel
-          </Link>
-        </section>
-      </div>
-    </PublicPage>
+          <section className="rounded-2xl bg-gray-50 p-5">
+            <h2 className="text-xl font-bold text-gray-900">Já tem conta?</h2>
+            <p className="mt-2">Entre no painel para verificar conexão, credenciais, grupos, planos e logs da sua operação.</p>
+            <Link href="/dashboard/inicio" className="mt-4 inline-flex rounded-xl bg-green-600 px-5 py-3 font-bold text-white hover:bg-green-700">
+              Acessar painel
+            </Link>
+          </section>
+        </div>
+      </PublicPage>
+    </>
   )
 }
