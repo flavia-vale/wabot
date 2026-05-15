@@ -84,10 +84,10 @@ export default function GruposPage() {
     }
   }
 
-  function getGroupImageSettings(group) {
+  function getGroupImageSettings() {
     return {
-      imageMode: group.imageMode ?? 'original',
-      imageLinkTarget: group.imageLinkTarget ?? 'first',
+      imageMode: 'original',
+      imageLinkTarget: 'first',
       fallbackToOriginal: true,
     }
   }
@@ -106,9 +106,8 @@ export default function GruposPage() {
   }
 
   function hasImageDraftChanges(group) {
-    const current = getGroupImageSettings(group)
     const draft = getImageDraft(group)
-    return current.imageMode !== draft.imageMode
+    return (group.imageMode ?? 'original') !== 'original' || draft.imageMode !== 'original'
   }
 
   async function saveImageSettings(group) {
