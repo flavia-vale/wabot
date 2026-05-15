@@ -10,5 +10,5 @@ Disallow: /dashboard/*
 Disallow: /api/*
 Disallow: /promo-vip-7dias
 
-Sitemap: http://espelhagrupos.com.br/sitemap.xml
-Host: http://espelhagrupos.com.br
+Sitemap: https://espelhagrupos.com.br/sitemap.xml
+Host: https://espelhagrupos.com.br
