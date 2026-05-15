@@ -123,8 +123,14 @@ export const api = {
     return data
   },
 
-  register: async (name, email, password, contactPhone, ref) => {
-    const data = await apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, ...(ref && { ref }) }) })
+  register: async (name, email, password, contactPhone, refOrAttribution = '') => {
+    const attribution = typeof refOrAttribution === 'object' && refOrAttribution !== null
+      ? refOrAttribution
+      : { ...(refOrAttribution && { ref: refOrAttribution }) }
+    const data = await apiFetch('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ name, email, password, contactPhone, ...attribution }),
+    })
     setAuthToken(data?.token || '')
     return data
   },
