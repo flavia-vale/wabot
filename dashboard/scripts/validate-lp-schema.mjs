@@ -1,4 +1,10 @@
-import { PROGRAMMATIC_SEO_ROUTES } from '../lib/seo-registry.mjs'
+import { getAllLpSlugs, getPainLpSlugs } from '../lib/lp-config.mjs'
+
+const PAIN_SLUGS = new Set(getPainLpSlugs())
+const VALIDATION_TARGETS = [
+  ...getAllLpSlugs().map((slug) => ({ path: `/${slug}`, label: slug, requiredTypes: getRequiredTypesForLp(slug) })),
+  { path: '/suporte', label: 'suporte', requiredTypes: ['FAQPage'] },
+]
 
 const baseUrl = (process.env.LP_BASE_URL || process.argv[2] || 'http://localhost:3006').replace(/\/$/, '')
 
@@ -15,51 +21,59 @@ function extractJsonLdBlocks(html) {
     .filter(Boolean)
 }
 
-function validateStructuredData(route, blocks) {
-  const types = new Set(blocks.map((b) => b?.['@type']).filter(Boolean))
-  const missing = route.schemaTypes.filter((type) => !types.has(type))
-  const softwareApplication = blocks.find((block) => block?.['@type'] === 'SoftwareApplication')
-  const missingSoftwareFields = []
-
-  if (softwareApplication) {
-    if (!softwareApplication.url) missingSoftwareFields.push('SoftwareApplication.url')
-    if (!softwareApplication.mainEntityOfPage) missingSoftwareFields.push('SoftwareApplication.mainEntityOfPage')
-    if (!Array.isArray(softwareApplication.offers) || softwareApplication.offers.length === 0) {
-      missingSoftwareFields.push('SoftwareApplication.offers')
-    } else if (softwareApplication.offers.some((offer) => offer.priceCurrency !== 'BRL')) {
-      missingSoftwareFields.push('SoftwareApplication.offers.priceCurrency=BRL')
-    }
-  }
-
-  return [...missing, ...missingSoftwareFields]
+function flattenSchemaNodes(block) {
+  if (!block) return []
+  if (Array.isArray(block)) return block.flatMap(flattenSchemaNodes)
+  if (Array.isArray(block['@graph'])) return [block, ...block['@graph'].flatMap(flattenSchemaNodes)]
+  return [block]
 }
 
-async function validateSlug(route) {
-  const url = `${baseUrl}${route.path}`
+function collectSchemaTypes(blocks) {
+  const types = new Set()
+  for (const node of blocks.flatMap(flattenSchemaNodes)) {
+    const rawType = node?.['@type']
+    const values = Array.isArray(rawType) ? rawType : [rawType]
+    for (const value of values) {
+      if (value) types.add(value)
+    }
+  }
+  return types
+}
+
+function getRequiredTypesForLp(slug) {
+  const required = ['FAQPage', 'HowTo', 'SoftwareApplication']
+  if (PAIN_SLUGS.has(slug)) required.push('BreadcrumbList')
+  return required
+}
+
+async function validateTarget(target) {
+  const url = `${baseUrl}${target.path}`
   const response = await fetch(url)
 
   if (!response.ok) {
-    return { slug: route.slug, ok: false, reason: `HTTP ${response.status}` }
+    return { label: target.label, ok: false, reason: `HTTP ${response.status}` }
   }
 
   const html = await response.text()
   const blocks = extractJsonLdBlocks(html)
-  const missing = validateStructuredData(route, blocks)
+  const types = collectSchemaTypes(blocks)
+
+  const missing = target.requiredTypes.filter((t) => !types.has(t))
 
   return {
-    slug: route.slug,
+    label: target.label,
     ok: missing.length === 0,
     reason: missing.length === 0 ? 'OK' : `Missing: ${missing.join(', ')}`,
   }
 }
 
 async function main() {
-  const results = await Promise.all(PROGRAMMATIC_SEO_ROUTES.map(validateSlug))
+  const results = await Promise.all(VALIDATION_TARGETS.map(validateTarget))
   const failed = results.filter((r) => !r.ok)
 
   for (const result of results) {
     const marker = result.ok ? 'OK' : 'FALHA'
-    console.log(`${marker} - ${result.slug} (${result.reason})`)
+    console.log(`${marker} - ${result.label} (${result.reason})`)
   }
 
   if (failed.length > 0) {
