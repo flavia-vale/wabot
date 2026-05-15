@@ -1,6 +1,8 @@
 import "./globals.css";
 import { ToastProvider } from "@/components/ToastProvider";
 import { ConversionPrompt } from "@/components/marketing/ConversionPrompt";
+import { getSiteUrl } from '@/lib/site-url'
+import { BRAND_NAME, BRAND_SHORT_NAME, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION } from '@/lib/marketing-content'
 
 export const metadata = {
   metadataBase: new URL('https://espelhagrupos.com.br'),
