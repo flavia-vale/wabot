@@ -29,6 +29,19 @@ const blogPosts = [
   },
 ]
 
+const nichePages = [
+  {
+    href: '/bot-ofertas-restaurantes-whatsapp',
+    title: 'Bot de ofertas para restaurantes no WhatsApp',
+    description: 'Calendário, copy e distribuição responsável para promoções de restaurantes.',
+  },
+  {
+    href: '/bot-ofertas-marketplace-whatsapp',
+    title: 'Bot de ofertas para marketplace no WhatsApp',
+    description: 'Conferência de link monetizado, tag de afiliado e automação em grupos.',
+  },
+]
+
 const materials = [
   {
     href: '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp',
@@ -91,6 +104,13 @@ export default function Page() {
           <h2 className="text-2xl font-black tracking-tight text-gray-950">Artigos do blog</h2>
           <ul className="mt-4 grid gap-4 md:grid-cols-2">
             {blogPosts.map((item) => <ContentCard key={item.href} item={item} />)}
+          </ul>
+        </section>
+
+        <section className="mt-10">
+          <h2 className="text-2xl font-black tracking-tight text-gray-950">Páginas por nicho</h2>
+          <ul className="mt-4 grid gap-4 md:grid-cols-2">
+            {nichePages.map((item) => <ContentCard key={item.href} item={item} />)}
           </ul>
         </section>
 
