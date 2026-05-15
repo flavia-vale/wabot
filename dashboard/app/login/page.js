@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { mapAuthError, trackEvent, TRACKING_EVENTS } from '@/lib/analytics'
+import { attributionForTracking, readAttributionFromSearchParams } from '@/lib/marketing-attribution'
 
 const LOGIN_BENEFITS = [
   'Conversão automática de links de afiliado',
@@ -18,6 +19,8 @@ function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const ref = searchParams.get('ref')
+  const signupAttribution = readAttributionFromSearchParams(searchParams)
+  const trackingAttribution = attributionForTracking(signupAttribution)
   const [name, setName] = useState('')
   const [email, setEmail] = useState(() => searchParams.get('email') || '')
   const [password, setPassword] = useState('')
@@ -47,10 +50,11 @@ function LoginContent() {
         origin: 'login_page',
         mode: isRegister ? 'register' : 'login',
         has_ref: Boolean(ref),
+        ...(isRegister ? trackingAttribution : {}),
       })
       if (isRegister) {
-        await api.register(name, email, password, contactPhone, ref)
-        trackEvent(TRACKING_EVENTS.SIGNUP_SUCCESS, { origin: 'login_page', has_ref: Boolean(ref) })
+        await api.register(name, email, password, contactPhone, { ...signupAttribution, ...(ref && { ref }) })
+        trackEvent(TRACKING_EVENTS.SIGNUP_SUCCESS, { origin: 'login_page', has_ref: Boolean(ref), ...trackingAttribution })
       } else {
         await api.login(email, password)
         trackEvent(TRACKING_EVENTS.LOGIN_SUCCESS, { origin: 'login_page' })
@@ -62,6 +66,7 @@ function LoginContent() {
         origin: 'login_page',
         mode: isRegister ? 'register' : 'login',
         error_type: mapAuthError(err),
+        ...(isRegister ? trackingAttribution : {}),
       })
       setError(err?.message || 'Não foi possível concluir a autenticação agora.')
     } finally {

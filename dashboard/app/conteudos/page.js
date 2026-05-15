@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { buildRegisterHref } from '@/lib/marketing-attribution'
 import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 
@@ -161,7 +162,7 @@ export default function Page() {
   const experimentId = 'hub-fase4'
   const heroCta = {
     label: 'Receber checklist + plano semanal',
-    href: `/login?mode=register&utm_source=conteudos&utm_medium=organic&utm_campaign=content-hub&utm_content=hero-cta-checklist-plano&utm_term=${experimentId}`
+    href: buildRegisterHref({ source: 'conteudos', campaign: 'content-hub', content: 'hero-cta-checklist-plano', term: experimentId })
   }
 
   const hubSections = [
@@ -170,7 +171,7 @@ export default function Page() {
       title: 'Artigos do blog',
       description: 'Guias para melhorar a qualidade das postagens e reduzir erros antes de escalar.',
       items: blogPosts,
-      ctaHref: `/login?mode=register&utm_source=conteudos&utm_medium=organic&utm_campaign=content-hub&utm_content=cta-pos-blog&utm_term=${experimentId}`,
+      ctaHref: buildRegisterHref({ source: 'conteudos', campaign: 'content-hub', content: 'cta-pos-blog', term: experimentId }),
       ctaLabel: 'Receber próximos artigos aplicáveis',
     },
     {
@@ -178,7 +179,7 @@ export default function Page() {
       title: 'Materiais práticos',
       description: 'Checklists acionáveis para executar processo, manter consistência e acompanhar resultado.',
       items: materials,
-      ctaHref: `/login?mode=register&utm_source=conteudos&utm_medium=organic&utm_campaign=content-hub&utm_content=cta-pos-materiais&utm_term=${experimentId}`,
+      ctaHref: buildRegisterHref({ source: 'conteudos', campaign: 'content-hub', content: 'cta-pos-materiais', term: experimentId }),
       ctaLabel: 'Entrar na lista e receber novos materiais',
     },
   ]
