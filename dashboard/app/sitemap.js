@@ -43,8 +43,10 @@ function getLastModified(route) {
 
 export default function sitemap() {
   const allRoutes = [...CORE_ROUTES, ...LP_ROUTES, ...CONTENT_ROUTES]
-
-const DEFAULT_LAST_MODIFIED = '2026-05-15'
+  return allRoutes.map((route) => {
+    const isHome = route === '/'
+    const isLp = LP_ROUTES.includes(route)
+    const isContent = CONTENT_ROUTES.includes(route)
 
     return {
       url: `${baseUrl}${route === '/' ? '' : route}`,
