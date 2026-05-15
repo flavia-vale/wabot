@@ -38,6 +38,8 @@ const LP_ROUTES = [
   '/bot-ofertas-pet-shop-whatsapp',
   '/bot-ofertas-turismo-whatsapp',
   '/bot-ofertas-afiliados-whatsapp',
+  '/bot-ofertas-restaurantes-whatsapp',
+  '/bot-ofertas-marketplace-whatsapp',
 ]
 
 const CORE_ROUTES = ['/', '/termos', '/privacidade', '/quem-somos', '/suporte', '/promo-vip-7dias']

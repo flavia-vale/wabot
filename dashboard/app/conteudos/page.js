@@ -34,6 +34,19 @@ const blogPosts = [
   },
 ]
 
+const nichePages = [
+  {
+    href: '/bot-ofertas-restaurantes-whatsapp',
+    title: 'Bot de ofertas para restaurantes no WhatsApp',
+    description: 'Calendário, copy e distribuição responsável para promoções de restaurantes.',
+  },
+  {
+    href: '/bot-ofertas-marketplace-whatsapp',
+    title: 'Bot de ofertas para marketplace no WhatsApp',
+    description: 'Conferência de link monetizado, tag de afiliado e automação em grupos.',
+  },
+]
+
 const materials = [
   {
     href: '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp',
