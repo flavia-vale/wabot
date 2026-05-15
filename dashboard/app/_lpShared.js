@@ -1,4 +1,5 @@
 import '../app/landing.css'
+import Link from 'next/link'
 import { Hero } from '@/components/landing/Hero'
 import { How } from '@/components/landing/How'
 import { Features } from '@/components/landing/Features'
@@ -8,7 +9,8 @@ import { FAQ } from '@/components/landing/FAQ'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
 import { getSiteUrl } from '@/lib/site-url'
 import { BRAND_NAME, BRAND_SHORT_NAME, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION } from '@/lib/marketing-content'
-import { getProgrammaticSeoRoute } from '@/lib/seo-registry.mjs'
+import { getHubSeoRoute, getProgrammaticSeoRoute, getRelatedProgrammaticSeoRoutes } from '@/lib/seo-registry.mjs'
+import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 
 export const LP_CONFIG = {
   'espelhar-grupos-whatsapp-sao-paulo': { title: 'Espelhar grupos WhatsApp em São Paulo | BOTinho', description: 'Automatize sua rotina de ofertas em grupos de São Paulo com o BOTinho e reduza trabalho manual.', uniqueHeadline: 'Operação em São Paulo: volume alto, rotina estável.', uniqueBody: 'Em SP, a disputa por atenção é maior e os grupos giram rápido. O BOTinho ajuda você a manter constância sem perder tempo no copia-e-cola.', uniqueBullets: ['Padronize campanhas em múltiplos bairros e públicos.', 'Evite atrasos nas postagens de ofertas relâmpago.', 'Mantenha frequência diária mesmo em horários de pico.'], faq: [{ q: 'Quanto tempo para ativar em São Paulo?', a: 'Normalmente no mesmo dia: conexão por QR Code, escolha dos grupos e regras básicas.' }, { q: 'Posso separar grupos por bairro?', a: 'Sim. Você pode organizar fontes e destinos por região e tipo de público.' }], howTo: ['Conecte seu WhatsApp de operação e valide os grupos de origem.', 'Defina os grupos de destino e o intervalo ideal para o público paulista.', 'Ative regras por horário para manter consistência nos picos de tráfego.'] },
@@ -146,7 +148,10 @@ export function getLpMetadata(slug) {
 
 export function LpTemplate({ slug }) {
   const cfg = LP_CONFIG[slug]
+  const seoRoute = getProgrammaticSeoRoute(slug)
   const lpType = getLpType(slug, cfg)
+  const hubRoute = getHubSeoRoute(seoRoute?.parentPath ?? seoRoute?.cluster)
+  const relatedRoutes = getRelatedProgrammaticSeoRoutes(seoRoute, 3)
   const theme = LP_TYPE_THEME[lpType] ?? LP_TYPE_THEME.default
   const heroCopy = getHeroCopy(cfg, lpType)
   const faqJsonLd = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: cfg.faq.map((item) => ({ '@type': 'Question', name: item.q, acceptedAnswer: { '@type': 'Answer', text: item.a } })) }
@@ -178,6 +183,7 @@ export function LpTemplate({ slug }) {
 
   return (
     <div className="landing-root">
+      <OrganicPageTracker route={seoRoute} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(howToJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }} />
@@ -218,6 +224,29 @@ export function LpTemplate({ slug }) {
               <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.7 }}>
                 {cfg.uniqueBullets.map((bullet) => <li key={`check-${bullet}`}>{bullet}</li>)}
               </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section aria-labelledby={`${slug}-cluster-seo`}>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: '26px 28px', boxShadow: 'var(--shadow-soft)' }}>
+            <span className="pill"><span className="dot" />Hub & próximos passos</span>
+            <h2 id={`${slug}-cluster-seo`} style={{ fontSize: 'clamp(24px, 2.6vw, 36px)', lineHeight: 1.12, margin: '14px 0 12px' }}>Continue pelo cluster certo</h2>
+            <p style={{ color: 'var(--ink-soft)', lineHeight: 1.65, marginBottom: 16 }}>
+              Use a página hub para comparar cenários parecidos e navegue para páginas relacionadas sem depender de URLs soltas.
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+              {hubRoute && (
+                <Link href={hubRoute.path} data-seo-cta="lp-parent-hub" className="btn btn-ghost" style={{ textDecoration: 'none' }}>
+                  Ver hub: {hubRoute.label}
+                </Link>
+              )}
+              {relatedRoutes.map((route) => (
+                <Link key={route.path} href={route.path} data-seo-cta="lp-related-page" className="btn btn-ghost" style={{ textDecoration: 'none' }}>
+                  {route.label}
+                </Link>
+              ))}
             </div>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 
@@ -60,6 +61,32 @@ const materials = [
   },
 ]
 
+const benchmarkItems = [
+  {
+    href: '/benchmarks/operacao-grupos-ofertas-whatsapp',
+    title: 'Benchmark de operação em grupos de ofertas',
+    description: 'Modelo para medir tempo, revisão, falhas e consistência sem expor dados sensíveis.',
+  },
+]
+
+const hubPages = [
+  {
+    href: '/espelhar-grupos-whatsapp',
+    title: 'Hub: espelhar grupos WhatsApp por cidade',
+    description: 'Rotas regionais para operações que precisam comparar cidades e cadência local.',
+  },
+  {
+    href: '/bot-ofertas-whatsapp',
+    title: 'Hub: bot de ofertas por nicho',
+    description: 'Páginas por categoria para adaptar calendário, copy e validação de ofertas.',
+  },
+  {
+    href: '/automacao-whatsapp-afiliados',
+    title: 'Hub: automação para afiliados',
+    description: 'Diagnósticos de escala, consistência, tempo operacional e rastreamento.',
+  },
+]
+
 const roadmapTracks = [
   {
     id: 'iniciante',
@@ -90,7 +117,7 @@ const roadmapTracks = [
   },
 ]
 
-const contentItems = [...blogPosts, ...materials]
+const contentItems = [...blogPosts, ...materials, ...benchmarkItems, ...hubPages]
 
 const faqItems = [
   {
@@ -125,7 +152,7 @@ function ContentCard({ item }) {
     <li className="rounded-3xl border border-emerald-100 bg-white p-6 shadow-sm">
       <h3 className="text-xl font-black tracking-tight text-gray-950">{item.title}</h3>
       <p className="mt-3 text-sm leading-7 text-gray-700">{item.description}</p>
-      <Link href={item.href} className="mt-4 inline-flex text-sm font-black text-emerald-700 underline underline-offset-4">
+      <Link href={item.href} data-seo-cta="content-card" className="mt-4 inline-flex text-sm font-black text-emerald-700 underline underline-offset-4">
         Ver guia completo
       </Link>
     </li>
@@ -141,7 +168,7 @@ function HubSection({ title: sectionTitle, description: sectionDescription, item
         {items.map((item) => <ContentCard key={item.href} item={item} />)}
       </ul>
       <div className="mt-5">
-        <Link href={ctaHref} className="inline-flex rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-700">
+        <Link href={ctaHref} data-seo-cta="content-section-cta" className="inline-flex rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-700">
           {ctaLabel}
         </Link>
       </div>
@@ -157,6 +184,22 @@ export default function Page() {
   }
 
   const hubSections = [
+    {
+      key: 'hubs',
+      title: 'Hubs programáticos',
+      description: 'Páginas centrais que conectam clusters de localizações, nichos e dores operacionais.',
+      items: hubPages,
+      ctaHref: `/login?mode=register&utm_source=conteudos&utm_medium=organic&utm_campaign=content-hub&utm_content=cta-pos-hubs&utm_term=${experimentId}`,
+      ctaLabel: 'Receber plano por cluster',
+    },
+    {
+      key: 'benchmarks',
+      title: 'Benchmarks e dados operacionais',
+      description: 'Modelos para transformar rotina de grupos em métricas agregadas e seguras.',
+      items: benchmarkItems,
+      ctaHref: `/login?mode=register&utm_source=conteudos&utm_medium=organic&utm_campaign=content-hub&utm_content=cta-pos-benchmarks&utm_term=${experimentId}`,
+      ctaLabel: 'Receber benchmark operacional',
+    },
     {
       key: 'blog',
       title: 'Artigos do blog',
@@ -222,6 +265,7 @@ export default function Page() {
 
   return (
     <>
+      <OrganicPageTracker route={{ slug: 'conteudos', path: slug, cluster: 'conteudos', intent: 'conteudos afiliados whatsapp', template: 'content-hub' }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(collectionJsonLd) }} />
       <PublicShell>
         <main className="mx-auto w-full max-w-6xl px-5 py-10 md:px-8 md:py-16">
@@ -246,10 +290,10 @@ export default function Page() {
             </div>
 
             <div className="mt-6 flex flex-wrap gap-3 text-sm font-bold text-emerald-800">
-              <Link href={heroCta.href} className="rounded-xl bg-emerald-600 px-4 py-3 text-white hover:bg-emerald-700">
+              <Link href={heroCta.href} data-seo-cta="content-hero-register" className="rounded-xl bg-emerald-600 px-4 py-3 text-white hover:bg-emerald-700">
                 {heroCta.label}
               </Link>
-              <Link href={`/materiais/checklist-divulgacao-ofertas-grupos-whatsapp?from=hub&exp_id=${experimentId}`} className="rounded-xl border border-emerald-200 px-4 py-3 hover:bg-emerald-50">
+              <Link href={`/materiais/checklist-divulgacao-ofertas-grupos-whatsapp?from=hub&exp_id=${experimentId}`} data-seo-cta="content-primary-checklist" className="rounded-xl border border-emerald-200 px-4 py-3 hover:bg-emerald-50">
                 Ver checklist principal
               </Link>
             </div>
@@ -266,7 +310,7 @@ export default function Page() {
                   <ul className="mt-3 space-y-2 text-sm font-bold text-emerald-800">
                     {track.links.map((link) => (
                       <li key={link.href}>
-                        <Link href={`${link.href}?from=trilha-${track.id}&exp_id=${experimentId}`} className="underline underline-offset-4">
+                        <Link href={`${link.href}?from=trilha-${track.id}&exp_id=${experimentId}`} data-seo-cta="content-roadmap-link" className="underline underline-offset-4">
                           {link.label}
                         </Link>
                       </li>

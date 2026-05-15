@@ -4,7 +4,10 @@ export const TRACKING_EVENTS = {
   LOGIN_SUCCESS: 'login_success',
   AUTH_ERROR: 'auth_error',
   AUTH_MODE_SWITCH: 'auth_mode_switch',
+  ORGANIC_PAGE_VIEW: 'organic_page_view',
+  ORGANIC_CTA_CLICK: 'organic_cta_click',
 }
+
 
 function resolvePathname() {
   if (typeof window === 'undefined') return ''
