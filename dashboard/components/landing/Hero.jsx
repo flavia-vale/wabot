@@ -44,7 +44,7 @@ function Nav() {
     <nav style={s.nav} className="landing-nav" aria-label="Navegação principal da página inicial">
       <div style={s.logo}>
         <div style={s.logoMark}>b</div>
-        <span>botinho espelha grupos</span>
+        <span>BOTinho</span>
       </div>
       <div style={s.navLinks} className="landing-nav-links">
         <a style={s.navLink} href="#como">Como funciona</a>
@@ -73,16 +73,16 @@ function Nav() {
 
 export function Hero({ tone, primaryCtaLabel = 'Conectar meu WhatsApp', eyebrowLabel = 'Experimente grátis!', headlineOverride, subOverride, heroStyle }) {
   const headline = headlineOverride ?? (tone === 'direto'
-    ? <><span>Promoção dos outros,</span><br /><span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>comissão sua.</span></>
+    ? <><span>Ofertas conferidas,</span><br /><span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>rotina organizada.</span></>
     : tone === 'animado'
-    ? <><span>Os grupos postam.</span><br /><span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>Você fatura.</span> 💜</>
-    : <><span>Promoções de outros grupos</span><br />viram <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>vendas no seu.</span></>);
+    ? <><span>Os grupos geram ofertas.</span><br /><span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>Você organiza.</span> 💜</>
+    : <><span>Promoções conferidas</span><br />viram <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>rotina no seu grupo.</span></>);
 
   const sub = subOverride ?? (tone === 'direto'
-    ? 'Você escolhe os grupos de promoção que quer monitorar. O bot pega cada link da Shopee, ML ou Amazon, troca pelo seu código de afiliada e posta no seu grupo de achadinhos. Em segundos.'
+    ? 'Você escolhe os grupos de promoção que quer monitorar. O bot pega cada link da Shopee, ML ou Amazon, ajuda a usar suas credenciais cadastradas e prepara a postagem para seu grupo de achadinhos.'
     : tone === 'animado'
-    ? 'Aqueles grupos lotados de promoção que você acompanha? O bot fica de olho neles 24h. Cada link vira o seu link de afiliada e cai direto no seu grupo. ✨'
-    : 'Você indica os grupos que quer monitorar (de promoções, ofertas, achadinhos). O bot detecta cada link da Shopee, ML ou Amazon, converte para o seu código de afiliada e reposta no seu próprio grupo de clientes.');
+    ? 'Aqueles grupos lotados de promoção que você acompanha? O bot monitora conforme sua configuração. Cada link suportado pode ser conferido, organizado e enviado para o seu grupo com cadência. ✨'
+    : 'Você indica os grupos que quer monitorar (de promoções, ofertas, achadinhos). O bot detecta cada link da Shopee, ML ou Amazon, usa as credenciais cadastradas quando aplicável e reposta no seu próprio grupo de clientes com controle operacional.');
 
   return (
     <div className="wrap" style={{ position: 'relative' }}>
@@ -124,8 +124,8 @@ export function Hero({ tone, primaryCtaLabel = 'Conectar meu WhatsApp', eyebrowL
           <div style={{ ...s.floatNote, bottom: 80, right: -50, transform: 'rotate(2deg)', background: 'color-mix(in oklab, var(--accent) 18%, var(--surface))' }} className="landing-float-note">
             <Icon name="chart" size={18} />
             <div>
-              <div style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>Comissões hoje</div>
-              <div className="serif" style={{ fontSize: 22, fontStyle: 'italic', lineHeight: 1 }}>R$ 184,50</div>
+              <div style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>Exemplo ilustrativo</div>
+              <div className="serif" style={{ fontSize: 22, fontStyle: 'italic', lineHeight: 1 }}>campanha</div>
             </div>
           </div>
           <WhatsAppMockup />

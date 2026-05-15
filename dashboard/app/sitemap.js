@@ -42,7 +42,7 @@ const LP_ROUTES = [
   '/bot-ofertas-marketplace-whatsapp',
 ]
 
-const CORE_ROUTES = ['/', '/termos', '/privacidade', '/quem-somos', '/suporte', '/promo-vip-7dias']
+const CORE_ROUTES = ['/', '/llms.txt', '/pricing.md', '/termos', '/privacidade', '/quem-somos', '/suporte', '/promo-vip-7dias']
 const CONTENT_ROUTES = [
   '/conteudos',
   '/blog/como-escalar-grupos-sem-operacao-manual',

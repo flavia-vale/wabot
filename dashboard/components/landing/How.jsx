@@ -78,7 +78,7 @@ export function How() {
                 <h2 style={s.h2}>Três passos.<br /><span className="serif" style={{ fontStyle: 'italic' }}>Zero esforço diário.</span></h2>
               </div>
               <p style={{ maxWidth: 360, color: 'var(--ink-soft)', fontSize: 15, lineHeight: 1.6 }}>
-                Você configura uma vez, o bot trabalha 24h. Ideal para quem tem mais de um grupo e não quer ficar copiando link toda hora.
+                Você configura a rotina e acompanha pelos logs. Ideal para quem tem mais de um grupo e não quer ficar copiando link toda hora.
               </p>
             </div>
             <div style={s.steps} className="landing-how-steps">

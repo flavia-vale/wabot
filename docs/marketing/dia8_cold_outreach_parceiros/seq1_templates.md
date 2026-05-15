@@ -1,7 +1,7 @@
 # Dia 8 — Sequência 1 de cold outreach para parceiros
 
 ## Objetivo da mensagem
-Abrir conversa com admins/curadores de ofertas e convidar para um piloto guiado de 7 dias do wabot, sem prometer automação agressiva nem disparo em massa.
+Abrir conversa com admins/curadores de ofertas e convidar para um piloto guiado de 7 dias do BOTinho, sem prometer automação agressiva nem disparo em massa.
 
 ## Regras de personalização
 1. Usar o `gancho_personalizado` do CRM antes da proposta.
@@ -13,7 +13,7 @@ Abrir conversa com admins/curadores de ofertas e convidar para um piloto guiado 
 ## Template WhatsApp/DM — versão curta
 Oi, {{nome_conta}}! Vi que vocês já curam ofertas: {{gancho_personalizado}}
 
-O wabot ajuda admins a replicar ofertas em múltiplos grupos com menos copia-e-cola, padrão de copy e acompanhamento de envio.
+O BOTinho ajuda admins a replicar ofertas em múltiplos grupos com menos copia-e-cola, padrão de copy e acompanhamento de envio.
 
 Topa um piloto guiado de 7 dias para testar em poucos grupos primeiro?
 {{tracking_url}}
@@ -25,7 +25,7 @@ Oi, {{nome_conta}}.
 
 Vi que vocês já trabalham com curadoria de ofertas: {{gancho_personalizado}}
 
-Estou abrindo um lote pequeno de parceiros para testar o wabot: uma ferramenta para espelhar ofertas em múltiplos grupos com mais consistência, menos operação manual e logs de envio/sucesso.
+Estou abrindo um lote pequeno de parceiros para testar o BOTinho: uma ferramenta para espelhar ofertas em múltiplos grupos com mais consistência, menos operação manual e logs de envio/sucesso.
 
 A proposta é simples: piloto guiado de 7 dias, começando com poucos grupos para validar setup, timing e padrão de copy antes de escalar.
 

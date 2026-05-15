@@ -40,9 +40,9 @@ export function FinalCTA() {
               <span className="dot" />Teste grátis
             </span>
             <h2 style={{ ...s.h2, marginTop: 16 }}>
-              Sua próxima venda<br /><span className="serif" style={{ fontStyle: 'italic' }}>já está no grupo.</span>
+              Sua próxima rotina<br /><span className="serif" style={{ fontStyle: 'italic' }}>fica mais organizada.</span>
             </h2>
-            <p style={s.sub}>Conecta o WhatsApp em 4 minutos. Sem cartão, sem letrinha miúda. Se não converter para você, é só desconectar.</p>
+            <p style={s.sub}>Conecte o WhatsApp, valide poucos grupos primeiro e escale apenas rotinas permitidas, com revisão humana e cadência responsável.</p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }} className="landing-final-cta-actions">
               <Link className="btn" href="/login?mode=register" style={{ background: 'var(--accent-2)', color: 'var(--ink)' }}>
                 <Icon name="whatsapp" size={16} /> Conectar meu WhatsApp <Icon name="arrow" size={16} />
@@ -66,9 +66,9 @@ function Footer() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 600, fontSize: 17 }}>
               <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 14 }}>b</div>
-              <span>botinho espelha grupos</span>
+              <span>BOTinho</span>
             </div>
-            <p style={s.brand}>Bot de WhatsApp que transforma os links dos seus grupos em comissões de afiliada — automaticamente, 24h por dia.</p>
+            <p style={s.brand}>Software web para afiliados e admins organizarem links suportados, grupos e rotinas de divulgação no WhatsApp com revisão humana.</p>
           </div>
           <div>
             <div style={s.colTitle}>Produto</div>

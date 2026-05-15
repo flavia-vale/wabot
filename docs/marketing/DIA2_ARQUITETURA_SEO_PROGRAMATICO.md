@@ -1,4 +1,4 @@
-# Dia 2 — Arquitetura de SEO Programático — wabot
+# Dia 2 — Arquitetura de SEO Programático — BOTinho
 
 Data: 2026-05-10
 Owner: Growth/SEO
@@ -25,7 +25,7 @@ Preparar escala de páginas orgânicas com estrutura reutilizável para LPs de a
 - **H1:** "Como espelhar grupos no WhatsApp em {cidade}"
 - **Seções obrigatórias:**
   1. Dor local
-  2. Benefícios do wabot para operação regional
+  2. Benefícios do BOTinho para operação regional
   3. Passo a passo de ativação
   4. FAQ local
   5. CTA trial guiado
@@ -49,7 +49,7 @@ Preparar escala de páginas orgânicas com estrutura reutilizável para LPs de a
 - **H1:** "Como resolver {dor} com automação de grupos"
 - **Seções obrigatórias:**
   1. Diagnóstico da dor
-  2. Solução com wabot
+  2. Solução com BOTinho
   3. Métricas esperadas
   4. Perguntas frequentes
   5. CTA onboarding

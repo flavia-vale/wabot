@@ -19,8 +19,8 @@ export default function Page() {
     '@type': 'Article',
     headline: title,
     description,
-    author: { '@type': 'Organization', name: 'wabot' },
-    publisher: { '@type': 'Organization', name: 'wabot' },
+    author: { '@type': 'Organization', name: 'BOTinho' },
+    publisher: { '@type': 'Organization', name: 'BOTinho' },
     datePublished: '2026-05-11',
     dateModified: '2026-05-11',
     mainEntityOfPage: `${getSiteUrl()}${slug}`,
@@ -64,7 +64,7 @@ export default function Page() {
         </section>
 
         <section>
-          <h2>Como conectar esse checklist ao wabot</h2>
+          <h2>Como conectar esse checklist ao BOTinho</h2>
           <ol>
             <li>Use o checklist para definir quais grupos são origem e quais são destino.</li>
             <li>Transforme a copy padrão em modelo de campanha recorrente.</li>

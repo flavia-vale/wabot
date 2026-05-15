@@ -102,7 +102,7 @@
 Restaurante não precisa depender de lembrete manual para divulgar combo, cupom e promoção de horário fraco. Primeiro valide oferta, preço, região e regra do pedido. Depois automatize a distribuição em grupos com cadência.
 
 URL sugerida:
-`http://espelhagrupos.com.br/bot-ofertas-restaurantes-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-wabot&utm_content=nicho-restaurantes`
+`http://espelhagrupos.com.br/bot-ofertas-restaurantes-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-botinho&utm_content=nicho-restaurantes`
 
 ### Instagram — Restaurantes
 
@@ -113,7 +113,7 @@ Promo de restaurante sem processo vira esquecimento. Oferta validada + grupo cer
 Marketplace exige velocidade, mas afiliado não pode pular conferência. Link monetizado, tag, preço e estoque vêm antes da automação em grupos. O risco de um link errado é simples: tráfego sem comissão.
 
 URL sugerida:
-`http://espelhagrupos.com.br/bot-ofertas-marketplace-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-wabot&utm_content=nicho-marketplace`
+`http://espelhagrupos.com.br/bot-ofertas-marketplace-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-botinho&utm_content=nicho-marketplace`
 
 ### Instagram — Marketplace/afiliados
 

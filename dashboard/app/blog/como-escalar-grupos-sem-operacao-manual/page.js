@@ -18,8 +18,8 @@ export default function Page() {
     '@type': 'Article',
     headline: title,
     description,
-    author: { '@type': 'Organization', name: 'wabot' },
-    publisher: { '@type': 'Organization', name: 'wabot' },
+    author: { '@type': 'Organization', name: 'BOTinho' },
+    publisher: { '@type': 'Organization', name: 'BOTinho' },
     datePublished: '2026-05-11',
     dateModified: '2026-05-11',
     mainEntityOfPage: `${getSiteUrl()}${slug}`,
@@ -48,7 +48,7 @@ export default function Page() {
             <li><strong>Monitoramento:</strong> acompanhe envio, falha, timing e primeira conversão para ajustar a cadência.</li>
           </ol>
           <p>
-            O wabot entra na terceira e quarta camadas: replica a mensagem para múltiplos destinos, reduz retrabalho e mantém logs para o operador saber se a rotina foi executada.
+            O BOTinho entra na terceira e quarta camadas: replica a mensagem para múltiplos destinos, reduz retrabalho e mantém logs para o operador saber se a rotina foi executada.
           </p>
         </section>
 

@@ -1,4 +1,4 @@
-# Dia 3 — Produção IA de LPs (Lote 1) — wabot
+# Dia 3 — Produção IA de LPs (Lote 1) — BOTinho
 
 Data: 2026-05-11
 Owner: Growth/SEO
