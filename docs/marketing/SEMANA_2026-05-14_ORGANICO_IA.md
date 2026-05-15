@@ -91,7 +91,7 @@ Texto:
 > - se cupom, preço e estoque batem com a copy;
 > - se o grupo certo vai receber a oferta certa.
 >
-> O BOTinho/WABOT entra depois dessa validação: ajuda a organizar e distribuir mensagens conferidas, sem depender de copia-e-cola.
+> O BOTinho entra depois dessa validação: ajuda a organizar e distribuir mensagens conferidas, sem depender de copia-e-cola.
 >
 > Guia novo: http://espelhagrupos.com.br/blog/conferir-converter-link-afiliado-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=organic-marketing-sprint-1&utm_content=post-link-afiliado
 

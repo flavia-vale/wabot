@@ -35,8 +35,8 @@ export default function Page() {
     '@type': 'Article',
     headline: title,
     description,
-    author: { '@type': 'Organization', name: 'wabot' },
-    publisher: { '@type': 'Organization', name: 'wabot' },
+    author: { '@type': 'Organization', name: 'BOTinho' },
+    publisher: { '@type': 'Organization', name: 'BOTinho' },
     datePublished: publishedAt,
     dateModified: publishedAt,
     mainEntityOfPage: `${getSiteUrl()}${slug}`,
@@ -59,7 +59,7 @@ export default function Page() {
         <section>
           <h2>Resposta direta</h2>
           <p>
-            Um bot para afiliados no WhatsApp faz sentido quando a operação já tem ofertas validadas e precisa distribuir mensagens para grupos certos, com menos copia-e-cola e mais controle. O BOTinho/WABOT apoia espelhamento e rotina de publicação; ele não deve ser usado para prometer comissão, burlar regras ou enviar spam.
+            Um bot para afiliados no WhatsApp faz sentido quando a operação já tem ofertas validadas e precisa distribuir mensagens para grupos certos, com menos copia-e-cola e mais controle. O BOTinho apoia espelhamento e rotina de publicação; ele não deve ser usado para prometer comissão, burlar regras ou enviar spam.
           </p>
         </section>
 

@@ -54,7 +54,7 @@
 - LinkedIn: “Autopeças em grupos: primeiro confira link monetizado e condição comercial, depois escale com cadência.”
 - Instagram: “Menos copia-e-cola, mais processo: oferta válida + tag de afiliado ativa + CTA claro.”
 - URL sugerida com UTM:
-  `http://espelhagrupos.com.br/bot-ofertas-autopecas-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-wabot&utm_content=case-operacao`
+  `http://espelhagrupos.com.br/bot-ofertas-autopecas-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-botinho&utm_content=case-operacao`
 
 ## Validações locais
 

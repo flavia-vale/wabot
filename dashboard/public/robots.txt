@@ -1,5 +1,7 @@
 User-agent: *
 Allow: /
+Allow: /llms.txt
+Allow: /pricing.md
 Allow: /termos
 Allow: /privacidade
 Allow: /quem-somos

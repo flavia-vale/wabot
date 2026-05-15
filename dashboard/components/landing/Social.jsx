@@ -1,42 +1,40 @@
+import { RESPONSIBLE_OPERATION_POINTS } from '@/lib/marketing-content';
 import { Icon } from './Icon';
 
 const s = {
   head: { textAlign: 'center', marginBottom: 56 },
   h2: { fontSize: 'clamp(32px, 3.5vw, 48px)', lineHeight: 1.1 },
+  sub: { fontSize: 16, color: 'var(--ink-soft)', maxWidth: 680, margin: '16px auto 0', lineHeight: 1.6 },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 },
   card: {
     background: 'var(--surface)', border: '1px solid var(--line)',
     borderRadius: 24, padding: 28,
-    display: 'flex', flexDirection: 'column', minHeight: 240,
+    display: 'flex', flexDirection: 'column', minHeight: 220,
   },
-  stars: { display: 'flex', gap: 2, color: 'var(--accent-strong)', marginBottom: 14 },
-  quote: { fontSize: 16, lineHeight: 1.55, color: 'var(--ink)', marginBottom: 24, fontFamily: "'Instrument Serif', serif", fontStyle: 'italic' },
-  who: { display: 'flex', alignItems: 'center', gap: 12, marginTop: 'auto' },
-  ava: (gradient) => ({ width: 40, height: 40, borderRadius: '50%', background: gradient, flexShrink: 0 }),
-  name: { fontSize: 14, fontWeight: 600, color: 'var(--ink)' },
-  role: { fontSize: 12.5, color: 'var(--ink-soft)', marginTop: 2 },
-  numbers: {
+  iconBox: {
+    width: 42, height: 42, borderRadius: 14,
+    background: 'color-mix(in oklab, var(--accent) 18%, var(--surface))',
+    color: 'var(--accent-strong)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    marginBottom: 18,
+  },
+  cardTitle: { fontSize: 20, lineHeight: 1.2, color: 'var(--ink)', fontWeight: 650, marginBottom: 12 },
+  cardBody: { fontSize: 14.5, lineHeight: 1.6, color: 'var(--ink-soft)', margin: 0 },
+  proof: {
     display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
     background: 'color-mix(in oklab, var(--accent) 18%, var(--surface))',
-    borderRadius: 24, padding: '32px 16px', marginTop: 32,
+    borderRadius: 24, padding: '28px 16px', marginTop: 32,
     border: '1px solid var(--line)',
   },
-  numItem: { textAlign: 'center', borderRight: '1px solid var(--line)', padding: '8px 16px' },
-  numBig: { fontFamily: "'Instrument Serif', serif", fontStyle: 'italic', fontSize: 48, lineHeight: 1, color: 'var(--ink)' },
-  numLabel: { fontSize: 12.5, color: 'var(--ink-soft)', marginTop: 8 },
+  proofItem: { textAlign: 'center', borderRight: '1px solid var(--line)', padding: '8px 16px' },
+  proofBig: { fontFamily: "'Instrument Serif', serif", fontStyle: 'italic', fontSize: 36, lineHeight: 1, color: 'var(--ink)' },
+  proofLabel: { fontSize: 12.5, color: 'var(--ink-soft)', marginTop: 8 },
 };
 
-const testimonials = [
-  { q: 'Eu mandava os links na mão para 4 grupos diferentes. Agora durmo e acordo com comissão pingando.', name: 'Sol Almeida', role: 'Afiliada Shopee · 6 grupos', g: 'linear-gradient(135deg,#F4D9E0,#A78BFA)' },
-  { q: 'O texto que ele monta soa igual eu falando. As meninas do grupo nem percebem que é bot.', name: 'Mariana Costa', role: 'Influencer micro · ML + Amazon', g: 'linear-gradient(135deg,#C8E6D8,#7CC9A9)' },
-  { q: 'Em duas semanas paguei a assinatura do ano. Sério, era dinheiro que eu deixava na mesa.', name: 'Rafa Pires', role: 'Mãe afiliada · Shopee', g: 'linear-gradient(135deg,#F4E5D5,#E8A488)' },
-];
-
-const stats = [
-  ['1.200+', 'afiliadas ativas'],
-  ['R$ 4,2M', 'comissões geradas'],
-  ['380k', 'links convertidos'],
-  ['4,9 ★', 'nota das clientes'],
+const proofPoints = [
+  ['QR Code', 'conexão guiada'],
+  ['Logs', 'histórico de envios'],
+  ['Filtros', 'palavras e plataformas'],
+  ['Cadência', 'intervalos configuráveis'],
 ];
 
 export function Social() {
@@ -44,34 +42,29 @@ export function Social() {
     <section>
       <div className="wrap">
         <div style={s.head}>
-          <span className="pill"><span className="dot" />Quem já usa</span>
+          <span className="pill"><span className="dot" />Operação responsável</span>
           <h2 style={{ ...s.h2, marginTop: 16 }}>
-            Mais de <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>1.200 afiliadas</span> deixaram o copia-e-cola.
+            Automação para <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>organizar rotina</span>, não para prometer resultado.
           </h2>
+          <p style={s.sub}>
+            Substituímos números e depoimentos sem lastro por critérios verificáveis de uso: revisão humana, cadência configurável e logs para acompanhar a rotina de divulgação.
+          </p>
         </div>
         <div style={s.grid} className="landing-social-grid">
-          {testimonials.map((t, i) => (
-            <div key={i} style={s.card}>
-              <div style={s.stars}>
-                {[...Array(5)].map((_, j) => <Icon key={j} name="star" size={16} />)}
-              </div>
-              <p style={s.quote}>{`“${t.q}”`}</p>
-              <div style={s.who}>
-                <div style={s.ava(t.g)} />
-                <div>
-                  <div style={s.name}>{t.name}</div>
-                  <div style={s.role}>{t.role}</div>
-                </div>
-              </div>
+          {RESPONSIBLE_OPERATION_POINTS.map((item) => (
+            <div key={item.title} style={s.card}>
+              <div style={s.iconBox}><Icon name="check" size={18} /></div>
+              <h3 style={s.cardTitle}>{item.title}</h3>
+              <p style={s.cardBody}>{item.body}</p>
             </div>
           ))}
         </div>
 
-        <div style={s.numbers} className="landing-social-numbers">
-          {stats.map(([n, l], i, a) => (
-            <div key={n} style={{ ...s.numItem, borderRight: i === a.length - 1 ? 'none' : s.numItem.borderRight }}>
-              <div style={s.numBig}>{n}</div>
-              <div style={s.numLabel}>{l}</div>
+        <div style={s.proof} className="landing-social-numbers" aria-label="Sinais verificáveis do produto">
+          {proofPoints.map(([title, label], i, a) => (
+            <div key={title} style={{ ...s.proofItem, borderRight: i === a.length - 1 ? 'none' : s.proofItem.borderRight }}>
+              <div style={s.proofBig}>{title}</div>
+              <div style={s.proofLabel}>{label}</div>
             </div>
           ))}
         </div>

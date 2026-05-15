@@ -29,7 +29,7 @@ export function PublicFooter() {
   return (
     <footer className="border-t border-green-100 bg-white">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-5 py-8 text-sm text-gray-500 md:flex-row md:items-center md:justify-between md:px-8">
-        <p>© {new Date().getFullYear()} BOTinho. Bot conversor para afiliados no WhatsApp.</p>
+        <p>© {new Date().getFullYear()} BOTinho. Software para afiliados no WhatsApp.</p>
         <nav className="flex flex-wrap gap-4">
           {footerLinks.map(link => (
             <Link key={link.href} href={link.href} className="font-medium text-gray-600 hover:text-green-700">

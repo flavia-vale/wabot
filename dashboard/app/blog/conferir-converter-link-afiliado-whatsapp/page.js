@@ -35,8 +35,8 @@ export default function Page() {
     '@type': 'Article',
     headline: title,
     description,
-    author: { '@type': 'Organization', name: 'wabot' },
-    publisher: { '@type': 'Organization', name: 'wabot' },
+    author: { '@type': 'Organization', name: 'BOTinho' },
+    publisher: { '@type': 'Organization', name: 'BOTinho' },
     datePublished: publishedAt,
     dateModified: publishedAt,
     mainEntityOfPage: `${getSiteUrl()}${slug}`,
@@ -62,7 +62,7 @@ export default function Page() {
             Antes de divulgar no WhatsApp, o afiliado deve abrir a URL final no celular, confirmar se a tag ou o código de afiliado aparece no destino esperado e registrar qual link monetizado será enviado. Essa conferência reduz o risco de publicar uma oferta com link sem comissão, cupom errado ou redirecionamento quebrado.
           </p>
           <p>
-            O BOTinho/WABOT ajuda na rotina de organização e distribuição de mensagens em grupos, mas não promete integração aprovada com marketplaces, redes de afiliados ou programas externos. A responsabilidade de validar as regras de cada plataforma continua sendo do operador.
+            O BOTinho ajuda na rotina de organização e distribuição de mensagens em grupos, mas não promete integração aprovada com marketplaces, redes de afiliados ou programas externos. A responsabilidade de validar as regras de cada plataforma continua sendo do operador.
           </p>
         </section>
 

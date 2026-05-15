@@ -6,7 +6,7 @@
       "mainEntity": [
         {
           "@type": "Question",
-          "name": "Como começar com o wabot?",
+          "name": "Como começar com o BOTinho?",
           "acceptedAnswer": {
             "@type": "Answer",
             "text": "Cadastre-se na Lista VIP e siga o onboarding guiado para ativar seu primeiro espelhamento."
@@ -25,7 +25,7 @@
     "HowTo": {
       "@context": "https://schema.org",
       "@type": "HowTo",
-      "name": "Como espelhar grupos com o wabot",
+      "name": "Como espelhar grupos com o BOTinho",
       "step": [
         { "@type": "HowToStep", "name": "Criar conta", "text": "Cadastre-se e acesse o painel." },
         { "@type": "HowToStep", "name": "Conectar operação", "text": "Conecte seus grupos e valide permissões." },
@@ -35,11 +35,11 @@
     "Product": {
       "@context": "https://schema.org",
       "@type": "Product",
-      "name": "wabot",
+      "name": "BOTinho",
       "description": "Plataforma para espelhamento e automação de distribuição em grupos.",
       "brand": {
         "@type": "Brand",
-        "name": "wabot"
+        "name": "BOTinho"
       }
     }
   }

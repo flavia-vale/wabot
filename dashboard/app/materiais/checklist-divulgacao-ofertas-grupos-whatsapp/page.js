@@ -44,8 +44,8 @@ export default function Page() {
     '@type': 'Article',
     headline: title,
     description,
-    author: { '@type': 'Organization', name: 'wabot' },
-    publisher: { '@type': 'Organization', name: 'wabot' },
+    author: { '@type': 'Organization', name: 'BOTinho' },
+    publisher: { '@type': 'Organization', name: 'BOTinho' },
     datePublished: publishedAt,
     dateModified: publishedAt,
     mainEntityOfPage: `${getSiteUrl()}${slug}`,
@@ -70,7 +70,7 @@ export default function Page() {
             <section>
               <h2 className="text-2xl font-black tracking-tight text-gray-950">Resposta direta</h2>
               <p className="mt-3">
-                Antes de divulgar ofertas em grupos de WhatsApp, valide a oferta, confira se o link monetizado carrega a tag ou código de afiliado, revise a copy e escolha grupos com permissão e contexto. Só depois automatize o espelhamento com o BOTinho/WABOT.
+                Antes de divulgar ofertas em grupos de WhatsApp, valide a oferta, confira se o link monetizado carrega a tag ou código de afiliado, revise a copy e escolha grupos com permissão e contexto. Só depois automatize o espelhamento com o BOTinho.
               </p>
             </section>
 
