@@ -100,8 +100,8 @@ function LoginContent() {
         ...(isRegister ? trackingAttribution : {}),
       })
       if (isRegister) {
-        await api.register(cleanName, cleanEmail, password, cleanPhone, ref)
-        trackEvent(TRACKING_EVENTS.SIGNUP_SUCCESS, { origin: 'login_page', has_ref: Boolean(ref) })
+        await api.register(name, email, password, contactPhone, { ...signupAttribution, ...(ref && { ref }) })
+        trackEvent(TRACKING_EVENTS.SIGNUP_SUCCESS, { origin: 'login_page', has_ref: Boolean(ref), ...trackingAttribution })
       } else {
         await api.login(cleanEmail, password)
         trackEvent(TRACKING_EVENTS.LOGIN_SUCCESS, { origin: 'login_page' })

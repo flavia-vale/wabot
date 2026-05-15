@@ -46,3 +46,17 @@ Só avançar para endpoint público persistido, componente `ConversionPrompt` au
 3. CTAs preservam atribuição até a tela de login;
 4. não há prompt em páginas excluídas;
 5. dashboard build/lint passam sem regressão.
+
+## Implementação P1 adicionada
+
+1. **Endpoint público anônimo:** `POST /api/public/analytics` aceita apenas eventos públicos de prompts/isca digital, aplica rate limit em memória por IP e reutiliza sanitização do backend antes de gravar em `AnalyticsEvent`.
+2. **Componente central:** `ConversionPrompt` fica montado no layout, mas só aparece quando `NEXT_PUBLIC_CONVERSION_PROMPTS_ENABLED=true`; respeita páginas excluídas, cooldown de dismiss e uma impressão por sessão.
+3. **Atribuição no cadastro:** UTMs e `conversion_prompt_id`/`conversion_prompt_variant` passam a chegar opcionalmente no evento `signup_created`, sem mudar campos obrigatórios do cadastro.
+4. **Admin:** a aba de marketing passa a consultar `/api/admin/marketing/prompts` para ver views, cliques, dismiss, foco em formulário e cadastros atribuídos por prompt/variante.
+
+### Validação esperada em staging P1
+
+- Com a flag desligada, não deve aparecer nenhum prompt visual.
+- Com `NEXT_PUBLIC_CONVERSION_PROMPTS_ENABLED=true` em staging, validar em `http://178.105.54.0:3006` que o prompt não aparece em `/login`, `/dashboard/*`, `/admin/*`, `/termos` e `/privacidade`.
+- Simular scroll de 50% ou aguardar 45s em uma página pública; confirmar evento em `/api/public/analytics` e leitura posterior no admin marketing.
+- Fechar o prompt; confirmar que ele não volta na mesma sessão e respeita cooldown em `localStorage`.

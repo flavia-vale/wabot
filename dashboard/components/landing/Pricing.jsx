@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from './Icon';
 import { DEFAULT_LANDING_PLANS } from '@/lib/marketing-content';
+import { buildRegisterHref } from '@/lib/marketing-attribution';
 
 const s = {
   head: { textAlign: 'center', marginBottom: 56 },

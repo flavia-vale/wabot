@@ -100,14 +100,15 @@ export default function MarketingGrowthAdminPage() {
   const [dataTrust, setDataTrust] = useState(null)
   const [cohorts, setCohorts] = useState([])
   const [backendAlerts, setBackendAlerts] = useState([])
+  const [promptMetrics, setPromptMetrics] = useState([])
   const [users, setUsers] = useState([])
-  const [lastUpdated, setLastUpdated] = useState({ dashboard: '', kpis: '', funnel: '', channels: '', campaigns: '', trust: '' })
+  const [lastUpdated, setLastUpdated] = useState({ dashboard: '', kpis: '', funnel: '', channels: '', campaigns: '', prompts: '', trust: '' })
 
   useEffect(() => {
     let active = true
     ;(async () => {
       try {
-        const [adminData, overviewData, financeData, paymentsData, subscriptionsData, usersData, mkOverview, mkCampaigns, mkFunnel, mkTrust, mkCohorts, mkAlerts] = await Promise.all([
+        const [adminData, overviewData, financeData, paymentsData, subscriptionsData, usersData, mkOverview, mkCampaigns, mkFunnel, mkTrust, mkCohorts, mkAlerts, mkPrompts] = await Promise.all([
           api.adminMe(),
           api.adminOverview(),
           api.adminFinanceOverview().catch(() => null),
@@ -120,6 +121,7 @@ export default function MarketingGrowthAdminPage() {
           api.adminMarketingDataTrust(dateRangeFromPeriod('30d')).catch(() => null),
           api.adminMarketingCohorts(dateRangeFromPeriod('90d')).catch(() => ({ cohorts: [] })),
           api.adminMarketingAlerts(dateRangeFromPeriod('30d')).catch(() => ({ alerts: [] })),
+          api.adminMarketingPrompts(dateRangeFromPeriod('30d')).catch(() => ({ prompts: [] })),
         ])
         if (!active) return
         setAdmin(adminData)
@@ -134,8 +136,9 @@ export default function MarketingGrowthAdminPage() {
         setDataTrust(mkTrust)
         setCohorts(Array.isArray(mkCohorts?.cohorts) ? mkCohorts.cohorts : [])
         setBackendAlerts(Array.isArray(mkAlerts?.alerts) ? mkAlerts.alerts : [])
+        setPromptMetrics(Array.isArray(mkPrompts?.prompts) ? mkPrompts.prompts : [])
         const nowIso = new Date().toISOString()
-        setLastUpdated({ dashboard: nowIso, kpis: nowIso, funnel: nowIso, channels: nowIso, campaigns: nowIso, trust: nowIso })
+        setLastUpdated({ dashboard: nowIso, kpis: nowIso, funnel: nowIso, channels: nowIso, campaigns: nowIso, prompts: nowIso, trust: nowIso })
       } catch (err) {
         if (!active) return
         setError(err.message || 'Não foi possível carregar métricas de marketing.')
@@ -151,8 +154,8 @@ export default function MarketingGrowthAdminPage() {
     setError('')
     try {
       const range = dateRangeFromPeriod(period)
-      const [adminData, overviewData, financeData, paymentsData, subscriptionsData, usersData, mkOverview, mkCampaigns, mkFunnel, mkTrust, mkCohorts, mkAlerts] = await Promise.all([
-        api.adminMe(), api.adminOverview(), api.adminFinanceOverview().catch(() => null), api.adminPayments({ limit: 100 }).catch(() => ({ items: [] })), api.adminSubscriptions({ limit: 100 }).catch(() => ({ items: [] })), api.adminUsers({ limit: 120 }).catch(() => ({ users: [] })), api.adminMarketingOverview(range).catch(() => null), api.adminMarketingCampaigns(range).catch(() => ({ campaigns: [] })), api.adminMarketingFunnel(range).catch(() => null), api.adminMarketingDataTrust(range).catch(() => null), api.adminMarketingCohorts(dateRangeFromPeriod('90d')).catch(() => ({ cohorts: [] })), api.adminMarketingAlerts(range).catch(() => ({ alerts: [] })),
+      const [adminData, overviewData, financeData, paymentsData, subscriptionsData, usersData, mkOverview, mkCampaigns, mkFunnel, mkTrust, mkCohorts, mkAlerts, mkPrompts] = await Promise.all([
+        api.adminMe(), api.adminOverview(), api.adminFinanceOverview().catch(() => null), api.adminPayments({ limit: 100 }).catch(() => ({ items: [] })), api.adminSubscriptions({ limit: 100 }).catch(() => ({ items: [] })), api.adminUsers({ limit: 120 }).catch(() => ({ users: [] })), api.adminMarketingOverview(range).catch(() => null), api.adminMarketingCampaigns(range).catch(() => ({ campaigns: [] })), api.adminMarketingFunnel(range).catch(() => null), api.adminMarketingDataTrust(range).catch(() => null), api.adminMarketingCohorts(dateRangeFromPeriod('90d')).catch(() => ({ cohorts: [] })), api.adminMarketingAlerts(range).catch(() => ({ alerts: [] })), api.adminMarketingPrompts(range).catch(() => ({ prompts: [] })),
       ])
       setAdmin(adminData); setOverview(overviewData); setFinance(financeData)
       setPayments(Array.isArray(paymentsData?.items) ? paymentsData.items : [])
@@ -164,8 +167,9 @@ export default function MarketingGrowthAdminPage() {
       setDataTrust(mkTrust)
       setCohorts(Array.isArray(mkCohorts?.cohorts) ? mkCohorts.cohorts : [])
       setBackendAlerts(Array.isArray(mkAlerts?.alerts) ? mkAlerts.alerts : [])
+      setPromptMetrics(Array.isArray(mkPrompts?.prompts) ? mkPrompts.prompts : [])
       const nowIso = new Date().toISOString()
-      setLastUpdated({ dashboard: nowIso, kpis: nowIso, funnel: nowIso, channels: nowIso, campaigns: nowIso, trust: nowIso })
+      setLastUpdated({ dashboard: nowIso, kpis: nowIso, funnel: nowIso, channels: nowIso, campaigns: nowIso, prompts: nowIso, trust: nowIso })
     } catch (err) {
       setError(err.message || 'Não foi possível carregar métricas de marketing.')
     } finally { setLoading(false) }
@@ -199,6 +203,19 @@ export default function MarketingGrowthAdminPage() {
       return { ...item, conversion, drop: Math.max(100 - conversion, 0) }
     })
   }, [metrics, marketingFunnel])
+
+  const promptRows = useMemo(() => promptMetrics.map(item => ({
+    promptId: item.promptId || 'unknown',
+    variant: item.variant || 'default',
+    views: Number(item.views || 0),
+    dismissals: Number(item.dismissals || 0),
+    ctaClicks: Number(item.ctaClicks || 0),
+    formFocuses: Number(item.formFocuses || 0),
+    signups: Number(item.signups || 0),
+    dismissRate: Number(item.dismissRate || 0),
+    ctaRate: Number(item.ctaRate || 0),
+    signupRate: Number(item.signupRate || 0),
+  })), [promptMetrics])
 
   const channelRows = useMemo(() => {
     const approvedPayments = payments.filter(item => String(item?.status || '').toLowerCase() === 'approved').length
@@ -454,6 +471,7 @@ export default function MarketingGrowthAdminPage() {
     funnel: formatUpdatedAt(lastUpdated.funnel),
     channels: formatUpdatedAt(lastUpdated.channels),
     campaigns: formatUpdatedAt(lastUpdated.campaigns),
+    prompts: formatUpdatedAt(lastUpdated.prompts),
     trust: formatUpdatedAt(lastUpdated.trust),
   }), [lastUpdated])
 
@@ -493,6 +511,20 @@ export default function MarketingGrowthAdminPage() {
           <h2 className="text-lg font-black text-gray-900">Funil principal</h2>
           <p className="text-xs text-gray-500">Leitura de queda por etapa para priorização de experimentos. {updatedAt.funnel ? `Atualizado: ${updatedAt.funnel}` : ''}</p>
           <div className="mt-4 grid gap-3 md:grid-cols-5">{funnel.map(step => <div key={step.key} className="rounded-xl border border-gray-100 bg-gray-50 p-4"><p className="text-xs text-gray-500">{step.label}</p><p className="text-2xl font-black text-gray-900">{step.value}</p><p className={`text-xs font-semibold ${step.drop > 35 ? 'text-red-600' : 'text-emerald-700'}`}>{step.key === 'sessions' ? 'Base 100%' : `Conv: ${step.conversion}% · Queda: ${step.drop.toFixed(1)}%`}</p></div>)}</div>
+        </section>
+
+
+        <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+          <h2 className="text-lg font-black text-gray-900">Prompts de conversão (P1)</h2>
+          <p className="text-xs text-gray-500">Impressões, interações e cadastros atribuídos por prompt/variante. {updatedAt.prompts ? `Atualizado: ${updatedAt.prompts}` : ''}</p>
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="text-xs uppercase tracking-wide text-gray-400"><tr><th className="px-3 py-2">Prompt</th><th className="px-3 py-2">Variante</th><th className="px-3 py-2">Views</th><th className="px-3 py-2">Foco form</th><th className="px-3 py-2">CTA</th><th className="px-3 py-2">Dismiss</th><th className="px-3 py-2">Cadastros</th><th className="px-3 py-2">CTR</th><th className="px-3 py-2">Dismiss rate</th><th className="px-3 py-2">Signup/view</th></tr></thead>
+              <tbody className="divide-y divide-gray-100">
+                {promptRows.length ? promptRows.map(row => <tr key={`${row.promptId}-${row.variant}`}><td className="px-3 py-3 font-semibold text-gray-900">{row.promptId}</td><td className="px-3 py-3">{row.variant}</td><td className="px-3 py-3">{row.views}</td><td className="px-3 py-3">{row.formFocuses}</td><td className="px-3 py-3">{row.ctaClicks}</td><td className="px-3 py-3">{row.dismissals}</td><td className="px-3 py-3">{row.signups}</td><td className="px-3 py-3">{row.ctaRate}%</td><td className={`px-3 py-3 font-semibold ${row.dismissRate > 70 ? 'text-red-600' : 'text-emerald-700'}`}>{row.dismissRate}%</td><td className="px-3 py-3">{row.signupRate}%</td></tr>) : <tr><td className="px-3 py-4 text-gray-500" colSpan={10}>Sem eventos de prompt no período selecionado.</td></tr>}
+              </tbody>
+            </table>
+          </div>
         </section>
 
         <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">

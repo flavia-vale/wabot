@@ -1,7 +1,6 @@
 import "./globals.css";
 import { ToastProvider } from "@/components/ToastProvider";
-import { BRAND_NAME, BRAND_SHORT_NAME, PRODUCT_DEFINITION, DEFAULT_LANDING_PLANS } from "@/lib/marketing-content";
-import { getSiteUrl } from "@/lib/site-url";
+import { ConversionPrompt } from "@/components/marketing/ConversionPrompt";
 
 export const metadata = {
   metadataBase: new URL('https://espelhagrupos.com.br'),
@@ -60,12 +59,7 @@ export default function RootLayout({ children }) {
   const jsonLd = buildGlobalJsonLd();
   return (
     <html lang="pt-br">
-      <body style={{ background: '#EEF6F2' }}>
-        {jsonLd.map((schema) => (
-          <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
-        ))}
-        <ToastProvider>{children}</ToastProvider>
-      </body>
+      <body style={{ background: '#EEF6F2' }}><ToastProvider>{children}<ConversionPrompt /></ToastProvider></body>
     </html>
   );
 }

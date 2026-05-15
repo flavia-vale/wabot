@@ -218,7 +218,22 @@ function publicUser(user) {
 
 export async function authRoutes(app) {
   app.post('/register', async (req, reply) => {
-    const { name: rawName, email: rawEmail, password: rawPassword, contactPhone: rawContactPhone, ref, source, coupon_code: couponCode } = req.body ?? {}
+    const {
+      name: rawName,
+      email: rawEmail,
+      password: rawPassword,
+      contactPhone: rawContactPhone,
+      ref,
+      source,
+      utm_source: utmSource,
+      utm_medium: utmMedium,
+      utm_campaign: utmCampaign,
+      utm_content: utmContent,
+      utm_term: utmTerm,
+      conversion_prompt_id: conversionPromptId,
+      conversion_prompt_variant: conversionPromptVariant,
+      coupon_code: couponCode,
+    } = req.body ?? {}
     const name = normalizeName(rawName)
     const email = normalizeEmail(rawEmail) || generateFallbackEmail()
     const isPromoVipFlow = source === 'promo_vip_7dias' && couponCode === 'VIP7DIAS'
@@ -283,7 +298,18 @@ export async function authRoutes(app) {
       trackAnalyticsEventSafe({
         userId: user.id,
         event: 'signup_created',
-        metadata: { source: source || 'direct', ref: ref || null, promo: isPromoVipFlow ? 'vip7dias' : 'none' },
+        metadata: {
+          source: source || utmSource || 'direct',
+          ref: ref || null,
+          promo: isPromoVipFlow ? 'vip7dias' : 'none',
+          utm_source: utmSource || source || 'direct',
+          utm_medium: utmMedium || null,
+          utm_campaign: utmCampaign || null,
+          utm_content: utmContent || null,
+          utm_term: utmTerm || null,
+          conversion_prompt_id: conversionPromptId || null,
+          conversion_prompt_variant: conversionPromptVariant || null,
+        },
       })
       const token = app.jwt.sign({ sub: user.id, email: user.email, jti: randomToken(12) }, { expiresIn: '7d' })
       setAuthCookie(reply, token, req)
