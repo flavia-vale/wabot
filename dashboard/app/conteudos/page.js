@@ -3,7 +3,7 @@ import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 
 const title = 'Conteúdos: blog e materiais para afiliados no WhatsApp'
-const description = 'Central de conteúdos do WABOT com artigos e materiais práticos para padronizar divulgação, validar links de afiliado e escalar grupos no WhatsApp com responsabilidade.'
+const description = 'Central de conteúdos do BOTinho com artigos e materiais práticos para padronizar divulgação, validar links de afiliado e escalar grupos no WhatsApp com responsabilidade.'
 const slug = '/conteudos'
 
 const blogPosts = [
@@ -39,6 +39,51 @@ const nichePages = [
     href: '/bot-ofertas-marketplace-whatsapp',
     title: 'Bot de ofertas para marketplace no WhatsApp',
     description: 'Conferência de link monetizado, tag de afiliado e automação em grupos.',
+  },
+]
+
+const methodologyPages = [
+  {
+    href: '/metodologia-uso-responsavel-whatsapp',
+    title: 'Metodologia de uso responsável no WhatsApp',
+    description: 'Critérios públicos para revisar ofertas, links, grupos, cadência e logs antes de escalar automação.',
+  },
+]
+
+
+const comparisonPages = [
+  {
+    href: '/alternativas/bot-para-whatsapp-afiliados',
+    title: 'Alternativas de bot para WhatsApp para afiliados',
+    description: 'Comparativo equilibrado entre planilha, automação genérica, ferramentas oficiais e BOTinho.',
+  },
+  {
+    href: '/botinho-vs-planilha-manual',
+    title: 'BOTinho vs planilha manual',
+    description: 'Quando a planilha basta e quando logs, cadência e origem/destino viram prioridade.',
+  },
+  {
+    href: '/botinho-vs-ferramentas-genericas-automacao',
+    title: 'BOTinho vs ferramentas genéricas de automação',
+    description: 'Comparação para times que avaliam construir fluxos próprios ou usar ferramenta focada em grupos.',
+  },
+  {
+    href: '/melhores-bots-para-afiliados-whatsapp',
+    title: 'Melhores bots para afiliados no WhatsApp',
+    description: 'Critérios transparentes para avaliar ferramentas sem ranking falso ou promessa de ganho.',
+  },
+]
+
+const authorityPages = [
+  {
+    href: '/glossario',
+    title: 'Glossário de automação para afiliados no WhatsApp',
+    description: 'Definições parseáveis de link monetizado, origem, destino, espelhamento, cadência, UTM e anti-spam.',
+  },
+  {
+    href: '/estudos-de-caso',
+    title: 'Estudos de caso do BOTinho',
+    description: 'Política pública para publicar cases somente com consentimento e dados verificáveis.',
   },
 ]
 
@@ -111,6 +156,28 @@ export default function Page() {
           <h2 className="text-2xl font-black tracking-tight text-gray-950">Páginas por nicho</h2>
           <ul className="mt-4 grid gap-4 md:grid-cols-2">
             {nichePages.map((item) => <ContentCard key={item.href} item={item} />)}
+          </ul>
+        </section>
+
+        <section className="mt-10">
+          <h2 className="text-2xl font-black tracking-tight text-gray-950">Metodologia e uso responsável</h2>
+          <ul className="mt-4 grid gap-4 md:grid-cols-2">
+            {methodologyPages.map((item) => <ContentCard key={item.href} item={item} />)}
+          </ul>
+        </section>
+
+
+        <section className="mt-10">
+          <h2 className="text-2xl font-black tracking-tight text-gray-950">Comparativos e alternativas</h2>
+          <ul className="mt-4 grid gap-4 md:grid-cols-2">
+            {comparisonPages.map((item) => <ContentCard key={item.href} item={item} />)}
+          </ul>
+        </section>
+
+        <section className="mt-10">
+          <h2 className="text-2xl font-black tracking-tight text-gray-950">Autoridade e definições</h2>
+          <ul className="mt-4 grid gap-4 md:grid-cols-2">
+            {authorityPages.map((item) => <ContentCard key={item.href} item={item} />)}
           </ul>
         </section>
 

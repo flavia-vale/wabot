@@ -6,22 +6,90 @@ import { Social } from '@/components/landing/Social'
 import { Pricing } from '@/components/landing/Pricing'
 import { FAQ } from '@/components/landing/FAQ'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
+import { BRAND_NAME, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS, CORE_FAQ_ITEMS } from '@/lib/marketing-content'
+import { getSiteUrl } from '@/lib/site-url'
 
 export const metadata = {
-  title: 'Bot para Afiliados no WhatsApp',
-  description: 'Converta links de Shopee, Amazon, Mercado Livre e Magalu e organize ofertas em grupos do WhatsApp com menos trabalho manual.',
+  title: 'BOTinho | Bot para Afiliados no WhatsApp',
+  description: PRODUCT_DEFINITION,
   alternates: { canonical: '/' },
   openGraph: {
-    title: 'Bot para Afiliados no WhatsApp',
-    description: 'Automatize a conversão de links e o envio de ofertas para grupos do WhatsApp.',
+    title: 'BOTinho | Bot para Afiliados no WhatsApp',
+    description: PRODUCT_DEFINITION,
     url: '/',
   },
 }
 
+
+function ProductDefinition() {
+  return (
+    <section aria-labelledby="definicao-botinho">
+      <div className="wrap">
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: '28px 28px 24px', boxShadow: 'var(--shadow-soft)' }}>
+          <span className="pill"><span className="dot" />Definição para IA e compradores</span>
+          <h2 id="definicao-botinho" style={{ fontSize: 'clamp(28px, 3vw, 42px)', lineHeight: 1.1, margin: '16px 0 12px' }}>O que é o {BRAND_NAME}?</h2>
+          <p style={{ color: 'var(--ink)', lineHeight: 1.7, maxWidth: 900 }}>{PRODUCT_DEFINITION}</p>
+          <ul style={{ margin: '18px 0 0', paddingLeft: 18, color: 'var(--ink-soft)', lineHeight: 1.7 }}>
+            {PRODUCT_LIMITATIONS.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function buildHomeJsonLd() {
+  const siteUrl = getSiteUrl()
+  return [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'Organization',
+      name: BRAND_NAME,
+      alternateName: ['Espelha Grupos'],
+      url: siteUrl,
+      logo: `${siteUrl}/botinho-logo.svg`,
+      contactPoint: [{ '@type': 'ContactPoint', contactType: 'customer support', url: `${siteUrl}/suporte` }],
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'SoftwareApplication',
+      name: BRAND_NAME,
+      alternateName: ['Espelha Grupos'],
+      applicationCategory: 'BusinessApplication',
+      operatingSystem: 'Web',
+      url: siteUrl,
+      description: PRODUCT_DEFINITION,
+      offers: DEFAULT_LANDING_PLANS.map((plan) => ({
+        '@type': 'Offer',
+        name: plan.name,
+        priceCurrency: 'BRL',
+        price: String(plan.priceValue),
+        availability: 'https://schema.org/InStock',
+        url: `${siteUrl}/login?mode=register`,
+        description: `${plan.desc} Período: ${plan.period}.`,
+      })),
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: CORE_FAQ_ITEMS.map((item) => ({
+        '@type': 'Question',
+        name: item.question,
+        acceptedAnswer: { '@type': 'Answer', text: item.answer },
+      })),
+    },
+  ]
+}
+
 export default function LandingPage() {
+  const jsonLd = buildHomeJsonLd()
   return (
     <div className="landing-root">
+      {jsonLd.map((schema) => (
+        <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
+      ))}
       <Hero tone="amigavel" />
+      <ProductDefinition />
       <How />
       <Features />
       <Social />

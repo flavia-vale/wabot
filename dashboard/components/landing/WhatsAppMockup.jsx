@@ -151,8 +151,8 @@ function DestinoPhone() {
           <div style={waStyles.metaLeft}>14:31</div>
         </div>
         <div style={waStyles.bubble(true)}>
-          <span style={{ fontWeight: 600 }}>+R$ 4,79</span> de comissão
-          <div style={waStyles.meta}>14:48 · você</div>
+          <span style={{ fontWeight: 600 }}>Oferta revisada</span>
+          <div style={waStyles.meta}>14:48 · exemplo</div>
         </div>
       </div>
     </div>

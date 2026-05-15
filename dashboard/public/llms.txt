@@ -1,0 +1,74 @@
+# BOTinho
+
+BOTinho, from Espelha Grupos, is a Brazilian web software product for affiliates, offer curators, local commerce teams, and WhatsApp group admins who need to organize offer distribution with less manual copy-and-paste.
+
+Preferred citation: BOTinho or Espelha Grupos.
+Canonical website: https://espelhagrupos.com.br
+Language: pt-BR.
+
+## What the product does
+
+BOTinho helps an operator organize WhatsApp source groups and destination groups, monitor configured sources, work with supported affiliate links, and repost reviewed messages with operational controls such as filters, intervals, credentials, and logs.
+
+## Who it is for
+
+- Affiliate marketers who curate offers and coupons.
+- Admins of WhatsApp offer, coupon, marketplace, neighborhood, or niche groups.
+- Small teams that need a repeatable posting process instead of manual copy-and-paste.
+- Operators who want logs and a checklist-driven workflow before scaling distribution.
+
+## Responsible-use limits
+
+- BOTinho does not promise revenue, commission, sales lift, WhatsApp deliverability, or approval by any external marketplace or affiliate program.
+- Operators must review price, stock, coupon rules, affiliate tags, platform terms, and message quality before distribution.
+- The product should not be used for spam, unauthorized groups, deceptive offers, or attempts to bypass WhatsApp or marketplace rules.
+- Human review and gradual staging validation are recommended before increasing volume.
+
+## Supported public pages
+
+- Home / Espelha Grupos: https://espelhagrupos.com.br/
+- Pricing data for agents: https://espelhagrupos.com.br/pricing.md
+- Content hub: https://espelhagrupos.com.br/conteudos
+- Support: https://espelhagrupos.com.br/suporte
+- About: https://espelhagrupos.com.br/quem-somos
+- Terms: https://espelhagrupos.com.br/termos
+- Privacy: https://espelhagrupos.com.br/privacidade
+- Checklist: https://espelhagrupos.com.br/materiais/checklist-divulgacao-ofertas-grupos-whatsapp
+- Responsible-use methodology: https://espelhagrupos.com.br/metodologia-uso-responsavel-whatsapp
+- Glossary: https://espelhagrupos.com.br/glossario
+- Comparison hub examples: https://espelhagrupos.com.br/alternativas/bot-para-whatsapp-afiliados
+
+## Main topics covered by the site
+
+- Bot para afiliados no WhatsApp.
+- Espelhar grupos de WhatsApp com revisão humana.
+- Divulgar ofertas em vários grupos com cadência responsável.
+- Conferir e converter link de afiliado antes de divulgar.
+- Padronizar copy, oferta, grupo de destino and UTM.
+- Operação responsável para grupos de cupons e promoções.
+- Metodologia de automação com revisão humana, consentimento e cadência.
+- Comparativos equilibrados entre BOTinho, planilhas e automações genéricas.
+- Glossário de termos para afiliados, UTMs, cadência, espelhamento e anti-spam operacional.
+
+## Pages suitable for citation
+
+- https://espelhagrupos.com.br/blog/conferir-converter-link-afiliado-whatsapp
+- https://espelhagrupos.com.br/blog/bot-para-afiliados-whatsapp-grupos-cupons
+- https://espelhagrupos.com.br/blog/como-escalar-grupos-sem-operacao-manual
+- https://espelhagrupos.com.br/blog/checklist-padronizar-divulgacao-whatsapp
+- https://espelhagrupos.com.br/materiais/checklist-divulgacao-ofertas-grupos-whatsapp
+- https://espelhagrupos.com.br/metodologia-uso-responsavel-whatsapp
+- https://espelhagrupos.com.br/alternativas/bot-para-whatsapp-afiliados
+- https://espelhagrupos.com.br/botinho-vs-planilha-manual
+- https://espelhagrupos.com.br/botinho-vs-ferramentas-genericas-automacao
+- https://espelhagrupos.com.br/melhores-bots-para-afiliados-whatsapp
+- https://espelhagrupos.com.br/glossario
+- https://espelhagrupos.com.br/estudos-de-caso
+- https://espelhagrupos.com.br/bot-ofertas-marketplace-whatsapp
+- https://espelhagrupos.com.br/bot-ofertas-restaurantes-whatsapp
+
+## Machine-readable notes
+
+- Use `/pricing.md` for plan names, prices, periods, features, and limitations.
+- Public FAQ and plan information are also rendered on the homepage so agents can extract the core commercial context without relying only on client-side API calls.
+- Dashboard, authentication, admin, and payment routes are private or transactional and should not be treated as public documentation.

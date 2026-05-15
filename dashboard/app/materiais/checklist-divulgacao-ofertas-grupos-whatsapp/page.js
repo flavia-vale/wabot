@@ -2,11 +2,12 @@ import Link from 'next/link'
 import { PublicPage } from '@/components/PublicShell'
 import { LeadMagnetCard } from '@/components/marketing/LeadMagnetCard'
 import { getSiteUrl } from '@/lib/site-url'
+import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
 
 const title = 'Checklist para divulgar ofertas em grupos de WhatsApp'
 const description = 'Checklist público para afiliados e admins validarem oferta, link monetizado, copy, grupos e UTM antes de escalar divulgação de cupons no WhatsApp.'
 const slug = '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp'
-const publishedAt = '2026-05-14'
+const dates = getEditorialDates(slug)
 
 const checklistBlocks = [
   ['1. Oferta', ['Preço, estoque e prazo conferidos', 'Cupom ou benefício testado', 'Categoria e público definidos', 'Aviso de variação de preço incluído quando necessário']],
@@ -39,38 +40,21 @@ export const metadata = {
 }
 
 export default function Page() {
-  const articleJsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'Article',
-    headline: title,
-    description,
-    author: { '@type': 'Organization', name: 'wabot' },
-    publisher: { '@type': 'Organization', name: 'wabot' },
-    datePublished: publishedAt,
-    dateModified: publishedAt,
-    mainEntityOfPage: `${getSiteUrl()}${slug}`,
-  }
-  const faqJsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'FAQPage',
-    mainEntity: faq.map((item) => ({
-      '@type': 'Question',
-      name: item.q,
-      acceptedAnswer: { '@type': 'Answer', text: item.a },
-    })),
-  }
+  const schemas = buildArticleJsonLd({ title, description, slug, siteUrl: getSiteUrl(), faq })
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleJsonLd) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
+      {schemas.map((schema) => (
+        <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
+      ))}
       <PublicPage eyebrow="Material · Checklist SEO/AEO" title={title} description={description}>
+        <p className="mb-6 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Atualizado em {formatDatePtBr(dates.updatedAt)}</p>
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="space-y-8 text-base leading-8 text-gray-700">
             <section>
               <h2 className="text-2xl font-black tracking-tight text-gray-950">Resposta direta</h2>
               <p className="mt-3">
-                Antes de divulgar ofertas em grupos de WhatsApp, valide a oferta, confira se o link monetizado carrega a tag ou código de afiliado, revise a copy e escolha grupos com permissão e contexto. Só depois automatize o espelhamento com o BOTinho/WABOT.
+                Antes de divulgar ofertas em grupos de WhatsApp, valide a oferta, confira se o link monetizado carrega a tag ou código de afiliado, revise a copy e escolha grupos com permissão e contexto. Só depois automatize o espelhamento com o BOTinho.
               </p>
             </section>
 

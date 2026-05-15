@@ -1,4 +1,4 @@
-# Dia 4 — Conteúdo de dor (Cluster 1) — wabot
+# Dia 4 — Conteúdo de dor (Cluster 1) — BOTinho
 
 Data: 2026-05-11
 Owner: Growth/SEO
