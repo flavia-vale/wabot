@@ -4,7 +4,10 @@ export const TRACKING_EVENTS = {
   LOGIN_SUCCESS: 'login_success',
   AUTH_ERROR: 'auth_error',
   AUTH_MODE_SWITCH: 'auth_mode_switch',
+  SIGNUP_FORM_STARTED: 'signup_form_started',
+  SIGNUP_SUBMIT_BLOCKED_CLIENT: 'signup_submit_blocked_client',
 }
+
 
 function resolvePathname() {
   if (typeof window === 'undefined') return ''

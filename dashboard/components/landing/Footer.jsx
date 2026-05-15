@@ -79,16 +79,16 @@ function Footer() {
           </div>
           <div>
             <div style={s.colTitle}>Empresa</div>
-            <a style={s.colLink} href="#">Sobre</a>
-            <a style={s.colLink} href="#">Blog</a>
-            <a style={s.colLink} href="#">Contato</a>
-            <a style={s.colLink} href="#">Afiliados (do bot)</a>
+            <Link style={s.colLink} href="/quem-somos">Sobre</Link>
+            <Link style={s.colLink} href="/conteudos">Blog</Link>
+            <Link style={s.colLink} href="/suporte">Contato</Link>
+            <Link style={s.colLink} href="/suporte">Afiliados (do bot)</Link>
           </div>
           <div>
             <div style={s.colTitle}>Legal</div>
-            <a style={s.colLink} href="#">Termos</a>
-            <a style={s.colLink} href="#">Privacidade</a>
-            <a style={s.colLink} href="#">LGPD</a>
+            <Link style={s.colLink} href="/termos">Termos</Link>
+            <Link style={s.colLink} href="/privacidade">Privacidade</Link>
+            <Link style={s.colLink} href="/privacidade">LGPD</Link>
           </div>
         </div>
         <div style={s.bottom} className="landing-footer-bottom">

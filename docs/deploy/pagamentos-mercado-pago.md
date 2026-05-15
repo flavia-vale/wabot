@@ -6,8 +6,8 @@ O BOTinho usa **links de assinatura fixos do Mercado Pago** para checkout.
 
 | Plano | Preço | Link |
 | --- | --- | --- |
-| Basic | R$50 / 30 dias | `preapproval_plan_id=7417a34c47be40fdbc4bc1decc0233e0` |
-| Pro | R$100 / 30 dias | `preapproval_plan_id=251ba8b89a8a483a89e4e6ba336adb5c` |
+| Basic | R$39 / 30 dias | `preapproval_plan_id=7417a34c47be40fdbc4bc1decc0233e0` |
+| Pro | R$69 / 30 dias | `preapproval_plan_id=251ba8b89a8a483a89e4e6ba336adb5c` |
 
 Os links estão hardcoded em `src/api/routes/payments.js` (campo `checkoutUrl` de cada plano).
 
@@ -31,7 +31,7 @@ Como os links são fixos (sem metadados de usuário), o acesso é ativado manual
 3. MP exibe o `payment_id` na página de confirmação e o envia por e-mail.
 4. Usuário volta ao dashboard, informa o `payment_id` no campo de ativação.
 5. Frontend chama `POST /api/payments/recover` com `{ paymentId }`.
-6. Backend consulta o MP, confirma status `approved`, infere o plano pelo valor (R$50 = basic, R$100 = pro) e libera o acesso por 30 dias.
+6. Backend consulta o MP, confirma status `approved`, infere o plano pelo valor (R$39 = basic, R$69 = pro) e libera o acesso por 30 dias.
 
 ## Segurança do endpoint `/recover`
 

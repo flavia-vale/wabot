@@ -24,8 +24,8 @@ export const DEFAULT_LANDING_PLANS = [
   {
     id: 'basic',
     name: 'Basic',
-    price: 'R$1',
-    priceValue: 1,
+    price: 'R$39',
+    priceValue: 39,
     period: '30 dias',
     desc: 'Para operar com os mesmos recursos essenciais do Pro mantendo anúncios no uso.',
     cta: 'Assinar Basic',
@@ -34,8 +34,8 @@ export const DEFAULT_LANDING_PLANS = [
   {
     id: 'pro',
     name: 'Pro',
-    price: 'R$2',
-    priceValue: 2,
+    price: 'R$69',
+    priceValue: 69,
     period: '30 dias',
     desc: 'Para operar com os mesmos recursos do Basic, sem anúncios na experiência.',
     cta: 'Assinar Pro',
