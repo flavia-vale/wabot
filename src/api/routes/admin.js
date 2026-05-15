@@ -916,6 +916,28 @@ export async function adminRoutes(app) {
     }
   })
 
+  app.get('/marketing/funnel', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:read'))) return
+    const { from, to } = parseDateRange(req.query, 30)
+
+    const [sessions, signups, firstValue, approvals] = await Promise.all([
+      db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event = 'login_completed' AND createdAt >= ${from} AND createdAt <= ${to}`,
+      db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event = 'signup_created' AND createdAt >= ${from} AND createdAt <= ${to}`,
+      db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event = 'first_send_success' AND createdAt >= ${from} AND createdAt <= ${to}`,
+      db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event = 'payment_approved' AND createdAt >= ${from} AND createdAt <= ${to}`,
+    ])
+
+    await writeAdminAuditLog(req, { action: 'admin.marketing.funnel.read', resource: 'marketingFunnel' })
+    return {
+      sessions: Number(sessions?.[0]?.total || 0),
+      signups: Number(signups?.[0]?.total || 0),
+      firstValueActions: Number(firstValue?.[0]?.total || 0),
+      approvedPayments: Number(approvals?.[0]?.total || 0),
+      from,
+      to,
+    }
+  })
+
   app.get('/marketing/campaigns', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'admin:read'))) return
     const { from, to } = parseDateRange(req.query, 30)
