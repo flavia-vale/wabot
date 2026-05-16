@@ -171,8 +171,8 @@ export default function ConfigPage() {
     return { value: number }
   }
 
-  async function handleSave(e) {
-    e.preventDefault()
+  async function handleSave(e, section = 'all') {
+    e?.preventDefault?.()
     if (!loadedOnce || loadError) return
     setError('')
     setDelayError('')
@@ -180,41 +180,51 @@ export default function ConfigPage() {
     setBrandingError('')
     setSuccess(false)
 
-    const parsedMin = parseDelay(form.delayMin, 'Delay mínimo')
-    if (parsedMin.error) {
-      setDelayError(parsedMin.error)
-      setError(parsedMin.error)
-      return
-    }
+    let parsedMin
+    let parsedMax
 
-    const parsedMax = parseDelay(form.delayMax, 'Delay máximo')
-    if (parsedMax.error) {
-      setDelayError(parsedMax.error)
-      setError(parsedMax.error)
-      return
-    }
+    if (section === 'delay' || section === 'all') {
+      parsedMin = parseDelay(form.delayMin, 'Delay mínimo')
+      if (parsedMin.error) {
+        setDelayError(parsedMin.error)
+        setError(parsedMin.error)
+        return
+      }
 
-    if (parsedMin.value > parsedMax.value) {
-      const message = 'Delay mínimo não pode ser maior que o máximo'
-      setDelayError(message)
-      setError(message)
-      return
+      parsedMax = parseDelay(form.delayMax, 'Delay máximo')
+      if (parsedMax.error) {
+        setDelayError(parsedMax.error)
+        setError(parsedMax.error)
+        return
+      }
+
+      if (parsedMin.value > parsedMax.value) {
+        const message = 'Delay mínimo não pode ser maior que o máximo'
+        setDelayError(message)
+        setError(message)
+        return
+      }
+    } else {
+      parsedMin = parseDelay(form.delayMin, 'Delay mínimo')
+      parsedMax = parseDelay(form.delayMax, 'Delay máximo')
     }
 
     const brandingGroupLink = form.brandingGroupLink.trim()
     const brandingCtaText = form.brandingCtaText.trim() || DEFAULT_BRANDING_CTA_TEXT
-    if (brandingGroupLink && !hasHttpProtocol(brandingGroupLink)) {
-      const message = 'Informe um link válido começando com http:// ou https://'
-      setBrandingError(message)
-      setError(message)
-      return
-    }
+    if (section === 'branding' || section === 'all') {
+      if (brandingGroupLink && !hasHttpProtocol(brandingGroupLink)) {
+        const message = 'Informe um link válido começando com http:// ou https://'
+        setBrandingError(message)
+        setError(message)
+        return
+      }
 
-    if (brandingCtaText.length > MAX_BRANDING_CTA_CHARS) {
-      const message = `Texto do CTA deve ter no máximo ${MAX_BRANDING_CTA_CHARS} caracteres`
-      setBrandingError(message)
-      setError(message)
-      return
+      if (brandingCtaText.length > MAX_BRANDING_CTA_CHARS) {
+        const message = `Texto do CTA deve ter no máximo ${MAX_BRANDING_CTA_CHARS} caracteres`
+        setBrandingError(message)
+        setError(message)
+        return
+      }
     }
 
     setSaving(true)
@@ -253,7 +263,7 @@ export default function ConfigPage() {
 
       {loadError && <div className="mb-4"><ErrorState title="Falha ao carregar configurações" message={loadError} actionLabel="Tentar novamente" onAction={loadConfig} /></div>}
 
-      <form onSubmit={handleSave} className="flex flex-col gap-4">
+      <form onSubmit={(e) => handleSave(e, "all")} className="flex flex-col gap-4">
         <div className="bg-white rounded-2xl shadow p-5">
           <div className="mb-4">
             <h3 className="font-semibold text-gray-700 mb-1">⏱️ Delay entre envios</h3>
@@ -315,6 +325,15 @@ export default function ConfigPage() {
             <p className="font-semibold">Como zerar a fila</p>
             <p className="mt-1 leading-relaxed">Vá em <Link href="/dashboard" className="font-semibold underline underline-offset-2">WhatsApp</Link> e clique em <strong>Desligar bot</strong>. Isso encerra a fila atual em memória; envios que ainda estavam “Na fila” ou “Enviando” são marcados como interrompidos nos logs. Depois, ligue o bot novamente quando quiser retomar.</p>
           </div>
+
+          <button
+            type="button"
+            onClick={() => handleSave(undefined, 'delay')}
+            disabled={saving || !!loadError || !loadedOnce}
+            className="mt-4 w-full bg-green-600 text-white rounded-xl py-3 font-semibold hover:bg-green-700 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+          >
+            {saving ? 'Salvando...' : 'Salvar delay'}
+          </button>
         </div>
 
         <div className="bg-white rounded-2xl shadow p-5">
@@ -347,14 +366,21 @@ export default function ConfigPage() {
             <p className="text-[11px] font-semibold uppercase tracking-wide text-green-700">Prévia do rodapé</p>
             <p className="mt-2 whitespace-pre-wrap rounded-2xl bg-white px-3 py-2.5 min-h-11 text-sm text-gray-700 shadow-sm">{brandingPreview}</p>
           </div>
+
+          <button
+            type="button"
+            onClick={() => handleSave(undefined, 'branding')}
+            disabled={saving || !!loadError || !loadedOnce}
+            className="mt-4 w-full bg-green-600 text-white rounded-xl py-3 font-semibold hover:bg-green-700 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+          >
+            {saving ? 'Salvando...' : 'Salvar branding'}
+          </button>
         </div>
 
         <div className="flex flex-col gap-2">
           {error && <Alert type="error" title="Não foi possível salvar" message={error} />}
           {success && <Alert type="success" title="Configurações salvas" message="Suas alterações foram aplicadas com sucesso." />}
         </div>
-
-        <button type="submit" disabled={saving || !!loadError || !loadedOnce} className="bg-green-600 text-white rounded-xl py-3 font-semibold hover:bg-green-700 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">{saving ? 'Salvando...' : 'Salvar configurações'}</button>
       </form>
     </div>
   )

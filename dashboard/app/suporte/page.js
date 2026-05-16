@@ -19,9 +19,9 @@ const faqs = [
   ['renovar-acesso', 'Como renovar acesso/plano?', 'Acesse Planos, escolha Basic ou Pro e finalize uma nova compra. No MVP o acesso é por 30 dias renovável manualmente.'],
 ]
 
-function buildSupportFaqSchema() {
+function buildSupportJsonLd() {
   const siteUrl = getSiteUrl()
-  return {
+  const faqSchema = {
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
     mainEntity: faqs.map(([id, question, answer]) => ({
@@ -34,20 +34,41 @@ function buildSupportFaqSchema() {
       url: `${siteUrl}/suporte#${id}`,
     })),
   }
+
+  const breadcrumbSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Início', item: siteUrl },
+      { '@type': 'ListItem', position: 2, name: 'Suporte', item: `${siteUrl}/suporte` },
+    ],
+  }
+
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [faqSchema, breadcrumbSchema],
+  }
 }
 
 export default function SupportPage() {
-  const supportFaqSchema = buildSupportFaqSchema()
+  const supportSchemaGraph = buildSupportJsonLd()
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(supportFaqSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(supportSchemaGraph) }} />
       <PublicPage
         eyebrow="Suporte"
         title="Como podemos ajudar?"
         description="Encontre o canal oficial de atendimento e respostas rápidas para configurar sua operação."
       >
         <div className="space-y-8 text-sm leading-7 text-gray-600">
+          <nav aria-label="Breadcrumb" className="text-xs text-gray-500">
+            <ol className="flex items-center gap-2">
+              <li><Link href="/" className="hover:underline">Início</Link></li>
+              <li aria-hidden="true">/</li>
+              <li className="font-semibold text-gray-700">Suporte</li>
+            </ol>
+          </nav>
           <section className="rounded-2xl bg-green-50 p-5 text-green-900">
             <h2 className="text-xl font-bold">Canal oficial</h2>
             <p className="mt-2">WhatsApp oficial: <a href="https://wa.me/5532999844020" target="_blank" rel="noopener noreferrer" className="font-bold underline">5532999844020</a></p>

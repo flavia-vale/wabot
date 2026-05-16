@@ -59,6 +59,9 @@ function getExpiredAccessCopy(user) {
 }
 
 export default function AssinaturasPage() {
+  const [plans, setPlans] = useState(FALLBACK_PLAN_CARDS)
+  const [checkoutPlan, setCheckoutPlan] = useState('')
+  const [checkoutError, setCheckoutError] = useState('')
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState('')
   const [email, setEmail] = useState('')
@@ -123,8 +126,8 @@ export default function AssinaturasPage() {
   }
 
   const selectedPlan = useMemo(
-    () => PLAN_CARDS.find((plan) => plan.id === selectedPlanId) ?? PLAN_CARDS[0],
-    [selectedPlanId],
+    () => plans.find((plan) => plan.id === selectedPlanId) ?? plans[0],
+    [plans, selectedPlanId],
   )
 
   const whatsappLink = useMemo(() => {
@@ -136,7 +139,6 @@ export default function AssinaturasPage() {
     <section className="mx-auto w-full max-w-3xl">
       <header className="mb-5 rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
         <h1 className="text-xl font-bold text-gray-800 md:text-2xl">Escolha seu plano</h1>
-        <p className="mt-2 text-sm text-gray-600">Pague com checkout seguro para ativação automática. Se o provedor estiver indisponível, use o PIX manual como fallback.</p>
       </header>
 
       {expiredAccessCopy && (
@@ -156,7 +158,7 @@ export default function AssinaturasPage() {
       )}
 
       <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {PLAN_CARDS.map((plan) => {
+        {plans.map((plan) => {
           const selected = plan.id === selectedPlanId
           return (
             <button
