@@ -263,11 +263,20 @@ Critério de aceite: 5+ ofertas reais de um canal chegando a um grupo
 destino em staging por 24h sem regressão.
 
 ### Fase 3 — Postagem em canal-destino
-- Validação de admin via `newsletterMetadata` antes de salvar
-  canal-destino.
-- Adaptação no path de envio para forçar `quoted: undefined` quando
-  destino é canal.
-- Endpoint admin para cadastrar canal-destino.
+- ~~Validação de admin via `newsletterMetadata` antes de salvar
+  canal-destino.~~ **Deferido para Fase 5**: a interface
+  `NewsletterMetadata` na Baileys 6.7.16 não expõe role do viewer
+  (só tem `owner`), inviabilizando validação genérica upfront.
+  Mitigação adotada: detectar erro de "forbidden" na resposta do
+  `sendMessage` e short-circuit no retry loop (não consumir todas
+  as tentativas em destinos permanentemente sem permissão).
+- Adaptação no path de envio:
+  - Bypass do `relayMessage` para canal-destino (reusa proto de
+    upload de grupo, não compatível com canal).
+  - Strip de `quoted` e `contextInfo` do payload (canais não
+    suportam reply-context).
+- Endpoint para cadastrar canal-destino: já contemplado em Fase 1
+  (`POST /api/groups` aceita `kind='channel'` com `role='post'`).
 
 Critério de aceite: ofertas de um grupo-monitor chegando a um
 canal-destino próprio em staging, com mídia hi-res, por 24h.
