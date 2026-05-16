@@ -25,6 +25,15 @@ function Tip({ children }) {
   )
 }
 
+function Warning({ children }) {
+  return (
+    <div className="flex gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+      <span className="text-base">⚠️</span>
+      <span>{children}</span>
+    </div>
+  )
+}
+
 function PlatformCard({ color, icon, title, children }) {
   const borders = {
     blue: 'border-blue-200',
@@ -91,20 +100,51 @@ function Badge({ children, color = 'green' }) {
   )
 }
 
+function QuickChecklist() {
+  const items = [
+    'Estou no computador com Google Chrome.',
+    'Instalei a extensão Cookie-Editor.',
+    'Separei 20 minutos para fazer tudo com calma.',
+    'Vou configurar 1 plataforma por vez para evitar confusão.',
+  ]
+  return (
+    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+      <h3 className="text-sm font-black text-emerald-900">✅ Checklist rápido (antes de começar)</h3>
+      <ul className="mt-3 space-y-2 text-sm text-emerald-900">
+        {items.map((item) => (
+          <li key={item} className="flex items-start gap-2">
+            <span className="mt-0.5">☑️</span>
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 export default function TutorialPage() {
   return (
     <div className="space-y-6 max-w-3xl">
       {/* Header */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm space-y-2">
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm space-y-4">
         <h1 className="text-2xl font-black text-gray-900">
           📚 Guia de Configuração de Credenciais
         </h1>
         <p className="text-gray-600 text-sm leading-relaxed">
           Para o <strong>BOTinho</strong> funcionar, ele precisa se conectar às suas contas de afiliado. Siga os passos abaixo com calma — é mais simples do que parece!
         </p>
+        <div className="flex flex-wrap gap-2">
+          <Badge color="green">Tempo médio: 15-25 min</Badge>
+          <Badge color="blue">Dificuldade: fácil</Badge>
+          <Badge color="yellow">Ordem recomendada: ML → Amazon → Shopee</Badge>
+        </div>
         <Tip>
           Este guia cobre <strong>Mercado Livre</strong>, <strong>Amazon</strong> e <strong>Shopee</strong>. Você não precisa configurar todas de uma vez — faça uma por vez.
         </Tip>
+        <QuickChecklist />
+        <Warning>
+          Nunca compartilhe seus cookies, IDs, SSID, Key ou Secret com terceiros. Esses dados dão acesso à sua conta.
+        </Warning>
       </div>
 
       {/* Passo 0 */}
@@ -238,11 +278,19 @@ export default function TutorialPage() {
       </PlatformCard>
 
       {/* Final */}
-      <div className="rounded-2xl border border-green-200 bg-green-50 p-5 space-y-2">
+      <div className="rounded-2xl border border-green-200 bg-green-50 p-5 space-y-3">
         <h2 className="font-black text-green-900 text-base">✅ Tudo pronto!</h2>
         <p className="text-sm text-green-800 leading-relaxed">
           Após salvar suas credenciais na tela de <strong>Credenciais</strong>, o BOTinho já consegue gerar links de afiliado automaticamente. Se tiver dúvidas ou algum código não funcionar, fale com o suporte — estamos aqui para ajudar!
         </p>
+        <div className="rounded-xl border border-green-300 bg-white/80 p-3">
+          <p className="text-sm font-bold text-green-900">Próximo passo recomendado (2 minutos):</p>
+          <ol className="mt-2 space-y-1 text-sm text-green-900">
+            <li>1. Salvar as credenciais.</li>
+            <li>2. Gerar um link de teste de cada plataforma que você configurou.</li>
+            <li>3. Confirmar se o link abre corretamente no destino final.</li>
+          </ol>
+        </div>
       </div>
     </div>
   )
