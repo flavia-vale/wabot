@@ -15,7 +15,11 @@ module.exports = {
         API_URL: 'https://espelhagrupos.com.br',
       },
       max_memory_restart: '500M',
-      kill_timeout: 10000,
+      // kill_timeout precisa cobrir SHUTDOWN_DRAIN_TIMEOUT_MS (default 15s) +
+      // cleanup do dedup/backend (~3s). Se for menor, PM2 manda SIGKILL no
+      // meio do drain e mensagens em vôo voltam a ser marcadas como
+      // 'Envio interrompido por reinício do worker'.
+      kill_timeout: 20000,
       wait_ready: false,
       listen_timeout: 10000,
     },
