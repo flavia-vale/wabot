@@ -1,4 +1,5 @@
 'use client'
+import Image from 'next/image'
 
 const LINKS = {
   cookieEditor: 'https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm',
@@ -189,6 +190,8 @@ export default function TutorialPage() {
           Não encontrou o ícone? Clique no ícone de <strong>peça de quebra-cabeça 🧩</strong> ao lado da barra de endereço e fixe a Cookie-Editor clicando no alfinete 📌.
         </Tip>
       </PlatformCard>
+
+      <TutorialImagesGallery />
 
       {/* Mercado Livre */}
       <PlatformCard color="blue" icon="🔵" title="Mercado Livre — Pegando seu ID e SSID">
