@@ -59,6 +59,9 @@ function getExpiredAccessCopy(user) {
 }
 
 export default function AssinaturasPage() {
+  const [plans, setPlans] = useState(FALLBACK_PLAN_CARDS)
+  const [checkoutPlan, setCheckoutPlan] = useState('')
+  const [checkoutError, setCheckoutError] = useState('')
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState('')
   const [email, setEmail] = useState('')
@@ -123,8 +126,8 @@ export default function AssinaturasPage() {
   }
 
   const selectedPlan = useMemo(
-    () => PLAN_CARDS.find((plan) => plan.id === selectedPlanId) ?? PLAN_CARDS[0],
-    [selectedPlanId],
+    () => plans.find((plan) => plan.id === selectedPlanId) ?? plans[0],
+    [plans, selectedPlanId],
   )
 
   const whatsappLink = useMemo(() => {
@@ -156,7 +159,7 @@ export default function AssinaturasPage() {
       )}
 
       <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {PLAN_CARDS.map((plan) => {
+        {plans.map((plan) => {
           const selected = plan.id === selectedPlanId
           return (
             <button
