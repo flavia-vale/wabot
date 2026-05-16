@@ -34,6 +34,7 @@ find_global_skill_dir() {
   local -a bases=(
     "$HOME/.codex/skills"
     "$HOME/.claude/skills"
+    "$HOME/.agents/skills"
     "$HOME/.config/codex/skills"
     "$HOME/.local/share/codex/skills"
   )
@@ -53,6 +54,7 @@ list_global_skills() {
   local -a bases=(
     "$HOME/.codex/skills"
     "$HOME/.claude/skills"
+    "$HOME/.agents/skills"
     "$HOME/.config/codex/skills"
     "$HOME/.local/share/codex/skills"
   )
