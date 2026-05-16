@@ -1,13 +1,13 @@
 import db from '../../db.js'
 import { sendBroadcast, isRunning } from '../../manager.js'
+import { ensureJid, JID_KIND } from '../../core/jid.js'
 
 function normalizeTargetJids(jids) {
   const input = Array.isArray(jids) ? jids : []
   return [...new Set(
     input
-      .map(jid => String(jid ?? '').trim())
-      .filter(Boolean)
-      .map(jid => (jid.includes('@') ? jid : `${jid}@g.us`)),
+      .map(jid => ensureJid(jid, JID_KIND.GROUP))
+      .filter(Boolean),
   )]
 }
 
