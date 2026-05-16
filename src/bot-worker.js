@@ -38,6 +38,7 @@ const OWNER_INSTANCE = process.env.NODE_APP_INSTANCE ?? '0'
 const SESSION_ERROR_WINDOW_MS = Math.max(30_000, Number(process.env.WA_SESSION_ERROR_WINDOW_MS || 120_000))
 const SESSION_ERROR_THRESHOLD = Math.max(5, Number(process.env.WA_SESSION_ERROR_THRESHOLD || 30))
 const SESSION_RECOVERY_COOLDOWN_MS = Math.max(60_000, Number(process.env.WA_SESSION_RECOVERY_COOLDOWN_MS || 300_000))
+const ALLOW_TEXT_WITHOUT_LINKS = String(process.env.WA_ALLOW_TEXT_WITHOUT_LINKS || '0') === '1'
 
 let activeSock = null
 let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
@@ -800,11 +801,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         msg.message?.imageMessage?.caption ||
         msg.message?.videoMessage?.caption || ''
 
-      if (!text) {
-        await recordSkippedMessage({ reason: 'skip:no_text' })
-        return
-      }
-      if (text.length > MAX_INCOMING_MESSAGE_CHARS) {
+      if (text && text.length > MAX_INCOMING_MESSAGE_CHARS) {
         logger.warn({ msgId: msg.key.id, chars: text.length, limit: MAX_INCOMING_MESSAGE_CHARS }, 'Mensagem grande demais — processamento ignorado para preservar latência')
         await recordSkippedMessage({ reason: 'skip:text_too_large' })
         return
@@ -821,15 +818,32 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }
       }
 
-      const sanitizedText = sanitizeInviteLinks(text)
-      if (!sanitizedText) {
-        await recordSkippedMessage({ reason: 'skip:empty_after_sanitize' })
-        return
-      }
+      const sanitizedText = text ? sanitizeInviteLinks(text) : ''
+      if (text && !sanitizedText) return
 
       const links = detectLinks(sanitizedText)
-      if (!links.length) {
-        await recordSkippedMessage({ reason: 'skip:no_link_detected' })
+      const innerMessage = extractMessageContent(msg.message)
+      const messageKind = detectMessageKind(innerMessage, sanitizedText)
+      const policy = normalizeForwardingPolicy(monitorGroup)
+      const canForwardCurrentMessage = shouldForwardMessage({
+        hasLinks: links.length > 0,
+        messageKind,
+        policy,
+      })
+      if (!canForwardCurrentMessage) {
+        await db.messageLog.create({
+          data: {
+            userId,
+            platform: links[0]?.platform || 'nolink',
+            sourceGroup: jid,
+            destGroup: 'skipped',
+            originalUrl: links[0]?.url || '',
+            convertedUrl: '',
+            messageText: sanitizeMessageForLog(sanitizedText || text || ''),
+            status: 'error',
+            errorMsg: `skip:policy:${policy.forwardMode}:${policy.noLinkScope}:${messageKind}`,
+          },
+        }).catch(() => {})
         return
       }
 
@@ -1038,7 +1052,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         dedup.links[key] = Date.now()
         scheduleDedupSave(dedup)
 
-        const platforms = conversions.map(c => c.platform).join('+')
+        const platforms = conversions.length ? conversions.map(c => c.platform).join('+') : 'nolink'
         const logData = {
           userId,
           platform: platforms,
@@ -1101,7 +1115,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             })
           },
           send: async ({ sock: sendSock, payload }) => {
-            if (shouldUseRelayPath({ destJid, hasOriginal: !!original })) {
+            if (original) {
               const replayProto = { ...original.proto }
               if (original.type === 'imageMessage' || original.type === 'videoMessage') {
                 replayProto.caption = finalText
