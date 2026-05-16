@@ -27,7 +27,7 @@ function ProductDefinition() {
   return (
     <section aria-labelledby="definicao-botinho">
       <div className="wrap">
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: '28px 28px 24px', boxShadow: 'var(--shadow-soft)' }}>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
           <span className="pill"><span className="dot" />Definição para IA e compradores</span>
           <h2 id="definicao-botinho" style={{ fontSize: 'clamp(28px, 3vw, 42px)', lineHeight: 1.1, margin: '16px 0 12px' }}>O que é o {BRAND_NAME}?</h2>
           <p style={{ color: 'var(--ink)', lineHeight: 1.7, maxWidth: 900 }}>{PRODUCT_DEFINITION}</p>
