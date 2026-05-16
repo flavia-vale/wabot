@@ -10,7 +10,14 @@
     "validate:lp-schema": "node scripts/validate-lp-schema.mjs",
     "guard:config-page": "node scripts/guard-config-page-regression.mjs",
     "validate:seo-consistency": "node scripts/validate-seo-consistency.mjs",
-    "validate:core-schema": "node scripts/validate-core-schema.mjs"
+    "validate:core-schema": "node scripts/validate-core-schema.mjs",
+    "guard:seo-registry": "node scripts/guard-seo-registry-coverage.mjs",
+    "lint:seo-metadata": "node scripts/lint-seo-metadata-duplicates.mjs",
+    "validate:schema-templates": "node scripts/validate-schema-templates.mjs",
+    "validate:seo-p0": "npm run guard:seo-registry && npm run lint:seo-metadata",
+    "validate:editorial-freshness": "node scripts/validate-editorial-freshness.mjs",
+    "monitor:cwv-budget": "node scripts/monitor-cwv-budget.mjs",
+    "validate:seo-p2": "npm run validate:editorial-freshness && npm run monitor:cwv-budget"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4",
