@@ -26,6 +26,7 @@ import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } fro
 import { isMirrorableJid, detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
+import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination } from './core/channelSend.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
@@ -1081,7 +1082,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           delayMs: buildSmartDelayMs(cfg.botConfig),
           typingDelayMs: calculateTypingDelayMs({ text: finalText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           buildPayload: async () => {
-            if (original) return null
+            // Para canal-destino, nunca usar relay (sendMessage com payload limpo).
+            // Para grupo-destino com mídia original, deixar relayMessage cuidar (return null).
+            if (shouldUseRelayPath({ destJid, hasOriginal: !!original })) return null
 
             let image = null
             if (wantImage) {
@@ -1105,7 +1108,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             })
           },
           send: async ({ sock: sendSock, payload }) => {
-            if (original) {
+            if (shouldUseRelayPath({ destJid, hasOriginal: !!original })) {
               const replayProto = { ...original.proto }
               if (original.type === 'imageMessage' || original.type === 'videoMessage') {
                 replayProto.caption = finalText
@@ -1115,11 +1118,19 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
               return
             }
 
+            // Canal-destino: remove campos não-suportados (quoted/contextInfo) de
+            // todas as rotas. Para grupos, sanitização é no-op (helper só remove
+            // se existir). Sem mutação do payload original.
+            const channelDest = isChannelDestination(destJid)
             const routes = [
-              { name: payload._route, body: payload.primary, sendOptions: payload.primarySendOptions },
+              {
+                name: payload._route,
+                body: channelDest ? stripChannelUnsafeFields(payload.primary) : payload.primary,
+                sendOptions: payload.primarySendOptions,
+              },
               ...(payload.fallbacks || []).map((body, idx) => ({
                 name: body.image ? 'image' : 'text',
-                body,
+                body: channelDest ? stripChannelUnsafeFields(body) : body,
                 sendOptions: payload.fallbackSendOptions?.[idx],
                 fallbackIdx: idx,
               })),
@@ -1132,7 +1143,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
                 return
               } catch (err) {
                 lastErr = err
-                logger.warn({ err: err.message, destJid, route: route.name, fallbackIdx: route.fallbackIdx }, 'Envio falhou — tentando próximo fallback')
+                logger.warn({ err: err.message, destJid, route: route.name, fallbackIdx: route.fallbackIdx, channel: channelDest }, 'Envio falhou — tentando próximo fallback')
               }
             }
             throw lastErr || new Error('Todos os fallbacks de envio falharam')
