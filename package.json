@@ -9,7 +9,8 @@
     "dashboard": "cd dashboard && npm run dev",
     "pressure:logs": "node scripts/pressure-logs.mjs",
     "db:readiness": "node scripts/db-migration-readiness.mjs",
-    "test": "node --test test/*.test.js test/**/*.test.js"
+    "test": "node --test test/*.test.js test/**/*.test.js",
+    "report:marketing-funnel": "node scripts/marketing-funnel-baseline.mjs 7"
   },
   "dependencies": {
     "@fastify/cors": "^11.2.0",

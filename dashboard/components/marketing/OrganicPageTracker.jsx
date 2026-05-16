@@ -10,6 +10,7 @@ function sanitizeSeoRoute(route = {}) {
     cluster: String(route.cluster ?? '').slice(0, 64),
     intent: String(route.intent ?? '').slice(0, 96),
     template: String(route.template ?? '').slice(0, 64),
+    variant: String(route.variant ?? '').slice(0, 64),
   }
 }
 
