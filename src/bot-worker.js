@@ -34,10 +34,15 @@ import { detectMessageKind, normalizeForwardingPolicy, shouldForwardMessage } fr
 const userId = process.env.BOT_USER_ID
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
 const OWNER_INSTANCE = process.env.NODE_APP_INSTANCE ?? '0'
+const SESSION_ERROR_WINDOW_MS = Math.max(30_000, Number(process.env.WA_SESSION_ERROR_WINDOW_MS || 120_000))
+const SESSION_ERROR_THRESHOLD = Math.max(5, Number(process.env.WA_SESSION_ERROR_THRESHOLD || 30))
+const SESSION_RECOVERY_COOLDOWN_MS = Math.max(60_000, Number(process.env.WA_SESSION_RECOVERY_COOLDOWN_MS || 300_000))
 
 let activeSock = null
 let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
 let shuttingDown = false
+let sessionErrorTimestamps = []
+let sessionRecoveryLastAt = 0
 
 let heartbeatTimer = null
 async function persistSessionPatch(data = {}) {
@@ -749,11 +754,37 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       const cfg = await getConfig()
       logger.info({ jid, monitorGroups: cfg.groups.monitor, feedGlobal: cfg.botConfig.feedGlobal }, 'mensagem recebida')
       const monitorGroup = cfg.groups.monitor.find(m => m.waJid === jid)
-      if (!cfg.botConfig.feedGlobal && !monitorGroup) return
+      async function recordSkippedMessage({ reason, platform = 'unknown', originalUrl = '', convertedUrl = '' }) {
+        const messageText =
+          msg.message?.conversation ||
+          msg.message?.extendedTextMessage?.text ||
+          msg.message?.imageMessage?.caption || ''
+        await db.messageLog.create({
+          data: {
+            userId,
+            platform,
+            sourceGroup: jid || 'unknown',
+            destGroup: 'skipped',
+            originalUrl,
+            convertedUrl,
+            messageText: sanitizeMessageForLog(messageText || reason),
+            status: 'skipped',
+            errorMsg: reason,
+          },
+        }).catch(() => {})
+      }
+
+      if (!cfg.botConfig.feedGlobal && !monitorGroup) {
+        await recordSkippedMessage({ reason: 'skip:not_monitor_group' })
+        return
+      }
       // feedGlobal aceita mensagens de qualquer JID espelhável (grupo ou canal).
       // O pipeline downstream é agnóstico ao tipo; o tratamento específico
       // de envio para canal-destino vem na Fase 3.
-      if (cfg.botConfig.feedGlobal && !isMirrorableJid(jid)) return
+      if (cfg.botConfig.feedGlobal && !isMirrorableJid(jid)) {
+        await recordSkippedMessage({ reason: 'skip:not_mirrorable_jid' })
+        return
+      }
 
       const text =
         msg.message?.conversation ||
@@ -761,8 +792,13 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         msg.message?.imageMessage?.caption ||
         msg.message?.videoMessage?.caption || ''
 
-      if (text && text.length > MAX_INCOMING_MESSAGE_CHARS) {
+      if (!text) {
+        await recordSkippedMessage({ reason: 'skip:no_text' })
+        return
+      }
+      if (text.length > MAX_INCOMING_MESSAGE_CHARS) {
         logger.warn({ msgId: msg.key.id, chars: text.length, limit: MAX_INCOMING_MESSAGE_CHARS }, 'Mensagem grande demais — processamento ignorado para preservar latência')
+        await recordSkippedMessage({ reason: 'skip:text_too_large' })
         return
       }
 
@@ -772,23 +808,22 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const blocked = blockedKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean)
         const lower = text.toLowerCase()
         if (blocked.some(kw => lower.includes(kw))) {
+          await recordSkippedMessage({ reason: 'skip:blocked_keyword' })
           logger.info({ blocked }, 'Mensagem bloqueada por keyword'); return
         }
       }
 
-      const sanitizedText = text ? sanitizeInviteLinks(text) : ''
-      if (text && !sanitizedText) return
+      const sanitizedText = sanitizeInviteLinks(text)
+      if (!sanitizedText) {
+        await recordSkippedMessage({ reason: 'skip:empty_after_sanitize' })
+        return
+      }
 
       const links = detectLinks(sanitizedText)
-      const innerMessage = extractMessageContent(msg.message)
-      const messageKind = detectMessageKind(innerMessage, sanitizedText)
-      const policy = normalizeForwardingPolicy(monitorGroup)
-      const canForwardCurrentMessage = shouldForwardMessage({
-        hasLinks: links.length > 0,
-        messageKind,
-        policy,
-      })
-      if (!canForwardCurrentMessage) return
+      if (!links.length) {
+        await recordSkippedMessage({ reason: 'skip:no_link_detected' })
+        return
+      }
 
       // Filtro por plataforma (override por grupo monitorado quando preenchido)
       const platformCsv = monitorGroup?.allowedPlatforms?.trim() || cfg.botConfig.platforms
@@ -974,6 +1009,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const dedupSubject = primary.url || `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
         const key = `${destJid}:${dedupSubject}`
         if (dedup.links[key] && Date.now() - dedup.links[key] < dedupeWindowMs) {
+          await recordSkippedMessage({ reason: 'skip:dedup_recent_link', platform: primary.platform, originalUrl: primary.url, convertedUrl: primary.converted })
           logger.info({ destJid }, 'Duplicata ignorada'); continue
         }
         dedup.links[key] = Date.now()
@@ -1118,6 +1154,28 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         label: `msg:${msgId}`,
         orderKey: msg.key.remoteJid,
         onError: async (err) => {
+          const raw = String(err?.message || '')
+          const reason = /Bad MAC|MessageCounterError|Key used already or never filled/i.test(raw)
+            ? `skip:decrypt_failed:${raw.slice(0, 80)}`
+            : `skip:incoming_error:${raw.slice(0, 80)}`
+          await db.messageLog.create({
+            data: {
+              userId,
+              platform: 'unknown',
+              sourceGroup: msg.key.remoteJid || 'unknown',
+              destGroup: 'skipped',
+              originalUrl: '',
+              convertedUrl: '',
+              messageText: sanitizeMessageForLog(
+                msg.message?.conversation ||
+                msg.message?.extendedTextMessage?.text ||
+                msg.message?.imageMessage?.caption ||
+                'incoming_error'
+              ),
+              status: 'skipped',
+              errorMsg: reason,
+            },
+          }).catch(() => {})
           logger.error({ msgId, dedupKey, err: err.message }, 'Mensagem descartada após erro/timeout — fila continua')
         },
       })
@@ -1126,6 +1184,28 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       }
     }
   })
+
+  function registerSessionError(err) {
+    const raw = String(err?.message || err || '')
+    if (!/Bad MAC|MessageCounterError|Key used already or never filled/i.test(raw)) return
+    const now = Date.now()
+    sessionErrorTimestamps.push(now)
+    sessionErrorTimestamps = sessionErrorTimestamps.filter(ts => now - ts <= SESSION_ERROR_WINDOW_MS)
+    const shouldRecover =
+      sessionErrorTimestamps.length >= SESSION_ERROR_THRESHOLD &&
+      now - sessionRecoveryLastAt >= SESSION_RECOVERY_COOLDOWN_MS &&
+      !shuttingDown
+    if (!shouldRecover) return
+    sessionRecoveryLastAt = now
+    logger.error(
+      { count: sessionErrorTimestamps.length, windowMs: SESSION_ERROR_WINDOW_MS, cooldownMs: SESSION_RECOVERY_COOLDOWN_MS },
+      'Surto de erros criptográficos detectado; reiniciando sessão WA automaticamente'
+    )
+    setTimeout(() => {
+      startBot().catch(error => logger.error({ err: error?.message }, 'Falha ao reiniciar sessão após surto de erro criptográfico'))
+    }, 1_000)
+  }
+  sock.ev.on('connection.update', ({ lastDisconnect }) => registerSessionError(lastDisconnect?.error))
 }
 
 
