@@ -29,6 +29,7 @@ import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
+import { detectMessageKind, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
 
 const userId = process.env.BOT_USER_ID
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
@@ -230,6 +231,8 @@ async function loadConfig() {
       fallbackToOriginal: g.fallbackToOriginal,
       blockedKeywords: g.blockedKeywords,
       allowedPlatforms: g.allowedPlatforms,
+      forwardMode: g.forwardMode,
+      noLinkScope: g.noLinkScope,
       targetPostJids: targetsByMonitor.get(g.id) ?? [],
     })),
     monitorJids: user.groups.filter(g => g.role === 'monitor').map(g => g.waJid),
@@ -787,7 +790,8 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       const text =
         msg.message?.conversation ||
         msg.message?.extendedTextMessage?.text ||
-        msg.message?.imageMessage?.caption || ''
+        msg.message?.imageMessage?.caption ||
+        msg.message?.videoMessage?.caption || ''
 
       if (!text) {
         await recordSkippedMessage({ reason: 'skip:no_text' })
@@ -838,6 +842,12 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         if (quoted?.imageMessage) return { type: 'imageMessage', proto: quoted.imageMessage }
         if (inner?.videoMessage) return { type: 'videoMessage', proto: inner.videoMessage }
         if (quoted?.videoMessage) return { type: 'videoMessage', proto: quoted.videoMessage }
+        if (inner?.audioMessage) return { type: 'audioMessage', proto: inner.audioMessage }
+        if (quoted?.audioMessage) return { type: 'audioMessage', proto: quoted.audioMessage }
+        if (inner?.documentMessage) return { type: 'documentMessage', proto: inner.documentMessage }
+        if (quoted?.documentMessage) return { type: 'documentMessage', proto: quoted.documentMessage }
+        if (inner?.stickerMessage) return { type: 'stickerMessage', proto: inner.stickerMessage }
+        if (quoted?.stickerMessage) return { type: 'stickerMessage', proto: quoted.stickerMessage }
         return null
       }
 
@@ -981,21 +991,24 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }
       }
 
-      if (!conversions.length) return
-
-      // Processa a mensagem em ordem defensiva: sanitização já aplicada, conversão e branding.
-      const finalText = applyConversionsAndBranding(sanitizedText, conversions, cfg.botConfig.brandingGroupLink, cfg.botConfig.brandingCtaText)
-      if (!finalText) {
+      let finalText = sanitizedText
+      if (links.length) {
+        if (!conversions.length) return
+        finalText = applyConversionsAndBranding(sanitizedText, conversions, cfg.botConfig.brandingGroupLink, cfg.botConfig.brandingCtaText)
+      }
+      const originalMedia = getOriginalMediaMessage()
+      if (!finalText && !originalMedia) {
         logger.warn({ msgId: msg.key.id }, 'Mensagem vazia após processamento — envio ignorado')
         return
       }
 
-      const primary = conversions[0]
+      const primary = conversions[0] ?? { platform: 'nolink', url: '', converted: '' }
 
       const baseDestinations = monitorGroup?.targetPostJids?.length ? monitorGroup.targetPostJids : cfg.groups.post
       const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
       for (const destJid of destinations) {
-        const key = `${destJid}:${primary.url}`
+        const dedupSubject = primary.url || `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
+        const key = `${destJid}:${dedupSubject}`
         if (dedup.links[key] && Date.now() - dedup.links[key] < dedupeWindowMs) {
           await recordSkippedMessage({ reason: 'skip:dedup_recent_link', platform: primary.platform, originalUrl: primary.url, convertedUrl: primary.converted })
           logger.info({ destJid }, 'Duplicata ignorada'); continue
@@ -1022,7 +1035,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // preview automático do WhatsApp em vez de imagem pixelada.
         const imageMode = monitorGroup?.imageMode
         const wantImage = imageMode !== 'none'
-        const original = wantImage ? getOriginalMediaMessage() : null
+        const original = wantImage ? originalMedia : null
         let useLinkPreview = false  // será setado a true se jpegThumbnail for descartado
 
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
@@ -1065,7 +1078,10 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           },
           send: async ({ sock: sendSock, payload }) => {
             if (original) {
-              const replayProto = { ...original.proto, caption: finalText }
+              const replayProto = { ...original.proto }
+              if (original.type === 'imageMessage' || original.type === 'videoMessage') {
+                replayProto.caption = finalText
+              }
               await sendSock.relayMessage(destJid, { [original.type]: replayProto }, {})
               sentVia = `relay:${original.type}`
               return

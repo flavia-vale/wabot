@@ -72,6 +72,8 @@ model Group {
   imageMode          String  @default("none")
   imageLinkTarget    String  @default("first")
   fallbackToOriginal Boolean @default(false)
+  forwardMode       String   @default("LINK_ONLY")
+  noLinkScope       String?
   blockedKeywords   String?
   allowedPlatforms  String?
   welcomeMsg        String?
