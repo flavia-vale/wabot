@@ -318,7 +318,8 @@ export function LpTemplate({ slug }) {
             <p style={{ color: 'var(--ink-soft)', lineHeight: 1.65, marginBottom: 16 }}>
               Use a página hub para comparar cenários parecidos e navegue para páginas relacionadas sem depender de URLs soltas.
             </p>
-            <div style={{ display: 'grid', gap: 16 }}><div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
               {hubRoute && (
                 <Link href={hubRoute.path} data-seo-cta="lp-parent-hub" className="btn btn-ghost" style={{ textDecoration: 'none' }}>
                   Ver hub: {hubRoute.label}
@@ -339,7 +340,7 @@ export function LpTemplate({ slug }) {
                   {link.label}
                 </Link>
               ))}
-            </div>
+              </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
               {journeyLinks.map((link) => (
                 <Link key={link.href} href={link.href} data-seo-cta="lp-journey-link" className="btn btn-ghost" style={{ textDecoration: 'none' }}>
@@ -354,9 +355,9 @@ export function LpTemplate({ slug }) {
                 </Link>
               ))}
             </div>
-            </div>
           </div>
         </div>
+      </div>
       </section>
 
       <section aria-labelledby={`${slug}-proof-library`}>
@@ -423,7 +424,6 @@ export function LpTemplate({ slug }) {
                   {link.label}
                 </Link>
               ))}
-            </div>
             </div>
           </div>
         </div>
