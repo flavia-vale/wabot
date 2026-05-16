@@ -291,10 +291,23 @@ export function LpTemplate({ slug }) {
         <div className="wrap" style={{ marginTop: 28 }}>
           <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
             <span className="pill"><span className="dot" />FAQ contextual</span>
-            <h2 id={`${slug}-faq-especifica`} style={{ fontSize: 'clamp(24px, 2.6vw, 36px)', lineHeight: 1.12, margin: '14px 0 16px' }}>Perguntas específicas sobre {cfg.title.replace(' | BOTinho', '')}</h2>
+            <h2
+              id={`${slug}-faq-especifica`}
+              style={{ fontSize: 'clamp(24px, 2.6vw, 36px)', lineHeight: 1.12, margin: '14px 0 16px' }}
+            >
+              {`Perguntas específicas sobre ${cfg.title.replace(' | BOTinho', '')}`}
+            </h2>
             <div style={{ display: 'grid', gap: 12 }}>
               {cfg.faq.map((item) => (
-                <details key={item.q} style={{ border: '1px solid var(--line)', borderRadius: 16, padding: '14px 16px', background: 'color-mix(in oklab, var(--surface) 92%, white)' }}>
+                <details
+                  key={item.q}
+                  style={{
+                    border: '1px solid var(--line)',
+                    borderRadius: 16,
+                    padding: '14px 16px',
+                    background: 'color-mix(in oklab, var(--surface) 92%, white)',
+                  }}
+                >
                   <summary style={{ cursor: 'pointer', fontWeight: 800, color: 'var(--ink)' }}>{item.q}</summary>
                   <p style={{ marginTop: 10, color: 'var(--ink-soft)', lineHeight: 1.65 }}>{item.a}</p>
                 </details>
