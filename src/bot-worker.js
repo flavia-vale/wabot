@@ -762,7 +762,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       const cfg = await getConfig()
       logger.info({ jid, monitorGroups: cfg.groups.monitor, feedGlobal: cfg.botConfig.feedGlobal }, 'mensagem recebida')
       const monitorGroup = cfg.groups.monitor.find(m => m.waJid === jid)
+      const shouldTrackSkipped = Boolean(monitorGroup) || (cfg.botConfig.feedGlobal && isMirrorableJid(jid))
       async function recordSkippedMessage({ reason, platform = 'unknown', originalUrl = '', convertedUrl = '' }) {
+        if (!shouldTrackSkipped) return
         const messageText =
           msg.message?.conversation ||
           msg.message?.extendedTextMessage?.text ||
@@ -783,14 +785,12 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       }
 
       if (!cfg.botConfig.feedGlobal && !monitorGroup) {
-        await recordSkippedMessage({ reason: 'skip:not_monitor_group' })
         return
       }
       // feedGlobal aceita mensagens de qualquer JID espelhável (grupo ou canal).
       // O pipeline downstream é agnóstico ao tipo; o tratamento específico
       // de envio para canal-destino vem na Fase 3.
       if (cfg.botConfig.feedGlobal && !isMirrorableJid(jid)) {
-        await recordSkippedMessage({ reason: 'skip:not_mirrorable_jid' })
         return
       }
 
@@ -800,7 +800,11 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         msg.message?.imageMessage?.caption ||
         msg.message?.videoMessage?.caption || ''
 
-      if (text && text.length > MAX_INCOMING_MESSAGE_CHARS) {
+      if (!text) {
+        await recordSkippedMessage({ reason: 'skip:no_text' })
+        return
+      }
+      if (text.length > MAX_INCOMING_MESSAGE_CHARS) {
         logger.warn({ msgId: msg.key.id, chars: text.length, limit: MAX_INCOMING_MESSAGE_CHARS }, 'Mensagem grande demais — processamento ignorado para preservar latência')
         await recordSkippedMessage({ reason: 'skip:text_too_large' })
         return
@@ -817,32 +821,15 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }
       }
 
-      const sanitizedText = text ? sanitizeInviteLinks(text) : ''
-      if (text && !sanitizedText) return
+      const sanitizedText = sanitizeInviteLinks(text)
+      if (!sanitizedText) {
+        await recordSkippedMessage({ reason: 'skip:empty_after_sanitize' })
+        return
+      }
 
       const links = detectLinks(sanitizedText)
-      const innerMessage = extractMessageContent(msg.message)
-      const messageKind = detectMessageKind(innerMessage, sanitizedText)
-      const policy = normalizeForwardingPolicy(monitorGroup)
-      const canForwardCurrentMessage = shouldForwardMessage({
-        hasLinks: links.length > 0,
-        messageKind,
-        policy,
-      })
-      if (!canForwardCurrentMessage) {
-        await db.messageLog.create({
-          data: {
-            userId,
-            platform: links[0]?.platform || 'nolink',
-            sourceGroup: jid,
-            destGroup: 'skipped',
-            originalUrl: links[0]?.url || '',
-            convertedUrl: '',
-            messageText: sanitizeMessageForLog(sanitizedText || text || ''),
-            status: 'error',
-            errorMsg: `skip:policy:${policy.forwardMode}:${policy.noLinkScope}:${messageKind}`,
-          },
-        }).catch(() => {})
+      if (!links.length) {
+        await recordSkippedMessage({ reason: 'skip:no_link_detected' })
         return
       }
 
@@ -1206,6 +1193,14 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         label: `msg:${msgId}`,
         orderKey: msg.key.remoteJid,
         onError: async (err) => {
+          const currentCfg = await getConfig().catch(() => null)
+          const currentJid = msg.key.remoteJid
+          const isMonitored = Boolean(currentCfg?.groups?.monitor?.find?.(m => m.waJid === currentJid))
+          const isFeedGlobalMirrorable = Boolean(currentCfg?.botConfig?.feedGlobal && isMirrorableJid(currentJid))
+          if (!isMonitored && !isFeedGlobalMirrorable) {
+            logger.error({ msgId, dedupKey, err: err.message }, 'Mensagem descartada fora do escopo monitorado — sem log em painel')
+            return
+          }
           const raw = String(err?.message || '')
           const reason = /Bad MAC|MessageCounterError|Key used already or never filled/i.test(raw)
             ? `skip:decrypt_failed:${raw.slice(0, 80)}`
