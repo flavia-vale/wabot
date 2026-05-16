@@ -1,7 +1,9 @@
 import db from '../../db.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { reloadConfig } from '../../manager.js'
-import { ensureJid, JID_KIND } from '../../core/jid.js'
+import { ensureJid, detectKind, JID_KIND } from '../../core/jid.js'
+
+const ALLOWED_KINDS = new Set([JID_KIND.GROUP, JID_KIND.CHANNEL])
 
 function parseBoolean(value) {
   if (typeof value === 'boolean') return value
@@ -19,23 +21,26 @@ export async function groupsRoutes(app) {
   })
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const { waJid: rawJid, name: rawName, role } = req.body ?? {}
-    const waJid = normalizeGroupJid(rawJid)
+    const { waJid: rawJid, name: rawName, role, kind: rawKind } = req.body ?? {}
+    const kind = (rawKind ?? JID_KIND.GROUP).toString()
+    if (!ALLOWED_KINDS.has(kind)) return reply.code(400).send({ error: 'kind deve ser group ou channel' })
+    const waJid = ensureJid(rawJid, kind === JID_KIND.CHANNEL ? JID_KIND.CHANNEL : JID_KIND.GROUP)
     const name = rawName?.trim()
     if (!waJid || !name || !role) return reply.code(400).send({ error: 'waJid, name e role obrigatórios' })
     if (!['monitor', 'post'].includes(role)) return reply.code(400).send({ error: 'role deve ser monitor ou post' })
+    if (detectKind(waJid) !== kind) return reply.code(400).send({ error: `waJid não bate com kind=${kind}` })
 
     try {
       const group = await db.group.create({
-        data: { userId: req.user.sub, waJid, name, role },
+        data: { userId: req.user.sub, waJid, name, role, kind },
       })
       trackAnalyticsEventSafe({
         userId: req.user.sub,
         event: role === 'monitor' ? 'monitor_group_created' : 'post_group_created',
-        metadata: { role },
+        metadata: { role, kind },
       })
       const configReloaded = reloadConfig(req.user.sub)
-      app.log.info({ groupId: group.id, role, configReloaded }, 'Grupo criado; configuração do worker recarregada quando disponível')
+      app.log.info({ groupId: group.id, role, kind, configReloaded }, 'Grupo/canal criado; configuração do worker recarregada quando disponível')
       return group
     } catch (err) {
       if (err.code === 'P2002') return reply.code(409).send({ error: 'Grupo já cadastrado com esse role' })

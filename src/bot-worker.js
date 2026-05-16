@@ -23,7 +23,8 @@ import { trackAnalyticsEventSafe } from './analytics.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } from './sendQueueBackend.js'
-import { isMirrorableJid } from './core/jid.js'
+import { isMirrorableJid, detectKind, JID_KIND } from './core/jid.js'
+import { subscribeToMonitorChannels } from './core/channels.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
@@ -162,6 +163,21 @@ const CONFIG_CACHE_TTL_MS = Math.max(1_000, Number(process.env.CONFIG_CACHE_TTL_
 let configCache = null
 let configCacheTime = 0
 let configCachePromise = null
+const followedChannelJids = new Set()
+
+async function ensureChannelSubscriptions() {
+  if (!activeSock) return
+  const cfg = await getConfig().catch(() => null)
+  const channelMonitors = (cfg?.groups?.monitor ?? []).filter(m => detectKind(m.waJid) === JID_KIND.CHANNEL)
+  if (channelMonitors.length === 0) return
+  const result = await subscribeToMonitorChannels({
+    sock: activeSock,
+    channelMonitors,
+    followedSet: followedChannelJids,
+    logger,
+  })
+  logger.info({ ...result }, 'channels: inscrição de canais-monitor concluída')
+}
 
 async function loadConfig() {
   const user = await db.user.findUnique({
@@ -195,6 +211,7 @@ async function loadConfig() {
     monitor: user.groups.filter(g => g.role === 'monitor').map(g => ({
       id: g.id,
       waJid: g.waJid,
+      kind: g.kind,
       imageMode: g.imageMode,
       imageLinkTarget: g.imageLinkTarget,
       fallbackToOriginal: g.fallbackToOriginal,
@@ -204,7 +221,7 @@ async function loadConfig() {
     })),
     monitorJids: user.groups.filter(g => g.role === 'monitor').map(g => g.waJid),
     post: user.groups.filter(g => g.role === 'post').map(g => g.waJid),
-    postDetails: user.groups.filter(g => g.role === 'post').map(g => ({ waJid: g.waJid, welcomeMsg: g.welcomeMsg })),
+    postDetails: user.groups.filter(g => g.role === 'post').map(g => ({ waJid: g.waJid, kind: g.kind, welcomeMsg: g.welcomeMsg })),
   }
 
   const botConfig = {
@@ -672,6 +689,7 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       if (process.send) process.send({ type: 'status', data: 'connected', phone })
 await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: null })
       trackAnalyticsEventSafe({ userId, event: 'whatsapp_connected' })
+      ensureChannelSubscriptions().catch(err => logger.error({ err: err?.message }, 'channels: erro ao inscrever no boot'))
     }
 
     if (connection === 'close') {
@@ -1106,6 +1124,7 @@ process.on('message', async msg => {
     configCache = null
     configCachePromise = null
     logger.info('Config recarregada')
+    ensureChannelSubscriptions().catch(err => logger.error({ err: err?.message }, 'channels: erro ao inscrever após reload'))
   }
 
   if (msg?.type === 'listGroups') {
