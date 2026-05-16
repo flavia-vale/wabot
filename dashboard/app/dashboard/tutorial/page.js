@@ -125,26 +125,29 @@ function QuickChecklist() {
 
 function TutorialInlineImage({ src, alt }) {
   return (
-    <a href={src} target="_blank" rel="noreferrer" className="group block overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
-      <Image
+    <a href={src} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-gray-200 bg-white">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
         src={src}
         alt={alt}
-        width={1200}
-        height={675}
-        unoptimized
         loading="lazy"
-        className="h-auto w-full transition group-hover:scale-[1.01]"
+        decoding="async"
+        className="h-auto w-full object-contain"
       />
+      <span className="block border-t border-gray-100 px-3 py-2 text-xs font-semibold text-gray-600">
+        🔎 Toque para abrir em alta resolução
+      </span>
     </a>
   )
+}
+
+function TutorialImagesGallery() {
+  return null
 }
 
 // Backward-safe shim:
 // if an old cached client bundle still references `TutorialImagesGallery`,
 // keep a harmless no-op export in runtime scope to avoid hard crash.
-function TutorialImagesGallery() {
-  return null
-}
 
 export default function TutorialPage() {
   return (
