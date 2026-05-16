@@ -2,6 +2,7 @@ import db from '../../db.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { reloadConfig } from '../../manager.js'
 import { ensureJid, detectKind, JID_KIND } from '../../core/jid.js'
+import { FORWARD_MODE, NO_LINK_SCOPE, normalizeForwardingPolicy } from '../../forwardingPolicy.js'
 
 const ALLOWED_KINDS = new Set([JID_KIND.GROUP, JID_KIND.CHANNEL])
 
@@ -32,7 +33,7 @@ export async function groupsRoutes(app) {
 
     try {
       const group = await db.group.create({
-        data: { userId: req.user.sub, waJid, name, role, kind },
+        data: { userId: req.user.sub, waJid, name, role, kind, forwardMode: FORWARD_MODE.LINK_ONLY },
       })
       trackAnalyticsEventSafe({
         userId: req.user.sub,
@@ -81,7 +82,7 @@ export async function groupsRoutes(app) {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo não encontrado' })
 
-    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, imageLinkTarget, fallbackToOriginal } = req.body ?? {}
+    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope } = req.body ?? {}
     if (allowedPlatforms !== undefined) {
       const platforms = String(allowedPlatforms).split(',').filter(Boolean)
       const invalid = platforms.find(p => !['shopee', 'amazon', 'mercadolivre', 'magazineluiza'].includes(p))
@@ -95,6 +96,22 @@ export async function groupsRoutes(app) {
       return reply.code(400).send({ error: 'imageLinkTarget inválido' })
     }
 
+    if (forwardMode !== undefined && !Object.values(FORWARD_MODE).includes(forwardMode)) {
+      return reply.code(400).send({ error: 'forwardMode inválido' })
+    }
+    if (noLinkScope !== undefined && !Object.values(NO_LINK_SCOPE).includes(noLinkScope)) {
+      return reply.code(400).send({ error: 'noLinkScope inválido' })
+    }
+    if (forwardMode === FORWARD_MODE.LINK_ONLY && noLinkScope !== undefined && noLinkScope !== null) {
+      return reply.code(400).send({ error: 'noLinkScope só pode ser usado com forwardMode=ALLOW_NO_LINK' })
+    }
+
+    const currentPolicy = normalizeForwardingPolicy(group)
+    const requestedForwardMode = forwardMode ?? currentPolicy.forwardMode
+    const requestedNoLinkScope = requestedForwardMode === FORWARD_MODE.ALLOW_NO_LINK
+      ? (noLinkScope ?? currentPolicy.noLinkScope ?? NO_LINK_SCOPE.TEXT_ONLY)
+      : null
+
     const updated = await db.group.update({
       where: { id: req.params.id },
       data: {
@@ -104,6 +121,8 @@ export async function groupsRoutes(app) {
         ...(imageMode !== undefined ? { imageMode } : {}),
         ...(imageLinkTarget !== undefined ? { imageLinkTarget } : {}),
         ...(fallbackToOriginal !== undefined ? { fallbackToOriginal: parseBoolean(fallbackToOriginal) } : {}),
+        ...(forwardMode !== undefined ? { forwardMode: requestedForwardMode } : {}),
+        ...((noLinkScope !== undefined || forwardMode !== undefined) ? { noLinkScope: requestedNoLinkScope } : {}),
       },
     })
     const configReloaded = reloadConfig(req.user.sub)
