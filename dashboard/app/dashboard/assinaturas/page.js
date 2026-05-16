@@ -139,7 +139,6 @@ export default function AssinaturasPage() {
     <section className="mx-auto w-full max-w-3xl">
       <header className="mb-5 rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
         <h1 className="text-xl font-bold text-gray-800 md:text-2xl">Escolha seu plano</h1>
-        <p className="mt-2 text-sm text-gray-600">Pague com checkout seguro para ativação automática. Se o provedor estiver indisponível, use o PIX manual como fallback.</p>
       </header>
 
       {expiredAccessCopy && (

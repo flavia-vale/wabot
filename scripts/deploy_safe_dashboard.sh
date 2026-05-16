@@ -45,18 +45,26 @@ verify_next_polyfill() {
   [[ -f "$polyfill" ]]
 }
 
+verify_next_jest_worker_process_child() {
+  local worker="$DASHBOARD_DIR/node_modules/next/dist/compiled/jest-worker/processChild.js"
+  [[ -f "$worker" ]]
+}
+
 ensure_dashboard_deps_integrity() {
-  if verify_next_polyfill; then
+  if verify_next_polyfill && verify_next_jest_worker_process_child; then
     return 0
   fi
 
-  echo "  Aviso: instalação do Next incompleta (polyfill ausente). Tentando reinstalar dependências do dashboard..."
+  echo "  Aviso: instalação do Next incompleta (arquivos críticos ausentes). Tentando reinstalar dependências do dashboard..."
   npm cache verify || true
   npm cache clean --force || true
+  rm -rf node_modules
   npm ci
 
-  if ! verify_next_polyfill; then
-    echo "ERRO: next/dist/build/polyfills/polyfill-nomodule.js segue ausente após reinstalação."
+  if ! verify_next_polyfill || ! verify_next_jest_worker_process_child; then
+    echo "ERRO: arquivos críticos do Next seguem ausentes após reinstalação:"
+    echo "  - next/dist/build/polyfills/polyfill-nomodule.js"
+    echo "  - next/dist/compiled/jest-worker/processChild.js"
     echo "Dica: validar saúde de disco/cache do host de deploy e repetir o pipeline."
     exit 1
   fi
