@@ -125,7 +125,7 @@ function QuickChecklist() {
 
 function TutorialInlineImage({ src, alt }) {
   return (
-    <a href={src} target="_blank" rel="noreferrer" className="mx-auto block w-full max-w-xl overflow-hidden rounded-xl border border-gray-200 bg-white">
+    <a href={src} target="_blank" rel="noreferrer" className="mx-auto block w-full max-w-lg overflow-hidden rounded-xl border border-gray-200 bg-white">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={src}
