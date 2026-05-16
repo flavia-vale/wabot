@@ -792,11 +792,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         msg.message?.imageMessage?.caption ||
         msg.message?.videoMessage?.caption || ''
 
-      if (!text) {
-        await recordSkippedMessage({ reason: 'skip:no_text' })
-        return
-      }
-      if (text.length > MAX_INCOMING_MESSAGE_CHARS) {
+      if (text && text.length > MAX_INCOMING_MESSAGE_CHARS) {
         logger.warn({ msgId: msg.key.id, chars: text.length, limit: MAX_INCOMING_MESSAGE_CHARS }, 'Mensagem grande demais — processamento ignorado para preservar latência')
         await recordSkippedMessage({ reason: 'skip:text_too_large' })
         return
@@ -813,17 +809,19 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }
       }
 
-      const sanitizedText = sanitizeInviteLinks(text)
-      if (!sanitizedText) {
-        await recordSkippedMessage({ reason: 'skip:empty_after_sanitize' })
-        return
-      }
+      const sanitizedText = text ? sanitizeInviteLinks(text) : ''
+      if (text && !sanitizedText) return
 
       const links = detectLinks(sanitizedText)
-      if (!links.length) {
-        await recordSkippedMessage({ reason: 'skip:no_link_detected' })
-        return
-      }
+      const innerMessage = extractMessageContent(msg.message)
+      const messageKind = detectMessageKind(innerMessage, sanitizedText)
+      const policy = normalizeForwardingPolicy(monitorGroup)
+      const canForwardCurrentMessage = shouldForwardMessage({
+        hasLinks: links.length > 0,
+        messageKind,
+        policy,
+      })
+      if (!canForwardCurrentMessage) return
 
       // Filtro por plataforma (override por grupo monitorado quando preenchido)
       const platformCsv = monitorGroup?.allowedPlatforms?.trim() || cfg.botConfig.platforms
