@@ -139,6 +139,13 @@ function TutorialInlineImage({ src, alt }) {
   )
 }
 
+// Backward-safe shim:
+// if an old cached client bundle still references `TutorialImagesGallery`,
+// keep a harmless no-op export in runtime scope to avoid hard crash.
+function TutorialImagesGallery() {
+  return null
+}
+
 export default function TutorialPage() {
   return (
     <div className="space-y-6 max-w-3xl">
