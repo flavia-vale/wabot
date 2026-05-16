@@ -38,6 +38,7 @@ const OWNER_INSTANCE = process.env.NODE_APP_INSTANCE ?? '0'
 const SESSION_ERROR_WINDOW_MS = Math.max(30_000, Number(process.env.WA_SESSION_ERROR_WINDOW_MS || 120_000))
 const SESSION_ERROR_THRESHOLD = Math.max(5, Number(process.env.WA_SESSION_ERROR_THRESHOLD || 30))
 const SESSION_RECOVERY_COOLDOWN_MS = Math.max(60_000, Number(process.env.WA_SESSION_RECOVERY_COOLDOWN_MS || 300_000))
+const ALLOW_TEXT_WITHOUT_LINKS = String(process.env.WA_ALLOW_TEXT_WITHOUT_LINKS || '0') === '1'
 
 let activeSock = null
 let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
@@ -829,6 +830,44 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 
       const links = detectLinks(sanitizedText)
       if (!links.length) {
+        if (ALLOW_TEXT_WITHOUT_LINKS) {
+          const baseDestinations = monitorGroup?.targetPostJids?.length ? monitorGroup.targetPostJids : cfg.groups.post
+          const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
+          for (const destJid of destinations) {
+            const log = await db.messageLog.create({
+              data: {
+                userId,
+                platform: 'plain_text',
+                sourceGroup: jid,
+                destGroup: destJid,
+                originalUrl: '',
+                convertedUrl: '',
+                messageText: sanitizeMessageForLog(sanitizedText),
+                status: 'queued',
+              },
+            })
+            const accepted = await enqueueSendJob({
+              type: 'plain_text',
+              logId: log.id,
+              destJid,
+              platforms: 'plain_text',
+              plan: cfg.plan,
+              delayMs: buildSmartDelayMs(cfg.botConfig),
+              typingDelayMs: calculateTypingDelayMs({ text: sanitizedText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
+              buildPayload: async () => ({ text: sanitizedText }),
+              send: async ({ sock: sendSock, payload }) => {
+                await sendSock.sendMessage(destJid, payload)
+              },
+            })
+            if (!accepted) {
+              await db.messageLog.update({
+                where: { id: log.id },
+                data: { status: 'error', errorMsg: 'Fila interna de envios cheia ou worker encerrando', sentAt: new Date() },
+              }).catch(() => {})
+            }
+          }
+          return
+        }
         await recordSkippedMessage({ reason: 'skip:no_link_detected' })
         return
       }
