@@ -8,6 +8,8 @@ import { FAQ } from '@/components/landing/FAQ'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
 import { BRAND_NAME, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS, CORE_FAQ_ITEMS } from '@/lib/marketing-content'
 import { getSiteUrl } from '@/lib/site-url'
+import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
+import { selectHomeHeroVariant } from '@/lib/cro-experiments'
 
 export const metadata = {
   title: 'BOTinho | Bot para Afiliados no WhatsApp',
@@ -81,14 +83,16 @@ function buildHomeJsonLd() {
   ]
 }
 
-export default function LandingPage() {
+export default function LandingPage({ searchParams = {} }) {
+  const { variant, tone } = selectHomeHeroVariant(searchParams)
   const jsonLd = buildHomeJsonLd()
   return (
     <div className="landing-root">
+      <OrganicPageTracker route={{ slug: 'home', path: '/', cluster: 'homepage', intent: 'commercial', template: 'landing', variant }} />
       {jsonLd.map((schema) => (
         <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
       ))}
-      <Hero tone="amigavel" />
+      <Hero tone={tone} />
       <ProductDefinition />
       <How />
       <Features />

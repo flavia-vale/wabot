@@ -30,6 +30,7 @@ const s = {
 };
 
 export function FinalCTA() {
+  const finalRegisterHref = buildRegisterHref({ source: 'landing', campaign: 'home-final-cta', content: 'final-primary' })
   return (
     <section>
       <div className="wrap">
@@ -45,7 +46,7 @@ export function FinalCTA() {
             </h2>
             <p style={s.sub}>Conecte o WhatsApp, valide poucos grupos primeiro e escale apenas rotinas permitidas, com revisão humana e cadência responsável.</p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }} className="landing-final-cta-actions">
-              <Link className="btn" href="/login?mode=register" data-seo-cta="final-cta-register" style={{ background: 'var(--accent-2)', color: 'var(--ink)' }}>
+              <Link className="btn" href={finalRegisterHref} data-seo-cta="final-cta-register" style={{ background: 'var(--accent-2)', color: 'var(--ink)' }}>
                 <Icon name="whatsapp" size={16} /> Conectar meu WhatsApp <Icon name="arrow" size={16} />
               </Link>
               <Link className="btn" href="/suporte" data-seo-cta="final-cta-support" style={{ background: 'transparent', color: 'var(--surface)', border: '1px solid rgba(255,255,255,0.2)' }}>
