@@ -11,6 +11,7 @@ import { getSiteUrl } from '@/lib/site-url'
 import { BRAND_NAME, BRAND_SHORT_NAME, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION } from '@/lib/marketing-content'
 import { getHubSeoRoute, getProgrammaticSeoRoute, getRelatedProgrammaticSeoRoutes } from '@/lib/seo-registry.mjs'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
+import { IntroCard } from '@/components/landing/IntroCard'
 
 export const LP_CONFIG = {
   'espelhar-grupos-whatsapp-sao-paulo': { title: 'Espelhar grupos WhatsApp em São Paulo | BOTinho', description: 'Automatize sua rotina de ofertas em grupos de São Paulo com o BOTinho e reduza trabalho manual.', uniqueHeadline: 'Operação em São Paulo: volume alto, rotina estável.', uniqueBody: 'Em SP, a disputa por atenção é maior e os grupos giram rápido. O BOTinho ajuda você a manter constância sem perder tempo no copia-e-cola.', uniqueBullets: ['Padronize campanhas em múltiplos bairros e públicos.', 'Evite atrasos nas postagens de ofertas relâmpago.', 'Mantenha frequência diária mesmo em horários de pico.'], faq: [{ q: 'Quanto tempo para ativar em São Paulo?', a: 'Normalmente no mesmo dia: conexão por QR Code, escolha dos grupos e regras básicas.' }, { q: 'Posso separar grupos por bairro?', a: 'Sim. Você pode organizar fontes e destinos por região e tipo de público.' }], howTo: ['Conecte seu WhatsApp de operação e valide os grupos de origem.', 'Defina os grupos de destino e o intervalo ideal para o público paulista.', 'Ative regras por horário para manter consistência nos picos de tráfego.'] },
@@ -234,14 +235,13 @@ export function LpTemplate({ slug }) {
       />
       <section>
         <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}`, borderRadius: 24, padding: 28 }}>
-            <span className="pill" style={{ marginBottom: 12 }}><span className="dot" />{BRAND_NAME} · {theme.badge}</span>
-            <h2 style={{ fontSize: 'clamp(28px, 3vw, 42px)', lineHeight: 1.1, marginBottom: 10 }}>{cfg.uniqueHeadline}</h2>
-            <p style={{ color: 'var(--ink-soft)', lineHeight: 1.6, marginBottom: 14 }}>{cfg.uniqueBody}</p>
-            <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.7 }}>
-              {cfg.uniqueBullets.map((bullet) => <li key={bullet}>{bullet}</li>)}
-            </ul>
-          </div>
+          <IntroCard
+            eyebrow={`${BRAND_NAME} · ${theme.badge}`}
+            title={cfg.uniqueHeadline}
+            body={cfg.uniqueBody}
+            pills={cfg.uniqueBullets}
+            accent={lpType !== 'default'}
+          />
         </div>
       </section>
       <section aria-labelledby={`${slug}-roteiro-operacional`}>
