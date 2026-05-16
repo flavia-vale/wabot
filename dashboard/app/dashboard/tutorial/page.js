@@ -25,6 +25,15 @@ function Tip({ children }) {
   )
 }
 
+function Warning({ children }) {
+  return (
+    <div className="flex gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+      <span className="text-base">⚠️</span>
+      <span>{children}</span>
+    </div>
+  )
+}
+
 function PlatformCard({ color, icon, title, children }) {
   const borders = {
     blue: 'border-blue-200',
@@ -91,20 +100,77 @@ function Badge({ children, color = 'green' }) {
   )
 }
 
+function QuickChecklist() {
+  const items = [
+    'Estou no computador com Google Chrome.',
+    'Instalei a extensão Cookie-Editor.',
+    'Separei 20 minutos para fazer tudo com calma.',
+    'Vou configurar 1 plataforma por vez para evitar confusão.',
+  ]
+  return (
+    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+      <h3 className="text-sm font-black text-emerald-900">✅ Checklist rápido (antes de começar)</h3>
+      <ul className="mt-3 space-y-2 text-sm text-emerald-900">
+        {items.map((item) => (
+          <li key={item} className="flex items-start gap-2">
+            <span className="mt-0.5">☑️</span>
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function TutorialInlineImage({ src, alt }) {
+  return (
+    <a href={src} target="_blank" rel="noreferrer" className="mx-auto block w-full max-w-xl overflow-hidden rounded-xl border border-gray-200 bg-white">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt}
+        loading="lazy"
+        decoding="async"
+        className="h-auto w-full object-contain"
+      />
+      <span className="block border-t border-gray-100 px-3 py-2 text-base font-extrabold text-gray-700">
+        🔎 Toque para abrir em alta resolução
+      </span>
+    </a>
+  )
+}
+
+function TutorialImagesGallery() {
+  return null
+}
+
+// Backward-safe shim:
+// if an old cached client bundle still references `TutorialImagesGallery`,
+// keep a harmless no-op export in runtime scope to avoid hard crash.
+
 export default function TutorialPage() {
   return (
     <div className="space-y-6 max-w-3xl">
       {/* Header */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm space-y-2">
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm space-y-4">
         <h1 className="text-2xl font-black text-gray-900">
           📚 Guia de Configuração de Credenciais
         </h1>
         <p className="text-gray-600 text-sm leading-relaxed">
           Para o <strong>BOTinho</strong> funcionar, ele precisa se conectar às suas contas de afiliado. Siga os passos abaixo com calma — é mais simples do que parece!
         </p>
+        <div className="flex flex-wrap gap-2">
+          <Badge color="green">Tempo médio: 15-25 min</Badge>
+          <Badge color="blue">Dificuldade: fácil</Badge>
+          <Badge color="yellow">Ordem recomendada: ML → Amazon → Shopee</Badge>
+        </div>
         <Tip>
           Este guia cobre <strong>Mercado Livre</strong>, <strong>Amazon</strong> e <strong>Shopee</strong>. Você não precisa configurar todas de uma vez — faça uma por vez.
         </Tip>
+        <QuickChecklist />
+        <Warning>
+          Nunca compartilhe seus cookies, IDs, SSID, Key ou Secret com terceiros. Esses dados dão acesso à sua conta.
+        </Warning>
       </div>
 
       {/* Passo 0 */}
@@ -118,6 +184,7 @@ export default function TutorialPage() {
           <>Confirme a instalação clicando em <strong>&quot;Adicionar extensão&quot;</strong> na janelinha que aparecer.</>,
           <>Pronto! O ícone da extensão (uma bolachinha 🍪) vai aparecer no canto superior direito do navegador.</>,
         ]} />
+        <TutorialInlineImage src="https://i.postimg.cc/cvYC69ZD/Captura-de-Tela-2026-05-16-a-s-11-25-44.png" alt="Passo zero: instalação da extensão Cookie-Editor" />
         <Tip>
           Não encontrou o ícone? Clique no ícone de <strong>peça de quebra-cabeça 🧩</strong> ao lado da barra de endereço e fixe a Cookie-Editor clicando no alfinete 📌.
         </Tip>
@@ -137,6 +204,7 @@ export default function TutorialPage() {
           <><ExternalLink href={LINKS.mercadoLivreLinkBuilder}>Acesse o Gerador de Links ML</ExternalLink> — ou navegue por: <strong>Minha Conta → Afiliados e Criadores → Gerador de links</strong>.</>,
           <>Na página do Gerador de Links, você vai ver um campo chamado <strong>&quot;Etiqueta em uso&quot;</strong> com um código (ex: <code className="bg-gray-100 px-1 rounded text-xs">47xxxxx</code> ou <code className="bg-gray-100 px-1 rounded text-xs">faxxxxx</code>). Esse é o seu <strong>ID</strong>. Copie-o.</>,
         ]} />
+        <TutorialInlineImage src="https://i.postimg.cc/cvYC69ZM/Captura-de-Tela-2026-05-16-a-s-11-26-03.png" alt="Mercado Livre parte 1: campo etiqueta em uso" />
 
         <div className="space-y-1 pt-2">
           <Badge color="blue">Parte 2 — Pegando o SSID</Badge>
@@ -146,6 +214,8 @@ export default function TutorialPage() {
           <>Uma lista de itens vai aparecer. Role até encontrar o item chamado <strong className="text-green-700">ssid</strong> e clique nele para expandir.</>,
           <>Você vai ver o campo <strong>Value</strong> com um código longo. Copie esse valor completo.</>,
         ]} />
+        <TutorialInlineImage src="https://i.postimg.cc/68RqTjwf/Captura-de-Tela-2026-05-16-a-s-11-26-57.png" alt="Mercado Livre parte 2: clicar no Cookie-Editor" />
+        <TutorialInlineImage src="https://i.postimg.cc/gxRjrSdK/Captura-de-Tela-2026-05-16-a-s-11-27-08.png" alt="Mercado Livre parte 2: valor de SSID para copiar" />
         <Tip>
           O valor do SSID começa com letras e traços (ex: <code className="bg-gray-100 px-1 rounded text-xs">ghy-xxxxx_-1</code>). Copie tudo, sem espaços extras.
         </Tip>
@@ -169,6 +239,8 @@ export default function TutorialPage() {
           <>Para cada um: clique no nome do cookie na lista para expandir e copie o valor que aparece no campo <strong>Value</strong>.</>,
           <>Cole cada valor no campo correspondente na tela de <strong>Credenciais</strong> do BOTinho.</>,
         ]} />
+        <TutorialInlineImage src="https://i.postimg.cc/XrFqXH3x/Captura-de-Tela-2026-05-16-a-s-11-27-22.png" alt="Amazon: abrir Cookie-Editor após login" />
+        <TutorialInlineImage src="https://i.postimg.cc/JsJ0t6mJ/Captura-de-Tela-2026-05-16-a-s-11-27-33.png" alt="Amazon: cookies necessários listados na extensão" />
         <Tip>
           Use o campo de <strong>busca (Search)</strong> no topo da Cookie-Editor para encontrar cada cookie rapidamente sem precisar rolar a lista toda.
         </Tip>
@@ -238,11 +310,19 @@ export default function TutorialPage() {
       </PlatformCard>
 
       {/* Final */}
-      <div className="rounded-2xl border border-green-200 bg-green-50 p-5 space-y-2">
+      <div className="rounded-2xl border border-green-200 bg-green-50 p-5 space-y-3">
         <h2 className="font-black text-green-900 text-base">✅ Tudo pronto!</h2>
         <p className="text-sm text-green-800 leading-relaxed">
           Após salvar suas credenciais na tela de <strong>Credenciais</strong>, o BOTinho já consegue gerar links de afiliado automaticamente. Se tiver dúvidas ou algum código não funcionar, fale com o suporte — estamos aqui para ajudar!
         </p>
+        <div className="rounded-xl border border-green-300 bg-white/80 p-3">
+          <p className="text-sm font-bold text-green-900">Próximo passo recomendado (2 minutos):</p>
+          <ol className="mt-2 space-y-1 text-sm text-green-900">
+            <li>1. Salvar as credenciais.</li>
+            <li>2. Gerar um link de teste de cada plataforma que você configurou.</li>
+            <li>3. Confirmar se o link abre corretamente no destino final.</li>
+          </ol>
+        </div>
       </div>
     </div>
   )
