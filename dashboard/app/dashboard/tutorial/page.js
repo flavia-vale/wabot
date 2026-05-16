@@ -1,4 +1,5 @@
 'use client'
+import Image from 'next/image'
 
 const LINKS = {
   cookieEditor: 'https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm',
@@ -122,6 +123,88 @@ function QuickChecklist() {
   )
 }
 
+function VideoTutorialCard() {
+  const scenes = [
+    { time: '00:00', label: 'Introdução e objetivo do tutorial' },
+    { time: '00:20', label: 'Instalação rápida do Cookie-Editor' },
+    { time: '00:45', label: 'Mercado Livre: ID + SSID' },
+    { time: '01:20', label: 'Amazon: cookies necessários' },
+    { time: '02:00', label: 'Shopee: solicitação da API + Key/Secret' },
+    { time: '02:35', label: 'Checklist final e teste de validação' },
+  ]
+  return (
+    <section className="rounded-2xl border border-violet-200 bg-violet-50 p-5 space-y-3">
+      <h2 className="text-base font-black text-violet-900">🎬 Video tutorial (guia rápido)</h2>
+      <p className="text-sm text-violet-900 leading-relaxed">
+        Prefere assistir em vez de ler? Use este roteiro de vídeo curto (2-3 min) para executar a configuração completa de credenciais sem pular etapas.
+      </p>
+      <ol className="space-y-1 text-sm text-violet-900">
+        {scenes.map((scene) => (
+          <li key={scene.time} className="flex items-start gap-2">
+            <code className="rounded bg-violet-100 px-2 py-0.5 text-xs font-bold text-violet-800">{scene.time}</code>
+            <span>{scene.label}</span>
+          </li>
+        ))}
+      </ol>
+      <Tip>
+        Se você for do suporte/time interno, grave a tela seguindo este roteiro e publique o link aqui nesta aba para acelerar onboarding de novos clientes.
+      </Tip>
+    </section>
+  )
+}
+
+function TutorialImagesGallery() {
+  const images = [
+    {
+      src: 'https://i.postimg.cc/cvYC69ZD/Captura-de-Tela-2026-05-16-a-s-11-25-44.png',
+      alt: 'Passo a passo no dashboard - imagem 1',
+    },
+    {
+      src: 'https://i.postimg.cc/cvYC69ZM/Captura-de-Tela-2026-05-16-a-s-11-26-03.png',
+      alt: 'Passo a passo no dashboard - imagem 2',
+    },
+    {
+      src: 'https://i.postimg.cc/68RqTjwf/Captura-de-Tela-2026-05-16-a-s-11-26-57.png',
+      alt: 'Passo a passo no dashboard - imagem 3',
+    },
+    {
+      src: 'https://i.postimg.cc/gxRjrSdK/Captura-de-Tela-2026-05-16-a-s-11-27-08.png',
+      alt: 'Passo a passo no dashboard - imagem 4',
+    },
+    {
+      src: 'https://i.postimg.cc/XrFqXH3x/Captura-de-Tela-2026-05-16-a-s-11-27-22.png',
+      alt: 'Passo a passo no dashboard - imagem 5',
+    },
+    {
+      src: 'https://i.postimg.cc/JsJ0t6mJ/Captura-de-Tela-2026-05-16-a-s-11-27-33.png',
+      alt: 'Passo a passo no dashboard - imagem 6',
+    },
+  ]
+  return (
+    <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-3">
+      <h2 className="text-base font-black text-gray-900">🖼️ Imagens do tutorial</h2>
+      <p className="text-sm text-gray-600">
+        Referências visuais para acompanhar os passos com mais segurança.
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {images.map((image) => (
+          <a key={image.src} href={image.src} target="_blank" rel="noreferrer" className="group block overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
+            <Image
+              src={image.src}
+              alt={image.alt}
+              width={1200}
+              height={675}
+              unoptimized
+              loading="lazy"
+              className="h-auto w-full transition group-hover:scale-[1.01]"
+            />
+          </a>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 export default function TutorialPage() {
   return (
     <div className="space-y-6 max-w-3xl">
@@ -145,6 +228,7 @@ export default function TutorialPage() {
         <Warning>
           Nunca compartilhe seus cookies, IDs, SSID, Key ou Secret com terceiros. Esses dados dão acesso à sua conta.
         </Warning>
+        <VideoTutorialCard />
       </div>
 
       {/* Passo 0 */}
@@ -162,6 +246,8 @@ export default function TutorialPage() {
           Não encontrou o ícone? Clique no ícone de <strong>peça de quebra-cabeça 🧩</strong> ao lado da barra de endereço e fixe a Cookie-Editor clicando no alfinete 📌.
         </Tip>
       </PlatformCard>
+
+      <TutorialImagesGallery />
 
       {/* Mercado Livre */}
       <PlatformCard color="blue" icon="🔵" title="Mercado Livre — Pegando seu ID e SSID">
