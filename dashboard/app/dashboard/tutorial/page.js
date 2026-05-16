@@ -125,7 +125,7 @@ function QuickChecklist() {
 
 function TutorialInlineImage({ src, alt }) {
   return (
-    <a href={src} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-gray-200 bg-white">
+    <a href={src} target="_blank" rel="noreferrer" className="mx-auto block w-full max-w-xl overflow-hidden rounded-xl border border-gray-200 bg-white">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={src}
@@ -134,7 +134,7 @@ function TutorialInlineImage({ src, alt }) {
         decoding="async"
         className="h-auto w-full object-contain"
       />
-      <span className="block border-t border-gray-100 px-3 py-2 text-xs font-semibold text-gray-600">
+      <span className="block border-t border-gray-100 px-3 py-2 text-base font-extrabold text-gray-700">
         🔎 Toque para abrir em alta resolução
       </span>
     </a>
