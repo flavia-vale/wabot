@@ -1,4 +1,4 @@
-import { EDITORIAL_DATES } from './editorial-content'
+import { EDITORIAL_DATES } from './editorial-content.js'
 
 const DEFAULT_LAST_MODIFIED = '2026-05-15'
 
@@ -231,8 +231,8 @@ export const CORE_SEO_ROUTES = [
 ]
 
 export const CONTENT_SEO_ROUTES = [
-  { path: '/conteudos', template: 'content-hub', priority: 0.8, changeFrequency: 'weekly', lastModified: '2026-05-15', indexable: true },
-  { path: '/benchmarks/operacao-grupos-ofertas-whatsapp', template: 'benchmark', priority: 0.8, changeFrequency: 'monthly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
+  { path: '/conteudos', template: 'content-hub', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/conteudos'), indexable: true },
+  { path: '/benchmarks/operacao-grupos-ofertas-whatsapp', template: 'benchmark', priority: 0.8, changeFrequency: 'monthly', lastModified: resolveLastModified('/benchmarks/operacao-grupos-ofertas-whatsapp'), indexable: true },
   { path: '/blog/como-escalar-grupos-sem-operacao-manual', template: 'article', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/como-escalar-grupos-sem-operacao-manual'), indexable: true },
   { path: '/blog/checklist-padronizar-divulgacao-whatsapp', template: 'article', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/checklist-padronizar-divulgacao-whatsapp'), indexable: true },
   { path: '/materiais/checklist-operacao-whatsapp', template: 'lead-magnet', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/materiais/checklist-operacao-whatsapp'), indexable: true },

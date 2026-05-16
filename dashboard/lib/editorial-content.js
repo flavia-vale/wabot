@@ -2,6 +2,8 @@ export const EDITORIAL_AUTHOR = 'Equipe editorial do BOTinho'
 export const EDITORIAL_AUTHOR_DESCRIPTION = 'Equipe responsável por guias de operação responsável, afiliados, grupos de WhatsApp e rotinas de divulgação com revisão humana.'
 
 export const EDITORIAL_DATES = {
+  '/conteudos': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
+  '/benchmarks/operacao-grupos-ofertas-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
   '/blog/como-escalar-grupos-sem-operacao-manual': { publishedAt: '2026-05-11', updatedAt: '2026-05-15' },
   '/blog/checklist-padronizar-divulgacao-whatsapp': { publishedAt: '2026-05-11', updatedAt: '2026-05-15' },
   '/blog/conferir-converter-link-afiliado-whatsapp': { publishedAt: '2026-05-14', updatedAt: '2026-05-15' },
