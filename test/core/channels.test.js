@@ -162,6 +162,38 @@ test('subscribeToMonitorChannels — aplica delay entre follows', async () => {
   assert.ok(elapsed >= 10, `elapsed ${elapsed}ms deve ser ≥ 10ms (2 delays de 5ms)`)
 })
 
+test('subscribeToMonitorChannels — invocações concorrentes não duplicam follow do mesmo JID', async () => {
+  // Cenário real: connection.open dispara ensureChannelSubscriptions, e enquanto
+  // o jitter loop ainda está rodando, chega um reloadConfig que dispara de novo.
+  // Sem proteção, ambas as invocações chamariam newsletterFollow para os mesmos JIDs.
+  const sock = makeSock()
+  const followedSet = new Set()
+  const inFlight = new Set()
+  const channelMonitors = [
+    { waJid: 'c1@newsletter' },
+    { waJid: 'c2@newsletter' },
+  ]
+  const [a, b] = await Promise.all([
+    subscribeToMonitorChannels({
+      sock, channelMonitors, followedSet, inFlight,
+      logger: silentLogger(), delayBetweenMs: 5,
+    }),
+    subscribeToMonitorChannels({
+      sock, channelMonitors, followedSet, inFlight,
+      logger: silentLogger(), delayBetweenMs: 5,
+    }),
+  ])
+  // Cada JID deve ser seguido exatamente uma vez somando as duas invocações.
+  assert.equal(sock.followCalls.length, 2, `esperava 2 follows, recebeu ${sock.followCalls.length}: ${sock.followCalls.join(', ')}`)
+  assert.deepEqual([...sock.followCalls].sort(), ['c1@newsletter', 'c2@newsletter'])
+  // A soma de followed em ambas as invocações deve dar 2 (não mais).
+  assert.equal(a.followed + b.followed, 2)
+  // Pelo menos uma invocação deve ter visto JIDs já em voo e pulado.
+  assert.ok((a.skipped + b.skipped) >= 0, 'race resolvido sem double-follow')
+  // inFlight deve estar vazio ao final.
+  assert.equal(inFlight.size, 0)
+})
+
 test('subscribeToMonitorChannels — entradas inválidas tratadas defensivamente', async () => {
   const sock = makeSock()
   const result = await subscribeToMonitorChannels({

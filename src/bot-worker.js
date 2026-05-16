@@ -164,19 +164,24 @@ let configCache = null
 let configCacheTime = 0
 let configCachePromise = null
 const followedChannelJids = new Set()
+const inFlightChannelJids = new Set()
 
 async function ensureChannelSubscriptions() {
   if (!activeSock) return
-  const cfg = await getConfig().catch(() => null)
+  const cfg = await getConfig().catch(err => {
+    logger.warn({ err: err?.message }, 'channels: getConfig falhou; pulando inscrição')
+    return null
+  })
   const channelMonitors = (cfg?.groups?.monitor ?? []).filter(m => detectKind(m.waJid) === JID_KIND.CHANNEL)
   if (channelMonitors.length === 0) return
   const result = await subscribeToMonitorChannels({
     sock: activeSock,
     channelMonitors,
     followedSet: followedChannelJids,
+    inFlight: inFlightChannelJids,
     logger,
   })
-  logger.info({ ...result }, 'channels: inscrição de canais-monitor concluída')
+  logger.info(result, 'channels: inscrição de canais-monitor concluída')
 }
 
 async function loadConfig() {
@@ -737,6 +742,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       logger.info({ jid, monitorGroups: cfg.groups.monitor, feedGlobal: cfg.botConfig.feedGlobal }, 'mensagem recebida')
       const monitorGroup = cfg.groups.monitor.find(m => m.waJid === jid)
       if (!cfg.botConfig.feedGlobal && !monitorGroup) return
+      // feedGlobal aceita mensagens de qualquer JID espelhável (grupo ou canal).
+      // O pipeline downstream é agnóstico ao tipo; o tratamento específico
+      // de envio para canal-destino vem na Fase 3.
       if (cfg.botConfig.feedGlobal && !isMirrorableJid(jid)) return
 
       const text =
