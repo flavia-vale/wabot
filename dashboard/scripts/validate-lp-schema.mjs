@@ -15,7 +15,7 @@ function extractJsonLdBlocks(html) {
     .filter(Boolean)
 }
 
-function validateStructuredData(route, blocks) {
+function validateStructuredData(route, blocks, expectedUrl) {
   const types = new Set(blocks.map((b) => b?.['@type']).filter(Boolean))
   const missing = route.schemaTypes.filter((type) => !types.has(type))
   const softwareApplication = blocks.find((block) => block?.['@type'] === 'SoftwareApplication')
@@ -24,6 +24,9 @@ function validateStructuredData(route, blocks) {
   if (softwareApplication) {
     if (!softwareApplication.url) missingSoftwareFields.push('SoftwareApplication.url')
     if (!softwareApplication.mainEntityOfPage) missingSoftwareFields.push('SoftwareApplication.mainEntityOfPage')
+    if (softwareApplication.mainEntityOfPage && softwareApplication.mainEntityOfPage !== expectedUrl) {
+      missingSoftwareFields.push('SoftwareApplication.mainEntityOfPage=url-da-rota')
+    }
     if (!Array.isArray(softwareApplication.offers) || softwareApplication.offers.length === 0) {
       missingSoftwareFields.push('SoftwareApplication.offers')
     } else if (softwareApplication.offers.some((offer) => offer.priceCurrency !== 'BRL')) {
@@ -44,7 +47,7 @@ async function validateSlug(route) {
 
   const html = await response.text()
   const blocks = extractJsonLdBlocks(html)
-  const missing = validateStructuredData(route, blocks)
+  const missing = validateStructuredData(route, blocks, url)
 
   return {
     slug: route.slug,
