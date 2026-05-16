@@ -268,7 +268,8 @@ export default function LogsPage() {
           </div>
 
           <div className="hidden md:block bg-white rounded-xl shadow overflow-hidden">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px] table-fixed text-sm">
               <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
                 <tr>
                   <th className="text-left px-4 py-3">Plataforma</th>
@@ -282,8 +283,11 @@ export default function LogsPage() {
               <tbody className="divide-y divide-gray-100">
                 {logs.map(log => (
                   <tr key={log.id} className="hover:bg-gray-50 align-top">
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${PLATFORM_COLORS[log.platform] || 'bg-gray-100 text-gray-600'}`}>
+                    <td className="px-4 py-3 align-top w-44">
+                      <span
+                        className={`inline-block max-w-full rounded-full px-2 py-0.5 text-xs font-medium break-words ${PLATFORM_COLORS[log.platform] || 'bg-gray-100 text-gray-600'}`}
+                        title={log.platform}
+                      >
                         {log.platform}
                       </span>
                     </td>
@@ -310,7 +314,8 @@ export default function LogsPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+              </table>
+            </div>
           </div>
 
           <div className="flex items-center justify-between mt-4 text-sm text-gray-500">
