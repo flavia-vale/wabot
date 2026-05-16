@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
+import { buildRegisterHref } from '@/lib/marketing-attribution'
 
 const title = 'Conteúdos: blog e materiais para afiliados no WhatsApp'
 const description = 'Central de conteúdos do BOTinho com artigos e materiais práticos para padronizar divulgação, validar links de afiliado e escalar grupos no WhatsApp com responsabilidade.'
