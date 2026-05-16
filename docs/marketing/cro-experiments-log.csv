@@ -1,0 +1,3 @@
+experiment_id,status,owner,scope,hypothesis,primary_metric,guardrail_metric,start_date,end_date,decision,decision_notes,next_action,due_date
+CRO-2026-001,planned,growth,home-hero,"Tom direto aumenta cta_click sem piorar signup",organic_cta_click_rate,signup_success_rate,2026-05-18,,,,,
+CRO-2026-002,planned,growth,home-cta-secondary,"CTA checklist aumenta microconversão e mantém qualidade",lead_magnet_submit_rate,first_send_success_rate,2026-05-18,,,,,

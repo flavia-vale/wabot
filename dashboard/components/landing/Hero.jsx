@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Icon } from './Icon';
 import { WhatsAppMockup } from './WhatsAppMockup';
+import { buildRegisterHref } from '@/lib/marketing-attribution';
 
 const s = {
   nav: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '24px 0' },
@@ -40,6 +41,7 @@ const s = {
 };
 
 function Nav() {
+  const navRegisterHref = buildRegisterHref({ source: 'landing', campaign: 'home-nav', content: 'nav-entrar' })
   return (
     <nav style={s.nav} className="landing-nav" aria-label="Navegação principal da página inicial">
       <div style={s.logo}>
@@ -54,7 +56,7 @@ function Nav() {
         <a style={s.navLink} href="#faq">Perguntas</a>
       </div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center' }} className="landing-nav-cta">
-        <Link className="btn btn-ghost" href="/login" style={{ padding: '10px 18px', fontSize: 14 }}>Entrar</Link>
+        <Link className="btn btn-ghost" href={navRegisterHref} style={{ padding: '10px 18px', fontSize: 14 }}>Entrar</Link>
         <a className="btn btn-primary" href="#planos" style={{ padding: '10px 18px', fontSize: 14 }}>Começar grátis</a>
       </div>
       <details className="landing-mobile-menu">
@@ -65,7 +67,7 @@ function Nav() {
           <Link style={s.navLink} href="/ferramentas">Ferramentas</Link>
           <a style={s.navLink} href="#planos">Planos</a>
           <a style={s.navLink} href="#faq">Perguntas</a>
-          <Link className="btn btn-ghost" href="/login">Entrar</Link>
+          <Link className="btn btn-ghost" href={navRegisterHref}>Entrar</Link>
           <a className="btn btn-primary" href="#planos">Começar grátis</a>
         </div>
       </details>
@@ -74,6 +76,8 @@ function Nav() {
 }
 
 export function Hero({ tone, primaryCtaLabel = 'Conectar meu WhatsApp', eyebrowLabel = 'Experimente grátis!', headlineOverride, subOverride, heroStyle }) {
+  const heroPrimaryHref = buildRegisterHref({ source: 'landing', campaign: 'home-hero', content: 'hero-primary' })
+  const heroChecklistHref = buildRegisterHref({ source: 'landing', campaign: 'home-hero', content: 'hero-checklist' })
   const headline = headlineOverride ?? (tone === 'direto'
     ? <><span>Ofertas conferidas,</span><br /><span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>rotina organizada.</span></>
     : tone === 'animado'
@@ -90,7 +94,7 @@ export function Hero({ tone, primaryCtaLabel = 'Conectar meu WhatsApp', eyebrowL
     <div className="wrap" style={{ position: 'relative' }}>
       <Nav />
       <div className="landing-mobile-priority">
-        <Link className="btn btn-ghost" href="/login">Entrar</Link>
+        <Link className="btn btn-ghost" href={heroPrimaryHref}>Entrar</Link>
       </div>
       <div style={{ ...s.decor, width: 380, height: 380, background: 'var(--accent-2)', top: -40, right: -80 }} />
       <div style={{ ...s.decor, width: 280, height: 280, background: 'var(--accent-3)', bottom: -60, left: -40 }} />
@@ -103,10 +107,11 @@ export function Hero({ tone, primaryCtaLabel = 'Conectar meu WhatsApp', eyebrowL
           <h1 style={s.h1}>{headline}</h1>
           <p style={s.sub}>{sub}</p>
           <div style={s.cta} className="landing-hero-cta">
-            <a className="btn btn-accent" href="#planos" data-seo-cta="hero-primary-planos">
+            <Link className="btn btn-accent" href={heroPrimaryHref} data-seo-cta="hero-primary-register">
               {primaryCtaLabel} <Icon name="arrow" size={16} />
-            </a>
+            </Link>
             <a className="btn btn-ghost" href="#como" data-seo-cta="hero-secondary-como">Ver como funciona</a>
+            <Link className="btn btn-ghost" href={heroChecklistHref} data-seo-cta="hero-secondary-checklist">Receber checklist</Link>
           </div>
           <div style={s.trust} className="landing-trust">
             <div style={s.trustItem} className="landing-trust-item"><Icon name="check" size={16} /> Sem cartão para testar</div>
