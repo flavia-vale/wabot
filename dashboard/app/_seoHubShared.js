@@ -2,6 +2,7 @@ import './landing.css'
 import Link from 'next/link'
 import { Hero } from '@/components/landing/Hero'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
+import { IntroCard } from '@/components/landing/IntroCard'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { getHubSeoRoute, getSeoRoutesByCluster } from '@/lib/seo-registry.mjs'
 import { getSiteUrl } from '@/lib/site-url'
@@ -115,28 +116,23 @@ export function SeoHubPage({ hubSlug }) {
 
       <section>
         <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 340px', gap: 20, alignItems: 'flex-start' }} className="landing-faq-wrap">
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-              <span className="pill"><span className="dot" />{content.eyebrow}</span>
-              <h2 style={{ fontSize: 'clamp(28px, 3vw, 42px)', lineHeight: 1.1, margin: '16px 0 12px' }}>Como usar este hub</h2>
-              <p style={{ color: 'var(--ink-soft)', lineHeight: 1.65 }}>{content.intro}</p>
-              <p style={{ marginTop: 16, padding: 16, borderRadius: 16, background: 'color-mix(in oklab, var(--accent) 18%, var(--surface))', border: '1px solid var(--line)', color: 'var(--ink)', lineHeight: 1.6, fontWeight: 500 }}>{content.promise}</p>
-            </div>
-            <aside style={{ background: 'color-mix(in oklab, var(--accent) 22%, var(--surface))', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-              <span className="pill"><span className="dot" />Checklist</span>
-              <h2 style={{ fontSize: 22, fontWeight: 600, margin: '14px 0 12px', letterSpacing: '-0.01em' }}>Checklist do cluster</h2>
-              <ul style={{ margin: 0, paddingLeft: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {content.checklist.map((item) => (
-                  <li key={item} style={{ display: 'flex', gap: 10, fontSize: 14.5, lineHeight: 1.55, color: 'var(--ink)' }}>
-                    <span style={{ color: 'var(--accent-strong)', fontWeight: 700 }}>✓</span>
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-              <Link href="/login?mode=register" data-seo-cta="hub-register" className="btn btn-accent" style={{ marginTop: 20 }}>
-                Entrar na Lista VIP
-              </Link>
-            </aside>
+          <IntroCard
+            eyebrow={content.eyebrow}
+            title={route.title}
+            body={content.intro}
+            pills={content.checklist}
+          />
+        </div>
+      </section>
+
+      <section>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ background: 'color-mix(in oklab, var(--accent-3) 50%, var(--surface))', border: '1px solid var(--line)', borderRadius: 28, padding: 36 }}>
+            <span className="pill"><span className="dot" />Promessa do hub</span>
+            <p style={{ marginTop: 14, fontSize: 16, lineHeight: 1.65, color: 'var(--ink)', fontWeight: 500 }}>{content.promise}</p>
+            <Link href="/login?mode=register" data-seo-cta="hub-register" className="btn btn-accent" style={{ marginTop: 20 }}>
+              Entrar na Lista VIP
+            </Link>
           </div>
         </div>
       </section>

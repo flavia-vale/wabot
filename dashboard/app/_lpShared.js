@@ -7,6 +7,7 @@ import { Social } from '@/components/landing/Social'
 import { Pricing } from '@/components/landing/Pricing'
 import { FAQ } from '@/components/landing/FAQ'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
+import { IntroCard } from '@/components/landing/IntroCard'
 import { getSiteUrl } from '@/lib/site-url'
 import { BRAND_NAME, BRAND_SHORT_NAME, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION } from '@/lib/marketing-content'
 import { getHubSeoRoute, getProgrammaticSeoRoute, getRelatedProgrammaticSeoRoutes } from '@/lib/seo-registry.mjs'
@@ -266,14 +267,13 @@ export function LpTemplate({ slug }) {
       />
       <section>
         <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}`, borderRadius: 24, padding: 28 }}>
-            <span className="pill" style={{ marginBottom: 12 }}><span className="dot" />{BRAND_NAME} · {theme.badge}</span>
-            <h2 style={{ fontSize: 'clamp(28px, 3vw, 42px)', lineHeight: 1.1, marginBottom: 10 }}>{cfg.uniqueHeadline}</h2>
-            <p style={{ color: 'var(--ink-soft)', lineHeight: 1.6, marginBottom: 14 }}>{cfg.uniqueBody}</p>
-            <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.7 }}>
-              {cfg.uniqueBullets.map((bullet) => <li key={bullet}>{bullet}</li>)}
-            </ul>
-          </div>
+          <IntroCard
+            eyebrow={`${BRAND_NAME} · ${theme.badge}`}
+            title={cfg.uniqueHeadline}
+            body={cfg.uniqueBody}
+            pills={cfg.uniqueBullets}
+            accent={lpType !== 'default'}
+          />
         </div>
       </section>
       <section aria-labelledby={`${slug}-roteiro-operacional`}>

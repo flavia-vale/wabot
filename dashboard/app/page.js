@@ -6,7 +6,8 @@ import { Social } from '@/components/landing/Social'
 import { Pricing } from '@/components/landing/Pricing'
 import { FAQ } from '@/components/landing/FAQ'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
-import { BRAND_NAME, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS, CORE_FAQ_ITEMS } from '@/lib/marketing-content'
+import { IntroCard, RulesCard } from '@/components/landing/IntroCard'
+import { BRAND_NAME, BRAND_SHORT_NAME, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS, CORE_FAQ_ITEMS } from '@/lib/marketing-content'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { selectHomeHeroVariant } from '@/lib/cro-experiments'
 
@@ -23,17 +24,24 @@ export const metadata = {
 
 
 function ProductDefinition() {
+  const negatives = PRODUCT_LIMITATIONS.slice(0, 2)
+  const positive = PRODUCT_LIMITATIONS[2]
+  const rulesLabel = (
+    <>Uso responsável · o que o {BRAND_NAME} <em className="serif" style={{ fontStyle: 'italic', textTransform: 'none', letterSpacing: 0, fontSize: 14 }}>não faz</em></>
+  )
+
   return (
-    <section aria-labelledby="definicao-botinho">
+    <section id="sobre" aria-labelledby="definicao-botinho">
       <div className="wrap">
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-          <span className="pill"><span className="dot" />Definição para IA e compradores</span>
-          <h2 id="definicao-botinho" style={{ fontSize: 'clamp(28px, 3vw, 42px)', lineHeight: 1.1, margin: '16px 0 12px' }}>O que é o {BRAND_NAME}?</h2>
-          <p style={{ color: 'var(--ink)', lineHeight: 1.7, maxWidth: 900 }}>{PRODUCT_DEFINITION}</p>
-          <ul style={{ margin: '18px 0 0', paddingLeft: 18, color: 'var(--ink-soft)', lineHeight: 1.7 }}>
-            {PRODUCT_LIMITATIONS.map((item) => <li key={item}>{item}</li>)}
-          </ul>
-        </div>
+        <IntroCard
+          id="definicao-botinho"
+          eyebrow={BRAND_SHORT_NAME}
+          title={<>O que é o <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>{BRAND_NAME}?</span></>}
+          body={PRODUCT_DEFINITION}
+          pills={['Revisão humana', 'Cadência responsável', 'Histórico de logs', 'Grupos de origem & destino']}
+        >
+          <RulesCard label={rulesLabel} negatives={negatives} positive={positive} />
+        </IntroCard>
       </div>
     </section>
   )

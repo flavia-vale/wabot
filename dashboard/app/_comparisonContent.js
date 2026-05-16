@@ -2,6 +2,7 @@ import './landing.css'
 import Link from 'next/link'
 import { Hero } from '@/components/landing/Hero'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
+import { IntroCard } from '@/components/landing/IntroCard'
 import { BRAND_NAME, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS } from '@/lib/marketing-content'
 import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
 import { getSiteUrl } from '@/lib/site-url'
@@ -125,12 +126,13 @@ export function ComparisonPage({ slug }) {
 
       <section>
         <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ background: 'color-mix(in oklab, var(--accent) 22%, var(--surface))', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-            <span className="pill"><span className="dot" />Resposta direta</span>
-            <h2 style={{ fontSize: 'clamp(24px, 2.6vw, 34px)', lineHeight: 1.12, margin: '14px 0 12px' }}>Resposta direta</h2>
-            <p style={{ color: 'var(--ink)', lineHeight: 1.7 }}>{page.directAnswer}</p>
-            <p style={{ marginTop: 14, fontSize: 13, color: 'var(--ink-soft)' }}>Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Atualizado em {formatDatePtBr(dates.updatedAt)}</p>
-          </div>
+          <IntroCard
+            eyebrow={page.eyebrow}
+            title={page.title}
+            body={page.directAnswer}
+            pills={[`Por ${EDITORIAL_AUTHOR}`, `Publicado em ${formatDatePtBr(dates.publishedAt)}`, `Atualizado em ${formatDatePtBr(dates.updatedAt)}`]}
+            accent
+          />
         </div>
       </section>
 

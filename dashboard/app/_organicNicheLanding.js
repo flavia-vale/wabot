@@ -2,6 +2,7 @@ import './landing.css'
 import Link from 'next/link'
 import { Hero } from '@/components/landing/Hero'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
+import { IntroCard } from '@/components/landing/IntroCard'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildOgImageUrl } from '@/lib/seo-og'
@@ -183,14 +184,12 @@ export function OrganicNicheLanding({ pageKey }) {
 
       <section>
         <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20 }}>
-            {page.bullets.map((bullet) => (
-              <div key={bullet} style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-                <span className="pill"><span className="dot" />Critério</span>
-                <p style={{ marginTop: 14, fontSize: 15, lineHeight: 1.6, color: 'var(--ink)' }}>{bullet}</p>
-              </div>
-            ))}
-          </div>
+          <IntroCard
+            eyebrow={page.eyebrow}
+            title={page.h1}
+            body={page.directAnswer}
+            pills={page.bullets}
+          />
         </div>
       </section>
 
