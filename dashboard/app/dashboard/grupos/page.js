@@ -22,6 +22,12 @@ const ALL_PLATFORMS = [
   { id: 'magazineluiza', label: 'Magazine Luiza' },
 ]
 
+const NO_LINK_SCOPE_OPTIONS = [
+  { id: 'ALL', label: 'Tudo (texto, mídia, áudio, sticker, documentos)' },
+  { id: 'TEXT_ONLY', label: 'Só texto' },
+  { id: 'TEXT_IMAGE_WITH_CAPTION', label: 'Texto + imagem com legenda' },
+]
+
 export default function GruposPage() {
   const [groups, setGroups] = useState([])
   const [actionError, setActionError] = useState('')
@@ -343,6 +349,35 @@ export default function GruposPage() {
                     })}
                   </div>
                   <p className="mt-1 text-[11px] text-gray-400">Sem seleção manual, usa as plataformas globais.</p>
+                </div>
+                <div className="mt-3 border-t border-gray-100 pt-3">
+                  <p className="text-xs font-medium text-gray-500 mb-2">Mensagens sem link:</p>
+                  <label className="flex items-center gap-2 text-xs text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={(g.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK'}
+                      onChange={(e) => {
+                        const enabled = e.target.checked
+                        handleUpdateGroup(g.id, {
+                          forwardMode: enabled ? 'ALLOW_NO_LINK' : 'LINK_ONLY',
+                          noLinkScope: enabled ? (g.noLinkScope ?? 'TEXT_ONLY') : null,
+                        })
+                      }}
+                    />
+                    Incluir mensagens sem link
+                  </label>
+                  {(g.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK' && (
+                    <select
+                      className="mt-2 w-full border border-gray-200 rounded-lg px-3 py-2 text-xs"
+                      value={g.noLinkScope ?? 'TEXT_ONLY'}
+                      onChange={(e) => handleUpdateGroup(g.id, { forwardMode: 'ALLOW_NO_LINK', noLinkScope: e.target.value })}
+                    >
+                      {NO_LINK_SCOPE_OPTIONS.map((option) => (
+                        <option key={option.id} value={option.id}>{option.label}</option>
+                      ))}
+                    </select>
+                  )}
+                  <p className="mt-1 text-[11px] text-amber-600">Ativar pode aumentar o volume de mensagens encaminhadas.</p>
                 </div>
                 <div className="mt-3 border-t border-gray-100 pt-3">
                   <div className="mb-1.5 flex items-center justify-between gap-2">
