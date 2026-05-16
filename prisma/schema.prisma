@@ -68,6 +68,7 @@ model Group {
   waJid              String
   name               String
   role               String
+  kind               String  @default("group")
   imageMode          String  @default("none")
   imageLinkTarget    String  @default("first")
   fallbackToOriginal Boolean @default(false)
@@ -78,6 +79,7 @@ model Group {
   postTargets      GroupTarget[] @relation("PostTargets")
 
   @@unique([userId, waJid, role])
+  @@index([userId, kind])
 }
 
 model GroupTarget {
