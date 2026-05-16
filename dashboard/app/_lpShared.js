@@ -384,8 +384,7 @@ export function LpTemplate({ slug }) {
           </div>
         </div>
       </section>
-
-      <section aria-labelledby={`${slug}-faq-especifica`}>
+      <div aria-labelledby={`${slug}-faq-especifica`} role="region">
         <div className="wrap" style={{ marginTop: 28 }}>
           <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
             <span className="pill"><span className="dot" />FAQ contextual</span>
@@ -427,7 +426,7 @@ export function LpTemplate({ slug }) {
             </div>
           </div>
         </div>
-      </section>
+      </div>
       <How />
       <Features />
       <Social />
