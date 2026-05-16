@@ -1,8 +1,9 @@
+import './landing.css'
 import Link from 'next/link'
+import { Hero } from '@/components/landing/Hero'
+import Footer, { FinalCTA } from '@/components/landing/Footer'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
-import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
-import { buildRegisterHref } from '@/lib/marketing-attribution'
 
 const pages = {
   'bot-ofertas-restaurantes-whatsapp': {
@@ -154,90 +155,116 @@ export function OrganicNicheLanding({ pageKey }) {
   const page = pages[pageKey]
   const schemas = buildSchema(page)
   const trackerRoute = { slug: pageKey, path: page.slug, cluster: 'nichos', intent: page.primaryKeyword, template: 'organic-niche' }
+  const registerHref = `/login?mode=register&utm_source=seo&utm_medium=organic&utm_campaign=organic-marketing-sprint&utm_content=${pageKey}`
+
+  const headline = (
+    <>
+      <span>{page.h1.split(' ').slice(0, -2).join(' ')}</span><br />
+      <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>{page.h1.split(' ').slice(-2).join(' ')}</span>
+    </>
+  )
 
   return (
-    <PublicShell>
+    <div className="landing-root">
       <OrganicPageTracker route={trackerRoute} />
       {schemas.map((schema) => (
         <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
       ))}
-      <main className="mx-auto w-full max-w-6xl px-5 py-10 md:px-8 md:py-16">
-        <section className="rounded-[2rem] bg-white p-8 shadow-sm ring-1 ring-emerald-100 md:p-10">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">{page.eyebrow}</p>
-          <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-950 md:text-5xl">{page.h1}</h1>
-          <p className="mt-5 max-w-3xl text-lg leading-8 text-gray-800">{page.directAnswer}</p>
-          <div className="mt-6 flex flex-wrap gap-3 text-sm font-bold">
-            <Link href={`/login?mode=register&utm_source=seo&utm_medium=organic&utm_campaign=organic-marketing-sprint&utm_content=${pageKey}`} data-seo-cta="organic-niche-register" className="rounded-xl bg-emerald-600 px-4 py-3 text-white hover:bg-emerald-700">
-              Entrar na lista VIP
-            </Link>
-            <Link href="/conteudos" data-seo-cta="organic-niche-content" className="rounded-xl border border-emerald-200 px-4 py-3 text-emerald-800 hover:bg-emerald-50">
-              Ver guias e checklists
-            </Link>
-          </div>
-        </section>
+      <Hero
+        eyebrowLabel={page.eyebrow}
+        primaryCtaLabel="Entrar na Lista VIP"
+        headlineOverride={headline}
+        subOverride={page.directAnswer}
+        heroStyle={{ background: 'linear-gradient(180deg, color-mix(in oklab, var(--accent-3) 50%, var(--surface)), transparent)', borderRadius: 24, paddingInline: 20 }}
+      />
 
-        <section className="mt-8 grid gap-5 md:grid-cols-3">
-          {page.bullets.map((bullet) => (
-            <div key={bullet} className="rounded-3xl border border-emerald-100 bg-white p-6 shadow-sm">
-              <p className="text-sm font-bold leading-7 text-gray-800">{bullet}</p>
-            </div>
-          ))}
-        </section>
-
-        {page.affiliateBox && (
-          <section className="mt-8 rounded-[2rem] border border-amber-200 bg-amber-50 p-7">
-            <h2 className="text-2xl font-black tracking-tight text-gray-950">{page.affiliateBox.title}</h2>
-            <ul className="mt-4 list-disc space-y-2 pl-6 text-sm leading-7 text-gray-800">
-              {page.affiliateBox.items.map((item) => <li key={item}>{item}</li>)}
-            </ul>
-          </section>
-        )}
-
-        <section className="mt-8 rounded-[2rem] bg-white p-8 shadow-sm ring-1 ring-emerald-100">
-          <h2 className="text-2xl font-black tracking-tight text-gray-950">{page.processTitle}</h2>
-          <ol className="mt-5 grid gap-4 md:grid-cols-2">
-            {page.process.map((step, index) => (
-              <li key={step} className="rounded-2xl bg-emerald-50 p-5 text-sm leading-7 text-gray-800">
-                <span className="mb-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-sm font-black text-white">{index + 1}</span>
-                <p>{step}</p>
-              </li>
+      <section>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20 }}>
+            {page.bullets.map((bullet) => (
+              <div key={bullet} style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+                <span className="pill"><span className="dot" />Critério</span>
+                <p style={{ marginTop: 14, fontSize: 15, lineHeight: 1.6, color: 'var(--ink)' }}>{bullet}</p>
+              </div>
             ))}
-          </ol>
-        </section>
+          </div>
+        </div>
+      </section>
 
-        <section className="mt-8 grid gap-6 md:grid-cols-[1fr_0.8fr]">
-          <div className="rounded-[2rem] bg-white p-8 shadow-sm ring-1 ring-emerald-100">
-            <h2 className="text-2xl font-black tracking-tight text-gray-950">FAQ</h2>
-            <div className="mt-5 space-y-4">
-              {page.faq.map((item) => (
-                <div key={item.q} className="rounded-2xl border border-emerald-100 p-5">
-                  <h3 className="font-black text-gray-950">{item.q}</h3>
-                  <p className="mt-2 text-sm leading-7 text-gray-700">{item.a}</p>
-                </div>
-              ))}
+      {page.affiliateBox && (
+        <section>
+          <div className="wrap" style={{ marginTop: 28 }}>
+            <div style={{ background: 'color-mix(in oklab, var(--accent-2) 24%, var(--surface))', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+              <span className="pill"><span className="dot" />Atenção</span>
+              <h2 style={{ fontSize: 'clamp(24px, 2.4vw, 32px)', lineHeight: 1.15, margin: '14px 0 14px' }}>{page.affiliateBox.title}</h2>
+              <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.65 }}>
+                {page.affiliateBox.items.map((item) => <li key={item}>{item}</li>)}
+              </ul>
             </div>
           </div>
-          <aside className="rounded-[2rem] bg-emerald-950 p-8 text-white">
-            <h2 className="text-2xl font-black tracking-tight">Links internos</h2>
-            <p className="mt-3 text-sm leading-7 text-emerald-50">Continue pelo cluster de automação, afiliados e distribuição em grupos.</p>
-            <ul className="mt-5 space-y-3">
-              <li>
-                <Link href="/bot-ofertas-whatsapp" data-seo-cta="organic-niche-parent-hub" className="text-sm font-bold text-emerald-100 underline underline-offset-4 hover:text-white">
-                  Hub: bot de ofertas por nicho
-                </Link>
-              </li>
-              {page.internalLinks.map((link) => (
-                <li key={link.href}>
-                  <Link href={link.href} data-seo-cta="organic-niche-internal-link" className="text-sm font-bold text-emerald-100 underline underline-offset-4 hover:text-white">
-                    {link.label}
-                  </Link>
+        </section>
+      )}
+
+      <section>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+            <span className="pill"><span className="dot" />Processo</span>
+            <h2 style={{ fontSize: 'clamp(24px, 2.6vw, 36px)', lineHeight: 1.12, margin: '14px 0 18px' }}>{page.processTitle}</h2>
+            <ol style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16, listStyle: 'none', margin: 0, padding: 0, counterReset: 'step' }}>
+              {page.process.map((step, index) => (
+                <li key={step} style={{ background: 'color-mix(in oklab, var(--accent) 14%, var(--surface))', border: '1px solid var(--line)', borderRadius: 16, padding: 20 }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: '50%', background: 'var(--accent-strong)', color: 'white', fontWeight: 700, fontSize: 14, marginBottom: 10 }}>{index + 1}</span>
+                  <p style={{ fontSize: 14.5, lineHeight: 1.6, color: 'var(--ink)' }}>{step}</p>
                 </li>
               ))}
-            </ul>
-          </aside>
-        </section>
-      </main>
-    </PublicShell>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 340px', gap: 20, alignItems: 'flex-start' }} className="landing-faq-wrap">
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+              <span className="pill"><span className="dot" />FAQ</span>
+              <h2 style={{ fontSize: 'clamp(24px, 2.6vw, 36px)', lineHeight: 1.12, margin: '14px 0 16px' }}>Perguntas frequentes</h2>
+              <div style={{ display: 'grid', gap: 12 }}>
+                {page.faq.map((item) => (
+                  <details key={item.q} style={{ border: '1px solid var(--line)', borderRadius: 16, padding: '14px 16px', background: 'color-mix(in oklab, var(--surface) 92%, white)' }}>
+                    <summary style={{ cursor: 'pointer', fontWeight: 700, color: 'var(--ink)' }}>{item.q}</summary>
+                    <p style={{ marginTop: 10, color: 'var(--ink-soft)', lineHeight: 1.65 }}>{item.a}</p>
+                  </details>
+                ))}
+              </div>
+            </div>
+            <aside style={{ background: 'color-mix(in oklab, var(--accent) 22%, var(--surface))', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+              <span className="pill"><span className="dot" />Links internos</span>
+              <h2 style={{ fontSize: 22, fontWeight: 600, margin: '14px 0 14px', letterSpacing: '-0.01em' }}>Continue pelo cluster</h2>
+              <ul style={{ margin: 0, paddingLeft: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <li>
+                  <Link href="/bot-ofertas-whatsapp" data-seo-cta="organic-niche-parent-hub" style={{ color: 'var(--ink)', fontWeight: 500, fontSize: 14.5, textDecoration: 'underline', textUnderlineOffset: 4 }}>
+                    Hub: bot de ofertas por nicho
+                  </Link>
+                </li>
+                {page.internalLinks.map((link) => (
+                  <li key={link.href}>
+                    <Link href={link.href} data-seo-cta="organic-niche-internal-link" style={{ color: 'var(--ink)', fontWeight: 500, fontSize: 14.5, textDecoration: 'underline', textUnderlineOffset: 4 }}>
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              <Link href={registerHref} data-seo-cta="organic-niche-register" className="btn btn-accent" style={{ marginTop: 20 }}>
+                Entrar na Lista VIP
+              </Link>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <FinalCTA />
+      <Footer />
+    </div>
   )
 }
 

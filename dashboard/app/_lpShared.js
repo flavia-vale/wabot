@@ -234,7 +234,7 @@ export function LpTemplate({ slug }) {
       />
       <section>
         <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}`, borderRadius: 24, padding: '28px 28px 22px', boxShadow: 'var(--shadow-soft)' }}>
+          <div style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}`, borderRadius: 24, padding: 28 }}>
             <span className="pill" style={{ marginBottom: 12 }}><span className="dot" />{BRAND_NAME} · {theme.badge}</span>
             <h2 style={{ fontSize: 'clamp(28px, 3vw, 42px)', lineHeight: 1.1, marginBottom: 10 }}>{cfg.uniqueHeadline}</h2>
             <p style={{ color: 'var(--ink-soft)', lineHeight: 1.6, marginBottom: 14 }}>{cfg.uniqueBody}</p>
@@ -246,15 +246,15 @@ export function LpTemplate({ slug }) {
       </section>
       <section aria-labelledby={`${slug}-roteiro-operacional`}>
         <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 18 }}>
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 22, padding: 24, boxShadow: 'var(--shadow-soft)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20 }}>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
               <span className="pill"><span className="dot" />Roteiro específico</span>
               <h2 id={`${slug}-roteiro-operacional`} style={{ fontSize: 'clamp(24px, 2.4vw, 34px)', lineHeight: 1.12, margin: '14px 0 12px' }}>Como aplicar neste cenário</h2>
               <ol style={{ margin: 0, paddingLeft: 20, color: 'var(--ink)', lineHeight: 1.7 }}>
                 {cfg.howTo.map((step) => <li key={step}>{step}</li>)}
               </ol>
             </div>
-            <div style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}`, borderRadius: 22, padding: 24, boxShadow: 'var(--shadow-soft)' }}>
+            <div style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}`, borderRadius: 24, padding: 28 }}>
               <span className="pill"><span className="dot" />Critérios de qualidade</span>
               <h2 style={{ fontSize: 'clamp(24px, 2.4vw, 34px)', lineHeight: 1.12, margin: '14px 0 12px' }}>O que validar antes de escalar</h2>
               <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.7 }}>
@@ -266,7 +266,7 @@ export function LpTemplate({ slug }) {
       </section>
       <section aria-labelledby={`${slug}-cluster-seo`}>
         <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: '26px 28px', boxShadow: 'var(--shadow-soft)' }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
             <span className="pill"><span className="dot" />Hub & próximos passos</span>
             <h2 id={`${slug}-cluster-seo`} style={{ fontSize: 'clamp(24px, 2.6vw, 36px)', lineHeight: 1.12, margin: '14px 0 12px' }}>Continue pelo cluster certo</h2>
             <p style={{ color: 'var(--ink-soft)', lineHeight: 1.65, marginBottom: 16 }}>
@@ -289,7 +289,7 @@ export function LpTemplate({ slug }) {
       </section>
       <section aria-labelledby={`${slug}-faq-especifica`}>
         <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: '28px 28px 22px', boxShadow: 'var(--shadow-soft)' }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
             <span className="pill"><span className="dot" />FAQ contextual</span>
             <h2 id={`${slug}-faq-especifica`} style={{ fontSize: 'clamp(24px, 2.6vw, 36px)', lineHeight: 1.12, margin: '14px 0 16px' }}>Perguntas específicas sobre {cfg.title.replace(' | BOTinho', '')}</h2>
             <div style={{ display: 'grid', gap: 12 }}>
