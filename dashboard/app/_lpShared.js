@@ -329,6 +329,16 @@ export function LpTemplate({ slug }) {
                   {route.label}
                 </Link>
               ))}
+              {journeyLinks.map((link) => (
+                <Link key={link.href} href={link.href} data-seo-cta="lp-journey-link" className="btn btn-ghost" style={{ textDecoration: 'none' }}>
+                  {link.label}
+                </Link>
+              ))}
+              {conversionLinks.map((link) => (
+                <Link key={link.href} href={link.href} data-seo-cta="lp-conversion-link" className="btn btn-accent" style={{ textDecoration: 'none' }}>
+                  {link.label}
+                </Link>
+              ))}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
               {journeyLinks.map((link) => (
