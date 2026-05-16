@@ -5,6 +5,7 @@ import Footer, { FinalCTA } from '@/components/landing/Footer'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { getHubSeoRoute, getSeoRoutesByCluster } from '@/lib/seo-registry.mjs'
 import { getSiteUrl } from '@/lib/site-url'
+import { buildOgImageUrl } from '@/lib/seo-og'
 
 const HUB_CONTENT = {
   'espelhar-grupos-whatsapp': {
@@ -35,16 +36,25 @@ export function getSeoHubMetadata(hubSlug) {
   const route = getHubSeoRoute(`/${hubSlug}`)
   if (!route) return {}
 
+  const ogImage = buildOgImageUrl({ slug: hubSlug, cluster: route.cluster, template: 'seo-hub' })
+
   return {
     title: route.title,
     description: route.description,
     alternates: { canonical: route.path },
     openGraph: {
+      images: [{ url: ogImage, width: 1200, height: 630, alt: route.title }],
       title: route.title,
       description: route.description,
       url: `${getSiteUrl()}${route.path}`,
       type: 'website',
       locale: 'pt_BR',
+    },
+    twitter: {
+      card: 'summary',
+      title: route.title,
+      description: route.description,
+      images: [ogImage],
     },
   }
 }

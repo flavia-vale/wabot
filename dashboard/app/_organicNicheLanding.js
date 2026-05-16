@@ -4,6 +4,7 @@ import { Hero } from '@/components/landing/Hero'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { getSiteUrl } from '@/lib/site-url'
+import { buildOgImageUrl } from '@/lib/seo-og'
 
 const pages = {
   'bot-ofertas-restaurantes-whatsapp': {
@@ -102,6 +103,7 @@ export function getOrganicNicheMetadata(key) {
     description: page.description,
     alternates: { canonical: page.slug },
     openGraph: {
+      images: [{ url: buildOgImageUrl({ slug: page.slug.replace(/^\//, ''), cluster: 'nichos', template: 'organic-niche' }), width: 1200, height: 630, alt: page.title }],
       title: page.title,
       description: page.description,
       url: `${siteUrl}${page.slug}`,
@@ -111,6 +113,7 @@ export function getOrganicNicheMetadata(key) {
     },
     twitter: {
       card: 'summary',
+      images: [buildOgImageUrl({ slug: page.slug.replace(/^\//, ''), cluster: 'nichos', template: 'organic-niche' })],
       title: page.title,
       description: page.description,
     },
