@@ -61,7 +61,16 @@ export default function RootLayout({ children }) {
   const jsonLd = buildGlobalJsonLd();
   return (
     <html lang="pt-br">
-      <body style={{ background: '#EEF6F2' }}><ToastProvider>{children}<ConversionPrompt /></ToastProvider></body>
+      <body style={{ background: '#EEF6F2' }}>
+        {jsonLd.map((schema) => (
+          <script
+            key={`global-schema-${schema['@type']}`}
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+          />
+        ))}
+        <ToastProvider>{children}<ConversionPrompt /></ToastProvider>
+      </body>
     </html>
   );
 }
