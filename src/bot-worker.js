@@ -801,11 +801,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         msg.message?.imageMessage?.caption ||
         msg.message?.videoMessage?.caption || ''
 
-      if (!text) {
-        await recordSkippedMessage({ reason: 'skip:no_text' })
-        return
-      }
-      if (text.length > MAX_INCOMING_MESSAGE_CHARS) {
+      if (text && text.length > MAX_INCOMING_MESSAGE_CHARS) {
         logger.warn({ msgId: msg.key.id, chars: text.length, limit: MAX_INCOMING_MESSAGE_CHARS }, 'Mensagem grande demais — processamento ignorado para preservar latência')
         await recordSkippedMessage({ reason: 'skip:text_too_large' })
         return
@@ -822,53 +818,32 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }
       }
 
-      const sanitizedText = sanitizeInviteLinks(text)
-      if (!sanitizedText) {
-        await recordSkippedMessage({ reason: 'skip:empty_after_sanitize' })
-        return
-      }
+      const sanitizedText = text ? sanitizeInviteLinks(text) : ''
+      if (text && !sanitizedText) return
 
       const links = detectLinks(sanitizedText)
-      if (!links.length) {
-        if (ALLOW_TEXT_WITHOUT_LINKS) {
-          const baseDestinations = monitorGroup?.targetPostJids?.length ? monitorGroup.targetPostJids : cfg.groups.post
-          const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
-          for (const destJid of destinations) {
-            const log = await db.messageLog.create({
-              data: {
-                userId,
-                platform: 'plain_text',
-                sourceGroup: jid,
-                destGroup: destJid,
-                originalUrl: '',
-                convertedUrl: '',
-                messageText: sanitizeMessageForLog(sanitizedText),
-                status: 'queued',
-              },
-            })
-            const accepted = await enqueueSendJob({
-              type: 'plain_text',
-              logId: log.id,
-              destJid,
-              platforms: 'plain_text',
-              plan: cfg.plan,
-              delayMs: buildSmartDelayMs(cfg.botConfig),
-              typingDelayMs: calculateTypingDelayMs({ text: sanitizedText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
-              buildPayload: async () => ({ text: sanitizedText }),
-              send: async ({ sock: sendSock, payload }) => {
-                await sendSock.sendMessage(destJid, payload)
-              },
-            })
-            if (!accepted) {
-              await db.messageLog.update({
-                where: { id: log.id },
-                data: { status: 'error', errorMsg: 'Fila interna de envios cheia ou worker encerrando', sentAt: new Date() },
-              }).catch(() => {})
-            }
-          }
-          return
-        }
-        await recordSkippedMessage({ reason: 'skip:no_link_detected' })
+      const innerMessage = extractMessageContent(msg.message)
+      const messageKind = detectMessageKind(innerMessage, sanitizedText)
+      const policy = normalizeForwardingPolicy(monitorGroup)
+      const canForwardCurrentMessage = shouldForwardMessage({
+        hasLinks: links.length > 0,
+        messageKind,
+        policy,
+      })
+      if (!canForwardCurrentMessage) {
+        await db.messageLog.create({
+          data: {
+            userId,
+            platform: links[0]?.platform || 'nolink',
+            sourceGroup: jid,
+            destGroup: 'skipped',
+            originalUrl: links[0]?.url || '',
+            convertedUrl: '',
+            messageText: sanitizeMessageForLog(sanitizedText || text || ''),
+            status: 'error',
+            errorMsg: `skip:policy:${policy.forwardMode}:${policy.noLinkScope}:${messageKind}`,
+          },
+        }).catch(() => {})
         return
       }
 
@@ -1077,7 +1052,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         dedup.links[key] = Date.now()
         scheduleDedupSave(dedup)
 
-        const platforms = conversions.map(c => c.platform).join('+')
+        const platforms = conversions.length ? conversions.map(c => c.platform).join('+') : 'nolink'
         const logData = {
           userId,
           platform: platforms,
@@ -1140,7 +1115,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             })
           },
           send: async ({ sock: sendSock, payload }) => {
-            if (shouldUseRelayPath({ destJid, hasOriginal: !!original })) {
+            if (original) {
               const replayProto = { ...original.proto }
               if (original.type === 'imageMessage' || original.type === 'videoMessage') {
                 replayProto.caption = finalText
