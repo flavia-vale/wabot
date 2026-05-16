@@ -11,6 +11,8 @@ import { getSiteUrl } from '@/lib/site-url'
 import { BRAND_NAME, BRAND_SHORT_NAME, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION } from '@/lib/marketing-content'
 import { getHubSeoRoute, getProgrammaticSeoRoute, getRelatedProgrammaticSeoRoutes } from '@/lib/seo-registry.mjs'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
+import { buildOgImageUrl } from '@/lib/seo-og'
+import { getProofAssetsForCluster } from '@/lib/proof-assets'
 
 export const LP_CONFIG = {
   'espelhar-grupos-whatsapp-sao-paulo': { title: 'Espelhar grupos WhatsApp em São Paulo | BOTinho', description: 'Automatize sua rotina de ofertas em grupos de São Paulo com o BOTinho e reduza trabalho manual.', uniqueHeadline: 'Operação em São Paulo: volume alto, rotina estável.', uniqueBody: 'Em SP, a disputa por atenção é maior e os grupos giram rápido. O BOTinho ajuda você a manter constância sem perder tempo no copia-e-cola.', uniqueBullets: ['Padronize campanhas em múltiplos bairros e públicos.', 'Evite atrasos nas postagens de ofertas relâmpago.', 'Mantenha frequência diária mesmo em horários de pico.'], faq: [{ q: 'Quanto tempo para ativar em São Paulo?', a: 'Normalmente no mesmo dia: conexão por QR Code, escolha dos grupos e regras básicas.' }, { q: 'Posso separar grupos por bairro?', a: 'Sim. Você pode organizar fontes e destinos por região e tipo de público.' }], howTo: ['Conecte seu WhatsApp de operação e valide os grupos de origem.', 'Defina os grupos de destino e o intervalo ideal para o público paulista.', 'Ative regras por horário para manter consistência nos picos de tráfego.'] },
@@ -160,6 +162,9 @@ export function getLpMetadata(slug) {
 
   const siteUrl = getSiteUrl()
   const canonicalUrl = `${siteUrl}/${slug}`
+  const seoRoute = getProgrammaticSeoRoute(slug)
+
+  const ogImage = buildOgImageUrl({ slug, cluster: seoRoute?.cluster ?? 'programmatic', template: seoRoute?.template ?? 'programmatic-lp' })
 
   return {
     title: cfg.title,
@@ -172,11 +177,13 @@ export function getLpMetadata(slug) {
       siteName: BRAND_NAME,
       locale: 'pt_BR',
       type: 'website',
+      images: [{ url: ogImage, width: 1200, height: 630, alt: cfg.title }],
     },
     twitter: {
       card: 'summary',
       title: cfg.title,
       description: cfg.description,
+      images: [ogImage],
     },
   }
 }
@@ -215,6 +222,31 @@ export function LpTemplate({ slug }) {
       description: `${plan.desc} Período: ${plan.period}.`,
     })),
   }
+
+  const evidenceCard = {
+    title: `Sinal de evidência: ${cfg.title.replace(' | BOTinho', '')}`,
+    description: `Este cenário usa critérios verificáveis (origem, destino, frequência e revisão humana) para evitar automação sem contexto.`,
+    points: [
+      `Checklist de validação antes de escalar campanhas.`,
+      `Registro de ajustes por logs e rotina semanal.`,
+      `Segmentação explícita por cluster: ${seoRoute?.cluster ?? 'operacional'}.`,
+    ],
+  }
+
+  const journeyLinks = [
+    { href: '/botinho-vs-planilha-manual', label: 'Comparar com planilha manual' },
+    { href: '/metodologia-uso-responsavel-whatsapp', label: 'Ver metodologia de uso responsável' },
+    { href: '/melhores-bots-para-afiliados-whatsapp', label: 'Critérios para avaliar bots' },
+  ]
+
+  const proofAssets = getProofAssetsForCluster(seoRoute?.cluster)
+
+  const conversionLinks = [
+    { href: '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp', label: 'Checklist de divulgação' },
+    { href: '/ferramentas/calculadora-tempo-grupos-whatsapp', label: 'Calculadora de tempo operacional' },
+    { href: '/login?mode=register', label: 'Entrar na lista VIP' },
+  ]
+
   const breadcrumbJsonLd = { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'Início', item: getSiteUrl() }, { '@type': 'ListItem', position: 2, name: cfg.title.replace(' | BOTinho', ''), item: `${getSiteUrl()}/${slug}` }] }
 
   return (
@@ -264,6 +296,20 @@ export function LpTemplate({ slug }) {
           </div>
         </div>
       </section>
+
+      <section aria-labelledby={`${slug}-evidencia-unica`}>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ background: 'color-mix(in oklab, var(--accent) 14%, var(--surface))', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+            <span className="pill"><span className="dot" />Bloco de evidência</span>
+            <h2 id={`${slug}-evidencia-unica`} style={{ fontSize: 'clamp(24px, 2.4vw, 34px)', lineHeight: 1.12, margin: '14px 0 10px' }}>{evidenceCard.title}</h2>
+            <p style={{ color: 'var(--ink-soft)', lineHeight: 1.65, marginBottom: 12 }}>{evidenceCard.description}</p>
+            <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.7 }}>
+              {evidenceCard.points.map((point) => <li key={point}>{point}</li>)}
+            </ul>
+          </div>
+        </div>
+      </section>
+
       <section aria-labelledby={`${slug}-cluster-seo`}>
         <div className="wrap" style={{ marginTop: 28 }}>
           <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
@@ -272,7 +318,7 @@ export function LpTemplate({ slug }) {
             <p style={{ color: 'var(--ink-soft)', lineHeight: 1.65, marginBottom: 16 }}>
               Use a página hub para comparar cenários parecidos e navegue para páginas relacionadas sem depender de URLs soltas.
             </p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'grid', gap: 16 }}><div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
               {hubRoute && (
                 <Link href={hubRoute.path} data-seo-cta="lp-parent-hub" className="btn btn-ghost" style={{ textDecoration: 'none' }}>
                   Ver hub: {hubRoute.label}
@@ -284,9 +330,50 @@ export function LpTemplate({ slug }) {
                 </Link>
               ))}
             </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+              {journeyLinks.map((link) => (
+                <Link key={link.href} href={link.href} data-seo-cta="lp-journey-link" className="btn btn-ghost" style={{ textDecoration: 'none' }}>
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+              {conversionLinks.map((link) => (
+                <Link key={link.href} href={link.href} data-seo-cta="lp-conversion-link" className="btn btn-accent" style={{ textDecoration: 'none' }}>
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+            </div>
           </div>
         </div>
       </section>
+
+      <section aria-labelledby={`${slug}-proof-library`}>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+            <span className="pill"><span className="dot" />Biblioteca de provas</span>
+            <h2 id={`${slug}-proof-library`} style={{ fontSize: 'clamp(24px, 2.4vw, 34px)', lineHeight: 1.12, margin: '14px 0 16px' }}>Materiais de evidência reutilizáveis</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
+              {proofAssets.map((asset) => (
+                <article key={asset.id} style={{ border: '1px solid var(--line)', borderRadius: 16, padding: 20, background: 'color-mix(in oklab, var(--surface) 92%, white)' }}>
+                  <p className="mono" style={{ fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--accent-strong)', marginBottom: 8 }}>{asset.evidenceType}</p>
+                  <h3 style={{ fontSize: 18, lineHeight: 1.25, marginBottom: 10 }}>{asset.title}</h3>
+                  <p style={{ color: 'var(--ink-soft)', lineHeight: 1.6, marginBottom: 12 }}>{asset.summary}</p>
+                  <ul style={{ margin: 0, paddingLeft: 18 }}>
+                    {asset.links.map((link) => (
+                      <li key={link.href}>
+                        <Link href={link.href} data-seo-cta="lp-proof-asset" style={{ textDecoration: 'underline', textUnderlineOffset: 4 }}>{link.label}</Link>
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section aria-labelledby={`${slug}-faq-especifica`}>
         <div className="wrap" style={{ marginTop: 28 }}>
           <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
@@ -299,6 +386,21 @@ export function LpTemplate({ slug }) {
                   <p style={{ marginTop: 10, color: 'var(--ink-soft)', lineHeight: 1.65 }}>{item.a}</p>
                 </details>
               ))}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+              {journeyLinks.map((link) => (
+                <Link key={link.href} href={link.href} data-seo-cta="lp-journey-link" className="btn btn-ghost" style={{ textDecoration: 'none' }}>
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+              {conversionLinks.map((link) => (
+                <Link key={link.href} href={link.href} data-seo-cta="lp-conversion-link" className="btn btn-accent" style={{ textDecoration: 'none' }}>
+                  {link.label}
+                </Link>
+              ))}
+            </div>
             </div>
           </div>
         </div>
