@@ -43,6 +43,7 @@ let pendingSock = null  // socket criado mas ainda não conectado (disponível p
 let shuttingDown = false
 let sessionErrorTimestamps = []
 let sessionRecoveryLastAt = 0
+let sessionRecoveryInFlight = false
 
 let heartbeatTimer = null
 async function persistSessionPatch(data = {}) {
@@ -792,7 +793,11 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         msg.message?.imageMessage?.caption ||
         msg.message?.videoMessage?.caption || ''
 
-      if (text && text.length > MAX_INCOMING_MESSAGE_CHARS) {
+      if (!text) {
+        await recordSkippedMessage({ reason: 'skip:no_text' })
+        return
+      }
+      if (text.length > MAX_INCOMING_MESSAGE_CHARS) {
         logger.warn({ msgId: msg.key.id, chars: text.length, limit: MAX_INCOMING_MESSAGE_CHARS }, 'Mensagem grande demais — processamento ignorado para preservar latência')
         await recordSkippedMessage({ reason: 'skip:text_too_large' })
         return
@@ -809,19 +814,17 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }
       }
 
-      const sanitizedText = text ? sanitizeInviteLinks(text) : ''
-      if (text && !sanitizedText) return
+      const sanitizedText = sanitizeInviteLinks(text)
+      if (!sanitizedText) {
+        await recordSkippedMessage({ reason: 'skip:empty_after_sanitize' })
+        return
+      }
 
       const links = detectLinks(sanitizedText)
-      const innerMessage = extractMessageContent(msg.message)
-      const messageKind = detectMessageKind(innerMessage, sanitizedText)
-      const policy = normalizeForwardingPolicy(monitorGroup)
-      const canForwardCurrentMessage = shouldForwardMessage({
-        hasLinks: links.length > 0,
-        messageKind,
-        policy,
-      })
-      if (!canForwardCurrentMessage) return
+      if (!links.length) {
+        await recordSkippedMessage({ reason: 'skip:no_link_detected' })
+        return
+      }
 
       // Filtro por plataforma (override por grupo monitorado quando preenchido)
       const platformCsv = monitorGroup?.allowedPlatforms?.trim() || cfg.botConfig.platforms
@@ -1183,6 +1186,24 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
     }
   })
 
+  async function restartSessionAfterCryptoSurge() {
+    if (sessionRecoveryInFlight || shuttingDown) return
+    sessionRecoveryInFlight = true
+    try {
+      const currentSock = activeSock || pendingSock
+      if (currentSock?.end) currentSock.end(new Error('restart_after_crypto_surge'))
+    } catch (err) {
+      logger.warn({ err: err?.message }, 'Falha ao encerrar sessão antes da recuperação automática')
+    }
+    activeSock = null
+    pendingSock = null
+    setTimeout(() => {
+      startBot()
+        .catch(error => logger.error({ err: error?.message }, 'Falha ao reiniciar sessão após surto de erro criptográfico'))
+        .finally(() => { sessionRecoveryInFlight = false })
+    }, 1_000)
+  }
+
   function registerSessionError(err) {
     const raw = String(err?.message || err || '')
     if (!/Bad MAC|MessageCounterError|Key used already or never filled/i.test(raw)) return
@@ -1199,9 +1220,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       { count: sessionErrorTimestamps.length, windowMs: SESSION_ERROR_WINDOW_MS, cooldownMs: SESSION_RECOVERY_COOLDOWN_MS },
       'Surto de erros criptográficos detectado; reiniciando sessão WA automaticamente'
     )
-    setTimeout(() => {
-      startBot().catch(error => logger.error({ err: error?.message }, 'Falha ao reiniciar sessão após surto de erro criptográfico'))
-    }, 1_000)
+    restartSessionAfterCryptoSurge().catch(error => logger.error({ err: error?.message }, 'Erro na rotina de recuperação automática'))
   }
   sock.ev.on('connection.update', ({ lastDisconnect }) => registerSessionError(lastDisconnect?.error))
 }
