@@ -26,17 +26,25 @@ import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } fro
 import { isMirrorableJid, detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
+import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
+import { detectMessageKind, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
 
 const userId = process.env.BOT_USER_ID
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
 const OWNER_INSTANCE = process.env.NODE_APP_INSTANCE ?? '0'
+const SESSION_ERROR_WINDOW_MS = Math.max(30_000, Number(process.env.WA_SESSION_ERROR_WINDOW_MS || 120_000))
+const SESSION_ERROR_THRESHOLD = Math.max(5, Number(process.env.WA_SESSION_ERROR_THRESHOLD || 30))
+const SESSION_RECOVERY_COOLDOWN_MS = Math.max(60_000, Number(process.env.WA_SESSION_RECOVERY_COOLDOWN_MS || 300_000))
 
 let activeSock = null
 let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
 let shuttingDown = false
+let sessionErrorTimestamps = []
+let sessionRecoveryLastAt = 0
+let sessionRecoveryInFlight = false
 
 let heartbeatTimer = null
 async function persistSessionPatch(data = {}) {
@@ -224,6 +232,8 @@ async function loadConfig() {
       fallbackToOriginal: g.fallbackToOriginal,
       blockedKeywords: g.blockedKeywords,
       allowedPlatforms: g.allowedPlatforms,
+      forwardMode: g.forwardMode,
+      noLinkScope: g.noLinkScope,
       targetPostJids: targetsByMonitor.get(g.id) ?? [],
     })),
     monitorJids: user.groups.filter(g => g.role === 'monitor').map(g => g.waJid),
@@ -581,6 +591,12 @@ async function processSendJob(job) {
         }
         return
       } catch (err) {
+        // Canal sem permissão: aborta retries para não queimar SEND_MAX_ATTEMPTS
+        // em destino permanentemente bloqueado (e evitar rate-limit/ban).
+        if (isChannelDestination(job.destJid) && isChannelForbiddenError(err)) {
+          logger.warn({ destJid: job.destJid, err: err.message, attempt, type: job.type }, 'Canal-destino sem permissão (forbidden) — abortando retries')
+          throw err
+        }
         if (attempt < SEND_MAX_ATTEMPTS && !shuttingDown) {
           const retryDelayMs = getRetryDelayMs(attempt)
           sendMetrics.retryTotal++
@@ -746,20 +762,51 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       const cfg = await getConfig()
       logger.info({ jid, monitorGroups: cfg.groups.monitor, feedGlobal: cfg.botConfig.feedGlobal }, 'mensagem recebida')
       const monitorGroup = cfg.groups.monitor.find(m => m.waJid === jid)
-      if (!cfg.botConfig.feedGlobal && !monitorGroup) return
+      const shouldTrackSkipped = Boolean(monitorGroup) || (cfg.botConfig.feedGlobal && isMirrorableJid(jid))
+      async function recordSkippedMessage({ reason, platform = 'unknown', originalUrl = '', convertedUrl = '' }) {
+        if (!shouldTrackSkipped) return
+        const messageText =
+          msg.message?.conversation ||
+          msg.message?.extendedTextMessage?.text ||
+          msg.message?.imageMessage?.caption || ''
+        await db.messageLog.create({
+          data: {
+            userId,
+            platform,
+            sourceGroup: jid || 'unknown',
+            destGroup: 'skipped',
+            originalUrl,
+            convertedUrl,
+            messageText: sanitizeMessageForLog(messageText || reason),
+            status: 'skipped',
+            errorMsg: reason,
+          },
+        }).catch(() => {})
+      }
+
+      if (!cfg.botConfig.feedGlobal && !monitorGroup) {
+        return
+      }
       // feedGlobal aceita mensagens de qualquer JID espelhável (grupo ou canal).
       // O pipeline downstream é agnóstico ao tipo; o tratamento específico
       // de envio para canal-destino vem na Fase 3.
-      if (cfg.botConfig.feedGlobal && !isMirrorableJid(jid)) return
+      if (cfg.botConfig.feedGlobal && !isMirrorableJid(jid)) {
+        return
+      }
 
       const text =
         msg.message?.conversation ||
         msg.message?.extendedTextMessage?.text ||
-        msg.message?.imageMessage?.caption || ''
+        msg.message?.imageMessage?.caption ||
+        msg.message?.videoMessage?.caption || ''
 
-      if (!text) return
+      if (!text) {
+        await recordSkippedMessage({ reason: 'skip:no_text' })
+        return
+      }
       if (text.length > MAX_INCOMING_MESSAGE_CHARS) {
         logger.warn({ msgId: msg.key.id, chars: text.length, limit: MAX_INCOMING_MESSAGE_CHARS }, 'Mensagem grande demais — processamento ignorado para preservar latência')
+        await recordSkippedMessage({ reason: 'skip:text_too_large' })
         return
       }
 
@@ -769,15 +816,22 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const blocked = blockedKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean)
         const lower = text.toLowerCase()
         if (blocked.some(kw => lower.includes(kw))) {
+          await recordSkippedMessage({ reason: 'skip:blocked_keyword' })
           logger.info({ blocked }, 'Mensagem bloqueada por keyword'); return
         }
       }
 
       const sanitizedText = sanitizeInviteLinks(text)
-      if (!sanitizedText) return
+      if (!sanitizedText) {
+        await recordSkippedMessage({ reason: 'skip:empty_after_sanitize' })
+        return
+      }
 
       const links = detectLinks(sanitizedText)
-      if (!links.length) return
+      if (!links.length) {
+        await recordSkippedMessage({ reason: 'skip:no_link_detected' })
+        return
+      }
 
       // Filtro por plataforma (override por grupo monitorado quando preenchido)
       const platformCsv = monitorGroup?.allowedPlatforms?.trim() || cfg.botConfig.platforms
@@ -795,6 +849,12 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         if (quoted?.imageMessage) return { type: 'imageMessage', proto: quoted.imageMessage }
         if (inner?.videoMessage) return { type: 'videoMessage', proto: inner.videoMessage }
         if (quoted?.videoMessage) return { type: 'videoMessage', proto: quoted.videoMessage }
+        if (inner?.audioMessage) return { type: 'audioMessage', proto: inner.audioMessage }
+        if (quoted?.audioMessage) return { type: 'audioMessage', proto: quoted.audioMessage }
+        if (inner?.documentMessage) return { type: 'documentMessage', proto: inner.documentMessage }
+        if (quoted?.documentMessage) return { type: 'documentMessage', proto: quoted.documentMessage }
+        if (inner?.stickerMessage) return { type: 'stickerMessage', proto: inner.stickerMessage }
+        if (quoted?.stickerMessage) return { type: 'stickerMessage', proto: quoted.stickerMessage }
         return null
       }
 
@@ -938,22 +998,41 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }
       }
 
-      if (!conversions.length) return
-
-      // Processa a mensagem em ordem defensiva: sanitização já aplicada, conversão e branding.
-      const finalText = applyConversionsAndBranding(sanitizedText, conversions, cfg.botConfig.brandingGroupLink, cfg.botConfig.brandingCtaText)
-      if (!finalText) {
+      let finalText = sanitizedText
+      if (links.length) {
+      if (!conversions.length) {
+        await db.messageLog.create({
+          data: {
+            userId,
+            platform: links[0]?.platform || 'unknown',
+            sourceGroup: jid,
+            destGroup: 'skipped',
+            originalUrl: links[0]?.url || '',
+            convertedUrl: '',
+            messageText: sanitizeMessageForLog(sanitizedText || ''),
+            status: 'error',
+            errorMsg: 'skip:no_valid_conversions',
+          },
+        }).catch(() => {})
+        return
+      }
+        finalText = applyConversionsAndBranding(sanitizedText, conversions, cfg.botConfig.brandingGroupLink, cfg.botConfig.brandingCtaText)
+      }
+      const originalMedia = getOriginalMediaMessage()
+      if (!finalText && !originalMedia) {
         logger.warn({ msgId: msg.key.id }, 'Mensagem vazia após processamento — envio ignorado')
         return
       }
 
-      const primary = conversions[0]
+      const primary = conversions[0] ?? { platform: 'nolink', url: '', converted: '' }
 
       const baseDestinations = monitorGroup?.targetPostJids?.length ? monitorGroup.targetPostJids : cfg.groups.post
       const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
       for (const destJid of destinations) {
-        const key = `${destJid}:${primary.url}`
+        const dedupSubject = primary.url || `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
+        const key = `${destJid}:${dedupSubject}`
         if (dedup.links[key] && Date.now() - dedup.links[key] < dedupeWindowMs) {
+          await recordSkippedMessage({ reason: 'skip:dedup_recent_link', platform: primary.platform, originalUrl: primary.url, convertedUrl: primary.converted })
           logger.info({ destJid }, 'Duplicata ignorada'); continue
         }
         dedup.links[key] = Date.now()
@@ -978,7 +1057,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // preview automático do WhatsApp em vez de imagem pixelada.
         const imageMode = monitorGroup?.imageMode
         const wantImage = imageMode !== 'none'
-        const original = wantImage ? getOriginalMediaMessage() : null
+        const original = wantImage ? originalMedia : null
         let useLinkPreview = false  // será setado a true se jpegThumbnail for descartado
 
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
@@ -996,7 +1075,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           delayMs: buildSmartDelayMs(cfg.botConfig),
           typingDelayMs: calculateTypingDelayMs({ text: finalText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           buildPayload: async () => {
-            if (original) return null
+            // Para canal-destino, nunca usar relay (sendMessage com payload limpo).
+            // Para grupo-destino com mídia original, deixar relayMessage cuidar (return null).
+            if (shouldUseRelayPath({ destJid, hasOriginal: !!original })) return null
 
             let image = null
             if (wantImage) {
@@ -1020,18 +1101,35 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             })
           },
           send: async ({ sock: sendSock, payload }) => {
-            if (original) {
-              const replayProto = { ...original.proto, caption: finalText }
+            if (shouldUseRelayPath({ destJid, hasOriginal: !!original })) {
+              const replayProto = { ...original.proto }
+              if (original.type === 'imageMessage' || original.type === 'videoMessage') {
+                replayProto.caption = finalText
+              }
               await sendSock.relayMessage(destJid, { [original.type]: replayProto }, {})
               sentVia = `relay:${original.type}`
               return
             }
 
+            // Canal-destino: remove campos não-suportados (quoted/contextInfo) de
+            // todas as rotas. Para grupos, sanitização é no-op (helper só remove
+            // se existir). Sem mutação do payload original.
+            const channelDest = isChannelDestination(destJid)
+            // Sinal de contrato: se chegou aqui um JID que não é grupo nem canal,
+            // o filtro upstream isMirrorableJid não está cobrindo um novo kind —
+            // queremos saber em prod, sem matar o envio (sendMessage tenta como fallback).
+            if (detectKind(destJid) === null) {
+              logger.warn({ destJid }, 'JID kind inesperado chegou ao send path; usando sendMessage como fallback')
+            }
             const routes = [
-              { name: payload._route, body: payload.primary, sendOptions: payload.primarySendOptions },
+              {
+                name: payload._route,
+                body: channelDest ? stripChannelUnsafeFields(payload.primary) : payload.primary,
+                sendOptions: payload.primarySendOptions,
+              },
               ...(payload.fallbacks || []).map((body, idx) => ({
                 name: body.image ? 'image' : 'text',
-                body,
+                body: channelDest ? stripChannelUnsafeFields(body) : body,
                 sendOptions: payload.fallbackSendOptions?.[idx],
                 fallbackIdx: idx,
               })),
@@ -1044,7 +1142,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
                 return
               } catch (err) {
                 lastErr = err
-                logger.warn({ err: err.message, destJid, route: route.name, fallbackIdx: route.fallbackIdx }, 'Envio falhou — tentando próximo fallback')
+                logger.warn({ err: err.message, destJid, route: route.name, fallbackIdx: route.fallbackIdx, channel: channelDest }, 'Envio falhou — tentando próximo fallback')
               }
             }
             throw lastErr || new Error('Todos os fallbacks de envio falharam')
@@ -1095,6 +1193,36 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         label: `msg:${msgId}`,
         orderKey: msg.key.remoteJid,
         onError: async (err) => {
+          const currentCfg = await getConfig().catch(() => null)
+          const currentJid = msg.key.remoteJid
+          const isMonitored = Boolean(currentCfg?.groups?.monitor?.find?.(m => m.waJid === currentJid))
+          const isFeedGlobalMirrorable = Boolean(currentCfg?.botConfig?.feedGlobal && isMirrorableJid(currentJid))
+          if (!isMonitored && !isFeedGlobalMirrorable) {
+            logger.error({ msgId, dedupKey, err: err.message }, 'Mensagem descartada fora do escopo monitorado — sem log em painel')
+            return
+          }
+          const raw = String(err?.message || '')
+          const reason = /Bad MAC|MessageCounterError|Key used already or never filled/i.test(raw)
+            ? `skip:decrypt_failed:${raw.slice(0, 80)}`
+            : `skip:incoming_error:${raw.slice(0, 80)}`
+          await db.messageLog.create({
+            data: {
+              userId,
+              platform: 'unknown',
+              sourceGroup: msg.key.remoteJid || 'unknown',
+              destGroup: 'skipped',
+              originalUrl: '',
+              convertedUrl: '',
+              messageText: sanitizeMessageForLog(
+                msg.message?.conversation ||
+                msg.message?.extendedTextMessage?.text ||
+                msg.message?.imageMessage?.caption ||
+                'incoming_error'
+              ),
+              status: 'skipped',
+              errorMsg: reason,
+            },
+          }).catch(() => {})
           logger.error({ msgId, dedupKey, err: err.message }, 'Mensagem descartada após erro/timeout — fila continua')
         },
       })
@@ -1103,6 +1231,44 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       }
     }
   })
+
+  async function restartSessionAfterCryptoSurge() {
+    if (sessionRecoveryInFlight || shuttingDown) return
+    sessionRecoveryInFlight = true
+    try {
+      const currentSock = activeSock || pendingSock
+      if (currentSock?.end) currentSock.end(new Error('restart_after_crypto_surge'))
+    } catch (err) {
+      logger.warn({ err: err?.message }, 'Falha ao encerrar sessão antes da recuperação automática')
+    }
+    activeSock = null
+    pendingSock = null
+    setTimeout(() => {
+      startBot()
+        .catch(error => logger.error({ err: error?.message }, 'Falha ao reiniciar sessão após surto de erro criptográfico'))
+        .finally(() => { sessionRecoveryInFlight = false })
+    }, 1_000)
+  }
+
+  function registerSessionError(err) {
+    const raw = String(err?.message || err || '')
+    if (!/Bad MAC|MessageCounterError|Key used already or never filled/i.test(raw)) return
+    const now = Date.now()
+    sessionErrorTimestamps.push(now)
+    sessionErrorTimestamps = sessionErrorTimestamps.filter(ts => now - ts <= SESSION_ERROR_WINDOW_MS)
+    const shouldRecover =
+      sessionErrorTimestamps.length >= SESSION_ERROR_THRESHOLD &&
+      now - sessionRecoveryLastAt >= SESSION_RECOVERY_COOLDOWN_MS &&
+      !shuttingDown
+    if (!shouldRecover) return
+    sessionRecoveryLastAt = now
+    logger.error(
+      { count: sessionErrorTimestamps.length, windowMs: SESSION_ERROR_WINDOW_MS, cooldownMs: SESSION_RECOVERY_COOLDOWN_MS },
+      'Surto de erros criptográficos detectado; reiniciando sessão WA automaticamente'
+    )
+    restartSessionAfterCryptoSurge().catch(error => logger.error({ err: error?.message }, 'Erro na rotina de recuperação automática'))
+  }
+  sock.ev.on('connection.update', ({ lastDisconnect }) => registerSessionError(lastDisconnect?.error))
 }
 
 
