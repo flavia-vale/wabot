@@ -23,6 +23,7 @@ import { trackAnalyticsEventSafe } from './analytics.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } from './sendQueueBackend.js'
+import { isMirrorableJid } from './core/jid.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
@@ -718,7 +719,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       logger.info({ jid, monitorGroups: cfg.groups.monitor, feedGlobal: cfg.botConfig.feedGlobal }, 'mensagem recebida')
       const monitorGroup = cfg.groups.monitor.find(m => m.waJid === jid)
       if (!cfg.botConfig.feedGlobal && !monitorGroup) return
-      if (cfg.botConfig.feedGlobal && !String(jid).endsWith('@g.us')) return
+      if (cfg.botConfig.feedGlobal && !isMirrorableJid(jid)) return
 
       const text =
         msg.message?.conversation ||

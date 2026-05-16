@@ -1,6 +1,7 @@
 import db from '../../db.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { reloadConfig } from '../../manager.js'
+import { ensureJid, JID_KIND } from '../../core/jid.js'
 
 function parseBoolean(value) {
   if (typeof value === 'boolean') return value
@@ -9,10 +10,7 @@ function parseBoolean(value) {
 }
 
 function normalizeGroupJid(rawJid) {
-  const jid = String(rawJid ?? '').trim()
-  if (!jid) return null
-  if (jid.includes('@')) return jid
-  return `${jid}@g.us`
+  return ensureJid(rawJid, JID_KIND.GROUP)
 }
 
 export async function groupsRoutes(app) {
