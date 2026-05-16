@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "validate:lp-schema": "node scripts/validate-lp-schema.mjs",
-    "guard:config-page": "node scripts/guard-config-page-regression.mjs"
+    "guard:config-page": "node scripts/guard-config-page-regression.mjs",
+    "validate:seo-consistency": "node scripts/validate-seo-consistency.mjs",
+    "validate:core-schema": "node scripts/validate-core-schema.mjs"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4",
