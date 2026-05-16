@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from './Icon';
 import { DEFAULT_LANDING_PLANS } from '@/lib/marketing-content';
+import { buildRegisterHref } from '@/lib/marketing-attribution';
 
 const s = {
   head: { textAlign: 'center', marginBottom: 56 },
@@ -103,7 +104,7 @@ export function Pricing() {
                 ))}
               </ul>
               <Link
-                href="/login?mode=register"
+                href={buildRegisterHref({ source: 'landing', campaign: 'home-pricing', content: `plan-${p.id}` })}
                 className="landing-pricing-cta"
                 style={{
                   display: 'block', textAlign: 'center', padding: '14px 22px', borderRadius: 999,

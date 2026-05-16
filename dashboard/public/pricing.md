@@ -25,7 +25,7 @@ BOTinho, from Espelha Grupos, uses a simple 30-day access model for validating a
 ## Basic
 
 - Plan ID: `basic`
-- Price: R$1 / 30 days
+- Price: R$39 / 30 days
 - Best for: using the core workflow with ads in the experience
 - Includes:
   - Supported link conversion workflow
@@ -41,7 +41,7 @@ BOTinho, from Espelha Grupos, uses a simple 30-day access model for validating a
 ## Pro
 
 - Plan ID: `pro`
-- Price: R$2 / 30 days
+- Price: R$69 / 30 days
 - Best for: using the same core workflow without ads in the experience
 - Includes:
   - Supported link conversion workflow

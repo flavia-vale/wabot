@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Icon } from './Icon';
+import { buildRegisterHref } from '@/lib/marketing-attribution';
 
 const s = {
   cta: {
@@ -44,10 +45,10 @@ export function FinalCTA() {
             </h2>
             <p style={s.sub}>Conecte o WhatsApp, valide poucos grupos primeiro e escale apenas rotinas permitidas, com revisão humana e cadência responsável.</p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }} className="landing-final-cta-actions">
-              <Link className="btn" href="/login?mode=register" style={{ background: 'var(--accent-2)', color: 'var(--ink)' }}>
+              <Link className="btn" href="/login?mode=register" data-seo-cta="final-cta-register" style={{ background: 'var(--accent-2)', color: 'var(--ink)' }}>
                 <Icon name="whatsapp" size={16} /> Conectar meu WhatsApp <Icon name="arrow" size={16} />
               </Link>
-              <Link className="btn" href="/suporte" style={{ background: 'transparent', color: 'var(--surface)', border: '1px solid rgba(255,255,255,0.2)' }}>
+              <Link className="btn" href="/suporte" data-seo-cta="final-cta-support" style={{ background: 'transparent', color: 'var(--surface)', border: '1px solid rgba(255,255,255,0.2)' }}>
                 Falar com suporte
               </Link>
             </div>
@@ -79,16 +80,16 @@ function Footer() {
           </div>
           <div>
             <div style={s.colTitle}>Empresa</div>
-            <a style={s.colLink} href="#">Sobre</a>
-            <a style={s.colLink} href="#">Blog</a>
-            <a style={s.colLink} href="#">Contato</a>
-            <a style={s.colLink} href="#">Afiliados (do bot)</a>
+            <Link style={s.colLink} href="/quem-somos">Sobre</Link>
+            <Link style={s.colLink} href="/conteudos">Blog</Link>
+            <Link style={s.colLink} href="/suporte">Contato</Link>
+            <Link style={s.colLink} href="/suporte">Afiliados (do bot)</Link>
           </div>
           <div>
             <div style={s.colTitle}>Legal</div>
-            <a style={s.colLink} href="#">Termos</a>
-            <a style={s.colLink} href="#">Privacidade</a>
-            <a style={s.colLink} href="#">LGPD</a>
+            <Link style={s.colLink} href="/termos">Termos</Link>
+            <Link style={s.colLink} href="/privacidade">Privacidade</Link>
+            <Link style={s.colLink} href="/privacidade">LGPD</Link>
           </div>
         </div>
         <div style={s.bottom} className="landing-footer-bottom">

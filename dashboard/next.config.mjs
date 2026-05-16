@@ -19,6 +19,37 @@ const nextConfig = {
       },
     ]
   },
+  async headers() {
+    const noIndexHeaders = [
+      {
+        key: 'X-Robots-Tag',
+        value: 'noindex, nofollow',
+      },
+    ]
+
+    return [
+      {
+        source: '/dashboard/:path*',
+        headers: noIndexHeaders,
+      },
+      {
+        source: '/admin/:path*',
+        headers: noIndexHeaders,
+      },
+      {
+        source: '/api/:path*',
+        headers: noIndexHeaders,
+      },
+      {
+        source: '/login',
+        headers: noIndexHeaders,
+      },
+      {
+        source: '/promo-vip-7dias',
+        headers: noIndexHeaders,
+      },
+    ]
+  },
 }
 
 export default nextConfig

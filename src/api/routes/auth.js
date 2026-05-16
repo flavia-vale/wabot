@@ -5,6 +5,8 @@ import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { normalizeEmail } from '../auth-utils.js'
 
 const loginAttempts = new Map()
+const STANDARD_TRIAL_DAYS = 30
+const PROMO_VIP_TRIAL_DAYS = 7
 
 function getLoginAttemptMaxEntries() {
   const value = Number(process.env.LOGIN_RATE_LIMIT_MAX_ENTRIES ?? 20000)
@@ -216,7 +218,22 @@ function publicUser(user) {
 
 export async function authRoutes(app) {
   app.post('/register', async (req, reply) => {
-    const { name: rawName, email: rawEmail, password: rawPassword, contactPhone: rawContactPhone, ref, source, coupon_code: couponCode } = req.body ?? {}
+    const {
+      name: rawName,
+      email: rawEmail,
+      password: rawPassword,
+      contactPhone: rawContactPhone,
+      ref,
+      source,
+      utm_source: utmSource,
+      utm_medium: utmMedium,
+      utm_campaign: utmCampaign,
+      utm_content: utmContent,
+      utm_term: utmTerm,
+      conversion_prompt_id: conversionPromptId,
+      conversion_prompt_variant: conversionPromptVariant,
+      coupon_code: couponCode,
+    } = req.body ?? {}
     const name = normalizeName(rawName)
     const email = normalizeEmail(rawEmail) || generateFallbackEmail()
     const isPromoVipFlow = source === 'promo_vip_7dias' && couponCode === 'VIP7DIAS'
@@ -238,9 +255,8 @@ export async function authRoutes(app) {
 
     const passwordHash = await bcrypt.hash(password, 10)
     const now = new Date()
-    const accessExpiresAt = isPromoVipFlow
-      ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-      : new Date(Date.now() + 3 * 60 * 60 * 1000)
+    const trialDays = isPromoVipFlow ? PROMO_VIP_TRIAL_DAYS : STANDARD_TRIAL_DAYS
+    const accessExpiresAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000)
     const referralCode = randomBytes(4).toString('hex')
 
     let referrer = null
@@ -282,7 +298,18 @@ export async function authRoutes(app) {
       trackAnalyticsEventSafe({
         userId: user.id,
         event: 'signup_created',
-        metadata: { source: source || 'direct', ref: ref || null, promo: isPromoVipFlow ? 'vip7dias' : 'none' },
+        metadata: {
+          source: source || utmSource || 'direct',
+          ref: ref || null,
+          promo: isPromoVipFlow ? 'vip7dias' : 'none',
+          utm_source: utmSource || source || 'direct',
+          utm_medium: utmMedium || null,
+          utm_campaign: utmCampaign || null,
+          utm_content: utmContent || null,
+          utm_term: utmTerm || null,
+          conversion_prompt_id: conversionPromptId || null,
+          conversion_prompt_variant: conversionPromptVariant || null,
+        },
       })
       const token = app.jwt.sign({ sub: user.id, email: user.email, jti: randomToken(12) }, { expiresIn: '7d' })
       setAuthCookie(reply, token, req)

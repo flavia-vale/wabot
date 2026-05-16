@@ -13,7 +13,7 @@ const ROLE_PERMISSIONS = {
 }
 
 const PAID_PLANS = ['basic', 'pro']
-const PLAN_PRICES = { trial: 0, basic: 1, pro: 2 }
+const PLAN_PRICES = { trial: 0, basic: 39, pro: 69 }
 const EXPORT_LIMIT = 100
 const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = ['flavia.vale@usp.br', 'flaviaroberta.1496@gmail.com', 'tacianeaas02@gmail.com']
 const CANONICAL_OWNER_ADMIN_EMAILS = new Set(DEFAULT_BOOTSTRAP_ADMIN_EMAILS)
@@ -966,6 +966,70 @@ export async function adminRoutes(app) {
       from,
       to,
     }
+  })
+
+
+  app.get('/marketing/prompts', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:read'))) return
+    const { from, to } = parseDateRange(req.query, 30)
+
+    const [eventRows, signupRows] = await Promise.all([
+      db.$queryRaw`
+        SELECT
+          COALESCE(json_extract(metadata, '$.prompt_id'), json_extract(metadata, '$.offer_id'), json_extract(metadata, '$.conversion_prompt_id'), 'unknown') as promptId,
+          COALESCE(json_extract(metadata, '$.variant'), json_extract(metadata, '$.conversion_prompt_variant'), 'default') as variant,
+          COUNT(*) as totalEvents,
+          SUM(CASE WHEN event IN ('conversion_prompt_viewed','lead_magnet_viewed') THEN 1 ELSE 0 END) as views,
+          SUM(CASE WHEN event = 'conversion_prompt_dismissed' THEN 1 ELSE 0 END) as dismissals,
+          SUM(CASE WHEN event IN ('conversion_prompt_cta_clicked','lead_magnet_submitted','lead_magnet_pdf_clicked','lead_magnet_online_clicked') THEN 1 ELSE 0 END) as ctaClicks,
+          SUM(CASE WHEN event = 'lead_magnet_form_focused' THEN 1 ELSE 0 END) as formFocuses
+        FROM AnalyticsEvent
+        WHERE event IN ('conversion_prompt_viewed','conversion_prompt_dismissed','conversion_prompt_cta_clicked','lead_magnet_viewed','lead_magnet_form_focused','lead_magnet_submitted','lead_magnet_pdf_clicked','lead_magnet_online_clicked')
+          AND createdAt >= ${from}
+          AND createdAt <= ${to}
+        GROUP BY promptId, variant
+        ORDER BY views DESC, ctaClicks DESC
+        LIMIT 50
+      `,
+      db.$queryRaw`
+        SELECT
+          COALESCE(json_extract(metadata, '$.conversion_prompt_id'), 'unknown') as promptId,
+          COALESCE(json_extract(metadata, '$.conversion_prompt_variant'), 'default') as variant,
+          COUNT(*) as signups
+        FROM AnalyticsEvent
+        WHERE event = 'signup_created'
+          AND COALESCE(json_extract(metadata, '$.conversion_prompt_id'), '') <> ''
+          AND createdAt >= ${from}
+          AND createdAt <= ${to}
+        GROUP BY promptId, variant
+      `,
+    ])
+
+    const signupMap = new Map(signupRows.map(row => [`${row.promptId || 'unknown'}::${row.variant || 'default'}`, Number(row.signups || 0)]))
+    const prompts = eventRows.map(row => {
+      const promptId = String(row.promptId || 'unknown')
+      const variant = String(row.variant || 'default')
+      const views = Number(row.views || 0)
+      const dismissals = Number(row.dismissals || 0)
+      const ctaClicks = Number(row.ctaClicks || 0)
+      const signups = signupMap.get(`${promptId}::${variant}`) || 0
+      return {
+        promptId,
+        variant,
+        totalEvents: Number(row.totalEvents || 0),
+        views,
+        dismissals,
+        ctaClicks,
+        formFocuses: Number(row.formFocuses || 0),
+        signups,
+        dismissRate: views ? Math.round((dismissals / views) * 1000) / 10 : 0,
+        ctaRate: views ? Math.round((ctaClicks / views) * 1000) / 10 : 0,
+        signupRate: views ? Math.round((signups / views) * 1000) / 10 : 0,
+      }
+    })
+
+    await writeAdminAuditLog(req, { action: 'admin.marketing.prompts.read', resource: 'marketingPrompts' })
+    return { prompts, from, to }
   })
 
 

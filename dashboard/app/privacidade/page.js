@@ -4,6 +4,7 @@ import { PublicPage } from '@/components/PublicShell'
 export const metadata = {
   title: 'Política de Privacidade | BOTinho',
   description: 'Política mínima de privacidade do BOTinho para usuários e visitantes.',
+  alternates: { canonical: '/privacidade' },
 }
 
 const privacyItems = [

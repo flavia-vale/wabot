@@ -1,6 +1,8 @@
 import Link from 'next/link'
+import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
+import { buildRegisterHref } from '@/lib/marketing-attribution'
 
 const title = 'Conteúdos: blog e materiais para afiliados no WhatsApp'
 const description = 'Central de conteúdos do BOTinho com artigos e materiais práticos para padronizar divulgação, validar links de afiliado e escalar grupos no WhatsApp com responsabilidade.'
@@ -47,6 +49,51 @@ const nichePages = [
   },
 ]
 
+const methodologyPages = [
+  {
+    href: '/metodologia-uso-responsavel-whatsapp',
+    title: 'Metodologia de uso responsável no WhatsApp',
+    description: 'Critérios públicos para revisar ofertas, links, grupos, cadência e logs antes de escalar automação.',
+  },
+]
+
+
+const comparisonPages = [
+  {
+    href: '/alternativas/bot-para-whatsapp-afiliados',
+    title: 'Alternativas de bot para WhatsApp para afiliados',
+    description: 'Comparativo equilibrado entre planilha, automação genérica, ferramentas oficiais e BOTinho.',
+  },
+  {
+    href: '/botinho-vs-planilha-manual',
+    title: 'BOTinho vs planilha manual',
+    description: 'Quando a planilha basta e quando logs, cadência e origem/destino viram prioridade.',
+  },
+  {
+    href: '/botinho-vs-ferramentas-genericas-automacao',
+    title: 'BOTinho vs ferramentas genéricas de automação',
+    description: 'Comparação para times que avaliam construir fluxos próprios ou usar ferramenta focada em grupos.',
+  },
+  {
+    href: '/melhores-bots-para-afiliados-whatsapp',
+    title: 'Melhores bots para afiliados no WhatsApp',
+    description: 'Critérios transparentes para avaliar ferramentas sem ranking falso ou promessa de ganho.',
+  },
+]
+
+const authorityPages = [
+  {
+    href: '/glossario',
+    title: 'Glossário de automação para afiliados no WhatsApp',
+    description: 'Definições parseáveis de link monetizado, origem, destino, espelhamento, cadência, UTM e anti-spam.',
+  },
+  {
+    href: '/estudos-de-caso',
+    title: 'Estudos de caso do BOTinho',
+    description: 'Política pública para publicar cases somente com consentimento e dados verificáveis.',
+  },
+]
+
 const materials = [
   {
     href: '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp',
@@ -57,6 +104,32 @@ const materials = [
     href: '/materiais/checklist-operacao-whatsapp',
     title: 'Checklist de operação para WhatsApp',
     description: 'Material para padronizar rotina antes de escalar automação.',
+  },
+]
+
+const benchmarkItems = [
+  {
+    href: '/benchmarks/operacao-grupos-ofertas-whatsapp',
+    title: 'Benchmark de operação em grupos de ofertas',
+    description: 'Modelo para medir tempo, revisão, falhas e consistência sem expor dados sensíveis.',
+  },
+]
+
+const hubPages = [
+  {
+    href: '/espelhar-grupos-whatsapp',
+    title: 'Hub: espelhar grupos WhatsApp por cidade',
+    description: 'Rotas regionais para operações que precisam comparar cidades e cadência local.',
+  },
+  {
+    href: '/bot-ofertas-whatsapp',
+    title: 'Hub: bot de ofertas por nicho',
+    description: 'Páginas por categoria para adaptar calendário, copy e validação de ofertas.',
+  },
+  {
+    href: '/automacao-whatsapp-afiliados',
+    title: 'Hub: automação para afiliados',
+    description: 'Diagnósticos de escala, consistência, tempo operacional e rastreamento.',
   },
 ]
 
@@ -90,7 +163,7 @@ const roadmapTracks = [
   },
 ]
 
-const contentItems = [...blogPosts, ...materials]
+const contentItems = [...blogPosts, ...materials, ...benchmarkItems, ...hubPages]
 
 const faqItems = [
   {
@@ -125,7 +198,7 @@ function ContentCard({ item }) {
     <li className="rounded-3xl border border-emerald-100 bg-white p-6 shadow-sm">
       <h3 className="text-xl font-black tracking-tight text-gray-950">{item.title}</h3>
       <p className="mt-3 text-sm leading-7 text-gray-700">{item.description}</p>
-      <Link href={item.href} className="mt-4 inline-flex text-sm font-black text-emerald-700 underline underline-offset-4">
+      <Link href={item.href} data-seo-cta="content-card" className="mt-4 inline-flex text-sm font-black text-emerald-700 underline underline-offset-4">
         Ver guia completo
       </Link>
     </li>
@@ -141,7 +214,7 @@ function HubSection({ title: sectionTitle, description: sectionDescription, item
         {items.map((item) => <ContentCard key={item.href} item={item} />)}
       </ul>
       <div className="mt-5">
-        <Link href={ctaHref} className="inline-flex rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-700">
+        <Link href={ctaHref} data-seo-cta="content-section-cta" className="inline-flex rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-700">
           {ctaLabel}
         </Link>
       </div>
@@ -153,16 +226,32 @@ export default function Page() {
   const experimentId = 'hub-fase4'
   const heroCta = {
     label: 'Receber checklist + plano semanal',
-    href: `/login?mode=register&utm_source=conteudos&utm_medium=organic&utm_campaign=content-hub&utm_content=hero-cta-checklist-plano&utm_term=${experimentId}`
+    href: buildRegisterHref({ source: 'conteudos', campaign: 'content-hub', content: 'hero-cta-checklist-plano', term: experimentId })
   }
 
   const hubSections = [
+    {
+      key: 'hubs',
+      title: 'Hubs programáticos',
+      description: 'Páginas centrais que conectam clusters de localizações, nichos e dores operacionais.',
+      items: hubPages,
+      ctaHref: `/login?mode=register&utm_source=conteudos&utm_medium=organic&utm_campaign=content-hub&utm_content=cta-pos-hubs&utm_term=${experimentId}`,
+      ctaLabel: 'Receber plano por cluster',
+    },
+    {
+      key: 'benchmarks',
+      title: 'Benchmarks e dados operacionais',
+      description: 'Modelos para transformar rotina de grupos em métricas agregadas e seguras.',
+      items: benchmarkItems,
+      ctaHref: `/login?mode=register&utm_source=conteudos&utm_medium=organic&utm_campaign=content-hub&utm_content=cta-pos-benchmarks&utm_term=${experimentId}`,
+      ctaLabel: 'Receber benchmark operacional',
+    },
     {
       key: 'blog',
       title: 'Artigos do blog',
       description: 'Guias para melhorar a qualidade das postagens e reduzir erros antes de escalar.',
       items: blogPosts,
-      ctaHref: `/login?mode=register&utm_source=conteudos&utm_medium=organic&utm_campaign=content-hub&utm_content=cta-pos-blog&utm_term=${experimentId}`,
+      ctaHref: buildRegisterHref({ source: 'conteudos', campaign: 'content-hub', content: 'cta-pos-blog', term: experimentId }),
       ctaLabel: 'Receber próximos artigos aplicáveis',
     },
     {
@@ -170,7 +259,7 @@ export default function Page() {
       title: 'Materiais práticos',
       description: 'Checklists acionáveis para executar processo, manter consistência e acompanhar resultado.',
       items: materials,
-      ctaHref: `/login?mode=register&utm_source=conteudos&utm_medium=organic&utm_campaign=content-hub&utm_content=cta-pos-materiais&utm_term=${experimentId}`,
+      ctaHref: buildRegisterHref({ source: 'conteudos', campaign: 'content-hub', content: 'cta-pos-materiais', term: experimentId }),
       ctaLabel: 'Entrar na lista e receber novos materiais',
     },
   ]
@@ -222,6 +311,7 @@ export default function Page() {
 
   return (
     <>
+      <OrganicPageTracker route={{ slug: 'conteudos', path: slug, cluster: 'conteudos', intent: 'conteudos afiliados whatsapp', template: 'content-hub' }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(collectionJsonLd) }} />
       <PublicShell>
         <main className="mx-auto w-full max-w-6xl px-5 py-10 md:px-8 md:py-16">
@@ -232,24 +322,25 @@ export default function Page() {
               Se você publica ofertas em grupos de WhatsApp, esta página centraliza os guias e checklists para validar links, padronizar operação e escalar divulgação sem improviso.
             </p>
 
-            <p className="mt-4 text-sm text-gray-600">
-              Atualizado em <time dateTime={lastUpdated}>{formattedLastUpdated}</time> · Curadoria: {editorialOwner}
-            </p>
+        <section className="mt-10">
+          <h2 className="text-2xl font-black tracking-tight text-gray-950">Páginas por nicho</h2>
+          <ul className="mt-4 grid gap-4 md:grid-cols-2">
+            {nichePages.map((item) => <ContentCard key={item.href} item={item} />)}
+          </ul>
+        </section>
 
-            <div className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 md:p-5">
-              <h2 className="text-base font-black text-emerald-900">Como usar esta central em 3 passos</h2>
-              <ol className="mt-3 space-y-2 text-sm leading-7 text-emerald-950">
-                <li><span className="font-black">1.</span> Comece pelo checklist principal para padronizar sua operação.</li>
-                <li><span className="font-black">2.</span> Aplique os artigos do blog para reduzir erros de link e copy.</li>
-                <li><span className="font-black">3.</span> Entre na lista para receber novos materiais e executar semanalmente.</li>
-              </ol>
-            </div>
+        <section className="mt-10">
+          <h2 className="text-2xl font-black tracking-tight text-gray-950">Metodologia e uso responsável</h2>
+          <ul className="mt-4 grid gap-4 md:grid-cols-2">
+            {methodologyPages.map((item) => <ContentCard key={item.href} item={item} />)}
+          </ul>
+        </section>
 
             <div className="mt-6 flex flex-wrap gap-3 text-sm font-bold text-emerald-800">
-              <Link href={heroCta.href} className="rounded-xl bg-emerald-600 px-4 py-3 text-white hover:bg-emerald-700">
+              <Link href={heroCta.href} data-seo-cta="content-hero-register" className="rounded-xl bg-emerald-600 px-4 py-3 text-white hover:bg-emerald-700">
                 {heroCta.label}
               </Link>
-              <Link href={`/materiais/checklist-divulgacao-ofertas-grupos-whatsapp?from=hub&exp_id=${experimentId}`} className="rounded-xl border border-emerald-200 px-4 py-3 hover:bg-emerald-50">
+              <Link href={`/materiais/checklist-divulgacao-ofertas-grupos-whatsapp?from=hub&exp_id=${experimentId}`} data-seo-cta="content-primary-checklist" className="rounded-xl border border-emerald-200 px-4 py-3 hover:bg-emerald-50">
                 Ver checklist principal
               </Link>
             </div>
@@ -266,7 +357,7 @@ export default function Page() {
                   <ul className="mt-3 space-y-2 text-sm font-bold text-emerald-800">
                     {track.links.map((link) => (
                       <li key={link.href}>
-                        <Link href={`${link.href}?from=trilha-${track.id}&exp_id=${experimentId}`} className="underline underline-offset-4">
+                        <Link href={`${link.href}?from=trilha-${track.id}&exp_id=${experimentId}`} data-seo-cta="content-roadmap-link" className="underline underline-offset-4">
                           {link.label}
                         </Link>
                       </li>
@@ -277,30 +368,21 @@ export default function Page() {
             </div>
           </section>
 
-          {hubSections.map((section) => (
-            <HubSection
-              key={section.key}
-              title={section.title}
-              description={section.description}
-              items={section.items}
-              ctaHref={section.ctaHref}
-              ctaLabel={section.ctaLabel}
-            />
-          ))}
+        <section className="mt-10">
+          <h2 className="text-2xl font-black tracking-tight text-gray-950">Autoridade e definições</h2>
+          <ul className="mt-4 grid gap-4 md:grid-cols-2">
+            {authorityPages.map((item) => <ContentCard key={item.href} item={item} />)}
+          </ul>
+        </section>
 
-          <section className="mt-10 rounded-3xl border border-emerald-100 bg-white p-6 shadow-sm">
-            <h2 className="text-2xl font-black tracking-tight text-gray-950">Perguntas frequentes</h2>
-            <dl className="mt-4 space-y-4 text-sm leading-7 text-gray-700">
-              {faqItems.map((item) => (
-                <div key={item.question}>
-                  <dt className="font-black text-gray-950">{item.question}</dt>
-                  <dd className="mt-1">{item.answer}</dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-        </main>
-      </PublicShell>
+        <section className="mt-10">
+          <h2 className="text-2xl font-black tracking-tight text-gray-950">Materiais práticos</h2>
+          <ul className="mt-4 grid gap-4 md:grid-cols-2">
+            {materials.map((item) => <ContentCard key={item.href} item={item} />)}
+          </ul>
+        </section>
+      </main>
+    </PublicShell>
     </>
   )
 }
