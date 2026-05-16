@@ -4,6 +4,7 @@ import {
   shouldUseRelayPath,
   stripChannelUnsafeFields,
   isChannelDestination,
+  isChannelForbiddenError,
 } from '../../src/core/channelSend.js'
 
 test('isChannelDestination', async (t) => {
@@ -83,5 +84,46 @@ test('stripChannelUnsafeFields', async (t) => {
     const input = { text: 'oi', quoted: { x: 1 } }
     stripChannelUnsafeFields(input)
     assert.deepEqual(input.quoted, { x: 1 }, 'input original não deve ser mutado')
+  })
+})
+
+test('isChannelForbiddenError', async (t) => {
+  await t.test('verdadeiro para erro com statusCode 403', () => {
+    const err = new Error('forbidden')
+    err.output = { statusCode: 403 }
+    assert.equal(isChannelForbiddenError(err), true)
+  })
+  await t.test('verdadeiro para erro com data.statusCode 403 (formato Baileys)', () => {
+    const err = new Error('forbidden')
+    err.data = 403
+    assert.equal(isChannelForbiddenError(err), true)
+  })
+  await t.test('verdadeiro para mensagem com "forbidden"', () => {
+    assert.equal(isChannelForbiddenError(new Error('Forbidden: not allowed to post')), true)
+  })
+  await t.test('verdadeiro para mensagem com "not authorized"', () => {
+    assert.equal(isChannelForbiddenError(new Error('not authorized to post in newsletter')), true)
+  })
+  await t.test('verdadeiro para mensagem com "unauthorized"', () => {
+    assert.equal(isChannelForbiddenError(new Error('Unauthorized access')), true)
+  })
+  await t.test('verdadeiro para mensagem com "not admin"', () => {
+    assert.equal(isChannelForbiddenError(new Error('Sender is not admin of newsletter')), true)
+  })
+  await t.test('falso para erro transitório de rede', () => {
+    assert.equal(isChannelForbiddenError(new Error('ETIMEDOUT')), false)
+    assert.equal(isChannelForbiddenError(new Error('Connection closed')), false)
+  })
+  await t.test('falso para statusCode 5xx (transitório)', () => {
+    const err = new Error('server error')
+    err.output = { statusCode: 500 }
+    assert.equal(isChannelForbiddenError(err), false)
+  })
+  await t.test('falso para err null/undefined', () => {
+    assert.equal(isChannelForbiddenError(null), false)
+    assert.equal(isChannelForbiddenError(undefined), false)
+  })
+  await t.test('falso para err sem message nem statusCode', () => {
+    assert.equal(isChannelForbiddenError({}), false)
   })
 })

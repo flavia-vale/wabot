@@ -22,8 +22,37 @@ export function shouldUseRelayPath({ destJid, hasOriginal }) {
 
 // Remove campos que canais não suportam (quoted reply, contextInfo).
 // Retorna um novo objeto sem mutar o input. null/undefined passa adiante.
+//
+// Lista atual reflete o que buildMonitoredMessagePayload emite hoje + sufixos
+// historicamente quebrados em canal. Se Fase 4 enriquecer o payload (mentions,
+// forward, viewOnce, ephemeralExpiration), revisitar esta lista.
 export function stripChannelUnsafeFields(payload) {
   if (payload == null) return payload
   const { quoted, contextInfo, ...rest } = payload
   return rest
+}
+
+// Detecta se um erro de sendMessage indica que a conta NÃO pode postar
+// no canal (não é admin/owner) — diferente de erro transitório de rede.
+// Para erro "forbidden", o retry loop deve abortar imediatamente em vez
+// de consumir SEND_MAX_ATTEMPTS, evitando rate-limit/ban por tentativas
+// repetidas em destino permanentemente sem permissão.
+//
+// Heurísticas (Baileys 6.7.16 não expõe um código padronizado):
+// - statusCode 403 em err.output (formato @hapi/boom usado por Baileys).
+// - err.data === 403 (formato alternativo em alguns erros do Baileys).
+// - Mensagens contendo "forbidden", "not authorized", "unauthorized",
+//   "not admin" (case-insensitive).
+export function isChannelForbiddenError(err) {
+  if (err == null) return false
+  const statusCode = err?.output?.statusCode ?? (typeof err?.data === 'number' ? err.data : null)
+  if (statusCode === 403) return true
+  const message = String(err?.message ?? '').toLowerCase()
+  if (!message) return false
+  return (
+    message.includes('forbidden') ||
+    message.includes('not authorized') ||
+    message.includes('unauthorized') ||
+    message.includes('not admin')
+  )
 }

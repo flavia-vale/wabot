@@ -26,7 +26,7 @@ import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } fro
 import { isMirrorableJid, detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
-import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination } from './core/channelSend.js'
+import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
@@ -591,6 +591,12 @@ async function processSendJob(job) {
         }
         return
       } catch (err) {
+        // Canal sem permissão: aborta retries para não queimar SEND_MAX_ATTEMPTS
+        // em destino permanentemente bloqueado (e evitar rate-limit/ban).
+        if (isChannelDestination(job.destJid) && isChannelForbiddenError(err)) {
+          logger.warn({ destJid: job.destJid, err: err.message, attempt, type: job.type }, 'Canal-destino sem permissão (forbidden) — abortando retries')
+          throw err
+        }
         if (attempt < SEND_MAX_ATTEMPTS && !shuttingDown) {
           const retryDelayMs = getRetryDelayMs(attempt)
           sendMetrics.retryTotal++
@@ -1122,6 +1128,12 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             // todas as rotas. Para grupos, sanitização é no-op (helper só remove
             // se existir). Sem mutação do payload original.
             const channelDest = isChannelDestination(destJid)
+            // Sinal de contrato: se chegou aqui um JID que não é grupo nem canal,
+            // o filtro upstream isMirrorableJid não está cobrindo um novo kind —
+            // queremos saber em prod, sem matar o envio (sendMessage tenta como fallback).
+            if (detectKind(destJid) === null) {
+              logger.warn({ destJid }, 'JID kind inesperado chegou ao send path; usando sendMessage como fallback')
+            }
             const routes = [
               {
                 name: payload._route,
