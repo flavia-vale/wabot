@@ -188,6 +188,8 @@ export default function TutorialPage() {
         </Tip>
       </PlatformCard>
 
+      <TutorialImagesGallery />
+
       {/* Mercado Livre */}
       <PlatformCard color="blue" icon="🔵" title="Mercado Livre — Pegando seu ID e SSID">
         <p className="text-sm text-gray-700">
