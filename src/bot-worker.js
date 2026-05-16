@@ -23,7 +23,9 @@ import { trackAnalyticsEventSafe } from './analytics.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } from './sendQueueBackend.js'
-import { isMirrorableJid } from './core/jid.js'
+import { isMirrorableJid, detectKind, JID_KIND } from './core/jid.js'
+import { subscribeToMonitorChannels } from './core/channels.js'
+import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
@@ -162,6 +164,27 @@ const CONFIG_CACHE_TTL_MS = Math.max(1_000, Number(process.env.CONFIG_CACHE_TTL_
 let configCache = null
 let configCacheTime = 0
 let configCachePromise = null
+const followedChannelJids = new Set()
+const inFlightChannelJids = new Set()
+const sendJobTracker = makeInFlightTracker()
+
+async function ensureChannelSubscriptions() {
+  if (!activeSock) return
+  const cfg = await getConfig().catch(err => {
+    logger.warn({ err: err?.message }, 'channels: getConfig falhou; pulando inscrição')
+    return null
+  })
+  const channelMonitors = (cfg?.groups?.monitor ?? []).filter(m => detectKind(m.waJid) === JID_KIND.CHANNEL)
+  if (channelMonitors.length === 0) return
+  const result = await subscribeToMonitorChannels({
+    sock: activeSock,
+    channelMonitors,
+    followedSet: followedChannelJids,
+    inFlight: inFlightChannelJids,
+    logger,
+  })
+  logger.info(result, 'channels: inscrição de canais-monitor concluída')
+}
 
 async function loadConfig() {
   const user = await db.user.findUnique({
@@ -195,6 +218,7 @@ async function loadConfig() {
     monitor: user.groups.filter(g => g.role === 'monitor').map(g => ({
       id: g.id,
       waJid: g.waJid,
+      kind: g.kind,
       imageMode: g.imageMode,
       imageLinkTarget: g.imageLinkTarget,
       fallbackToOriginal: g.fallbackToOriginal,
@@ -204,7 +228,7 @@ async function loadConfig() {
     })),
     monitorJids: user.groups.filter(g => g.role === 'monitor').map(g => g.waJid),
     post: user.groups.filter(g => g.role === 'post').map(g => g.waJid),
-    postDetails: user.groups.filter(g => g.role === 'post').map(g => ({ waJid: g.waJid, welcomeMsg: g.welcomeMsg })),
+    postDetails: user.groups.filter(g => g.role === 'post').map(g => ({ waJid: g.waJid, kind: g.kind, welcomeMsg: g.welcomeMsg })),
   }
 
   const botConfig = {
@@ -347,6 +371,7 @@ const SEND_QUEUE_MAX_SIZE = envNumber('SEND_QUEUE_MAX_SIZE', 1_000)
 const SEND_MAX_ATTEMPTS = Math.max(1, envNumber('SEND_MAX_ATTEMPTS', 3))
 const SEND_RETRY_BASE_MS = Math.max(0, envNumber('SEND_RETRY_BASE_MS', 2_000))
 const SEND_RETRY_MAX_MS = Math.max(SEND_RETRY_BASE_MS, envNumber('SEND_RETRY_MAX_MS', 30_000))
+const SHUTDOWN_DRAIN_TIMEOUT_MS = Math.max(0, envNumber('SHUTDOWN_DRAIN_TIMEOUT_MS', 15_000))
 const DEST_RATE_LIMIT_MS = Math.max(0, envNumber('DEST_RATE_LIMIT_MS', 1_000))
 const SMART_DELAY_PROGRESSIVE_THRESHOLD = Math.max(1, envNumber('SMART_DELAY_PROGRESSIVE_THRESHOLD', 20))
 const SMART_DELAY_PROGRESSIVE_STEP_MS = Math.max(0, envNumber('SMART_DELAY_PROGRESSIVE_STEP_MS', 5_000))
@@ -604,7 +629,9 @@ async function markInterruptedSendLogs() {
 
 async function createSendBackend() {
   const onRejected = () => { sendMetrics.rejectedTotal++ }
-  const onDequeued = async (job) => { await processSendJob(job) }
+  // sendJobTracker é lido por shutdown() via waitUntilDrained para esperar
+  // jobs em vôo terminarem antes de marcar restos como interrompidos.
+  const onDequeued = (job) => sendJobTracker.track(() => processSendJob(job))
   if (SEND_QUEUE_BACKEND !== 'bullmq') {
     return createMemorySendBackend({ maxSize: SEND_QUEUE_MAX_SIZE, onRejected, onDequeued })
   }
@@ -672,6 +699,7 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       if (process.send) process.send({ type: 'status', data: 'connected', phone })
 await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: null })
       trackAnalyticsEventSafe({ userId, event: 'whatsapp_connected' })
+      ensureChannelSubscriptions().catch(err => logger.error({ err: err?.message }, 'channels: erro ao inscrever no boot'))
     }
 
     if (connection === 'close') {
@@ -719,6 +747,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       logger.info({ jid, monitorGroups: cfg.groups.monitor, feedGlobal: cfg.botConfig.feedGlobal }, 'mensagem recebida')
       const monitorGroup = cfg.groups.monitor.find(m => m.waJid === jid)
       if (!cfg.botConfig.feedGlobal && !monitorGroup) return
+      // feedGlobal aceita mensagens de qualquer JID espelhável (grupo ou canal).
+      // O pipeline downstream é agnóstico ao tipo; o tratamento específico
+      // de envio para canal-destino vem na Fase 3.
       if (cfg.botConfig.feedGlobal && !isMirrorableJid(jid)) return
 
       const text =
@@ -1079,6 +1110,21 @@ async function shutdown(code = 0) {
   if (shuttingDown) return
   shuttingDown = true
   stopHeartbeatIpc()
+
+  // Drena jobs em vôo antes de marcar pendentes como interrompidos.
+  // shuttingDown=true acima já desativa retries em processSendJob (linha 581),
+  // então jobs ativos terminam (ok ou falha definitiva) em poucos segundos.
+  // markInterruptedSendLogs só roda depois, capturando o que sobrou da fila
+  // ou jobs que excederam o timeout.
+  if (!sendJobTracker.isDrained()) {
+    const drain = await waitUntilDrained({
+      isDrained: sendJobTracker.isDrained,
+      timeoutMs: SHUTDOWN_DRAIN_TIMEOUT_MS,
+      pollIntervalMs: 100,
+    })
+    logger.info({ ...drain, remaining: sendJobTracker.inFlightCount() }, 'shutdown: drenagem de envios concluída')
+  }
+
   await Promise.all([
     flushDedupNow().catch(err => {
       logger.error({ err: err.message }, 'Erro ao persistir deduplicação antes de encerrar')
@@ -1106,6 +1152,7 @@ process.on('message', async msg => {
     configCache = null
     configCachePromise = null
     logger.info('Config recarregada')
+    ensureChannelSubscriptions().catch(err => logger.error({ err: err?.message }, 'channels: erro ao inscrever após reload'))
   }
 
   if (msg?.type === 'listGroups') {

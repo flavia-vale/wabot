@@ -1,5 +1,7 @@
+import './landing.css'
 import Link from 'next/link'
-import { PublicShell } from '@/components/PublicShell'
+import { Hero } from '@/components/landing/Hero'
+import Footer, { FinalCTA } from '@/components/landing/Footer'
 import { BRAND_NAME, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS } from '@/lib/marketing-content'
 import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
 import { getSiteUrl } from '@/lib/site-url'
@@ -101,91 +103,136 @@ export function ComparisonPage({ slug }) {
   const dates = getEditorialDates(slug)
   const schemas = buildArticleJsonLd({ title: page.title, description: page.description, slug, siteUrl, faq: page.faq, type: 'Article' })
 
+  const headline = (
+    <>
+      <span>{page.title.split(' ').slice(0, -2).join(' ')}</span><br />
+      <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>{page.title.split(' ').slice(-2).join(' ')}</span>
+    </>
+  )
+
   return (
-    <PublicShell>
+    <div className="landing-root">
       {schemas.map((schema) => (
         <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
       ))}
-      <main className="mx-auto w-full max-w-6xl px-5 py-10 md:px-8 md:py-16">
-        <article className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-emerald-100 md:p-10">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">{page.eyebrow}</p>
-          <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-950 md:text-5xl">{page.title}</h1>
-          <p className="mt-5 max-w-3xl text-lg leading-8 text-gray-600">{page.description}</p>
-          <p className="mt-4 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Atualizado em {formatDatePtBr(dates.updatedAt)}</p>
+      <Hero
+        eyebrowLabel={page.eyebrow}
+        primaryCtaLabel="Entrar na Lista VIP"
+        headlineOverride={headline}
+        subOverride={page.description}
+        heroStyle={{ background: 'linear-gradient(180deg, color-mix(in oklab, var(--accent-2) 18%, white), transparent)', borderRadius: 24, paddingInline: 20 }}
+      />
 
-          <section className="mt-8 rounded-2xl border border-emerald-100 bg-emerald-50 p-5">
-            <h2 className="text-2xl font-black tracking-tight text-gray-950">Resposta direta</h2>
-            <p className="mt-3 leading-8 text-gray-700">{page.directAnswer}</p>
-          </section>
+      <section>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ background: 'color-mix(in oklab, var(--accent) 22%, var(--surface))', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+            <span className="pill"><span className="dot" />Resposta direta</span>
+            <h2 style={{ fontSize: 'clamp(24px, 2.6vw, 34px)', lineHeight: 1.12, margin: '14px 0 12px' }}>Resposta direta</h2>
+            <p style={{ color: 'var(--ink)', lineHeight: 1.7 }}>{page.directAnswer}</p>
+            <p style={{ marginTop: 14, fontSize: 13, color: 'var(--ink-soft)' }}>Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Atualizado em {formatDatePtBr(dates.updatedAt)}</p>
+          </div>
+        </div>
+      </section>
 
-          <section className="mt-8">
-            <h2 className="text-2xl font-black tracking-tight text-gray-950">Comparativo equilibrado</h2>
-            <div className="mt-4 overflow-hidden rounded-2xl border border-gray-200">
-              <table className="w-full border-collapse text-left text-sm">
-                <thead className="bg-gray-50 text-gray-950">
+      <section>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+            <span className="pill"><span className="dot" />Comparativo</span>
+            <h2 style={{ fontSize: 'clamp(24px, 2.6vw, 36px)', lineHeight: 1.12, margin: '14px 0 18px' }}>Comparativo equilibrado</h2>
+            <div style={{ overflowX: 'auto', borderRadius: 16, border: '1px solid var(--line)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, textAlign: 'left', color: 'var(--ink)' }}>
+                <thead style={{ background: 'var(--bg-soft)' }}>
                   <tr>
-                    <th className="p-4 font-black">Critério</th>
-                    <th className="p-4 font-black">Alternativa</th>
-                    <th className="p-4 font-black">Leitura responsável</th>
+                    <th style={{ padding: 16, fontWeight: 700, borderBottom: '1px solid var(--line)' }}>Critério</th>
+                    <th style={{ padding: 16, fontWeight: 700, borderBottom: '1px solid var(--line)' }}>Alternativa</th>
+                    <th style={{ padding: 16, fontWeight: 700, borderBottom: '1px solid var(--line)' }}>Leitura responsável</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {page.rows.map(([criterion, alternative, reading]) => (
-                    <tr key={criterion}>
-                      <td className="p-4 font-bold text-gray-950">{criterion}</td>
-                      <td className="p-4 leading-7 text-gray-700">{alternative}</td>
-                      <td className="p-4 leading-7 text-gray-700">{reading}</td>
+                <tbody>
+                  {page.rows.map(([criterion, alternative, reading], i, arr) => (
+                    <tr key={criterion} style={{ borderBottom: i === arr.length - 1 ? 'none' : '1px solid var(--line)' }}>
+                      <td style={{ padding: 16, fontWeight: 600 }}>{criterion}</td>
+                      <td style={{ padding: 16, lineHeight: 1.6, color: 'var(--ink-soft)' }}>{alternative}</td>
+                      <td style={{ padding: 16, lineHeight: 1.6, color: 'var(--ink-soft)' }}>{reading}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </section>
+          </div>
+        </div>
+      </section>
 
-          <section className="mt-8 grid gap-6 md:grid-cols-2">
-            <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
-              <h2 className="text-xl font-black text-gray-950">Critérios de decisão</h2>
-              <ul className="mt-4 list-disc space-y-2 pl-6 text-gray-700">
+      <section>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+              <span className="pill"><span className="dot" />Decisão</span>
+              <h2 style={{ fontSize: 22, fontWeight: 600, margin: '14px 0 12px', letterSpacing: '-0.01em' }}>Critérios de decisão</h2>
+              <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.7 }}>
                 {page.criteria.map((item) => <li key={item}>{item}</li>)}
               </ul>
             </div>
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-              <h2 className="text-xl font-black text-gray-950">Limites importantes</h2>
-              <ul className="mt-4 list-disc space-y-2 pl-6 text-gray-700">
+            <div style={{ background: 'color-mix(in oklab, var(--accent-2) 24%, var(--surface))', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+              <span className="pill"><span className="dot" />Limites</span>
+              <h2 style={{ fontSize: 22, fontWeight: 600, margin: '14px 0 12px', letterSpacing: '-0.01em' }}>Limites importantes</h2>
+              <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.7 }}>
                 {PRODUCT_LIMITATIONS.map((item) => <li key={item}>{item}</li>)}
               </ul>
             </div>
-          </section>
+          </div>
+        </div>
+      </section>
 
-          <section className="mt-8">
-            <h2 className="text-2xl font-black tracking-tight text-gray-950">Fontes e políticas para revisar antes de operar</h2>
-            <p className="mt-3 leading-8 text-gray-700">Use as políticas oficiais como referência operacional. Elas podem mudar e devem ser revisadas pela pessoa responsável antes de ampliar volume.</p>
-            <ul className="mt-4 list-disc space-y-2 pl-6 text-gray-700">
+      <section>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+            <span className="pill"><span className="dot" />Fontes</span>
+            <h2 style={{ fontSize: 'clamp(22px, 2.4vw, 30px)', lineHeight: 1.15, margin: '14px 0 12px' }}>Fontes e políticas para revisar antes de operar</h2>
+            <p style={{ color: 'var(--ink-soft)', lineHeight: 1.65 }}>Use as políticas oficiais como referência operacional. Elas podem mudar e devem ser revisadas pela pessoa responsável antes de ampliar volume.</p>
+            <ul style={{ margin: '14px 0 0', paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.8 }}>
               {COMPARISON_SOURCE_LINKS.map((source) => (
-                <li key={source.href}><a href={source.href} className="font-bold text-emerald-700 underline underline-offset-4" rel="noreferrer">{source.label}</a></li>
+                <li key={source.href}>
+                  <a href={source.href} style={{ color: 'var(--accent-strong)', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 4 }} rel="noreferrer">{source.label}</a>
+                </li>
               ))}
             </ul>
-          </section>
+          </div>
+        </div>
+      </section>
 
-          <section className="mt-8">
-            <h2 className="text-2xl font-black tracking-tight text-gray-950">FAQ</h2>
-            <div className="mt-4 space-y-3">
+      <section>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+            <span className="pill"><span className="dot" />FAQ</span>
+            <h2 style={{ fontSize: 'clamp(24px, 2.6vw, 36px)', lineHeight: 1.12, margin: '14px 0 16px' }}>Perguntas frequentes</h2>
+            <div style={{ display: 'grid', gap: 12 }}>
               {page.faq.map((item) => (
-                <details key={item.q} className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5">
-                  <summary className="cursor-pointer font-black text-gray-950">{item.q}</summary>
-                  <p className="mt-3 leading-7 text-gray-700">{item.a}</p>
+                <details key={item.q} style={{ border: '1px solid var(--line)', borderRadius: 16, padding: '14px 16px', background: 'color-mix(in oklab, var(--surface) 92%, white)' }}>
+                  <summary style={{ cursor: 'pointer', fontWeight: 700, color: 'var(--ink)' }}>{item.q}</summary>
+                  <p style={{ marginTop: 10, color: 'var(--ink-soft)', lineHeight: 1.65 }}>{item.a}</p>
                 </details>
               ))}
             </div>
-          </section>
+          </div>
+        </div>
+      </section>
 
-          <section className="mt-8 rounded-2xl border border-emerald-100 bg-white p-5">
-            <h2 className="text-2xl font-black tracking-tight text-gray-950">Onde o {BRAND_NAME} se encaixa?</h2>
-            <p className="mt-3 leading-8 text-gray-700">{PRODUCT_DEFINITION}</p>
-            <Link href="/login?mode=register&utm_source=comparativo&utm_medium=organic&utm_campaign=ai-seo-p2" className="mt-4 inline-flex min-h-12 items-center rounded-xl bg-emerald-600 px-5 font-black text-white hover:bg-emerald-700">Entrar na lista VIP</Link>
-          </section>
-        </article>
-      </main>
-    </PublicShell>
+      <section>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ background: 'color-mix(in oklab, var(--accent) 22%, var(--surface))', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+            <span className="pill"><span className="dot" />{BRAND_NAME}</span>
+            <h2 style={{ fontSize: 'clamp(24px, 2.6vw, 34px)', lineHeight: 1.12, margin: '14px 0 12px' }}>Onde o {BRAND_NAME} se encaixa?</h2>
+            <p style={{ color: 'var(--ink)', lineHeight: 1.7 }}>{PRODUCT_DEFINITION}</p>
+            <Link href="/login?mode=register&utm_source=comparativo&utm_medium=organic&utm_campaign=ai-seo-p2" className="btn btn-accent" style={{ marginTop: 20 }}>
+              Entrar na Lista VIP
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <FinalCTA />
+      <Footer />
+    </div>
   )
 }

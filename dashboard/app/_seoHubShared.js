@@ -1,6 +1,8 @@
+import './landing.css'
 import Link from 'next/link'
+import { Hero } from '@/components/landing/Hero'
+import Footer, { FinalCTA } from '@/components/landing/Footer'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
-import { PublicShell } from '@/components/PublicShell'
 import { getHubSeoRoute, getSeoRoutesByCluster } from '@/lib/seo-registry.mjs'
 import { getSiteUrl } from '@/lib/site-url'
 
@@ -81,49 +83,93 @@ export function SeoHubPage({ hubSlug }) {
     ],
   }
 
+  const headline = (
+    <>
+      <span>{route.title.split(' ').slice(0, -2).join(' ')}</span><br />
+      <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>{route.title.split(' ').slice(-2).join(' ')}</span>
+    </>
+  )
+
   return (
-    <PublicShell>
+    <div className="landing-root">
       <OrganicPageTracker route={route} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(collectionJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbJsonLd) }} />
-      <main className="mx-auto w-full max-w-6xl px-5 py-12 md:px-8 md:py-16">
-        <p className="text-sm font-black uppercase tracking-[0.18em] text-emerald-700">{content.eyebrow}</p>
-        <div className="mt-3 grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
-          <section className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-emerald-100 md:p-10">
-            <h1 className="text-4xl font-black tracking-tight text-gray-950 md:text-6xl">{route.title}</h1>
-            <p className="mt-5 text-lg leading-8 text-gray-600">{content.intro}</p>
-            <p className="mt-4 rounded-2xl bg-emerald-50 p-5 text-base font-bold leading-7 text-emerald-900 ring-1 ring-emerald-100">{content.promise}</p>
-          </section>
-          <aside className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
-            <h2 className="text-2xl font-black tracking-tight text-gray-950">Checklist do cluster</h2>
-            <ul className="mt-4 space-y-3 text-sm leading-6 text-gray-700">
-              {content.checklist.map((item) => <li key={item}>✓ {item}</li>)}
-            </ul>
-            <Link href="/login?mode=register" data-seo-cta="hub-register" className="mt-5 inline-flex min-h-12 items-center rounded-xl bg-emerald-600 px-5 font-black text-white hover:bg-emerald-700">
-              Entrar na lista VIP
-            </Link>
-          </aside>
-        </div>
+      <Hero
+        eyebrowLabel={content.eyebrow}
+        primaryCtaLabel="Entrar na Lista VIP"
+        headlineOverride={headline}
+        subOverride={content.intro}
+        heroStyle={{ background: 'linear-gradient(180deg, color-mix(in oklab, var(--accent-3) 42%, white), transparent)', borderRadius: 24, paddingInline: 20 }}
+      />
 
-        <section className="mt-10 rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-emerald-100 md:p-8">
-          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Spokes do hub</p>
-              <h2 className="mt-2 text-3xl font-black tracking-tight text-gray-950">Páginas relacionadas</h2>
+      <section>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 340px', gap: 20, alignItems: 'flex-start' }} className="landing-faq-wrap">
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+              <span className="pill"><span className="dot" />{content.eyebrow}</span>
+              <h2 style={{ fontSize: 'clamp(28px, 3vw, 42px)', lineHeight: 1.1, margin: '16px 0 12px' }}>Como usar este hub</h2>
+              <p style={{ color: 'var(--ink-soft)', lineHeight: 1.65 }}>{content.intro}</p>
+              <p style={{ marginTop: 16, padding: 16, borderRadius: 16, background: 'color-mix(in oklab, var(--accent) 18%, var(--surface))', border: '1px solid var(--line)', color: 'var(--ink)', lineHeight: 1.6, fontWeight: 500 }}>{content.promise}</p>
             </div>
-            <Link href="/conteudos" data-seo-cta="hub-content-center" className="font-bold text-emerald-700 underline underline-offset-4">Ver central de conteúdos</Link>
-          </div>
-          <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {spokes.map((spoke) => (
-              <Link key={spoke.path} href={spoke.path} data-seo-cta="hub-spoke" className="rounded-2xl border border-gray-100 bg-gray-50 p-5 text-gray-800 transition hover:border-emerald-200 hover:bg-emerald-50">
-                <span className="text-xs font-black uppercase tracking-wide text-emerald-700">{spoke.template}</span>
-                <span className="mt-2 block text-lg font-black text-gray-950">{spoke.label}</span>
-                <span className="mt-2 block text-sm leading-6 text-gray-600">Intenção: {spoke.intent}</span>
+            <aside style={{ background: 'color-mix(in oklab, var(--accent) 22%, var(--surface))', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+              <span className="pill"><span className="dot" />Checklist</span>
+              <h2 style={{ fontSize: 22, fontWeight: 600, margin: '14px 0 12px', letterSpacing: '-0.01em' }}>Checklist do cluster</h2>
+              <ul style={{ margin: 0, paddingLeft: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {content.checklist.map((item) => (
+                  <li key={item} style={{ display: 'flex', gap: 10, fontSize: 14.5, lineHeight: 1.55, color: 'var(--ink)' }}>
+                    <span style={{ color: 'var(--accent-strong)', fontWeight: 700 }}>✓</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+              <Link href="/login?mode=register" data-seo-cta="hub-register" className="btn btn-accent" style={{ marginTop: 20 }}>
+                Entrar na Lista VIP
               </Link>
-            ))}
+            </aside>
           </div>
-        </section>
-      </main>
-    </PublicShell>
+        </div>
+      </section>
+
+      <section>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24 }}>
+              <div>
+                <span className="pill"><span className="dot" />Spokes do hub</span>
+                <h2 style={{ fontSize: 'clamp(28px, 3vw, 40px)', lineHeight: 1.1, marginTop: 14 }}>Páginas relacionadas</h2>
+              </div>
+              <Link href="/conteudos" data-seo-cta="hub-content-center" className="btn btn-ghost">Ver central de conteúdos</Link>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20 }}>
+              {spokes.map((spoke) => (
+                <Link
+                  key={spoke.path}
+                  href={spoke.path}
+                  data-seo-cta="hub-spoke"
+                  style={{
+                    display: 'block',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--line)',
+                    borderRadius: 24,
+                    padding: 28,
+                    color: 'var(--ink)',
+                    textDecoration: 'none',
+                    transition: 'background 0.2s ease, border-color 0.2s ease',
+                  }}
+                >
+                  <span className="mono" style={{ display: 'inline-block', fontSize: 11.5, fontWeight: 500, color: 'var(--accent-strong)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{spoke.template}</span>
+                  <span style={{ display: 'block', marginTop: 12, fontSize: 18, fontWeight: 600, lineHeight: 1.25, letterSpacing: '-0.01em', color: 'var(--ink)' }}>{spoke.label}</span>
+                  <span style={{ display: 'block', marginTop: 10, fontSize: 14, lineHeight: 1.55, color: 'var(--ink-soft)' }}>Intenção: {spoke.intent}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <FinalCTA />
+      <Footer />
+    </div>
   )
 }

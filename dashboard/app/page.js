@@ -6,8 +6,7 @@ import { Social } from '@/components/landing/Social'
 import { Pricing } from '@/components/landing/Pricing'
 import { FAQ } from '@/components/landing/FAQ'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
-import { BRAND_NAME, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS, CORE_FAQ_ITEMS } from '@/lib/marketing-content'
-import { getSiteUrl } from '@/lib/site-url'
+import { BRAND_NAME, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS, CORE_FAQ_ITEMS } from '@/lib/marketing-content'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { selectHomeHeroVariant } from '@/lib/cro-experiments'
 
@@ -27,7 +26,7 @@ function ProductDefinition() {
   return (
     <section aria-labelledby="definicao-botinho">
       <div className="wrap">
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: '28px 28px 24px', boxShadow: 'var(--shadow-soft)' }}>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
           <span className="pill"><span className="dot" />Definição para IA e compradores</span>
           <h2 id="definicao-botinho" style={{ fontSize: 'clamp(28px, 3vw, 42px)', lineHeight: 1.1, margin: '16px 0 12px' }}>O que é o {BRAND_NAME}?</h2>
           <p style={{ color: 'var(--ink)', lineHeight: 1.7, maxWidth: 900 }}>{PRODUCT_DEFINITION}</p>
@@ -41,36 +40,7 @@ function ProductDefinition() {
 }
 
 function buildHomeJsonLd() {
-  const siteUrl = getSiteUrl()
   return [
-    {
-      '@context': 'https://schema.org',
-      '@type': 'Organization',
-      name: BRAND_NAME,
-      alternateName: ['Espelha Grupos'],
-      url: siteUrl,
-      logo: `${siteUrl}/botinho-logo.svg`,
-      contactPoint: [{ '@type': 'ContactPoint', contactType: 'customer support', url: `${siteUrl}/suporte` }],
-    },
-    {
-      '@context': 'https://schema.org',
-      '@type': 'SoftwareApplication',
-      name: BRAND_NAME,
-      alternateName: ['Espelha Grupos'],
-      applicationCategory: 'BusinessApplication',
-      operatingSystem: 'Web',
-      url: siteUrl,
-      description: PRODUCT_DEFINITION,
-      offers: DEFAULT_LANDING_PLANS.map((plan) => ({
-        '@type': 'Offer',
-        name: plan.name,
-        priceCurrency: 'BRL',
-        price: String(plan.priceValue),
-        availability: 'https://schema.org/InStock',
-        url: `${siteUrl}/login?mode=register`,
-        description: `${plan.desc} Período: ${plan.period}.`,
-      })),
-    },
     {
       '@context': 'https://schema.org',
       '@type': 'FAQPage',
@@ -82,6 +52,7 @@ function buildHomeJsonLd() {
     },
   ]
 }
+
 
 export default function LandingPage({ searchParams = {} }) {
   const { variant, tone } = selectHomeHeroVariant(searchParams)
