@@ -3,6 +3,7 @@ import { listRunningBots } from '../../manager.js'
 import { getApiMetricsSnapshot } from '../metrics.js'
 import { summarizeCredentialHealth } from '../../credentialHealth.js'
 import { getPublicAnalyticsQualitySnapshot } from './public.js'
+import { trackAnalyticsEventSafe } from '../../analytics.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -336,6 +337,48 @@ function buildRiskFlags({ user, groups, successCount = 0, errorCount = 0, now = 
   return flags
 }
 
+
+
+function getSuggestedAction(contactReasons = []) {
+  if (contactReasons.includes('wa_disconnected')) return 'Reconectar WhatsApp e validar sessão'
+  if (contactReasons.includes('onboarding_incomplete')) return 'Concluir onboarding (credenciais e grupos)'
+  if (contactReasons.includes('high_errors_24h')) return 'Investigar erros e estabilizar envios'
+  if (contactReasons.includes('expiring_soon')) return 'Contatar para renovação antes do vencimento'
+  if (contactReasons.includes('paid_stale_48h')) return 'Reengajar uso com acompanhamento guiado'
+  if (contactReasons.includes('no_first_success')) return 'Executar primeiro envio assistido'
+  if (contactReasons.includes('missing_phone')) return 'Atualizar celular para contato ativo'
+  return 'Realizar contato de diagnóstico'
+}
+
+function computePriorityScore({ riskFlags = [], errorCount24h = 0, accessExpiresAt = null, lastSupportContactAt = null, financialWeight = 0 }) {
+  let score = 0
+  score += Math.min(60, (riskFlags || []).length * 10)
+  if (errorCount24h >= 5) score += 10
+  if (accessExpiresAt) {
+    const daysToExpire = Math.ceil((new Date(accessExpiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+    if (daysToExpire <= 3) score += 20
+    else if (daysToExpire <= 7) score += 10
+  }
+  if (!lastSupportContactAt) score += 10
+  score += Math.min(20, Number(financialWeight || 0))
+  return Math.max(0, Math.min(100, score))
+}
+
+
+function scoreFinancialWeight(user) {
+  const planWeight = user.plan === 'pro' ? 20 : user.plan === 'basic' ? 12 : 4
+  const paymentsWeight = Number(user?._count?.payments || 0) > 0 ? 10 : 0
+  return planWeight + paymentsWeight
+}
+
+function selectContactExperimentVariant(userId = '', strategy = 'risk_first') {
+  const seed = String(userId || '')
+  let hash = 0
+  for (let i = 0; i < seed.length; i++) hash = ((hash << 5) - hash) + seed.charCodeAt(i)
+  const bucket = Math.abs(hash) % 2
+  if (strategy === 'value_first') return bucket === 0 ? 'value_copy_a' : 'value_copy_b'
+  return bucket === 0 ? 'risk_copy_a' : 'risk_copy_b'
+}
 function sanitizeUser(user, role) {
   return {
     ...user,
@@ -592,6 +635,7 @@ export async function adminRoutes(app) {
         const lastMessageAt = lastMessageMap.get(user.id) ?? null
         const effectiveLastActivityAt = resolveEffectiveLastActivity(user, lastMessageAt)
         const riskUser = { ...user, lastActivityAt: effectiveLastActivityAt }
+        trackAnalyticsEventSafe({ userId: user.id, event: 'cs_risk_detected', metadata: { strategy, reasons: contactReasons.join('|').slice(0, 80) } })
         return sanitizeUser({
           ...user,
           groups: undefined,
@@ -700,7 +744,7 @@ export async function adminRoutes(app) {
   app.get('/success/queue', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'support:read'))) return
 
-    const { limit = '25', reason = 'all' } = req.query
+    const { limit = '25', reason = 'all', strategy = 'risk_first' } = req.query
     const limitNum = Math.min(EXPORT_LIMIT, Math.max(1, parseInt(limit) || 25))
     const now = new Date()
     const since24h = addDays(now, -1)
@@ -724,7 +768,7 @@ export async function adminRoutes(app) {
           waSession: { select: { status: true, phone: true, updatedAt: true } },
           groups: { select: { role: true } },
           customerContacts: { orderBy: { createdAt: 'desc' }, take: 1 },
-          _count: { select: { credentials: true, messageLogs: true } },
+          _count: { select: { credentials: true, messageLogs: true, payments: true } },
         },
       }),
       getLogCountMap({ status: 'success' }),
@@ -738,6 +782,16 @@ export async function adminRoutes(app) {
         const botRunning = running.has(user.id)
         const riskFlags = buildRiskFlags({ user, groups: user.groups, successCount, errorCount: errorCount24h, now, running: botRunning })
         const contactReasons = getCustomerSuccessReasons({ user, riskFlags, errorCount24h })
+        const lastContact = user.customerContacts?.[0] ?? null
+        const financialWeight = scoreFinancialWeight(user)
+        const priorityScore = computePriorityScore({
+          riskFlags,
+          errorCount24h,
+          accessExpiresAt: user.accessExpiresAt,
+          lastSupportContactAt: user.lastSupportContactAt,
+          financialWeight,
+        })
+        trackAnalyticsEventSafe({ userId: user.id, event: 'cs_risk_detected', metadata: { strategy, reasons: contactReasons.join('|').slice(0, 80) } })
         return sanitizeUser({
           ...user,
           groups: undefined,
@@ -746,17 +800,92 @@ export async function adminRoutes(app) {
           errorCount24h,
           riskFlags,
           contactReasons,
-          lastContact: user.customerContacts?.[0] ?? null,
+          lastContact,
+          suggestedAction: getSuggestedAction(contactReasons),
+          priorityScore,
+          financialWeight,
+          strategy,
+          experimentVariant: selectContactExperimentVariant(user.id, strategy),
+          riskAgeHours: user.lastActivityAt ? Math.max(0, Math.round((Date.now() - new Date(user.lastActivityAt).getTime()) / (60 * 60 * 1000))) : null,
           customerContacts: undefined,
         }, req.admin.role)
       })
       .filter(user => user.contactReasons.length > 0)
       .filter(user => reason === 'all' || user.contactReasons.includes(reason))
+      .sort((a, b) => (b.priorityScore || 0) - (a.priorityScore || 0))
       .slice(0, limitNum)
 
     await writeAdminAuditLog(req, { action: 'admin.success.queue.list', resource: 'customerSuccess' })
 
     return { total: queue.length, queue }
+  })
+
+  app.get('/success/metrics', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+
+    const now = new Date()
+    const from = req.query?.from ? new Date(req.query.from) : addDays(now, -7)
+    const to = req.query?.to ? new Date(req.query.to) : now
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) {
+      return reply.code(400).send({ error: 'Período inválido para métricas de CS.' })
+    }
+
+    const sinceQueue = addDays(now, -2)
+    const [
+      atRiskDetected,
+      followUpsDue,
+      queueAgingRows,
+      contacts,
+      offerShown,
+      offerAccepted,
+      retained7d,
+      retained30d,
+    ] = await Promise.all([
+      db.user.count({ where: { status: 'active', OR: [{ lastActivityAt: null }, { lastActivityAt: { lt: sinceQueue } }] } }),
+      db.customerContactLog.count({ where: { outcome: 'follow_up', nextFollowUpAt: { lte: now } } }),
+      db.user.findMany({ where: { status: 'active', lastSupportContactAt: { not: null } }, select: { lastSupportContactAt: true }, take: EXPORT_LIMIT }),
+      db.customerContactLog.groupBy({
+        by: ['outcome'],
+        where: { createdAt: { gte: from, lte: to } },
+        _count: { _all: true },
+      }),
+      db.analyticsEvent.count({ where: { event: 'cs_offer_shown', createdAt: { gte: from, lte: to } } }).catch(() => 0),
+      db.analyticsEvent.count({ where: { event: 'cs_offer_accepted', createdAt: { gte: from, lte: to } } }).catch(() => 0),
+      db.analyticsEvent.count({ where: { event: 'cs_retained_7d', createdAt: { gte: from, lte: to } } }).catch(() => 0),
+      db.analyticsEvent.count({ where: { event: 'cs_retained_30d', createdAt: { gte: from, lte: to } } }).catch(() => 0),
+    ])
+
+    const contactsTotal = contacts.reduce((sum, row) => sum + (row?._count?._all || 0), 0)
+    const connected = contacts
+      .filter(row => ['contacted', 'resolved', 'follow_up'].includes(String(row.outcome)))
+      .reduce((sum, row) => sum + (row?._count?._all || 0), 0)
+
+    const queueAgesHours = queueAgingRows
+      .map(row => row.lastSupportContactAt ? Math.max(0, (Date.now() - new Date(row.lastSupportContactAt).getTime()) / (1000 * 60 * 60)) : null)
+      .filter(v => Number.isFinite(v))
+      .sort((a, b) => a - b)
+    const p95Idx = queueAgesHours.length ? Math.min(queueAgesHours.length - 1, Math.ceil(queueAgesHours.length * 0.95) - 1) : 0
+
+    await writeAdminAuditLog(req, { action: 'admin.success.metrics.read', resource: 'customerSuccess' })
+
+    return {
+      period: { from: from.toISOString(), to: to.toISOString() },
+      funnel: {
+        atRiskDetected,
+        queuedForContact: atRiskDetected,
+        firstContactAttempted: contactsTotal,
+        contactConnected: connected,
+        saveOfferShown: offerShown,
+        saveOfferAccepted: offerAccepted,
+        retained7d,
+        retained30d,
+      },
+      sla: {
+        followUpsDue,
+        queueAgingP95Hours: queueAgesHours.length ? Math.round(queueAgesHours[p95Idx]) : 0,
+        queueAgingAvgHours: queueAgesHours.length ? Math.round(queueAgesHours.reduce((a, b) => a + b, 0) / queueAgesHours.length) : 0,
+      },
+    }
   })
 
   app.post('/users/:id/contact-log', async (req, reply) => {
@@ -787,6 +916,11 @@ export async function adminRoutes(app) {
       data: { lastSupportContactAt: new Date(), supportStatus: data.outcome },
       select: { id: true, email: true, supportStatus: true, lastSupportContactAt: true },
     })
+
+    trackAnalyticsEventSafe({ userId: user.id, event: 'cs_contact_attempted', metadata: { channel: data.channel, outcome: data.outcome } })
+    if (['contacted', 'resolved', 'follow_up'].includes(data.outcome)) {
+      trackAnalyticsEventSafe({ userId: user.id, event: 'cs_contact_connected', metadata: { channel: data.channel, outcome: data.outcome } })
+    }
 
     await writeAdminAuditLog(req, {
       action: 'admin.customer.contact.create',
