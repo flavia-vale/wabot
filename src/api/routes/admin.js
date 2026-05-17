@@ -269,6 +269,7 @@ async function getTutorialContentSafe() {
   }
 }
 
+
 function parseContactLogInput(body = {}) {
   const channel = String(body.channel ?? 'whatsapp').trim()
   const reason = String(body.reason ?? '').trim()
@@ -1385,6 +1386,7 @@ export async function adminRoutes(app) {
 
     return { tutorial: { ...tutorial, images } }
   })
+
 
   app.put('/lp-content/plans/:id', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'admin:write'))) return
