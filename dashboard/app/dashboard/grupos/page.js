@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -43,21 +43,35 @@ export default function GruposPage() {
   const [targetEditorId, setTargetEditorId] = useState(null)
   const [targetPostIds, setTargetPostIds] = useState([])
   const [targetLoading, setTargetLoading] = useState(false)
+  const autoFixingImageModeRef = useRef(new Set())
 
   async function load() {
     setLoadingGroups(true)
     setActionError('')
-    try { setGroups(await api.groups()) } catch (err) { setActionError(err.message) } finally { setLoadingGroups(false) }
+    try {
+      const list = await api.groups()
+      setGroups(list)
+      await ensureHiddenImageDefaults(list)
+    } catch (err) {
+      setActionError(err.message)
+    } finally {
+      setLoadingGroups(false)
+    }
   }
 
   useEffect(() => {
     let active = true
     setLoadingGroups(true)
     api.groups()
-      .then((data) => { if (active) setGroups(data) })
+      .then(async (data) => {
+        if (!active) return
+        setGroups(data)
+        await ensureHiddenImageDefaults(data)
+      })
       .catch((err) => { if (active) setActionError(err.message) })
       .finally(() => { if (active) setLoadingGroups(false) })
     return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function handleDelete(id) {
@@ -82,6 +96,21 @@ export default function GruposPage() {
       return false
     } finally {
       setSavingGroupId(current => current === id ? null : current)
+    }
+  }
+
+  async function ensureHiddenImageDefaults(list) {
+    const monitorGroups = list.filter(g => g.role === 'monitor')
+    for (const group of monitorGroups) {
+      const needsFix = (group.imageMode ?? 'original') !== 'original' || group.fallbackToOriginal === false
+      if (!needsFix || autoFixingImageModeRef.current.has(group.id)) continue
+      autoFixingImageModeRef.current.add(group.id)
+      await handleUpdateGroup(group.id, {
+        imageMode: 'original',
+        imageLinkTarget: group.imageLinkTarget ?? 'first',
+        fallbackToOriginal: true,
+      })
+      autoFixingImageModeRef.current.delete(group.id)
     }
   }
 
