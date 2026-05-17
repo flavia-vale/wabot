@@ -349,8 +349,6 @@ export default function GruposPage() {
               (filter === 'channel' && g.kind === 'channel') ||
               (filter === 'group' && g.kind !== 'channel')
             ).map(g => {
-              const imageDraft = getImageDraft(g)
-              const imageChanged = hasImageDraftChanges(g)
               return (
               <li key={g.id} className="text-sm border border-gray-100 rounded-xl p-3">
                 <div className="flex flex-col gap-2 mb-2 sm:flex-row sm:items-center sm:justify-between">
