@@ -2,6 +2,7 @@ import db from '../../db.js'
 import { listRunningBots } from '../../manager.js'
 import { getApiMetricsSnapshot } from '../metrics.js'
 import { summarizeCredentialHealth } from '../../credentialHealth.js'
+import { getPublicAnalyticsQualitySnapshot } from './public.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],

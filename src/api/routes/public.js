@@ -3,6 +3,7 @@ import { PUBLIC_ANALYTICS_EVENTS, sanitizeAnalyticsMetadata, trackAnalyticsEvent
 
 
 const publicAnalyticsAttempts = new Map()
+const publicAnalyticsQuality = { blocked429: 0, invalidEvent: 0, accepted: 0 }
 const PUBLIC_ANALYTICS_RATE_WINDOW_MS = 10 * 60 * 1000
 const PUBLIC_ANALYTICS_RATE_LIMIT = 60
 
@@ -31,6 +32,9 @@ export function consumePublicAnalyticsAttempt({ ip = 'unknown', now = Date.now()
 
 export function clearPublicAnalyticsAttempts() {
   publicAnalyticsAttempts.clear()
+}
+export function getPublicAnalyticsQualitySnapshot() {
+  return { ...publicAnalyticsQuality }
 }
 
 function serializeFaqItem(item) {

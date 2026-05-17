@@ -266,6 +266,34 @@ export function ComparisonPage({ slug }) {
       <section>
         <div className="wrap" style={{ marginTop: 28 }}>
           <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+            <span className="pill"><span className="dot" />Veja também</span>
+            <h2 style={{ fontSize: 'clamp(22px, 2.4vw, 30px)', lineHeight: 1.15, margin: '14px 0 12px' }}>Outros comparativos relacionados</h2>
+            <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
+              <li><Link href="/comparativos" data-comparison-cta="related-hub" style={{ color: 'var(--accent-strong)', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 4 }}>Hub de comparativos do BOTinho</Link></li>
+              {relatedPages.map((related) => (
+                <li key={related.href}>
+                  <Link href={related.href} data-comparison-cta="related-page" style={{ color: 'var(--accent-strong)', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 4 }}>
+                    {related.title}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ background: 'color-mix(in oklab, var(--accent) 14%, var(--surface))', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+            <span className="pill"><span className="dot" />TL;DR</span>
+            <p style={{ margin: '12px 0 0', color: 'var(--ink)', lineHeight: 1.7 }}>{page.tldr || page.directAnswer}</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
             <span className="pill"><span className="dot" />Comparativo</span>
             <h2 style={{ fontSize: 'clamp(24px, 2.6vw, 36px)', lineHeight: 1.12, margin: '14px 0 18px' }}>Comparativo equilibrado</h2>
             <div style={{ overflowX: 'auto', borderRadius: 16, border: '1px solid var(--line)' }}>
@@ -330,6 +358,45 @@ export function ComparisonPage({ slug }) {
           </div>
         </div>
       </section>
+
+      <section>
+        <div className="wrap" style={{ marginTop: 28 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+            <span className="pill"><span className="dot" />Perfis de alternativa</span>
+            <h2 style={{ fontSize: 'clamp(22px, 2.4vw, 30px)', lineHeight: 1.15, margin: '14px 0 12px' }}>Resumo centralizado dos caminhos avaliados</h2>
+            <div style={{ display: 'grid', gap: 12 }}>
+              {(page.competitorSlugs || []).map((slug) => {
+                const competitor = getCompetitorBySlug(slug)
+                return (
+                  <article key={slug} style={{ border: '1px solid var(--line)', borderRadius: 16, padding: 16, background: 'color-mix(in oklab, var(--surface) 92%, white)' }}>
+                    <h3 style={{ margin: '0 0 8px', fontSize: 18 }}>{competitor.name}</h3>
+                    <p style={{ margin: 0, color: 'var(--ink-soft)', lineHeight: 1.6 }}>{competitor.positioning}</p>
+                    <p style={{ margin: '8px 0 0', color: 'var(--ink)', lineHeight: 1.6 }}><strong>Melhor para:</strong> {competitor.bestFor}</p>
+                    <p style={{ margin: '8px 0 0', color: 'var(--ink)', lineHeight: 1.6 }}><strong>Não ideal para:</strong> {competitor.notIdealFor}</p>
+                    <p style={{ margin: '8px 0 0', color: 'var(--ink-soft)', lineHeight: 1.6 }}><strong>Nota de migração:</strong> {competitor.migrationNotes}</p>
+                    <p style={{ margin: '8px 0 0', color: 'var(--ink-soft)', lineHeight: 1.6 }}><strong>Fonte:</strong> {competitor.source}</p>
+                    <p style={{ margin: '4px 0 0', color: 'var(--ink-soft)', lineHeight: 1.6 }}><strong>Verificado em:</strong> {competitor.verifiedAt}</p>
+                  </article>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {Array.isArray(page.migrationPath) && page.migrationPath.length > 0 && (
+        <section>
+          <div className="wrap" style={{ marginTop: 28 }}>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+              <span className="pill"><span className="dot" />Migração</span>
+              <h2 style={{ fontSize: 'clamp(22px, 2.4vw, 30px)', lineHeight: 1.15, margin: '14px 0 12px' }}>Caminho de migração recomendado</h2>
+              <ol style={{ margin: 0, paddingLeft: 20, color: 'var(--ink)', lineHeight: 1.8 }}>
+                {page.migrationPath.map((step) => <li key={step}>{step}</li>)}
+              </ol>
+            </div>
+          </div>
+        </section>
+      )}
 
       <section>
         <div className="wrap" style={{ marginTop: 28 }}>
