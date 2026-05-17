@@ -1,10 +1,11 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { HelpLink } from '@/components/HelpLink'
 import { LoadingState } from '@/components/States'
+import { trackEvent, TRACKING_EVENTS } from '@/lib/analytics'
 
 const HELPER_STEPS = {
   noGroups: { label: 'Criar meu primeiro grupo', progress: 'Passo 1 de 3', message: 'Vamos começar: adicione seu primeiro grupo em menos de 1 minuto.' },
@@ -18,10 +19,6 @@ const FRIENDLY_ERROR_HINTS = [
   { match: /permission|forbidden|admin|not-authorized|unauthorized/i, message: 'Parece faltar permissão nesse grupo. Confirme se sua conta é admin do grupo.' },
   { match: /timeout|network|fetch|temporar|ECONN|socket/i, message: 'A conexão falhou agora. Tente novamente em alguns segundos.' },
 ]
-
-const IMAGE_MODE_HELP = {
-  original: 'Usa a imagem que veio na mensagem monitorada.',
-}
 
 const roleLabels = {
   monitor: 'Monitorar (origem)',
@@ -60,8 +57,13 @@ export default function GruposPage() {
   const [targetEditorId, setTargetEditorId] = useState(null)
   const [targetPostIds, setTargetPostIds] = useState([])
   const [targetLoading, setTargetLoading] = useState(false)
-  const [imageDrafts, setImageDrafts] = useState({})
   const [copiedGroupId, setCopiedGroupId] = useState(null)
+  const trackedRef = useRef({
+    helperStates: new Set(),
+    emptyStates: new Set(),
+    stepsCompleted: new Set(),
+    groupReady: false,
+  })
 
   async function load() {
     setLoadingGroups(true)
@@ -109,43 +111,6 @@ export default function GruposPage() {
     } finally {
       setSavingGroupId(current => current === id ? null : current)
     }
-  }
-
-  function getGroupImageSettings() {
-    return {
-      imageMode: 'original',
-      imageLinkTarget: 'first',
-      fallbackToOriginal: true,
-    }
-  }
-
-  function getImageDraft(group) {
-    return imageDrafts[group.id] ?? getGroupImageSettings(group)
-  }
-
-  function updateImageDraft(group, data) {
-    setImageDrafts(prev => ({
-      ...prev,
-      [group.id]: { ...(prev[group.id] ?? getGroupImageSettings(group)), ...data },
-    }))
-    setSavedGroupId(current => current === group.id ? null : current)
-    setGroupErrors(prev => ({ ...prev, [group.id]: '' }))
-  }
-
-  function hasImageDraftChanges(group) {
-    const draft = getImageDraft(group)
-    return (group.imageMode ?? 'original') !== 'original' || draft.imageMode !== 'original'
-  }
-
-  async function saveImageSettings(group) {
-    const draft = getImageDraft(group)
-    const saved = await handleUpdateGroup(group.id, { ...draft, imageMode: 'original', fallbackToOriginal: true })
-    if (!saved) return
-    setImageDrafts(prev => {
-      const next = { ...prev }
-      delete next[group.id]
-      return next
-    })
   }
 
   function toggleGroupPlatform(group, platformId) {
@@ -241,6 +206,7 @@ export default function GruposPage() {
       setActionError(getFriendlyErrorMessage(err.message))
     }
   }
+  const trackingBase = useMemo(() => ({ user_profile: 'iniciante', group_count_before_click: groups.length }), [groups.length])
 
   async function handleManualAdd(e) {
     e.preventDefault()
@@ -276,6 +242,36 @@ export default function GruposPage() {
         : 'done'
   const helper = HELPER_STEPS[helperState]
 
+  useEffect(() => {
+    if (!trackedRef.current.helperStates.has(helperState)) {
+      trackedRef.current.helperStates.add(helperState)
+      trackEvent(TRACKING_EVENTS.GROUPS_HELPER_MASTER_VIEWED, { helper_type: 'onboarding', step_name: helperState, ...trackingBase })
+    }
+  }, [helperState, trackingBase])
+
+  useEffect(() => {
+    if (helperState === 'noMonitor' && !trackedRef.current.emptyStates.has('monitor')) {
+      trackedRef.current.emptyStates.add('monitor')
+      trackEvent(TRACKING_EVENTS.GROUPS_EMPTY_STATE_VIEWED, { helper_type: 'empty_state', step_name: 'monitor', ...trackingBase })
+    }
+    if (helperState === 'noPost' && !trackedRef.current.emptyStates.has('post')) {
+      trackedRef.current.emptyStates.add('post')
+      trackEvent(TRACKING_EVENTS.GROUPS_EMPTY_STATE_VIEWED, { helper_type: 'empty_state', step_name: 'post', ...trackingBase })
+    }
+    if (groups.length > 0 && monitor.length > 0 && !trackedRef.current.stepsCompleted.has('monitor')) {
+      trackedRef.current.stepsCompleted.add('monitor')
+      trackEvent(TRACKING_EVENTS.GROUP_SETUP_STEP_COMPLETED, { step_name: 'monitor', ...trackingBase })
+    }
+    if (groups.length > 0 && post.length > 0 && !trackedRef.current.stepsCompleted.has('post')) {
+      trackedRef.current.stepsCompleted.add('post')
+      trackEvent(TRACKING_EVENTS.GROUP_SETUP_STEP_COMPLETED, { step_name: 'post', ...trackingBase })
+    }
+    if (monitor.length > 0 && post.length > 0 && !trackedRef.current.groupReady) {
+      trackedRef.current.groupReady = true
+      trackEvent(TRACKING_EVENTS.GROUP_READY, { step_name: 'group_ready', ...trackingBase })
+    }
+  }, [helperState, groups.length, monitor.length, post.length, trackingBase])
+
   function scrollToSection(id) {
     const el = document.getElementById(id)
     if (!el) return
@@ -283,6 +279,7 @@ export default function GruposPage() {
   }
 
   function handlePrimaryHelperAction() {
+    trackEvent(TRACKING_EVENTS.GROUPS_HELPER_MASTER_CLICKED, { helper_type: 'onboarding', cta_label: helper.label, step_name: helperState, ...trackingBase })
     if (helperState === 'done') {
       scrollToSection('grupos-monitorar')
       return
@@ -324,7 +321,21 @@ export default function GruposPage() {
       </div>
       <p className="text-gray-500 text-sm mb-6">Configure quais grupos monitorar e onde postar</p>
 
-      {actionError && <div className="mb-4"><Alert type="error" title="Não consegui concluir essa ação" message={getFriendlyErrorMessage(actionError)} /></div>}
+      {actionError && (
+        <div className="mb-4">
+          <Alert type="error" title="Não consegui concluir essa ação" message={getFriendlyErrorMessage(actionError)} />
+          <button
+            type="button"
+            onClick={() => {
+              trackEvent(TRACKING_EVENTS.GROUPS_ERROR_RESCUE_CLICKED, { helper_type: 'rescue', cta_label: 'Tentar novamente', step_name: helperState, error_type: 'action_error', ...trackingBase })
+              load()
+            }}
+            className="mt-2 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
 
       {/* Carregar grupos do WhatsApp */}
       <div id="grupos-carregar" className="bg-white rounded-2xl shadow p-5 mb-4">
@@ -398,12 +409,20 @@ export default function GruposPage() {
             <p className="text-sm font-semibold text-blue-900">Você ainda não escolheu grupos de origem.</p>
             <p className="mt-1 text-xs text-blue-800">Escolha um grupo para o bot começar a ler mensagens e links.</p>
             <p className="mt-2 text-xs text-blue-700">Passo 2 de 3</p>
+            <button
+              type="button"
+              onClick={() => {
+                trackEvent(TRACKING_EVENTS.GROUPS_EMPTY_STATE_CTA_CLICKED, { helper_type: 'empty_state', cta_label: 'Carregar do WhatsApp', step_name: 'monitor', ...trackingBase })
+                scrollToSection('grupos-carregar')
+              }}
+              className="mt-3 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+            >
+              Carregar do WhatsApp
+            </button>
           </div>
         ) : (
           <ul className="flex flex-col gap-4">
             {monitor.map(g => {
-              const imageDraft = getImageDraft(g)
-              const imageChanged = hasImageDraftChanges(g)
               return (
               <li key={g.id} className="text-sm border border-gray-100 rounded-xl p-3">
                 <div className="flex flex-col gap-2 mb-2 sm:flex-row sm:items-center sm:justify-between">
@@ -418,10 +437,10 @@ export default function GruposPage() {
                     <button onClick={() => openTargetEditor(g.id)} className="text-blue-500 hover:text-blue-700 text-xs">
                       Configurar alvos
                     </button>
-                    <button onClick={() => handleCopyGroupJid(g)} className="text-gray-600 hover:text-gray-800 text-xs">
+                    <button onClick={() => { trackEvent(TRACKING_EVENTS.GROUPS_QUICK_ACTION_CLICKED, { helper_type: 'quick_action', cta_label: 'Copiar link', step_name: 'monitor', ...trackingBase }); handleCopyGroupJid(g) }} className="text-gray-600 hover:text-gray-800 text-xs">
                       Copiar link
                     </button>
-                    <button onClick={() => handleDuplicateGroup(g)} className="text-purple-600 hover:text-purple-800 text-xs">
+                    <button onClick={() => { trackEvent(TRACKING_EVENTS.GROUPS_QUICK_ACTION_CLICKED, { helper_type: 'quick_action', cta_label: 'Duplicar', step_name: 'monitor', ...trackingBase }); handleDuplicateGroup(g) }} className="text-purple-600 hover:text-purple-800 text-xs">
                       Duplicar
                     </button>
                     <button onClick={() => setDeleteTarget(g)} className="text-red-400 hover:text-red-600 text-xs">
@@ -481,14 +500,14 @@ export default function GruposPage() {
                   <div className="mt-2 flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => handleUpdateGroup(g.id, { forwardMode: 'ALLOW_NO_LINK', noLinkScope: g.noLinkScope ?? 'TEXT_ONLY' })}
+                      onClick={() => { trackEvent(TRACKING_EVENTS.GROUPS_QUICK_ACTION_CLICKED, { helper_type: 'quick_action', cta_label: 'Retomar', step_name: 'monitor', ...trackingBase }); handleUpdateGroup(g.id, { forwardMode: 'ALLOW_NO_LINK', noLinkScope: g.noLinkScope ?? 'TEXT_ONLY' }) }}
                       className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] text-amber-700 hover:bg-amber-100"
                     >
                       Retomar
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleUpdateGroup(g.id, { forwardMode: 'LINK_ONLY', noLinkScope: null })}
+                      onClick={() => { trackEvent(TRACKING_EVENTS.GROUPS_QUICK_ACTION_CLICKED, { helper_type: 'quick_action', cta_label: 'Pausar', step_name: 'monitor', ...trackingBase }); handleUpdateGroup(g.id, { forwardMode: 'LINK_ONLY', noLinkScope: null }) }}
                       className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] text-gray-700 hover:bg-gray-50"
                     >
                       Pausar
@@ -496,28 +515,7 @@ export default function GruposPage() {
                   </div>
                   <p className="mt-1 text-[11px] text-amber-600">Ativar pode aumentar o volume de mensagens encaminhadas.</p>
                 </div>
-                <div className="mt-3 border-t border-gray-100 pt-3">
-                  <div className="mb-1.5 flex items-center justify-between gap-2">
-                    <p className="text-xs font-medium text-gray-500">Imagem da mensagem:</p>
-                  </div>
-                  <p className="mt-1 text-[11px] text-gray-400">{IMAGE_MODE_HELP.original}</p>
-                  {imageDraft.imageMode !== 'original' && (
-                    <p className="mt-1 text-[11px] text-amber-600">Este grupo ainda não está usando a imagem original.</p>
-                  )}
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => saveImageSettings(g)}
-                      disabled={!imageChanged || savingGroupId === g.id}
-                      className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {savingGroupId === g.id ? 'Salvando imagem...' : 'Aplicar imagem original'}
-                    </button>
-                    {imageChanged && <span className="text-[11px] text-amber-600">Alteração de imagem ainda não salva.</span>}
-                    {!imageChanged && savedGroupId === g.id && <span className="text-[11px] text-green-600">Configuração de imagem salva.</span>}
-                  </div>
-                  {groupErrors[g.id] && <p className="mt-2 text-xs text-red-600" role="alert">{groupErrors[g.id]}</p>}
-                </div>
+                {groupErrors[g.id] && <p className="mt-2 text-xs text-red-600" role="alert">{groupErrors[g.id]}</p>}
               </li>
               )
             })}
@@ -536,6 +534,16 @@ export default function GruposPage() {
             <p className="text-sm font-semibold text-purple-900">Falta escolher os grupos de destino.</p>
             <p className="mt-1 text-xs text-purple-800">Escolha para onde o bot vai publicar os links convertidos.</p>
             <p className="mt-2 text-xs text-purple-700">Passo 3 de 3</p>
+            <button
+              type="button"
+              onClick={() => {
+                trackEvent(TRACKING_EVENTS.GROUPS_EMPTY_STATE_CTA_CLICKED, { helper_type: 'empty_state', cta_label: 'Carregar do WhatsApp', step_name: 'post', ...trackingBase })
+                scrollToSection('grupos-carregar')
+              }}
+              className="mt-3 rounded-lg bg-purple-600 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-700"
+            >
+              Carregar do WhatsApp
+            </button>
           </div>
         ) : (
           <ul className="flex flex-col gap-2">
@@ -548,8 +556,8 @@ export default function GruposPage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {copiedGroupId === g.id && <span className="text-[11px] text-green-600">JID copiado ✅</span>}
-                    <button onClick={() => handleCopyGroupJid(g)} className="text-gray-600 hover:text-gray-800 text-xs">Copiar link</button>
-                    <button onClick={() => handleDuplicateGroup(g)} className="text-purple-600 hover:text-purple-800 text-xs">Duplicar</button>
+                    <button onClick={() => { trackEvent(TRACKING_EVENTS.GROUPS_QUICK_ACTION_CLICKED, { helper_type: 'quick_action', cta_label: 'Copiar link', step_name: 'post', ...trackingBase }); handleCopyGroupJid(g) }} className="text-gray-600 hover:text-gray-800 text-xs">Copiar link</button>
+                    <button onClick={() => { trackEvent(TRACKING_EVENTS.GROUPS_QUICK_ACTION_CLICKED, { helper_type: 'quick_action', cta_label: 'Duplicar', step_name: 'post', ...trackingBase }); handleDuplicateGroup(g) }} className="text-purple-600 hover:text-purple-800 text-xs">Duplicar</button>
                     <button onClick={() => setDeleteTarget(g)} className="text-red-400 hover:text-red-600 text-xs">Remover</button>
                   </div>
                 </div>
