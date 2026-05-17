@@ -39,6 +39,13 @@ export const ANALYTICS_EVENTS = new Set([
   'public_analytics_accepted',
   'public_analytics_invalid_event',
   'public_analytics_blocked_429',
+  'cs_risk_detected',
+  'cs_contact_attempted',
+  'cs_contact_connected',
+  'cs_offer_shown',
+  'cs_offer_accepted',
+  'cs_retained_7d',
+  'cs_retained_30d',
 ])
 
 const SENSITIVE_KEY_PATTERN = /(token|secret|password|cookie|credential|csrf|ssid|key|message|text|url|phone|email)/i
