@@ -42,6 +42,20 @@ function serializeFaqItem(item) {
   }
 }
 
+function assertFaqShape(items = []) {
+  if (!Array.isArray(items)) throw new Error('FAQ payload inválido: esperado array.')
+  return items.map((item, index) => {
+    if (!item || typeof item !== 'object') throw new Error(`FAQ payload inválido no índice ${index}: esperado objeto.`)
+    if (!item.id || !item.question || !item.answer) throw new Error(`FAQ payload inválido no índice ${index}: campos obrigatórios ausentes.`)
+    return {
+      id: String(item.id),
+      question: String(item.question),
+      answer: String(item.answer),
+      position: Number(item.position ?? 0),
+    }
+  })
+}
+
 function parsePlanFeatures(rawFeatures) {
   try {
     const parsed = JSON.parse(String(rawFeatures ?? '[]'))
@@ -60,6 +74,45 @@ function serializeLpPlan(plan) {
     features: parsePlanFeatures(plan.features),
     position: plan.position,
   }
+}
+
+function assertPlanShape(plans = []) {
+  if (!Array.isArray(plans)) throw new Error('Plans payload inválido: esperado array.')
+  return plans.map((plan, index) => {
+    if (!plan || typeof plan !== 'object') throw new Error(`Plans payload inválido no índice ${index}: esperado objeto.`)
+    if (!plan.id || !plan.title) throw new Error(`Plans payload inválido no índice ${index}: id/title obrigatórios.`)
+    return {
+      id: String(plan.id),
+      title: String(plan.title),
+      description: String(plan.description ?? ''),
+      price: String(plan.price ?? ''),
+      features: Array.isArray(plan.features) ? plan.features.map((f) => String(f)) : [],
+      position: Number(plan.position ?? 0),
+    }
+  })
+}
+
+function safeShapeOrFallback({ label, factory, fallback = [] }) {
+  try {
+    return factory()
+  } catch (err) {
+    console.error(`[publicRoutes] ${label}:`, err?.message || err)
+    return fallback
+  }
+}
+
+async function handlePublicAnalytics(req, reply, { includeVersion = false } = {}) {
+  const attempt = consumePublicAnalyticsAttempt({ ip: req.ip })
+  if (attempt.blocked) {
+    const retryAfter = Math.max(1, Math.ceil((attempt.resetAt - Date.now()) / 1000))
+    reply.header('Retry-After', String(retryAfter))
+    return reply.code(429).send({ error: 'Muitos eventos. Tente novamente mais tarde.' })
+  }
+
+  const { event, metadata = {} } = req.body ?? {}
+  if (!PUBLIC_ANALYTICS_EVENTS.has(event)) return reply.code(400).send({ error: 'Evento público inválido' })
+  await trackAnalyticsEvent({ event, metadata: normalizePublicAnalyticsMetadata(metadata, req) })
+  return reply.code(202).send(includeVersion ? { ok: true, version: 'v1' } : { ok: true })
 }
 
 async function getActiveFaqItems() {
@@ -101,11 +154,28 @@ async function getTutorialContent() {
 }
 
 export async function publicRoutes(app) {
+  app.get('/v1/faq', async (_req, reply) => {
+    reply.header('Cache-Control', 'no-store, max-age=0')
+    const items = await getActiveFaqItems()
+    return { version: 'v1', items: safeShapeOrFallback({ label: 'v1/faq shape', factory: () => assertFaqShape(items.map(serializeFaqItem)) }) }
+  })
+
   app.get('/faq', async (_req, reply) => {
     reply.header('Cache-Control', 'no-store, max-age=0')
     const items = await getActiveFaqItems()
 
-    return { items: items.map(serializeFaqItem) }
+    return { items: safeShapeOrFallback({ label: 'faq shape', factory: () => assertFaqShape(items.map(serializeFaqItem)) }) }
+  })
+
+  app.get('/v1/lp-content', async (_req, reply) => {
+    reply.header('Cache-Control', 'no-store, max-age=0')
+    const [plans, faqItems, tutorial] = await Promise.all([getLpPlans(), getActiveFaqItems(), getTutorialContent()])
+    return {
+      version: 'v1',
+      plans: safeShapeOrFallback({ label: 'v1/lp-content plans shape', factory: () => assertPlanShape(plans.map(serializeLpPlan)) }),
+      faq: safeShapeOrFallback({ label: 'v1/lp-content faq shape', factory: () => assertFaqShape(faqItems.map(serializeFaqItem)) }),
+      tutorial: tutorial ?? null,
+    }
   })
 
   app.get('/lp-content', async (_req, reply) => {
@@ -113,10 +183,16 @@ export async function publicRoutes(app) {
     const [plans, faqItems, tutorial] = await Promise.all([getLpPlans(), getActiveFaqItems(), getTutorialContent()])
 
     return {
-      plans: plans.map(serializeLpPlan),
-      faq: faqItems.map(serializeFaqItem),
+      plans: safeShapeOrFallback({ label: 'lp-content plans shape', factory: () => assertPlanShape(plans.map(serializeLpPlan)) }),
+      faq: safeShapeOrFallback({ label: 'lp-content faq shape', factory: () => assertFaqShape(faqItems.map(serializeFaqItem)) }),
       tutorial,
     }
+  })
+
+  app.get('/v1/tutorial-content', async (_req, reply) => {
+    reply.header('Cache-Control', 'no-store, max-age=0')
+    const tutorial = await getTutorialContent()
+    return { version: 'v1', tutorial: tutorial ?? null }
   })
 
   app.get('/tutorial-content', async (_req, reply) => {
@@ -128,28 +204,24 @@ export async function publicRoutes(app) {
 
   app.post('/analytics', async (req, reply) => {
     reply.header('Cache-Control', 'no-store, max-age=0')
-    const attempt = consumePublicAnalyticsAttempt({ ip: req.ip })
-    if (attempt.blocked) {
-      const retryAfter = Math.max(1, Math.ceil((attempt.resetAt - Date.now()) / 1000))
-      reply.header('Retry-After', String(retryAfter))
-      return reply.code(429).send({ error: 'Muitos eventos. Tente novamente mais tarde.' })
-    }
+    return handlePublicAnalytics(req, reply)
+  })
 
-    const { event, metadata = {} } = req.body ?? {}
-    if (!PUBLIC_ANALYTICS_EVENTS.has(event)) return reply.code(400).send({ error: 'Evento público inválido' })
+  app.post('/v1/analytics', async (req, reply) => {
+    reply.header('Cache-Control', 'no-store, max-age=0')
+    return handlePublicAnalytics(req, reply, { includeVersion: true })
+  })
 
-    await trackAnalyticsEvent({
-      event,
-      metadata: normalizePublicAnalyticsMetadata(metadata, req),
-    })
-
-    return reply.code(202).send({ ok: true })
+  app.get('/v1/plans', async (_req, reply) => {
+    reply.header('Cache-Control', 'no-store, max-age=0')
+    const plans = await getLpPlans()
+    return { version: 'v1', plans: safeShapeOrFallback({ label: 'v1/plans shape', factory: () => assertPlanShape(plans.map(serializeLpPlan)) }) }
   })
 
   app.get('/plans', async (_req, reply) => {
     reply.header('Cache-Control', 'no-store, max-age=0')
     const plans = await getLpPlans()
 
-    return { plans: plans.map(serializeLpPlan) }
+    return { plans: safeShapeOrFallback({ label: 'plans shape', factory: () => assertPlanShape(plans.map(serializeLpPlan)) }) }
   })
 }
