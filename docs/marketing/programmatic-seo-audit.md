@@ -1,10 +1,10 @@
-# Auditoria de SEO programático do Wabot / BOTinho
+# Auditoria de SEO programático do BOTinho
 
 Data da análise: 2026-05-15
 
 ## Escopo e protocolo de risco
 
-Esta auditoria aplica a skill `programmatic-seo` ao projeto Wabot/BOTinho, com foco em páginas criadas em escala, conteúdo orgânico, arquitetura de indexação, dados proprietários, conversão e riscos de thin content.
+Esta auditoria aplica a skill `programmatic-seo` ao projeto BOTinho, com foco em páginas criadas em escala, conteúdo orgânico, arquitetura de indexação, dados proprietários, conversão e riscos de thin content.
 
 Protocolo STRICT antes de qualquer implementação futura:
 
@@ -291,4 +291,4 @@ Risco: médio/alto se tocar dados reais; precisa revisão de privacidade e stagi
 
 ## Crítica final
 
-O Wabot/BOTinho não precisa de “mais páginas” agora; precisa de **mais sistema**. A base já existe, mas o próximo salto vem de governança, diferenciação e dados proprietários. Se o projeto simplesmente gerar mais centenas de URLs com a estrutura atual, o risco é diluir qualidade e criar páginas finas. Se primeiro criar registry, hubs, validação, conteúdo único e mensuração por slug, o mesmo motor pode virar um canal de aquisição defensável.
+O BOTinho não precisa de “mais páginas” agora; precisa de **mais sistema**. A base já existe, mas o próximo salto vem de governança, diferenciação e dados proprietários. Se o projeto simplesmente gerar mais centenas de URLs com a estrutura atual, o risco é diluir qualidade e criar páginas finas. Se primeiro criar registry, hubs, validação, conteúdo único e mensuração por slug, o mesmo motor pode virar um canal de aquisição defensável.

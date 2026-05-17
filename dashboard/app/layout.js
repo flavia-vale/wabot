@@ -7,10 +7,10 @@ import { BRAND_NAME, BRAND_SHORT_NAME, BRAND_SAME_AS, DEFAULT_LANDING_PLANS, PRO
 export const metadata = {
   metadataBase: new URL('https://espelhagrupos.com.br'),
   title: {
-    default: 'Bot para Afiliados no WhatsApp | BOTinho',
+    default: 'BOTinho | Espelhe grupos e espalhe ofertas no WhatsApp',
     template: '%s | BOTinho',
   },
-  description: 'Automatize a conversão de links de afiliado, organize grupos de WhatsApp e envie ofertas com menos trabalho manual.',
+  description: 'Com o BOTinho, você espelha grupos de WhatsApp e espalha ofertas com controle de cadência, revisão humana e menos operação manual.',
   alternates: {
     canonical: '/',
   },
