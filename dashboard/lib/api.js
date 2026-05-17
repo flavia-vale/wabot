@@ -229,6 +229,10 @@ export const api = {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/success/queue${query ? `?${query}` : ''}`)
   },
+  adminSuccessMetrics: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/success/metrics${query ? `?${query}` : ''}`)
+  },
   adminCreateContactLog: (id, data) =>
     apiFetch(`/api/admin/users/${id}/contact-log`, { method: 'POST', body: JSON.stringify(data) }),
   adminFinanceOverview: () => apiFetch('/api/admin/finance/overview'),
