@@ -571,7 +571,7 @@ export default function GruposPage() {
         </div>
       )}
 
-      <ConfirmDialog open={!!deleteTarget} title={deleteTarget ? `Remover “${deleteTarget.name}” de ${roleLabels[deleteTarget.role] ?? 'grupo'}?` : 'Remover grupo'} message=”O grupo será removido apenas da configuração do bot. O grupo no WhatsApp não será excluído.” confirmLabel=”Remover” danger onCancel={() => setDeleteTarget(null)} onConfirm={async () => { const target = deleteTarget; setDeleteTarget(null); if (target?.id) await handleDelete(target.id) }} />
+      <ConfirmDialog open={!!deleteTarget} title={deleteTarget ? `Remover "${deleteTarget.name}" de ${roleLabels[deleteTarget.role] ?? 'grupo'}?` : 'Remover grupo'} message="O grupo será removido apenas da configuração do bot. O grupo no WhatsApp não será excluído." confirmLabel="Remover" danger onCancel={() => setDeleteTarget(null)} onConfirm={async () => { const target = deleteTarget; setDeleteTarget(null); if (target?.id) await handleDelete(target.id) }} />
 
       <AddChannelModal
         open={showChannelModal}
