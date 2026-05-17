@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { getChannelMetadata } from '../../src/core/channelDirectory.js'
+import { followChannel } from '../../src/core/channelDirectory.js'
 
 function makeSock({ user = { id: '5511999999999:1@s.whatsapp.net' }, newsletterMetadata } = {}) {
   return { user, newsletterMetadata }
@@ -66,4 +67,67 @@ test('getChannelMetadata exige jid OU inviteCode', async () => {
     () => getChannelMetadata({ sock }),
     /jid ou inviteCode/,
   )
+})
+
+test('followChannel chama newsletterFollow e marca followedSet', async () => {
+  const calls = []
+  const sock = {
+    newsletterFollow: async (jid) => { calls.push(['follow', jid]) },
+    subscribeNewsletterUpdates: async (jid) => { calls.push(['sub', jid]); return { duration: 86400 } },
+  }
+  const followedSet = new Set()
+  const inFlight = new Set()
+  const result = await followChannel({ sock, jid: 'a@newsletter', followedSet, inFlight })
+  assert.deepEqual(result, { followed: 'new', duration: 86400 })
+  assert.ok(followedSet.has('a@newsletter'))
+  assert.equal(inFlight.has('a@newsletter'), false)
+  assert.deepEqual(calls, [['follow', 'a@newsletter'], ['sub', 'a@newsletter']])
+})
+
+test('followChannel é idempotente — já seguido retorna "already" sem chamar Baileys', async () => {
+  let called = false
+  const sock = { newsletterFollow: async () => { called = true } }
+  const followedSet = new Set(['a@newsletter'])
+  const result = await followChannel({ sock, jid: 'a@newsletter', followedSet, inFlight: new Set() })
+  assert.deepEqual(result, { followed: 'already' })
+  assert.equal(called, false)
+})
+
+test('followChannel detecta concorrência via inFlight e aguarda sem duplicar chamada', async () => {
+  let calls = 0
+  const sock = {
+    newsletterFollow: async () => { calls++ },
+    subscribeNewsletterUpdates: async () => ({ duration: 0 }),
+  }
+  const followedSet = new Set()
+  const inFlight = new Set()
+  const [a, b] = await Promise.all([
+    followChannel({ sock, jid: 'a@newsletter', followedSet, inFlight }),
+    followChannel({ sock, jid: 'a@newsletter', followedSet, inFlight }),
+  ])
+  assert.equal(calls, 1, 'apenas uma chamada efetiva ao newsletterFollow')
+  const outcomes = [a.followed, b.followed].sort()
+  assert.deepEqual(outcomes, ['in-flight', 'new'])
+})
+
+test('followChannel propaga erro de newsletterFollow e remove de inFlight', async () => {
+  const sock = { newsletterFollow: async () => { throw new Error('forbidden') } }
+  const inFlight = new Set()
+  await assert.rejects(
+    () => followChannel({ sock, jid: 'a@newsletter', followedSet: new Set(), inFlight }),
+    /forbidden/,
+  )
+  assert.equal(inFlight.has('a@newsletter'), false, 'inFlight limpo mesmo em erro')
+})
+
+test('followChannel funciona quando subscribeNewsletterUpdates falha — só warn', async () => {
+  const sock = {
+    newsletterFollow: async () => {},
+    subscribeNewsletterUpdates: async () => { throw new Error('subscribe-failed') },
+  }
+  const followedSet = new Set()
+  const result = await followChannel({ sock, jid: 'a@newsletter', followedSet, inFlight: new Set() })
+  assert.equal(result.followed, 'new')
+  assert.equal(result.duration, null)
+  assert.ok(followedSet.has('a@newsletter'))
 })
