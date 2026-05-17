@@ -1345,7 +1345,14 @@ process.on('message', async msg => {
     }
     activeSock.groupFetchAllParticipating()
       .then(groups => {
-        const list = Object.entries(groups).map(([id, g]) => ({ waJid: id, name: g.subject }))
+        const list = Object.entries(groups).map(([id, g]) => {
+          const parentJid = g.linkedParent
+          const parent = parentJid ? groups[parentJid] : null
+          const name = parent?.subject && parent.subject !== g.subject
+            ? `${parent.subject} - ${g.subject}`
+            : g.subject
+          return { waJid: id, name }
+        })
         process.send({ type: 'groups', requestId: msg.requestId, data: list })
       })
       .catch(err => {
