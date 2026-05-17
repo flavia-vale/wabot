@@ -159,12 +159,30 @@ export function getComparisonMetadata(slug) {
   }
 }
 
+function getRelatedComparisonPages(slug, limit = 3) {
+  const current = COMPARISON_PAGES[slug]
+  if (!current) return []
+  const currentCompetitors = new Set(current.competitorSlugs || [])
+
+  return Object.entries(COMPARISON_PAGES)
+    .filter(([href]) => href !== slug)
+    .map(([href, page]) => {
+      const competitors = new Set(page.competitorSlugs || [])
+      let overlap = 0
+      currentCompetitors.forEach((competitor) => {
+        if (competitors.has(competitor)) overlap += 1
+      })
+      const sameFormatBoost = page.format === current.format ? 1 : 0
+      const score = overlap * 10 + sameFormatBoost * 3
+      return { href, title: page.title, score }
+    })
+    .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
+    .slice(0, limit)
+}
+
 export function ComparisonPage({ slug }) {
   const page = COMPARISON_PAGES[slug]
-  const relatedPages = Object.entries(COMPARISON_PAGES)
-    .filter(([href]) => href !== slug)
-    .slice(0, 3)
-    .map(([href, related]) => ({ href, title: related.title }))
+  const relatedPages = getRelatedComparisonPages(slug, 3)
   const siteUrl = getSiteUrl()
   const dates = getEditorialDates(slug)
   const schemas = buildArticleJsonLd({ title: page.title, description: page.description, slug, siteUrl, faq: page.faq, type: 'Article' })
@@ -208,10 +226,10 @@ export function ComparisonPage({ slug }) {
             <span className="pill"><span className="dot" />Veja também</span>
             <h2 style={{ fontSize: 'clamp(22px, 2.4vw, 30px)', lineHeight: 1.15, margin: '14px 0 12px' }}>Outros comparativos relacionados</h2>
             <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
-              <li><Link href="/comparativos" style={{ color: 'var(--accent-strong)', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 4 }}>Hub de comparativos do BOTinho</Link></li>
+              <li><Link href="/comparativos" data-comparison-cta="related-hub" style={{ color: 'var(--accent-strong)', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 4 }}>Hub de comparativos do BOTinho</Link></li>
               {relatedPages.map((related) => (
                 <li key={related.href}>
-                  <Link href={related.href} style={{ color: 'var(--accent-strong)', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 4 }}>
+                  <Link href={related.href} data-comparison-cta="related-page" style={{ color: 'var(--accent-strong)', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 4 }}>
                     {related.title}
                   </Link>
                 </li>
@@ -344,7 +362,7 @@ export function ComparisonPage({ slug }) {
             <ul style={{ margin: '14px 0 0', paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.8 }}>
               {COMPARISON_SOURCE_LINKS.map((source) => (
                 <li key={source.href}>
-                  <a href={source.href} style={{ color: 'var(--accent-strong)', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 4 }} rel="noreferrer">{source.label}</a>
+                  <a href={source.href} data-comparison-cta="source-link" style={{ color: 'var(--accent-strong)', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 4 }} rel="noreferrer">{source.label}</a>
                 </li>
               ))}
             </ul>

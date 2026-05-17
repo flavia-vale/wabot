@@ -38,7 +38,7 @@ export default function Page() {
               <li key={item.href} className="rounded-3xl border border-emerald-100 bg-white p-6 shadow-sm">
                 <h2 className="text-xl font-black tracking-tight text-gray-950">{item.title}</h2>
                 <p className="mt-3 text-sm leading-7 text-gray-700">{item.description}</p>
-                <Link href={item.href} className="mt-4 inline-flex text-sm font-black text-emerald-700 underline underline-offset-4">
+                <Link href={item.href} data-seo-cta="comparativos-hub-card" className="mt-4 inline-flex text-sm font-black text-emerald-700 underline underline-offset-4">
                   Ver comparativo
                 </Link>
               </li>
