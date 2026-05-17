@@ -10,6 +10,9 @@ export const PUBLIC_ANALYTICS_EVENTS = new Set([
   'lead_magnet_submitted',
   'lead_magnet_pdf_clicked',
   'lead_magnet_online_clicked',
+  'comparison_page_view',
+  'comparison_scroll_50',
+  'comparison_cta_click',
 ])
 
 export const ANALYTICS_EVENTS = new Set([
@@ -30,6 +33,12 @@ export const ANALYTICS_EVENTS = new Set([
   'lead_magnet_started',
   'lead_magnet_submitted',
   'signup_started_from_seo',
+  'comparison_page_view',
+  'comparison_scroll_50',
+  'comparison_cta_click',
+  'public_analytics_accepted',
+  'public_analytics_invalid_event',
+  'public_analytics_blocked_429',
 ])
 
 const SENSITIVE_KEY_PATTERN = /(token|secret|password|cookie|credential|csrf|ssid|key|message|text|url|phone|email)/i
