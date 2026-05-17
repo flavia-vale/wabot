@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -7,10 +7,6 @@ import { HelpLink } from '@/components/HelpLink'
 import { LoadingState } from '@/components/States'
 import { AddChannelModal } from '@/components/AddChannelModal'
 import { TypeBadge, FollowBadge, AdminBadge } from '@/components/ChannelStatusBadges'
-
-const IMAGE_MODE_HELP = {
-  original: 'Usa a imagem que veio na mensagem monitorada.',
-}
 
 const roleLabels = {
   monitor: 'Monitorar (origem)',
@@ -59,17 +55,30 @@ export default function GruposPage() {
   async function load() {
     setLoadingGroups(true)
     setActionError('')
-    try { setGroups(await api.groups()) } catch (err) { setActionError(err.message) } finally { setLoadingGroups(false) }
+    try {
+      const list = await api.groups()
+      setGroups(list)
+      await ensureHiddenImageDefaults(list)
+    } catch (err) {
+      setActionError(err.message)
+    } finally {
+      setLoadingGroups(false)
+    }
   }
 
   useEffect(() => {
     let active = true
     setLoadingGroups(true)
     api.groups()
-      .then((data) => { if (active) setGroups(data) })
+      .then(async (data) => {
+        if (!active) return
+        setGroups(data)
+        await ensureHiddenImageDefaults(data)
+      })
       .catch((err) => { if (active) setActionError(err.message) })
       .finally(() => { if (active) setLoadingGroups(false) })
     return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function refreshAdmin(group) {
@@ -125,41 +134,19 @@ export default function GruposPage() {
     }
   }
 
-  function getGroupImageSettings() {
-    return {
-      imageMode: 'original',
-      imageLinkTarget: 'first',
-      fallbackToOriginal: true,
+  async function ensureHiddenImageDefaults(list) {
+    const monitorGroups = list.filter(g => g.role === 'monitor')
+    for (const group of monitorGroups) {
+      const needsFix = (group.imageMode ?? 'original') !== 'original' || group.fallbackToOriginal === false
+      if (!needsFix || autoFixingImageModeRef.current.has(group.id)) continue
+      autoFixingImageModeRef.current.add(group.id)
+      await handleUpdateGroup(group.id, {
+        imageMode: 'original',
+        imageLinkTarget: group.imageLinkTarget ?? 'first',
+        fallbackToOriginal: true,
+      })
+      autoFixingImageModeRef.current.delete(group.id)
     }
-  }
-
-  function getImageDraft(group) {
-    return imageDrafts[group.id] ?? getGroupImageSettings(group)
-  }
-
-  function updateImageDraft(group, data) {
-    setImageDrafts(prev => ({
-      ...prev,
-      [group.id]: { ...(prev[group.id] ?? getGroupImageSettings(group)), ...data },
-    }))
-    setSavedGroupId(current => current === group.id ? null : current)
-    setGroupErrors(prev => ({ ...prev, [group.id]: '' }))
-  }
-
-  function hasImageDraftChanges(group) {
-    const draft = getImageDraft(group)
-    return (group.imageMode ?? 'original') !== 'original' || draft.imageMode !== 'original'
-  }
-
-  async function saveImageSettings(group) {
-    const draft = getImageDraft(group)
-    const saved = await handleUpdateGroup(group.id, { ...draft, imageMode: 'original', fallbackToOriginal: true })
-    if (!saved) return
-    setImageDrafts(prev => {
-      const next = { ...prev }
-      delete next[group.id]
-      return next
-    })
   }
 
   function toggleGroupPlatform(group, platformId) {
@@ -438,28 +425,6 @@ export default function GruposPage() {
                     </select>
                   )}
                   <p className="mt-1 text-[11px] text-amber-600">Ativar pode aumentar o volume de mensagens encaminhadas.</p>
-                </div>
-                <div className="mt-3 border-t border-gray-100 pt-3">
-                  <div className="mb-1.5 flex items-center justify-between gap-2">
-                    <p className="text-xs font-medium text-gray-500">Imagem da mensagem:</p>
-                  </div>
-                  <p className="mt-1 text-[11px] text-gray-400">{IMAGE_MODE_HELP.original}</p>
-                  {imageDraft.imageMode !== 'original' && (
-                    <p className="mt-1 text-[11px] text-amber-600">Este grupo ainda não está usando a imagem original.</p>
-                  )}
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => saveImageSettings(g)}
-                      disabled={!imageChanged || savingGroupId === g.id}
-                      className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {savingGroupId === g.id ? 'Salvando imagem...' : 'Aplicar imagem original'}
-                    </button>
-                    {imageChanged && <span className="text-[11px] text-amber-600">Alteração de imagem ainda não salva.</span>}
-                    {!imageChanged && savedGroupId === g.id && <span className="text-[11px] text-green-600">Configuração de imagem salva.</span>}
-                  </div>
-                  {groupErrors[g.id] && <p className="mt-2 text-xs text-red-600" role="alert">{groupErrors[g.id]}</p>}
                 </div>
               </li>
               )

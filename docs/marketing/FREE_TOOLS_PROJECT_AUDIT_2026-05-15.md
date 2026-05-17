@@ -1,4 +1,4 @@
-# Auditoria profunda do Wabot com a skill `free-tools` — 2026-05-15
+# Auditoria profunda do BOTinho com a skill `free-tools` — 2026-05-15
 
 ## 1. Protocolo STRICT antes de qualquer melhoria
 
@@ -32,7 +32,7 @@
 
 ## 2. Diagnóstico executivo
 
-O Wabot/BOTinho já saiu do estágio “bot técnico” e tem uma base forte de produto SaaS: landing page, páginas programáticas, blog, materiais ricos, admin, pagamento, analytics, logs, suporte, FAQ editável e documentação de deploy. A maior oportunidade agora não é criar mais páginas genéricas; é criar **ferramentas gratuitas úteis e adjacentes** que capturem demanda de alta intenção antes do cadastro.
+O BOTinho já saiu do estágio “bot técnico” e tem uma base forte de produto SaaS: landing page, páginas programáticas, blog, materiais ricos, admin, pagamento, analytics, logs, suporte, FAQ editável e documentação de deploy. A maior oportunidade agora não é criar mais páginas genéricas; é criar **ferramentas gratuitas úteis e adjacentes** que capturem demanda de alta intenção antes do cadastro.
 
 A crítica principal: o projeto tem muito conteúdo e muita automação operacional, mas ainda falta um **motor de aquisição interativo**. Hoje a promessa é explicada; falta o visitante experimentar valor antes de criar conta. A skill `free-tools` aponta exatamente esse gap: ferramentas simples, focadas e úteis, com caminho natural para o produto pago.
 

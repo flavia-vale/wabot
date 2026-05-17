@@ -39,6 +39,7 @@ const OWNER_INSTANCE = process.env.NODE_APP_INSTANCE ?? '0'
 const SESSION_ERROR_WINDOW_MS = Math.max(30_000, Number(process.env.WA_SESSION_ERROR_WINDOW_MS || 120_000))
 const SESSION_ERROR_THRESHOLD = Math.max(5, Number(process.env.WA_SESSION_ERROR_THRESHOLD || 30))
 const SESSION_RECOVERY_COOLDOWN_MS = Math.max(60_000, Number(process.env.WA_SESSION_RECOVERY_COOLDOWN_MS || 300_000))
+const ALLOW_TEXT_WITHOUT_LINKS = String(process.env.WA_ALLOW_TEXT_WITHOUT_LINKS || '0') === '1'
 
 let activeSock = null
 let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
@@ -228,9 +229,11 @@ async function loadConfig() {
       id: g.id,
       waJid: g.waJid,
       kind: g.kind,
-      imageMode: g.imageMode,
-      imageLinkTarget: g.imageLinkTarget,
-      fallbackToOriginal: g.fallbackToOriginal,
+      // A opção de imagem fica oculta no dashboard, mas a operação deve
+      // permanecer sempre habilitada para todos os clientes.
+      imageMode: 'original',
+      imageLinkTarget: g.imageLinkTarget ?? 'first',
+      fallbackToOriginal: true,
       blockedKeywords: g.blockedKeywords,
       allowedPlatforms: g.allowedPlatforms,
       forwardMode: g.forwardMode,
@@ -763,7 +766,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       const cfg = await getConfig()
       logger.info({ jid, monitorGroups: cfg.groups.monitor, feedGlobal: cfg.botConfig.feedGlobal }, 'mensagem recebida')
       const monitorGroup = cfg.groups.monitor.find(m => m.waJid === jid)
+      const shouldTrackSkipped = Boolean(monitorGroup) || (cfg.botConfig.feedGlobal && isMirrorableJid(jid))
       async function recordSkippedMessage({ reason, platform = 'unknown', originalUrl = '', convertedUrl = '' }) {
+        if (!shouldTrackSkipped) return
         const messageText =
           msg.message?.conversation ||
           msg.message?.extendedTextMessage?.text ||
@@ -784,14 +789,12 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       }
 
       if (!cfg.botConfig.feedGlobal && !monitorGroup) {
-        await recordSkippedMessage({ reason: 'skip:not_monitor_group' })
         return
       }
       // feedGlobal aceita mensagens de qualquer JID espelhável (grupo ou canal).
       // O pipeline downstream é agnóstico ao tipo; o tratamento específico
       // de envio para canal-destino vem na Fase 3.
       if (cfg.botConfig.feedGlobal && !isMirrorableJid(jid)) {
-        await recordSkippedMessage({ reason: 'skip:not_mirrorable_jid' })
         return
       }
 
@@ -1052,7 +1055,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         dedup.links[key] = Date.now()
         scheduleDedupSave(dedup)
 
-        const platforms = conversions.map(c => c.platform).join('+')
+        const platforms = conversions.length ? conversions.map(c => c.platform).join('+') : 'nolink'
         const logData = {
           userId,
           platform: platforms,
@@ -1115,7 +1118,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             })
           },
           send: async ({ sock: sendSock, payload }) => {
-            if (shouldUseRelayPath({ destJid, hasOriginal: !!original })) {
+            if (original) {
               const replayProto = { ...original.proto }
               if (original.type === 'imageMessage' || original.type === 'videoMessage') {
                 replayProto.caption = finalText
@@ -1207,6 +1210,14 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         label: `msg:${msgId}`,
         orderKey: msg.key.remoteJid,
         onError: async (err) => {
+          const currentCfg = await getConfig().catch(() => null)
+          const currentJid = msg.key.remoteJid
+          const isMonitored = Boolean(currentCfg?.groups?.monitor?.find?.(m => m.waJid === currentJid))
+          const isFeedGlobalMirrorable = Boolean(currentCfg?.botConfig?.feedGlobal && isMirrorableJid(currentJid))
+          if (!isMonitored && !isFeedGlobalMirrorable) {
+            logger.error({ msgId, dedupKey, err: err.message }, 'Mensagem descartada fora do escopo monitorado — sem log em painel')
+            return
+          }
           const raw = String(err?.message || '')
           const reason = /Bad MAC|MessageCounterError|Key used already or never filled/i.test(raw)
             ? `skip:decrypt_failed:${raw.slice(0, 80)}`
