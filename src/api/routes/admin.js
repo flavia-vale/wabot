@@ -2,6 +2,7 @@ import db from '../../db.js'
 import { listRunningBots } from '../../manager.js'
 import { getApiMetricsSnapshot } from '../metrics.js'
 import { summarizeCredentialHealth } from '../../credentialHealth.js'
+import { getPublicAnalyticsQualitySnapshot } from './public.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -268,6 +269,7 @@ async function getTutorialContentSafe() {
     throw err
   }
 }
+
 
 function parseContactLogInput(body = {}) {
   const channel = String(body.channel ?? 'whatsapp').trim()
@@ -1087,6 +1089,31 @@ export async function adminRoutes(app) {
     return { alerts, from, to }
   })
 
+  app.get('/marketing/comparison-quality', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:read'))) return
+    const { from, to } = parseDateRange(req.query, 30)
+    const [viewsRows, scrollRows, ctaRows] = await Promise.all([
+      db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event='comparison_page_view' AND createdAt >= ${from} AND createdAt <= ${to}`,
+      db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event='comparison_scroll_50' AND createdAt >= ${from} AND createdAt <= ${to}`,
+      db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event='comparison_cta_click' AND createdAt >= ${from} AND createdAt <= ${to}`,
+    ])
+    const views = Number(viewsRows?.[0]?.total || 0)
+    const scroll50 = Number(scrollRows?.[0]?.total || 0)
+    const ctaClicks = Number(ctaRows?.[0]?.total || 0)
+    const publicQuality = getPublicAnalyticsQualitySnapshot()
+    await writeAdminAuditLog(req, { action: 'admin.marketing.comparison_quality.read', resource: 'comparisonQuality' })
+    return {
+      views,
+      scroll50,
+      ctaClicks,
+      scrollRate: views ? Math.round((scroll50 / views) * 1000) / 10 : 0,
+      ctaRate: views ? Math.round((ctaClicks / views) * 1000) / 10 : 0,
+      ingestion: publicQuality,
+      from,
+      to,
+    }
+  })
+
   app.get('/billing/webhooks', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'billing:read'))) return
 
@@ -1385,6 +1412,7 @@ export async function adminRoutes(app) {
 
     return { tutorial: { ...tutorial, images } }
   })
+
 
   app.put('/lp-content/plans/:id', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'admin:write'))) return
