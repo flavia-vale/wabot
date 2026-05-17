@@ -281,6 +281,14 @@ export const api = {
 
 
 
+  resolveChannelInvite: (url) =>
+    apiFetch('/api/groups/resolve-channel-invite', { method: 'POST', body: JSON.stringify({ url }) }),
+  resolveChannelJid: (jid) =>
+    apiFetch('/api/groups/resolve-channel-jid', { method: 'POST', body: JSON.stringify({ jid }) }),
+  followChannelNow: (id) => apiFetch(`/api/groups/${id}/follow-now`, { method: 'POST' }),
+  refreshChannelAdmin: (id) => apiFetch(`/api/groups/${id}/refresh-admin`, { method: 'POST' }),
+  waChannels: () => apiFetch('/api/groups/wa/channels'),
+
   logs: (status = 'all', page = 1, limit = 20) =>
     apiFetch(`/api/logs?status=${status}&page=${page}&limit=${limit}`),
   logsClear: () => apiFetch('/api/logs/clear', { method: 'DELETE' }),
