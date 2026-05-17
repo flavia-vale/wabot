@@ -16,6 +16,9 @@ export const TRACKING_EVENTS = {
   LEAD_MAGNET_SUBMITTED: 'lead_magnet_submitted',
   LEAD_MAGNET_PDF_CLICKED: 'lead_magnet_pdf_clicked',
   LEAD_MAGNET_ONLINE_CLICKED: 'lead_magnet_online_clicked',
+  COMPARISON_PAGE_VIEW: 'comparison_page_view',
+  COMPARISON_SCROLL_50: 'comparison_scroll_50',
+  COMPARISON_CTA_CLICK: 'comparison_cta_click',
 }
 
 export const PROMPT_EXCLUDED_PATH_PREFIXES = [
@@ -35,6 +38,9 @@ export const PUBLIC_PERSISTED_EVENTS = new Set([
   TRACKING_EVENTS.LEAD_MAGNET_SUBMITTED,
   TRACKING_EVENTS.LEAD_MAGNET_PDF_CLICKED,
   TRACKING_EVENTS.LEAD_MAGNET_ONLINE_CLICKED,
+  TRACKING_EVENTS.COMPARISON_PAGE_VIEW,
+  TRACKING_EVENTS.COMPARISON_SCROLL_50,
+  TRACKING_EVENTS.COMPARISON_CTA_CLICK,
 ])
 
 export function shouldSuppressConversionPrompt(pathname = resolvePathname()) {
@@ -76,12 +82,12 @@ function persistPublicEvent(payload) {
   try {
     if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
       const blob = new Blob([body], { type: 'application/json' })
-      if (navigator.sendBeacon('/api/public/analytics', blob)) return
+      if (navigator.sendBeacon('/api/public/v1/analytics', blob)) return
     }
   } catch {}
 
   try {
-    fetch('/api/public/analytics', {
+    fetch('/api/public/v1/analytics', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
