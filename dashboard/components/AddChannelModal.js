@@ -10,7 +10,15 @@ const TABS = [
   { id: 'jid', label: 'JID manual' },
 ]
 
+// Wrapper que remonta o conteúdo via `key` quando abre — substitui o effect
+// que resetava state ao fechar. Padrão idiomático React 19 (evita setState
+// síncrono em useEffect, regra react-hooks/set-state-in-effect).
 export function AddChannelModal({ open, onClose, onCreated }) {
+  if (!open) return null
+  return <AddChannelModalContent onClose={onClose} onCreated={onCreated} />
+}
+
+function AddChannelModalContent({ onClose, onCreated }) {
   const [tab, setTab] = useState('link')
   const [url, setUrl] = useState('')
   const [jid, setJid] = useState('')
@@ -18,25 +26,21 @@ export function AddChannelModal({ open, onClose, onCreated }) {
   const [role, setRole] = useState('monitor')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // followedList: null = ainda não buscado (= loading quando tab='followed'),
+  // array = lista carregada (possivelmente vazia)
   const [followedList, setFollowedList] = useState(null)
-  const [loadingFollowed, setLoadingFollowed] = useState(false)
   const [confirmNonAdmin, setConfirmNonAdmin] = useState(false)
 
   useEffect(() => {
-    if (!open) {
-      setTab('link'); setUrl(''); setJid(''); setPreview(null); setRole('monitor')
-      setBusy(false); setError(''); setFollowedList(null); setConfirmNonAdmin(false)
-    }
-  }, [open])
-
-  useEffect(() => {
     if (tab !== 'followed' || followedList !== null) return
-    setLoadingFollowed(true)
+    let cancelled = false
     api.waChannels()
-      .then((list) => setFollowedList(Array.isArray(list) ? list : []))
-      .catch((err) => setError(err.message))
-      .finally(() => setLoadingFollowed(false))
+      .then((list) => { if (!cancelled) setFollowedList(Array.isArray(list) ? list : []) })
+      .catch((err) => { if (!cancelled) { setFollowedList([]); setError(err.message) } })
+    return () => { cancelled = true }
   }, [tab, followedList])
+
+  const loadingFollowed = tab === 'followed' && followedList === null
 
   async function resolveLink() {
     setBusy(true); setError(''); setPreview(null)
@@ -71,8 +75,6 @@ export function AddChannelModal({ open, onClose, onCreated }) {
       onClose?.()
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
-
-  if (!open) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
