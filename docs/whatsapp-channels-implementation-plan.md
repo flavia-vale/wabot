@@ -281,14 +281,63 @@ destino em staging por 24h sem regressão.
 Critério de aceite: ofertas de um grupo-monitor chegando a um
 canal-destino próprio em staging, com mídia hi-res, por 24h.
 
-### Fase 4 — UI no dashboard
-- Formulário com seletor de tipo.
-- Parser de invite URL.
-- Badges de status (seguindo / admin).
-- Migrar páginas existentes para o vocabulário "origens/destinos".
+## Fase 4 — UI no dashboard (IMPLEMENTADA)
 
-Critério de aceite: usuária consegue, no dashboard de staging, adicionar
-canal-monitor e canal-destino sem assistência técnica.
+**Status:** Implementada em PR #496. Branch `feat/channels-phase-4-ui`. Pendente validação manual em staging.
+
+### Decisões consolidadas (alinhadas com a usuária via brainstorming)
+
+1. **Cadastro de canal** aceita três caminhos no mesmo modal:
+   - Link de convite (`https://whatsapp.com/channel/...`) — resolvido via `newsletterMetadata('invite', code)`.
+   - Lista de canais já seguidos — via `listFollowedChannels` (derivado de `followedChannelJids` + metadata em paralelo).
+   - JID manual (`xxx@newsletter`) — caminho fallback avançado.
+
+2. **Follow de canal-monitor** acontece imediatamente após o cadastro, via IPC `channel:follow` no worker. Badge na UI mostra status `pendente → seguindo → erro`.
+
+3. **Badge de admin** preventivo no canal-destino, com refresh manual. Limitação conhecida: Baileys 6.7.16 só expõe `owner` em NewsletterMetadata, não admins. Badge texto é honesto: "Admin OK" / "Sem permissão confirmada".
+
+4. **Página única "Grupos e Canais"** com seletor de tipo no cadastro, badges de tipo na listagem (Grupo/Canal) e chips de filtro (Todos / Grupos / Canais).
+
+### IPC API↔worker
+
+Reusa o padrão existente `requestWithTimeout` em `sessionCore.js`. Novos exports:
+- `channelMetadata(userId, { jid? | inviteCode? })`
+- `followChannelImmediate(userId, jid)`
+- `listFollowedChannels(userId)`
+
+Handlers no worker recebem `channel:metadata`, `channel:follow`, `channel:listFollowed` e roteiam para `src/core/channelDirectory.js` (módulo puro, sock injetado).
+
+### Rotas API novas (em `src/api/routes/groups.js`)
+
+- `POST /api/groups/resolve-channel-invite` — body `{ url }`
+- `POST /api/groups/resolve-channel-jid` — body `{ jid }`
+- `POST /api/groups/:id/follow-now` — para canal-monitor cadastrado
+- `POST /api/groups/:id/refresh-admin` — re-checa admin de canal-destino
+- `GET /api/groups/wa/channels` — lista canais seguidos com metadata
+
+Todas as rotas validam `isRunning(userId)` (503 se worker offline) e usam dependency injection para serem testáveis.
+
+### Testes
+
+- `test/core/channelDirectory.test.js` — 14 testes (metadata, follow idempotente, listFollowed)
+- `test/api/routes/groups.channel.test.js` — 13 testes para as 5 rotas
+- Suite full: 224+ verdes
+
+### Componentes novos no dashboard
+
+- `dashboard/components/AddChannelModal.js` — modal 3 abas (link / seguidos / JID)
+- `dashboard/components/ChannelStatusBadges.js` — TypeBadge, FollowBadge, AdminBadge
+
+### Smoke manual pós-merge staging
+
+1. Resolver link de canal próprio → preview com "Admin OK"
+2. Cadastrar canal-destino próprio → mensagem chega no canal
+3. Cadastrar canal-monitor → badge "Pendente" → "Seguindo" em segundos
+4. Cadastrar canal alheio como destino (com checkbox) → erro forbidden + sem retries (Fase 3 já cobre)
+5. JID manual → preview funciona
+6. Refresh admin badge → status atualiza
+7. Worker offline → 503 com mensagem clara
+8. Filtro chips funcionando
 
 ### Fase 5 — Salvaguardas anti-ban
 - Limite diário de novos `newsletterFollow` por sessão (default 3,
