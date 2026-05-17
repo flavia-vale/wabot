@@ -116,4 +116,14 @@ export const sendBroadcast = (userId, text, jids) => requestWithTimeout(userId, 
 export const getBotMetrics = userId => bots.has(userId) ? requestWithTimeout(userId, 'metrics', {}, 5000, 'Timeout ao buscar métricas') : Promise.resolve(null)
 export const requestPairingCode = (userId, phone) => requestWithTimeout(userId, 'requestPairingCode', { phone }, 45000, 'Timeout ao solicitar código de pareamento')
 export function reloadConfig(userId) { const e = bots.get(userId); if (!e) return false; try { e.proc.send({ type: 'reloadConfig' }) } catch {}; return true }
+
+export const channelMetadata = (userId, { jid, inviteCode }) =>
+  requestWithTimeout(userId, 'channel:metadata', { jid, inviteCode }, 15000, 'Timeout ao buscar metadata do canal')
+
+export const followChannelImmediate = (userId, jid) =>
+  requestWithTimeout(userId, 'channel:follow', { jid }, 15000, 'Timeout ao seguir canal')
+
+export const listFollowedChannels = (userId) =>
+  requestWithTimeout(userId, 'channel:listFollowed', {}, 20000, 'Timeout ao listar canais seguidos')
+
 export function stopAllBots() { const ids = listRunningBots(); for (const id of ids) stopBot(id); return ids.length }
