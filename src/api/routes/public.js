@@ -42,6 +42,16 @@ function serializeFaqItem(item) {
   }
 }
 
+function assertFaqShape(items = []) {
+  if (!Array.isArray(items)) return []
+  return items.map((item) => ({
+    id: String(item.id ?? ''),
+    question: String(item.question ?? ''),
+    answer: String(item.answer ?? ''),
+    position: Number(item.position ?? 0),
+  }))
+}
+
 function parsePlanFeatures(rawFeatures) {
   try {
     const parsed = JSON.parse(String(rawFeatures ?? '[]'))
@@ -60,6 +70,18 @@ function serializeLpPlan(plan) {
     features: parsePlanFeatures(plan.features),
     position: plan.position,
   }
+}
+
+function assertPlanShape(plans = []) {
+  if (!Array.isArray(plans)) return []
+  return plans.map((plan) => ({
+    id: String(plan.id ?? ''),
+    title: String(plan.title ?? ''),
+    description: String(plan.description ?? ''),
+    price: String(plan.price ?? ''),
+    features: Array.isArray(plan.features) ? plan.features.map((f) => String(f)) : [],
+    position: Number(plan.position ?? 0),
+  }))
 }
 
 async function getActiveFaqItems() {
@@ -101,11 +123,28 @@ async function getTutorialContent() {
 }
 
 export async function publicRoutes(app) {
+  app.get('/v1/faq', async (_req, reply) => {
+    reply.header('Cache-Control', 'no-store, max-age=0')
+    const items = await getActiveFaqItems()
+    return { version: 'v1', items: assertFaqShape(items.map(serializeFaqItem)) }
+  })
+
   app.get('/faq', async (_req, reply) => {
     reply.header('Cache-Control', 'no-store, max-age=0')
     const items = await getActiveFaqItems()
 
-    return { items: items.map(serializeFaqItem) }
+    return { items: assertFaqShape(items.map(serializeFaqItem)) }
+  })
+
+  app.get('/v1/lp-content', async (_req, reply) => {
+    reply.header('Cache-Control', 'no-store, max-age=0')
+    const [plans, faqItems, tutorial] = await Promise.all([getLpPlans(), getActiveFaqItems(), getTutorialContent()])
+    return {
+      version: 'v1',
+      plans: assertPlanShape(plans.map(serializeLpPlan)),
+      faq: assertFaqShape(faqItems.map(serializeFaqItem)),
+      tutorial: tutorial ?? null,
+    }
   })
 
   app.get('/lp-content', async (_req, reply) => {
@@ -113,10 +152,16 @@ export async function publicRoutes(app) {
     const [plans, faqItems, tutorial] = await Promise.all([getLpPlans(), getActiveFaqItems(), getTutorialContent()])
 
     return {
-      plans: plans.map(serializeLpPlan),
-      faq: faqItems.map(serializeFaqItem),
+      plans: assertPlanShape(plans.map(serializeLpPlan)),
+      faq: assertFaqShape(faqItems.map(serializeFaqItem)),
       tutorial,
     }
+  })
+
+  app.get('/v1/tutorial-content', async (_req, reply) => {
+    reply.header('Cache-Control', 'no-store, max-age=0')
+    const tutorial = await getTutorialContent()
+    return { version: 'v1', tutorial: tutorial ?? null }
   })
 
   app.get('/tutorial-content', async (_req, reply) => {
@@ -146,10 +191,30 @@ export async function publicRoutes(app) {
     return reply.code(202).send({ ok: true })
   })
 
+  app.post('/v1/analytics', async (req, reply) => {
+    reply.header('Cache-Control', 'no-store, max-age=0')
+    const attempt = consumePublicAnalyticsAttempt({ ip: req.ip })
+    if (attempt.blocked) {
+      const retryAfter = Math.max(1, Math.ceil((attempt.resetAt - Date.now()) / 1000))
+      reply.header('Retry-After', String(retryAfter))
+      return reply.code(429).send({ error: 'Muitos eventos. Tente novamente mais tarde.' })
+    }
+    const { event, metadata = {} } = req.body ?? {}
+    if (!PUBLIC_ANALYTICS_EVENTS.has(event)) return reply.code(400).send({ error: 'Evento público inválido' })
+    await trackAnalyticsEvent({ event, metadata: normalizePublicAnalyticsMetadata(metadata, req) })
+    return reply.code(202).send({ ok: true, version: 'v1' })
+  })
+
+  app.get('/v1/plans', async (_req, reply) => {
+    reply.header('Cache-Control', 'no-store, max-age=0')
+    const plans = await getLpPlans()
+    return { version: 'v1', plans: assertPlanShape(plans.map(serializeLpPlan)) }
+  })
+
   app.get('/plans', async (_req, reply) => {
     reply.header('Cache-Control', 'no-store, max-age=0')
     const plans = await getLpPlans()
 
-    return { plans: plans.map(serializeLpPlan) }
+    return { plans: assertPlanShape(plans.map(serializeLpPlan)) }
   })
 }

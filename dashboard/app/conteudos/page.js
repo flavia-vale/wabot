@@ -60,6 +60,11 @@ const methodologyPages = [
 
 const comparisonPages = [
   {
+    href: '/comparativos',
+    title: 'Hub de comparativos do BOTinho',
+    description: 'Página índice com comparativos e alternativas para escolher ferramenta por estágio e tipo de operação.',
+  },
+  {
     href: '/alternativas/bot-para-whatsapp-afiliados',
     title: 'Alternativas de bot para WhatsApp para afiliados',
     description: 'Comparativo equilibrado entre planilha, automação genérica, ferramentas oficiais e BOTinho.',

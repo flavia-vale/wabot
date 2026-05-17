@@ -269,6 +269,17 @@ async function getTutorialContentSafe() {
   }
 }
 
+async function getComparisonContentSafe() {
+  if (!db.tutorialContent || typeof db.tutorialContent.findUnique !== 'function') return null
+  const record = await db.tutorialContent.findUnique({ where: { id: 'comparison_content' } })
+  if (!record) return null
+  try {
+    return JSON.parse(String(record.body || '{}'))
+  } catch {
+    return null
+  }
+}
+
 function parseContactLogInput(body = {}) {
   const channel = String(body.channel ?? 'whatsapp').trim()
   const reason = String(body.reason ?? '').trim()
@@ -1384,6 +1395,47 @@ export async function adminRoutes(app) {
     })
 
     return { tutorial: { ...tutorial, images } }
+  })
+
+  app.get('/comparison-content', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:read'))) return
+    const comparison = await getComparisonContentSafe()
+    await writeAdminAuditLog(req, { action: 'admin.comparisonContent.view', resource: 'comparisonContent' })
+    return { comparison: comparison ?? { status: 'draft', pages: {} } }
+  })
+
+  app.put('/comparison-content', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:write'))) return
+    if (!db.tutorialContent || typeof db.tutorialContent.upsert !== 'function') {
+      reply.code(503).send({ error: 'Conteúdo comparativo indisponível no momento. Rode prisma generate/migrate no servidor.' })
+      return
+    }
+
+    const body = req.body ?? {}
+    const status = String(body.status ?? 'draft').trim().toLowerCase()
+    const pages = typeof body.pages === 'object' && body.pages !== null ? body.pages : {}
+    if (!['draft', 'review', 'published'].includes(status)) {
+      reply.code(400).send({ error: 'Status inválido. Use draft, review ou published.' })
+      return
+    }
+
+    const payload = { status, pages, updatedAt: new Date().toISOString() }
+    const existing = await getComparisonContentSafe()
+    const saved = await db.tutorialContent.upsert({
+      where: { id: 'comparison_content' },
+      create: { id: 'comparison_content', title: 'Comparison Content', body: JSON.stringify(payload), images: '[]' },
+      update: { body: JSON.stringify(payload) },
+    })
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.comparisonContent.update',
+      resource: 'comparisonContent',
+      resourceId: saved.id,
+      before: existing ? JSON.stringify(existing) : undefined,
+      after: JSON.stringify(payload),
+    })
+
+    return { comparison: payload }
   })
 
   app.put('/lp-content/plans/:id', async (req, reply) => {
