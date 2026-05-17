@@ -192,7 +192,7 @@ Prioridade máxima: transformar o site em uma fonte que um LLM consiga citar sem
 
 **Melhorias recomendadas**
 
-1. Definir naming canônico: “BOTinho” ou “BOTinho by BOTinho”, e aplicar em title, schema, llms.txt, footer e páginas institucionais.
+1. Definir naming canônico: “BOTinho” como marca e “espelhar grupos” como território semântico/SEO, aplicando isso em title, schema, llms.txt, footer e páginas institucionais.
 2. Criar página `/sobre-metodologia` ou expandir `/quem-somos` com:
    - quem opera o produto;
    - quais integrações/marketplaces são suportados;
