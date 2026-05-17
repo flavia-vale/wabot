@@ -22,7 +22,7 @@ export async function logsRoutes(app) {
       .filter(([label, value]) => label.includes(normalizedQuery) || value.includes(normalizedQuery))
       .map(([, value]) => value)
 
-    const groups = query ? await db.group.findMany({ where: { userId } }) : []
+    const groups = await db.group.findMany({ where: { userId } })
     const groupMap = Object.fromEntries(groups.map(g => [g.waJid, g.name]))
     const matchingGroupJids = query
       ? groups
