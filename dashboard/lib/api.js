@@ -198,8 +198,6 @@ export const api = {
 
   adminMe: () => apiFetch('/api/admin/me'),
   adminLpContent: () => apiFetch('/api/admin/lp-content'),
-  adminComparisonContent: () => apiFetch('/api/admin/comparison-content'),
-  adminUpdateComparisonContent: (data) => apiFetch('/api/admin/comparison-content', { method: 'PUT', body: JSON.stringify(data) }),
   adminUpdateLpPlan: (id, data) => apiFetch(`/api/admin/lp-content/plans/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   adminUpdateTutorialContent: (data) => apiFetch('/api/admin/lp-content/tutorial', { method: 'PUT', body: JSON.stringify(data) }),
   adminFaq: () => apiFetch('/api/admin/faq'),
