@@ -6,6 +6,7 @@ import {
   computePriorityScore,
   scoreFinancialWeight,
   selectContactExperimentVariant,
+  shouldTrackRiskDetected,
 } from '../src/api/routes/admin.js'
 
 test('getSuggestedAction retorna ação por motivo prioritário', () => {
@@ -46,4 +47,14 @@ test('selectContactExperimentVariant é determinístico por usuário e estratég
   assert.equal(a, b)
   assert.ok(['risk_copy_a', 'risk_copy_b'].includes(a))
   assert.ok(['value_copy_a', 'value_copy_b'].includes(c))
+})
+
+
+test('shouldTrackRiskDetected deduplica por 24h por user+strategy+reasons', () => {
+  const now = Date.now()
+  const base = { userId: 'u1', strategy: 'risk_first', reasons: ['wa_disconnected'] }
+  assert.equal(shouldTrackRiskDetected({ ...base, now }), true)
+  assert.equal(shouldTrackRiskDetected({ ...base, now: now + 1000 }), false)
+  assert.equal(shouldTrackRiskDetected({ ...base, now: now + (24 * 60 * 60 * 1000) + 1 }), true)
+  assert.equal(shouldTrackRiskDetected({ userId: 'u1', strategy: 'value_first', reasons: ['wa_disconnected'], now: now + 2000 }), true)
 })

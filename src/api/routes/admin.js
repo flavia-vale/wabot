@@ -20,6 +20,25 @@ const EXPORT_LIMIT = 100
 const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = ['flavia.vale@usp.br', 'flaviaroberta.1496@gmail.com', 'tacianeaas02@gmail.com']
 const CANONICAL_OWNER_ADMIN_EMAILS = new Set(DEFAULT_BOOTSTRAP_ADMIN_EMAILS)
 
+
+const CS_RISK_DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000
+const csRiskDetectedWindow = new Map()
+
+export function shouldTrackRiskDetected({ userId = '', strategy = 'risk_first', reasons = [], now = Date.now() } = {}) {
+  const reasonKey = Array.isArray(reasons) ? reasons.slice().sort().join('|').slice(0, 120) : ''
+  const key = `${String(userId)}::${String(strategy)}::${reasonKey}`
+  const lastAt = csRiskDetectedWindow.get(key)
+  if (lastAt && (now - lastAt) < CS_RISK_DEDUP_WINDOW_MS) return false
+  csRiskDetectedWindow.set(key, now)
+  if (csRiskDetectedWindow.size > 5000) {
+    for (const [k, at] of csRiskDetectedWindow.entries()) {
+      if ((now - at) > CS_RISK_DEDUP_WINDOW_MS) csRiskDetectedWindow.delete(k)
+      if (csRiskDetectedWindow.size <= 4000) break
+    }
+  }
+  return true
+}
+
 function normalizeAdminEmail(email) {
   return String(email ?? '').trim().toLowerCase()
 }
@@ -791,7 +810,9 @@ export async function adminRoutes(app) {
           lastSupportContactAt: user.lastSupportContactAt,
           financialWeight,
         })
-        trackAnalyticsEventSafe({ userId: user.id, event: 'cs_risk_detected', metadata: { strategy, reasons: contactReasons.join('|').slice(0, 80) } })
+        if (shouldTrackRiskDetected({ userId: user.id, strategy, reasons: contactReasons })) {
+          trackAnalyticsEventSafe({ userId: user.id, event: 'cs_risk_detected', metadata: { strategy, reasons: contactReasons.join('|').slice(0, 80) } })
+        }
         return sanitizeUser({
           ...user,
           groups: undefined,
@@ -920,6 +941,12 @@ export async function adminRoutes(app) {
     trackAnalyticsEventSafe({ userId: user.id, event: 'cs_contact_attempted', metadata: { channel: data.channel, outcome: data.outcome } })
     if (['contacted', 'resolved', 'follow_up'].includes(data.outcome)) {
       trackAnalyticsEventSafe({ userId: user.id, event: 'cs_contact_connected', metadata: { channel: data.channel, outcome: data.outcome } })
+    }
+    if (data.outcome === 'follow_up') {
+      trackAnalyticsEventSafe({ userId: user.id, event: 'cs_offer_shown', metadata: { channel: data.channel } })
+    }
+    if (data.outcome === 'resolved') {
+      trackAnalyticsEventSafe({ userId: user.id, event: 'cs_offer_accepted', metadata: { channel: data.channel } })
     }
 
     await writeAdminAuditLog(req, {

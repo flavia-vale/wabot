@@ -85,7 +85,10 @@ export default function CustomerSuccessPage() {
 
   useEffect(() => {
     if (!admin || !hasCustomerSuccessAccess) return
-    loadData(reason).catch(err => setError(err.message || 'Erro ao carregar fila de CS.'))
+    const timer = setTimeout(() => {
+      loadData(reason).catch(err => setError(err.message || 'Erro ao carregar fila de CS.'))
+    }, 0)
+    return () => clearTimeout(timer)
   }, [admin, hasCustomerSuccessAccess, loadData, reason, strategy])
 
   async function saveContactLog() {
