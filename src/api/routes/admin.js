@@ -339,7 +339,7 @@ function buildRiskFlags({ user, groups, successCount = 0, errorCount = 0, now = 
 
 
 
-function getSuggestedAction(contactReasons = []) {
+export function getSuggestedAction(contactReasons = []) {
   if (contactReasons.includes('wa_disconnected')) return 'Reconectar WhatsApp e validar sessão'
   if (contactReasons.includes('onboarding_incomplete')) return 'Concluir onboarding (credenciais e grupos)'
   if (contactReasons.includes('high_errors_24h')) return 'Investigar erros e estabilizar envios'
@@ -350,7 +350,7 @@ function getSuggestedAction(contactReasons = []) {
   return 'Realizar contato de diagnóstico'
 }
 
-function computePriorityScore({ riskFlags = [], errorCount24h = 0, accessExpiresAt = null, lastSupportContactAt = null, financialWeight = 0 }) {
+export function computePriorityScore({ riskFlags = [], errorCount24h = 0, accessExpiresAt = null, lastSupportContactAt = null, financialWeight = 0 }) {
   let score = 0
   score += Math.min(60, (riskFlags || []).length * 10)
   if (errorCount24h >= 5) score += 10
@@ -365,13 +365,13 @@ function computePriorityScore({ riskFlags = [], errorCount24h = 0, accessExpires
 }
 
 
-function scoreFinancialWeight(user) {
+export function scoreFinancialWeight(user) {
   const planWeight = user.plan === 'pro' ? 20 : user.plan === 'basic' ? 12 : 4
   const paymentsWeight = Number(user?._count?.payments || 0) > 0 ? 10 : 0
   return planWeight + paymentsWeight
 }
 
-function selectContactExperimentVariant(userId = '', strategy = 'risk_first') {
+export function selectContactExperimentVariant(userId = '', strategy = 'risk_first') {
   const seed = String(userId || '')
   let hash = 0
   for (let i = 0; i < seed.length; i++) hash = ((hash << 5) - hash) + seed.charCodeAt(i)
