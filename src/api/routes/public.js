@@ -1,5 +1,5 @@
 import db from '../../db.js'
-import { PUBLIC_ANALYTICS_EVENTS, sanitizeAnalyticsMetadata, trackAnalyticsEvent } from '../../analytics.js'
+import { PUBLIC_ANALYTICS_EVENTS, sanitizeAnalyticsMetadata, trackAnalyticsEvent, trackAnalyticsEventSafe } from '../../analytics.js'
 
 
 const publicAnalyticsAttempts = new Map()
@@ -108,7 +108,10 @@ function safeShapeOrFallback({ label, factory, fallback = [] }) {
 async function handlePublicAnalytics(req, reply, { includeVersion = false } = {}) {
   const attempt = consumePublicAnalyticsAttempt({ ip: req.ip })
   if (attempt.blocked) {
-    publicAnalyticsQuality.blocked429 += 1
+    trackAnalyticsEventSafe({
+      event: 'public_analytics_blocked_429',
+      metadata: { route: req.routeOptions?.url || '/api/public/analytics' },
+    })
     const retryAfter = Math.max(1, Math.ceil((attempt.resetAt - Date.now()) / 1000))
     reply.header('Retry-After', String(retryAfter))
     return reply.code(429).send({ error: 'Muitos eventos. Tente novamente mais tarde.' })
@@ -116,11 +119,17 @@ async function handlePublicAnalytics(req, reply, { includeVersion = false } = {}
 
   const { event, metadata = {} } = req.body ?? {}
   if (!PUBLIC_ANALYTICS_EVENTS.has(event)) {
-    publicAnalyticsQuality.invalidEvent += 1
+    trackAnalyticsEventSafe({
+      event: 'public_analytics_invalid_event',
+      metadata: { route: req.routeOptions?.url || '/api/public/analytics' },
+    })
     return reply.code(400).send({ error: 'Evento público inválido' })
   }
   await trackAnalyticsEvent({ event, metadata: normalizePublicAnalyticsMetadata(metadata, req) })
-  publicAnalyticsQuality.accepted += 1
+  trackAnalyticsEventSafe({
+    event: 'public_analytics_accepted',
+    metadata: { route: req.routeOptions?.url || '/api/public/analytics', public_event: String(event).slice(0, 80) },
+  })
   return reply.code(202).send(includeVersion ? { ok: true, version: 'v1' } : { ok: true })
 }
 

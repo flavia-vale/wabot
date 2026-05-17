@@ -36,6 +36,9 @@ export const ANALYTICS_EVENTS = new Set([
   'comparison_page_view',
   'comparison_scroll_50',
   'comparison_cta_click',
+  'public_analytics_accepted',
+  'public_analytics_invalid_event',
+  'public_analytics_blocked_429',
 ])
 
 const SENSITIVE_KEY_PATTERN = /(token|secret|password|cookie|credential|csrf|ssid|key|message|text|url|phone|email)/i

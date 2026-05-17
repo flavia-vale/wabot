@@ -1100,7 +1100,16 @@ export async function adminRoutes(app) {
     const views = Number(viewsRows?.[0]?.total || 0)
     const scroll50 = Number(scrollRows?.[0]?.total || 0)
     const ctaClicks = Number(ctaRows?.[0]?.total || 0)
-    const publicQuality = getPublicAnalyticsQualitySnapshot()
+    const [acceptedRows, invalidRows, blockedRows] = await Promise.all([
+      db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event='public_analytics_accepted' AND createdAt >= ${from} AND createdAt <= ${to}`,
+      db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event='public_analytics_invalid_event' AND createdAt >= ${from} AND createdAt <= ${to}`,
+      db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event='public_analytics_blocked_429' AND createdAt >= ${from} AND createdAt <= ${to}`,
+    ])
+    const publicQuality = {
+      accepted: Number(acceptedRows?.[0]?.total || 0),
+      invalidEvent: Number(invalidRows?.[0]?.total || 0),
+      blocked429: Number(blockedRows?.[0]?.total || 0),
+    }
     await writeAdminAuditLog(req, { action: 'admin.marketing.comparison_quality.read', resource: 'comparisonQuality' })
     return {
       views,
