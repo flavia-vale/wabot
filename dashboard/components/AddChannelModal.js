@@ -63,7 +63,7 @@ export function AddChannelModal({ open, onClose, onCreated }) {
     }
     setBusy(true); setError('')
     try {
-      const group = await api.addGroup(preview.jid, preview.name, role)
+      const group = await api.addGroup(preview.jid, preview.name, role, 'channel')
       if (role === 'monitor') {
         api.followChannelNow(group.id).catch(() => {})
       }

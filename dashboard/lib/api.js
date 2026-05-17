@@ -160,8 +160,8 @@ export const api = {
   sessionWAGroups: () => apiFetch('/api/session/wa-groups'),
 
   groups: () => apiFetch('/api/groups'),
-  addGroup: (waJid, name, role) =>
-    apiFetch('/api/groups', { method: 'POST', body: JSON.stringify({ waJid, name, role }) }),
+  addGroup: (waJid, name, role, kind) =>
+    apiFetch('/api/groups', { method: 'POST', body: JSON.stringify({ waJid, name, role, ...(kind ? { kind } : {}) }) }),
   updateGroup: (id, data) =>
     apiFetch(`/api/groups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteGroup: (id) => apiFetch(`/api/groups/${id}`, { method: 'DELETE' }),
