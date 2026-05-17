@@ -137,7 +137,7 @@ function AddChannelModalContent({ onClose, onCreated }) {
                   : 'Atualizar lista'}
             </button>
             {followedList !== null && followedList.length === 0 && !loadingFollowed && (
-              <p className="text-sm text-slate-500">Nenhum canal encontrado na sua conta. Tente "Colar link" ou "JID manual".</p>
+              <p className="text-sm text-slate-500">Nenhum canal encontrado na sua conta. Tente &ldquo;Colar link&rdquo; ou &ldquo;JID manual&rdquo;.</p>
             )}
             <ul className="space-y-1 max-h-64 overflow-y-auto">
               {followedList?.map(c => (
