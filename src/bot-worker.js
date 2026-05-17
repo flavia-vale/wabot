@@ -228,9 +228,11 @@ async function loadConfig() {
       id: g.id,
       waJid: g.waJid,
       kind: g.kind,
-      imageMode: g.imageMode,
-      imageLinkTarget: g.imageLinkTarget,
-      fallbackToOriginal: g.fallbackToOriginal,
+      // A opção de imagem fica oculta no dashboard, mas a operação deve
+      // permanecer sempre habilitada para todos os clientes.
+      imageMode: 'original',
+      imageLinkTarget: g.imageLinkTarget ?? 'first',
+      fallbackToOriginal: true,
       blockedKeywords: g.blockedKeywords,
       allowedPlatforms: g.allowedPlatforms,
       forwardMode: g.forwardMode,
