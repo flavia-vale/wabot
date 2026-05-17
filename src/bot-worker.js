@@ -25,6 +25,7 @@ import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } from './sendQueueBackend.js'
 import { isMirrorableJid, detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
+import { getChannelMetadata, followChannel, listFollowedChannels } from './core/channelDirectory.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
@@ -1421,6 +1422,64 @@ process.on('message', async msg => {
       }
     }
     process.send({ type: 'broadcastResult', requestId: msg.requestId, data: { queued, rejected: errors.length, errors } })
+  }
+
+  if (msg?.type === 'channel:metadata') {
+    if (!activeSock) {
+      process.send({ type: 'channel:metadataResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      return
+    }
+    try {
+      const data = await getChannelMetadata({
+        sock: activeSock,
+        jid: msg.jid,
+        inviteCode: msg.inviteCode,
+      })
+      process.send({ type: 'channel:metadataResult', requestId: msg.requestId, data })
+    } catch (err) {
+      logger.warn({ err: err?.message, jid: msg.jid, inviteCode: msg.inviteCode }, 'channel:metadata falhou')
+      process.send({ type: 'channel:metadataResult', requestId: msg.requestId, error: err.message })
+    }
+    return
+  }
+
+  if (msg?.type === 'channel:follow') {
+    if (!activeSock) {
+      process.send({ type: 'channel:followResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      return
+    }
+    try {
+      const data = await followChannel({
+        sock: activeSock,
+        jid: msg.jid,
+        followedSet: followedChannelJids,
+        inFlight: inFlightChannelJids,
+        logger,
+      })
+      process.send({ type: 'channel:followResult', requestId: msg.requestId, data })
+    } catch (err) {
+      logger.warn({ err: err?.message, jid: msg.jid }, 'channel:follow falhou')
+      process.send({ type: 'channel:followResult', requestId: msg.requestId, error: err.message })
+    }
+    return
+  }
+
+  if (msg?.type === 'channel:listFollowed') {
+    if (!activeSock) {
+      process.send({ type: 'channel:listFollowedResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      return
+    }
+    try {
+      const data = await listFollowedChannels({
+        sock: activeSock,
+        followedSet: followedChannelJids,
+      })
+      process.send({ type: 'channel:listFollowedResult', requestId: msg.requestId, data })
+    } catch (err) {
+      logger.warn({ err: err?.message }, 'channel:listFollowed falhou')
+      process.send({ type: 'channel:listFollowedResult', requestId: msg.requestId, error: err.message })
+    }
+    return
   }
 })
 
