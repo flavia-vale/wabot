@@ -6,6 +6,13 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { HelpLink } from '@/components/HelpLink'
 import { LoadingState } from '@/components/States'
 
+const HELPER_STEPS = {
+  noGroups: { label: 'Criar meu primeiro grupo', progress: 'Passo 1 de 3', message: 'Vamos começar: adicione seu primeiro grupo em menos de 1 minuto.' },
+  noMonitor: { label: 'Configurar grupo de origem', progress: 'Passo 2 de 3', message: 'Ótimo! Agora escolha de onde o bot vai ler as mensagens.' },
+  noPost: { label: 'Configurar grupo de destino', progress: 'Passo 3 de 3', message: 'Falta pouco: escolha para onde o bot vai publicar os links convertidos.' },
+  done: { label: 'Revisar grupos configurados', progress: 'Tudo pronto ✅', message: 'Seus grupos principais já estão configurados. Você pode revisar e ajustar quando quiser.' },
+}
+
 const IMAGE_MODE_HELP = {
   original: 'Usa a imagem que veio na mensagem monitorada.',
 }
@@ -225,19 +232,67 @@ export default function GruposPage() {
   const monitor = groups.filter(g => g.role === 'monitor')
   const post = groups.filter(g => g.role === 'post')
   const existingJidRoles = new Set(groups.map(g => `${g.waJid}::${g.role}`))
+  const helperState = groups.length === 0
+    ? 'noGroups'
+    : monitor.length === 0
+      ? 'noMonitor'
+      : post.length === 0
+        ? 'noPost'
+        : 'done'
+  const helper = HELPER_STEPS[helperState]
+
+  function scrollToSection(id) {
+    const el = document.getElementById(id)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  function handlePrimaryHelperAction() {
+    if (helperState === 'done') {
+      scrollToSection('grupos-monitorar')
+      return
+    }
+    scrollToSection('grupos-carregar')
+    if (waGroups === null && !loadingWA) {
+      handleLoadWA()
+    }
+  }
 
   return (
     <div className="max-w-xl">
+      <div className="mb-4 rounded-2xl border border-green-100 bg-green-50/70 p-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-green-700">{helper.progress}</p>
+        <p className="mt-1 text-sm text-green-900">{helper.message}</p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handlePrimaryHelperAction}
+            className="min-h-11 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700"
+          >
+            {helper.label}
+          </button>
+          <button
+            type="button"
+            onClick={() => scrollToSection('grupos-ajuda')}
+            className="min-h-11 rounded-lg border border-green-200 bg-white px-4 py-2 text-sm font-medium text-green-800 transition hover:bg-green-100"
+          >
+            Ver tutorial rápido (30s)
+          </button>
+        </div>
+      </div>
+
       <div className="flex items-start justify-between gap-3">
         <h2 className="text-2xl font-bold text-gray-800 mb-1">Grupos</h2>
-        <HelpLink topic="como-cadastrar-grupos">Ajuda</HelpLink>
+        <div id="grupos-ajuda">
+          <HelpLink topic="como-cadastrar-grupos">Ajuda</HelpLink>
+        </div>
       </div>
       <p className="text-gray-500 text-sm mb-6">Configure quais grupos monitorar e onde postar</p>
 
       {actionError && <div className="mb-4"><Alert type="error" title="Falha ao atualizar grupos" message={actionError} /></div>}
 
       {/* Carregar grupos do WhatsApp */}
-      <div className="bg-white rounded-2xl shadow p-5 mb-4">
+      <div id="grupos-carregar" className="bg-white rounded-2xl shadow p-5 mb-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-gray-700">Carregar grupos existentes</h3>
           <button
@@ -298,7 +353,7 @@ export default function GruposPage() {
       </div>
 
       {/* Grupos monitorados */}
-      <div className="bg-white rounded-2xl shadow p-5 mb-4">
+      <div id="grupos-monitorar" className="bg-white rounded-2xl shadow p-5 mb-4">
         <h3 className="font-semibold text-gray-700 mb-1"><span aria-hidden="true">👀</span> Monitorar (origem)</h3>
         <p className="mb-3 text-xs text-gray-500">O bot lê mensagens desses grupos e procura links para converter.</p>
         {loadingGroups ? (
