@@ -176,6 +176,10 @@ let configCacheTime = 0
 let configCachePromise = null
 const followedChannelJids = new Set()
 const inFlightChannelJids = new Set()
+// Canais conhecidos pela conta (do messaging-history.set e chats.upsert) —
+// usado para popular o "Canais que sigo" no dashboard. Inclui qualquer
+// @newsletter visto via Baileys, independente de o bot ter seguido.
+const knownChannelJids = new Set()
 const sendJobTracker = makeInFlightTracker()
 
 async function ensureChannelSubscriptions() {
@@ -703,6 +707,21 @@ async function startBot() {
   pendingSock = sock
 
   sock.ev.on('creds.update', saveCreds)
+
+  // Captura JIDs de canais (@newsletter) que aparecem nos chats do usuário,
+  // pra alimentar o picker "Canais que sigo" no dashboard. Baileys 6.7.16
+  // não tem listFollowedNewsletters; chegamos lá via histórico + upserts.
+  function trackChannelChats(chats) {
+    if (!Array.isArray(chats)) return
+    for (const chat of chats) {
+      const id = chat?.id
+      if (typeof id === 'string' && id.endsWith('@newsletter')) {
+        knownChannelJids.add(id)
+      }
+    }
+  }
+  sock.ev.on('messaging-history.set', ({ chats }) => trackChannelChats(chats))
+  sock.ev.on('chats.upsert', (chats) => trackChannelChats(chats))
 
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
@@ -1488,9 +1507,11 @@ process.on('message', async msg => {
       return
     }
     try {
+      // União: canais que o bot seguiu nesta vida + canais detectados no
+      // histórico/chats do usuário. Set dedupa automaticamente.
       const data = await listFollowedChannels({
         sock: activeSock,
-        followedSet: followedChannelJids,
+        followedSet: new Set([...followedChannelJids, ...knownChannelJids]),
       })
       process.send({ type: 'channel:listFollowedResult', requestId: msg.requestId, data })
     } catch (err) {

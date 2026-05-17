@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 
@@ -26,21 +26,25 @@ function AddChannelModalContent({ onClose, onCreated }) {
   const [role, setRole] = useState('monitor')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  // followedList: null = ainda não buscado (= loading quando tab='followed'),
-  // array = lista carregada (possivelmente vazia)
+  // followedList: null = não carregado ainda (usuária precisa clicar "Carregar"),
+  // array = resultado da chamada (possivelmente vazio)
   const [followedList, setFollowedList] = useState(null)
+  const [loadingFollowed, setLoadingFollowed] = useState(false)
   const [confirmNonAdmin, setConfirmNonAdmin] = useState(false)
 
-  useEffect(() => {
-    if (tab !== 'followed' || followedList !== null) return
-    let cancelled = false
-    api.waChannels()
-      .then((list) => { if (!cancelled) setFollowedList(Array.isArray(list) ? list : []) })
-      .catch((err) => { if (!cancelled) { setFollowedList([]); setError(err.message) } })
-    return () => { cancelled = true }
-  }, [tab, followedList])
-
-  const loadingFollowed = tab === 'followed' && followedList === null
+  async function loadFollowed() {
+    setLoadingFollowed(true)
+    setError('')
+    try {
+      const list = await api.waChannels()
+      setFollowedList(Array.isArray(list) ? list : [])
+    } catch (err) {
+      setError(err.message)
+      setFollowedList([])
+    } finally {
+      setLoadingFollowed(false)
+    }
+  }
 
   async function resolveLink() {
     setBusy(true); setError(''); setPreview(null)
@@ -119,10 +123,21 @@ function AddChannelModalContent({ onClose, onCreated }) {
         )}
 
         {tab === 'followed' && (
-          <div>
-            {loadingFollowed && <p className="text-sm text-slate-500">Carregando…</p>}
-            {!loadingFollowed && followedList?.length === 0 && (
-              <p className="text-sm text-slate-500">Você não segue nenhum canal ainda.</p>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={loadFollowed}
+              disabled={loadingFollowed}
+              className="px-3 py-1.5 bg-sky-600 text-white rounded text-sm disabled:opacity-50"
+            >
+              {loadingFollowed
+                ? 'Carregando…'
+                : followedList === null
+                  ? 'Carregar canais do WhatsApp'
+                  : 'Atualizar lista'}
+            </button>
+            {followedList !== null && followedList.length === 0 && !loadingFollowed && (
+              <p className="text-sm text-slate-500">Nenhum canal encontrado na sua conta. Tente "Colar link" ou "JID manual".</p>
             )}
             <ul className="space-y-1 max-h-64 overflow-y-auto">
               {followedList?.map(c => (
