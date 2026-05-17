@@ -16,14 +16,6 @@ export const TRACKING_EVENTS = {
   LEAD_MAGNET_SUBMITTED: 'lead_magnet_submitted',
   LEAD_MAGNET_PDF_CLICKED: 'lead_magnet_pdf_clicked',
   LEAD_MAGNET_ONLINE_CLICKED: 'lead_magnet_online_clicked',
-  GROUPS_HELPER_MASTER_VIEWED: 'groups_helper_master_viewed',
-  GROUPS_HELPER_MASTER_CLICKED: 'groups_helper_master_clicked',
-  GROUPS_EMPTY_STATE_VIEWED: 'groups_empty_state_viewed',
-  GROUPS_EMPTY_STATE_CTA_CLICKED: 'groups_empty_state_cta_clicked',
-  GROUPS_ERROR_RESCUE_CLICKED: 'groups_error_rescue_clicked',
-  GROUPS_QUICK_ACTION_CLICKED: 'groups_quick_action_clicked',
-  GROUP_SETUP_STEP_COMPLETED: 'group_setup_step_completed',
-  GROUP_READY: 'group_ready',
 }
 
 export const PROMPT_EXCLUDED_PATH_PREFIXES = [
