@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { getChannelMetadata } from '../../src/core/channelDirectory.js'
 import { followChannel } from '../../src/core/channelDirectory.js'
+import { listFollowedChannels } from '../../src/core/channelDirectory.js'
 
 function makeSock({ user = { id: '5511999999999:1@s.whatsapp.net' }, newsletterMetadata } = {}) {
   return { user, newsletterMetadata }
@@ -130,4 +131,39 @@ test('followChannel funciona quando subscribeNewsletterUpdates falha — só war
   assert.equal(result.followed, 'new')
   assert.equal(result.duration, null)
   assert.ok(followedSet.has('a@newsletter'))
+})
+
+test('listFollowedChannels resolve metadata em paralelo a partir de followedSet', async () => {
+  const sock = {
+    user: { id: 'me@s.whatsapp.net' },
+    newsletterMetadata: async (type, key) => {
+      assert.equal(type, 'jid')
+      return { id: key, name: `Nome ${key}`, owner: 'me@s.whatsapp.net' }
+    },
+  }
+  const followedSet = new Set(['a@newsletter', 'b@newsletter', 'c@newsletter'])
+  const result = await listFollowedChannels({ sock, followedSet, concurrency: 2 })
+  assert.equal(result.length, 3)
+  assert.deepEqual(result.map(r => r.jid).sort(), ['a@newsletter', 'b@newsletter', 'c@newsletter'])
+  for (const r of result) assert.equal(r.isViewerOwner, true)
+})
+
+test('listFollowedChannels tolera falha parcial — item com erro vira null', async () => {
+  const sock = {
+    user: { id: 'me@s.whatsapp.net' },
+    newsletterMetadata: async (type, key) => {
+      if (key === 'b@newsletter') throw new Error('boom')
+      return { id: key, name: 'X', owner: 'someone@s.whatsapp.net' }
+    },
+  }
+  const followedSet = new Set(['a@newsletter', 'b@newsletter'])
+  const result = await listFollowedChannels({ sock, followedSet, concurrency: 5 })
+  assert.equal(result.length, 1, 'item com erro é descartado')
+  assert.equal(result[0].jid, 'a@newsletter')
+})
+
+test('listFollowedChannels com followedSet vazio retorna []', async () => {
+  const sock = { newsletterMetadata: async () => { throw new Error('should-not-call') } }
+  const result = await listFollowedChannels({ sock, followedSet: new Set() })
+  assert.deepEqual(result, [])
 })

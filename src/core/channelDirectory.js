@@ -27,6 +27,29 @@ export async function getChannelMetadata({ sock, jid, inviteCode }) {
   }
 }
 
+async function mapParallel(items, concurrency, fn) {
+  const result = new Array(items.length)
+  let next = 0
+  async function worker() {
+    while (true) {
+      const i = next++
+      if (i >= items.length) return
+      try { result[i] = await fn(items[i]) } catch { result[i] = null }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker))
+  return result
+}
+
+export async function listFollowedChannels({ sock, followedSet, concurrency = 5 }) {
+  if (!followedSet || followedSet.size === 0) return []
+  const jids = [...followedSet]
+  const items = await mapParallel(jids, concurrency, async (jid) => {
+    return getChannelMetadata({ sock, jid })
+  })
+  return items.filter(Boolean)
+}
+
 // Follow imediato idempotente. Reusa contratos de followedSet/inFlight da Fase 2.
 // Retorna:
 //  - { followed: 'already' } se já estava em followedSet
