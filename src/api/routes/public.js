@@ -3,6 +3,7 @@ import { PUBLIC_ANALYTICS_EVENTS, sanitizeAnalyticsMetadata, trackAnalyticsEvent
 
 
 const publicAnalyticsAttempts = new Map()
+const publicAnalyticsQuality = { blocked429: 0, invalidEvent: 0, accepted: 0 }
 const PUBLIC_ANALYTICS_RATE_WINDOW_MS = 10 * 60 * 1000
 const PUBLIC_ANALYTICS_RATE_LIMIT = 60
 
@@ -31,6 +32,9 @@ export function consumePublicAnalyticsAttempt({ ip = 'unknown', now = Date.now()
 
 export function clearPublicAnalyticsAttempts() {
   publicAnalyticsAttempts.clear()
+}
+export function getPublicAnalyticsQualitySnapshot() {
+  return { ...publicAnalyticsQuality }
 }
 
 function serializeFaqItem(item) {
@@ -104,14 +108,19 @@ function safeShapeOrFallback({ label, factory, fallback = [] }) {
 async function handlePublicAnalytics(req, reply, { includeVersion = false } = {}) {
   const attempt = consumePublicAnalyticsAttempt({ ip: req.ip })
   if (attempt.blocked) {
+    publicAnalyticsQuality.blocked429 += 1
     const retryAfter = Math.max(1, Math.ceil((attempt.resetAt - Date.now()) / 1000))
     reply.header('Retry-After', String(retryAfter))
     return reply.code(429).send({ error: 'Muitos eventos. Tente novamente mais tarde.' })
   }
 
   const { event, metadata = {} } = req.body ?? {}
-  if (!PUBLIC_ANALYTICS_EVENTS.has(event)) return reply.code(400).send({ error: 'Evento público inválido' })
+  if (!PUBLIC_ANALYTICS_EVENTS.has(event)) {
+    publicAnalyticsQuality.invalidEvent += 1
+    return reply.code(400).send({ error: 'Evento público inválido' })
+  }
   await trackAnalyticsEvent({ event, metadata: normalizePublicAnalyticsMetadata(metadata, req) })
+  publicAnalyticsQuality.accepted += 1
   return reply.code(202).send(includeVersion ? { ok: true, version: 'v1' } : { ok: true })
 }
 

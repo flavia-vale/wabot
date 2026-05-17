@@ -331,6 +331,8 @@ export function ComparisonPage({ slug }) {
                     <p style={{ margin: '8px 0 0', color: 'var(--ink)', lineHeight: 1.6 }}><strong>Melhor para:</strong> {competitor.bestFor}</p>
                     <p style={{ margin: '8px 0 0', color: 'var(--ink)', lineHeight: 1.6 }}><strong>Não ideal para:</strong> {competitor.notIdealFor}</p>
                     <p style={{ margin: '8px 0 0', color: 'var(--ink-soft)', lineHeight: 1.6 }}><strong>Nota de migração:</strong> {competitor.migrationNotes}</p>
+                    <p style={{ margin: '8px 0 0', color: 'var(--ink-soft)', lineHeight: 1.6 }}><strong>Fonte:</strong> {competitor.source}</p>
+                    <p style={{ margin: '4px 0 0', color: 'var(--ink-soft)', lineHeight: 1.6 }}><strong>Verificado em:</strong> {competitor.verifiedAt}</p>
                   </article>
                 )
               })}

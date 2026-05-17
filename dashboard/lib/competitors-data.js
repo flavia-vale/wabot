@@ -1,4 +1,4 @@
-const REQUIRED_STRING_FIELDS = ['slug', 'name', 'positioning', 'bestFor', 'notIdealFor', 'migrationNotes', 'updatedAt']
+const REQUIRED_STRING_FIELDS = ['slug', 'name', 'positioning', 'bestFor', 'notIdealFor', 'migrationNotes', 'updatedAt', 'verifiedAt']
 
 const COMPETITORS = [
   {
@@ -22,6 +22,8 @@ const COMPETITORS = [
     ],
     migrationNotes: 'Migrar mantendo a planilha como planejamento editorial e delegando execução recorrente ao fluxo operacional da ferramenta.',
     updatedAt: '2026-05-17',
+    verifiedAt: '2026-05-17',
+    source: 'Pesquisa editorial interna com critérios públicos de operação responsável.',
   },
   {
     slug: 'generic-automation-tools',
@@ -44,6 +46,8 @@ const COMPETITORS = [
     ],
     migrationNotes: 'Mapear fluxos críticos e migrar por etapas, mantendo integrações externas em paralelo até estabilizar o novo processo.',
     updatedAt: '2026-05-17',
+    verifiedAt: '2026-05-17',
+    source: 'Pesquisa editorial interna com foco em manutenção técnica e governança.',
   },
   {
     slug: 'official-service-api-tools',
@@ -66,6 +70,8 @@ const COMPETITORS = [
     ],
     migrationNotes: 'Usar ferramentas oficiais para atendimento e manter fluxo especializado para operação de ofertas quando necessário.',
     updatedAt: '2026-05-17',
+    verifiedAt: '2026-05-17',
+    source: 'Pesquisa editorial interna orientada a fluxos de atendimento e conversas.',
   },
 ]
 
@@ -83,6 +89,7 @@ function validateCompetitorShape(competitor) {
   for (const field of REQUIRED_STRING_FIELDS) {
     assertString(competitor?.[field], field, competitorName)
   }
+  assertString(competitor?.source, 'source', competitorName)
 
   if (!Array.isArray(competitor.pricingTiers) || competitor.pricingTiers.length === 0) {
     throw new Error(`Competitor data inválido (${competitorName}): pricingTiers deve ter pelo menos um item.`)
