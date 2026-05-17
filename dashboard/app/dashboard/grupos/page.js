@@ -13,6 +13,12 @@ const HELPER_STEPS = {
   done: { label: 'Revisar grupos configurados', progress: 'Tudo pronto ✅', message: 'Seus grupos principais já estão configurados. Você pode revisar e ajustar quando quiser.' },
 }
 
+const FRIENDLY_ERROR_HINTS = [
+  { match: /not connected|desconect|conectar|connection/i, message: 'Seu WhatsApp parece desconectado. Clique em “Carregar do WhatsApp” após reconectar.' },
+  { match: /permission|forbidden|admin|not-authorized|unauthorized/i, message: 'Parece faltar permissão nesse grupo. Confirme se sua conta é admin do grupo.' },
+  { match: /timeout|network|fetch|temporar|ECONN|socket/i, message: 'A conexão falhou agora. Tente novamente em alguns segundos.' },
+]
+
 const IMAGE_MODE_HELP = {
   original: 'Usa a imagem que veio na mensagem monitorada.',
 }
@@ -55,6 +61,7 @@ export default function GruposPage() {
   const [targetPostIds, setTargetPostIds] = useState([])
   const [targetLoading, setTargetLoading] = useState(false)
   const [imageDrafts, setImageDrafts] = useState({})
+  const [copiedGroupId, setCopiedGroupId] = useState(null)
 
   async function load() {
     setLoadingGroups(true)
@@ -75,6 +82,13 @@ export default function GruposPage() {
   async function handleDelete(id) {
     setActionError('')
     try { await api.deleteGroup(id); await load() } catch (err) { setActionError(err.message) }
+  }
+
+  function getFriendlyErrorMessage(rawMessage) {
+    const message = String(rawMessage || '')
+    const matched = FRIENDLY_ERROR_HINTS.find((item) => item.match.test(message))
+    if (matched) return matched.message
+    return 'Não consegui concluir essa ação agora. Tente novamente.'
   }
 
   async function handleUpdateGroup(id, data) {
@@ -207,6 +221,27 @@ export default function GruposPage() {
     }
   }
 
+  async function handleCopyGroupJid(group) {
+    if (!group?.waJid || !navigator?.clipboard) return
+    try {
+      await navigator.clipboard.writeText(group.waJid)
+      setCopiedGroupId(group.id)
+      window.setTimeout(() => setCopiedGroupId((current) => (current === group.id ? null : current)), 1500)
+    } catch (_err) {
+      setActionError('Não foi possível copiar agora. Tente novamente.')
+    }
+  }
+
+  async function handleDuplicateGroup(group) {
+    setActionError('')
+    try {
+      await api.addGroup(group.waJid, `${group.name} (cópia)`, group.role)
+      await load()
+    } catch (err) {
+      setActionError(getFriendlyErrorMessage(err.message))
+    }
+  }
+
   async function handleManualAdd(e) {
     e.preventDefault()
     setManualError('')
@@ -289,7 +324,7 @@ export default function GruposPage() {
       </div>
       <p className="text-gray-500 text-sm mb-6">Configure quais grupos monitorar e onde postar</p>
 
-      {actionError && <div className="mb-4"><Alert type="error" title="Falha ao atualizar grupos" message={actionError} /></div>}
+      {actionError && <div className="mb-4"><Alert type="error" title="Não consegui concluir essa ação" message={getFriendlyErrorMessage(actionError)} /></div>}
 
       {/* Carregar grupos do WhatsApp */}
       <div id="grupos-carregar" className="bg-white rounded-2xl shadow p-5 mb-4">
@@ -359,7 +394,11 @@ export default function GruposPage() {
         {loadingGroups ? (
           <LoadingState message="Carregando grupos configurados..." />
         ) : monitor.length === 0 ? (
-          <p className="text-gray-400 text-sm">Nenhum grupo cadastrado</p>
+          <div className="rounded-xl border border-dashed border-blue-200 bg-blue-50/60 p-4">
+            <p className="text-sm font-semibold text-blue-900">Você ainda não escolheu grupos de origem.</p>
+            <p className="mt-1 text-xs text-blue-800">Escolha um grupo para o bot começar a ler mensagens e links.</p>
+            <p className="mt-2 text-xs text-blue-700">Passo 2 de 3</p>
+          </div>
         ) : (
           <ul className="flex flex-col gap-4">
             {monitor.map(g => {
@@ -372,11 +411,18 @@ export default function GruposPage() {
                     <span className="font-medium text-gray-700">{g.name}</span>
                     <span className="ml-2 text-gray-400 text-xs">{g.waJid}</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     {savingGroupId === g.id && <span className="text-[11px] text-blue-600">Salvando...</span>}
                     {savedGroupId === g.id && <span className="text-[11px] text-green-600">Salvo</span>}
+                    {copiedGroupId === g.id && <span className="text-[11px] text-green-600">JID copiado ✅</span>}
                     <button onClick={() => openTargetEditor(g.id)} className="text-blue-500 hover:text-blue-700 text-xs">
                       Configurar alvos
+                    </button>
+                    <button onClick={() => handleCopyGroupJid(g)} className="text-gray-600 hover:text-gray-800 text-xs">
+                      Copiar link
+                    </button>
+                    <button onClick={() => handleDuplicateGroup(g)} className="text-purple-600 hover:text-purple-800 text-xs">
+                      Duplicar
                     </button>
                     <button onClick={() => setDeleteTarget(g)} className="text-red-400 hover:text-red-600 text-xs">
                       Remover
@@ -432,6 +478,22 @@ export default function GruposPage() {
                       ))}
                     </select>
                   )}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateGroup(g.id, { forwardMode: 'ALLOW_NO_LINK', noLinkScope: g.noLinkScope ?? 'TEXT_ONLY' })}
+                      className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] text-amber-700 hover:bg-amber-100"
+                    >
+                      Retomar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateGroup(g.id, { forwardMode: 'LINK_ONLY', noLinkScope: null })}
+                      className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] text-gray-700 hover:bg-gray-50"
+                    >
+                      Pausar
+                    </button>
+                  </div>
                   <p className="mt-1 text-[11px] text-amber-600">Ativar pode aumentar o volume de mensagens encaminhadas.</p>
                 </div>
                 <div className="mt-3 border-t border-gray-100 pt-3">
@@ -470,7 +532,11 @@ export default function GruposPage() {
         {loadingGroups ? (
           <LoadingState message="Carregando grupos configurados..." />
         ) : post.length === 0 ? (
-          <p className="text-gray-400 text-sm">Nenhum grupo cadastrado</p>
+          <div className="rounded-xl border border-dashed border-purple-200 bg-purple-50/60 p-4">
+            <p className="text-sm font-semibold text-purple-900">Falta escolher os grupos de destino.</p>
+            <p className="mt-1 text-xs text-purple-800">Escolha para onde o bot vai publicar os links convertidos.</p>
+            <p className="mt-2 text-xs text-purple-700">Passo 3 de 3</p>
+          </div>
         ) : (
           <ul className="flex flex-col gap-2">
             {post.map(g => (
@@ -480,9 +546,12 @@ export default function GruposPage() {
                     <span className="font-medium text-gray-700">{g.name}</span>
                     <span className="ml-2 text-gray-400 text-xs">{g.waJid}</span>
                   </div>
-                  <button onClick={() => setDeleteTarget(g)} className="text-red-400 hover:text-red-600 text-xs">
-                    Remover
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {copiedGroupId === g.id && <span className="text-[11px] text-green-600">JID copiado ✅</span>}
+                    <button onClick={() => handleCopyGroupJid(g)} className="text-gray-600 hover:text-gray-800 text-xs">Copiar link</button>
+                    <button onClick={() => handleDuplicateGroup(g)} className="text-purple-600 hover:text-purple-800 text-xs">Duplicar</button>
+                    <button onClick={() => setDeleteTarget(g)} className="text-red-400 hover:text-red-600 text-xs">Remover</button>
+                  </div>
                 </div>
                 <textarea
                   rows={2}
