@@ -9,18 +9,18 @@ const description = 'Use ferramentas gratuitas do BOTinho para calcular tempo op
 
 const tools = [
   {
+    href: '/ferramentas/calculadora-risco-whatsapp',
+    status: 'Disponível',
+    title: 'Calculadora de risco no WhatsApp',
+    description: 'Estime exposição operacional por volume, cadência, mensagens idênticas, chip, monitoramento e recuperação.',
+    cta: 'Calcular risco',
+  },
+  {
     href: '/ferramentas/calculadora-tempo-grupos-whatsapp',
     status: 'Disponível',
     title: 'Calculadora de tempo em grupos de WhatsApp',
     description: 'Estime horas/mês gastas com curadoria, conferência e repostagem manual de ofertas.',
-    cta: 'Calcular agora',
-  },
-  {
-    href: '/ferramentas/calculadora-tempo-grupos-whatsapp',
-    status: 'Próxima',
-    title: 'Auditor de operação de grupos de ofertas',
-    description: 'Score de maturidade para cadência, revisão, filtros e logs antes de escalar.',
-    cta: 'Usar calculadora enquanto isso',
+    cta: 'Calcular tempo',
   },
   {
     href: '/ferramentas/calculadora-tempo-grupos-whatsapp',

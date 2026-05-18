@@ -99,34 +99,34 @@ A landing mostra um painel de saúde como narrativa de produto. Se o recurso ain
    - Landing, páginas comerciais e artigos da campanha agora têm caminho para diagnóstico antes do cadastro completo.
    - Cadastro direto continua disponível para quem já está pronto para testar.
 
-### Ainda não implementado — P1 lead magnets e ferramentas
+### Implementado nesta etapa — P1 lead magnets e ferramentas
 
 1. **Checklist de Preservação Avançada**
-   - URL planejada: `/materiais/checklist-antiban-whatsapp`
+   - URL implementada: `/materiais/checklist-antiban-whatsapp`
    - Função: captura leve para quem ainda não quer cadastro completo.
    - Pode ser formulário simples + checklist na própria página.
 
 2. **Calculadora de risco**
-   - URL planejada: `/ferramentas/calculadora-risco-whatsapp`
+   - URL implementada: `/ferramentas/calculadora-risco-whatsapp`
    - Função: ferramenta compartilhável para SEO, conversão e educação.
    - Deve evitar linguagem de garantia e usar “estimativa de exposição operacional”.
 
-### Não implementado — P1/P2 páginas de decisão
+### Implementado nesta etapa — P2 páginas de decisão
 
 1. **Página comparativa contra bot comum**
-   - URL planejada: `/bot-comum-vs-botinho`
+   - URL implementada: `/bot-comum-vs-botinho`
    - Função: diferenciar BOTinho de ferramentas que só repostam.
 
 2. **FAQ de preservação/“anti-ban”**
-   - URL planejada: `/faq-antiban-whatsapp`
+   - URL implementada: `/faq-antiban-whatsapp`
    - Função: responder objeções e capturar long tails sensíveis.
 
 3. **Página “como funciona”**
-   - URL planejada: `/como-funciona-botinho-canais`
+   - URL implementada: `/como-funciona-botinho-canais`
    - Função: explicar fluxo operacional de fontes, destinos, cadência, variações e monitoramento.
 
 4. **Página de aprofundamento do módulo**
-   - URL planejada: `/protecao-antiban-botinho`
+   - URL implementada: `/protecao-antiban-botinho`
    - Função: ranquear para buscas de limite, variação, pausa, horário de silêncio e monitoramento.
 
 ### Não implementado — validação externa e distribuição
@@ -135,14 +135,16 @@ A landing mostra um painel de saúde como narrativa de produto. Se o recurso ain
    - Validar todas as rotas, metadata, links internos, mobile e CTAs.
 
 2. **Search Console pós-deploy**
-   - Enviar sitemap, pedir indexação das rotas P0/P1 e monitorar cobertura.
+   - Playbook implementado em [`search-console-otimizacao.md`](./search-console-otimizacao.md).
+   - Enviar sitemap, pedir indexação das rotas P0/P1/P2 e monitorar cobertura depois de produção.
 
 3. **Pacote social/audiovisual**
-   - Reels, carrosséis e scripts ainda não foram criados.
-   - Devem usar a mesma promessa honesta: preservação, não “anti-ban 100%”.
+   - Posts sociais implementados em [`social-posts.md`](./social-posts.md).
+   - Roteiros de vídeo implementados em [`roteiros-video.md`](./roteiros-video.md).
+   - Usam a mesma promessa honesta: preservação, não “anti-ban 100%”.
 
 4. **Provas e ativos comerciais**
-   - Prints reais de fluxo, mini-demo, depoimentos ou estudo de caso ainda precisam ser levantados.
+   - Playbook de coleta, consentimento e métricas implementado em [`provas-comerciais.md`](./provas-comerciais.md).
 
 ## Prioridades revisadas
 
@@ -152,7 +154,7 @@ A landing mostra um painel de saúde como narrativa de produto. Se o recurso ain
 
 1. Criar `/diagnostico-antiban-whatsapp` com resultado simples e CTA para cadastro/contato — implementado.
 2. Criar matriz de eventos/UTMs para todos os CTAs da campanha — implementada em [`matriz-eventos-utms.md`](./matriz-eventos-utms.md).
-3. Revisar CTAs da landing e das páginas comerciais para apontarem também para diagnóstico/checklist quando o usuário ainda estiver em fase de dor — diagnóstico implementado; checklist fica para P1.
+3. Revisar CTAs da landing e das páginas comerciais para apontarem também para diagnóstico/checklist quando o usuário ainda estiver em fase de dor — implementado.
 4. Rodar QA completo em staging `http://178.105.54.0:3006` antes de qualquer tráfego pago ou divulgação forte.
 
 **Critério de pronto:** usuário consegue sair de uma busca de dor, fazer diagnóstico, entender risco e ter próximo passo claro sem depender apenas de cadastro genérico.
@@ -161,10 +163,10 @@ A landing mostra um painel de saúde como narrativa de produto. Se o recurso ain
 
 **Objetivo:** capturar usuários que pesquisam problema, mas ainda não estão prontos para comprar.
 
-1. Criar `/materiais/checklist-antiban-whatsapp`.
-2. Criar `/ferramentas/calculadora-risco-whatsapp`.
-3. Inserir chamadas contextuais para esses ativos em artigos e páginas comerciais.
-4. Registrar essas rotas no SEO registry/sitemap quando implementadas.
+1. Criar `/materiais/checklist-antiban-whatsapp` — implementado.
+2. Criar `/ferramentas/calculadora-risco-whatsapp` — implementado.
+3. Inserir chamadas contextuais para esses ativos em artigos e páginas comerciais — implementado.
+4. Registrar essas rotas no SEO registry/sitemap — implementado.
 
 **Critério de pronto:** cada artigo educativo tem pelo menos um CTA para ativo intermediário e um CTA para página comercial.
 
@@ -172,10 +174,10 @@ A landing mostra um painel de saúde como narrativa de produto. Se o recurso ain
 
 **Objetivo:** aumentar autoridade e conversão para visitantes comparando opções.
 
-1. Criar `/bot-comum-vs-botinho`.
-2. Criar `/faq-antiban-whatsapp`.
-3. Criar `/como-funciona-botinho-canais`.
-4. Criar `/protecao-antiban-botinho`.
+1. Criar `/bot-comum-vs-botinho` — implementado.
+2. Criar `/faq-antiban-whatsapp` — implementado.
+3. Criar `/como-funciona-botinho-canais` — implementado.
+4. Criar `/protecao-antiban-botinho` — implementado.
 
 **Critério de pronto:** visitante consegue entender diferença entre BOTinho, bot comum, automação manual, preservação avançada e riscos sem depender de conversa humana.
 
@@ -183,12 +185,12 @@ A landing mostra um painel de saúde como narrativa de produto. Se o recurso ain
 
 **Objetivo:** transformar o hub em campanha de aquisição.
 
-1. Produzir 5 a 8 posts sociais a partir dos artigos já publicados.
-2. Criar 3 roteiros curtos de vídeo: medo do grupo cair, chip dedicado, “anti-ban” honesto.
-3. Levantar provas reais permitidas: prints, depoimentos, microcases e métricas agregadas.
-4. Monitorar Search Console e ajustar titles/metas de páginas com impressão sem clique.
+1. Produzir 5 a 8 posts sociais a partir dos artigos já publicados — implementado em [`social-posts.md`](./social-posts.md).
+2. Criar 3 roteiros curtos de vídeo: medo do grupo cair, chip dedicado, “anti-ban” honesto — implementado em [`roteiros-video.md`](./roteiros-video.md).
+3. Levantar provas reais permitidas: prints, depoimentos, microcases e métricas agregadas — playbook implementado em [`provas-comerciais.md`](./provas-comerciais.md).
+4. Monitorar Search Console e ajustar titles/metas de páginas com impressão sem clique — playbook implementado em [`search-console-otimizacao.md`](./search-console-otimizacao.md).
 
-**Critério de pronto:** campanha tem conteúdo para distribuição recorrente e sinais reais para melhorar confiança.
+**Critério de pronto:** campanha tem conteúdo para distribuição recorrente e sinais reais para melhorar confiança. Status: P3 implementado como pacote operacional em [`p3-distribuicao-autoridade.md`](./p3-distribuicao-autoridade.md).
 
 ## Ordem recomendada de execução
 
@@ -203,6 +205,10 @@ A landing mostra um painel de saúde como narrativa de produto. Se o recurso ain
 
 4. **Sprint D — Distribuição**
    - Social, vídeo, provas, Search Console e otimização por dados.
+
+## Backlog pós-P3
+
+Ainda existem pontos operacionais e de validação após P3. A nova priorização está em [`backlog-pos-p3-prioridades.md`](./backlog-pos-p3-prioridades.md).
 
 ## Checklist de aceite para qualquer próxima implementação
 
