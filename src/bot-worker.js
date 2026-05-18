@@ -18,7 +18,7 @@ import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, normalizeBrandi
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
 import { resolveMonitoredImage } from './monitoredImageResolver.js'
 import db from './db.js'
-import { getAuthInfoDir, getDedupFile } from './paths.js'
+import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { createMessageQueue } from './messageQueue.js'
@@ -96,7 +96,9 @@ function stopHeartbeatIpc() {
 
 const AUTH_DIR = getAuthInfoDir(userId)
 const DEDUP_FILE = getDedupFile(userId)
+const KNOWN_CHANNELS_FILE = getKnownChannelsFile(userId)
 const DEDUP_FLUSH_DEBOUNCE_MS = 1_000
+const KNOWN_CHANNELS_FLUSH_DEBOUNCE_MS = 2_000
 
 let pendingDedupStore = null
 let dedupFlushTimer = null
@@ -145,6 +147,30 @@ async function flushDedupNow() {
 }
 
 
+// JIDs de canais (@newsletter) já vistos pela conta. Persistido em disco
+// pra sobreviver a restart — Baileys não tem API para listar newsletters
+// seguidos e messaging-history.set não re-dispara em reconexão incremental.
+let knownChannelsFlushTimer = null
+function loadKnownChannels() {
+  try {
+    const raw = JSON.parse(readFileSync(KNOWN_CHANNELS_FILE, 'utf8'))
+    return Array.isArray(raw?.jids) ? raw.jids : []
+  } catch { return [] }
+}
+function scheduleKnownChannelsSave(set) {
+  if (knownChannelsFlushTimer) return
+  knownChannelsFlushTimer = setTimeout(async () => {
+    knownChannelsFlushTimer = null
+    try {
+      mkdirSync(dirname(KNOWN_CHANNELS_FILE), { recursive: true })
+      await writeFile(KNOWN_CHANNELS_FILE, JSON.stringify({ jids: [...set] }), 'utf8')
+    } catch (err) {
+      logger.error({ err: err.message }, 'Erro ao persistir known channels')
+    }
+  }, KNOWN_CHANNELS_FLUSH_DEBOUNCE_MS)
+  knownChannelsFlushTimer.unref?.()
+}
+
 async function clearAppStateSyncKeys() {
   const shouldClear = String(process.env.WA_CLEAR_SYNC_KEYS_ON_START ?? '0') === '1'
   if (!shouldClear) return
@@ -179,7 +205,17 @@ const inFlightChannelJids = new Set()
 // Canais conhecidos pela conta (do messaging-history.set e chats.upsert) —
 // usado para popular o "Canais que sigo" no dashboard. Inclui qualquer
 // @newsletter visto via Baileys, independente de o bot ter seguido.
-const knownChannelJids = new Set()
+const knownChannelJids = new Set(loadKnownChannels())
+function rememberChannelJid(id) {
+  if (typeof id !== 'string' || !id.endsWith('@newsletter')) return
+  if (knownChannelJids.has(id)) return
+  knownChannelJids.add(id)
+  scheduleKnownChannelsSave(knownChannelJids)
+}
+function trackChannelChats(chats) {
+  if (!Array.isArray(chats)) return
+  for (const chat of chats) rememberChannelJid(chat?.id)
+}
 const sendJobTracker = makeInFlightTracker()
 
 async function ensureChannelSubscriptions() {
@@ -711,15 +747,6 @@ async function startBot() {
   // Captura JIDs de canais (@newsletter) que aparecem nos chats do usuário,
   // pra alimentar o picker "Canais que sigo" no dashboard. Baileys 6.7.16
   // não tem listFollowedNewsletters; chegamos lá via histórico + upserts.
-  function trackChannelChats(chats) {
-    if (!Array.isArray(chats)) return
-    for (const chat of chats) {
-      const id = chat?.id
-      if (typeof id === 'string' && id.endsWith('@newsletter')) {
-        knownChannelJids.add(id)
-      }
-    }
-  }
   sock.ev.on('messaging-history.set', ({ chats }) => trackChannelChats(chats))
   sock.ev.on('chats.upsert', (chats) => trackChannelChats(chats))
 
@@ -1209,6 +1236,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
     const cutoff = Date.now() - 5 * 60_000
 
     for (const msg of messages) {
+      rememberChannelJid(msg?.key?.remoteJid)
       if (msg.key.fromMe) continue
       const msgTsRaw = Number(msg.messageTimestamp ?? 0)
       const hasValidTimestamp = Number.isFinite(msgTsRaw) && msgTsRaw > 0
@@ -1493,6 +1521,7 @@ process.on('message', async msg => {
         inFlight: inFlightChannelJids,
         logger,
       })
+      rememberChannelJid(msg.jid)
       process.send({ type: 'channel:followResult', requestId: msg.requestId, data })
     } catch (err) {
       logger.warn({ err: err?.message, jid: msg.jid }, 'channel:follow falhou')
