@@ -342,3 +342,42 @@ test('GET /wa/channels com worker offline retorna 503', async () => {
   assert.equal(res.statusCode, 503)
   await app.close()
 })
+
+
+test('PUT /:id bloqueia forwardMode=ALLOW_NO_LINK para Basic (Preservação Avançada)', async (t) => {
+  const { app, userId } = await buildApp({}, { plan: 'basic' })
+  const group = await db.group.create({
+    data: { userId, waJid: 'pres-basic@g.us', name: 'Grupo Basic Pres', role: 'monitor', kind: 'group', forwardMode: 'LINK_ONLY' },
+  })
+  t.after(async () => { await db.group.deleteMany({ where: { userId } }); await db.user.deleteMany({ where: { id: userId } }); await app.close() })
+
+  const res = await app.inject({
+    method: 'PUT',
+    url: `/api/groups/${group.id}`,
+    payload: { forwardMode: 'ALLOW_NO_LINK', noLinkScope: 'ALL' },
+  })
+
+  assert.equal(res.statusCode, 403)
+  const body = JSON.parse(res.body)
+  assert.equal(body.code, 'FEATURE_REQUIRES_PRO')
+  assert.equal(body.feature, 'advanced_preservation')
+})
+
+test('PUT /:id permite forwardMode=ALLOW_NO_LINK para Pro', async (t) => {
+  const { app, userId } = await buildApp({}, { plan: 'pro' })
+  const group = await db.group.create({
+    data: { userId, waJid: 'pres-pro@g.us', name: 'Grupo Pro Pres', role: 'monitor', kind: 'group', forwardMode: 'LINK_ONLY' },
+  })
+  t.after(async () => { await db.group.deleteMany({ where: { userId } }); await db.user.deleteMany({ where: { id: userId } }); await app.close() })
+
+  const res = await app.inject({
+    method: 'PUT',
+    url: `/api/groups/${group.id}`,
+    payload: { forwardMode: 'ALLOW_NO_LINK', noLinkScope: 'ALL' },
+  })
+
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.forwardMode, 'ALLOW_NO_LINK')
+  assert.equal(body.noLinkScope, 'ALL')
+})
