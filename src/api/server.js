@@ -16,6 +16,7 @@ import { dashboardRoutes } from './routes/dashboard.js'
 import { logsRoutes } from './routes/logs.js'
 import { adminRoutes } from './routes/admin.js'
 import { publicRoutes } from './routes/public.js'
+import { clickTrackerRoutes } from './routes/clickTracker.js'
 import { registerApiMetricsHooks } from './metrics.js'
 import db from '../db.js'
 import { resumePersistedBots, startSessionHealthMonitor, stopAllBots } from '../manager.js'
@@ -238,6 +239,7 @@ app.register(dashboardRoutes, { prefix: '/api/dashboard' })
 app.register(logsRoutes, { prefix: '/api/logs' })
 app.register(adminRoutes, { prefix: '/api/admin' })
 app.register(publicRoutes, { prefix: '/api/public' })
+app.register(clickTrackerRoutes) // sem prefix — /r/:hash precisa estar na raiz
 
 // Liveness: processo está de pé
 app.get('/health', () => ({ ok: true }))
