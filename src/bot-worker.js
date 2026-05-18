@@ -28,6 +28,7 @@ import { subscribeToMonitorChannels } from './core/channels.js'
 import { getChannelMetadata, followChannel, listFollowedChannels } from './core/channelDirectory.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
+import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
@@ -258,32 +259,12 @@ async function loadConfig() {
     }
   }
 
-  const targetsByMonitor = new Map()
-  for (const target of user.groupTargets) {
-    if (!targetsByMonitor.has(target.monitorId)) targetsByMonitor.set(target.monitorId, [])
-    if (target.post?.waJid) targetsByMonitor.get(target.monitorId).push(target.post.waJid)
-  }
-
-  const groups = {
-    monitor: user.groups.filter(g => g.role === 'monitor').map(g => ({
-      id: g.id,
-      waJid: g.waJid,
-      kind: g.kind,
-      // A opção de imagem fica oculta no dashboard, mas a operação deve
-      // permanecer sempre habilitada para todos os clientes.
-      imageMode: 'original',
-      imageLinkTarget: g.imageLinkTarget ?? 'first',
-      fallbackToOriginal: true,
-      blockedKeywords: g.blockedKeywords,
-      allowedPlatforms: g.allowedPlatforms,
-      forwardMode: g.forwardMode,
-      noLinkScope: g.noLinkScope,
-      targetPostJids: targetsByMonitor.get(g.id) ?? [],
-    })),
-    monitorJids: user.groups.filter(g => g.role === 'monitor').map(g => g.waJid),
-    post: user.groups.filter(g => g.role === 'post').map(g => g.waJid),
-    postDetails: user.groups.filter(g => g.role === 'post').map(g => ({ waJid: g.waJid, kind: g.kind, welcomeMsg: g.welcomeMsg })),
-  }
+  const { groups } = buildEntitledGroupConfig({
+    groups: user.groups,
+    groupTargets: user.groupTargets,
+    planSubject: { plan: user.plan, accessExpiresAt: user.accessExpiresAt },
+    logger,
+  })
 
   const botConfig = {
     delayMin: 5,
