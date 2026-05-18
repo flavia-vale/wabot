@@ -10,6 +10,7 @@ import {
 import { ensureJid, detectKind, parseChannelInviteUrl, JID_KIND } from '../../core/jid.js'
 import { canFollowNow, logFollow } from '../../core/followGuard.js'
 import { getHealth as getChannelHealth } from '../../core/channelHealth.js'
+import { captureSnapshot } from '../../jobs/channelSnapshot.js'
 import { FORWARD_MODE, NO_LINK_SCOPE, normalizeForwardingPolicy } from '../../forwardingPolicy.js'
 
 const ALLOWED_KINDS = new Set([JID_KIND.GROUP, JID_KIND.CHANNEL])
@@ -209,6 +210,71 @@ export async function groupsRoutes(app, opts = {}) {
       await logFollow(req.user.sub, group.waJid, 'error', err.message ?? null).catch(() => {})
       return reply.code(502).send({ error: err.message || 'Falha ao seguir canal' })
     }
+  })
+
+  app.get('/:id/snapshots', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
+    if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'snapshots só vale pra canais' })
+    return db.channelSnapshot.findMany({
+      where: { groupId: group.id },
+      orderBy: { snapshotedAt: 'desc' },
+      take: 30,
+    })
+  })
+
+  app.post('/:id/snapshot-now', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
+    if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'snapshot só vale pra canais' })
+    if (!isRunning(req.user.sub)) return reply.code(503).send({ error: 'WhatsApp não está conectado.' })
+    try {
+      const row = await captureSnapshot(group.id, {
+        userId: req.user.sub,
+        waJid: group.waJid,
+        getMetadata: channelMetadata,
+      })
+      if (!row) return reply.code(502).send({ error: 'Não foi possível obter metadata do canal' })
+      return row
+    } catch (err) {
+      req.log.warn({ err: err.message, groupId: group.id }, 'snapshot-now falhou')
+      return reply.code(502).send({ error: err.message ?? 'Falha ao capturar snapshot' })
+    }
+  })
+
+  app.post('/:id/recreate', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
+    if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'recreate só vale pra canais' })
+    const newJid = req.body?.newJid
+    if (!newJid || typeof newJid !== 'string' || !newJid.endsWith('@newsletter')) {
+      return reply.code(400).send({ error: 'newJid inválido (deve terminar em @newsletter)' })
+    }
+    if (newJid === group.waJid) {
+      return reply.code(400).send({ error: 'newJid é igual ao JID atual' })
+    }
+    if (!isRunning(req.user.sub)) return reply.code(503).send({ error: 'WhatsApp não está conectado.' })
+
+    // Valida ownership do novo canal antes de trocar.
+    let meta
+    try {
+      meta = await channelMetadata(req.user.sub, { jid: newJid })
+    } catch (err) {
+      req.log.warn({ err: err.message, newJid }, 'recreate: falha ao buscar metadata do novo canal')
+      return reply.code(502).send({ error: 'Não foi possível verificar o novo canal' })
+    }
+    if (!meta) return reply.code(404).send({ error: 'Novo canal não encontrado no WhatsApp' })
+    if (!meta.isViewerOwner) return reply.code(403).send({ error: 'Você não é admin do novo canal' })
+
+    const updated = await db.group.update({
+      where: { id: group.id },
+      data: { waJid: newJid, name: meta.name || group.name },
+    })
+    // Reset health/throttle do canal pra começar limpo no novo JID.
+    await db.channelHealth.deleteMany({ where: { groupId: group.id } }).catch(() => {})
+    await db.channelThrottle.deleteMany({ where: { groupId: group.id } }).catch(() => {})
+
+    return { group: updated, owner: meta.owner, name: meta.name }
   })
 
   app.get('/:id/health', { onRequest: [app.authenticate] }, async (req, reply) => {

@@ -162,6 +162,99 @@ test('GET /:id/health reflete registro existente em red com pausedUntil', async 
   assert.equal(body.lastError, '403')
 })
 
+test('GET /:id/snapshots retorna lista ordenada do mais recente', async (t) => {
+  const { app, userId } = await buildApp({}, { withUser: true })
+  const group = await db.group.create({
+    data: { userId, waJid: 's@newsletter', name: 'Canal S', role: 'post', kind: 'channel', forwardMode: 'LINK_ONLY' },
+  })
+  await db.channelSnapshot.create({ data: { groupId: group.id, name: 'old', snapshotJson: '{}', snapshotedAt: new Date('2026-01-01') } })
+  await db.channelSnapshot.create({ data: { groupId: group.id, name: 'new', snapshotJson: '{}', snapshotedAt: new Date('2026-05-01') } })
+  t.after(async () => {
+    await db.channelSnapshot.deleteMany({ where: { groupId: group.id } })
+    await db.group.deleteMany({ where: { userId } })
+    await db.user.deleteMany({ where: { id: userId } })
+    await app.close()
+  })
+  const res = await app.inject({ method: 'GET', url: `/api/groups/${group.id}/snapshots` })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.length, 2)
+  assert.equal(body[0].name, 'new')
+})
+
+test('POST /:id/snapshot-now grava snapshot via metadata', async (t) => {
+  const { app, userId } = await buildApp({
+    channelMetadata: async (_uid, { jid }) => ({ jid, name: 'Capturado', description: 'd' }),
+  }, { withUser: true })
+  const group = await db.group.create({
+    data: { userId, waJid: 'sn@newsletter', name: 'X', role: 'post', kind: 'channel', forwardMode: 'LINK_ONLY' },
+  })
+  t.after(async () => {
+    await db.channelSnapshot.deleteMany({ where: { groupId: group.id } })
+    await db.group.deleteMany({ where: { userId } })
+    await db.user.deleteMany({ where: { id: userId } })
+    await app.close()
+  })
+  const res = await app.inject({ method: 'POST', url: `/api/groups/${group.id}/snapshot-now` })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.name, 'Capturado')
+  const stored = await db.channelSnapshot.findMany({ where: { groupId: group.id } })
+  assert.equal(stored.length, 1)
+})
+
+test('POST /:id/recreate troca waJid após validar ownership', async (t) => {
+  const { app, userId } = await buildApp({
+    channelMetadata: async (_uid, { jid }) => ({ jid, name: 'Canal Novo', owner: 'me', isViewerOwner: true }),
+  }, { withUser: true })
+  const group = await db.group.create({
+    data: { userId, waJid: 'old@newsletter', name: 'Canal Velho', role: 'post', kind: 'channel', forwardMode: 'LINK_ONLY' },
+  })
+  t.after(async () => {
+    await db.channelHealth.deleteMany({ where: { groupId: group.id } }).catch(() => {})
+    await db.channelThrottle.deleteMany({ where: { groupId: group.id } }).catch(() => {})
+    await db.group.deleteMany({ where: { userId } })
+    await db.user.deleteMany({ where: { id: userId } })
+    await app.close()
+  })
+  const res = await app.inject({
+    method: 'POST', url: `/api/groups/${group.id}/recreate`,
+    payload: { newJid: 'new@newsletter' },
+  })
+  assert.equal(res.statusCode, 200)
+  const updated = await db.group.findFirst({ where: { id: group.id } })
+  assert.equal(updated.waJid, 'new@newsletter')
+  assert.equal(updated.name, 'Canal Novo')
+})
+
+test('POST /:id/recreate rejeita 403 quando não é admin do novo canal', async (t) => {
+  const { app, userId } = await buildApp({
+    channelMetadata: async (_uid, { jid }) => ({ jid, name: 'X', owner: 'someone-else', isViewerOwner: false }),
+  }, { withUser: true })
+  const group = await db.group.create({
+    data: { userId, waJid: 'old2@newsletter', name: 'V', role: 'post', kind: 'channel', forwardMode: 'LINK_ONLY' },
+  })
+  t.after(async () => { await db.group.deleteMany({ where: { userId } }); await db.user.deleteMany({ where: { id: userId } }); await app.close() })
+  const res = await app.inject({
+    method: 'POST', url: `/api/groups/${group.id}/recreate`,
+    payload: { newJid: 'new2@newsletter' },
+  })
+  assert.equal(res.statusCode, 403)
+})
+
+test('POST /:id/recreate rejeita 400 quando newJid não termina em @newsletter', async (t) => {
+  const { app, userId } = await buildApp({}, { withUser: true })
+  const group = await db.group.create({
+    data: { userId, waJid: 'old3@newsletter', name: 'V', role: 'post', kind: 'channel', forwardMode: 'LINK_ONLY' },
+  })
+  t.after(async () => { await db.group.deleteMany({ where: { userId } }); await db.user.deleteMany({ where: { id: userId } }); await app.close() })
+  const res = await app.inject({
+    method: 'POST', url: `/api/groups/${group.id}/recreate`,
+    payload: { newJid: 'something@g.us' },
+  })
+  assert.equal(res.statusCode, 400)
+})
+
 test('GET /:id/health para grupo (não canal) retorna 400', async (t) => {
   const { app, userId } = await buildApp({}, { withUser: true })
   const group = await db.group.create({
