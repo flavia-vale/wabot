@@ -13,6 +13,7 @@ import { getHealth as getChannelHealth } from '../../core/channelHealth.js'
 import { captureSnapshot } from '../../jobs/channelSnapshot.js'
 import { lintChannelTitle, lintCopyTemplate } from '../../core/copyLinter.js'
 import { recomputeScore as recomputeReportRiskScore } from '../../core/reportRiskScore.js'
+import { recordProbeSeen } from '../../core/channelProbe.js'
 import { FORWARD_MODE, NO_LINK_SCOPE, normalizeForwardingPolicy } from '../../forwardingPolicy.js'
 
 const ALLOWED_KINDS = new Set([JID_KIND.GROUP, JID_KIND.CHANNEL])
@@ -294,6 +295,17 @@ export async function groupsRoutes(app, opts = {}) {
     if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
     if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'health só vale pra canais' })
     return getChannelHealth(group.id)
+  })
+
+  // PR-5.C.3: endpoint público (autenticado) que aceita "ping" externo da
+  // conta-probe. Atualiza lastProbeSeenAt no ChannelHealth. O watchdog
+  // periódico decide quando degradar saúde se faltar ping pós-post.
+  app.post('/:id/probe-ping', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
+    if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'probe só vale pra canais' })
+    await recordProbeSeen(group.id)
+    return { ok: true, groupId: group.id }
   })
 
   app.post('/:id/risk-score/recompute', { onRequest: [app.authenticate] }, async (req, reply) => {

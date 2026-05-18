@@ -157,6 +157,26 @@ function startLogRetentionJob() {
   timer.unref?.()
 }
 
+// PR-5.C.3: watchdog do probe roda a cada 5min e marca yellow canais que
+// publicaram mas não receberam ping da conta-probe. Conservador — nunca
+// degrada para red/critical e nunca sobreescreve red/critical existente.
+const PROBE_WATCHDOG_INTERVAL_MS = 5 * 60 * 1000
+async function runProbeWatchdogTick() {
+  const { runProbeWatchdog } = await import('../core/channelProbe.js')
+  try {
+    const summary = await runProbeWatchdog()
+    if (summary.flagged > 0) {
+      app.log.info({ ...summary }, 'probe-watchdog: canais marcados yellow')
+    }
+  } catch (err) {
+    app.log.warn({ err: err.message }, 'probe-watchdog tick falhou')
+  }
+}
+function startProbeWatchdogJob() {
+  const timer = setInterval(runProbeWatchdogTick, PROBE_WATCHDOG_INTERVAL_MS)
+  timer.unref?.()
+}
+
 async function ensureDatabaseReady() {
   try {
     await verifyDatabase()
@@ -259,6 +279,7 @@ if (!databaseReadyAtBoot) {
 }
 startLogRetentionJob()
 startActivityCacheCleanup()
+startProbeWatchdogJob()
 await app.listen({ port, host: '0.0.0.0' })
 console.log(`API rodando em http://localhost:${port}`)
 const stopSessionHealthMonitor = startSessionHealthMonitor(db, app.log)
