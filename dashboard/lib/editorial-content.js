@@ -14,6 +14,7 @@ export const EDITORIAL_DATES = {
   '/blog/migrar-grupo-achadinhos-para-canal': { publishedAt: '2026-05-18', updatedAt: '2026-05-18' },
   '/blog/chip-dedicado-bot-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-05-18' },
   '/blog/bot-whatsapp-antiban-existe': { publishedAt: '2026-05-18', updatedAt: '2026-05-18' },
+  '/diagnostico-antiban-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-05-18' },
   '/materiais/checklist-operacao-whatsapp': { publishedAt: '2026-05-11', updatedAt: '2026-05-15' },
   '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp': { publishedAt: '2026-05-14', updatedAt: '2026-05-15' },
   '/metodologia-uso-responsavel-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
