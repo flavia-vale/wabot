@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -55,6 +55,7 @@ export default function GruposPage() {
   const [followStatus, setFollowStatus] = useState({})
   const [adminStatus, setAdminStatus] = useState({})
   const [refreshingAdminId, setRefreshingAdminId] = useState(null)
+  const [planSubject, setPlanSubject] = useState({ plan: 'trial', accessExpiresAt: null })
 
   async function load() {
     setLoadingGroups(true)
@@ -73,8 +74,9 @@ export default function GruposPage() {
   useEffect(() => {
     let active = true
     setLoadingGroups(true)
-    api.groups()
-      .then(async (data) => {
+    Promise.all([api.groups(), api.me()])
+      .then(async ([data, me]) => {
+        setPlanSubject({ plan: me?.plan ?? 'trial', accessExpiresAt: me?.accessExpiresAt ?? null })
         if (!active) return
         setGroups(data)
         await ensureHiddenImageDefaults(data)
@@ -252,6 +254,13 @@ export default function GruposPage() {
   const post = groups.filter(g => g.role === 'post')
   const existingJidRoles = new Set(groups.map(g => `${g.waJid}::${g.role}`))
 
+  const canUseChannels = useMemo(() => {
+    if (planSubject.plan === 'pro') return true
+    if (planSubject.plan !== 'trial' || !planSubject.accessExpiresAt) return false
+    const expiresAt = new Date(planSubject.accessExpiresAt)
+    return !Number.isNaN(expiresAt.getTime()) && expiresAt > new Date()
+  }, [planSubject])
+
   return (
     <div className="max-w-xl">
       <div className="flex items-start justify-between gap-3">
@@ -269,13 +278,18 @@ export default function GruposPage() {
               `Canais (${groups.filter(g => g.kind === 'channel').length})`}
           </button>
         ))}
-        <button onClick={() => setShowChannelModal(true)}
-          className="ml-auto px-3 py-1.5 bg-emerald-600 text-white rounded text-sm">
-          + Adicionar canal
+        <button
+          onClick={() => canUseChannels ? setShowChannelModal(true) : setActionError('Canais estão disponíveis no Trial ativo e no plano Pro.')}
+          className={`ml-auto px-3 py-1.5 rounded text-sm ${canUseChannels ? 'bg-emerald-600 text-white' : 'bg-amber-100 text-amber-800 border border-amber-300'}`}
+        >
+          + Adicionar canal {!canUseChannels && '(Pro)'}
         </button>
       </div>
 
       {actionError && <div className="mb-4"><Alert type="error" title="Falha ao atualizar grupos" message={actionError} /></div>}
+      {!canUseChannels && (
+        <div className="mb-4"><Alert type="info" title="Canais bloqueados no Basic" message="Canais já cadastrados ficam preservados. Faça upgrade para o Pro para reativar monitoramento e envio em canais." /></div>
+      )}
 
       {/* Carregar grupos do WhatsApp */}
       <div className="bg-white rounded-2xl shadow p-5 mb-4">
@@ -361,6 +375,7 @@ export default function GruposPage() {
                     <span className="ml-2 text-gray-400 text-xs">{g.waJid}</span>
                     <span className="ml-2 inline-flex items-center gap-1">
                       <TypeBadge kind={g.kind} />
+                      {!canUseChannels && g.kind === 'channel' && <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Pro</span>}
                       {g.kind === 'channel' && g.role === 'monitor' && (
                         <FollowBadge status={followStatus[g.id] ?? 'unknown'} />
                       )}
@@ -404,16 +419,21 @@ export default function GruposPage() {
                   <label className="flex items-center gap-2 text-xs text-gray-600">
                     <input
                       type="checkbox"
+                      disabled={!canUseChannels}
                       checked={(g.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK'}
                       onChange={(e) => {
                         const enabled = e.target.checked
+                        if (enabled && !canUseChannels) {
+                          setActionError('O Módulo de Preservação Avançada está disponível no Trial ativo e no plano Pro.')
+                          return
+                        }
                         handleUpdateGroup(g.id, {
                           forwardMode: enabled ? 'ALLOW_NO_LINK' : 'LINK_ONLY',
                           noLinkScope: enabled ? (g.noLinkScope ?? 'TEXT_ONLY') : null,
                         })
                       }}
                     />
-                    Incluir mensagens sem link
+                    Incluir mensagens sem link {!canUseChannels && '(Pro)'}
                   </label>
                   {(g.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK' && (
                     <select
@@ -426,7 +446,7 @@ export default function GruposPage() {
                       ))}
                     </select>
                   )}
-                  <p className="mt-1 text-[11px] text-amber-600">Ativar pode aumentar o volume de mensagens encaminhadas.</p>
+                  <p className="mt-1 text-[11px] text-amber-600">Ativar pode aumentar o volume de mensagens encaminhadas. {!canUseChannels && 'No Basic, esse controle faz parte do Módulo de Preservação Avançada (Pro).'}</p>
                 </div>
               </li>
               )
@@ -457,6 +477,7 @@ export default function GruposPage() {
                     <span className="ml-2 text-gray-400 text-xs">{g.waJid}</span>
                     <span className="ml-2 inline-flex items-center gap-1">
                       <TypeBadge kind={g.kind} />
+                      {!canUseChannels && g.kind === 'channel' && <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Pro</span>}
                       {g.kind === 'channel' && g.role === 'post' && (
                         <AdminBadge
                           status={adminStatus[g.id] ?? 'unknown'}

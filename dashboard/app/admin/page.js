@@ -133,7 +133,60 @@ function RiskBadges({ flags = [] }) {
   )
 }
 
-function DetailPanel({ detail, onClose }) {
+
+function ManualAccessEditor({ detail, onApply }) {
+  const [form, setForm] = useState({ plan: detail?.plan ?? '', days: '', reason: '' })
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    setForm({ plan: detail?.plan ?? '', days: '', reason: '' })
+    setMessage('')
+  }, [detail?.id, detail?.plan])
+
+  async function submit(e) {
+    e.preventDefault()
+    setSaving(true)
+    setMessage('')
+    try {
+      const payload = {
+        plan: form.plan || undefined,
+        days: form.days === '' ? undefined : Number(form.days),
+        reason: form.reason,
+      }
+      await onApply(payload)
+      setMessage('Acesso atualizado com sucesso.')
+      setForm((current) => ({ ...current, days: '', reason: '' }))
+    } catch (err) {
+      setMessage(err.message || 'Falha ao atualizar acesso.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+      <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Ajuste manual de plano/acesso (CS/Admin)</p>
+      <div className="mt-2 grid gap-2 md:grid-cols-3">
+        <select value={form.plan} onChange={(e) => setForm((f) => ({ ...f, plan: e.target.value }))} className="rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs">
+          <option value="">Sem alterar plano</option>
+          <option value="trial">trial</option>
+          <option value="basic">basic</option>
+          <option value="pro">pro</option>
+        </select>
+        <input value={form.days} onChange={(e) => setForm((f) => ({ ...f, days: e.target.value }))} type="number" min="-365" max="365" placeholder="Dias (+/-)" className="rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs" />
+        <input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Motivo (obrigatório)" className="rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs" required minLength={5} />
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <p className="text-[11px] text-gray-500">Altera plano e/ou expiração imediatamente e deve refletir no uso real após reloadConfig natural das rotas.</p>
+        <button disabled={saving} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{saving ? 'Aplicando...' : 'Aplicar acesso'}</button>
+      </div>
+      {message && <p className="mt-2 text-xs text-gray-700">{message}</p>}
+    </form>
+  )
+}
+
+function DetailPanel({ detail, onClose, onApplyAccess }) {
   if (!detail) return null
   return (
     <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
@@ -169,6 +222,8 @@ function DetailPanel({ detail, onClose }) {
           <p className="text-sm text-gray-600">Expiração: {formatDate(detail.accessExpiresAt)}</p>
         </div>
       </div>
+
+      <div className="mt-5"><ManualAccessEditor detail={detail} onApply={onApplyAccess} /></div>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
         <div>
@@ -601,6 +656,13 @@ export default function AdminPage() {
     }
   }
 
+  async function applyManualAccess(userId, payload) {
+    setError('')
+    await api.adminUpdateAccess(userId, payload)
+    await loadAdminData(risk, search)
+    if (selectedUser?.id === userId) setSelectedUser(await api.adminUserDetail(userId))
+  }
+
   async function recordContact(user) {
     const notes = window.prompt(`Resumo do contato com ${user.email}:`)
     if (notes === null) return
@@ -953,7 +1015,7 @@ export default function AdminPage() {
           </div>
         </section>
 
-        <DetailPanel detail={selectedUser} onClose={() => setSelectedUser(null)} />
+        <DetailPanel detail={selectedUser} onClose={() => setSelectedUser(null)} onApplyAccess={(payload) => applyManualAccess(selectedUser.id, payload)} />
 
         <div className="grid gap-6 lg:grid-cols-2">
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">

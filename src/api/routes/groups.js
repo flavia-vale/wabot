@@ -11,7 +11,7 @@ import { ensureJid, detectKind, parseChannelInviteUrl, JID_KIND } from '../../co
 import { canFollowNow, logFollow } from '../../core/followGuard.js'
 import { getHealth as getChannelHealth } from '../../core/channelHealth.js'
 import { FORWARD_MODE, NO_LINK_SCOPE, normalizeForwardingPolicy } from '../../forwardingPolicy.js'
-import { buildFeatureGateError, canUseChannels, FEATURE_CODES } from '../../billing/plans.js'
+import { buildFeatureGateError, canUseAdvancedPreservation, canUseChannels, FEATURE_CODES } from '../../billing/plans.js'
 
 const ALLOWED_KINDS = new Set([JID_KIND.GROUP, JID_KIND.CHANNEL])
 
@@ -36,6 +36,13 @@ async function ensureChannelFeatureAllowed(userId, reply) {
   const user = await getPlanSubject(userId)
   if (canUseChannels(user ?? { plan: 'basic' })) return true
   reply.code(403).send(buildFeatureGateError(FEATURE_CODES.CHANNELS))
+  return false
+}
+
+async function ensureAdvancedPreservationAllowed(userId, reply) {
+  const user = await getPlanSubject(userId)
+  if (canUseAdvancedPreservation(user ?? { plan: 'basic' })) return true
+  reply.code(403).send(buildFeatureGateError(FEATURE_CODES.ADVANCED_PRESERVATION))
   return false
 }
 
@@ -142,6 +149,9 @@ export async function groupsRoutes(app, opts = {}) {
     const requestedNoLinkScope = requestedForwardMode === FORWARD_MODE.ALLOW_NO_LINK
       ? (noLinkScope ?? currentPolicy.noLinkScope ?? NO_LINK_SCOPE.TEXT_ONLY)
       : null
+
+    const enablingAdvancedPreservation = requestedForwardMode === FORWARD_MODE.ALLOW_NO_LINK
+    if (enablingAdvancedPreservation && !(await ensureAdvancedPreservationAllowed(req.user.sub, reply))) return
 
     const updated = await db.group.update({
       where: { id: req.params.id },
