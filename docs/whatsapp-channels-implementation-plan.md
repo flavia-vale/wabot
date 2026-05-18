@@ -340,18 +340,246 @@ Todas as rotas validam `isRunning(userId)` (503 se worker offline) e usam depend
 8. Filtro chips funcionando
 
 ### Fase 5 — Salvaguardas anti-ban
+
+A Fase 5 cobre três frentes:
+
+- **5.A** — anti-ban no `newsletterFollow` (seguir canais-fonte).
+- **5.B** — anti-ban na postagem em canais-destino (vetor mais crítico,
+  porque canal só tem 1 admin e qualquer regularidade vira fingerprint).
+- **5.C** — detecção precoce de problema (shadowban silencioso é a regra,
+  não a exceção — Meta não notifica queda de quality rating).
+
+#### 5.A — Follow de canais-fonte
+
 - Limite diário de novos `newsletterFollow` por sessão (default 3,
-  configurável via `BotConfig`).
-- Warmup: contas novas começam com limite reduzido, sobe ao longo de
-  semanas.
+  configurável via `BotConfig.maxDailyFollows`).
+- Warmup: contas com idade < 7d limitam a 1 follow/dia; sobe gradual.
+- Jitter humano entre follows: `smartDelay` 30–90s.
 - Aviso explícito no onboarding: "use conta dedicada, não a pessoal".
-- Telemetria: contar follows/dia/conta, alertar quando sessão se
-  aproxima do limite.
-- Opcional: pausa automática se o WhatsApp emitir sinal de
-  rate-limiting (`stream:error` com motivo específico).
+- Telemetria: `FollowLog` (sessão, canal, timestamp, status), alerta
+  quando sessão se aproxima do limite.
+- Pausa automática se Baileys emitir `stream:error` com `rate-overlimit`
+  ou `not-authorized`.
+
+#### 5.B — Postagem em canais-destino
+
+**5.B.1. Velocity por canal-destino**
+
+| Limite | Default | Configurável em |
+|---|---|---|
+| Intervalo mínimo entre posts no mesmo canal | 20–40s + jitter | `BotConfig.channelMinIntervalSec` |
+| Burst cap (janela curta) | 6 posts / 10 min | `BotConfig.channelBurstCap` |
+| Quiet hours (sem post) | 00:00–06:00 BRT | `BotConfig.channelQuietHoursJson` |
+| Cap diário por canal | configurável, sem default rígido | `BotConfig.channelDailyCap` |
+
+Se N fontes dispararam ao mesmo tempo pro mesmo destino, **serializa**
+respeitando o intervalo mínimo (não dispara em paralelo).
+
+**5.B.2. Fingerprint de conteúdo replicado**
+
+O cenário canônico é "1 cliente, N fontes → N destinos do mesmo
+cliente". Se o mesmo conteúdo sai byte-idêntico em 10 canais
+simultaneamente, a Meta cruza fingerprint trivial.
+
+- **Stagger temporal entre destinos:** mesmo conteúdo para N canais
+  distribui em janela aleatória de 30s–3min.
+- **Variação leve de copy:** banco de templates por cliente (saudação,
+  CTA, emoji), rotação por canal. Não precisa AI — pool manual já
+  quebra hash.
+- **Variação de imagem:** micro-perturbação no buffer enviado por canal
+  (recompressão JPEG qualidade aleatória 85–92, crop 1–2px).
+  **Não tocar no caminho do Mercado Livre** (regra do AGENTS.md, image
+  scrapers PR #422). A mutação é aplicada **depois** do scraper, no
+  buffer pronto para envio.
+- **Ordem de campos** (caption+url vs url+caption) alternada por canal.
+
+**5.B.3. Sinal de "bot puro" (canal sem vida)**
+
+Canal que só sai post de afiliado, sempre mesmo formato, sem
+reactions/replies, é assinatura óbvia.
+
+- **Reactions sintéticas do próprio admin** em posts antigos
+  (1–2/dia, espaçadas, emojis variados).
+- **Posts humanizadores:** texto curto solto entre afiliados ("boa
+  noite", "promo da semana"), 1 a cada N posts comerciais. Pool manual
+  do cliente.
+- **Edição ocasional:** editar mensagem antiga (corrigir typo
+  simulado) é sinal humano.
+- **Pin/unpin esporádico** de mensagem destacada.
+
+**5.B.4. Camada de transporte**
+
+- **Reusar conexão WebSocket** (Baileys já faz, mas auditar: reconnect
+  por post é fingerprint).
+- **`presence` consistente:** sessão online só no instante do post é
+  suspeita. Manter "available" em janelas plausíveis (heartbeat de
+  presença alinhado com horário comercial do cliente).
+
+#### 5.C — Detecção precoce de problema
+
+Como não temos feedback direto da Meta sobre quality rating
+(documentado: "quality rating recalculates ... no dashboard
+notification when it drops"), a detecção é por **proxies**.
+
+**5.C.1. Sinais diretos do socket Baileys**
+
+| Sinal | Reação |
+|---|---|
+| `stream:error` motivo `rate-overlimit` | Quarentena imediata da sessão, pausar todos canais |
+| `stream:error` motivo `not-authorized`/`forbidden` | **Crítico** — chip sob risco, alertar cliente |
+| `status: 403/401` em `sendMessage` | Marcar canal vermelho, pausar |
+| Timeout de envio P95 subindo >3x baseline | Throttling silencioso, reduzir velocity |
+| `messageId` ausente no retorno | Envio engolido pelo servidor, contar como erro |
+
+**5.C.2. Sinais derivados da telemetria já existente**
+
+- Taxa de erro por `targetChannelId` em janela rolante (1h, 24h).
+- Latency drift por canal (P50/P95 do `sendMessage` específico).
+- Razão `enviados / com sucesso` por canal — drop sustentado = canal
+  queimando.
+
+**5.C.3. Probe ativo (opcional, recomendado)**
+
+Conta secundária ("chip probe", 1 por tenant) segue os canais-destino
+do cliente. O bot mede:
+
+- Tempo entre `publish` no canal e mensagem chegando na conta probe.
+- Se posts param de aparecer na probe → **shadowban quase certo**.
+
+Roda 1–2x/dia, frequência baixíssima. Custo: 1 chip extra por tenant
+(barato; cliente pode usar um número antigo dele).
+
+**5.C.4. Sinal indireto via afiliado**
+
+Se o cliente tem callback de cliques de afiliado (ML, Amazon, Shopee):
+queda brusca de cliques/dia em um canal específico (>70% drop
+sustentado por 48h) é proxy de shadowban — followers nem estão vendo
+o post.
+
+**5.C.5. Gradação de reação**
+
+| Nível | Gatilho | Ação |
+|---|---|---|
+| 🟢 Verde | Tudo normal | — |
+| 🟡 Amarelo | 1 sinal indireto (latency drift, erro >5%/h) | Reduzir velocity do canal pela metade, logar, alertar dashboard |
+| 🔴 Vermelho | Probe sem ver posts OU drop >70% de cliques OU `403` repetido | Pausar postagem no canal, notificar cliente, sugerir migração |
+| ⚫ Crítico | `stream:error: forbidden`/`not-authorized` | Quarentena da **sessão inteira** — risco de o chip cair |
+
+#### 5.D — Schema novo
+
+```
+ChannelHealth { targetChannelId, lastError, errorRate1h,
+                latencyP95_1h, lastProbeSeenAt,
+                status: green|yellow|red|critical, updatedAt }
+ChannelThrottle { targetChannelId, postsLastHour, postsLastDay,
+                  burstWindowStart, dailyCap, hourlyCap }
+FollowLog { sessionId, channelId, followedAt, status }
+BotConfig (novos campos):
+  channelMinIntervalSec, channelBurstCap, channelDailyCap,
+  channelStaggerJitterMs, channelQuietHoursJson,
+  imageMutationEnabled, copyVariationPoolJson,
+  probeAccountId (nullable), probeEnabled
+```
 
 Critério de aceite: documentação operacional + dashboards de
-monitoramento + nenhum ban em staging em 14 dias de operação real.
+monitoramento (`ChannelHealth` por canal + agregado por sessão) +
+nenhum ban em staging em 14 dias de operação real **com pelo menos
+1 probe ativo**.
+
+### Fase 5.E — Conformidade com regras da Meta (pesquisa maio 2026)
+
+Pesquisa feita nas guidelines, ToS e supplemental terms oficiais.
+Riscos adicionais identificados além do brainstorm:
+
+#### 5.E.1. ToS principal proíbe explicitamente o que fazemos
+
+O [ToS principal](https://www.whatsapp.com/legal/terms-of-service) tem
+cláusulas que cobrem **diretamente** Baileys + bot de afiliado:
+
+- "create software or APIs that function substantially the same as
+  our Services" — Baileys é exatamente isso.
+- "sending illegal or impermissible communications such as bulk
+  messaging, auto-messaging, auto-dialing" — replicar post em N
+  canais conta.
+- "non-personal use of our Services unless otherwise authorized" —
+  uso comercial de chip pessoal viola.
+- "create accounts for our Services through unauthorized or automated
+  means" — não criamos contas via API, mas chips dedicados que só
+  servem ao bot caem em zona cinza.
+
+**Implicação prática:** mesmo com 100% das salvaguardas técnicas, o
+uso é tecnicamente proibido pelo ToS. A defesa é estatística (parecer
+humano), não jurídica. Reforça **defesa em profundidade**.
+
+#### 5.E.2. Channels Guidelines — gatilhos de suspensão
+
+[Channels Guidelines](https://www.whatsapp.com/legal/channels-guidelines)
+listam o que suspende canal:
+
+| Risco para nós | Mitigação |
+|---|---|
+| **Título de canal deve refletir conteúdo real** | UI deve validar título do canal-destino vs nicho declarado pelo cliente. Não aceitar nomes genéricos tipo "Promo VIP" sem categoria. |
+| **"Sending too many or low-quality updates"** é citado explicitamente como motivo de unfollow | Quiet hours + cap diário + mistura com posts humanizadores (5.B.3). |
+| **"Activity that purposefully deceives or willfully misrepresents"** | Não aceitar copy do cliente com claims falsos ("99% OFF", "última peça") sem corresponder ao link real. Validação opcional na UI antes de salvar template. |
+| **"Unlicensed intellectual property"** | Imagens de produto vêm de scrapers oficiais (ML/Amazon/Shopee) — uso justo para afiliado, mas se cliente subir logo da loja, alertar. |
+| **Impersonação de marca** | UI deve impedir nome de canal copiar marca conhecida ("Amazon Ofertas BR" como nome puro pode ser takedown). |
+
+#### 5.E.3. Sinal de "reports de followers" é forte e silencioso
+
+Fontes secundárias indicam que **5–10 reports em janela curta
+disparam revisão automática** (não confirmado oficialmente pela Meta,
+mas batendo com observado em accounts comerciais — ver
+[Chatarmin messaging limits](https://chatarmin.com/en/blog/whats-app-messaging-limits)).
+
+**Implicação:** reduzir motivo de report é tão importante quanto
+reduzir spam técnico. Vetores que aumentam report:
+
+- Conteúdo enganoso (cupom expirado/inválido).
+- Frequência alta sem valor (overposting).
+- Imagem que destoa do nicho prometido na descrição do canal.
+- CTAs agressivos ("CLIQUE AGORA OU PERDE").
+
+**Salvaguarda nova:** dashboard mostra estimativa de "report risk
+score" por canal-destino baseado em:
+- Frequência de posts/dia vs follower count.
+- Taxa de cliques de afiliado (proxy: post sem clique = post sem
+  valor → candidato a report).
+- Diversidade de fontes (canal que só posta Amazon vira "loja", mais
+  sujeito a report do que canal de "ofertas variadas").
+
+#### 5.E.4. 1 admin por canal — single point of failure
+
+Limitação documentada: **cada canal só tem 1 admin** (o chip que
+criou). Implicações:
+
+- Se o chip cai, **o canal morre junto** — followers ficam órfãos,
+  cliente perde meses de audiência.
+- **Mitigação obrigatória:** snapshot diário do `newsletterMetadata`
+  de cada canal-destino (nome, descrição, link de convite) para
+  permitir recriação rápida em chip novo. Já considerar Fase 5.F.
+
+#### 5.E.5. Quality rating é silencioso e recalcula continuamente
+
+Documentado: "quality rating recalculates based on recent recipient
+behavior, primarily block rates and spam reports, with **no dashboard
+notification** when it drops".
+
+**Implicação para nós:** o probe (5.C.3) é a única forma de detectar
+queda antes do ban total. Sem probe, descobrimos quando o canal já
+está vermelho.
+
+### Fase 5.F — Plano de recuperação (canal-destino caído)
+
+Fora do escopo original, mas a pesquisa mostrou que é inevitável
+algum canal cair. Mínimo viável:
+
+- Snapshot diário em `ChannelSnapshot { targetChannelId, name,
+  description, inviteLink, snapshotJson, snapshotedAt }`.
+- Botão "recriar canal" na UI: cliente cria canal novo no app, cola
+  o ID novo, bot re-aplica `newsletterMetadata` do snapshot e
+  re-roteia todas as fontes que apontavam pro antigo.
+- Comunicação ao cliente: "canal X está em risco vermelho, considere
+  preparar recriação".
 
 ## 6. Salvaguardas anti-ban (não opcionais)
 
@@ -363,11 +591,25 @@ Resumo das mitigações que entram **obrigatoriamente** até a Fase 5:
 | Limite diário de novos follows | `BotConfig.maxDailyFollows` | 3 |
 | Warmup gradual | sessões com idade < 7d limitam a 1/dia | — |
 | Aviso "conta dedicada" | onboarding UI | obrigatório |
-| Telemetria de follows | `MessageLog`-like, novo `FollowLog` | — |
+| Telemetria de follows | `FollowLog` | — |
 | Pausa em rate-limit | listener de `stream:error` no Baileys | auto |
 | Reply-ratio mínimo | bot já não responde — não aplicável | — |
+| Intervalo mínimo entre posts no mesmo canal | `BotConfig.channelMinIntervalSec` | 20–40s + jitter |
+| Burst cap por canal | `BotConfig.channelBurstCap` | 6 / 10min |
+| Quiet hours | `BotConfig.channelQuietHoursJson` | 00–06 BRT |
+| Stagger temporal entre destinos do mesmo cliente | scheduler de envio | 30s–3min |
+| Variação de copy | pool de templates por cliente | obrigatório |
+| Variação de imagem (mutação pós-scraper) | `imageMutationEnabled` | true |
+| Reactions/posts humanizadores | scheduler periódico no chip-admin | 1/N posts |
+| Presence consistente | heartbeat alinhado a horário comercial | auto |
+| `ChannelHealth` + gradação 🟢🟡🔴⚫ | listeners + worker periódico | obrigatório |
+| Probe ativo (chip secundário) | 1 por tenant | recomendado |
+| Snapshot diário do canal | `ChannelSnapshot` | obrigatório |
+| Validação de título/copy enganosa | UI no momento de salvar | warning |
 
-**Não confiar em uma única salvaguarda**. Defesa em profundidade.
+**Não confiar em uma única salvaguarda**. Defesa em profundidade. O ToS
+principal proíbe Baileys explicitamente — a defesa é estatística
+(parecer humano), não jurídica.
 
 ## 7. Riscos e questões abertas
 
