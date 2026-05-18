@@ -49,6 +49,11 @@ const SESSION_ERROR_THRESHOLD = Math.max(5, Number(process.env.WA_SESSION_ERROR_
 const SESSION_RECOVERY_COOLDOWN_MS = Math.max(60_000, Number(process.env.WA_SESSION_RECOVERY_COOLDOWN_MS || 300_000))
 const ALLOW_TEXT_WITHOUT_LINKS = String(process.env.WA_ALLOW_TEXT_WITHOUT_LINKS || '0') === '1'
 
+function normalizeJidForMatch(jid) {
+  if (typeof jid !== 'string') return ''
+  return jid.trim().replace(/:\d+(?=@)/, '')
+}
+
 let activeSock = null
 let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
 let shuttingDown = false
@@ -855,9 +860,10 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 
   async function processIncomingMessage(msg, sock) {
       const jid = msg.key.remoteJid
+      const normalizedJid = normalizeJidForMatch(jid)
       const cfg = await getConfig()
       logger.info({ jid, monitorGroups: cfg.groups.monitor, feedGlobal: cfg.botConfig.feedGlobal }, 'mensagem recebida')
-      const monitorGroup = cfg.groups.monitor.find(m => m.waJid === jid)
+      const monitorGroup = cfg.groups.monitor.find(m => normalizeJidForMatch(m.waJid) === normalizedJid)
       const shouldTrackSkipped = Boolean(monitorGroup) || (cfg.botConfig.feedGlobal && isMirrorableJid(jid))
       async function recordSkippedMessage({ reason, platform = 'unknown', originalUrl = '', convertedUrl = '' }) {
         if (!shouldTrackSkipped) return
@@ -869,7 +875,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           data: {
             userId,
             platform,
-            sourceGroup: jid || 'unknown',
+            sourceGroup: normalizedJid || 'unknown',
             destGroup: 'skipped',
             originalUrl,
             convertedUrl,
