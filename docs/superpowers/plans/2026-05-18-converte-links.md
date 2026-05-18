@@ -85,3 +85,14 @@
 - [x] **Step 3: Bloquear conversões concorrentes do mesmo usuário** e limitar capacidade global do endpoint.
 - [x] **Step 4: Aplicar timeout por item e deadline por requisição** para não manter workers presos em marketplaces lentos.
 - [x] **Step 5: Cobrir hardening com testes** para texto grande, rate limit, concorrência e timeout.
+
+
+### Task 6: Ajuste mobile first pós-review
+
+**Files:**
+- Modify: `dashboard/app/dashboard/converte-links/page.js`
+
+- [x] **Step 1: Reduzir densidade visual no mobile** com cards menores, `p-4`, títulos compactos e métricas em chips.
+- [x] **Step 2: Melhorar uso com dedo** usando botões `min-h-12`, CTA sticky no mobile e ações full-width.
+- [x] **Step 3: Evitar overflow em URLs longas** com áreas roláveis/`break-all` nos links original e convertido.
+- [x] **Step 4: Manter layout expandido em telas maiores** via classes `sm:` sem alterar contrato da API.
