@@ -41,6 +41,7 @@ model User {
   customerContacts      CustomerContactLog[]
   customerContactActors CustomerContactLog[] @relation("CustomerContactActor")
   followLogs            FollowLog[]
+  affiliateLinks        AffiliateLink[]
 
   @@index([status, plan, accessExpiresAt])
   @@index([lastActivityAt])
@@ -233,6 +234,32 @@ model ChannelThrottle {
   postsInBurstWindow Int       @default(0)
   postsToday         Int       @default(0)
   dayBucket          String    @default("")
+}
+
+model AffiliateLink {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hash         String   @unique
+  originalUrl  String
+  messageLogId String?
+  groupId      String?
+  createdAt    DateTime @default(now())
+  clicks       AffiliateClick[]
+
+  @@index([userId, createdAt])
+  @@index([groupId, createdAt])
+}
+
+model AffiliateClick {
+  id        String        @id @default(cuid())
+  linkId    String
+  link      AffiliateLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  clickedAt DateTime      @default(now())
+  ipHash    String?
+  uaHash    String?
+
+  @@index([linkId, clickedAt])
 }
 
 model ChannelSnapshot {
