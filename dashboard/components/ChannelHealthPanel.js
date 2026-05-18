@@ -13,7 +13,7 @@ function formatDate(iso) {
 }
 
 function ScoreBar({ score }) {
-  if (score == null) return <span className="text-xs text-slate-500">Sem dados (clique em "Recalcular")</span>
+  if (score == null) return <span className="text-xs text-slate-500">Sem dados (clique em &quot;Recalcular&quot;)</span>
   const cls = score >= 70 ? 'bg-rose-500' : score >= 40 ? 'bg-amber-500' : 'bg-emerald-500'
   return (
     <div className="flex items-center gap-2">
