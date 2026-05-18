@@ -26,8 +26,16 @@ import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } fro
 import { isMirrorableJid, detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
 import { getChannelMetadata, followChannel, listFollowedChannels } from './core/channelDirectory.js'
+import { logFollow } from './core/followGuard.js'
+import {
+  recordSendResult as recordChannelSendResult,
+  recordStreamError as recordChannelStreamError,
+  isChannelPaused,
+  getHealth as getChannelHealth,
+} from './core/channelHealth.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
+import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
@@ -258,32 +266,12 @@ async function loadConfig() {
     }
   }
 
-  const targetsByMonitor = new Map()
-  for (const target of user.groupTargets) {
-    if (!targetsByMonitor.has(target.monitorId)) targetsByMonitor.set(target.monitorId, [])
-    if (target.post?.waJid) targetsByMonitor.get(target.monitorId).push(target.post.waJid)
-  }
-
-  const groups = {
-    monitor: user.groups.filter(g => g.role === 'monitor').map(g => ({
-      id: g.id,
-      waJid: g.waJid,
-      kind: g.kind,
-      // A opção de imagem fica oculta no dashboard, mas a operação deve
-      // permanecer sempre habilitada para todos os clientes.
-      imageMode: 'original',
-      imageLinkTarget: g.imageLinkTarget ?? 'first',
-      fallbackToOriginal: true,
-      blockedKeywords: g.blockedKeywords,
-      allowedPlatforms: g.allowedPlatforms,
-      forwardMode: g.forwardMode,
-      noLinkScope: g.noLinkScope,
-      targetPostJids: targetsByMonitor.get(g.id) ?? [],
-    })),
-    monitorJids: user.groups.filter(g => g.role === 'monitor').map(g => g.waJid),
-    post: user.groups.filter(g => g.role === 'post').map(g => g.waJid),
-    postDetails: user.groups.filter(g => g.role === 'post').map(g => ({ waJid: g.waJid, kind: g.kind, welcomeMsg: g.welcomeMsg })),
-  }
+  const { groups } = buildEntitledGroupConfig({
+    groups: user.groups,
+    groupTargets: user.groupTargets,
+    planSubject: { plan: user.plan, accessExpiresAt: user.accessExpiresAt },
+    logger,
+  })
 
   const botConfig = {
     delayMin: 5,
@@ -598,6 +586,30 @@ async function processSendJob(job) {
       await sleep(totalDelayMs)
     }
 
+    // PR-5.C.1: lookup do groupId do canal-destino (uma vez por job) para
+    // alimentar ChannelHealth e respeitar pausedUntil.
+    let channelGroupId = null
+    if (isChannelDestination(job.destJid)) {
+      try {
+        const g = await db.group.findFirst({
+          where: { userId, waJid: job.destJid, role: 'post', kind: 'channel' },
+          select: { id: true },
+        })
+        channelGroupId = g?.id ?? null
+        if (channelGroupId) {
+          const health = await getChannelHealth(channelGroupId)
+          if (isChannelPaused(health)) {
+            const err = new Error(`Canal pausado por saúde (${health.status}) até ${health.pausedUntil}`)
+            err.code = 'CHANNEL_PAUSED'
+            throw err
+          }
+        }
+      } catch (err) {
+        if (err.code === 'CHANNEL_PAUSED') throw err
+        logger.warn({ err: err?.message, destJid: job.destJid }, 'channelHealth lookup falhou; seguindo sem pausa')
+      }
+    }
+
     for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt++) {
       try {
         if (!activeSock) throw new Error('Bot não conectado')
@@ -613,8 +625,14 @@ async function processSendJob(job) {
         } else {
           await activeSock.sendMessage(job.destJid, payload)
         }
-        lastSendByDest.set(job.destJid, Date.now())
+        const finishedAt = Date.now()
+        lastSendByDest.set(job.destJid, finishedAt)
         logger.info({ destJid: job.destJid, platforms: job.platforms, attempt, type: job.type }, 'Mensagem enviada')
+
+        if (channelGroupId) {
+          recordChannelSendResult(channelGroupId, { ok: true, latencyMs: finishedAt - startedAt }, { now: finishedAt })
+            .catch(err => logger.warn({ err: err?.message }, 'recordChannelSendResult(ok) falhou'))
+        }
 
         await db.messageLog.update({
           where: { id: job.logId },
@@ -664,6 +682,13 @@ async function processSendJob(job) {
     sendMetrics.errorTotal++
     sendMetrics.lastErrorAt = new Date().toISOString()
     sendMetrics.lastError = err.message
+    if (channelGroupId) {
+      const errorCode = isChannelForbiddenError(err)
+        ? '403'
+        : (err?.output?.statusCode ? String(err.output.statusCode) : (err?.code ?? null))
+      recordChannelSendResult(channelGroupId, { ok: false, errorCode, errorMsg: err.message })
+        .catch(e => logger.warn({ err: e?.message }, 'recordChannelSendResult(fail) falhou'))
+    }
     await finishSendJob(job, { ok: false, error: err.message })
   }
 }
@@ -743,6 +768,27 @@ async function startBot() {
   pendingSock = sock
 
   sock.ev.on('creds.update', saveCreds)
+
+  // PR-5.A: Baileys emite stream:error em rate-overlimit / forbidden /
+  // not-authorized. Gravar uma marca rate_limited em FollowLog faz o
+  // followGuard pausar follows por 1h para a sessão.
+  const handleStreamError = (node) => {
+    try {
+      const code = node?.attrs?.code || node?.children?.[0]?.tag || 'unknown'
+      const blocking = ['rate-overlimit', 'not-authorized', 'forbidden', '401', '403', '429']
+      if (!blocking.includes(String(code))) return
+      logger.warn({ code }, 'stream:error capturado; quarentenando follows desta sessão')
+      logFollow(userId, '<stream>', 'rate_limited', String(code)).catch(err => {
+        logger.warn({ err: err?.message }, 'logFollow(rate_limited) falhou')
+      })
+      recordChannelStreamError(userId, String(code)).catch(err => {
+        logger.warn({ err: err?.message }, 'recordChannelStreamError falhou')
+      })
+    } catch (err) {
+      logger.warn({ err: err?.message }, 'handleStreamError falhou')
+    }
+  }
+  sock.ws?.on?.('CB:stream:error', handleStreamError)
 
   // Captura JIDs de canais (@newsletter) que aparecem nos chats do usuário,
   // pra alimentar o picker "Canais que sigo" no dashboard. Baileys 6.7.16

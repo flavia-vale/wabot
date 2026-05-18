@@ -21,6 +21,14 @@ export function FollowBadge({ status }) {
   return <span className={`${STYLE.base} ${STYLE.gray}`}>Não verificado</span>
 }
 
+export function HealthBadge({ status }) {
+  if (status === 'green') return <span className={`${STYLE.base} ${STYLE.green}`} title="Canal saudável">🟢 Saudável</span>
+  if (status === 'yellow') return <span className={`${STYLE.base} ${STYLE.yellow}`} title="Sinais de degradação detectados">🟡 Atenção</span>
+  if (status === 'red') return <span className={`${STYLE.base} ${STYLE.rose}`} title="Canal pausado por falhas consecutivas">🔴 Pausado</span>
+  if (status === 'critical') return <span className={`${STYLE.base} ${STYLE.rose}`} title="Falha crítica — verifique a sessão">⚫ Crítico</span>
+  return <span className={`${STYLE.base} ${STYLE.gray}`}>Sem dados</span>
+}
+
 export function AdminBadge({ status, onRefresh, refreshing }) {
   let cls = STYLE.gray
   let label = 'Não verificado'
