@@ -15,6 +15,36 @@ const formattedLastUpdated = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'long
 
 const blogPosts = [
   {
+    href: '/blog/grupo-ou-canal-whatsapp-achadinhos',
+    title: 'Guia: grupo ou canal para achadinhos no WhatsApp',
+    description: 'Compare grupos e canais para organizar achadinhos com menos ruído e mais preservação operacional.',
+  },
+  {
+    href: '/blog/como-evitar-banimento-whatsapp-afiliados',
+    title: 'Como reduzir o risco de banimento no WhatsApp para afiliados',
+    description: 'Checklist honesto de chip dedicado, cadência, variações e preservação avançada.',
+  },
+  {
+    href: '/blog/shadowban-whatsapp-canais',
+    title: 'Shadowban em Canais do WhatsApp: sinais silenciosos',
+    description: 'Sinais de queda de entrega e cliques para monitorar antes do prejuízo.',
+  },
+  {
+    href: '/blog/migrar-grupo-achadinhos-para-canal',
+    title: 'Como migrar grupo de achadinhos para Canal do WhatsApp',
+    description: 'Passo a passo para migrar sem abandonar comunidade nem quebrar rotina.',
+  },
+  {
+    href: '/blog/chip-dedicado-bot-whatsapp',
+    title: 'Por que afiliados devem usar chip dedicado no bot do WhatsApp',
+    description: 'Separe número pessoal da infraestrutura de canais, grupos e ofertas.',
+  },
+  {
+    href: '/blog/bot-whatsapp-antiban-existe',
+    title: 'Bot “anti-ban” para WhatsApp existe? A resposta honesta',
+    description: 'Por que promessa absoluta é perigosa e como funciona preservação avançada.',
+  },
+  {
     href: '/blog/conferir-converter-link-afiliado-whatsapp',
     title: 'Como conferir e converter link de afiliado para WhatsApp',
     description: 'Evite perda de comissão ao validar tag, redirecionamento e destino final antes da divulgação.',
