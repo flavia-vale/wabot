@@ -23,6 +23,7 @@ function AddChannelModalContent({ onClose, onCreated }) {
   const [url, setUrl] = useState('')
   const [jid, setJid] = useState('')
   const [preview, setPreview] = useState(null)
+  const [nameDraft, setNameDraft] = useState('')
   const [role, setRole] = useState('monitor')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -46,32 +47,42 @@ function AddChannelModalContent({ onClose, onCreated }) {
     }
   }
 
+  function applyPreview(data) {
+    setPreview(data)
+    setNameDraft(data?.name || (data?.jid ? `Canal ${data.jid.split('@')[0].slice(-6)}` : ''))
+  }
+
   async function resolveLink() {
-    setBusy(true); setError(''); setPreview(null)
+    setBusy(true); setError(''); applyPreview(null)
     try {
       const data = await api.resolveChannelInvite(url.trim())
-      setPreview(data)
+      applyPreview(data)
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
 
   async function resolveJid() {
     if (!jid.trim().endsWith('@newsletter')) { setError('JID deve terminar com @newsletter'); return }
-    setBusy(true); setError(''); setPreview(null)
+    setBusy(true); setError(''); applyPreview(null)
     try {
       const data = await api.resolveChannelJid(jid.trim())
-      setPreview(data)
+      applyPreview(data)
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
 
   async function submit() {
     if (!preview) return
+    const finalName = nameDraft.trim()
+    if (!finalName) {
+      setError('Dê um nome para este canal antes de cadastrar.')
+      return
+    }
     if (role === 'post' && preview.isViewerOwner === false && !confirmNonAdmin) {
       setError('Confirme que você é admin desse canal antes de cadastrar como destino.')
       return
     }
     setBusy(true); setError('')
     try {
-      const group = await api.addGroup(preview.jid, preview.name, role, 'channel')
+      const group = await api.addGroup(preview.jid, finalName, role, 'channel')
       if (role === 'monitor') {
         api.followChannelNow(group.id).catch(() => {})
       }
@@ -176,8 +187,18 @@ function AddChannelModalContent({ onClose, onCreated }) {
 
         {preview && (
           <div className="mt-4 p-3 border rounded bg-slate-50">
-            <div className="font-medium">{preview.name}</div>
-            <div className="text-xs text-slate-500 font-mono">{preview.jid}</div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Nome do canal</label>
+            <input
+              type="text"
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              placeholder="Dê um nome para identificar este canal"
+              className="w-full border rounded px-2 py-1 text-sm font-medium"
+            />
+            {!preview.name && (
+              <p className="mt-1 text-xs text-amber-700">O WhatsApp não devolveu nome para esse canal — defina um para identificar na sua lista.</p>
+            )}
+            <div className="text-xs text-slate-500 font-mono mt-2">{preview.jid}</div>
             <div className="mt-2 text-sm">
               {preview.isViewerOwner
                 ? <span className="text-emerald-700">✓ Você é dono deste canal</span>
