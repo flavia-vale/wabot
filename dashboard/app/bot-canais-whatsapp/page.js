@@ -9,7 +9,7 @@ const pagePath = '/bot-canais-whatsapp'
 const siteUrl = getSiteUrl()
 const pageUrl = `${siteUrl}${pagePath}`
 const primaryCtaHref = '/login?mode=register&utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=hero'
-const diagnosticHref = '/login?mode=register&utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=modulo_preservacao'
+const diagnosticHref = '/diagnostico-antiban-whatsapp?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=modulo_preservacao'
 
 const title = 'Bot para Canais do WhatsApp com Módulo de Preservação Avançada'
 const description = 'Migre achadinhos para Canais do WhatsApp com o BOTinho: espelhamento entre grupos e canais, ritmo humano, variações, monitoramento e Módulo de Preservação Avançada (o chamado "anti-ban").'
@@ -267,8 +267,8 @@ export default function BotCanaisWhatsAppPage() {
                 O BOTinho espelha ofertas entre grupos e canais, publica em ritmo humano, cria variações naturais e monitora sinais de risco para preservar sua operação de afiliados.
               </p>
               <div style={s.ctaRow}>
-                <Link className="btn btn-accent" href={primaryCtaHref}>Quero preservar meus canais</Link>
-                <Link className="btn btn-ghost" href={diagnosticHref}>Conhecer o módulo de preservação</Link>
+                <Link className="btn btn-accent" href={primaryCtaHref} data-seo-cta="signup_preservar_canais" data-cta-position="hero_primary" data-cta-stage="conversion" data-cta-destination="signup">Quero preservar meus canais</Link>
+                <Link className="btn btn-ghost" href={diagnosticHref} data-seo-cta="diagnostico_preservacao" data-cta-position="hero_secondary" data-cta-stage="diagnostic" data-cta-destination="diagnostic">Fazer diagnóstico de preservação</Link>
               </div>
               <p style={{ ...s.small, marginTop: 16 }}>
                 Aviso honesto: nenhuma automação séria garante banimento zero. O BOTinho trabalha com redução de risco, uso responsável, monitoramento preventivo e plano de recuperação.
@@ -417,8 +417,8 @@ export default function BotCanaisWhatsAppPage() {
               <h2 id="cta-final-title" style={{ ...s.h2, marginInline: 'auto', maxWidth: 820 }}>Seu WhatsApp virou ativo de negócio. Preserve como ativo.</h2>
               <p style={{ ...s.lead, margin: '0 auto', maxWidth: 760 }}>Configure canais, espelhamento e camadas de preservação antes que uma queda de grupo ou chip vire prejuízo.</p>
               <div style={{ ...s.ctaRow, justifyContent: 'center' }}>
-                <Link className="btn btn-accent" href={primaryCtaHref}>Quero preservar meus canais</Link>
-                <Link className="btn btn-ghost" href={diagnosticHref}>Conhecer o módulo de preservação</Link>
+                <Link className="btn btn-accent" href={primaryCtaHref} data-seo-cta="signup_preservar_canais" data-cta-position="final_primary" data-cta-stage="conversion" data-cta-destination="signup">Quero preservar meus canais</Link>
+                <Link className="btn btn-ghost" href={diagnosticHref} data-seo-cta="diagnostico_preservacao" data-cta-position="final_secondary" data-cta-stage="diagnostic" data-cta-destination="diagnostic">Fazer diagnóstico antes de escalar</Link>
               </div>
             </div>
           </div>

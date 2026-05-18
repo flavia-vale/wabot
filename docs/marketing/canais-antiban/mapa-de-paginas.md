@@ -2,7 +2,7 @@
 
 Este mapa prioriza ativos que podem ser construídos por IA/Codex antes da produção de Reels, carrosséis e vídeos.
 
-> Status pós-implementação inicial: veja o plano revisado com lacunas e prioridades em [`plano-revisado-prioridades.md`](./plano-revisado-prioridades.md).
+> Status pós-implementação inicial: veja o plano revisado com lacunas e prioridades em [`plano-revisado-prioridades.md`](./plano-revisado-prioridades.md). A matriz de medição P0 está em [`matriz-eventos-utms.md`](./matriz-eventos-utms.md).
 
 ## Página principal — Sprint 1
 

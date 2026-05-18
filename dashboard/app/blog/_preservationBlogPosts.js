@@ -166,11 +166,28 @@ export function PreservationBlogPost({ postKey }) {
           <p>
             Se você quer aplicar esse processo na prática, comece pela página de Canais + Preservação e veja como o BOTinho conecta grupos, canais, cadência e monitoramento em uma operação única.
           </p>
-          <p>
-            <Link className="font-black text-emerald-700 underline underline-offset-4" href="/bot-canais-whatsapp?utm_source=blog&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=article_cta">
-              Ver a campanha Canais + Módulo de Preservação Avançada
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Link
+              className="rounded-2xl bg-emerald-600 px-5 py-4 text-center font-black text-white no-underline hover:bg-emerald-700"
+              href="/diagnostico-antiban-whatsapp?utm_source=blog&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=article_diagnostic_cta"
+              data-seo-cta="blog_diagnostic"
+              data-cta-position="article_next_step_primary"
+              data-cta-stage="diagnostic"
+              data-cta-destination="diagnostic"
+            >
+              Fazer diagnóstico de preservação
             </Link>
-          </p>
+            <Link
+              className="rounded-2xl border border-emerald-200 px-5 py-4 text-center font-black text-emerald-700 no-underline hover:bg-emerald-50"
+              href="/bot-canais-whatsapp?utm_source=blog&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=article_landing_cta"
+              data-seo-cta="blog_campaign_landing"
+              data-cta-position="article_next_step_secondary"
+              data-cta-stage="consideration"
+              data-cta-destination="landing"
+            >
+              Ver campanha Canais + Preservação
+            </Link>
+          </div>
         </section>
 
         <section>

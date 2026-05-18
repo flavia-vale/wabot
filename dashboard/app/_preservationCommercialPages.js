@@ -8,6 +8,7 @@ import { buildOgImageUrl } from '@/lib/seo-og'
 const siteUrl = getSiteUrl()
 const registerHref = '/login?mode=register&utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=sprint2'
 const mainLandingHref = '/bot-canais-whatsapp?utm_source=seo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=sprint2_crosslink'
+const diagnosticHref = '/diagnostico-antiban-whatsapp?utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=commercial_secondary'
 
 export const PRESERVATION_COMMERCIAL_PAGES = {
   'bot-afiliados-whatsapp': {
@@ -218,8 +219,8 @@ export function PreservationCommercialPage({ pageKey }) {
               <h1 id="page-title" style={s.h1}>{page.h1}</h1>
               <p style={s.lead}>{page.lead}</p>
               <div style={s.ctas}>
-                <Link className="btn btn-accent" href={registerHref}>{page.primaryCta}</Link>
-                <Link className="btn btn-ghost" href={mainLandingHref}>{page.secondaryCta}</Link>
+                <Link className="btn btn-accent" href={registerHref} data-seo-cta="commercial_signup" data-cta-position="hero_primary" data-cta-stage="conversion" data-cta-destination="signup">{page.primaryCta}</Link>
+                <Link className="btn btn-ghost" href={diagnosticHref} data-seo-cta="commercial_diagnostic" data-cta-position="hero_secondary" data-cta-stage="diagnostic" data-cta-destination="diagnostic">Fazer diagnóstico</Link>
               </div>
             </div>
             <aside style={s.softCard} aria-label="Resumo do Módulo de Preservação Avançada">
@@ -265,8 +266,8 @@ export function PreservationCommercialPage({ pageKey }) {
               <h2 style={{ ...s.h2, marginInline: 'auto', maxWidth: 760 }}>Quer transformar WhatsApp em uma operação menos frágil?</h2>
               <p style={{ ...s.lead, maxWidth: 760, margin: '0 auto' }}>Veja a landing principal da campanha e entenda como grupos, canais e Módulo de Preservação Avançada trabalham juntos.</p>
               <div style={{ ...s.ctas, justifyContent: 'center' }}>
-                <Link className="btn btn-accent" href={mainLandingHref}>Ver campanha Canais + Preservação</Link>
-                <Link className="btn btn-ghost" href={registerHref}>Começar pelo BOTinho</Link>
+                <Link className="btn btn-accent" href={mainLandingHref} data-seo-cta="commercial_campaign_landing" data-cta-position="final_primary" data-cta-stage="consideration" data-cta-destination="landing">Ver campanha Canais + Preservação</Link>
+                <Link className="btn btn-ghost" href={diagnosticHref} data-seo-cta="commercial_diagnostic" data-cta-position="final_secondary" data-cta-stage="diagnostic" data-cta-destination="diagnostic">Diagnosticar minha operação</Link>
               </div>
             </div>
           </div>

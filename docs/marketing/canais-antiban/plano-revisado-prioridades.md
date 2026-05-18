@@ -81,28 +81,35 @@ A landing mostra um painel de saúde como narrativa de produto. Se o recurso ain
 
 **Correção recomendada:** validar texto e screenshots com o estado real do produto em staging antes de impulsionar.
 
-## O que ainda não foi implementado
+## Status pós-P0
 
-### Não implementado — P0 comercial antes de tráfego
+### Implementado nesta etapa — P0 comercial antes de tráfego
 
 1. **Diagnóstico de Preservação Avançada**
-   - URL planejada: `/diagnostico-antiban-whatsapp`
+   - URL implementada: `/diagnostico-antiban-whatsapp`.
    - Função: transformar tráfego de dor urgente em lead qualificado.
-   - Deve entregar uma pontuação simples de risco e recomendar próximo passo.
+   - Entrega pontuação simples de exposição operacional, recomenda próximos passos e envia `diagnostic_score_band` para o cadastro.
 
-2. **Checklist de Preservação Avançada**
+2. **Matriz de eventos/UTMs da campanha**
+   - Implementada em [`matriz-eventos-utms.md`](./matriz-eventos-utms.md).
+   - Cliques em CTA principal, CTA secundário, diagnóstico e cadastro têm posição, estágio e destino rastreáveis.
+   - O diagnóstico registra faixa de exposição, perfil e origem sem coletar dados sensíveis do WhatsApp.
+
+3. **Revisão de CTAs P0**
+   - Landing, páginas comerciais e artigos da campanha agora têm caminho para diagnóstico antes do cadastro completo.
+   - Cadastro direto continua disponível para quem já está pronto para testar.
+
+### Ainda não implementado — P1 lead magnets e ferramentas
+
+1. **Checklist de Preservação Avançada**
    - URL planejada: `/materiais/checklist-antiban-whatsapp`
    - Função: captura leve para quem ainda não quer cadastro completo.
    - Pode ser formulário simples + checklist na própria página.
 
-3. **Calculadora de risco**
+2. **Calculadora de risco**
    - URL planejada: `/ferramentas/calculadora-risco-whatsapp`
    - Função: ferramenta compartilhável para SEO, conversão e educação.
    - Deve evitar linguagem de garantia e usar “estimativa de exposição operacional”.
-
-4. **Matriz de eventos/UTMs da campanha**
-   - Cliques em CTA principal, CTA secundário, diagnóstico, checklist e cadastro.
-   - Dimensões mínimas: rota, cluster, intenção, posição do CTA e destino.
 
 ### Não implementado — P1/P2 páginas de decisão
 
@@ -143,9 +150,9 @@ A landing mostra um painel de saúde como narrativa de produto. Se o recurso ain
 
 **Objetivo:** não desperdiçar tráfego orgânico ou social com CTA genérico demais.
 
-1. Criar `/diagnostico-antiban-whatsapp` com resultado simples e CTA para cadastro/contato.
-2. Criar matriz de eventos/UTMs para todos os CTAs da campanha.
-3. Revisar CTAs da landing e das páginas comerciais para apontarem também para diagnóstico/checklist quando o usuário ainda estiver em fase de dor.
+1. Criar `/diagnostico-antiban-whatsapp` com resultado simples e CTA para cadastro/contato — implementado.
+2. Criar matriz de eventos/UTMs para todos os CTAs da campanha — implementada em [`matriz-eventos-utms.md`](./matriz-eventos-utms.md).
+3. Revisar CTAs da landing e das páginas comerciais para apontarem também para diagnóstico/checklist quando o usuário ainda estiver em fase de dor — diagnóstico implementado; checklist fica para P1.
 4. Rodar QA completo em staging `http://178.105.54.0:3006` antes de qualquer tráfego pago ou divulgação forte.
 
 **Critério de pronto:** usuário consegue sair de uma busca de dor, fazer diagnóstico, entender risco e ter próximo passo claro sem depender apenas de cadastro genérico.
@@ -203,7 +210,7 @@ A landing mostra um painel de saúde como narrativa de produto. Se o recurso ain
 - A rota está no SEO registry quando for indexável.
 - Metadata, canonical e OG estão definidos.
 - JSON-LD é compatível com o tipo de página.
-- CTAs têm UTM ou origem rastreável.
+- CTAs têm UTM ou origem rastreável conforme [`matriz-eventos-utms.md`](./matriz-eventos-utms.md).
 - Links internos não apontam para página inexistente.
 - Copy não promete “anti-ban 100%”.
 - Staging é validado em `http://178.105.54.0:3006` antes de produção.
