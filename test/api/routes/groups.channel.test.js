@@ -162,6 +162,33 @@ test('GET /:id/health reflete registro existente em red com pausedUntil', async 
   assert.equal(body.lastError, '403')
 })
 
+test('POST /:id/probe-ping atualiza lastProbeSeenAt', async (t) => {
+  const { app, userId } = await buildApp({}, { withUser: true })
+  const group = await db.group.create({
+    data: { userId, waJid: 'p@newsletter', name: 'P', role: 'post', kind: 'channel', forwardMode: 'LINK_ONLY' },
+  })
+  t.after(async () => {
+    await db.channelHealth.deleteMany({ where: { groupId: group.id } }).catch(() => {})
+    await db.group.deleteMany({ where: { userId } })
+    await db.user.deleteMany({ where: { id: userId } })
+    await app.close()
+  })
+  const res = await app.inject({ method: 'POST', url: `/api/groups/${group.id}/probe-ping` })
+  assert.equal(res.statusCode, 200)
+  const health = await db.channelHealth.findUnique({ where: { groupId: group.id } })
+  assert.ok(health?.lastProbeSeenAt)
+})
+
+test('POST /:id/probe-ping para grupo (não canal) retorna 400', async (t) => {
+  const { app, userId } = await buildApp({}, { withUser: true })
+  const group = await db.group.create({
+    data: { userId, waJid: 'p@g.us', name: 'G', role: 'post', kind: 'group', forwardMode: 'LINK_ONLY' },
+  })
+  t.after(async () => { await db.group.deleteMany({ where: { userId } }); await db.user.deleteMany({ where: { id: userId } }); await app.close() })
+  const res = await app.inject({ method: 'POST', url: `/api/groups/${group.id}/probe-ping` })
+  assert.equal(res.statusCode, 400)
+})
+
 test('POST /:id/risk-score/recompute calcula e persiste score', async (t) => {
   const { app, userId } = await buildApp({}, { withUser: true })
   const group = await db.group.create({
