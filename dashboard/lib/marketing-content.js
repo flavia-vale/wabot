@@ -20,10 +20,10 @@ export const DEFAULT_LANDING_PLANS = [
     name: 'Teste grátis',
     price: 'R$0',
     priceValue: 0,
-    period: '30 dias de validação inicial',
-    desc: 'Experimente o fluxo principal antes de escolher um plano pago.',
+    period: '7 dias de validação inicial',
+    desc: 'Teste por 7 dias os recursos completos do Pro: grupos, canais e Módulo de Preservação Avançada.',
     cta: 'Começar teste grátis',
-    features: ['Conversão de links suportados', 'Monitoramento de grupos', 'Envio para grupos de destino', 'Histórico de logs', 'Com anúncios'],
+    features: ['Conversão de links suportados', 'Monitoramento de grupos', 'Envio para grupos e canais', 'Módulo de Preservação Avançada', 'Histórico de logs'],
   },
   {
     id: 'basic',
@@ -31,9 +31,9 @@ export const DEFAULT_LANDING_PLANS = [
     price: 'R$39',
     priceValue: 39,
     period: '30 dias',
-    desc: 'Para operar com os mesmos recursos essenciais do Pro mantendo anúncios no uso.',
+    desc: 'Plano focado em grupos: operação essencial com cadência e filtros básicos.',
     cta: 'Assinar Basic',
-    features: ['Conversão de links suportados', 'Monitoramento de grupos', 'Envio para grupos de destino', 'Histórico de logs', 'Com anúncios'],
+    features: ['Conversão de links suportados', 'Monitoramento e envio em grupos', 'Delay e filtros básicos', 'Histórico de logs', 'Sem canais'],
   },
   {
     id: 'pro',
@@ -41,10 +41,10 @@ export const DEFAULT_LANDING_PLANS = [
     price: 'R$69',
     priceValue: 69,
     period: '30 dias',
-    desc: 'Para operar com os mesmos recursos do Basic, sem anúncios na experiência.',
+    desc: 'Tudo do Basic + canais + Módulo de Preservação Avançada para operar com mais controle.',
     cta: 'Assinar Pro',
     highlight: true,
-    features: ['Conversão de links suportados', 'Monitoramento de grupos', 'Envio para grupos de destino', 'Histórico de logs', 'Sem anúncios'],
+    features: ['Tudo do Basic', 'Monitoramento e envio em canais', 'Módulo de Preservação Avançada', 'Warmup, limites e cadência avançada', 'Histórico de logs'],
   },
 ]
 
