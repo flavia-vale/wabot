@@ -32,6 +32,8 @@ import {
   recordStreamError as recordChannelStreamError,
 } from './core/channelHealth.js'
 import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
+import { applyVariation } from './core/copyVariation.js'
+import { mutate as mutateChannelImage } from './core/imageMutation.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
@@ -1172,7 +1174,12 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 
       const baseDestinations = monitorGroup?.targetPostJids?.length ? monitorGroup.targetPostJids : cfg.groups.post
       const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
+      // PR-5.B.2: stagger entre destinos para quebrar simultaneidade exata.
+      // Primeiro destino sem atraso; demais com jitter aleatório limitado.
+      const staggerJitterMs = Math.max(0, Number(cfg.botConfig.channelStaggerJitterMs ?? 0))
+      let destIndex = -1
       for (const destJid of destinations) {
+        destIndex++
         const dedupSubject = primary.url || `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
         const key = `${destJid}:${dedupSubject}`
         if (dedup.links[key] && Date.now() - dedup.links[key] < dedupeWindowMs) {
@@ -1210,14 +1217,27 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         })
         let sentVia = 'text'
 
+        // PR-5.B.2: variação de copy por canal-destino (determinística por
+        // destJid+data). Aplica só em canal — em grupo não há fingerprint
+        // de "mesma mensagem em N", então mantém texto original.
+        const isChannelDest = isChannelDestination(destJid)
+        const variantText = isChannelDest
+          ? applyVariation(finalText, { groupId: destJid, poolJson: cfg.botConfig.copyVariationPoolJson })
+          : finalText
+
+        // Stagger: 1º destino sai sem atraso adicional; demais recebem jitter.
+        const staggerMs = (destIndex > 0 && isChannelDest && staggerJitterMs > 0)
+          ? Math.floor(Math.random() * staggerJitterMs)
+          : 0
+
         const accepted = await enqueueSendJob({
           type: 'converted',
           logId: log.id,
           destJid,
           platforms,
           plan: cfg.plan,
-          delayMs: buildSmartDelayMs(cfg.botConfig),
-          typingDelayMs: calculateTypingDelayMs({ text: finalText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
+          delayMs: buildSmartDelayMs(cfg.botConfig) + staggerMs,
+          typingDelayMs: calculateTypingDelayMs({ text: variantText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           buildPayload: async () => {
             // Para canal-destino, nunca usar relay (sendMessage com payload limpo).
             // Para grupo-destino com mídia original, deixar relayMessage cuidar (return null).
@@ -1236,10 +1256,22 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
               if (imageMode === 'original' && !image) {
                 useLinkPreview = true
               }
+
+              // PR-5.B.2: mutação de imagem APÓS o scraper (fora do bloco
+              // protegido). Só para canal-destino; valida >=800px após crop.
+              if (image && isChannelDest && cfg.botConfig.imageMutationEnabled) {
+                const mutated = await mutateChannelImage(image.buffer, image.mimetype, {
+                  groupId: destJid,
+                  enabled: true,
+                })
+                if (mutated.buffer !== image.buffer) {
+                  image = { ...image, buffer: mutated.buffer, mimetype: mutated.mimetype }
+                }
+              }
             }
 
             return buildMonitoredMessagePayload({
-              finalText,
+              finalText: variantText,
               image,
               useLinkPreview,
             })
@@ -1248,7 +1280,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             if (original) {
               const replayProto = { ...original.proto }
               if (original.type === 'imageMessage' || original.type === 'videoMessage') {
-                replayProto.caption = finalText
+                replayProto.caption = variantText
               }
               await sendSock.relayMessage(destJid, { [original.type]: replayProto }, {})
               sentVia = `relay:${original.type}`
