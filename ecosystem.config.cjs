@@ -41,5 +41,20 @@ module.exports = {
       max_restarts: 8,
       min_uptime: 15000,
     },
+    {
+      // PR-5.F follow-up: cron diário de snapshot de canais.
+      // PM2 reinicia 1x/dia às 03:00 BRT (06:00 UTC); processo roda 1x e sai.
+      // autorestart:false impede reinicialização imediata após exit 0.
+      name: 'snapshot-cron',
+      script: 'scripts/run_channel_snapshots.mjs',
+      exec_mode: 'fork',
+      instances: 1,
+      autorestart: false,
+      cron_restart: '0 6 * * *',
+      env: {
+        NODE_ENV: 'production',
+      },
+      max_memory_restart: '300M',
+    },
   ],
 }

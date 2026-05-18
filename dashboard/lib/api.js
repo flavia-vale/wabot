@@ -296,6 +296,14 @@ export const api = {
   refreshChannelAdmin: (id) => apiFetch(`/api/groups/${id}/refresh-admin`, { method: 'POST' }),
   waChannels: () => apiFetch('/api/groups/wa/channels'),
 
+  // PR-5 follow-up: anti-ban
+  channelHealth: (id) => apiFetch(`/api/groups/${id}/health`),
+  channelSnapshots: (id) => apiFetch(`/api/groups/${id}/snapshots`),
+  channelSnapshotNow: (id) => apiFetch(`/api/groups/${id}/snapshot-now`, { method: 'POST' }),
+  channelRecreate: (id, newJid) => apiFetch(`/api/groups/${id}/recreate`, { method: 'POST', body: JSON.stringify({ newJid }) }),
+  channelRiskScore: (id, days = 7) => apiFetch(`/api/groups/${id}/risk-score/recompute?days=${days}`, { method: 'POST' }),
+  lintChannelCopy: ({ title, template }) => apiFetch('/api/groups/lint', { method: 'POST', body: JSON.stringify({ title, template }) }),
+
   logs: (status = 'all', page = 1, limit = 20) =>
     apiFetch(`/api/logs?status=${status}&page=${page}&limit=${limit}`),
   logsClear: () => apiFetch('/api/logs/clear', { method: 'DELETE' }),

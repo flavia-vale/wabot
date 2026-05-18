@@ -6,7 +6,8 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { HelpLink } from '@/components/HelpLink'
 import { LoadingState } from '@/components/States'
 import { AddChannelModal } from '@/components/AddChannelModal'
-import { TypeBadge, FollowBadge, AdminBadge } from '@/components/ChannelStatusBadges'
+import { TypeBadge, FollowBadge, AdminBadge, HealthBadge } from '@/components/ChannelStatusBadges'
+import { ChannelHealthPanel } from '@/components/ChannelHealthPanel'
 
 const roleLabels = {
   monitor: 'Monitorar (origem)',
@@ -55,7 +56,8 @@ export default function GruposPage() {
   const [followStatus, setFollowStatus] = useState({})
   const [adminStatus, setAdminStatus] = useState({})
   const [refreshingAdminId, setRefreshingAdminId] = useState(null)
-  const [planSubject, setPlanSubject] = useState({ plan: 'trial', accessExpiresAt: null })
+  const [healthByGroup, setHealthByGroup] = useState({})
+  const [expandedHealthId, setExpandedHealthId] = useState(null)
 
   async function load() {
     setLoadingGroups(true)
@@ -86,6 +88,27 @@ export default function GruposPage() {
     return () => { active = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // PR-5.C.1 follow-up: busca saúde dos canais-destino para os badges.
+  useEffect(() => {
+    let active = true
+    const postChannels = groups.filter(g => g.kind === 'channel' && g.role === 'post')
+    if (postChannels.length === 0) return
+    Promise.all(postChannels.map(async (g) => {
+      try {
+        const h = await api.channelHealth(g.id)
+        return [g.id, h]
+      } catch { return [g.id, null] }
+    })).then((entries) => {
+      if (!active) return
+      setHealthByGroup(prev => {
+        const next = { ...prev }
+        for (const [id, h] of entries) if (h) next[id] = h
+        return next
+      })
+    })
+    return () => { active = false }
+  }, [groups])
 
   async function refreshAdmin(group) {
     setRefreshingAdminId(group.id)
@@ -479,11 +502,22 @@ export default function GruposPage() {
                       <TypeBadge kind={g.kind} />
                       {!canUseChannels && g.kind === 'channel' && <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Pro</span>}
                       {g.kind === 'channel' && g.role === 'post' && (
-                        <AdminBadge
-                          status={adminStatus[g.id] ?? 'unknown'}
-                          onRefresh={() => refreshAdmin(g)}
-                          refreshing={refreshingAdminId === g.id}
-                        />
+                        <>
+                          <AdminBadge
+                            status={adminStatus[g.id] ?? 'unknown'}
+                            onRefresh={() => refreshAdmin(g)}
+                            refreshing={refreshingAdminId === g.id}
+                          />
+                          {healthByGroup[g.id] && <HealthBadge status={healthByGroup[g.id].status} />}
+                          <button
+                            type="button"
+                            onClick={() => setExpandedHealthId(expandedHealthId === g.id ? null : g.id)}
+                            className="text-xs text-sky-600 hover:underline"
+                            title="Saúde, snapshots e risco do canal"
+                          >
+                            {expandedHealthId === g.id ? 'Fechar painel' : 'Painel anti-ban'}
+                          </button>
+                        </>
                       )}
                     </span>
                   </div>
@@ -491,6 +525,13 @@ export default function GruposPage() {
                     Remover
                   </button>
                 </div>
+                {expandedHealthId === g.id && (
+                  <ChannelHealthPanel
+                    group={g}
+                    initialHealth={healthByGroup[g.id]}
+                    onHealthChange={(h) => setHealthByGroup(prev => ({ ...prev, [g.id]: h }))}
+                  />
+                )}
                 <textarea
                   rows={2}
                   value={g.welcomeMsg ?? ''}
