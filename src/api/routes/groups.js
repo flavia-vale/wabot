@@ -9,6 +9,7 @@ import {
 } from '../../manager.js'
 import { ensureJid, detectKind, parseChannelInviteUrl, JID_KIND } from '../../core/jid.js'
 import { canFollowNow, logFollow } from '../../core/followGuard.js'
+import { getHealth as getChannelHealth } from '../../core/channelHealth.js'
 import { FORWARD_MODE, NO_LINK_SCOPE, normalizeForwardingPolicy } from '../../forwardingPolicy.js'
 
 const ALLOWED_KINDS = new Set([JID_KIND.GROUP, JID_KIND.CHANNEL])
@@ -208,6 +209,13 @@ export async function groupsRoutes(app, opts = {}) {
       await logFollow(req.user.sub, group.waJid, 'error', err.message ?? null).catch(() => {})
       return reply.code(502).send({ error: err.message || 'Falha ao seguir canal' })
     }
+  })
+
+  app.get('/:id/health', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
+    if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'health só vale pra canais' })
+    return getChannelHealth(group.id)
   })
 
   app.post('/:id/refresh-admin', { onRequest: [app.authenticate] }, async (req, reply) => {

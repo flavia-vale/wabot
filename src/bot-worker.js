@@ -27,6 +27,12 @@ import { isMirrorableJid, detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
 import { getChannelMetadata, followChannel, listFollowedChannels } from './core/channelDirectory.js'
 import { logFollow } from './core/followGuard.js'
+import {
+  recordSendResult as recordChannelSendResult,
+  recordStreamError as recordChannelStreamError,
+  isChannelPaused,
+  getHealth as getChannelHealth,
+} from './core/channelHealth.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
@@ -599,6 +605,30 @@ async function processSendJob(job) {
       await sleep(totalDelayMs)
     }
 
+    // PR-5.C.1: lookup do groupId do canal-destino (uma vez por job) para
+    // alimentar ChannelHealth e respeitar pausedUntil.
+    let channelGroupId = null
+    if (isChannelDestination(job.destJid)) {
+      try {
+        const g = await db.group.findFirst({
+          where: { userId, waJid: job.destJid, role: 'post', kind: 'channel' },
+          select: { id: true },
+        })
+        channelGroupId = g?.id ?? null
+        if (channelGroupId) {
+          const health = await getChannelHealth(channelGroupId)
+          if (isChannelPaused(health)) {
+            const err = new Error(`Canal pausado por saúde (${health.status}) até ${health.pausedUntil}`)
+            err.code = 'CHANNEL_PAUSED'
+            throw err
+          }
+        }
+      } catch (err) {
+        if (err.code === 'CHANNEL_PAUSED') throw err
+        logger.warn({ err: err?.message, destJid: job.destJid }, 'channelHealth lookup falhou; seguindo sem pausa')
+      }
+    }
+
     for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt++) {
       try {
         if (!activeSock) throw new Error('Bot não conectado')
@@ -614,8 +644,14 @@ async function processSendJob(job) {
         } else {
           await activeSock.sendMessage(job.destJid, payload)
         }
-        lastSendByDest.set(job.destJid, Date.now())
+        const finishedAt = Date.now()
+        lastSendByDest.set(job.destJid, finishedAt)
         logger.info({ destJid: job.destJid, platforms: job.platforms, attempt, type: job.type }, 'Mensagem enviada')
+
+        if (channelGroupId) {
+          recordChannelSendResult(channelGroupId, { ok: true, latencyMs: finishedAt - startedAt }, { now: finishedAt })
+            .catch(err => logger.warn({ err: err?.message }, 'recordChannelSendResult(ok) falhou'))
+        }
 
         await db.messageLog.update({
           where: { id: job.logId },
@@ -665,6 +701,13 @@ async function processSendJob(job) {
     sendMetrics.errorTotal++
     sendMetrics.lastErrorAt = new Date().toISOString()
     sendMetrics.lastError = err.message
+    if (channelGroupId) {
+      const errorCode = isChannelForbiddenError(err)
+        ? '403'
+        : (err?.output?.statusCode ? String(err.output.statusCode) : (err?.code ?? null))
+      recordChannelSendResult(channelGroupId, { ok: false, errorCode, errorMsg: err.message })
+        .catch(e => logger.warn({ err: e?.message }, 'recordChannelSendResult(fail) falhou'))
+    }
     await finishSendJob(job, { ok: false, error: err.message })
   }
 }
@@ -756,6 +799,9 @@ async function startBot() {
       logger.warn({ code }, 'stream:error capturado; quarentenando follows desta sessão')
       logFollow(userId, '<stream>', 'rate_limited', String(code)).catch(err => {
         logger.warn({ err: err?.message }, 'logFollow(rate_limited) falhou')
+      })
+      recordChannelStreamError(userId, String(code)).catch(err => {
+        logger.warn({ err: err?.message }, 'recordChannelStreamError falhou')
       })
     } catch (err) {
       logger.warn({ err: err?.message }, 'handleStreamError falhou')
