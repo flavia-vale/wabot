@@ -19,3 +19,7 @@ export function getLogsBaseDir() {
 export function getDedupFile(userId) {
   return resolve(getLogsBaseDir(), `dedup_${String(userId)}.json`)
 }
+
+export function getKnownChannelsFile(userId) {
+  return resolve(getLogsBaseDir(), `known_channels_${String(userId)}.json`)
+}
