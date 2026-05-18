@@ -30,9 +30,8 @@ import { logFollow } from './core/followGuard.js'
 import {
   recordSendResult as recordChannelSendResult,
   recordStreamError as recordChannelStreamError,
-  isChannelPaused,
-  getHealth as getChannelHealth,
 } from './core/channelHealth.js'
+import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
@@ -605,8 +604,8 @@ async function processSendJob(job) {
       await sleep(totalDelayMs)
     }
 
-    // PR-5.C.1: lookup do groupId do canal-destino (uma vez por job) para
-    // alimentar ChannelHealth e respeitar pausedUntil.
+    // PR-5.C.1 + 5.B.1: lookup do groupId do canal-destino (uma vez por job)
+    // para alimentar ChannelHealth e passar pelo velocity scheduler.
     let channelGroupId = null
     if (isChannelDestination(job.destJid)) {
       try {
@@ -616,16 +615,33 @@ async function processSendJob(job) {
         })
         channelGroupId = g?.id ?? null
         if (channelGroupId) {
-          const health = await getChannelHealth(channelGroupId)
-          if (isChannelPaused(health)) {
-            const err = new Error(`Canal pausado por saúde (${health.status}) até ${health.pausedUntil}`)
-            err.code = 'CHANNEL_PAUSED'
-            throw err
+          // checkAndReserve já cobre: pausa por health, quiet hours, daily cap,
+          // intervalo mínimo, burst cap. Reserva o slot quando libera.
+          const cfg = (await getConfig().catch(() => null))?.botConfig ?? {}
+          const decision = await throttleCheckAndReserve(channelGroupId, cfg)
+          if (!decision.allow) {
+            const waitMs = Math.max(0, (decision.deferUntil ?? Date.now()) - Date.now())
+            const SHORT_DEFER_MS = 2 * 60 * 1000 // 2min
+            if (waitMs <= SHORT_DEFER_MS) {
+              logger.info({ destJid: job.destJid, reason: decision.reason, waitMs }, 'Velocity scheduler: aguardando defer curto')
+              await sleep(waitMs)
+              // tenta de novo (reserva real); se ainda negar, aborta
+              const retry = await throttleCheckAndReserve(channelGroupId, cfg)
+              if (!retry.allow) {
+                const err = new Error(`Canal throttled (${retry.reason}) até ${new Date(retry.deferUntil ?? Date.now()).toISOString()}`)
+                err.code = 'CHANNEL_THROTTLED'
+                throw err
+              }
+            } else {
+              const err = new Error(`Canal throttled (${decision.reason}); defer ${Math.round(waitMs / 1000)}s excede limite`)
+              err.code = 'CHANNEL_THROTTLED'
+              throw err
+            }
           }
         }
       } catch (err) {
-        if (err.code === 'CHANNEL_PAUSED') throw err
-        logger.warn({ err: err?.message, destJid: job.destJid }, 'channelHealth lookup falhou; seguindo sem pausa')
+        if (err.code === 'CHANNEL_PAUSED' || err.code === 'CHANNEL_THROTTLED') throw err
+        logger.warn({ err: err?.message, destJid: job.destJid }, 'channelHealth/throttle lookup falhou; seguindo sem pausa')
       }
     }
 
