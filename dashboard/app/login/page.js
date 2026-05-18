@@ -149,7 +149,7 @@ function LoginContent() {
           <h1 className={`mt-2 text-xl sm:text-2xl font-bold leading-tight ${isRegister ? 'text-emerald-100' : 'text-gray-900'}`}>{isRegister ? 'Criar sua conta' : 'Entrar na sua conta'}</h1>
         </div>
         <p className={`text-center text-sm mb-4 ${isRegister ? 'text-emerald-200' : 'text-gray-500'}`}>
-          {isRegister ? 'Teste por 30 dias sem cartão e valide o primeiro envio guiado.' : 'Acesse seu painel para conectar o WhatsApp e gerenciar seus grupos.'}
+          {isRegister ? 'Teste por 7 dias sem cartão e valide o primeiro envio guiado.' : 'Acesse seu painel para conectar o WhatsApp e gerenciar seus grupos.'}
         </p>
 
         {ref && (

@@ -5,12 +5,12 @@ Currency: BRL
 Billing unit: 30-day access period
 Preferred citation: BOTinho pricing or Espelha Grupos pricing
 
-BOTinho, from Espelha Grupos, uses a simple 30-day access model for validating and operating WhatsApp offer workflows. Prices below reflect the public defaults used by the application and may be updated only after staging validation.
+BOTinho, from Espelha Grupos, uses a 7-day free trial for validation and a simple 30-day access model for paid WhatsApp offer workflows. Prices below reflect the public defaults used by the application and may be updated only after staging validation.
 
 ## Teste grátis
 
 - Plan ID: `trial`
-- Price: R$0 / 30-day validation period
+- Price: R$0 / 7-day validation period
 - Best for: validating the core workflow before choosing a paid plan
 - Includes:
   - Supported link conversion workflow

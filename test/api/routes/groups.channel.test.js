@@ -121,6 +121,85 @@ test('POST /:id/follow-now com group inexistente retorna 404', async () => {
   await app.close()
 })
 
+test('GET /:id/health retorna defaults verdes quando não há registro', async (t) => {
+  const { app, userId } = await buildApp({}, { withUser: true })
+  const group = await db.group.create({
+    data: { userId, waJid: 'h@newsletter', name: 'Canal H', role: 'post', kind: 'channel', forwardMode: 'LINK_ONLY' },
+  })
+  t.after(async () => {
+    await db.channelHealth.deleteMany({ where: { groupId: group.id } })
+    await db.group.deleteMany({ where: { userId } })
+    await db.user.deleteMany({ where: { id: userId } })
+    await app.close()
+  })
+  const res = await app.inject({ method: 'GET', url: `/api/groups/${group.id}/health` })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.status, 'green')
+  assert.equal(body.consecutiveFailures, 0)
+})
+
+test('GET /:id/health reflete registro existente em red com pausedUntil', async (t) => {
+  const { app, userId } = await buildApp({}, { withUser: true })
+  const group = await db.group.create({
+    data: { userId, waJid: 'h2@newsletter', name: 'Canal H2', role: 'post', kind: 'channel', forwardMode: 'LINK_ONLY' },
+  })
+  const future = new Date(Date.now() + 60 * 60 * 1000)
+  await db.channelHealth.create({
+    data: { groupId: group.id, status: 'red', consecutiveFailures: 3, pausedUntil: future, lastError: '403' },
+  })
+  t.after(async () => {
+    await db.channelHealth.deleteMany({ where: { groupId: group.id } })
+    await db.group.deleteMany({ where: { userId } })
+    await db.user.deleteMany({ where: { id: userId } })
+    await app.close()
+  })
+  const res = await app.inject({ method: 'GET', url: `/api/groups/${group.id}/health` })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.status, 'red')
+  assert.equal(body.consecutiveFailures, 3)
+  assert.equal(body.lastError, '403')
+})
+
+test('GET /:id/health para grupo (não canal) retorna 400', async (t) => {
+  const { app, userId } = await buildApp({}, { withUser: true })
+  const group = await db.group.create({
+    data: { userId, waJid: 'g@g.us', name: 'Grupo G', role: 'post', kind: 'group', forwardMode: 'LINK_ONLY' },
+  })
+  t.after(async () => { await db.group.deleteMany({ where: { userId } }); await db.user.deleteMany({ where: { id: userId } }); await app.close() })
+  const res = await app.inject({ method: 'GET', url: `/api/groups/${group.id}/health` })
+  assert.equal(res.statusCode, 400)
+})
+
+test('POST /:id/follow-now retorna 429 quando guard nega (warmup cap atingido)', async (t) => {
+  let invoked = 0
+  const { app, userId } = await buildApp({
+    followChannelImmediate: async () => { invoked++; return { followed: 'new' } },
+  }, { withUser: true })
+  const group = await db.group.create({
+    data: { userId, waJid: 'a@newsletter', name: 'Canal A', role: 'monitor', kind: 'channel', forwardMode: 'LINK_ONLY' },
+  })
+  // Conta nova (createdAt = now) → warmup cap = 1. Pré-gravar 1 follow OK
+  // consome o cap; próxima tentativa deve bater no daily_cap.
+  await db.followLog.create({ data: { userId, channelJid: 'x@newsletter', status: 'ok' } })
+
+  t.after(async () => {
+    await db.followLog.deleteMany({ where: { userId } })
+    await db.group.deleteMany({ where: { userId } })
+    await db.user.deleteMany({ where: { id: userId } })
+    await app.close()
+  })
+
+  const res = await app.inject({ method: 'POST', url: `/api/groups/${group.id}/follow-now` })
+  assert.equal(res.statusCode, 429)
+  assert.equal(invoked, 0, 'guard deve impedir chamada ao follow real')
+  const body = JSON.parse(res.body)
+  assert.equal(body.reason, 'daily_cap')
+  assert.equal(body.dailyCap, 1)
+  assert.ok(res.headers['retry-after'])
+})
+
 // ---------- POST /:id/refresh-admin ----------
 
 test('POST /:id/refresh-admin retorna isViewerOwner atualizado', async (t) => {

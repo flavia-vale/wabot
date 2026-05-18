@@ -1,0 +1,243 @@
+'use client'
+
+import { useMemo, useState } from 'react'
+import { api } from '@/lib/api'
+import { Alert } from '@/components/Alert'
+
+const MAX_LINKS = 10
+const MAX_TEXT_LENGTH = 12_000
+const SUPPORTED_LINK_RE = /https?:\/\/(?:www\.)?(?:mercadolivre\.com\.br|mercadolibre\.com|meli\.la|mluvem\.com|amazon\.com\.br|amzn\.to|a\.co|amzn\.divulgador\.link|shope\.ee|shopee\.com\.br|s\.shopee\.com\.br|magazineluiza\.com\.br|magazinevoce\.com\.br|mlz\.me)\S*/gi
+
+function countSupportedLinks(text) {
+  const matches = text.match(SUPPORTED_LINK_RE)
+  return matches?.length ?? 0
+}
+
+function getLimitMessage(count) {
+  return `Cole no máximo ${MAX_LINKS} links por vez. Encontramos ${count} links no texto; divida em partes menores para converter com segurança.`
+}
+
+function MetricPill({ label, value, tone = 'neutral' }) {
+  const tones = {
+    neutral: 'border-gray-200 bg-gray-50 text-gray-700',
+    success: 'border-green-200 bg-green-50 text-green-800',
+    warning: 'border-amber-200 bg-amber-50 text-amber-800',
+    danger: 'border-red-200 bg-red-50 text-red-800',
+  }
+  return (
+    <div className={`rounded-2xl border px-3 py-2 ${tones[tone] ?? tones.neutral}`}>
+      <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">{label}</p>
+      <p className="mt-0.5 text-base font-black leading-none">{value}</p>
+    </div>
+  )
+}
+
+function ResultCard({ result, onCopy }) {
+  const converted = result.status === 'converted'
+  return (
+    <article className={`rounded-2xl border p-3 shadow-sm sm:p-4 ${converted ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Link {result.index + 1}</p>
+          <h2 className="mt-0.5 truncate text-base font-bold text-gray-900">{result.label || result.platform}</h2>
+        </div>
+        <span className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${converted ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
+          {converted ? 'OK' : 'Atenção'}
+        </span>
+      </div>
+
+      <div className="mt-3 space-y-3 text-sm">
+        <div>
+          <p className="font-semibold text-gray-600">Original</p>
+          <p className="mt-1 max-h-24 overflow-y-auto break-all rounded-xl bg-white/80 px-3 py-2 text-xs leading-5 text-gray-800 sm:text-sm">{result.originalUrl}</p>
+        </div>
+
+        {converted ? (
+          <div>
+            <p className="font-semibold text-gray-600">Link de afiliado</p>
+            <div className="mt-1 rounded-xl bg-white px-3 py-2">
+              <p className="max-h-28 overflow-y-auto break-all text-xs font-medium leading-5 text-green-800 sm:text-sm">{result.convertedUrl}</p>
+              <button
+                type="button"
+                onClick={() => onCopy(result.convertedUrl)}
+                className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-green-200 px-3 py-2 text-sm font-bold text-green-700 transition hover:bg-green-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 sm:w-auto"
+              >
+                Copiar link
+              </button>
+            </div>
+          </div>
+        ) : (
+          <Alert type="warning" title="Não foi possível converter" message={result.error || 'Confira o link e as credenciais da loja.'} />
+        )}
+      </div>
+    </article>
+  )
+}
+
+export default function ConverteLinksPage() {
+  const [text, setText] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [copyFeedback, setCopyFeedback] = useState('')
+  const [response, setResponse] = useState(null)
+
+  const detectedCount = useMemo(() => countSupportedLinks(text), [text])
+  const successfulLinks = useMemo(
+    () => response?.results?.filter(result => result.status === 'converted' && result.convertedUrl) ?? [],
+    [response],
+  )
+  const charsOverLimit = text.length > MAX_TEXT_LENGTH
+  const linksOverLimit = detectedCount > MAX_LINKS
+
+  async function copyText(value, feedback = 'Link copiado.') {
+    if (!value) return
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopyFeedback(feedback)
+      window.setTimeout(() => setCopyFeedback(''), 2500)
+    } catch {
+      setError('Não foi possível copiar automaticamente. Selecione o link e copie manualmente.')
+    }
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+    setError('')
+    setCopyFeedback('')
+    setResponse(null)
+
+    if (!text.trim()) {
+      setError('Cole pelo menos um link de produto para converter.')
+      return
+    }
+
+    if (linksOverLimit) {
+      setError(getLimitMessage(detectedCount))
+      return
+    }
+
+    if (charsOverLimit) {
+      setError(`Texto muito grande para conversão manual. Cole até ${MAX_TEXT_LENGTH.toLocaleString('pt-BR')} caracteres por vez para evitar sobrecarga.`)
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const data = await api.convertLinks(text)
+      setResponse(data)
+    } catch (err) {
+      setError(err.message || 'Falha ao converter links. Tente novamente em instantes.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function copyAllConverted() {
+    const value = successfulLinks.map(result => result.convertedUrl).join('\n')
+    await copyText(value, `${successfulLinks.length} link(s) convertido(s) copiado(s).`)
+  }
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-4 pb-24 sm:space-y-6 sm:pb-0">
+      <div className="rounded-2xl bg-white p-4 shadow-sm sm:p-6">
+        <p className="text-xs font-semibold uppercase tracking-wide text-green-700 sm:text-sm">Ferramenta manual</p>
+        <h1 className="mt-1 text-2xl font-black leading-tight text-gray-900 sm:mt-2 sm:text-3xl">Converte links</h1>
+        <p className="mt-2 text-sm leading-6 text-gray-600 sm:max-w-3xl">
+          Cole links de produto e receba seus links de afiliado. Funciona com Amazon, Mercado Livre, Shopee e Magazine Luiza.
+        </p>
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:max-w-xl sm:grid-cols-3">
+          <MetricPill label="Por envio" value={`${MAX_LINKS} links`} />
+          <MetricPill label="Texto" value={`${Math.round(MAX_TEXT_LENGTH / 1000)} mil`} />
+          <MetricPill label="Formato" value="1:1 ou n:n" tone="success" />
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="rounded-2xl bg-white p-4 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <label htmlFor="links" className="text-sm font-bold text-gray-900">Links para converter</label>
+            <p className="mt-1 text-xs leading-5 text-gray-500">No celular, cole tudo aqui: um link por linha ou texto completo da oferta.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setText(''); setResponse(null); setError(''); setCopyFeedback('') }}
+            className="hidden min-h-10 items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold text-gray-700 transition hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 sm:inline-flex"
+          >
+            Limpar
+          </button>
+        </div>
+
+        <textarea
+          id="links"
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          rows={7}
+          placeholder="Exemplo:\nhttps://www.amazon.com.br/dp/...\nhttps://produto.mercadolivre.com.br/..."
+          className="mt-3 w-full rounded-2xl border border-gray-300 px-3 py-3 text-base text-gray-900 shadow-sm outline-none transition placeholder:text-sm placeholder:text-gray-400 focus:border-green-500 focus:ring-2 focus:ring-green-500/20 sm:px-4 sm:text-sm"
+        />
+
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-between">
+          <MetricPill label="Detectados" value={detectedCount || '0'} tone={linksOverLimit ? 'danger' : detectedCount ? 'success' : 'neutral'} />
+          <MetricPill label="Caracteres" value={`${text.length.toLocaleString('pt-BR')}/${MAX_TEXT_LENGTH.toLocaleString('pt-BR')}`} tone={charsOverLimit ? 'danger' : 'neutral'} />
+        </div>
+
+        {(linksOverLimit || charsOverLimit) && (
+          <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold leading-5 text-red-700" role="alert">
+            {linksOverLimit ? getLimitMessage(detectedCount) : `Reduza o texto para até ${MAX_TEXT_LENGTH.toLocaleString('pt-BR')} caracteres.`}
+          </p>
+        )}
+
+        {error && <div className="mt-4"><Alert type="error" title="Não foi possível converter" message={error} /></div>}
+        {copyFeedback && <div className="mt-4"><Alert type="success" title="Copiado" message={copyFeedback} /></div>}
+
+        <div className="sticky bottom-3 z-10 mt-5 rounded-2xl border border-gray-200 bg-white/95 p-2 shadow-xl backdrop-blur sm:static sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none">
+          <div className="grid grid-cols-[1fr_auto] gap-2 sm:flex sm:items-center">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="inline-flex min-h-12 items-center justify-center rounded-xl bg-green-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-green-700 disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 sm:px-5"
+            >
+              {submitting ? 'Convertendo...' : 'Converter'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setText(''); setResponse(null); setError(''); setCopyFeedback('') }}
+              className="inline-flex min-h-12 items-center justify-center rounded-xl border border-gray-300 px-4 py-3 text-sm font-bold text-gray-700 transition hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 sm:hidden"
+            >
+              Limpar
+            </button>
+          </div>
+        </div>
+      </form>
+
+      {response && (
+        <section className="space-y-3 sm:space-y-4">
+          <div className="rounded-2xl bg-white p-4 shadow-sm sm:flex sm:items-center sm:justify-between sm:gap-4 sm:p-5">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Resultado</h2>
+              <div className="mt-3 grid grid-cols-3 gap-2 sm:max-w-md">
+                <MetricPill label="Total" value={response.count} />
+                <MetricPill label="OK" value={response.convertedCount} tone="success" />
+                <MetricPill label="Atenção" value={response.failedCount} tone={response.failedCount ? 'warning' : 'neutral'} />
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={copyAllConverted}
+              disabled={!successfulLinks.length}
+              className="mt-4 inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-gray-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2 sm:mt-0 sm:w-auto"
+            >
+              Copiar todos
+            </button>
+          </div>
+
+          <div className="grid gap-3 sm:gap-4">
+            {response.results.map(result => (
+              <ResultCard key={`${result.index}-${result.originalUrl}`} result={result} onCopy={copyText} />
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  )
+}
