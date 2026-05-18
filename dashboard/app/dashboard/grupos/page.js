@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -277,12 +277,12 @@ export default function GruposPage() {
   const post = groups.filter(g => g.role === 'post')
   const existingJidRoles = new Set(groups.map(g => `${g.waJid}::${g.role}`))
 
-  const canUseChannels = useMemo(() => {
+  const canUseChannels = (() => {
     if (planSubject.plan === 'pro') return true
     if (planSubject.plan !== 'trial' || !planSubject.accessExpiresAt) return false
     const expiresAt = new Date(planSubject.accessExpiresAt)
     return !Number.isNaN(expiresAt.getTime()) && expiresAt > new Date()
-  }, [planSubject])
+  })()
 
   return (
     <div className="max-w-xl">
