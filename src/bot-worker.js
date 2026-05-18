@@ -26,6 +26,7 @@ import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } fro
 import { isMirrorableJid, detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
 import { getChannelMetadata, followChannel, listFollowedChannels } from './core/channelDirectory.js'
+import { logFollow } from './core/followGuard.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
@@ -743,6 +744,24 @@ async function startBot() {
   pendingSock = sock
 
   sock.ev.on('creds.update', saveCreds)
+
+  // PR-5.A: Baileys emite stream:error em rate-overlimit / forbidden /
+  // not-authorized. Gravar uma marca rate_limited em FollowLog faz o
+  // followGuard pausar follows por 1h para a sessão.
+  const handleStreamError = (node) => {
+    try {
+      const code = node?.attrs?.code || node?.children?.[0]?.tag || 'unknown'
+      const blocking = ['rate-overlimit', 'not-authorized', 'forbidden', '401', '403', '429']
+      if (!blocking.includes(String(code))) return
+      logger.warn({ code }, 'stream:error capturado; quarentenando follows desta sessão')
+      logFollow(userId, '<stream>', 'rate_limited', String(code)).catch(err => {
+        logger.warn({ err: err?.message }, 'logFollow(rate_limited) falhou')
+      })
+    } catch (err) {
+      logger.warn({ err: err?.message }, 'handleStreamError falhou')
+    }
+  }
+  sock.ws?.on?.('CB:stream:error', handleStreamError)
 
   // Captura JIDs de canais (@newsletter) que aparecem nos chats do usuário,
   // pra alimentar o picker "Canais que sigo" no dashboard. Baileys 6.7.16

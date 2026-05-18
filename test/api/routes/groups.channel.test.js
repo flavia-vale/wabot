@@ -121,6 +121,34 @@ test('POST /:id/follow-now com group inexistente retorna 404', async () => {
   await app.close()
 })
 
+test('POST /:id/follow-now retorna 429 quando guard nega (warmup cap atingido)', async (t) => {
+  let invoked = 0
+  const { app, userId } = await buildApp({
+    followChannelImmediate: async () => { invoked++; return { followed: 'new' } },
+  }, { withUser: true })
+  const group = await db.group.create({
+    data: { userId, waJid: 'a@newsletter', name: 'Canal A', role: 'monitor', kind: 'channel', forwardMode: 'LINK_ONLY' },
+  })
+  // Conta nova (createdAt = now) → warmup cap = 1. Pré-gravar 1 follow OK
+  // consome o cap; próxima tentativa deve bater no daily_cap.
+  await db.followLog.create({ data: { userId, channelJid: 'x@newsletter', status: 'ok' } })
+
+  t.after(async () => {
+    await db.followLog.deleteMany({ where: { userId } })
+    await db.group.deleteMany({ where: { userId } })
+    await db.user.deleteMany({ where: { id: userId } })
+    await app.close()
+  })
+
+  const res = await app.inject({ method: 'POST', url: `/api/groups/${group.id}/follow-now` })
+  assert.equal(res.statusCode, 429)
+  assert.equal(invoked, 0, 'guard deve impedir chamada ao follow real')
+  const body = JSON.parse(res.body)
+  assert.equal(body.reason, 'daily_cap')
+  assert.equal(body.dailyCap, 1)
+  assert.ok(res.headers['retry-after'])
+})
+
 // ---------- POST /:id/refresh-admin ----------
 
 test('POST /:id/refresh-admin retorna isViewerOwner atualizado', async (t) => {
