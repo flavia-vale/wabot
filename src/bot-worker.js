@@ -36,6 +36,7 @@ import { applyVariation } from './core/copyVariation.js'
 import { mutate as mutateChannelImage } from './core/imageMutation.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
+import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
@@ -48,6 +49,11 @@ const SESSION_ERROR_WINDOW_MS = Math.max(30_000, Number(process.env.WA_SESSION_E
 const SESSION_ERROR_THRESHOLD = Math.max(5, Number(process.env.WA_SESSION_ERROR_THRESHOLD || 30))
 const SESSION_RECOVERY_COOLDOWN_MS = Math.max(60_000, Number(process.env.WA_SESSION_RECOVERY_COOLDOWN_MS || 300_000))
 const ALLOW_TEXT_WITHOUT_LINKS = String(process.env.WA_ALLOW_TEXT_WITHOUT_LINKS || '0') === '1'
+
+function normalizeJidForMatch(jid) {
+  if (typeof jid !== 'string') return ''
+  return jid.trim().replace(/:\d+(?=@)/, '')
+}
 
 let activeSock = null
 let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
@@ -266,32 +272,12 @@ async function loadConfig() {
     }
   }
 
-  const targetsByMonitor = new Map()
-  for (const target of user.groupTargets) {
-    if (!targetsByMonitor.has(target.monitorId)) targetsByMonitor.set(target.monitorId, [])
-    if (target.post?.waJid) targetsByMonitor.get(target.monitorId).push(target.post.waJid)
-  }
-
-  const groups = {
-    monitor: user.groups.filter(g => g.role === 'monitor').map(g => ({
-      id: g.id,
-      waJid: g.waJid,
-      kind: g.kind,
-      // A opção de imagem fica oculta no dashboard, mas a operação deve
-      // permanecer sempre habilitada para todos os clientes.
-      imageMode: 'original',
-      imageLinkTarget: g.imageLinkTarget ?? 'first',
-      fallbackToOriginal: true,
-      blockedKeywords: g.blockedKeywords,
-      allowedPlatforms: g.allowedPlatforms,
-      forwardMode: g.forwardMode,
-      noLinkScope: g.noLinkScope,
-      targetPostJids: targetsByMonitor.get(g.id) ?? [],
-    })),
-    monitorJids: user.groups.filter(g => g.role === 'monitor').map(g => g.waJid),
-    post: user.groups.filter(g => g.role === 'post').map(g => g.waJid),
-    postDetails: user.groups.filter(g => g.role === 'post').map(g => ({ waJid: g.waJid, kind: g.kind, welcomeMsg: g.welcomeMsg })),
-  }
+  const { groups } = buildEntitledGroupConfig({
+    groups: user.groups,
+    groupTargets: user.groupTargets,
+    planSubject: { plan: user.plan, accessExpiresAt: user.accessExpiresAt },
+    logger,
+  })
 
   const botConfig = {
     delayMin: 5,
@@ -892,9 +878,10 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 
   async function processIncomingMessage(msg, sock) {
       const jid = msg.key.remoteJid
+      const normalizedJid = normalizeJidForMatch(jid)
       const cfg = await getConfig()
       logger.info({ jid, monitorGroups: cfg.groups.monitor, feedGlobal: cfg.botConfig.feedGlobal }, 'mensagem recebida')
-      const monitorGroup = cfg.groups.monitor.find(m => m.waJid === jid)
+      const monitorGroup = cfg.groups.monitor.find(m => normalizeJidForMatch(m.waJid) === normalizedJid)
       const shouldTrackSkipped = Boolean(monitorGroup) || (cfg.botConfig.feedGlobal && isMirrorableJid(jid))
       async function recordSkippedMessage({ reason, platform = 'unknown', originalUrl = '', convertedUrl = '' }) {
         if (!shouldTrackSkipped) return
@@ -906,7 +893,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           data: {
             userId,
             platform,
-            sourceGroup: jid || 'unknown',
+            sourceGroup: normalizedJid || 'unknown',
             destGroup: 'skipped',
             originalUrl,
             convertedUrl,

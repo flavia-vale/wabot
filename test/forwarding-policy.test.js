@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { FORWARD_MODE, NO_LINK_SCOPE, normalizeForwardingPolicy, shouldForwardMessage } from '../src/forwardingPolicy.js'
+import { FORWARD_MODE, NO_LINK_SCOPE, normalizeForwardingPolicy, shouldForwardMessage, detectMessageKind } from '../src/forwardingPolicy.js'
 
 test('normalizeForwardingPolicy mantém default conservador LINK_ONLY', () => {
   const policy = normalizeForwardingPolicy({})
@@ -37,4 +37,26 @@ test('ALLOW_NO_LINK + ALL encaminha formatos sem texto', () => {
   assert.equal(shouldForwardMessage({ hasLinks: false, messageKind: 'audio', policy }), true)
   assert.equal(shouldForwardMessage({ hasLinks: false, messageKind: 'document', policy }), true)
   assert.equal(shouldForwardMessage({ hasLinks: false, messageKind: 'sticker', policy }), true)
+})
+
+test('detectMessageKind identifica texto em wrappers aninhados de mensagem', () => {
+  const kind = detectMessageKind({
+    editedMessage: {
+      message: {
+        extendedTextMessage: { text: 'texto de admin' },
+      },
+    },
+  }, '')
+  assert.equal(kind, 'text')
+})
+
+test('detectMessageKind identifica texto em documentWithCaptionMessage', () => {
+  const kind = detectMessageKind({
+    documentWithCaptionMessage: {
+      message: {
+        documentMessage: { caption: 'legenda de documento' },
+      },
+    },
+  }, '')
+  assert.equal(kind, 'text')
 })

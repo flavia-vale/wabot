@@ -18,6 +18,10 @@ export const TRACKING_EVENTS = {
   LEAD_MAGNET_ONLINE_CLICKED: 'lead_magnet_online_clicked',
   COMPARISON_PAGE_VIEW: 'comparison_page_view',
   COMPARISON_SCROLL_50: 'comparison_scroll_50',
+  DIAGNOSTIC_ANSWER_CHANGED: 'diagnostic_answer_changed',
+  DIAGNOSTIC_RESULT_VIEWED: 'diagnostic_result_viewed',
+  DIAGNOSTIC_FORM_SUBMITTED: 'diagnostic_form_submitted',
+  DIAGNOSTIC_CTA_CLICKED: 'diagnostic_cta_clicked',
   COMPARISON_CTA_CLICK: 'comparison_cta_click',
 }
 
@@ -41,6 +45,9 @@ export const PUBLIC_PERSISTED_EVENTS = new Set([
   TRACKING_EVENTS.COMPARISON_PAGE_VIEW,
   TRACKING_EVENTS.COMPARISON_SCROLL_50,
   TRACKING_EVENTS.COMPARISON_CTA_CLICK,
+  TRACKING_EVENTS.DIAGNOSTIC_RESULT_VIEWED,
+  TRACKING_EVENTS.DIAGNOSTIC_FORM_SUBMITTED,
+  TRACKING_EVENTS.DIAGNOSTIC_CTA_CLICKED,
 ])
 
 export function shouldSuppressConversionPrompt(pathname = resolvePathname()) {

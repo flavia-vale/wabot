@@ -173,6 +173,9 @@ export const api = {
   saveCredential: (platform, data) =>
     apiFetch(`/api/credentials/${platform}`, { method: 'PUT', body: JSON.stringify(data) }),
 
+  convertLinks: (text) =>
+    apiFetch('/api/link-conversion/convert', { method: 'POST', body: JSON.stringify({ text }) }),
+
   paymentsStatus: () => apiFetch('/api/payments/status'),
   paymentsOverview: () => apiFetch('/api/payments/overview'),
   paymentsCheckout: (plan) =>

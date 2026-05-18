@@ -14,6 +14,7 @@ import { configRoutes } from './routes/config.js'
 import { broadcastRoutes } from './routes/broadcast.js'
 import { dashboardRoutes } from './routes/dashboard.js'
 import { logsRoutes } from './routes/logs.js'
+import { linkConversionRoutes } from './routes/linkConversion.js'
 import { adminRoutes } from './routes/admin.js'
 import { publicRoutes } from './routes/public.js'
 import { clickTrackerRoutes } from './routes/clickTracker.js'
@@ -257,6 +258,7 @@ app.register(configRoutes, { prefix: '/api/config' })
 app.register(broadcastRoutes, { prefix: '/api/broadcast' })
 app.register(dashboardRoutes, { prefix: '/api/dashboard' })
 app.register(logsRoutes, { prefix: '/api/logs' })
+app.register(linkConversionRoutes, { prefix: '/api/link-conversion' })
 app.register(adminRoutes, { prefix: '/api/admin' })
 app.register(publicRoutes, { prefix: '/api/public' })
 app.register(clickTrackerRoutes) // sem prefix — /r/:hash precisa estar na raiz

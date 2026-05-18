@@ -15,6 +15,7 @@ import { lintChannelTitle, lintCopyTemplate } from '../../core/copyLinter.js'
 import { recomputeScore as recomputeReportRiskScore } from '../../core/reportRiskScore.js'
 import { recordProbeSeen } from '../../core/channelProbe.js'
 import { FORWARD_MODE, NO_LINK_SCOPE, normalizeForwardingPolicy } from '../../forwardingPolicy.js'
+import { buildFeatureGateError, canUseAdvancedPreservation, canUseChannels, FEATURE_CODES } from '../../billing/plans.js'
 
 const ALLOWED_KINDS = new Set([JID_KIND.GROUP, JID_KIND.CHANNEL])
 
@@ -26,6 +27,27 @@ function parseBoolean(value) {
 
 function normalizeGroupJid(rawJid) {
   return ensureJid(rawJid, JID_KIND.GROUP)
+}
+
+async function getPlanSubject(userId) {
+  return db.user.findUnique({
+    where: { id: userId },
+    select: { plan: true, accessExpiresAt: true },
+  })
+}
+
+async function ensureChannelFeatureAllowed(userId, reply) {
+  const user = await getPlanSubject(userId)
+  if (canUseChannels(user ?? { plan: 'basic' })) return true
+  reply.code(403).send(buildFeatureGateError(FEATURE_CODES.CHANNELS))
+  return false
+}
+
+async function ensureAdvancedPreservationAllowed(userId, reply) {
+  const user = await getPlanSubject(userId)
+  if (canUseAdvancedPreservation(user ?? { plan: 'basic' })) return true
+  reply.code(403).send(buildFeatureGateError(FEATURE_CODES.ADVANCED_PRESERVATION))
+  return false
 }
 
 export async function groupsRoutes(app, opts = {}) {
@@ -47,6 +69,7 @@ export async function groupsRoutes(app, opts = {}) {
     if (!waJid || !name || !role) return reply.code(400).send({ error: 'waJid, name e role obrigatórios' })
     if (!['monitor', 'post'].includes(role)) return reply.code(400).send({ error: 'role deve ser monitor ou post' })
     if (detectKind(waJid) !== kind) return reply.code(400).send({ error: `waJid não bate com kind=${kind}` })
+    if (kind === JID_KIND.CHANNEL && !(await ensureChannelFeatureAllowed(req.user.sub, reply))) return
 
     try {
       const group = await db.group.create({
@@ -81,9 +104,11 @@ export async function groupsRoutes(app, opts = {}) {
     const postIds = Array.isArray(req.body?.postIds) ? [...new Set(req.body.postIds.map(String))] : []
     const validPosts = await db.group.findMany({
       where: { userId: req.user.sub, role: 'post', id: { in: postIds } },
-      select: { id: true },
+      select: { id: true, kind: true },
     })
     if (validPosts.length !== postIds.length) return reply.code(400).send({ error: 'Lista de grupos destino inválida' })
+    const usesChannel = monitor.kind === JID_KIND.CHANNEL || validPosts.some(post => post.kind === JID_KIND.CHANNEL)
+    if (usesChannel && !(await ensureChannelFeatureAllowed(req.user.sub, reply))) return
 
     await db.$transaction([
       db.groupTarget.deleteMany({ where: { userId: req.user.sub, monitorId: monitor.id } }),
@@ -129,6 +154,9 @@ export async function groupsRoutes(app, opts = {}) {
       ? (noLinkScope ?? currentPolicy.noLinkScope ?? NO_LINK_SCOPE.TEXT_ONLY)
       : null
 
+    const enablingAdvancedPreservation = requestedForwardMode === FORWARD_MODE.ALLOW_NO_LINK
+    if (enablingAdvancedPreservation && !(await ensureAdvancedPreservationAllowed(req.user.sub, reply))) return
+
     const updated = await db.group.update({
       where: { id: req.params.id },
       data: {
@@ -160,6 +188,7 @@ export async function groupsRoutes(app, opts = {}) {
     const url = req.body?.url
     const inviteCode = typeof url === 'string' ? parseChannelInviteUrl(url) : null
     if (!inviteCode) return reply.code(400).send({ error: 'URL de convite de canal inválida' })
+    if (!(await ensureChannelFeatureAllowed(req.user.sub, reply))) return
     if (!isRunning(req.user.sub)) return reply.code(503).send({ error: 'WhatsApp não está conectado. Conecte primeiro.' })
     try {
       const data = await channelMetadata(req.user.sub, { inviteCode })
@@ -174,6 +203,7 @@ export async function groupsRoutes(app, opts = {}) {
   app.post('/resolve-channel-jid', { onRequest: [app.authenticate] }, async (req, reply) => {
     const jid = typeof req.body?.jid === 'string' ? req.body.jid.trim() : ''
     if (detectKind(jid) !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'JID deve terminar com @newsletter' })
+    if (!(await ensureChannelFeatureAllowed(req.user.sub, reply))) return
     if (!isRunning(req.user.sub)) return reply.code(503).send({ error: 'WhatsApp não está conectado.' })
     try {
       const data = await channelMetadata(req.user.sub, { jid })
@@ -189,6 +219,7 @@ export async function groupsRoutes(app, opts = {}) {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
     if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'follow-now só vale pra canais' })
+    if (!(await ensureChannelFeatureAllowed(req.user.sub, reply))) return
     if (!isRunning(req.user.sub)) return reply.code(503).send({ error: 'WhatsApp não está conectado.' })
 
     const guard = await canFollowNow(req.user.sub)
@@ -323,6 +354,7 @@ export async function groupsRoutes(app, opts = {}) {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
     if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'refresh-admin só vale pra canais' })
+    if (!(await ensureChannelFeatureAllowed(req.user.sub, reply))) return
     if (!isRunning(req.user.sub)) return reply.code(503).send({ error: 'WhatsApp não está conectado.' })
     try {
       const data = await channelMetadata(req.user.sub, { jid: group.waJid })
@@ -335,6 +367,7 @@ export async function groupsRoutes(app, opts = {}) {
   })
 
   app.get('/wa/channels', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!(await ensureChannelFeatureAllowed(req.user.sub, reply))) return
     if (!isRunning(req.user.sub)) return reply.code(503).send({ error: 'WhatsApp não está conectado.' })
     try {
       const data = await listFollowedChannelsFn(req.user.sub)
