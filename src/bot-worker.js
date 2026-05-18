@@ -18,13 +18,14 @@ import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, normalizeBrandi
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
 import { resolveMonitoredImage } from './monitoredImageResolver.js'
 import db from './db.js'
-import { getAuthInfoDir, getDedupFile } from './paths.js'
+import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } from './sendQueueBackend.js'
 import { isMirrorableJid, detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
+import { getChannelMetadata, followChannel, listFollowedChannels } from './core/channelDirectory.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
@@ -95,7 +96,9 @@ function stopHeartbeatIpc() {
 
 const AUTH_DIR = getAuthInfoDir(userId)
 const DEDUP_FILE = getDedupFile(userId)
+const KNOWN_CHANNELS_FILE = getKnownChannelsFile(userId)
 const DEDUP_FLUSH_DEBOUNCE_MS = 1_000
+const KNOWN_CHANNELS_FLUSH_DEBOUNCE_MS = 2_000
 
 let pendingDedupStore = null
 let dedupFlushTimer = null
@@ -144,6 +147,30 @@ async function flushDedupNow() {
 }
 
 
+// JIDs de canais (@newsletter) já vistos pela conta. Persistido em disco
+// pra sobreviver a restart — Baileys não tem API para listar newsletters
+// seguidos e messaging-history.set não re-dispara em reconexão incremental.
+let knownChannelsFlushTimer = null
+function loadKnownChannels() {
+  try {
+    const raw = JSON.parse(readFileSync(KNOWN_CHANNELS_FILE, 'utf8'))
+    return Array.isArray(raw?.jids) ? raw.jids : []
+  } catch { return [] }
+}
+function scheduleKnownChannelsSave(set) {
+  if (knownChannelsFlushTimer) return
+  knownChannelsFlushTimer = setTimeout(async () => {
+    knownChannelsFlushTimer = null
+    try {
+      mkdirSync(dirname(KNOWN_CHANNELS_FILE), { recursive: true })
+      await writeFile(KNOWN_CHANNELS_FILE, JSON.stringify({ jids: [...set] }), 'utf8')
+    } catch (err) {
+      logger.error({ err: err.message }, 'Erro ao persistir known channels')
+    }
+  }, KNOWN_CHANNELS_FLUSH_DEBOUNCE_MS)
+  knownChannelsFlushTimer.unref?.()
+}
+
 async function clearAppStateSyncKeys() {
   const shouldClear = String(process.env.WA_CLEAR_SYNC_KEYS_ON_START ?? '0') === '1'
   if (!shouldClear) return
@@ -175,6 +202,20 @@ let configCacheTime = 0
 let configCachePromise = null
 const followedChannelJids = new Set()
 const inFlightChannelJids = new Set()
+// Canais conhecidos pela conta (do messaging-history.set e chats.upsert) —
+// usado para popular o "Canais que sigo" no dashboard. Inclui qualquer
+// @newsletter visto via Baileys, independente de o bot ter seguido.
+const knownChannelJids = new Set(loadKnownChannels())
+function rememberChannelJid(id) {
+  if (typeof id !== 'string' || !id.endsWith('@newsletter')) return
+  if (knownChannelJids.has(id)) return
+  knownChannelJids.add(id)
+  scheduleKnownChannelsSave(knownChannelJids)
+}
+function trackChannelChats(chats) {
+  if (!Array.isArray(chats)) return
+  for (const chat of chats) rememberChannelJid(chat?.id)
+}
 const sendJobTracker = makeInFlightTracker()
 
 async function ensureChannelSubscriptions() {
@@ -703,6 +744,12 @@ async function startBot() {
 
   sock.ev.on('creds.update', saveCreds)
 
+  // Captura JIDs de canais (@newsletter) que aparecem nos chats do usuário,
+  // pra alimentar o picker "Canais que sigo" no dashboard. Baileys 6.7.16
+  // não tem listFollowedNewsletters; chegamos lá via histórico + upserts.
+  sock.ev.on('messaging-history.set', ({ chats }) => trackChannelChats(chats))
+  sock.ev.on('chats.upsert', (chats) => trackChannelChats(chats))
+
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
       setLifecycleState(WA_LIFECYCLE.AUTHENTICATING, { reason: 'qr_generated' })
@@ -1189,6 +1236,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
     const cutoff = Date.now() - 5 * 60_000
 
     for (const msg of messages) {
+      rememberChannelJid(msg?.key?.remoteJid)
       if (msg.key.fromMe) continue
       const msgTsRaw = Number(msg.messageTimestamp ?? 0)
       const hasValidTimestamp = Number.isFinite(msgTsRaw) && msgTsRaw > 0
@@ -1344,7 +1392,14 @@ process.on('message', async msg => {
     }
     activeSock.groupFetchAllParticipating()
       .then(groups => {
-        const list = Object.entries(groups).map(([id, g]) => ({ waJid: id, name: g.subject }))
+        const list = Object.entries(groups).map(([id, g]) => {
+          const parentJid = g.linkedParent
+          const parent = parentJid ? groups[parentJid] : null
+          const name = parent?.subject && parent.subject !== g.subject
+            ? `${parent.subject} - ${g.subject}`
+            : g.subject
+          return { waJid: id, name }
+        })
         process.send({ type: 'groups', requestId: msg.requestId, data: list })
       })
       .catch(err => {
@@ -1432,6 +1487,67 @@ process.on('message', async msg => {
       }
     }
     process.send({ type: 'broadcastResult', requestId: msg.requestId, data: { queued, rejected: errors.length, errors } })
+  }
+
+  if (msg?.type === 'channel:metadata') {
+    if (!activeSock) {
+      process.send({ type: 'channel:metadataResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      return
+    }
+    try {
+      const data = await getChannelMetadata({
+        sock: activeSock,
+        jid: msg.jid,
+        inviteCode: msg.inviteCode,
+      })
+      process.send({ type: 'channel:metadataResult', requestId: msg.requestId, data })
+    } catch (err) {
+      logger.warn({ err: err?.message, jid: msg.jid, inviteCode: msg.inviteCode }, 'channel:metadata falhou')
+      process.send({ type: 'channel:metadataResult', requestId: msg.requestId, error: err.message })
+    }
+    return
+  }
+
+  if (msg?.type === 'channel:follow') {
+    if (!activeSock) {
+      process.send({ type: 'channel:followResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      return
+    }
+    try {
+      const data = await followChannel({
+        sock: activeSock,
+        jid: msg.jid,
+        followedSet: followedChannelJids,
+        inFlight: inFlightChannelJids,
+        logger,
+      })
+      rememberChannelJid(msg.jid)
+      process.send({ type: 'channel:followResult', requestId: msg.requestId, data })
+    } catch (err) {
+      logger.warn({ err: err?.message, jid: msg.jid }, 'channel:follow falhou')
+      process.send({ type: 'channel:followResult', requestId: msg.requestId, error: err.message })
+    }
+    return
+  }
+
+  if (msg?.type === 'channel:listFollowed') {
+    if (!activeSock) {
+      process.send({ type: 'channel:listFollowedResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      return
+    }
+    try {
+      // União: canais que o bot seguiu nesta vida + canais detectados no
+      // histórico/chats do usuário. Set dedupa automaticamente.
+      const data = await listFollowedChannels({
+        sock: activeSock,
+        followedSet: new Set([...followedChannelJids, ...knownChannelJids]),
+      })
+      process.send({ type: 'channel:listFollowedResult', requestId: msg.requestId, data })
+    } catch (err) {
+      logger.warn({ err: err?.message }, 'channel:listFollowed falhou')
+      process.send({ type: 'channel:listFollowedResult', requestId: msg.requestId, error: err.message })
+    }
+    return
   }
 })
 

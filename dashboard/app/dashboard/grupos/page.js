@@ -5,6 +5,8 @@ import { Alert } from '@/components/Alert'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { HelpLink } from '@/components/HelpLink'
 import { LoadingState } from '@/components/States'
+import { AddChannelModal } from '@/components/AddChannelModal'
+import { TypeBadge, FollowBadge, AdminBadge } from '@/components/ChannelStatusBadges'
 
 const roleLabels = {
   monitor: 'Monitorar (origem)',
@@ -43,7 +45,16 @@ export default function GruposPage() {
   const [targetEditorId, setTargetEditorId] = useState(null)
   const [targetPostIds, setTargetPostIds] = useState([])
   const [targetLoading, setTargetLoading] = useState(false)
+  const [imageDrafts, setImageDrafts] = useState({})
+  // Set de IDs de grupo já em processo de auto-fix (ensureHiddenImageDefaults)
+  // pra evitar disparar UPDATE em paralelo no mesmo grupo. Ref pq não precisa
+  // re-renderizar quando muda.
   const autoFixingImageModeRef = useRef(new Set())
+  const [showChannelModal, setShowChannelModal] = useState(false)
+  const [filter, setFilter] = useState('all')
+  const [followStatus, setFollowStatus] = useState({})
+  const [adminStatus, setAdminStatus] = useState({})
+  const [refreshingAdminId, setRefreshingAdminId] = useState(null)
 
   async function load() {
     setLoadingGroups(true)
@@ -73,6 +84,34 @@ export default function GruposPage() {
     return () => { active = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  async function refreshAdmin(group) {
+    setRefreshingAdminId(group.id)
+    try {
+      const data = await api.refreshChannelAdmin(group.id)
+      setAdminStatus(prev => ({ ...prev, [group.id]: data.isViewerOwner ? 'owner' : 'not-owner' }))
+    } catch {
+      setAdminStatus(prev => ({ ...prev, [group.id]: 'error' }))
+    } finally {
+      setRefreshingAdminId(null)
+    }
+  }
+
+  async function handleChannelCreated(group) {
+    setGroups(prev => [...prev, group])
+    if (group.kind === 'channel' && group.role === 'monitor') {
+      setFollowStatus(prev => ({ ...prev, [group.id]: 'pending' }))
+      try {
+        await api.followChannelNow(group.id)
+        setFollowStatus(prev => ({ ...prev, [group.id]: 'followed' }))
+      } catch {
+        setFollowStatus(prev => ({ ...prev, [group.id]: 'error' }))
+      }
+    }
+    if (group.kind === 'channel' && group.role === 'post') {
+      refreshAdmin(group)
+    }
+  }
 
   async function handleDelete(id) {
     setActionError('')
@@ -216,10 +255,25 @@ export default function GruposPage() {
   return (
     <div className="max-w-xl">
       <div className="flex items-start justify-between gap-3">
-        <h2 className="text-2xl font-bold text-gray-800 mb-1">Grupos</h2>
+        <h2 className="text-2xl font-bold text-gray-800 mb-1">Grupos e Canais</h2>
         <HelpLink topic="como-cadastrar-grupos">Ajuda</HelpLink>
       </div>
       <p className="text-gray-500 text-sm mb-6">Configure quais grupos monitorar e onde postar</p>
+
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        {['all', 'group', 'channel'].map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            className={`px-3 py-1 rounded-full text-sm ${filter === f ? 'bg-sky-600 text-white' : 'bg-slate-100'}`}>
+            {f === 'all' ? `Todos (${groups.length})` :
+              f === 'group' ? `Grupos (${groups.filter(g => g.kind !== 'channel').length})` :
+              `Canais (${groups.filter(g => g.kind === 'channel').length})`}
+          </button>
+        ))}
+        <button onClick={() => setShowChannelModal(true)}
+          className="ml-auto px-3 py-1.5 bg-emerald-600 text-white rounded text-sm">
+          + Adicionar canal
+        </button>
+      </div>
 
       {actionError && <div className="mb-4"><Alert type="error" title="Falha ao atualizar grupos" message={actionError} /></div>}
 
@@ -294,13 +348,23 @@ export default function GruposPage() {
           <p className="text-gray-400 text-sm">Nenhum grupo cadastrado</p>
         ) : (
           <ul className="flex flex-col gap-4">
-            {monitor.map(g => {
+            {monitor.filter(g =>
+              filter === 'all' ||
+              (filter === 'channel' && g.kind === 'channel') ||
+              (filter === 'group' && g.kind !== 'channel')
+            ).map(g => {
               return (
               <li key={g.id} className="text-sm border border-gray-100 rounded-xl p-3">
                 <div className="flex flex-col gap-2 mb-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0 break-words">
                     <span className="font-medium text-gray-700">{g.name}</span>
                     <span className="ml-2 text-gray-400 text-xs">{g.waJid}</span>
+                    <span className="ml-2 inline-flex items-center gap-1">
+                      <TypeBadge kind={g.kind} />
+                      {g.kind === 'channel' && g.role === 'monitor' && (
+                        <FollowBadge status={followStatus[g.id] ?? 'unknown'} />
+                      )}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     {savingGroupId === g.id && <span className="text-[11px] text-blue-600">Salvando...</span>}
@@ -381,12 +445,26 @@ export default function GruposPage() {
           <p className="text-gray-400 text-sm">Nenhum grupo cadastrado</p>
         ) : (
           <ul className="flex flex-col gap-2">
-            {post.map(g => (
+            {post.filter(g =>
+              filter === 'all' ||
+              (filter === 'channel' && g.kind === 'channel') ||
+              (filter === 'group' && g.kind !== 'channel')
+            ).map(g => (
               <li key={g.id} className="text-sm border border-gray-100 rounded-xl p-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0 break-words">
                     <span className="font-medium text-gray-700">{g.name}</span>
                     <span className="ml-2 text-gray-400 text-xs">{g.waJid}</span>
+                    <span className="ml-2 inline-flex items-center gap-1">
+                      <TypeBadge kind={g.kind} />
+                      {g.kind === 'channel' && g.role === 'post' && (
+                        <AdminBadge
+                          status={adminStatus[g.id] ?? 'unknown'}
+                          onRefresh={() => refreshAdmin(g)}
+                          refreshing={refreshingAdminId === g.id}
+                        />
+                      )}
+                    </span>
                   </div>
                   <button onClick={() => setDeleteTarget(g)} className="text-red-400 hover:text-red-600 text-xs">
                     Remover
@@ -495,7 +573,13 @@ export default function GruposPage() {
         </div>
       )}
 
-      <ConfirmDialog open={!!deleteTarget} title={deleteTarget ? `Remover “${deleteTarget.name}” de ${roleLabels[deleteTarget.role] ?? 'grupo'}?` : 'Remover grupo'} message="O grupo será removido apenas da configuração do bot. O grupo no WhatsApp não será excluído." confirmLabel="Remover" danger onCancel={() => setDeleteTarget(null)} onConfirm={async () => { const target = deleteTarget; setDeleteTarget(null); if (target?.id) await handleDelete(target.id) }} />
+      <ConfirmDialog open={!!deleteTarget} title={deleteTarget ? `Remover "${deleteTarget.name}" de ${roleLabels[deleteTarget.role] ?? 'grupo'}?` : 'Remover grupo'} message="O grupo será removido apenas da configuração do bot. O grupo no WhatsApp não será excluído." confirmLabel="Remover" danger onCancel={() => setDeleteTarget(null)} onConfirm={async () => { const target = deleteTarget; setDeleteTarget(null); if (target?.id) await handleDelete(target.id) }} />
+
+      <AddChannelModal
+        open={showChannelModal}
+        onClose={() => setShowChannelModal(false)}
+        onCreated={handleChannelCreated}
+      />
     </div>
   )
 }

@@ -160,8 +160,8 @@ export const api = {
   sessionWAGroups: () => apiFetch('/api/session/wa-groups'),
 
   groups: () => apiFetch('/api/groups'),
-  addGroup: (waJid, name, role) =>
-    apiFetch('/api/groups', { method: 'POST', body: JSON.stringify({ waJid, name, role }) }),
+  addGroup: (waJid, name, role, kind) =>
+    apiFetch('/api/groups', { method: 'POST', body: JSON.stringify({ waJid, name, role, ...(kind ? { kind } : {}) }) }),
   updateGroup: (id, data) =>
     apiFetch(`/api/groups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteGroup: (id) => apiFetch(`/api/groups/${id}`, { method: 'DELETE' }),
@@ -229,6 +229,10 @@ export const api = {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/success/queue${query ? `?${query}` : ''}`)
   },
+  adminSuccessMetrics: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/success/metrics${query ? `?${query}` : ''}`)
+  },
   adminCreateContactLog: (id, data) =>
     apiFetch(`/api/admin/users/${id}/contact-log`, { method: 'POST', body: JSON.stringify(data) }),
   adminFinanceOverview: () => apiFetch('/api/admin/finance/overview'),
@@ -280,6 +284,14 @@ export const api = {
 
 
 
+
+  resolveChannelInvite: (url) =>
+    apiFetch('/api/groups/resolve-channel-invite', { method: 'POST', body: JSON.stringify({ url }) }),
+  resolveChannelJid: (jid) =>
+    apiFetch('/api/groups/resolve-channel-jid', { method: 'POST', body: JSON.stringify({ jid }) }),
+  followChannelNow: (id) => apiFetch(`/api/groups/${id}/follow-now`, { method: 'POST' }),
+  refreshChannelAdmin: (id) => apiFetch(`/api/groups/${id}/refresh-admin`, { method: 'POST' }),
+  waChannels: () => apiFetch('/api/groups/wa/channels'),
 
   logs: (status = 'all', page = 1, limit = 20) =>
     apiFetch(`/api/logs?status=${status}&page=${page}&limit=${limit}`),

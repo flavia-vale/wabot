@@ -1,7 +1,13 @@
 import db from '../../db.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
-import { reloadConfig } from '../../manager.js'
-import { ensureJid, detectKind, JID_KIND } from '../../core/jid.js'
+import {
+  reloadConfig as _reloadConfig,
+  channelMetadata as _channelMetadata,
+  followChannelImmediate as _followChannelImmediate,
+  listFollowedChannels as _listFollowedChannels,
+  isRunning as _isRunning,
+} from '../../manager.js'
+import { ensureJid, detectKind, parseChannelInviteUrl, JID_KIND } from '../../core/jid.js'
 import { FORWARD_MODE, NO_LINK_SCOPE, normalizeForwardingPolicy } from '../../forwardingPolicy.js'
 
 const ALLOWED_KINDS = new Set([JID_KIND.GROUP, JID_KIND.CHANNEL])
@@ -16,7 +22,12 @@ function normalizeGroupJid(rawJid) {
   return ensureJid(rawJid, JID_KIND.GROUP)
 }
 
-export async function groupsRoutes(app) {
+export async function groupsRoutes(app, opts = {}) {
+  const reloadConfig = opts.reloadConfig ?? _reloadConfig
+  const channelMetadata = opts.channelMetadata ?? _channelMetadata
+  const followChannelImmediate = opts.followChannelImmediate ?? _followChannelImmediate
+  const listFollowedChannelsFn = opts.listFollowedChannels ?? _listFollowedChannels
+  const isRunning = opts.isRunning ?? _isRunning
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
     return db.group.findMany({ where: { userId: req.user.sub } })
   })
@@ -137,5 +148,74 @@ export async function groupsRoutes(app) {
     const configReloaded = reloadConfig(req.user.sub)
     app.log.info({ groupId: group.id, role: group.role, configReloaded }, 'Grupo removido; configuração do worker recarregada quando disponível')
     return { ok: true }
+  })
+
+  app.post('/resolve-channel-invite', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const url = req.body?.url
+    const inviteCode = typeof url === 'string' ? parseChannelInviteUrl(url) : null
+    if (!inviteCode) return reply.code(400).send({ error: 'URL de convite de canal inválida' })
+    if (!isRunning(req.user.sub)) return reply.code(503).send({ error: 'WhatsApp não está conectado. Conecte primeiro.' })
+    try {
+      const data = await channelMetadata(req.user.sub, { inviteCode })
+      if (!data) return reply.code(404).send({ error: 'Canal não encontrado. Confira o link.' })
+      return data
+    } catch (err) {
+      req.log.warn({ err: err.message, inviteCode }, 'resolve-channel-invite falhou')
+      return reply.code(502).send({ error: err.message || 'Falha ao buscar canal' })
+    }
+  })
+
+  app.post('/resolve-channel-jid', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const jid = typeof req.body?.jid === 'string' ? req.body.jid.trim() : ''
+    if (detectKind(jid) !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'JID deve terminar com @newsletter' })
+    if (!isRunning(req.user.sub)) return reply.code(503).send({ error: 'WhatsApp não está conectado.' })
+    try {
+      const data = await channelMetadata(req.user.sub, { jid })
+      if (!data) return reply.code(404).send({ error: 'Canal não encontrado' })
+      return data
+    } catch (err) {
+      req.log.warn({ err: err.message, jid }, 'resolve-channel-jid falhou')
+      return reply.code(502).send({ error: err.message })
+    }
+  })
+
+  app.post('/:id/follow-now', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
+    if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'follow-now só vale pra canais' })
+    if (!isRunning(req.user.sub)) return reply.code(503).send({ error: 'WhatsApp não está conectado.' })
+    try {
+      const data = await followChannelImmediate(req.user.sub, group.waJid)
+      return data
+    } catch (err) {
+      req.log.warn({ err: err.message, groupId: group.id }, 'follow-now falhou')
+      return reply.code(502).send({ error: err.message || 'Falha ao seguir canal' })
+    }
+  })
+
+  app.post('/:id/refresh-admin', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
+    if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'refresh-admin só vale pra canais' })
+    if (!isRunning(req.user.sub)) return reply.code(503).send({ error: 'WhatsApp não está conectado.' })
+    try {
+      const data = await channelMetadata(req.user.sub, { jid: group.waJid })
+      if (!data) return reply.code(404).send({ error: 'Canal não encontrado no WhatsApp' })
+      return { isViewerOwner: data.isViewerOwner, owner: data.owner, name: data.name }
+    } catch (err) {
+      req.log.warn({ err: err.message, groupId: group.id }, 'refresh-admin falhou')
+      return reply.code(502).send({ error: err.message || 'Falha ao verificar canal' })
+    }
+  })
+
+  app.get('/wa/channels', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!isRunning(req.user.sub)) return reply.code(503).send({ error: 'WhatsApp não está conectado.' })
+    try {
+      const data = await listFollowedChannelsFn(req.user.sub)
+      return data ?? []
+    } catch (err) {
+      req.log.warn({ err: err.message }, 'wa/channels falhou')
+      return reply.code(502).send({ error: err.message || 'Falha ao listar canais' })
+    }
   })
 }

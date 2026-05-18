@@ -17,7 +17,7 @@ const navGroups = [
   {
     title: 'Configuração',
     items: [
-      { href: '/dashboard/grupos', icon: '👥', label: 'Grupos' },
+      { href: '/dashboard/grupos', icon: '👥', label: 'Grupos e Canais' },
       { href: '/dashboard/credenciais', icon: '🔑', label: 'Credenciais' },
       { href: '/dashboard/configuracoes', icon: '⚙️', label: 'Configurações' },
       { href: '/dashboard/tutorial', icon: '📘', label: 'Tutorial' },

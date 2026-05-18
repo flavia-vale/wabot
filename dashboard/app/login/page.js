@@ -136,7 +136,7 @@ function LoginContent() {
           <div className={`rounded-2xl p-3 shadow-sm ${isRegister ? 'bg-emerald-900' : 'bg-green-50'}`}>
             <Image
               src="/botinho-logo.svg"
-              alt="Logo do BOTinho, bot conversor para afiliados no WhatsApp"
+              alt="Logo do BOTinho, ferramenta para espelhar grupos e espalhar ofertas no WhatsApp"
               width={64}
               height={64}
               priority
@@ -145,11 +145,11 @@ function LoginContent() {
         </div>
 
         <div className="mb-2 text-center">
-          <p className={`text-sm font-semibold ${isRegister ? 'text-emerald-200' : 'text-green-700'}`}><span aria-hidden="true">🤖</span> Bot Conversor para Afiliados</p>
+          <p className={`text-sm font-semibold ${isRegister ? 'text-emerald-200' : 'text-green-700'}`}><span aria-hidden="true">🤖</span> O BOTinho que espelha grupos</p>
           <h1 className={`mt-2 text-xl sm:text-2xl font-bold leading-tight ${isRegister ? 'text-emerald-100' : 'text-gray-900'}`}>{isRegister ? 'Criar sua conta' : 'Entrar na sua conta'}</h1>
         </div>
         <p className={`text-center text-sm mb-4 ${isRegister ? 'text-emerald-200' : 'text-gray-500'}`}>
-          {isRegister ? 'Teste por 30 dias sem cartão e valide o primeiro envio guiado.' : 'Acesse seu painel para conectar o WhatsApp e gerenciar seus grupos.'}
+          {isRegister ? 'Teste por 7 dias sem cartão e valide o primeiro envio guiado.' : 'Acesse seu painel para conectar o WhatsApp e gerenciar seus grupos.'}
         </p>
 
         {ref && (
@@ -228,7 +228,7 @@ function LoginContent() {
               <label htmlFor="password" className={`block text-sm font-medium ${isRegister ? 'text-emerald-100' : 'text-gray-700'}`}>Senha</label>
               {!isRegister && (
                 <a
-                  href="mailto:suporte@BOTinho.app?subject=Recuperar%20senha%20do%20BOTinho"
+                  href="mailto:suporte@botinho.app?subject=Recuperar%20senha%20do%20BOTinho"
                   className="text-xs font-medium text-green-600 hover:underline"
                 >
                   Esqueci minha senha

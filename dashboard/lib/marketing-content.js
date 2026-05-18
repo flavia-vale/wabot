@@ -20,7 +20,7 @@ export const DEFAULT_LANDING_PLANS = [
     name: 'Teste grátis',
     price: 'R$0',
     priceValue: 0,
-    period: '30 dias de validação inicial',
+    period: '7 dias de validação inicial',
     desc: 'Experimente o fluxo principal antes de escolher um plano pago.',
     cta: 'Começar teste grátis',
     features: ['Conversão de links suportados', 'Monitoramento de grupos', 'Envio para grupos de destino', 'Histórico de logs', 'Com anúncios'],
