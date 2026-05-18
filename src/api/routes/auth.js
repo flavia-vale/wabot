@@ -5,8 +5,8 @@ import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { normalizeEmail } from '../auth-utils.js'
 
 const loginAttempts = new Map()
-const STANDARD_TRIAL_DAYS = 30
-const PROMO_VIP_TRIAL_DAYS = 7
+export const STANDARD_TRIAL_DAYS = 7
+export const PROMO_VIP_TRIAL_DAYS = 7
 
 function getLoginAttemptMaxEntries() {
   const value = Number(process.env.LOGIN_RATE_LIMIT_MAX_ENTRIES ?? 20000)
