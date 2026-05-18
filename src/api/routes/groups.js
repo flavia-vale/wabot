@@ -11,6 +11,7 @@ import { ensureJid, detectKind, parseChannelInviteUrl, JID_KIND } from '../../co
 import { canFollowNow, logFollow } from '../../core/followGuard.js'
 import { getHealth as getChannelHealth } from '../../core/channelHealth.js'
 import { captureSnapshot } from '../../jobs/channelSnapshot.js'
+import { lintChannelTitle, lintCopyTemplate } from '../../core/copyLinter.js'
 import { FORWARD_MODE, NO_LINK_SCOPE, normalizeForwardingPolicy } from '../../forwardingPolicy.js'
 
 const ALLOWED_KINDS = new Set([JID_KIND.GROUP, JID_KIND.CHANNEL])
@@ -210,6 +211,16 @@ export async function groupsRoutes(app, opts = {}) {
       await logFollow(req.user.sub, group.waJid, 'error', err.message ?? null).catch(() => {})
       return reply.code(502).send({ error: err.message || 'Falha ao seguir canal' })
     }
+  })
+
+  // PR-5.E.2: lint de título/copy. UI chama no submit; warnings nunca
+  // bloqueiam — só alertam o cliente sobre risco de denúncia/banimento.
+  app.post('/lint', { onRequest: [app.authenticate] }, async (req) => {
+    const { title, template } = req.body ?? {}
+    const warnings = []
+    if (typeof title === 'string') warnings.push(...lintChannelTitle(title).warnings)
+    if (typeof template === 'string') warnings.push(...lintCopyTemplate(template).warnings)
+    return { warnings }
   })
 
   app.get('/:id/snapshots', { onRequest: [app.authenticate] }, async (req, reply) => {

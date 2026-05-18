@@ -162,6 +162,31 @@ test('GET /:id/health reflete registro existente em red com pausedUntil', async 
   assert.equal(body.lastError, '403')
 })
 
+test('POST /lint detecta título de impersonação e claim em copy', async (t) => {
+  const { app } = await buildApp()
+  t.after(async () => { await app.close() })
+  const res = await app.inject({
+    method: 'POST', url: '/api/groups/lint',
+    payload: { title: 'Amazon Brasil', template: 'oferta 80% off agora' },
+  })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  const codes = body.warnings.map(w => w.code)
+  assert.ok(codes.includes('brand_impersonation'))
+  assert.ok(codes.includes('misleading_claim'))
+})
+
+test('POST /lint sem inputs problemáticos retorna sem warnings', async (t) => {
+  const { app } = await buildApp()
+  t.after(async () => { await app.close() })
+  const res = await app.inject({
+    method: 'POST', url: '/api/groups/lint',
+    payload: { title: 'Ofertas Tech BR', template: 'Confira em https://ex.com' },
+  })
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(JSON.parse(res.body).warnings, [])
+})
+
 test('GET /:id/snapshots retorna lista ordenada do mais recente', async (t) => {
   const { app, userId } = await buildApp({}, { withUser: true })
   const group = await db.group.create({
