@@ -46,6 +46,10 @@ export default function GruposPage() {
   const [targetPostIds, setTargetPostIds] = useState([])
   const [targetLoading, setTargetLoading] = useState(false)
   const [imageDrafts, setImageDrafts] = useState({})
+  // Set de IDs de grupo já em processo de auto-fix (ensureHiddenImageDefaults)
+  // pra evitar disparar UPDATE em paralelo no mesmo grupo. Ref pq não precisa
+  // re-renderizar quando muda.
+  const autoFixingImageModeRef = useRef(new Set())
   const [showChannelModal, setShowChannelModal] = useState(false)
   const [filter, setFilter] = useState('all')
   const [followStatus, setFollowStatus] = useState({})
