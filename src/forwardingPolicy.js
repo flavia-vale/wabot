@@ -32,8 +32,11 @@ export function shouldForwardMessage({ hasLinks, messageKind, policy }) {
 }
 
 export function detectMessageKind(innerMessage, text) {
+  if (innerMessage?.extendedTextMessage?.text?.trim()) return 'text'
+  if (innerMessage?.editedMessage?.message?.extendedTextMessage?.text?.trim()) return 'text'
   if (innerMessage?.imageMessage && text?.trim()) return 'image_with_caption'
   if (innerMessage?.videoMessage && text?.trim()) return 'video_with_caption'
+  if (innerMessage?.documentWithCaptionMessage?.message?.documentMessage?.caption?.trim()) return 'text'
   if (text?.trim()) return 'text'
   if (innerMessage?.imageMessage) return 'image'
   if (innerMessage?.videoMessage) return 'video'
