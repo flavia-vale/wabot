@@ -139,10 +139,6 @@ function ManualAccessEditor({ detail, onApply }) {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
 
-  useEffect(() => {
-    setForm({ plan: detail?.plan ?? '', days: '', reason: '' })
-    setMessage('')
-  }, [detail?.id, detail?.plan])
 
   async function submit(e) {
     e.preventDefault()
@@ -223,7 +219,7 @@ function DetailPanel({ detail, onClose, onApplyAccess }) {
         </div>
       </div>
 
-      <div className="mt-5"><ManualAccessEditor detail={detail} onApply={onApplyAccess} /></div>
+      <div className="mt-5"><ManualAccessEditor key={`${detail.id}-${detail.plan}`} detail={detail} onApply={onApplyAccess} /></div>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
         <div>
