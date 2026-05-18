@@ -12,6 +12,7 @@ import { canFollowNow, logFollow } from '../../core/followGuard.js'
 import { getHealth as getChannelHealth } from '../../core/channelHealth.js'
 import { captureSnapshot } from '../../jobs/channelSnapshot.js'
 import { lintChannelTitle, lintCopyTemplate } from '../../core/copyLinter.js'
+import { recomputeScore as recomputeReportRiskScore } from '../../core/reportRiskScore.js'
 import { FORWARD_MODE, NO_LINK_SCOPE, normalizeForwardingPolicy } from '../../forwardingPolicy.js'
 
 const ALLOWED_KINDS = new Set([JID_KIND.GROUP, JID_KIND.CHANNEL])
@@ -293,6 +294,17 @@ export async function groupsRoutes(app, opts = {}) {
     if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
     if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'health só vale pra canais' })
     return getChannelHealth(group.id)
+  })
+
+  app.post('/:id/risk-score/recompute', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
+    if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'risk-score só vale pra canais' })
+    const daysRaw = Number(req.query?.days)
+    const days = Number.isFinite(daysRaw) && daysRaw >= 1 && daysRaw <= 30 ? Math.floor(daysRaw) : 7
+    const out = await recomputeReportRiskScore(group.id, { db, userId: req.user.sub, days })
+    if (!out) return reply.code(404).send({ error: 'Não foi possível calcular' })
+    return out
   })
 
   app.post('/:id/refresh-admin', { onRequest: [app.authenticate] }, async (req, reply) => {

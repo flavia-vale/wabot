@@ -218,6 +218,7 @@ model ChannelHealth {
   lastPostedAt        DateTime?
   consecutiveFailures Int       @default(0)
   pausedUntil         DateTime?
+  reportRiskScore     Int?
   updatedAt           DateTime  @default(now())
 
   @@index([status])

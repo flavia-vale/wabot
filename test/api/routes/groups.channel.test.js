@@ -162,6 +162,43 @@ test('GET /:id/health reflete registro existente em red com pausedUntil', async 
   assert.equal(body.lastError, '403')
 })
 
+test('POST /:id/risk-score/recompute calcula e persiste score', async (t) => {
+  const { app, userId } = await buildApp({}, { withUser: true })
+  const group = await db.group.create({
+    data: { userId, waJid: 'r@newsletter', name: 'R', role: 'post', kind: 'channel', forwardMode: 'LINK_ONLY' },
+  })
+  // 10 posts no canal nos últimos minutos, 50 followers, 1 fonte → score alto
+  for (let i = 0; i < 10; i++) {
+    await db.messageLog.create({
+      data: {
+        userId,
+        platform: 'amazon',
+        sourceGroup: 'src@g.us',
+        destGroup: 'r@newsletter',
+        originalUrl: 'https://ex.com',
+        convertedUrl: 'https://ex.com',
+        messageText: 'x',
+        status: 'success',
+      },
+    })
+  }
+  await db.channelSnapshot.create({
+    data: { groupId: group.id, name: 'R', snapshotJson: JSON.stringify({ subscribersCount: 50 }) },
+  })
+  t.after(async () => {
+    await db.channelHealth.deleteMany({ where: { groupId: group.id } }).catch(() => {})
+    await db.channelSnapshot.deleteMany({ where: { groupId: group.id } }).catch(() => {})
+    await db.messageLog.deleteMany({ where: { userId } }).catch(() => {})
+    await db.group.deleteMany({ where: { userId } })
+    await db.user.deleteMany({ where: { id: userId } })
+    await app.close()
+  })
+  const res = await app.inject({ method: 'POST', url: `/api/groups/${group.id}/risk-score/recompute?days=1` })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.ok(body.score >= 80, `score=${body.score}`)
+})
+
 test('POST /lint detecta título de impersonação e claim em copy', async (t) => {
   const { app } = await buildApp()
   t.after(async () => { await app.close() })
