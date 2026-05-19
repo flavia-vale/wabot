@@ -52,6 +52,46 @@ export function canUseAdvancedPreservation(userOrPlan = {}, options = {}) {
   return getPlanEntitlements(userOrPlan, options).canUseAdvancedPreservation
 }
 
+// Cache em memória pra evitar martelar o DB no fan-out do bot-worker.
+// TTL de 60s — aceitável: mudança de plano leva até 1min pra refletir nas defesas.
+const PRESERVATION_CACHE_TTL_MS = 60_000
+const preservationCache = new Map() // userId → { fetchedAt, active, plan, accessExpiresAt }
+
+export function __resetCacheForTests() {
+  preservationCache.clear()
+}
+
+/**
+ * Retorna se usuário tem acesso ao Módulo de Preservação Avançada (Pro ou Trial ativo).
+ * Cacheia o resultado por 60s. Use em hot paths (bot-worker fan-out, cron).
+ *
+ * @param {string} userId
+ * @param {{ db?: object, now?: number }} opts
+ * @returns {Promise<{ active: boolean, plan: string|null, accessExpiresAt: Date|null }>}
+ */
+export async function getAdvancedPreservationAccess(userId, opts = {}) {
+  const db = opts.db
+  if (!db) throw new Error('getAdvancedPreservationAccess: db obrigatório')
+  const now = opts.now ?? Date.now()
+  const cached = preservationCache.get(userId)
+  if (cached && now - cached.fetchedAt < PRESERVATION_CACHE_TTL_MS) {
+    return { active: cached.active, plan: cached.plan, accessExpiresAt: cached.accessExpiresAt }
+  }
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { plan: true, accessExpiresAt: true },
+  })
+  if (!user) {
+    const entry = { fetchedAt: now, active: false, plan: null, accessExpiresAt: null }
+    preservationCache.set(userId, entry)
+    return { active: false, plan: null, accessExpiresAt: null }
+  }
+  const active = canUseAdvancedPreservation(user, { now: new Date(now) })
+  const entry = { fetchedAt: now, active, plan: user.plan, accessExpiresAt: user.accessExpiresAt }
+  preservationCache.set(userId, entry)
+  return { active, plan: user.plan, accessExpiresAt: user.accessExpiresAt }
+}
+
 export function buildFeatureGateError(feature = FEATURE_CODES.CHANNELS) {
   const featureCode = String(feature || FEATURE_CODES.CHANNELS)
   if (featureCode === FEATURE_CODES.ADVANCED_PRESERVATION) {
