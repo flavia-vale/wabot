@@ -20,6 +20,19 @@ const s = {
   },
   cardTitle: { fontSize: 22, fontWeight: 600, marginBottom: 10, letterSpacing: '-0.01em' },
   cardBody: { fontSize: 14.5, lineHeight: 1.55, color: 'var(--ink-soft)' },
+  preservationCard: {
+    gridColumn: 'span 12',
+    background: 'linear-gradient(135deg, color-mix(in oklab, var(--accent) 24%, var(--surface)), color-mix(in oklab, var(--accent-2) 24%, var(--surface)))',
+    border: '1px solid var(--line)',
+    borderRadius: 28,
+    padding: 36,
+    minHeight: 220,
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1.2fr) minmax(240px, 0.8fr)',
+    gap: 28,
+    alignItems: 'center',
+  },
+  preservationList: { margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.7, fontSize: 14.5 },
   bigStat: { fontFamily: "'Instrument Serif', serif", fontStyle: 'italic', fontSize: 88, lineHeight: 1, color: 'var(--accent-strong)', letterSpacing: '-0.04em' },
   storeRow: { display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 20 },
   store: { padding: '8px 14px', borderRadius: 999, background: 'var(--bg-soft)', border: '1px solid var(--line)', fontSize: 13, fontWeight: 500, color: 'var(--ink)' },
@@ -35,26 +48,34 @@ const featureCards = [
   },
   {
     title: 'Monitoramento 24/7',
-    body: 'O bot acompanha seus grupos de origem continuamente e mantém a operação rodando mesmo quando você não está no painel.',
+    body: 'O bot acompanha seus grupos e/ou canais de origem continuamente e mantém a operação rodando mesmo quando você não está no painel.',
     icon: 'users',
     cols: 4,
   },
   {
     title: 'Anti-Spam Inteligente',
-    body: 'Regras de intervalo, filtros por palavras e controle por grupo reduzem disparos repetidos e protegem a saúde do seu número.',
+    body: 'Regras de intervalo, filtros por palavras e controle por grupo/canal reduzem disparos repetidos e protegem a saúde do seu número.',
     icon: 'shield',
     cols: 4,
   },
   {
     title: 'Envio manual',
-    body: 'Envie uma oferta pontual para seus grupos quando quiser reforçar uma campanha ou publicar um achadinho específico.',
+    body: 'Envie uma oferta pontual para seus grupos e/ou canais quando quiser reforçar uma campanha ou publicar um achadinho específico.',
     icon: 'chat',
     cols: 4,
   },
   {
     title: 'Broadcast em Massa',
-    body: 'Distribua mensagens para múltiplos grupos de destino de uma só vez, mantendo controle sobre quais públicos recebem cada oferta.',
+    body: 'Distribua mensagens para múltiplos grupos e/ou canais de destino de uma só vez, mantendo controle sobre quais públicos recebem cada oferta.',
     icon: 'sparkles',
+    cols: 4,
+    accent: true,
+  },
+
+  {
+    title: 'Espelhamento entre grupos e canais',
+    body: 'Envie de canais para grupos, de grupos para canais ou entre destinos do mesmo tipo, mantendo cada rotina com origem, destino e cadência definidos.',
+    icon: 'arrow',
     cols: 4,
     accent: true,
   },
@@ -75,14 +96,14 @@ export function Features() {
           <h2 style={{ ...s.h2, marginTop: 16 }}>
             Pensado para afiliada que <span className="serif" style={{ fontStyle: 'italic' }}>quer escalar</span> sem ficar copiando link.
           </h2>
-          <p style={s.sub}>Você aponta os grupos de promoção que quer monitorar e o seu grupo de destino. O resto é com a gente.</p>
+          <p style={s.sub}>Você aponta os grupos e/ou canais de promoção que quer monitorar e o seu grupo e/ou canal de destino. O resto é com a gente.</p>
         </div>
 
         <div style={s.grid} className="landing-features-grid">
           <div style={s.card(7, true)} className="landing-feature-card landing-feature-card-primary">
             <div style={s.iconBox}><Icon name="bolt" size={22} /></div>
             <div style={s.cardTitle}>Detecção em menos de 1 segundo</div>
-            <p style={s.cardBody}>O bot escuta seus grupos em tempo real. Quando aparece um link de loja parceira, ele já dispara a versão sua antes da mensagem original sair de vista.</p>
+            <p style={s.cardBody}>O bot escuta seus grupos e/ou canais em tempo real. Quando aparece um link de loja parceira, ele já dispara a versão sua antes da mensagem original sair de vista.</p>
             <div style={{ marginTop: 'auto', paddingTop: 24, display: 'flex', gap: 32, alignItems: 'baseline' }}>
               <div>
                 <div style={s.bigStat}>0,8s</div>
@@ -115,6 +136,21 @@ export function Features() {
               <p style={s.cardBody}>{card.body}</p>
             </div>
           ))}
+
+          <div style={s.preservationCard} className="landing-feature-card landing-preservation-card">
+            <div>
+              <span className="pill"><span className="dot" />Camada Pro</span>
+              <div style={{ ...s.cardTitle, fontSize: 28, marginTop: 16 }}>Módulo de preservação avançada</div>
+              <p style={{ ...s.cardBody, fontSize: 16, maxWidth: 680 }}>
+                Camada para operar grupos e/ou canais com mais controle: limites por rotina, cadência mais natural, variações, pausas preventivas e monitoramento para reduzir padrões frágeis de divulgação.
+              </p>
+            </div>
+            <ul style={s.preservationList}>
+              <li>Warmup e limites configuráveis por origem e destino.</li>
+              <li>Intervalos e variações para evitar repetição mecânica.</li>
+              <li>Logs e alertas para pausar, revisar e retomar com segurança.</li>
+            </ul>
+          </div>
         </div>
       </div>
     </section>
