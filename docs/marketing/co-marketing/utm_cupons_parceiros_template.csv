@@ -1,0 +1,4 @@
+partner_slug,utm_source,utm_medium,utm_campaign,utm_content,cupom_sugerido,landing_destino,regra_atribuicao,validade,observacoes
+parceiro-exemplo,parceiro-exemplo,co-marketing,comarketing-piloto-2026q2,dm-convite-v1,PARCEX10,/login,last-touch-com-cupom,2026-12-31,uso_em_piloto_controlado
+creator-exemplo,creator-exemplo,affiliate,launch-botinho-2026q2,live-workshop-v1,CREATOR7,/login,last-touch-com-cupom,2026-12-31,usar_disclaimer_publicitario
+comunidade-exemplo,comunidade-exemplo,co-marketing,comarketing-checklist-2026q2,newsletter-v1,COMU5,/login,first-touch-utm-plus-cupom,2026-12-31,coletar_consentimento_form
