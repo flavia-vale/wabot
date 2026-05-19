@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import { PublicShell } from '@/components/PublicShell'
+import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
+import { PartnerLeadForm } from '@/components/marketing/PartnerLeadForm'
 import { getSiteUrl } from '@/lib/site-url'
 
 const slug = '/parcerias'
@@ -80,6 +82,7 @@ function buildJsonLd() {
 export default function Page() {
   return (
     <PublicShell>
+      <OrganicPageTracker route={{ slug: 'parcerias', path: '/parcerias', cluster: 'partner-program', intent: 'co-marketing partnership', template: 'partner-landing' }} />
       <main className="mx-auto w-full max-w-6xl px-5 py-10 md:px-8 md:py-16">
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(buildJsonLd()) }} />
 
@@ -88,7 +91,7 @@ export default function Page() {
           <h1 className="mt-3 max-w-4xl text-4xl font-black tracking-tight md:text-6xl">Faça co-marketing com o BOTinho e leve mais consistência operacional para sua audiência</h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-emerald-50">Para admins, creators e comunidades que já trabalham com ofertas no WhatsApp e querem campanhas conjuntas com rastreio, checklist e piloto guiado.</p>
           <div className="mt-7 flex flex-wrap gap-3">
-            <Link href="/login" className="inline-flex min-h-12 items-center rounded-xl bg-white px-5 font-black text-emerald-900 hover:bg-emerald-100">Quero ser parceiro(a)</Link>
+            <Link href="/login?mode=register&utm_source=parcerias&utm_medium=co-marketing&utm_campaign=partner-program-2026q2&utm_content=hero-cta" data-seo-cta="partner-hero-cta" data-cta-position="hero" data-cta-stage="partnership" data-cta-destination="login-register" className="inline-flex min-h-12 items-center rounded-xl bg-white px-5 font-black text-emerald-900 hover:bg-emerald-100">Quero ser parceiro(a)</Link>
             <a href="#tipos" className="inline-flex min-h-12 items-center rounded-xl border border-emerald-200 px-5 font-black text-white hover:bg-emerald-800">Ver tipos de parceria</a>
           </div>
         </section>
@@ -120,6 +123,10 @@ export default function Page() {
               ))}
             </ul>
           </article>
+        </section>
+
+        <section className="mt-8">
+          <PartnerLeadForm />
         </section>
       </main>
     </PublicShell>

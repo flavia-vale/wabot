@@ -551,3 +551,21 @@ Pacote 4 (fechamento operacional) aplicado com:
 - atualização do plano com assets executados e padronização de handoff para Growth/Parcerias.
 
 Observação: continua obrigatório validar a página `/parcerias` em staging (`3006`) antes de uso em produção.
+
+
+---
+
+## 21. Pós-entrega implementado (2026-05-19)
+
+Itens implementados do manual pós-entrega:
+
+- Landing `/parcerias` com rastreio orgânico e CTA rastreável.
+- Formulário de qualificação de parceria com consentimento explícito e envio de evento público (`partner_form_submit`).
+- Handoff operacional documentado para Growth/Parcerias com RACI, SLA e checklist.
+- Distribuição interna inicial da rota `/parcerias` no hub de conteúdos.
+
+Pendências que continuam manuais/operacionais:
+
+- validação em staging (`3006`) e aprovação visual final;
+- revisão jurídica final do termo de lead sharing;
+- operação de CRM e cadência de outreach no time.
