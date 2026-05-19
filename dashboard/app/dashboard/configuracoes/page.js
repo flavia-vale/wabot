@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
+import { canAccessAdvancedPreservation } from '@/lib/plan'
 import { Alert } from '@/components/Alert'
 import { ErrorState, LoadingState } from '@/components/States'
 
@@ -16,17 +17,6 @@ const DELAY_PRESETS = [
 
 function hasHttpProtocol(value) {
   return /^https?:\/\//i.test(String(value ?? '').trim())
-}
-
-
-function hasActiveTrial(planSubject) {
-  if (planSubject?.plan !== 'trial' || !planSubject?.accessExpiresAt) return false
-  const expiresAt = new Date(planSubject.accessExpiresAt)
-  return !Number.isNaN(expiresAt.getTime()) && expiresAt > new Date()
-}
-
-function canAccessAdvancedPreservation(planSubject) {
-  return planSubject?.plan === 'pro' || hasActiveTrial(planSubject)
 }
 
 function normalizeKeywords(text) {
