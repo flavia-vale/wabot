@@ -162,3 +162,19 @@ test('captureAllForUser conta skipped quando metadata falha', async () => {
   assert.equal(summary.captured, 1)
   assert.equal(summary.skipped, 1)
 })
+
+test('captureAllForUser pula quando preservationActive=false', async () => {
+  const db = makeFakeDb({
+    groups: [
+      { id: 'g-1', userId: 'u', role: 'post', kind: 'channel', waJid: 'a@newsletter' },
+    ],
+  })
+  const summary = await captureAllForUser('u', {
+    db,
+    getMetadata: async () => ({ jid: 'a@newsletter', name: 'X' }),
+    preservationActive: false,
+  })
+  assert.equal(summary.captured, 0)
+  assert.equal(summary.gated, 1)
+  assert.equal(db._snapshots.has('g-1'), false)
+})

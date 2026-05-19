@@ -14,6 +14,7 @@
 import db from '../src/db.js'
 import { captureAllForUser } from '../src/jobs/channelSnapshot.js'
 import { isRunning } from '../src/manager.js'
+import { getAdvancedPreservationAccess } from '../src/billing/plans.js'
 
 async function main() {
   const started = Date.now()
@@ -31,9 +32,10 @@ async function main() {
       continue
     }
     try {
-      const r = await captureAllForUser(u.id)
-      stats.captured += r.captured
-      stats.skipped += r.skipped
+      const access = await getAdvancedPreservationAccess(u.id, { db })
+      const r = await captureAllForUser(u.id, { preservationActive: access.active })
+      stats.captured += r.captured ?? 0
+      stats.skipped += r.skipped ?? 0
     } catch (err) {
       stats.errors++
       process.stderr.write(JSON.stringify({ level: 'error', userId: u.id, err: err.message }) + '\n')
