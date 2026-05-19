@@ -86,10 +86,13 @@ export async function getAdvancedPreservationAccess(userId, opts = {}) {
     preservationCache.set(userId, entry)
     return { active: false, plan: null, accessExpiresAt: null }
   }
-  const active = canUseAdvancedPreservation(user, { now: new Date(now) })
-  const entry = { fetchedAt: now, active, plan: user.plan, accessExpiresAt: user.accessExpiresAt }
+  const accessExpiresAt = user.accessExpiresAt
+    ? (user.accessExpiresAt instanceof Date ? user.accessExpiresAt : new Date(user.accessExpiresAt))
+    : null
+  const active = canUseAdvancedPreservation({ plan: user.plan, accessExpiresAt }, { now: new Date(now) })
+  const entry = { fetchedAt: now, active, plan: user.plan, accessExpiresAt }
   preservationCache.set(userId, entry)
-  return { active, plan: user.plan, accessExpiresAt: user.accessExpiresAt }
+  return { active, plan: user.plan, accessExpiresAt }
 }
 
 export function buildFeatureGateError(feature = FEATURE_CODES.CHANNELS) {
