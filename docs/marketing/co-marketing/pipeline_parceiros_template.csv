@@ -1,0 +1,6 @@
+partner_id,nome_parceiro,tipo_parceiro,nicho,canal_principal,source_url,audience_fit_1_5,audience_size_1_5,brand_alignment_1_5,engagement_quality_1_5,reciprocity_1_5,ease_execution_1_5,score_final_0_100,prioridade_abc,status_pipeline,owner,proxima_acao,data_proxima_acao,utm_source,utm_medium,utm_campaign,utm_content,cupom,observacoes_lgpd
+CMK-001,,,,,,,,,,,,,,novo_lead,growth,,,,,,,consentimento_pendente
+CMK-002,,,,,,,,,,,,,,contato_iniciado,sdr,,,,,,,consentimento_pendente
+CMK-003,,,,,,,,,,,,,,reuniao_agendada,growth,,,,,,,consentimento_pendente
+CMK-004,,,,,,,,,,,,,,piloto_em_execucao,csm,,,,,,,consentimento_confirmado
+CMK-005,,,,,,,,,,,,,,ganho_parceria,csm,,,,,,,consentimento_confirmado
