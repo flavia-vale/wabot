@@ -13,6 +13,8 @@ export const PUBLIC_ANALYTICS_EVENTS = new Set([
   'comparison_page_view',
   'comparison_scroll_50',
   'comparison_cta_click',
+  'partner_form_submit',
+  'partner_form_validation_blocked',
 ])
 
 export const ANALYTICS_EVENTS = new Set([
@@ -36,6 +38,8 @@ export const ANALYTICS_EVENTS = new Set([
   'comparison_page_view',
   'comparison_scroll_50',
   'comparison_cta_click',
+  'partner_form_submit',
+  'partner_form_validation_blocked',
   'public_analytics_accepted',
   'public_analytics_invalid_event',
   'public_analytics_blocked_429',

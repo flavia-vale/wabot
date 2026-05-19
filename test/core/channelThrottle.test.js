@@ -236,3 +236,19 @@ test('recordPost incrementa contadores e atualiza burst window', async () => {
   assert.equal(stored.postsToday, 2)
   assert.equal(stored.postsInBurstWindow, 2)
 })
+
+test('checkAndReserve curto-circuita quando preservationActive=false', async () => {
+  const db = {
+    channelThrottle: {
+      findUnique: async () => { throw new Error('NÃO deveria consultar throttle quando gating off') },
+      upsert: async () => { throw new Error('NÃO deveria reservar quando gating off') },
+    },
+  }
+  const result = await checkAndReserve('g-1', { channelMinIntervalSec: 30 }, {
+    db,
+    preservationActive: false,
+    getHealth: async () => ({}),
+  })
+  assert.equal(result.allow, true)
+  assert.equal(result.reason, 'gating_off')
+})
