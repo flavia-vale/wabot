@@ -72,3 +72,12 @@ test('getAdvancedPreservationAccess retorna inactive quando usuário não existe
   assert.equal(access.active, false)
   assert.equal(access.plan, null)
 })
+
+test('getAdvancedPreservationAccess normaliza accessExpiresAt string para Date', async () => {
+  __resetCacheForTests()
+  const isoString = new Date(Date.now() + 60_000).toISOString()
+  const db = makeFakeDb({ plan: 'trial', accessExpiresAt: isoString })
+  const access = await getAdvancedPreservationAccess('u-1', { db })
+  assert.equal(access.active, true)
+  assert.ok(access.accessExpiresAt instanceof Date, 'esperava Date, recebeu ' + typeof access.accessExpiresAt)
+})
