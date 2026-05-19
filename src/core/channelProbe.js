@@ -17,6 +17,7 @@
 // (`lastProbeSeenAt`) e a UI para um shadowban detector evoluir.
 
 import defaultDb from '../db.js'
+import { getAdvancedPreservationAccess } from '../billing/plans.js'
 
 export const PROBE_STALE_WINDOW_MS = 60 * 60 * 1000 // 1h
 const NON_OVERRIDABLE = new Set(['red', 'critical'])
@@ -59,6 +60,9 @@ export async function runProbeWatchdog(opts = {}) {
 
   let flagged = 0
   for (const ch of channels) {
+    const access = await getAdvancedPreservationAccess(ch.userId, { db })
+    if (!access.active) continue
+
     const health = await db.channelHealth.findUnique({ where: { groupId: ch.id } })
     if (!health) continue
     if (NON_OVERRIDABLE.has(health.status)) continue
