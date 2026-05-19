@@ -77,7 +77,12 @@ async function requirePreservationAccess(req, reply) {
 }
 
 export async function preservationRoutes(app) {
-  app.addHook('preHandler', async (req) => req.jwtVerify())
+  app.addHook('preHandler', async (req) => {
+    if (typeof app.authenticate === 'function') {
+      return app.authenticate(req)
+    }
+    return req.jwtVerify()
+  })
 
   // ---------- Config ----------
   app.get('/config', async (req, reply) => {
