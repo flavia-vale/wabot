@@ -58,6 +58,7 @@ export default function GruposPage() {
   const [refreshingAdminId, setRefreshingAdminId] = useState(null)
   const [healthByGroup, setHealthByGroup] = useState({})
   const [expandedHealthId, setExpandedHealthId] = useState(null)
+  const [planSubject, setPlanSubject] = useState({ plan: 'trial', accessExpiresAt: null })
 
   async function load() {
     setLoadingGroups(true)
