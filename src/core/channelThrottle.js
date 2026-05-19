@@ -128,6 +128,9 @@ export function decide({ now, throttle, isPaused, botConfig }) {
  * @param {{ db?: any, now?: number, getHealth?: function }} [opts]
  */
 export async function checkAndReserve(groupId, botConfig, opts = {}) {
+  if (opts.preservationActive === false) {
+    return { allow: true, reason: 'gating_off' }
+  }
   const db = opts.db ?? defaultDb
   const now = opts.now ?? Date.now()
   const fetchHealth = opts.getHealth ?? ((id) => getHealth(id, { db }))
