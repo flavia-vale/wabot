@@ -17,12 +17,10 @@ export function RiskScoreSummary() {
 
   useEffect(() => {
     let active = true
-    setError('')
     api.preservationRiskScore()
       .then(d => { if (active) setData(d) })
       .catch(e => { if (active) setError(e.message) })
     return () => { active = false }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function recompute() {
