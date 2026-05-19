@@ -56,5 +56,50 @@ module.exports = {
       },
       max_memory_restart: '300M',
     },
+    {
+      // Staging mirror de 'api'. deploy_safe_staging.sh roda este config a
+      // partir de ~/wabot-staging com `--only api-staging`; PM2 usa o cwd
+      // de invocação para localizar o .env (que carrega DATABASE_URL,
+      // JWT_SECRET, CLICK_HASH_SALT etc.). Variáveis abaixo SÃO sobrescritas
+      // pelo dotenv só quando ele encontra primeiro — então mantém apenas
+      // o que define ambiente, não segredos.
+      name: 'api-staging',
+      script: 'src/api/server.js',
+      exec_mode: 'fork',
+      instances: 1,
+      env: {
+        NODE_ENV: 'production',
+        APP_ENV: 'staging',
+        API_PORT: '3004',
+        AUTH_INFO_DIR: '/home/deploy/wabot-staging-shared/auth_info',
+        BOT_LOG_DIR: '/home/deploy/wabot-staging-shared/logs',
+        AUTO_START_WHATSAPP_SESSIONS: 'true',
+        DASHBOARD_URL: 'http://178.105.54.0:3006',
+        API_URL: 'http://178.105.54.0:3006',
+      },
+      max_memory_restart: '500M',
+      kill_timeout: 20000,
+      wait_ready: false,
+      listen_timeout: 10000,
+    },
+    {
+      // Staging mirror de 'dashboard'. cwd ./dashboard é relativo a
+      // ROOT_DIR (~/wabot-staging) onde o pm2 start foi invocado.
+      name: 'visual-staging',
+      cwd: './dashboard',
+      script: 'npm',
+      args: 'start',
+      exec_mode: 'fork',
+      instances: 1,
+      env: {
+        NODE_ENV: 'production',
+        PORT: '3006',
+      },
+      max_memory_restart: '768M',
+      kill_timeout: 10000,
+      exp_backoff_restart_delay: 100,
+      max_restarts: 8,
+      min_uptime: 15000,
+    },
   ],
 }

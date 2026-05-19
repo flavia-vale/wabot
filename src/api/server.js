@@ -18,6 +18,7 @@ import { linkConversionRoutes } from './routes/linkConversion.js'
 import { adminRoutes } from './routes/admin.js'
 import { publicRoutes } from './routes/public.js'
 import { clickTrackerRoutes } from './routes/clickTracker.js'
+import { preservationRoutes } from './routes/preservation.js'
 import { registerApiMetricsHooks } from './metrics.js'
 import db from '../db.js'
 import { resumePersistedBots, startSessionHealthMonitor, stopAllBots } from '../manager.js'
@@ -261,6 +262,7 @@ app.register(logsRoutes, { prefix: '/api/logs' })
 app.register(linkConversionRoutes, { prefix: '/api/link-conversion' })
 app.register(adminRoutes, { prefix: '/api/admin' })
 app.register(publicRoutes, { prefix: '/api/public' })
+app.register(preservationRoutes, { prefix: '/api/preservation' })
 app.register(clickTrackerRoutes) // sem prefix — /r/:hash precisa estar na raiz
 
 // Liveness: processo está de pé

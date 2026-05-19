@@ -37,6 +37,7 @@ import { mutate as mutateChannelImage } from './core/imageMutation.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
+import { getAdvancedPreservationAccess } from './billing/plans.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
@@ -294,7 +295,8 @@ async function loadConfig() {
   botConfig.brandingGroupLink = normalizeBrandingLink(botConfig.brandingGroupLink)
   botConfig.brandingCtaText = normalizeBrandingCtaText(botConfig.brandingCtaText)
 
-  return { credentials, groups, plan: user.plan, botConfig }
+  const preservation = await getAdvancedPreservationAccess(userId, { db })
+  return { credentials, groups, plan: user.plan, botConfig, preservationActive: preservation.active }
 }
 
 async function getConfig() {
@@ -605,8 +607,11 @@ async function processSendJob(job) {
         if (channelGroupId) {
           // checkAndReserve já cobre: pausa por health, quiet hours, daily cap,
           // intervalo mínimo, burst cap. Reserva o slot quando libera.
-          const cfg = (await getConfig().catch(() => null))?.botConfig ?? {}
-          const decision = await throttleCheckAndReserve(channelGroupId, cfg)
+          const cfgFull = await getConfig().catch(() => null)
+          const cfg = cfgFull?.botConfig ?? {}
+          const decision = await throttleCheckAndReserve(channelGroupId, cfg, {
+            preservationActive: cfgFull?.preservationActive ?? false,
+          })
           if (!decision.allow) {
             const waitMs = Math.max(0, (decision.deferUntil ?? Date.now()) - Date.now())
             const SHORT_DEFER_MS = 2 * 60 * 1000 // 2min
@@ -614,7 +619,9 @@ async function processSendJob(job) {
               logger.info({ destJid: job.destJid, reason: decision.reason, waitMs }, 'Velocity scheduler: aguardando defer curto')
               await sleep(waitMs)
               // tenta de novo (reserva real); se ainda negar, aborta
-              const retry = await throttleCheckAndReserve(channelGroupId, cfg)
+              const retry = await throttleCheckAndReserve(channelGroupId, cfg, {
+                preservationActive: cfgFull?.preservationActive ?? false,
+              })
               if (!retry.allow) {
                 const err = new Error(`Canal throttled (${retry.reason}) até ${new Date(retry.deferUntil ?? Date.now()).toISOString()}`)
                 err.code = 'CHANNEL_THROTTLED'
@@ -1209,11 +1216,13 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // de "mesma mensagem em N", então mantém texto original.
         const isChannelDest = isChannelDestination(destJid)
         const variantText = isChannelDest
-          ? applyVariation(finalText, { groupId: destJid, poolJson: cfg.botConfig.copyVariationPoolJson })
+          ? (cfg.preservationActive
+              ? applyVariation(finalText, { groupId: destJid, poolJson: cfg.botConfig.copyVariationPoolJson })
+              : finalText)
           : finalText
 
         // Stagger: 1º destino sai sem atraso adicional; demais recebem jitter.
-        const staggerMs = (destIndex > 0 && isChannelDest && staggerJitterMs > 0)
+        const staggerMs = (destIndex > 0 && isChannelDest && cfg.preservationActive && staggerJitterMs > 0)
           ? Math.floor(Math.random() * staggerJitterMs)
           : 0
 
@@ -1246,7 +1255,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 
               // PR-5.B.2: mutação de imagem APÓS o scraper (fora do bloco
               // protegido). Só para canal-destino; valida >=800px após crop.
-              if (image && isChannelDest && cfg.botConfig.imageMutationEnabled) {
+              if (image && isChannelDest && cfg.preservationActive && cfg.botConfig.imageMutationEnabled) {
                 const mutated = await mutateChannelImage(image.buffer, image.mimetype, {
                   groupId: destJid,
                   enabled: true,
