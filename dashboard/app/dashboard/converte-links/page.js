@@ -17,6 +17,10 @@ function getLimitMessage(count) {
   return `Cole no máximo ${MAX_LINKS} links por vez. Encontramos ${count} links no texto; divida em partes menores para converter com segurança.`
 }
 
+function hasAmbiguousSeparators(text) {
+  return /;\s*https?:\/\//i.test(text)
+}
+
 function classifyConversionError(errorMessage) {
   const message = String(errorMessage || '').toLowerCase()
 
@@ -114,6 +118,7 @@ export default function ConverteLinksPage() {
   const charsOverLimit = text.length > MAX_TEXT_LENGTH
   const linksOverLimit = detectedCount > MAX_LINKS
   const noisyTextWithoutLinks = text.trim().length >= 240 && detectedCount === 0
+  const ambiguousSeparators = hasAmbiguousSeparators(text)
 
   async function copyText(value, feedback = 'Link copiado.', itemKey = '') {
     if (!value) return
@@ -158,6 +163,12 @@ export default function ConverteLinksPage() {
       return
     }
 
+    if (ambiguousSeparators) {
+      setError('Separe múltiplos links com quebra de linha (Enter). Não use ponto e vírgula entre links.')
+      setRequestPhase('idle')
+      return
+    }
+
     setRequestPhase('submitting')
     setSubmitting(true)
     try {
@@ -193,20 +204,20 @@ export default function ConverteLinksPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="rounded-2xl bg-white p-4 shadow-sm sm:p-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-3">
           <div>
             <label htmlFor="links" className="text-sm font-bold text-gray-900">Links para converter</label>
             <p className="mt-1 text-xs leading-5 text-gray-500">No celular, cole tudo aqui: um link por linha ou texto completo da oferta.</p>
-            <div className="mt-2 flex flex-wrap gap-2" aria-label="Dicas rápidas de uso">
-              <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-700">1 link por linha</span>
-              <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-700">Aceita texto com links</span>
-              <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-1 text-[11px] font-semibold text-green-800">Máximo {MAX_LINKS} links por envio</span>
+            <div className="mt-2 grid grid-cols-1 gap-1.5 text-[11px] sm:flex sm:flex-wrap sm:gap-2" aria-label="Dicas rápidas de uso">
+              <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 font-semibold text-gray-700">✅ Separe links com Enter (1 por linha)</span>
+              <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 font-semibold text-gray-700">✅ Também aceita texto com links no meio</span>
+              <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-1 font-semibold text-green-800">⚠️ Não use ; para separar links</span>
             </div>
           </div>
           <button
             type="button"
             onClick={() => { setText(''); setResponse(null); setError(''); setCopyFeedback(''); setCopiedItemKey(''); setRequestPhase('idle') }}
-            className="hidden min-h-10 items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold text-gray-700 transition hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 sm:inline-flex"
+            className="inline-flex min-h-10 w-full items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold text-gray-700 transition hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 sm:hidden"
           >
             Limpar
           </button>
@@ -220,6 +231,8 @@ export default function ConverteLinksPage() {
           placeholder="Exemplo:\nhttps://www.amazon.com.br/dp/...\nhttps://produto.mercadolivre.com.br/..."
           className="mt-3 w-full rounded-2xl border border-gray-300 px-3 py-3 text-base text-gray-900 shadow-sm outline-none transition placeholder:text-sm placeholder:text-gray-400 focus:border-green-500 focus:ring-2 focus:ring-green-500/20 sm:px-4 sm:text-sm"
         />
+
+        <p className="mt-2 text-xs font-medium text-gray-600">Para vários links: cole um por linha. Exemplo: link1 + Enter + link2 + Enter + link3.</p>
 
         <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-between">
           <MetricPill label="Detectados" value={detectedCount || '0'} tone={linksOverLimit ? 'danger' : detectedCount ? 'success' : 'neutral'} />
@@ -263,7 +276,7 @@ export default function ConverteLinksPage() {
             <button
               type="button"
               onClick={() => { setText(''); setResponse(null); setError(''); setCopyFeedback(''); setCopiedItemKey(''); setRequestPhase('idle') }}
-              className="inline-flex min-h-12 items-center justify-center rounded-xl border border-gray-300 px-4 py-3 text-sm font-bold text-gray-700 transition hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 sm:hidden"
+              className="hidden min-h-12 items-center justify-center rounded-xl border border-gray-300 px-4 py-3 text-sm font-bold text-gray-700 transition hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2"
             >
               Limpar
             </button>
