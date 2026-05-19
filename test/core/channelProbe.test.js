@@ -6,6 +6,7 @@ import {
   runProbeWatchdog,
   PROBE_STALE_WINDOW_MS,
 } from '../../src/core/channelProbe.js'
+import { __resetCacheForTests } from '../../src/billing/plans.js'
 
 function makeFakeDb({ channels = [], channelHealth = new Map() } = {}) {
   return {
@@ -33,6 +34,9 @@ function makeFakeDb({ channels = [], channelHealth = new Map() } = {}) {
         return { count }
       },
     },
+    user: {
+      findUnique: async () => ({ plan: 'pro', accessExpiresAt: null }),
+    },
   }
 }
 
@@ -53,6 +57,7 @@ test('recordProbeSeen é idempotente (sobrescreve com timestamp novo)', async ()
 })
 
 test('runProbeWatchdog não altera canal sem post recente', async () => {
+  __resetCacheForTests()
   const channelHealth = new Map([
     ['g-1', { groupId: 'g-1', status: 'green', lastPostedAt: null, lastProbeSeenAt: null }],
   ])
@@ -66,6 +71,7 @@ test('runProbeWatchdog não altera canal sem post recente', async () => {
 })
 
 test('runProbeWatchdog flag yellow quando lastPostedAt > stale window e probe não viu', async () => {
+  __resetCacheForTests()
   const now = Date.now()
   const channelHealth = new Map([
     ['g-1', {
@@ -84,6 +90,7 @@ test('runProbeWatchdog flag yellow quando lastPostedAt > stale window e probe n�
 })
 
 test('runProbeWatchdog flag yellow quando probe viu ANTES do último post (stale)', async () => {
+  __resetCacheForTests()
   const now = Date.now()
   const channelHealth = new Map([
     ['g-1', {
@@ -101,6 +108,7 @@ test('runProbeWatchdog flag yellow quando probe viu ANTES do último post (stale
 })
 
 test('runProbeWatchdog NÃO mexe em canais já em red/critical', async () => {
+  __resetCacheForTests()
   const now = Date.now()
   const channelHealth = new Map([
     ['g-1', {
@@ -118,6 +126,7 @@ test('runProbeWatchdog NÃO mexe em canais já em red/critical', async () => {
 })
 
 test('runProbeWatchdog: probe viu DEPOIS do post → mantém verde', async () => {
+  __resetCacheForTests()
   const now = Date.now()
   const channelHealth = new Map([
     ['g-1', {
