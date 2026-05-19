@@ -13,7 +13,13 @@ export function RecentFollowsList() {
     try { setError(''); const d = await api.preservationFollows(20); setItems(d.items ?? []) }
     catch (e) { setError(e.message) }
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    let active = true
+    api.preservationFollows(20)
+      .then(d => { if (active) setItems(d.items ?? []) })
+      .catch(e => { if (active) setError(e.message) })
+    return () => { active = false }
+  }, [])
 
   return (
     <section className="bg-white rounded-2xl shadow p-4">

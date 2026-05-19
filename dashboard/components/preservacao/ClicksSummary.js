@@ -11,7 +11,13 @@ export function ClicksSummary() {
     try { setError(''); setData(await api.preservationClicks()) }
     catch (e) { setError(e.message) }
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    let active = true
+    api.preservationClicks()
+      .then(d => { if (active) setData(d) })
+      .catch(e => { if (active) setError(e.message) })
+    return () => { active = false }
+  }, [])
 
   return (
     <section className="bg-white rounded-2xl shadow p-4">

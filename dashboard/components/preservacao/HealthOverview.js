@@ -19,12 +19,10 @@ export function HealthOverview() {
 
   useEffect(() => {
     let active = true
-    setError('')
     api.preservationHealth()
       .then(data => { if (active) setItems(data.items ?? []) })
       .catch(e => { if (active) setError(e.message) })
     return () => { active = false }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (

@@ -11,7 +11,13 @@ export function SnapshotsList() {
     try { setError(''); const d = await api.preservationSnapshots(); setItems(d.items ?? []) }
     catch (e) { setError(e.message) }
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    let active = true
+    api.preservationSnapshots()
+      .then(d => { if (active) setItems(d.items ?? []) })
+      .catch(e => { if (active) setError(e.message) })
+    return () => { active = false }
+  }, [])
 
   return (
     <section className="bg-white rounded-2xl shadow p-4">
