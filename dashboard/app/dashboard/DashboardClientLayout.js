@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { api } from '@/lib/api'
+import { canAccessAdvancedPreservation } from '@/lib/plan'
 
 const navGroups = [
   {
@@ -22,6 +23,14 @@ const navGroups = [
       { href: '/dashboard/credenciais', icon: '🔑', label: 'Credenciais' },
       { href: '/dashboard/configuracoes', icon: '⚙️', label: 'Configurações' },
       { href: '/dashboard/tutorial', icon: '📘', label: 'Tutorial' },
+    ],
+  },
+  {
+    title: 'Preservação Avançada',
+    pro: true,
+    items: [
+      { href: '/dashboard/preservacao/monitoramento', icon: '📊', label: 'Monitoramento' },
+      { href: '/dashboard/preservacao/configuracoes',  icon: '⚙️', label: 'Configurações avançadas' },
     ],
   },
   {
@@ -160,6 +169,7 @@ export default function DashboardClientLayout({ children }) {
         <div className="flex flex-col gap-1">
           {group.items.map(item => {
             const active = isActive(item.href)
+            const itemLocked = group.pro && !canAccessAdvancedPreservation(currentUser)
             return (
               <Link
                 key={item.href}
@@ -170,10 +180,10 @@ export default function DashboardClientLayout({ children }) {
                   active
                     ? 'bg-white text-green-700'
                     : 'hover:bg-green-600'
-                }`}
+                } ${itemLocked ? 'opacity-70' : ''}`}
               >
                 <span aria-hidden="true">{item.icon}</span>
-                <span>{item.label}</span>
+                <span>{item.label}{itemLocked ? ' 🔒' : ''}</span>
                 {expiredInfo && item.href === '/dashboard/assinaturas' && (
                   <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold ${active ? 'bg-red-100 text-red-700' : 'bg-red-500 text-white'}`}>Vencido</span>
                 )}
