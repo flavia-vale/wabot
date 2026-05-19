@@ -80,7 +80,7 @@ export function Pricing() {
           <h2 style={{ ...s.h2, marginTop: 16 }}>
             Escolha o plano para <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>começar e escalar</span> sua operação.
           </h2>
-          <p style={s.sub}>Planos públicos: Trial com experiência Pro por 7 dias, Basic focado em grupos e Pro com grupos + canais + Módulo de Preservação Avançada. Valores podem ser atualizados pelo painel administrativo após validação em staging.</p>
+          <p style={s.sub}>Planos públicos: Trial com experiência Pro por 7 dias, Basic focado em grupos (canais no Pro) e Pro com grupos + canais + Módulo de Preservação Avançada. Valores podem ser atualizados pelo painel administrativo após validação em staging.</p>
         </div>
 
         <div style={s.grid} className="landing-pricing-grid">
