@@ -159,12 +159,31 @@ function extractMetaPrice(html) {
   return ''
 }
 
+// Landings sociais do Mercado Livre (meli.la, mluvem.com, /social/...) embedam
+// o produto destacado num JSON inline com a estrutura:
+//   "price":{"previous_price":{"value":599.99,...},"current_price":{"value":399.99,...}}
+// A primeira ocorrência é o produto que a share aponta — pegamos esses dois
+// valores diretamente, já que /produto/MLB* normal cai em anti-bot.
+function extractFromMercadoLivreLanding(html) {
+  const block = html.match(/"price"\s*:\s*\{[^{}]*"previous_price"\s*:\s*\{\s*"value"\s*:\s*([0-9]+(?:\.[0-9]+)?)[^{}]*\}[^{}]*"current_price"\s*:\s*\{\s*"value"\s*:\s*([0-9]+(?:\.[0-9]+)?)/)
+  if (block) {
+    return { oldPrice: toPriceString(block[1]), newPrice: toPriceString(block[2]) }
+  }
+  // Em ofertas sem desconto, só vem current_price — devolvemos só o novo.
+  const single = html.match(/"current_price"\s*:\s*\{\s*"value"\s*:\s*([0-9]+(?:\.[0-9]+)?)/)
+  if (single) {
+    return { oldPrice: '', newPrice: toPriceString(single[1]) }
+  }
+  return null
+}
+
 export async function fetchProductInfo(url, opts = {}) {
   const { html, finalUrl } = await fetchHtml(url, opts)
   if (!html) return { title: '', oldPrice: '', newPrice: '', finalUrl }
   const jsonLd = extractFromJsonLd(html)
+  const mlLanding = extractFromMercadoLivreLanding(html)
   const title = jsonLd?.title || extractTitleFallback(html)
-  const newPrice = jsonLd?.newPrice || extractMetaPrice(html)
-  const oldPrice = jsonLd?.oldPrice || ''
+  const newPrice = jsonLd?.newPrice || mlLanding?.newPrice || extractMetaPrice(html)
+  const oldPrice = jsonLd?.oldPrice || mlLanding?.oldPrice || ''
   return { title, oldPrice, newPrice, finalUrl }
 }
