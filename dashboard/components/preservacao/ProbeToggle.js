@@ -3,7 +3,7 @@
 export function ProbeToggle({ value, onChange, disabled, probeAccountSessionId }) {
   return (
     <fieldset className="bg-white rounded-2xl shadow p-5">
-      <legend className="text-base font-semibold text-gray-800">🔭 Probe externo</legend>
+      <legend className="text-base font-semibold text-gray-800">🔭 Observador externo</legend>
       <p className="text-xs text-gray-500 mb-3">
         Uma segunda conta WhatsApp conectada como observadora confere se suas mensagens chegam nos canais de destino. Se não chega, o bot marca o canal em estado de alerta.
       </p>
@@ -15,10 +15,10 @@ export function ProbeToggle({ value, onChange, disabled, probeAccountSessionId }
           disabled={disabled}
           className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-400"
         />
-        <span className="text-sm text-gray-700">Ativar probe externo</span>
+        <span className="text-sm text-gray-700">Ativar observador externo</span>
       </label>
       <p className="text-[11px] text-gray-500 mt-2">
-        Conta probe configurada no servidor: <span className="font-mono">{probeAccountSessionId ?? 'nenhuma'}</span>.
+        Conta observadora configurada no servidor: <span className="font-mono">{probeAccountSessionId ?? 'nenhuma'}</span>.
         Pra trocar, fale com o suporte.
       </p>
     </fieldset>
