@@ -19,12 +19,73 @@ para reaproveitar o mesmo conteúdo.
 Nunca pular staging. Nunca subir direto em `main`. Nunca fazer amend em
 commits já mergeados — sempre criar commit novo.
 
+## Processos PM2 (canônico)
+
+| App                      | Ambiente | Responsabilidade                                              |
+|--------------------------|----------|---------------------------------------------------------------|
+| `api`                    | prod     | Fastify HTTP + JWT + rotas                                    |
+| `dashboard`              | prod     | Next.js                                                       |
+| `bot-supervisor`         | prod     | Ciclo de vida das sessões WhatsApp (fork dos bot-workers)     |
+| `snapshot-cron`          | prod     | Cron diário de snapshots de canais                            |
+| `api-staging`            | staging  | Espelho da API                                                |
+| `visual-staging`         | staging  | Espelho do dashboard                                          |
+| `bot-supervisor-staging` | staging  | Espelho do supervisor                                         |
+
+**Por que `bot-supervisor` existe**: historicamente a API fazia `fork()`
+dos workers WhatsApp. Toda vez que a API reiniciava (deploy, OOM, bug)
+**todas as sessões caíam juntas**, com risco de ban em massa e perda de
+mensagens em vôo. O supervisor é um processo PM2 separado que assume o
+`fork()` dos workers e fala com a API só via Redis (BullMQ para comandos,
+pub/sub para eventos QR/status). Reiniciar a API deixa de tocar nas
+sessões.
+
+### Seleção de modo via `BOT_SUPERVISOR_MODE`
+
+A API decide quem gerencia os bots via env var `BOT_SUPERVISOR_MODE`:
+
+- **`inline`** (default histórico): a API faz `fork()` dos workers ela mesma.
+  Deploy da API derruba todas as sessões.
+- **`remote`**: a API só envia comandos via BullMQ no Redis; o app
+  `bot-supervisor` faz `fork()` dos workers. Deploy da API **não** toca
+  nas sessões.
+
+Cutover seguro (validar staging primeiro):
+
+1. Subir Redis local no VPS (`redis-server`, bind 127.0.0.1, AOF on).
+2. `pm2 start ecosystem.config.cjs --only bot-supervisor-staging`
+3. Setar `BOT_SUPERVISOR_MODE=remote` no env da `api-staging` e
+   `pm2 restart api-staging`. Confirmar pelo dashboard staging que QR,
+   status e envio funcionam end-to-end.
+4. Teste de aceitação: `pm2 restart api-staging` enquanto há sessão
+   conectada — sessão **deve continuar conectada** (esse é o ponto).
+5. Repetir para produção (`bot-supervisor` + `pm2 restart api`).
+
+Rollback: setar `BOT_SUPERVISOR_MODE=inline` + `pm2 restart api/api-staging`.
+Janela ≤ 2min.
+
+**Pré-requisito do modo `remote`:** Redis local em `REDIS_URL`
+(`redis://127.0.0.1:6379/0` prod, `/1` staging). No modo `inline` o
+Redis é opcional.
+
+### Arquivos do supervisor (não confundir)
+
+- `src/supervisor/protocol.js` — contrato (nomes de filas, eventos,
+  timeouts). [PROTECTED_CORE]. Mudança breaking exige bumping de
+  `PROTOCOL_VERSION`.
+- `src/supervisor/client.js` — usado pela API quando em modo `remote`.
+  Mantém a mesma superfície de `src/core/sessionCore.js` para que rotas
+  não mudem ao alternar de modo.
+- `src/supervisor/index.js` — entrypoint do app PM2 `bot-supervisor`.
+- `src/manager.js` — fachada que escolhe inline vs remote por env var;
+  consumido por todas as rotas. **Não importar `sessionCore` direto** —
+  sempre via `manager.js`.
+
 ## Ambientes e portas (canônico — não inventar valores)
 
 | Ambiente | Branch  | Diretório no VPS   | PM2 apps                        | Dashboard PORT | API_PORT | URL pública                   |
 |----------|---------|--------------------|---------------------------------|----------------|----------|-------------------------------|
-| Staging  | develop | `~/wabot-staging`  | `visual-staging`, `api-staging` | `3006`         | `3004`   | `http://178.105.54.0:3006`    |
-| Produção | main    | `~/wabot`          | `dashboard`, `api`              | `3000`         | `3001`   | `http://espelhagrupos.com.br` |
+| Staging  | develop | `~/wabot-staging`  | `visual-staging`, `api-staging`, `bot-supervisor-staging` | `3006`         | `3004`   | `http://178.105.54.0:3006`    |
+| Produção | main    | `~/wabot`          | `dashboard`, `api`, `bot-supervisor` | `3000`         | `3001`   | `http://espelhagrupos.com.br` |
 
 O proxy do Next (`dashboard/app/api/[...path]/route.js`) já mapeia
 `3006 → 3004` e `3000 → 3001` automaticamente via header `host`.
@@ -52,6 +113,10 @@ BOT_LOG_DIR=/home/deploy/wabot-staging-shared/logs
 AUTO_START_WHATSAPP_SESSIONS=true
 DASHBOARD_URL=http://178.105.54.0:3006
 API_URL=http://178.105.54.0:3006
+# BOT_SUPERVISOR_MODE: 'inline' (default) ou 'remote'. Em 'remote', a API
+# delega ciclo de vida dos bots ao app PM2 bot-supervisor-staging via Redis.
+BOT_SUPERVISOR_MODE=inline
+REDIS_URL=redis://127.0.0.1:6379/1
 ```
 
 ### `~/wabot-staging/dashboard/.env.local`
@@ -72,6 +137,9 @@ BOT_LOG_DIR=/home/deploy/BOTinho-shared/logs
 AUTO_START_WHATSAPP_SESSIONS=true
 DASHBOARD_URL=http://espelhagrupos.com.br
 API_URL=http://espelhagrupos.com.br
+# Ver seção "Processos PM2" para detalhes sobre cutover inline -> remote.
+BOT_SUPERVISOR_MODE=inline
+REDIS_URL=redis://127.0.0.1:6379/0
 ```
 
 ### `~/wabot/dashboard/.env.local`
