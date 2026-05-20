@@ -780,6 +780,7 @@ export async function adminRoutes(app) {
           status: true,
           plan: true,
           accessExpiresAt: true,
+          createdAt: true,
           lastActivityAt: true,
           lastSupportContactAt: true,
           supportStatus: true,

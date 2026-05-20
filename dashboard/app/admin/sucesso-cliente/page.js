@@ -47,6 +47,7 @@ export default function CustomerSuccessPage() {
   const [metrics, setMetrics] = useState(null)
   const [reason, setReason] = useState('all')
   const [strategy, setStrategy] = useState('risk_first')
+  const [sortBy, setSortBy] = useState('priority')
   const [limit] = useState(200)
   const [contactTarget, setContactTarget] = useState(null)
   const [savingContact, setSavingContact] = useState(false)
@@ -57,6 +58,9 @@ export default function CustomerSuccessPage() {
     notes: '',
     nextFollowUpAt: '',
   })
+  const [accessTarget, setAccessTarget] = useState(null)
+  const [savingAccess, setSavingAccess] = useState(false)
+  const [accessPayload, setAccessPayload] = useState({ plan: '', expiresAt: '', reason: '' })
 
   const hasCustomerSuccessAccess = useMemo(() => {
     const email = resolveAdminEmail(admin)
@@ -90,6 +94,60 @@ export default function CustomerSuccessPage() {
     }, 0)
     return () => clearTimeout(timer)
   }, [admin, hasCustomerSuccessAccess, loadData, reason, strategy])
+
+  const sortedQueue = useMemo(() => {
+    const items = [...queue]
+    if (sortBy === 'createdAt') {
+      items.sort((a, b) => {
+        const av = a.createdAt ? new Date(a.createdAt).getTime() : 0
+        const bv = b.createdAt ? new Date(b.createdAt).getTime() : 0
+        return bv - av
+      })
+    } else if (sortBy === 'lastContact') {
+      items.sort((a, b) => {
+        const av = a.lastContact?.createdAt ? new Date(a.lastContact.createdAt).getTime() : 0
+        const bv = b.lastContact?.createdAt ? new Date(b.lastContact.createdAt).getTime() : 0
+        return bv - av
+      })
+    } else {
+      items.sort((a, b) => (b.priorityScore || 0) - (a.priorityScore || 0))
+    }
+    return items
+  }, [queue, sortBy])
+
+  function openAccessModal(user) {
+    const expires = user.accessExpiresAt
+      ? new Date(user.accessExpiresAt).toISOString().slice(0, 10)
+      : ''
+    setAccessPayload({ plan: user.plan || '', expiresAt: expires, reason: '' })
+    setAccessTarget(user)
+  }
+
+  async function saveAccessChange() {
+    if (!accessTarget) return
+    if (!accessPayload.reason || accessPayload.reason.trim().length < 5) {
+      setError('Motivo precisa ter pelo menos 5 caracteres.')
+      return
+    }
+    if (!accessPayload.plan && !accessPayload.expiresAt) {
+      setError('Informe plano ou data de expiração.')
+      return
+    }
+    setSavingAccess(true)
+    try {
+      const payload = { reason: accessPayload.reason }
+      if (accessPayload.plan && accessPayload.plan !== accessTarget.plan) payload.plan = accessPayload.plan
+      if (accessPayload.expiresAt) payload.expiresAt = new Date(accessPayload.expiresAt).toISOString()
+      await api.adminUpdateAccess(accessTarget.id, payload)
+      setAccessTarget(null)
+      setAccessPayload({ plan: '', expiresAt: '', reason: '' })
+      await loadData(reason)
+    } catch (err) {
+      setError(err.message || 'Falha ao atualizar acesso.')
+    } finally {
+      setSavingAccess(false)
+    }
+  }
 
   async function saveContactLog() {
     if (!contactTarget) return
@@ -179,6 +237,12 @@ export default function CustomerSuccessPage() {
             <button onClick={() => setStrategy('risk_first')} className={`rounded-full px-3 py-1.5 font-bold ring-1 ${strategy === 'risk_first' ? 'bg-slate-900 text-white ring-slate-900' : 'bg-white text-gray-600 ring-gray-200'}`}>Risco primeiro</button>
             <button onClick={() => setStrategy('value_first')} className={`rounded-full px-3 py-1.5 font-bold ring-1 ${strategy === 'value_first' ? 'bg-slate-900 text-white ring-slate-900' : 'bg-white text-gray-600 ring-gray-200'}`}>Risco + valor</button>
           </div>
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-bold text-gray-600">Ordenar por:</span>
+            <button onClick={() => setSortBy('priority')} className={`rounded-full px-3 py-1.5 font-bold ring-1 ${sortBy === 'priority' ? 'bg-indigo-600 text-white ring-indigo-600' : 'bg-white text-gray-600 ring-gray-200'}`}>Prioridade</button>
+            <button onClick={() => setSortBy('createdAt')} className={`rounded-full px-3 py-1.5 font-bold ring-1 ${sortBy === 'createdAt' ? 'bg-indigo-600 text-white ring-indigo-600' : 'bg-white text-gray-600 ring-gray-200'}`}>Data de criação</button>
+            <button onClick={() => setSortBy('lastContact')} className={`rounded-full px-3 py-1.5 font-bold ring-1 ${sortBy === 'lastContact' ? 'bg-indigo-600 text-white ring-indigo-600' : 'bg-white text-gray-600 ring-gray-200'}`}>Último contato</button>
+          </div>
           <div className="mb-4 flex flex-wrap gap-2">
             {Object.entries(REASON_LABELS).map(([key, label]) => (
               <button key={key} onClick={() => setReason(key)} className={`rounded-full px-3 py-1.5 text-xs font-bold ring-1 ${reason === key ? 'bg-emerald-600 text-white ring-emerald-600' : 'bg-white text-gray-600 ring-gray-200'}`}>{label}</button>
@@ -189,27 +253,28 @@ export default function CustomerSuccessPage() {
             <table className="min-w-full text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-gray-400">
                 <tr>
-                  <th className="px-3 py-2">Cliente</th><th className="px-3 py-2">Contato</th><th className="px-3 py-2">Motivos</th><th className="px-3 py-2">Prioridade</th><th className="px-3 py-2">Peso valor</th><th className="px-3 py-2">Experimento</th><th className="px-3 py-2">Ação sugerida</th><th className="px-3 py-2">Último contato</th><th className="px-3 py-2">Ações</th>
+                  <th className="px-3 py-2">Cliente</th><th className="px-3 py-2">Contato</th><th className="px-3 py-2">Criado em</th><th className="px-3 py-2">Motivos</th><th className="px-3 py-2">Prioridade</th><th className="px-3 py-2">Peso valor</th><th className="px-3 py-2">Experimento</th><th className="px-3 py-2">Ação sugerida</th><th className="px-3 py-2">Último contato</th><th className="px-3 py-2">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {queue.map(user => {
+                {sortedQueue.map(user => {
                   const phone = normalizePhone(user.contactPhone)
                   return (
                     <tr key={user.id}>
                       <td className="px-3 py-3"><p className="font-bold text-gray-900">{user.email}</p><p className="text-xs text-gray-500">Plano: {user.plan} · WA: {user.waSession?.status || '—'}</p></td>
                       <td className="px-3 py-3 text-xs">{user.contactPhone || 'Sem celular'}</td>
+                      <td className="px-3 py-3 text-xs text-gray-600">{formatDate(user.createdAt)}</td>
                       <td className="px-3 py-3 text-xs">{(user.contactReasons || []).map(item => <span key={item} className="mb-1 mr-1 inline-block rounded-full bg-amber-100 px-2 py-1 font-bold text-amber-700">{REASON_LABELS[item] || item}</span>)}</td>
                       <td className="px-3 py-3"><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{user.priorityScore ?? 0}</span></td><td className="px-3 py-3 text-xs">{user.financialWeight ?? 0}</td><td className="px-3 py-3 text-xs">{user.experimentVariant || '—'}</td>
                       <td className="px-3 py-3 text-xs text-gray-700">{user.suggestedAction || 'Diagnosticar causa de risco'}</td>
                       <td className="px-3 py-3 text-xs text-gray-600">{formatDate(user.lastContact?.createdAt)}<br />{user.lastContact ? (CONTACT_OUTCOMES[user.lastContact.outcome] || user.lastContact.outcome) : 'Sem registro'}</td>
-                      <td className="px-3 py-3"><div className="flex flex-wrap gap-2"><a href={phone ? `https://wa.me/${phone}` : undefined} target="_blank" rel="noreferrer" className={`rounded-lg px-3 py-2 text-xs font-bold ${phone ? 'bg-green-600 text-white' : 'pointer-events-none bg-gray-200 text-gray-500'}`}>WhatsApp</a><button onClick={() => { setContactTarget(user); setContactPayload(prev => ({ ...prev, reason: user.contactReasons?.[0] || '', notes: `Playbook: ${user.suggestedAction || 'Diagnóstico'} | Variante: ${user.experimentVariant || 'n/a'}` })) }} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Registrar contato</button></div></td>
+                      <td className="px-3 py-3"><div className="flex flex-wrap gap-2"><a href={phone ? `https://wa.me/${phone}` : undefined} target="_blank" rel="noreferrer" className={`rounded-lg px-3 py-2 text-xs font-bold ${phone ? 'bg-green-600 text-white' : 'pointer-events-none bg-gray-200 text-gray-500'}`}>WhatsApp</a><button onClick={() => { setContactTarget(user); setContactPayload(prev => ({ ...prev, reason: user.contactReasons?.[0] || '', notes: `Playbook: ${user.suggestedAction || 'Diagnóstico'} | Variante: ${user.experimentVariant || 'n/a'}` })) }} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Registrar contato</button><button onClick={() => openAccessModal(user)} className="rounded-lg bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700">Ajustar plano</button></div></td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
-            {!queue.length && <p className="py-8 text-center text-sm text-gray-400">Nenhum cliente na fila para este filtro.</p>}
+            {!sortedQueue.length && <p className="py-8 text-center text-sm text-gray-400">Nenhum cliente na fila para este filtro.</p>}
           </div>
         </section>
 
@@ -226,6 +291,33 @@ export default function CustomerSuccessPage() {
                 <textarea value={contactPayload.notes} onChange={e => setContactPayload(prev => ({ ...prev, notes: e.target.value }))} placeholder="Notas" className="min-h-24 rounded-xl border border-gray-200 px-3 py-2 text-sm" />
               </div>
               <div className="mt-4 flex justify-end gap-2"><button onClick={() => setContactTarget(null)} className="rounded-lg bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-700">Cancelar</button><button disabled={savingContact} onClick={saveContactLog} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{savingContact ? 'Salvando...' : 'Salvar contato'}</button></div>
+            </div>
+          </div>
+        )}
+
+        {accessTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl">
+              <h3 className="text-lg font-black text-gray-900">Ajustar plano e expiração</h3>
+              <p className="mt-1 text-sm text-gray-500">{accessTarget.email}</p>
+              <p className="mt-1 text-xs text-gray-400">Plano atual: {accessTarget.plan || '—'} · Expira: {formatDate(accessTarget.accessExpiresAt)}</p>
+              <div className="mt-4 grid gap-3">
+                <label className="text-xs font-semibold text-gray-600">Modalidade do plano
+                  <select value={accessPayload.plan} onChange={e => setAccessPayload(prev => ({ ...prev, plan: e.target.value }))} className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm">
+                    <option value="">— Manter ({accessTarget.plan || '—'}) —</option>
+                    <option value="trial">Trial</option>
+                    <option value="basic">Basic</option>
+                    <option value="pro">Pro</option>
+                  </select>
+                </label>
+                <label className="text-xs font-semibold text-gray-600">Data de expiração
+                  <input type="date" value={accessPayload.expiresAt} onChange={e => setAccessPayload(prev => ({ ...prev, expiresAt: e.target.value }))} className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm" />
+                </label>
+                <label className="text-xs font-semibold text-gray-600">Motivo (mín. 5 caracteres)
+                  <textarea value={accessPayload.reason} onChange={e => setAccessPayload(prev => ({ ...prev, reason: e.target.value }))} placeholder="Ex: upgrade contratado pelo cliente" className="mt-1 min-h-20 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm" />
+                </label>
+              </div>
+              <div className="mt-4 flex justify-end gap-2"><button onClick={() => setAccessTarget(null)} className="rounded-lg bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-700">Cancelar</button><button disabled={savingAccess} onClick={saveAccessChange} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{savingAccess ? 'Salvando...' : 'Salvar alteração'}</button></div>
             </div>
           </div>
         )}
