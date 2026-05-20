@@ -45,13 +45,41 @@ Esta matriz padroniza a medição do P0 da campanha. O objetivo é diferenciar v
 | Blog posts da campanha | `blog_campaign_landing` | `article_next_step_secondary` | `consideration` | `landing` | `/bot-canais-whatsapp` |
 | Diagnóstico | `diagnostic_direct_signup` | `result_secondary` | `diagnostic` | `signup` | `/login` |
 
+## CTAs P1 implementados
+
+| Origem | CTA | `cta_position` | `cta_stage` | `cta_destination` | Destino |
+|---|---|---|---|---|---|
+| Landing P1 assets | `landing_checklist` | `p1_assets_primary` | `lead_magnet` | `checklist` | `/materiais/checklist-antiban-whatsapp` |
+| Landing P1 assets | `landing_risk_calculator` | `p1_assets_secondary` | `tool` | `calculator` | `/ferramentas/calculadora-risco-whatsapp` |
+| Páginas comerciais P1 assets | `commercial_checklist` | `p1_assets_primary` | `lead_magnet` | `checklist` | `/materiais/checklist-antiban-whatsapp` |
+| Páginas comerciais P1 assets | `commercial_risk_calculator` | `p1_assets_secondary` | `tool` | `calculator` | `/ferramentas/calculadora-risco-whatsapp` |
+| Blog posts da campanha | `blog_checklist` | `article_next_step_secondary` | `lead_magnet` | `checklist` | `/materiais/checklist-antiban-whatsapp` |
+| Blog posts da campanha | `blog_risk_calculator` | `article_next_step_tool` | `tool` | `calculator` | `/ferramentas/calculadora-risco-whatsapp` |
+| Checklist de preservação | `checklist_diagnostic` | `body_primary` | `diagnostic` | `diagnostic` | `/diagnostico-antiban-whatsapp` |
+| Checklist de preservação | `checklist_risk_calculator` | `body_secondary` | `tool` | `calculator` | `/ferramentas/calculadora-risco-whatsapp` |
+| Calculadora de risco | `risk_calculator_checklist` | `result_primary` | `lead_magnet` | `checklist` | `/materiais/checklist-antiban-whatsapp` |
+| Calculadora de risco | `risk_calculator_signup` | `result_secondary` | `conversion` | `signup` | `/login` |
+
+## CTAs P2 implementados
+
+| Origem | CTA | `cta_position` | `cta_stage` | `cta_destination` | Destino |
+|---|---|---|---|---|---|
+| Landing P2 assets | `landing_p2_decision` | `p2_assets` | `decision` | `decision_page` | páginas P2 |
+| Páginas P2 hero | `p2_diagnostic` | `decision_cta` | `diagnostic` | `diagnostic` | `/diagnostico-antiban-whatsapp` |
+| Páginas P2 hero | `p2_checklist` | `decision_cta` | `lead_magnet` | `checklist` | `/materiais/checklist-antiban-whatsapp` |
+| Páginas P2 hero | `p2_calculator` | `decision_cta` | `tool` | `calculator` | `/ferramentas/calculadora-risco-whatsapp` |
+| Páginas P2 hero | `p2_signup` | `decision_cta` | `conversion` | `signup` | `/login` |
+| Páginas P2 relacionadas | `p2_related_page` | `related` | `consideration` | `decision_page` | outra página P2 |
+
 ## Funil mínimo de análise
 
 1. **Aquisição:** `organic_page_view` por rota e intenção.
 2. **Interesse:** `organic_cta_click` para diagnóstico ou landing.
 3. **Diagnóstico:** `diagnostic_result_viewed` por faixa de exposição.
 4. **MQL:** `diagnostic_form_submitted` com `score_band` e `profile`.
-5. **Trial/cadastro:** parâmetros enviados ao `/login` com `diagnostic_score_band`.
+5. **Lead magnet/tool:** checklist e calculadora capturam intenção intermediária com `lead_magnet` e `tool`.
+6. **Decisão:** páginas P2 capturam objeções com `decision` e roteiam para diagnóstico, checklist, calculadora ou cadastro.
+7. **Trial/cadastro:** parâmetros enviados ao `/login` com `diagnostic_score_band`, `risk_score_band` ou origem P2.
 
 ## Regras de qualidade
 

@@ -10,8 +10,12 @@ import {
 import { ensureJid, detectKind, parseChannelInviteUrl, JID_KIND } from '../../core/jid.js'
 import { canFollowNow, logFollow } from '../../core/followGuard.js'
 import { getHealth as getChannelHealth } from '../../core/channelHealth.js'
+import { captureSnapshot } from '../../jobs/channelSnapshot.js'
+import { lintChannelTitle, lintCopyTemplate } from '../../core/copyLinter.js'
+import { recomputeScore as recomputeReportRiskScore } from '../../core/reportRiskScore.js'
+import { recordProbeSeen } from '../../core/channelProbe.js'
 import { FORWARD_MODE, NO_LINK_SCOPE, normalizeForwardingPolicy } from '../../forwardingPolicy.js'
-import { buildFeatureGateError, canUseChannels, FEATURE_CODES } from '../../billing/plans.js'
+import { buildFeatureGateError, canUseAdvancedPreservation, canUseChannels, FEATURE_CODES } from '../../billing/plans.js'
 
 const ALLOWED_KINDS = new Set([JID_KIND.GROUP, JID_KIND.CHANNEL])
 
@@ -36,6 +40,13 @@ async function ensureChannelFeatureAllowed(userId, reply) {
   const user = await getPlanSubject(userId)
   if (canUseChannels(user ?? { plan: 'basic' })) return true
   reply.code(403).send(buildFeatureGateError(FEATURE_CODES.CHANNELS))
+  return false
+}
+
+async function ensureAdvancedPreservationAllowed(userId, reply) {
+  const user = await getPlanSubject(userId)
+  if (canUseAdvancedPreservation(user ?? { plan: 'basic' })) return true
+  reply.code(403).send(buildFeatureGateError(FEATURE_CODES.ADVANCED_PRESERVATION))
   return false
 }
 
@@ -143,6 +154,9 @@ export async function groupsRoutes(app, opts = {}) {
       ? (noLinkScope ?? currentPolicy.noLinkScope ?? NO_LINK_SCOPE.TEXT_ONLY)
       : null
 
+    const enablingAdvancedPreservation = requestedForwardMode === FORWARD_MODE.ALLOW_NO_LINK
+    if (enablingAdvancedPreservation && !(await ensureAdvancedPreservationAllowed(req.user.sub, reply))) return
+
     const updated = await db.group.update({
       where: { id: req.params.id },
       data: {
@@ -232,11 +246,108 @@ export async function groupsRoutes(app, opts = {}) {
     }
   })
 
+  // PR-5.E.2: lint de título/copy. UI chama no submit; warnings nunca
+  // bloqueiam — só alertam o cliente sobre risco de denúncia/banimento.
+  app.post('/lint', { onRequest: [app.authenticate] }, async (req) => {
+    const { title, template } = req.body ?? {}
+    const warnings = []
+    if (typeof title === 'string') warnings.push(...lintChannelTitle(title).warnings)
+    if (typeof template === 'string') warnings.push(...lintCopyTemplate(template).warnings)
+    return { warnings }
+  })
+
+  app.get('/:id/snapshots', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
+    if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'snapshots só vale pra canais' })
+    return db.channelSnapshot.findMany({
+      where: { groupId: group.id },
+      orderBy: { snapshotedAt: 'desc' },
+      take: 30,
+    })
+  })
+
+  app.post('/:id/snapshot-now', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
+    if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'snapshot só vale pra canais' })
+    if (!isRunning(req.user.sub)) return reply.code(503).send({ error: 'WhatsApp não está conectado.' })
+    try {
+      const row = await captureSnapshot(group.id, {
+        userId: req.user.sub,
+        waJid: group.waJid,
+        getMetadata: channelMetadata,
+      })
+      if (!row) return reply.code(502).send({ error: 'Não foi possível obter metadata do canal' })
+      return row
+    } catch (err) {
+      req.log.warn({ err: err.message, groupId: group.id }, 'snapshot-now falhou')
+      return reply.code(502).send({ error: err.message ?? 'Falha ao capturar snapshot' })
+    }
+  })
+
+  app.post('/:id/recreate', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
+    if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'recreate só vale pra canais' })
+    const newJid = req.body?.newJid
+    if (!newJid || typeof newJid !== 'string' || !newJid.endsWith('@newsletter')) {
+      return reply.code(400).send({ error: 'newJid inválido (deve terminar em @newsletter)' })
+    }
+    if (newJid === group.waJid) {
+      return reply.code(400).send({ error: 'newJid é igual ao JID atual' })
+    }
+    if (!isRunning(req.user.sub)) return reply.code(503).send({ error: 'WhatsApp não está conectado.' })
+
+    // Valida ownership do novo canal antes de trocar.
+    let meta
+    try {
+      meta = await channelMetadata(req.user.sub, { jid: newJid })
+    } catch (err) {
+      req.log.warn({ err: err.message, newJid }, 'recreate: falha ao buscar metadata do novo canal')
+      return reply.code(502).send({ error: 'Não foi possível verificar o novo canal' })
+    }
+    if (!meta) return reply.code(404).send({ error: 'Novo canal não encontrado no WhatsApp' })
+    if (!meta.isViewerOwner) return reply.code(403).send({ error: 'Você não é admin do novo canal' })
+
+    const updated = await db.group.update({
+      where: { id: group.id },
+      data: { waJid: newJid, name: meta.name || group.name },
+    })
+    // Reset health/throttle do canal pra começar limpo no novo JID.
+    await db.channelHealth.deleteMany({ where: { groupId: group.id } }).catch(() => {})
+    await db.channelThrottle.deleteMany({ where: { groupId: group.id } }).catch(() => {})
+
+    return { group: updated, owner: meta.owner, name: meta.name }
+  })
+
   app.get('/:id/health', { onRequest: [app.authenticate] }, async (req, reply) => {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
     if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'health só vale pra canais' })
     return getChannelHealth(group.id)
+  })
+
+  // PR-5.C.3: endpoint público (autenticado) que aceita "ping" externo da
+  // conta-probe. Atualiza lastProbeSeenAt no ChannelHealth. O watchdog
+  // periódico decide quando degradar saúde se faltar ping pós-post.
+  app.post('/:id/probe-ping', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
+    if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'probe só vale pra canais' })
+    await recordProbeSeen(group.id)
+    return { ok: true, groupId: group.id }
+  })
+
+  app.post('/:id/risk-score/recompute', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
+    if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
+    if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'risk-score só vale pra canais' })
+    const daysRaw = Number(req.query?.days)
+    const days = Number.isFinite(daysRaw) && daysRaw >= 1 && daysRaw <= 30 ? Math.floor(daysRaw) : 7
+    const out = await recomputeReportRiskScore(group.id, { db, userId: req.user.sub, days })
+    if (!out) return reply.code(404).send({ error: 'Não foi possível calcular' })
+    return out
   })
 
   app.post('/:id/refresh-admin', { onRequest: [app.authenticate] }, async (req, reply) => {

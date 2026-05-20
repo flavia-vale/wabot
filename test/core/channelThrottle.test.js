@@ -1,14 +1,254 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { checkAndReserve, recordPost } from '../../src/core/channelThrottle.js'
+import {
+  checkAndReserve,
+  recordPost,
+  decide,
+  quietHoursState,
+  tzDayBucket,
+  DEFER_REASON,
+} from '../../src/core/channelThrottle.js'
 
-test('checkAndReserve skeleton sempre permite', () => {
-  const decision = checkAndReserve('group-x', {})
-  assert.equal(decision.allow, true)
+const SEC = 1000
+const MIN = 60 * SEC
+const HOUR = 60 * MIN
+
+const DEFAULT_CONFIG = {
+  channelMinIntervalSec: 30,
+  channelBurstCap: 6,
+  channelBurstWindowSec: 600,
+  channelDailyCap: null,
+  channelStaggerJitterMs: 0,
+  channelQuietHoursJson: '{"startHour":0,"endHour":6,"tz":"America/Sao_Paulo"}',
+}
+
+// 2026-01-15 14:00 UTC = 11:00 BRT (UTC-3) → fora do quiet 0–6
+const NOON_BRT_MS = Date.UTC(2026, 0, 15, 14, 0, 0)
+// 2026-01-15 05:30 UTC = 02:30 BRT → dentro do quiet 0–6
+const EARLY_BRT_MS = Date.UTC(2026, 0, 15, 5, 30, 0)
+
+// ---------- helpers puros ----------
+
+test('quietHoursState detecta fora do intervalo', () => {
+  const state = quietHoursState(NOON_BRT_MS, { startHour: 0, endHour: 6, tz: 'America/Sao_Paulo' })
+  assert.equal(state.inQuiet, false)
+  assert.equal(state.deferMs, 0)
 })
 
-test('recordPost skeleton é no-op', async () => {
-  const result = await recordPost('group-x')
-  assert.equal(result, null)
+test('quietHoursState detecta dentro do intervalo e calcula tempo até o fim', () => {
+  const state = quietHoursState(EARLY_BRT_MS, { startHour: 0, endHour: 6, tz: 'America/Sao_Paulo' })
+  assert.equal(state.inQuiet, true)
+  // 02:30 → 06:00 = 3h30 = 12_600_000ms
+  assert.equal(state.deferMs, 3.5 * HOUR)
+})
+
+test('quietHoursState com janela que cruza meia-noite', () => {
+  // quiet 22-06 BRT, agora 23:00 BRT = 02:00 UTC do dia seguinte
+  const at23BRT = Date.UTC(2026, 0, 16, 2, 0, 0)
+  const state = quietHoursState(at23BRT, { startHour: 22, endHour: 6, tz: 'America/Sao_Paulo' })
+  assert.equal(state.inQuiet, true)
+  // 23:00 → 06:00 (próximo dia) = 7h
+  assert.equal(state.deferMs, 7 * HOUR)
+})
+
+test('tzDayBucket retorna data no formato yyyy-mm-dd no tz informado', () => {
+  // 2026-01-16 02:00 UTC = 2026-01-15 23:00 BRT
+  const lateBRT = Date.UTC(2026, 0, 16, 2, 0, 0)
+  assert.equal(tzDayBucket(lateBRT, 'America/Sao_Paulo'), '2026-01-15')
+  assert.equal(tzDayBucket(lateBRT, 'UTC'), '2026-01-16')
+})
+
+// ---------- decide ----------
+
+test('decide: canal pausado pelo health → recusa', () => {
+  const res = decide({
+    now: NOON_BRT_MS,
+    throttle: null,
+    isPaused: true,
+    pausedUntil: NOON_BRT_MS + HOUR,
+    botConfig: DEFAULT_CONFIG,
+  })
+  assert.equal(res.allow, false)
+  assert.equal(res.reason, DEFER_REASON.HEALTH_PAUSED)
+})
+
+test('decide: quiet hours difere até fim do intervalo', () => {
+  const res = decide({
+    now: EARLY_BRT_MS,
+    throttle: null,
+    isPaused: false,
+    botConfig: DEFAULT_CONFIG,
+  })
+  assert.equal(res.allow, false)
+  assert.equal(res.reason, DEFER_REASON.QUIET_HOURS)
+  assert.equal(res.deferUntil, EARLY_BRT_MS + 3.5 * HOUR)
+})
+
+test('decide: dailyCap atingido → defer 24h', () => {
+  const res = decide({
+    now: NOON_BRT_MS,
+    throttle: {
+      postsToday: 10,
+      dayBucket: tzDayBucket(NOON_BRT_MS, 'America/Sao_Paulo'),
+      lastPostAt: null,
+      burstWindowStart: null,
+      postsInBurstWindow: 0,
+    },
+    isPaused: false,
+    botConfig: { ...DEFAULT_CONFIG, channelDailyCap: 10 },
+  })
+  assert.equal(res.allow, false)
+  assert.equal(res.reason, DEFER_REASON.DAILY_CAP)
+})
+
+test('decide: dailyCap de outro dia não bloqueia', () => {
+  const res = decide({
+    now: NOON_BRT_MS,
+    throttle: {
+      postsToday: 10,
+      dayBucket: '2025-12-31',
+      lastPostAt: null,
+      burstWindowStart: null,
+      postsInBurstWindow: 0,
+    },
+    isPaused: false,
+    botConfig: { ...DEFAULT_CONFIG, channelDailyCap: 10 },
+  })
+  assert.equal(res.allow, true)
+})
+
+test('decide: intervalo mínimo não fechou → defer até o gap', () => {
+  const lastPostMs = NOON_BRT_MS - 10 * SEC
+  const res = decide({
+    now: NOON_BRT_MS,
+    throttle: {
+      postsToday: 1,
+      dayBucket: tzDayBucket(NOON_BRT_MS, 'America/Sao_Paulo'),
+      lastPostAt: new Date(lastPostMs),
+      burstWindowStart: new Date(lastPostMs),
+      postsInBurstWindow: 1,
+    },
+    isPaused: false,
+    botConfig: DEFAULT_CONFIG,
+  })
+  assert.equal(res.allow, false)
+  assert.equal(res.reason, DEFER_REASON.MIN_INTERVAL)
+  assert.equal(res.deferUntil, lastPostMs + 30 * SEC)
+})
+
+test('decide: burst cap atingido na janela móvel → defer', () => {
+  const windowStart = NOON_BRT_MS - 5 * MIN
+  const res = decide({
+    now: NOON_BRT_MS,
+    throttle: {
+      postsToday: 6,
+      dayBucket: tzDayBucket(NOON_BRT_MS, 'America/Sao_Paulo'),
+      lastPostAt: new Date(NOON_BRT_MS - 60 * SEC),
+      burstWindowStart: new Date(windowStart),
+      postsInBurstWindow: 6,
+    },
+    isPaused: false,
+    botConfig: DEFAULT_CONFIG,
+  })
+  assert.equal(res.allow, false)
+  assert.equal(res.reason, DEFER_REASON.BURST_CAP)
+  // janela começou em -5min, fecha em +5min (600s)
+  assert.equal(res.deferUntil, windowStart + 10 * MIN)
+})
+
+test('decide: burst window expirou → permite', () => {
+  const windowStart = NOON_BRT_MS - 20 * MIN
+  const res = decide({
+    now: NOON_BRT_MS,
+    throttle: {
+      postsToday: 6,
+      dayBucket: tzDayBucket(NOON_BRT_MS, 'America/Sao_Paulo'),
+      lastPostAt: new Date(NOON_BRT_MS - 60 * SEC),
+      burstWindowStart: new Date(windowStart),
+      postsInBurstWindow: 6,
+    },
+    isPaused: false,
+    botConfig: DEFAULT_CONFIG,
+  })
+  assert.equal(res.allow, true)
+})
+
+test('decide: sem throttle anterior → permite', () => {
+  const res = decide({
+    now: NOON_BRT_MS,
+    throttle: null,
+    isPaused: false,
+    botConfig: DEFAULT_CONFIG,
+  })
+  assert.equal(res.allow, true)
+})
+
+// ---------- I/O com fake db ----------
+
+function makeFakeDb(initial = new Map()) {
+  return {
+    _records: initial,
+    channelThrottle: {
+      findUnique: async ({ where }) => initial.get(where.groupId) ?? null,
+      upsert: async ({ where, create, update }) => {
+        const existing = initial.get(where.groupId)
+        const next = existing ? { ...existing, ...update } : { id: 't', groupId: where.groupId, ...create }
+        initial.set(where.groupId, next)
+        return next
+      },
+    },
+  }
+}
+
+test('checkAndReserve aloca o primeiro slot e atualiza throttle', async () => {
+  const db = makeFakeDb()
+  const res = await checkAndReserve('g-1', DEFAULT_CONFIG, {
+    db,
+    now: NOON_BRT_MS,
+    getHealth: async () => ({ status: 'green', pausedUntil: null }),
+  })
+  assert.equal(res.allow, true)
+  const stored = db._records.get('g-1')
+  assert.equal(stored.postsToday, 1)
+  assert.equal(stored.postsInBurstWindow, 1)
+  assert.ok(stored.lastPostAt)
+})
+
+test('checkAndReserve respeita pausa do health', async () => {
+  const db = makeFakeDb()
+  const res = await checkAndReserve('g-1', DEFAULT_CONFIG, {
+    db,
+    now: NOON_BRT_MS,
+    getHealth: async () => ({ status: 'red', pausedUntil: new Date(NOON_BRT_MS + HOUR) }),
+  })
+  assert.equal(res.allow, false)
+  assert.equal(res.reason, DEFER_REASON.HEALTH_PAUSED)
+  // não reservou
+  assert.equal(db._records.size, 0)
+})
+
+test('recordPost incrementa contadores e atualiza burst window', async () => {
+  const db = makeFakeDb()
+  await recordPost('g-1', { db, now: NOON_BRT_MS, botConfig: DEFAULT_CONFIG })
+  await recordPost('g-1', { db, now: NOON_BRT_MS + 60 * SEC, botConfig: DEFAULT_CONFIG })
+  const stored = db._records.get('g-1')
+  assert.equal(stored.postsToday, 2)
+  assert.equal(stored.postsInBurstWindow, 2)
+})
+
+test('checkAndReserve curto-circuita quando preservationActive=false', async () => {
+  const db = {
+    channelThrottle: {
+      findUnique: async () => { throw new Error('NÃO deveria consultar throttle quando gating off') },
+      upsert: async () => { throw new Error('NÃO deveria reservar quando gating off') },
+    },
+  }
+  const result = await checkAndReserve('g-1', { channelMinIntervalSec: 30 }, {
+    db,
+    preservationActive: false,
+    getHealth: async () => ({}),
+  })
+  assert.equal(result.allow, true)
+  assert.equal(result.reason, 'gating_off')
 })

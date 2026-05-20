@@ -175,6 +175,8 @@ export const api = {
 
   convertLinks: (text) =>
     apiFetch('/api/link-conversion/convert', { method: 'POST', body: JSON.stringify({ text }) }),
+  scrapeOffer: (url) =>
+    apiFetch('/api/link-conversion/scrape-offer', { method: 'POST', body: JSON.stringify({ url }) }),
 
   paymentsStatus: () => apiFetch('/api/payments/status'),
   paymentsOverview: () => apiFetch('/api/payments/overview'),
@@ -295,6 +297,24 @@ export const api = {
   followChannelNow: (id) => apiFetch(`/api/groups/${id}/follow-now`, { method: 'POST' }),
   refreshChannelAdmin: (id) => apiFetch(`/api/groups/${id}/refresh-admin`, { method: 'POST' }),
   waChannels: () => apiFetch('/api/groups/wa/channels'),
+
+  // PR-5 follow-up: anti-ban
+  channelHealth: (id) => apiFetch(`/api/groups/${id}/health`),
+  channelSnapshots: (id) => apiFetch(`/api/groups/${id}/snapshots`),
+  channelSnapshotNow: (id) => apiFetch(`/api/groups/${id}/snapshot-now`, { method: 'POST' }),
+  channelRecreate: (id, newJid) => apiFetch(`/api/groups/${id}/recreate`, { method: 'POST', body: JSON.stringify({ newJid }) }),
+  channelRiskScore: (id, days = 7) => apiFetch(`/api/groups/${id}/risk-score/recompute?days=${days}`, { method: 'POST' }),
+  lintChannelCopy: ({ title, template }) => apiFetch('/api/groups/lint', { method: 'POST', body: JSON.stringify({ title, template }) }),
+
+  preservationConfig: () => apiFetch('/api/preservation/config'),
+  updatePreservationConfig: (patch) => apiFetch('/api/preservation/config', { method: 'PUT', body: JSON.stringify(patch) }),
+  preservationHealth: () => apiFetch('/api/preservation/monitoring/health'),
+  preservationRiskScore: () => apiFetch('/api/preservation/monitoring/risk-score'),
+  preservationRiskScoreRecomputeAll: () => apiFetch('/api/preservation/monitoring/risk-score/recompute-all', { method: 'POST' }),
+  preservationFollows: (limit = 20) => apiFetch(`/api/preservation/monitoring/follows?limit=${limit}`),
+  preservationSnapshots: () => apiFetch('/api/preservation/monitoring/snapshots'),
+  preservationProbe: () => apiFetch('/api/preservation/monitoring/probe'),
+  preservationClicks: () => apiFetch('/api/preservation/monitoring/clicks'),
 
   logs: (status = 'all', page = 1, limit = 20) =>
     apiFetch(`/api/logs?status=${status}&page=${page}&limit=${limit}`),

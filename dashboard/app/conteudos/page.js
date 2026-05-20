@@ -81,6 +81,21 @@ const nichePages = [
 
 const methodologyPages = [
   {
+    href: '/faq-antiban-whatsapp',
+    title: 'FAQ anti-ban WhatsApp honesto',
+    description: 'Respostas sobre preservação avançada, chip dedicado, cadência, variações e recuperação.',
+  },
+  {
+    href: '/como-funciona-botinho-canais',
+    title: 'Como funciona o BOTinho para Canais do WhatsApp',
+    description: 'Fluxo operacional de fontes, destinos, cadência, monitoramento e recuperação.',
+  },
+  {
+    href: '/protecao-antiban-botinho',
+    title: 'Proteção anti-ban no BOTinho',
+    description: 'Camadas do Módulo de Preservação Avançada: limites, variações, monitoramento e plano B.',
+  },
+  {
     href: '/metodologia-uso-responsavel-whatsapp',
     title: 'Metodologia de uso responsável no WhatsApp',
     description: 'Critérios públicos para revisar ofertas, links, grupos, cadência e logs antes de escalar automação.',
@@ -89,6 +104,11 @@ const methodologyPages = [
 
 
 const comparisonPages = [
+  {
+    href: '/bot-comum-vs-botinho',
+    title: 'Bot comum vs BOTinho',
+    description: 'Compare repostagem simples com operação preservada para grupos e Canais do WhatsApp.',
+  },
   {
     href: '/comparativos',
     title: 'Hub de comparativos do BOTinho',
@@ -131,6 +151,11 @@ const authorityPages = [
 
 const materials = [
   {
+    href: '/materiais/checklist-antiban-whatsapp',
+    title: 'Checklist de Preservação Avançada para WhatsApp',
+    description: 'Roteiro para revisar chip, cadência, variações, monitoramento e recuperação sem promessa de banimento zero.',
+  },
+  {
     href: '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp',
     title: 'Checklist de divulgação de ofertas em grupos de WhatsApp',
     description: 'Roteiro público para validar oferta, link, copy, grupo e medição.',
@@ -143,6 +168,11 @@ const materials = [
 ]
 
 const benchmarkItems = [
+  {
+    href: '/ferramentas/calculadora-risco-whatsapp',
+    title: 'Calculadora de risco operacional no WhatsApp',
+    description: 'Ferramenta gratuita para estimar exposição por volume, cadência, repetição, chip e monitoramento.',
+  },
   {
     href: '/benchmarks/operacao-grupos-ofertas-whatsapp',
     title: 'Benchmark de operação em grupos de ofertas',
@@ -194,6 +224,7 @@ const roadmapTracks = [
     links: [
       { href: '/blog/como-escalar-grupos-sem-operacao-manual', label: 'Escalar grupos sem operação manual' },
       { href: '/materiais/checklist-operacao-whatsapp', label: 'Checklist de operação para escala' },
+      { href: '/ferramentas/calculadora-risco-whatsapp', label: 'Calculadora de risco operacional' },
     ],
   },
 ]

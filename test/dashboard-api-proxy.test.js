@@ -21,6 +21,29 @@ test('proxy do dashboard roteia porta visual 3000 para API produção 3001', () 
   assert.equal(getProxyUrl(req), 'http://127.0.0.1:3001/api/auth/login')
 })
 
+
+test('proxy usa x-forwarded-host quando host chega sem porta', () => {
+  const req = makeRequest('http://espelhagrupos.com.br/api/auth/login', {
+    host: 'espelhagrupos.com.br',
+    'x-forwarded-host': '178.105.54.0:3006',
+  })
+
+  assert.equal(getApiPort(req), '3004')
+})
+
+test('proxy usa PORT do processo quando headers não trazem porta', () => {
+  const previousPort = process.env.PORT
+  process.env.PORT = '3006'
+
+  try {
+    const req = makeRequest('http://espelhagrupos.com.br/api/auth/login', { host: 'espelhagrupos.com.br' })
+    assert.equal(getApiPort(req), '3004')
+  } finally {
+    if (previousPort === undefined) delete process.env.PORT
+    else process.env.PORT = previousPort
+  }
+})
+
 test('proxy remove headers hop-by-hop e força no-store nas respostas de API', () => {
   const upstream = new Response(JSON.stringify({ ok: true }), {
     status: 200,
