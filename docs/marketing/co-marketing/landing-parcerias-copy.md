@@ -19,10 +19,10 @@ Objetivo: captar parceiros qualificados para piloto controlado
 
 ## Bloco: tipos de parceria
 
-- Webinar/live co-hosted.
-- Checklist/lead magnet conjunto.
-- Cupom exclusivo com UTM dedicada.
-- Case prático de operação por nicho.
+- **Aula ao vivo em parceria:** live prática com conteúdo útil para sua audiência e convite para piloto controlado.
+- **Material gratuito em conjunto:** checklist/guia com co-brand para captar leads qualificados.
+- **Link com cupom exclusivo:** cada parceiro recebe um link próprio para acompanhar resultados com clareza.
+- **Caso real do seu nicho:** estudo prático de antes/depois com aprovação do parceiro antes de publicar.
 
 ## Bloco: o que você recebe
 

@@ -49,7 +49,7 @@ export function ProbeToggle({ value, onChange, disabled, probeAccountSessionId }
           disabled={disabled || !configured}
           className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-400"
         />
-        <span className="text-sm text-gray-700">Ativar probe externo</span>
+        <span className="text-sm text-gray-700">Ativar observador externo</span>
       </label>
       {!configured && (
         <p className="text-[11px] text-gray-400 mt-1 ml-6">

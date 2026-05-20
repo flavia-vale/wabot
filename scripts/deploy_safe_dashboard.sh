@@ -50,6 +50,16 @@ verify_next_jest_worker_process_child() {
   [[ -f "$worker" ]]
 }
 
+run_npm_ci_with_recovery() {
+  local label="$1"
+  if npm ci; then
+    return 0
+  fi
+  echo "  Aviso: 'npm ci' falhou em $label. Estado de node_modules pode estar sujo (ex: ENOTEMPTY). Removendo e tentando novamente uma vez..."
+  rm -rf node_modules
+  npm ci
+}
+
 ensure_dashboard_deps_integrity() {
   if verify_next_polyfill && verify_next_jest_worker_process_child; then
     return 0
@@ -78,14 +88,14 @@ git checkout "$BRANCH"
 git pull --ff-only origin "$BRANCH"
 
 echo "[2/9] Install root dependencies sem alterar lockfile"
-npm ci
+run_npm_ci_with_recovery "root"
 
 echo "[3/9] Apply database migrations"
 npx prisma migrate deploy
 
 echo "[4/9] Install dashboard dependencies"
 cd "$DASHBOARD_DIR"
-npm ci
+run_npm_ci_with_recovery "dashboard"
 ensure_dashboard_deps_integrity
 
 echo "[5/9] Guardrail + build dashboard (hard gate)"

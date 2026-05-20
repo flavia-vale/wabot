@@ -23,9 +23,9 @@ export function ProbeStatus() {
     <section className="bg-white rounded-2xl shadow p-4">
       <header className="flex items-center justify-between mb-3">
         <div>
-          <h3 className="font-semibold text-gray-800 text-sm">🔭 Probe externo</h3>
+          <h3 className="font-semibold text-gray-800 text-sm">🔭 Observador externo</h3>
           <p className="text-xs text-gray-500">
-            O probe é uma conta WhatsApp &quot;observadora&quot; que confere se suas mensagens estão chegando nos canais de destino. Se não chega, é sinal de shadowban.
+            O observador é uma conta WhatsApp adicional que confere se suas mensagens estão chegando nos canais de destino. Se não chega, é sinal de shadowban.
           </p>
         </div>
         <button onClick={load} className="text-xs text-green-700 hover:underline">Atualizar</button>

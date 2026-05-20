@@ -569,3 +569,6 @@ Pendências que continuam manuais/operacionais:
 - validação em staging (`3006`) e aprovação visual final;
 - revisão jurídica final do termo de lead sharing;
 - operação de CRM e cadência de outreach no time.
+
+
+- `docs/marketing/co-marketing/social-tiktok-instagram.md` (formatos prontos para TikTok e Instagram).

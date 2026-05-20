@@ -1,4 +1,11 @@
 'use client'
+import { PresetButtons } from './PresetButtons'
+
+const PRESETS = [
+  { label: '🛡️ Conservador', tone: 'safe', description: 'Pouquíssimas seguidas/dia — ideal pra contas recém-criadas.', values: { maxDailyFollows: 5 } },
+  { label: '⚖️ Médio', tone: 'medium', description: 'Ritmo equilibrado pra contas já aquecidas.', values: { maxDailyFollows: 15 } },
+  { label: '⚡ Leve', tone: 'aggressive', description: 'Crescimento mais rápido, com mais risco.', values: { maxDailyFollows: 30 } },
+]
 
 export function FollowGuardForm({ value, onChange, disabled }) {
   return (
@@ -7,6 +14,7 @@ export function FollowGuardForm({ value, onChange, disabled }) {
       <p className="text-xs text-gray-500 mb-3">
         Quantos canais novos o bot pode começar a seguir em um único dia. Vai começando devagar pra contas novas — esse limite é o teto.
       </p>
+      <PresetButtons presets={PRESETS} onApply={onChange} disabled={disabled} />
       <label className="block">
         <span className="text-xs font-medium text-gray-700">Máximo diário</span>
         <input
