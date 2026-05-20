@@ -427,6 +427,19 @@ function resolveEffectiveLastActivity(user, lastMessageAt = null) {
   return user.lastActivityAt > lastMessageAt ? user.lastActivityAt : lastMessageAt
 }
 
+async function countAnalyticsEventSafe(event, from, to) {
+  try {
+    const rows = await db.$queryRaw`
+      SELECT COUNT(*) AS count FROM "AnalyticsEvent"
+      WHERE event = ${event} AND createdAt >= ${from} AND createdAt <= ${to}
+    `
+    const row = Array.isArray(rows) ? rows[0] : null
+    return Number(row?.count ?? 0) || 0
+  } catch {
+    return 0
+  }
+}
+
 async function getLogCountMap({ status, since, userIds = null }) {
   if (Array.isArray(userIds) && userIds.length === 0) return new Map()
   const rows = await db.messageLog.groupBy({
@@ -869,10 +882,10 @@ export async function adminRoutes(app) {
         where: { createdAt: { gte: from, lte: to } },
         _count: { _all: true },
       }),
-      db.analyticsEvent.count({ where: { event: 'cs_offer_shown', createdAt: { gte: from, lte: to } } }).catch(() => 0),
-      db.analyticsEvent.count({ where: { event: 'cs_offer_accepted', createdAt: { gte: from, lte: to } } }).catch(() => 0),
-      db.analyticsEvent.count({ where: { event: 'cs_retained_7d', createdAt: { gte: from, lte: to } } }).catch(() => 0),
-      db.analyticsEvent.count({ where: { event: 'cs_retained_30d', createdAt: { gte: from, lte: to } } }).catch(() => 0),
+      countAnalyticsEventSafe('cs_offer_shown', from, to),
+      countAnalyticsEventSafe('cs_offer_accepted', from, to),
+      countAnalyticsEventSafe('cs_retained_7d', from, to),
+      countAnalyticsEventSafe('cs_retained_30d', from, to),
     ])
 
     const contactsTotal = contacts.reduce((sum, row) => sum + (row?._count?._all || 0), 0)
