@@ -150,6 +150,9 @@
     grid-column: span 6 !important;
     min-height: unset !important;
   }
+  .landing-root .landing-preservation-card {
+    grid-template-columns: 1fr !important;
+  }
   .landing-root .landing-pricing-grid,
   .landing-root .landing-how-steps,
   .landing-root .landing-social-grid {
