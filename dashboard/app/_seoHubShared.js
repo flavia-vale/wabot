@@ -85,6 +85,17 @@ export function SeoHubPage({ hubSlug }) {
     },
   }
 
+  const itemListJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    itemListElement: spokes.map((spoke, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: spoke.label,
+      url: `${siteUrl}${spoke.path}`,
+    })),
+  }
+
   const breadcrumbJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
@@ -105,6 +116,7 @@ export function SeoHubPage({ hubSlug }) {
     <div className="landing-root">
       <OrganicPageTracker route={route} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(collectionJsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(itemListJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbJsonLd) }} />
       <Hero
         eyebrowLabel={content.eyebrow}

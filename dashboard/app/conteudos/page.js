@@ -15,6 +15,36 @@ const formattedLastUpdated = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'long
 
 const blogPosts = [
   {
+    href: '/blog/grupo-ou-canal-whatsapp-achadinhos',
+    title: 'Guia: grupo ou canal para achadinhos no WhatsApp',
+    description: 'Compare grupos e canais para organizar achadinhos com menos ruído e mais preservação operacional.',
+  },
+  {
+    href: '/blog/como-evitar-banimento-whatsapp-afiliados',
+    title: 'Como reduzir o risco de banimento no WhatsApp para afiliados',
+    description: 'Checklist honesto de chip dedicado, cadência, variações e preservação avançada.',
+  },
+  {
+    href: '/blog/shadowban-whatsapp-canais',
+    title: 'Shadowban em Canais do WhatsApp: sinais silenciosos',
+    description: 'Sinais de queda de entrega e cliques para monitorar antes do prejuízo.',
+  },
+  {
+    href: '/blog/migrar-grupo-achadinhos-para-canal',
+    title: 'Como migrar grupo de achadinhos para Canal do WhatsApp',
+    description: 'Passo a passo para migrar sem abandonar comunidade nem quebrar rotina.',
+  },
+  {
+    href: '/blog/chip-dedicado-bot-whatsapp',
+    title: 'Por que afiliados devem usar chip dedicado no bot do WhatsApp',
+    description: 'Separe número pessoal da infraestrutura de canais, grupos e ofertas.',
+  },
+  {
+    href: '/blog/bot-whatsapp-antiban-existe',
+    title: 'Bot “anti-ban” para WhatsApp existe? A resposta honesta',
+    description: 'Por que promessa absoluta é perigosa e como funciona preservação avançada.',
+  },
+  {
     href: '/blog/conferir-converter-link-afiliado-whatsapp',
     title: 'Como conferir e converter link de afiliado para WhatsApp',
     description: 'Evite perda de comissão ao validar tag, redirecionamento e destino final antes da divulgação.',
@@ -51,6 +81,21 @@ const nichePages = [
 
 const methodologyPages = [
   {
+    href: '/faq-antiban-whatsapp',
+    title: 'FAQ anti-ban WhatsApp honesto',
+    description: 'Respostas sobre preservação avançada, chip dedicado, cadência, variações e recuperação.',
+  },
+  {
+    href: '/como-funciona-botinho-canais',
+    title: 'Como funciona o BOTinho para Canais do WhatsApp',
+    description: 'Fluxo operacional de fontes, destinos, cadência, monitoramento e recuperação.',
+  },
+  {
+    href: '/protecao-antiban-botinho',
+    title: 'Proteção anti-ban no BOTinho',
+    description: 'Camadas do Módulo de Preservação Avançada: limites, variações, monitoramento e plano B.',
+  },
+  {
     href: '/metodologia-uso-responsavel-whatsapp',
     title: 'Metodologia de uso responsável no WhatsApp',
     description: 'Critérios públicos para revisar ofertas, links, grupos, cadência e logs antes de escalar automação.',
@@ -59,6 +104,11 @@ const methodologyPages = [
 
 
 const comparisonPages = [
+  {
+    href: '/bot-comum-vs-botinho',
+    title: 'Bot comum vs BOTinho',
+    description: 'Compare repostagem simples com operação preservada para grupos e Canais do WhatsApp.',
+  },
   {
     href: '/comparativos',
     title: 'Hub de comparativos do BOTinho',
@@ -101,6 +151,11 @@ const authorityPages = [
 
 const materials = [
   {
+    href: '/materiais/checklist-antiban-whatsapp',
+    title: 'Checklist de Preservação Avançada para WhatsApp',
+    description: 'Roteiro para revisar chip, cadência, variações, monitoramento e recuperação sem promessa de banimento zero.',
+  },
+  {
     href: '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp',
     title: 'Checklist de divulgação de ofertas em grupos de WhatsApp',
     description: 'Roteiro público para validar oferta, link, copy, grupo e medição.',
@@ -113,6 +168,11 @@ const materials = [
 ]
 
 const benchmarkItems = [
+  {
+    href: '/ferramentas/calculadora-risco-whatsapp',
+    title: 'Calculadora de risco operacional no WhatsApp',
+    description: 'Ferramenta gratuita para estimar exposição por volume, cadência, repetição, chip e monitoramento.',
+  },
   {
     href: '/benchmarks/operacao-grupos-ofertas-whatsapp',
     title: 'Benchmark de operação em grupos de ofertas',
@@ -164,6 +224,7 @@ const roadmapTracks = [
     links: [
       { href: '/blog/como-escalar-grupos-sem-operacao-manual', label: 'Escalar grupos sem operação manual' },
       { href: '/materiais/checklist-operacao-whatsapp', label: 'Checklist de operação para escala' },
+      { href: '/ferramentas/calculadora-risco-whatsapp', label: 'Calculadora de risco operacional' },
     ],
   },
 ]
