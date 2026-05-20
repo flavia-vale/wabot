@@ -402,3 +402,14 @@ model TutorialContent {
   images    String   @default("[]")
   updatedAt DateTime @updatedAt
 }
+
+model AnalyticsEvent {
+  id        String   @id
+  userId    String?
+  event     String
+  metadata  String   @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([event, createdAt])
+  @@index([userId, createdAt])
+}
