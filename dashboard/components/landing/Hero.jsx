@@ -81,14 +81,14 @@ export function Hero({ tone, primaryCtaLabel = 'Conectar meu WhatsApp', eyebrowL
   const headline = headlineOverride ?? (tone === 'direto'
     ? <><span>Ofertas conferidas,</span><br /><span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>rotina organizada.</span></>
     : tone === 'animado'
-    ? <><span>Grupos e canais geram ofertas.</span><br /><span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>Você organiza.</span> 💜</>
-    : <><span>Promoções conferidas</span><br />viram <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>rotina no seu grupo/canal.</span></>);
+    ? <><span>Os grupos geram ofertas.</span><br /><span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>Você organiza.</span> 💜</>
+    : <><span>Promoções conferidas</span><br />viram <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>rotina no seu grupo.</span></>);
 
   const sub = subOverride ?? (tone === 'direto'
-    ? 'Você escolhe os grupos e/ou canais de promoção que quer monitorar. O bot pega cada link da Shopee, ML ou Amazon, ajuda a usar suas credenciais cadastradas e prepara a postagem para seu grupo e/ou canal de achadinhos.'
+    ? 'Você escolhe os grupos de promoção que quer monitorar. O bot pega cada link da Shopee, ML ou Amazon, ajuda a usar suas credenciais cadastradas e prepara a postagem para seu grupo de achadinhos.'
     : tone === 'animado'
-    ? 'Aqueles grupos e canais lotados de promoção que você acompanha? O bot monitora conforme sua configuração. Cada link suportado pode ser conferido, organizado e enviado para o seu grupo e/ou canal com cadência. ✨'
-    : 'Você indica os grupos e/ou canais que quer monitorar (de promoções, ofertas, achadinhos). O bot detecta cada link da Shopee, ML ou Amazon, usa as credenciais cadastradas quando aplicável e reposta no seu próprio grupo e/ou canal de clientes com controle operacional.');
+    ? 'Aqueles grupos lotados de promoção que você acompanha? O bot monitora conforme sua configuração. Cada link suportado pode ser conferido, organizado e enviado para o seu grupo com cadência. ✨'
+    : 'Você indica os grupos que quer monitorar (de promoções, ofertas, achadinhos). O bot detecta cada link da Shopee, ML ou Amazon, usa as credenciais cadastradas quando aplicável e reposta no seu próprio grupo de clientes com controle operacional.');
 
   return (
     <div className="wrap" style={{ position: 'relative' }}>

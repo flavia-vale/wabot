@@ -179,29 +179,9 @@ export function PreservationBlogPost({ postKey }) {
             </Link>
             <Link
               className="rounded-2xl border border-emerald-200 px-5 py-4 text-center font-black text-emerald-700 no-underline hover:bg-emerald-50"
-              href="/materiais/checklist-antiban-whatsapp?utm_source=blog&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=article_checklist_cta"
-              data-seo-cta="blog_checklist"
-              data-cta-position="article_next_step_secondary"
-              data-cta-stage="lead_magnet"
-              data-cta-destination="checklist"
-            >
-              Ver checklist de preservação
-            </Link>
-            <Link
-              className="rounded-2xl border border-emerald-200 px-5 py-4 text-center font-black text-emerald-700 no-underline hover:bg-emerald-50"
-              href="/ferramentas/calculadora-risco-whatsapp?utm_source=blog&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=article_risk_calculator_cta"
-              data-seo-cta="blog_risk_calculator"
-              data-cta-position="article_next_step_tool"
-              data-cta-stage="tool"
-              data-cta-destination="calculator"
-            >
-              Calcular risco operacional
-            </Link>
-            <Link
-              className="rounded-2xl border border-emerald-200 px-5 py-4 text-center font-black text-emerald-700 no-underline hover:bg-emerald-50"
               href="/bot-canais-whatsapp?utm_source=blog&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=article_landing_cta"
               data-seo-cta="blog_campaign_landing"
-              data-cta-position="article_next_step_landing"
+              data-cta-position="article_next_step_secondary"
               data-cta-stage="consideration"
               data-cta-destination="landing"
             >

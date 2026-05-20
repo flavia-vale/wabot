@@ -30,14 +30,12 @@ import { logFollow } from './core/followGuard.js'
 import {
   recordSendResult as recordChannelSendResult,
   recordStreamError as recordChannelStreamError,
+  isChannelPaused,
+  getHealth as getChannelHealth,
 } from './core/channelHealth.js'
-import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
-import { applyVariation } from './core/copyVariation.js'
-import { mutate as mutateChannelImage } from './core/imageMutation.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
-import { getAdvancedPreservationAccess } from './billing/plans.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
@@ -295,8 +293,7 @@ async function loadConfig() {
   botConfig.brandingGroupLink = normalizeBrandingLink(botConfig.brandingGroupLink)
   botConfig.brandingCtaText = normalizeBrandingCtaText(botConfig.brandingCtaText)
 
-  const preservation = await getAdvancedPreservationAccess(userId, { db })
-  return { credentials, groups, plan: user.plan, botConfig, preservationActive: preservation.active }
+  return { credentials, groups, plan: user.plan, botConfig }
 }
 
 async function getConfig() {
@@ -594,8 +591,8 @@ async function processSendJob(job) {
       await sleep(totalDelayMs)
     }
 
-    // PR-5.C.1 + 5.B.1: lookup do groupId do canal-destino (uma vez por job)
-    // para alimentar ChannelHealth e passar pelo velocity scheduler.
+    // PR-5.C.1: lookup do groupId do canal-destino (uma vez por job) para
+    // alimentar ChannelHealth e respeitar pausedUntil.
     let channelGroupId = null
     if (isChannelDestination(job.destJid)) {
       try {
@@ -605,38 +602,16 @@ async function processSendJob(job) {
         })
         channelGroupId = g?.id ?? null
         if (channelGroupId) {
-          // checkAndReserve já cobre: pausa por health, quiet hours, daily cap,
-          // intervalo mínimo, burst cap. Reserva o slot quando libera.
-          const cfgFull = await getConfig().catch(() => null)
-          const cfg = cfgFull?.botConfig ?? {}
-          const decision = await throttleCheckAndReserve(channelGroupId, cfg, {
-            preservationActive: cfgFull?.preservationActive ?? false,
-          })
-          if (!decision.allow) {
-            const waitMs = Math.max(0, (decision.deferUntil ?? Date.now()) - Date.now())
-            const SHORT_DEFER_MS = 2 * 60 * 1000 // 2min
-            if (waitMs <= SHORT_DEFER_MS) {
-              logger.info({ destJid: job.destJid, reason: decision.reason, waitMs }, 'Velocity scheduler: aguardando defer curto')
-              await sleep(waitMs)
-              // tenta de novo (reserva real); se ainda negar, aborta
-              const retry = await throttleCheckAndReserve(channelGroupId, cfg, {
-                preservationActive: cfgFull?.preservationActive ?? false,
-              })
-              if (!retry.allow) {
-                const err = new Error(`Canal throttled (${retry.reason}) até ${new Date(retry.deferUntil ?? Date.now()).toISOString()}`)
-                err.code = 'CHANNEL_THROTTLED'
-                throw err
-              }
-            } else {
-              const err = new Error(`Canal throttled (${decision.reason}); defer ${Math.round(waitMs / 1000)}s excede limite`)
-              err.code = 'CHANNEL_THROTTLED'
-              throw err
-            }
+          const health = await getChannelHealth(channelGroupId)
+          if (isChannelPaused(health)) {
+            const err = new Error(`Canal pausado por saúde (${health.status}) até ${health.pausedUntil}`)
+            err.code = 'CHANNEL_PAUSED'
+            throw err
           }
         }
       } catch (err) {
-        if (err.code === 'CHANNEL_PAUSED' || err.code === 'CHANNEL_THROTTLED') throw err
-        logger.warn({ err: err?.message, destJid: job.destJid }, 'channelHealth/throttle lookup falhou; seguindo sem pausa')
+        if (err.code === 'CHANNEL_PAUSED') throw err
+        logger.warn({ err: err?.message, destJid: job.destJid }, 'channelHealth lookup falhou; seguindo sem pausa')
       }
     }
 
@@ -1168,12 +1143,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 
       const baseDestinations = monitorGroup?.targetPostJids?.length ? monitorGroup.targetPostJids : cfg.groups.post
       const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
-      // PR-5.B.2: stagger entre destinos para quebrar simultaneidade exata.
-      // Primeiro destino sem atraso; demais com jitter aleatório limitado.
-      const staggerJitterMs = Math.max(0, Number(cfg.botConfig.channelStaggerJitterMs ?? 0))
-      let destIndex = -1
       for (const destJid of destinations) {
-        destIndex++
         const dedupSubject = primary.url || `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
         const key = `${destJid}:${dedupSubject}`
         if (dedup.links[key] && Date.now() - dedup.links[key] < dedupeWindowMs) {
@@ -1211,29 +1181,14 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         })
         let sentVia = 'text'
 
-        // PR-5.B.2: variação de copy por canal-destino (determinística por
-        // destJid+data). Aplica só em canal — em grupo não há fingerprint
-        // de "mesma mensagem em N", então mantém texto original.
-        const isChannelDest = isChannelDestination(destJid)
-        const variantText = isChannelDest
-          ? (cfg.preservationActive
-              ? applyVariation(finalText, { groupId: destJid, poolJson: cfg.botConfig.copyVariationPoolJson })
-              : finalText)
-          : finalText
-
-        // Stagger: 1º destino sai sem atraso adicional; demais recebem jitter.
-        const staggerMs = (destIndex > 0 && isChannelDest && cfg.preservationActive && staggerJitterMs > 0)
-          ? Math.floor(Math.random() * staggerJitterMs)
-          : 0
-
         const accepted = await enqueueSendJob({
           type: 'converted',
           logId: log.id,
           destJid,
           platforms,
           plan: cfg.plan,
-          delayMs: buildSmartDelayMs(cfg.botConfig) + staggerMs,
-          typingDelayMs: calculateTypingDelayMs({ text: variantText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
+          delayMs: buildSmartDelayMs(cfg.botConfig),
+          typingDelayMs: calculateTypingDelayMs({ text: finalText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           buildPayload: async () => {
             // Para canal-destino, nunca usar relay (sendMessage com payload limpo).
             // Para grupo-destino com mídia original, deixar relayMessage cuidar (return null).
@@ -1252,22 +1207,10 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
               if (imageMode === 'original' && !image) {
                 useLinkPreview = true
               }
-
-              // PR-5.B.2: mutação de imagem APÓS o scraper (fora do bloco
-              // protegido). Só para canal-destino; valida >=800px após crop.
-              if (image && isChannelDest && cfg.preservationActive && cfg.botConfig.imageMutationEnabled) {
-                const mutated = await mutateChannelImage(image.buffer, image.mimetype, {
-                  groupId: destJid,
-                  enabled: true,
-                })
-                if (mutated.buffer !== image.buffer) {
-                  image = { ...image, buffer: mutated.buffer, mimetype: mutated.mimetype }
-                }
-              }
             }
 
             return buildMonitoredMessagePayload({
-              finalText: variantText,
+              finalText,
               image,
               useLinkPreview,
             })
@@ -1276,7 +1219,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             if (original) {
               const replayProto = { ...original.proto }
               if (original.type === 'imageMessage' || original.type === 'videoMessage') {
-                replayProto.caption = variantText
+                replayProto.caption = finalText
               }
               await sendSock.relayMessage(destJid, { [original.type]: replayProto }, {})
               sentVia = `relay:${original.type}`

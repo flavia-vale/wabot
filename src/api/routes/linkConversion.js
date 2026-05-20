@@ -1,7 +1,6 @@
 import db from '../../db.js'
 import { detectLinks } from '../../detector.js'
 import { convertLink as defaultConvertLink } from '../../converters/index.js'
-import { fetchProductInfo as defaultFetchProductInfo } from '../../converters/productInfoScraper.js'
 import { parseCredentialData, validateCredentialData } from '../../credentialHealth.js'
 
 const MAX_LINKS_PER_REQUEST = 10
@@ -90,41 +89,13 @@ function resolveOperationalOptions(opts) {
   }
 }
 
-const SCRAPE_OFFER_URL_RE = /^https?:\/\/[^\s]+$/i
-
 export async function linkConversionRoutes(app, opts = {}) {
   const convertLink = opts.converter ?? defaultConvertLink
-  const fetchProductInfo = opts.fetchProductInfo ?? defaultFetchProductInfo
   const findCredentials = opts.findCredentials ?? ((userId) => db.credential.findMany({ where: { userId } }))
   const rateState = opts.rateState ?? new Map()
   const getNow = opts.now ?? (() => Date.now())
   const operational = resolveOperationalOptions(opts)
   let activeRequestsGlobal = 0
-
-  app.post('/scrape-offer', { onRequest: [app.authenticate], bodyLimit: BODY_LIMIT_BYTES }, async (req, reply) => {
-    const url = normalizeText(req.body?.url)
-    if (!url || !SCRAPE_OFFER_URL_RE.test(url)) {
-      return reply.code(400).send({
-        error: 'Cole um link válido começando com http(s):// para gerar a oferta.',
-        code: 'SCRAPE_OFFER_INVALID_URL',
-      })
-    }
-    try {
-      const info = await fetchProductInfo(url)
-      return {
-        title: info?.title || '',
-        oldPrice: info?.oldPrice || '',
-        newPrice: info?.newPrice || '',
-        finalUrl: info?.finalUrl || url,
-      }
-    } catch (err) {
-      app.log.warn({ err: err.message, url }, 'Falha ao buscar informações do produto')
-      return reply.code(502).send({
-        error: 'Não foi possível ler as informações do produto agora. Preencha o template manualmente ou tente outro link.',
-        code: 'SCRAPE_OFFER_FETCH_FAILED',
-      })
-    }
-  })
 
   app.post('/convert', { onRequest: [app.authenticate], bodyLimit: BODY_LIMIT_BYTES }, async (req, reply) => {
     const userId = req.user.sub

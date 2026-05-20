@@ -183,17 +183,3 @@ test('logFollow grava com status e error', async () => {
   assert.equal(created.status, 'rate_limited')
   assert.equal(created.error, 'overlimit')
 })
-
-test('canFollowNow nega quando preservationActive=false', async () => {
-  const db = {
-    followLog: { findMany: async () => { throw new Error('não deve consultar') } },
-    waSession: { findFirst: async () => ({ createdAt: new Date() }) },
-  }
-  const decision = await canFollowNow('u-1', {
-    db,
-    preservationActive: false,
-    botConfig: { maxDailyFollows: 3 },
-  })
-  assert.equal(decision.allow, false)
-  assert.equal(decision.reason, 'gating_off')
-})

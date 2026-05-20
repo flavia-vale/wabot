@@ -6,7 +6,7 @@ export const BRAND_SAME_AS = [
   'https://wa.me/5532999844020',
 ]
 
-export const PRODUCT_DEFINITION = 'O BOTinho, do Espelha Grupos, é um software web para afiliados, curadores de ofertas e admins de grupos e canais que organiza grupos e/ou canais de origem e destino, converte links suportados e ajuda a distribuir mensagens de WhatsApp com revisão humana, cadência responsável e histórico de logs.'
+export const PRODUCT_DEFINITION = 'O BOTinho, do Espelha Grupos, é um software web para afiliados, curadores de ofertas e admins de grupos que organiza grupos de origem e destino, converte links suportados e ajuda a distribuir mensagens de WhatsApp com revisão humana, cadência responsável e histórico de logs.'
 
 export const PRODUCT_LIMITATIONS = [
   'Não promete ganho financeiro, comissão ou aumento garantido de vendas.',
@@ -21,9 +21,9 @@ export const DEFAULT_LANDING_PLANS = [
     price: 'R$0',
     priceValue: 0,
     period: '7 dias de validação inicial',
-    desc: 'Teste por 7 dias os recursos completos do Pro: grupos, canais e Módulo de Preservação Avançada.',
+    desc: 'Experimente o fluxo principal antes de escolher um plano pago.',
     cta: 'Começar teste grátis',
-    features: ['Conversão de links suportados', 'Monitoramento de grupos e canais', 'Envio para grupos e canais', 'Módulo de Preservação Avançada', 'Histórico de logs'],
+    features: ['Conversão de links suportados', 'Monitoramento de grupos', 'Envio para grupos de destino', 'Histórico de logs', 'Com anúncios'],
   },
   {
     id: 'basic',
@@ -31,9 +31,9 @@ export const DEFAULT_LANDING_PLANS = [
     price: 'R$39',
     priceValue: 39,
     period: '30 dias',
-    desc: 'Plano focado em grupos, com canais disponíveis no Pro: operação essencial com cadência e filtros básicos.',
+    desc: 'Para operar com os mesmos recursos essenciais do Pro mantendo anúncios no uso.',
     cta: 'Assinar Basic',
-    features: ['Conversão de links suportados', 'Monitoramento e envio em grupos', 'Canais disponíveis no Pro', 'Delay e filtros básicos', 'Histórico de logs'],
+    features: ['Conversão de links suportados', 'Monitoramento de grupos', 'Envio para grupos de destino', 'Histórico de logs', 'Com anúncios'],
   },
   {
     id: 'pro',
@@ -41,10 +41,10 @@ export const DEFAULT_LANDING_PLANS = [
     price: 'R$69',
     priceValue: 69,
     period: '30 dias',
-    desc: 'Tudo do Basic + canais + Módulo de Preservação Avançada para operar com mais controle.',
+    desc: 'Para operar com os mesmos recursos do Basic, sem anúncios na experiência.',
     cta: 'Assinar Pro',
     highlight: true,
-    features: ['Tudo do Basic', 'Monitoramento e envio em canais', 'Módulo de Preservação Avançada', 'Warmup, limites e cadência avançada', 'Histórico de logs'],
+    features: ['Conversão de links suportados', 'Monitoramento de grupos', 'Envio para grupos de destino', 'Histórico de logs', 'Sem anúncios'],
   },
 ]
 
@@ -52,7 +52,7 @@ export const CORE_FAQ_ITEMS = [
   {
     id: 'faq_seed_whatsapp_ban',
     question: 'Vou ser banida do WhatsApp?',
-    answer: 'O BOTinho permite intervalos configuráveis, filtros anti-spam e revisão da operação, mas nenhum software elimina risco de bloqueio. Use apenas grupos e canais autorizados, mensagens relevantes e cadência responsável.',
+    answer: 'O BOTinho permite intervalos configuráveis, filtros anti-spam e revisão da operação, mas nenhum software elimina risco de bloqueio. Use apenas grupos autorizados, mensagens relevantes e cadência responsável.',
   },
   {
     id: 'faq_seed_cancel',
@@ -72,7 +72,7 @@ export const CORE_FAQ_ITEMS = [
   {
     id: 'faq_seed_text',
     question: 'Posso controlar os envios?',
-    answer: 'Sim. Você define grupos e/ou canais de origem e destino, filtros por palavras, plataformas permitidas e acompanha os envios pelo histórico de logs.',
+    answer: 'Sim. Você define grupos de origem e destino, filtros por palavras, plataformas permitidas e acompanha os envios pelo histórico de logs.',
   },
 ]
 
@@ -83,10 +83,10 @@ export const RESPONSIBLE_OPERATION_POINTS = [
   },
   {
     title: 'Cadência em vez de spam',
-    body: 'Use intervalos, grupos e canais autorizados e mensagens relevantes para reduzir ruído e proteger a experiência da comunidade.',
+    body: 'Use intervalos, grupos autorizados e mensagens relevantes para reduzir ruído e proteger a experiência da comunidade.',
   },
   {
     title: 'Logs para aprender com a operação',
-    body: 'Acompanhe histórico de envios e falhas para ajustar grupos/canais, horários e campanhas com evidência operacional.',
+    body: 'Acompanhe histórico de envios e falhas para ajustar grupos, horários e campanhas com evidência operacional.',
   },
 ]

@@ -27,7 +27,6 @@ function AddChannelModalContent({ onClose, onCreated }) {
   const [role, setRole] = useState('monitor')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [lintWarnings, setLintWarnings] = useState([])
   // followedList: null = não carregado ainda (usuária precisa clicar "Carregar"),
   // array = resultado da chamada (possivelmente vazio)
   const [followedList, setFollowedList] = useState(null)
@@ -83,14 +82,6 @@ function AddChannelModalContent({ onClose, onCreated }) {
     }
     setBusy(true); setError('')
     try {
-      // PR-5.E.2: lint o título antes de salvar. Warnings não bloqueiam —
-      // ficam visíveis acima do submit para o cliente revisar depois.
-      try {
-        const result = await api.lintChannelCopy({ title: finalName })
-        setLintWarnings(result?.warnings ?? [])
-      } catch {
-        setLintWarnings([])
-      }
       const group = await api.addGroup(preview.jid, finalName, role, 'channel')
       if (role === 'monitor') {
         api.followChannelNow(group.id).catch(() => {})
@@ -240,18 +231,6 @@ function AddChannelModalContent({ onClose, onCreated }) {
             {busy ? 'Salvando…' : 'Cadastrar canal'}
           </button>
         </div>
-
-        {lintWarnings.length > 0 && (
-          <div className="mt-3 p-3 border border-amber-300 bg-amber-50 rounded text-sm">
-            <div className="font-medium text-amber-900 mb-1">⚠ Aviso sobre o nome do canal</div>
-            <ul className="list-disc pl-5 text-amber-900">
-              {lintWarnings.map((w, i) => <li key={i}>{w.message}</li>)}
-            </ul>
-            <p className="mt-2 text-xs text-amber-700">
-              O canal foi cadastrado — esses avisos são sugestões para reduzir risco de denúncia.
-            </p>
-          </div>
-        )}
       </div>
     </div>
   )

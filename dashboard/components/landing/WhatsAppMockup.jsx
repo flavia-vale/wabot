@@ -96,13 +96,13 @@ function OrigemPhone() {
         <div style={waStyles.avatar('linear-gradient(135deg,#94A3B8,#475569)')}>PB</div>
         <div style={{ flex: 1 }}>
           <div style={waStyles.groupName}>Promoções Brasil 🔥</div>
-          <div style={waStyles.groupMembers}>1.842 membros · grupo/canal de origem</div>
+          <div style={waStyles.groupMembers}>1.842 membros · grupo de origem</div>
         </div>
       </div>
       <div style={waStyles.body}>
         <div style={waStyles.systemMsg}>Hoje</div>
         <div style={waStyles.bubble(false)}>
-          <div style={waStyles.senderName('#C77758')}>Admin da origem</div>
+          <div style={waStyles.senderName('#C77758')}>Admin do grupo</div>
           Promo relâmpago! Sandália linda na Shopee 😍
           <div style={{ marginTop: 4 }}>
             <span style={waStyles.link}>shopee.com.br/sandalia-bege-A12X9</span>
@@ -127,7 +127,7 @@ function DestinoPhone() {
         <div style={waStyles.avatar()}>AS</div>
         <div style={{ flex: 1 }}>
           <div style={waStyles.groupName}>Achados da Sol 💜</div>
-          <div style={waStyles.groupMembers}>247 membros · seu grupo/canal</div>
+          <div style={waStyles.groupMembers}>247 membros · seu grupo</div>
         </div>
       </div>
       <div style={waStyles.body}>
@@ -166,7 +166,7 @@ export function WhatsAppMockup() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, alignSelf: 'center', fontSize: 12, color: 'var(--ink-soft)' }}>
         <div style={{ width: 1, height: 16, background: 'var(--line)' }} />
         <span style={{ padding: '4px 12px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 999, fontWeight: 500 }}>
-          ↓ converte e reposta no grupo/canal
+          ↓ converte e reposta no seu grupo
         </span>
         <div style={{ width: 1, height: 16, background: 'var(--line)' }} />
       </div>

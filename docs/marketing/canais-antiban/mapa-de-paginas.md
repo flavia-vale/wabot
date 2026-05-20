@@ -2,7 +2,7 @@
 
 Este mapa prioriza ativos que podem ser construídos por IA/Codex antes da produção de Reels, carrosséis e vídeos.
 
-> Status pós-implementação inicial: veja o plano revisado com lacunas e prioridades em [`plano-revisado-prioridades.md`](./plano-revisado-prioridades.md). A matriz de medição P0 está em [`matriz-eventos-utms.md`](./matriz-eventos-utms.md). O backlog pós-P3 está em [`backlog-pos-p3-prioridades.md`](./backlog-pos-p3-prioridades.md).
+> Status pós-implementação inicial: veja o plano revisado com lacunas e prioridades em [`plano-revisado-prioridades.md`](./plano-revisado-prioridades.md). A matriz de medição P0 está em [`matriz-eventos-utms.md`](./matriz-eventos-utms.md).
 
 ## Página principal — Sprint 1
 
@@ -42,8 +42,6 @@ Este mapa prioriza ativos que podem ser construídos por IA/Codex antes da produ
 
 ## Páginas de objeção e decisão — Sprint 6
 
-> Status P2: as quatro páginas de decisão foram implementadas: `/bot-comum-vs-botinho`, `/faq-antiban-whatsapp`, `/como-funciona-botinho-canais` e `/protecao-antiban-botinho`.
-
 | URL | Função | CTA | Prioridade |
 |---|---|---|---|
 | `/bot-comum-vs-botinho` | Diferenciar de bots simples | Comparar minha operação | P2 |
@@ -64,24 +62,11 @@ Este mapa prioriza ativos que podem ser construídos por IA/Codex antes da produ
 
 ## Ferramentas/lead magnets — Sprint 4
 
-> Status P1: `/materiais/checklist-antiban-whatsapp` e `/ferramentas/calculadora-risco-whatsapp` foram implementadas. O diagnóstico P0 está em `/diagnostico-antiban-whatsapp`.
-
 | URL | Ativo | Função | Captura |
 |---|---|---|---|
 | `/diagnostico-antiban-whatsapp` | Diagnóstico de Preservação Avançada | Gerar lead qualificado sem prometer “anti-ban” absoluto | Parcialmente gated |
 | `/materiais/checklist-antiban-whatsapp` | Checklist de Preservação Avançada | Captura simples para buscas “anti-ban” | E-mail/WhatsApp |
 | `/ferramentas/calculadora-risco-whatsapp` | Calculadora de risco | Educação + diagnóstico | Resultado + CTA |
-
-## Distribuição e autoridade — Sprint 7
-
-> Status P3: pacote operacional implementado em [`p3-distribuicao-autoridade.md`](./p3-distribuicao-autoridade.md), com social posts, roteiros de vídeo, provas comerciais e rotina de Search Console.
-
-| Ativo | Arquivo | Prioridade |
-|---|---|---|
-| Posts sociais | [`social-posts.md`](./social-posts.md) | P3 |
-| Roteiros de vídeo | [`roteiros-video.md`](./roteiros-video.md) | P3 |
-| Provas comerciais | [`provas-comerciais.md`](./provas-comerciais.md) | P3 |
-| Search Console | [`search-console-otimizacao.md`](./search-console-otimizacao.md) | P3 |
 
 ## Arquitetura de links internos
 

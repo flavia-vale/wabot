@@ -10,14 +10,6 @@ const siteUrl = getSiteUrl()
 const pageUrl = `${siteUrl}${pagePath}`
 const primaryCtaHref = '/login?mode=register&utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=hero'
 const diagnosticHref = '/diagnostico-antiban-whatsapp?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=modulo_preservacao'
-const checklistHref = '/materiais/checklist-antiban-whatsapp?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=landing_checklist'
-const riskCalculatorHref = '/ferramentas/calculadora-risco-whatsapp?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=landing_calculadora_risco'
-const decisionPages = [
-  { href: '/bot-comum-vs-botinho?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=p2_bot_comum', title: 'Bot comum vs BOTinho', description: 'Compare repostagem simples com operação preservada.' },
-  { href: '/faq-antiban-whatsapp?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=p2_faq', title: 'FAQ “anti-ban” honesto', description: 'Respostas diretas sem promessa de banimento zero.' },
-  { href: '/como-funciona-botinho-canais?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=p2_como_funciona', title: 'Como funciona em canais', description: 'Fluxo de fontes, destinos, cadência e monitoramento.' },
-  { href: '/protecao-antiban-botinho?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=p2_protecao', title: 'Proteção avançada', description: 'Limites, variações, pausa preventiva e recuperação.' },
-]
 
 const title = 'Bot para Canais do WhatsApp com Módulo de Preservação Avançada'
 const description = 'Migre achadinhos para Canais do WhatsApp com o BOTinho: espelhamento entre grupos e canais, ritmo humano, variações, monitoramento e Módulo de Preservação Avançada (o chamado "anti-ban").'
@@ -400,47 +392,6 @@ export default function BotCanaisWhatsAppPage() {
               <p style={{ ...s.lead, fontSize: 18 }}>
                 O BOTinho não controla decisões da plataforma. O Módulo de Preservação Avançada — buscado por muitos afiliados como “anti-ban” — entrega processo: chip dedicado, cadência responsável, variações, monitoramento, pausa preventiva e plano de recuperação para reduzir exposição.
               </p>
-            </div>
-          </div>
-        </section>
-
-        <section style={s.section} aria-labelledby="ativos-p1-title">
-          <div className="wrap">
-            <SectionHeader
-              eyebrow="Ferramentas P1"
-              title="Antes de escalar, transforme risco em checklist e número."
-              body="Use a calculadora para estimar exposição operacional e o checklist para aplicar as camadas de preservação no dia a dia."
-            />
-            <div style={s.grid2}>
-              <article style={s.card}>
-                <h3 id="ativos-p1-title" style={{ fontSize: 24, marginBottom: 10 }}>Checklist de Preservação Avançada</h3>
-                <p style={s.small}>Revise chip dedicado, fontes, destinos, cadência, variações, monitoramento e recuperação sem prometer “anti-ban” absoluto.</p>
-                <Link className="btn btn-accent" style={{ marginTop: 18 }} href={checklistHref} data-seo-cta="landing_checklist" data-cta-position="p1_assets_primary" data-cta-stage="lead_magnet" data-cta-destination="checklist">Ver checklist</Link>
-              </article>
-              <article style={s.card}>
-                <h3 style={{ fontSize: 24, marginBottom: 10 }}>Calculadora de risco operacional</h3>
-                <p style={s.small}>Estime exposição por volume, intervalo, repetição de mensagens, chip, monitoramento e plano de recuperação.</p>
-                <Link className="btn btn-ghost" style={{ marginTop: 18 }} href={riskCalculatorHref} data-seo-cta="landing_risk_calculator" data-cta-position="p1_assets_secondary" data-cta-stage="tool" data-cta-destination="calculator">Calcular risco</Link>
-              </article>
-            </div>
-          </div>
-        </section>
-
-        <section style={s.section} aria-labelledby="decisao-p2-title">
-          <div className="wrap">
-            <SectionHeader
-              eyebrow="Decisão P2"
-              title="Compare, tire objeções e entenda o funcionamento antes de configurar."
-              body="Estas páginas fecham as dúvidas de decisão: diferença contra bot comum, FAQ honesto, fluxo de canais e detalhes do Módulo de Preservação Avançada."
-            />
-            <div style={s.grid2}>
-              {decisionPages.map((page) => (
-                <article key={page.href} style={s.card}>
-                  <h3 id={page.title === 'Bot comum vs BOTinho' ? 'decisao-p2-title' : undefined} style={{ fontSize: 22, marginBottom: 10 }}>{page.title}</h3>
-                  <p style={s.small}>{page.description}</p>
-                  <Link className="btn btn-ghost" style={{ marginTop: 18 }} href={page.href} data-seo-cta="landing_p2_decision" data-cta-position="p2_assets" data-cta-stage="decision" data-cta-destination="decision_page">Abrir página</Link>
-                </article>
-              ))}
             </div>
           </div>
         </section>

@@ -9,8 +9,6 @@ const siteUrl = getSiteUrl()
 const registerHref = '/login?mode=register&utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=sprint2'
 const mainLandingHref = '/bot-canais-whatsapp?utm_source=seo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=sprint2_crosslink'
 const diagnosticHref = '/diagnostico-antiban-whatsapp?utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=commercial_secondary'
-const checklistHref = '/materiais/checklist-antiban-whatsapp?utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=commercial_checklist'
-const riskCalculatorHref = '/ferramentas/calculadora-risco-whatsapp?utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=commercial_calculadora_risco'
 
 export const PRESERVATION_COMMERCIAL_PAGES = {
   'bot-afiliados-whatsapp': {
@@ -258,24 +256,6 @@ export function PreservationCommercialPage({ pageKey }) {
                 </li>
               ))}
             </ol>
-          </div>
-        </section>
-
-        <section style={s.section}>
-          <div className="wrap">
-            <SectionHeader eyebrow="Ferramentas gratuitas" title="Quer medir antes de decidir?" body="Use os ativos P1 para transformar a dor de preservação em próximo passo concreto: checklist ou cálculo de exposição." />
-            <div style={s.grid}>
-              <article style={s.card}>
-                <h3 style={{ fontSize: 22, marginBottom: 10 }}>Checklist de Preservação Avançada</h3>
-                <p style={s.small}>Um roteiro rápido para revisar chip, cadência, variações, monitoramento e recuperação.</p>
-                <Link className="btn btn-accent" style={{ marginTop: 18 }} href={checklistHref} data-seo-cta="commercial_checklist" data-cta-position="p1_assets_primary" data-cta-stage="lead_magnet" data-cta-destination="checklist">Abrir checklist</Link>
-              </article>
-              <article style={s.card}>
-                <h3 style={{ fontSize: 22, marginBottom: 10 }}>Calculadora de risco</h3>
-                <p style={s.small}>Estime exposição por volume, intervalo, repetição, chip e monitoramento.</p>
-                <Link className="btn btn-ghost" style={{ marginTop: 18 }} href={riskCalculatorHref} data-seo-cta="commercial_risk_calculator" data-cta-position="p1_assets_secondary" data-cta-stage="tool" data-cta-destination="calculator">Calcular risco</Link>
-              </article>
-            </div>
           </div>
         </section>
 

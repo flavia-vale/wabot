@@ -1,7 +1,6 @@
 import db from '../../db.js'
 import { reloadConfig } from '../../manager.js'
 import { DEFAULT_BRANDING_CTA_TEXT, MAX_BRANDING_CTA_CHARS, normalizeBrandingCtaText, normalizeBrandingLink } from '../../messageProcessor.js'
-import { buildFeatureGateError, canUseAdvancedPreservation, FEATURE_CODES } from '../../billing/plans.js'
 
 const DEFAULTS = {
   delayMin: 5,
@@ -13,18 +12,6 @@ const DEFAULTS = {
   postToStatus: false,
   brandingGroupLink: '',
   brandingCtaText: DEFAULT_BRANDING_CTA_TEXT,
-}
-
-
-async function getPlanSubject(userId) {
-  return db.user.findUnique({ where: { id: userId }, select: { plan: true, accessExpiresAt: true } })
-}
-
-async function ensureAdvancedPreservationAllowed(userId, reply) {
-  const user = await getPlanSubject(userId)
-  if (canUseAdvancedPreservation(user ?? { plan: 'basic' })) return true
-  reply.code(403).send(buildFeatureGateError(FEATURE_CODES.ADVANCED_PRESERVATION))
-  return false
 }
 
 function isIntegerInRange(value) {
@@ -53,9 +40,6 @@ export async function configRoutes(app) {
     if (postToStatus !== undefined && typeof postToStatus !== 'boolean') {
       return reply.code(400).send({ error: 'postToStatus deve ser boolean' })
     }
-
-    const requestsAdvancedPreservation = feedGlobal === true || postToStatus === true
-    if (requestsAdvancedPreservation && !(await ensureAdvancedPreservationAllowed(userId, reply))) return
     const rawBrandingGroupLink = String(brandingGroupLink ?? '').trim()
     const normalizedBrandingGroupLink = normalizeBrandingLink(rawBrandingGroupLink)
     if (brandingGroupLink !== undefined && rawBrandingGroupLink && !normalizedBrandingGroupLink) {

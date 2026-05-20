@@ -5,14 +5,13 @@ import { linkConversionRoutes } from '../src/api/routes/linkConversion.js'
 
 let counter = 0
 
-async function buildApp({ userId, converter, fetchProductInfo, credentials = [], routeOptions = {} } = {}) {
+async function buildApp({ userId, converter, credentials = [], routeOptions = {} } = {}) {
   const app = Fastify({ logger: false })
   const effectiveUserId = userId || `link-conversion-user-${++counter}`
   app.decorate('authenticate', async (req) => { req.user = { sub: effectiveUserId } })
   await app.register(linkConversionRoutes, {
     prefix: '/api/link-conversion',
     converter,
-    fetchProductInfo,
     findCredentials: async () => credentials,
     ...routeOptions,
   })
@@ -195,66 +194,4 @@ test('POST /convert aplica timeout por item para evitar request preso', async (t
   assert.equal(body.results[0].status, 'error')
   assert.equal(body.results[0].code, 'CONVERSION_FAILED')
   assert.match(body.results[0].error, /Tempo limite de conversão excedido/i)
-})
-
-test('POST /scrape-offer retorna título e preços sem converter o link', async (t) => {
-  let calls = 0
-  const { app } = await buildApp({
-    converter: async () => { throw new Error('não deve converter') },
-    fetchProductInfo: async (url) => {
-      calls += 1
-      assert.equal(url, 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20')
-      return { title: 'Mixer Vertical Turbo Chef', oldPrice: '199,90', newPrice: '149,90', finalUrl: url }
-    },
-  })
-  t.after(async () => { await app.close() })
-
-  const res = await app.inject({
-    method: 'POST',
-    url: '/api/link-conversion/scrape-offer',
-    payload: { url: 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20' },
-  })
-
-  assert.equal(res.statusCode, 200)
-  const body = JSON.parse(res.body)
-  assert.equal(body.title, 'Mixer Vertical Turbo Chef')
-  assert.equal(body.oldPrice, '199,90')
-  assert.equal(body.newPrice, '149,90')
-  assert.equal(calls, 1)
-})
-
-test('POST /scrape-offer rejeita url inválida', async (t) => {
-  const { app } = await buildApp({
-    converter: async () => 'never',
-    fetchProductInfo: async () => { throw new Error('não deve buscar') },
-  })
-  t.after(async () => { await app.close() })
-
-  const res = await app.inject({
-    method: 'POST',
-    url: '/api/link-conversion/scrape-offer',
-    payload: { url: 'nao-eh-url' },
-  })
-
-  assert.equal(res.statusCode, 400)
-  const body = JSON.parse(res.body)
-  assert.equal(body.code, 'SCRAPE_OFFER_INVALID_URL')
-})
-
-test('POST /scrape-offer trata erros do scraper com 502', async (t) => {
-  const { app } = await buildApp({
-    converter: async () => 'never',
-    fetchProductInfo: async () => { throw new Error('timeout') },
-  })
-  t.after(async () => { await app.close() })
-
-  const res = await app.inject({
-    method: 'POST',
-    url: '/api/link-conversion/scrape-offer',
-    payload: { url: 'https://exemplo.com/produto' },
-  })
-
-  assert.equal(res.statusCode, 502)
-  const body = JSON.parse(res.body)
-  assert.equal(body.code, 'SCRAPE_OFFER_FETCH_FAILED')
 })

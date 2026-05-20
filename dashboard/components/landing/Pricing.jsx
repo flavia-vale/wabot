@@ -80,13 +80,13 @@ export function Pricing() {
           <h2 style={{ ...s.h2, marginTop: 16 }}>
             Escolha o plano para <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>começar e escalar</span> sua operação.
           </h2>
-          <p style={s.sub}>Planos públicos: Trial com experiência Pro por 7 dias, Basic focado em grupos (canais no Pro) e Pro com grupos + canais + Módulo de Preservação Avançada. Valores podem ser atualizados pelo painel administrativo após validação em staging.</p>
+          <p style={s.sub}>Planos públicos e parseáveis por agentes: teste gratuito, Basic com anúncios e Pro sem anúncios. Valores podem ser atualizados pelo painel administrativo após validação em staging.</p>
         </div>
 
         <div style={s.grid} className="landing-pricing-grid">
           {plans.map(p => (
             <div key={p.id} style={s.card(p.highlight)} className="landing-pricing-card">
-              {p.highlight && <div style={s.badge}>Canais + Preservação Avançada</div>}
+              {p.highlight && <div style={s.badge}>Sem anúncios</div>}
               <div style={s.planName}>{p.name}</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 8, color: p.highlight ? 'var(--surface)' : 'var(--ink)' }}>
                 <span style={s.priceBig}>{p.price}</span>

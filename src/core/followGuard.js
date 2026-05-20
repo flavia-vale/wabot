@@ -91,9 +91,6 @@ function toMs(v) {
  * @param {{ db?: any, now?: number }} [opts]
  */
 export async function canFollowNow(userId, opts = {}) {
-  if (opts.preservationActive === false) {
-    return { allow: false, reason: 'gating_off' }
-  }
   const db = opts.db ?? defaultDb
   const now = opts.now ?? Date.now()
 

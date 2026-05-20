@@ -25,15 +25,15 @@ const s = {
 const steps = [
   {
     n: '01',
-    title: 'Aponte grupos e/ou canais para monitorar',
-    body: 'Conecte seu WhatsApp via QR Code e marque quais grupos e/ou canais de promoção, ofertas ou achadinhos o bot vai escutar. Pode ser 1 origem ou 20.',
+    title: 'Aponte os grupos para monitorar',
+    body: 'Conecte seu WhatsApp via QR Code e marque quais grupos de promoção, ofertas ou achadinhos o bot vai escutar. Pode ser 1 grupo ou 20.',
     visual: (
       <div style={s.visual}>
-        <div style={{ color: 'var(--ink-soft)' }}>{'// grupos e canais monitorados'}</div>
+        <div style={{ color: 'var(--ink-soft)' }}>{'// grupos monitorados'}</div>
         <div style={{ color: 'var(--ink)', marginTop: 6 }}>✓ Promoções Brasil 🔥</div>
         <div style={{ color: 'var(--ink)' }}>✓ Ofertas Relâmpago</div>
         <div style={{ color: 'var(--ink)' }}>✓ Achadinhos do dia</div>
-        <div style={{ marginTop: 8, color: 'var(--accent-strong)' }}>● 3 origens ativas</div>
+        <div style={{ marginTop: 8, color: 'var(--accent-strong)' }}>● 3 grupos ativos</div>
       </div>
     ),
   },
@@ -52,8 +52,8 @@ const steps = [
   },
   {
     n: '03',
-    title: 'Posta no SEU grupo e/ou canal de clientes',
-    body: 'O link convertido vai direto para o seu grupo e/ou canal de achadinhos, com a mensagem promocional do seu jeito. Você dorme, ele trabalha.',
+    title: 'Posta no SEU grupo de clientes',
+    body: 'O link convertido vai direto para o seu grupo de achadinhos, com a mensagem promocional do seu jeito. Você dorme, ele trabalha.',
     visual: (
       <div style={s.visual}>
         <div style={{ color: 'var(--ink-soft)' }}>{'// publicado em "Achados da Sol"'}</div>
@@ -78,7 +78,7 @@ export function How() {
                 <h2 style={s.h2}>Três passos.<br /><span className="serif" style={{ fontStyle: 'italic' }}>Zero esforço diário.</span></h2>
               </div>
               <p style={{ maxWidth: 360, color: 'var(--ink-soft)', fontSize: 15, lineHeight: 1.6 }}>
-                Você configura a rotina e acompanha pelos logs. Ideal para quem tem mais de um grupo e/ou canal e não quer ficar copiando link toda hora.
+                Você configura a rotina e acompanha pelos logs. Ideal para quem tem mais de um grupo e não quer ficar copiando link toda hora.
               </p>
             </div>
             <div style={s.steps} className="landing-how-steps">

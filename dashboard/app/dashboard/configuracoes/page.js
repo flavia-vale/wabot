@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
-import { canAccessAdvancedPreservation } from '@/lib/plan'
 import { Alert } from '@/components/Alert'
 import { ErrorState, LoadingState } from '@/components/States'
 
@@ -116,7 +115,6 @@ export default function ConfigPage() {
   const [delayError, setDelayError] = useState('')
   const [platformError, setPlatformError] = useState('')
   const [brandingError, setBrandingError] = useState('')
-  const [planSubject, setPlanSubject] = useState({ plan: 'trial', accessExpiresAt: null })
 
   function applyConfig(cfg) {
     setForm({
@@ -148,8 +146,8 @@ export default function ConfigPage() {
 
   useEffect(() => {
     let active = true
-    Promise.all([api.getConfig(), api.me()])
-      .then(([cfg, me]) => { if (active) { applyConfig(cfg); setPlanSubject({ plan: me?.plan ?? 'trial', accessExpiresAt: me?.accessExpiresAt ?? null }) } })
+    api.getConfig()
+      .then((cfg) => { if (active) applyConfig(cfg) })
       .catch((err) => { if (active) setLoadError(err.message || 'Não foi possível carregar as configurações.') })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
@@ -254,7 +252,6 @@ export default function ConfigPage() {
   if (loading) return <LoadingState message="Carregando configurações do bot..." />
 
   const enabledPlatforms = new Set(form.platforms.split(',').filter(Boolean))
-  const hasAdvancedPreservation = canAccessAdvancedPreservation(planSubject)
   const brandingCtaText = form.brandingCtaText.trim() || DEFAULT_BRANDING_CTA_TEXT
   const brandingPreviewLink = form.brandingGroupLink.trim() || '[Link do seu grupo]'
   const brandingPreview = `${brandingCtaText} ${brandingPreviewLink}`
@@ -265,17 +262,6 @@ export default function ConfigPage() {
       <p className="text-gray-500 text-sm mb-6">Ajuste o delay e o branding das mensagens do bot</p>
 
       {loadError && <div className="mb-4"><ErrorState title="Falha ao carregar configurações" message={loadError} actionLabel="Tentar novamente" onAction={loadConfig} /></div>}
-
-
-      {!hasAdvancedPreservation && (
-        <div className="mb-4">
-          <Alert
-            type="info"
-            title="Módulo de Preservação Avançada (Pro)"
-            message="Seu plano atual mantém delay e filtros básicos. Para liberar controles avançados de preservação, faça upgrade para o Pro ou use Trial ativo."
-          />
-        </div>
-      )}
 
       <form onSubmit={(e) => handleSave(e, "all")} className="flex flex-col gap-4">
         <div className="bg-white rounded-2xl shadow p-5">
