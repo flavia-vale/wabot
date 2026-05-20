@@ -159,16 +159,45 @@ Quatro camadas de isolamento em produção:
 1. `DATABASE_URL` diferente: `file:./prisma/staging.db` vs `file:./prisma/prod.db`.
 2. Diretórios físicos diferentes no VPS: `~/wabot-staging/prisma/` vs `~/wabot/prisma/`.
 3. `AUTH_INFO_DIR` absoluto e diferente entre ambientes.
-4. `.gitignore` cobre `*.db`, `*.db-journal`, `auth_info/`, `.env`.
+4. `.gitignore` cobre `*.db`, `*.db-journal`, `*.db-wal`, `*.db-shm`,
+   `auth_info/`, `.env`.
 
 O workflow de deploy nunca copia banco entre ambientes — só faz
 `git pull` (sem tocar em gitignored) + `npx prisma migrate deploy` (aplica
 migrations, não substitui dados).
 
+### SQLite em modo WAL (canônico, aplicado em todo boot)
+
+`src/db.js` aplica os seguintes PRAGMAs no primeiro import do PrismaClient:
+
+```
+PRAGMA journal_mode = WAL          # rollback journal -> WAL
+PRAGMA busy_timeout = 5000         # aguarda até 5s em locks (em vez de 0)
+PRAGMA synchronous  = NORMAL       # companion recomendado de WAL
+PRAGMA temp_store   = MEMORY
+```
+
+Por quê: SQLite default não suporta bem leituras simultâneas com escritas;
+em picos (várias sessões escrevendo em `MessageLog`/`AnalyticsEvent`/
+`AffiliateClick` ao mesmo tempo) aparecia `SQLITE_BUSY: database is locked`.
+WAL + `busy_timeout=5000` eliminam esse erro até dezenas de writers.
+
+Implicações operacionais:
+- O banco passa a ter arquivos auxiliares `<db>-wal` e `<db>-shm` no mesmo
+  diretório. Os dois estão no `.gitignore`. Backups via `sqlite3 .backup`
+  são WAL-safe (a API consolida tudo num snapshot único).
+- `journal_mode=WAL` é persistente no arquivo do DB; setar em todo boot é
+  idempotente. `busy_timeout` é per-connection — precisa ser reaplicado.
+- Escape hatch: `DB_SKIP_PRAGMAS=1` pula a aplicação (útil só em scripts
+  one-off; **não usar em prod**).
+- Em caso de cópia manual do `.db`, copie também os arquivos `-wal` e
+  `-shm` para garantir consistência (ou use `sqlite3 .backup`).
+
 **Backup:** `scripts/backup_prod.sh` rodando diariamente via cron grava em
 `/home/deploy/wabot-backups/` (snapshot consistente com `sqlite3 .backup`
 + tar.gz do `auth_info`, rotação de 30 dias, upload opcional via `rclone`).
-Detalhes em `docs/deploy/backup-prod.md`.
+A `.backup` API é WAL-safe (faz checkpoint implícito). Detalhes em
+`docs/deploy/backup-prod.md`.
 
 ## GitHub Secrets exigidos pelo workflow
 
