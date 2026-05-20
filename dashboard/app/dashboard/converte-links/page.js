@@ -39,6 +39,26 @@ function classifyConversionError(errorMessage) {
   return { badge: 'Falha temporária', hint: 'Não foi possível converter agora. Tente novamente.' }
 }
 
+
+function formatOfferPrice(raw) {
+  const value = String(raw || '').trim()
+  if (!value) return ''
+  const normalized = value.replace(/[^\d,\.]/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.')
+  const numeric = Number.parseFloat(normalized)
+  if (!Number.isFinite(numeric) || numeric <= 0) return value
+  return numeric.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+function buildOfferMessage({ title, oldPrice, newPrice, convertedUrl, includeGroupCta, groupCtaText }) {
+  const lines = []
+  if (title) lines.push(`🛍️ ${title}`)
+  if (oldPrice) lines.push('', `De ${formatOfferPrice(oldPrice)}`)
+  if (newPrice) lines.push(`💥 Por ${formatOfferPrice(newPrice)}`)
+  lines.push('', `🛒 Compre aqui 👉 ${convertedUrl}`, '', '⚠️ Promoção sujeita à alteração de preço e estoque do site')
+  if (includeGroupCta && groupCtaText.trim()) lines.push(groupCtaText.trim())
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
 function MetricPill({ label, value, tone = 'neutral' }) {
   const tones = {
     neutral: 'border-gray-200 bg-gray-50 text-gray-700',
@@ -96,6 +116,68 @@ function ResultCard({ result, onCopy, copied }) {
     </article>
   )
 }
+
+
+function OfferBuilderCard({ result, onCopy, copied }) {
+  const [wantsOfferBuilder, setWantsOfferBuilder] = useState(true)
+  const [title, setTitle] = useState(result.label || '')
+  const [oldPrice, setOldPrice] = useState('')
+  const [newPrice, setNewPrice] = useState('')
+  const [includeGroupCta, setIncludeGroupCta] = useState(false)
+  const [groupCtaText, setGroupCtaText] = useState('Participe do grupo: xxxxxx')
+
+  const message = useMemo(() => buildOfferMessage({
+    title,
+    oldPrice,
+    newPrice,
+    convertedUrl: result.convertedUrl,
+    includeGroupCta,
+    groupCtaText,
+  }), [title, oldPrice, newPrice, result.convertedUrl, includeGroupCta, groupCtaText])
+
+  return (
+    <article className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4 shadow-sm">
+      <h3 className="text-sm font-black text-indigo-900">Montador de oferta (link {result.index + 1})</h3>
+      <label className="mt-2 flex items-center gap-2 rounded-xl bg-white/80 px-3 py-2 text-xs font-semibold text-indigo-900">
+        <input type="checkbox" checked={wantsOfferBuilder} onChange={(event) => setWantsOfferBuilder(event.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+        Quer criar uma oferta com esse link?
+      </label>
+      {!wantsOfferBuilder ? (
+        <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-gray-600">
+          Sem problemas — você ainda pode copiar apenas o link convertido acima.
+        </p>
+      ) : (
+        <>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <label className="text-xs font-semibold text-gray-700">Título
+          <input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm" placeholder="Ex.: Chaleira Elétrica..." />
+        </label>
+        <label className="text-xs font-semibold text-gray-700">Preço antigo (opcional)
+          <input value={oldPrice} onChange={(event) => setOldPrice(event.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm" placeholder="Ex.: 78,90" />
+        </label>
+        <label className="text-xs font-semibold text-gray-700">Preço promocional (opcional)
+          <input value={newPrice} onChange={(event) => setNewPrice(event.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm" placeholder="Ex.: 39,00" />
+        </label>
+      </div>
+
+      <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-gray-700">
+        <input type="checkbox" checked={includeGroupCta} onChange={(event) => setIncludeGroupCta(event.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+        Incluir CTA de grupo no final
+      </label>
+      {includeGroupCta && (
+        <input value={groupCtaText} onChange={(event) => setGroupCtaText(event.target.value)} className="mt-2 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm" placeholder="Participe do grupo: https://..." />
+      )}
+
+      <p className="mt-3 whitespace-pre-wrap rounded-xl bg-white px-3 py-3 text-sm leading-6 text-gray-800">{message}</p>
+      <button type="button" onClick={() => onCopy(message)} className="mt-3 inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-700 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-800">
+        {copied ? 'Mensagem copiada ✅' : 'Copiar mensagem pronta'}
+      </button>
+        </>
+      )}
+    </article>
+  )
+}
+
 
 export default function ConverteLinksPage() {
   const [text, setText] = useState('')
@@ -294,7 +376,16 @@ export default function ConverteLinksPage() {
 
           <div className="grid gap-3 sm:gap-4">
             {response.results.map(result => (
-              <ResultCard key={`${result.index}-${result.originalUrl}`} result={result} onCopy={(value) => copyText(value, 'Link copiado.', `${result.index}-${result.originalUrl}`)} copied={copiedItemKey === `${result.index}-${result.originalUrl}`} />
+              <div key={`${result.index}-${result.originalUrl}`} className="space-y-3">
+                <ResultCard result={result} onCopy={(value) => copyText(value, 'Link copiado.', `${result.index}-${result.originalUrl}`)} copied={copiedItemKey === `${result.index}-${result.originalUrl}`} />
+                {result.status === 'converted' && result.convertedUrl && (
+                  <OfferBuilderCard
+                    result={result}
+                    onCopy={(value) => copyText(value, 'Mensagem pronta copiada.', `offer-${result.index}-${result.originalUrl}`)}
+                    copied={copiedItemKey === `offer-${result.index}-${result.originalUrl}`}
+                  />
+                )}
+              </div>
             ))}
           </div>
         </section>

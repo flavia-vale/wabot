@@ -12,6 +12,7 @@ const navGroups = [
       { href: '/dashboard', icon: '📱', label: 'Conexão WhatsApp' },
       { href: '/dashboard/envio', icon: '✉️', label: 'Envio de mensagens' },
       { href: '/dashboard/converte-links', icon: '🔗', label: 'Converte links' },
+      { href: '/dashboard/gerar-oferta', icon: '🛍️', label: 'Gerar oferta' },
       { href: '/dashboard/logs', icon: '📋', label: 'Logs' },
     ],
   },
