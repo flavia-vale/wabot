@@ -54,6 +54,39 @@ test('fetchProductInfo cai para og:title e meta price quando não há JSON-LD', 
   assert.equal(info.oldPrice, '')
 })
 
+test('fetchProductInfo extrai preços de landing social do Mercado Livre', async (t) => {
+  const html = `
+    <html><head>
+      <meta property="og:title" content="Tênis Nike Quest 6 Masculino" />
+    </head><body>
+      <script>
+        x={"components":[{"type":"price","id":"price","price":{"previous_price":{"value":599.99,"currency":"BRL"},"current_price":{"value":399.99,"currency":"BRL"},"discount":{"value":33}}}]};
+      </script>
+    </body></html>`
+  const server = await startServer(html)
+  t.after(() => close(server))
+  const { port } = server.address()
+
+  const info = await fetchProductInfo(`http://127.0.0.1:${port}/social`)
+  assert.equal(info.title, 'Tênis Nike Quest 6 Masculino')
+  assert.equal(info.oldPrice, '599,99')
+  assert.equal(info.newPrice, '399,99')
+})
+
+test('fetchProductInfo aceita current_price sozinho quando não há previous_price', async (t) => {
+  const html = `
+    <html><head><meta property="og:title" content="Produto sem desconto" /></head>
+    <body><script>x={"current_price":{"value":89.90,"currency":"BRL"}}</script></body></html>`
+  const server = await startServer(html)
+  t.after(() => close(server))
+  const { port } = server.address()
+
+  const info = await fetchProductInfo(`http://127.0.0.1:${port}/p`)
+  assert.equal(info.title, 'Produto sem desconto')
+  assert.equal(info.newPrice, '89,90')
+  assert.equal(info.oldPrice, '')
+})
+
 test('fetchProductInfo devolve campos vazios quando não há HTML utilizável', async (t) => {
   const server = await startServer('{}', { contentType: 'application/json' })
   t.after(() => close(server))
