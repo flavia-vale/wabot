@@ -654,7 +654,6 @@ export async function adminRoutes(app) {
         const lastMessageAt = lastMessageMap.get(user.id) ?? null
         const effectiveLastActivityAt = resolveEffectiveLastActivity(user, lastMessageAt)
         const riskUser = { ...user, lastActivityAt: effectiveLastActivityAt }
-        trackAnalyticsEventSafe({ userId: user.id, event: 'cs_risk_detected', metadata: { strategy, reasons: contactReasons.join('|').slice(0, 80) } })
         return sanitizeUser({
           ...user,
           groups: undefined,
