@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 export function ProbeToggle({ value, onChange, disabled, probeAccountSessionId }) {
   const configured = !!probeAccountSessionId
 
@@ -30,9 +32,9 @@ export function ProbeToggle({ value, onChange, disabled, probeAccountSessionId }
           <ol className="text-xs text-gray-600 space-y-1 list-decimal list-inside">
             <li>
               Vá em{' '}
-              <a href="/dashboard/credenciais" className="text-blue-600 underline hover:text-blue-800">
+              <Link href="/dashboard/credenciais" className="text-blue-600 underline hover:text-blue-800">
                 Credenciais
-              </a>{' '}
+              </Link>{' '}
               e conecte um segundo número de WhatsApp.
             </li>
             <li>Anote o <strong>ID da sessão</strong> gerado (ex.: <span className="font-mono text-gray-700">probe-session-1</span>).</li>
