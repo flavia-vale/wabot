@@ -62,6 +62,9 @@ export async function captureSnapshot(groupId, opts) {
  * @returns {Promise<{ captured: number, skipped: number }>}
  */
 export async function captureAllForUser(userId, opts = {}) {
+  if (opts.preservationActive === false) {
+    return { captured: 0, skipped: 0, errors: 0, gated: 1 }
+  }
   const db = opts.db ?? defaultDb
   const getMetadata = opts.getMetadata ?? defaultGetMetadata
   const channels = await db.group.findMany({

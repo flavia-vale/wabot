@@ -304,6 +304,16 @@ export const api = {
   channelRiskScore: (id, days = 7) => apiFetch(`/api/groups/${id}/risk-score/recompute?days=${days}`, { method: 'POST' }),
   lintChannelCopy: ({ title, template }) => apiFetch('/api/groups/lint', { method: 'POST', body: JSON.stringify({ title, template }) }),
 
+  preservationConfig: () => apiFetch('/api/preservation/config'),
+  updatePreservationConfig: (patch) => apiFetch('/api/preservation/config', { method: 'PUT', body: JSON.stringify(patch) }),
+  preservationHealth: () => apiFetch('/api/preservation/monitoring/health'),
+  preservationRiskScore: () => apiFetch('/api/preservation/monitoring/risk-score'),
+  preservationRiskScoreRecomputeAll: () => apiFetch('/api/preservation/monitoring/risk-score/recompute-all', { method: 'POST' }),
+  preservationFollows: (limit = 20) => apiFetch(`/api/preservation/monitoring/follows?limit=${limit}`),
+  preservationSnapshots: () => apiFetch('/api/preservation/monitoring/snapshots'),
+  preservationProbe: () => apiFetch('/api/preservation/monitoring/probe'),
+  preservationClicks: () => apiFetch('/api/preservation/monitoring/clicks'),
+
   logs: (status = 'all', page = 1, limit = 20) =>
     apiFetch(`/api/logs?status=${status}&page=${page}&limit=${limit}`),
   logsClear: () => apiFetch('/api/logs/clear', { method: 'DELETE' }),
