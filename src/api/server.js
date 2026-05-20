@@ -14,8 +14,11 @@ import { configRoutes } from './routes/config.js'
 import { broadcastRoutes } from './routes/broadcast.js'
 import { dashboardRoutes } from './routes/dashboard.js'
 import { logsRoutes } from './routes/logs.js'
+import { linkConversionRoutes } from './routes/linkConversion.js'
 import { adminRoutes } from './routes/admin.js'
 import { publicRoutes } from './routes/public.js'
+import { clickTrackerRoutes } from './routes/clickTracker.js'
+import { preservationRoutes } from './routes/preservation.js'
 import { registerApiMetricsHooks } from './metrics.js'
 import db from '../db.js'
 import { resumePersistedBots, startSessionHealthMonitor, stopAllBots } from '../manager.js'
@@ -157,6 +160,26 @@ function startLogRetentionJob() {
   timer.unref?.()
 }
 
+// PR-5.C.3: watchdog do probe roda a cada 5min e marca yellow canais que
+// publicaram mas não receberam ping da conta-probe. Conservador — nunca
+// degrada para red/critical e nunca sobreescreve red/critical existente.
+const PROBE_WATCHDOG_INTERVAL_MS = 5 * 60 * 1000
+async function runProbeWatchdogTick() {
+  const { runProbeWatchdog } = await import('../core/channelProbe.js')
+  try {
+    const summary = await runProbeWatchdog()
+    if (summary.flagged > 0) {
+      app.log.info({ ...summary }, 'probe-watchdog: canais marcados yellow')
+    }
+  } catch (err) {
+    app.log.warn({ err: err.message }, 'probe-watchdog tick falhou')
+  }
+}
+function startProbeWatchdogJob() {
+  const timer = setInterval(runProbeWatchdogTick, PROBE_WATCHDOG_INTERVAL_MS)
+  timer.unref?.()
+}
+
 async function ensureDatabaseReady() {
   try {
     await verifyDatabase()
@@ -236,8 +259,11 @@ app.register(configRoutes, { prefix: '/api/config' })
 app.register(broadcastRoutes, { prefix: '/api/broadcast' })
 app.register(dashboardRoutes, { prefix: '/api/dashboard' })
 app.register(logsRoutes, { prefix: '/api/logs' })
+app.register(linkConversionRoutes, { prefix: '/api/link-conversion' })
 app.register(adminRoutes, { prefix: '/api/admin' })
 app.register(publicRoutes, { prefix: '/api/public' })
+app.register(preservationRoutes, { prefix: '/api/preservation' })
+app.register(clickTrackerRoutes) // sem prefix — /r/:hash precisa estar na raiz
 
 // Liveness: processo está de pé
 app.get('/health', () => ({ ok: true }))
@@ -259,6 +285,7 @@ if (!databaseReadyAtBoot) {
 }
 startLogRetentionJob()
 startActivityCacheCleanup()
+startProbeWatchdogJob()
 await app.listen({ port, host: '0.0.0.0' })
 console.log(`API rodando em http://localhost:${port}`)
 const stopSessionHealthMonitor = startSessionHealthMonitor(db, app.log)

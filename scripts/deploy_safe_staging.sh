@@ -99,6 +99,16 @@ verify_next_jest_worker_process_child() {
   [[ -f "$worker" ]]
 }
 
+run_npm_ci_with_recovery() {
+  local label="$1"
+  if npm ci; then
+    return 0
+  fi
+  echo "  Aviso: 'npm ci' falhou em $label. Estado de node_modules pode estar sujo (ex: ENOTEMPTY). Removendo e tentando novamente uma vez..."
+  rm -rf node_modules
+  npm ci
+}
+
 ensure_dashboard_deps_integrity() {
   if verify_next_polyfill && verify_next_jest_worker_process_child; then
     return 0
@@ -117,6 +127,27 @@ ensure_dashboard_deps_integrity() {
     echo "Dica: validar saúde de disco/cache do host de deploy e repetir o pipeline."
     exit 1
   fi
+}
+
+
+ensure_pm2_app_running() {
+  local app_name="$1"
+
+  if pm2 describe "$app_name" >/dev/null 2>&1; then
+    pm2 restart "$app_name" --update-env
+    return 0
+  fi
+
+  echo "  Aviso: processo PM2 '$app_name' não encontrado. Tentando criar via ecosystem.config.cjs..."
+  if pm2 start "$ROOT_DIR/ecosystem.config.cjs" --only "$app_name" --update-env >/tmp/wabot_pm2_start_${app_name}.log 2>&1; then
+    echo "  PM2 app '$app_name' criado com sucesso via ecosystem.config.cjs."
+    return 0
+  fi
+
+  echo "ERRO: não foi possível iniciar '$app_name' via ecosystem.config.cjs."
+  cat /tmp/wabot_pm2_start_${app_name}.log || true
+  echo "Dica: valide o nome do app no PM2 (pm2 status) e no ecosystem/config de staging."
+  exit 1
 }
 
 cd "$ROOT_DIR"
@@ -150,14 +181,14 @@ else
 fi
 
 echo "[3/9] Install root dependencies sem alterar lockfile"
-npm ci
+run_npm_ci_with_recovery "root"
 
 echo "[4/9] Apply database migrations no banco isolado de staging"
 npx prisma migrate deploy
 
 echo "[5/9] Install dashboard dependencies sem alterar lockfile"
 cd "$DASHBOARD_DIR"
-npm ci
+run_npm_ci_with_recovery "dashboard"
 ensure_dashboard_deps_integrity
 
 echo "[6/9] Guardrail + build dashboard staging (hard gate)"
@@ -173,6 +204,7 @@ for artifact in .next/BUILD_ID .next/prerender-manifest.json .next/server/app-pa
 done
 
 echo "  Build íntegro: BUILD_ID=$(cat .next/BUILD_ID)"
+
 cd "$ROOT_DIR"
 node scripts/verify-dashboard-api-proxy.mjs
 
@@ -181,8 +213,9 @@ if ! command -v pm2 >/dev/null 2>&1; then
   echo "ERRO: pm2 não encontrado no PATH."
   exit 1
 fi
-pm2 restart "$API_APP" --update-env
-pm2 restart "$VISUAL_APP" --update-env
+ensure_pm2_app_running "$API_APP"
+ensure_pm2_app_running "$VISUAL_APP"
+pm2 save
 
 echo "[8/9] PM2 status"
 pm2 status

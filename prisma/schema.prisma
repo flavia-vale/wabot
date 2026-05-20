@@ -40,6 +40,8 @@ model User {
   adminAuditTargets     AdminAuditLog[]      @relation("AdminAuditTarget")
   customerContacts      CustomerContactLog[]
   customerContactActors CustomerContactLog[] @relation("CustomerContactActor")
+  followLogs            FollowLog[]
+  affiliateLinks        AffiliateLink[]
 
   @@index([status, plan, accessExpiresAt])
   @@index([lastActivityAt])
@@ -79,6 +81,9 @@ model Group {
   welcomeMsg        String?
   monitorTargets   GroupTarget[] @relation("MonitorTargets")
   postTargets      GroupTarget[] @relation("PostTargets")
+  channelHealth    ChannelHealth?
+  channelThrottle  ChannelThrottle?
+  channelSnapshots ChannelSnapshot[]
 
   @@unique([userId, waJid, role])
   @@index([userId, kind])
@@ -176,7 +181,98 @@ model BotConfig {
   postToStatus    Boolean  @default(false)
   brandingGroupLink String   @default("")
   brandingCtaText String   @default("Participe do grupo:")
+  maxDailyFollows         Int     @default(3)
+  channelMinIntervalSec   Int     @default(30)
+  channelBurstCap         Int     @default(6)
+  channelBurstWindowSec   Int     @default(600)
+  channelDailyCap         Int?
+  channelStaggerJitterMs  Int     @default(90000)
+  channelQuietHoursJson   String  @default("{\"startHour\":0,\"endHour\":6,\"tz\":\"America/Sao_Paulo\"}")
+  imageMutationEnabled    Boolean @default(true)
+  copyVariationPoolJson   String  @default("{}")
+  probeAccountSessionId   String?
+  probeEnabled            Boolean @default(false)
   updatedAt       DateTime @updatedAt
+}
+
+model FollowLog {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channelJid String
+  status     String
+  error      String?
+  followedAt DateTime @default(now())
+
+  @@index([userId, followedAt])
+}
+
+model ChannelHealth {
+  id                  String    @id @default(cuid())
+  groupId             String    @unique
+  group               Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  status              String    @default("green")
+  lastError           String?
+  errorRate1h         Float     @default(0)
+  latencyP95_1h       Int?
+  lastProbeSeenAt     DateTime?
+  lastPostedAt        DateTime?
+  consecutiveFailures Int       @default(0)
+  pausedUntil         DateTime?
+  reportRiskScore     Int?
+  updatedAt           DateTime  @default(now())
+
+  @@index([status])
+}
+
+model ChannelThrottle {
+  id                 String    @id @default(cuid())
+  groupId            String    @unique
+  group              Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  lastPostAt         DateTime?
+  burstWindowStart   DateTime?
+  postsInBurstWindow Int       @default(0)
+  postsToday         Int       @default(0)
+  dayBucket          String    @default("")
+}
+
+model AffiliateLink {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hash         String   @unique
+  originalUrl  String
+  messageLogId String?
+  groupId      String?
+  createdAt    DateTime @default(now())
+  clicks       AffiliateClick[]
+
+  @@index([userId, createdAt])
+  @@index([groupId, createdAt])
+}
+
+model AffiliateClick {
+  id        String        @id @default(cuid())
+  linkId    String
+  link      AffiliateLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  clickedAt DateTime      @default(now())
+  ipHash    String?
+  uaHash    String?
+
+  @@index([linkId, clickedAt])
+}
+
+model ChannelSnapshot {
+  id           String   @id @default(cuid())
+  groupId      String
+  group        Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name         String?
+  description  String?
+  inviteLink   String?
+  snapshotJson String
+  snapshotedAt DateTime @default(now())
+
+  @@index([groupId, snapshotedAt])
 }
 
 model ScheduledMessage {

@@ -26,8 +26,18 @@ import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } fro
 import { isMirrorableJid, detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
 import { getChannelMetadata, followChannel, listFollowedChannels } from './core/channelDirectory.js'
+import { logFollow } from './core/followGuard.js'
+import {
+  recordSendResult as recordChannelSendResult,
+  recordStreamError as recordChannelStreamError,
+} from './core/channelHealth.js'
+import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
+import { applyVariation } from './core/copyVariation.js'
+import { mutate as mutateChannelImage } from './core/imageMutation.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
+import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
+import { getAdvancedPreservationAccess } from './billing/plans.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
@@ -40,6 +50,11 @@ const SESSION_ERROR_WINDOW_MS = Math.max(30_000, Number(process.env.WA_SESSION_E
 const SESSION_ERROR_THRESHOLD = Math.max(5, Number(process.env.WA_SESSION_ERROR_THRESHOLD || 30))
 const SESSION_RECOVERY_COOLDOWN_MS = Math.max(60_000, Number(process.env.WA_SESSION_RECOVERY_COOLDOWN_MS || 300_000))
 const ALLOW_TEXT_WITHOUT_LINKS = String(process.env.WA_ALLOW_TEXT_WITHOUT_LINKS || '0') === '1'
+
+function normalizeJidForMatch(jid) {
+  if (typeof jid !== 'string') return ''
+  return jid.trim().replace(/:\d+(?=@)/, '')
+}
 
 let activeSock = null
 let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
@@ -258,32 +273,12 @@ async function loadConfig() {
     }
   }
 
-  const targetsByMonitor = new Map()
-  for (const target of user.groupTargets) {
-    if (!targetsByMonitor.has(target.monitorId)) targetsByMonitor.set(target.monitorId, [])
-    if (target.post?.waJid) targetsByMonitor.get(target.monitorId).push(target.post.waJid)
-  }
-
-  const groups = {
-    monitor: user.groups.filter(g => g.role === 'monitor').map(g => ({
-      id: g.id,
-      waJid: g.waJid,
-      kind: g.kind,
-      // A opção de imagem fica oculta no dashboard, mas a operação deve
-      // permanecer sempre habilitada para todos os clientes.
-      imageMode: 'original',
-      imageLinkTarget: g.imageLinkTarget ?? 'first',
-      fallbackToOriginal: true,
-      blockedKeywords: g.blockedKeywords,
-      allowedPlatforms: g.allowedPlatforms,
-      forwardMode: g.forwardMode,
-      noLinkScope: g.noLinkScope,
-      targetPostJids: targetsByMonitor.get(g.id) ?? [],
-    })),
-    monitorJids: user.groups.filter(g => g.role === 'monitor').map(g => g.waJid),
-    post: user.groups.filter(g => g.role === 'post').map(g => g.waJid),
-    postDetails: user.groups.filter(g => g.role === 'post').map(g => ({ waJid: g.waJid, kind: g.kind, welcomeMsg: g.welcomeMsg })),
-  }
+  const { groups } = buildEntitledGroupConfig({
+    groups: user.groups,
+    groupTargets: user.groupTargets,
+    planSubject: { plan: user.plan, accessExpiresAt: user.accessExpiresAt },
+    logger,
+  })
 
   const botConfig = {
     delayMin: 5,
@@ -300,7 +295,8 @@ async function loadConfig() {
   botConfig.brandingGroupLink = normalizeBrandingLink(botConfig.brandingGroupLink)
   botConfig.brandingCtaText = normalizeBrandingCtaText(botConfig.brandingCtaText)
 
-  return { credentials, groups, plan: user.plan, botConfig }
+  const preservation = await getAdvancedPreservationAccess(userId, { db })
+  return { credentials, groups, plan: user.plan, botConfig, preservationActive: preservation.active }
 }
 
 async function getConfig() {
@@ -598,6 +594,52 @@ async function processSendJob(job) {
       await sleep(totalDelayMs)
     }
 
+    // PR-5.C.1 + 5.B.1: lookup do groupId do canal-destino (uma vez por job)
+    // para alimentar ChannelHealth e passar pelo velocity scheduler.
+    let channelGroupId = null
+    if (isChannelDestination(job.destJid)) {
+      try {
+        const g = await db.group.findFirst({
+          where: { userId, waJid: job.destJid, role: 'post', kind: 'channel' },
+          select: { id: true },
+        })
+        channelGroupId = g?.id ?? null
+        if (channelGroupId) {
+          // checkAndReserve já cobre: pausa por health, quiet hours, daily cap,
+          // intervalo mínimo, burst cap. Reserva o slot quando libera.
+          const cfgFull = await getConfig().catch(() => null)
+          const cfg = cfgFull?.botConfig ?? {}
+          const decision = await throttleCheckAndReserve(channelGroupId, cfg, {
+            preservationActive: cfgFull?.preservationActive ?? false,
+          })
+          if (!decision.allow) {
+            const waitMs = Math.max(0, (decision.deferUntil ?? Date.now()) - Date.now())
+            const SHORT_DEFER_MS = 2 * 60 * 1000 // 2min
+            if (waitMs <= SHORT_DEFER_MS) {
+              logger.info({ destJid: job.destJid, reason: decision.reason, waitMs }, 'Velocity scheduler: aguardando defer curto')
+              await sleep(waitMs)
+              // tenta de novo (reserva real); se ainda negar, aborta
+              const retry = await throttleCheckAndReserve(channelGroupId, cfg, {
+                preservationActive: cfgFull?.preservationActive ?? false,
+              })
+              if (!retry.allow) {
+                const err = new Error(`Canal throttled (${retry.reason}) até ${new Date(retry.deferUntil ?? Date.now()).toISOString()}`)
+                err.code = 'CHANNEL_THROTTLED'
+                throw err
+              }
+            } else {
+              const err = new Error(`Canal throttled (${decision.reason}); defer ${Math.round(waitMs / 1000)}s excede limite`)
+              err.code = 'CHANNEL_THROTTLED'
+              throw err
+            }
+          }
+        }
+      } catch (err) {
+        if (err.code === 'CHANNEL_PAUSED' || err.code === 'CHANNEL_THROTTLED') throw err
+        logger.warn({ err: err?.message, destJid: job.destJid }, 'channelHealth/throttle lookup falhou; seguindo sem pausa')
+      }
+    }
+
     for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt++) {
       try {
         if (!activeSock) throw new Error('Bot não conectado')
@@ -613,8 +655,14 @@ async function processSendJob(job) {
         } else {
           await activeSock.sendMessage(job.destJid, payload)
         }
-        lastSendByDest.set(job.destJid, Date.now())
+        const finishedAt = Date.now()
+        lastSendByDest.set(job.destJid, finishedAt)
         logger.info({ destJid: job.destJid, platforms: job.platforms, attempt, type: job.type }, 'Mensagem enviada')
+
+        if (channelGroupId) {
+          recordChannelSendResult(channelGroupId, { ok: true, latencyMs: finishedAt - startedAt }, { now: finishedAt })
+            .catch(err => logger.warn({ err: err?.message }, 'recordChannelSendResult(ok) falhou'))
+        }
 
         await db.messageLog.update({
           where: { id: job.logId },
@@ -664,6 +712,13 @@ async function processSendJob(job) {
     sendMetrics.errorTotal++
     sendMetrics.lastErrorAt = new Date().toISOString()
     sendMetrics.lastError = err.message
+    if (channelGroupId) {
+      const errorCode = isChannelForbiddenError(err)
+        ? '403'
+        : (err?.output?.statusCode ? String(err.output.statusCode) : (err?.code ?? null))
+      recordChannelSendResult(channelGroupId, { ok: false, errorCode, errorMsg: err.message })
+        .catch(e => logger.warn({ err: e?.message }, 'recordChannelSendResult(fail) falhou'))
+    }
     await finishSendJob(job, { ok: false, error: err.message })
   }
 }
@@ -744,6 +799,27 @@ async function startBot() {
 
   sock.ev.on('creds.update', saveCreds)
 
+  // PR-5.A: Baileys emite stream:error em rate-overlimit / forbidden /
+  // not-authorized. Gravar uma marca rate_limited em FollowLog faz o
+  // followGuard pausar follows por 1h para a sessão.
+  const handleStreamError = (node) => {
+    try {
+      const code = node?.attrs?.code || node?.children?.[0]?.tag || 'unknown'
+      const blocking = ['rate-overlimit', 'not-authorized', 'forbidden', '401', '403', '429']
+      if (!blocking.includes(String(code))) return
+      logger.warn({ code }, 'stream:error capturado; quarentenando follows desta sessão')
+      logFollow(userId, '<stream>', 'rate_limited', String(code)).catch(err => {
+        logger.warn({ err: err?.message }, 'logFollow(rate_limited) falhou')
+      })
+      recordChannelStreamError(userId, String(code)).catch(err => {
+        logger.warn({ err: err?.message }, 'recordChannelStreamError falhou')
+      })
+    } catch (err) {
+      logger.warn({ err: err?.message }, 'handleStreamError falhou')
+    }
+  }
+  sock.ws?.on?.('CB:stream:error', handleStreamError)
+
   // Captura JIDs de canais (@newsletter) que aparecem nos chats do usuário,
   // pra alimentar o picker "Canais que sigo" no dashboard. Baileys 6.7.16
   // não tem listFollowedNewsletters; chegamos lá via histórico + upserts.
@@ -809,9 +885,10 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 
   async function processIncomingMessage(msg, sock) {
       const jid = msg.key.remoteJid
+      const normalizedJid = normalizeJidForMatch(jid)
       const cfg = await getConfig()
       logger.info({ jid, monitorGroups: cfg.groups.monitor, feedGlobal: cfg.botConfig.feedGlobal }, 'mensagem recebida')
-      const monitorGroup = cfg.groups.monitor.find(m => m.waJid === jid)
+      const monitorGroup = cfg.groups.monitor.find(m => normalizeJidForMatch(m.waJid) === normalizedJid)
       const shouldTrackSkipped = Boolean(monitorGroup) || (cfg.botConfig.feedGlobal && isMirrorableJid(jid))
       async function recordSkippedMessage({ reason, platform = 'unknown', originalUrl = '', convertedUrl = '' }) {
         if (!shouldTrackSkipped) return
@@ -823,7 +900,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           data: {
             userId,
             platform,
-            sourceGroup: jid || 'unknown',
+            sourceGroup: normalizedJid || 'unknown',
             destGroup: 'skipped',
             originalUrl,
             convertedUrl,
@@ -1091,7 +1168,12 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 
       const baseDestinations = monitorGroup?.targetPostJids?.length ? monitorGroup.targetPostJids : cfg.groups.post
       const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
+      // PR-5.B.2: stagger entre destinos para quebrar simultaneidade exata.
+      // Primeiro destino sem atraso; demais com jitter aleatório limitado.
+      const staggerJitterMs = Math.max(0, Number(cfg.botConfig.channelStaggerJitterMs ?? 0))
+      let destIndex = -1
       for (const destJid of destinations) {
+        destIndex++
         const dedupSubject = primary.url || `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
         const key = `${destJid}:${dedupSubject}`
         if (dedup.links[key] && Date.now() - dedup.links[key] < dedupeWindowMs) {
@@ -1129,14 +1211,29 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         })
         let sentVia = 'text'
 
+        // PR-5.B.2: variação de copy por canal-destino (determinística por
+        // destJid+data). Aplica só em canal — em grupo não há fingerprint
+        // de "mesma mensagem em N", então mantém texto original.
+        const isChannelDest = isChannelDestination(destJid)
+        const variantText = isChannelDest
+          ? (cfg.preservationActive
+              ? applyVariation(finalText, { groupId: destJid, poolJson: cfg.botConfig.copyVariationPoolJson })
+              : finalText)
+          : finalText
+
+        // Stagger: 1º destino sai sem atraso adicional; demais recebem jitter.
+        const staggerMs = (destIndex > 0 && isChannelDest && cfg.preservationActive && staggerJitterMs > 0)
+          ? Math.floor(Math.random() * staggerJitterMs)
+          : 0
+
         const accepted = await enqueueSendJob({
           type: 'converted',
           logId: log.id,
           destJid,
           platforms,
           plan: cfg.plan,
-          delayMs: buildSmartDelayMs(cfg.botConfig),
-          typingDelayMs: calculateTypingDelayMs({ text: finalText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
+          delayMs: buildSmartDelayMs(cfg.botConfig) + staggerMs,
+          typingDelayMs: calculateTypingDelayMs({ text: variantText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           buildPayload: async () => {
             // Para canal-destino, nunca usar relay (sendMessage com payload limpo).
             // Para grupo-destino com mídia original, deixar relayMessage cuidar (return null).
@@ -1155,10 +1252,22 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
               if (imageMode === 'original' && !image) {
                 useLinkPreview = true
               }
+
+              // PR-5.B.2: mutação de imagem APÓS o scraper (fora do bloco
+              // protegido). Só para canal-destino; valida >=800px após crop.
+              if (image && isChannelDest && cfg.preservationActive && cfg.botConfig.imageMutationEnabled) {
+                const mutated = await mutateChannelImage(image.buffer, image.mimetype, {
+                  groupId: destJid,
+                  enabled: true,
+                })
+                if (mutated.buffer !== image.buffer) {
+                  image = { ...image, buffer: mutated.buffer, mimetype: mutated.mimetype }
+                }
+              }
             }
 
             return buildMonitoredMessagePayload({
-              finalText,
+              finalText: variantText,
               image,
               useLinkPreview,
             })
@@ -1167,7 +1276,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             if (original) {
               const replayProto = { ...original.proto }
               if (original.type === 'imageMessage' || original.type === 'videoMessage') {
-                replayProto.caption = finalText
+                replayProto.caption = variantText
               }
               await sendSock.relayMessage(destJid, { [original.type]: replayProto }, {})
               sentVia = `relay:${original.type}`
