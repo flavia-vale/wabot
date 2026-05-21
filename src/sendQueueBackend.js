@@ -14,6 +14,7 @@ export function createMemorySendBackend({ maxSize, onRejected, onDequeued }) {
   return {
     backend: 'memory',
     getQueueSize: () => queue.length,
+    getDlqSize: async () => 0,
     async close() {},
     async process() {
       if (processing) return
@@ -41,33 +42,88 @@ export function createMemorySendBackend({ maxSize, onRejected, onDequeued }) {
   }
 }
 
-export async function createBullmqSendBackend({ redisUrl, queueName, onRejected, onDequeued, concurrency = 1 }) {
-  const { Queue, Worker } = await import('bullmq')
-  const queue = new Queue(queueName, { connection: { url: redisUrl } })
+/**
+ * Backend BullMQ com DLQ explícita.
+ *
+ * Persistência: jobs ficam no Redis até serem processados. Reinício do
+ * worker NÃO perde jobs em vôo (eles voltam para `waiting` no boot seguinte).
+ *
+ * Política de falha: o handler do Worker BullMQ é o `onDequeued` (que chama
+ * `processSendJob` no bot-worker). `processSendJob` já tem seu próprio loop
+ * de retries (SEND_MAX_ATTEMPTS) — então se ele lançou, é falha DEFINITIVA.
+ * Nesse caso publicamos uma cópia do job na DLQ `${queueName}-dlq` para
+ * inspeção/retry manual via rota admin.
+ *
+ * DLQ é uma Queue BullMQ sem Worker associado: jobs ficam parados,
+ * removeOnComplete/Fail desligados. Inspeção via `src/jobs/sendDlq.js`.
+ */
+export async function createBullmqSendBackend({
+  redisUrl,
+  queueName,
+  onRejected,
+  onDequeued,
+  concurrency = 1,
+  dlqQueueName = `${queueName}-dlq`,
+  // Injeção opcional usada em testes — permite substituir bullmq por mock
+  // sem precisar de Redis real. Em produção fica undefined e cai no import
+  // dinâmico padrão.
+  bullmqModule = null,
+}) {
+  const { Queue, Worker } = bullmqModule ?? (await import('bullmq'))
+  const connection = { url: redisUrl }
+  const queue = new Queue(queueName, { connection })
+  const dlq = new Queue(dlqQueueName, { connection })
+
   const worker = new Worker(
     queueName,
     async bullJob => {
       await onDequeued(bullJob.data)
     },
-    { connection: { url: redisUrl }, concurrency },
+    { connection, concurrency },
   )
 
-  worker.on('failed', (job, err) => {
-    logger.error({ err: err?.message, jobId: job?.id }, 'Falha no worker BullMQ de envios')
+  worker.on('failed', async (bullJob, err) => {
+    const errMsg = err?.message ?? String(err)
+    logger.error({ err: errMsg, jobId: bullJob?.id, name: bullJob?.name }, 'Falha definitiva no worker BullMQ — empurrando para DLQ')
+    try {
+      await dlq.add(
+        'failed',
+        {
+          originalQueue: queueName,
+          originalJobId: bullJob?.id ?? null,
+          originalData: bullJob?.data ?? null,
+          error: errMsg,
+          failedAt: Date.now(),
+        },
+        {
+          // DLQ é para inspeção humana — não auto-expira.
+          removeOnComplete: false,
+          removeOnFail: false,
+        },
+      )
+    } catch (dlqErr) {
+      logger.error({ err: dlqErr.message }, 'Falha ao empurrar para DLQ — job perdido')
+    }
   })
 
   return {
     backend: 'bullmq',
-    getQueueSize: async () => queue.getWaitingCount(),
+    queueName,
+    dlqQueueName,
+    getQueueSize: () => queue.getWaitingCount(),
+    getDlqSize: () => dlq.getJobCountByTypes('waiting', 'delayed', 'active', 'completed', 'failed'),
     getProcessing: () => true,
     async close() {
       await worker.close()
       await queue.close()
+      await dlq.close()
     },
     enqueue(job) {
       return queue
         .add('send', job, {
           removeOnComplete: 500,
+          // Mantemos só os últimos 500 failed no histórico da fila principal;
+          // a DLQ guarda cópia explícita das falhas para inspeção.
           removeOnFail: 500,
           jobId: String(job.logId),
         })
@@ -83,4 +139,27 @@ export async function createBullmqSendBackend({ redisUrl, queueName, onRejected,
 
 export async function finalizeSendJob(onDone, job, result) {
   await withSafeOnDone(onDone, job, result)
+}
+
+/**
+ * Decide qual backend usar.
+ *
+ *   QUEUE_BACKEND   REDIS_URL   resultado
+ *   -------------   ---------   ---------
+ *   'bullmq'        set         bullmq (explícito)
+ *   'bullmq'        empty       memory (fallback com warn)
+ *   'memory'        *           memory (opt-out explícito)
+ *   unset/auto      set         bullmq (default novo: persistente em prod)
+ *   unset/auto      empty       memory (compatibilidade dev)
+ *
+ * Mudança vs comportamento histórico: antes o default era 'memory' mesmo
+ * com Redis disponível. Agora, presença de REDIS_URL é o gatilho — assim
+ * deploy não perde mensagens em restart sem precisar configurar nada
+ * adicional.
+ */
+export function resolveBackendMode({ queueBackendEnv, redisUrl }) {
+  const explicit = String(queueBackendEnv || '').toLowerCase()
+  if (explicit === 'memory') return 'memory'
+  if (explicit === 'bullmq') return redisUrl ? 'bullmq' : 'memory-fallback'
+  return redisUrl ? 'bullmq' : 'memory'
 }

@@ -135,6 +135,36 @@ Settings → Secrets and variables → Actions:
 Falha do smoke 9 geralmente é `.env` faltando, `JWT_SECRET` ausente
 ou porta divergente do que está em `apiPortByDashboardPort`.
 
+## Fila de envio (BullMQ + DLQ)
+
+Cada bot-worker tem uma fila própria de envio (`wabot-send-<userId>`) e
+uma DLQ correspondente (`wabot-send-<userId>-dlq`). Configuração via env:
+
+| Env                 | Default                       | Efeito |
+|---------------------|-------------------------------|--------|
+| `QUEUE_BACKEND`     | auto                          | `'memory'` força in-process; `'bullmq'` força Redis (com fallback). Vazio = auto. |
+| `REDIS_URL`         | (vazio)                       | Em modo auto, presença liga BullMQ; ausência cai em memory. |
+| `BULLMQ_QUEUE_NAME` | `wabot-send-${userId}`        | Nome da fila principal; DLQ é `<name>-dlq`. |
+| `SEND_MAX_ATTEMPTS` | 3                             | Retries in-process antes do job ser declarado falha definitiva. |
+
+**Default novo (PR #...):** com `REDIS_URL` configurado, BullMQ vira o
+backend automaticamente. Antes era opt-in via `QUEUE_BACKEND=bullmq`.
+Motivo: deploy em prod (Redis presente) ganha persistência sem nenhuma
+mudança de env. Para opt-out: `QUEUE_BACKEND=memory`.
+
+**DLQ:** quando `processSendJob` lança após esgotar `SEND_MAX_ATTEMPTS`,
+o BullMQ marca o job como `failed`. Um listener no Worker copia o payload
+para a DLQ (`<queueName>-dlq`) com `removeOnComplete: false` —
+**jobs ficam indefinidamente** até ação manual. Inspeção via:
+
+- `GET  /api/admin/send-dlq/:userId?limit=100` — lista jobs
+- `POST /api/admin/send-dlq/:userId/retry/:jobId` — reenfileira na principal
+- `DEL  /api/admin/send-dlq/:userId/job/:jobId` — descarta
+- `POST /api/admin/send-dlq/:userId/purge` — drena toda a DLQ
+
+Helpers programáticos: `src/jobs/sendDlq.js`. Todas as ações destrutivas
+gravam `AdminAuditLog`.
+
 ## Pegadinhas conhecidas (lições aprendidas — leia antes de mexer)
 
 ### 1. PM2 cacheia env vars no momento do `pm2 start`
