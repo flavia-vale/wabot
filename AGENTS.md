@@ -52,13 +52,17 @@ A API decide quem gerencia os bots via env var `BOT_SUPERVISOR_MODE`:
 Cutover seguro (validar staging primeiro):
 
 1. Subir Redis local no VPS (`redis-server`, bind 127.0.0.1, AOF on).
-2. `pm2 start ecosystem.config.cjs --only bot-supervisor-staging`
-3. Setar `BOT_SUPERVISOR_MODE=remote` no env da `api-staging` e
-   `pm2 restart api-staging`. Confirmar pelo dashboard staging que QR,
-   status e envio funcionam end-to-end.
-4. Teste de aceitação: `pm2 restart api-staging` enquanto há sessão
+2. Garantir `REDIS_URL=redis://127.0.0.1:6379/1` no `.env` de staging.
+3. `pm2 start ecosystem.config.cjs --only bot-supervisor-staging`
+4. Setar `BOT_SUPERVISOR_MODE=remote` no `.env` da `api-staging` (NÃO no
+   ecosystem) e fazer `pm2 delete api-staging && pm2 start
+   ecosystem.config.cjs --only api-staging`. `pm2 restart --update-env`
+   NÃO basta (vide pegadinha #1: dotenv não sobrescreve env já cacheada
+   pelo PM2 — precisa delete + start). Confirmar pelo dashboard staging
+   que QR, status e envio funcionam end-to-end.
+5. Teste de aceitação: `pm2 restart api-staging` enquanto há sessão
    conectada — sessão **deve continuar conectada** (esse é o ponto).
-5. Repetir para produção (`bot-supervisor` + `pm2 restart api`).
+6. Repetir para produção (`bot-supervisor` + ajustar `.env` + delete/start `api`).
 
 Rollback: setar `BOT_SUPERVISOR_MODE=inline` + `pm2 restart api/api-staging`.
 Janela ≤ 2min.

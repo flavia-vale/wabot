@@ -13,13 +13,12 @@ module.exports = {
         AUTO_START_WHATSAPP_SESSIONS: 'true',
         DASHBOARD_URL: 'https://espelhagrupos.com.br',
         API_URL: 'https://espelhagrupos.com.br',
-        // BOT_SUPERVISOR_MODE: 'inline' (default) mantém comportamento
-        // histórico — API faz fork() dos workers e deploy derruba sessões.
-        // Para cutover ao supervisor independente: subir o app
-        // `bot-supervisor`, depois setar 'remote' aqui e pm2 restart api.
-        // Rollback: voltar para 'inline' e restart. Detalhes em AGENTS.md.
-        BOT_SUPERVISOR_MODE: 'inline',
-        REDIS_URL: 'redis://127.0.0.1:6379/0',
+        // BOT_SUPERVISOR_MODE e REDIS_URL ficam APENAS no .env do VPS.
+        // Antes estavam hardcoded aqui, mas isso bloqueava o cutover:
+        // PM2 seta env antes do dotenv rodar, e dotenv default não
+        // sobrescreve process.env existente — então 'remote' no .env
+        // ficava ignorado em favor do 'inline' daqui. Detalhes da
+        // pegadinha #1 em AGENTS.md.
       },
       max_memory_restart: '500M',
       // kill_timeout precisa cobrir SHUTDOWN_DRAIN_TIMEOUT_MS (default 15s) +
@@ -83,10 +82,9 @@ module.exports = {
         AUTO_START_WHATSAPP_SESSIONS: 'true',
         DASHBOARD_URL: 'http://178.105.54.0:3006',
         API_URL: 'http://178.105.54.0:3006',
-        // Em staging também começa em 'inline' — vira 'remote' assim que
-        // bot-supervisor-staging estiver validado.
-        BOT_SUPERVISOR_MODE: 'inline',
-        REDIS_URL: 'redis://127.0.0.1:6379/1',
+        // BOT_SUPERVISOR_MODE e REDIS_URL ficam APENAS no .env de staging
+        // (~/wabot-staging/.env). Ver pegadinha #1 em AGENTS.md e comentário
+        // no bloco 'api' acima.
       },
       max_memory_restart: '500M',
       kill_timeout: 20000,
@@ -112,7 +110,7 @@ module.exports = {
         AUTH_INFO_DIR: '/home/deploy/BOTinho-shared/auth_info',
         BOT_LOG_DIR: '/home/deploy/BOTinho-shared/logs',
         AUTO_START_WHATSAPP_SESSIONS: 'true',
-        REDIS_URL: 'redis://127.0.0.1:6379/0',
+        // REDIS_URL vem do .env de produção (mesma pegadinha #1).
       },
       max_memory_restart: '400M',
       kill_timeout: 30000,
@@ -132,7 +130,7 @@ module.exports = {
         AUTH_INFO_DIR: '/home/deploy/wabot-staging-shared/auth_info',
         BOT_LOG_DIR: '/home/deploy/wabot-staging-shared/logs',
         AUTO_START_WHATSAPP_SESSIONS: 'true',
-        REDIS_URL: 'redis://127.0.0.1:6379/1',
+        // REDIS_URL vem do .env de staging (mesma pegadinha #1).
       },
       max_memory_restart: '400M',
       kill_timeout: 30000,
