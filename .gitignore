@@ -10,3 +10,5 @@ dashboard/.next/
 
 *.db
 *.db-journal
+*.db-wal
+*.db-shm
