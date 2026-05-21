@@ -132,3 +132,94 @@ test('PUT /config aceita channelDailyCap null para pro', async () => {
   assert.equal(body.config.channelDailyCap, null)
   await app.close()
 })
+
+// 7. PUT /config rejeita channelQuietHoursJson inválido
+test('PUT /config retorna 400 para channelQuietHoursJson com JSON malformado', async () => {
+  const { app } = await buildApp({ plan: 'pro' })
+  const res = await app.inject({
+    method: 'PUT',
+    url: '/api/preservation/config',
+    payload: { channelQuietHoursJson: '{ não é json' },
+  })
+  assert.equal(res.statusCode, 400)
+  const body = JSON.parse(res.body)
+  assert.ok(body.errors.some(e => /channelQuietHoursJson/.test(e)))
+  await app.close()
+})
+
+// 8. PUT /config aceita channelQuietHoursJson válido
+test('PUT /config aceita channelQuietHoursJson com JSON válido', async () => {
+  const { app } = await buildApp({ plan: 'pro' })
+  const payload = { channelQuietHoursJson: JSON.stringify({ startHour: 23, endHour: 6, tz: 'America/Sao_Paulo' }) }
+  const res = await app.inject({
+    method: 'PUT',
+    url: '/api/preservation/config',
+    payload,
+  })
+  assert.equal(res.statusCode, 200)
+  await app.close()
+})
+
+// 9. PUT /config rejeita copyVariationPoolJson não-string
+test('PUT /config retorna 400 para copyVariationPoolJson não-string', async () => {
+  const { app } = await buildApp({ plan: 'pro' })
+  const res = await app.inject({
+    method: 'PUT',
+    url: '/api/preservation/config',
+    payload: { copyVariationPoolJson: { not: 'a string' } },
+  })
+  assert.equal(res.statusCode, 400)
+  await app.close()
+})
+
+// 10. PUT /config rejeita maxDailyFollows fora do range
+test('PUT /config retorna 400 para maxDailyFollows > 50', async () => {
+  const { app } = await buildApp({ plan: 'pro' })
+  const res = await app.inject({
+    method: 'PUT',
+    url: '/api/preservation/config',
+    payload: { maxDailyFollows: 100 },
+  })
+  assert.equal(res.statusCode, 400)
+  await app.close()
+})
+
+// 11. PUT /config aceita probeEnabled boolean
+test('PUT /config aceita probeEnabled true', async () => {
+  const { app } = await buildApp({ plan: 'pro' })
+  const res = await app.inject({
+    method: 'PUT',
+    url: '/api/preservation/config',
+    payload: { probeEnabled: true },
+  })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.config.probeEnabled, true)
+  await app.close()
+})
+
+// 12. PUT /config trial ativo libera (mesmo gating do pro)
+test('PUT /config trial ativo permite atualização', async () => {
+  const future = new Date(Date.now() + 60_000)
+  const { app } = await buildApp({ plan: 'trial', accessExpiresAt: future })
+  const res = await app.inject({
+    method: 'PUT',
+    url: '/api/preservation/config',
+    payload: { channelBurstCap: 5 },
+  })
+  assert.equal(res.statusCode, 200)
+  await app.close()
+})
+
+// 13. PUT /config trial expirado bloqueia com 402
+test('PUT /config trial expirado retorna 402', async () => {
+  const past = new Date(Date.now() - 60_000)
+  const { app } = await buildApp({ plan: 'trial', accessExpiresAt: past })
+  const res = await app.inject({
+    method: 'PUT',
+    url: '/api/preservation/config',
+    payload: { channelBurstCap: 5 },
+  })
+  assert.equal(res.statusCode, 402)
+  await app.close()
+})

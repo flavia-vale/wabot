@@ -8,7 +8,7 @@ import {
 } from '../../src/core/channelProbe.js'
 import { __resetCacheForTests } from '../../src/billing/plans.js'
 
-function makeFakeDb({ channels = [], channelHealth = new Map() } = {}) {
+function makeFakeDb({ channels = [], channelHealth = new Map(), usersByPlan = new Map() } = {}) {
   return {
     _health: channelHealth,
     group: {
@@ -35,7 +35,7 @@ function makeFakeDb({ channels = [], channelHealth = new Map() } = {}) {
       },
     },
     user: {
-      findUnique: async () => ({ plan: 'pro', accessExpiresAt: null }),
+      findUnique: async ({ where }) => usersByPlan.get(where.id) ?? { plan: 'pro', accessExpiresAt: null },
     },
   }
 }
@@ -142,4 +142,30 @@ test('runProbeWatchdog: probe viu DEPOIS do post → mantém verde', async () =>
   const summary = await runProbeWatchdog({ db, now })
   assert.equal(summary.flagged, 0)
   assert.equal(channelHealth.get('g-1').status, 'green')
+})
+
+test('runProbeWatchdog pula canais de usuários sem preservação avançada', async () => {
+  __resetCacheForTests()
+  const now = Date.now()
+  const stalePosted = new Date(now - (PROBE_STALE_WINDOW_MS + 60_000))
+  const channelHealth = new Map([
+    ['g-pro', { groupId: 'g-pro', status: 'green', lastPostedAt: stalePosted, lastProbeSeenAt: null }],
+    ['g-basic', { groupId: 'g-basic', status: 'green', lastPostedAt: stalePosted, lastProbeSeenAt: null }],
+  ])
+  const usersByPlan = new Map([
+    ['u-pro', { plan: 'pro', accessExpiresAt: null }],
+    ['u-basic', { plan: 'basic', accessExpiresAt: null }],
+  ])
+  const db = makeFakeDb({
+    channels: [
+      { id: 'g-pro', userId: 'u-pro', kind: 'channel', role: 'post' },
+      { id: 'g-basic', userId: 'u-basic', kind: 'channel', role: 'post' },
+    ],
+    channelHealth,
+    usersByPlan,
+  })
+  const summary = await runProbeWatchdog({ db, now })
+  assert.equal(summary.flagged, 1, 'só o canal do usuário pro foi flaggado')
+  assert.equal(channelHealth.get('g-pro').status, 'yellow')
+  assert.equal(channelHealth.get('g-basic').status, 'green', 'canal do basic não é tocado')
 })
