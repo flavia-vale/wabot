@@ -99,6 +99,16 @@ verify_next_jest_worker_process_child() {
   [[ -f "$worker" ]]
 }
 
+run_npm_ci_with_recovery() {
+  local label="$1"
+  if npm ci; then
+    return 0
+  fi
+  echo "  Aviso: 'npm ci' falhou em $label. Estado de node_modules pode estar sujo (ex: ENOTEMPTY). Removendo e tentando novamente uma vez..."
+  rm -rf node_modules
+  npm ci
+}
+
 ensure_dashboard_deps_integrity() {
   if verify_next_polyfill && verify_next_jest_worker_process_child; then
     return 0
@@ -171,14 +181,14 @@ else
 fi
 
 echo "[3/9] Install root dependencies sem alterar lockfile"
-npm ci
+run_npm_ci_with_recovery "root"
 
 echo "[4/9] Apply database migrations no banco isolado de staging"
 npx prisma migrate deploy
 
 echo "[5/9] Install dashboard dependencies sem alterar lockfile"
 cd "$DASHBOARD_DIR"
-npm ci
+run_npm_ci_with_recovery "dashboard"
 ensure_dashboard_deps_integrity
 
 echo "[6/9] Guardrail + build dashboard staging (hard gate)"
@@ -205,6 +215,24 @@ if ! command -v pm2 >/dev/null 2>&1; then
 fi
 ensure_pm2_app_running "$API_APP"
 ensure_pm2_app_running "$VISUAL_APP"
+
+# bot-supervisor é INTENCIONALMENTE deixado de fora do restart automático
+# em todo deploy. O ponto do desacoplamento é justamente que deploy da API
+# não derrube as sessões WhatsApp. Reinicie o supervisor manualmente quando
+# houver mudança em:
+#   - src/supervisor/*
+#   - src/core/sessionCore.js
+#   - src/bot-worker.js
+# Comando: pm2 restart bot-supervisor-staging --update-env
+# Para forçar restart no pipeline (raro), exporte RESTART_SUPERVISOR=1.
+SUPERVISOR_APP="${SUPERVISOR_APP:-bot-supervisor-staging}"
+if [[ "${RESTART_SUPERVISOR:-0}" == "1" ]]; then
+  echo "  RESTART_SUPERVISOR=1 — reiniciando $SUPERVISOR_APP"
+  ensure_pm2_app_running "$SUPERVISOR_APP"
+else
+  echo "  bot-supervisor preservado (RESTART_SUPERVISOR=0). Sessões continuam ativas."
+fi
+
 pm2 save
 
 echo "[8/9] PM2 status"

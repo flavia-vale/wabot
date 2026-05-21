@@ -175,6 +175,8 @@ export const api = {
 
   convertLinks: (text) =>
     apiFetch('/api/link-conversion/convert', { method: 'POST', body: JSON.stringify({ text }) }),
+  scrapeOffer: (url) =>
+    apiFetch('/api/link-conversion/scrape-offer', { method: 'POST', body: JSON.stringify({ url }) }),
 
   paymentsStatus: () => apiFetch('/api/payments/status'),
   paymentsOverview: () => apiFetch('/api/payments/overview'),

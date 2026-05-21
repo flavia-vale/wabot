@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 export function ProbeToggle({ value, onChange, disabled, probeAccountSessionId }) {
   return (
     <fieldset className="bg-white rounded-2xl shadow p-5">
@@ -15,7 +17,7 @@ export function ProbeToggle({ value, onChange, disabled, probeAccountSessionId }
           disabled={disabled}
           className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-400"
         />
-        <span className="text-sm text-gray-700">Ativar probe externo</span>
+        <span className="text-sm text-gray-700">Ativar observador externo</span>
       </label>
       <p className="text-[11px] text-gray-500 mt-2">
         Conta probe configurada no servidor: <span className="font-mono">{probeAccountSessionId ?? 'nenhuma'}</span>.

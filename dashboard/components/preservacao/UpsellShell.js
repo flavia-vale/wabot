@@ -7,7 +7,7 @@ const FEATURES = [
   { icon: '🎲', title: 'Variação automática de textos', desc: 'Cada mensagem sai com pequenas variações pré-configuradas.' },
   { icon: '🖼️', title: 'Mutação leve de imagens', desc: 'Crop e recompressão sutis pra evitar hash duplicado.' },
   { icon: '🩺', title: 'Saúde dos canais', desc: 'Status verde/amarelo/vermelho pra cada canal de destino.' },
-  { icon: '🔭', title: 'Probe externo', desc: 'Detecta sombras de banimento antes que afete o envio.' },
+  { icon: '🔭', title: 'Observador externo', desc: 'Detecta sombras de banimento antes que afete o envio.' },
   { icon: '📊', title: 'Score de risco', desc: 'Estimativa 0-100 da chance de denúncia por canal.' },
   { icon: '📸', title: 'Snapshots diários', desc: 'Histórico do estado de cada canal — 30 dias guardados.' },
 ]

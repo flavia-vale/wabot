@@ -22,8 +22,8 @@ const s = {
   cardBody: { fontSize: 14.5, lineHeight: 1.55, color: 'var(--ink-soft)' },
   preservationCard: {
     gridColumn: 'span 12',
-    background: 'linear-gradient(135deg, color-mix(in oklab, var(--accent) 24%, var(--surface)), color-mix(in oklab, var(--accent-2) 24%, var(--surface)))',
-    border: '1px solid var(--line)',
+    background: 'linear-gradient(135deg, #fff3c4 0%, #ffd8a8 45%, #fcbf49 100%)',
+    border: '2px solid #f59e0b',
     borderRadius: 28,
     padding: 36,
     minHeight: 220,
@@ -31,6 +31,7 @@ const s = {
     gridTemplateColumns: 'minmax(0, 1.2fr) minmax(240px, 0.8fr)',
     gap: 28,
     alignItems: 'center',
+    boxShadow: '0 18px 42px rgba(245, 158, 11, 0.28)',
   },
   preservationList: { margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.7, fontSize: 14.5 },
   bigStat: { fontFamily: "'Instrument Serif', serif", fontStyle: 'italic', fontSize: 88, lineHeight: 1, color: 'var(--accent-strong)', letterSpacing: '-0.04em' },
@@ -39,6 +40,20 @@ const s = {
 };
 
 const featureCards = [
+
+  {
+    title: 'Conversão de links',
+    body: 'Converta automaticamente links de ofertas para o seu código de afiliada antes de enviar para grupos e/ou canais de destino.',
+    icon: 'link',
+    cols: 4,
+    accent: true,
+  },
+  {
+    title: 'Geração de texto de ofertas',
+    body: 'Crie mensagem promocional com estrutura pronta (benefício, preço e CTA) para publicar com mais consistência em grupos e/ou canais.',
+    icon: 'chat',
+    cols: 4,
+  },
   {
     title: 'Conversão Instantânea',
     body: 'Links de lojas suportadas são detectados e convertidos em tempo real com o seu código de afiliada, sem copiar e colar manualmente.',

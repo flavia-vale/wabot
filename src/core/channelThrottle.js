@@ -105,7 +105,7 @@ export function decide({ now, throttle, isPaused, botConfig }) {
     }
   }
 
-  const burstWindowMs = (botConfig.channelBurstWindowSec ?? 600) * SEC
+  const burstWindowMs = (botConfig.channelBurstWindowSec ?? 3600) * SEC
   const burstCap = botConfig.channelBurstCap ?? 6
   const winStartMs = toMs(throttle?.burstWindowStart)
   const windowActive = winStartMs && now - winStartMs < burstWindowMs
@@ -154,7 +154,7 @@ export async function checkAndReserve(groupId, botConfig, opts = {}) {
 async function reserve(db, groupId, throttle, now, botConfig) {
   const quiet = parseQuietHours(botConfig.channelQuietHoursJson)
   const today = tzDayBucket(now, quiet.tz)
-  const burstWindowMs = (botConfig.channelBurstWindowSec ?? 600) * SEC
+  const burstWindowMs = (botConfig.channelBurstWindowSec ?? 3600) * SEC
   const winStartMs = toMs(throttle?.burstWindowStart)
   const windowActive = winStartMs && now - winStartMs < burstWindowMs
 

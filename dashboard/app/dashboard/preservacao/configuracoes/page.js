@@ -26,7 +26,7 @@ export default function ConfiguracoesAvancadasPage() {
       const data = await api.preservationConfig()
       setConfig(data.config)
       setFlags(data.flags)
-      setDraft(data.config)
+      setDraft({ ...data.config, channelBurstWindowSec: 3600 })
     } catch (e) { setError(e.message) }
   }
 

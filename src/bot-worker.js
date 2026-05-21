@@ -22,7 +22,7 @@ import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { createMessageQueue } from './messageQueue.js'
-import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } from './sendQueueBackend.js'
+import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode } from './sendQueueBackend.js'
 import { isMirrorableJid, detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
 import { getChannelMetadata, followChannel, listFollowedChannels } from './core/channelDirectory.js'
@@ -432,7 +432,11 @@ const SMART_DELAY_TYPING_ENABLED = String(process.env.SMART_DELAY_TYPING_ENABLED
 const SMART_DELAY_TYPING_MIN_MS = Math.max(0, envNumber('SMART_DELAY_TYPING_MIN_MS', 1_200))
 const SMART_DELAY_TYPING_MAX_MS = Math.max(SMART_DELAY_TYPING_MIN_MS, envNumber('SMART_DELAY_TYPING_MAX_MS', 7_000))
 const SMART_DELAY_TYPING_CHARS_PER_SECOND = Math.max(1, envNumber('SMART_DELAY_TYPING_CHARS_PER_SECOND', 18))
-const SEND_QUEUE_BACKEND = String(process.env.QUEUE_BACKEND || 'memory').toLowerCase()
+// QUEUE_BACKEND aceita 'memory', 'bullmq' ou vazio (auto). Quando vazio
+// e REDIS_URL está setado, default vira 'bullmq' — assim deploy em produção
+// ganha persistência automaticamente. Comportamento controlado em
+// resolveBackendMode() para manter a regra em um lugar só.
+const SEND_QUEUE_BACKEND_ENV = String(process.env.QUEUE_BACKEND || '').toLowerCase()
 const REDIS_URL = process.env.REDIS_URL || ''
 const BULLMQ_QUEUE_NAME = process.env.BULLMQ_QUEUE_NAME || `wabot-send-${userId}`
 const MSG_QUEUE_CONCURRENCY = Math.max(1, envNumber('MSG_QUEUE_CONCURRENCY', 2))
@@ -747,14 +751,17 @@ async function createSendBackend() {
   // sendJobTracker é lido por shutdown() via waitUntilDrained para esperar
   // jobs em vôo terminarem antes de marcar restos como interrompidos.
   const onDequeued = (job) => sendJobTracker.track(() => processSendJob(job))
-  if (SEND_QUEUE_BACKEND !== 'bullmq') {
+  const mode = resolveBackendMode({ queueBackendEnv: SEND_QUEUE_BACKEND_ENV, redisUrl: REDIS_URL })
+  if (mode === 'memory') {
     return createMemorySendBackend({ maxSize: SEND_QUEUE_MAX_SIZE, onRejected, onDequeued })
   }
-  if (!REDIS_URL) {
+  if (mode === 'memory-fallback') {
     logger.warn('QUEUE_BACKEND=bullmq definido sem REDIS_URL; fallback para memória')
     return createMemorySendBackend({ maxSize: SEND_QUEUE_MAX_SIZE, onRejected, onDequeued })
   }
+  // mode === 'bullmq'
   try {
+    logger.info({ queueName: BULLMQ_QUEUE_NAME, dlqQueueName: `${BULLMQ_QUEUE_NAME}-dlq` }, 'Usando BullMQ como backend de envio')
     return await createBullmqSendBackend({
       redisUrl: REDIS_URL,
       queueName: BULLMQ_QUEUE_NAME,

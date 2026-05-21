@@ -25,10 +25,22 @@ const partnerTypes = [
 ]
 
 const partnershipFormats = [
-  'Webinar ou live co-hosted',
-  'Lead magnet/checklist conjunto',
-  'Cupom exclusivo com UTM dedicada',
-  'Case prático por nicho com aprovação prévia',
+  {
+    title: 'Aula ao vivo em parceria',
+    description: 'Fazemos uma live juntos para ensinar sua audiência e mostrar, na prática, como funciona um piloto seguro.',
+  },
+  {
+    title: 'Material gratuito em conjunto',
+    description: 'Criamos um checklist ou guia simples com sua marca e a nossa para captar leads qualificados sem complicação.',
+  },
+  {
+    title: 'Link com cupom exclusivo',
+    description: 'Você recebe um link com cupom só seu para indicar pessoas e acompanhar resultados de forma clara.',
+  },
+  {
+    title: 'Caso real do seu nicho',
+    description: 'Montamos um estudo prático com seu público para mostrar o antes e depois, sempre com sua aprovação antes de publicar.',
+  },
 ]
 
 const guardrails = [
@@ -110,7 +122,12 @@ export default function Page() {
             <h2 className="text-2xl font-black tracking-tight text-gray-950">Formatos de parceria</h2>
             <ul className="mt-4 space-y-3 text-sm leading-7 text-gray-700">
               {partnershipFormats.map((item) => (
-                <li key={item} className="flex gap-3"><span aria-hidden="true" className="text-emerald-600">✓</span><span>{item}</span></li>
+                <li key={item.title} className="flex gap-3">
+                  <span aria-hidden="true" className="text-emerald-600">✓</span>
+                  <span>
+                    <strong className="text-gray-900">{item.title}:</strong> {item.description}
+                  </span>
+                </li>
               ))}
             </ul>
           </article>
