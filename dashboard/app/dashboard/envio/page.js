@@ -109,7 +109,7 @@ export default function EnvioPage() {
   const [selectedTargetJids, setSelectedTargetJids] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   const [minMembers, setMinMembers] = useState('')
-  const [includeChannels, setIncludeChannels] = useState(false)
+  const [includeChannels, setIncludeChannels] = useState(true)
   const [topN, setTopN] = useState(10)
   const [targetGroupsLoading, setTargetGroupsLoading] = useState(true)
   const [targetGroupsError, setTargetGroupsError] = useState('')
@@ -330,7 +330,7 @@ export default function EnvioPage() {
           </div>
           <label className="mt-2 inline-flex items-center gap-2 text-xs text-gray-600">
             <input type="checkbox" checked={includeChannels} onChange={(e) => { setIncludeChannels(e.target.checked); trackEvent('group_filter_changed', { filter_name: 'include_channels', to_value: e.target.checked }) }} />
-            Incluir canais
+            Incluir canais (recomendado)
           </label>
           <div className="mt-2 flex flex-wrap gap-2">
             <button type="button" onClick={selectAllVisible} className="rounded-full border px-3 py-1 text-xs">Selecionar visíveis ({filteredTargetGroups.length})</button>
