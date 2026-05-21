@@ -1789,4 +1789,65 @@ app.get('/sessions', async (req, reply) => {
       })),
     }
   })
+
+  // ---- DLQ do pipeline de envio (BullMQ) ----
+  //
+  // Disponível apenas quando o worker do usuário está em backend bullmq
+  // (REDIS_URL configurada). Em backend memory a DLQ é sempre vazia.
+  // Auditoria registra todas as ações destrutivas (retry/discard/purge).
+
+  app.get('/send-dlq/:userId', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:read'))) return
+    const { listDlq } = await import('../../jobs/sendDlq.js')
+    const userId = String(req.params.userId)
+    const limit = Math.min(500, Math.max(1, Number(req.query?.limit) || 100))
+    try {
+      const result = await listDlq({ redisUrl: process.env.REDIS_URL, userId, limit })
+      await writeAdminAuditLog(req, { action: 'admin.sendDlq.list', resource: 'sendDlq', resourceId: userId, after: { total: result.total } })
+      return result
+    } catch (err) {
+      return reply.code(503).send({ error: err.message })
+    }
+  })
+
+  app.post('/send-dlq/:userId/retry/:jobId', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:write'))) return
+    const { retryDlqJob } = await import('../../jobs/sendDlq.js')
+    const userId = String(req.params.userId)
+    const jobId = String(req.params.jobId)
+    try {
+      const result = await retryDlqJob({ redisUrl: process.env.REDIS_URL, userId, dlqJobId: jobId })
+      await writeAdminAuditLog(req, { action: 'admin.sendDlq.retry', resource: 'sendDlq', resourceId: `${userId}:${jobId}`, after: result })
+      return result
+    } catch (err) {
+      return reply.code(503).send({ error: err.message })
+    }
+  })
+
+  app.delete('/send-dlq/:userId/job/:jobId', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:write'))) return
+    const { discardDlqJob } = await import('../../jobs/sendDlq.js')
+    const userId = String(req.params.userId)
+    const jobId = String(req.params.jobId)
+    try {
+      const result = await discardDlqJob({ redisUrl: process.env.REDIS_URL, userId, dlqJobId: jobId })
+      await writeAdminAuditLog(req, { action: 'admin.sendDlq.discard', resource: 'sendDlq', resourceId: `${userId}:${jobId}`, after: result })
+      return result
+    } catch (err) {
+      return reply.code(503).send({ error: err.message })
+    }
+  })
+
+  app.post('/send-dlq/:userId/purge', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:write'))) return
+    const { purgeDlq } = await import('../../jobs/sendDlq.js')
+    const userId = String(req.params.userId)
+    try {
+      const result = await purgeDlq({ redisUrl: process.env.REDIS_URL, userId })
+      await writeAdminAuditLog(req, { action: 'admin.sendDlq.purge', resource: 'sendDlq', resourceId: userId, after: { removed: result.removed } })
+      return result
+    } catch (err) {
+      return reply.code(503).send({ error: err.message })
+    }
+  })
 }
