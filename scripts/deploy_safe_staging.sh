@@ -215,6 +215,24 @@ if ! command -v pm2 >/dev/null 2>&1; then
 fi
 ensure_pm2_app_running "$API_APP"
 ensure_pm2_app_running "$VISUAL_APP"
+
+# bot-supervisor é INTENCIONALMENTE deixado de fora do restart automático
+# em todo deploy. O ponto do desacoplamento é justamente que deploy da API
+# não derrube as sessões WhatsApp. Reinicie o supervisor manualmente quando
+# houver mudança em:
+#   - src/supervisor/*
+#   - src/core/sessionCore.js
+#   - src/bot-worker.js
+# Comando: pm2 restart bot-supervisor-staging --update-env
+# Para forçar restart no pipeline (raro), exporte RESTART_SUPERVISOR=1.
+SUPERVISOR_APP="${SUPERVISOR_APP:-bot-supervisor-staging}"
+if [[ "${RESTART_SUPERVISOR:-0}" == "1" ]]; then
+  echo "  RESTART_SUPERVISOR=1 — reiniciando $SUPERVISOR_APP"
+  ensure_pm2_app_running "$SUPERVISOR_APP"
+else
+  echo "  bot-supervisor preservado (RESTART_SUPERVISOR=0). Sessões continuam ativas."
+fi
+
 pm2 save
 
 echo "[8/9] PM2 status"

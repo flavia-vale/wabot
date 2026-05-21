@@ -133,6 +133,17 @@ echo "[7b/9] Restart PM2 apps"
 pm2 restart dashboard --update-env
 pm2 restart api --update-env
 
+# bot-supervisor (prod) é INTENCIONALMENTE preservado: ver comentário
+# detalhado em scripts/deploy_safe_staging.sh. Reinicie manualmente quando
+# mudar src/supervisor/*, src/core/sessionCore.js ou src/bot-worker.js.
+# Para forçar restart nesse pipeline, exporte RESTART_SUPERVISOR=1.
+if [[ "${RESTART_SUPERVISOR:-0}" == "1" ]]; then
+  echo "  RESTART_SUPERVISOR=1 — reiniciando bot-supervisor"
+  pm2 restart bot-supervisor --update-env
+else
+  echo "  bot-supervisor preservado. Sessões WhatsApp continuam ativas."
+fi
+
 echo "[8/9] PM2 status"
 pm2 status
 
