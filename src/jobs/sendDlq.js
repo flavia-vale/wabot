@@ -18,14 +18,14 @@ function dlqNameForUser(userId, { queueNameOverride } = {}) {
   return `${base}-dlq`
 }
 
-async function withDlq({ redisUrl, userId, queueNameOverride }, fn) {
+async function withDlq({ redisUrl, userId, queueNameOverride, bullmqModule }, fn) {
   if (!redisUrl) throw new Error('REDIS_URL ausente — DLQ só funciona com backend BullMQ')
   if (!userId) throw new Error('userId obrigatório')
-  const { Queue } = await import('bullmq')
+  const { Queue } = bullmqModule ?? (await import('bullmq'))
   const name = dlqNameForUser(userId, { queueNameOverride })
   const queue = new Queue(name, { connection: { url: redisUrl } })
   try {
-    return await fn(queue, name)
+    return await fn(queue, name, { Queue })
   } finally {
     await queue.close().catch(() => {})
   }
@@ -35,8 +35,8 @@ async function withDlq({ redisUrl, userId, queueNameOverride }, fn) {
  * Lista jobs presentes na DLQ. Limita por padrão a 100 entradas para
  * proteger a UI/admin.
  */
-export async function listDlq({ redisUrl, userId, limit = 100, queueNameOverride } = {}) {
-  return withDlq({ redisUrl, userId, queueNameOverride }, async (queue, name) => {
+export async function listDlq({ redisUrl, userId, limit = 100, queueNameOverride, bullmqModule } = {}) {
+  return withDlq({ redisUrl, userId, queueNameOverride, bullmqModule }, async (queue, name) => {
     const jobs = await queue.getJobs(['waiting', 'delayed', 'completed', 'failed'], 0, limit - 1, false)
     return {
       queue: name,
@@ -57,9 +57,9 @@ export async function listDlq({ redisUrl, userId, limit = 100, queueNameOverride
  * Idempotente: se o jobId já existir na principal, BullMQ rejeita o
  * duplicado silenciosamente.
  */
-export async function retryDlqJob({ redisUrl, userId, dlqJobId, queueNameOverride } = {}) {
+export async function retryDlqJob({ redisUrl, userId, dlqJobId, queueNameOverride, bullmqModule } = {}) {
   if (!dlqJobId) throw new Error('dlqJobId obrigatório')
-  return withDlq({ redisUrl, userId, queueNameOverride }, async (dlq) => {
+  return withDlq({ redisUrl, userId, queueNameOverride, bullmqModule }, async (dlq, _name, { Queue }) => {
     const job = await dlq.getJob(dlqJobId)
     if (!job) return { ok: false, reason: 'job não encontrado na DLQ' }
     const original = job.data?.originalData
@@ -67,7 +67,6 @@ export async function retryDlqJob({ redisUrl, userId, dlqJobId, queueNameOverrid
     if (!original || !originalQueue) {
       return { ok: false, reason: 'job da DLQ sem originalData/originalQueue — não dá para reenfileirar com segurança' }
     }
-    const { Queue } = await import('bullmq')
     const main = new Queue(originalQueue, { connection: { url: redisUrl } })
     try {
       await main.add('send', original, {
@@ -86,9 +85,9 @@ export async function retryDlqJob({ redisUrl, userId, dlqJobId, queueNameOverrid
 /**
  * Remove permanentemente um job da DLQ.
  */
-export async function discardDlqJob({ redisUrl, userId, dlqJobId, queueNameOverride } = {}) {
+export async function discardDlqJob({ redisUrl, userId, dlqJobId, queueNameOverride, bullmqModule } = {}) {
   if (!dlqJobId) throw new Error('dlqJobId obrigatório')
-  return withDlq({ redisUrl, userId, queueNameOverride }, async (dlq) => {
+  return withDlq({ redisUrl, userId, queueNameOverride, bullmqModule }, async (dlq) => {
     const job = await dlq.getJob(dlqJobId)
     if (!job) return { ok: false, reason: 'job não encontrado' }
     await job.remove()
@@ -101,8 +100,8 @@ export async function discardDlqJob({ redisUrl, userId, dlqJobId, queueNameOverr
  * removidos. Loga antes de remover para deixar rastro em caso de operação
  * acidental.
  */
-export async function purgeDlq({ redisUrl, userId, queueNameOverride } = {}) {
-  return withDlq({ redisUrl, userId, queueNameOverride }, async (dlq, name) => {
+export async function purgeDlq({ redisUrl, userId, queueNameOverride, bullmqModule } = {}) {
+  return withDlq({ redisUrl, userId, queueNameOverride, bullmqModule }, async (dlq, name) => {
     const jobs = await dlq.getJobs(['waiting', 'delayed', 'completed', 'failed'], 0, -1, false)
     logger.warn({ queue: name, count: jobs.length }, 'Purgando DLQ — ação manual')
     for (const j of jobs) await j.remove().catch(() => {})

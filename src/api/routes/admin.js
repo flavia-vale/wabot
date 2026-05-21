@@ -570,8 +570,12 @@ async function getOperationalOverview(now = new Date()) {
   }
 }
 
-export async function adminRoutes(app) {
+export async function adminRoutes(app, opts = {}) {
   app.addHook('onRequest', app.authenticate)
+
+  // Permite injetar mock do módulo de DLQ em testes. Em produção,
+  // opts.sendDlqModule é undefined e o import dinâmico padrão é usado.
+  const loadSendDlq = async () => opts.sendDlqModule ?? await import('../../jobs/sendDlq.js')
 
   app.get('/me', async (req, reply) => {
     if (!(await requireAdmin(req, reply))) return
@@ -1798,7 +1802,7 @@ app.get('/sessions', async (req, reply) => {
 
   app.get('/send-dlq/:userId', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'admin:read'))) return
-    const { listDlq } = await import('../../jobs/sendDlq.js')
+    const { listDlq } = await loadSendDlq()
     const userId = String(req.params.userId)
     const limit = Math.min(500, Math.max(1, Number(req.query?.limit) || 100))
     try {
@@ -1812,7 +1816,7 @@ app.get('/sessions', async (req, reply) => {
 
   app.post('/send-dlq/:userId/retry/:jobId', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'admin:write'))) return
-    const { retryDlqJob } = await import('../../jobs/sendDlq.js')
+    const { retryDlqJob } = await loadSendDlq()
     const userId = String(req.params.userId)
     const jobId = String(req.params.jobId)
     try {
@@ -1826,7 +1830,7 @@ app.get('/sessions', async (req, reply) => {
 
   app.delete('/send-dlq/:userId/job/:jobId', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'admin:write'))) return
-    const { discardDlqJob } = await import('../../jobs/sendDlq.js')
+    const { discardDlqJob } = await loadSendDlq()
     const userId = String(req.params.userId)
     const jobId = String(req.params.jobId)
     try {
@@ -1840,7 +1844,7 @@ app.get('/sessions', async (req, reply) => {
 
   app.post('/send-dlq/:userId/purge', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'admin:write'))) return
-    const { purgeDlq } = await import('../../jobs/sendDlq.js')
+    const { purgeDlq } = await loadSendDlq()
     const userId = String(req.params.userId)
     try {
       const result = await purgeDlq({ redisUrl: process.env.REDIS_URL, userId })
