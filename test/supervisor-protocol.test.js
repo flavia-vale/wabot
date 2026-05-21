@@ -16,7 +16,11 @@ import {
 } from '../src/supervisor/protocol.js'
 
 test('protocolo expõe nomes canônicos de canais e fila', () => {
-  assert.equal(COMMAND_QUEUE, 'supervisor:commands')
+  // COMMAND_QUEUE não pode ter ':' — BullMQ proíbe e o supervisor crasha
+  // no boot. Pub/sub channel e heartbeat key são chaves Redis simples,
+  // ':' é OK lá.
+  assert.equal(COMMAND_QUEUE, 'supervisor-commands')
+  assert.ok(!COMMAND_QUEUE.includes(':'), 'BullMQ não aceita ":" em nome de fila')
   assert.equal(EVENTS_CHANNEL, 'bots:events')
   assert.equal(PROTOCOL_VERSION, 1)
 })

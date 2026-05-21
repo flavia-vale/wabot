@@ -11,7 +11,12 @@
 export const PROTOCOL_VERSION = 1
 
 // Fila BullMQ que carrega comandos request-response API -> Supervisor.
-export const COMMAND_QUEUE = 'supervisor:commands'
+// IMPORTANTE: BullMQ proíbe ':' em nomes de fila (usa ':' como separador
+// interno de chaves Redis 'bull:<queue>:<id>'). O construtor de Worker/Queue
+// lança 'Error: Queue name cannot contain :' e mata o supervisor no boot.
+// Mantemos hífen como separador. Pub/sub channels e chaves Redis simples
+// (heartbeat) podem ter ':' — só Queue/Worker que não pode.
+export const COMMAND_QUEUE = 'supervisor-commands'
 
 // Canal Redis pub/sub que carrega eventos broadcast Supervisor -> API.
 // payload: { v, userId, type, data, ts }
