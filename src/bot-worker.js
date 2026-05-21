@@ -762,13 +762,30 @@ async function createSendBackend() {
   // mode === 'bullmq'
   try {
     logger.info({ queueName: BULLMQ_QUEUE_NAME, dlqQueueName: `${BULLMQ_QUEUE_NAME}-dlq` }, 'Usando BullMQ como backend de envio')
-    return await createBullmqSendBackend({
+    const bullBackend = await createBullmqSendBackend({
       redisUrl: REDIS_URL,
       queueName: BULLMQ_QUEUE_NAME,
       onRejected,
       onDequeued,
       concurrency: 1,
     })
+    const memoryFallback = createMemorySendBackend({ maxSize: SEND_QUEUE_MAX_SIZE, onRejected, onDequeued })
+    return {
+      ...bullBackend,
+      enqueue(job) {
+        return bullBackend.enqueue(job).then(ok => {
+          if (ok) return true
+          logger.warn({ logId: job?.logId }, 'BullMQ indisponível no enqueue; fallback imediato para fila em memória')
+          return memoryFallback.enqueue(job)
+        })
+      },
+      async close() {
+        await Promise.allSettled([
+          bullBackend.close(),
+          memoryFallback.close(),
+        ])
+      },
+    }
   } catch (err) {
     logger.error({ err: err.message }, 'Falha ao iniciar BullMQ; fallback para memória')
     return createMemorySendBackend({ maxSize: SEND_QUEUE_MAX_SIZE, onRejected, onDequeued })

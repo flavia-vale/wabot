@@ -39,6 +39,22 @@ mensagens em vôo. O supervisor é um processo PM2 separado que assume o
 pub/sub para eventos QR/status). Reiniciar a API deixa de tocar nas
 sessões.
 
+
+### Pré-flight obrigatório antes de qualquer cutover em produção (NÃO pular)
+
+Antes de executar qualquer passo de `inline -> remote` em **prod**, rodar e validar:
+
+```bash
+grep "name:" ~/wabot/ecosystem.config.cjs
+ls ~/wabot/src/supervisor/
+```
+
+Critérios de aprovação:
+- `grep` precisa listar **5 apps**: `api`, `dashboard`, `bot-supervisor`, `snapshot-cron` e (quando houver) os equivalentes de staging no repo correto.
+- `ls` precisa mostrar `protocol.js`, `client.js`, `index.js` (e demais arquivos do supervisor).
+
+Se qualquer item falhar: **BLOQUEAR CUTOVER**. Primeiro promover `develop -> main`, aguardar autodeploy, revalidar pre-flight e só então prosseguir com o runbook de produção.
+
 ### Seleção de modo via `BOT_SUPERVISOR_MODE`
 
 A API decide quem gerencia os bots via env var `BOT_SUPERVISOR_MODE`:
