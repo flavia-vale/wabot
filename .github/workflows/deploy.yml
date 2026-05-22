@@ -3,6 +3,16 @@ name: Deploy Automático Wabot
 on:
   push:
     branches: [ main, develop ]
+  # Permite disparar manualmente pela UI do GitHub Actions ("Run workflow").
+  # Útil para re-rodar deploy no HEAD atual de develop/main sem precisar de
+  # commit novo (ex: quando uma execução antiga falhou em SHA já corrigido
+  # por commits posteriores).
+  workflow_dispatch:
+    inputs:
+      ref_label:
+        description: 'Rótulo opcional para identificar este run nos logs (ex: "redeploy after lock fix")'
+        required: false
+        default: 'manual'
 
 jobs:
   deploy:
