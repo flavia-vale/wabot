@@ -300,12 +300,14 @@ export default function DashboardPage() {
       trackTelemetry({ stage: 'authenticating', event: 'qr_requested' })
       // no fluxo de pairing, evitamos abrir WS de QR imediatamente para não disputar handshake
       const s = await fetchStatus()
-      if (s?.running && s?.status === 'connecting' && !qr) {
+      const shouldOpenWsNow = s?.running && s?.status === 'connecting' && !qrRef.current && !pairingCodeRef.current
+      if (shouldOpenWsNow) {
         await openWS().catch(() => setSocketState('error'))
         trackTelemetry({ stage: 'authenticating', event: mode === 'retry' ? 'waiting_qr_after_retry_click' : 'waiting_qr_after_connect_click' })
       }
       const runningStatus = s?.running ? s : await waitForRunningSession(12000)
-      if (runningStatus?.running) {
+      const wsIsOpen = wsRef.current && wsRef.current.readyState === 1
+      if (runningStatus?.running && !wsIsOpen && !qrRef.current && !pairingCodeRef.current) {
         await openWS().catch(() => setSocketState('error'))
         const fallbackQr = await api.sessionQRLatest().catch(() => null)
         if (fallbackQr?.qr) {
