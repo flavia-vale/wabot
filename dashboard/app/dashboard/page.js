@@ -34,6 +34,8 @@ export default function DashboardPage() {
   const wsQrTimeoutRef = useRef(null)
   const qrPollingRef = useRef(null)
   const qrWaitElapsedRef = useRef(0)
+  const qrRef = useRef(null)
+  const pairingCodeRef = useRef('')
 
   const [showPairingInput, setShowPairingInput] = useState(false)
   const [pairingPhone, setPairingPhone] = useState('')
@@ -131,12 +133,12 @@ export default function DashboardPage() {
     wsQrTimeoutRef.current = setTimeout(async () => {
       const latest = await api.sessionStatusFast().catch(() => null)
       const stillConnecting = latest?.running && latest?.status === 'connecting'
-      if (stillConnecting && !qr && !pairingCode) {
+      if (stillConnecting && !qrRef.current && !pairingCodeRef.current) {
         setWsErrorMessage('QR não foi recebido em até 25s (conexão possivelmente presa)')
         trackTelemetry({ stage: 'authenticating', event: 'qr_timeout_25s' })
       }
     }, 25_000)
-  }, [fetchStatus, trackTelemetry, qr, pairingCode])
+  }, [fetchStatus, trackTelemetry])
 
   useEffect(() => {
     const shouldPoll = connectMethod === 'qr' && status?.running && status?.status === 'connecting' && !qr
@@ -165,6 +167,14 @@ export default function DashboardPage() {
   useEffect(() => {
     qrWaitElapsedRef.current = qrWaitElapsed
   }, [qrWaitElapsed])
+
+  useEffect(() => {
+    qrRef.current = qr
+  }, [qr])
+
+  useEffect(() => {
+    pairingCodeRef.current = pairingCode
+  }, [pairingCode])
 
   useEffect(() => {
     let active = true
@@ -270,7 +280,20 @@ export default function DashboardPage() {
       // no fluxo de pairing, evitamos abrir WS de QR imediatamente para não disputar handshake
       const s = await fetchStatus()
       if (s?.running && s?.status === 'connecting' && !qr) {
+        await openWS().catch(() => setSocketState('error'))
         trackTelemetry({ stage: 'authenticating', event: mode === 'retry' ? 'waiting_qr_after_retry_click' : 'waiting_qr_after_connect_click' })
+      }
+      const runningStatus = s?.running ? s : await waitForRunningSession(12000)
+      if (runningStatus?.running) {
+        await openWS().catch(() => setSocketState('error'))
+        const fallbackQr = await api.sessionQRLatest().catch(() => null)
+        if (fallbackQr?.qr) {
+          setQr(fallbackQr.qr)
+          setQrStartElapsed(qrWaitElapsedRef.current)
+          setWsErrorMessage('')
+          trackTelemetry({ stage: 'authenticating', event: 'qr_received_polling_fallback' })
+          trackTelemetry({ stage: 'authenticating', event: 'qr_rendered' })
+        }
       }
       setTimeout(async () => {
         const s = await api.sessionStatusFast().catch(() => null)
