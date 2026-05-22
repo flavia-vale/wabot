@@ -91,7 +91,26 @@ echo "[2/9] Install root dependencies sem alterar lockfile"
 run_npm_ci_with_recovery "root"
 
 echo "[3/9] Apply database migrations"
-npx prisma migrate deploy
+# Skip se não houver migrations pendentes — evita tocar no DB enquanto
+# PM2 (api / bot-supervisor) está escrevendo, o que dispara SQLITE_BUSY
+# mesmo com busy_timeout=5000 do src/db.js. Mesmo padrão do
+# deploy_safe_staging.sh.
+if npx prisma migrate status 2>&1 | grep -q "Database schema is up to date"; then
+  echo "  Nenhuma migration pendente — pulando migrate deploy."
+else
+  # Há migration pendente: tenta até 5x com backoff (lock costuma ser transitório).
+  migrate_attempt=0
+  until npx prisma migrate deploy; do
+    migrate_attempt=$((migrate_attempt + 1))
+    if [ "$migrate_attempt" -ge 5 ]; then
+      echo "ERRO: prisma migrate deploy falhou após 5 tentativas."
+      exit 1
+    fi
+    wait_s=$((migrate_attempt * 3))
+    echo "  migrate falhou (tentativa $migrate_attempt/5) — aguardando ${wait_s}s..."
+    sleep "$wait_s"
+  done
+fi
 
 echo "[4/9] Install dashboard dependencies"
 cd "$DASHBOARD_DIR"
