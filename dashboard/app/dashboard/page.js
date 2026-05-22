@@ -270,6 +270,7 @@ export default function DashboardPage() {
       // no fluxo de pairing, evitamos abrir WS de QR imediatamente para não disputar handshake
       const s = await fetchStatus()
       if (s?.running && s?.status === 'connecting' && !qr) {
+        await openWS().catch(() => setSocketState('error'))
         trackTelemetry({ stage: 'authenticating', event: mode === 'retry' ? 'waiting_qr_after_retry_click' : 'waiting_qr_after_connect_click' })
       }
       setTimeout(async () => {
