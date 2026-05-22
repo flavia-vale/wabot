@@ -21,7 +21,7 @@ import { clickTrackerRoutes } from './routes/clickTracker.js'
 import { preservationRoutes } from './routes/preservation.js'
 import { registerApiMetricsHooks } from './metrics.js'
 import db from '../db.js'
-import { resumePersistedBots, startSessionHealthMonitor, stopAllBots } from '../manager.js'
+import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, stopBot } from '../manager.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
 registerApiMetricsHooks(app)
@@ -132,6 +132,7 @@ const MESSAGE_LOG_RETENTION_DAYS = process.env.LOG_RETENTION_DAYS === undefined 
 const WEBHOOK_RETENTION_DAYS = process.env.WEBHOOK_RETENTION_DAYS === undefined ? 30 : Number(process.env.WEBHOOK_RETENTION_DAYS)
 const ADMIN_AUDIT_RETENTION_DAYS = process.env.ADMIN_AUDIT_RETENTION_DAYS === undefined ? 180 : Number(process.env.ADMIN_AUDIT_RETENTION_DAYS)
 const LOG_RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000
+const EXPIRED_SESSION_SWEEP_INTERVAL_MS = Math.max(30_000, Number(process.env.EXPIRED_SESSION_SWEEP_INTERVAL_MS || 60_000))
 
 async function cleanupByRetentionDays(model, dateField, retentionDays, logLabel) {
   if (!Number.isFinite(retentionDays) || retentionDays <= 0) return
@@ -157,6 +158,46 @@ function startLogRetentionJob() {
   const timer = setInterval(() => {
     cleanupOldLogs().catch(err => app.log.error({ err: err.message }, 'Falha na limpeza automática de retenção'))
   }, LOG_RETENTION_INTERVAL_MS)
+  timer.unref?.()
+}
+
+async function disconnectExpiredSessionsTick() {
+  const nowMs = Date.now()
+  const expiredConnectedSessions = await db.waSession.findMany({
+    where: {
+      status: { in: ['connected', 'connecting'] },
+      user: {
+        accessExpiresAt: { not: null },
+      },
+    },
+    select: {
+      userId: true,
+      user: { select: { accessExpiresAt: true, plan: true } },
+    },
+  })
+
+  for (const session of expiredConnectedSessions) {
+    const accessMs = Number(session?.user?.accessExpiresAt ?? 0)
+    if (!Number.isFinite(accessMs) || accessMs <= 0) continue
+    if (accessMs >= nowMs) continue
+    try {
+      await Promise.resolve(stopBot(session.userId))
+      await db.waSession.updateMany({
+        where: { userId: session.userId, status: { in: ['connected', 'connecting'] } },
+        data: { status: 'disconnected', updatedAt: new Date() },
+      })
+      app.log.info({ userId: session.userId, plan: session.user?.plan, accessExpiresAt: accessMs }, 'Sessão WhatsApp desconectada automaticamente por acesso expirado')
+    } catch (err) {
+      app.log.warn({ userId: session.userId, err: err.message }, 'Falha ao desconectar sessão expirada automaticamente')
+    }
+  }
+}
+
+function startExpiredSessionSweepJob() {
+  disconnectExpiredSessionsTick().catch(err => app.log.error({ err: err.message }, 'Falha no sweep inicial de sessões expiradas'))
+  const timer = setInterval(() => {
+    disconnectExpiredSessionsTick().catch(err => app.log.error({ err: err.message }, 'Falha no sweep de sessões expiradas'))
+  }, EXPIRED_SESSION_SWEEP_INTERVAL_MS)
   timer.unref?.()
 }
 
@@ -284,6 +325,7 @@ if (!databaseReadyAtBoot) {
   app.log.warn('API iniciada em modo degradado: execute "npx prisma migrate deploy" e reinicie quando o banco estiver pronto')
 }
 startLogRetentionJob()
+startExpiredSessionSweepJob()
 startActivityCacheCleanup()
 startProbeWatchdogJob()
 await app.listen({ port, host: '0.0.0.0' })
