@@ -17,7 +17,8 @@ function buildAuth(appId, secretKey, payload) {
 
 export async function convert(url, creds) {
   const { appId, secretKey } = creds
-  const safeUrl = url.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  const canonical = await resolveCanonical(url)
+  const safeUrl = canonical.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
   const body = {
     query: `mutation {
       generateShortLink(input: { originUrl: "${safeUrl}", subIds: [""] }) {
