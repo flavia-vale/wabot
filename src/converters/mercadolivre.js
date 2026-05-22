@@ -1,9 +1,42 @@
 import axios from 'axios'
 import logger from '../logger.js'
 
+// Cache LRU simples para evitar reexpansão de short links repetidos
+// (campanhas de cupons disparam o mesmo meli.la várias vezes seguidas).
+// Só cacheia resoluções de host de encurtador para URL ML canônica/produto;
+// não cacheia chamadas autenticadas da API de afiliados.
+const RESOLVE_CACHE_MAX = Math.max(50, Number(process.env.ML_RESOLVE_CACHE_MAX) || 500)
+const RESOLVE_CACHE_TTL_MS = Math.max(60_000, Number(process.env.ML_RESOLVE_CACHE_TTL_MS) || 6 * 60 * 60_000)
+const ML_RESOLVE_FETCH_TIMEOUT_MS = Math.max(1_000, Number(process.env.ML_RESOLVE_FETCH_TIMEOUT_MS) || 4_000)
+const resolveCache = new Map()
+
+function getCachedResolve(url) {
+  const entry = resolveCache.get(url)
+  if (!entry) return null
+  if (Date.now() - entry.at > RESOLVE_CACHE_TTL_MS) {
+    resolveCache.delete(url)
+    return null
+  }
+  // bump recência (LRU)
+  resolveCache.delete(url)
+  resolveCache.set(url, entry)
+  return entry.value
+}
+
+function setCachedResolve(url, value) {
+  if (!value) return
+  if (resolveCache.size >= RESOLVE_CACHE_MAX) {
+    const oldest = resolveCache.keys().next().value
+    if (oldest) resolveCache.delete(oldest)
+  }
+  resolveCache.set(url, { value, at: Date.now() })
+}
+
 // Captura o Location do redirect meli.la sem seguir até o ML
 // (follow-redirects lança erro na 3xx — Location fica em err.response.headers)
 async function resolve(url) {
+  const cached = getCachedResolve(url)
+  if (cached) return cached
   try {
     const res = await fetch(url, {
       redirect: 'follow',
@@ -11,8 +44,12 @@ async function resolve(url) {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
         'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
       },
+      signal: AbortSignal.timeout(ML_RESOLVE_FETCH_TIMEOUT_MS),
     })
-    if (res?.url && res.url !== url) return res.url
+    if (res?.url && res.url !== url) {
+      setCachedResolve(url, res.url)
+      return res.url
+    }
   } catch {
     // fallback para resolução manual abaixo
   }
@@ -37,18 +74,28 @@ async function resolve(url) {
         ? JSON.parse(`"${encodedOriginUrl}"`)
         : null
       const nextFromHtml = originUrl || metaRefresh || canonical || jsLocation
-      if (!nextFromHtml) return current
+      if (!nextFromHtml) {
+        if (current !== url) setCachedResolve(url, current)
+        return current
+      }
 
       const next = new URL(nextFromHtml, current).toString()
-      if (next === current) return current
+      if (next === current) {
+        if (current !== url) setCachedResolve(url, current)
+        return current
+      }
       current = next
       continue
     } catch (err) {
       const location = err?.response?.headers?.location
-      if (!location) return current
+      if (!location) {
+        if (current !== url) setCachedResolve(url, current)
+        return current
+      }
       current = new URL(location, current).toString()
     }
   }
+  if (current !== url) setCachedResolve(url, current)
   return current
 }
 

@@ -1080,12 +1080,15 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform, errorType: 'conversion_diagnostic' } })
       }
 
-      // Converter todos os links habilitados de uma vez
-      const conversions = []
-      for (const { platform, url } of links) {
+      // Converter todos os links habilitados em paralelo. Conversores podem
+      // fazer 4-5 chamadas HTTP sequenciais cada (resolve short → API afiliado
+      // → validate); processar N links em série estoura o teto da fila quando
+      // a mensagem tem múltiplas URLs. Ordem é preservada porque a substituição
+      // no texto casa por URL original, não por índice em conversions[].
+      const linkResults = await Promise.all(links.map(async ({ platform, url }) => {
         if (!enabledPlatforms.has(platform)) {
           logger.info({ platform }, 'Plataforma desabilitada — pulando')
-          continue
+          return null
         }
         logger.info({ platform, url }, 'Link detectado')
         const credentialValidation = validateCredentialData(platform, cfg.credentials[platform])
@@ -1097,21 +1100,23 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             text,
             reason: `Credenciais de ${credentialValidation.label} ausentes ou incompletas: ${credentialValidation.missing.join(', ')}`,
           })
-          continue
+          return null
         }
 
         try {
           const converted = await convertLink(platform, url, cfg.credentials)
           if (!converted) {
             await recordConversionIssue({ platform, url, jid, text, reason: `Conversor de ${credentialValidation.label} não retornou link convertido. Confira se as credenciais estão válidas.` })
-            continue
+            return null
           }
           logger.info({ platform, converted }, 'Link convertido')
-          conversions.push({ platform, url, converted })
+          return { platform, url, converted }
         } catch (err) {
           await recordConversionIssue({ platform, url, jid, text, reason: `Falha na conversão de ${credentialValidation.label}: ${err.message}` })
+          return null
         }
-      }
+      }))
+      const conversions = linkResults.filter(Boolean)
 
       let finalText = sanitizedText
       if (links.length) {
