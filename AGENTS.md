@@ -334,6 +334,53 @@ arquivos commitados antes da regra continuam trackeados até `git rm --cached`.
 Confira periodicamente: `git ls-files | grep -E '\.db$|\.db-journal$'` deve
 retornar vazio.
 
+### 6. Em prod, o arquivo do banco se chamava `dev.db` até 2026-05-22
+
+Histórico: por meses a produção rodou com `DATABASE_URL` apontando para
+`prisma/dev.db` (5.8MB, dados reais), enquanto `prisma/prod.db` e
+`prisma/staging.db` existiam como arquivos vazios de 0 bytes no mesmo
+diretório — restos de tentativas anteriores de migração que nunca foram
+concluídas. Em 2026-05-22 fizemos o rename canônico: parou `api`,
+backup defensivo via `sqlite3 .backup`, `mv dev.db prod.db`, ajustou
+`DATABASE_URL`, `pm2 delete api && pm2 start` (pegadinha #1), validou.
+
+Risco que isso evita: alguém olhar o AGENTS.md, ver que prod "deve"
+usar `prod.db`, trocar `DATABASE_URL` para `file:./prisma/prod.db`,
+reiniciar — e a aplicação passar a usar o arquivo vazio de 0 bytes.
+Login quebra, sessões somem, parece perda total. Antes de qualquer
+mudança de `DATABASE_URL`, sempre conferir `ls -la prisma/*.db` e
+`sqlite3 <db> "SELECT COUNT(*) FROM User"`.
+
+### 7. O cron de backup chamava um script órfão (`backup_safe.sh`)
+
+Até 2026-05-22 o `crontab -l` do VPS de prod chamava
+`/home/deploy/wabot/scripts/backup_safe.sh` — um arquivo que existia no
+diretório `scripts/` mas **não** estava versionado no git (untracked,
+copiado à mão em algum momento). Por isso `git pull` nunca tocou nele,
+e os bugs nunca foram corrigidos via PR:
+
+- Apontava hardcoded para `prisma/dev.db` (caminho errado depois do
+  rename — e tinha um `set -euo pipefail` que aborta o script entre
+  `pm2 stop api` e `pm2 start api`, deixando a API offline).
+- Resolvia `AUTH_INFO_DIR` via `node -e` **sem carregar `.env`**, então
+  caía no default errado. Resultado: 11 dias seguidos de backup
+  **sem `auth_info`** (`WARN.txt` em cada snapshot). Se o VPS pegasse
+  fogo, o restore não traria as sessões WhatsApp de volta.
+- Gravava em `/home/deploy/backups/wabot/` (não no canônico
+  `/home/deploy/wabot-backups/`).
+
+Correção: trocou cron para `scripts/backup_prod.sh` (canônico, no repo,
+WAL-safe via `sqlite3 .backup`, `AUTH_INFO_DIR` correto, grava em
+`/home/deploy/wabot-backups/`). Script órfão renomeado para
+`.deprecated`. Os 13 snapshots históricos em `/home/deploy/backups/wabot/`
+foram mantidos como rede de segurança até o novo diretório acumular
+histórico equivalente.
+
+Lição: se o cron de prod chamar um script, **confirmar que o script
+está versionado** (`git ls-files scripts/<nome>`). Scripts untracked
+no diretório do clone são bombas-relógio — sobrevivem deploys mas
+escapam de qualquer code review.
+
 ## Image scrapers — configuração canônica (PR #422, não regredir)
 
 `src/converters/imageScrapers.js` entrega imagem hi-res para link preview
