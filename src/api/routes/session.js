@@ -1,4 +1,4 @@
-import { startBot, stopBot, isRunning, onQR, onStatus, listGroups, requestPairingCode, getBotMetrics, getLastQR } from '../../manager.js'
+import { startBot, stopBot, isRunning, onQR, onStatus, listGroups, requestPairingCode, getBotMetrics, getLastQR, refreshWaGroups } from '../../manager.js'
 import db from '../../db.js'
 import { rm } from 'fs/promises'
 import { getAuthInfoDir } from '../../paths.js'
@@ -155,6 +155,25 @@ export async function sessionRoutes(app) {
       status: session?.status ?? 'disconnected',
       phone: session?.phone ?? null,
       metrics,
+    }
+  })
+
+  // Força refresh manual do estado de grupos do WhatsApp. Atalho para o
+  // workaround conhecido de "remover e re-adicionar grupo no painel" que
+  // recupera grupos travados em Bad MAC (sender_key dessincronizada).
+  // Ação leve (~1s); chama groupFetchAllParticipating() e segue a vida.
+  app.post('/refresh-wa-state', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const userId = req.user.sub
+    if (!(await isRunning(userId))) return reply.code(503).send({ error: 'WhatsApp não está conectado.' })
+    try {
+      const result = await refreshWaGroups(userId)
+      if (!result?.ok) {
+        return reply.code(503).send({ error: result?.error || `Não foi possível atualizar agora: ${result?.reason || 'desconhecido'}` })
+      }
+      return result
+    } catch (err) {
+      req.log.warn({ err: err.message }, 'refresh-wa-state falhou')
+      return reply.code(502).send({ error: err.message || 'Falha ao atualizar grupos' })
     }
   })
 

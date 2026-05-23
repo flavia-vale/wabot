@@ -400,6 +400,62 @@ async function checkScheduledMessages() {
 
 setInterval(checkScheduledMessages, 30_000)
 
+// Força re-emissão de sender_keys do WhatsApp via groupFetchAllParticipating().
+// Compartilhado entre o watchdog e o endpoint manual /refresh-wa-state.
+async function triggerWaGroupsRefresh(reason = 'manual') {
+  if (!activeSock) return { ok: false, reason: 'not_connected' }
+  if (waGroupsRefreshInFlight) return { ok: false, reason: 'in_flight' }
+  waGroupsRefreshInFlight = true
+  try {
+    const startedAt = Date.now()
+    const groups = await activeSock.groupFetchAllParticipating()
+    const count = groups ? Object.keys(groups).length : 0
+    lastWaGroupsRefreshAt = Date.now()
+    logger.info({ reason, count, durationMs: lastWaGroupsRefreshAt - startedAt }, 'WA groups refresh concluído')
+    return { ok: true, count }
+  } catch (err) {
+    logger.error({ reason, err: err?.message }, 'WA groups refresh falhou')
+    return { ok: false, reason: 'error', error: err?.message }
+  } finally {
+    waGroupsRefreshInFlight = false
+  }
+}
+
+async function monitorSilenceWatchdog() {
+  if (!activeSock) return
+  const cfg = await getConfig().catch(() => null)
+  const monitors = cfg?.groups?.monitor ?? []
+  if (monitors.length < 2) return // precisa de pelo menos 2 pra comparar atividade
+
+  const now = Date.now()
+  if (now - lastWaGroupsRefreshAt < MONITOR_REFRESH_COOLDOWN_MS) return
+
+  const baseline = Math.max(workerStartedAt, lastWaGroupsRefreshAt)
+  const silent = []
+  let hasActive = false
+  for (const m of monitors) {
+    const jid = normalizeJidForMatch(m.waJid)
+    const lastTs = lastIncomingByMonitorJid.get(jid) ?? baseline
+    const silentMs = now - lastTs
+    if (silentMs > MONITOR_SILENCE_THRESHOLD_MS) silent.push({ jid, silentMs })
+    else if (lastIncomingByMonitorJid.has(jid)) hasActive = true
+  }
+
+  if (!silent.length || !hasActive) return
+
+  logger.warn(
+    { silent, thresholdMs: MONITOR_SILENCE_THRESHOLD_MS },
+    'Monitor(es) silenciado(s) detectado(s); forçando refresh de sender_keys'
+  )
+  await triggerWaGroupsRefresh('silence_watchdog')
+}
+
+const monitorSilenceTimer = setInterval(
+  () => { monitorSilenceWatchdog().catch(err => logger.error({ err: err?.message }, 'monitorSilenceWatchdog falhou')) },
+  MONITOR_SILENCE_CHECK_INTERVAL_MS,
+)
+monitorSilenceTimer.unref?.()
+
 
 const MESSAGE_LOG_MAX_CHARS = Math.max(40, Number(process.env.MESSAGE_LOG_MAX_CHARS || 240))
 
@@ -444,6 +500,17 @@ const MSG_QUEUE_TIMEOUT_MS = Math.max(1_000, envNumber('MSG_QUEUE_TIMEOUT_MS', 1
 const MSG_QUEUE_WATCHDOG_MS = Math.max(5_000, envNumber('MSG_QUEUE_WATCHDOG_MS', 30_000))
 const MSG_QUEUE_MAX_SIZE = Math.max(10, envNumber('MSG_QUEUE_MAX_SIZE', 500))
 const MAX_INCOMING_MESSAGE_CHARS = Math.max(500, envNumber('MAX_INCOMING_MESSAGE_CHARS', 8_000))
+
+// Watchdog de "monitor silencioso": detecta grupos monitorados que pararam
+// de receber mensagens enquanto outros monitores do mesmo usuário continuam
+// ativos. Sintoma típico de sender_key dessincronizada no Signal — o
+// WebSocket segue ok, mas o libsignal devolve Bad MAC pra mensagens daquele
+// grupo. Chamar groupFetchAllParticipating() força o WhatsApp a re-emitir
+// sender_keys atualizadas (mesmo efeito de abrir o seletor de grupos no
+// painel). Ação é leve (~1s) e não derruba a sessão.
+const MONITOR_SILENCE_CHECK_INTERVAL_MS = Math.max(60_000, envNumber('MONITOR_SILENCE_CHECK_INTERVAL_MS', 5 * 60_000))
+const MONITOR_SILENCE_THRESHOLD_MS = Math.max(5 * 60_000, envNumber('MONITOR_SILENCE_THRESHOLD_MS', 30 * 60_000))
+const MONITOR_REFRESH_COOLDOWN_MS = Math.max(60_000, envNumber('MONITOR_REFRESH_COOLDOWN_MS', 60 * 60_000))
 const WA_LIFECYCLE = Object.freeze({
   INITIALIZING: 'initializing',
   AUTHENTICATING: 'authenticating',
@@ -470,6 +537,10 @@ const incomingQueue = createMessageQueue({
 })
 
 const lastSendByDest = new Map()
+const lastIncomingByMonitorJid = new Map()
+const workerStartedAt = Date.now()
+let lastWaGroupsRefreshAt = 0
+let waGroupsRefreshInFlight = false
 let interruptedSendLogsMarked = false
 let adSendCount = 0
 const doneCallbacks = new Map()
@@ -1376,6 +1447,11 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
     for (const msg of messages) {
       rememberChannelJid(msg?.key?.remoteJid)
       if (msg.key.fromMe) continue
+      // Marca atividade do JID — usado pelo monitorSilenceWatchdog pra
+      // diferenciar "monitor parado por falha de decrypt" de "monitor
+      // inativo organicamente". Atualiza independente de filtros downstream.
+      const remoteJid = normalizeJidForMatch(msg.key.remoteJid)
+      if (remoteJid) lastIncomingByMonitorJid.set(remoteJid, Date.now())
       const msgTsRaw = Number(msg.messageTimestamp ?? 0)
       const hasValidTimestamp = Number.isFinite(msgTsRaw) && msgTsRaw > 0
       const msgTs = hasValidTimestamp ? msgTsRaw * 1000 : null
@@ -1521,6 +1597,11 @@ process.on('message', async msg => {
     configCachePromise = null
     logger.info('Config recarregada')
     ensureChannelSubscriptions().catch(err => logger.error({ err: err?.message }, 'channels: erro ao inscrever após reload'))
+  }
+
+  if (msg?.type === 'refreshWaGroups') {
+    const result = await triggerWaGroupsRefresh('ipc_manual')
+    process.send({ type: 'refreshWaGroups', requestId: msg.requestId, data: result })
   }
 
   if (msg?.type === 'listGroups') {
