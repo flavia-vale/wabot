@@ -512,13 +512,6 @@ async function monitorSilenceWatchdog() {
   await triggerWaGroupsRefresh('silence_watchdog')
 }
 
-const monitorSilenceTimer = setInterval(
-  () => { monitorSilenceWatchdog().catch(err => logger.error({ err: err?.message }, 'monitorSilenceWatchdog falhou')) },
-  MONITOR_SILENCE_CHECK_INTERVAL_MS,
-)
-monitorSilenceTimer.unref?.()
-
-
 const MESSAGE_LOG_MAX_CHARS = Math.max(40, Number(process.env.MESSAGE_LOG_MAX_CHARS || 240))
 
 function sanitizeMessageForLog(text) {
@@ -573,6 +566,13 @@ const MAX_INCOMING_MESSAGE_CHARS = Math.max(500, envNumber('MAX_INCOMING_MESSAGE
 const MONITOR_SILENCE_CHECK_INTERVAL_MS = Math.max(60_000, envNumber('MONITOR_SILENCE_CHECK_INTERVAL_MS', 5 * 60_000))
 const MONITOR_SILENCE_THRESHOLD_MS = Math.max(5 * 60_000, envNumber('MONITOR_SILENCE_THRESHOLD_MS', 30 * 60_000))
 const MONITOR_REFRESH_COOLDOWN_MS = Math.max(60_000, envNumber('MONITOR_REFRESH_COOLDOWN_MS', 60 * 60_000))
+
+const monitorSilenceTimer = setInterval(
+  () => { monitorSilenceWatchdog().catch(err => logger.error({ err: err?.message }, 'monitorSilenceWatchdog falhou')) },
+  MONITOR_SILENCE_CHECK_INTERVAL_MS,
+)
+monitorSilenceTimer.unref?.()
+
 const WA_LIFECYCLE = Object.freeze({
   INITIALIZING: 'initializing',
   AUTHENTICATING: 'authenticating',
