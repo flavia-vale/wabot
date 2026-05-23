@@ -6,6 +6,18 @@ import { MobileShell } from '@/components/mobile/MobileShell'
 import { useMobileHomeData } from '@/components/mobile/useMobileHomeData'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 
+function HomeIcon({ name, size = 16 }) {
+  const props = {
+    width: size, height: size, viewBox: '0 0 24 24',
+    fill: 'none', stroke: 'currentColor', strokeWidth: 1.8,
+    strokeLinecap: 'round', strokeLinejoin: 'round',
+    'aria-hidden': 'true',
+  }
+  if (name === 'link') return <svg {...props}><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 1 0-7.07-7.07L11 5" /><path d="M14 11a5 5 0 0 0-7.07 0l-3 3A5 5 0 1 0 11 21l1.5-1.5" /></svg>
+  if (name === 'send') return <svg {...props}><path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4 20-7z" /></svg>
+  return null
+}
+
 export default function MobileHomePage() {
   useMobileRoutePerf('m/home')
   const { summary, recent } = useMobileHomeData()
@@ -39,8 +51,12 @@ export default function MobileHomePage() {
       </section>
 
       <section className="mt-4 grid grid-cols-2 gap-2">
-        <Link href="/m/op/converter" className="rounded-xl border border-[#d7e7de] bg-white p-3 text-sm font-semibold">Converter link</Link>
-        <Link href="/m/op/sends" className="rounded-xl border border-[#d7e7de] bg-white p-3 text-sm font-semibold">Ver envios</Link>
+        <Link href="/m/op/converter" className="rounded-xl border border-[#d7e7de] bg-white p-3 text-sm font-semibold">
+          <span className="inline-flex items-center gap-2"><HomeIcon name="link" />Converter link</span>
+        </Link>
+        <Link href="/m/op/sends" className="rounded-xl border border-[#d7e7de] bg-white p-3 text-sm font-semibold">
+          <span className="inline-flex items-center gap-2"><HomeIcon name="send" />Ver envios</span>
+        </Link>
       </section>
 
       <section className="mt-5">
