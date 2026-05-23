@@ -74,6 +74,22 @@ export const COMMAND_TIMEOUTS_MS = Object.freeze({
   [COMMAND.GET_LAST_QR]: 5_000,
 })
 
+/**
+ * @typedef {Object} SupervisorEvent
+ * @property {number} v
+ * @property {string} userId
+ * @property {string} type
+ * @property {any} data
+ * @property {number} ts
+ */
+
+/**
+ * @typedef {Object} SupervisorCommandPayload
+ * @property {string} name
+ * @property {string} userId
+ * @property {Object<string, any>} [payload]
+ */
+
 export function isKnownCommand(name) {
   return Object.values(COMMAND).includes(name)
 }
@@ -105,7 +121,7 @@ export function decodeEvent(raw) {
   if (!parsed || typeof parsed !== 'object') return null
   if (parsed.v !== PROTOCOL_VERSION) return null
   if (!parsed.userId || !parsed.type) return null
-  return parsed
+  return /** @type {SupervisorEvent} */ (parsed)
 }
 
 /**

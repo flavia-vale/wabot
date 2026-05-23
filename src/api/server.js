@@ -19,8 +19,10 @@ import { adminRoutes } from './routes/admin.js'
 import { publicRoutes } from './routes/public.js'
 import { clickTrackerRoutes } from './routes/clickTracker.js'
 import { preservationRoutes } from './routes/preservation.js'
-import { registerApiMetricsHooks } from './metrics.js'
+import { registerApiMetricsHooks, renderPrometheusMetrics } from './metrics.js'
+import { getSupervisorOperationalCounters } from '../supervisor/operationalCounters.js'
 import db from '../db.js'
+import { revokeTokenJtiGlobal, isTokenRevokedGlobal } from '../core/tokenRevocationStore.js'
 import { resumePersistedBots, startSessionHealthMonitor, stopAllBots } from '../manager.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
@@ -99,26 +101,6 @@ function getTokenFromCookie(cookieHeader, cookieName = 'wb_auth') {
   const target = parts.find((part) => part.startsWith(`${cookieName}=`))
   if (!target) return null
   return decodeURIComponent(target.slice(cookieName.length + 1))
-}
-
-const revokedTokens = new Map()
-
-function revokeTokenJti(jti, exp) {
-  if (!jti) return
-  const expiresAtMs = Number.isFinite(exp) ? exp * 1000 : Date.now() + (7 * 24 * 60 * 60 * 1000)
-  revokedTokens.set(String(jti), expiresAtMs)
-}
-
-function isTokenRevoked(jti) {
-  if (!jti) return false
-  const key = String(jti)
-  const expiresAtMs = revokedTokens.get(key)
-  if (!expiresAtMs) return false
-  if (Date.now() > expiresAtMs) {
-    revokedTokens.delete(key)
-    return false
-  }
-  return true
 }
 
 async function verifyDatabase() {
@@ -227,7 +209,7 @@ if (!jwtSecret) {
 }
 await app.register(fastifyJwt, { secret: jwtSecret })
 await app.register(fastifyWebsocket)
-app.decorate('revokeTokenJti', revokeTokenJti)
+app.decorate('revokeTokenJti', revokeTokenJtiGlobal)
 
 app.decorate('authenticate', async function (req, reply) {
   const cookieToken = getTokenFromCookie(req.headers.cookie)
@@ -237,7 +219,7 @@ app.decorate('authenticate', async function (req, reply) {
   for (const token of candidates) {
     try {
       const user = app.jwt.verify(token)
-      if (isTokenRevoked(user.jti)) continue
+      if (await isTokenRevokedGlobal(user.jti)) continue
       const active = await verifyAuthenticatedUser(user.sub)
       if (!active) continue
       req.user = user
@@ -267,6 +249,14 @@ app.register(clickTrackerRoutes) // sem prefix — /r/:hash precisa estar na rai
 
 // Liveness: processo está de pé
 app.get('/health', () => ({ ok: true }))
+
+// Prometheus scrape endpoint
+app.get('/metrics', async (_req, reply) => {
+  reply
+    .code(200)
+    .header('content-type', 'text/plain; version=0.0.4; charset=utf-8')
+    .send(renderPrometheusMetrics(await getSupervisorOperationalCounters()))
+})
 
 // Readiness: dependências estão prontas para receber tráfego
 app.get('/ready', async (req, reply) => {

@@ -10,7 +10,8 @@
     "pressure:logs": "node scripts/pressure-logs.mjs",
     "db:readiness": "node scripts/db-migration-readiness.mjs",
     "test": "node --test test/*.test.js test/**/*.test.js",
-    "report:marketing-funnel": "node scripts/marketing-funnel-baseline.mjs 7"
+    "report:marketing-funnel": "node scripts/marketing-funnel-baseline.mjs 7",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@fastify/cors": "^11.2.0",

@@ -1,0 +1,12 @@
+timestamp=2026-05-23T03:22:48Z
+commit=f6d553b
+app_env=unknown
+api_port=3004
+base_url=http://127.0.0.1:3004
+GLOBAL_RATE_LIMIT_MODE=unset
+GLOBAL_DEDUP_MODE=unset
+REDIS_FAIL_MODE=unset
+SHARD_COUNT=unset
+SHARD_INDEX=unset
+MAX_SESSIONS_PER_PROCESS=unset
+SESSION_CIRCUIT_BREAKER_MODE=unset

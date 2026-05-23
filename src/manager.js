@@ -14,8 +14,9 @@
 
 import logger from './logger.js'
 import * as inlineImpl from './core/sessionCore.js'
+import { parseEnumEnv, logModeSummary } from './core/envModes.js'
 
-const MODE = (process.env.BOT_SUPERVISOR_MODE || 'inline').toLowerCase()
+const MODE = parseEnumEnv('BOT_SUPERVISOR_MODE', process.env.BOT_SUPERVISOR_MODE || 'inline', ['inline', 'remote'], 'inline')
 
 let impl = inlineImpl
 let remoteClient = null
@@ -28,9 +29,9 @@ if (MODE === 'remote') {
   remoteClient = createSupervisorClient()
   impl = remoteClient
   logger.info('Manager em modo REMOTE — comandos serão enviados ao bot-supervisor via Redis')
-} else if (MODE !== 'inline') {
-  logger.warn({ MODE }, 'BOT_SUPERVISOR_MODE desconhecido, usando inline')
 }
+
+logModeSummary('manager', { supervisorMode: MODE })
 
 export const startBot = (...args) => impl.startBot(...args)
 export const stopBot = (...args) => impl.stopBot(...args)

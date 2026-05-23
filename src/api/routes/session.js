@@ -3,6 +3,8 @@ import db from '../../db.js'
 import { rm } from 'fs/promises'
 import { getAuthInfoDir } from '../../paths.js'
 import { mapInfraError } from '../../errors.js'
+import { appContainer } from '../../app/container.js'
+import { normalizePairingPhone } from '../../domain/session/service.js'
 
 const WA_GROUPS_RECOVERY_TIMEOUT_MS = Math.max(Number(process.env.WA_GROUPS_RECOVERY_TIMEOUT_MS || 15000), 0)
 const WA_GROUPS_RECOVERY_RETRY_MS = Math.max(Number(process.env.WA_GROUPS_RECOVERY_RETRY_MS || 1000), 100)
@@ -63,54 +65,14 @@ export async function loadWaGroupsWithRecovery(userId, deps = {}) {
   throw error
 }
 
-function normalizePairingPhone(rawPhone) {
-  const digits = String(rawPhone ?? '').replace(/\D/g, '')
-  if (!digits) return { ok: false, message: 'Número de telefone obrigatório' }
-
-  let br = digits
-  if (br.startsWith('55')) br = br.slice(2)
-
-  if (br.length < 10 || br.length > 11) {
-    return { ok: false, message: 'Número inválido. Use DDI+DDD+número (ex.: 5511999999999).' }
-  }
-
-  const ddd = br.slice(0, 2)
-  const subscriber = br.slice(2)
-  if (!/^\d{2}$/.test(ddd)) return { ok: false, message: 'DDD inválido.' }
-  if (subscriber.length === 9 && !subscriber.startsWith('9')) {
-    return { ok: false, message: 'Celular com 9 dígitos deve iniciar com 9.' }
-  }
-
-  return { ok: true, phone: `55${ddd}${subscriber}` }
-}
-
-function isPrismaShapeMismatch(err) {
-  const message = String(err?.message ?? '')
-  return message.includes('Unknown argument') || message.includes('Unknown field') || message.includes('no such column') || message.includes('does not exist in the current database')
-}
-
-async function findSessionStartUser(userId) {
-  try {
-    return await db.user.findUnique({ where: { id: userId }, select: { plan: true, accessExpiresAt: true, status: true } })
-  } catch (err) {
-    if (!isPrismaShapeMismatch(err)) throw err
-    return db.user.findUnique({ where: { id: userId }, select: { plan: true, accessExpiresAt: true } })
-  }
-}
+const sessionService = appContainer.services.session
 
 export async function sessionRoutes(app) {
   app.post('/start', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
-    const user = await findSessionStartUser(userId)
-    if (user.status === 'banned' || user.status === 'suspended') {
-      return reply.code(403).send({ error: 'Conta bloqueada. Entre em contato com o suporte.' })
-    }
-    if (user.accessExpiresAt && user.accessExpiresAt < new Date()) {
-      const msg = user.plan === 'trial'
-        ? 'Seu trial expirou. Assine um plano em Planos.'
-        : 'Sua assinatura expirou. Renove em Planos.'
-      return reply.code(403).send({ error: msg })
-    }
+    const user = await sessionService.findSessionStartUser(userId)
+    const validation = sessionService.validateSessionStartUser(user)
+    if (!validation.ok) return reply.code(validation.statusCode).send({ error: validation.error })
 
     const running = Boolean(await isRunning(userId))
     if (running) {

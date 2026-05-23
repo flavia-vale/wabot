@@ -1,0 +1,4 @@
+timestamp=2026-05-23T03:22:48Z
+mode=dry-run
+ERRO: ROOT_DIR não encontrado: /root/wabot
+cutover_dry_run=failed
