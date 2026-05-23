@@ -43,7 +43,22 @@ if (!REDIS_URL) {
 const publisher = new Redis(REDIS_URL, { lazyConnect: false, maxRetriesPerRequest: null })
 publisher.on('error', err => logger.warn({ err: err.message }, 'Publisher Redis error'))
 const SHARD_COUNT = normalizeShardCount(process.env.SHARD_COUNT || 1, 1)
-const SHARD_INDEX = Math.max(0, Math.min(SHARD_COUNT - 1, Number(process.env.SHARD_INDEX || 0)))
+// Fail-fast: SHARD_INDEX precisa ser inteiro finito em [0, SHARD_COUNT). Qualquer
+// outra coisa (typo "abc", negativo, fora da faixa) faria a aritmética devolver
+// NaN, shouldHandleUserOnShard rejeitaria 100% dos usuários e o supervisor subiria
+// "saudável" rejeitando tudo silenciosamente. Melhor crashar no boot.
+const SHARD_INDEX_RAW = process.env.SHARD_INDEX
+const SHARD_INDEX_PARSED = SHARD_INDEX_RAW === undefined || SHARD_INDEX_RAW === ''
+  ? 0
+  : Number(SHARD_INDEX_RAW)
+if (!Number.isInteger(SHARD_INDEX_PARSED) || SHARD_INDEX_PARSED < 0 || SHARD_INDEX_PARSED >= SHARD_COUNT) {
+  logger.fatal(
+    { shardIndexRaw: SHARD_INDEX_RAW, shardCount: SHARD_COUNT },
+    'SHARD_INDEX inválido — precisa ser inteiro em [0, SHARD_COUNT). Abortando.',
+  )
+  process.exit(1)
+}
+const SHARD_INDEX = SHARD_INDEX_PARSED
 const SHARD_TAG = `shard-${SHARD_INDEX + 1}-of-${SHARD_COUNT}`
 const SESSION_OWNER_MISMATCH_KEY = `supervisor:session_owner_mismatch_total:${SHARD_TAG}`
 let sessionOwnerMismatchTotal = 0
@@ -250,27 +265,93 @@ function startHeartbeat() {
   heartbeatTimer.unref?.()
 }
 
+// ---- Monitor de saúde shard-aware ----
+
+const HEALTH_TICK_MS = Math.max(Number(process.env.WA_ZOMBIE_CHECK_INTERVAL_MS || 15000), 5000)
+const HEALTH_STALE_MS = Math.max(Number(process.env.WA_HEARTBEAT_STALE_MS || 90000), 30000)
+let healthMonitorTimer = null
+
+async function healthMonitorTick() {
+  // (1) Mata zumbis: workers vivos mas sem heartbeat há >STALE_MS. stopBot
+  // remove do Map; o próximo tick ressuscita via DB-poll abaixo.
+  const now = Date.now()
+  for (const { userId, lastHeartbeatAt, killed } of sessionCore.listSessionHealth()) {
+    if (killed) continue
+    if (!belongsToThisShard(userId)) continue
+    const hbAge = now - (lastHeartbeatAt || 0)
+    if (hbAge <= HEALTH_STALE_MS) continue
+    logger.warn({ userId, hbAge, shard: SHARD_TAG }, 'Worker com heartbeat estagnado — reiniciando')
+    try { stopBotWithBridge(userId) } catch (err) {
+      logger.warn({ err: err?.message, userId }, 'Falha ao parar worker estagnado')
+    }
+  }
+
+  // (2) Ressuscita sessões persistidas que pertencem ao shard mas não estão
+  // rodando localmente — cobre tanto o exit de worker (OOM/exceção) quanto
+  // o restart pós-stopBot acima no próximo tick.
+  try {
+    const persisted = await db.waSession.findMany({
+      where: { status: { in: ['connected', 'connecting'] } },
+      select: { userId: true },
+    })
+    for (const s of persisted) {
+      if (!belongsToThisShard(s.userId)) continue
+      if (sessionCore.isRunning(s.userId)) continue
+      try {
+        await startBotWithBridge(s.userId)
+      } catch (err) {
+        logger.error({ err: err?.message, userId: s.userId, shard: SHARD_TAG }, 'Falha ao ressuscitar sessão no health monitor')
+      }
+    }
+  } catch (err) {
+    logger.error({ err: err?.message, shard: SHARD_TAG }, 'Health monitor: falha ao listar sessões persistidas')
+  }
+}
+
+function startShardHealthMonitor() {
+  if (healthMonitorTimer) return
+  healthMonitorTimer = setInterval(
+    () => { void healthMonitorTick() },
+    HEALTH_TICK_MS,
+  )
+  healthMonitorTimer.unref?.()
+}
+
 // ---- Boot ----
 
 async function boot() {
   logger.info({ redisUrl: REDIS_URL.replace(/:[^:@/]+@/, ':***@'), shard: SHARD_TAG, shardCount: SHARD_COUNT, shardIndex: SHARD_INDEX }, 'bot-supervisor iniciando')
   startHeartbeat()
 
-  // O monitor de saúde mantido em sessionCore precisa que cada bot
-  // startado pelo monitor também ative a bridge. Por isso o monitor é
-  // iniciado com um wrapper que adiciona attachBridge após cada start.
-  // Como sessionCore.startSessionHealthMonitor chama internamente
-  // sessionCore.startBot (não o wrapper), precisamos compensar assinando
-  // os bots já rodando a cada tick. Mais barato: polling de subscriptions.
-  // Em modo sharded, o monitor de saúde do core não deve iniciar sessões fora do shard.
-
-  const persisted = await db.waSession.findMany({ where: { status: { in: ['connected', 'connecting'] } }, select: { userId: true } })
+  // Resume de sessões persistidas — guardado por try/catch por sessão. Antes
+  // o loop era unguarded: uma única sessão com auth_info corrompido derrubava
+  // o boot inteiro, PM2 reiniciava, mesma falha → loop de DoS auto-infligido.
   let started = 0
-  for (const s of persisted) {
-    if (!belongsToThisShard(s.userId)) continue
-    if (await startBotWithBridge(s.userId)) started++
+  let attempted = 0
+  try {
+    const persisted = await db.waSession.findMany({ where: { status: { in: ['connected', 'connecting'] } }, select: { userId: true } })
+    attempted = persisted.length
+    for (const s of persisted) {
+      if (!belongsToThisShard(s.userId)) continue
+      try {
+        if (await startBotWithBridge(s.userId)) started++
+      } catch (err) {
+        logger.error({ err: err?.message, userId: s.userId, shard: SHARD_TAG }, 'Falha ao retomar sessão persistida — continuando')
+      }
+    }
+  } catch (err) {
+    logger.error({ err: err?.message, shard: SHARD_TAG }, 'Falha ao listar sessões persistidas — supervisor sobe sem resume')
   }
-  logger.info({ attempted: persisted.length, started, shard: SHARD_TAG }, 'Sessões persistidas retomadas no shard')
+  logger.info({ attempted, started, shard: SHARD_TAG }, 'Sessões persistidas retomadas no shard')
+
+  // Monitor de saúde shard-aware. Substitui sessionCore.startSessionHealthMonitor
+  // (que não conhece shard) com duas responsabilidades:
+  //   1. Reiniciar workers com heartbeat estagnado (zumbis baileys).
+  //   2. Ressuscitar sessões persistidas com status connected/connecting que
+  //      pertencem a este shard mas não estão no Map do sessionCore (worker
+  //      morreu por OOM/exceção, exit handler removeu do Map).
+  // Sem isso, em modo remote workers crashados nunca eram restartados.
+  startShardHealthMonitor()
 
   // Garante bridge para todos os bots já rodando (após resume e a qualquer
   // momento que health monitor reerga um). Custo: O(n) a cada 5s, n <= 100.
@@ -294,6 +375,7 @@ async function boot() {
 async function shutdown(signal) {
   logger.info({ signal }, 'bot-supervisor encerrando')
   try { if (heartbeatTimer) clearInterval(heartbeatTimer) } catch {}
+  try { if (healthMonitorTimer) clearInterval(healthMonitorTimer) } catch {}
   try { await publisher.del(SUPERVISOR_HEARTBEAT_KEY) } catch {}
   try { await worker.close() } catch {}
   try { await publisher.quit() } catch {}
