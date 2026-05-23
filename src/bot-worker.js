@@ -725,26 +725,22 @@ async function processSendJob(job) {
           // intervalo mínimo, burst cap. Reserva o slot quando libera.
           const cfgFull = await getConfig().catch(() => null)
           const cfg = cfgFull?.botConfig ?? {}
-          const decision = await throttleCheckAndReserve(channelGroupId, cfg, {
+          let gate = await throttleCheckAndReserve(channelGroupId, cfg, {
             preservationActive: cfgFull?.preservationActive ?? false,
           })
-          if (!decision.allow) {
-            const waitMs = Math.max(0, (decision.deferUntil ?? Date.now()) - Date.now())
-            logger.info({ destJid: job.destJid, reason: decision.reason, waitMs }, 'Velocity scheduler: aguardando janela de throttle do canal')
+          let throttleCycles = 0
+          while (!gate.allow && !shuttingDown) {
+            throttleCycles++
+            const waitMs = Math.max(0, (gate.deferUntil ?? Date.now()) - Date.now())
+            logger.info({ destJid: job.destJid, reason: gate.reason, waitMs, throttleCycles }, 'Velocity scheduler: aguardando janela de throttle do canal')
             await sleep(waitMs)
-            // tenta de novo (reserva real); se ainda negar, aborta
-            const retry = await throttleCheckAndReserve(channelGroupId, cfg, {
+            gate = await throttleCheckAndReserve(channelGroupId, cfg, {
               preservationActive: cfgFull?.preservationActive ?? false,
             })
-            if (!retry.allow) {
-              const err = new Error(`Canal throttled (${retry.reason}) até ${new Date(retry.deferUntil ?? Date.now()).toISOString()}`)
-              err.code = 'CHANNEL_THROTTLED'
-              throw err
-            }
           }
+          if (shuttingDown) throw new Error('Worker encerrando durante espera de throttle do canal')
         }
       } catch (err) {
-        if (err.code === 'CHANNEL_PAUSED' || err.code === 'CHANNEL_THROTTLED') throw err
         logger.warn({ err: err?.message, destJid: job.destJid }, 'channelHealth/throttle lookup falhou; seguindo sem pausa')
       }
     }
