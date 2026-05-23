@@ -93,6 +93,19 @@ export function stopBot(userId) {
 
 export const isRunning = userId => bots.has(userId)
 export const listRunningBots = () => [...bots.keys()]
+// Read-only accessor para o supervisor monitorar zumbis sem precisar mexer
+// na lógica interna do core. Retorna [{ userId, lastHeartbeatAt, killed }].
+export const listSessionHealth = () => {
+  const out = []
+  for (const [userId, entry] of bots.entries()) {
+    out.push({
+      userId,
+      lastHeartbeatAt: entry?.lastHeartbeatAt || 0,
+      killed: Boolean(entry?.proc?.killed),
+    })
+  }
+  return out
+}
 export function onQR(userId, fn) { const e = bots.get(userId); if (!e) return () => {}; if (e.lastQR) fn(e.lastQR); e.qrListeners.add(fn); return () => e.qrListeners.delete(fn) }
 export function onStatus(userId, fn) { const e = bots.get(userId); if (!e) return () => {}; e.statusListeners.add(fn); return () => e.statusListeners.delete(fn) }
 export const getLastQR = userId => bots.get(userId)?.lastQR ?? null
