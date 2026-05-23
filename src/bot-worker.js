@@ -361,7 +361,7 @@ async function checkScheduledMessages() {
           plan: 'scheduled',
           delayMs: buildSmartDelayMs((await getConfig()).botConfig),
           typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
-          buildPayload: async () => ({ text: msg.text }),
+          payload: { text: msg.text },
           onDone: async (result) => {
             state.remaining--
             if (!result.ok) state.hasError = true
@@ -620,11 +620,9 @@ async function enqueueSendJob(job) {
   const normalizedJob = { attempts: 0, enqueuedAt: Date.now(), ...job, onDone: undefined }
   if (typeof normalizedJob.buildPayload === 'function') {
     normalizedJob.payload = await normalizedJob.buildPayload()
-    delete normalizedJob.buildPayload
   }
-  if (typeof normalizedJob.send === 'function') {
-    delete normalizedJob.send
-  }
+  delete normalizedJob.buildPayload
+  delete normalizedJob.send
   if (normalizedJob.delayMs === undefined) normalizedJob.delayMs = 0
   if (normalizedJob.typingDelayMs === undefined) normalizedJob.typingDelayMs = 0
   if (typeof job.onDone === 'function') doneCallbacks.set(job.logId, job.onDone)
@@ -761,11 +759,8 @@ async function processSendJob(job) {
     for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt++) {
       try {
         if (!activeSock) throw new Error('Bot não conectado')
-        if (!payload) {
-          if (typeof job.buildPayload === 'function') payload = await job.buildPayload()
-          else if (job.payload !== undefined) payload = job.payload
-          else throw new Error('Invalid send job: payload/buildPayload ausente')
-        }
+        if (payload === null) payload = job.payload
+        if (payload === undefined) throw new Error('Invalid send job: payload ausente')
         await waitDestinationRateLimit(job.destJid)
         if (SMART_DELAY_TYPING_ENABLED && job.typingDelayMs > 0 && !job.skipTyping) {
           await Promise.resolve(activeSock.sendPresenceUpdate?.('composing', job.destJid)).catch(() => {})
@@ -1369,6 +1364,49 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           ? Math.floor(Math.random() * staggerJitterMs)
           : 0
 
+        const preparedPayload = await (async () => {
+          if (shouldUseRelayPath({ destJid, hasOriginal: !!original })) {
+            const replayProto = { ...original.proto }
+            if (original.type === 'imageMessage' || original.type === 'videoMessage') {
+              replayProto.caption = variantText
+            }
+            return {
+              _route: 'relay',
+              relay: {
+                type: original.type,
+                proto: replayProto,
+              },
+            }
+          }
+
+          let image = null
+          if (wantImage) {
+            const fetched = await getImage()
+            image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
+            if (fetched && !image) {
+              logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
+            }
+            if (imageMode === 'original' && !image) {
+              useLinkPreview = true
+            }
+            if (image && isChannelDest && cfg.preservationActive && cfg.botConfig.imageMutationEnabled) {
+              const mutated = await mutateChannelImage(image.buffer, image.mimetype, {
+                groupId: destJid,
+                enabled: true,
+              })
+              if (mutated.buffer !== image.buffer) {
+                image = { ...image, buffer: mutated.buffer, mimetype: mutated.mimetype }
+              }
+            }
+          }
+
+          return buildMonitoredMessagePayload({
+            finalText: variantText,
+            image,
+            useLinkPreview,
+          })
+        })()
+
         const accepted = await enqueueSendJob({
           type: 'converted',
           logId: log.id,
@@ -1377,56 +1415,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           plan: cfg.plan,
           delayMs: buildSmartDelayMs(cfg.botConfig) + staggerMs,
           typingDelayMs: calculateTypingDelayMs({ text: variantText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
-          buildPayload: async () => {
-            // Para canal-destino, nunca usar relay (sendMessage com payload limpo).
-            // Para grupo-destino com mídia original, deixar relayMessage cuidar (return null).
-            if (shouldUseRelayPath({ destJid, hasOriginal: !!original })) {
-              const replayProto = { ...original.proto }
-              if (original.type === 'imageMessage' || original.type === 'videoMessage') {
-                replayProto.caption = variantText
-              }
-              return {
-                _route: 'relay',
-                relay: {
-                  type: original.type,
-                  proto: replayProto,
-                },
-              }
-            }
-
-            let image = null
-            if (wantImage) {
-              const fetched = await getImage()
-              image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
-              if (fetched && !image) {
-                logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
-              }
-              // Em modo original, se não conseguimos imagem alguma da mensagem
-              // monitorada, peça ao WhatsApp para gerar preview automático do
-              // link convertido — assim ainda há chance de aparecer card com foto.
-              if (imageMode === 'original' && !image) {
-                useLinkPreview = true
-              }
-
-              // PR-5.B.2: mutação de imagem APÓS o scraper (fora do bloco
-              // protegido). Só para canal-destino; valida >=800px após crop.
-              if (image && isChannelDest && cfg.preservationActive && cfg.botConfig.imageMutationEnabled) {
-                const mutated = await mutateChannelImage(image.buffer, image.mimetype, {
-                  groupId: destJid,
-                  enabled: true,
-                })
-                if (mutated.buffer !== image.buffer) {
-                  image = { ...image, buffer: mutated.buffer, mimetype: mutated.mimetype }
-                }
-              }
-            }
-
-            return buildMonitoredMessagePayload({
-              finalText: variantText,
-              image,
-              useLinkPreview,
-            })
-          },
+          payload: preparedPayload,
           onDone: async (result) => {
             if (result.ok) {
               logger.info({ destJid, platforms, sentVia }, 'Mensagem enviada')
@@ -1700,7 +1689,7 @@ process.on('message', async msg => {
         plan: 'broadcast',
         delayMs: buildSmartDelayMs((await getConfig()).botConfig),
         typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
-        buildPayload: async () => ({ text: msg.text }),
+        payload: { text: msg.text },
       })
       if (accepted) {
         queued++
