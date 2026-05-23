@@ -618,6 +618,13 @@ async function enqueueSendJob(job) {
     return false
   }
   const normalizedJob = { attempts: 0, enqueuedAt: Date.now(), ...job, onDone: undefined }
+  if (typeof normalizedJob.buildPayload === 'function') {
+    normalizedJob.payload = await normalizedJob.buildPayload()
+    delete normalizedJob.buildPayload
+  }
+  if (typeof normalizedJob.send === 'function') {
+    delete normalizedJob.send
+  }
   if (normalizedJob.delayMs === undefined) normalizedJob.delayMs = 0
   if (normalizedJob.typingDelayMs === undefined) normalizedJob.typingDelayMs = 0
   if (typeof job.onDone === 'function') doneCallbacks.set(job.logId, job.onDone)
@@ -645,6 +652,42 @@ async function finishSendJob(job, result) {
   const onDone = doneCallbacks.get(job.logId)
   doneCallbacks.delete(job.logId)
   await finalizeSendJob(onDone, job, result)
+}
+
+async function sendPreparedPayload({ sock, job, payload }) {
+  if (payload && payload._route === 'relay' && payload.relay?.type && payload.relay?.proto) {
+    await sock.relayMessage(job.destJid, { [payload.relay.type]: payload.relay.proto }, {})
+    return
+  }
+
+  if (payload && payload.primary) {
+    const channelDest = isChannelDestination(job.destJid)
+    if (detectKind(job.destJid) === null) {
+      logger.warn({ destJid: job.destJid }, 'JID kind inesperado chegou ao send path; usando sendMessage como fallback')
+    }
+    const routes = [
+      {
+        body: channelDest ? stripChannelUnsafeFields(payload.primary) : payload.primary,
+        sendOptions: payload.primarySendOptions,
+      },
+      ...(payload.fallbacks || []).map((body, idx) => ({
+        body: channelDest ? stripChannelUnsafeFields(body) : body,
+        sendOptions: payload.fallbackSendOptions?.[idx],
+      })),
+    ]
+    let lastErr = null
+    for (const route of routes) {
+      try {
+        await sock.sendMessage(job.destJid, route.body, route.sendOptions || undefined)
+        return
+      } catch (err) {
+        lastErr = err
+      }
+    }
+    throw lastErr || new Error('Todos os fallbacks de envio falharam')
+  }
+
+  await sock.sendMessage(job.destJid, payload)
 }
 
 async function processSendJob(job) {
@@ -718,18 +761,18 @@ async function processSendJob(job) {
     for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt++) {
       try {
         if (!activeSock) throw new Error('Bot não conectado')
-        if (!payload) payload = await job.buildPayload()
+        if (!payload) {
+          if (typeof job.buildPayload === 'function') payload = await job.buildPayload()
+          else if (job.payload !== undefined) payload = job.payload
+          else throw new Error('Invalid send job: payload/buildPayload ausente')
+        }
         await waitDestinationRateLimit(job.destJid)
         if (SMART_DELAY_TYPING_ENABLED && job.typingDelayMs > 0 && !job.skipTyping) {
           await Promise.resolve(activeSock.sendPresenceUpdate?.('composing', job.destJid)).catch(() => {})
           await sleep(job.typingDelayMs)
           await Promise.resolve(activeSock.sendPresenceUpdate?.('paused', job.destJid)).catch(() => {})
         }
-        if (typeof job.send === 'function') {
-          await job.send({ sock: activeSock, payload })
-        } else {
-          await activeSock.sendMessage(job.destJid, payload)
-        }
+        await sendPreparedPayload({ sock: activeSock, job, payload })
         const finishedAt = Date.now()
         lastSendByDest.set(job.destJid, finishedAt)
         logger.info({ destJid: job.destJid, platforms: job.platforms, attempt, type: job.type }, 'Mensagem enviada')
@@ -1337,7 +1380,19 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           buildPayload: async () => {
             // Para canal-destino, nunca usar relay (sendMessage com payload limpo).
             // Para grupo-destino com mídia original, deixar relayMessage cuidar (return null).
-            if (shouldUseRelayPath({ destJid, hasOriginal: !!original })) return null
+            if (shouldUseRelayPath({ destJid, hasOriginal: !!original })) {
+              const replayProto = { ...original.proto }
+              if (original.type === 'imageMessage' || original.type === 'videoMessage') {
+                replayProto.caption = variantText
+              }
+              return {
+                _route: 'relay',
+                relay: {
+                  type: original.type,
+                  proto: replayProto,
+                },
+              }
+            }
 
             let image = null
             if (wantImage) {
@@ -1371,53 +1426,6 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
               image,
               useLinkPreview,
             })
-          },
-          send: async ({ sock: sendSock, payload }) => {
-            if (original) {
-              const replayProto = { ...original.proto }
-              if (original.type === 'imageMessage' || original.type === 'videoMessage') {
-                replayProto.caption = variantText
-              }
-              await sendSock.relayMessage(destJid, { [original.type]: replayProto }, {})
-              sentVia = `relay:${original.type}`
-              return
-            }
-
-            // Canal-destino: remove campos não-suportados (quoted/contextInfo) de
-            // todas as rotas. Para grupos, sanitização é no-op (helper só remove
-            // se existir). Sem mutação do payload original.
-            const channelDest = isChannelDestination(destJid)
-            // Sinal de contrato: se chegou aqui um JID que não é grupo nem canal,
-            // o filtro upstream isMirrorableJid não está cobrindo um novo kind —
-            // queremos saber em prod, sem matar o envio (sendMessage tenta como fallback).
-            if (detectKind(destJid) === null) {
-              logger.warn({ destJid }, 'JID kind inesperado chegou ao send path; usando sendMessage como fallback')
-            }
-            const routes = [
-              {
-                name: payload._route,
-                body: channelDest ? stripChannelUnsafeFields(payload.primary) : payload.primary,
-                sendOptions: payload.primarySendOptions,
-              },
-              ...(payload.fallbacks || []).map((body, idx) => ({
-                name: body.image ? 'image' : 'text',
-                body: channelDest ? stripChannelUnsafeFields(body) : body,
-                sendOptions: payload.fallbackSendOptions?.[idx],
-                fallbackIdx: idx,
-              })),
-            ]
-            let lastErr = null
-            for (const route of routes) {
-              try {
-                await sendSock.sendMessage(destJid, route.body, route.sendOptions || undefined)
-                sentVia = route.name
-                return
-              } catch (err) {
-                lastErr = err
-                logger.warn({ err: err.message, destJid, route: route.name, fallbackIdx: route.fallbackIdx, channel: channelDest }, 'Envio falhou — tentando próximo fallback')
-              }
-            }
-            throw lastErr || new Error('Todos os fallbacks de envio falharam')
           },
           onDone: async (result) => {
             if (result.ok) {
