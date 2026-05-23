@@ -730,21 +730,14 @@ async function processSendJob(job) {
           })
           if (!decision.allow) {
             const waitMs = Math.max(0, (decision.deferUntil ?? Date.now()) - Date.now())
-            const SHORT_DEFER_MS = 2 * 60 * 1000 // 2min
-            if (waitMs <= SHORT_DEFER_MS) {
-              logger.info({ destJid: job.destJid, reason: decision.reason, waitMs }, 'Velocity scheduler: aguardando defer curto')
-              await sleep(waitMs)
-              // tenta de novo (reserva real); se ainda negar, aborta
-              const retry = await throttleCheckAndReserve(channelGroupId, cfg, {
-                preservationActive: cfgFull?.preservationActive ?? false,
-              })
-              if (!retry.allow) {
-                const err = new Error(`Canal throttled (${retry.reason}) até ${new Date(retry.deferUntil ?? Date.now()).toISOString()}`)
-                err.code = 'CHANNEL_THROTTLED'
-                throw err
-              }
-            } else {
-              const err = new Error(`Canal throttled (${decision.reason}); defer ${Math.round(waitMs / 1000)}s excede limite`)
+            logger.info({ destJid: job.destJid, reason: decision.reason, waitMs }, 'Velocity scheduler: aguardando janela de throttle do canal')
+            await sleep(waitMs)
+            // tenta de novo (reserva real); se ainda negar, aborta
+            const retry = await throttleCheckAndReserve(channelGroupId, cfg, {
+              preservationActive: cfgFull?.preservationActive ?? false,
+            })
+            if (!retry.allow) {
+              const err = new Error(`Canal throttled (${retry.reason}) até ${new Date(retry.deferUntil ?? Date.now()).toISOString()}`)
               err.code = 'CHANNEL_THROTTLED'
               throw err
             }
