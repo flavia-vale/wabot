@@ -117,6 +117,9 @@ export const getBotMetrics = userId => bots.has(userId) ? requestWithTimeout(use
 export const requestPairingCode = (userId, phone) => requestWithTimeout(userId, 'requestPairingCode', { phone }, 45000, 'Timeout ao solicitar código de pareamento')
 export function reloadConfig(userId) { const e = bots.get(userId); if (!e) return false; try { e.proc.send({ type: 'reloadConfig' }) } catch {}; return true }
 
+export const refreshWaGroups = userId =>
+  requestWithTimeout(userId, 'refreshWaGroups', {}, 15000, 'Timeout ao atualizar grupos do WhatsApp')
+
 export const channelMetadata = (userId, { jid, inviteCode }) =>
   requestWithTimeout(userId, 'channel:metadata', { jid, inviteCode }, 15000, 'Timeout ao buscar metadata do canal')
 

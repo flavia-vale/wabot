@@ -103,6 +103,7 @@ const COMMAND_HANDLERS = {
   [COMMAND.REQUEST_PAIRING_CODE]: ({ userId, phone }) => sessionCore.requestPairingCode(userId, phone),
   [COMMAND.GET_BOT_METRICS]: ({ userId }) => sessionCore.getBotMetrics(userId),
   [COMMAND.RELOAD_CONFIG]: ({ userId }) => sessionCore.reloadConfig(userId),
+  [COMMAND.REFRESH_WA_GROUPS]: ({ userId }) => sessionCore.refreshWaGroups(userId),
   [COMMAND.CHANNEL_METADATA]: ({ userId, jid, inviteCode }) => sessionCore.channelMetadata(userId, { jid, inviteCode }),
   [COMMAND.CHANNEL_FOLLOW]: ({ userId, jid }) => sessionCore.followChannelImmediate(userId, jid),
   [COMMAND.CHANNEL_LIST_FOLLOWED]: ({ userId }) => sessionCore.listFollowedChannels(userId),
