@@ -13,6 +13,22 @@
 
 import logger from '../logger.js'
 
+/**
+ * @typedef {Object} DlqListItem
+ * @property {string|number|null} id
+ * @property {Object<string, any>} data
+ * @property {number|null} failedAt
+ * @property {string|null} error
+ * @property {string|number|null} originalJobId
+ */
+
+/**
+ * @typedef {Object} DlqListResult
+ * @property {string} queue
+ * @property {number} total
+ * @property {DlqListItem[]} jobs
+ */
+
 function dlqNameForUser(userId, { queueNameOverride } = {}) {
   const base = queueNameOverride || `wabot-send-${userId}`
   return `${base}-dlq`
@@ -38,7 +54,7 @@ async function withDlq({ redisUrl, userId, queueNameOverride }, fn) {
 export async function listDlq({ redisUrl, userId, limit = 100, queueNameOverride } = {}) {
   return withDlq({ redisUrl, userId, queueNameOverride }, async (queue, name) => {
     const jobs = await queue.getJobs(['waiting', 'delayed', 'completed', 'failed'], 0, limit - 1, false)
-    return {
+    return /** @type {DlqListResult} */ ({
       queue: name,
       total: jobs.length,
       jobs: jobs.map(j => ({
@@ -48,7 +64,7 @@ export async function listDlq({ redisUrl, userId, limit = 100, queueNameOverride
         error: j.data?.error ?? null,
         originalJobId: j.data?.originalJobId ?? null,
       })),
-    }
+    })
   })
 }
 

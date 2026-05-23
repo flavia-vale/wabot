@@ -42,8 +42,70 @@ import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindo
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
 import { detectMessageKind, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
+import Redis from 'ioredis'
+import { parseEnumEnv, logModeSummary } from './core/envModes.js'
 
 const userId = process.env.BOT_USER_ID
+
+
+const GLOBAL_RATE_LIMIT_MODE = parseEnumEnv('GLOBAL_RATE_LIMIT_MODE', process.env.GLOBAL_RATE_LIMIT_MODE || 'auto', ['auto', 'on', 'off'], 'auto')
+const GLOBAL_DEDUP_MODE = parseEnumEnv('GLOBAL_DEDUP_MODE', process.env.GLOBAL_DEDUP_MODE || 'auto', ['auto', 'on', 'off'], 'auto')
+const REDIS_FAIL_MODE = parseEnumEnv('REDIS_FAIL_MODE', process.env.REDIS_FAIL_MODE || 'open', ['open', 'closed'], 'open')
+let runtimeRedis = null
+
+
+logModeSummary('bot-worker', {
+  userId,
+  globalRateLimitMode: GLOBAL_RATE_LIMIT_MODE,
+  globalDedupMode: GLOBAL_DEDUP_MODE,
+  redisFailMode: REDIS_FAIL_MODE,
+  hasRedisUrl: Boolean(process.env.REDIS_URL),
+})
+
+function useGlobalRedis() {
+  if (!process.env.REDIS_URL) return false
+  if (GLOBAL_RATE_LIMIT_MODE === 'off' && GLOBAL_DEDUP_MODE === 'off') return false
+  return true
+}
+
+function ensureRuntimeRedis() {
+  if (!useGlobalRedis()) return null
+  if (runtimeRedis) return runtimeRedis
+  runtimeRedis = new Redis(process.env.REDIS_URL, { lazyConnect: false, maxRetriesPerRequest: null })
+  runtimeRedis.on('error', (err) => logger.warn({ err: err?.message }, 'runtimeRedis error'))
+  return runtimeRedis
+}
+
+async function globalRateLimitWait(destJid, windowMs) {
+  const r = ensureRuntimeRedis()
+  if (!r) return { allowed: true }
+  const key = `send:last:${userId}:${destJid}`
+  try {
+    const now = Date.now()
+    const last = Number(await r.get(key) || 0)
+    const waitMs = windowMs - (now - last)
+    if (waitMs > 0) return { allowed: false, waitMs }
+    await r.psetex(key, Math.max(windowMs * 2, 1000), String(now))
+    return { allowed: true }
+  } catch (err) {
+    if (REDIS_FAIL_MODE === 'closed') throw new Error(`Global rate-limit unavailable: ${err.message}`)
+    logger.warn({ err: err?.message }, 'Global rate-limit falhou (fail-open)')
+    return { allowed: true }
+  }
+}
+
+async function globalDedupCheckAndSet(key, ttlMs) {
+  const r = ensureRuntimeRedis()
+  if (!r) return { duplicate: false }
+  try {
+    const ok = await r.set(`dedup:${userId}:${key}`, '1', 'PX', ttlMs, 'NX')
+    return { duplicate: ok !== 'OK' }
+  } catch (err) {
+    if (REDIS_FAIL_MODE === 'closed') throw new Error(`Global dedup unavailable: ${err.message}`)
+    logger.warn({ err: err?.message }, 'Global dedup falhou (fail-open)')
+    return { duplicate: false }
+  }
+}
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
 const OWNER_INSTANCE = process.env.NODE_APP_INSTANCE ?? '0'
 const SESSION_ERROR_WINDOW_MS = Math.max(30_000, Number(process.env.WA_SESSION_ERROR_WINDOW_MS || 120_000))
@@ -644,6 +706,10 @@ async function waitDestinationRateLimit(destJid) {
   const lastSentAt = lastSendByDest.get(destJid) ?? 0
   const waitMs = DEST_RATE_LIMIT_MS - (Date.now() - lastSentAt)
   if (waitMs > 0) await sleep(waitMs)
+  if (GLOBAL_RATE_LIMIT_MODE !== 'off') {
+    const gate = await globalRateLimitWait(destJid, DEST_RATE_LIMIT_MS)
+    if (!gate.allowed && gate.waitMs > 0) await sleep(gate.waitMs)
+  }
 }
 
 async function finishSendJob(job, result) {
@@ -1315,6 +1381,14 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         if (dedup.links[key] && Date.now() - dedup.links[key] < dedupeWindowMs) {
           await recordSkippedMessage({ reason: 'skip:dedup_recent_link', platform: primary.platform, originalUrl: primary.url, convertedUrl: primary.converted })
           logger.info({ destJid }, 'Duplicata ignorada'); continue
+        }
+        if (GLOBAL_DEDUP_MODE !== 'off') {
+          const globalDedup = await globalDedupCheckAndSet(key, dedupeWindowMs)
+          if (globalDedup.duplicate) {
+            await recordSkippedMessage({ reason: 'skip:dedup_recent_link_global', platform: primary.platform, originalUrl: primary.url, convertedUrl: primary.converted })
+            logger.info({ destJid }, 'Duplicata global ignorada')
+            continue
+          }
         }
         dedup.links[key] = Date.now()
         scheduleDedupSave(dedup)

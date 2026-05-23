@@ -1,0 +1,13 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// P2.1: schema provisório para validar pipeline de migrations em Postgres.
+// Mantido em arquivo dedicado para não quebrar provider SQLite atual.
+// A estrutura de modelos deve ser sincronizada a partir de prisma/schema.prisma
+// via processo controlado de migração (P2.2+).

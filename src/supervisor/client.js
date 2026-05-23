@@ -21,6 +21,31 @@ import {
 } from './protocol.js'
 
 /**
+ * @typedef {Object} SupervisorClient
+ * @property {(userId:string)=>Promise<any>} startBot
+ * @property {(userId:string)=>Promise<any>} stopBot
+ * @property {(userId:string)=>Promise<any>} isRunning
+ * @property {()=>Promise<any>} listRunningBots
+ * @property {(userId:string)=>Promise<any>} listGroups
+ * @property {(userId:string,text:string,jids:string[])=>Promise<any>} sendBroadcast
+ * @property {(userId:string,phone:string)=>Promise<any>} requestPairingCode
+ * @property {(userId:string)=>Promise<any>} getBotMetrics
+ * @property {(userId:string)=>Promise<any>} reloadConfig
+ * @property {(userId:string)=>Promise<any>} refreshWaGroups
+ * @property {(userId:string,args:{jid?:string,inviteCode?:string})=>Promise<any>} channelMetadata
+ * @property {(userId:string,jid:string)=>Promise<any>} followChannelImmediate
+ * @property {(userId:string)=>Promise<any>} listFollowedChannels
+ * @property {(userId:string,fn:Function)=>Function} onQR
+ * @property {(userId:string,fn:Function)=>Function} onStatus
+ * @property {(userId:string)=>Promise<any>} getLastQR
+ * @property {()=>Promise<{attempted:number,started:number,skipped:number,mode:string}>} resumePersistedBots
+ * @property {()=>Function} startSessionHealthMonitor
+ * @property {()=>number} stopAllBots
+ * @property {()=>Promise<boolean>} isSupervisorAlive
+ * @property {()=>Promise<void>} close
+ */
+
+/**
  * Cria um cliente do supervisor. As dependências (`Queue`, `QueueEvents`,
  * `Redis`) são injetadas para permitir testes com ioredis-mock e bullmq-mock
  * sem precisar de Redis real.
@@ -173,7 +198,7 @@ export function createSupervisorClient({
     try { await queue?.close() } catch {}
   }
 
-  return {
+  return /** @type {SupervisorClient} */ ({
     // superfície igual a sessionCore.js
     startBot, stopBot, isRunning, listRunningBots,
     listGroups, sendBroadcast, requestPairingCode, getBotMetrics, reloadConfig, refreshWaGroups,
@@ -182,5 +207,5 @@ export function createSupervisorClient({
     resumePersistedBots, startSessionHealthMonitor, stopAllBots,
     // extras
     isSupervisorAlive, close, _events: events,
-  }
+  })
 }

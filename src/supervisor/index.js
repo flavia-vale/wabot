@@ -19,6 +19,8 @@ import Redis from 'ioredis'
 import db from '../db.js'
 import logger from '../logger.js'
 import * as sessionCore from '../core/sessionCore.js'
+import { buildShardTag, normalizeShardCount, shouldHandleUserOnShard } from './sharding.js'
+import { parseEnumEnv, logModeSummary } from '../core/envModes.js'
 import {
   COMMAND,
   COMMAND_QUEUE,
@@ -40,6 +42,52 @@ if (!REDIS_URL) {
 
 const publisher = new Redis(REDIS_URL, { lazyConnect: false, maxRetriesPerRequest: null })
 publisher.on('error', err => logger.warn({ err: err.message }, 'Publisher Redis error'))
+const SHARD_COUNT = normalizeShardCount(process.env.SHARD_COUNT || 1, 1)
+const SHARD_INDEX = Math.max(0, Math.min(SHARD_COUNT - 1, Number(process.env.SHARD_INDEX || 0)))
+const SHARD_TAG = `shard-${SHARD_INDEX + 1}-of-${SHARD_COUNT}`
+const SESSION_OWNER_MISMATCH_KEY = `supervisor:session_owner_mismatch_total:${SHARD_TAG}`
+let sessionOwnerMismatchTotal = 0
+
+const MAX_SESSIONS_PER_PROCESS = Math.max(1, Number(process.env.MAX_SESSIONS_PER_PROCESS || 200))
+const SESSION_CIRCUIT_BREAKER_MODE = parseEnumEnv('SESSION_CIRCUIT_BREAKER_MODE', process.env.SESSION_CIRCUIT_BREAKER_MODE || 'closed', ['closed', 'open'], 'closed')
+const SESSION_CIRCUIT_BREAKER_ALERT_KEY = `supervisor:session_circuit_breaker_alert:${SHARD_TAG}`
+
+logModeSummary('bot-supervisor', {
+  shardCount: SHARD_COUNT,
+  shardIndex: SHARD_INDEX,
+  shardTag: SHARD_TAG,
+  maxSessionsPerProcess: MAX_SESSIONS_PER_PROCESS,
+  sessionCircuitBreakerMode: SESSION_CIRCUIT_BREAKER_MODE,
+})
+
+async function checkSessionCircuitBreaker(userId) {
+  const running = sessionCore.listRunningBots().length
+  if (running < MAX_SESSIONS_PER_PROCESS) return true
+  const msg = `Circuit breaker: limite de sessões por processo atingido (${running}/${MAX_SESSIONS_PER_PROCESS})`
+  logger.error({ userId, shard: SHARD_TAG, running, max: MAX_SESSIONS_PER_PROCESS }, msg)
+  try {
+    await publisher.incr(SESSION_CIRCUIT_BREAKER_ALERT_KEY)
+  } catch (err) {
+    logger.warn({ err: err?.message }, 'Falha ao gravar alerta de circuit breaker')
+  }
+  if (SESSION_CIRCUIT_BREAKER_MODE === 'open') return true
+  return false
+}
+
+function belongsToThisShard(userId) {
+  return shouldHandleUserOnShard(userId, SHARD_COUNT, SHARD_INDEX)
+}
+
+async function noteSessionOwnerMismatch(userId, command = 'unknown') {
+  sessionOwnerMismatchTotal++
+  logger.warn({ userId, command, shard: SHARD_TAG }, 'sessão fora do shard local — comando ignorado')
+  try {
+    await publisher.incr(SESSION_OWNER_MISMATCH_KEY)
+  } catch (err) {
+    logger.warn({ err: err.message }, 'Falha ao incrementar session_owner_mismatch_total')
+  }
+}
+
 
 // ---- Bridge sessionCore -> pub/sub ----
 //
@@ -79,13 +127,22 @@ function publishEvent(userId, type, data) {
 // Wrapper de startBot que também monta a bridge — sessionCore.startBot
 // é síncrono e adiciona o bot ao Map antes de retornar, então a bridge
 // consegue assinar imediatamente após.
-function startBotWithBridge(userId) {
+async function startBotWithBridge(userId) {
+  if (!belongsToThisShard(userId)) {
+    void noteSessionOwnerMismatch(userId, 'startBot')
+    return false
+  }
+  if (!(await checkSessionCircuitBreaker(userId))) return false
   const ok = sessionCore.startBot(userId)
   if (ok) attachBridge(userId)
   return ok
 }
 
 function stopBotWithBridge(userId) {
+  if (!belongsToThisShard(userId)) {
+    void noteSessionOwnerMismatch(userId, 'stopBot')
+    return false
+  }
   const ok = sessionCore.stopBot(userId)
   detachBridge(userId)
   return ok
@@ -96,18 +153,66 @@ function stopBotWithBridge(userId) {
 const COMMAND_HANDLERS = {
   [COMMAND.START_BOT]: ({ userId }) => startBotWithBridge(userId),
   [COMMAND.STOP_BOT]: ({ userId }) => stopBotWithBridge(userId),
-  [COMMAND.IS_RUNNING]: ({ userId }) => sessionCore.isRunning(userId),
+  [COMMAND.IS_RUNNING]: ({ userId }) => belongsToThisShard(userId) ? sessionCore.isRunning(userId) : false,
   [COMMAND.LIST_RUNNING_BOTS]: () => sessionCore.listRunningBots(),
-  [COMMAND.LIST_GROUPS]: ({ userId }) => sessionCore.listGroups(userId),
-  [COMMAND.SEND_BROADCAST]: ({ userId, text, jids }) => sessionCore.sendBroadcast(userId, text, jids),
-  [COMMAND.REQUEST_PAIRING_CODE]: ({ userId, phone }) => sessionCore.requestPairingCode(userId, phone),
-  [COMMAND.GET_BOT_METRICS]: ({ userId }) => sessionCore.getBotMetrics(userId),
-  [COMMAND.RELOAD_CONFIG]: ({ userId }) => sessionCore.reloadConfig(userId),
-  [COMMAND.REFRESH_WA_GROUPS]: ({ userId }) => sessionCore.refreshWaGroups(userId),
-  [COMMAND.CHANNEL_METADATA]: ({ userId, jid, inviteCode }) => sessionCore.channelMetadata(userId, { jid, inviteCode }),
-  [COMMAND.CHANNEL_FOLLOW]: ({ userId, jid }) => sessionCore.followChannelImmediate(userId, jid),
-  [COMMAND.CHANNEL_LIST_FOLLOWED]: ({ userId }) => sessionCore.listFollowedChannels(userId),
-  [COMMAND.GET_LAST_QR]: ({ userId }) => sessionCore.getLastQR(userId),
+  [COMMAND.LIST_GROUPS]: ({ userId }) => {
+    if (!belongsToThisShard(userId)) {
+      void noteSessionOwnerMismatch(userId, 'listGroups')
+      throw new Error('Session owner mismatch')
+    }
+    return sessionCore.listGroups(userId)
+  },
+  [COMMAND.SEND_BROADCAST]: ({ userId, text, jids }) => {
+    if (!belongsToThisShard(userId)) {
+      void noteSessionOwnerMismatch(userId, 'sendBroadcast')
+      throw new Error('Session owner mismatch')
+    }
+    return sessionCore.sendBroadcast(userId, text, jids)
+  },
+  [COMMAND.REQUEST_PAIRING_CODE]: ({ userId, phone }) => {
+    if (!belongsToThisShard(userId)) {
+      void noteSessionOwnerMismatch(userId, 'requestPairingCode')
+      throw new Error('Session owner mismatch')
+    }
+    return sessionCore.requestPairingCode(userId, phone)
+  },
+  [COMMAND.GET_BOT_METRICS]: ({ userId }) => {
+    if (!belongsToThisShard(userId)) {
+      void noteSessionOwnerMismatch(userId, 'getBotMetrics')
+      return { session_owner_mismatch_total: sessionOwnerMismatchTotal }
+    }
+    return sessionCore.getBotMetrics(userId)
+  },
+  [COMMAND.RELOAD_CONFIG]: ({ userId }) => belongsToThisShard(userId) ? sessionCore.reloadConfig(userId) : false,
+  [COMMAND.REFRESH_WA_GROUPS]: ({ userId }) => {
+    if (!belongsToThisShard(userId)) {
+      void noteSessionOwnerMismatch(userId, 'refreshWaGroups')
+      throw new Error('Session owner mismatch')
+    }
+    return sessionCore.refreshWaGroups(userId)
+  },
+  [COMMAND.CHANNEL_METADATA]: ({ userId, jid, inviteCode }) => {
+    if (!belongsToThisShard(userId)) {
+      void noteSessionOwnerMismatch(userId, 'channelMetadata')
+      throw new Error('Session owner mismatch')
+    }
+    return sessionCore.channelMetadata(userId, { jid, inviteCode })
+  },
+  [COMMAND.CHANNEL_FOLLOW]: ({ userId, jid }) => {
+    if (!belongsToThisShard(userId)) {
+      void noteSessionOwnerMismatch(userId, 'channelFollow')
+      throw new Error('Session owner mismatch')
+    }
+    return sessionCore.followChannelImmediate(userId, jid)
+  },
+  [COMMAND.CHANNEL_LIST_FOLLOWED]: ({ userId }) => {
+    if (!belongsToThisShard(userId)) {
+      void noteSessionOwnerMismatch(userId, 'channelListFollowed')
+      throw new Error('Session owner mismatch')
+    }
+    return sessionCore.listFollowedChannels(userId)
+  },
+  [COMMAND.GET_LAST_QR]: ({ userId }) => belongsToThisShard(userId) ? sessionCore.getLastQR(userId) : null,
 }
 
 const worker = new Worker(
@@ -148,7 +253,7 @@ function startHeartbeat() {
 // ---- Boot ----
 
 async function boot() {
-  logger.info({ redisUrl: REDIS_URL.replace(/:[^:@/]+@/, ':***@') }, 'bot-supervisor iniciando')
+  logger.info({ redisUrl: REDIS_URL.replace(/:[^:@/]+@/, ':***@'), shard: SHARD_TAG, shardCount: SHARD_COUNT, shardIndex: SHARD_INDEX }, 'bot-supervisor iniciando')
   startHeartbeat()
 
   // O monitor de saúde mantido em sessionCore precisa que cada bot
@@ -157,15 +262,27 @@ async function boot() {
   // Como sessionCore.startSessionHealthMonitor chama internamente
   // sessionCore.startBot (não o wrapper), precisamos compensar assinando
   // os bots já rodando a cada tick. Mais barato: polling de subscriptions.
-  sessionCore.startSessionHealthMonitor(db, logger)
+  // Em modo sharded, o monitor de saúde do core não deve iniciar sessões fora do shard.
 
-  await sessionCore.resumePersistedBots(db, logger)
-    .catch(err => logger.error({ err: err.message }, 'Falha ao retomar sessões persistidas'))
+  const persisted = await db.waSession.findMany({ where: { status: { in: ['connected', 'connecting'] } }, select: { userId: true } })
+  let started = 0
+  for (const s of persisted) {
+    if (!belongsToThisShard(s.userId)) continue
+    if (await startBotWithBridge(s.userId)) started++
+  }
+  logger.info({ attempted: persisted.length, started, shard: SHARD_TAG }, 'Sessões persistidas retomadas no shard')
 
   // Garante bridge para todos os bots já rodando (após resume e a qualquer
   // momento que health monitor reerga um). Custo: O(n) a cada 5s, n <= 100.
   setInterval(() => {
-    for (const userId of sessionCore.listRunningBots()) attachBridge(userId)
+    for (const userId of sessionCore.listRunningBots()) {
+      if (!belongsToThisShard(userId)) {
+        void noteSessionOwnerMismatch(userId, 'runningBotSweep')
+        stopBotWithBridge(userId)
+        continue
+      }
+      attachBridge(userId)
+    }
     for (const userId of subscriptions.keys()) {
       if (!sessionCore.isRunning(userId)) detachBridge(userId)
     }

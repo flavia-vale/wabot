@@ -14,6 +14,7 @@
 
 import crypto from 'node:crypto'
 import defaultDb from '../db.js'
+import { writeAffiliateClick } from '../events/store.js'
 
 const HASH_BYTES = 6 // 8 chars base64url
 
@@ -84,13 +85,11 @@ export async function resolveShortlink(hash, opts = {}) {
  */
 export async function recordClick(linkId, request = {}, opts = {}) {
   const db = opts.db ?? defaultDb
-  return db.affiliateClick.create({
-    data: {
-      linkId,
-      ipHash: hashIp(request.ip),
-      uaHash: hashUserAgent(request.userAgent),
-    },
-  })
+  return writeAffiliateClick({
+    linkId,
+    ipHash: hashIp(request.ip),
+    uaHash: hashUserAgent(request.userAgent),
+  }, { db })
 }
 
 /**

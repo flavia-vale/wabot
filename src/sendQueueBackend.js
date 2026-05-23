@@ -1,5 +1,24 @@
 import logger from './logger.js'
 
+/**
+ * @typedef {Object} SendJob
+ * @property {string|number} logId
+ * @property {string} [destJid]
+ * @property {string} [type]
+ * @property {Function} [onDone]
+ * @property {Object<string, any>} [extra]
+ */
+
+/**
+ * @typedef {Object} SendBackend
+ * @property {'memory'|'bullmq'} backend
+ * @property {() => (number|Promise<number>)} getQueueSize
+ * @property {() => (number|Promise<number>)} getDlqSize
+ * @property {() => boolean} getProcessing
+ * @property {(job: SendJob) => (boolean|Promise<boolean>)} enqueue
+ * @property {() => Promise<void>} close
+ */
+
 function withSafeOnDone(onDone, job, result) {
   if (typeof onDone !== 'function') return Promise.resolve()
   return onDone(result).catch(err => {
@@ -11,7 +30,7 @@ export function createMemorySendBackend({ maxSize, onRejected, onDequeued }) {
   const queue = []
   let processing = false
 
-  return {
+  return /** @type {SendBackend} */ ({
     backend: 'memory',
     getQueueSize: () => queue.length,
     getDlqSize: async () => 0,
@@ -39,7 +58,7 @@ export function createMemorySendBackend({ maxSize, onRejected, onDequeued }) {
       return true
     },
     getProcessing: () => processing,
-  }
+  })
 }
 
 /**
@@ -106,7 +125,7 @@ export async function createBullmqSendBackend({
     }
   })
 
-  return {
+  return /** @type {SendBackend} */ ({
     backend: 'bullmq',
     queueName,
     dlqQueueName,
@@ -134,7 +153,7 @@ export async function createBullmqSendBackend({
           return false
         })
     },
-  }
+  })
 }
 
 export async function finalizeSendJob(onDone, job, result) {
