@@ -4,12 +4,38 @@ import Link from 'next/link'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { mobileRoutes } from '@/components/mobile/routes'
 
+function MobileIcon({ name, size = 16, stroke = 1.8 }) {
+  const props = {
+    width: size, height: size, viewBox: '0 0 24 24',
+    fill: 'none', stroke: 'currentColor', strokeWidth: stroke,
+    strokeLinecap: 'round', strokeLinejoin: 'round',
+    'aria-hidden': 'true',
+  }
+
+  switch (name) {
+    case 'menu':
+      return <svg {...props}><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="14" y2="18" /></svg>
+    case 'home':
+      return <svg {...props}><path d="M3 11l9-8 9 8v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>
+    case 'link':
+      return <svg {...props}><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 1 0-7.07-7.07L11 5" /><path d="M14 11a5 5 0 0 0-7.07 0l-3 3A5 5 0 1 0 11 21l1.5-1.5" /></svg>
+    case 'plus':
+      return <svg {...props}><path d="M12 5v14M5 12h14" /></svg>
+    case 'send':
+      return <svg {...props}><path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4 20-7z" /></svg>
+    case 'logs':
+      return <svg {...props}><rect x="4" y="4" width="16" height="16" rx="2" /><line x1="8" y1="9" x2="16" y2="9" /><line x1="8" y1="13" x2="16" y2="13" /><line x1="8" y1="17" x2="12" y2="17" /></svg>
+    default:
+      return null
+  }
+}
+
 const tabs = [
-  { key: 'inicio', href: mobileRoutes.home, label: 'Início' },
-  { key: 'converter', href: mobileRoutes.converter, label: 'Converter' },
-  { key: 'criar', href: mobileRoutes.offer, label: 'Criar' },
-  { key: 'envios', href: mobileRoutes.sends, label: 'Envios' },
-  { key: 'logs', href: mobileRoutes.logs, label: 'Logs' },
+  { key: 'inicio', href: mobileRoutes.home, label: 'Início', icon: 'home' },
+  { key: 'converter', href: mobileRoutes.converter, label: 'Converter', icon: 'link' },
+  { key: 'criar', href: mobileRoutes.offer, label: 'Criar', icon: 'plus' },
+  { key: 'envios', href: mobileRoutes.sends, label: 'Envios', icon: 'send' },
+  { key: 'logs', href: mobileRoutes.logs, label: 'Logs', icon: 'logs' },
 ]
 
 const drawerLinks = [
@@ -100,7 +126,8 @@ export function MobileShell({ title = 'Conversor', active = 'inicio', children }
             aria-controls={drawerId}
             onClick={() => setDrawerOpen(true)}
           >
-            Menu
+            <MobileIcon name="menu" size={14} />
+            <span>Menu</span>
           </button>
           <h1 className="text-sm font-semibold">{title}</h1>
         </div>
@@ -142,7 +169,19 @@ export function MobileShell({ title = 'Conversor', active = 'inicio', children }
                   className="rounded-lg border border-[#e4efe9] px-3 py-2 text-sm"
                   onClick={() => setDrawerOpen(false)}
                 >
-                  {link.label}
+                  <span className="inline-flex items-center gap-2">
+                    <MobileIcon
+                      name={
+                        link.href === mobileRoutes.home ? 'home'
+                          : link.href === mobileRoutes.converter ? 'link'
+                            : link.href === mobileRoutes.offer ? 'plus'
+                              : link.href === mobileRoutes.sends ? 'send'
+                                : 'logs'
+                      }
+                      size={14}
+                    />
+                    {link.label}
+                  </span>
                 </Link>
               ))}
             </nav>
@@ -161,8 +200,9 @@ export function MobileShell({ title = 'Conversor', active = 'inicio', children }
                 <Link
                   href={tab.href}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`block py-3 text-center text-[11px] font-semibold ${isActive ? 'text-[#3E9C7A]' : 'text-[#5A6E68]'}`}
+                  className={`flex flex-col items-center justify-center gap-1 py-2 text-center text-[11px] font-semibold ${isActive ? 'text-[#3E9C7A]' : 'text-[#5A6E68]'}`}
                 >
+                  <MobileIcon name={tab.icon} size={16} />
                   {tab.label}
                 </Link>
               </li>
