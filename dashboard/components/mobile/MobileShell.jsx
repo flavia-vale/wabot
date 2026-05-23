@@ -18,8 +18,8 @@ const drawerLinks = [
   { href: mobileRoutes.offer, label: 'Gerar oferta' },
   { href: mobileRoutes.sends, label: 'Envios' },
   { href: mobileRoutes.logs, label: 'Logs' },
-  { href: mobileRoutes.groups, label: 'Grupos e canais' },
-  { href: mobileRoutes.whatsapp, label: 'Conexão WhatsApp' },
+  { href: mobileRoutes.configGroups, label: 'Grupos e canais' },
+  { href: mobileRoutes.configWhatsApp, label: 'Conexão WhatsApp' },
 ]
 
 function useFocusTrap({ open, onClose, containerRef, firstFocusRef }) {
