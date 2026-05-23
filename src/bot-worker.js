@@ -473,6 +473,13 @@ const lastSendByDest = new Map()
 let interruptedSendLogsMarked = false
 let adSendCount = 0
 const doneCallbacks = new Map()
+// BullMQ serializa o job em JSON para o Redis, então closures (buildPayload,
+// send) não sobrevivem ao enqueue. Mantemos as funções no processo, indexadas
+// por logId, e elas são consultadas quando o job é retirado da fila.
+// Limitação consciente: se o worker reiniciar antes de processar o job, a
+// closure se perde — o job vai falhar no dequeue e cair na DLQ (mesma fronteira
+// do antigo backend em memória, que perdia o job inteiro).
+const jobCallbacks = new Map()
 let sendBackend = null
 
 const sendMetrics = {
@@ -546,15 +553,32 @@ async function enqueueSendJob(job) {
     sendMetrics.rejectedTotal++
     return false
   }
-  const normalizedJob = { attempts: 0, enqueuedAt: Date.now(), ...job, onDone: undefined }
+  const normalizedJob = {
+    attempts: 0,
+    enqueuedAt: Date.now(),
+    ...job,
+    onDone: undefined,
+    buildPayload: undefined,
+    send: undefined,
+  }
   if (normalizedJob.delayMs === undefined) normalizedJob.delayMs = 0
   if (normalizedJob.typingDelayMs === undefined) normalizedJob.typingDelayMs = 0
   if (typeof job.onDone === 'function') doneCallbacks.set(job.logId, job.onDone)
+  if (typeof job.buildPayload === 'function' || typeof job.send === 'function') {
+    jobCallbacks.set(job.logId, { buildPayload: job.buildPayload, send: job.send })
+  }
   sendMetrics.queuedTotal++
   if (job.type === 'broadcast') sendMetrics.broadcastQueuedTotal++
   else if (job.type === 'scheduled') sendMetrics.scheduledQueuedTotal++
   else sendMetrics.convertedQueuedTotal++
-  return sendBackend.enqueue(normalizedJob)
+  const enqueued = await sendBackend.enqueue(normalizedJob)
+  if (!enqueued) {
+    // Backend recusou (BullMQ indisponível, fila cheia, etc.) — limpa os
+    // callbacks que nunca serão consumidos para evitar leak no Map.
+    doneCallbacks.delete(job.logId)
+    jobCallbacks.delete(job.logId)
+  }
+  return enqueued
 }
 
 function getRetryDelayMs(attempt) {
@@ -573,6 +597,7 @@ async function waitDestinationRateLimit(destJid) {
 async function finishSendJob(job, result) {
   const onDone = doneCallbacks.get(job.logId)
   doneCallbacks.delete(job.logId)
+  jobCallbacks.delete(job.logId)
   await finalizeSendJob(onDone, job, result)
 }
 
@@ -644,18 +669,27 @@ async function processSendJob(job) {
       }
     }
 
+    // BullMQ stripou as closures durante serialização; recupera do Map por logId.
+    // Fallback para job.buildPayload/job.send (backend em memória, que preserva funções).
+    const callbacks = jobCallbacks.get(job.logId) ?? {}
+    const buildPayload = callbacks.buildPayload ?? (typeof job.buildPayload === 'function' ? job.buildPayload : null)
+    const sendFn = callbacks.send ?? (typeof job.send === 'function' ? job.send : null)
+    if (!buildPayload) {
+      throw new Error(`buildPayload ausente para job ${job.logId} — closure perdida após restart do worker`)
+    }
+
     for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt++) {
       try {
         if (!activeSock) throw new Error('Bot não conectado')
-        if (!payload) payload = await job.buildPayload()
+        if (!payload) payload = await buildPayload()
         await waitDestinationRateLimit(job.destJid)
         if (SMART_DELAY_TYPING_ENABLED && job.typingDelayMs > 0 && !job.skipTyping) {
           await Promise.resolve(activeSock.sendPresenceUpdate?.('composing', job.destJid)).catch(() => {})
           await sleep(job.typingDelayMs)
           await Promise.resolve(activeSock.sendPresenceUpdate?.('paused', job.destJid)).catch(() => {})
         }
-        if (typeof job.send === 'function') {
-          await job.send({ sock: activeSock, payload })
+        if (sendFn) {
+          await sendFn({ sock: activeSock, payload })
         } else {
           await activeSock.sendMessage(job.destJid, payload)
         }
