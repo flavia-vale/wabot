@@ -129,6 +129,24 @@ ensure_dashboard_deps_integrity() {
   fi
 }
 
+# Build com recuperação após corrupção de node_modules pós-install.
+# Observado em staging: npm ci passa e arquivos críticos existem, mas o
+# build estoura com erros internos do webpack (ex.: 'WebpackError is not
+# a constructor' no minify-webpack-plugin). Causa típica: cópias
+# divergentes do webpack resolvidas no runtime. Limpar node_modules +
+# cache e reinstalar resolve sem mudar código nem versão.
+build_dashboard_with_recovery() {
+  if npm run build; then
+    return 0
+  fi
+  echo "  Aviso: 'npm run build' falhou. Limpando node_modules + .next + cache e tentando novamente uma vez..."
+  rm -rf node_modules .next
+  npm cache clean --force || true
+  npm ci
+  ensure_dashboard_deps_integrity
+  npm run build
+}
+
 
 ensure_pm2_app_running() {
   local app_name="$1"
@@ -212,7 +230,7 @@ ensure_dashboard_deps_integrity
 echo "[6/9] Guardrail + build dashboard staging (hard gate)"
 npm run guard:config-page
 rm -rf .next
-npm run build
+build_dashboard_with_recovery
 
 for artifact in .next/BUILD_ID .next/prerender-manifest.json .next/server/app-paths-manifest.json; do
   if [[ ! -f "$artifact" ]]; then
