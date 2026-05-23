@@ -785,6 +785,15 @@ async function processSendJob(job) {
         }
         return
       } catch (err) {
+        if (isChannelDestination(job.destJid) && (
+          err?.code === 'CHANNEL_THROTTLED' ||
+          /Canal throttled \(/i.test(err?.message || '')
+        )) {
+          const waitMs = Math.max(0, (err?.deferUntil ? (new Date(err.deferUntil).getTime() - Date.now()) : getRetryDelayMs(attempt)))
+          logger.info({ destJid: job.destJid, err: err.message, waitMs, attempt, type: job.type }, 'Throttle de canal detectado durante envio — aguardando e retomando')
+          await sleep(waitMs)
+          continue
+        }
         // Canal sem permissão: aborta retries para não queimar SEND_MAX_ATTEMPTS
         // em destino permanentemente bloqueado (e evitar rate-limit/ban).
         if (isChannelDestination(job.destJid) && isChannelForbiddenError(err)) {
