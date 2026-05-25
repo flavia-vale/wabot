@@ -76,6 +76,22 @@ test('sanitizeInviteLinks remove CTA inline que ficou sem link de convite', () =
   assert.equal(sanitized, 'Oferta boa https://amzn.to/produto')
 })
 
+test('sanitizeInviteLinks remove CTA+link final irrelevante fora de marketplaces suportados', () => {
+  const sanitized = sanitizeInviteLinks([
+    '🚨 MENOR PREÇO!',
+    '🔗 LINK PROMOCIONAL: https://s.shopee.com.br/809mpYoiVb?lp=aff',
+    '🎫 Cupons disponíveis aqui: 👇',
+    'https://s.shopee.com.br/7VDWEdqxpm',
+    '🛍️ Conheça nossos grupos👇',
+    'https://ofertasdagrasi.lovable.app',
+  ].join('\n'))
+
+  assert.equal(sanitized.includes('ofertasdagrasi.lovable.app'), false)
+  assert.equal(sanitized.includes('Conheça nossos grupos'), false)
+  assert.equal(sanitized.includes('https://s.shopee.com.br/809mpYoiVb?lp=aff'), true)
+  assert.equal(sanitized.includes('https://s.shopee.com.br/7VDWEdqxpm'), true)
+})
+
 test('branding vazio ou inválido não altera a mensagem', () => {
   assert.equal(appendBrandingFooter('Oferta convertida', ''), 'Oferta convertida')
   assert.equal(appendBrandingFooter('Oferta convertida', 'chat.whatsapp.com/sem-protocolo'), 'Oferta convertida')
