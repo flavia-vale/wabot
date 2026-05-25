@@ -35,43 +35,69 @@ function buildCookieHeader(creds) {
   return pairs.join('; ')
 }
 
+const SHORTLINK_RETRY_BACKOFF_MS = [1000, 3000, 8000]
+const sleep = (ms) => new Promise(r => setTimeout(r, ms))
+
 async function createAmazonShortLink(longUrl, tag, creds) {
   const cookieHeader = buildCookieHeader(creds)
   if (!cookieHeader) {
     logger.warn('Amazon createShortLink: cookies vazios, pulando chamada API')
-    return null
+    return { shortUrl: null, transient: false }
   }
 
-  try {
-    const res = await axios.get('https://www.amazon.com.br/associates/sitestripe/getShortUrl', {
-      params: { longUrl, marketplaceId: 'A2Q3Y263D00KWC', tag },
-      headers: {
-        'Cookie': cookieHeader,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Referer': 'https://www.amazon.com.br/',
-        'X-Requested-With': 'XMLHttpRequest',
-      },
-      timeout: 10000,
-      validateStatus: () => true,
-    })
+  // Retry com backoff em erros transitórios (5xx, network, timeout). 4xx e
+  // resposta válida sem shortUrl falham na primeira tentativa — re-tentar
+  // credencial ruim ou bug de schema só queima cota da Amazon.
+  let lastStatus = null
+  for (let attempt = 0; attempt <= SHORTLINK_RETRY_BACKOFF_MS.length; attempt++) {
+    try {
+      const res = await axios.get('https://www.amazon.com.br/associates/sitestripe/getShortUrl', {
+        params: { longUrl, marketplaceId: 'A2Q3Y263D00KWC', tag },
+        headers: {
+          'Cookie': cookieHeader,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+          'Accept': 'application/json, text/plain, */*',
+          'Referer': 'https://www.amazon.com.br/',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        timeout: 10000,
+        validateStatus: () => true,
+      })
+      lastStatus = res.status
 
-    const shortUrl = res.data?.shortUrl || res.data?.shortenedUrl || res.data?.url
-    if (shortUrl && /amzn\.to|a\.co/.test(shortUrl)) {
-      logger.info({ longUrl, shortUrl }, 'Amazon createShortLink: amzn.to gerado')
-      return shortUrl
+      const shortUrl = res.data?.shortUrl || res.data?.shortenedUrl || res.data?.url
+      if (shortUrl && /amzn\.to|a\.co/.test(shortUrl)) {
+        logger.info({ longUrl, shortUrl, attempt }, 'Amazon createShortLink: amzn.to gerado')
+        return { shortUrl, transient: false }
+      }
+
+      if (res.status >= 500 && attempt < SHORTLINK_RETRY_BACKOFF_MS.length) {
+        const wait = SHORTLINK_RETRY_BACKOFF_MS[attempt]
+        logger.warn({ status: res.status, attempt, retryInMs: wait }, 'Amazon createShortLink: 5xx — retry')
+        await sleep(wait)
+        continue
+      }
+
+      logger.warn({
+        status: res.status,
+        attempt,
+        rawBody: typeof res.data === 'string' ? res.data.slice(0, 500) : JSON.stringify(res.data).slice(0, 500),
+        contentType: res.headers?.['content-type'],
+      }, 'Amazon createShortLink: API respondeu sem shortUrl')
+      return { shortUrl: null, transient: res.status >= 500 }
+    } catch (err) {
+      lastStatus = err.response?.status ?? null
+      if (attempt < SHORTLINK_RETRY_BACKOFF_MS.length) {
+        const wait = SHORTLINK_RETRY_BACKOFF_MS[attempt]
+        logger.warn({ err: err.message, status: lastStatus, attempt, retryInMs: wait }, 'Amazon createShortLink: erro de rede — retry')
+        await sleep(wait)
+        continue
+      }
+      logger.warn({ err: err.message, status: lastStatus, attempt }, 'Amazon createShortLink: erro na chamada API')
+      return { shortUrl: null, transient: true }
     }
-
-    logger.warn({
-      status: res.status,
-      rawBody: typeof res.data === 'string' ? res.data.slice(0, 500) : JSON.stringify(res.data).slice(0, 500),
-      contentType: res.headers?.['content-type'],
-    }, 'Amazon createShortLink: API respondeu sem shortUrl')
-    return null
-  } catch (err) {
-    logger.warn({ err: err.message, status: err.response?.status }, 'Amazon createShortLink: erro na chamada API')
-    return null
   }
+  return { shortUrl: null, transient: lastStatus == null || lastStatus >= 500 }
 }
 
 export async function convert(url, creds) {
@@ -93,9 +119,15 @@ export async function convert(url, creds) {
     const longUrl = `https://www.amazon.com.br/dp/${asin}`
 
     if (hasCookies) {
-      const shortUrl = await createAmazonShortLink(longUrl, tag, creds)
+      const { shortUrl, transient } = await createAmazonShortLink(longUrl, tag, creds)
       if (shortUrl) return shortUrl
-      logger.warn({ url, longUrl }, 'Amazon: API falhou — abortando (cookies preenchidos, fallback ?tag desativado)')
+      if (transient) {
+        // 5xx/timeout transitório da Amazon após retries — degradar pra ?tag=
+        // longo é melhor que perder a oferta. Conversão pior, mas entrega 100%.
+        logger.warn({ url, longUrl }, 'Amazon: API transitória após retries — fallback para ?tag=')
+        return `${longUrl}?tag=${tag}`
+      }
+      logger.warn({ url, longUrl }, 'Amazon: API falhou (4xx/credencial) — abortando')
       return null
     }
 

@@ -32,12 +32,14 @@ import { logFollow } from './core/followGuard.js'
 import {
   recordSendResult as recordChannelSendResult,
   recordStreamError as recordChannelStreamError,
-  isChannelPaused,
-  getHealth as getChannelHealth,
 } from './core/channelHealth.js'
+import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
+import { applyVariation } from './core/copyVariation.js'
+import { mutate as mutateChannelImage } from './core/imageMutation.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
+import { getAdvancedPreservationAccess } from './billing/plans.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
@@ -365,7 +367,8 @@ async function loadConfig() {
   botConfig.brandingGroupLink = normalizeBrandingLink(botConfig.brandingGroupLink)
   botConfig.brandingCtaText = normalizeBrandingCtaText(botConfig.brandingCtaText)
 
-  return { credentials, groups, plan: user.plan, botConfig }
+  const preservation = await getAdvancedPreservationAccess(userId, { db })
+  return { credentials, groups, plan: user.plan, botConfig, preservationActive: preservation.active }
 }
 
 async function getConfig() {
@@ -812,8 +815,8 @@ async function processSendJob(job) {
       await sleep(totalDelayMs)
     }
 
-    // PR-5.C.1: lookup do groupId do canal-destino (uma vez por job) para
-    // alimentar ChannelHealth e respeitar pausedUntil.
+    // PR-5.C.1 + 5.B.1: lookup do groupId do canal-destino (uma vez por job)
+    // para alimentar ChannelHealth e passar pelo velocity scheduler.
     let channelGroupId = null
     if (isChannelDestination(job.destJid)) {
       try {
@@ -1450,6 +1453,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 
       const baseDestinations = monitorGroup?.targetPostJids?.length ? monitorGroup.targetPostJids : cfg.groups.post
       const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
+      // PR-5.B.2: stagger entre destinos para quebrar simultaneidade exata.
+      // Primeiro destino sem atraso; demais com jitter aleatório limitado.
+      const staggerJitterMs = Math.max(0, Number(cfg.botConfig.channelStaggerJitterMs ?? 0))
       let destIndex = -1
       for (const destJid of destinations) {
         destIndex++
