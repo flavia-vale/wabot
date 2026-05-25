@@ -259,15 +259,23 @@ uma DLQ correspondente (`wabot-send-<userId>-dlq`). Configuração via env:
 
 | Env                 | Default                       | Efeito |
 |---------------------|-------------------------------|--------|
-| `QUEUE_BACKEND`     | auto                          | `'memory'` força in-process; `'bullmq'` força Redis (com fallback). Vazio = auto. |
-| `REDIS_URL`         | (vazio)                       | Em modo auto, presença liga BullMQ; ausência cai em memory. |
+| `QUEUE_BACKEND`     | `memory`                      | `'memory'` (default) força in-process; `'bullmq'` opt-in via Redis. Vazio = memory. |
+| `REDIS_URL`         | (vazio)                       | Necessário **apenas** quando `QUEUE_BACKEND=bullmq`. Sem ele, BullMQ cai em memory-fallback. |
 | `BULLMQ_QUEUE_NAME` | `wabot-send-${userId}`        | Nome da fila principal; DLQ é `<name>-dlq`. |
 | `SEND_MAX_ATTEMPTS` | 3                             | Retries in-process antes do job ser declarado falha definitiva. |
 
-**Default novo (PR #...):** com `REDIS_URL` configurado, BullMQ vira o
-backend automaticamente. Antes era opt-in via `QUEUE_BACKEND=bullmq`.
-Motivo: deploy em prod (Redis presente) ganha persistência sem nenhuma
-mudança de env. Para opt-out: `QUEUE_BACKEND=memory`.
+**Default é `memory` — BullMQ é opt-in explícito.** Já tentamos
+auto-ligar BullMQ quando `REDIS_URL` está presente e isso quebrou o
+envio de imagem em staging: o payload do job carrega `image.buffer`
+(Buffer real); BullMQ persiste via `JSON.stringify`, e Buffer vira
+`{type:'Buffer', data:[...]}` na deserialização. O Baileys não
+reconhece como mídia e a oferta sai **sem foto**. Para reabilitar
+BullMQ como default sem regressão, antes mover a construção da payload
+(fetch + normalize de imagem + `buildMonitoredMessagePayload`) para
+dentro do worker pós-dequeue, persistindo só a "receita" (URL, flags,
+texto) na fila. Até lá: para forçar persistência, setar
+`QUEUE_BACKEND=bullmq` explicitamente — ciente de que ofertas com
+imagem podem sair só como texto.
 
 **DLQ:** quando `processSendJob` lança após esgotar `SEND_MAX_ATTEMPTS`,
 o BullMQ marca o job como `failed`. Um listener no Worker copia o payload

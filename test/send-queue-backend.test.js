@@ -6,14 +6,21 @@ import {
   createMemorySendBackend,
 } from '../src/sendQueueBackend.js'
 
-test('resolveBackendMode: vazio + REDIS_URL → bullmq (novo default)', () => {
-  assert.equal(resolveBackendMode({ queueBackendEnv: '', redisUrl: 'redis://x' }), 'bullmq')
-  assert.equal(resolveBackendMode({ queueBackendEnv: undefined, redisUrl: 'redis://x' }), 'bullmq')
+// BullMQ é opt-in explícito: o payload de envio contém Buffer de imagem,
+// que não sobrevive ao JSON.stringify do BullMQ (sai oferta sem imagem).
+// Enquanto a build do payload roda no enqueue, default seguro é memory.
+test('resolveBackendMode: vazio + REDIS_URL → memory (BullMQ é opt-in)', () => {
+  assert.equal(resolveBackendMode({ queueBackendEnv: '', redisUrl: 'redis://x' }), 'memory')
+  assert.equal(resolveBackendMode({ queueBackendEnv: undefined, redisUrl: 'redis://x' }), 'memory')
 })
 
-test('resolveBackendMode: vazio + sem Redis → memory (compat dev)', () => {
+test('resolveBackendMode: vazio + sem Redis → memory', () => {
   assert.equal(resolveBackendMode({ queueBackendEnv: '', redisUrl: '' }), 'memory')
   assert.equal(resolveBackendMode({ queueBackendEnv: undefined, redisUrl: undefined }), 'memory')
+})
+
+test('resolveBackendMode: bullmq explícito + REDIS_URL → bullmq', () => {
+  assert.equal(resolveBackendMode({ queueBackendEnv: 'bullmq', redisUrl: 'redis://x' }), 'bullmq')
 })
 
 test('resolveBackendMode: bullmq explícito sem Redis → memory-fallback', () => {
