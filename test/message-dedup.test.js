@@ -29,3 +29,19 @@ test('dedup entries expire continuously instead of only at worker start', () => 
   assert.equal(hasRecentDedupEntry(store.msgIds, '111@g.us:new', 10_000, 300), true)
   assert.equal(hasRecentDedupEntry(store.msgIds, '111@g.us:old', 10_000, 300), false)
 })
+
+test('pruneDedupStore aceita janelas independentes pra msgIds e links', () => {
+  // Cenário do hotfix: msgIds expira em 5min, links em 24h. Mesma URL
+  // repostada 42min depois precisa continuar deduplicada.
+  const store = {
+    msgIds: [{ id: 'jid:msg-velho', ts: 0 }, { id: 'jid:msg-novo', ts: 9_500 }],
+    links: { 'dest:url-velho': 0, 'dest:url-fresco': 9_500 },
+  }
+
+  pruneDedupStore(store, 10_000, { msgIds: 1_000, links: 100_000 })
+
+  // msgIds com janela curta: 'msg-velho' (ts=0, now=10_000, idade=10_000 >= 1_000) sai
+  assert.deepEqual(store.msgIds, [{ id: 'jid:msg-novo', ts: 9_500 }])
+  // links com janela longa: AMBOS sobrevivem (idade 10_000 < 100_000)
+  assert.deepEqual(store.links, { 'dest:url-velho': 0, 'dest:url-fresco': 9_500 })
+})
