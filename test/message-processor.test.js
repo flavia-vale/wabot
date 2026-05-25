@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { applyConversionsAndBranding, appendBrandingFooter, buildProcessedMessage, DEFAULT_BRANDING_CTA_TEXT, isValidBrandingLink, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from '../src/messageProcessor.js'
+import { applyConversionsAndBranding, appendBrandingFooter, buildProcessedMessage, DEFAULT_BRANDING_CTA_TEXT, extractKeywordTokens, hasSignificantTokenOverlap, isValidBrandingLink, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from '../src/messageProcessor.js'
 
 test('sanitizeInviteLinks remove convites WhatsApp e Telegram preservando oferta', () => {
   const original = 'Oferta top https://produto.example/item\nEntre no grupo https://chat.whatsapp.com/AbCdEf12345 e t.me/+ConviteXYZ'
@@ -124,4 +124,48 @@ test('sanitizeInviteLinks processa entrada grande hostil sem backtracking catast
 
   assert.equal(sanitized.includes('https://produto.example/item'), true)
   assert.equal(sanitized.includes('t.me/'), false)
+})
+
+test('extractKeywordTokens normaliza, remove stopwords e ignora tokens curtos', () => {
+  const tokens = extractKeywordTokens('Jogo de Toalhas 4 Peças Fio Cardado 100% Algodão Softmax Bressan Karsten')
+  assert.equal(tokens.has('jogo'), true)
+  assert.equal(tokens.has('toalhas'), true)
+  assert.equal(tokens.has('algodao'), true)
+  assert.equal(tokens.has('softmax'), true)
+  assert.equal(tokens.has('bressan'), true)
+  assert.equal(tokens.has('karsten'), true)
+  // stopwords e tokens curtos descartados
+  assert.equal(tokens.has('de'), false)
+  assert.equal(tokens.has('fio'), false)
+  assert.equal(tokens.has('para'), false)
+  assert.equal(tokens.has('100'), false)
+})
+
+test('hasSignificantTokenOverlap detecta mismatch entre título de mochila e texto de toalhas', () => {
+  const titulo = 'Mochila Esportiva Adidas Originals Trefoil 30L Preta'
+  const caption = '✅ Jogo de Toalhas 4 Peças Fio Cardado 100 Algodão Softmax Bressan Karsten - Bordô ou Azul/Branco'
+  assert.equal(hasSignificantTokenOverlap(titulo, caption), false)
+})
+
+test('hasSignificantTokenOverlap aceita quando há overlap em pelo menos um token relevante', () => {
+  const titulo = 'Jogo de Toalhas 4 Peças Karsten Softmax Algodão'
+  const caption = '✅ Jogo de Toalhas 4 Peças Fio Cardado 100 Algodão Softmax Bressan Karsten'
+  assert.equal(hasSignificantTokenOverlap(titulo, caption), true)
+})
+
+test('hasSignificantTokenOverlap aceita quando título tem poucos tokens significativos (sinal insuficiente)', () => {
+  // Título genérico com pouca substância — não flagamos para não bloquear ofertas válidas.
+  assert.equal(hasSignificantTokenOverlap('Oferta Imperdível', 'qualquer texto aqui'), true)
+})
+
+test('hasSignificantTokenOverlap rejeita quando candidato vazio mas título tem signal', () => {
+  assert.equal(hasSignificantTokenOverlap('Mochila Adidas Trefoil Esportiva 30L', ''), false)
+})
+
+test('hasSignificantTokenOverlap ignora ruído de marketplace (nomes de plataformas) no título', () => {
+  // Título do og:title da Amazon costuma vir "Amazon.com.br: <Produto>".
+  // Sem stopwords, "amazon" daria match com qualquer caption mencionando Amazon.
+  const titulo = 'Amazon.com.br Mochila Esportiva Trefoil 30L'
+  const caption = 'Oferta Amazon imperdível confira'
+  assert.equal(hasSignificantTokenOverlap(titulo, caption), false)
 })
