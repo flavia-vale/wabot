@@ -166,19 +166,22 @@ export async function finalizeSendJob(onDone, job, result) {
  *   QUEUE_BACKEND   REDIS_URL   resultado
  *   -------------   ---------   ---------
  *   'bullmq'        set         bullmq (explícito)
- *   'bullmq'        empty       memory (fallback com warn)
- *   'memory'        *           memory (opt-out explícito)
- *   unset/auto      set         bullmq (default novo: persistente em prod)
- *   unset/auto      empty       memory (compatibilidade dev)
+ *   'bullmq'        empty       memory-fallback (warn)
+ *   'memory'        *           memory (explícito)
+ *   unset/auto      *           memory (default seguro)
  *
- * Mudança vs comportamento histórico: antes o default era 'memory' mesmo
- * com Redis disponível. Agora, presença de REDIS_URL é o gatilho — assim
- * deploy não perde mensagens em restart sem precisar configurar nada
- * adicional.
+ * Por que NÃO auto-switch para bullmq quando há REDIS_URL: o payload de
+ * envio carrega `image.buffer` (Buffer real) quando há mídia. BullMQ
+ * serializa o job via JSON.stringify, e Buffer vira `{type:'Buffer',
+ * data:[...]}` na deserialização — o Baileys não reconhece como mídia e
+ * a oferta sai sem imagem. Até existir um caminho que serialize só a
+ * "receita" (URL/flags) e reconstrua a payload pós-dequeue, o BullMQ
+ * precisa ser opt-in explícito via `QUEUE_BACKEND=bullmq` (e nesse caso
+ * o operador aceita o trade-off ou roda só com texto).
  */
 export function resolveBackendMode({ queueBackendEnv, redisUrl }) {
   const explicit = String(queueBackendEnv || '').toLowerCase()
   if (explicit === 'memory') return 'memory'
   if (explicit === 'bullmq') return redisUrl ? 'bullmq' : 'memory-fallback'
-  return redisUrl ? 'bullmq' : 'memory'
+  return 'memory'
 }
