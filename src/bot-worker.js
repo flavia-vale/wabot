@@ -14,8 +14,9 @@ import { dirname } from 'path'
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
-import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from './messageProcessor.js'
+import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
+import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage } from './monitoredImageResolver.js'
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
@@ -112,6 +113,14 @@ const SESSION_ERROR_WINDOW_MS = Math.max(30_000, Number(process.env.WA_SESSION_E
 const SESSION_ERROR_THRESHOLD = Math.max(5, Number(process.env.WA_SESSION_ERROR_THRESHOLD || 30))
 const SESSION_RECOVERY_COOLDOWN_MS = Math.max(60_000, Number(process.env.WA_SESSION_RECOVERY_COOLDOWN_MS || 300_000))
 const ALLOW_TEXT_WITHOUT_LINKS = String(process.env.WA_ALLOW_TEXT_WITHOUT_LINKS || '0') === '1'
+
+// Plataformas com og:title/JSON-LD confiável o suficiente para o guard de
+// "título do produto bate com o caption". Shopee fica de fora porque sem
+// creds o SPA não embute og:title (mesmo motivo já documentado em #422
+// para og:image), o que daria muito skip falso. `WA_DISABLE_TITLE_MISMATCH_GUARD=1`
+// desliga o guard em caso de emergência.
+const TITLE_MISMATCH_GUARD_PLATFORMS = new Set(['mercadolivre', 'amazon', 'magazineluiza'])
+const TITLE_MISMATCH_GUARD_DISABLED = String(process.env.WA_DISABLE_TITLE_MISMATCH_GUARD || '0') === '1'
 
 function normalizeJidForMatch(jid) {
   if (typeof jid !== 'string') return ''
@@ -1385,6 +1394,38 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       }
 
       const primary = conversions[0] ?? { platform: 'nolink', url: '', converted: '' }
+
+      // Guard anti-mismatch: já apareceu em produção mensagem com caption
+      // de "toalhas", link de "mochila" e foto de "jaqueta" (upstream
+      // republicou uma oferta errada). Como nosso pipeline relaya a imagem
+      // de cima e troca só o caption, herdamos esse desalinhamento. Raspar
+      // og:title do link convertido e comparar com o caption pega o caso
+      // sem confiar em nada do upstream. Skip silencioso quando o scrape
+      // falha — não queremos derrubar oferta legítima por timeout.
+      if (
+        !TITLE_MISMATCH_GUARD_DISABLED &&
+        primary.url &&
+        TITLE_MISMATCH_GUARD_PLATFORMS.has(primary.platform)
+      ) {
+        const scrapedTitle = await scrapeProductTitle(primary.url).catch(() => null)
+        if (scrapedTitle && !hasSignificantTokenOverlap(scrapedTitle, sanitizedText)) {
+          logger.warn({
+            msgId: msg.key.id,
+            platform: primary.platform,
+            originalUrl: primary.url,
+            convertedUrl: primary.converted,
+            scrapedTitle,
+            captionPreview: sanitizeMessageForLog(sanitizedText).slice(0, 200),
+          }, 'skip:title_mismatch — caption não bate com o título raspado do produto destino')
+          await recordSkippedMessage({
+            reason: 'skip:title_mismatch',
+            platform: primary.platform,
+            originalUrl: primary.url,
+            convertedUrl: primary.converted,
+          })
+          return
+        }
+      }
 
       const baseDestinations = monitorGroup?.targetPostJids?.length ? monitorGroup.targetPostJids : cfg.groups.post
       const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
