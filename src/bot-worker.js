@@ -1450,7 +1450,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 
       const baseDestinations = monitorGroup?.targetPostJids?.length ? monitorGroup.targetPostJids : cfg.groups.post
       const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
+      let destIndex = -1
       for (const destJid of destinations) {
+        destIndex++
         const dedupSubject = primary.url || `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
         const key = `${destJid}:${dedupSubject}`
         if (dedup.links[key] && Date.now() - dedup.links[key] < linkDedupWindowMs) {
