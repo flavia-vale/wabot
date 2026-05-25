@@ -24,6 +24,7 @@ import { trackAnalyticsEventSafe } from './analytics.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode } from './sendQueueBackend.js'
+import { withSendTimeout as withSendTimeoutImpl } from './sendMessageTimeout.js'
 import { isMirrorableJid, detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
 import { getChannelMetadata, followChannel, listFollowedChannels } from './core/channelDirectory.js'
@@ -542,6 +543,12 @@ const SEND_MAX_ATTEMPTS = Math.max(1, envNumber('SEND_MAX_ATTEMPTS', 3))
 const SEND_RETRY_BASE_MS = Math.max(0, envNumber('SEND_RETRY_BASE_MS', 2_000))
 const SEND_RETRY_MAX_MS = Math.max(SEND_RETRY_BASE_MS, envNumber('SEND_RETRY_MAX_MS', 30_000))
 const SHUTDOWN_DRAIN_TIMEOUT_MS = Math.max(0, envNumber('SHUTDOWN_DRAIN_TIMEOUT_MS', 15_000))
+// Timeout duro em volta de cada sock.sendMessage/relayMessage. Sem isso, um
+// socket Baileys silenciosamente morto trava o await indefinidamente, e como
+// a fila em memória processa serialmente, todo job posterior fica "queued"
+// até reinício do worker. Com timeout vira erro transitório que reentra no
+// retry loop; após SEND_MAX_ATTEMPTS o job é marcado 'error' e a fila avança.
+const SEND_MESSAGE_TIMEOUT_MS = Math.max(5_000, envNumber('SEND_MESSAGE_TIMEOUT_MS', 60_000))
 const DEST_RATE_LIMIT_MS = Math.max(0, envNumber('DEST_RATE_LIMIT_MS', 1_000))
 const SMART_DELAY_PROGRESSIVE_THRESHOLD = Math.max(1, envNumber('SMART_DELAY_PROGRESSIVE_THRESHOLD', 20))
 const SMART_DELAY_PROGRESSIVE_STEP_MS = Math.max(0, envNumber('SMART_DELAY_PROGRESSIVE_STEP_MS', 5_000))
@@ -733,9 +740,16 @@ async function finishSendJob(job, result) {
   await finalizeSendJob(onDone, job, result)
 }
 
+function withSendTimeout(promise, ctx) {
+  return withSendTimeoutImpl(promise, { ...ctx, timeoutMs: SEND_MESSAGE_TIMEOUT_MS })
+}
+
 async function sendPreparedPayload({ sock, job, payload }) {
   if (payload && payload._route === 'relay' && payload.relay?.type && payload.relay?.proto) {
-    await sock.relayMessage(job.destJid, { [payload.relay.type]: payload.relay.proto }, {})
+    await withSendTimeout(
+      sock.relayMessage(job.destJid, { [payload.relay.type]: payload.relay.proto }, {}),
+      { destJid: job.destJid, route: 'relay' },
+    )
     return
   }
 
@@ -755,18 +769,28 @@ async function sendPreparedPayload({ sock, job, payload }) {
       })),
     ]
     let lastErr = null
-    for (const route of routes) {
+    for (let i = 0; i < routes.length; i++) {
+      const route = routes[i]
       try {
-        await sock.sendMessage(job.destJid, route.body, route.sendOptions || undefined)
+        await withSendTimeout(
+          sock.sendMessage(job.destJid, route.body, route.sendOptions || undefined),
+          { destJid: job.destJid, route: i === 0 ? 'primary' : `fallback[${i - 1}]` },
+        )
         return
       } catch (err) {
         lastErr = err
+        if (err?.code === 'SEND_MESSAGE_TIMEOUT') {
+          logger.warn({ destJid: job.destJid, route: i === 0 ? 'primary' : `fallback[${i - 1}]` }, 'sendMessage timeout; tentando próximo fallback se houver')
+        }
       }
     }
     throw lastErr || new Error('Todos os fallbacks de envio falharam')
   }
 
-  await sock.sendMessage(job.destJid, payload)
+  await withSendTimeout(
+    sock.sendMessage(job.destJid, payload),
+    { destJid: job.destJid, route: 'default' },
+  )
 }
 
 async function processSendJob(job) {
