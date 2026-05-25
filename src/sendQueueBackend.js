@@ -138,6 +138,20 @@ export async function createBullmqSendBackend({
       await dlq.close()
     },
     enqueue(job) {
+      // Guard contra regressão silenciosa: BullMQ serializa o job via
+      // JSON.stringify. Funções viram null; Buffer vira
+      // `{type:'Buffer',data:[...]}` que o Baileys NÃO reconhece como
+      // mídia — a oferta sairia sem foto. Detectamos antes de enfileirar
+      // e rejeitamos com erro alto, em vez de mandar texto puro em
+      // silêncio. Quando esta linha disparar, a fix correta é manter o
+      // valor LAZY (função buildPayload) em vez de embutir o Buffer no job.
+      const offender = findUnserializableField(job)
+      if (offender) {
+        const err = new Error(`Job de envio contém campo não-serializável em "${offender.path}" (${offender.kind}). BullMQ perderia esse valor — use buildPayload (lazy) em vez de payload eager.`)
+        logger.error({ err: err.message, logId: job?.logId, path: offender.path, kind: offender.kind }, 'BullMQ enqueue bloqueado: payload não-serializável')
+        onRejected?.()
+        return Promise.resolve(false).then(() => { throw err })
+      }
       return queue
         .add('send', job, {
           removeOnComplete: 500,
@@ -154,6 +168,33 @@ export async function createBullmqSendBackend({
         })
     },
   })
+}
+
+/**
+ * Procura recursivamente o primeiro campo que não sobrevive a
+ * JSON.stringify/parse (funções e Buffers). Devolve { path, kind } ou null.
+ * Limitado a 6 níveis de profundidade pra evitar loop em estruturas cíclicas.
+ */
+export function findUnserializableField(value, path = '$', depth = 0) {
+  if (depth > 6) return null
+  if (value === null || value === undefined) return null
+  if (typeof value === 'function') return { path, kind: 'function' }
+  if (Buffer.isBuffer(value)) return { path, kind: 'Buffer' }
+  if (value instanceof Uint8Array) return { path, kind: 'Uint8Array' }
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      const found = findUnserializableField(value[i], `${path}[${i}]`, depth + 1)
+      if (found) return found
+    }
+    return null
+  }
+  if (typeof value === 'object') {
+    for (const key of Object.keys(value)) {
+      const found = findUnserializableField(value[key], `${path}.${key}`, depth + 1)
+      if (found) return found
+    }
+  }
+  return null
 }
 
 export async function finalizeSendJob(onDone, job, result) {

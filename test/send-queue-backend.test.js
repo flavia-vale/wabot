@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   resolveBackendMode,
   createMemorySendBackend,
+  findUnserializableField,
 } from '../src/sendQueueBackend.js'
 
 // BullMQ é opt-in explícito: o payload de envio contém Buffer de imagem,
@@ -74,4 +75,26 @@ test('memory backend rejeita quando atinge maxSize', () => {
   // Terceiro: agora a fila tem 1 e bate maxSize.
   assert.equal(backend.enqueue({ id: 3 }), false)
   assert.equal(rejected, 1)
+})
+
+test('findUnserializableField: detecta Buffer em payload aninhado', () => {
+  const job = {
+    logId: 1,
+    payload: { primary: { image: Buffer.from('x'), caption: 'hi' } },
+  }
+  const found = findUnserializableField(job)
+  assert.equal(found?.kind, 'Buffer')
+  assert.equal(found?.path, '$.payload.primary.image')
+})
+
+test('findUnserializableField: detecta função (buildPayload eager)', () => {
+  const job = { logId: 1, buildPayload: async () => ({}) }
+  const found = findUnserializableField(job)
+  assert.equal(found?.kind, 'function')
+  assert.equal(found?.path, '$.buildPayload')
+})
+
+test('findUnserializableField: payload serializável passa', () => {
+  const job = { logId: 1, payload: { text: 'hello', n: 42, arr: [1, 2, { a: 'b' }] } }
+  assert.equal(findUnserializableField(job), null)
 })

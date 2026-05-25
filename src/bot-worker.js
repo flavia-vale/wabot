@@ -680,11 +680,17 @@ async function enqueueSendJob(job) {
     return false
   }
   const normalizedJob = { attempts: 0, enqueuedAt: Date.now(), ...job, onDone: undefined }
-  if (typeof normalizedJob.buildPayload === 'function') {
-    normalizedJob.payload = await normalizedJob.buildPayload()
-  }
-  delete normalizedJob.buildPayload
-  delete normalizedJob.send
+  // IMPORTANTE: NÃO chamar buildPayload aqui. A payload (que pode conter
+  // image.buffer Buffer real) precisa ser materializada apenas no dequeue,
+  // dentro do worker — caso contrário, em backend BullMQ, o Buffer é
+  // serializado via JSON.stringify e vira `{type:'Buffer',data:[...]}` na
+  // deserialização. O Baileys não reconhece como mídia e a oferta sai sem
+  // imagem (regressão já vivida — ver AGENTS.md).
+  //
+  // Em backend `memory` a função `buildPayload` viaja in-process e roda no
+  // dequeue. Em backend `bullmq`, a função não sobrevive ao Redis: o guard
+  // em sendBackend.enqueue rejeita explicitamente (fail-loud em vez de
+  // perder imagem silenciosamente).
   if (normalizedJob.delayMs === undefined) normalizedJob.delayMs = 0
   if (normalizedJob.typingDelayMs === undefined) normalizedJob.typingDelayMs = 0
   if (typeof job.onDone === 'function') doneCallbacks.set(job.logId, job.onDone)
@@ -814,8 +820,11 @@ async function processSendJob(job) {
     for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt++) {
       try {
         if (!activeSock) throw new Error('Bot não conectado')
-        if (payload === null) payload = job.payload
-        if (payload === undefined) throw new Error('Invalid send job: payload ausente')
+        if (payload === null) {
+          if (typeof job.buildPayload === 'function') payload = await job.buildPayload()
+          else payload = job.payload
+        }
+        if (payload === undefined) throw new Error('Invalid send job: payload/buildPayload ausente')
         await waitDestinationRateLimit(job.destJid)
         if (SMART_DELAY_TYPING_ENABLED && job.typingDelayMs > 0 && !job.skipTyping) {
           await Promise.resolve(activeSock.sendPresenceUpdate?.('composing', job.destJid)).catch(() => {})
@@ -1445,7 +1454,10 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           ? Math.floor(Math.random() * staggerJitterMs)
           : 0
 
-        const preparedPayload = await (async () => {
+        // buildPayload é LAZY de propósito: roda no dequeue, dentro do
+        // worker. Mantém image.buffer (Buffer) em memória do processo, sem
+        // passar pelo Redis. Ver enqueueSendJob() para a explicação completa.
+        const buildPayload = async () => {
           if (shouldUseRelayPath({ destJid, hasOriginal: !!original })) {
             const replayProto = { ...original.proto }
             if (original.type === 'imageMessage' || original.type === 'videoMessage') {
@@ -1486,7 +1498,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             image,
             useLinkPreview,
           })
-        })()
+        }
 
         const accepted = await enqueueSendJob({
           type: 'converted',
@@ -1496,7 +1508,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           plan: cfg.plan,
           delayMs: buildSmartDelayMs(cfg.botConfig) + staggerMs,
           typingDelayMs: calculateTypingDelayMs({ text: variantText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
-          payload: preparedPayload,
+          buildPayload,
           onDone: async (result) => {
             if (result.ok) {
               logger.info({ destJid, platforms, sentVia }, 'Mensagem enviada')
