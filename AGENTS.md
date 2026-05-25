@@ -19,12 +19,93 @@ para reaproveitar o mesmo conteúdo.
 Nunca pular staging. Nunca subir direto em `main`. Nunca fazer amend em
 commits já mergeados — sempre criar commit novo.
 
+## Processos PM2 (canônico)
+
+| App                      | Ambiente | Responsabilidade                                              |
+|--------------------------|----------|---------------------------------------------------------------|
+| `api`                    | prod     | Fastify HTTP + JWT + rotas                                    |
+| `dashboard`              | prod     | Next.js                                                       |
+| `bot-supervisor`         | prod     | Ciclo de vida das sessões WhatsApp (fork dos bot-workers)     |
+| `snapshot-cron`          | prod     | Cron diário de snapshots de canais                            |
+| `api-staging`            | staging  | Espelho da API                                                |
+| `visual-staging`         | staging  | Espelho do dashboard                                          |
+| `bot-supervisor-staging` | staging  | Espelho do supervisor                                         |
+
+**Por que `bot-supervisor` existe**: historicamente a API fazia `fork()`
+dos workers WhatsApp. Toda vez que a API reiniciava (deploy, OOM, bug)
+**todas as sessões caíam juntas**, com risco de ban em massa e perda de
+mensagens em vôo. O supervisor é um processo PM2 separado que assume o
+`fork()` dos workers e fala com a API só via Redis (BullMQ para comandos,
+pub/sub para eventos QR/status). Reiniciar a API deixa de tocar nas
+sessões.
+
+
+### Pré-flight obrigatório antes de qualquer cutover em produção (NÃO pular)
+
+Antes de executar qualquer passo de `inline -> remote` em **prod**, rodar e validar:
+
+```bash
+grep "name:" ~/wabot/ecosystem.config.cjs
+ls ~/wabot/src/supervisor/
+```
+
+Critérios de aprovação:
+- `grep` precisa listar **5 apps**: `api`, `dashboard`, `bot-supervisor`, `snapshot-cron` e (quando houver) os equivalentes de staging no repo correto.
+- `ls` precisa mostrar `protocol.js`, `client.js`, `index.js` (e demais arquivos do supervisor).
+
+Se qualquer item falhar: **BLOQUEAR CUTOVER**. Primeiro promover `develop -> main`, aguardar autodeploy, revalidar pre-flight e só então prosseguir com o runbook de produção.
+
+### Seleção de modo via `BOT_SUPERVISOR_MODE`
+
+A API decide quem gerencia os bots via env var `BOT_SUPERVISOR_MODE`:
+
+- **`inline`** (default histórico): a API faz `fork()` dos workers ela mesma.
+  Deploy da API derruba todas as sessões.
+- **`remote`**: a API só envia comandos via BullMQ no Redis; o app
+  `bot-supervisor` faz `fork()` dos workers. Deploy da API **não** toca
+  nas sessões.
+
+Cutover seguro (validar staging primeiro):
+
+1. Subir Redis local no VPS (`redis-server`, bind 127.0.0.1, AOF on).
+2. Garantir `REDIS_URL=redis://127.0.0.1:6379/1` no `.env` de staging.
+3. `pm2 start ecosystem.config.cjs --only bot-supervisor-staging`
+4. Setar `BOT_SUPERVISOR_MODE=remote` no `.env` da `api-staging` (NÃO no
+   ecosystem) e fazer `pm2 delete api-staging && pm2 start
+   ecosystem.config.cjs --only api-staging`. `pm2 restart --update-env`
+   NÃO basta (vide pegadinha #1: dotenv não sobrescreve env já cacheada
+   pelo PM2 — precisa delete + start). Confirmar pelo dashboard staging
+   que QR, status e envio funcionam end-to-end.
+5. Teste de aceitação: `pm2 restart api-staging` enquanto há sessão
+   conectada — sessão **deve continuar conectada** (esse é o ponto).
+6. Repetir para produção (`bot-supervisor` + ajustar `.env` + delete/start `api`).
+
+Rollback: setar `BOT_SUPERVISOR_MODE=inline` + `pm2 restart api/api-staging`.
+Janela ≤ 2min.
+
+**Pré-requisito do modo `remote`:** Redis local em `REDIS_URL`
+(`redis://127.0.0.1:6379/0` prod, `/1` staging). No modo `inline` o
+Redis é opcional.
+
+### Arquivos do supervisor (não confundir)
+
+- `src/supervisor/protocol.js` — contrato (nomes de filas, eventos,
+  timeouts). [PROTECTED_CORE]. Mudança breaking exige bumping de
+  `PROTOCOL_VERSION`.
+- `src/supervisor/client.js` — usado pela API quando em modo `remote`.
+  Mantém a mesma superfície de `src/core/sessionCore.js` para que rotas
+  não mudem ao alternar de modo.
+- `src/supervisor/index.js` — entrypoint do app PM2 `bot-supervisor`.
+- `src/manager.js` — fachada que escolhe inline vs remote por env var;
+  consumido por todas as rotas. **Não importar `sessionCore` direto** —
+  sempre via `manager.js`.
+
 ## Ambientes e portas (canônico — não inventar valores)
 
 | Ambiente | Branch  | Diretório no VPS   | PM2 apps                        | Dashboard PORT | API_PORT | URL pública                   |
 |----------|---------|--------------------|---------------------------------|----------------|----------|-------------------------------|
-| Staging  | develop | `~/wabot-staging`  | `visual-staging`, `api-staging` | `3006`         | `3004`   | `http://178.105.54.0:3006`    |
-| Produção | main    | `~/wabot`          | `dashboard`, `api`              | `3000`         | `3001`   | `http://espelhagrupos.com.br` |
+| Staging  | develop | `~/wabot-staging`  | `visual-staging`, `api-staging`, `bot-supervisor-staging` | `3006`         | `3004`   | `http://178.105.54.0:3006`    |
+| Produção | main    | `~/wabot`          | `dashboard`, `api`, `bot-supervisor` | `3000`         | `3001`   | `http://espelhagrupos.com.br` |
 
 O proxy do Next (`dashboard/app/api/[...path]/route.js`) já mapeia
 `3006 → 3004` e `3000 → 3001` automaticamente via header `host`.
@@ -52,6 +133,10 @@ BOT_LOG_DIR=/home/deploy/wabot-staging-shared/logs
 AUTO_START_WHATSAPP_SESSIONS=true
 DASHBOARD_URL=http://178.105.54.0:3006
 API_URL=http://178.105.54.0:3006
+# BOT_SUPERVISOR_MODE: 'inline' (default) ou 'remote'. Em 'remote', a API
+# delega ciclo de vida dos bots ao app PM2 bot-supervisor-staging via Redis.
+BOT_SUPERVISOR_MODE=inline
+REDIS_URL=redis://127.0.0.1:6379/1
 ```
 
 ### `~/wabot-staging/dashboard/.env.local`
@@ -72,6 +157,9 @@ BOT_LOG_DIR=/home/deploy/BOTinho-shared/logs
 AUTO_START_WHATSAPP_SESSIONS=true
 DASHBOARD_URL=http://espelhagrupos.com.br
 API_URL=http://espelhagrupos.com.br
+# Ver seção "Processos PM2" para detalhes sobre cutover inline -> remote.
+BOT_SUPERVISOR_MODE=inline
+REDIS_URL=redis://127.0.0.1:6379/0
 ```
 
 ### `~/wabot/dashboard/.env.local`
@@ -91,16 +179,45 @@ Quatro camadas de isolamento em produção:
 1. `DATABASE_URL` diferente: `file:./prisma/staging.db` vs `file:./prisma/prod.db`.
 2. Diretórios físicos diferentes no VPS: `~/wabot-staging/prisma/` vs `~/wabot/prisma/`.
 3. `AUTH_INFO_DIR` absoluto e diferente entre ambientes.
-4. `.gitignore` cobre `*.db`, `*.db-journal`, `auth_info/`, `.env`.
+4. `.gitignore` cobre `*.db`, `*.db-journal`, `*.db-wal`, `*.db-shm`,
+   `auth_info/`, `.env`.
 
 O workflow de deploy nunca copia banco entre ambientes — só faz
 `git pull` (sem tocar em gitignored) + `npx prisma migrate deploy` (aplica
 migrations, não substitui dados).
 
+### SQLite em modo WAL (canônico, aplicado em todo boot)
+
+`src/db.js` aplica os seguintes PRAGMAs no primeiro import do PrismaClient:
+
+```
+PRAGMA journal_mode = WAL          # rollback journal -> WAL
+PRAGMA busy_timeout = 5000         # aguarda até 5s em locks (em vez de 0)
+PRAGMA synchronous  = NORMAL       # companion recomendado de WAL
+PRAGMA temp_store   = MEMORY
+```
+
+Por quê: SQLite default não suporta bem leituras simultâneas com escritas;
+em picos (várias sessões escrevendo em `MessageLog`/`AnalyticsEvent`/
+`AffiliateClick` ao mesmo tempo) aparecia `SQLITE_BUSY: database is locked`.
+WAL + `busy_timeout=5000` eliminam esse erro até dezenas de writers.
+
+Implicações operacionais:
+- O banco passa a ter arquivos auxiliares `<db>-wal` e `<db>-shm` no mesmo
+  diretório. Os dois estão no `.gitignore`. Backups via `sqlite3 .backup`
+  são WAL-safe (a API consolida tudo num snapshot único).
+- `journal_mode=WAL` é persistente no arquivo do DB; setar em todo boot é
+  idempotente. `busy_timeout` é per-connection — precisa ser reaplicado.
+- Escape hatch: `DB_SKIP_PRAGMAS=1` pula a aplicação (útil só em scripts
+  one-off; **não usar em prod**).
+- Em caso de cópia manual do `.db`, copie também os arquivos `-wal` e
+  `-shm` para garantir consistência (ou use `sqlite3 .backup`).
+
 **Backup:** `scripts/backup_prod.sh` rodando diariamente via cron grava em
 `/home/deploy/wabot-backups/` (snapshot consistente com `sqlite3 .backup`
 + tar.gz do `auth_info`, rotação de 30 dias, upload opcional via `rclone`).
-Detalhes em `docs/deploy/backup-prod.md`.
+A `.backup` API é WAL-safe (faz checkpoint implícito). Detalhes em
+`docs/deploy/backup-prod.md`.
 
 ## GitHub Secrets exigidos pelo workflow
 
@@ -134,6 +251,44 @@ Settings → Secrets and variables → Actions:
 
 Falha do smoke 9 geralmente é `.env` faltando, `JWT_SECRET` ausente
 ou porta divergente do que está em `apiPortByDashboardPort`.
+
+## Fila de envio (BullMQ + DLQ)
+
+Cada bot-worker tem uma fila própria de envio (`wabot-send-<userId>`) e
+uma DLQ correspondente (`wabot-send-<userId>-dlq`). Configuração via env:
+
+| Env                 | Default                       | Efeito |
+|---------------------|-------------------------------|--------|
+| `QUEUE_BACKEND`     | `memory`                      | `'memory'` (default) força in-process; `'bullmq'` opt-in via Redis. Vazio = memory. |
+| `REDIS_URL`         | (vazio)                       | Necessário **apenas** quando `QUEUE_BACKEND=bullmq`. Sem ele, BullMQ cai em memory-fallback. |
+| `BULLMQ_QUEUE_NAME` | `wabot-send-${userId}`        | Nome da fila principal; DLQ é `<name>-dlq`. |
+| `SEND_MAX_ATTEMPTS` | 3                             | Retries in-process antes do job ser declarado falha definitiva. |
+
+**Default é `memory` — BullMQ é opt-in explícito.** Já tentamos
+auto-ligar BullMQ quando `REDIS_URL` está presente e isso quebrou o
+envio de imagem em staging: o payload do job carrega `image.buffer`
+(Buffer real); BullMQ persiste via `JSON.stringify`, e Buffer vira
+`{type:'Buffer', data:[...]}` na deserialização. O Baileys não
+reconhece como mídia e a oferta sai **sem foto**. Para reabilitar
+BullMQ como default sem regressão, antes mover a construção da payload
+(fetch + normalize de imagem + `buildMonitoredMessagePayload`) para
+dentro do worker pós-dequeue, persistindo só a "receita" (URL, flags,
+texto) na fila. Até lá: para forçar persistência, setar
+`QUEUE_BACKEND=bullmq` explicitamente — ciente de que ofertas com
+imagem podem sair só como texto.
+
+**DLQ:** quando `processSendJob` lança após esgotar `SEND_MAX_ATTEMPTS`,
+o BullMQ marca o job como `failed`. Um listener no Worker copia o payload
+para a DLQ (`<queueName>-dlq`) com `removeOnComplete: false` —
+**jobs ficam indefinidamente** até ação manual. Inspeção via:
+
+- `GET  /api/admin/send-dlq/:userId?limit=100` — lista jobs
+- `POST /api/admin/send-dlq/:userId/retry/:jobId` — reenfileira na principal
+- `DEL  /api/admin/send-dlq/:userId/job/:jobId` — descarta
+- `POST /api/admin/send-dlq/:userId/purge` — drena toda a DLQ
+
+Helpers programáticos: `src/jobs/sendDlq.js`. Todas as ações destrutivas
+gravam `AdminAuditLog`.
 
 ## Pegadinhas conhecidas (lições aprendidas — leia antes de mexer)
 
@@ -186,6 +341,53 @@ Foi removido do tracking em #328. `.gitignore` cobre `*.db-journal`, mas
 arquivos commitados antes da regra continuam trackeados até `git rm --cached`.
 Confira periodicamente: `git ls-files | grep -E '\.db$|\.db-journal$'` deve
 retornar vazio.
+
+### 6. Em prod, o arquivo do banco se chamava `dev.db` até 2026-05-22
+
+Histórico: por meses a produção rodou com `DATABASE_URL` apontando para
+`prisma/dev.db` (5.8MB, dados reais), enquanto `prisma/prod.db` e
+`prisma/staging.db` existiam como arquivos vazios de 0 bytes no mesmo
+diretório — restos de tentativas anteriores de migração que nunca foram
+concluídas. Em 2026-05-22 fizemos o rename canônico: parou `api`,
+backup defensivo via `sqlite3 .backup`, `mv dev.db prod.db`, ajustou
+`DATABASE_URL`, `pm2 delete api && pm2 start` (pegadinha #1), validou.
+
+Risco que isso evita: alguém olhar o AGENTS.md, ver que prod "deve"
+usar `prod.db`, trocar `DATABASE_URL` para `file:./prisma/prod.db`,
+reiniciar — e a aplicação passar a usar o arquivo vazio de 0 bytes.
+Login quebra, sessões somem, parece perda total. Antes de qualquer
+mudança de `DATABASE_URL`, sempre conferir `ls -la prisma/*.db` e
+`sqlite3 <db> "SELECT COUNT(*) FROM User"`.
+
+### 7. O cron de backup chamava um script órfão (`backup_safe.sh`)
+
+Até 2026-05-22 o `crontab -l` do VPS de prod chamava
+`/home/deploy/wabot/scripts/backup_safe.sh` — um arquivo que existia no
+diretório `scripts/` mas **não** estava versionado no git (untracked,
+copiado à mão em algum momento). Por isso `git pull` nunca tocou nele,
+e os bugs nunca foram corrigidos via PR:
+
+- Apontava hardcoded para `prisma/dev.db` (caminho errado depois do
+  rename — e tinha um `set -euo pipefail` que aborta o script entre
+  `pm2 stop api` e `pm2 start api`, deixando a API offline).
+- Resolvia `AUTH_INFO_DIR` via `node -e` **sem carregar `.env`**, então
+  caía no default errado. Resultado: 11 dias seguidos de backup
+  **sem `auth_info`** (`WARN.txt` em cada snapshot). Se o VPS pegasse
+  fogo, o restore não traria as sessões WhatsApp de volta.
+- Gravava em `/home/deploy/backups/wabot/` (não no canônico
+  `/home/deploy/wabot-backups/`).
+
+Correção: trocou cron para `scripts/backup_prod.sh` (canônico, no repo,
+WAL-safe via `sqlite3 .backup`, `AUTH_INFO_DIR` correto, grava em
+`/home/deploy/wabot-backups/`). Script órfão renomeado para
+`.deprecated`. Os 13 snapshots históricos em `/home/deploy/backups/wabot/`
+foram mantidos como rede de segurança até o novo diretório acumular
+histórico equivalente.
+
+Lição: se o cron de prod chamar um script, **confirmar que o script
+está versionado** (`git ls-files scripts/<nome>`). Scripts untracked
+no diretório do clone são bombas-relógio — sobrevivem deploys mas
+escapam de qualquer code review.
 
 ## Image scrapers — configuração canônica (PR #422, não regredir)
 

@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto'
 import db from './db.js'
+import { writeAnalyticsEvent } from './events/store.js'
 
 export const PUBLIC_ANALYTICS_EVENTS = new Set([
   'conversion_prompt_viewed',
@@ -66,10 +67,13 @@ export async function trackAnalyticsEvent({ userId = null, event, metadata = {} 
   if (!analyticsEnabled() || !ANALYTICS_EVENTS.has(event)) return { skipped: true }
 
   const safeMetadata = JSON.stringify(sanitizeAnalyticsMetadata(metadata))
-  await db.$executeRaw`
-    INSERT INTO AnalyticsEvent (id, userId, event, metadata, createdAt)
-    VALUES (${randomUUID()}, ${userId}, ${event}, ${safeMetadata}, ${new Date()})
-  `
+  await writeAnalyticsEvent({
+    id: randomUUID(),
+    userId,
+    event,
+    metadata: safeMetadata,
+    createdAt: new Date(),
+  }, { db })
   return { ok: true }
 }
 

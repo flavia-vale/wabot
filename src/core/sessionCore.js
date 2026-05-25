@@ -93,6 +93,19 @@ export function stopBot(userId) {
 
 export const isRunning = userId => bots.has(userId)
 export const listRunningBots = () => [...bots.keys()]
+// Read-only accessor para o supervisor monitorar zumbis sem precisar mexer
+// na lógica interna do core. Retorna [{ userId, lastHeartbeatAt, killed }].
+export const listSessionHealth = () => {
+  const out = []
+  for (const [userId, entry] of bots.entries()) {
+    out.push({
+      userId,
+      lastHeartbeatAt: entry?.lastHeartbeatAt || 0,
+      killed: Boolean(entry?.proc?.killed),
+    })
+  }
+  return out
+}
 export function onQR(userId, fn) { const e = bots.get(userId); if (!e) return () => {}; if (e.lastQR) fn(e.lastQR); e.qrListeners.add(fn); return () => e.qrListeners.delete(fn) }
 export function onStatus(userId, fn) { const e = bots.get(userId); if (!e) return () => {}; e.statusListeners.add(fn); return () => e.statusListeners.delete(fn) }
 export const getLastQR = userId => bots.get(userId)?.lastQR ?? null
@@ -116,6 +129,9 @@ export const sendBroadcast = (userId, text, jids) => requestWithTimeout(userId, 
 export const getBotMetrics = userId => bots.has(userId) ? requestWithTimeout(userId, 'metrics', {}, 5000, 'Timeout ao buscar métricas') : Promise.resolve(null)
 export const requestPairingCode = (userId, phone) => requestWithTimeout(userId, 'requestPairingCode', { phone }, 45000, 'Timeout ao solicitar código de pareamento')
 export function reloadConfig(userId) { const e = bots.get(userId); if (!e) return false; try { e.proc.send({ type: 'reloadConfig' }) } catch {}; return true }
+
+export const refreshWaGroups = userId =>
+  requestWithTimeout(userId, 'refreshWaGroups', {}, 15000, 'Timeout ao atualizar grupos do WhatsApp')
 
 export const channelMetadata = (userId, { jid, inviteCode }) =>
   requestWithTimeout(userId, 'channel:metadata', { jid, inviteCode }, 15000, 'Timeout ao buscar metadata do canal')

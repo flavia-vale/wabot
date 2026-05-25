@@ -23,7 +23,8 @@ import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { createMessageQueue } from './messageQueue.js'
-import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob } from './sendQueueBackend.js'
+import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode } from './sendQueueBackend.js'
+import { withSendTimeout as withSendTimeoutImpl } from './sendMessageTimeout.js'
 import { isMirrorableJid, detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
 import { getChannelMetadata, followChannel, listFollowedChannels } from './core/channelDirectory.js'
@@ -41,8 +42,70 @@ import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindo
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
 import { detectMessageKind, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
+import Redis from 'ioredis'
+import { parseEnumEnv, logModeSummary } from './core/envModes.js'
 
 const userId = process.env.BOT_USER_ID
+
+
+const GLOBAL_RATE_LIMIT_MODE = parseEnumEnv('GLOBAL_RATE_LIMIT_MODE', process.env.GLOBAL_RATE_LIMIT_MODE || 'auto', ['auto', 'on', 'off'], 'auto')
+const GLOBAL_DEDUP_MODE = parseEnumEnv('GLOBAL_DEDUP_MODE', process.env.GLOBAL_DEDUP_MODE || 'auto', ['auto', 'on', 'off'], 'auto')
+const REDIS_FAIL_MODE = parseEnumEnv('REDIS_FAIL_MODE', process.env.REDIS_FAIL_MODE || 'open', ['open', 'closed'], 'open')
+let runtimeRedis = null
+
+
+logModeSummary('bot-worker', {
+  userId,
+  globalRateLimitMode: GLOBAL_RATE_LIMIT_MODE,
+  globalDedupMode: GLOBAL_DEDUP_MODE,
+  redisFailMode: REDIS_FAIL_MODE,
+  hasRedisUrl: Boolean(process.env.REDIS_URL),
+})
+
+function useGlobalRedis() {
+  if (!process.env.REDIS_URL) return false
+  if (GLOBAL_RATE_LIMIT_MODE === 'off' && GLOBAL_DEDUP_MODE === 'off') return false
+  return true
+}
+
+function ensureRuntimeRedis() {
+  if (!useGlobalRedis()) return null
+  if (runtimeRedis) return runtimeRedis
+  runtimeRedis = new Redis(process.env.REDIS_URL, { lazyConnect: false, maxRetriesPerRequest: null })
+  runtimeRedis.on('error', (err) => logger.warn({ err: err?.message }, 'runtimeRedis error'))
+  return runtimeRedis
+}
+
+async function globalRateLimitWait(destJid, windowMs) {
+  const r = ensureRuntimeRedis()
+  if (!r) return { allowed: true }
+  const key = `send:last:${userId}:${destJid}`
+  try {
+    const now = Date.now()
+    const last = Number(await r.get(key) || 0)
+    const waitMs = windowMs - (now - last)
+    if (waitMs > 0) return { allowed: false, waitMs }
+    await r.psetex(key, Math.max(windowMs * 2, 1000), String(now))
+    return { allowed: true }
+  } catch (err) {
+    if (REDIS_FAIL_MODE === 'closed') throw new Error(`Global rate-limit unavailable: ${err.message}`)
+    logger.warn({ err: err?.message }, 'Global rate-limit falhou (fail-open)')
+    return { allowed: true }
+  }
+}
+
+async function globalDedupCheckAndSet(key, ttlMs) {
+  const r = ensureRuntimeRedis()
+  if (!r) return { duplicate: false }
+  try {
+    const ok = await r.set(`dedup:${userId}:${key}`, '1', 'PX', ttlMs, 'NX')
+    return { duplicate: ok !== 'OK' }
+  } catch (err) {
+    if (REDIS_FAIL_MODE === 'closed') throw new Error(`Global dedup unavailable: ${err.message}`)
+    logger.warn({ err: err?.message }, 'Global dedup falhou (fail-open)')
+    return { duplicate: false }
+  }
+}
 if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
 const OWNER_INSTANCE = process.env.NODE_APP_INSTANCE ?? '0'
 const SESSION_ERROR_WINDOW_MS = Math.max(30_000, Number(process.env.WA_SESSION_ERROR_WINDOW_MS || 120_000))
@@ -367,7 +430,7 @@ async function checkScheduledMessages() {
           plan: 'scheduled',
           delayMs: buildSmartDelayMs((await getConfig()).botConfig),
           typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
-          buildPayload: async () => ({ text: msg.text }),
+          payload: { text: msg.text },
           onDone: async (result) => {
             state.remaining--
             if (!result.ok) state.hasError = true
@@ -406,6 +469,55 @@ async function checkScheduledMessages() {
 
 setInterval(checkScheduledMessages, 30_000)
 
+// Força re-emissão de sender_keys do WhatsApp via groupFetchAllParticipating().
+// Compartilhado entre o watchdog e o endpoint manual /refresh-wa-state.
+async function triggerWaGroupsRefresh(reason = 'manual') {
+  if (!activeSock) return { ok: false, reason: 'not_connected' }
+  if (waGroupsRefreshInFlight) return { ok: false, reason: 'in_flight' }
+  waGroupsRefreshInFlight = true
+  try {
+    const startedAt = Date.now()
+    const groups = await activeSock.groupFetchAllParticipating()
+    const count = groups ? Object.keys(groups).length : 0
+    lastWaGroupsRefreshAt = Date.now()
+    logger.info({ reason, count, durationMs: lastWaGroupsRefreshAt - startedAt }, 'WA groups refresh concluído')
+    return { ok: true, count }
+  } catch (err) {
+    logger.error({ reason, err: err?.message }, 'WA groups refresh falhou')
+    return { ok: false, reason: 'error', error: err?.message }
+  } finally {
+    waGroupsRefreshInFlight = false
+  }
+}
+
+async function monitorSilenceWatchdog() {
+  if (!activeSock) return
+  const cfg = await getConfig().catch(() => null)
+  const monitors = cfg?.groups?.monitor ?? []
+  if (monitors.length < 2) return // precisa de pelo menos 2 pra comparar atividade
+
+  const now = Date.now()
+  if (now - lastWaGroupsRefreshAt < MONITOR_REFRESH_COOLDOWN_MS) return
+
+  const baseline = Math.max(workerStartedAt, lastWaGroupsRefreshAt)
+  const silent = []
+  let hasActive = false
+  for (const m of monitors) {
+    const jid = normalizeJidForMatch(m.waJid)
+    const lastTs = lastIncomingByMonitorJid.get(jid) ?? baseline
+    const silentMs = now - lastTs
+    if (silentMs > MONITOR_SILENCE_THRESHOLD_MS) silent.push({ jid, silentMs })
+    else if (lastIncomingByMonitorJid.has(jid)) hasActive = true
+  }
+
+  if (!silent.length || !hasActive) return
+
+  logger.warn(
+    { silent, thresholdMs: MONITOR_SILENCE_THRESHOLD_MS },
+    'Monitor(es) silenciado(s) detectado(s); forçando refresh de sender_keys'
+  )
+  await triggerWaGroupsRefresh('silence_watchdog')
+}
 
 const MESSAGE_LOG_MAX_CHARS = Math.max(40, Number(process.env.MESSAGE_LOG_MAX_CHARS || 240))
 
@@ -428,6 +540,12 @@ const SEND_MAX_ATTEMPTS = Math.max(1, envNumber('SEND_MAX_ATTEMPTS', 3))
 const SEND_RETRY_BASE_MS = Math.max(0, envNumber('SEND_RETRY_BASE_MS', 2_000))
 const SEND_RETRY_MAX_MS = Math.max(SEND_RETRY_BASE_MS, envNumber('SEND_RETRY_MAX_MS', 30_000))
 const SHUTDOWN_DRAIN_TIMEOUT_MS = Math.max(0, envNumber('SHUTDOWN_DRAIN_TIMEOUT_MS', 15_000))
+// Timeout duro em volta de cada sock.sendMessage/relayMessage. Sem isso, um
+// socket Baileys silenciosamente morto trava o await indefinidamente, e como
+// a fila em memória processa serialmente, todo job posterior fica "queued"
+// até reinício do worker. Com timeout vira erro transitório que reentra no
+// retry loop; após SEND_MAX_ATTEMPTS o job é marcado 'error' e a fila avança.
+const SEND_MESSAGE_TIMEOUT_MS = Math.max(5_000, envNumber('SEND_MESSAGE_TIMEOUT_MS', 60_000))
 const DEST_RATE_LIMIT_MS = Math.max(0, envNumber('DEST_RATE_LIMIT_MS', 1_000))
 const SMART_DELAY_PROGRESSIVE_THRESHOLD = Math.max(1, envNumber('SMART_DELAY_PROGRESSIVE_THRESHOLD', 20))
 const SMART_DELAY_PROGRESSIVE_STEP_MS = Math.max(0, envNumber('SMART_DELAY_PROGRESSIVE_STEP_MS', 5_000))
@@ -438,7 +556,11 @@ const SMART_DELAY_TYPING_ENABLED = String(process.env.SMART_DELAY_TYPING_ENABLED
 const SMART_DELAY_TYPING_MIN_MS = Math.max(0, envNumber('SMART_DELAY_TYPING_MIN_MS', 1_200))
 const SMART_DELAY_TYPING_MAX_MS = Math.max(SMART_DELAY_TYPING_MIN_MS, envNumber('SMART_DELAY_TYPING_MAX_MS', 7_000))
 const SMART_DELAY_TYPING_CHARS_PER_SECOND = Math.max(1, envNumber('SMART_DELAY_TYPING_CHARS_PER_SECOND', 18))
-const SEND_QUEUE_BACKEND = String(process.env.QUEUE_BACKEND || 'memory').toLowerCase()
+// QUEUE_BACKEND aceita 'memory', 'bullmq' ou vazio (auto). Quando vazio
+// e REDIS_URL está setado, default vira 'bullmq' — assim deploy em produção
+// ganha persistência automaticamente. Comportamento controlado em
+// resolveBackendMode() para manter a regra em um lugar só.
+const SEND_QUEUE_BACKEND_ENV = String(process.env.QUEUE_BACKEND || '').toLowerCase()
 const REDIS_URL = process.env.REDIS_URL || ''
 const BULLMQ_QUEUE_NAME = process.env.BULLMQ_QUEUE_NAME || `wabot-send-${userId}`
 const MSG_QUEUE_CONCURRENCY = Math.max(1, envNumber('MSG_QUEUE_CONCURRENCY', 2))
@@ -446,6 +568,24 @@ const MSG_QUEUE_TIMEOUT_MS = Math.max(1_000, envNumber('MSG_QUEUE_TIMEOUT_MS', 1
 const MSG_QUEUE_WATCHDOG_MS = Math.max(5_000, envNumber('MSG_QUEUE_WATCHDOG_MS', 30_000))
 const MSG_QUEUE_MAX_SIZE = Math.max(10, envNumber('MSG_QUEUE_MAX_SIZE', 500))
 const MAX_INCOMING_MESSAGE_CHARS = Math.max(500, envNumber('MAX_INCOMING_MESSAGE_CHARS', 8_000))
+
+// Watchdog de "monitor silencioso": detecta grupos monitorados que pararam
+// de receber mensagens enquanto outros monitores do mesmo usuário continuam
+// ativos. Sintoma típico de sender_key dessincronizada no Signal — o
+// WebSocket segue ok, mas o libsignal devolve Bad MAC pra mensagens daquele
+// grupo. Chamar groupFetchAllParticipating() força o WhatsApp a re-emitir
+// sender_keys atualizadas (mesmo efeito de abrir o seletor de grupos no
+// painel). Ação é leve (~1s) e não derruba a sessão.
+const MONITOR_SILENCE_CHECK_INTERVAL_MS = Math.max(60_000, envNumber('MONITOR_SILENCE_CHECK_INTERVAL_MS', 5 * 60_000))
+const MONITOR_SILENCE_THRESHOLD_MS = Math.max(5 * 60_000, envNumber('MONITOR_SILENCE_THRESHOLD_MS', 30 * 60_000))
+const MONITOR_REFRESH_COOLDOWN_MS = Math.max(60_000, envNumber('MONITOR_REFRESH_COOLDOWN_MS', 60 * 60_000))
+
+const monitorSilenceTimer = setInterval(
+  () => { monitorSilenceWatchdog().catch(err => logger.error({ err: err?.message }, 'monitorSilenceWatchdog falhou')) },
+  MONITOR_SILENCE_CHECK_INTERVAL_MS,
+)
+monitorSilenceTimer.unref?.()
+
 const WA_LIFECYCLE = Object.freeze({
   INITIALIZING: 'initializing',
   AUTHENTICATING: 'authenticating',
@@ -472,6 +612,10 @@ const incomingQueue = createMessageQueue({
 })
 
 const lastSendByDest = new Map()
+const lastIncomingByMonitorJid = new Map()
+const workerStartedAt = Date.now()
+let lastWaGroupsRefreshAt = 0
+let waGroupsRefreshInFlight = false
 let interruptedSendLogsMarked = false
 let adSendCount = 0
 const doneCallbacks = new Map()
@@ -549,6 +693,17 @@ async function enqueueSendJob(job) {
     return false
   }
   const normalizedJob = { attempts: 0, enqueuedAt: Date.now(), ...job, onDone: undefined }
+  // IMPORTANTE: NÃO chamar buildPayload aqui. A payload (que pode conter
+  // image.buffer Buffer real) precisa ser materializada apenas no dequeue,
+  // dentro do worker — caso contrário, em backend BullMQ, o Buffer é
+  // serializado via JSON.stringify e vira `{type:'Buffer',data:[...]}` na
+  // deserialização. O Baileys não reconhece como mídia e a oferta sai sem
+  // imagem (regressão já vivida — ver AGENTS.md).
+  //
+  // Em backend `memory` a função `buildPayload` viaja in-process e roda no
+  // dequeue. Em backend `bullmq`, a função não sobrevive ao Redis: o guard
+  // em sendBackend.enqueue rejeita explicitamente (fail-loud em vez de
+  // perder imagem silenciosamente).
   if (normalizedJob.delayMs === undefined) normalizedJob.delayMs = 0
   if (normalizedJob.typingDelayMs === undefined) normalizedJob.typingDelayMs = 0
   if (typeof job.onDone === 'function') doneCallbacks.set(job.logId, job.onDone)
@@ -570,12 +725,69 @@ async function waitDestinationRateLimit(destJid) {
   const lastSentAt = lastSendByDest.get(destJid) ?? 0
   const waitMs = DEST_RATE_LIMIT_MS - (Date.now() - lastSentAt)
   if (waitMs > 0) await sleep(waitMs)
+  if (GLOBAL_RATE_LIMIT_MODE !== 'off') {
+    const gate = await globalRateLimitWait(destJid, DEST_RATE_LIMIT_MS)
+    if (!gate.allowed && gate.waitMs > 0) await sleep(gate.waitMs)
+  }
 }
 
 async function finishSendJob(job, result) {
   const onDone = doneCallbacks.get(job.logId)
   doneCallbacks.delete(job.logId)
   await finalizeSendJob(onDone, job, result)
+}
+
+function withSendTimeout(promise, ctx) {
+  return withSendTimeoutImpl(promise, { ...ctx, timeoutMs: SEND_MESSAGE_TIMEOUT_MS })
+}
+
+async function sendPreparedPayload({ sock, job, payload }) {
+  if (payload && payload._route === 'relay' && payload.relay?.type && payload.relay?.proto) {
+    await withSendTimeout(
+      sock.relayMessage(job.destJid, { [payload.relay.type]: payload.relay.proto }, {}),
+      { destJid: job.destJid, route: 'relay' },
+    )
+    return
+  }
+
+  if (payload && payload.primary) {
+    const channelDest = isChannelDestination(job.destJid)
+    if (detectKind(job.destJid) === null) {
+      logger.warn({ destJid: job.destJid }, 'JID kind inesperado chegou ao send path; usando sendMessage como fallback')
+    }
+    const routes = [
+      {
+        body: channelDest ? stripChannelUnsafeFields(payload.primary) : payload.primary,
+        sendOptions: payload.primarySendOptions,
+      },
+      ...(payload.fallbacks || []).map((body, idx) => ({
+        body: channelDest ? stripChannelUnsafeFields(body) : body,
+        sendOptions: payload.fallbackSendOptions?.[idx],
+      })),
+    ]
+    let lastErr = null
+    for (let i = 0; i < routes.length; i++) {
+      const route = routes[i]
+      try {
+        await withSendTimeout(
+          sock.sendMessage(job.destJid, route.body, route.sendOptions || undefined),
+          { destJid: job.destJid, route: i === 0 ? 'primary' : `fallback[${i - 1}]` },
+        )
+        return
+      } catch (err) {
+        lastErr = err
+        if (err?.code === 'SEND_MESSAGE_TIMEOUT') {
+          logger.warn({ destJid: job.destJid, route: i === 0 ? 'primary' : `fallback[${i - 1}]` }, 'sendMessage timeout; tentando próximo fallback se houver')
+        }
+      }
+    }
+    throw lastErr || new Error('Todos os fallbacks de envio falharam')
+  }
+
+  await withSendTimeout(
+    sock.sendMessage(job.destJid, payload),
+    { destJid: job.destJid, route: 'default' },
+  )
 }
 
 async function processSendJob(job) {
@@ -611,34 +823,45 @@ async function processSendJob(job) {
         })
         channelGroupId = g?.id ?? null
         if (channelGroupId) {
-          const health = await getChannelHealth(channelGroupId)
-          if (isChannelPaused(health)) {
-            const err = new Error(`Canal pausado por saúde (${health.status}) até ${health.pausedUntil}`)
-            err.code = 'CHANNEL_PAUSED'
-            throw err
+          // checkAndReserve já cobre: pausa por health, quiet hours, daily cap,
+          // intervalo mínimo, burst cap. Reserva o slot quando libera.
+          const cfgFull = await getConfig().catch(() => null)
+          const cfg = cfgFull?.botConfig ?? {}
+          let gate = await throttleCheckAndReserve(channelGroupId, cfg, {
+            preservationActive: cfgFull?.preservationActive ?? false,
+          })
+          let throttleCycles = 0
+          while (!gate.allow && !shuttingDown) {
+            throttleCycles++
+            const waitMs = Math.max(0, (gate.deferUntil ?? Date.now()) - Date.now())
+            logger.info({ destJid: job.destJid, reason: gate.reason, waitMs, throttleCycles }, 'Velocity scheduler: aguardando janela de throttle do canal')
+            await sleep(waitMs)
+            gate = await throttleCheckAndReserve(channelGroupId, cfg, {
+              preservationActive: cfgFull?.preservationActive ?? false,
+            })
           }
+          if (shuttingDown) throw new Error('Worker encerrando durante espera de throttle do canal')
         }
       } catch (err) {
-        if (err.code === 'CHANNEL_PAUSED') throw err
-        logger.warn({ err: err?.message, destJid: job.destJid }, 'channelHealth lookup falhou; seguindo sem pausa')
+        logger.warn({ err: err?.message, destJid: job.destJid }, 'channelHealth/throttle lookup falhou; seguindo sem pausa')
       }
     }
 
     for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt++) {
       try {
         if (!activeSock) throw new Error('Bot não conectado')
-        if (!payload) payload = await job.buildPayload()
+        if (payload === null) {
+          if (typeof job.buildPayload === 'function') payload = await job.buildPayload()
+          else payload = job.payload
+        }
+        if (payload === undefined) throw new Error('Invalid send job: payload/buildPayload ausente')
         await waitDestinationRateLimit(job.destJid)
         if (SMART_DELAY_TYPING_ENABLED && job.typingDelayMs > 0 && !job.skipTyping) {
           await Promise.resolve(activeSock.sendPresenceUpdate?.('composing', job.destJid)).catch(() => {})
           await sleep(job.typingDelayMs)
           await Promise.resolve(activeSock.sendPresenceUpdate?.('paused', job.destJid)).catch(() => {})
         }
-        if (typeof job.send === 'function') {
-          await job.send({ sock: activeSock, payload })
-        } else {
-          await activeSock.sendMessage(job.destJid, payload)
-        }
+        await sendPreparedPayload({ sock: activeSock, job, payload })
         const finishedAt = Date.now()
         lastSendByDest.set(job.destJid, finishedAt)
         logger.info({ destJid: job.destJid, platforms: job.platforms, attempt, type: job.type }, 'Mensagem enviada')
@@ -667,6 +890,15 @@ async function processSendJob(job) {
         }
         return
       } catch (err) {
+        if (isChannelDestination(job.destJid) && (
+          err?.code === 'CHANNEL_THROTTLED' ||
+          /Canal throttled \(/i.test(err?.message || '')
+        )) {
+          const waitMs = Math.max(0, (err?.deferUntil ? (new Date(err.deferUntil).getTime() - Date.now()) : getRetryDelayMs(attempt)))
+          logger.info({ destJid: job.destJid, err: err.message, waitMs, attempt, type: job.type }, 'Throttle de canal detectado durante envio — aguardando e retomando')
+          await sleep(waitMs)
+          continue
+        }
         // Canal sem permissão: aborta retries para não queimar SEND_MAX_ATTEMPTS
         // em destino permanentemente bloqueado (e evitar rate-limit/ban).
         if (isChannelDestination(job.destJid) && isChannelForbiddenError(err)) {
@@ -731,21 +963,41 @@ async function createSendBackend() {
   // sendJobTracker é lido por shutdown() via waitUntilDrained para esperar
   // jobs em vôo terminarem antes de marcar restos como interrompidos.
   const onDequeued = (job) => sendJobTracker.track(() => processSendJob(job))
-  if (SEND_QUEUE_BACKEND !== 'bullmq') {
+  const mode = resolveBackendMode({ queueBackendEnv: SEND_QUEUE_BACKEND_ENV, redisUrl: REDIS_URL })
+  if (mode === 'memory') {
     return createMemorySendBackend({ maxSize: SEND_QUEUE_MAX_SIZE, onRejected, onDequeued })
   }
-  if (!REDIS_URL) {
+  if (mode === 'memory-fallback') {
     logger.warn('QUEUE_BACKEND=bullmq definido sem REDIS_URL; fallback para memória')
     return createMemorySendBackend({ maxSize: SEND_QUEUE_MAX_SIZE, onRejected, onDequeued })
   }
+  // mode === 'bullmq'
   try {
-    return await createBullmqSendBackend({
+    logger.info({ queueName: BULLMQ_QUEUE_NAME, dlqQueueName: `${BULLMQ_QUEUE_NAME}-dlq` }, 'Usando BullMQ como backend de envio')
+    const bullBackend = await createBullmqSendBackend({
       redisUrl: REDIS_URL,
       queueName: BULLMQ_QUEUE_NAME,
       onRejected,
       onDequeued,
       concurrency: 1,
     })
+    const memoryFallback = createMemorySendBackend({ maxSize: SEND_QUEUE_MAX_SIZE, onRejected, onDequeued })
+    return {
+      ...bullBackend,
+      enqueue(job) {
+        return bullBackend.enqueue(job).then(ok => {
+          if (ok) return true
+          logger.warn({ logId: job?.logId }, 'BullMQ indisponível no enqueue; fallback imediato para fila em memória')
+          return memoryFallback.enqueue(job)
+        })
+      },
+      async close() {
+        await Promise.allSettled([
+          bullBackend.close(),
+          memoryFallback.close(),
+        ])
+      },
+    }
   } catch (err) {
     logger.error({ err: err.message }, 'Falha ao iniciar BullMQ; fallback para memória')
     return createMemorySendBackend({ maxSize: SEND_QUEUE_MAX_SIZE, onRejected, onDequeued })
@@ -1205,6 +1457,14 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           await recordSkippedMessage({ reason: 'skip:dedup_recent_link', platform: primary.platform, originalUrl: primary.url, convertedUrl: primary.converted })
           logger.info({ destJid }, 'Duplicata ignorada'); continue
         }
+        if (GLOBAL_DEDUP_MODE !== 'off') {
+          const globalDedup = await globalDedupCheckAndSet(key, dedupeWindowMs)
+          if (globalDedup.duplicate) {
+            await recordSkippedMessage({ reason: 'skip:dedup_recent_link_global', platform: primary.platform, originalUrl: primary.url, convertedUrl: primary.converted })
+            logger.info({ destJid }, 'Duplicata global ignorada')
+            continue
+          }
+        }
         dedup.links[key] = Date.now()
         scheduleDedupSave(dedup)
 
@@ -1236,87 +1496,76 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         })
         let sentVia = 'text'
 
+        // PR-5.B.2: variação de copy por canal-destino (determinística por
+        // destJid+data). Aplica só em canal — em grupo não há fingerprint
+        // de "mesma mensagem em N", então mantém texto original.
+        const isChannelDest = isChannelDestination(destJid)
+        const variantText = isChannelDest
+          ? (cfg.preservationActive
+              ? applyVariation(finalText, { groupId: destJid, poolJson: cfg.botConfig.copyVariationPoolJson })
+              : finalText)
+          : finalText
+
+        // Stagger: 1º destino sai sem atraso adicional; demais recebem jitter.
+        const staggerMs = (destIndex > 0 && isChannelDest && cfg.preservationActive && staggerJitterMs > 0)
+          ? Math.floor(Math.random() * staggerJitterMs)
+          : 0
+
+        // buildPayload é LAZY de propósito: roda no dequeue, dentro do
+        // worker. Mantém image.buffer (Buffer) em memória do processo, sem
+        // passar pelo Redis. Ver enqueueSendJob() para a explicação completa.
+        const buildPayload = async () => {
+          if (shouldUseRelayPath({ destJid, hasOriginal: !!original })) {
+            const replayProto = { ...original.proto }
+            if (original.type === 'imageMessage' || original.type === 'videoMessage') {
+              replayProto.caption = variantText
+            }
+            return {
+              _route: 'relay',
+              relay: {
+                type: original.type,
+                proto: replayProto,
+              },
+            }
+          }
+
+          let image = null
+          if (wantImage) {
+            const fetched = await getImage()
+            image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
+            if (fetched && !image) {
+              logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
+            }
+            if (imageMode === 'original' && !image) {
+              useLinkPreview = true
+            }
+            if (image && isChannelDest && cfg.preservationActive && cfg.botConfig.imageMutationEnabled) {
+              const mutated = await mutateChannelImage(image.buffer, image.mimetype, {
+                groupId: destJid,
+                enabled: true,
+              })
+              if (mutated.buffer !== image.buffer) {
+                image = { ...image, buffer: mutated.buffer, mimetype: mutated.mimetype }
+              }
+            }
+          }
+
+          return buildMonitoredMessagePayload({
+            finalText: variantText,
+            image,
+            useLinkPreview,
+          })
+        }
+
         const accepted = await enqueueSendJob({
           type: 'converted',
           logId: log.id,
           destJid,
           platforms,
           plan: cfg.plan,
-          delayMs: buildSmartDelayMs(cfg.botConfig),
-          typingDelayMs: calculateTypingDelayMs({ text: finalText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
-          buildPayload: async () => {
-            // Para canal-destino, nunca usar relay (sendMessage com payload limpo).
-            // Para grupo-destino com mídia original, deixar relayMessage cuidar (return null).
-            if (shouldUseRelayPath({ destJid, hasOriginal: !!original })) return null
-
-            let image = null
-            if (wantImage) {
-              const fetched = await getImage()
-              image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
-              if (fetched && !image) {
-                logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
-              }
-              // Em modo original, se não conseguimos imagem alguma da mensagem
-              // monitorada, peça ao WhatsApp para gerar preview automático do
-              // link convertido — assim ainda há chance de aparecer card com foto.
-              if (imageMode === 'original' && !image) {
-                useLinkPreview = true
-              }
-            }
-
-            return buildMonitoredMessagePayload({
-              finalText,
-              image,
-              useLinkPreview,
-            })
-          },
-          send: async ({ sock: sendSock, payload }) => {
-            if (original) {
-              const replayProto = { ...original.proto }
-              if (original.type === 'imageMessage' || original.type === 'videoMessage') {
-                replayProto.caption = finalText
-              }
-              await sendSock.relayMessage(destJid, { [original.type]: replayProto }, {})
-              sentVia = `relay:${original.type}`
-              return
-            }
-
-            // Canal-destino: remove campos não-suportados (quoted/contextInfo) de
-            // todas as rotas. Para grupos, sanitização é no-op (helper só remove
-            // se existir). Sem mutação do payload original.
-            const channelDest = isChannelDestination(destJid)
-            // Sinal de contrato: se chegou aqui um JID que não é grupo nem canal,
-            // o filtro upstream isMirrorableJid não está cobrindo um novo kind —
-            // queremos saber em prod, sem matar o envio (sendMessage tenta como fallback).
-            if (detectKind(destJid) === null) {
-              logger.warn({ destJid }, 'JID kind inesperado chegou ao send path; usando sendMessage como fallback')
-            }
-            const routes = [
-              {
-                name: payload._route,
-                body: channelDest ? stripChannelUnsafeFields(payload.primary) : payload.primary,
-                sendOptions: payload.primarySendOptions,
-              },
-              ...(payload.fallbacks || []).map((body, idx) => ({
-                name: body.image ? 'image' : 'text',
-                body: channelDest ? stripChannelUnsafeFields(body) : body,
-                sendOptions: payload.fallbackSendOptions?.[idx],
-                fallbackIdx: idx,
-              })),
-            ]
-            let lastErr = null
-            for (const route of routes) {
-              try {
-                await sendSock.sendMessage(destJid, route.body, route.sendOptions || undefined)
-                sentVia = route.name
-                return
-              } catch (err) {
-                lastErr = err
-                logger.warn({ err: err.message, destJid, route: route.name, fallbackIdx: route.fallbackIdx, channel: channelDest }, 'Envio falhou — tentando próximo fallback')
-              }
-            }
-            throw lastErr || new Error('Todos os fallbacks de envio falharam')
-          },
+          delayMs: buildSmartDelayMs(cfg.botConfig) + staggerMs,
+          typingDelayMs: calculateTypingDelayMs({ text: variantText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
+          buildPayload,
           onDone: async (result) => {
             if (result.ok) {
               logger.info({ destJid, platforms, sentVia }, 'Mensagem enviada')
@@ -1345,6 +1594,11 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
     for (const msg of messages) {
       rememberChannelJid(msg?.key?.remoteJid)
       if (msg.key.fromMe) continue
+      // Marca atividade do JID — usado pelo monitorSilenceWatchdog pra
+      // diferenciar "monitor parado por falha de decrypt" de "monitor
+      // inativo organicamente". Atualiza independente de filtros downstream.
+      const remoteJid = normalizeJidForMatch(msg.key.remoteJid)
+      if (remoteJid) lastIncomingByMonitorJid.set(remoteJid, Date.now())
       const msgTsRaw = Number(msg.messageTimestamp ?? 0)
       const hasValidTimestamp = Number.isFinite(msgTsRaw) && msgTsRaw > 0
       const msgTs = hasValidTimestamp ? msgTsRaw * 1000 : null
@@ -1492,6 +1746,11 @@ process.on('message', async msg => {
     ensureChannelSubscriptions().catch(err => logger.error({ err: err?.message }, 'channels: erro ao inscrever após reload'))
   }
 
+  if (msg?.type === 'refreshWaGroups') {
+    const result = await triggerWaGroupsRefresh('ipc_manual')
+    process.send({ type: 'refreshWaGroups', requestId: msg.requestId, data: result })
+  }
+
   if (msg?.type === 'listGroups') {
     if (!activeSock) {
       process.send({ type: 'groups', requestId: msg.requestId, data: [], error: 'Bot não conectado' })
@@ -1580,7 +1839,7 @@ process.on('message', async msg => {
         plan: 'broadcast',
         delayMs: buildSmartDelayMs((await getConfig()).botConfig),
         typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
-        buildPayload: async () => ({ text: msg.text }),
+        payload: { text: msg.text },
       })
       if (accepted) {
         queued++

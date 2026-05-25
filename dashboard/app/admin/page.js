@@ -468,6 +468,7 @@ export default function AdminPage() {
   const [successQueue, setSuccessQueue] = useState(null)
   const [systemHealth, setSystemHealth] = useState(null)
   const [systemMetrics, setSystemMetrics] = useState(null)
+  const [systemObservability, setSystemObservability] = useState(null)
   const [faq, setFaq] = useState(null)
   const [plans, setPlans] = useState([])
   const [tutorial, setTutorial] = useState(null)
@@ -481,7 +482,7 @@ export default function AdminPage() {
   async function loadAdminData(nextRisk = risk, nextSearch = search) {
     if (accessDenied) return
     setError('')
-    const [adminData, overviewData, usersData, sessionsData, sessionTelemetryData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, lpContentData] = await Promise.all([
+    const [adminData, overviewData, usersData, sessionsData, sessionTelemetryData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, lpContentData] = await Promise.all([
       api.adminMe(),
       api.adminOverview(),
       api.adminUsers({ risk: nextRisk, search: nextSearch, limit: 20 }),
@@ -495,6 +496,7 @@ export default function AdminPage() {
       api.adminSuccessQueue({ limit: 8 }).catch(() => null),
       api.adminSystemHealth().catch(() => null),
       api.adminSystemMetrics().catch(() => null),
+      api.adminSystemObservability().catch(() => null),
       api.adminLpContent().catch(() => null),
     ])
     setAdmin(adminData)
@@ -510,6 +512,7 @@ export default function AdminPage() {
     setSuccessQueue(successQueueData)
     setSystemHealth(systemHealthData)
     setSystemMetrics(systemMetricsData)
+    setSystemObservability(systemObservabilityData)
     setFaq(lpContentData?.faq ?? null)
     setPlans(lpContentData?.plans ?? [])
     setTutorial(lpContentData?.tutorial ?? null)
@@ -536,12 +539,13 @@ export default function AdminPage() {
           api.adminSuccessQueue({ limit: 8 }).catch(() => null),
           api.adminSystemHealth().catch(() => null),
           api.adminSystemMetrics().catch(() => null),
+          api.adminSystemObservability().catch(() => null),
           api.adminLpContent().catch(() => null),
         ])
       })
       .then((result) => {
         if (!active || !result) return
-        const [adminData, overviewData, usersData, sessionsData, sessionTelemetryData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, lpContentData] = result
+        const [adminData, overviewData, usersData, sessionsData, sessionTelemetryData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, lpContentData] = result
         setAdmin(adminData)
         setOverview(overviewData)
         setUsers(usersData)
@@ -555,6 +559,7 @@ export default function AdminPage() {
         setSuccessQueue(successQueueData)
         setSystemHealth(systemHealthData)
         setSystemMetrics(systemMetricsData)
+        setSystemObservability(systemObservabilityData)
         setFaq(lpContentData?.faq ?? null)
         setPlans(lpContentData?.plans ?? [])
         setTutorial(lpContentData?.tutorial ?? null)
@@ -746,6 +751,35 @@ export default function AdminPage() {
 
 
 
+
+        {systemObservability && (
+          <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Observabilidade · Fases C e D</p>
+                <h2 className="text-lg font-black text-gray-900">Gate operacional de promoção</h2>
+                <p className="text-sm text-gray-500">Resumo de alertas técnicos e recomendação GO/NO-GO para produção.</p>
+              </div>
+              <span className={`rounded-full px-3 py-1 text-xs font-bold ${systemObservability.goNoGo?.recommended === 'go' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                {String(systemObservability.goNoGo?.recommended || 'no-go').toUpperCase()}
+              </span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl bg-gray-50 p-3"><p className="text-xs text-gray-400">DB</p><p className="text-xl font-black">{systemObservability.goNoGo?.dbOk ? 'OK' : 'Falha'}</p></div>
+              <div className="rounded-xl bg-red-50 p-3"><p className="text-xs text-red-600">5xx</p><p className="text-xl font-black text-red-700">{systemObservability.api?.total5xx ?? 0}</p></div>
+              <div className="rounded-xl bg-amber-50 p-3"><p className="text-xs text-amber-600">Payment DLQ</p><p className="text-xl font-black text-amber-700">{systemObservability.goNoGo?.paymentDlqOpen ?? 0}</p></div>
+              <div className="rounded-xl bg-blue-50 p-3"><p className="text-xs text-blue-600">Uptime</p><p className="text-xl font-black text-blue-700">{Math.round((systemObservability.goNoGo?.uptimeSeconds ?? 0)/60)}m</p></div>
+            </div>
+            <div className="mt-4 space-y-2">
+              {(systemObservability.alerts ?? []).map((a, idx) => (
+                <div key={`${a.title}-${idx}`} className="rounded-xl border border-gray-100 p-3 text-sm">
+                  <p className="font-bold text-gray-900">{a.title}</p>
+                  <p className="text-gray-600">{String(a.value ?? '')}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {systemHealth && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">

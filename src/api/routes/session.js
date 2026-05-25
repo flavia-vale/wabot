@@ -1,8 +1,10 @@
-import { startBot, stopBot, isRunning, onQR, onStatus, listGroups, requestPairingCode, getBotMetrics, getLastQR } from '../../manager.js'
+import { startBot, stopBot, isRunning, onQR, onStatus, listGroups, requestPairingCode, getBotMetrics, getLastQR, refreshWaGroups } from '../../manager.js'
 import db from '../../db.js'
 import { rm } from 'fs/promises'
 import { getAuthInfoDir } from '../../paths.js'
 import { mapInfraError } from '../../errors.js'
+import { appContainer } from '../../app/container.js'
+import { normalizePairingPhone } from '../../domain/session/service.js'
 
 const WA_GROUPS_RECOVERY_TIMEOUT_MS = Math.max(Number(process.env.WA_GROUPS_RECOVERY_TIMEOUT_MS || 15000), 0)
 const WA_GROUPS_RECOVERY_RETRY_MS = Math.max(Number(process.env.WA_GROUPS_RECOVERY_RETRY_MS || 1000), 100)
@@ -32,10 +34,10 @@ export async function loadWaGroupsWithRecovery(userId, deps = {}) {
   } = deps
 
   let recoveredProcess = false
-  if (!isRunningFn(userId)) {
+  if (!(await isRunningFn(userId))) {
     const resumableSession = await findResumableSessionFn(userId)
     if (!resumableSession) throw new Error('Bot não está rodando')
-    startBotFn(userId)
+    await startBotFn(userId)
     recoveredProcess = true
   }
 
@@ -63,64 +65,37 @@ export async function loadWaGroupsWithRecovery(userId, deps = {}) {
   throw error
 }
 
-function normalizePairingPhone(rawPhone) {
-  const digits = String(rawPhone ?? '').replace(/\D/g, '')
-  if (!digits) return { ok: false, message: 'Número de telefone obrigatório' }
-
-  let br = digits
-  if (br.startsWith('55')) br = br.slice(2)
-
-  if (br.length < 10 || br.length > 11) {
-    return { ok: false, message: 'Número inválido. Use DDI+DDD+número (ex.: 5511999999999).' }
-  }
-
-  const ddd = br.slice(0, 2)
-  const subscriber = br.slice(2)
-  if (!/^\d{2}$/.test(ddd)) return { ok: false, message: 'DDD inválido.' }
-  if (subscriber.length === 9 && !subscriber.startsWith('9')) {
-    return { ok: false, message: 'Celular com 9 dígitos deve iniciar com 9.' }
-  }
-
-  return { ok: true, phone: `55${ddd}${subscriber}` }
-}
-
-function isPrismaShapeMismatch(err) {
-  const message = String(err?.message ?? '')
-  return message.includes('Unknown argument') || message.includes('Unknown field') || message.includes('no such column') || message.includes('does not exist in the current database')
-}
-
-async function findSessionStartUser(userId) {
-  try {
-    return await db.user.findUnique({ where: { id: userId }, select: { plan: true, accessExpiresAt: true, status: true } })
-  } catch (err) {
-    if (!isPrismaShapeMismatch(err)) throw err
-    return db.user.findUnique({ where: { id: userId }, select: { plan: true, accessExpiresAt: true } })
-  }
-}
+const sessionService = appContainer.services.session
 
 export async function sessionRoutes(app) {
   app.post('/start', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
-    if (isRunning(userId)) return reply.code(409).send({ error: 'Bot já está rodando' })
+    const user = await sessionService.findSessionStartUser(userId)
+    const validation = sessionService.validateSessionStartUser(user)
+    if (!validation.ok) return reply.code(validation.statusCode).send({ error: validation.error })
 
-    const user = await findSessionStartUser(userId)
-    if (user.status === 'banned' || user.status === 'suspended') {
-      return reply.code(403).send({ error: 'Conta bloqueada. Entre em contato com o suporte.' })
-    }
-    if (user.accessExpiresAt && user.accessExpiresAt < new Date()) {
-      const msg = user.plan === 'trial'
-        ? 'Seu trial expirou. Assine um plano em Planos.'
-        : 'Sua assinatura expirou. Renove em Planos.'
-      return reply.code(403).send({ error: msg })
+    const running = Boolean(await isRunning(userId))
+    if (running) {
+      // Em modo remote, a API pode ver o worker como "rodando" enquanto o
+      // socket WhatsApp já caiu (sem heartbeat / status='disconnected' no DB).
+      // Nesse caso o QR nunca chega na dashboard. Tratamos como órfão:
+      // derruba o worker e refaz o start limpo.
+      const session = await db.waSession.findUnique({ where: { userId }, select: { status: true } }).catch(() => null)
+      const isOrphan = !session || session.status === 'disconnected'
+      if (!isOrphan) return reply.code(409).send({ error: 'Bot já está rodando' })
+      req.log.warn({ userId, dbStatus: session?.status }, 'Worker órfão detectado em /start — reiniciando sessão')
+      try { await stopBot(userId) } catch (err) { req.log.warn({ err: err.message }, 'Falha ao parar worker órfão') }
+      // Pequeno gap para o supervisor liberar o slot antes do start novo.
+      await new Promise(r => setTimeout(r, 250))
     }
 
-    startBot(userId)
+    await startBot(userId)
     return { ok: true, message: 'Bot iniciado — aguarde o QR' }
   })
 
   app.post('/stop', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
-    const stopped = stopBot(userId)
+    const stopped = await stopBot(userId)
     if (!stopped) return reply.code(404).send({ error: 'Bot não estava rodando' })
     await db.waSession.updateMany({
       where: { userId },
@@ -131,7 +106,7 @@ export async function sessionRoutes(app) {
 
   app.get('/status', { onRequest: [app.authenticate] }, async (req) => {
     const userId = req.user.sub
-    const running = isRunning(userId)
+    const running = Boolean(await isRunning(userId))
     const includeMetrics = String(req.query?.metrics ?? '1') !== '0'
     const [session, metrics] = await Promise.all([
       db.waSession.findUnique({ where: { userId } }),
@@ -142,6 +117,25 @@ export async function sessionRoutes(app) {
       status: session?.status ?? 'disconnected',
       phone: session?.phone ?? null,
       metrics,
+    }
+  })
+
+  // Força refresh manual do estado de grupos do WhatsApp. Atalho para o
+  // workaround conhecido de "remover e re-adicionar grupo no painel" que
+  // recupera grupos travados em Bad MAC (sender_key dessincronizada).
+  // Ação leve (~1s); chama groupFetchAllParticipating() e segue a vida.
+  app.post('/refresh-wa-state', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const userId = req.user.sub
+    if (!(await isRunning(userId))) return reply.code(503).send({ error: 'WhatsApp não está conectado.' })
+    try {
+      const result = await refreshWaGroups(userId)
+      if (!result?.ok) {
+        return reply.code(503).send({ error: result?.error || `Não foi possível atualizar agora: ${result?.reason || 'desconhecido'}` })
+      }
+      return result
+    } catch (err) {
+      req.log.warn({ err: err.message }, 'refresh-wa-state falhou')
+      return reply.code(502).send({ error: err.message || 'Falha ao atualizar grupos' })
     }
   })
 
@@ -166,7 +160,7 @@ export async function sessionRoutes(app) {
     const normalizedResult = normalizePairingPhone(phone)
     if (!normalizedResult.ok) return reply.code(400).send({ error: normalizedResult.message })
     const normalized = normalizedResult.phone
-    if (!isRunning(userId)) return reply.code(400).send({ error: 'Bot não está rodando' })
+    if (!(await isRunning(userId))) return reply.code(400).send({ error: 'Bot não está rodando' })
     try {
       const code = await requestPairingCode(userId, normalized)
       return { code }
@@ -183,7 +177,7 @@ export async function sessionRoutes(app) {
 
   app.post('/forget', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
-    stopBot(userId)
+    try { await stopBot(userId) } catch (err) { req.log.warn({ err: err.message, userId }, 'Falha ao parar worker em /forget') }
     await db.waSession.updateMany({
       where: { userId },
       data: { status: 'disconnected', phone: null },
@@ -220,14 +214,15 @@ export async function sessionRoutes(app) {
 
   app.get('/qr-latest', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
-    if (!isRunning(userId)) {
+    if (!(await isRunning(userId))) {
       return reply.code(400).send({ error: 'Bot não está rodando' })
     }
-    return { qr: getLastQR(userId) }
+    const qr = await getLastQR(userId)
+    return { qr: qr ?? null }
   })
 
   // WebSocket: emite QR em tempo real (ticket efêmero via subprotocol para não expor segredo na URL)
-  app.get('/qr', { websocket: true }, (socket, req) => {
+  app.get('/qr', { websocket: true }, async (socket, req) => {
     let userId
     try {
       const rawProtocols = req.headers['sec-websocket-protocol'] ?? ''
@@ -243,7 +238,7 @@ export async function sessionRoutes(app) {
       return
     }
 
-    if (!isRunning(userId)) {
+    if (!(await isRunning(userId))) {
       socket.send(JSON.stringify({ type: 'error', message: 'Bot não está rodando' }))
       socket.close()
       return
@@ -259,5 +254,15 @@ export async function sessionRoutes(app) {
     })
 
     socket.on('close', () => { unsubQR(); unsubStatus() })
+
+    // Em modo remote, onQR só registra o listener — o QR cacheado fica no
+    // supervisor. Enviamos o último QR conhecido imediatamente para que a
+    // UI não precise esperar o próximo refresh (~20s).
+    try {
+      const last = await getLastQR(userId)
+      if (last && socket.readyState === 1) {
+        socket.send(JSON.stringify({ type: 'qr', data: last }))
+      }
+    } catch {}
   })
 }

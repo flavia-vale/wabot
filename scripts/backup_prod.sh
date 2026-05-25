@@ -24,6 +24,12 @@ AUTH_INFO_DIR="${AUTH_INFO_DIR:-/home/deploy/BOTinho-shared/auth_info}"
 BACKUP_DIR="${BACKUP_DIR:-/home/deploy/wabot-backups}"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
 BACKUP_RCLONE_REMOTE="${BACKUP_RCLONE_REMOTE:-}"
+# .env do root e do dashboard. Backup ATÔMICO precisa incluir esses
+# arquivos: sem JWT_SECRET, DATABASE_URL, etc., restaurar DB+auth_info
+# em um VPS novo não traz a aplicação de volta.
+INCLUDE_ENV_FILES="${INCLUDE_ENV_FILES:-1}"
+ROOT_ENV_FILE="${ROOT_ENV_FILE:-$PROD_DIR/.env}"
+DASHBOARD_ENV_FILE="${DASHBOARD_ENV_FILE:-$PROD_DIR/dashboard/.env.local}"
 
 timestamp="$(date -u +%Y%m%d-%H%M%S)"
 log_prefix="[backup_prod $(date -u +%Y-%m-%dT%H:%M:%SZ)]"
@@ -59,18 +65,54 @@ else
   log "Aviso: $AUTH_INFO_DIR não existe — pulando auth_info"
 fi
 
-# 3) Empacota tudo
+# 3) .env files — JWT_SECRET, DATABASE_URL, BOT_SUPERVISOR_MODE, REDIS_URL.
+# Sem eles, restaurar em VPS novo deixa a aplicação fora do ar até o
+# operador recriar manualmente (e risco de perder JWT_SECRET = invalidar
+# todos os tokens emitidos). Armazenados sob env/ no tarball para que o
+# layout do staging fique claro.
+if [[ "$INCLUDE_ENV_FILES" == "1" ]]; then
+  env_count=0
+  mkdir -p "$stage_dir/env"
+  if [[ -f "$ROOT_ENV_FILE" ]]; then
+    cp -a "$ROOT_ENV_FILE" "$stage_dir/env/root.env"
+    env_count=$((env_count+1))
+  fi
+  if [[ -f "$DASHBOARD_ENV_FILE" ]]; then
+    cp -a "$DASHBOARD_ENV_FILE" "$stage_dir/env/dashboard.env.local"
+    env_count=$((env_count+1))
+  fi
+  log ".env capturado ($env_count arquivos)"
+else
+  log "INCLUDE_ENV_FILES=0 — backup NÃO contém .env (recuperação de DR exige reconstrução manual)"
+fi
+
+# 4) Manifest com metadata úteis para verify/restore
+manifest="$stage_dir/manifest.json"
+cat > "$manifest" <<EOF_MANIFEST
+{
+  "version": 1,
+  "timestamp_utc": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "hostname": "$(hostname)",
+  "prod_db_path": "$PROD_DB",
+  "auth_info_path": "$AUTH_INFO_DIR",
+  "include_env_files": $INCLUDE_ENV_FILES,
+  "db_bytes": $db_bytes
+}
+EOF_MANIFEST
+log "manifest.json escrito"
+
+# 5) Empacota tudo
 archive="$BACKUP_DIR/wabot-prod-$timestamp.tar.gz"
 tar -C "$stage_dir" -czf "$archive" .
 chmod 600 "$archive"
 archive_bytes="$(stat -c%s "$archive")"
 log "Arquivo gerado: $archive ($archive_bytes bytes)"
 
-# 4) Rotação local — apaga arquivos com mais de $RETENTION_DAYS dias
+# 6) Rotação local — apaga arquivos com mais de $RETENTION_DAYS dias
 deleted="$(find "$BACKUP_DIR" -maxdepth 1 -name 'wabot-prod-*.tar.gz' -type f -mtime "+$RETENTION_DAYS" -print -delete | wc -l)"
 log "Rotação local concluída: $deleted arquivo(s) com mais de ${RETENTION_DAYS}d removido(s)"
 
-# 5) Upload para nuvem (opcional — só se rclone + BACKUP_RCLONE_REMOTE estiverem configurados)
+# 7) Upload para nuvem (opcional — só se rclone + BACKUP_RCLONE_REMOTE estiverem configurados)
 if [[ -n "$BACKUP_RCLONE_REMOTE" ]]; then
   if command -v rclone >/dev/null 2>&1; then
     log "Subindo para nuvem: $BACKUP_RCLONE_REMOTE"

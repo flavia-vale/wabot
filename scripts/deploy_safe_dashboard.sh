@@ -50,6 +50,16 @@ verify_next_jest_worker_process_child() {
   [[ -f "$worker" ]]
 }
 
+run_npm_ci_with_recovery() {
+  local label="$1"
+  if npm ci; then
+    return 0
+  fi
+  echo "  Aviso: 'npm ci' falhou em $label. Estado de node_modules pode estar sujo (ex: ENOTEMPTY). Removendo e tentando novamente uma vez..."
+  rm -rf node_modules
+  npm ci
+}
+
 ensure_dashboard_deps_integrity() {
   if verify_next_polyfill && verify_next_jest_worker_process_child; then
     return 0
@@ -70,6 +80,24 @@ ensure_dashboard_deps_integrity() {
   fi
 }
 
+# Build com recuperação após corrupção de node_modules pós-install.
+# Observado em prod: npm ci passa e arquivos críticos existem, mas o
+# build estoura com erros internos do webpack (ex.: 'WebpackError is not
+# a constructor' no minify-webpack-plugin). Causa típica: cópias
+# divergentes do webpack resolvidas no runtime. Limpar node_modules +
+# cache e reinstalar resolve sem mudar código nem versão.
+build_dashboard_with_recovery() {
+  if npm run build; then
+    return 0
+  fi
+  echo "  Aviso: 'npm run build' falhou. Limpando node_modules + .next + cache e tentando novamente uma vez..."
+  rm -rf node_modules .next
+  npm cache clean --force || true
+  npm ci
+  ensure_dashboard_deps_integrity
+  npm run build
+}
+
 cd "$ROOT_DIR"
 configure_public_git_dependencies
 echo "[1/9] Sync branch $BRANCH"
@@ -78,20 +106,39 @@ git checkout "$BRANCH"
 git pull --ff-only origin "$BRANCH"
 
 echo "[2/9] Install root dependencies sem alterar lockfile"
-npm ci
+run_npm_ci_with_recovery "root"
 
 echo "[3/9] Apply database migrations"
-npx prisma migrate deploy
+# Skip se não houver migrations pendentes — evita tocar no DB enquanto
+# PM2 (api / bot-supervisor) está escrevendo, o que dispara SQLITE_BUSY
+# mesmo com busy_timeout=5000 do src/db.js. Mesmo padrão do
+# deploy_safe_staging.sh.
+if npx prisma migrate status 2>&1 | grep -q "Database schema is up to date"; then
+  echo "  Nenhuma migration pendente — pulando migrate deploy."
+else
+  # Há migration pendente: tenta até 5x com backoff (lock costuma ser transitório).
+  migrate_attempt=0
+  until npx prisma migrate deploy; do
+    migrate_attempt=$((migrate_attempt + 1))
+    if [ "$migrate_attempt" -ge 5 ]; then
+      echo "ERRO: prisma migrate deploy falhou após 5 tentativas."
+      exit 1
+    fi
+    wait_s=$((migrate_attempt * 3))
+    echo "  migrate falhou (tentativa $migrate_attempt/5) — aguardando ${wait_s}s..."
+    sleep "$wait_s"
+  done
+fi
 
 echo "[4/9] Install dashboard dependencies"
 cd "$DASHBOARD_DIR"
-npm ci
+run_npm_ci_with_recovery "dashboard"
 ensure_dashboard_deps_integrity
 
 echo "[5/9] Guardrail + build dashboard (hard gate)"
 npm run guard:config-page
 rm -rf .next
-npm run build
+build_dashboard_with_recovery
 
 echo "[5b/9] Verificando integridade do build"
 for artifact in .next/BUILD_ID .next/prerender-manifest.json; do
@@ -122,6 +169,17 @@ fi
 echo "[7b/9] Restart PM2 apps"
 pm2 restart dashboard --update-env
 pm2 restart api --update-env
+
+# bot-supervisor (prod) é INTENCIONALMENTE preservado: ver comentário
+# detalhado em scripts/deploy_safe_staging.sh. Reinicie manualmente quando
+# mudar src/supervisor/*, src/core/sessionCore.js ou src/bot-worker.js.
+# Para forçar restart nesse pipeline, exporte RESTART_SUPERVISOR=1.
+if [[ "${RESTART_SUPERVISOR:-0}" == "1" ]]; then
+  echo "  RESTART_SUPERVISOR=1 — reiniciando bot-supervisor"
+  pm2 restart bot-supervisor --update-env
+else
+  echo "  bot-supervisor preservado. Sessões WhatsApp continuam ativas."
+fi
 
 echo "[8/9] PM2 status"
 pm2 status

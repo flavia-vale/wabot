@@ -170,7 +170,7 @@ export function getLpMetadata(slug) {
   return {
     title: cfg.title,
     description: cfg.description,
-    alternates: { canonical: `/${slug}` },
+    alternates: { canonical: canonicalUrl },
     openGraph: {
       title: cfg.title,
       description: cfg.description,

@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
+import { OfferBuilder } from '@/components/OfferBuilder'
 
 const MAX_LINKS = 10
 const MAX_TEXT_LENGTH = 12_000
@@ -16,6 +17,33 @@ function countSupportedLinks(text) {
 function getLimitMessage(count) {
   return `Cole no máximo ${MAX_LINKS} links por vez. Encontramos ${count} links no texto; divida em partes menores para converter com segurança.`
 }
+
+function hasAmbiguousSeparators(text) {
+  return /;\s*https?:\/\//i.test(text)
+}
+
+function classifyConversionError(errorMessage) {
+  const message = String(errorMessage || '').toLowerCase()
+
+  if (!message.trim()) {
+    return { badge: 'Falha temporária', hint: 'Tente novamente em instantes.' }
+  }
+
+  if (message.includes('credencial') || message.includes('credential') || message.includes('token') || message.includes('chave')) {
+    return { badge: 'Sem credencial', hint: 'Revise as credenciais da loja em Configurações > Credenciais.' }
+  }
+
+  if (message.includes('não suport') || message.includes('not support') || message.includes('unsupported')) {
+    return { badge: 'Link não suportado', hint: 'Use um link de Amazon, Mercado Livre, Shopee ou Magazine Luiza.' }
+  }
+
+  if (message.includes('inválid') || message.includes('invalid') || message.includes('malform') || message.includes('url')) {
+    return { badge: 'URL inválida', hint: 'Confira se o link foi copiado por completo.' }
+  }
+
+  return { badge: 'Falha temporária', hint: 'Não foi possível converter agora. Tente novamente.' }
+}
+
 
 function MetricPill({ label, value, tone = 'neutral' }) {
   const tones = {
@@ -73,6 +101,35 @@ function ResultCard({ result, onCopy }) {
     </article>
   )
 }
+
+
+function OfferBuilderCard({ result, onCopy, copied }) {
+  const [wantsOfferBuilder, setWantsOfferBuilder] = useState(true)
+  return (
+    <article className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4 shadow-sm">
+      <h3 className="text-sm font-black text-indigo-900">Montador de oferta (link {result.index + 1})</h3>
+      <label className="mt-2 flex items-center gap-2 rounded-xl bg-white/80 px-3 py-2 text-xs font-semibold text-indigo-900">
+        <input type="checkbox" checked={wantsOfferBuilder} onChange={(event) => setWantsOfferBuilder(event.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+        Quer criar uma oferta com esse link?
+      </label>
+      {!wantsOfferBuilder ? (
+        <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-gray-600">
+          Sem problemas — você ainda pode copiar apenas o link convertido acima.
+        </p>
+      ) : (
+        <div className="mt-3">
+          <OfferBuilder
+            mode="inline"
+            initialLink={result.convertedUrl}
+            onCopy={onCopy}
+            copyLabelCopied={copied ? 'Mensagem copiada ✅' : 'Copiar mensagem pronta'}
+          />
+        </div>
+      )}
+    </article>
+  )
+}
+
 
 export default function ConverteLinksPage() {
   const [text, setText] = useState('')

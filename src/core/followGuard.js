@@ -5,6 +5,7 @@
 // banco; aceitam `{ db }` para testes.
 
 import defaultDb from '../db.js'
+import { writeFollowLog } from '../events/store.js'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -140,7 +141,5 @@ export async function canFollowNow(userId, opts = {}) {
  */
 export async function logFollow(userId, channelJid, status, error = null, opts = {}) {
   const db = opts.db ?? defaultDb
-  return db.followLog.create({
-    data: { userId, channelJid, status, error: error ?? null },
-  })
+  return writeFollowLog({ userId, channelJid, status, error: error ?? null }, { db })
 }

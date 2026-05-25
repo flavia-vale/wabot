@@ -112,3 +112,55 @@ export function getApiMetricsSnapshot() {
     recentErrors: recentErrors.slice(0, 20),
   }
 }
+
+
+function escLabel(value) {
+  return String(value ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+}
+
+export function renderPrometheusMetrics(extra = {}) {
+  const routes = [...routeMetrics.values()]
+  const totalRequests = routes.reduce((sum, route) => sum + route.count, 0)
+  const total4xx = routes.reduce((sum, route) => sum + route.status4xxCount, 0)
+  const total5xx = routes.reduce((sum, route) => sum + route.status5xxCount, 0)
+  const lines = [
+    '# HELP wabot_api_uptime_seconds API uptime in seconds',
+    '# TYPE wabot_api_uptime_seconds gauge',
+    `wabot_api_uptime_seconds ${Math.round(process.uptime())}`,
+    '# HELP wabot_api_requests_total Total API requests observed by route',
+    '# TYPE wabot_api_requests_total counter',
+  ]
+
+  for (const metric of routes) {
+    lines.push(`wabot_api_requests_total{method="${escLabel(metric.method)}",route="${escLabel(metric.route)}"} ${metric.count}`)
+  }
+
+  const sessionOwnerMismatchTotal = Number(extra.sessionOwnerMismatchTotal ?? 0)
+  const sessionCircuitBreakerAlertTotal = Number(extra.sessionCircuitBreakerAlertTotal ?? 0)
+
+  lines.push(
+    '# HELP wabot_api_http_4xx_total Total 4xx responses',
+    '# TYPE wabot_api_http_4xx_total counter',
+    `wabot_api_http_4xx_total ${total4xx}`,
+    '# HELP wabot_api_http_5xx_total Total 5xx responses',
+    '# TYPE wabot_api_http_5xx_total counter',
+    `wabot_api_http_5xx_total ${total5xx}`,
+    '# HELP wabot_api_errors_total Total Fastify onError hook events',
+    '# TYPE wabot_api_errors_total counter',
+    `wabot_api_errors_total ${recentErrors.length}`,
+    '# HELP wabot_api_requests_aggregate_total Aggregate request count',
+    '# TYPE wabot_api_requests_aggregate_total counter',
+    `wabot_api_requests_aggregate_total ${totalRequests}`,
+    '# HELP wabot_supervisor_session_owner_mismatch_total Total session-owner mismatches across supervisor shards',
+    '# TYPE wabot_supervisor_session_owner_mismatch_total gauge',
+    `wabot_supervisor_session_owner_mismatch_total ${Number.isFinite(sessionOwnerMismatchTotal) ? sessionOwnerMismatchTotal : 0}`,
+    '# HELP wabot_supervisor_session_circuit_breaker_alert_total Total session circuit-breaker alerts across supervisor shards',
+    '# TYPE wabot_supervisor_session_circuit_breaker_alert_total gauge',
+    `wabot_supervisor_session_circuit_breaker_alert_total ${Number.isFinite(sessionCircuitBreakerAlertTotal) ? sessionCircuitBreakerAlertTotal : 0}`,
+  )
+
+  return `${lines.join('\n')}\n`
+}

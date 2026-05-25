@@ -99,6 +99,16 @@ verify_next_jest_worker_process_child() {
   [[ -f "$worker" ]]
 }
 
+run_npm_ci_with_recovery() {
+  local label="$1"
+  if npm ci; then
+    return 0
+  fi
+  echo "  Aviso: 'npm ci' falhou em $label. Estado de node_modules pode estar sujo (ex: ENOTEMPTY). Removendo e tentando novamente uma vez..."
+  rm -rf node_modules
+  npm ci
+}
+
 ensure_dashboard_deps_integrity() {
   if verify_next_polyfill && verify_next_jest_worker_process_child; then
     return 0
@@ -117,6 +127,45 @@ ensure_dashboard_deps_integrity() {
     echo "Dica: validar saúde de disco/cache do host de deploy e repetir o pipeline."
     exit 1
   fi
+}
+
+# Build com recuperação após corrupção de node_modules pós-install.
+# Observado em staging: npm ci passa e arquivos críticos existem, mas o
+# build estoura com erros internos do webpack (ex.: 'WebpackError is not
+# a constructor' no minify-webpack-plugin). Causa típica: cópias
+# divergentes do webpack resolvidas no runtime. Limpar node_modules +
+# cache e reinstalar resolve sem mudar código nem versão.
+build_dashboard_with_recovery() {
+  if npm run build; then
+    return 0
+  fi
+  echo "  Aviso: 'npm run build' falhou. Limpando node_modules + .next + cache e tentando novamente uma vez..."
+  rm -rf node_modules .next
+  npm cache clean --force || true
+  npm ci
+  ensure_dashboard_deps_integrity
+  npm run build
+}
+
+
+ensure_pm2_app_running() {
+  local app_name="$1"
+
+  if pm2 describe "$app_name" >/dev/null 2>&1; then
+    pm2 restart "$app_name" --update-env
+    return 0
+  fi
+
+  echo "  Aviso: processo PM2 '$app_name' não encontrado. Tentando criar via ecosystem.config.cjs..."
+  if pm2 start "$ROOT_DIR/ecosystem.config.cjs" --only "$app_name" --update-env >/tmp/wabot_pm2_start_${app_name}.log 2>&1; then
+    echo "  PM2 app '$app_name' criado com sucesso via ecosystem.config.cjs."
+    return 0
+  fi
+
+  echo "ERRO: não foi possível iniciar '$app_name' via ecosystem.config.cjs."
+  cat /tmp/wabot_pm2_start_${app_name}.log || true
+  echo "Dica: valide o nome do app no PM2 (pm2 status) e no ecosystem/config de staging."
+  exit 1
 }
 
 cd "$ROOT_DIR"
@@ -150,20 +199,38 @@ else
 fi
 
 echo "[3/9] Install root dependencies sem alterar lockfile"
-npm ci
+run_npm_ci_with_recovery "root"
 
 echo "[4/9] Apply database migrations no banco isolado de staging"
-npx prisma migrate deploy
+# Skip se não houver migrations pendentes — evita tocar no DB enquanto
+# PM2 (api-staging / bot-supervisor-staging) está escrevendo, o que dispara
+# SQLITE_BUSY mesmo com busy_timeout=5000 do src/db.js.
+if npx prisma migrate status 2>&1 | grep -q "Database schema is up to date"; then
+  echo "  Nenhuma migration pendente — pulando migrate deploy."
+else
+  # Há migration pendente: tenta até 5x com backoff (lock costuma ser transitório).
+  migrate_attempt=0
+  until npx prisma migrate deploy; do
+    migrate_attempt=$((migrate_attempt + 1))
+    if [ "$migrate_attempt" -ge 5 ]; then
+      echo "ERRO: prisma migrate deploy falhou após 5 tentativas."
+      exit 1
+    fi
+    wait_s=$((migrate_attempt * 3))
+    echo "  migrate falhou (tentativa $migrate_attempt/5) — aguardando ${wait_s}s..."
+    sleep "$wait_s"
+  done
+fi
 
 echo "[5/9] Install dashboard dependencies sem alterar lockfile"
 cd "$DASHBOARD_DIR"
-npm ci
+run_npm_ci_with_recovery "dashboard"
 ensure_dashboard_deps_integrity
 
 echo "[6/9] Guardrail + build dashboard staging (hard gate)"
 npm run guard:config-page
 rm -rf .next
-npm run build
+build_dashboard_with_recovery
 
 for artifact in .next/BUILD_ID .next/prerender-manifest.json .next/server/app-paths-manifest.json; do
   if [[ ! -f "$artifact" ]]; then
@@ -181,8 +248,27 @@ if ! command -v pm2 >/dev/null 2>&1; then
   echo "ERRO: pm2 não encontrado no PATH."
   exit 1
 fi
-pm2 restart "$API_APP" --update-env
-pm2 restart "$VISUAL_APP" --update-env
+ensure_pm2_app_running "$API_APP"
+ensure_pm2_app_running "$VISUAL_APP"
+
+# bot-supervisor é INTENCIONALMENTE deixado de fora do restart automático
+# em todo deploy. O ponto do desacoplamento é justamente que deploy da API
+# não derrube as sessões WhatsApp. Reinicie o supervisor manualmente quando
+# houver mudança em:
+#   - src/supervisor/*
+#   - src/core/sessionCore.js
+#   - src/bot-worker.js
+# Comando: pm2 restart bot-supervisor-staging --update-env
+# Para forçar restart no pipeline (raro), exporte RESTART_SUPERVISOR=1.
+SUPERVISOR_APP="${SUPERVISOR_APP:-bot-supervisor-staging}"
+if [[ "${RESTART_SUPERVISOR:-0}" == "1" ]]; then
+  echo "  RESTART_SUPERVISOR=1 — reiniciando $SUPERVISOR_APP"
+  ensure_pm2_app_running "$SUPERVISOR_APP"
+else
+  echo "  bot-supervisor preservado (RESTART_SUPERVISOR=0). Sessões continuam ativas."
+fi
+
+pm2 save
 
 echo "[8/9] PM2 status"
 pm2 status

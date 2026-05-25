@@ -1,9 +1,11 @@
 import db from '../../db.js'
 import { listRunningBots } from '../../manager.js'
 import { getApiMetricsSnapshot } from '../metrics.js'
+import { getSupervisorOperationalCounters } from '../../supervisor/operationalCounters.js'
 import { summarizeCredentialHealth } from '../../credentialHealth.js'
 import { getPublicAnalyticsQualitySnapshot } from './public.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
+import { createAdminService } from '../../domain/admin/service.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -571,6 +573,22 @@ async function getOperationalOverview(now = new Date()) {
 }
 
 export async function adminRoutes(app) {
+  const adminService = createAdminService({
+    db,
+    listRunningBots,
+    getOperationalOverview,
+    getPagination,
+    addDays,
+    getLogCountMap,
+    getLogActivityMap,
+    getGroupCounts,
+    getAccessStatus,
+    resolveEffectiveLastActivity,
+    summarizeCredentialHealth,
+    buildRiskFlags,
+    sanitizeUser,
+    parseDateRange,
+  })
   app.addHook('onRequest', app.authenticate)
 
   app.get('/me', async (req, reply) => {
@@ -580,99 +598,17 @@ export async function adminRoutes(app) {
 
   app.get('/overview', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'admin:read'))) return
-    const overview = await getOperationalOverview()
+    const overview = await adminService.getOverview()
     await writeAdminAuditLog(req, { action: 'admin.overview.read', resource: 'overview' })
     return overview
   })
 
   app.get('/users', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'support:read'))) return
-
-    const { page, limit, skip } = getPagination(req.query)
-    const { status, plan, risk, search } = req.query
-    const now = new Date()
-    const twoDaysAgo = addDays(now, -2)
-    const where = {
-      ...(status ? { status } : {}),
-      ...(plan ? { plan } : {}),
-      ...(search ? { email: { contains: String(search).trim() } } : {}),
-      ...(risk === 'stale' ? { OR: [{ lastActivityAt: null }, { lastActivityAt: { lt: twoDaysAgo } }] } : {}),
-      ...(risk === 'missing_phone' ? { contactPhone: null } : {}),
-      ...(risk === 'expiring_soon' ? { accessExpiresAt: { gt: now, lte: addDays(now, 7) } } : {}),
-      ...(risk === 'missing_credentials' ? { credentials: { none: {} } } : {}),
-      ...(risk === 'missing_monitor' ? { groups: { none: { role: 'monitor' } } } : {}),
-      ...(risk === 'missing_post' ? { groups: { none: { role: 'post' } } } : {}),
-    }
-
-    const since24h = addDays(now, -1)
-    const [total, users] = await Promise.all([
-      db.user.count({ where }),
-      db.user.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-        skip,
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          contactPhone: true,
-          status: true,
-          plan: true,
-          accessExpiresAt: true,
-          lastLoginAt: true,
-          lastActivityAt: true,
-          lastSupportContactAt: true,
-          supportStatus: true,
-          createdAt: true,
-          waSession: { select: { status: true, phone: true, updatedAt: true } },
-          groups: { select: { role: true } },
-          credentials: { select: { platform: true, data: true } },
-          _count: { select: { payments: true, credentials: true, messageLogs: true } },
-        },
-      }),
-    ])
-    const userIds = users.map(user => user.id)
-    const [successMap, errorMap, lastMessageMap] = await Promise.all([
-      getLogCountMap({ status: 'success', userIds }),
-      getLogCountMap({ status: 'error', since: since24h, userIds }),
-      getLogActivityMap({ userIds }),
-    ])
-
-    const running = new Set(listRunningBots())
+    const result = await adminService.listUsers({ query: req.query ?? {}, adminRole: req.admin.role })
     await writeAdminAuditLog(req, { action: 'admin.users.list', resource: 'user' })
-
-    return {
-      total,
-      page,
-      limit,
-      users: users.map(user => {
-        const groupCounts = getGroupCounts(user.groups)
-        const successCount = successMap.get(user.id) ?? 0
-        const errorCount24h = errorMap.get(user.id) ?? 0
-        const userRunning = running.has(user.id)
-        const lastMessageAt = lastMessageMap.get(user.id) ?? null
-        const effectiveLastActivityAt = resolveEffectiveLastActivity(user, lastMessageAt)
-        const riskUser = { ...user, lastActivityAt: effectiveLastActivityAt }
-        return sanitizeUser({
-          ...user,
-          groups: undefined,
-          groupCounts,
-          accessStatus: getAccessStatus(user, now),
-          botRunning: userRunning,
-          lastMessageAt,
-          effectiveLastActivityAt,
-          successCount,
-          errorCount24h,
-          credentialHealth: summarizeCredentialHealth(user.credentials),
-          credentials: undefined,
-          riskFlags: buildRiskFlags({ user: riskUser, groups: user.groups, successCount, errorCount: errorCount24h, now, running: userRunning }),
-        }, req.admin.role)
-      }),
-    }
+    return result
   })
-
-
 
 
   app.get('/system/health', async (req, reply) => {
@@ -718,6 +654,43 @@ export async function adminRoutes(app) {
     const metrics = getApiMetricsSnapshot()
     await writeAdminAuditLog(req, { action: 'admin.system.metrics.read', resource: 'apiMetrics' })
     return metrics
+  })
+
+  // Fase C/D (P0): resumo operacional para painel admin (observabilidade + go/no-go).
+  app.get('/system/observability', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const metrics = getApiMetricsSnapshot()
+    const now = new Date().toISOString()
+    const [dlqOpen, dbOk, supervisor] = await Promise.all([
+      db.paymentWebhookDlq.count({ where: { resolvedAt: null } }).catch(() => null),
+      db.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
+      getSupervisorOperationalCounters(),
+    ])
+
+    const sessionOwnerMismatchTotal = Number(supervisor.sessionOwnerMismatchTotal ?? 0)
+    const sessionCircuitBreakerAlertTotal = Number(supervisor.sessionCircuitBreakerAlertTotal ?? 0)
+
+    const alerts = []
+    if (!dbOk) alerts.push({ tone: 'critical', title: 'Banco indisponível', value: 'db query failed' })
+    if ((metrics.total5xx ?? 0) > 0) alerts.push({ tone: 'risk', title: 'Erros 5xx recentes', value: metrics.total5xx })
+    if ((metrics.uptimeSeconds ?? 0) < 300) alerts.push({ tone: 'risk', title: 'Uptime baixo (reinício recente)', value: `${metrics.uptimeSeconds}s` })
+    if ((dlqOpen ?? 0) > 0) alerts.push({ tone: 'risk', title: 'Payment DLQ pendente', value: dlqOpen })
+    if (sessionOwnerMismatchTotal > 0) alerts.push({ tone: 'risk', title: 'Shard owner mismatch detectado', value: sessionOwnerMismatchTotal })
+    if (sessionCircuitBreakerAlertTotal > 0) alerts.push({ tone: 'risk', title: 'Circuit breaker de sessão acionado', value: sessionCircuitBreakerAlertTotal })
+    if (!alerts.length) alerts.push({ tone: 'good', title: 'Sem alertas críticos', value: 'OK' })
+
+    const goNoGo = {
+      dbOk,
+      has5xx: (metrics.total5xx ?? 0) > 0,
+      paymentDlqOpen: dlqOpen ?? 0,
+      uptimeSeconds: metrics.uptimeSeconds ?? 0,
+      sessionOwnerMismatchTotal,
+      sessionCircuitBreakerAlertTotal,
+      recommended: dbOk && (metrics.total5xx ?? 0) === 0 && (dlqOpen ?? 0) === 0 && sessionCircuitBreakerAlertTotal === 0 ? 'go' : 'no-go',
+    }
+
+    await writeAdminAuditLog(req, { action: 'admin.system.observability.read', resource: 'systemObservability' })
+    return { checkedAt: now, alerts, goNoGo, api: metrics, supervisor }
   })
 
   app.get('/success/overview', async (req, reply) => {
@@ -1492,41 +1465,10 @@ export async function adminRoutes(app) {
 
   app.get('/logs', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'support:read'))) return
-
-    const { page, limit, skip } = getPagination(req.query, 30)
-    const { status = 'all', platform, userId } = req.query
-    const { from, to } = parseDateRange(req.query, 7)
-    const where = {
-      sentAt: { gte: from, lte: to },
-      ...(status !== 'all' ? { status } : {}),
-      ...(platform ? { platform: { contains: String(platform) } } : {}),
-      ...(userId ? { userId } : {}),
-    }
-
-    const [total, logs] = await Promise.all([
-      db.messageLog.count({ where }),
-      db.messageLog.findMany({
-        where,
-        orderBy: { sentAt: 'desc' },
-        take: limit,
-        skip,
-        include: { user: { select: { id: true, email: true, plan: true, contactPhone: true } } },
-      }),
-    ])
-
+    const result = await adminService.listLogs({ query: req.query ?? {}, adminRole: req.admin.role })
     await writeAdminAuditLog(req, { action: 'admin.logs.list', resource: 'messageLog' })
-
-    return {
-      total,
-      page,
-      limit,
-      logs: logs.map(log => ({
-        ...log,
-        user: sanitizeUser(log.user, req.admin.role),
-      })),
-    }
+    return result
   })
-
 
 
   app.get('/lp-content', async (req, reply) => {
@@ -1788,6 +1730,67 @@ app.get('/sessions', async (req, reply) => {
         botRunning: running.has(session.userId),
         user: sanitizeUser(session.user, req.admin.role),
       })),
+    }
+  })
+
+  // ---- DLQ do pipeline de envio (BullMQ) ----
+  //
+  // Disponível apenas quando o worker do usuário está em backend bullmq
+  // (REDIS_URL configurada). Em backend memory a DLQ é sempre vazia.
+  // Auditoria registra todas as ações destrutivas (retry/discard/purge).
+
+  app.get('/send-dlq/:userId', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:read'))) return
+    const { listDlq } = await import('../../jobs/sendDlq.js')
+    const userId = String(req.params.userId)
+    const limit = Math.min(500, Math.max(1, Number(req.query?.limit) || 100))
+    try {
+      const result = await listDlq({ redisUrl: process.env.REDIS_URL, userId, limit })
+      await writeAdminAuditLog(req, { action: 'admin.sendDlq.list', resource: 'sendDlq', resourceId: userId, after: { total: result.total } })
+      return result
+    } catch (err) {
+      return reply.code(503).send({ error: err.message })
+    }
+  })
+
+  app.post('/send-dlq/:userId/retry/:jobId', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:write'))) return
+    const { retryDlqJob } = await import('../../jobs/sendDlq.js')
+    const userId = String(req.params.userId)
+    const jobId = String(req.params.jobId)
+    try {
+      const result = await retryDlqJob({ redisUrl: process.env.REDIS_URL, userId, dlqJobId: jobId })
+      await writeAdminAuditLog(req, { action: 'admin.sendDlq.retry', resource: 'sendDlq', resourceId: `${userId}:${jobId}`, after: result })
+      return result
+    } catch (err) {
+      return reply.code(503).send({ error: err.message })
+    }
+  })
+
+  app.delete('/send-dlq/:userId/job/:jobId', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:write'))) return
+    const { discardDlqJob } = await import('../../jobs/sendDlq.js')
+    const userId = String(req.params.userId)
+    const jobId = String(req.params.jobId)
+    try {
+      const result = await discardDlqJob({ redisUrl: process.env.REDIS_URL, userId, dlqJobId: jobId })
+      await writeAdminAuditLog(req, { action: 'admin.sendDlq.discard', resource: 'sendDlq', resourceId: `${userId}:${jobId}`, after: result })
+      return result
+    } catch (err) {
+      return reply.code(503).send({ error: err.message })
+    }
+  })
+
+  app.post('/send-dlq/:userId/purge', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:write'))) return
+    const { purgeDlq } = await import('../../jobs/sendDlq.js')
+    const userId = String(req.params.userId)
+    try {
+      const result = await purgeDlq({ redisUrl: process.env.REDIS_URL, userId })
+      await writeAdminAuditLog(req, { action: 'admin.sendDlq.purge', resource: 'sendDlq', resourceId: userId, after: { removed: result.removed } })
+      return result
+    } catch (err) {
+      return reply.code(503).send({ error: err.message })
     }
   })
 }

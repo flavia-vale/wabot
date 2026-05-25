@@ -14,9 +14,11 @@ const TRAILING_URL_PUNCTUATION_RE = /[.,;!?)\]}]+$/
 const EXTRA_BLANK_LINES_RE = /[ \t]*\n[ \t]*\n[ \t\n]*/g
 const LINE_TRAILING_SPACES_RE = /[ \t]+$/gm
 const INVITE_HOST_HINT_RE = /(?:chat\.whatsapp\.com\/|whatsapp\.com\/(?:channel|invite)\/|(?:www\.)?t\.me\/|(?:www\.)?telegram\.me\/|telegram\.dog\/)/i
-const CTA_KEYWORD_RE = /\b(participe|entre|acesse|siga|junte|venha|clique|link|grupo|canal)\b/i
-const CTA_DESTINATION_RE = /\b(grupo|canal|whatsapp|telegram)\b/i
+const CTA_KEYWORD_RE = /\b(participe|entre|acesse|siga|junte|venha|clique|link|grupo|canal|conheca)\b/i
+const CTA_DESTINATION_RE = /\b(grupo|grupos|canal|canais|whatsapp|telegram)\b/i
 const TRAILING_INVITE_CTA_RE = /(?:^|[\s|•\-–—:])(?:[^\p{L}\p{N}\s]{1,6}\s*)?(?:participe|entre|acesse|siga|junte-se|venha|clique)(?:\s+\S{1,40}){0,8}\s+(?:grupo|canal|whatsapp|telegram)(?:\s+\S{1,40}){0,4}[:：\-–—|•]*\s*$/iu
+const TRAILING_HTTP_URL_RE = /https?:\/\/[^\s<>"]+[^\s<>".,;!?)]$/i
+const ALLOWED_OFFER_HOST_RE = /(?:^|\.)((?:s\.)?shopee\.com\.br|shope\.ee|amazon\.com\.br|amzn\.to|a\.co|amzn\.divulgador\.link|amzlink\.to|mercadolivre\.com\.br|mercadolibre\.com|meli\.la|mluvem\.com|magazineluiza\.com\.br|magazinevoce\.com\.br|mlz\.me)$/i
 
 function hasInviteLinkCandidate(text) {
   return INVITE_HOST_HINT_RE.test(String(text ?? ''))
@@ -55,12 +57,34 @@ function removeOrphanInviteCtas(text) {
     .join('\n')
 }
 
+function isAllowedOfferUrl(raw) {
+  try {
+    const url = new URL(String(raw ?? '').trim())
+    return ['http:', 'https:'].includes(url.protocol) && ALLOWED_OFFER_HOST_RE.test(url.hostname)
+  } catch {
+    return false
+  }
+}
+
+function removeTrailingIrrelevantUrlBlock(text) {
+  const lines = String(text ?? '').split('\n')
+  const idx = lines.findLastIndex(line => line.trim())
+  if (idx <= 0) return String(text ?? '')
+  const lastLine = lines[idx].trim()
+  if (!TRAILING_HTTP_URL_RE.test(lastLine)) return String(text ?? '')
+  if (isAllowedOfferUrl(lastLine)) return String(text ?? '')
+  const prev = lines[idx - 1]?.trim() || ''
+  if (!isInviteCtaOnlyLine(prev)) return String(text ?? '')
+  lines.splice(idx - 1, 2)
+  return lines.join('\n')
+}
+
 export function sanitizeInviteLinks(text) {
   const raw = String(text ?? '')
-  if (!hasInviteLinkCandidate(raw)) return normalizeMessageWhitespace(raw)
+  if (!hasInviteLinkCandidate(raw)) return normalizeMessageWhitespace(removeTrailingIrrelevantUrlBlock(raw))
   GROUP_INVITE_URL_RE.lastIndex = 0
   const withoutInviteLinks = raw.replace(GROUP_INVITE_URL_RE, removeInviteUrl)
-  return normalizeMessageWhitespace(removeOrphanInviteCtas(withoutInviteLinks))
+  return normalizeMessageWhitespace(removeTrailingIrrelevantUrlBlock(removeOrphanInviteCtas(withoutInviteLinks)))
 }
 
 export function normalizeBrandingCtaText(text) {

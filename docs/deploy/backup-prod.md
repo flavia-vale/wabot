@@ -9,9 +9,18 @@ SQLite (`prisma/prod.db`) usando `sqlite3 .backup`, copia o diretório
 
 ```
 wabot-prod-YYYYMMDD-HHMMSS.tar.gz
+├── manifest.json     # version, timestamp, paths originais, contagem de bytes
 ├── prod.db           # snapshot consistente do SQLite (PRAGMA integrity_check OK)
-└── auth_info/        # sessões WhatsApp (Baileys) — opcional, só se existir
+├── auth_info/        # sessões WhatsApp (Baileys) — opcional, só se existir
+└── env/
+    ├── root.env             # .env raiz (JWT_SECRET, DATABASE_URL, REDIS_URL…)
+    └── dashboard.env.local  # .env do dashboard
 ```
+
+> ⚠️ O archive contém segredos (JWT_SECRET, etc). `chmod 600` é aplicado
+> automaticamente. Se replicar para nuvem via `rclone`, garanta que o
+> bucket/remote seja privado. Para excluir os .env do backup (DR parcial
+> apenas), exporte `INCLUDE_ENV_FILES=0` antes de rodar.
 
 ## Instalação no VPS de produção
 
@@ -112,46 +121,79 @@ Edite o cron para incluir `BACKUP_RCLONE_REMOTE`:
 O script vai fazer `rclone copy` do arquivo gerado e aplicar a mesma
 política de retenção (`--min-age`) no remote.
 
-## Restauração (procedimento manual)
+## Restauração (`scripts/restore_from_backup.sh`)
 
-⚠️ Operação destrutiva — sempre pare a API antes, faça um backup do
-estado atual, e só então restaure.
+Script idempotente que executa o procedimento canônico: pre-backup
+automático do estado atual, verificação de integridade do archive,
+parada PM2, restore, religa PM2.
 
 ```bash
-# 1) Parar a API em produção
-pm2 stop api
+# Exige --confirm explícito (operação destrutiva)
+/home/deploy/wabot/scripts/restore_from_backup.sh \
+  /home/deploy/wabot-backups/wabot-prod-20260601-060000.tar.gz \
+  --confirm
+```
 
-# 2) Backup do estado atual antes de mexer
-cp /home/deploy/wabot/prisma/prod.db /home/deploy/wabot/prisma/prod.db.broken.$(date +%s)
-tar -czf /tmp/auth_info_pre_restore_$(date +%s).tar.gz -C /home/deploy/BOTinho-shared auth_info
+O script:
+1. Verifica integridade do `.db` no archive antes de tocar em qualquer arquivo
+2. Salva pre-backup em `/tmp/wabot-pre-restore-<ts>/` (db, auth_info, .env)
+3. Para `pm2 stop api bot-supervisor`
+4. Restaura `prod.db`, `auth_info/`, `.env` (raiz + dashboard)
+5. `pm2 start` dos mesmos apps
+6. Imprime caminho do pre-backup para rollback manual rápido
 
-# 3) Extrair o backup desejado para uma pasta temporária
-mkdir -p /tmp/wabot-restore
-tar -xzf /home/deploy/wabot-backups/wabot-prod-YYYYMMDD-HHMMSS.tar.gz -C /tmp/wabot-restore
+Knobs úteis:
 
-# 4) Restaurar
-cp /tmp/wabot-restore/prod.db /home/deploy/wabot/prisma/prod.db
+| Env             | Default                          | Efeito |
+|-----------------|----------------------------------|--------|
+| `RESTORE_ENV`   | `1`                              | `0` preserva `.env` atual (use quando só quer voltar DB) |
+| `SKIP_PM2`      | `0`                              | `1` pula stop/start (use em DR onde PM2 ainda não está montado) |
+| `PM2_APPS`      | `api bot-supervisor`             | Apps a parar/reiniciar |
+| `PROD_DB`       | `$PROD_DIR/prisma/prod.db`       | Destino do DB |
+| `AUTH_INFO_DIR` | `/home/deploy/BOTinho-shared/auth_info` | Destino de auth_info |
+
+### Rollback rápido (algo deu errado no restore)
+
+O pre-backup que o script imprime fica em `/tmp/wabot-pre-restore-<ts>/`.
+Para reverter:
+
+```bash
+PRE=/tmp/wabot-pre-restore-20260601-150000   # caminho do log do script
+pm2 stop api bot-supervisor
+cp "$PRE/prod.db.before-restore" /home/deploy/wabot/prisma/prod.db
 rm -rf /home/deploy/BOTinho-shared/auth_info
-cp -a /tmp/wabot-restore/auth_info /home/deploy/BOTinho-shared/auth_info
-
-# 5) Religar
-pm2 start api
-pm2 logs api --lines 50 --nostream
-
-# 6) Limpeza
-rm -rf /tmp/wabot-restore
+tar -xzf "$PRE/auth_info.before-restore.tar.gz" -C /home/deploy/BOTinho-shared/
+cp "$PRE/root.env.before-restore" /home/deploy/wabot/.env
+pm2 start api bot-supervisor
 ```
 
-## Verificação periódica
+## Verificação periódica (`scripts/verify_backup.sh`)
 
-Pelo menos 1x por mês, faça um teste de restauração em um diretório
-isolado:
+Cron-safe, não-destrutivo. Por default checa o backup MAIS RECENTE em
+`BACKUP_DIR`. Bom para alertar quando o cron de backup parou ou quando
+o `.db` corrompeu.
 
 ```bash
-tar -xzf /home/deploy/wabot-backups/wabot-prod-$(ls -t /home/deploy/wabot-backups | head -1) -C /tmp/restore-test
-sqlite3 /tmp/restore-test/prod.db "SELECT COUNT(*) FROM User; PRAGMA integrity_check;"
-ls /tmp/restore-test/auth_info | head
-rm -rf /tmp/restore-test
+# Verifica o último backup
+/home/deploy/wabot/scripts/verify_backup.sh
+
+# Ou um arquivo específico
+/home/deploy/wabot/scripts/verify_backup.sh /caminho/arquivo.tar.gz
 ```
 
-Se a query retornar uma contagem coerente e `ok`, o backup está válido.
+O script falha (exit ≠ 0) se:
+- Arquivo mais novo tem >`MAX_AGE_HOURS` (default 26h — cobre cron diário com folga)
+- `tar -xzf` falhou (archive corrompido)
+- `PRAGMA integrity_check` não retornou `ok`
+- Tabela `User`, `WaSession` ou `AdminAuditLog` ausente
+- `User.count < MIN_USER_COUNT`
+- `env/root.env` ausente ou sem `JWT_SECRET` (a menos que `REQUIRE_ENV_FILES=0`)
+
+Rodar como cron logo após o backup:
+
+```cron
+0 6 * * * /home/deploy/wabot/scripts/backup_prod.sh >> /home/deploy/wabot-backups/backup.log 2>&1
+30 6 * * * /home/deploy/wabot/scripts/verify_backup.sh >> /home/deploy/wabot-backups/verify.log 2>&1 || echo "VERIFY FALHOU" | mail -s "wabot backup falhou" voce@exemplo.com
+```
+
+(A linha do `mail` é opcional — adapte para o canal de alerta que você usa.)
