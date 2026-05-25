@@ -1,17 +1,26 @@
 export function pruneDedupStore(store, now = Date.now(), windowMs = 300_000) {
-  const safeWindow = Math.max(0, Number(windowMs) || 0)
+  // Aceita número (mesma janela pra msgIds e links) OU objeto
+  // { msgIds, links } pra janelas independentes — necessário porque o dedup
+  // de URL→destino precisa de janela longa (fonte reposta a mesma oferta
+  // depois de 5 min), enquanto msgIds só protege contra redelivery do WA.
+  const msgIdWindow = Math.max(0, Number(
+    typeof windowMs === 'object' && windowMs !== null ? windowMs.msgIds : windowMs,
+  ) || 0)
+  const linkWindow = Math.max(0, Number(
+    typeof windowMs === 'object' && windowMs !== null ? windowMs.links : windowMs,
+  ) || 0)
   const msgIds = Array.isArray(store?.msgIds) ? store.msgIds : []
   const links = store?.links && typeof store.links === 'object' ? store.links : {}
 
   store.msgIds = msgIds.filter(entry => {
     const ts = Number(entry?.ts ?? 0)
-    return Number.isFinite(ts) && now - ts < safeWindow
+    return Number.isFinite(ts) && now - ts < msgIdWindow
   })
 
   store.links = links
   for (const key of Object.keys(store.links)) {
     const ts = Number(store.links[key] ?? 0)
-    if (!Number.isFinite(ts) || now - ts >= safeWindow) delete store.links[key]
+    if (!Number.isFinite(ts) || now - ts >= linkWindow) delete store.links[key]
   }
 
   return store

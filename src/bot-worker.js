@@ -751,8 +751,17 @@ async function startBot() {
     await markInterruptedSendLogs()
   }
 
-  const dedupeWindowMs = 300_000
-  const dedup = pruneDedupStore(loadDedup(), Date.now(), dedupeWindowMs)
+  // Duas janelas: msgIds (curta) protege contra redelivery do WhatsApp do
+  // mesmo msg.key.id; links (longa) protege contra a fonte republicar a
+  // mesma URL no destino algum tempo depois. Caso real: mesmo amzn.to/4rUx7Gd
+  // convertido 3x em 52min porque o canal-fonte reposta a mesma oferta.
+  const dedupeWindowMs = Math.max(1_000, Number(process.env.DEDUP_MSGID_WINDOW_MS) || 300_000)
+  const linkDedupWindowMs = Math.max(dedupeWindowMs, Number(process.env.DEDUP_LINK_WINDOW_MS) || 24 * 60 * 60_000)
+  const dedup = pruneDedupStore(
+    loadDedup(),
+    Date.now(),
+    { msgIds: dedupeWindowMs, links: linkDedupWindowMs },
+  )
   scheduleDedupSave(dedup)
 
   setLifecycleState(WA_LIFECYCLE.INITIALIZING, { reason: 'start_bot' })
@@ -1151,7 +1160,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       for (const destJid of destinations) {
         const dedupSubject = primary.url || `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
         const key = `${destJid}:${dedupSubject}`
-        if (dedup.links[key] && Date.now() - dedup.links[key] < dedupeWindowMs) {
+        if (dedup.links[key] && Date.now() - dedup.links[key] < linkDedupWindowMs) {
           await recordSkippedMessage({ reason: 'skip:dedup_recent_link', platform: primary.platform, originalUrl: primary.url, convertedUrl: primary.converted })
           logger.info({ destJid }, 'Duplicata ignorada'); continue
         }
@@ -1301,7 +1310,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       if (msgTs && msgTs < cutoff) continue
 
       const now = Date.now()
-      pruneDedupStore(dedup, now, dedupeWindowMs)
+      pruneDedupStore(dedup, now, { msgIds: dedupeWindowMs, links: linkDedupWindowMs })
       const dedupKey = buildIncomingDedupKey(msg)
       if (dedupKey && hasRecentDedupEntry(dedup.msgIds, dedupKey, now, dedupeWindowMs)) {
         logger.info({ dedupKey, jid: msg.key.remoteJid }, 'Mensagem duplicada ignorada')
