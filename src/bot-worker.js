@@ -1074,11 +1074,12 @@ async function startBotInner() {
 
   sock.ev.on('creds.update', saveCreds)
 
-  // Pairing mode: requisitar o código depois que o noise handshake completar.
-  // Baileys 6.7.16 emite connection.update({ connection: 'connecting' }) quando
-  // o handshake termina; só então sock.requestPairingCode() consegue enviar a
-  // IQ. Chamar antes provoca "Connection Closed" — os próprios exemplos do
-  // Baileys usam um delay de 3s pelo mesmo motivo.
+  // Pairing mode: requisitar o código depois que WA emitir o primeiro 'qr'
+  // (sinal de que noise handshake + auth challenge terminaram e o servidor
+  // está pronto pra aceitar a IQ link_code_companion_reg). Esperar só o
+  // 'connecting' é cedo demais — auth challenge ainda não rodou, e a IQ
+  // de pairing é rejeitada com "Connection Closed". O exemplo canônico do
+  // Baileys faz `if (qr && !creds.registered) requestPairingCode`.
   if (pairingState.isActive()) {
     const { requestId, phone } = pairingState.snapshot()
     ;(async () => {
@@ -1086,33 +1087,45 @@ async function startBotInner() {
         if (sock.authState?.creds?.registered) {
           throw new Error('Sessão já está autenticada. Use "Esquecer número salvo" antes de parear por número.')
         }
-        // Aguarda primeiro connection.update (handshake completo) com cap de 15s.
-        await new Promise((resolve, reject) => {
-          const onUpdate = ({ connection }) => {
-            if (connection === 'connecting' || connection === 'open') {
+        // Aguarda 'qr' (= WA pronto pra pairing) OU 'open' (= já registrado)
+        // OU 'close' (= erro antes de chegar lá). Cap em 25s.
+        const ready = await new Promise((resolve, reject) => {
+          const onUpdate = ({ connection, qr, lastDisconnect }) => {
+            if (qr) {
               sock.ev.off('connection.update', onUpdate)
-              resolve()
+              resolve({ via: 'qr' })
+            } else if (connection === 'open') {
+              sock.ev.off('connection.update', onUpdate)
+              resolve({ via: 'open' })
+            } else if (connection === 'close') {
+              sock.ev.off('connection.update', onUpdate)
+              const code = lastDisconnect?.error?.output?.statusCode
+              reject(new Error(`Socket fechado antes de chegar pronto para pairing (code=${code ?? 'unknown'})`))
             }
           }
           sock.ev.on('connection.update', onUpdate)
           setTimeout(() => {
             sock.ev.off('connection.update', onUpdate)
-            reject(new Error('Socket não completou handshake em 15s'))
-          }, 15_000)
+            reject(new Error('WA não respondeu em 25s ao iniciar pareamento'))
+          }, 25_000)
         })
         if (!pairingState.ownsRequest(requestId)) return
+        if (ready.via === 'open') {
+          throw new Error('Sessão já está conectada — não é possível parear por número agora.')
+        }
 
+        logger.info({ requestId }, 'WA pronto para pairing (qr emitido); solicitando código')
         const code = await Promise.race([
           sock.requestPairingCode(phone),
           new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout interno (20s) ao gerar pairing code no WhatsApp')), 20_000)),
         ])
         if (!pairingState.ownsRequest(requestId)) return
         pairingState.markCode(code)
-        logger.info({ requestId }, 'Pairing code recebido do WhatsApp')
+        logger.info({ requestId, codeLen: code?.length }, 'Pairing code recebido do WhatsApp')
         if (process.send) process.send({ type: 'pairingCode', requestId, code })
       } catch (err) {
         if (!pairingState.ownsRequest(requestId)) return
-        logger.error({ err: err.message, requestId }, 'Falha ao solicitar pairing code no socket WA')
+        logger.error({ err: err.message, stack: err.stack, requestId }, 'Falha ao solicitar pairing code no socket WA')
         pairingState.clear()
         if (process.send) process.send({ type: 'pairingCode', requestId, error: err.message })
       }
