@@ -38,6 +38,7 @@ import { applyVariation } from './core/copyVariation.js'
 import { mutate as mutateChannelImage } from './core/imageMutation.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
+import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess } from './billing/plans.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
@@ -131,6 +132,15 @@ function normalizeJidForMatch(jid) {
 let activeSock = null
 let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
 let shuttingDown = false
+
+// Pairing-by-phone-number mode. Ativado pela IPC 'requestPairingCode'.
+// Enquanto active=true:
+//   - connection.update NÃO emite IPC 'qr' (o usuário escolheu pairing, não QR)
+//   - connection.update NÃO agenda auto-restart em close (não-loggedOut)
+//   - startBot, logo após makeWASocket, chama sock.requestPairingCode(phone)
+//     ANTES da emissão de QR fazer o server WA comitar no fluxo errado.
+// Limpa em connection==='open' (sucesso) ou em erro/timeout.
+const pairingState = createPairingState({ windowMs: PAIRING_WINDOW_MS_DEFAULT })
 let sessionErrorTimestamps = []
 let sessionRecoveryLastAt = 0
 let sessionRecoveryInFlight = false
@@ -1047,6 +1057,34 @@ async function startBot() {
 
   sock.ev.on('creds.update', saveCreds)
 
+  // Pairing mode: requisitar o código IMEDIATAMENTE após o socket existir,
+  // antes que connection.update emita o primeiro QR e o server WA comite no
+  // fluxo de QR. Baileys 6.7.16 requer creds.registered === false; isso é
+  // garantido porque o handler IPC limpou AUTH_DIR antes de chamar startBot().
+  if (pairingState.isActive()) {
+    const { requestId, phone } = pairingState.snapshot()
+    ;(async () => {
+      try {
+        if (sock.authState?.creds?.registered) {
+          throw new Error('Sessão já está autenticada. Use "Esquecer número salvo" antes de parear por número.')
+        }
+        const code = await Promise.race([
+          sock.requestPairingCode(phone),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout interno (20s) ao gerar pairing code no WhatsApp')), 20_000)),
+        ])
+        if (!pairingState.ownsRequest(requestId)) return
+        pairingState.markCode(code)
+        logger.info({ requestId }, 'Pairing code recebido do WhatsApp')
+        if (process.send) process.send({ type: 'pairingCode', requestId, code })
+      } catch (err) {
+        if (!pairingState.ownsRequest(requestId)) return
+        logger.error({ err: err.message, requestId }, 'Falha ao solicitar pairing code no socket WA')
+        pairingState.clear()
+        if (process.send) process.send({ type: 'pairingCode', requestId, error: err.message })
+      }
+    })()
+  }
+
   // PR-5.A: Baileys emite stream:error em rate-overlimit / forbidden /
   // not-authorized. Gravar uma marca rate_limited em FollowLog faz o
   // followGuard pausar follows por 1h para a sessão.
@@ -1077,7 +1115,9 @@ async function startBot() {
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
       setLifecycleState(WA_LIFECYCLE.AUTHENTICATING, { reason: 'qr_generated' })
-      if (process.send) process.send({ type: 'qr', data: qr })
+      // Em pairing mode, NÃO vazar o QR pra UI — o usuário pediu código,
+      // não scan. Baileys ainda gera QR internamente como fallback, ignoramos.
+      if (!pairingState.suppressQrEmission() && process.send) process.send({ type: 'qr', data: qr })
 await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date() })
     }
 
@@ -1085,6 +1125,7 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       setLifecycleState(WA_LIFECYCLE.READY, { reason: 'connection_open' })
       activeSock = sock
       pendingSock = null
+      pairingState.clear()
       const phone = sock.user?.id?.split(':')[0] ?? null
       if (process.send) process.send({ type: 'status', data: 'connected', phone })
 await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: null })
@@ -1096,6 +1137,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       setLifecycleState(WA_LIFECYCLE.DISCONNECTED, { reason: 'connection_close' })
       const code = new Boom(lastDisconnect?.error)?.output?.statusCode
       const isLoggedOut = code === DisconnectReason.loggedOut
+      const wasPairing = pairingState.suppressAutoRestart()
       activeSock = null
       pendingSock = null
       if (process.send) process.send({ type: 'status', data: 'disconnected' })
@@ -1104,6 +1146,11 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // Sessão revogada/expirada — limpar auth para que próximo start gere QR limpo
         await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
         logger.info('Sessão encerrada pelo servidor WA — auth_info limpo automaticamente')
+      } else if (wasPairing) {
+        // Em pairing mode, NÃO auto-reiniciar: isso destruiria o socket que
+        // segura o código que o usuário está digitando. Se o usuário falhar
+        // em colar o código a tempo, a UI chamará novamente o endpoint.
+        logger.warn({ code }, 'WA close durante pairing — não reiniciando automaticamente (janela do usuário)')
       } else {
         logger.warn({ code }, 'WA conexão fechada, agendando restart automático em 5s')
         setTimeout(startBot, 5_000)
@@ -1782,37 +1829,52 @@ process.on('message', async msg => {
   }
 
   if (msg?.type === 'requestPairingCode') {
-    let attempts = 0
-    const tryRequest = async () => {
-      const sock = pendingSock || activeSock
-      if (!sock && attempts < 60) {
-        attempts++
-        setTimeout(tryRequest, 500)
-        return
-      }
-      if (!sock) {
-        logger.warn({ requestId: msg.requestId, attempts }, 'Pairing code indisponível: socket não pronto')
-        process.send({ type: 'pairingCode', requestId: msg.requestId, error: 'Bot não disponível' })
-        return
-      }
-      try {
-        if (pendingSock && lifecycleState === WA_LIFECYCLE.INITIALIZING) {
-          logger.info({ requestId: msg.requestId }, 'Aguardando estado AUTHENTICATING antes de solicitar pairing code')
-          await new Promise(resolve => setTimeout(resolve, 1200))
-        }
-        logger.info({ requestId: msg.requestId, attempts, using: pendingSock ? 'pendingSock' : 'activeSock' }, 'Solicitando pairing code ao WhatsApp')
-        const code = await Promise.race([
-          sock.requestPairingCode(msg.phone),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout interno ao gerar pairing code no WhatsApp')), 20000)),
-        ])
-        logger.info({ requestId: msg.requestId }, 'Pairing code recebido do WhatsApp')
-        process.send({ type: 'pairingCode', requestId: msg.requestId, code })
-      } catch (err) {
-        logger.error({ err, requestId: msg.requestId }, 'Falha ao solicitar pairing code no socket WA')
-        process.send({ type: 'pairingCode', requestId: msg.requestId, error: err.message })
-      }
+    const requestId = msg.requestId
+    const phone = msg.phone
+    if (!phone) {
+      process.send({ type: 'pairingCode', requestId, error: 'Telefone obrigatório' })
+      return
     }
-    tryRequest()
+    // Fluxo atômico de pairing:
+    //   1. Tear-down do socket atual (se houver) — pairing exige fresh socket
+    //   2. Limpar AUTH_DIR para garantir creds.registered === false
+    //   3. setActive(...) (suprime QR IPC + auto-restart em close; agenda expiry)
+    //   4. Chamar startBot() — o trigger em startBot pede o código logo após
+    //      makeWASocket e devolve via IPC 'pairingCode'.
+    try {
+      if (pairingState.isActive()) {
+        logger.warn({ existing: pairingState.snapshot().requestId, newRequestId: requestId }, 'Pairing já em andamento — substituindo')
+      }
+      try { activeSock?.end?.(undefined) } catch {}
+      try { pendingSock?.end?.(undefined) } catch {}
+      try { activeSock?.ws?.close?.() } catch {}
+      try { pendingSock?.ws?.close?.() } catch {}
+      activeSock = null
+      pendingSock = null
+
+      await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
+
+      pairingState.setActive({
+        phone,
+        requestId,
+        onExpire: (expired) => {
+          logger.warn({ requestId: expired.requestId }, 'Pairing window expirou sem código')
+          if (process.send) process.send({ type: 'pairingCode', requestId: expired.requestId, error: 'Tempo esgotado aguardando código de pareamento' })
+        },
+      })
+
+      logger.info({ requestId }, 'Iniciando socket fresh em pairing mode')
+      startBot().catch(err => {
+        if (!pairingState.ownsRequest(requestId)) return
+        logger.error({ err: err.message, requestId }, 'startBot falhou durante pairing')
+        pairingState.clear()
+        if (process.send) process.send({ type: 'pairingCode', requestId, error: `Falha ao iniciar sessão: ${err.message}` })
+      })
+    } catch (err) {
+      logger.error({ err: err.message, requestId }, 'Erro inesperado no handler de pairing')
+      pairingState.clear()
+      if (process.send) process.send({ type: 'pairingCode', requestId, error: err.message })
+    }
   }
 
   if (msg?.type === 'metrics') {
