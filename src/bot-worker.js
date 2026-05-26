@@ -862,7 +862,8 @@ async function processSendJob(job) {
 
     for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt++) {
       try {
-        if (!activeSock) throw new Error('Bot não conectado')
+        const sockForAttempt = activeSock
+        if (!sockForAttempt) throw new Error('Bot não conectado')
         if (payload === null) {
           if (typeof job.buildPayload === 'function') payload = await job.buildPayload()
           else payload = job.payload
@@ -870,11 +871,11 @@ async function processSendJob(job) {
         if (payload === undefined) throw new Error('Invalid send job: payload/buildPayload ausente')
         await waitDestinationRateLimit(job.destJid)
         if (SMART_DELAY_TYPING_ENABLED && job.typingDelayMs > 0 && !job.skipTyping) {
-          await Promise.resolve(activeSock.sendPresenceUpdate?.('composing', job.destJid)).catch(() => {})
+          await Promise.resolve(sockForAttempt.sendPresenceUpdate?.('composing', job.destJid)).catch(() => {})
           await sleep(job.typingDelayMs)
-          await Promise.resolve(activeSock.sendPresenceUpdate?.('paused', job.destJid)).catch(() => {})
+          await Promise.resolve(sockForAttempt.sendPresenceUpdate?.('paused', job.destJid)).catch(() => {})
         }
-        await sendPreparedPayload({ sock: activeSock, job, payload })
+        await sendPreparedPayload({ sock: sockForAttempt, job, payload })
         const finishedAt = Date.now()
         lastSendByDest.set(job.destJid, finishedAt)
         logger.info({ destJid: job.destJid, platforms: job.platforms, attempt, type: job.type }, 'Mensagem enviada')
@@ -898,7 +899,7 @@ async function processSendJob(job) {
         if (job.plan === 'basic') {
           adSendCount++
           if (adSendCount % 50 === 0) {
-            await activeSock.sendMessage(job.destJid, { text: AD_TEXT }).catch(() => {})
+            await sockForAttempt.sendMessage(job.destJid, { text: AD_TEXT }).catch(() => {})
           }
         }
         return
