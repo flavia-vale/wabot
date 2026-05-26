@@ -160,7 +160,16 @@ export async function sessionRoutes(app) {
     const normalizedResult = normalizePairingPhone(phone)
     if (!normalizedResult.ok) return reply.code(400).send({ error: normalizedResult.message })
     const normalized = normalizedResult.phone
-    if (!(await isRunning(userId))) return reply.code(400).send({ error: 'Bot não está rodando' })
+    // O worker recicla o socket + limpa AUTH_DIR atomicamente ao receber a IPC
+    // 'requestPairingCode', então só precisamos garantir que o processo worker
+    // esteja vivo pra receber a mensagem.
+    if (!(await isRunning(userId))) {
+      await startBot(userId)
+      // Pequena espera pro fork concluir e o handler IPC estar registrado.
+      // requestWithTimeout no manager retorna 'Bot não está rodando' se chegar
+      // antes do bots.set(userId, …); 600ms é folga sobre o tempo típico de fork.
+      await new Promise(r => setTimeout(r, 600))
+    }
     try {
       const code = await requestPairingCode(userId, normalized)
       return { code }
