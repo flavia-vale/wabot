@@ -23,7 +23,10 @@ export const TRACKING_EVENTS = {
   DIAGNOSTIC_FORM_SUBMITTED: 'diagnostic_form_submitted',
   DIAGNOSTIC_CTA_CLICKED: 'diagnostic_cta_clicked',
   COMPARISON_CTA_CLICK: 'comparison_cta_click',
+  PARTNER_FORM_SUBMIT: 'partner_form_submit',
+  PARTNER_FORM_VALIDATION_BLOCKED: 'partner_form_validation_blocked',
 }
+
 
 export const PROMPT_EXCLUDED_PATH_PREFIXES = [
   '/login',
