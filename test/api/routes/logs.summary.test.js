@@ -44,11 +44,11 @@ test('GET /summary agrega contagens por categoria de errorMsg', async (t) => {
   })
 
   await Promise.all([
+    // Sucesso com 2 repostas agregadas (dedupHits=2) — contam como 2 dedups.
+    seedLog(userId, { status: 'success', dedupHits: 2 }),
     seedLog(userId, { status: 'success' }),
-    seedLog(userId, { status: 'success' }),
-    seedLog(userId, { status: 'skipped', errorMsg: 'skip:dedup_recent_link', destGroup: 'skipped' }),
-    seedLog(userId, { status: 'skipped', errorMsg: 'skip:dedup_recent_link', destGroup: 'skipped' }),
-    seedLog(userId, { status: 'skipped', errorMsg: 'skip:dedup_recent_link_global', destGroup: 'skipped' }),
+    // Linha fallback de dedup com 1 reposta agregada — conta como 1 + 1 = 2.
+    seedLog(userId, { status: 'skipped', errorMsg: 'skip:dedup_recent_link', destGroup: 'skipped', dedupHits: 1 }),
     seedLog(userId, { status: 'skipped', errorMsg: 'skip:blocked_keyword', destGroup: 'skipped' }),
     seedLog(userId, { status: 'skipped', errorMsg: 'skip:title_mismatch', destGroup: 'skipped' }),
     seedLog(userId, { status: 'error', errorMsg: 'timeout:send:120999@newsletter' }),
@@ -64,7 +64,8 @@ test('GET /summary agrega contagens por categoria de errorMsg', async (t) => {
 
   assert.equal(body.period, '7d')
   assert.equal(body.counts.success, 2)
-  assert.equal(body.counts.skippedDedup, 3)
+  // 2 (dedupHits do sucesso) + 1+1 (linha fallback com dedupHits=1) = 4.
+  assert.equal(body.counts.skippedDedup, 4)
   assert.equal(body.counts.skippedConfig, 2)
   assert.equal(body.counts.timeoutTotal, 2)
   assert.equal(body.counts.errorOther, 2)
@@ -73,12 +74,11 @@ test('GET /summary agrega contagens por categoria de errorMsg', async (t) => {
   // deliveryRate = success / (success + timeout + errorOther) = 2 / (2+2+2) = 0.333...
   assert.ok(body.deliveryRate > 0.33 && body.deliveryRate < 0.34)
 
-  // top sources: temos 7 mensagens do mesmo sourceGroup (sucessos + dedup);
-  // os outros 5 (config, timeout, queue_full, baileys, queued) também usam
-  // o mesmo sourceGroup. Deve aparecer 1 fonte com sent=2 + blocked=3.
+  // top sources: mesma source para todos. sent=2 (sucessos), blocked=4
+  // (2 dedupHits do sucesso + 1+1 da linha fallback).
   assert.equal(body.topSources.length, 1)
   assert.equal(body.topSources[0].sent, 2)
-  assert.equal(body.topSources[0].blocked, 3)
+  assert.equal(body.topSources[0].blocked, 4)
 })
 
 test('GET /summary respeita período (today só pega hoje)', async (t) => {
