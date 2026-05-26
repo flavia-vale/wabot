@@ -40,7 +40,6 @@ export default function DashboardPage() {
   const qrRef = useRef(null)
   const pairingCodeRef = useRef('')
 
-  const [showPairingInput, setShowPairingInput] = useState(false)
   const [pairingPhone, setPairingPhone] = useState('')
   const [pairingCode, setPairingCode] = useState('')
   const [connectMethod, setConnectMethod] = useState('qr')
@@ -207,7 +206,11 @@ export default function DashboardPage() {
         const s = await api.sessionStatusFast()
         if (!active) return
         setStatus(s)
-        if (s.running && s.status === 'connecting') openWS().catch(() => setSocketState('error'))
+        // Abre WS apenas no fluxo QR. Em pairing, o usuário acompanha a
+        // conexão pelo polling de status (não há QR para receber via WS).
+        if (s.running && s.status === 'connecting' && connectMethod === 'qr') {
+          openWS().catch(() => setSocketState('error'))
+        }
       } catch (err) {
         if (active) setStatusError(err.message || STATUS_ERROR_MESSAGE)
       } finally {
@@ -223,7 +226,7 @@ export default function DashboardPage() {
       if (qrPollingRef.current) clearInterval(qrPollingRef.current)
       wsRef.current?.close()
     }
-  }, [openWS])
+  }, [openWS, connectMethod])
 
 
 
@@ -281,7 +284,6 @@ export default function DashboardPage() {
     setFeedback('')
     setStatusError('')
     setWsErrorMessage('')
-    setShowPairingInput(false)
     setConnectMethod('qr')
     setPairingCode('')
     setQrWaitElapsed(0)
@@ -342,40 +344,35 @@ export default function DashboardPage() {
 
   async function handlePairingSubmit(e) {
     e.preventDefault()
+    if (loading) return
     if (!pairingPhone.trim()) return
     setError('')
     setFeedback('')
     setStatusError('')
-    if (loading) return
+    setWsErrorMessage('')
     setLoading(true)
     setActionLoading('pairing')
     setConnectMethod('pairing')
+    setQr(null)
+    setQrWaitElapsed(0)
     trackTelemetry({ stage: 'authenticating', event: 'pairing_request' })
     try {
-      let activeSession = status
-      if (!status?.running) {
-        await api.sessionStart().catch(async (err) => {
-          if (err?.status === 409) return
-          throw err
-        })
-        activeSession = await waitForRunningSession()
-      }
-
-      if (!activeSession?.running) {
-        throw new Error('Não conseguimos iniciar o serviço do WhatsApp para gerar o código. Tente novamente em alguns segundos.')
-      }
-
+      // Backend (POST /api/session/pairing-code) faz o fluxo atômico:
+      //   auto-start worker se necessário → tear-down socket → rm AUTH_DIR
+      //   → setActive(pairing) → sock.requestPairingCode(phone).
+      // Frontend não precisa orquestrar sessionStart/waitForRunning aqui.
+      // Também NÃO abrimos WS de QR — pairing usa o status polling de 5s
+      // (useEffect de status?.status === 'connecting') pra detectar 'connected'.
       const { code } = await api.sessionPairingCode(pairingPhone.trim())
       setPairingCode(code)
-      setQrWaitElapsed(0)
-      setFeedback('Código de pareamento gerado.')
-      trackTelemetry({ stage: 'initializing', event: 'service_start_ok' })
-      trackTelemetry({ stage: 'authenticating', event: 'qr_requested' })
-      // no fluxo de pairing, evitamos abrir WS de QR imediatamente para nao disputar handshake
+      setFeedback('Código gerado. Digite-o no WhatsApp: Configurações → Dispositivos vinculados → Vincular pelo número.')
+      trackTelemetry({ stage: 'authenticating', event: 'pairing_code_received' })
+      // Força refresh do status pra UI saber que o worker subiu.
+      await fetchStatus()
     } catch (err) {
       setError(err.message)
-      toast.error(err.message, 'Falha na conexão')
-      if (!status?.running) await fetchStatus()
+      toast.error(err.message, 'Falha ao gerar código')
+      trackTelemetry({ stage: 'authenticating', event: 'pairing_failed', detail: err.message })
     } finally {
       setLoading(false)
       setActionLoading('')
@@ -393,7 +390,6 @@ export default function DashboardPage() {
       await api.sessionStop()
       setQr(null)
       setPairingCode('')
-      setShowPairingInput(false)
       wsRef.current?.close()
       await fetchStatus()
       setFeedback('Bot desligado. Para voltar, gere um novo QR Code ou código de pareamento.')
@@ -453,7 +449,6 @@ export default function DashboardPage() {
       await api.sessionForget()
       setQr(null)
       setPairingCode('')
-      setShowPairingInput(false)
       wsRef.current?.close()
       await fetchStatus()
       setFeedback('Sessão removida com sucesso. Conecte novamente por QR Code ou código de pareamento para usar o bot.')
@@ -672,22 +667,91 @@ export default function DashboardPage() {
 
       {pairingCode && !isConnected && (
         <div className="bg-white rounded-2xl shadow p-6 mb-4 flex flex-col items-center gap-3">
-          <p className="text-sm font-semibold text-gray-700">Código de pareamento</p>
-          <p className="text-4xl font-mono font-bold tracking-widest text-green-600">{pairingCode}</p>
+          <p className="text-sm font-semibold text-gray-700">Seu código de pareamento</p>
+          <p className="text-4xl font-mono font-bold tracking-widest text-green-600" aria-label={`Código: ${pairingCode.split('').join(' ')}`}>{pairingCode}</p>
           <button onClick={copyPairingCode} className="text-sm text-blue-700 underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">Copiar código</button>
-          <p className="text-xs text-gray-500 text-center">No WhatsApp: <strong>Configurações → Dispositivos vinculados → Vincular pelo número</strong></p>
+          <div className="text-center text-xs text-gray-500">
+            <p>No WhatsApp: <strong>Configurações → Dispositivos vinculados → Vincular pelo número</strong></p>
+            <p className="mt-1">O código expira em ~60s. Se não conseguir, gere um novo abaixo.</p>
+          </div>
+          <div className="flex flex-wrap gap-2 justify-center">
+            <button
+              type="button"
+              onClick={() => handlePairingSubmit({ preventDefault: () => {} })}
+              disabled={loading || !pairingPhone}
+              className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+            >
+              {actionLoading === 'pairing' ? 'Gerando...' : 'Gerar novo código'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setPairingCode(''); setConnectMethod('qr'); setError('') }}
+              disabled={loading}
+              className="text-sm bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2"
+            >
+              Voltar para QR Code
+            </button>
+          </div>
         </div>
       )}
 
-      {!isRunning && !showPairingInput && !statusLoading && !isAwaitingConnectStart && (
+      {!isRunning && !statusLoading && !isAwaitingConnectStart && !pairingCode && (
         <div className="flex flex-col gap-4">
           <div className="mx-auto w-full max-w-xl">
-            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm text-center">
-              <h3 className="font-semibold text-gray-700">Escaneie o QR Code abaixo para conectar seu WhatsApp</h3>
-              <p className="mt-1 text-xs text-gray-500">Abra o WhatsApp no celular e mantenha esta tela aberta até finalizar.</p>
-              <button onClick={() => handleQRConnect('connect')} disabled={loading} className="mt-4 w-full bg-green-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-green-700 disabled:opacity-50 transition flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
-                <span aria-hidden="true">📷</span>{actionLoading === 'connect' ? 'Conectando...' : 'Gerar QR Code'}
-              </button>
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div role="tablist" aria-label="Método de conexão" className="mb-4 flex gap-2 rounded-xl bg-gray-100 p-1">
+                <button
+                  role="tab"
+                  aria-selected={connectMethod === 'qr'}
+                  onClick={() => { setConnectMethod('qr'); setError('') }}
+                  disabled={loading}
+                  className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 ${connectMethod === 'qr' ? 'bg-white text-green-700 shadow' : 'text-gray-600 hover:bg-white/60'}`}
+                >
+                  <span aria-hidden="true">📷 </span>QR Code
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={connectMethod === 'pairing'}
+                  onClick={() => { setConnectMethod('pairing'); setError('') }}
+                  disabled={loading}
+                  className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 ${connectMethod === 'pairing' ? 'bg-white text-blue-700 shadow' : 'text-gray-600 hover:bg-white/60'}`}
+                >
+                  <span aria-hidden="true">📱 </span>Número de celular
+                </button>
+              </div>
+
+              {connectMethod === 'qr' ? (
+                <div className="text-center">
+                  <h3 className="font-semibold text-gray-700">Escaneie o QR Code para conectar seu WhatsApp</h3>
+                  <p className="mt-1 text-xs text-gray-500">Abra o WhatsApp no celular e mantenha esta tela aberta até finalizar.</p>
+                  <button onClick={() => handleQRConnect('connect')} disabled={loading} className="mt-4 w-full bg-green-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-green-700 disabled:opacity-50 transition flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
+                    <span aria-hidden="true">📷</span>{actionLoading === 'connect' ? 'Conectando...' : 'Gerar QR Code'}
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handlePairingSubmit} className="flex flex-col gap-3">
+                  <h3 className="font-semibold text-gray-700">Conectar pelo número do WhatsApp</h3>
+                  <p className="text-xs text-gray-500">Informaremos um código de 8 caracteres para você digitar no app — sem precisar escanear.</p>
+                  <div>
+                    <label htmlFor="pairing-phone" className="block text-sm font-medium text-gray-700 mb-1">Número (com DDI + DDD)</label>
+                    <input
+                      id="pairing-phone"
+                      type="tel"
+                      inputMode="numeric"
+                      autoComplete="tel"
+                      value={pairingPhone}
+                      onChange={handlePairingPhoneChange}
+                      placeholder="Ex: 5511999999999"
+                      className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      disabled={loading}
+                    />
+                    <p className="mt-2 text-xs text-gray-500">Padrão internacional (55 = Brasil + DDD + número). Pode colar com +, espaços ou parênteses.</p>
+                  </div>
+                  <button type="submit" disabled={loading || !canSubmitPairing} className="w-full bg-blue-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
+                    {actionLoading === 'pairing' ? 'Gerando código...' : 'Obter código de pareamento'}
+                  </button>
+                </form>
+              )}
             </div>
           </div>
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
@@ -697,23 +761,6 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-
-      {/* Fluxo de pareamento por código temporariamente desativado.
-      {!isRunning && showPairingInput && (
-        <form onSubmit={handlePairingSubmit} className="flex flex-col gap-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Número do WhatsApp (com DDD e código do país)</label>
-            <input type="tel" inputMode="numeric" autoComplete="tel" value={pairingPhone} onChange={handlePairingPhoneChange} placeholder="Ex: 5511999999999" className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" disabled={loading} autoFocus />
-            <p className="mt-2 text-xs text-gray-500">Informe no padrão internacional (55 + DDD + número).</p>
-            <p className="text-xs text-gray-400 mt-1">Cole com +, espaços ou parênteses se quiser; vamos manter apenas os números.</p>
-          </div>
-          <div className="flex gap-3">
-            <button type="submit" disabled={loading || !canSubmitPairing} className="flex-1 bg-blue-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">{loading ? 'Aguarde...' : 'Obter código'}</button>
-            <button type="button" onClick={() => { setShowPairingInput(false); setPairingPhone(''); setError('') }} disabled={loading} className="px-5 py-3 rounded-xl font-semibold bg-gray-200 text-gray-600 hover:bg-gray-300 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2">Cancelar</button>
-          </div>
-        </form>
-      )}
-      */}
 
       {isRunning && (
         <div className="flex flex-col gap-4">
