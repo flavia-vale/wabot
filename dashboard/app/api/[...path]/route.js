@@ -33,9 +33,23 @@ function getHostPort(host = '') {
   return portMatch?.[1] || ''
 }
 
+function getDashboardPortFromRequest(request) {
+  const hostCandidates = [
+    request.headers.get('x-forwarded-host'),
+    request.headers.get('host'),
+  ]
+
+  for (const host of hostCandidates) {
+    const port = getHostPort(host)
+    if (port) return port
+  }
+
+  return process.env.PORT || ''
+}
+
 export function getApiPort(request) {
-  const hostPort = getHostPort(request.headers.get('host'))
-  return apiPortByDashboardPort[hostPort] || process.env.API_PORT || '3001'
+  const dashboardPort = getDashboardPortFromRequest(request)
+  return apiPortByDashboardPort[dashboardPort] || process.env.API_PORT || '3001'
 }
 
 export function getProxyUrl(request) {

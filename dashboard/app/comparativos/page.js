@@ -20,8 +20,12 @@ export const metadata = {
   },
 }
 
+const p2ComparisonItems = [
+  { href: '/bot-comum-vs-botinho', title: 'Bot comum vs BOTinho', description: 'Compare repostagem simples com operação preservada para afiliados em grupos e Canais do WhatsApp.' },
+]
+
 export default function Page() {
-  const items = Object.entries(COMPARISON_PAGES).map(([href, page]) => ({ href, title: page.title, description: page.description }))
+  const items = [...p2ComparisonItems, ...Object.entries(COMPARISON_PAGES).map(([href, page]) => ({ href, title: page.title, description: page.description }))]
 
   return (
     <PublicShell>
