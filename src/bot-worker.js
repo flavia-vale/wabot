@@ -1184,6 +1184,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       setLifecycleState(WA_LIFECYCLE.DISCONNECTED, { reason: 'connection_close' })
       const code = new Boom(lastDisconnect?.error)?.output?.statusCode
       const isLoggedOut = code === DisconnectReason.loggedOut
+      const isRestartRequired = code === DisconnectReason.restartRequired
       const wasPairing = pairingState.suppressAutoRestart()
       activeSock = null
       pendingSock = null
@@ -1193,11 +1194,19 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // Sessão revogada/expirada — limpar auth para que próximo start gere QR limpo
         await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
         logger.info('Sessão encerrada pelo servidor WA — auth_info limpo automaticamente')
+      } else if (wasPairing && isRestartRequired) {
+        // Pairing aceito pelo WA: o servidor manda close com code 515 esperando
+        // que a gente reconecte com as novas creds salvas via saveCreds. Esse é
+        // o caminho FELIZ do pairing — limpa o estado e dispara startBot pra
+        // completar o handshake pós-pairing e chegar em connection: 'open'.
+        logger.info({ code }, 'Pairing aceito pelo WA (restartRequired 515) — reiniciando com creds novas')
+        pairingState.clear()
+        setTimeout(startBot, 500)
       } else if (wasPairing) {
-        // Em pairing mode, NÃO auto-reiniciar: isso destruiria o socket que
-        // segura o código que o usuário está digitando. Se o usuário falhar
-        // em colar o código a tempo, a UI chamará novamente o endpoint.
-        logger.warn({ code }, 'WA close durante pairing — não reiniciando automaticamente (janela do usuário)')
+        // Pairing pendente (usuário ainda digitando código no app) ou falha
+        // não-515 durante pairing: NÃO auto-reiniciar agora. Se o usuário
+        // falhar em colar o código a tempo, a UI chamará novamente o endpoint.
+        logger.warn({ code }, 'WA close durante pairing (não-515) — não reiniciando automaticamente')
       } else {
         logger.warn({ code }, 'WA conexão fechada, agendando restart automático em 5s')
         setTimeout(startBot, 5_000)
