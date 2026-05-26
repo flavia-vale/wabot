@@ -1281,6 +1281,59 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }).catch(() => {})
       }
 
+      // Quando uma URL já enviada nas últimas 24h é vista de novo, em vez de
+      // criar mais uma linha 'skip:dedup_recent_link' (gerando N rows iguais
+      // que poluem o painel), incrementamos um contador na linha existente
+      // mais recente do mesmo (userId, destJid, convertedUrl). Janela de busca
+      // = linkDedupWindowMs. Se não houver linha recente (estado dessincronizado
+      // após restart, por exemplo), cria uma nova como fallback para não perder
+      // visibilidade do evento.
+      async function registerDedupBlock({ reason, platform, destJid, originalUrl: incomingUrl, convertedUrl: outgoingUrl, messageText }) {
+        if (!shouldTrackSkipped) return
+        const since = new Date(Date.now() - linkDedupWindowMs)
+        const lookupUrl = outgoingUrl || incomingUrl || ''
+        try {
+          const recent = lookupUrl
+            ? await db.messageLog.findFirst({
+                where: {
+                  userId,
+                  destGroup: destJid,
+                  OR: [
+                    { convertedUrl: lookupUrl },
+                    { originalUrl: lookupUrl },
+                  ],
+                  sentAt: { gte: since },
+                },
+                orderBy: { sentAt: 'desc' },
+                select: { id: true },
+              })
+            : null
+          if (recent) {
+            await db.messageLog.update({
+              where: { id: recent.id },
+              data: { dedupHits: { increment: 1 } },
+            })
+            return
+          }
+        } catch (err) {
+          logger.warn({ err: err?.message, reason }, 'registerDedupBlock lookup falhou; fallback para create')
+        }
+        await db.messageLog.create({
+          data: {
+            userId,
+            platform: platform || 'unknown',
+            sourceGroup: normalizedJid || 'unknown',
+            destGroup: destJid || 'skipped',
+            originalUrl: incomingUrl || '',
+            convertedUrl: outgoingUrl || '',
+            messageText: sanitizeMessageForLog(messageText || reason),
+            status: 'skipped',
+            errorMsg: reason,
+            dedupHits: 0,
+          },
+        }).catch(() => {})
+      }
+
       if (!cfg.botConfig.feedGlobal && !monitorGroup) {
         return
       }
@@ -1584,13 +1637,27 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const dedupSubject = primary.url || `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
         const key = `${destJid}:${dedupSubject}`
         if (dedup.links[key] && Date.now() - dedup.links[key] < linkDedupWindowMs) {
-          await recordSkippedMessage({ reason: 'skip:dedup_recent_link', platform: primary.platform, originalUrl: primary.url, convertedUrl: primary.converted })
+          await registerDedupBlock({
+            reason: 'skip:dedup_recent_link',
+            platform: primary.platform,
+            destJid,
+            originalUrl: primary.url,
+            convertedUrl: primary.converted,
+            messageText: finalText,
+          })
           logger.info({ destJid }, 'Duplicata ignorada'); continue
         }
         if (GLOBAL_DEDUP_MODE !== 'off') {
           const globalDedup = await globalDedupCheckAndSet(key, dedupeWindowMs)
           if (globalDedup.duplicate) {
-            await recordSkippedMessage({ reason: 'skip:dedup_recent_link_global', platform: primary.platform, originalUrl: primary.url, convertedUrl: primary.converted })
+            await registerDedupBlock({
+              reason: 'skip:dedup_recent_link_global',
+              platform: primary.platform,
+              destJid,
+              originalUrl: primary.url,
+              convertedUrl: primary.converted,
+              messageText: finalText,
+            })
             logger.info({ destJid }, 'Duplicata global ignorada')
             continue
           }

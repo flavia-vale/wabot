@@ -134,7 +134,7 @@ export async function logsRoutes(app) {
 
     const logs = await db.messageLog.findMany({
       where: { userId, sentAt: { gte: from, lte: to } },
-      select: { status: true, errorMsg: true, sourceGroup: true, destGroup: true },
+      select: { status: true, errorMsg: true, sourceGroup: true, destGroup: true, dedupHits: true },
     })
 
     const counts = {
@@ -149,14 +149,19 @@ export async function logsRoutes(app) {
     const destAgg = new Map()
 
     for (const log of logs) {
+      const hits = Number(log.dedupHits) || 0
       if (log.status === 'queued' || log.status === 'sending') {
         counts.inFlight++
         continue
       }
       if (log.status === 'success') {
         counts.success++
+        // Repostas agregadas nesta linha (envio bem-sucedido + N duplicatas
+        // bloqueadas depois) entram no card de "bloqueadas por repetição".
+        counts.skippedDedup += hits
         const cur = sourceAgg.get(log.sourceGroup) || { sent: 0, blocked: 0 }
         cur.sent++
+        cur.blocked += hits
         sourceAgg.set(log.sourceGroup, cur)
         if (log.destGroup && log.destGroup !== 'skipped' && log.destGroup !== 'conversion') {
           const dcur = destAgg.get(log.destGroup) || { sent: 0, errors: 0 }
@@ -169,9 +174,11 @@ export async function logsRoutes(app) {
       const category = categorizeErrorMsg(log.errorMsg)
 
       if (category === ERROR_CATEGORIES.DEDUP) {
-        counts.skippedDedup++
+        // Fallback row (não havia linha original encontrável). +1 pela linha
+        // + N pelas repetições agregadas nela.
+        counts.skippedDedup += 1 + hits
         const cur = sourceAgg.get(log.sourceGroup) || { sent: 0, blocked: 0 }
-        cur.blocked++
+        cur.blocked += 1 + hits
         sourceAgg.set(log.sourceGroup, cur)
         continue
       }

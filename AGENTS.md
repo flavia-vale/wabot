@@ -252,6 +252,31 @@ Settings → Secrets and variables → Actions:
 Falha do smoke 9 geralmente é `.env` faltando, `JWT_SECRET` ausente
 ou porta divergente do que está em `apiPortByDashboardPort`.
 
+## Agregação de duplicatas em `MessageLog.dedupHits`
+
+Em vez de criar N linhas de `skip:dedup_recent_link` quando o mesmo
+link é republicado pela fonte ao longo de 24h, agregamos no contador
+`dedupHits` da linha mais recente do mesmo `(userId, destGroup,
+convertedUrl)`. Implementado em `registerDedupBlock()` no `bot-worker.js`:
+
+1. Procura a linha mais recente dentro de `linkDedupWindowMs` (default 24h)
+   filtrando por `userId`, `destGroup` e `convertedUrl OR originalUrl`.
+2. Se achar → `UPDATE` com `dedupHits = dedupHits + 1`.
+3. Senão (estado dessincronizado, fallback raro) → cria linha
+   `status='skipped'` com `errorMsg='skip:dedup_recent_link'`.
+
+O painel (`dashboard/app/dashboard/logs/page.js`) renderiza um chip
+`+N repetições bloqueadas` ao lado do status quando `dedupHits > 0`,
+inclusive em linhas de sucesso (uma promoção que saiu e foi tentada
+novamente N vezes pelos canais-fonte mostra ambos: "✓ Enviado +3
+repetições bloqueadas").
+
+O endpoint `/api/logs/summary` soma `dedupHits` em vez de contar
+linhas, garantindo que o card "Bloqueadas por repetição" reflita o
+número real de tentativas bloqueadas e não o número de linhas no
+banco. Índice composto `(userId, destGroup, convertedUrl, sentAt)`
+suporta o lookup em volume.
+
 ## Taxonomia canônica de `MessageLog.errorMsg`
 
 Toda escrita final em `MessageLog.errorMsg` passa por `classifyError()`

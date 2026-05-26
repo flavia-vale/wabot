@@ -106,6 +106,19 @@ function isBenignStatus(log) {
   return log.status === 'skipped'
 }
 
+function DedupHitsChip({ hits }) {
+  const n = Number(hits) || 0
+  if (n <= 0) return null
+  return (
+    <span
+      className="ml-2 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600"
+      title="Mesmo link bloqueado novamente nas últimas 24h — proteção contra repetição."
+    >
+      +{n.toLocaleString('pt-BR')} {n === 1 ? 'repetição bloqueada' : 'repetições bloqueadas'}
+    </span>
+  )
+}
+
 const LIMIT = 20
 
 function getStatusMeta(status) {
@@ -178,7 +191,7 @@ function LogMobileCard({ log, errorExpanded, onToggleError }) {
       <p className="text-gray-700 mt-2"><strong>Origem:</strong> {log.sourceGroupName}</p>
       <p className="text-gray-700"><strong>Destino:</strong> {log.destGroupName}</p>
       <p className="text-gray-600 truncate" title={log.messageText}>{log.messageText}</p>
-      <div className="mt-2"><StatusBadge log={log} /></div>
+      <div className="mt-2 flex flex-wrap items-center"><StatusBadge log={log} /><DedupHitsChip hits={log.dedupHits} /></div>
       <ErrorDetails log={log} expanded={errorExpanded} onToggle={onToggleError} />
     </div>
   )
@@ -383,7 +396,7 @@ export default function LogsPage() {
                       {log.messageText}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <StatusBadge log={log} />
+                      <div className="flex flex-wrap items-center"><StatusBadge log={log} /><DedupHitsChip hits={log.dedupHits} /></div>
                       <ErrorDetails
                         log={log}
                         expanded={expandedErrorIds.has(log.id)}
