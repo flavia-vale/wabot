@@ -319,6 +319,7 @@ export const api = {
 
   logs: (status = 'all', page = 1, limit = 20) =>
     apiFetch(`/api/logs?status=${status}&page=${page}&limit=${limit}`),
+  logsSummary: (period = '7d') => apiFetch(`/api/logs/summary?period=${encodeURIComponent(period)}`),
   logsClear: () => apiFetch('/api/logs/clear', { method: 'DELETE' }),
 }
 
