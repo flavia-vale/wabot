@@ -240,6 +240,7 @@ for artifact in .next/BUILD_ID .next/prerender-manifest.json .next/server/app-pa
 done
 
 echo "  Build íntegro: BUILD_ID=$(cat .next/BUILD_ID)"
+
 cd "$ROOT_DIR"
 node scripts/verify-dashboard-api-proxy.mjs
 

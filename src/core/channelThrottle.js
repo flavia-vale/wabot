@@ -1,10 +1,80 @@
-// PR-5.0 skeleton. Implementação real virá na PR-5.B.1.
+// PR-5.B.1: velocity scheduler por canal-destino.
+// Ordem dos cheques (em decide): health pause → quiet hours → daily cap →
+// min interval → burst cap → allow + reserve.
+
+import defaultDb from '../db.js'
+import { getHealth, isChannelPaused } from './channelHealth.js'
+
+export const DEFER_REASON = Object.freeze({
+  HEALTH_PAUSED: 'health_paused',
+  QUIET_HOURS: 'quiet_hours',
+  DAILY_CAP: 'daily_cap',
+  MIN_INTERVAL: 'min_interval',
+  BURST_CAP: 'burst_cap',
+})
+
+const SEC = 1000
+const MIN = 60 * SEC
+const HOUR = 60 * MIN
+const DAY = 24 * HOUR
+
+const DEFAULT_QUIET = { startHour: 0, endHour: 6, tz: 'America/Sao_Paulo' }
+
+function parseQuietHours(raw) {
+  if (!raw) return DEFAULT_QUIET
+  try {
+    const v = typeof raw === 'string' ? JSON.parse(raw) : raw
+    return {
+      startHour: Number.isFinite(v?.startHour) ? v.startHour : DEFAULT_QUIET.startHour,
+      endHour: Number.isFinite(v?.endHour) ? v.endHour : DEFAULT_QUIET.endHour,
+      tz: typeof v?.tz === 'string' ? v.tz : DEFAULT_QUIET.tz,
+    }
+  } catch {
+    return DEFAULT_QUIET
+  }
+}
+
+function tzHourMin(nowMs, tz) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz, hour: 'numeric', minute: 'numeric', hour12: false,
+  }).formatToParts(new Date(nowMs))
+  const hour = Number(parts.find(p => p.type === 'hour').value)
+  const minute = Number(parts.find(p => p.type === 'minute').value)
+  return { hour, minute }
+}
+
+export function tzDayBucket(nowMs, tz) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(nowMs))
+}
+
+export function quietHoursState(nowMs, { startHour, endHour, tz }) {
+  const { hour, minute } = tzHourMin(nowMs, tz)
+  const inQuiet = startHour <= endHour
+    ? hour >= startHour && hour < endHour
+    : hour >= startHour || hour < endHour
+  if (!inQuiet) return { inQuiet: false, deferMs: 0 }
+  const currentMins = hour * 60 + minute
+  let endMins = endHour * 60
+  if (endMins <= currentMins) endMins += 24 * 60
+  return { inQuiet: true, deferMs: (endMins - currentMins) * MIN }
+}
+
+function toMs(v) {
+  if (v == null) return null
+  return v instanceof Date ? v.getTime() : new Date(v).getTime()
+}
 
 /**
- * @typedef {Object} ThrottleDecision
- * @property {boolean} allow
- * @property {number} [deferUntil]
- * @property {string} [reason]
+ * Decisão pura.
+ * @param {{
+ *   now: number,
+ *   throttle: { postsToday: number, dayBucket: string, lastPostAt: Date|null,
+ *               burstWindowStart: Date|null, postsInBurstWindow: number } | null,
+ *   isPaused: boolean,
+ *   botConfig: object,
+ * }} input
  */
 export function decide({ now, throttle, isPaused, botConfig }) {
   if (isPaused) {
@@ -48,10 +118,6 @@ export function decide({ now, throttle, isPaused, botConfig }) {
     }
   }
 
-/**
- * @returns {ThrottleDecision}
- */
-export function checkAndReserve(_groupId, _botConfig, _opts = {}) {
   return { allow: true }
 }
 
