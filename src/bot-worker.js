@@ -559,7 +559,17 @@ const SHUTDOWN_DRAIN_TIMEOUT_MS = Math.max(0, envNumber('SHUTDOWN_DRAIN_TIMEOUT_
 // a fila em memória processa serialmente, todo job posterior fica "queued"
 // até reinício do worker. Com timeout vira erro transitório que reentra no
 // retry loop; após SEND_MAX_ATTEMPTS o job é marcado 'error' e a fila avança.
-const SEND_MESSAGE_TIMEOUT_MS = Math.max(5_000, envNumber('SEND_MESSAGE_TIMEOUT_MS', 60_000))
+//
+// Política por tentativa: 1ª paciente (gera link preview, mídia hospedada,
+// rede pode oscilar), demais rápidas para liberar a fila. Configurável via
+// env caso precise uniformizar em incidentes — caem todos no mesmo valor.
+const SEND_MESSAGE_TIMEOUT_MS = Math.max(5_000, envNumber('SEND_MESSAGE_TIMEOUT_MS', 0)) || null
+const SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS = [90_000, 60_000, 45_000]
+function resolveSendTimeoutMs(attempt) {
+  if (SEND_MESSAGE_TIMEOUT_MS) return SEND_MESSAGE_TIMEOUT_MS
+  const idx = Math.max(0, Math.min(SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS.length - 1, (attempt || 1) - 1))
+  return SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS[idx]
+}
 const DEST_RATE_LIMIT_MS = Math.max(0, envNumber('DEST_RATE_LIMIT_MS', 1_000))
 const SMART_DELAY_PROGRESSIVE_THRESHOLD = Math.max(1, envNumber('SMART_DELAY_PROGRESSIVE_THRESHOLD', 20))
 const SMART_DELAY_PROGRESSIVE_STEP_MS = Math.max(0, envNumber('SMART_DELAY_PROGRESSIVE_STEP_MS', 5_000))
@@ -578,8 +588,12 @@ const SEND_QUEUE_BACKEND_ENV = String(process.env.QUEUE_BACKEND || '').toLowerCa
 const REDIS_URL = process.env.REDIS_URL || ''
 const BULLMQ_QUEUE_NAME = process.env.BULLMQ_QUEUE_NAME || `wabot-send-${userId}`
 const MSG_QUEUE_CONCURRENCY = Math.max(1, envNumber('MSG_QUEUE_CONCURRENCY', 2))
-const MSG_QUEUE_TIMEOUT_MS = Math.max(1_000, envNumber('MSG_QUEUE_TIMEOUT_MS', 15_000))
-const MSG_QUEUE_WATCHDOG_MS = Math.max(5_000, envNumber('MSG_QUEUE_WATCHDOG_MS', 30_000))
+// Default subido de 15s -> 25s: dentro do orçamento da incomingQueue cabe
+// scrape de título (3s) + conversão de afiliado (rede) + dedup + DB write.
+// Em Amazon BR (HTML de ~1.3MB) 15s ficava apertado. Watchdog em
+// MSG_QUEUE_WATCHDOG_MS (30s) continua como safety-net pro caso patológico.
+const MSG_QUEUE_TIMEOUT_MS = Math.max(1_000, envNumber('MSG_QUEUE_TIMEOUT_MS', 25_000))
+const MSG_QUEUE_WATCHDOG_MS = Math.max(5_000, envNumber('MSG_QUEUE_WATCHDOG_MS', 40_000))
 const MSG_QUEUE_MAX_SIZE = Math.max(10, envNumber('MSG_QUEUE_MAX_SIZE', 500))
 const MAX_INCOMING_MESSAGE_CHARS = Math.max(500, envNumber('MAX_INCOMING_MESSAGE_CHARS', 8_000))
 
@@ -752,14 +766,15 @@ async function finishSendJob(job, result) {
 }
 
 function withSendTimeout(promise, ctx) {
-  return withSendTimeoutImpl(promise, { ...ctx, timeoutMs: SEND_MESSAGE_TIMEOUT_MS })
+  const timeoutMs = resolveSendTimeoutMs(ctx?.attempt)
+  return withSendTimeoutImpl(promise, { ...ctx, timeoutMs })
 }
 
-async function sendPreparedPayload({ sock, job, payload }) {
+async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
   if (payload && payload._route === 'relay' && payload.relay?.type && payload.relay?.proto) {
     await withSendTimeout(
       sock.relayMessage(job.destJid, { [payload.relay.type]: payload.relay.proto }, {}),
-      { destJid: job.destJid, route: 'relay' },
+      { destJid: job.destJid, route: 'relay', attempt },
     )
     return
   }
@@ -785,7 +800,7 @@ async function sendPreparedPayload({ sock, job, payload }) {
       try {
         await withSendTimeout(
           sock.sendMessage(job.destJid, route.body, route.sendOptions || undefined),
-          { destJid: job.destJid, route: i === 0 ? 'primary' : `fallback[${i - 1}]` },
+          { destJid: job.destJid, route: i === 0 ? 'primary' : `fallback[${i - 1}]`, attempt },
         )
         return
       } catch (err) {
@@ -800,7 +815,7 @@ async function sendPreparedPayload({ sock, job, payload }) {
 
   await withSendTimeout(
     sock.sendMessage(job.destJid, payload),
-    { destJid: job.destJid, route: 'default' },
+    { destJid: job.destJid, route: 'default', attempt },
   )
 }
 
@@ -876,7 +891,7 @@ async function processSendJob(job) {
           await sleep(job.typingDelayMs)
           await Promise.resolve(sockForAttempt.sendPresenceUpdate?.('paused', job.destJid)).catch(() => {})
         }
-        await sendPreparedPayload({ sock: sockForAttempt, job, payload })
+        await sendPreparedPayload({ sock: sockForAttempt, job, payload, attempt })
         const finishedAt = Date.now()
         lastSendByDest.set(job.destJid, finishedAt)
         logger.info({ destJid: job.destJid, platforms: job.platforms, attempt, type: job.type }, 'Mensagem enviada')
