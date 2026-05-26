@@ -1017,7 +1017,24 @@ async function createSendBackend() {
   }
 }
 
+let startBotInFlight = false
 async function startBot() {
+  // Guard contra startBots concorrentes (boot inicial + IPC pairing + restart
+  // timer podem todos chamar isto). Concorrência causa dois sockets fechando
+  // um ao outro mid-handshake, propagando "Connection Closed" pro pairing.
+  if (startBotInFlight) {
+    logger.warn('startBot já em andamento — ignorando chamada paralela')
+    return
+  }
+  startBotInFlight = true
+  try {
+    await startBotInner()
+  } finally {
+    startBotInFlight = false
+  }
+}
+
+async function startBotInner() {
   if (!sendBackend) sendBackend = await createSendBackend()
   await getConfig()
   if (!interruptedSendLogsMarked) {
@@ -1057,10 +1074,11 @@ async function startBot() {
 
   sock.ev.on('creds.update', saveCreds)
 
-  // Pairing mode: requisitar o código IMEDIATAMENTE após o socket existir,
-  // antes que connection.update emita o primeiro QR e o server WA comite no
-  // fluxo de QR. Baileys 6.7.16 requer creds.registered === false; isso é
-  // garantido porque o handler IPC limpou AUTH_DIR antes de chamar startBot().
+  // Pairing mode: requisitar o código depois que o noise handshake completar.
+  // Baileys 6.7.16 emite connection.update({ connection: 'connecting' }) quando
+  // o handshake termina; só então sock.requestPairingCode() consegue enviar a
+  // IQ. Chamar antes provoca "Connection Closed" — os próprios exemplos do
+  // Baileys usam um delay de 3s pelo mesmo motivo.
   if (pairingState.isActive()) {
     const { requestId, phone } = pairingState.snapshot()
     ;(async () => {
@@ -1068,6 +1086,22 @@ async function startBot() {
         if (sock.authState?.creds?.registered) {
           throw new Error('Sessão já está autenticada. Use "Esquecer número salvo" antes de parear por número.')
         }
+        // Aguarda primeiro connection.update (handshake completo) com cap de 15s.
+        await new Promise((resolve, reject) => {
+          const onUpdate = ({ connection }) => {
+            if (connection === 'connecting' || connection === 'open') {
+              sock.ev.off('connection.update', onUpdate)
+              resolve()
+            }
+          }
+          sock.ev.on('connection.update', onUpdate)
+          setTimeout(() => {
+            sock.ev.off('connection.update', onUpdate)
+            reject(new Error('Socket não completou handshake em 15s'))
+          }, 15_000)
+        })
+        if (!pairingState.ownsRequest(requestId)) return
+
         const code = await Promise.race([
           sock.requestPairingCode(phone),
           new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout interno (20s) ao gerar pairing code no WhatsApp')), 20_000)),
@@ -1836,24 +1870,28 @@ process.on('message', async msg => {
       return
     }
     // Fluxo atômico de pairing:
-    //   1. Tear-down do socket atual (se houver) — pairing exige fresh socket
-    //   2. Limpar AUTH_DIR para garantir creds.registered === false
-    //   3. setActive(...) (suprime QR IPC + auto-restart em close; agenda expiry)
-    //   4. Chamar startBot() — o trigger em startBot pede o código logo após
+    //   1. Aguardar startBot em andamento finalizar (boot inicial ou restart)
+    //   2. setActive(...) (suprime QR IPC + auto-restart em close; agenda expiry)
+    //   3. Tear-down do socket atual (se houver) — pairing exige fresh socket
+    //   4. Limpar AUTH_DIR para garantir creds.registered === false
+    //   5. Chamar startBot() — o trigger em startBot pede o código logo após
     //      makeWASocket e devolve via IPC 'pairingCode'.
     try {
       if (pairingState.isActive()) {
         logger.warn({ existing: pairingState.snapshot().requestId, newRequestId: requestId }, 'Pairing já em andamento — substituindo')
       }
-      try { activeSock?.end?.(undefined) } catch {}
-      try { pendingSock?.end?.(undefined) } catch {}
-      try { activeSock?.ws?.close?.() } catch {}
-      try { pendingSock?.ws?.close?.() } catch {}
-      activeSock = null
-      pendingSock = null
 
-      await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
+      // Worker pode acabar de bootar: o boot startBot pode estar criando
+      // socket nesse exato momento. Aguarda finalizar antes de tear-down
+      // (até 8s). Se não finalizar, segue assim mesmo — o tear-down forçará
+      // o close, e a guard startBotInFlight evita race no startBot seguinte.
+      const waitStart = Date.now()
+      while (startBotInFlight && (Date.now() - waitStart) < 8_000) {
+        await new Promise(r => setTimeout(r, 100))
+      }
 
+      // setActive ANTES do tear-down: connection.update do sock fechando
+      // verá suppressAutoRestart=true e não agendará setTimeout(startBot).
       pairingState.setActive({
         phone,
         requestId,
@@ -1862,6 +1900,18 @@ process.on('message', async msg => {
           if (process.send) process.send({ type: 'pairingCode', requestId: expired.requestId, error: 'Tempo esgotado aguardando código de pareamento' })
         },
       })
+
+      try { activeSock?.end?.(undefined) } catch {}
+      try { pendingSock?.end?.(undefined) } catch {}
+      try { activeSock?.ws?.close?.() } catch {}
+      try { pendingSock?.ws?.close?.() } catch {}
+      activeSock = null
+      pendingSock = null
+
+      // Pequena espera pra eventos 'close' propagarem antes de criar novo sock
+      await new Promise(r => setTimeout(r, 300))
+
+      await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
 
       logger.info({ requestId }, 'Iniciando socket fresh em pairing mode')
       startBot().catch(err => {
