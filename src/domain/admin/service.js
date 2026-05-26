@@ -63,7 +63,7 @@ export function createAdminService({
       getLogActivityMap({ userIds }),
     ])
 
-    const running = new Set(listRunningBots())
+    const running = new Set(await listRunningBots())
 
     return {
       total,
