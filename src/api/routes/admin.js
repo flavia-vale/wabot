@@ -512,7 +512,7 @@ async function getOperationalOverview(now = new Date()) {
   const inSevenDays = addDays(now, 7)
   const twoDaysAgo = addDays(now, -2)
   const since24h = addDays(now, -1)
-  const runningUserIds = listRunningBots()
+  const runningUserIds = await listRunningBots()
 
   const [
     totalUsers,
@@ -616,10 +616,11 @@ export async function adminRoutes(app) {
 
     const memory = process.memoryUsage()
     const cpu = process.cpuUsage()
-    const [dbOk, messageLogCount, userCount] = await Promise.all([
+    const [dbOk, messageLogCount, userCount, runningBotsList] = await Promise.all([
       db.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
       db.messageLog.count().catch(() => null),
       db.user.count().catch(() => null),
+      Promise.resolve(listRunningBots()).catch(() => []),
     ])
     const metrics = getApiMetricsSnapshot()
     const status = dbOk && metrics.total5xx === 0 ? 'ok' : dbOk ? 'degraded' : 'critical'
@@ -638,7 +639,7 @@ export async function adminRoutes(app) {
         heapTotalMb: Math.round(memory.heapTotal / 1024 / 1024),
       },
       cpu,
-      counts: { users: userCount, messageLogs: messageLogCount, runningBots: listRunningBots().length },
+      counts: { users: userCount, messageLogs: messageLogCount, runningBots: (runningBotsList ?? []).length },
       api: {
         totalRequests: metrics.totalRequests,
         total4xx: metrics.total4xx,
@@ -739,7 +740,7 @@ export async function adminRoutes(app) {
     const limitNum = Math.min(EXPORT_LIMIT, Math.max(1, parseInt(limit) || 25))
     const now = new Date()
     const since24h = addDays(now, -1)
-    const running = new Set(listRunningBots())
+    const running = new Set(await listRunningBots())
 
     const [users, successMap, errorMap] = await Promise.all([
       db.user.findMany({
@@ -1433,7 +1434,7 @@ export async function adminRoutes(app) {
       db.messageLog.findFirst({ where: { userId: user.id }, orderBy: { sentAt: 'desc' }, select: { sentAt: true } }),
       db.payment.aggregate({ where: { userId: user.id, status: 'approved' }, _sum: { amount: true } }),
     ])
-    const running = listRunningBots().includes(user.id)
+    const running = (await listRunningBots()).includes(user.id)
     const lastMessageAt = lastMessage?.sentAt ?? null
     const effectiveLastActivityAt = resolveEffectiveLastActivity(user, lastMessageAt)
     const riskUser = { ...user, lastActivityAt: effectiveLastActivityAt }
@@ -1689,7 +1690,7 @@ app.get('/sessions', async (req, reply) => {
 
     const { page, limit, skip } = getPagination(req.query, 30)
     const { status = 'all' } = req.query
-    const running = new Set(listRunningBots())
+    const running = new Set(await listRunningBots())
     const where = status !== 'all' ? { status } : {}
 
     const [total, sessions] = await Promise.all([
