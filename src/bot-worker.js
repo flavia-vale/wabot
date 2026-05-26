@@ -44,6 +44,7 @@ import { getAdvancedPreservationAccess } from './billing/plans.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
+import { classifyError } from './errorTaxonomy.js'
 import { detectMessageKind, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
 import Redis from 'ioredis'
 import { parseEnumEnv, logModeSummary } from './core/envModes.js'
@@ -461,7 +462,7 @@ async function checkScheduledMessages() {
           state.hasError = true
           await db.messageLog.update({
             where: { id: log.id },
-            data: { status: 'error', errorMsg: 'Fila interna de envios cheia ou worker encerrando', sentAt: new Date() },
+            data: { status: 'error', errorMsg: classifyError(null, { kind: 'queue_full' }), sentAt: new Date() },
           }).catch(() => {})
         }
       }
@@ -935,9 +936,11 @@ async function processSendJob(job) {
     }
   } catch (err) {
     logger.error({ destJid: job.destJid, err: err.message, type: job.type }, 'Erro ao enviar mensagem da fila')
+    const kind = isChannelForbiddenError(err) ? 'channel_forbidden' : undefined
+    const canonicalErrorMsg = classifyError(err, { destJid: job.destJid, kind })
     await db.messageLog.update({
       where: { id: job.logId },
-      data: { status: 'error', errorMsg: err.message, sentAt: new Date() },
+      data: { status: 'error', errorMsg: canonicalErrorMsg, sentAt: new Date() },
     }).catch(() => {})
     sendMetrics.errorTotal++
     sendMetrics.lastErrorAt = new Date().toISOString()
@@ -961,7 +964,7 @@ async function markInterruptedSendLogs() {
       where: { userId, status: { in: ['queued', 'sending'] } },
       data: {
         status: 'error',
-        errorMsg: 'Envio interrompido por reinício do worker antes da conclusão',
+        errorMsg: classifyError(null, { kind: 'worker_restart' }),
         sentAt: now,
       },
     }),
@@ -1318,7 +1321,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             originalUrl: links[0]?.url || '',
             convertedUrl: '',
             messageText: sanitizeMessageForLog(sanitizedText || text || ''),
-            status: 'error',
+            status: 'skipped',
             errorMsg: `skip:policy:${policy.forwardMode}:${policy.noLinkScope}:${messageKind}`,
           },
         }).catch(() => {})
@@ -1449,7 +1452,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             convertedUrl: '',
             messageText: sanitizeMessageForLog(text),
             status: 'error',
-            errorMsg: reason,
+            errorMsg: `error:conversion:${reason}`,
           },
         }).catch(err => {
           logger.warn({ err: err.message, platform }, 'Falha ao gravar diagnóstico de conversão')
@@ -1507,7 +1510,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             originalUrl: links[0]?.url || '',
             convertedUrl: '',
             messageText: sanitizeMessageForLog(sanitizedText || ''),
-            status: 'error',
+            status: 'skipped',
             errorMsg: 'skip:no_valid_conversions',
           },
         }).catch(() => {})
@@ -1691,7 +1694,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         if (!accepted) {
           await db.messageLog.update({
             where: { id: log.id },
-            data: { status: 'error', errorMsg: 'Fila interna de envios cheia ou worker encerrando', sentAt: new Date() },
+            data: { status: 'error', errorMsg: classifyError(null, { kind: 'queue_full' }), sentAt: new Date() },
           }).catch(() => {})
           logger.warn({ destJid, platforms, logId: log.id }, 'Mensagem convertida rejeitada pela fila')
         }
@@ -1738,10 +1741,10 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             logger.error({ msgId, dedupKey, err: err.message }, 'Mensagem descartada fora do escopo monitorado — sem log em painel')
             return
           }
-          const raw = String(err?.message || '')
-          const reason = /Bad MAC|MessageCounterError|Key used already or never filled/i.test(raw)
-            ? `skip:decrypt_failed:${raw.slice(0, 80)}`
-            : `skip:incoming_error:${raw.slice(0, 80)}`
+          const reason = classifyError(err, { kind: 'incoming' })
+          // timeout:incoming representa "tentamos processar e não conseguiu a tempo"
+          // — vira status='error'. Demais (decrypt, incoming_error) seguem 'skipped'.
+          const status = reason.startsWith('timeout:') ? 'error' : 'skipped'
           await db.messageLog.create({
             data: {
               userId,
@@ -1756,7 +1759,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
                 msg.message?.imageMessage?.caption ||
                 'incoming_error'
               ),
-              status: 'skipped',
+              status,
               errorMsg: reason,
             },
           }).catch(() => {})
@@ -1987,11 +1990,11 @@ process.on('message', async msg => {
       if (accepted) {
         queued++
       } else {
-        const error = 'Fila interna de envios cheia ou worker encerrando'
-        errors.push({ jid, error })
+        const canonicalErrorMsg = classifyError(null, { kind: 'queue_full' })
+        errors.push({ jid, error: canonicalErrorMsg })
         await db.messageLog.update({
           where: { id: log.id },
-          data: { status: 'error', errorMsg: error, sentAt: new Date() },
+          data: { status: 'error', errorMsg: canonicalErrorMsg, sentAt: new Date() },
         }).catch(() => {})
       }
     }
