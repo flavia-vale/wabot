@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
-import { OFFER_BUILDER_TEMPLATE_VISIBLE_DEFAULT, getConversionStatusPresentation, toggleTemplateVisibility } from '@/lib/offerBuilderUi'
+import { buildOfferPriceBlocks, OFFER_BUILDER_TEMPLATE_VISIBLE_DEFAULT, getConversionStatusPresentation, toggleTemplateVisibility } from '@/lib/offerBuilderUi'
 
 const DEFAULT_TEMPLATE = `🛍️ {{title}}{{oldPriceBlock}}{{newPriceBlock}}\n\n🛒 Compre aqui 👉 {{link}}`
 
@@ -47,13 +47,19 @@ export function OfferBuilder({ mode = 'standalone', initialLink = '', onCopy, co
   const [conversionStatus, setConversionStatus] = useState(null)
   const autoScrapedRef = useRef(false)
 
+  const priceBlocks = buildOfferPriceBlocks({
+    oldPrice: generated?.oldPrice,
+    newPrice: generated?.newPrice,
+    formatPrice: formatOfferPrice,
+  })
+
   const offerMessage = useMemo(() => applyTemplate(template, {
     title: generated?.title || '',
-    oldPriceBlock: generated?.oldPrice ? `\n\nDe ${formatOfferPrice(generated.oldPrice)}` : '',
-    newPriceBlock: generated?.newPrice ? `\n💥 Por ${formatOfferPrice(generated.newPrice)}` : '',
+    oldPriceBlock: priceBlocks.oldPriceBlock,
+    newPriceBlock: priceBlocks.newPriceBlock,
     link: generated?.link || link,
     groupCtaBlock: includeGroupCta && groupCtaText.trim() ? `\n${groupCtaText.trim()}` : '',
-  }), [template, generated, link, includeGroupCta, groupCtaText])
+  }), [template, generated?.title, generated?.link, priceBlocks.oldPriceBlock, priceBlocks.newPriceBlock, link, includeGroupCta, groupCtaText])
 
   async function runScrape(targetLink) {
     setError('')
