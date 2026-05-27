@@ -26,6 +26,19 @@ const PLAN_LABELS = {
   pro: 'Pro',
 }
 
+function formatBrazilianDate(value) {
+  if (!value) return null
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+function formatBrazilianCurrency(value) {
+  const numeric = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(numeric)) return null
+  return numeric.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
 function mergePlanCards(dynamicPlans = []) {
   const byId = new Map((dynamicPlans ?? []).map((plan) => [plan.id, plan]))
   return FALLBACK_PLAN_CARDS.map((fallbackPlan) => {
@@ -67,11 +80,12 @@ export default function AssinaturasPage() {
   const [email, setEmail] = useState('')
   const [expiredAccessCopy, setExpiredAccessCopy] = useState('')
   const [selectedPlanId, setSelectedPlanId] = useState('pro')
+  const [overview, setOverview] = useState(null)
 
   useEffect(() => {
     let active = true
-    Promise.allSettled([api.me(), api.publicPlans()])
-      .then(([userResult, plansResult]) => {
+    Promise.allSettled([api.me(), api.publicPlans(), api.paymentsOverview()])
+      .then(([userResult, plansResult, overviewResult]) => {
         if (!active) return
         if (userResult.status === 'fulfilled') {
           const user = userResult.value
@@ -86,12 +100,19 @@ export default function AssinaturasPage() {
           const dynamicPlans = Array.isArray(plansResult.value?.plans) ? plansResult.value.plans : []
           setPlans(mergePlanCards(dynamicPlans))
         }
+
+        if (overviewResult.status === 'fulfilled') {
+          setOverview(overviewResult.value || null)
+        } else {
+          setOverview(null)
+        }
       })
       .catch(() => {
         if (!active) return
         setEmail('')
         setExpiredAccessCopy('')
         setPlans(FALLBACK_PLAN_CARDS)
+        setOverview(null)
       })
 
     return () => {
@@ -135,10 +156,37 @@ export default function AssinaturasPage() {
     return `https://wa.me/${SUPPORT_WA_NUMBER}?text=${encodeURIComponent(payload)}`
   }, [email, selectedPlan])
 
+  const currentPlanLabel = overview?.plan ? (PLAN_LABELS[overview.plan] ?? overview.plan) : null
+  const expiresAtLabel = formatBrazilianDate(overview?.accessExpiresAt)
+  const lastPaymentAmount = overview?.lastApprovedPayment?.amount != null ? formatBrazilianCurrency(overview.lastApprovedPayment.amount) : null
+  const lastPaymentDate = formatBrazilianDate(overview?.lastApprovedPayment?.createdAt)
+
   return (
     <section className="mx-auto w-full max-w-3xl">
+      {overview && overview.isActive && currentPlanLabel && (
+        <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Assinatura atual</p>
+              <p className="mt-1 text-xl font-bold text-emerald-900">Plano {currentPlanLabel}</p>
+            </div>
+            {overview.expiresInDays != null && expiresAtLabel && (
+              <div className="text-right">
+                <p className="text-xs font-medium text-emerald-700">Renova manualmente em</p>
+                <p className="text-lg font-bold text-emerald-900">{overview.expiresInDays} {overview.expiresInDays === 1 ? 'dia' : 'dias'}</p>
+                <p className="text-xs text-emerald-700">até {expiresAtLabel}</p>
+              </div>
+            )}
+          </div>
+          <p className="mt-3 text-xs text-emerald-800">{overview.billingModel} · Pagamento via {overview.paymentMethod}</p>
+          {lastPaymentAmount && lastPaymentDate && (
+            <p className="mt-1 text-xs text-emerald-700">Último pagamento: {lastPaymentAmount} em {lastPaymentDate}</p>
+          )}
+        </div>
+      )}
+
       <header className="mb-5 rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
-        <h1 className="text-xl font-bold text-gray-800 md:text-2xl">Escolha seu plano</h1>
+        <h1 className="text-xl font-bold text-gray-800 md:text-2xl">{overview?.isActive ? 'Renovar ou trocar de plano' : 'Escolha seu plano'}</h1>
       </header>
 
       {expiredAccessCopy && (
