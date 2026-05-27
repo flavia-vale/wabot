@@ -398,7 +398,7 @@ export async function resolveToCleanProductUrl(url) {
     target = canonicalizeMlProductUrl(target)
     if (!extractMlbId(target)) {
       const u = new URL(target)
-      if (/^\/social\//i.test(u.pathname)) {
+      if (/^\/social\//i.test(u.pathname) || /^\/up\//i.test(u.pathname) || /^\/$/.test(u.pathname)) {
         const extracted = await tryExtractProductFromLanding(preCanonical)
         if (extracted) target = extracted
       }
