@@ -24,7 +24,7 @@ const CARDS = [
     icon: '⏭',
     tone: 'neutral',
     tooltip:
-      'O mesmo link já saiu nas últimas 24 horas. Bloqueamos para os seus assinantes não receberem a mesma promoção duas vezes. Isso é proteção, não erro.',
+      'O mesmo link já saiu nas últimas 2 horas. Bloqueamos para os seus assinantes não receberem a mesma promoção duas vezes. Isso é proteção, não erro.',
   },
   {
     key: 'skippedConfig',

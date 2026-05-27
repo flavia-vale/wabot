@@ -255,11 +255,12 @@ ou porta divergente do que está em `apiPortByDashboardPort`.
 ## Agregação de duplicatas em `MessageLog.dedupHits`
 
 Em vez de criar N linhas de `skip:dedup_recent_link` quando o mesmo
-link é republicado pela fonte ao longo de 24h, agregamos no contador
+link é republicado pela fonte ao longo de 2h, agregamos no contador
 `dedupHits` da linha mais recente do mesmo `(userId, destGroup,
 convertedUrl)`. Implementado em `registerDedupBlock()` no `bot-worker.js`:
 
-1. Procura a linha mais recente dentro de `linkDedupWindowMs` (default 24h)
+1. Procura a linha mais recente dentro de `linkDedupWindowMs` (default 2h,
+   override via env `DEDUP_LINK_WINDOW_MS`)
    filtrando por `userId`, `destGroup` e `convertedUrl OR originalUrl`.
 2. Se achar → `UPDATE` com `dedupHits = dedupHits + 1`.
 3. Senão (estado dessincronizado, fallback raro) → cria linha
@@ -287,7 +288,7 @@ tradutor `explainErrorMsg` em `dashboard/app/dashboard/logs/page.js`):
 
 | Prefixo                          | Categoria          | Significado                                                  |
 |----------------------------------|--------------------|--------------------------------------------------------------|
-| `skip:dedup_recent_link`         | DEDUP              | Link já enviado nas últimas 24h (per-dest)                   |
+| `skip:dedup_recent_link`         | DEDUP              | Link já enviado nas últimas 2h (per-dest)                    |
 | `skip:dedup_recent_link_global`  | DEDUP              | Idem, via Redis global                                       |
 | `skip:blocked_keyword`           | CONFIG_BLOCK       | Palavra-chave bloqueada pelo usuário                         |
 | `skip:title_mismatch`            | CONFIG_BLOCK       | Caption não bate com og:title raspado                        |

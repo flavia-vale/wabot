@@ -1070,7 +1070,7 @@ async function startBotInner() {
   // mesma URL no destino algum tempo depois. Caso real: mesmo amzn.to/4rUx7Gd
   // convertido 3x em 52min porque o canal-fonte reposta a mesma oferta.
   const dedupeWindowMs = Math.max(1_000, Number(process.env.DEDUP_MSGID_WINDOW_MS) || 300_000)
-  const linkDedupWindowMs = Math.max(dedupeWindowMs, Number(process.env.DEDUP_LINK_WINDOW_MS) || 24 * 60 * 60_000)
+  const linkDedupWindowMs = Math.max(dedupeWindowMs, Number(process.env.DEDUP_LINK_WINDOW_MS) || 2 * 60 * 60_000)
   const dedup = pruneDedupStore(
     loadDedup(),
     Date.now(),
@@ -1285,7 +1285,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }).catch(() => {})
       }
 
-      // Quando uma URL já enviada nas últimas 24h é vista de novo, em vez de
+      // Quando uma URL já enviada nas últimas 2h é vista de novo, em vez de
       // criar mais uma linha 'skip:dedup_recent_link' (gerando N rows iguais
       // que poluem o painel), incrementamos um contador na linha existente
       // mais recente do mesmo (userId, destJid, convertedUrl). Janela de busca

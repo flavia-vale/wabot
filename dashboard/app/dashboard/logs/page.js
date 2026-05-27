@@ -52,7 +52,7 @@ function explainErrorMsg(errorMsg) {
     return 'Seus cookies da Amazon (sitestripe) expiraram. As ofertas continuam saindo com link longo de afiliado e creditando comissão, mas para voltar a gerar links curtos amzn.to, renove os cookies em Configurações → Credenciais → Amazon.'
   }
   if (errorMsg.startsWith('skip:dedup')) {
-    return 'Link já enviado nas últimas 24 horas — bloqueado para não duplicar.'
+    return 'Link já enviado nas últimas 2 horas — bloqueado para não duplicar.'
   }
   if (errorMsg.startsWith('skip:blocked_keyword')) {
     return 'Contém uma palavra que você marcou para bloquear.'
@@ -115,7 +115,7 @@ function DedupHitsChip({ hits }) {
   return (
     <span
       className="ml-2 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600"
-      title="Mesmo link bloqueado novamente nas últimas 24h — proteção contra repetição."
+      title="Mesmo link bloqueado novamente nas últimas 2h — proteção contra repetição."
     >
       +{n.toLocaleString('pt-BR')} {n === 1 ? 'repetição bloqueada' : 'repetições bloqueadas'}
     </span>
