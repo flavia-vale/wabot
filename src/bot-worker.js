@@ -887,9 +887,13 @@ async function processSendJob(job) {
         if (payload === undefined) throw new Error('Invalid send job: payload/buildPayload ausente')
         await waitDestinationRateLimit(job.destJid)
         if (SMART_DELAY_TYPING_ENABLED && job.typingDelayMs > 0 && !job.skipTyping) {
-          await Promise.resolve(sockForAttempt.sendPresenceUpdate?.('composing', job.destJid)).catch(() => {})
-          await sleep(job.typingDelayMs)
-          await Promise.resolve(sockForAttempt.sendPresenceUpdate?.('paused', job.destJid)).catch(() => {})
+          try {
+            await Promise.resolve(sockForAttempt?.sendPresenceUpdate?.('composing', job.destJid)).catch(() => {})
+            await sleep(job.typingDelayMs)
+            await Promise.resolve((activeSock ?? sockForAttempt)?.sendPresenceUpdate?.('paused', job.destJid)).catch(() => {})
+          } catch (presenceErr) {
+            logger.debug({ err: presenceErr?.message, destJid: job.destJid }, 'sendPresenceUpdate falhou; ignorando typing')
+          }
         }
         await sendPreparedPayload({ sock: sockForAttempt, job, payload, attempt })
         const finishedAt = Date.now()
