@@ -172,6 +172,38 @@ Sem `JWT_SECRET` a API mata o processo no boot
 (`src/api/server.js:201-204`), o que faz o smoke test
 `assert_login_api_not_next_404` falhar e o deploy automático ficar vermelho.
 
+## Configurações do Mercado Pago (envs obrigatórias)
+
+Estas variáveis devem estar no `.env` de produção antes de ativar o fluxo de
+pagamento via Mercado Pago. Sem elas o endpoint de checkout ou o webhook
+falha silenciosamente.
+
+| Env                          | Obrigatória? | O que faz                                                                                   |
+|------------------------------|--------------|---------------------------------------------------------------------------------------------|
+| `MP_ACCESS_TOKEN`            | Sim          | Token de produção do MP (`APP_USR-...`). Obtido em Credenciais → Produção no painel MP.    |
+| `MP_WEBHOOK_SECRET`          | Sim (prod)   | Chave HMAC gerada pelo painel MP (Webhooks → Assinatura). Sem ela, `/api/payments/webhook` retorna 500 em produção. |
+| `BILLING_WEBHOOK_AUTOPROCESS`| Recomendada  | `true` ativa processamento imediato do webhook. Default `false` atrasa ativação em até 1h (reconciliação periódica). |
+
+**URL de webhook a registrar no painel MP:**
+`https://espelhagrupos.com.br/api/payments/webhook`
+
+Evento a marcar: `payment`.
+
+**Aplicar as envs (pegadinha #1 — PM2 cacheia env vars):**
+
+Mudar `.env` + `pm2 restart --update-env` **não substitui** variáveis já
+cacheadas. Para qualquer mudança nas envs do MP fazer:
+
+```bash
+pm2 delete api
+cd ~/wabot && pm2 start ecosystem.config.cjs --only api
+pm2 save
+```
+
+**Token de sandbox vs produção:** o MP fornece tokens separados. Usar token
+de produção em staging dispara cobranças reais. Para testes, usar token de
+sandbox no `.env` de staging.
+
 ## Isolamento de bancos (não substituir prod por staging)
 
 Quatro camadas de isolamento em produção:
@@ -255,11 +287,12 @@ ou porta divergente do que está em `apiPortByDashboardPort`.
 ## Agregação de duplicatas em `MessageLog.dedupHits`
 
 Em vez de criar N linhas de `skip:dedup_recent_link` quando o mesmo
-link é republicado pela fonte ao longo de 24h, agregamos no contador
+link é republicado pela fonte ao longo de 2h, agregamos no contador
 `dedupHits` da linha mais recente do mesmo `(userId, destGroup,
 convertedUrl)`. Implementado em `registerDedupBlock()` no `bot-worker.js`:
 
-1. Procura a linha mais recente dentro de `linkDedupWindowMs` (default 24h)
+1. Procura a linha mais recente dentro de `linkDedupWindowMs` (default 2h,
+   override via env `DEDUP_LINK_WINDOW_MS`)
    filtrando por `userId`, `destGroup` e `convertedUrl OR originalUrl`.
 2. Se achar → `UPDATE` com `dedupHits = dedupHits + 1`.
 3. Senão (estado dessincronizado, fallback raro) → cria linha
@@ -287,7 +320,7 @@ tradutor `explainErrorMsg` em `dashboard/app/dashboard/logs/page.js`):
 
 | Prefixo                          | Categoria          | Significado                                                  |
 |----------------------------------|--------------------|--------------------------------------------------------------|
-| `skip:dedup_recent_link`         | DEDUP              | Link já enviado nas últimas 24h (per-dest)                   |
+| `skip:dedup_recent_link`         | DEDUP              | Link já enviado nas últimas 2h (per-dest)                    |
 | `skip:dedup_recent_link_global`  | DEDUP              | Idem, via Redis global                                       |
 | `skip:blocked_keyword`           | CONFIG_BLOCK       | Palavra-chave bloqueada pelo usuário                         |
 | `skip:title_mismatch`            | CONFIG_BLOCK       | Caption não bate com og:title raspado                        |

@@ -151,20 +151,59 @@ function extractTitleFallback(html) {
   return m?.[1] ? normalizeText(m[1]) : ''
 }
 
+function extractTitleFromUrl(url) {
+  try {
+    const u = new URL(String(url || ''))
+    const host = u.hostname.replace(/^www\./, '')
+    if (/shopee\.com\.br$/.test(host)) {
+      const m = u.pathname.match(/^\/([^/]+)-i\.\d+\.\d+/i)
+      if (m?.[1]) return normalizeText(decodeURIComponent(m[1]).replace(/-/g, ' '))
+    }
+    if (/amazon\.com\.br$/.test(host)) {
+      const m = u.pathname.match(/^\/([^/]+)\/dp\/[A-Z0-9]{10}/i)
+      if (m?.[1]) return normalizeText(decodeURIComponent(m[1]).replace(/-/g, ' '))
+    }
+    if (/mercadolivre\.com\.br$/.test(host)) {
+      const m = u.pathname.match(/^\/([^/]+)\/up\//i)
+      if (m?.[1]) return normalizeText(decodeURIComponent(m[1]).replace(/-/g, ' '))
+    }
+  } catch {}
+  return ''
+}
+
 
 function extractAmazonTitleAndPrice(html) {
   const titleMatch = html.match(/<span[^>]+id=["']productTitle["'][^>]*>([\s\S]*?)<\/span>/i)
   const offscreenPrice = html.match(/<span[^>]+class=["'][^"']*a-offscreen[^"']*["'][^>]*>[^0-9]*([0-9]+(?:[\.,][0-9]{2})?)<\/span>/i)
+  const whole = html.match(/<span[^>]+class=["'][^"']*a-price-whole[^"']*["'][^>]*>([0-9\.]+)<\/span>/i)?.[1]
+  const fraction = html.match(/<span[^>]+class=["'][^"']*a-price-fraction[^"']*["'][^>]*>([0-9]{2})<\/span>/i)?.[1]
   const title = titleMatch?.[1] ? normalizeText(titleMatch[1]) : ''
-  const newPrice = offscreenPrice?.[1] ? toPriceString(offscreenPrice[1]) : ''
+  const inlinePrice = whole && fraction ? `${whole},${fraction}` : ''
+  const newPrice = offscreenPrice?.[1] ? toPriceString(offscreenPrice[1]) : toPriceString(inlinePrice)
   return { title, newPrice }
 }
 
 
 function parseShopeeIdsFromUrl(url) {
-  const m = String(url || '').match(/-i\.(\d+)\.(\d+)(?:\?|$)/)
+  const raw = String(url || '')
+  const m = raw.match(/-i\.(\d+)\.(\d+)(?:[/?#]|$)/) || raw.match(/\/product\/(\d+)\/(\d+)(?:[/?#]|$)/)
   if (!m) return null
   return { shopId: m[1], itemId: m[2] }
+}
+
+async function resolveShopeeUrl(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS } = {}) {
+  try {
+    const u = new URL(String(url || ''))
+    if (!/^(shope\.ee|s\.shopee\.com\.br)$/.test(u.hostname)) return String(url || '')
+    const res = await fetch(String(url), {
+      headers: { 'User-Agent': BROWSER_UA },
+      signal: AbortSignal.timeout(timeoutMs),
+      redirect: 'follow',
+    })
+    return String(res?.url || url)
+  } catch {
+    return String(url || '')
+  }
 }
 
 function shopeePriceIntToString(value) {
@@ -174,7 +213,8 @@ function shopeePriceIntToString(value) {
 }
 
 async function fetchShopeeItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS } = {}) {
-  const ids = parseShopeeIdsFromUrl(url)
+  const canonical = await resolveShopeeUrl(url, { timeoutMs })
+  const ids = parseShopeeIdsFromUrl(canonical)
   if (!ids) return null
   const endpoint = `https://shopee.com.br/api/v4/item/get?itemid=${ids.itemId}&shopid=${ids.shopId}`
   try {
@@ -182,7 +222,7 @@ async function fetchShopeeItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS } = 
       headers: {
         'User-Agent': BROWSER_UA,
         Accept: 'application/json,text/plain,*/*',
-        Referer: String(url || 'https://shopee.com.br/'),
+        Referer: String(canonical || 'https://shopee.com.br/'),
       },
       signal: AbortSignal.timeout(timeoutMs),
       redirect: 'follow',
@@ -234,7 +274,8 @@ export async function fetchProductInfo(url, opts = {}) {
   const mlLanding = extractFromMercadoLivreLanding(html)
   const amazonFallback = extractAmazonTitleAndPrice(html)
   const shopeeApiFallback = await fetchShopeeItemInfo(finalUrl || url, opts)
-  const title = jsonLd?.title || amazonFallback?.title || shopeeApiFallback?.title || extractTitleFallback(html)
+  const titleFromUrl = extractTitleFromUrl(finalUrl || url)
+  const title = jsonLd?.title || amazonFallback?.title || shopeeApiFallback?.title || titleFromUrl || extractTitleFallback(html)
   const newPrice = jsonLd?.newPrice || mlLanding?.newPrice || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || extractMetaPrice(html)
   const oldPrice = jsonLd?.oldPrice || mlLanding?.oldPrice || shopeeApiFallback?.oldPrice || ''
   return { title, oldPrice, newPrice, finalUrl }

@@ -26,3 +26,26 @@ export function getConversionStatusPresentation(status) {
     hint,
   }
 }
+
+export function buildOfferPriceBlocks({ oldPrice, newPrice, formatPrice }) {
+  const oldValue = String(oldPrice || '').trim()
+  const newValue = String(newPrice || '').trim()
+  const fmt = typeof formatPrice === 'function' ? formatPrice : (v) => String(v || '').trim()
+
+  if (oldValue && newValue) {
+    return {
+      oldPriceBlock: `\n\nDe ${fmt(oldValue)}`,
+      newPriceBlock: `\n💥 Por ${fmt(newValue)}`,
+    }
+  }
+
+  const single = newValue || oldValue
+  if (single) {
+    return {
+      oldPriceBlock: '',
+      newPriceBlock: `\n💥 Por ${fmt(single)}`,
+    }
+  }
+
+  return { oldPriceBlock: '', newPriceBlock: '' }
+}

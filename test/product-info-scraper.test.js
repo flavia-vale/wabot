@@ -27,6 +27,21 @@ test('fetchProductInfo extrai título e preço de página Amazon mesmo sem json-
   assert.equal(info.newPrice, '64,99')
 })
 
+test('fetchProductInfo extrai preço Amazon via a-price-whole/fraction quando a-offscreen não existir', async (t) => {
+  const html = `<!doctype html><html><body>
+    <span id="productTitle">Milagre Creme de Pentear, Lola Cosmetics</span>
+    <span class="a-price-whole">35</span><span class="a-price-fraction">90</span>
+  </body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => mockHtmlResponse(html)
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://www.amazon.com.br/Milagre-Creme-Pentear-Lola-Cosmetics/dp/B07GTMGKY1')
+  assert.match(info.title, /Milagre Creme de Pentear/i)
+  assert.equal(info.newPrice, '35,90')
+})
+
 
 test('fetchProductInfo usa fallback da API da Shopee para título e preços', async (t) => {
   const shellHtml = '<!doctype html><html><head><title>Shopee Brasil | Ofertas incríveis</title></head><body>app shell</body></html>'
@@ -61,4 +76,58 @@ test('fetchProductInfo usa fallback da API da Shopee para título e preços', as
   assert.equal(info.title, 'Kit Maquiagem Completo Com Pincéis Empreendedora Sucesso')
   assert.equal(info.oldPrice, '79,00')
   assert.equal(info.newPrice, '33,18')
+})
+
+test('fetchProductInfo resolve short link da Shopee antes de consultar a API', async (t) => {
+  const shellHtml = '<!doctype html><html><head><title>Shopee Brasil</title></head><body>app shell</body></html>'
+  const shopeeApiPayload = {
+    data: {
+      item: {
+        name: 'Kit Maquiagem Completo Com Pincéis Empreendedora Sucesso',
+        price_before_discount: 7900000,
+        price_min: 3318000,
+      },
+    },
+  }
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url === 'https://s.shopee.com.br/6L1arzoKKY') {
+      return mockHtmlResponse(shellHtml, 'https://shopee.com.br/Kit-Maquiagem-Completo-Com-Pinc%C3%A9is-Empreendedora-Sucesso-i.358101010.21697493290')
+    }
+    if (url.includes('/api/v4/item/get?itemid=21697493290&shopid=358101010')) {
+      return {
+        ok: true,
+        headers: { get: () => 'application/json; charset=utf-8' },
+        json: async () => shopeeApiPayload,
+      }
+    }
+    if (url.includes('shopee.com.br/Kit-Maquiagem-Completo-Com-Pinc')) {
+      return mockHtmlResponse(shellHtml, 'https://shopee.com.br/Kit-Maquiagem-Completo-Com-Pinc%C3%A9is-Empreendedora-Sucesso-i.358101010.21697493290')
+    }
+    throw new Error(`unexpected fetch: ${url}`)
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://s.shopee.com.br/6L1arzoKKY')
+  assert.equal(info.title, 'Kit Maquiagem Completo Com Pincéis Empreendedora Sucesso')
+  assert.equal(info.oldPrice, '79,00')
+  assert.equal(info.newPrice, '33,18')
+})
+
+test('fetchProductInfo usa título do slug da URL quando Shopee API falhar', async (t) => {
+  const shellHtml = '<!doctype html><html><head><title>Shopee Brasil</title></head><body>app shell</body></html>'
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('/api/v4/item/get?')) {
+      return { ok: false, headers: { get: () => 'application/json' } }
+    }
+    return mockHtmlResponse(shellHtml, 'https://shopee.com.br/Kit-Maquiagem-Completo-Com-Pinc%C3%A9is-Empreendedora-Sucesso-i.358101010.21697493290')
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://shopee.com.br/Kit-Maquiagem-Completo-Com-Pinc%C3%A9is-Empreendedora-Sucesso-i.358101010.21697493290?extraParams=1')
+  assert.match(info.title, /Kit Maquiagem Completo Com Pincéis Empreendedora Sucesso/i)
 })

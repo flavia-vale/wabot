@@ -149,14 +149,6 @@ export default function AssinaturasPage() {
         </div>
       )}
 
-      {checkoutError && (
-        <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950" role="alert">
-          <p className="font-bold">Checkout não iniciado</p>
-          <p className="mt-1">{checkoutError}</p>
-          <p className="mt-1 text-xs font-semibold">Você ainda pode pagar via PIX manual abaixo e enviar o comprovante no WhatsApp.</p>
-        </div>
-      )}
-
       <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
         {plans.map((plan) => {
           const selected = plan.id === selectedPlanId
@@ -179,8 +171,29 @@ export default function AssinaturasPage() {
         })}
       </div>
 
-      <div className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
-        <p className="text-sm font-semibold text-gray-800">PIX Copia e Cola · {selectedPlan.name} ({selectedPlan.price}/30 dias)</p>
+      <div className="mb-5 rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
+        {checkoutError && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950" role="alert">
+            <p className="font-bold">Checkout não iniciado</p>
+            <p className="mt-1">{checkoutError}</p>
+            <p className="mt-1 text-xs font-semibold">Você ainda pode pagar via PIX manual abaixo e enviar o comprovante no WhatsApp.</p>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => handleCheckout(selectedPlanId)}
+          disabled={!!checkoutPlan}
+          className="w-full min-h-12 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {checkoutPlan === selectedPlanId ? 'Aguarde...' : `Assinar ${selectedPlan.name} com Mercado Pago`}
+        </button>
+        <p className="mt-2 text-center text-xs text-gray-500">Você será redirecionado para o Mercado Pago para concluir o pagamento.</p>
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <p className="text-sm font-semibold text-gray-700">Prefere pagar via PIX manual?</p>
+        <p className="mt-1 text-xs text-gray-500">Se preferir pagar manualmente, copie a chave PIX abaixo e envie o comprovante no WhatsApp.</p>
+        <p className="mt-4 text-sm font-semibold text-gray-800">PIX Copia e Cola · {selectedPlan.name} ({selectedPlan.price}/30 dias)</p>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <input
             readOnly
