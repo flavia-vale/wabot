@@ -121,14 +121,13 @@ export async function convert(url, creds) {
     if (hasCookies) {
       const { shortUrl, transient } = await createAmazonShortLink(longUrl, tag, creds)
       if (shortUrl) return shortUrl
-      if (transient) {
-        // 5xx/timeout transitório da Amazon após retries — degradar pra ?tag=
-        // longo é melhor que perder a oferta. Conversão pior, mas entrega 100%.
-        logger.warn({ url, longUrl }, 'Amazon: API transitória após retries — fallback para ?tag=')
-        return `${longUrl}?tag=${tag}`
-      }
-      logger.warn({ url, longUrl }, 'Amazon: API falhou (4xx/credencial) — abortando')
-      return null
+      // Cookies sitestripe expiram (~14-30d) e a API retorna 4xx. Antes
+      // descartávamos a oferta nesse caso, mas o link longo ?tag= credita
+      // comissão normalmente (só a tag é obrigatória). Entregar com link
+      // longo é sempre melhor que perder a oferta — o usuário só precisa
+      // renovar os cookies pra voltar a gerar amzn.to.
+      logger.warn({ url, longUrl, transient }, 'Amazon: API não retornou shortUrl — fallback para ?tag= (renovar cookies sitestripe)')
+      return `${longUrl}?tag=${tag}`
     }
 
     return `${longUrl}?tag=${tag}`
