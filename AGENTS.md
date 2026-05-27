@@ -468,6 +468,33 @@ está versionado** (`git ls-files scripts/<nome>`). Scripts untracked
 no diretório do clone são bombas-relógio — sobrevivem deploys mas
 escapam de qualquer code review.
 
+### 8. `prisma migrate deploy` quebra com SQLITE_BUSY se API/supervisor estão rodando
+
+Migrations DML (INSERT/UPDATE) convivem com o WAL ligado; **DDL** (ALTER
+TABLE, CREATE INDEX) exige lock exclusivo do SQLite. Enquanto
+`api-staging` ou `bot-supervisor-staging` (ou os equivalentes de prod)
+seguram conexões abertas no `.db`, qualquer ALTER falha com
+`Error: SQLite database error / database is locked`. Os 5s de
+`busy_timeout` não bastam — a app nunca solta.
+
+Sintoma observado no autodeploy do PR #651 (2026-05-27): `prisma migrate
+deploy` falhou 5x consecutivas dentro do retry loop, deployment abortou.
+
+Correção aplicada nos dois scripts (`deploy_safe_staging.sh` e
+`deploy_safe_dashboard.sh`): quando `prisma migrate status` reporta
+pendências, o script faz `pm2 stop` na API e no bot-supervisor
+**antes** do migrate, e religa logo após (ou no erro). Janela de
+indisponibilidade ~10-30s, mas só ocorre em deploy com migration nova
+— raro e planejado. Sem migration pendente, o passo é pulado e
+sessões/API seguem intocadas.
+
+Se um deploy futuro falhar com `database is locked` mesmo após esse
+fix: confirmar que os apps PM2 estão sendo de fato parados (`pm2
+describe <app>` retorna ok antes do stop?). Para destravar manualmente
+em emergência: `pm2 stop api-staging bot-supervisor-staging && cd
+~/wabot-staging && npx prisma migrate deploy && pm2 restart
+api-staging bot-supervisor-staging --update-env`.
+
 ## Image scrapers — configuração canônica (PR #422, não regredir)
 
 `src/converters/imageScrapers.js` entrega imagem hi-res para link preview
