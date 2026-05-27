@@ -19,7 +19,7 @@ function mockAxiosOnce(impl) {
   return () => { axios.get = original }
 }
 
-test('Amazon: cookies expirados (4xx) caem para ?tag= longo em vez de descartar oferta', async () => {
+test('Amazon: cookies expirados (4xx) caem para ?tag= longo e sinalizam amazon_cookies_expired', async () => {
   const restore = mockAxiosOnce(async (url) => {
     if (url.includes('sitestripe/getShortUrl')) {
       return { status: 401, data: { error: 'unauthorized' }, headers: {} }
@@ -28,13 +28,13 @@ test('Amazon: cookies expirados (4xx) caem para ?tag= longo em vez de descartar 
   })
   try {
     const result = await convert(LONG_URL, CREDS)
-    assert.equal(result, `${LONG_URL}?tag=${CREDS.tag}`, 'deveria devolver link longo com tag, não null')
+    assert.deepEqual(result, { url: `${LONG_URL}?tag=${CREDS.tag}`, warning: 'amazon_cookies_expired' })
   } finally {
     restore()
   }
 })
 
-test('Amazon: API 5xx transitória também cai para ?tag= longo', async () => {
+test('Amazon: API 5xx transitória cai para ?tag= longo sem warning (instabilidade do lado deles, não cliente)', async () => {
   const restore = mockAxiosOnce(async (url) => {
     if (url.includes('sitestripe/getShortUrl')) {
       return { status: 503, data: {}, headers: {} }
@@ -43,7 +43,7 @@ test('Amazon: API 5xx transitória também cai para ?tag= longo', async () => {
   })
   try {
     const result = await convert(LONG_URL, CREDS)
-    assert.equal(result, `${LONG_URL}?tag=${CREDS.tag}`)
+    assert.deepEqual(result, { url: `${LONG_URL}?tag=${CREDS.tag}`, warning: null })
   } finally {
     restore()
   }

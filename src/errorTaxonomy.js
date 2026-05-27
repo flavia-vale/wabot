@@ -20,6 +20,7 @@ export const ERROR_CATEGORIES = Object.freeze({
   BAILEYS: 'baileys',
   INCOMING_ERROR: 'incoming_error',
   CONVERSION: 'conversion',
+  CREDENTIAL_EXPIRED: 'credential_expired',
   OTHER: 'other',
   UNKNOWN: 'unknown',
 })
@@ -74,6 +75,8 @@ export function categorizeErrorMsg(errorMsg) {
   if (errorMsg.startsWith('skip:text_too_large')) return ERROR_CATEGORIES.CONFIG_BLOCK
   if (errorMsg.startsWith('skip:decrypt_failed')) return ERROR_CATEGORIES.DECRYPT
   if (errorMsg.startsWith('skip:incoming_error')) return ERROR_CATEGORIES.INCOMING_ERROR
+  if (errorMsg.startsWith('warning:amazon_cookies_expired')) return ERROR_CATEGORIES.CREDENTIAL_EXPIRED
+  if (errorMsg.startsWith('warning:')) return ERROR_CATEGORIES.CREDENTIAL_EXPIRED
   if (errorMsg.startsWith('skip:')) return ERROR_CATEGORIES.CONFIG_BLOCK
 
   if (errorMsg.startsWith('timeout:')) return ERROR_CATEGORIES.TIMEOUT
