@@ -482,18 +482,37 @@ deploy` falhou 5x consecutivas dentro do retry loop, deployment abortou.
 
 Correção aplicada nos dois scripts (`deploy_safe_staging.sh` e
 `deploy_safe_dashboard.sh`): quando `prisma migrate status` reporta
-pendências, o script faz `pm2 stop` na API e no bot-supervisor
-**antes** do migrate, e religa logo após (ou no erro). Janela de
-indisponibilidade ~10-30s, mas só ocorre em deploy com migration nova
+pendências, o script:
+
+1. `pm2 stop` na API e no bot-supervisor (mata o **pai**).
+2. **`pkill -f "<ROOT_DIR>/src/bot-worker.js"`** — bot-workers são forks
+   do supervisor (não processos PM2 separados). `pm2 stop` mata só o
+   pai; os filhos viram órfãos e seguem segurando conexões SQLite. O
+   filtro por path completo garante que o `pkill` de staging não toca
+   em workers de produção (que rodam de `/home/deploy/wabot/src/...`).
+3. Aplica o migrate.
+4. Religa API e supervisor; supervisor re-spawna os workers se
+   `AUTO_START_WHATSAPP_SESSIONS=true`.
+
+Janela de indisponibilidade ~15-40s (10s de graça pra workers + 5s
+buffer + tempo da migration). Só ocorre em deploy com migration nova
 — raro e planejado. Sem migration pendente, o passo é pulado e
 sessões/API seguem intocadas.
 
-Se um deploy futuro falhar com `database is locked` mesmo após esse
-fix: confirmar que os apps PM2 estão sendo de fato parados (`pm2
-describe <app>` retorna ok antes do stop?). Para destravar manualmente
-em emergência: `pm2 stop api-staging bot-supervisor-staging && cd
-~/wabot-staging && npx prisma migrate deploy && pm2 restart
-api-staging bot-supervisor-staging --update-env`.
+Para destravar manualmente em emergência (mesma sequência):
+```bash
+pm2 stop api-staging bot-supervisor-staging
+pkill -TERM -f "/wabot-staging/src/bot-worker.js"
+sleep 5
+pkill -KILL -f "/wabot-staging/src/bot-worker.js" 2>/dev/null || true
+cd ~/wabot-staging && npx prisma migrate deploy
+pm2 restart api-staging bot-supervisor-staging --update-env
+```
+
+Sintoma observado quando o `pkill` faltava (PR #654 v1): mesmo após
+`pm2 stop`, `prisma migrate` continuava falhando com `database is
+locked` em todas as 5 tentativas, porque os workers órfãos seguravam
+o `.db` em modo WAL.
 
 ## Image scrapers — configuração canônica (PR #422, não regredir)
 

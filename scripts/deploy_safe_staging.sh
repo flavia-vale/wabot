@@ -227,11 +227,23 @@ else
     if pm2 describe "$app" >/dev/null 2>&1; then
       if pm2 stop "$app" >/dev/null 2>&1; then
         MIGRATE_STOPPED_APPS="$MIGRATE_STOPPED_APPS $app"
-        echo "    - $app parado"
+        echo "    - $app parado (PM2)"
       fi
     fi
   done
-  sleep 2
+  # bot-workers são forks do supervisor (node src/bot-worker.js). pm2 stop
+  # mata só o pai; os filhos viram órfãos e seguem segurando conexões
+  # SQLite, mantendo o lock que bloqueia DDL. Mata explicitamente qualquer
+  # worker desta árvore (filtra por path completo pra não tocar em prod).
+  echo "    - matando bot-workers órfãos em $ROOT_DIR..."
+  pkill -TERM -f "${ROOT_DIR}/src/bot-worker.js" >/dev/null 2>&1 || true
+  sleep 3
+  if pgrep -f "${ROOT_DIR}/src/bot-worker.js" >/dev/null 2>&1; then
+    echo "    - workers ainda vivos após SIGTERM; SIGKILL"
+    pkill -KILL -f "${ROOT_DIR}/src/bot-worker.js" >/dev/null 2>&1 || true
+    sleep 1
+  fi
+  sleep 1
 
   migrate_attempt=0
   until npx prisma migrate deploy; do
