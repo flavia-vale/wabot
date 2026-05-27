@@ -110,8 +110,20 @@ function conversionFailureFromContext(context, err) {
   return { reasonCode: 'CONVERSION_FAILED', reasonMessage: err?.message || 'Falha na conversão do link.' }
 }
 
+// Aceita converter externo (testes) que retorne string OU `{ url, warning }`.
+// Normaliza para o formato canônico do route.
+function normalizeConverter(fn) {
+  return async (...args) => {
+    const result = await fn(...args)
+    if (!result) return null
+    if (typeof result === 'string') return { url: result, warning: null }
+    if (result.url) return { url: result.url, warning: result.warning ?? null }
+    return null
+  }
+}
+
 export async function linkConversionRoutes(app, opts = {}) {
-  const convertLink = opts.converter ?? defaultConvertLink
+  const convertLink = opts.converter ? normalizeConverter(opts.converter) : defaultConvertLink
   const fetchProductInfo = opts.fetchProductInfo ?? defaultFetchProductInfo
   const findCredentials = opts.findCredentials ?? ((userId) => db.credential.findMany({ where: { userId } }))
   const rateState = opts.rateState ?? new Map()
@@ -152,13 +164,13 @@ export async function linkConversionRoutes(app, opts = {}) {
         reasonMessage = missingCredentialMessage(validation)
       } else {
         try {
-          const convertedUrl = await withTimeout(
+          const conversionResult = await withTimeout(
             convertLink(platform, url, credentialsMap),
             operational.conversionTimeoutMs,
             `Tempo limite de conversão excedido para ${validation.label}. Tente novamente.`,
           )
-          if (convertedUrl) {
-            offerUrl = convertedUrl
+          if (conversionResult?.url) {
+            offerUrl = conversionResult.url
             conversionSuccess = true
           } else {
             const failure = conversionFailureFromContext('empty_result')
@@ -295,12 +307,12 @@ export async function linkConversionRoutes(app, opts = {}) {
         }
 
         try {
-          const convertedUrl = await withTimeout(
+          const conversionResult = await withTimeout(
             convertLink(link.platform, link.url, credentialsMap),
             Math.min(operational.conversionTimeoutMs, remainingMs),
             `Tempo limite de conversão excedido para ${validation.label}. Tente novamente ou envie menos links por vez.`,
           )
-          if (!convertedUrl) {
+          if (!conversionResult?.url) {
             results.push(buildErrorResult(
               index,
               link,
@@ -316,7 +328,8 @@ export async function linkConversionRoutes(app, opts = {}) {
             platform: link.platform,
             label: validation.label,
             originalUrl: link.url,
-            convertedUrl,
+            convertedUrl: conversionResult.url,
+            warning: conversionResult.warning ?? null,
             status: 'converted',
             code: null,
             error: null,

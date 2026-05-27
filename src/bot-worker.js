@@ -1070,7 +1070,7 @@ async function startBotInner() {
   // mesma URL no destino algum tempo depois. Caso real: mesmo amzn.to/4rUx7Gd
   // convertido 3x em 52min porque o canal-fonte reposta a mesma oferta.
   const dedupeWindowMs = Math.max(1_000, Number(process.env.DEDUP_MSGID_WINDOW_MS) || 300_000)
-  const linkDedupWindowMs = Math.max(dedupeWindowMs, Number(process.env.DEDUP_LINK_WINDOW_MS) || 24 * 60 * 60_000)
+  const linkDedupWindowMs = Math.max(dedupeWindowMs, Number(process.env.DEDUP_LINK_WINDOW_MS) || 2 * 60 * 60_000)
   const dedup = pruneDedupStore(
     loadDedup(),
     Date.now(),
@@ -1285,7 +1285,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }).catch(() => {})
       }
 
-      // Quando uma URL já enviada nas últimas 24h é vista de novo, em vez de
+      // Quando uma URL já enviada nas últimas 2h é vista de novo, em vez de
       // criar mais uma linha 'skip:dedup_recent_link' (gerando N rows iguais
       // que poluem o painel), incrementamos um contador na linha existente
       // mais recente do mesmo (userId, destJid, convertedUrl). Janela de busca
@@ -1556,19 +1556,39 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }
 
         try {
-          const converted = await convertLink(platform, url, cfg.credentials)
-          if (!converted) {
+          const conversionResult = await convertLink(platform, url, cfg.credentials)
+          if (!conversionResult) {
             await recordConversionIssue({ platform, url, jid, text, reason: `Conversor de ${credentialValidation.label} não retornou link convertido. Confira se as credenciais estão válidas.` })
             return null
           }
-          logger.info({ platform, converted }, 'Link convertido')
-          return { platform, url, converted }
+          logger.info({ platform, converted: conversionResult.url, warning: conversionResult.warning }, 'Link convertido')
+          return { platform, url, converted: conversionResult.url, warning: conversionResult.warning }
         } catch (err) {
           await recordConversionIssue({ platform, url, jid, text, reason: `Falha na conversão de ${credentialValidation.label}: ${err.message}` })
           return null
         }
       }))
       const conversions = linkResults.filter(Boolean)
+
+      const warningKinds = new Set(conversions.map(c => c.warning).filter(Boolean))
+      for (const kind of warningKinds) {
+        const sample = conversions.find(c => c.warning === kind)
+        await db.messageLog.create({
+          data: {
+            userId,
+            platform: sample?.platform || 'unknown',
+            sourceGroup: jid,
+            destGroup: 'warning',
+            originalUrl: sample?.url || '',
+            convertedUrl: '',
+            messageText: '',
+            status: 'skipped',
+            errorMsg: `warning:${kind}`,
+          },
+        }).catch(err => {
+          logger.warn({ err: err.message, kind }, 'Falha ao gravar aviso de conversão')
+        })
+      }
 
       let finalText = sanitizedText
       if (links.length) {

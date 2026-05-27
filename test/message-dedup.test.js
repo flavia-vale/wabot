@@ -31,7 +31,7 @@ test('dedup entries expire continuously instead of only at worker start', () => 
 })
 
 test('pruneDedupStore aceita janelas independentes pra msgIds e links', () => {
-  // Cenário do hotfix: msgIds expira em 5min, links em 24h. Mesma URL
+  // Cenário do hotfix: msgIds expira em 5min, links em 2h. Mesma URL
   // repostada 42min depois precisa continuar deduplicada.
   const store = {
     msgIds: [{ id: 'jid:msg-velho', ts: 0 }, { id: 'jid:msg-novo', ts: 9_500 }],
