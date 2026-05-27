@@ -44,6 +44,7 @@ import { getAdvancedPreservationAccess } from './billing/plans.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
+import { classifyError } from './errorTaxonomy.js'
 import { detectMessageKind, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
 import Redis from 'ioredis'
 import { parseEnumEnv, logModeSummary } from './core/envModes.js'
@@ -461,7 +462,7 @@ async function checkScheduledMessages() {
           state.hasError = true
           await db.messageLog.update({
             where: { id: log.id },
-            data: { status: 'error', errorMsg: 'Fila interna de envios cheia ou worker encerrando', sentAt: new Date() },
+            data: { status: 'error', errorMsg: classifyError(null, { kind: 'queue_full' }), sentAt: new Date() },
           }).catch(() => {})
         }
       }
@@ -558,7 +559,17 @@ const SHUTDOWN_DRAIN_TIMEOUT_MS = Math.max(0, envNumber('SHUTDOWN_DRAIN_TIMEOUT_
 // a fila em memória processa serialmente, todo job posterior fica "queued"
 // até reinício do worker. Com timeout vira erro transitório que reentra no
 // retry loop; após SEND_MAX_ATTEMPTS o job é marcado 'error' e a fila avança.
-const SEND_MESSAGE_TIMEOUT_MS = Math.max(5_000, envNumber('SEND_MESSAGE_TIMEOUT_MS', 60_000))
+//
+// Política por tentativa: 1ª paciente (gera link preview, mídia hospedada,
+// rede pode oscilar), demais rápidas para liberar a fila. Configurável via
+// env caso precise uniformizar em incidentes — caem todos no mesmo valor.
+const SEND_MESSAGE_TIMEOUT_MS = Math.max(5_000, envNumber('SEND_MESSAGE_TIMEOUT_MS', 0)) || null
+const SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS = [90_000, 60_000, 45_000]
+function resolveSendTimeoutMs(attempt) {
+  if (SEND_MESSAGE_TIMEOUT_MS) return SEND_MESSAGE_TIMEOUT_MS
+  const idx = Math.max(0, Math.min(SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS.length - 1, (attempt || 1) - 1))
+  return SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS[idx]
+}
 const DEST_RATE_LIMIT_MS = Math.max(0, envNumber('DEST_RATE_LIMIT_MS', 1_000))
 const SMART_DELAY_PROGRESSIVE_THRESHOLD = Math.max(1, envNumber('SMART_DELAY_PROGRESSIVE_THRESHOLD', 20))
 const SMART_DELAY_PROGRESSIVE_STEP_MS = Math.max(0, envNumber('SMART_DELAY_PROGRESSIVE_STEP_MS', 5_000))
@@ -577,8 +588,12 @@ const SEND_QUEUE_BACKEND_ENV = String(process.env.QUEUE_BACKEND || '').toLowerCa
 const REDIS_URL = process.env.REDIS_URL || ''
 const BULLMQ_QUEUE_NAME = process.env.BULLMQ_QUEUE_NAME || `wabot-send-${userId}`
 const MSG_QUEUE_CONCURRENCY = Math.max(1, envNumber('MSG_QUEUE_CONCURRENCY', 2))
-const MSG_QUEUE_TIMEOUT_MS = Math.max(1_000, envNumber('MSG_QUEUE_TIMEOUT_MS', 15_000))
-const MSG_QUEUE_WATCHDOG_MS = Math.max(5_000, envNumber('MSG_QUEUE_WATCHDOG_MS', 30_000))
+// Default subido de 15s -> 25s: dentro do orçamento da incomingQueue cabe
+// scrape de título (3s) + conversão de afiliado (rede) + dedup + DB write.
+// Em Amazon BR (HTML de ~1.3MB) 15s ficava apertado. Watchdog em
+// MSG_QUEUE_WATCHDOG_MS (30s) continua como safety-net pro caso patológico.
+const MSG_QUEUE_TIMEOUT_MS = Math.max(1_000, envNumber('MSG_QUEUE_TIMEOUT_MS', 25_000))
+const MSG_QUEUE_WATCHDOG_MS = Math.max(5_000, envNumber('MSG_QUEUE_WATCHDOG_MS', 40_000))
 const MSG_QUEUE_MAX_SIZE = Math.max(10, envNumber('MSG_QUEUE_MAX_SIZE', 500))
 const MAX_INCOMING_MESSAGE_CHARS = Math.max(500, envNumber('MAX_INCOMING_MESSAGE_CHARS', 8_000))
 
@@ -751,14 +766,15 @@ async function finishSendJob(job, result) {
 }
 
 function withSendTimeout(promise, ctx) {
-  return withSendTimeoutImpl(promise, { ...ctx, timeoutMs: SEND_MESSAGE_TIMEOUT_MS })
+  const timeoutMs = resolveSendTimeoutMs(ctx?.attempt)
+  return withSendTimeoutImpl(promise, { ...ctx, timeoutMs })
 }
 
-async function sendPreparedPayload({ sock, job, payload }) {
+async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
   if (payload && payload._route === 'relay' && payload.relay?.type && payload.relay?.proto) {
     await withSendTimeout(
       sock.relayMessage(job.destJid, { [payload.relay.type]: payload.relay.proto }, {}),
-      { destJid: job.destJid, route: 'relay' },
+      { destJid: job.destJid, route: 'relay', attempt },
     )
     return
   }
@@ -784,7 +800,7 @@ async function sendPreparedPayload({ sock, job, payload }) {
       try {
         await withSendTimeout(
           sock.sendMessage(job.destJid, route.body, route.sendOptions || undefined),
-          { destJid: job.destJid, route: i === 0 ? 'primary' : `fallback[${i - 1}]` },
+          { destJid: job.destJid, route: i === 0 ? 'primary' : `fallback[${i - 1}]`, attempt },
         )
         return
       } catch (err) {
@@ -799,7 +815,7 @@ async function sendPreparedPayload({ sock, job, payload }) {
 
   await withSendTimeout(
     sock.sendMessage(job.destJid, payload),
-    { destJid: job.destJid, route: 'default' },
+    { destJid: job.destJid, route: 'default', attempt },
   )
 }
 
@@ -862,7 +878,8 @@ async function processSendJob(job) {
 
     for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt++) {
       try {
-        if (!activeSock) throw new Error('Bot não conectado')
+        const sockForAttempt = activeSock
+        if (!sockForAttempt) throw new Error('Bot não conectado')
         if (payload === null) {
           if (typeof job.buildPayload === 'function') payload = await job.buildPayload()
           else payload = job.payload
@@ -870,11 +887,15 @@ async function processSendJob(job) {
         if (payload === undefined) throw new Error('Invalid send job: payload/buildPayload ausente')
         await waitDestinationRateLimit(job.destJid)
         if (SMART_DELAY_TYPING_ENABLED && job.typingDelayMs > 0 && !job.skipTyping) {
-          await Promise.resolve(activeSock.sendPresenceUpdate?.('composing', job.destJid)).catch(() => {})
-          await sleep(job.typingDelayMs)
-          await Promise.resolve(activeSock.sendPresenceUpdate?.('paused', job.destJid)).catch(() => {})
+          try {
+            await Promise.resolve(sockForAttempt?.sendPresenceUpdate?.('composing', job.destJid)).catch(() => {})
+            await sleep(job.typingDelayMs)
+            await Promise.resolve((activeSock ?? sockForAttempt)?.sendPresenceUpdate?.('paused', job.destJid)).catch(() => {})
+          } catch (presenceErr) {
+            logger.debug({ err: presenceErr?.message, destJid: job.destJid }, 'sendPresenceUpdate falhou; ignorando typing')
+          }
         }
-        await sendPreparedPayload({ sock: activeSock, job, payload })
+        await sendPreparedPayload({ sock: sockForAttempt, job, payload, attempt })
         const finishedAt = Date.now()
         lastSendByDest.set(job.destJid, finishedAt)
         logger.info({ destJid: job.destJid, platforms: job.platforms, attempt, type: job.type }, 'Mensagem enviada')
@@ -898,7 +919,7 @@ async function processSendJob(job) {
         if (job.plan === 'basic') {
           adSendCount++
           if (adSendCount % 50 === 0) {
-            await activeSock.sendMessage(job.destJid, { text: AD_TEXT }).catch(() => {})
+            await sockForAttempt.sendMessage(job.destJid, { text: AD_TEXT }).catch(() => {})
           }
         }
         return
@@ -934,9 +955,11 @@ async function processSendJob(job) {
     }
   } catch (err) {
     logger.error({ destJid: job.destJid, err: err.message, type: job.type }, 'Erro ao enviar mensagem da fila')
+    const kind = isChannelForbiddenError(err) ? 'channel_forbidden' : undefined
+    const canonicalErrorMsg = classifyError(err, { destJid: job.destJid, kind })
     await db.messageLog.update({
       where: { id: job.logId },
-      data: { status: 'error', errorMsg: err.message, sentAt: new Date() },
+      data: { status: 'error', errorMsg: canonicalErrorMsg, sentAt: new Date() },
     }).catch(() => {})
     sendMetrics.errorTotal++
     sendMetrics.lastErrorAt = new Date().toISOString()
@@ -960,7 +983,7 @@ async function markInterruptedSendLogs() {
       where: { userId, status: { in: ['queued', 'sending'] } },
       data: {
         status: 'error',
-        errorMsg: 'Envio interrompido por reinício do worker antes da conclusão',
+        errorMsg: classifyError(null, { kind: 'worker_restart' }),
         sentAt: now,
       },
     }),
@@ -1017,7 +1040,24 @@ async function createSendBackend() {
   }
 }
 
+let startBotInFlight = false
 async function startBot() {
+  // Guard contra startBots concorrentes (boot inicial + IPC pairing + restart
+  // timer podem todos chamar isto). Concorrência causa dois sockets fechando
+  // um ao outro mid-handshake, propagando "Connection Closed" pro pairing.
+  if (startBotInFlight) {
+    logger.warn('startBot já em andamento — ignorando chamada paralela')
+    return
+  }
+  startBotInFlight = true
+  try {
+    await startBotInner()
+  } finally {
+    startBotInFlight = false
+  }
+}
+
+async function startBotInner() {
   if (!sendBackend) sendBackend = await createSendBackend()
   await getConfig()
   if (!interruptedSendLogsMarked) {
@@ -1057,10 +1097,12 @@ async function startBot() {
 
   sock.ev.on('creds.update', saveCreds)
 
-  // Pairing mode: requisitar o código IMEDIATAMENTE após o socket existir,
-  // antes que connection.update emita o primeiro QR e o server WA comite no
-  // fluxo de QR. Baileys 6.7.16 requer creds.registered === false; isso é
-  // garantido porque o handler IPC limpou AUTH_DIR antes de chamar startBot().
+  // Pairing mode: requisitar o código depois que WA emitir o primeiro 'qr'
+  // (sinal de que noise handshake + auth challenge terminaram e o servidor
+  // está pronto pra aceitar a IQ link_code_companion_reg). Esperar só o
+  // 'connecting' é cedo demais — auth challenge ainda não rodou, e a IQ
+  // de pairing é rejeitada com "Connection Closed". O exemplo canônico do
+  // Baileys faz `if (qr && !creds.registered) requestPairingCode`.
   if (pairingState.isActive()) {
     const { requestId, phone } = pairingState.snapshot()
     ;(async () => {
@@ -1068,17 +1110,45 @@ async function startBot() {
         if (sock.authState?.creds?.registered) {
           throw new Error('Sessão já está autenticada. Use "Esquecer número salvo" antes de parear por número.')
         }
+        // Aguarda 'qr' (= WA pronto pra pairing) OU 'open' (= já registrado)
+        // OU 'close' (= erro antes de chegar lá). Cap em 25s.
+        const ready = await new Promise((resolve, reject) => {
+          const onUpdate = ({ connection, qr, lastDisconnect }) => {
+            if (qr) {
+              sock.ev.off('connection.update', onUpdate)
+              resolve({ via: 'qr' })
+            } else if (connection === 'open') {
+              sock.ev.off('connection.update', onUpdate)
+              resolve({ via: 'open' })
+            } else if (connection === 'close') {
+              sock.ev.off('connection.update', onUpdate)
+              const code = lastDisconnect?.error?.output?.statusCode
+              reject(new Error(`Socket fechado antes de chegar pronto para pairing (code=${code ?? 'unknown'})`))
+            }
+          }
+          sock.ev.on('connection.update', onUpdate)
+          setTimeout(() => {
+            sock.ev.off('connection.update', onUpdate)
+            reject(new Error('WA não respondeu em 25s ao iniciar pareamento'))
+          }, 25_000)
+        })
+        if (!pairingState.ownsRequest(requestId)) return
+        if (ready.via === 'open') {
+          throw new Error('Sessão já está conectada — não é possível parear por número agora.')
+        }
+
+        logger.info({ requestId }, 'WA pronto para pairing (qr emitido); solicitando código')
         const code = await Promise.race([
           sock.requestPairingCode(phone),
           new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout interno (20s) ao gerar pairing code no WhatsApp')), 20_000)),
         ])
         if (!pairingState.ownsRequest(requestId)) return
         pairingState.markCode(code)
-        logger.info({ requestId }, 'Pairing code recebido do WhatsApp')
+        logger.info({ requestId, codeLen: code?.length }, 'Pairing code recebido do WhatsApp')
         if (process.send) process.send({ type: 'pairingCode', requestId, code })
       } catch (err) {
         if (!pairingState.ownsRequest(requestId)) return
-        logger.error({ err: err.message, requestId }, 'Falha ao solicitar pairing code no socket WA')
+        logger.error({ err: err.message, stack: err.stack, requestId }, 'Falha ao solicitar pairing code no socket WA')
         pairingState.clear()
         if (process.send) process.send({ type: 'pairingCode', requestId, error: err.message })
       }
@@ -1137,6 +1207,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       setLifecycleState(WA_LIFECYCLE.DISCONNECTED, { reason: 'connection_close' })
       const code = new Boom(lastDisconnect?.error)?.output?.statusCode
       const isLoggedOut = code === DisconnectReason.loggedOut
+      const isRestartRequired = code === DisconnectReason.restartRequired
       const wasPairing = pairingState.suppressAutoRestart()
       activeSock = null
       pendingSock = null
@@ -1146,11 +1217,19 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // Sessão revogada/expirada — limpar auth para que próximo start gere QR limpo
         await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
         logger.info('Sessão encerrada pelo servidor WA — auth_info limpo automaticamente')
+      } else if (wasPairing && isRestartRequired) {
+        // Pairing aceito pelo WA: o servidor manda close com code 515 esperando
+        // que a gente reconecte com as novas creds salvas via saveCreds. Esse é
+        // o caminho FELIZ do pairing — limpa o estado e dispara startBot pra
+        // completar o handshake pós-pairing e chegar em connection: 'open'.
+        logger.info({ code }, 'Pairing aceito pelo WA (restartRequired 515) — reiniciando com creds novas')
+        pairingState.clear()
+        setTimeout(startBot, 500)
       } else if (wasPairing) {
-        // Em pairing mode, NÃO auto-reiniciar: isso destruiria o socket que
-        // segura o código que o usuário está digitando. Se o usuário falhar
-        // em colar o código a tempo, a UI chamará novamente o endpoint.
-        logger.warn({ code }, 'WA close durante pairing — não reiniciando automaticamente (janela do usuário)')
+        // Pairing pendente (usuário ainda digitando código no app) ou falha
+        // não-515 durante pairing: NÃO auto-reiniciar agora. Se o usuário
+        // falhar em colar o código a tempo, a UI chamará novamente o endpoint.
+        logger.warn({ code }, 'WA close durante pairing (não-515) — não reiniciando automaticamente')
       } else {
         logger.warn({ code }, 'WA conexão fechada, agendando restart automático em 5s')
         setTimeout(startBot, 5_000)
@@ -1202,6 +1281,59 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             messageText: sanitizeMessageForLog(messageText || reason),
             status: 'skipped',
             errorMsg: reason,
+          },
+        }).catch(() => {})
+      }
+
+      // Quando uma URL já enviada nas últimas 24h é vista de novo, em vez de
+      // criar mais uma linha 'skip:dedup_recent_link' (gerando N rows iguais
+      // que poluem o painel), incrementamos um contador na linha existente
+      // mais recente do mesmo (userId, destJid, convertedUrl). Janela de busca
+      // = linkDedupWindowMs. Se não houver linha recente (estado dessincronizado
+      // após restart, por exemplo), cria uma nova como fallback para não perder
+      // visibilidade do evento.
+      async function registerDedupBlock({ reason, platform, destJid, originalUrl: incomingUrl, convertedUrl: outgoingUrl, messageText }) {
+        if (!shouldTrackSkipped) return
+        const since = new Date(Date.now() - linkDedupWindowMs)
+        const lookupUrl = outgoingUrl || incomingUrl || ''
+        try {
+          const recent = lookupUrl
+            ? await db.messageLog.findFirst({
+                where: {
+                  userId,
+                  destGroup: destJid,
+                  OR: [
+                    { convertedUrl: lookupUrl },
+                    { originalUrl: lookupUrl },
+                  ],
+                  sentAt: { gte: since },
+                },
+                orderBy: { sentAt: 'desc' },
+                select: { id: true },
+              })
+            : null
+          if (recent) {
+            await db.messageLog.update({
+              where: { id: recent.id },
+              data: { dedupHits: { increment: 1 } },
+            })
+            return
+          }
+        } catch (err) {
+          logger.warn({ err: err?.message, reason }, 'registerDedupBlock lookup falhou; fallback para create')
+        }
+        await db.messageLog.create({
+          data: {
+            userId,
+            platform: platform || 'unknown',
+            sourceGroup: normalizedJid || 'unknown',
+            destGroup: destJid || 'skipped',
+            originalUrl: incomingUrl || '',
+            convertedUrl: outgoingUrl || '',
+            messageText: sanitizeMessageForLog(messageText || reason),
+            status: 'skipped',
+            errorMsg: reason,
+            dedupHits: 0,
           },
         }).catch(() => {})
       }
@@ -1261,7 +1393,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             originalUrl: links[0]?.url || '',
             convertedUrl: '',
             messageText: sanitizeMessageForLog(sanitizedText || text || ''),
-            status: 'error',
+            status: 'skipped',
             errorMsg: `skip:policy:${policy.forwardMode}:${policy.noLinkScope}:${messageKind}`,
           },
         }).catch(() => {})
@@ -1392,7 +1524,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             convertedUrl: '',
             messageText: sanitizeMessageForLog(text),
             status: 'error',
-            errorMsg: reason,
+            errorMsg: `error:conversion:${reason}`,
           },
         }).catch(err => {
           logger.warn({ err: err.message, platform }, 'Falha ao gravar diagnóstico de conversão')
@@ -1450,7 +1582,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             originalUrl: links[0]?.url || '',
             convertedUrl: '',
             messageText: sanitizeMessageForLog(sanitizedText || ''),
-            status: 'error',
+            status: 'skipped',
             errorMsg: 'skip:no_valid_conversions',
           },
         }).catch(() => {})
@@ -1509,13 +1641,27 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const dedupSubject = primary.url || `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
         const key = `${destJid}:${dedupSubject}`
         if (dedup.links[key] && Date.now() - dedup.links[key] < linkDedupWindowMs) {
-          await recordSkippedMessage({ reason: 'skip:dedup_recent_link', platform: primary.platform, originalUrl: primary.url, convertedUrl: primary.converted })
+          await registerDedupBlock({
+            reason: 'skip:dedup_recent_link',
+            platform: primary.platform,
+            destJid,
+            originalUrl: primary.url,
+            convertedUrl: primary.converted,
+            messageText: finalText,
+          })
           logger.info({ destJid }, 'Duplicata ignorada'); continue
         }
         if (GLOBAL_DEDUP_MODE !== 'off') {
           const globalDedup = await globalDedupCheckAndSet(key, dedupeWindowMs)
           if (globalDedup.duplicate) {
-            await recordSkippedMessage({ reason: 'skip:dedup_recent_link_global', platform: primary.platform, originalUrl: primary.url, convertedUrl: primary.converted })
+            await registerDedupBlock({
+              reason: 'skip:dedup_recent_link_global',
+              platform: primary.platform,
+              destJid,
+              originalUrl: primary.url,
+              convertedUrl: primary.converted,
+              messageText: finalText,
+            })
             logger.info({ destJid }, 'Duplicata global ignorada')
             continue
           }
@@ -1634,7 +1780,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         if (!accepted) {
           await db.messageLog.update({
             where: { id: log.id },
-            data: { status: 'error', errorMsg: 'Fila interna de envios cheia ou worker encerrando', sentAt: new Date() },
+            data: { status: 'error', errorMsg: classifyError(null, { kind: 'queue_full' }), sentAt: new Date() },
           }).catch(() => {})
           logger.warn({ destJid, platforms, logId: log.id }, 'Mensagem convertida rejeitada pela fila')
         }
@@ -1681,10 +1827,10 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             logger.error({ msgId, dedupKey, err: err.message }, 'Mensagem descartada fora do escopo monitorado — sem log em painel')
             return
           }
-          const raw = String(err?.message || '')
-          const reason = /Bad MAC|MessageCounterError|Key used already or never filled/i.test(raw)
-            ? `skip:decrypt_failed:${raw.slice(0, 80)}`
-            : `skip:incoming_error:${raw.slice(0, 80)}`
+          const reason = classifyError(err, { kind: 'incoming' })
+          // timeout:incoming representa "tentamos processar e não conseguiu a tempo"
+          // — vira status='error'. Demais (decrypt, incoming_error) seguem 'skipped'.
+          const status = reason.startsWith('timeout:') ? 'error' : 'skipped'
           await db.messageLog.create({
             data: {
               userId,
@@ -1699,7 +1845,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
                 msg.message?.imageMessage?.caption ||
                 'incoming_error'
               ),
-              status: 'skipped',
+              status,
               errorMsg: reason,
             },
           }).catch(() => {})
@@ -1836,24 +1982,28 @@ process.on('message', async msg => {
       return
     }
     // Fluxo atômico de pairing:
-    //   1. Tear-down do socket atual (se houver) — pairing exige fresh socket
-    //   2. Limpar AUTH_DIR para garantir creds.registered === false
-    //   3. setActive(...) (suprime QR IPC + auto-restart em close; agenda expiry)
-    //   4. Chamar startBot() — o trigger em startBot pede o código logo após
+    //   1. Aguardar startBot em andamento finalizar (boot inicial ou restart)
+    //   2. setActive(...) (suprime QR IPC + auto-restart em close; agenda expiry)
+    //   3. Tear-down do socket atual (se houver) — pairing exige fresh socket
+    //   4. Limpar AUTH_DIR para garantir creds.registered === false
+    //   5. Chamar startBot() — o trigger em startBot pede o código logo após
     //      makeWASocket e devolve via IPC 'pairingCode'.
     try {
       if (pairingState.isActive()) {
         logger.warn({ existing: pairingState.snapshot().requestId, newRequestId: requestId }, 'Pairing já em andamento — substituindo')
       }
-      try { activeSock?.end?.(undefined) } catch {}
-      try { pendingSock?.end?.(undefined) } catch {}
-      try { activeSock?.ws?.close?.() } catch {}
-      try { pendingSock?.ws?.close?.() } catch {}
-      activeSock = null
-      pendingSock = null
 
-      await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
+      // Worker pode acabar de bootar: o boot startBot pode estar criando
+      // socket nesse exato momento. Aguarda finalizar antes de tear-down
+      // (até 8s). Se não finalizar, segue assim mesmo — o tear-down forçará
+      // o close, e a guard startBotInFlight evita race no startBot seguinte.
+      const waitStart = Date.now()
+      while (startBotInFlight && (Date.now() - waitStart) < 8_000) {
+        await new Promise(r => setTimeout(r, 100))
+      }
 
+      // setActive ANTES do tear-down: connection.update do sock fechando
+      // verá suppressAutoRestart=true e não agendará setTimeout(startBot).
       pairingState.setActive({
         phone,
         requestId,
@@ -1862,6 +2012,18 @@ process.on('message', async msg => {
           if (process.send) process.send({ type: 'pairingCode', requestId: expired.requestId, error: 'Tempo esgotado aguardando código de pareamento' })
         },
       })
+
+      try { activeSock?.end?.(undefined) } catch {}
+      try { pendingSock?.end?.(undefined) } catch {}
+      try { activeSock?.ws?.close?.() } catch {}
+      try { pendingSock?.ws?.close?.() } catch {}
+      activeSock = null
+      pendingSock = null
+
+      // Pequena espera pra eventos 'close' propagarem antes de criar novo sock
+      await new Promise(r => setTimeout(r, 300))
+
+      await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
 
       logger.info({ requestId }, 'Iniciando socket fresh em pairing mode')
       startBot().catch(err => {
@@ -1914,11 +2076,11 @@ process.on('message', async msg => {
       if (accepted) {
         queued++
       } else {
-        const error = 'Fila interna de envios cheia ou worker encerrando'
-        errors.push({ jid, error })
+        const canonicalErrorMsg = classifyError(null, { kind: 'queue_full' })
+        errors.push({ jid, error: canonicalErrorMsg })
         await db.messageLog.update({
           where: { id: log.id },
-          data: { status: 'error', errorMsg: error, sentAt: new Date() },
+          data: { status: 'error', errorMsg: canonicalErrorMsg, sentAt: new Date() },
         }).catch(() => {})
       }
     }

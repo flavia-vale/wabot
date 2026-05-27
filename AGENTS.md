@@ -252,6 +252,85 @@ Settings → Secrets and variables → Actions:
 Falha do smoke 9 geralmente é `.env` faltando, `JWT_SECRET` ausente
 ou porta divergente do que está em `apiPortByDashboardPort`.
 
+## Agregação de duplicatas em `MessageLog.dedupHits`
+
+Em vez de criar N linhas de `skip:dedup_recent_link` quando o mesmo
+link é republicado pela fonte ao longo de 24h, agregamos no contador
+`dedupHits` da linha mais recente do mesmo `(userId, destGroup,
+convertedUrl)`. Implementado em `registerDedupBlock()` no `bot-worker.js`:
+
+1. Procura a linha mais recente dentro de `linkDedupWindowMs` (default 24h)
+   filtrando por `userId`, `destGroup` e `convertedUrl OR originalUrl`.
+2. Se achar → `UPDATE` com `dedupHits = dedupHits + 1`.
+3. Senão (estado dessincronizado, fallback raro) → cria linha
+   `status='skipped'` com `errorMsg='skip:dedup_recent_link'`.
+
+O painel (`dashboard/app/dashboard/logs/page.js`) renderiza um chip
+`+N repetições bloqueadas` ao lado do status quando `dedupHits > 0`,
+inclusive em linhas de sucesso (uma promoção que saiu e foi tentada
+novamente N vezes pelos canais-fonte mostra ambos: "✓ Enviado +3
+repetições bloqueadas").
+
+O endpoint `/api/logs/summary` soma `dedupHits` em vez de contar
+linhas, garantindo que o card "Bloqueadas por repetição" reflita o
+número real de tentativas bloqueadas e não o número de linhas no
+banco. Índice composto `(userId, destGroup, convertedUrl, sentAt)`
+suporta o lookup em volume.
+
+## Taxonomia canônica de `MessageLog.errorMsg`
+
+Toda escrita final em `MessageLog.errorMsg` passa por `classifyError()`
+em `src/errorTaxonomy.js`. O painel e o endpoint `/api/logs/summary`
+agregam contagens via `categorizeErrorMsg()` lendo o prefixo. Prefixos
+canônicos (não inventar novos sem atualizar `errorTaxonomy.js` E o
+tradutor `explainErrorMsg` em `dashboard/app/dashboard/logs/page.js`):
+
+| Prefixo                          | Categoria          | Significado                                                  |
+|----------------------------------|--------------------|--------------------------------------------------------------|
+| `skip:dedup_recent_link`         | DEDUP              | Link já enviado nas últimas 24h (per-dest)                   |
+| `skip:dedup_recent_link_global`  | DEDUP              | Idem, via Redis global                                       |
+| `skip:blocked_keyword`           | CONFIG_BLOCK       | Palavra-chave bloqueada pelo usuário                         |
+| `skip:title_mismatch`            | CONFIG_BLOCK       | Caption não bate com og:title raspado                        |
+| `skip:text_too_large`            | CONFIG_BLOCK       | Mensagem acima de MAX_INCOMING_MESSAGE_CHARS                 |
+| `skip:no_valid_conversions`      | CONFIG_BLOCK       | Nenhum link convertido com sucesso                           |
+| `skip:policy:<...>`              | CONFIG_BLOCK       | Política de encaminhamento do grupo bloqueou                 |
+| `skip:decrypt_failed:<detail>`   | DECRYPT            | libsignal: Bad MAC / counter / key issues                    |
+| `skip:incoming_error:<detail>`   | INCOMING_ERROR     | Erro genérico no processamento de incoming                   |
+| `timeout:send:<destJid>`         | TIMEOUT            | `SEND_MESSAGE_TIMEOUT` após retries                          |
+| `timeout:incoming`               | TIMEOUT            | `MSG_QUEUE_TIMEOUT_MS` no preparo da mensagem                |
+| `error:queue_full`               | QUEUE_FULL         | Fila interna de envios cheia ou worker encerrando            |
+| `error:worker_restart`           | WORKER_RESTART     | Bot reiniciou antes de drenar a fila                         |
+| `error:channel_forbidden`        | CHANNEL_FORBIDDEN  | Canal-destino sem permissão (403)                            |
+| `error:channel_throttled`        | CHANNEL_THROTTLED  | Canal pediu para esperar                                     |
+| `error:baileys:<statusCode>`     | BAILEYS            | Boom/Baileys com `output.statusCode`                         |
+| `error:conversion:<motivo>`      | CONVERSION         | Falha de conversão de afiliado                               |
+| `error:other:<detail>`           | OTHER              | Catch-all classificado pelo classifyError                    |
+
+Regras de status (`MessageLog.status`):
+- `skip:*` → `status='skipped'` (decisão de não enviar; proteção/config)
+- `timeout:*` → `status='error'` (tentamos e não conseguimos a tempo)
+- `error:*` → `status='error'`
+- Sucesso → `status='success'`
+- Em vôo → `status='queued'` ou `'sending'`
+
+Strings históricas livres caem em categoria `UNKNOWN` — `categorizeErrorMsg`
+é tolerante. Para mudanças destrutivas (renomear prefixo) considerar
+backfill via SQL antes do deploy.
+
+## Timeouts no pipeline de mensagens
+
+| Constante                       | Default | Onde     | O que faz                                                          |
+|---------------------------------|---------|----------|--------------------------------------------------------------------|
+| `PRODUCT_TITLE_FETCH_TIMEOUT_MS`| 3s      | scraper  | Aborta scrape de og:title (`AbortSignal.timeout`); retorna `null`. |
+| `MSG_QUEUE_TIMEOUT_MS`          | **25s** | incoming | Aborta `processIncomingMessage` inteiro. `errorMsg=timeout:incoming`. |
+| `MSG_QUEUE_WATCHDOG_MS`         | 40s     | incoming | Libera slot travado mesmo após timeout (safety net).               |
+| `SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS` | [90,60,45]s | send | Por tentativa: 1ª paciente, retries rápidas. Override uniforme via `SEND_MESSAGE_TIMEOUT_MS` (vazio = usa array). |
+
+Defaults foram subidos em 2026-05 (15→25s incoming, 60→90/60/45s send)
+após observar timeouts excessivos com Amazon BR lenta (HTML ~1.3MB).
+**Não desligar os timeouts** — sem eles, um socket Baileys silenciosamente
+morto trava a fila serial inteira até reinício do worker.
+
 ## Fila de envio (BullMQ + DLQ)
 
 Cada bot-worker tem uma fila própria de envio (`wabot-send-<userId>`) e
