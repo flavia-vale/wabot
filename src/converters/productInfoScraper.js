@@ -151,6 +151,76 @@ function extractTitleFallback(html) {
   return m?.[1] ? normalizeText(m[1]) : ''
 }
 
+
+function extractAmazonTitleAndPrice(html) {
+  const titleMatch = html.match(/<span[^>]+id=["']productTitle["'][^>]*>([\s\S]*?)<\/span>/i)
+  const offscreenPrice = html.match(/<span[^>]+class=["'][^"']*a-offscreen[^"']*["'][^>]*>[^0-9]*([0-9]+(?:[\.,][0-9]{2})?)<\/span>/i)
+  const whole = html.match(/<span[^>]+class=["'][^"']*a-price-whole[^"']*["'][^>]*>([0-9\.]+)<\/span>/i)?.[1]
+  const fraction = html.match(/<span[^>]+class=["'][^"']*a-price-fraction[^"']*["'][^>]*>([0-9]{2})<\/span>/i)?.[1]
+  const title = titleMatch?.[1] ? normalizeText(titleMatch[1]) : ''
+  const inlinePrice = whole && fraction ? `${whole},${fraction}` : ''
+  const newPrice = offscreenPrice?.[1] ? toPriceString(offscreenPrice[1]) : toPriceString(inlinePrice)
+  return { title, newPrice }
+}
+
+
+function parseShopeeIdsFromUrl(url) {
+  const raw = String(url || '')
+  const m = raw.match(/-i\.(\d+)\.(\d+)(?:[/?#]|$)/) || raw.match(/\/product\/(\d+)\/(\d+)(?:[/?#]|$)/)
+  if (!m) return null
+  return { shopId: m[1], itemId: m[2] }
+}
+
+async function resolveShopeeUrl(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS } = {}) {
+  try {
+    const u = new URL(String(url || ''))
+    if (!/^(shope\.ee|s\.shopee\.com\.br)$/.test(u.hostname)) return String(url || '')
+    const res = await fetch(String(url), {
+      headers: { 'User-Agent': BROWSER_UA },
+      signal: AbortSignal.timeout(timeoutMs),
+      redirect: 'follow',
+    })
+    return String(res?.url || url)
+  } catch {
+    return String(url || '')
+  }
+}
+
+function shopeePriceIntToString(value) {
+  const num = Number(value)
+  if (!Number.isFinite(num) || num <= 0) return ''
+  return toPriceString(num / 100000)
+}
+
+async function fetchShopeeItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS } = {}) {
+  const canonical = await resolveShopeeUrl(url, { timeoutMs })
+  const ids = parseShopeeIdsFromUrl(canonical)
+  if (!ids) return null
+  const endpoint = `https://shopee.com.br/api/v4/item/get?itemid=${ids.itemId}&shopid=${ids.shopId}`
+  try {
+    const res = await fetch(endpoint, {
+      headers: {
+        'User-Agent': BROWSER_UA,
+        Accept: 'application/json,text/plain,*/*',
+        Referer: String(canonical || 'https://shopee.com.br/'),
+      },
+      signal: AbortSignal.timeout(timeoutMs),
+      redirect: 'follow',
+    })
+    if (!res.ok) return null
+    const payload = await res.json().catch(() => null)
+    const item = payload?.data?.item
+    if (!item) return null
+    return {
+      title: normalizeText(item.name || ''),
+      oldPrice: shopeePriceIntToString(item.price_before_discount),
+      newPrice: shopeePriceIntToString(item.price_min || item.price),
+    }
+  } catch {
+    return null
+  }
+}
+
 function extractMetaPrice(html) {
   for (const re of META_PRICE_RE) {
     const m = html.match(re)
@@ -182,8 +252,10 @@ export async function fetchProductInfo(url, opts = {}) {
   if (!html) return { title: '', oldPrice: '', newPrice: '', finalUrl }
   const jsonLd = extractFromJsonLd(html)
   const mlLanding = extractFromMercadoLivreLanding(html)
-  const title = jsonLd?.title || extractTitleFallback(html)
-  const newPrice = jsonLd?.newPrice || mlLanding?.newPrice || extractMetaPrice(html)
-  const oldPrice = jsonLd?.oldPrice || mlLanding?.oldPrice || ''
+  const amazonFallback = extractAmazonTitleAndPrice(html)
+  const shopeeApiFallback = await fetchShopeeItemInfo(finalUrl || url, opts)
+  const title = jsonLd?.title || amazonFallback?.title || shopeeApiFallback?.title || extractTitleFallback(html)
+  const newPrice = jsonLd?.newPrice || mlLanding?.newPrice || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || extractMetaPrice(html)
+  const oldPrice = jsonLd?.oldPrice || mlLanding?.oldPrice || shopeeApiFallback?.oldPrice || ''
   return { title, oldPrice, newPrice, finalUrl }
 }
