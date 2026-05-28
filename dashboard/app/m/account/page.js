@@ -1,8 +1,11 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
+import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+import { api } from '@/lib/api'
 
 const contaStyles = {
   // Perfil — discreto, sem blob
@@ -128,26 +131,79 @@ const ContaRow = ({ icon, tone, title, sub, statusTone, value, last }) => (
 
 export default function AccountPage() {
   useMobileRoutePerf('m/account')
+  const [user, setUser] = useState(null)
+  const [session, setSession] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    async function load() {
+      setLoading(true)
+      setError('')
+      try {
+        const [u, s] = await Promise.all([
+          api.me().catch(() => null),
+          api.sessionStatus().catch(() => null),
+        ])
+        if (!active) return
+        setUser(u || {})
+        setSession(s || {})
+      } catch (e) {
+        if (active) setError(e.message || 'Não foi possível carregar os dados.')
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    load()
+    return () => { active = false }
+  }, [])
+
+  if (loading) {
+    return (
+      <MobileShell title="Conversor" active="conta">
+        <div style={{ padding: '18px 16px' }}><MobileLoadingCard label="Carregando conta..." /></div>
+      </MobileShell>
+    )
+  }
+  if (error) {
+    return (
+      <MobileShell title="Conversor" active="conta">
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+      </MobileShell>
+    )
+  }
+
+  const name = user?.name || 'Usuário'
+  const email = user?.email || ''
+  const firstName = name.split(' ')[0]
+  const initials = name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
+  const plan = user?.plan?.toUpperCase() || 'FREE'
+  const planPrice = user?.plan === 'pro' ? 'R$ 39/mês' : 'Grátis'
+  const renewDate = user?.subscriptionRenewalAt ? new Date(user.subscriptionRenewalAt).toLocaleDateString('pt-BR') : ''
+
   return (
     <MobileShell title="Conversor" active="conta">
-      {/* Perfil — limpo */}
+      {/* Perfil */}
       <div style={contaStyles.profile}>
-        <div style={contaStyles.avatar}>SO</div>
+        <div style={contaStyles.avatar}>{initials}</div>
         <div style={contaStyles.profileMain}>
-          <div style={contaStyles.name}>Sol Almeida</div>
-          <div style={contaStyles.email}>sol@almeida.com.br</div>
-          <div style={contaStyles.planRow}>PRO</div>
+          <div style={contaStyles.name}>{name}</div>
+          <div style={contaStyles.email}>{email}</div>
+          <div style={contaStyles.planRow}>{plan}</div>
         </div>
       </div>
 
-      {/* Plano — separado, sem marketing pesado */}
-      <div style={contaStyles.plan}>
-        <div style={contaStyles.planMain}>
-          <div style={contaStyles.planTitle}>R$ 19/mês · renova em 14 dias</div>
-          <div style={contaStyles.planSub}>incluído: espelhamento e reescrita por IA</div>
+      {/* Plano */}
+      {user?.plan && (
+        <div style={contaStyles.plan}>
+          <div style={contaStyles.planMain}>
+            <div style={contaStyles.planTitle}>{planPrice}{renewDate ? ` · renova em ${renewDate}` : ''}</div>
+            <div style={contaStyles.planSub}>incluído: espelhamento e reescrita por IA</div>
+          </div>
+          <button style={contaStyles.planBtn}>Gerenciar</button>
         </div>
-        <button style={contaStyles.planBtn}>Gerenciar</button>
-      </div>
+      )}
 
       {/* ── CONEXÕES ── */}
       <div style={contaStyles.section}>
@@ -155,11 +211,10 @@ export default function AccountPage() {
       </div>
       <div style={contaStyles.card}>
         <ContaRow icon="whatsapp" tone="success" title="WhatsApp"
-          sub="+55 11 9 8765-4321 · ativo há 47 dias" statusTone="success"/>
-        <ContaRow icon="chat" tone="success" title="Telegram"
-          sub="@sol_achados" statusTone="success"/>
+          sub={session?.phone ? `${session.phone} · ativo há ${Math.floor((Date.now() - new Date(session.connectedAt).getTime()) / (1000 * 60 * 60 * 24))} dias` : 'não conectado'}
+          statusTone={session?.running ? "success" : "danger"} last={false}/>
         <ContaRow icon="link" tone="accent" title="Suas afiliadas"
-          sub="Shopee · ML · Amazon · Magalu · AliExpress falhou" value="4 de 5" last/>
+          sub="Shopee · ML · Amazon · Magalu" value="4 de 5" last/>
       </div>
 
       {/* ── ENVIOS — atalhos, não duplicação ── */}
