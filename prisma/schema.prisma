@@ -301,10 +301,16 @@ model MessageLog {
   messageText  String
   status       String   @default("success")
   errorMsg     String?
+  // Contador de repostas/duplicatas bloqueadas após a primeira gravação desta
+  // (sourceGroup, destGroup, convertedUrl). Em vez de criar N linhas iguais
+  // de skip:dedup_recent_link, agregamos no mesmo registro e renderizamos
+  // "+N repetições bloqueadas" no painel.
+  dedupHits    Int      @default(0)
   sentAt       DateTime @default(now())
 
   @@index([userId, sentAt])
   @@index([userId, status, sentAt])
+  @@index([userId, destGroup, convertedUrl, sentAt])
 }
 
 model AdminUser {
