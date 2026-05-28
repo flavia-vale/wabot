@@ -26,6 +26,19 @@ const PLAN_LABELS = {
   pro: 'Pro',
 }
 
+function formatBrazilianDate(value) {
+  if (!value) return null
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+function formatBrazilianCurrency(value) {
+  const numeric = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(numeric)) return null
+  return numeric.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
 function mergePlanCards(dynamicPlans = []) {
   const byId = new Map((dynamicPlans ?? []).map((plan) => [plan.id, plan]))
   return FALLBACK_PLAN_CARDS.map((fallbackPlan) => {
@@ -67,11 +80,12 @@ export default function AssinaturasPage() {
   const [email, setEmail] = useState('')
   const [expiredAccessCopy, setExpiredAccessCopy] = useState('')
   const [selectedPlanId, setSelectedPlanId] = useState('pro')
+  const [overview, setOverview] = useState(null)
 
   useEffect(() => {
     let active = true
-    Promise.allSettled([api.me(), api.publicPlans()])
-      .then(([userResult, plansResult]) => {
+    Promise.allSettled([api.me(), api.publicPlans(), api.paymentsOverview()])
+      .then(([userResult, plansResult, overviewResult]) => {
         if (!active) return
         if (userResult.status === 'fulfilled') {
           const user = userResult.value
@@ -86,12 +100,19 @@ export default function AssinaturasPage() {
           const dynamicPlans = Array.isArray(plansResult.value?.plans) ? plansResult.value.plans : []
           setPlans(mergePlanCards(dynamicPlans))
         }
+
+        if (overviewResult.status === 'fulfilled') {
+          setOverview(overviewResult.value || null)
+        } else {
+          setOverview(null)
+        }
       })
       .catch(() => {
         if (!active) return
         setEmail('')
         setExpiredAccessCopy('')
         setPlans(FALLBACK_PLAN_CARDS)
+        setOverview(null)
       })
 
     return () => {
@@ -135,10 +156,37 @@ export default function AssinaturasPage() {
     return `https://wa.me/${SUPPORT_WA_NUMBER}?text=${encodeURIComponent(payload)}`
   }, [email, selectedPlan])
 
+  const currentPlanLabel = overview?.plan ? (PLAN_LABELS[overview.plan] ?? overview.plan) : null
+  const expiresAtLabel = formatBrazilianDate(overview?.accessExpiresAt)
+  const lastPaymentAmount = overview?.lastApprovedPayment?.amount != null ? formatBrazilianCurrency(overview.lastApprovedPayment.amount) : null
+  const lastPaymentDate = formatBrazilianDate(overview?.lastApprovedPayment?.createdAt)
+
   return (
     <section className="mx-auto w-full max-w-3xl">
+      {overview && overview.isActive && currentPlanLabel && (
+        <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Assinatura atual</p>
+              <p className="mt-1 text-xl font-bold text-emerald-900">Plano {currentPlanLabel}</p>
+            </div>
+            {overview.expiresInDays != null && expiresAtLabel && (
+              <div className="text-right">
+                <p className="text-xs font-medium text-emerald-700">Renova manualmente em</p>
+                <p className="text-lg font-bold text-emerald-900">{overview.expiresInDays} {overview.expiresInDays === 1 ? 'dia' : 'dias'}</p>
+                <p className="text-xs text-emerald-700">até {expiresAtLabel}</p>
+              </div>
+            )}
+          </div>
+          <p className="mt-3 text-xs text-emerald-800">{overview.billingModel} · Pagamento via {overview.paymentMethod}</p>
+          {lastPaymentAmount && lastPaymentDate && (
+            <p className="mt-1 text-xs text-emerald-700">Último pagamento: {lastPaymentAmount} em {lastPaymentDate}</p>
+          )}
+        </div>
+      )}
+
       <header className="mb-5 rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
-        <h1 className="text-xl font-bold text-gray-800 md:text-2xl">Escolha seu plano</h1>
+        <h1 className="text-xl font-bold text-gray-800 md:text-2xl">{overview?.isActive ? 'Renovar ou trocar de plano' : 'Escolha seu plano'}</h1>
       </header>
 
       {expiredAccessCopy && (
@@ -146,14 +194,6 @@ export default function AssinaturasPage() {
           <p className="text-sm font-bold">Plano vencido: seus envios automáticos estão pausados</p>
           <p className="mt-2 text-sm text-red-900">{expiredAccessCopy}</p>
           <p className="mt-2 text-xs font-semibold text-red-800">Escolha um plano e finalize o checkout para reativar sua conta.</p>
-        </div>
-      )}
-
-      {checkoutError && (
-        <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950" role="alert">
-          <p className="font-bold">Checkout não iniciado</p>
-          <p className="mt-1">{checkoutError}</p>
-          <p className="mt-1 text-xs font-semibold">Você ainda pode pagar via PIX manual abaixo e enviar o comprovante no WhatsApp.</p>
         </div>
       )}
 
@@ -179,8 +219,29 @@ export default function AssinaturasPage() {
         })}
       </div>
 
-      <div className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
-        <p className="text-sm font-semibold text-gray-800">PIX Copia e Cola · {selectedPlan.name} ({selectedPlan.price}/30 dias)</p>
+      <div className="mb-5 rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
+        {checkoutError && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950" role="alert">
+            <p className="font-bold">Checkout não iniciado</p>
+            <p className="mt-1">{checkoutError}</p>
+            <p className="mt-1 text-xs font-semibold">Você ainda pode pagar via PIX manual abaixo e enviar o comprovante no WhatsApp.</p>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => handleCheckout(selectedPlanId)}
+          disabled={!!checkoutPlan}
+          className="w-full min-h-12 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {checkoutPlan === selectedPlanId ? 'Aguarde...' : `Assinar ${selectedPlan.name} com Mercado Pago`}
+        </button>
+        <p className="mt-2 text-center text-xs text-gray-500">Você será redirecionado para o Mercado Pago para concluir o pagamento.</p>
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <p className="text-sm font-semibold text-gray-700">Prefere pagar via PIX manual?</p>
+        <p className="mt-1 text-xs text-gray-500">Se preferir pagar manualmente, copie a chave PIX abaixo e envie o comprovante no WhatsApp.</p>
+        <p className="mt-4 text-sm font-semibold text-gray-800">PIX Copia e Cola · {selectedPlan.name} ({selectedPlan.price}/30 dias)</p>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <input
             readOnly
