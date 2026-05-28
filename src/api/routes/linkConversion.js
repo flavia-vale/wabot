@@ -110,18 +110,6 @@ function conversionFailureFromContext(context, err) {
   return { reasonCode: 'CONVERSION_FAILED', reasonMessage: err?.message || 'Falha na conversão do link.' }
 }
 
-// Aceita converter externo (testes) que retorne string OU `{ url, warning }`.
-// Normaliza para o formato canônico do route.
-function normalizeConverter(fn) {
-  return async (...args) => {
-    const result = await fn(...args)
-    if (!result) return null
-    if (typeof result === 'string') return { url: result, warning: null }
-    if (result.url) return { url: result.url, warning: result.warning ?? null }
-    return null
-  }
-}
-
 export async function linkConversionRoutes(app, opts = {}) {
   const convertLink = opts.converter ? normalizeConverter(opts.converter) : defaultConvertLink
   const fetchProductInfo = opts.fetchProductInfo ?? defaultFetchProductInfo
@@ -164,13 +152,13 @@ export async function linkConversionRoutes(app, opts = {}) {
         reasonMessage = missingCredentialMessage(validation)
       } else {
         try {
-          const conversionResult = await withTimeout(
+          const convertedUrl = await withTimeout(
             convertLink(platform, url, credentialsMap),
             operational.conversionTimeoutMs,
             `Tempo limite de conversão excedido para ${validation.label}. Tente novamente.`,
           )
-          if (conversionResult?.url) {
-            offerUrl = conversionResult.url
+          if (convertedUrl) {
+            offerUrl = convertedUrl
             conversionSuccess = true
           } else {
             const failure = conversionFailureFromContext('empty_result')

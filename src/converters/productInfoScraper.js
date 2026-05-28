@@ -164,11 +164,40 @@ function extractTitleFromUrl(url) {
       if (m?.[1]) return normalizeText(decodeURIComponent(m[1]).replace(/-/g, ' '))
     }
     if (/mercadolivre\.com\.br$/.test(host)) {
-      const m = u.pathname.match(/^\/([^/]+)\/up\//i)
+      const m = u.pathname.match(/^\/([^/]+)\/(?:up|p)\//i)
       if (m?.[1]) return normalizeText(decodeURIComponent(m[1]).replace(/-/g, ' '))
     }
   } catch {}
   return ''
+}
+
+function parseMercadoLivreProductIdFromUrl(url) {
+  const m = String(url || '').match(/\/p\/(MLB[0-9]+)/i)
+  return m?.[1]?.toUpperCase() || null
+}
+
+async function fetchMercadoLivreProductInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS } = {}) {
+  const productId = parseMercadoLivreProductIdFromUrl(url)
+  if (!productId) return null
+  const endpoint = `https://api.mercadolibre.com/products/${productId}`
+  try {
+    const res = await fetch(endpoint, {
+      headers: {
+        'User-Agent': BROWSER_UA,
+        Accept: 'application/json,text/plain,*/*',
+      },
+      signal: AbortSignal.timeout(timeoutMs),
+      redirect: 'follow',
+    })
+    if (!res.ok) return null
+    const payload = await res.json().catch(() => null)
+    const name = normalizeText(payload?.name || '')
+    const price = toPriceString(payload?.buy_box_winner?.price || payload?.buy_box_winner?.sale_price?.amount)
+    if (!name && !price) return null
+    return { title: name, oldPrice: '', newPrice: price }
+  } catch {
+    return null
+  }
 }
 
 
@@ -274,9 +303,10 @@ export async function fetchProductInfo(url, opts = {}) {
   const mlLanding = extractFromMercadoLivreLanding(html)
   const amazonFallback = extractAmazonTitleAndPrice(html)
   const shopeeApiFallback = await fetchShopeeItemInfo(finalUrl || url, opts)
+  const mercadoLivreApiFallback = await fetchMercadoLivreProductInfo(finalUrl || url, opts)
   const titleFromUrl = extractTitleFromUrl(finalUrl || url)
-  const title = jsonLd?.title || amazonFallback?.title || shopeeApiFallback?.title || titleFromUrl || extractTitleFallback(html)
-  const newPrice = jsonLd?.newPrice || mlLanding?.newPrice || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || extractMetaPrice(html)
-  const oldPrice = jsonLd?.oldPrice || mlLanding?.oldPrice || shopeeApiFallback?.oldPrice || ''
+  const title = jsonLd?.title || amazonFallback?.title || shopeeApiFallback?.title || mercadoLivreApiFallback?.title || titleFromUrl || extractTitleFallback(html)
+  const newPrice = jsonLd?.newPrice || mlLanding?.newPrice || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || mercadoLivreApiFallback?.newPrice || extractMetaPrice(html)
+  const oldPrice = jsonLd?.oldPrice || mlLanding?.oldPrice || shopeeApiFallback?.oldPrice || mercadoLivreApiFallback?.oldPrice || ''
   return { title, oldPrice, newPrice, finalUrl }
 }

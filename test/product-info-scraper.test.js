@@ -131,3 +131,32 @@ test('fetchProductInfo usa título do slug da URL quando Shopee API falhar', asy
   const info = await fetchProductInfo('https://shopee.com.br/Kit-Maquiagem-Completo-Com-Pinc%C3%A9is-Empreendedora-Sucesso-i.358101010.21697493290?extraParams=1')
   assert.match(info.title, /Kit Maquiagem Completo Com Pincéis Empreendedora Sucesso/i)
 })
+
+test('fetchProductInfo usa fallback da API de products do Mercado Livre para título e preço em URL /p/', async (t) => {
+  const htmlShell = '<!doctype html><html><head><title>Mercado Libre</title></head><body>anti-bot shell</body></html>'
+  const mlProductsPayload = {
+    name: 'Secador de roupas 600w elétrico portátil suspenso cortina compacto econômico seca rápido 110v',
+    buy_box_winner: { price: 189.9 },
+  }
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('mercadolivre.com.br/secador-de-roupas') && !url.includes('api.mercadolibre.com')) {
+      return mockHtmlResponse(htmlShell, 'https://www.mercadolivre.com.br/secador-de-roupas-600w-eletrico-portatil-suspenso-cortina-compacto-econmico-seca-rapido-110v/p/MLB70009242')
+    }
+    if (url === 'https://api.mercadolibre.com/products/MLB70009242') {
+      return {
+        ok: true,
+        headers: { get: () => 'application/json; charset=utf-8' },
+        json: async () => mlProductsPayload,
+      }
+    }
+    throw new Error(`unexpected fetch: ${url}`)
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://www.mercadolivre.com.br/secador-de-roupas-600w-eletrico-portatil-suspenso-cortina-compacto-econmico-seca-rapido-110v/p/MLB70009242')
+  assert.match(info.title, /Secador de roupas 600w elétrico portátil/i)
+  assert.equal(info.newPrice, '189,90')
+})
