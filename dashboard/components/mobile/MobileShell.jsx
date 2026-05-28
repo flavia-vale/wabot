@@ -133,7 +133,7 @@ const tabs = [
   { key: 'conta',    label: 'Conta',    href: mobileRoutes.account },
 ]
 
-export function MobileShell({ title = 'Conversor', active = 'inicio', hasAlert = false, children }) {
+export function MobileShell({ title = 'Conversor', active = 'inicio', hasAlert = false, showBack = false, onBack, children }) {
   return (
     <div className="mobile-shell" style={shellStyles.root}>
       <style>{`
@@ -151,7 +151,20 @@ export function MobileShell({ title = 'Conversor', active = 'inicio', hasAlert =
       `}</style>
       <header style={shellStyles.topbar}>
         <div style={shellStyles.topbarBrand}>
-          <div style={shellStyles.brandMark}>b</div>
+          {showBack ? (
+            <button
+              type="button"
+              style={{ ...shellStyles.iconBtn, marginRight: 6 }}
+              aria-label="Voltar"
+              onClick={onBack}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+            </button>
+          ) : (
+            <div style={shellStyles.brandMark}>b</div>
+          )}
           <div style={shellStyles.brandTxt}>{title}</div>
         </div>
         <button type="button" style={shellStyles.iconBtn} aria-label="Notificações">

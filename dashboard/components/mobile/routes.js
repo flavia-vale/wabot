@@ -13,4 +13,5 @@ export const mobileRoutes = {
   account: '/m/account',
   accountSubscription: '/m/account/subscription',
   accountTemplates: '/m/account/templates',
+  checklistEspelhamento: '/m/checklistespelhamento',
 }
