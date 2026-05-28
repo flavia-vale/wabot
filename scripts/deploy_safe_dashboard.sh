@@ -113,21 +113,50 @@ echo "[3/9] Apply database migrations"
 # PM2 (api / bot-supervisor) está escrevendo, o que dispara SQLITE_BUSY
 # mesmo com busy_timeout=5000 do src/db.js. Mesmo padrão do
 # deploy_safe_staging.sh.
+MIGRATE_STOPPED_APPS_PROD=""
+
+restart_apps_stopped_for_migration_prod() {
+  for app in $MIGRATE_STOPPED_APPS_PROD; do
+    pm2 restart "$app" --update-env >/dev/null 2>&1 || true
+  done
+}
+
 if npx prisma migrate status 2>&1 | grep -q "Database schema is up to date"; then
   echo "  Nenhuma migration pendente — pulando migrate deploy."
 else
-  # Há migration pendente: tenta até 5x com backoff (lock costuma ser transitório).
+  # Há migration pendente. DDL como ALTER TABLE precisa de lock exclusivo no
+  # SQLite — incompatível com api e bot-supervisor segurando conexões WAL.
+  # Paramos os dois antes de migrar e religamos logo depois. Janela de
+  # indisponibilidade ~10-30s, mas SÓ ocorre quando há migration pendente
+  # (eventos raros, planejados).
+  echo "  Migrations pendentes — parando processos que travam o banco..."
+  for app in "api" "bot-supervisor"; do
+    if pm2 describe "$app" >/dev/null 2>&1; then
+      if pm2 stop "$app" >/dev/null 2>&1; then
+        MIGRATE_STOPPED_APPS_PROD="$MIGRATE_STOPPED_APPS_PROD $app"
+        echo "    - $app parado"
+      fi
+    fi
+  done
+  sleep 2
+
   migrate_attempt=0
   until npx prisma migrate deploy; do
     migrate_attempt=$((migrate_attempt + 1))
     if [ "$migrate_attempt" -ge 5 ]; then
       echo "ERRO: prisma migrate deploy falhou após 5 tentativas."
+      restart_apps_stopped_for_migration_prod
       exit 1
     fi
     wait_s=$((migrate_attempt * 3))
     echo "  migrate falhou (tentativa $migrate_attempt/5) — aguardando ${wait_s}s..."
     sleep "$wait_s"
   done
+
+  if [ -n "$MIGRATE_STOPPED_APPS_PROD" ]; then
+    echo "  Migrations aplicadas. Religando:$MIGRATE_STOPPED_APPS_PROD"
+    restart_apps_stopped_for_migration_prod
+  fi
 fi
 
 echo "[4/9] Install dashboard dependencies"
