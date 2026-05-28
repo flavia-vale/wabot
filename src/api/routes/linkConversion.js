@@ -110,16 +110,31 @@ function conversionFailureFromContext(context, err) {
   return { reasonCode: 'CONVERSION_FAILED', reasonMessage: err?.message || 'Falha na conversão do link.' }
 }
 
-// Aceita converter externo (testes) que retorne string OU `{ url, warning }`.
-// Normaliza para o formato canônico do route.
-function normalizeConverter(fn) {
-  return async (...args) => {
-    const result = await fn(...args)
-    if (!result) return null
-    if (typeof result === 'string') return { url: result, warning: null }
-    if (result.url) return { url: result.url, warning: result.warning ?? null }
-    return null
-  }
+function inferTitleFromUrl(url) {
+  try {
+    const u = new URL(String(url || ''))
+    const host = u.hostname.replace(/^www\./, '')
+    if (/mercadolivre\.com\.br$/.test(host)) {
+      const m = u.pathname.match(/^\/([^/]+)\/(?:p|up)\//i)
+      if (m?.[1]) return decodeURIComponent(m[1]).replace(/-/g, ' ').trim()
+    }
+    if (/amazon\.com\.br$/.test(host)) {
+      const m = u.pathname.match(/^\/([^/]+)\/dp\//i)
+      if (m?.[1]) return decodeURIComponent(m[1]).replace(/-/g, ' ').trim()
+    }
+    if (/shopee\.com\.br$/.test(host)) {
+      const m = u.pathname.match(/^\/([^/]+)-i\.\d+\.\d+/i)
+      if (m?.[1]) return decodeURIComponent(m[1]).replace(/-/g, ' ').trim()
+    }
+  } catch {}
+  return ''
+}
+
+function hasUsefulOfferInfo(info) {
+  const title = typeof info?.title === 'string' ? info.title.trim() : ''
+  const newPrice = typeof info?.newPrice === 'string' ? info.newPrice.trim() : ''
+  const oldPrice = typeof info?.oldPrice === 'string' ? info.oldPrice.trim() : ''
+  return Boolean(title || newPrice || oldPrice)
 }
 
 export async function linkConversionRoutes(app, opts = {}) {
@@ -164,13 +179,13 @@ export async function linkConversionRoutes(app, opts = {}) {
         reasonMessage = missingCredentialMessage(validation)
       } else {
         try {
-          const conversionResult = await withTimeout(
+          const convertedUrl = await withTimeout(
             convertLink(platform, url, credentialsMap),
             operational.conversionTimeoutMs,
             `Tempo limite de conversão excedido para ${validation.label}. Tente novamente.`,
           )
-          if (conversionResult?.url) {
-            offerUrl = conversionResult.url
+          if (convertedUrl) {
+            offerUrl = convertedUrl
             conversionSuccess = true
           } else {
             const failure = conversionFailureFromContext('empty_result')
@@ -186,7 +201,25 @@ export async function linkConversionRoutes(app, opts = {}) {
     }
 
     try {
-      const info = await fetchProductInfo(offerUrl)
+      let info = await fetchProductInfo(offerUrl)
+
+      // Quando o link convertido é short-link (ex.: Shopee/Amazon) pode haver
+      // bloqueio de redirect/anti-bot no scrape do convertido. Nesses casos,
+      // tentamos o original para resgatar título/preço sem perder o offerUrl.
+      if (conversionSuccess && offerUrl !== url && !hasUsefulOfferInfo(info)) {
+        try {
+          const fallbackInfo = await fetchProductInfo(url)
+          if (hasUsefulOfferInfo(fallbackInfo)) {
+            info = {
+              ...fallbackInfo,
+              finalUrl: fallbackInfo?.finalUrl || info?.finalUrl || offerUrl,
+            }
+          }
+        } catch {
+          // mantém resultado do convertido
+        }
+      }
+
       return {
         title: info?.title || '',
         oldPrice: info?.oldPrice || '',
@@ -203,11 +236,57 @@ export async function linkConversionRoutes(app, opts = {}) {
         },
       }
     } catch (err) {
-      app.log.warn({ err: err.message, url: offerUrl }, 'Falha ao buscar informações do produto')
-      return reply.code(502).send({
-        error: 'Não foi possível ler as informações do produto agora. Preencha o template manualmente ou tente outro link.',
-        code: 'SCRAPE_OFFER_FETCH_FAILED',
-      })
+      app.log.warn({ err: err.message, url: offerUrl }, 'Falha ao buscar informações do produto; retornando fallback mínimo')
+
+      if (conversionSuccess && offerUrl !== url) {
+        try {
+          const originalInfo = await fetchProductInfo(url)
+          if (hasUsefulOfferInfo(originalInfo)) {
+            return {
+              title: originalInfo?.title || '',
+              oldPrice: originalInfo?.oldPrice || '',
+              newPrice: originalInfo?.newPrice || '',
+              finalUrl: originalInfo?.finalUrl || url,
+              offerUrl,
+              conversion: {
+                attempted: true,
+                success: conversionSuccess,
+                usedOriginalUrl: !conversionSuccess,
+                reasonCode: conversionSuccess ? null : reasonCode,
+                reasonMessage: conversionSuccess ? null : reasonMessage,
+                platform,
+              },
+              scrapeWarning: {
+                code: 'SCRAPE_OFFER_FETCH_FALLBACK_ORIGINAL',
+                message: 'Não foi possível ler dados pelo link convertido. Usamos o link original para preencher a oferta.',
+              },
+            }
+          }
+        } catch {
+          // cai no fallback mínimo abaixo
+        }
+      }
+
+      const fallbackTitle = inferTitleFromUrl(offerUrl) || inferTitleFromUrl(url)
+      return {
+        title: fallbackTitle,
+        oldPrice: '',
+        newPrice: '',
+        finalUrl: offerUrl,
+        offerUrl,
+        conversion: {
+          attempted: true,
+          success: conversionSuccess,
+          usedOriginalUrl: !conversionSuccess,
+          reasonCode: conversionSuccess ? null : reasonCode,
+          reasonMessage: conversionSuccess ? null : reasonMessage,
+          platform,
+        },
+        scrapeWarning: {
+          code: 'SCRAPE_OFFER_FETCH_FAILED',
+          message: 'Não foi possível ler as informações do produto agora. Preencha o template manualmente ou tente outro link.',
+        },
+      }
     }
   })
 

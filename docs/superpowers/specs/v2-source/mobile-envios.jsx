@@ -1,8 +1,8 @@
-'use client'
-
-import { useState } from 'react'
-import { MobileShell } from '@/components/mobile/MobileShell'
-import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+// ENVIOS v2 — princípio: a lista é o protagonista. Configuração mora atrás
+// de "ajustar". Labels em palavras, não símbolos.
+//
+// Cortado da v1: card grande "Cadência ativa..." no topo, filtro "Ignorados"
+// sem explicação, badges com símbolos ⇄ ✦ que precisam de legenda.
 
 const envStyles = {
   pageH: {
@@ -157,11 +157,9 @@ const envStyles = {
   }),
 };
 
-export default function LogsPage() {
-  useMobileRoutePerf('m/op/logs')
-
-  const [filter, setFilter] = useState('todos');
-  const [expanded, setExpanded] = useState(0);
+const MobileEnvios = () => {
+  const [filter, setFilter] = React.useState('todos');
+  const [expanded, setExpanded] = React.useState(0);
 
   // Filtros em palavras
   const filters = [
@@ -226,7 +224,7 @@ export default function LogsPage() {
   })[s];
 
   return (
-    <MobileShell title="Conversor" active="envios">
+    <MobileFrame title="Envios" active="envios">
       <div style={envStyles.pageH}>
         <div>
           <div style={envStyles.pageEyebrow}>Tudo que sai do bot</div>
@@ -367,6 +365,8 @@ export default function LogsPage() {
       </div>
 
       <div style={{height: 20}}/>
-    </MobileShell>
+    </MobileFrame>
   );
-}
+};
+
+window.MobileEnvios = MobileEnvios;

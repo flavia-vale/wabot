@@ -1,29 +1,70 @@
-import Link from 'next/link'
+'use client'
+
 import { MobileShell } from '@/components/mobile/MobileShell'
-import { whatsappStatus } from '@/components/mobile/mobileConfigData'
-import { mobileRoutes } from '@/components/mobile/routes'
+import { MobileIcon } from '@/components/mobile/MobileIcons'
+import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
+import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 
-export default function WhatsAppConfigPage() {
-  const progress = Math.round((whatsappStatus.postsToday / whatsappStatus.postLimit) * 100)
 
+export default function WhatsAppPage() {
+  useMobileRoutePerf('m/config/whatsapp')
   return (
-    <MobileShell title="Conversor" active="inicio">
-      <h2 className="text-lg font-semibold">Conexão WhatsApp</h2>
-      <div className="mt-3 rounded-2xl border border-[#bde3d2] bg-[#f3fbf7] p-4">
-        <p className="text-sm font-semibold text-[#3E9C7A]">WhatsApp conectado</p>
-        <p className="mt-1 text-xs text-[#5A6E68]">{whatsappStatus.phone} · {whatsappStatus.activeDays} dias ativos</p>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <Link href={mobileRoutes.logs} className="rounded-full border border-[#d7e7de] px-3 py-2 text-center text-sm font-semibold">Sincronizar</Link>
-          <Link href={mobileRoutes.helpTutorial} className="rounded-full border border-[#eecac1] px-3 py-2 text-center text-sm font-semibold text-[#D97757]">Desconectar</Link>
+    <MobileShell title="Conversor" active="conta">
+      <div style={cfgStyles.pageH}>
+        <div style={cfgStyles.pageEyebrow}>Configuração</div>
+        <div style={cfgStyles.pageTitle}>Conexão WhatsApp</div>
+      </div>
+
+      {/* Status conectado */}
+      <div style={cfgStyles.cardWrap}>
+        <div style={{...cfgStyles.cardP, background:'color-mix(in oklab, var(--success) 12%, var(--surface))', border:'1px solid color-mix(in oklab, var(--success) 30%, var(--line))'}}>
+          <div style={{display:'flex', alignItems:'center', gap: 12, marginBottom: 14}}>
+            <div style={{width: 40, height: 40, borderRadius: 12, background:'var(--success)', display:'flex', alignItems:'center', justifyContent:'center', color:'white'}}>
+              <MobileIcon name="check" size={20} stroke={3}/>
+            </div>
+            <div style={{flex: 1}}>
+              <div style={{fontSize: 14, fontWeight: 600, color:'var(--ink)'}}>WhatsApp conectado</div>
+              <div style={{fontSize: 11.5, color:'var(--ink-soft)', marginTop: 2}}>+55 11 9 8765-4321 · 47 dias ativos</div>
+            </div>
+          </div>
+          <div style={{display:'flex', gap: 8}}>
+            <button style={{...mobi.btn('ghost', false), flex: 1, fontSize: 12.5, padding:'10px 14px'}}>Sincronizar</button>
+            <button style={{...mobi.btn('ghost', false), flex: 1, fontSize: 12.5, padding:'10px 14px', color:'var(--danger)'}}>Desconectar</button>
+          </div>
         </div>
       </div>
 
-      <div className="mt-3 rounded-2xl border border-[#d7e7de] bg-white p-4">
-        <p className="text-xs font-semibold text-[#5A6E68]">Posts hoje</p>
-        <p className="mt-1 text-sm font-semibold">{whatsappStatus.postsToday} de {whatsappStatus.postLimit} ({progress}%)</p>
-        <div className="mt-2 h-2 rounded-full bg-[#e7f0eb]"><div className="h-2 rounded-full bg-[#3E9C7A]" style={{ width: `${progress}%` }} /></div>
-        <p className="mt-3 text-xs text-[#5A6E68]">Tempo mínimo entre posts: 45s · Soneca: {whatsappStatus.sleepMode ? '23h–7h' : 'desativada'}</p>
+      {/* Limites */}
+      <div style={cfgStyles.sectionLabel}>Limites e cadência</div>
+      <div style={{padding:'0 16px'}}>
+        <div style={cfgStyles.card}>
+          <div style={cfgStyles.row()}>
+            <div style={cfgStyles.rowMain}>
+              <div style={cfgStyles.rowTitle}>Posts hoje</div>
+              <div style={cfgStyles.rowSub}>127 de 250 · 51% do limite</div>
+              <div style={{height: 5, background:'var(--bg-soft)', borderRadius: 999, marginTop: 8, overflow:'hidden'}}>
+                <div style={{width:'51%', height:'100%', background:'var(--accent-strong)'}}/>
+              </div>
+            </div>
+          </div>
+          <div style={cfgStyles.row()}>
+            <div style={cfgStyles.rowMain}>
+              <div style={cfgStyles.rowTitle}>Tempo mínimo entre posts</div>
+              <div style={cfgStyles.rowSub}>recomendado para evitar bloqueios</div>
+            </div>
+            <div style={{fontSize: 13, fontWeight: 600, color:'var(--ink)'}}>45 s</div>
+          </div>
+          <div style={cfgStyles.row(true)}>
+            <div style={cfgStyles.rowMain}>
+              <div style={cfgStyles.rowTitle}>Modo soneca · 23h–7h</div>
+              <div style={cfgStyles.rowSub}>bot não posta no período noturno</div>
+            </div>
+            <div style={cfgStyles.toggle(true)}><div style={cfgStyles.toggleKnob(true)}/></div>
+          </div>
+        </div>
       </div>
+
+      <div style={{height: 24}}/>
     </MobileShell>
   )
 }

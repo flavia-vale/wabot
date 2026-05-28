@@ -1,14 +1,111 @@
 'use client'
 
-import Link from 'next/link'
+import { useEffect, useState } from 'react'
+import { api } from '@/lib/api'
+
+const STATE_LABEL = {
+  disconnected: 'Desconectado',
+  connecting: 'Conectando',
+  qr_pending: 'Aguardando QR',
+  connected: 'Conectado',
+  error: 'Erro',
+}
 
 export function ProbeToggle({ value, onChange, disabled, probeAccountSessionId }) {
+  const [session, setSession] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [sessionInput, setSessionInput] = useState('')
+
+  async function refreshStatus() {
+    try {
+      const out = await api.preservationProbeSessionStatus()
+      setSession(out?.session || null)
+      if (!sessionInput && out?.session?.sessionId) setSessionInput(out.session.sessionId)
+    } catch (err) {
+      setMsg(err?.message || 'Falha ao carregar status da sessão probe.')
+    }
+  }
+
+  useEffect(() => {
+    let active = true
+    api.preservationProbeSessionStatus()
+      .then((out) => {
+        if (!active) return
+        setSession(out?.session || null)
+        if (!sessionInput && out?.session?.sessionId) setSessionInput(out.session.sessionId)
+      })
+      .catch((err) => {
+        if (!active) return
+        setMsg(err?.message || 'Falha ao carregar status da sessão probe.')
+      })
+    return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function run(action) {
+    setLoading(true)
+    setMsg('')
+    try {
+      if (action === 'start') {
+        const out = await api.preservationProbeSessionStart()
+        setSession(out?.session || null)
+        setSessionInput(out?.session?.sessionId || sessionInput)
+      }
+      if (action === 'stop') {
+        const out = await api.preservationProbeSessionStop()
+        setSession(out?.session || null)
+      }
+      if (action === 'select') {
+        await api.preservationProbeSessionSelect(sessionInput.trim())
+        setMsg('Sessão probe selecionada com sucesso. Clique em salvar tudo para persistir o toggle.')
+      }
+      await refreshStatus()
+    } catch (err) {
+      setMsg(err?.message || 'Ação não concluída.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <fieldset className="bg-white rounded-2xl shadow p-5">
       <legend className="text-base font-semibold text-gray-800">🔭 Probe externo</legend>
       <p className="text-xs text-gray-500 mb-3">
-        Uma segunda conta WhatsApp conectada como observadora confere se suas mensagens chegam nos canais de destino. Se não chega, o bot marca o canal em estado de alerta.
+        Configure uma conta observadora para monitoramento. No modo atual (manual_fallback), a confirmação depende de pings de observação e não de leitura automática nativa do WhatsApp.
       </p>
+
+      <div className="grid gap-2 mb-3 rounded-lg border border-slate-200 p-3 bg-slate-50">
+        <div className="text-xs text-slate-700">
+          Sessão atual: <strong>{STATE_LABEL[session?.state] || 'Desconhecido'}</strong>
+          {session?.sessionId ? <span className="ml-1 font-mono">({session.sessionId})</span> : null}
+        </div>
+        {session?.qrExpiresAt ? (
+          <div className="text-[11px] text-slate-500">
+            QR expira em: {new Date(session.qrExpiresAt).toLocaleString('pt-BR')}
+          </div>
+        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" disabled={disabled || loading} onClick={() => run('start')} className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs text-emerald-700 disabled:opacity-60">Iniciar sessão probe</button>
+          <button type="button" disabled={disabled || loading} onClick={() => run('stop')} className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-700 disabled:opacity-60">Parar sessão probe</button>
+          <button type="button" disabled={disabled || loading} onClick={refreshStatus} className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 disabled:opacity-60">Atualizar status</button>
+        </div>
+      </div>
+
+      <div className="mb-3">
+        <label className="text-xs text-slate-600 block mb-1">Selecionar ID da sessão probe</label>
+        <div className="flex gap-2">
+          <input
+            value={sessionInput}
+            onChange={(e) => setSessionInput(e.target.value)}
+            placeholder="probe_<userId>"
+            disabled={disabled || loading}
+            className="flex-1 rounded-md border border-slate-300 px-2 py-1 text-xs font-mono"
+          />
+          <button type="button" disabled={disabled || loading || !sessionInput.trim()} onClick={() => run('select')} className="rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-xs text-blue-700 disabled:opacity-60">Selecionar</button>
+        </div>
+      </div>
+
       <label className="inline-flex items-center gap-2">
         <input
           type="checkbox"
@@ -20,9 +117,10 @@ export function ProbeToggle({ value, onChange, disabled, probeAccountSessionId }
         <span className="text-sm text-gray-700">Ativar observador externo</span>
       </label>
       <p className="text-[11px] text-gray-500 mt-2">
-        Conta probe configurada no servidor: <span className="font-mono">{probeAccountSessionId ?? 'nenhuma'}</span>.
-        Pra trocar, fale com o suporte.
+        Conta probe vinculada no config: <span className="font-mono">{probeAccountSessionId ?? 'nenhuma'}</span>.
       </p>
+      <p className="mt-2 text-[11px] text-amber-700">Modo atual: <strong>manual_fallback</strong> (beta). Use os dados como sinal preventivo, não como prova absoluta de entrega.</p>
+      {msg ? <p className="mt-2 text-xs text-slate-600">{msg}</p> : null}
     </fieldset>
   )
 }

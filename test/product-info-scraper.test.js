@@ -78,6 +78,92 @@ test('fetchProductInfo usa fallback da API da Shopee para título e preços', as
   assert.equal(info.newPrice, '33,18')
 })
 
+test('fetchProductInfo usa campos alternativos de preço da Shopee quando price_min não vier', async (t) => {
+  const shellHtml = '<!doctype html><html><head><title>Shopee Brasil</title></head><body>app shell</body></html>'
+  const shopeeApiPayload = {
+    data: {
+      item: {
+        name: 'KIT TERERÉ BLACK ERVA SABOR CEREJA ICE – GARRAFA TÉRMICA + COPO INOX + BOMBA + ERVA 500G',
+        price_min: 0,
+        price: 24567000,
+        price_before_discount: 0,
+      },
+    },
+  }
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('/api/v4/item/get?itemid=23499408546&shopid=1750300958')) {
+      return {
+        ok: true,
+        headers: { get: () => 'application/json; charset=utf-8' },
+        json: async () => shopeeApiPayload,
+      }
+    }
+    return mockHtmlResponse(shellHtml, 'https://shopee.com.br/KIT-TERERE-BLACK-ERVA-SABOR-CEREJA-ICE-i.1750300958.23499408546')
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://shopee.com.br/KIT-TERERE-BLACK-ERVA-SABOR-CEREJA-ICE-i.1750300958.23499408546')
+  assert.match(info.title, /KIT TERERÉ BLACK ERVA SABOR CEREJA ICE/i)
+  assert.equal(info.newPrice, '245,67')
+})
+
+test('fetchProductInfo extrai faixa de preço da Shopee pelo HTML quando API não trouxer preço', async (t) => {
+  const shellHtml = '<!doctype html><html><head><title>Moletom Canguru</title></head><body><div>R$58,99</div><span>R$99,90</span></body></html>'
+  const shopeeApiPayload = {
+    data: {
+      item: {
+        name: 'Moletom Canguru Capuz Bolso Blusa de Frio Feminino Masculino Unissex Algodão Dragão Japonês',
+        price_min: 0,
+        price: 0,
+        price_before_discount: 0,
+      },
+    },
+  }
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('/api/v4/item/get?itemid=58255937719&shopid=392751109')) {
+      return {
+        ok: true,
+        headers: { get: () => 'application/json; charset=utf-8' },
+        json: async () => shopeeApiPayload,
+      }
+    }
+    return mockHtmlResponse(shellHtml, 'https://shopee.com.br/Moletom-Canguru-Capuz-Bolso-Blusa-de-Frio-Feminino-Masculino-Unissex-Algod%C3%A3o-Drag%C3%A3o-Japon%C3%AAs-i.392751109.58255937719')
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://shopee.com.br/Moletom-Canguru-Capuz-Bolso-Blusa-de-Frio-Feminino-Masculino-Unissex-Algod%C3%A3o-Drag%C3%A3o-Japon%C3%AAs-i.392751109.58255937719')
+  assert.equal(info.newPrice, '58,99')
+  assert.equal(info.oldPrice, '99,90')
+})
+
+test('fetchProductInfo extrai preço da Shopee por JSON inline quando API falha', async (t) => {
+  const shellHtml = '<html><body>{"price_min":5899000,"price_before_discount":9990000,"price":5899000}</body></html>'
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('/api/v4/item/get?itemid=58255937719&shopid=392751109')) {
+      return {
+        ok: true,
+        headers: { get: () => 'application/json; charset=utf-8' },
+        json: async () => ({ data: { item: { name: '', price_min: 0, price: 0, price_before_discount: 0 } } }),
+      }
+    }
+    return mockHtmlResponse(shellHtml, 'https://shopee.com.br/Moletom-Canguru-Capuz-Bolso-Blusa-de-Frio-Feminino-Masculino-Unissex-Algod%C3%A3o-Drag%C3%A3o-Japon%C3%AAs-i.392751109.58255937719')
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://shopee.com.br/Moletom-Canguru-Capuz-Bolso-Blusa-de-Frio-Feminino-Masculino-Unissex-Algod%C3%A3o-Drag%C3%A3o-Japon%C3%AAs-i.392751109.58255937719')
+  assert.equal(info.newPrice, '58,99')
+  assert.equal(info.oldPrice, '99,90')
+})
+
 test('fetchProductInfo resolve short link da Shopee antes de consultar a API', async (t) => {
   const shellHtml = '<!doctype html><html><head><title>Shopee Brasil</title></head><body>app shell</body></html>'
   const shopeeApiPayload = {
@@ -130,4 +216,61 @@ test('fetchProductInfo usa título do slug da URL quando Shopee API falhar', asy
 
   const info = await fetchProductInfo('https://shopee.com.br/Kit-Maquiagem-Completo-Com-Pinc%C3%A9is-Empreendedora-Sucesso-i.358101010.21697493290?extraParams=1')
   assert.match(info.title, /Kit Maquiagem Completo Com Pincéis Empreendedora Sucesso/i)
+})
+
+test('fetchProductInfo usa fallback da API de products do Mercado Livre para título e preço em URL /p/', async (t) => {
+  const htmlShell = '<!doctype html><html><head><title>Mercado Libre</title></head><body>anti-bot shell</body></html>'
+  const mlProductsPayload = {
+    name: 'Secador de roupas 600w elétrico portátil suspenso cortina compacto econômico seca rápido 110v',
+    buy_box_winner: { price: 189.9 },
+  }
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('mercadolivre.com.br/secador-de-roupas') && !url.includes('api.mercadolibre.com')) {
+      return mockHtmlResponse(htmlShell, 'https://www.mercadolivre.com.br/secador-de-roupas-600w-eletrico-portatil-suspenso-cortina-compacto-econmico-seca-rapido-110v/p/MLB70009242')
+    }
+    if (url === 'https://api.mercadolibre.com/products/MLB70009242') {
+      return {
+        ok: true,
+        headers: { get: () => 'application/json; charset=utf-8' },
+        json: async () => mlProductsPayload,
+      }
+    }
+    throw new Error(`unexpected fetch: ${url}`)
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://www.mercadolivre.com.br/secador-de-roupas-600w-eletrico-portatil-suspenso-cortina-compacto-econmico-seca-rapido-110v/p/MLB70009242')
+  assert.match(info.title, /Secador de roupas 600w elétrico portátil/i)
+  assert.equal(info.newPrice, '189,90')
+})
+
+test('fetchProductInfo mantém fallback de API do Mercado Livre mesmo quando fetch do HTML falha', async (t) => {
+  const mlProductsPayload = {
+    name: 'Secador de roupas 600w elétrico portátil suspenso cortina compacto econômico seca rápido 110v',
+    buy_box_winner: { price: 189.9 },
+  }
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('mercadolivre.com.br/secador-de-roupas')) {
+      throw new Error('network blocked')
+    }
+    if (url === 'https://api.mercadolibre.com/products/MLB70009242') {
+      return {
+        ok: true,
+        headers: { get: () => 'application/json; charset=utf-8' },
+        json: async () => mlProductsPayload,
+      }
+    }
+    throw new Error(`unexpected fetch: ${url}`)
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://www.mercadolivre.com.br/secador-de-roupas-600w-eletrico-portatil-suspenso-cortina-compacto-econmico-seca-rapido-110v/p/MLB70009242')
+  assert.match(info.title, /Secador de roupas 600w elétrico portátil/i)
+  assert.equal(info.newPrice, '189,90')
 })

@@ -318,28 +318,63 @@ async function createAffiliateLink(mlUrl, tag, creds) {
   }
 
   let lastError = null
+  let authFailed = false
+  const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504])
+  const retryBackoffMs = [400, 1200, 2800]
   for (const attempt of attempts) {
-    try {
-      logger.info({ attempt: attempt.label, mlUrl, hasSsid: !!ssid, hasCsrf: !!csrf }, 'ML createLink: tentando chamada API')
-      const res = await callCreateLinkApi(mlUrl, tag, attempt)
-      const result = res.data?.urls?.[0]
-      if (result?.short_url) {
-        logger.info({ attempt: attempt.label, mlUrl }, 'ML createLink: short_url gerado')
-        return result.short_url
+    for (let i = 0; i <= retryBackoffMs.length; i++) {
+      try {
+        logger.info({ attempt: attempt.label, retry: i, mlUrl, hasSsid: !!ssid, hasCsrf: !!csrf }, 'ML createLink: tentando chamada API')
+        const res = await callCreateLinkApi(mlUrl, tag, attempt)
+        const result = res.data?.urls?.[0]
+        if (result?.short_url) {
+          logger.info({ attempt: attempt.label, retry: i, mlUrl }, 'ML createLink: short_url gerado')
+          return result.short_url
+        }
+
+        const status = Number(res.status) || 0
+        const apiError = String(result?.error || result?.message || res.data?.error || res.data?.message || '')
+        const looksAuthIssue = status === 401 || status === 403 || /auth|unauthoriz|forbidden|login|sess[aã]o|expirad/i.test(apiError)
+        if (looksAuthIssue) authFailed = true
+
+        lastError = {
+          status,
+          attempt: attempt.label,
+          retry: i,
+          apiError,
+          urls: res.data?.urls,
+          rawBody: typeof res.data === 'string' ? res.data.slice(0, 500) : JSON.stringify(res.data).slice(0, 500),
+          responseHeaders: { 'content-type': res.headers?.['content-type'], 'set-cookie': res.headers?.['set-cookie']?.length },
+        }
+
+        if (RETRYABLE_STATUS.has(status) && i < retryBackoffMs.length) {
+          const wait = retryBackoffMs[i]
+          logger.warn({ ...lastError, retryInMs: wait }, 'ML createLink: status transitório sem short_url — retry')
+          await new Promise(resolve => setTimeout(resolve, wait))
+          continue
+        }
+
+        logger.warn(lastError, 'ML createLink: API respondeu sem short_url')
+        break
+      } catch (err) {
+        const status = Number(err.response?.status) || 0
+        lastError = { attempt: attempt.label, retry: i, err: err.message, status }
+
+        if (RETRYABLE_STATUS.has(status) && i < retryBackoffMs.length) {
+          const wait = retryBackoffMs[i]
+          logger.warn({ ...lastError, retryInMs: wait }, 'ML createLink: erro transitório — retry')
+          await new Promise(resolve => setTimeout(resolve, wait))
+          continue
+        }
+
+        logger.warn(lastError, 'ML createLink: erro ao chamar API')
+        break
       }
-      lastError = {
-        status: res.status,
-        attempt: attempt.label,
-        apiError: result?.error || result?.message || res.data?.error || res.data?.message,
-        urls: res.data?.urls,
-        rawBody: typeof res.data === 'string' ? res.data.slice(0, 500) : JSON.stringify(res.data).slice(0, 500),
-        responseHeaders: { 'content-type': res.headers?.['content-type'], 'set-cookie': res.headers?.['set-cookie']?.length },
-      }
-      logger.warn(lastError, 'ML createLink: API respondeu sem short_url')
-    } catch (err) {
-      lastError = { attempt: attempt.label, err: err.message, status: err.response?.status }
-      logger.warn(lastError, 'ML createLink: erro ao chamar API')
     }
+  }
+
+  if (authFailed) {
+    throw new Error('Credencial Mercado Livre inválida/expirada. Renove o SSID (ou cookie) e tente novamente.')
   }
 
   return null

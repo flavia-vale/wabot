@@ -1,9 +1,11 @@
-'use client'
-
-import { MobileShell } from '@/components/mobile/MobileShell'
-import { MobileIcon } from '@/components/mobile/MobileIcons'
-import { mobi } from '@/components/mobile/mobileStyles'
-import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+// CRIAR v2 — princípio: o input é o protagonista. Cole, e tudo se revela.
+//
+// Cortado da v1: passos numerados (1, 2, 3...) que ficavam inconsistentes,
+// "Colar" botão (no celular você cola de verdade), explicações longas, divisor
+// step-by-step que parecia wizard.
+//
+// Estados (props): empty | converted | updated | noConverter | scrapeFail | expand
+//   expand=true → revela seção "montar oferta" no fim
 
 const criarStyles = {
   pageH: { padding:'18px 20px 0' },
@@ -421,13 +423,7 @@ const STATE_CFG = {
   },
 };
 
-export default function OfferPage() {
-  useMobileRoutePerf('m/op/offer')
-  const state = 'converted'
-  const expand = false
-  const bonuses = 'both'
-  const bonusLayout = 'unified'
-
+const MobileCriar = ({ state = 'converted', expand = false, bonuses = 'both', bonusLayout = 'unified' }) => {
   const isEmpty = state === 'empty';
   const cfg = STATE_CFG[state];
   const productDetected = state === 'converted' || state === 'updated';
@@ -442,7 +438,7 @@ export default function OfferPage() {
   const linkAfiliada = 's.shopee.com.br/3As9XkLp2';
 
   return (
-    <MobileShell title="Conversor" active="criar">
+    <MobileFrame title="Criar oferta" active="criar">
       {/* Header — limpo, sem italianização */}
       <div style={criarStyles.pageH}>
         <div style={criarStyles.pageEyebrow}>Grátis · sem limite</div>
@@ -480,7 +476,7 @@ export default function OfferPage() {
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5"/>
               </svg>
-              No celular: toque longo e escolha &quot;Colar&quot;.
+              No celular: toque longo e escolha "Colar".
             </div>
             <div style={criarStyles.examples}>
               <button style={criarStyles.examChip}>👟 exemplo Shopee</button>
@@ -499,7 +495,7 @@ export default function OfferPage() {
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                   <line x1="12" y1="8" x2="12" y2="13"/><circle cx="12" cy="17" r=".5"/>
                 </svg>
-              ) : <MobileIcon name="check" size={12} stroke={3}/>}
+              ) : <Icon name="check" size={12} stroke={3}/>}
             </div>
             <div style={criarStyles.resultText}>
               <div style={criarStyles.resultTitle}>{cfg.title}</div>
@@ -531,7 +527,7 @@ export default function OfferPage() {
 
             <div style={criarStyles.copyBtn}>
               <button style={criarStyles.flatBtn('ghost', true)}>
-                <MobileIcon name="link" size={12}/> Copiar
+                <Icon name="link" size={12}/> Copiar
               </button>
               <button style={criarStyles.flatBtn('ghost', true)}>
                 Compartilhar
@@ -579,9 +575,9 @@ export default function OfferPage() {
       {!isEmpty && !expand && (
         <div style={criarStyles.ctaWrap}>
           <button style={{...criarStyles.cta, ...(isNoConv ? criarStyles.ctaWarn : {})}}>
-            <MobileIcon name="sparkles" size={15}/>
+            <Icon name="sparkles" size={15}/>
             Montar oferta
-            <MobileIcon name="arrow" size={14}/>
+            <Icon name="arrow" size={14}/>
           </button>
           <div style={criarStyles.ctaNote}>
             {isNoConv
@@ -613,7 +609,7 @@ export default function OfferPage() {
                 Gerenciar
               </button>
               <button style={criarStyles.aiPill}>
-                <MobileIcon name="sparkles" size={11}/> Reescrever
+                <Icon name="sparkles" size={11}/> Reescrever
               </button>
             </div>
           </div>
@@ -695,7 +691,7 @@ export default function OfferPage() {
                 </div>
                 <div>
                   <div style={criarStyles.bonusPreviewLabel}>
-                    <MobileIcon name="check" size={10} stroke={3}/>
+                    <Icon name="check" size={10} stroke={3}/>
                     como vai aparecer
                   </div>
                   <div style={criarStyles.bonusPreview}>
@@ -730,7 +726,7 @@ export default function OfferPage() {
                   <div style={criarStyles.storeChips}>
                     {lojas.map(l => (
                       <button key={l.key} style={criarStyles.storeChip(l.sel)}>
-                        {l.sel && <MobileIcon name="check" size={10} stroke={3}/>}
+                        {l.sel && <Icon name="check" size={10} stroke={3}/>}
                         {l.nome}
                       </button>
                     ))}
@@ -755,7 +751,7 @@ export default function OfferPage() {
                 </div>
                 <div>
                   <div style={criarStyles.bonusPreviewLabel}>
-                    <MobileIcon name="check" size={10} stroke={3}/>
+                    <Icon name="check" size={10} stroke={3}/>
                     nesta oferta (Shopee)
                   </div>
                   <div style={criarStyles.bonusPreview}>
@@ -810,7 +806,7 @@ export default function OfferPage() {
             ].map((d, i, a) => (
               <div key={i} style={criarStyles.destRow(d.sel, i === a.length-1)}>
                 <div style={criarStyles.destCheck(d.sel)}>
-                  {d.sel && <MobileIcon name="check" size={11} stroke={3}/>}
+                  {d.sel && <Icon name="check" size={11} stroke={3}/>}
                 </div>
                 <div style={criarStyles.destAvatar(d.g)}>
                   {d.nome.split(' ').slice(0,2).map(w=>w[0]).join('').replace(/[^A-Za-zÀ-ÿ]/g,'').toUpperCase().slice(0,2)}
@@ -827,10 +823,10 @@ export default function OfferPage() {
           <div style={criarStyles.sendWrap}>
             <div style={criarStyles.sendRow}>
               <button style={criarStyles.schedBtn}>
-                <MobileIcon name="bolt" size={14}/> Agendar
+                <Icon name="bolt" size={14}/> Agendar
               </button>
               <button style={criarStyles.sendBtn}>
-                Enviar agora <MobileIcon name="arrow" size={14}/>
+                Enviar agora <Icon name="arrow" size={14}/>
               </button>
             </div>
             <div style={criarStyles.sendNote}>
@@ -841,6 +837,8 @@ export default function OfferPage() {
       )}
 
       <div style={{height: 20}}/>
-    </MobileShell>
+    </MobileFrame>
   );
-}
+};
+
+window.MobileCriar = MobileCriar;
