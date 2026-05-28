@@ -432,10 +432,19 @@ export async function resolveToCleanProductUrl(url) {
     const preCanonical = target
     target = canonicalizeMlProductUrl(target)
     if (!extractMlbId(target)) {
-      const u = new URL(target)
-      if (/^\/social\//i.test(u.pathname) || /^\/up\//i.test(u.pathname) || /^\/$/.test(u.pathname)) {
-        const extracted = await tryExtractProductFromLanding(preCanonical)
-        if (extracted) target = extracted
+      // Links de recomendação/anúncio (/up/MLBU..., vip-pads, etc.) trazem o
+      // path como id de catálogo (MLBU...) e o produto real compartilhado em
+      // `wid=MLB...` dentro do fragmento (#...), que canonicalize descarta.
+      // Recuperamos o MLB direto do fragmento, sem round-trip de rede.
+      const widMlb = extractMlbId(String(preCanonical).match(/[?#&;]wid=(MLB[-_]?[0-9]+)/i)?.[1])
+      if (widMlb) {
+        target = `https://produto.mercadolivre.com.br/${widMlb}-x-_JM`
+      } else {
+        const u = new URL(target)
+        if (/^\/social\//i.test(u.pathname) || /(?:^|\/)up\//i.test(u.pathname) || /^\/$/.test(u.pathname)) {
+          const extracted = await tryExtractProductFromLanding(preCanonical)
+          if (extracted) target = extracted
+        }
       }
     }
     return target
