@@ -262,8 +262,8 @@ export default function AccountPage() {
       <div style={contaStyles.card}>
         <ContaRow icon="star" title="Assinatura e cobrança"
           sub="histórico · forma de pagamento · renovar" onClick={() => router.push(mobileRoutes.accountSubscription)}/>
-        <ContaRow icon="chat" title="Falar com a gente"
-          sub="guia rápido e próximos passos" onClick={() => router.push(mobileRoutes.helpTutorial)}/>
+        <ContaRow icon="chat" title="Guia rápido"
+          sub="Tutorial para pegar credenciais" onClick={() => router.push(mobileRoutes.tutorial)}/>
         <ContaRow icon="shield" title="Privacidade e dados"
           sub="termos e privacidade no site" onClick={() => router.push('/privacidade')} last/>
       </div>
