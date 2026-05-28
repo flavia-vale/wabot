@@ -446,33 +446,8 @@ export default function OfferPage() {
   const [productData, setProductData] = useState(null)
   const [convertedLink, setConvertedLink] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState('achadinho')
-  const [bonuses, setBonuses] = useState('both')
+  const [bonuses, setBonuses] = useState('')
   const bonusLayout = 'unified'
-
-  const handlePasteFromClipboard = async () => {
-    setPasteFeedback('')
-
-    if (typeof navigator === 'undefined' || !navigator.clipboard?.readText) {
-      setPasteFeedback('Não consegui acessar a área de transferência neste navegador. Toque no campo e use Colar.')
-      return
-    }
-
-    try {
-      const clipboardText = await navigator.clipboard.readText()
-      const nextInput = clipboardText.trim()
-
-      if (!nextInput) {
-        setPasteFeedback('Sua área de transferência está vazia.')
-        return
-      }
-
-      setInput(nextInput)
-      setPasteFeedback('Link colado.')
-    } catch (error) {
-      console.warn('Clipboard paste failed:', error)
-      setPasteFeedback('Permita o acesso à área de transferência ou toque no campo e use Colar.')
-    }
-  }
 
   const handleConvert = async () => {
     if (!input.trim()) return
@@ -520,47 +495,43 @@ export default function OfferPage() {
       {/* INPUT — sempre o protagonista */}
       <div style={criarStyles.inputBlock}>
         <div style={criarStyles.inputLabel}>Link do produto</div>
-        <div style={criarStyles.inputRow}>
-          <div style={criarStyles.inputFieldWrap}>
-            {isEmpty ? (
-              <textarea
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value)
-                  setPasteFeedback('')
-                }}
-                style={{...criarStyles.inputField(false), minHeight: 60, resize: 'none'}}
-                placeholder="https://..."
-                autoFocus={false}
-              />
-            ) : (
-              <>
-                <div style={criarStyles.inputField(true)}>{linkOriginal}</div>
-                <div
-                  onClick={() => { setInput(''); setState('empty'); setProductData(null); setPasteFeedback('') }}
-                  style={criarStyles.inputClear}
-                >
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-                    <line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>
-                  </svg>
-                </div>
-              </>
-            )}
-          </div>
-          {isEmpty && (
-            <button type="button" onClick={handlePasteFromClipboard} style={criarStyles.pasteBtn}>
-              Colar
-            </button>
+        <div style={{position:'relative'}}>
+          {isEmpty ? (
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              style={{...criarStyles.inputField(false), minHeight: 60}}
+              placeholder="https://..."
+              autoFocus={false}
+            />
+          ) : (
+            <>
+              <div style={criarStyles.inputField(true)}>{linkOriginal}</div>
+              <div
+                onClick={() => { setInput(''); setState('empty'); setProductData(null) }}
+                style={criarStyles.inputClear}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                  <line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>
+                </svg>
+              </div>
+            </>
           )}
         </div>
 
         {isEmpty && (
-          <div style={criarStyles.inputHint}>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5"/>
-            </svg>
-            {pasteFeedback || 'Toque em Colar para preencher com o link copiado.'}
-          </div>
+          <>
+            <div style={criarStyles.inputHint}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5"/>
+              </svg>
+              No celular: toque longo e escolha &quot;Colar&quot;.
+            </div>
+            <div style={criarStyles.examples}>
+              <button onClick={() => setInput('https://shopee.com.br/Sandalia-Bege-Verao-i.4738291.928374')} style={criarStyles.examChip}>👟 exemplo Shopee</button>
+              <button onClick={() => setInput('https://www.amazon.com.br/s?k=notebook')} style={criarStyles.examChip}>🔌 exemplo Amazon</button>
+            </div>
+          </>
         )}
       </div>
 
@@ -613,15 +584,15 @@ export default function OfferPage() {
             </div>
           </div>
 
-          {productDetected && (
+          {productDetected && productData && (
             <div style={criarStyles.productCard}>
-              <div style={criarStyles.productImg}>IMG</div>
+              <div style={criarStyles.productImg}>{productData.imageUrl ? '🖼' : 'IMG'}</div>
               <div style={criarStyles.productInfo}>
-                <div style={criarStyles.productTitle}>Sandália Bege Verão 2026 — Conforto Anatômico</div>
+                <div style={criarStyles.productTitle}>{productData.title || 'Produto'}</div>
                 <div style={criarStyles.productPrices}>
-                  <span style={criarStyles.priceNow}>R$ 39,90</span>
-                  <span style={criarStyles.priceWas}>R$ 79,90</span>
-                  <span style={criarStyles.pill}>−50%</span>
+                  <span style={criarStyles.priceNow}>{productData.priceNow || 'R$ --'}</span>
+                  {productData.priceWas && <span style={criarStyles.priceWas}>{productData.priceWas}</span>}
+                  {productData.discount && <span style={criarStyles.pill}>−{productData.discount}%</span>}
                 </div>
               </div>
             </div>
@@ -729,7 +700,13 @@ export default function OfferPage() {
 
           {/* Editor */}
           <div style={criarStyles.editorWrap}>
-            <textarea style={criarStyles.editor} defaultValue={`✨ Achadinho do dia\n\nSandália Bege Verão 2026 — só hoje por *R$ 39,90* com frete grátis!\n\nDe ~R$ 79,90~ por R$ 39,90 🔥\n\n👉 ${isNoConv ? linkOriginal : linkAfiliada}${bonuses === 'both' || bonuses === 'coupons' ? '\n\n🎟 Mais cupons da Shopee:\ns.shopee.com.br/cupons-sol' : ''}${bonuses === 'both' || bonuses === 'group' ? '\n\n💜 Entra no nosso grupo:\nwa.me/achadosdasol' : ''}\n\n#achados #moda`}/>
+            <textarea style={criarStyles.editor} defaultValue={(() => {
+              const title = productData?.title || 'Produto';
+              const price = productData?.priceNow || 'R$ --';
+              const oldPrice = productData?.priceWas ? `De ~${productData.priceWas}~` : '';
+              return `✨ Achadinho do dia\n\n${title} — só hoje por *${price}* com frete grátis!\n\n${oldPrice}${oldPrice ? ' por ' : ''}${price} 🔥\n\n👉 ${isNoConv ? linkOriginal : linkAfiliada}${bonuses === 'both' || bonuses === 'coupons' ? '\n\n🎟 Mais cupons da Shopee:\ns.shopee.com.br/cupons-sol' : ''}${bonuses === 'both' || bonuses === 'group' ? '\n\n💜 Entra no nosso grupo:\nwa.me/achadosdasol' : ''}\n\n#achados #moda`;
+            })()}/>
+
             <div style={criarStyles.vars}>
               {['{produto}','{preço}','{preço_de}','{link}','{loja}'].map(v => (
                 <span key={v} style={criarStyles.varChip}>{v}</span>
