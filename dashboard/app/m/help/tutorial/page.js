@@ -1,21 +1,83 @@
 'use client'
 
+import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
+import { api } from '@/lib/api'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
+import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
+import { mobileRoutes } from '@/components/mobile/routes'
 import { cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 
 export default function TutorialPage() {
   useMobileRoutePerf('m/help/tutorial')
+  const router = useRouter()
 
-  const passos = [
-    { n: '01', t: 'Como conectar seu WhatsApp', m: '2 min · vídeo', done: true },
-    { n: '02', t: 'Adicionar grupos para monitorar', m: '1 min · vídeo', done: true },
-    { n: '03', t: 'Cadastrar IDs de afiliada', m: '3 min · texto', done: true },
-    { n: '04', t: 'Criar sua primeira regra', m: '4 min · vídeo', done: false, current: true },
-    { n: '05', t: 'Personalizar mensagens promocionais', m: '3 min · texto', done: false },
-    { n: '06', t: 'Entender o painel de logs', m: '2 min · vídeo', done: false },
-  ]
+  const [state, setState] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    async function load() {
+      setLoading(true)
+      setError('')
+      try {
+        const [session, groups, creds, config, summary] = await Promise.all([
+          api.sessionStatus().catch(() => null),
+          api.groups().catch(() => []),
+          api.credentials().catch(() => []),
+          api.getConfig().catch(() => null),
+          api.logsSummary('30d').catch(() => null),
+        ])
+        if (!active) return
+        setState({ session, groups: Array.isArray(groups) ? groups : [], creds: Array.isArray(creds) ? creds : [], config, summary })
+      } catch (e) {
+        if (active) setError(e.message || 'Não foi possível carregar o tutorial.')
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    load()
+    return () => { active = false }
+  }, [])
+
+  // Os passos são copy fixa; o que é real é o progresso, derivado do estado da conta.
+  const passos = useMemo(() => {
+    const s = state || {}
+    const groups = s.groups || []
+    const counts = s.summary?.counts
+    const totalLogs = counts ? Object.values(counts).reduce((a, b) => a + (Number(b) || 0), 0) : 0
+    const cfg = s.config || {}
+    const steps = [
+      { n: '01', t: 'Como conectar seu WhatsApp', m: '2 min · vídeo', done: Boolean(s.session?.running), route: mobileRoutes.configWhatsApp },
+      { n: '02', t: 'Adicionar grupos para monitorar', m: '1 min · vídeo', done: groups.some(g => g.role === 'monitor'), route: mobileRoutes.configGroups },
+      { n: '03', t: 'Cadastrar IDs de afiliada', m: '3 min · texto', done: (s.creds || []).length > 0, route: mobileRoutes.configCredentials },
+      { n: '04', t: 'Criar sua primeira regra', m: '4 min · vídeo', done: groups.some(g => g.role === 'post'), route: mobileRoutes.configGroups },
+      { n: '05', t: 'Personalizar mensagens promocionais', m: '3 min · texto', done: Boolean(String(cfg.welcomeMsg || '').trim() || String(cfg.brandingGroupLink || '').trim()), route: mobileRoutes.configPreferences },
+      { n: '06', t: 'Entender o painel de logs', m: '2 min · vídeo', done: totalLogs > 0, route: mobileRoutes.logs },
+    ]
+    const firstPending = steps.findIndex(st => !st.done)
+    return steps.map((st, i) => ({ ...st, current: i === firstPending }))
+  }, [state])
+
+  const doneCount = passos.filter(p => p.done).length
+
+  if (loading) {
+    return (
+      <MobileShell title="Conversor" active="conta">
+        <div style={{ padding: '18px 16px' }}><MobileLoadingCard label="Carregando tutorial..." /></div>
+      </MobileShell>
+    )
+  }
+  if (error) {
+    return (
+      <MobileShell title="Conversor" active="conta">
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+      </MobileShell>
+    )
+  }
 
   return (
     <MobileShell title="Conversor" active="conta">
@@ -32,10 +94,10 @@ export default function TutorialPage() {
         <div style={{ ...cfgStyles.card, padding: 14 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>Seu progresso</div>
-            <div style={{ fontSize: 12, color: 'var(--accent-strong)', fontWeight: 600 }}>3/6</div>
+            <div style={{ fontSize: 12, color: 'var(--accent-strong)', fontWeight: 600 }}>{doneCount}/{passos.length}</div>
           </div>
           <div style={{ height: 6, background: 'var(--bg-soft)', borderRadius: 999, overflow: 'hidden' }}>
-            <div style={{ width: '50%', height: '100%', background: 'var(--accent-strong)' }} />
+            <div style={{ width: `${(doneCount / passos.length) * 100}%`, height: '100%', background: 'var(--accent-strong)' }} />
           </div>
         </div>
       </div>
@@ -45,9 +107,11 @@ export default function TutorialPage() {
           {passos.map((p, i, a) => (
             <div
               key={p.n}
+              onClick={() => router.push(p.route)}
               style={{
                 ...cfgStyles.row(i === a.length - 1),
                 background: p.current ? 'color-mix(in oklab, var(--accent) 12%, var(--surface))' : 'transparent',
+                cursor: 'pointer',
               }}
             >
               <div

@@ -1,20 +1,70 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
+import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+import { api } from '@/lib/api'
 
+const storeInfo = {
+  shopee: { nome: 'Shopee', cor: '#EE4D2D' },
+  mercadolivre: { nome: 'Mercado Livre', cor: '#FFE600' },
+  amazon: { nome: 'Amazon', cor: '#FF9900' },
+  magalu: { nome: 'Magalu', cor: '#0086FF' },
+  aliexpress: { nome: 'AliExpress', cor: '#E62E04' },
+}
 
 export default function CredentialsPage() {
   useMobileRoutePerf('m/config/credentials')
-  const lojas = [
-    {nome:'Shopee', cor:'#EE4D2D', on:true, id:'sol_almeida_aff'},
-    {nome:'Mercado Livre', cor:'#FFE600', on:true, id:'MLB-12903847'},
-    {nome:'Amazon', cor:'#FF9900', on:true, id:'solalmeida-20'},
-    {nome:'Magalu', cor:'#0086FF', on:true, id:'magazinevoce.com.br/solalmeida'},
-    {nome:'AliExpress', cor:'#E62E04', on:false, id:''},
-  ];
+  const [creds, setCreds] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    async function load() {
+      setLoading(true)
+      setError('')
+      try {
+        const c = await api.credentials().catch(() => [])
+        if (!active) return
+        setCreds(Array.isArray(c) ? c : [])
+      } catch (e) {
+        if (active) setError(e.message || 'Não foi possível carregar as credenciais.')
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    load()
+    return () => { active = false }
+  }, [])
+
+  const lojas = Object.entries(storeInfo).map(([key, store]) => {
+    const cred = creds.find(c => c.platform === key || c.platform === store.nome.toLowerCase())
+    return {
+      nome: store.nome,
+      cor: store.cor,
+      on: Boolean(cred && cred.value),
+      id: cred?.value || '',
+    }
+  });
+  if (loading) {
+    return (
+      <MobileShell title="Conversor" active="conta">
+        <div style={{ padding: '18px 16px' }}><MobileLoadingCard label="Carregando credenciais..." /></div>
+      </MobileShell>
+    )
+  }
+  if (error) {
+    return (
+      <MobileShell title="Conversor" active="conta">
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+      </MobileShell>
+    )
+  }
+
   return (
     <MobileShell title="Conversor" active="conta">
       <div style={cfgStyles.pageH}>
