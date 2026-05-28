@@ -1,8 +1,29 @@
 'use client'
 
+import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
+import { api } from '@/lib/api'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
+import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
+import { mobileRoutes } from '@/components/mobile/routes'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+
+const PLATFORM_LABEL = {
+  shopee: 'Shopee', amazon: 'Amazon', mercadolivre: 'Mercado Livre',
+  magazineluiza: 'Magalu', magalu: 'Magalu', aliexpress: 'AliExpress',
+}
+
+function relativeShort(date) {
+  if (!date) return ''
+  const diffMs = Date.now() - new Date(date).getTime()
+  const min = Math.round(diffMs / 60000)
+  if (min < 1) return 'agora'
+  if (min < 60) return `${min} min`
+  const h = Math.floor(min / 60)
+  if (h < 24) return `${h}h`
+  return new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+}
 
 const homeStyles = {
   // Alerta inline (só quando há falhas/desconexões)
@@ -206,31 +227,121 @@ function HomeSparkline() {
 
 export default function MobileHomePage() {
   useMobileRoutePerf('m/home')
-  const checklistDone = 5
-  const hasAlert = true
-  const isOnboarding = checklistDone < 5
+  const router = useRouter()
 
-  const checklist = [
-    { label: 'Suas afiliadas (Shopee, ML…)', done: true },
-    { label: 'Conectar WhatsApp',             done: true },
-    { label: '1 grupo de origem',             done: true },
-    { label: '1 grupo de destino',            done: true },
-    { label: 'Ligar o espelhamento',          done: false, current: true },
-  ]
+  const [me, setMe] = useState(null)
+  const [session, setSession] = useState(null)
+  const [groups, setGroups] = useState([])
+  const [creds, setCreds] = useState([])
+  const [summary, setSummary] = useState(null)
+  const [recent, setRecent] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    async function load() {
+      setLoading(true)
+      setError('')
+      try {
+        const [m, s, g, cr, sum, lg] = await Promise.all([
+          api.me().catch(() => null),
+          api.sessionStatus().catch(() => null),
+          api.groups().catch(() => []),
+          api.credentials().catch(() => []),
+          api.logsSummary('today').catch(() => null),
+          api.logs('all', 1, 4).catch(() => null),
+        ])
+        if (!active) return
+        setMe(m)
+        setSession(s)
+        setGroups(Array.isArray(g) ? g : [])
+        setCreds(Array.isArray(cr) ? cr : [])
+        setSummary(sum)
+        setRecent(Array.isArray(lg?.logs) ? lg.logs : [])
+      } catch (e) {
+        if (active) setError(e.message || 'Não foi possível carregar a sua página.')
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    load()
+    return () => { active = false }
+  }, [])
+
+  const firstName = (me?.name || '').trim().split(' ')[0]
+  const whatsappConnected = Boolean(session?.running)
+  const hasCredentials = creds.length > 0
+  const hasSource = groups.some(g => g.role === 'monitor')
+  const hasDest = groups.some(g => g.role === 'post')
+
+  const c = summary?.counts
+  const postadosHoje = c?.success ?? 0
+  const errosHoje = (c?.timeoutTotal ?? 0) + (c?.errorOther ?? 0)
+  const vistosHoje = c
+    ? (c.success + c.skippedDedup + c.skippedConfig + c.timeoutTotal + c.errorOther + c.inFlight)
+    : 0
+
+  // Checklist de onboarding derivada do estado real da conta.
+  const checklist = useMemo(() => {
+    const steps = [
+      { label: 'Suas afiliadas (Shopee, ML…)', done: hasCredentials, route: mobileRoutes.configCredentials },
+      { label: 'Conectar WhatsApp',             done: whatsappConnected, route: mobileRoutes.configWhatsApp },
+      { label: '1 grupo de origem',             done: hasSource, route: mobileRoutes.configGroups },
+      { label: '1 grupo de destino',            done: hasDest, route: mobileRoutes.configGroups },
+      { label: 'Ligar o espelhamento',          done: whatsappConnected && hasSource && hasDest, route: mobileRoutes.espelhar },
+    ]
+    const firstPending = steps.findIndex(s => !s.done)
+    return steps.map((s, i) => ({ ...s, current: i === firstPending }))
+  }, [hasCredentials, whatsappConnected, hasSource, hasDest])
+
+  const checklistDone = checklist.filter(s => s.done).length
+  const isOnboarding = checklistDone < 5
+  const hasAlert = errosHoje > 0
+
+  const recentItems = useMemo(() => recent.map(log => {
+    const status = log.status
+    const tone = status === 'success' ? 'ok' : status === 'error' ? 'fail' : 'warn'
+    const firstLine = String(log.messageText || '').split('\n').find(l => l.trim()) || ''
+    const dest = log.destGroup && log.destGroup.includes('@') ? (log.destGroupName || log.destGroup) : null
+    return {
+      t: (firstLine || log.convertedUrl || log.originalUrl || '(sem texto)').slice(0, 60),
+      loja: PLATFORM_LABEL[String(log.platform || '').toLowerCase()] || log.platform || '—',
+      dest: status === 'success' ? dest : null,
+      erro: status === 'error' ? 'falhou' : null,
+      when: relativeShort(log.sentAt),
+      tone,
+    }
+  }), [recent])
+
+  if (loading) {
+    return (
+      <MobileShell title="Conversor" active="inicio">
+        <div style={{ padding: '18px 16px' }}><MobileLoadingCard label="Carregando sua página..." /></div>
+      </MobileShell>
+    )
+  }
+  if (error) {
+    return (
+      <MobileShell title="Conversor" active="inicio">
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+      </MobileShell>
+    )
+  }
 
   return (
     <MobileShell title="Conversor" active="inicio" hasAlert={hasAlert}>
       {/* Alerta inline — só quando há problemas reais */}
       {hasAlert && !isOnboarding && (
-        <div style={homeStyles.alert}>
+        <div style={homeStyles.alert} onClick={() => router.push(mobileRoutes.logs)}>
           <div style={homeStyles.alertIcon}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="9" x2="12" y2="14"/><circle cx="12" cy="17.5" r="0.5"/>
             </svg>
           </div>
           <div style={homeStyles.alertText}>
-            <div style={homeStyles.alertTitle}>3 envios falharam hoje</div>
-            <div style={homeStyles.alertSub}>AliExpress desconectou · toque para resolver</div>
+            <div style={homeStyles.alertTitle}>{errosHoje} {errosHoje === 1 ? 'envio falhou' : 'envios falharam'} hoje</div>
+            <div style={homeStyles.alertSub}>toque para ver o que aconteceu</div>
           </div>
           <MobileIcon name="arrow" size={14}/>
         </div>
@@ -238,16 +349,22 @@ export default function MobileHomePage() {
 
       {/* Saudação + manchete factual */}
       <div style={homeStyles.greet}>
-        <div style={homeStyles.greetHi}>Oi, Sol 👋</div>
+        <div style={homeStyles.greetHi}>Oi{firstName ? `, ${firstName}` : ''} 👋</div>
         {isOnboarding ? (
           <div style={homeStyles.greetHead}>
             Falta um passo<br/>pra começar.
           </div>
         ) : (
           <div style={homeStyles.greetHead}>
-            Hoje você postou{' '}
-            <span style={homeStyles.greetNum}>147 promoções</span>{' '}
-            nos seus grupos.
+            {postadosHoje > 0 ? (
+              <>
+                Hoje você postou{' '}
+                <span style={homeStyles.greetNum}>{postadosHoje} {postadosHoje === 1 ? 'promoção' : 'promoções'}</span>{' '}
+                nos seus grupos.
+              </>
+            ) : (
+              <>Tudo pronto. Aguardando as próximas promoções.</>
+            )}
           </div>
         )}
       </div>
@@ -259,19 +376,19 @@ export default function MobileHomePage() {
           <div style={homeStyles.heroGrid}>
             <div style={homeStyles.heroStat}>
               <div style={homeStyles.heroStatLabel}>Detectados</div>
-              <div style={homeStyles.heroStatNum}>183</div>
+              <div style={homeStyles.heroStatNum}>{vistosHoje}</div>
               <div style={homeStyles.heroStatTrend()}>nos grupos monitorados</div>
             </div>
             <div style={homeStyles.heroDivider}/>
             <div style={homeStyles.heroStat}>
               <div style={homeStyles.heroStatLabel}>Postados</div>
-              <div style={homeStyles.heroStatNum}>147</div>
-              <div style={homeStyles.heroStatTrend(true)}>↑ 12% vs. ontem</div>
+              <div style={homeStyles.heroStatNum}>{postadosHoje}</div>
+              <div style={homeStyles.heroStatTrend(true)}>hoje</div>
             </div>
           </div>
           <div style={homeStyles.heroFoot}>
             <span style={homeStyles.heroLive}/>
-            <span>último envio há 2 min</span>
+            <span>{summary?.lastSendAt ? `último envio há ${relativeShort(summary.lastSendAt)}` : 'sem envios ainda hoje'}</span>
             <span style={{flex:1}}/>
             <HomeSparkline/>
           </div>
@@ -298,7 +415,7 @@ export default function MobileHomePage() {
                   {c.done && <MobileIcon name="check" size={11} stroke={3}/>}
                 </div>
                 <span style={homeStyles.setupItemLabel(c.done)}>{c.label}</span>
-                {c.current && <button style={homeStyles.setupItemAction}>Fazer</button>}
+                {c.current && <button style={homeStyles.setupItemAction} onClick={() => router.push(c.route)}>Fazer</button>}
               </div>
             ))}
           </div>
@@ -307,7 +424,7 @@ export default function MobileHomePage() {
 
       {/* AÇÃO PRIMÁRIA — única, dominante */}
       <div style={homeStyles.primaryWrap}>
-        <button style={homeStyles.primaryBtn}>
+        <button style={homeStyles.primaryBtn} onClick={() => router.push(mobileRoutes.offer)}>
           <div style={homeStyles.primaryIcon}>
             <MobileIcon name="sparkles" size={20}/>
           </div>
@@ -321,7 +438,7 @@ export default function MobileHomePage() {
 
       {/* Atalhos — só 2, não 4. Nada de "status disfarçado de ação" */}
       <div style={homeStyles.shortcutsRow}>
-        <div style={homeStyles.shortcut}>
+        <button style={homeStyles.shortcut} onClick={() => router.push(mobileRoutes.espelhar)}>
           <div style={homeStyles.shortcutIcon('color-mix(in oklab, var(--accent-2) 60%, var(--surface))', 'var(--ink)')}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 7a5 5 0 0 1 5-5h4"/><path d="M7 12l-4-5 5-2"/>
@@ -329,15 +446,15 @@ export default function MobileHomePage() {
             </svg>
           </div>
           <div style={homeStyles.shortcutLabel}>Espelhamento</div>
-        </div>
-        <div style={homeStyles.shortcut}>
+        </button>
+        <button style={homeStyles.shortcut} onClick={() => router.push(mobileRoutes.logs)}>
           <div style={homeStyles.shortcutIcon('var(--bg-soft)', 'var(--ink-soft)')}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>
             </svg>
           </div>
           <div style={homeStyles.shortcutLabel}>Ver envios</div>
-        </div>
+        </button>
       </div>
 
       {/* Atividade recente — só quando já tem operação rodando */}
@@ -345,15 +462,14 @@ export default function MobileHomePage() {
         <>
           <div style={homeStyles.sectionH}>
             <div style={homeStyles.sectionTitle}>Últimos envios</div>
-            <div style={homeStyles.sectionLink}>Ver tudo →</div>
+            <div style={homeStyles.sectionLink} onClick={() => router.push(mobileRoutes.logs)}>Ver tudo →</div>
           </div>
           <div style={homeStyles.activityCard}>
-        {[
-          {t:'Sandália Bege Verão 2026', loja:'Shopee', dest:'Achados da Sol 💜', when:'agora', tone:'ok'},
-          {t:'Air Fryer Mondial 4L', loja:'Mercado Livre', dest:'Sol · Tech & Casa', when:'12 min', tone:'ok'},
-          {t:'Kit Maquiagem Ruby Rose', loja:'Amazon', dest:'Canal Sol Achados', when:'27 min', tone:'ok'},
-          {t:'Carregador USB-C 65W', loja:'AliExpress', dest:null, when:'1h 18', tone:'fail', erro:'AliExpress desconectada'},
-        ].map((a, i, arr) => (
+        {recentItems.length === 0 ? (
+          <div style={{ padding: '20px 16px', fontSize: 12.5, color: 'var(--ink-soft)', textAlign: 'center' }}>
+            Nenhum envio ainda. Quando o bot postar, aparece aqui.
+          </div>
+        ) : recentItems.map((a, i, arr) => (
           <div key={i} style={homeStyles.actRow(i === arr.length - 1)}>
             <div style={homeStyles.actDot(a.tone)}/>
             <div style={homeStyles.actMain}>
@@ -363,7 +479,7 @@ export default function MobileHomePage() {
                 <span style={{color:'var(--ink-faint)'}}>→</span>
                 {a.dest
                   ? <span style={{color:'var(--ink)', fontWeight: 500}}>{a.dest}</span>
-                  : <span style={{color:'var(--danger)', fontWeight: 500}}>{a.erro}</span>}
+                  : <span style={{color:'var(--danger)', fontWeight: 500}}>{a.erro || '—'}</span>}
               </div>
             </div>
             <div style={homeStyles.actTime}>{a.when}</div>
