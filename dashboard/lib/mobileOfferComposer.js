@@ -100,11 +100,27 @@ export function detectMobileOfferStoreKey({ product = {}, link = '' } = {}) {
   return ''
 }
 
+export function applyTemplateVariables(body, { title = '', price = '', oldPrice = '', link = '' } = {}) {
+  let result = body
+    .replace(/\{produto\}/g, title || '{produto}')
+    .replace(/\{preço\}/g, price || '{preço}')
+    .replace(/\{link\}/g, link || '{link}')
+  if (oldPrice) {
+    result = result.replace(/\{preço_de\}/g, oldPrice)
+  } else {
+    result = result
+      .replace(/De \{preço_de\} por \*([^*]+)\*/g, '*$1*')
+      .replace(/\{preço_de\}/g, '')
+  }
+  return result
+}
+
 export function buildMobileOfferText({
   product = {},
   manualProduct = {},
   link = '',
   template = 'achadinho',
+  templateBody = null,
   bonusMode = '',
   groupBonus = {},
   couponLinks = {},
@@ -113,15 +129,25 @@ export function buildMobileOfferText({
   offerStoreKey = '',
 } = {}) {
   const normalized = normalizeMobileOfferProduct(product, manualProduct)
-  const lines = [getMobileOfferTemplateHeading(template), '', normalized.title]
 
-  if (normalized.price) {
-    lines.push(normalized.oldPrice ? `De ${normalized.oldPrice} por *${normalized.price}*` : `Por *${normalized.price}*`)
+  let lines
+  if (templateBody) {
+    const bodyText = applyTemplateVariables(templateBody, {
+      title: normalized.title,
+      price: normalized.price,
+      oldPrice: normalized.oldPrice,
+      link,
+    })
+    lines = bodyText.split('\n')
   } else {
-    lines.push('De {preço_de} por *{preço}*')
+    lines = [getMobileOfferTemplateHeading(template), '', normalized.title]
+    if (normalized.price) {
+      lines.push(normalized.oldPrice ? `De ${normalized.oldPrice} por *${normalized.price}*` : `Por *${normalized.price}*`)
+    } else {
+      lines.push('De {preço_de} por *{preço}*')
+    }
+    lines.push('', `👉 ${link}`)
   }
-
-  lines.push('', `👉 ${link}`)
 
   const groupLink = String(groupBonus?.link || '').trim()
   if ((bonusMode === 'group' || bonusMode === 'both') && isValidHttpUrl(groupLink)) {

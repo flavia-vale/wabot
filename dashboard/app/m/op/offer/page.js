@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard } from '@/components/mobile/MobileAsyncState'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+import { mobileRoutes } from '@/components/mobile/routes'
 import { api } from '@/lib/api'
 import {
   COUPON_STORES,
@@ -14,6 +16,7 @@ import {
   getMobileOfferSingleLinkWarning,
   isValidHttpUrl,
 } from '@/lib/mobileOfferComposer'
+import { loadAllTemplates } from '@/lib/mobileTemplateStore'
 
 const COUPON_LINKS_STORAGE_KEY = 'wabot.mobile.offer.couponLinks.v1'
 const DEFAULT_COUPON_LINKS = { shopee: '', mercadolivre: '', amazon: '', magazineluiza: '' }
@@ -485,6 +488,7 @@ const STATE_CFG = {
 
 export default function OfferPage() {
   useMobileRoutePerf('m/op/offer')
+  const router = useRouter()
   const [input, setInput] = useState('')
   const [state, setState] = useState('empty')
   const [expand, setExpand] = useState(false)
@@ -495,6 +499,7 @@ export default function OfferPage() {
   const [convertedLink, setConvertedLink] = useState('')
   const [pasteFeedback, setPasteFeedback] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState('achadinho')
+  const [allTemplates, setAllTemplates] = useState(TEMPLATE_OPTIONS)
   const [bonuses, setBonuses] = useState('')
   const [groupBonus, setGroupBonus] = useState({ link: '', cta: '💜 Entra no nosso grupo:' })
   const [couponCta, setCouponCta] = useState('🎟 Mais cupons da {loja}:')
@@ -541,6 +546,13 @@ export default function OfferPage() {
     return () => window.clearTimeout(timer)
   }, [])
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setAllTemplates(loadAllTemplates())
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [])
+
   const handlePasteFromClipboard = async () => {
     setPasteFeedback('')
 
@@ -574,11 +586,13 @@ export default function OfferPage() {
     overrides = {},
   ) {
     const offerStoreKey = overrides.offerStoreKey ?? detectMobileOfferStoreKey({ product: nextProduct || {}, link: input || link })
+    const tpl = allTemplates.find((t) => t.key === template)
     return buildMobileOfferText({
       product: nextProduct || {},
       manualProduct,
       link,
       template,
+      templateBody: tpl?.body || null,
       bonusMode,
       groupBonus: overrides.groupBonus || groupBonus,
       couponLinks: overrides.couponLinks || couponLinks,
@@ -798,12 +812,13 @@ export default function OfferPage() {
         <>
           <div style={criarStyles.sectionH}>
             <div style={criarStyles.sectionTitle}>Escolha um modelo</div>
+            <button type="button" onClick={() => router.push(mobileRoutes.accountTemplates)} style={criarStyles.editTemplateLink}>Editar</button>
           </div>
           <div style={criarStyles.templateRow}>
-            {TEMPLATE_OPTIONS.map((template) => (
+            {allTemplates.map((template) => (
               <button key={template.key} type="button" onClick={() => updateTemplate(template.key)} style={criarStyles.templateCard(selectedTemplate === template.key)}>
                 <div style={criarStyles.templateName}>{template.name}</div>
-                <div style={criarStyles.templatePreview(selectedTemplate === template.key)}>{template.preview}</div>
+                <div style={criarStyles.templatePreview(selectedTemplate === template.key)}>{(template.body || template.preview || '').split('\n').slice(0, 4).join('\n')}</div>
               </button>
             ))}
           </div>
