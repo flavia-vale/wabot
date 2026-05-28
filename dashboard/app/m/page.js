@@ -1,8 +1,10 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+import { mobileRoutes } from '@/components/mobile/routes'
 
 const homeStyles = {
   // Alerta inline (só quando há falhas/desconexões)
@@ -24,6 +26,32 @@ const homeStyles = {
   alertText: { flex: 1, minWidth: 0 },
   alertTitle: { fontSize: 13, fontWeight: 600, color:'var(--ink)' },
   alertSub: { fontSize: 11.5, color:'var(--ink-soft)', marginTop: 2 },
+
+  // Balão de progresso do checklist (só quando onboarding incompleto)
+  checklistBalloon: {
+    margin:'14px 16px 0',
+    padding:'12px 14px',
+    background:'color-mix(in oklab, var(--accent-strong) 10%, var(--surface))',
+    border:'1px solid color-mix(in oklab, var(--accent-strong) 30%, var(--line))',
+    borderRadius: 14,
+    display:'flex', alignItems:'center', gap: 12,
+    cursor:'pointer',
+  },
+  checklistBalloonIcon: {
+    width: 28, height: 28, borderRadius: 8,
+    background:'var(--accent-strong)', color:'white',
+    display:'flex', alignItems:'center', justifyContent:'center',
+    flexShrink: 0,
+  },
+  checklistBalloonBar: {
+    height: 3, background:'color-mix(in oklab, var(--accent-strong) 20%, var(--surface))',
+    borderRadius: 999, overflow:'hidden', marginTop: 5,
+  },
+  checklistBalloonBarFill: (pct) => ({
+    height:'100%', borderRadius: 999,
+    background:'var(--accent-strong)',
+    width:`${pct}%`,
+  }),
 
   // Header da página (oi + factual)
   greet: { padding:'14px 20px 0' },
@@ -143,52 +171,6 @@ const homeStyles = {
   },
   actTime: { fontSize: 11, color:'var(--ink-faint)', fontFamily:"'JetBrains Mono', monospace", flexShrink: 0 },
 
-  // Checklist do empty-state / setup
-  setup: {
-    margin:'16px 16px 0',
-    background:'var(--surface)', border:'1px solid var(--line)',
-    borderRadius: 18, padding: 18,
-  },
-  setupHead: {
-    display:'flex', alignItems:'center', justifyContent:'space-between',
-    marginBottom: 14,
-  },
-  setupTitle: { fontSize: 15, fontWeight: 600, color:'var(--ink)' },
-  setupProgress: {
-    fontSize: 11, fontWeight: 600, color:'var(--ink-soft)',
-    fontFamily:"'JetBrains Mono', monospace",
-  },
-  setupBar: {
-    height: 4, background:'var(--bg-soft)', borderRadius: 999, overflow:'hidden',
-    marginBottom: 14,
-  },
-  setupBarFill: { height:'100%', background:'var(--accent-strong)', borderRadius: 999 },
-  setupItem: (done, current) => ({
-    display:'flex', alignItems:'center', gap: 12,
-    padding:'10px 0',
-    borderBottom: '1px solid var(--line)',
-  }),
-  setupCheck: (done) => ({
-    width: 22, height: 22, borderRadius:'50%',
-    background: done ? 'var(--success)' : 'var(--surface)',
-    border:'1.5px solid ' + (done ? 'var(--success)' : 'var(--line-strong)'),
-    display:'flex', alignItems:'center', justifyContent:'center',
-    color:'white', flexShrink: 0,
-  }),
-  setupItemLabel: (done) => ({
-    flex: 1, fontSize: 13.5,
-    color: done ? 'var(--ink-soft)' : 'var(--ink)',
-    fontWeight: done ? 400 : 500,
-    textDecoration: done ? 'line-through' : 'none',
-  }),
-  setupItemAction: {
-    fontSize: 12, fontWeight: 600,
-    color:'var(--accent-strong)',
-    padding:'4px 10px',
-    border:'1px solid var(--line)', borderRadius: 999,
-    background:'var(--surface)',
-    cursor:'pointer', fontFamily:'inherit',
-  },
 };
 
 // Sparkline mini para o foot do hero
@@ -206,21 +188,34 @@ function HomeSparkline() {
 
 export default function MobileHomePage() {
   useMobileRoutePerf('m/home')
+  const router = useRouter()
   const checklistDone = 5
+  const checklistTotal = 5
   const hasAlert = true
-  const isOnboarding = checklistDone < 5
-
-  const checklist = [
-    { label: 'Suas afiliadas (Shopee, ML…)', done: true },
-    { label: 'Conectar WhatsApp',             done: true },
-    { label: '1 grupo de origem',             done: true },
-    { label: '1 grupo de destino',            done: true },
-    { label: 'Ligar o espelhamento',          done: false, current: true },
-  ]
+  const isOnboarding = checklistDone < checklistTotal
 
   return (
-    <MobileShell title="Conversor" active="inicio" hasAlert={hasAlert}>
-      {/* Alerta inline — só quando há problemas reais */}
+    <MobileShell title="Conversor" active="inicio" hasAlert={hasAlert && !isOnboarding}>
+      {/* Balão de progresso do checklist — só quando setup incompleto */}
+      {isOnboarding && (
+        <div style={homeStyles.checklistBalloon} onClick={() => router.push(mobileRoutes.checklistEspelhamento)}>
+          <div style={homeStyles.checklistBalloonIcon}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+            </svg>
+          </div>
+          <div style={homeStyles.alertText}>
+            <div style={homeStyles.alertTitle}>{checklistDone} de {checklistTotal} passos executados</div>
+            <div style={homeStyles.alertSub}>Complete o checklist para espelhar seus grupos</div>
+            <div style={homeStyles.checklistBalloonBar}>
+              <div style={homeStyles.checklistBalloonBarFill((checklistDone / checklistTotal) * 100)}/>
+            </div>
+          </div>
+          <MobileIcon name="arrow" size={14}/>
+        </div>
+      )}
+
+      {/* Alerta inline — só quando há problemas reais e setup completo */}
       {hasAlert && !isOnboarding && (
         <div style={homeStyles.alert}>
           <div style={homeStyles.alertIcon}>
@@ -278,32 +273,6 @@ export default function MobileHomePage() {
         </div>
       )}
 
-      {/* Setup checklist (só no onboarding) */}
-      {isOnboarding && (
-        <div style={homeStyles.setup}>
-          <div style={homeStyles.setupHead}>
-            <div style={homeStyles.setupTitle}>Configurar bot</div>
-            <span style={homeStyles.setupProgress}>{checklistDone}/5</span>
-          </div>
-          <div style={homeStyles.setupBar}>
-            <div style={{...homeStyles.setupBarFill, width: `${(checklistDone/5)*100}%`}}/>
-          </div>
-          <div>
-            {checklist.map((c, i, a) => (
-              <div key={i} style={{
-                ...homeStyles.setupItem(),
-                borderBottom: i === a.length-1 ? 'none' : '1px solid var(--line)',
-              }}>
-                <div style={homeStyles.setupCheck(c.done)}>
-                  {c.done && <MobileIcon name="check" size={11} stroke={3}/>}
-                </div>
-                <span style={homeStyles.setupItemLabel(c.done)}>{c.label}</span>
-                {c.current && <button style={homeStyles.setupItemAction}>Fazer</button>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* AÇÃO PRIMÁRIA — única, dominante */}
       <div style={homeStyles.primaryWrap}>
