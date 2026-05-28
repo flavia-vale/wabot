@@ -110,6 +110,26 @@ function conversionFailureFromContext(context, err) {
   return { reasonCode: 'CONVERSION_FAILED', reasonMessage: err?.message || 'Falha na conversão do link.' }
 }
 
+function inferTitleFromUrl(url) {
+  try {
+    const u = new URL(String(url || ''))
+    const host = u.hostname.replace(/^www\./, '')
+    if (/mercadolivre\.com\.br$/.test(host)) {
+      const m = u.pathname.match(/^\/([^/]+)\/(?:p|up)\//i)
+      if (m?.[1]) return decodeURIComponent(m[1]).replace(/-/g, ' ').trim()
+    }
+    if (/amazon\.com\.br$/.test(host)) {
+      const m = u.pathname.match(/^\/([^/]+)\/dp\//i)
+      if (m?.[1]) return decodeURIComponent(m[1]).replace(/-/g, ' ').trim()
+    }
+    if (/shopee\.com\.br$/.test(host)) {
+      const m = u.pathname.match(/^\/([^/]+)-i\.\d+\.\d+/i)
+      if (m?.[1]) return decodeURIComponent(m[1]).replace(/-/g, ' ').trim()
+    }
+  } catch {}
+  return ''
+}
+
 export async function linkConversionRoutes(app, opts = {}) {
   const convertLink = opts.converter ? normalizeConverter(opts.converter) : defaultConvertLink
   const fetchProductInfo = opts.fetchProductInfo ?? defaultFetchProductInfo
@@ -191,11 +211,27 @@ export async function linkConversionRoutes(app, opts = {}) {
         },
       }
     } catch (err) {
-      app.log.warn({ err: err.message, url: offerUrl }, 'Falha ao buscar informações do produto')
-      return reply.code(502).send({
-        error: 'Não foi possível ler as informações do produto agora. Preencha o template manualmente ou tente outro link.',
-        code: 'SCRAPE_OFFER_FETCH_FAILED',
-      })
+      app.log.warn({ err: err.message, url: offerUrl }, 'Falha ao buscar informações do produto; retornando fallback mínimo')
+      const fallbackTitle = inferTitleFromUrl(offerUrl) || inferTitleFromUrl(url)
+      return {
+        title: fallbackTitle,
+        oldPrice: '',
+        newPrice: '',
+        finalUrl: offerUrl,
+        offerUrl,
+        conversion: {
+          attempted: true,
+          success: conversionSuccess,
+          usedOriginalUrl: !conversionSuccess,
+          reasonCode: conversionSuccess ? null : reasonCode,
+          reasonMessage: conversionSuccess ? null : reasonMessage,
+          platform,
+        },
+        scrapeWarning: {
+          code: 'SCRAPE_OFFER_FETCH_FAILED',
+          message: 'Não foi possível ler as informações do produto agora. Preencha o template manualmente ou tente outro link.',
+        },
+      }
     }
   })
 

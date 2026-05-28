@@ -143,6 +143,7 @@ function extractFromJsonLd(html) {
 }
 
 function extractTitleFallback(html) {
+  if (!html) return ''
   for (const re of OG_TITLE_RE) {
     const m = html.match(re)
     if (m?.[1]) return normalizeText(m[1])
@@ -271,6 +272,7 @@ async function fetchShopeeItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS } = 
 }
 
 function extractMetaPrice(html) {
+  if (!html) return ''
   for (const re of META_PRICE_RE) {
     const m = html.match(re)
     if (m?.[1]) return toPriceString(m[1])
@@ -297,11 +299,20 @@ function extractFromMercadoLivreLanding(html) {
 }
 
 export async function fetchProductInfo(url, opts = {}) {
-  const { html, finalUrl } = await fetchHtml(url, opts)
-  if (!html) return { title: '', oldPrice: '', newPrice: '', finalUrl }
-  const jsonLd = extractFromJsonLd(html)
-  const mlLanding = extractFromMercadoLivreLanding(html)
-  const amazonFallback = extractAmazonTitleAndPrice(html)
+  let html = null
+  let finalUrl = url
+  try {
+    const fetched = await fetchHtml(url, opts)
+    html = fetched?.html ?? null
+    finalUrl = fetched?.finalUrl || url
+  } catch {
+    html = null
+    finalUrl = url
+  }
+
+  const jsonLd = html ? extractFromJsonLd(html) : null
+  const mlLanding = html ? extractFromMercadoLivreLanding(html) : null
+  const amazonFallback = html ? extractAmazonTitleAndPrice(html) : null
   const shopeeApiFallback = await fetchShopeeItemInfo(finalUrl || url, opts)
   const mercadoLivreApiFallback = await fetchMercadoLivreProductInfo(finalUrl || url, opts)
   const titleFromUrl = extractTitleFromUrl(finalUrl || url)
