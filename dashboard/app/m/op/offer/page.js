@@ -459,7 +459,10 @@ export default function OfferPage() {
 
       try {
         const scrapeResult = await api.scrapeOffer(input)
-        setProductData(scrapeResult)
+        const priceNow = scrapeResult?.priceNow ?? scrapeResult?.newPrice ?? ''
+        const priceWas = scrapeResult?.priceWas ?? scrapeResult?.oldPrice ?? ''
+        const imageUrl = scrapeResult?.imageUrl ?? scrapeResult?.image ?? ''
+        setProductData({ ...scrapeResult, priceNow, priceWas, imageUrl })
         setState(scrapeResult?.title ? 'converted' : 'scrapeFail')
       } catch {
         setState('converted')
