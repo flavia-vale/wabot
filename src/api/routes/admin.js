@@ -1,4 +1,5 @@
 import db from '../../db.js'
+import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
 import { listRunningBots } from '../../manager.js'
 import { getApiMetricsSnapshot } from '../metrics.js'
 import { getSupervisorOperationalCounters } from '../../supervisor/operationalCounters.js'
@@ -1469,6 +1470,78 @@ export async function adminRoutes(app) {
     const result = await adminService.listLogs({ query: req.query ?? {}, adminRole: req.admin.role })
     await writeAdminAuditLog(req, { action: 'admin.logs.list', resource: 'messageLog' })
     return result
+  })
+
+  // Métricas operacionais cross-user para o painel admin.
+  // Igual ao /api/logs/summary mas sem filtrar por userId (e expondo top
+  // destinos com mais timeouts para investigação rápida).
+  app.get('/logs/summary', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+    const rawPeriod = String(req.query?.period || '7d').toLowerCase()
+    const period = ['today', '7d', '30d'].includes(rawPeriod) ? rawPeriod : '7d'
+    const now = new Date()
+    const to = now
+    let from
+    if (period === 'today') {
+      from = new Date(now); from.setHours(0, 0, 0, 0)
+    } else if (period === '30d') {
+      from = new Date(now.getTime() - 30 * 24 * 60 * 60_000)
+    } else {
+      from = new Date(now.getTime() - 7 * 24 * 60 * 60_000)
+    }
+
+    const logs = await db.messageLog.findMany({
+      where: { sentAt: { gte: from, lte: to } },
+      select: { userId: true, status: true, errorMsg: true, destGroup: true },
+    })
+
+    const counts = {
+      success: 0,
+      skippedDedup: 0,
+      skippedConfig: 0,
+      timeoutTotal: 0,
+      errorOther: 0,
+      inFlight: 0,
+    }
+    const timeoutByDest = new Map()
+    const errorsByUser = new Map()
+
+    for (const log of logs) {
+      if (log.status === 'queued' || log.status === 'sending') { counts.inFlight++; continue }
+      if (log.status === 'success') { counts.success++; continue }
+      const category = categorizeErrorMsg(log.errorMsg)
+      if (category === ERROR_CATEGORIES.DEDUP) { counts.skippedDedup++; continue }
+      if (category === ERROR_CATEGORIES.CONFIG_BLOCK) { counts.skippedConfig++; continue }
+      if (category === ERROR_CATEGORIES.TIMEOUT) {
+        counts.timeoutTotal++
+        if (log.destGroup && log.destGroup !== 'skipped') {
+          timeoutByDest.set(log.destGroup, (timeoutByDest.get(log.destGroup) || 0) + 1)
+        }
+      } else if (log.status === 'error') {
+        counts.errorOther++
+      }
+      if (log.status === 'error') {
+        errorsByUser.set(log.userId, (errorsByUser.get(log.userId) || 0) + 1)
+      }
+    }
+
+    const topTimeoutDests = Array.from(timeoutByDest.entries())
+      .map(([destJid, count]) => ({ destJid, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10)
+    const topErrorUsers = Array.from(errorsByUser.entries())
+      .map(([userId, count]) => ({ userId, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10)
+
+    await writeAdminAuditLog(req, { action: 'admin.logs.summary.read', resource: 'messageLog' })
+    return {
+      period,
+      range: { from: from.toISOString(), to: to.toISOString() },
+      counts,
+      topTimeoutDests,
+      topErrorUsers,
+    }
   })
 
 
