@@ -121,12 +121,14 @@ const criarStyles = {
       : 'var(--line)'),
     borderRadius: 16,
     padding: 14,
+    overflow: 'hidden',
+    minWidth: 0,
   }),
   beforeLabel: { fontSize: 10.5, color:'var(--ink-faint)', marginBottom: 4 },
   beforeLink: {
     fontFamily:"'JetBrains Mono', monospace", fontSize: 11.5,
     color:'var(--ink-faint)', textDecoration:'line-through',
-    wordBreak:'break-all', lineHeight: 1.45,
+    overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
   },
   afterArrow: {
     display:'flex', alignItems:'center', gap: 6,
@@ -137,7 +139,7 @@ const criarStyles = {
   afterLink: {
     fontFamily:"'JetBrains Mono', monospace", fontSize: 13,
     color:'var(--ink)', fontWeight: 500,
-    wordBreak:'break-all', lineHeight: 1.45,
+    overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
   },
   copyBtn: {
     marginTop: 12, display:'flex', gap: 6,
