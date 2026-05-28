@@ -87,7 +87,6 @@ export default function TutorialPage() {
         </div>
       </div>
 
-      {/* Suporte */}
       <div style={cfgStyles.sectionLabel}>Precisa de ajuda?</div>
       <div style={{ padding: '0 16px 24px' }}>
         <div style={{ ...cfgStyles.card, padding: 16, display: 'flex', alignItems: 'center', gap: 14 }}>
