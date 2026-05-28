@@ -381,10 +381,21 @@ async function createAffiliateLink(mlUrl, tag, creds) {
 }
 
 
+// Retorna 'match' | 'mismatch' | 'inconclusive'.
+//
+// Crítico: 'inconclusive' NÃO é motivo para descartar o short link. Do VPS
+// (IP de datacenter) o `resolve()` quase sempre bate no muro anti-bot do ML
+// (`/gz/account-verification`), de onde não dá pra extrair MLB nenhum. Erro de
+// rede idem. Tratar esses casos como falha jogava fora short links válidos e
+// caía no fallback partner_id (sintoma: links /p/MLB... saindo "com id" em vez
+// do meli.la). Só descartamos com mismatch comprovado — resolveu para um MLB
+// real e diferente do esperado.
 async function validateAffiliateRedirect(affiliateUrl, expectedMlbId) {
-  if (!affiliateUrl || !expectedMlbId) return false
+  if (!affiliateUrl || !expectedMlbId) return 'inconclusive'
   try {
     const resolved = await resolve(affiliateUrl)
+    const hitVerificationWall = /\/gz\/account-verification/i.test(String(resolved))
+
     let finalId = extractMlbId(resolved)
     let path = 'direct'
     if (!finalId) {
@@ -394,22 +405,32 @@ async function validateAffiliateRedirect(affiliateUrl, expectedMlbId) {
         if (finalId) path = 'canonicalize'
       } catch { /* ignore */ }
     }
-    if (!finalId) {
+    // Atrás do muro de verificação a landing é a própria tela anti-bot (sem
+    // produto), então nem tentamos raspar — só desperdiça uma chamada.
+    if (!finalId && !hitVerificationWall) {
       const fromLanding = await tryExtractProductFromLanding(resolved)
       if (fromLanding) {
         finalId = extractMlbId(fromLanding)
         if (finalId) path = 'landing'
       }
     }
+
+    if (!finalId) {
+      logger.warn(
+        { affiliateUrl, resolved, expectedMlbId, hitVerificationWall },
+        'ML validate: inconclusivo (muro anti-bot ou sem MLB extraível) — mantendo short link'
+      )
+      return 'inconclusive'
+    }
     const ok = finalId === expectedMlbId
     logger[ok ? 'info' : 'warn'](
       { affiliateUrl, resolved, finalId, expectedMlbId, path, ok },
       ok ? 'ML validate: short_url confere' : 'ML validate: short_url resolveu para MLB diferente do esperado'
     )
-    return ok
+    return ok ? 'match' : 'mismatch'
   } catch (err) {
-    logger.warn({ affiliateUrl, expectedMlbId, err: err.message }, 'ML validate: erro ao resolver short_url')
-    return false
+    logger.warn({ affiliateUrl, expectedMlbId, err: err.message }, 'ML validate: erro ao resolver short_url — inconclusivo, mantendo')
+    return 'inconclusive'
   }
 }
 
@@ -510,8 +531,11 @@ export async function convert(url, creds) {
           const affiliateUrl = await createAffiliateLink(candidate, tag, creds)
           if (!affiliateUrl) continue
           if (anchorMlbId) {
-            const valid = await validateAffiliateRedirect(affiliateUrl, anchorMlbId)
-            if (!valid) {
+            const verdict = await validateAffiliateRedirect(affiliateUrl, anchorMlbId)
+            // Só descartamos com mismatch comprovado. 'inconclusive' (muro
+            // anti-bot do VPS / erro de rede) mantém o short link — descartar
+            // jogava fora links válidos e caía no fallback partner_id.
+            if (verdict === 'mismatch') {
               logger.warn({ affiliateUrl, anchorMlbId, candidate }, 'ML createLink: short_url resolveu para produto diferente — descartando')
               continue
             }
