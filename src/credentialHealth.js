@@ -10,7 +10,7 @@ export const PLATFORMS = Object.keys(PLATFORM_LABELS)
 export const REQUIRED_FIELDS = {
   shopee: ['appId', 'secretKey'],
   amazon: ['tag', 'ubid-acbbr', 'at-acbbr', 'x-acbbr'],
-  mercadolivre: ['tag', 'ssid'],
+  mercadolivre: ['tag'],
   magazineluiza: ['tag'],
 }
 
@@ -70,6 +70,15 @@ export function validateCredentialData(platform, data = {}) {
 
   const required = REQUIRED_FIELDS[platform] ?? []
   const missing = required.filter(field => !hasValue(data?.[field]))
+
+  if (platform === 'mercadolivre') {
+    const ssid = getString(data, 'ssid')
+    const cookie = getString(data, 'cookie')
+    const hasAuthCarrier = ssid.length >= 10 || cookie.length >= 20
+    if (!hasAuthCarrier) {
+      missing.push('ssid/cookie')
+    }
+  }
   const warnings = missing.length ? [] : getFormatWarnings(platform, data)
   const configured = missing.length === 0
 
