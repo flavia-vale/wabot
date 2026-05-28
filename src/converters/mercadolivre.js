@@ -381,7 +381,38 @@ async function createAffiliateLink(mlUrl, tag, creds) {
 }
 
 
-async function validateAffiliateRedirect(affiliateUrl, expectedMlbId) {
+// Decide se o short_url resolvido aponta para o produto esperado.
+// - Não-catálogo (listagem): exige MLB idêntico ao esperado.
+// - Catálogo (`/p/MLB...`): um link de afiliado de catálogo redireciona para a
+//   listagem vencedora, cujo MLB é DIFERENTE do id do catálogo. Aceita quando
+//   confirmamos (via catalog_product_id da listagem) que ela pertence ao mesmo
+//   catálogo; se a confirmação é inconclusiva, aceita mesmo assim (o short foi
+//   gerado a partir da própria URL do catálogo).
+export function isAffiliateRedirectValid({ finalId, expectedMlbId, isCatalog, resolvedCatalogProductId }) {
+  if (!finalId || !expectedMlbId) return false
+  if (finalId === expectedMlbId) return true
+  if (!isCatalog) return false
+  if (resolvedCatalogProductId) return resolvedCatalogProductId === expectedMlbId
+  return true
+}
+
+// Lê o catalog_product_id de uma listagem via API pública do ML. Best-effort:
+// quando a API limita/expira, devolve null (validação cai no modo permissivo).
+async function fetchCatalogProductId(mlbId) {
+  if (!mlbId) return null
+  try {
+    const res = await axios.get(`https://api.mercadolibre.com/items/${mlbId}`, {
+      timeout: ML_RESOLVE_FETCH_TIMEOUT_MS,
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      validateStatus: (s) => s === 200,
+    })
+    return res.data?.catalog_product_id ? extractMlbId(res.data.catalog_product_id) : null
+  } catch {
+    return null
+  }
+}
+
+async function validateAffiliateRedirect(affiliateUrl, expectedMlbId, { isCatalog = false } = {}) {
   if (!affiliateUrl || !expectedMlbId) return false
   try {
     const resolved = await resolve(affiliateUrl)
@@ -401,10 +432,16 @@ async function validateAffiliateRedirect(affiliateUrl, expectedMlbId) {
         if (finalId) path = 'landing'
       }
     }
-    const ok = finalId === expectedMlbId
+    // Catálogo + MLB divergente: confirma que a listagem resolvida pertence ao
+    // mesmo catálogo antes de aceitar/rejeitar.
+    let resolvedCatalogProductId = null
+    if (isCatalog && finalId && finalId !== expectedMlbId) {
+      resolvedCatalogProductId = await fetchCatalogProductId(finalId)
+    }
+    const ok = isAffiliateRedirectValid({ finalId, expectedMlbId, isCatalog, resolvedCatalogProductId })
     logger[ok ? 'info' : 'warn'](
-      { affiliateUrl, resolved, finalId, expectedMlbId, path, ok },
-      ok ? 'ML validate: short_url confere' : 'ML validate: short_url resolveu para MLB diferente do esperado'
+      { affiliateUrl, resolved, finalId, expectedMlbId, isCatalog, resolvedCatalogProductId, path, ok },
+      ok ? 'ML validate: short_url confere' : 'ML validate: short_url resolveu para produto fora do esperado'
     )
     return ok
   } catch (err) {
@@ -469,7 +506,9 @@ export async function convert(url, creds) {
     // Sem essa âncora, se um candidate vier com MLB errado a validação compararia
     // errado-com-errado e passaria.
     const anchorMlbId = extractMlbId(target)
-    logger.info({ inputUrl: url, target, anchorMlbId, hasSsid: !!ssid }, 'ML convert: target resolvido')
+    let anchorIsCatalog = false
+    try { anchorIsCatalog = /\/p\/MLB/i.test(new URL(target).pathname) } catch { /* ignore */ }
+    logger.info({ inputUrl: url, target, anchorMlbId, anchorIsCatalog, hasSsid: !!ssid }, 'ML convert: target resolvido')
 
     // Sinaliza quando o SSID/cookie do afiliado expirou: a oferta ainda sai
     // via fallback partner_id, mas o painel avisa o usuário para renovar a
@@ -510,7 +549,7 @@ export async function convert(url, creds) {
           const affiliateUrl = await createAffiliateLink(candidate, tag, creds)
           if (!affiliateUrl) continue
           if (anchorMlbId) {
-            const valid = await validateAffiliateRedirect(affiliateUrl, anchorMlbId)
+            const valid = await validateAffiliateRedirect(affiliateUrl, anchorMlbId, { isCatalog: anchorIsCatalog })
             if (!valid) {
               logger.warn({ affiliateUrl, anchorMlbId, candidate }, 'ML createLink: short_url resolveu para produto diferente — descartando')
               continue
