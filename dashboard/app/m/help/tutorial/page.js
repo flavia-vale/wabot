@@ -54,9 +54,10 @@ export default function TutorialPage() {
       { n: '01', t: 'Como conectar seu WhatsApp', m: '2 min · vídeo', done: Boolean(s.session?.running), route: mobileRoutes.configWhatsApp },
       { n: '02', t: 'Adicionar grupos para monitorar', m: '1 min · vídeo', done: groups.some(g => g.role === 'monitor'), route: mobileRoutes.configGroups },
       { n: '03', t: 'Cadastrar IDs de afiliada', m: '3 min · texto', done: (s.creds || []).length > 0, route: mobileRoutes.configCredentials },
-      { n: '04', t: 'Criar sua primeira regra', m: '4 min · vídeo', done: groups.some(g => g.role === 'post'), route: mobileRoutes.configGroups },
-      { n: '05', t: 'Personalizar mensagens promocionais', m: '3 min · texto', done: Boolean(String(cfg.welcomeMsg || '').trim() || String(cfg.brandingGroupLink || '').trim()), route: mobileRoutes.configPreferences },
-      { n: '06', t: 'Entender o painel de logs', m: '2 min · vídeo', done: totalLogs > 0, route: mobileRoutes.logs },
+      { n: '04', t: 'Adicionar destino de publicação', m: '2 min · texto', done: groups.some(g => g.role === 'post'), route: mobileRoutes.configGroups },
+      { n: '05', t: 'Criar a primeira oferta mobile', m: '3 min · prática', done: totalLogs > 0, route: mobileRoutes.offer },
+      { n: '06', t: 'Personalizar mensagens promocionais', m: '3 min · texto', done: Boolean(String(cfg.welcomeMsg || '').trim() || String(cfg.brandingGroupLink || '').trim()), route: mobileRoutes.configPreferences },
+      { n: '07', t: 'Entender o painel de logs', m: '2 min · vídeo', done: totalLogs > 0, route: mobileRoutes.logs },
     ]
     const firstPending = steps.findIndex(st => !st.done)
     return steps.map((st, i) => ({ ...st, current: i === firstPending }))
@@ -87,7 +88,7 @@ export default function TutorialPage() {
       </div>
 
       <div style={{ padding: '12px 20px 0', fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.5 }}>
-        6 passos para você dominar o BOTinho. Cada um leva menos de 5 minutos.
+        7 passos para conectar, configurar, criar uma oferta e acompanhar logs pelo mobile.
       </div>
 
       <div style={cfgStyles.cardWrap}>
@@ -105,14 +106,11 @@ export default function TutorialPage() {
       <div style={cfgStyles.cardWrap}>
         <div style={{ ...cfgStyles.card, overflow: 'hidden' }}>
           {passos.map((p, i, a) => (
-            <div
+            <button
               key={p.n}
+              type="button"
               onClick={() => router.push(p.route)}
-              style={{
-                ...cfgStyles.row(i === a.length - 1),
-                background: p.current ? 'color-mix(in oklab, var(--accent) 12%, var(--surface))' : 'transparent',
-                cursor: 'pointer',
-              }}
+              style={cfgStyles.rowButton(i === a.length - 1, p.current)}
             >
               <div
                 style={{
@@ -146,7 +144,7 @@ export default function TutorialPage() {
               </div>
               {p.current && <span style={cfgStyles.pill('success')}>continuar</span>}
               <MobileIcon name="arrow" size={14} />
-            </div>
+            </button>
           ))}
         </div>
       </div>

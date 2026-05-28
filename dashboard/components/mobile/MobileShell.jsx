@@ -8,7 +8,7 @@ const shellStyles = {
   root: {
     position: 'relative',
     margin: '0 auto',
-    minHeight: '100vh',
+    minHeight: '100dvh',
     width: '100%',
     maxWidth: 480,
     background: 'var(--bg)',
@@ -32,7 +32,7 @@ const shellStyles = {
   },
   brandTxt: { fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--ink)' },
   iconBtn: {
-    width: 36, height: 36, borderRadius: 10,
+    width: 44, height: 44, minWidth: 44, minHeight: 44, borderRadius: 12,
     background: 'var(--bg-soft)', border: '1px solid var(--line)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     color: 'var(--ink)', cursor: 'pointer',
@@ -48,7 +48,8 @@ const shellStyles = {
     flex: 1,
     overflow: 'auto',
     background: 'var(--bg)',
-    paddingBottom: 92,
+    paddingBottom: 'calc(92px + env(safe-area-inset-bottom))',
+    scrollPaddingBottom: 'calc(92px + env(safe-area-inset-bottom))',
   },
   bottomNav: {
     position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)',
@@ -56,7 +57,7 @@ const shellStyles = {
     background: 'color-mix(in oklab, var(--surface) 95%, transparent)',
     backdropFilter: 'blur(12px)',
     borderTop: '1px solid var(--line)',
-    paddingBottom: 24,
+    paddingBottom: 'calc(10px + env(safe-area-inset-bottom))',
     paddingTop: 6,
     display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)',
     zIndex: 9,
@@ -64,6 +65,7 @@ const shellStyles = {
   navItem: (active) => ({
     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
     padding: '8px 4px',
+    minHeight: 44,
     color: active ? 'var(--accent-strong)' : 'var(--ink-soft)',
     fontSize: 10.5, fontWeight: 500,
     textDecoration: 'none',
@@ -133,7 +135,20 @@ const tabs = [
 
 export function MobileShell({ title = 'Conversor', active = 'inicio', hasAlert = false, children }) {
   return (
-    <div style={shellStyles.root}>
+    <div className="mobile-shell" style={shellStyles.root}>
+      <style>{`
+        .mobile-shell :is(a, button, input, textarea, select, [role="button"]):focus-visible {
+          outline: 3px solid color-mix(in oklab, var(--accent-strong) 70%, white);
+          outline-offset: 3px;
+          box-shadow: 0 0 0 5px color-mix(in oklab, var(--accent) 22%, transparent);
+        }
+        .mobile-shell :is(a, button) {
+          -webkit-tap-highlight-color: color-mix(in oklab, var(--accent) 20%, transparent);
+        }
+        .mobile-shell button:disabled {
+          cursor: not-allowed;
+        }
+      `}</style>
       <header style={shellStyles.topbar}>
         <div style={shellStyles.topbarBrand}>
           <div style={shellStyles.brandMark}>b</div>
@@ -200,6 +215,7 @@ export function MobileStateCard({ title, description, actionLabel, onAction, ton
           style={{
             marginTop: 12,
             padding: '8px 14px',
+            minHeight: 44,
             borderRadius: 999,
             border: '1px solid var(--line)',
             background: 'var(--surface)',

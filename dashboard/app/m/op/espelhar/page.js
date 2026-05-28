@@ -1,12 +1,14 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { mobi } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+import { mobileRoutes } from '@/components/mobile/routes'
 
 const GROUP_GRADIENTS = [
   'linear-gradient(135deg,#94A3B8,#475569)',
@@ -162,8 +164,10 @@ export default function EspelharPage() {
   const [groups, setGroups] = useState([])
   const [session, setSession] = useState(null)
   const [summary, setSummary] = useState(null)
+  const [config, setConfig] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const router = useRouter()
 
   useEffect(() => {
     let active = true
@@ -171,15 +175,17 @@ export default function EspelharPage() {
       setLoading(true)
       setError('')
       try {
-        const [g, s, sum] = await Promise.all([
+        const [g, s, sum, cfg] = await Promise.all([
           api.groups(),
           api.sessionStatus().catch(() => null),
           api.logsSummary('today').catch(() => null),
+          api.getConfig().catch(() => null),
         ])
         if (!active) return
         setGroups(Array.isArray(g) ? g : [])
         setSession(s)
         setSummary(sum)
+        setConfig(cfg)
       } catch (e) {
         if (active) setError(e.message || 'Não foi possível carregar o espelhamento.')
       } finally {
@@ -218,6 +224,8 @@ export default function EspelharPage() {
   const vistosHoje = c
     ? (c.success + c.skippedDedup + c.skippedConfig + c.timeoutTotal + c.errorOther + c.inFlight)
     : 0
+  const activeFilters = [config?.blockedKeywords, config?.allowedStores, config?.minDiscountPercent].filter((value) => Array.isArray(value) ? value.length > 0 : Boolean(value)).length
+  const postIntervalMinutes = config?.postIntervalMs ? Math.max(1, Math.round(config.postIntervalMs / 60000)) : null
 
   if (loading) {
     return (
@@ -247,7 +255,7 @@ export default function EspelharPage() {
       </div>
 
       {/* Controle ON/OFF — único toggle visível */}
-      <div style={espStyles.control}>
+      <button type="button" onClick={() => router.push(mobileRoutes.configWhatsApp)} style={{...espStyles.control, border:'none', width:'auto', textAlign:'left', fontFamily:'inherit'}}>
         <div style={espStyles.controlBlob}/>
         <div style={espStyles.controlIcon}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -271,7 +279,7 @@ export default function EspelharPage() {
         <div style={espStyles.bigToggle(on)}>
           <div style={espStyles.bigToggleKnob(on)}/>
         </div>
-      </div>
+      </button>
 
       {/* Stats compactos do dia */}
       <div style={espStyles.miniStats}>
@@ -295,7 +303,7 @@ export default function EspelharPage() {
       {/* ── DE ONDE VEM ── */}
       <div style={espStyles.sectionH}>
         <div style={espStyles.sectionTitle}>Grupos que monitoro</div>
-        <div style={espStyles.sectionAction}>Editar</div>
+        <button type="button" onClick={() => router.push(mobileRoutes.configGroups)} style={{...espStyles.sectionAction, border:'none', background:'transparent', fontFamily:'inherit'}}>Editar</button>
       </div>
       <div style={espStyles.sectionHint}>
         De onde a gente captura as promoções.
@@ -317,7 +325,7 @@ export default function EspelharPage() {
             <MobileIcon name="arrow" size={14}/>
           </div>
         ))}
-        <button style={espStyles.addBtn}>
+        <button type="button" onClick={() => router.push(mobileRoutes.configGroups)} style={espStyles.addBtn}>
           <div style={espStyles.addIcon}>
             <MobileIcon name="plus" size={14} stroke={2.4}/>
           </div>
@@ -328,7 +336,7 @@ export default function EspelharPage() {
       {/* ── PRA ONDE VAI ── */}
       <div style={espStyles.sectionH}>
         <div style={espStyles.sectionTitle}>Meus grupos de promoção</div>
-        <div style={espStyles.sectionAction}>Editar</div>
+        <button type="button" onClick={() => router.push(mobileRoutes.configGroups)} style={{...espStyles.sectionAction, border:'none', background:'transparent', fontFamily:'inherit'}}>Editar</button>
       </div>
       <div style={espStyles.sectionHint}>
         Pra onde a gente posta o link já com sua afiliada.
@@ -347,7 +355,7 @@ export default function EspelharPage() {
             <MobileIcon name="arrow" size={14}/>
           </div>
         ))}
-        <button style={espStyles.addBtn}>
+        <button type="button" onClick={() => router.push(mobileRoutes.configGroups)} style={espStyles.addBtn}>
           <div style={espStyles.addIcon}>
             <MobileIcon name="plus" size={14} stroke={2.4}/>
           </div>
@@ -372,7 +380,7 @@ export default function EspelharPage() {
             ex: só postar se ≤ R$ 200 com 30%+ de desconto
           </div>
         </div>
-        <span style={espStyles.filtersCount}>3 ativos</span>
+        <span style={espStyles.filtersCount}>{activeFilters} ativos</span>
         <MobileIcon name="arrow" size={14}/>
       </div>
 
@@ -388,7 +396,7 @@ export default function EspelharPage() {
           </svg>
         </div>
         <div style={espStyles.filtersMain}>
-          <div style={espStyles.filtersTitle}>1 envio a cada 12 minutos</div>
+          <div style={espStyles.filtersTitle}>{postIntervalMinutes ? `1 envio a cada ${postIntervalMinutes} min` : 'Cadência configurada no painel'}</div>
           <div style={espStyles.filtersSub}>
             evita parecer spam · ajustável conforme o uso
           </div>
