@@ -954,6 +954,143 @@ ${currentCouponLink}`
             )
           })()}
 
+          {(() => {
+            const groupOn = bonuses === 'group' || bonuses === 'both'
+            const couponsOn = bonuses === 'coupons' || bonuses === 'both'
+            const toggleGroup = () => {
+              const next = groupOn ? (bonuses === 'both' ? 'coupons' : '') : (couponsOn ? 'both' : 'group')
+              setBonuses(next)
+              refreshEditorWithBonuses(next)
+            }
+            const toggleCoupons = () => {
+              const next = couponsOn ? (bonuses === 'both' ? 'group' : '') : (groupOn ? 'both' : 'coupons')
+              setBonuses(next)
+              refreshEditorWithBonuses(next)
+            }
+            const updateGroupBonus = (field, value) => {
+              const nextGroupBonus = { ...groupBonus, [field]: value }
+              setGroupBonus(nextGroupBonus)
+              refreshEditorWithBonuses(bonuses, { groupBonus: nextGroupBonus })
+            }
+            const updateCouponLink = (storeKey, value) => {
+              const nextCouponLinks = { ...couponLinks, [storeKey]: value }
+              setCouponLinks(nextCouponLinks)
+              refreshEditorWithBonuses(bonuses, { couponLinks: nextCouponLinks })
+            }
+            const toggleCouponStore = (storeKey) => {
+              const nextSelected = selectedCouponStores.includes(storeKey)
+                ? selectedCouponStores.filter((item) => item !== storeKey)
+                : [...selectedCouponStores, storeKey]
+              setSelectedCouponStores(nextSelected)
+              refreshEditorWithBonuses(bonuses, { selectedCouponStores: nextSelected })
+            }
+            const updateCouponCta = (value) => {
+              setCouponCta(value)
+              refreshEditorWithBonuses(bonuses, { couponCta: value })
+            }
+            const groupPreview = groupBonus.link.trim()
+              ? `${groupBonus.cta.trim() || 'Entre no nosso grupo:'}
+${groupBonus.link.trim()}`
+              : 'Preencha o link do grupo para ele aparecer na mensagem.'
+            const firstCouponStore = selectedCouponStores.find((storeKey) => couponLinks[storeKey]?.trim())
+            const firstCoupon = firstCouponStore ? COUPON_STORES.find((store) => store.key === firstCouponStore) : null
+            const couponPreview = firstCoupon
+              ? `${(couponCta.trim() || 'Mais cupons da {loja}:').replace('{loja}', firstCoupon.nome)}
+${couponLinks[firstCoupon.key].trim()}`
+              : 'Selecione uma loja e preencha o link de cupons para aparecer na mensagem.'
+
+            const groupHead = (on) => (
+              <button type="button" style={{...criarStyles.unifiedRowHead, width:'100%', border:'none', background:'transparent', padding:0, textAlign:'left', fontFamily:'inherit'}} onClick={toggleGroup} aria-pressed={on}>
+                <div style={criarStyles.bonusIcon(on)}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                </div>
+                <div style={criarStyles.bonusMain}>
+                  <div style={criarStyles.bonusTitle}>Link do seu grupo</div>
+                  <div style={criarStyles.bonusSub}>{on ? 'aparece no fim da mensagem quando houver link' : 'convida pra entrar no seu grupo principal'}</div>
+                </div>
+                <div style={criarStyles.bonusToggle(on)}><div style={criarStyles.bonusKnob(on)}/></div>
+              </button>
+            )
+            const couponsHead = (on) => (
+              <button type="button" style={{...criarStyles.unifiedRowHead, width:'100%', border:'none', background:'transparent', padding:0, textAlign:'left', fontFamily:'inherit'}} onClick={toggleCoupons} aria-pressed={on}>
+                <div style={criarStyles.bonusIcon(on)}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M20 12V8H4v8h16v-4z"/><path d="M9 8v8M15 8v8"/>
+                  </svg>
+                </div>
+                <div style={criarStyles.bonusMain}>
+                  <div style={criarStyles.bonusTitle}>Página de cupons da loja</div>
+                  <div style={criarStyles.bonusSub}>{on ? 'só aparece quando a loja tiver link preenchido' : 'leva pra sua página de cupons da loja'}</div>
+                </div>
+                <div style={criarStyles.bonusToggle(on)}><div style={criarStyles.bonusKnob(on)}/></div>
+              </button>
+            )
+
+            return (
+              <div style={{...criarStyles.unifiedCard, marginTop: 4}}>
+                <div style={criarStyles.unifiedRow(groupOn, false)}>
+                  {groupHead(groupOn)}
+                  {groupOn && (
+                    <div style={criarStyles.unifiedBody}>
+                      <label style={criarStyles.bonusField}>
+                        <div style={criarStyles.bonusLabel}>Link de convite</div>
+                        <input style={criarStyles.bonusInput} value={groupBonus.link} onChange={(event) => updateGroupBonus('link', event.target.value)} placeholder="https://chat.whatsapp.com/..." />
+                      </label>
+                      <label style={criarStyles.bonusField}>
+                        <div style={criarStyles.bonusLabel}>Chamada (CTA)</div>
+                        <input style={criarStyles.bonusInputText} value={groupBonus.cta} onChange={(event) => updateGroupBonus('cta', event.target.value)} />
+                      </label>
+                      <div>
+                        <div style={criarStyles.bonusPreviewLabel}><MobileIcon name="check" size={10} stroke={3}/>como vai aparecer</div>
+                        <div style={criarStyles.bonusPreview}>{groupPreview}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div style={criarStyles.unifiedRow(couponsOn, true)}>
+                  {couponsHead(couponsOn)}
+                  {couponsOn && (
+                    <div style={criarStyles.unifiedBody}>
+                      <div style={criarStyles.bonusField}>
+                        <div style={criarStyles.bonusLabel}>Quais lojas você tem cupom?</div>
+                        <div style={criarStyles.storeChips}>
+                          {COUPON_STORES.map((store) => {
+                            const selected = selectedCouponStores.includes(store.key)
+                            return (
+                              <button key={store.key} type="button" onClick={() => toggleCouponStore(store.key)} style={criarStyles.storeChip(selected)} aria-pressed={selected}>
+                                {selected && <MobileIcon name="check" size={10} stroke={3}/>} {store.nome}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                      {COUPON_STORES.filter((store) => selectedCouponStores.includes(store.key)).map((store) => (
+                        <label key={store.key} style={criarStyles.bonusField}>
+                          <div style={criarStyles.storeRow}>
+                            <div style={criarStyles.storeBadge(store.cor)}>{store.nome.slice(0,2).toUpperCase()}</div>
+                            <span style={criarStyles.storeName}>Link {store.nome}</span>
+                          </div>
+                          <input style={{...criarStyles.bonusInput, marginTop: 6}} value={couponLinks[store.key] || ''} onChange={(event) => updateCouponLink(store.key, event.target.value)} placeholder="https://..." />
+                        </label>
+                      ))}
+                      <label style={criarStyles.bonusField}>
+                        <div style={criarStyles.bonusLabel}>Chamada (CTA) · use {'{loja}'} pro nome</div>
+                        <input style={criarStyles.bonusInputText} value={couponCta} onChange={(event) => updateCouponCta(event.target.value)} />
+                      </label>
+                      <div>
+                        <div style={criarStyles.bonusPreviewLabel}><MobileIcon name="check" size={10} stroke={3}/>nesta oferta</div>
+                        <div style={criarStyles.bonusPreview}>{couponPreview}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
+
           <div style={criarStyles.sectionH}>
             <div style={criarStyles.sectionTitle}>Postar em</div>
             <span style={{fontSize: 11, color:'var(--ink-soft)', fontWeight: 600}}>{selectedDestinations.length} selecionado(s)</span>
