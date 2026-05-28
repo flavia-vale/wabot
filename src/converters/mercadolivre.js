@@ -471,6 +471,11 @@ export async function convert(url, creds) {
     const anchorMlbId = extractMlbId(target)
     logger.info({ inputUrl: url, target, anchorMlbId, hasSsid: !!ssid }, 'ML convert: target resolvido')
 
+    // Sinaliza quando o SSID/cookie do afiliado expirou: a oferta ainda sai
+    // via fallback partner_id, mas o painel avisa o usuário para renovar a
+    // credencial e voltar a gerar short links meli.la.
+    let authExpired = false
+
     // Sem MLB no target, não há como validar — chamar a API neste caso é
     // tiro no escuro (o ML pode devolver short para produto qualquer).
     // Pular API e cair direto no fallback partner_id.
@@ -514,6 +519,12 @@ export async function convert(url, creds) {
           return affiliateUrl
         } catch (err) {
           logger.warn({ candidate, err: err.message }, 'ML createLink: tentativa falhou')
+          // Credencial expirada falha igual em todos os candidates: marca e
+          // para de tentar (poupa chamadas) — cai no fallback com aviso.
+          if (/credencial|inv[aá]lida|expirad/i.test(err.message)) {
+            authExpired = true
+            break
+          }
         }
       }
 
@@ -534,6 +545,7 @@ export async function convert(url, creds) {
     // Fallback: injetar partner_id na URL resolvida (ou na meli.la original se resolve falhou)
     u.searchParams.delete('partner_id')
     if (tag) u.searchParams.set('partner_id', tag)
+    if (authExpired) return { url: u.toString(), warning: 'ml_ssid_expired' }
     return u.toString()
   } catch {
     return null
