@@ -44,6 +44,7 @@ import { getAdvancedPreservationAccess } from './billing/plans.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
+import { classifyError } from './errorTaxonomy.js'
 import { detectMessageKind, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
 import Redis from 'ioredis'
 import { parseEnumEnv, logModeSummary } from './core/envModes.js'
@@ -461,7 +462,7 @@ async function checkScheduledMessages() {
           state.hasError = true
           await db.messageLog.update({
             where: { id: log.id },
-            data: { status: 'error', errorMsg: 'Fila interna de envios cheia ou worker encerrando', sentAt: new Date() },
+            data: { status: 'error', errorMsg: classifyError(null, { kind: 'queue_full' }), sentAt: new Date() },
           }).catch(() => {})
         }
       }
@@ -558,7 +559,17 @@ const SHUTDOWN_DRAIN_TIMEOUT_MS = Math.max(0, envNumber('SHUTDOWN_DRAIN_TIMEOUT_
 // a fila em memória processa serialmente, todo job posterior fica "queued"
 // até reinício do worker. Com timeout vira erro transitório que reentra no
 // retry loop; após SEND_MAX_ATTEMPTS o job é marcado 'error' e a fila avança.
-const SEND_MESSAGE_TIMEOUT_MS = Math.max(5_000, envNumber('SEND_MESSAGE_TIMEOUT_MS', 60_000))
+//
+// Política por tentativa: 1ª paciente (gera link preview, mídia hospedada,
+// rede pode oscilar), demais rápidas para liberar a fila. Configurável via
+// env caso precise uniformizar em incidentes — caem todos no mesmo valor.
+const SEND_MESSAGE_TIMEOUT_MS = Math.max(5_000, envNumber('SEND_MESSAGE_TIMEOUT_MS', 0)) || null
+const SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS = [90_000, 60_000, 45_000]
+function resolveSendTimeoutMs(attempt) {
+  if (SEND_MESSAGE_TIMEOUT_MS) return SEND_MESSAGE_TIMEOUT_MS
+  const idx = Math.max(0, Math.min(SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS.length - 1, (attempt || 1) - 1))
+  return SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS[idx]
+}
 const DEST_RATE_LIMIT_MS = Math.max(0, envNumber('DEST_RATE_LIMIT_MS', 1_000))
 const SMART_DELAY_PROGRESSIVE_THRESHOLD = Math.max(1, envNumber('SMART_DELAY_PROGRESSIVE_THRESHOLD', 20))
 const SMART_DELAY_PROGRESSIVE_STEP_MS = Math.max(0, envNumber('SMART_DELAY_PROGRESSIVE_STEP_MS', 5_000))
@@ -577,8 +588,12 @@ const SEND_QUEUE_BACKEND_ENV = String(process.env.QUEUE_BACKEND || '').toLowerCa
 const REDIS_URL = process.env.REDIS_URL || ''
 const BULLMQ_QUEUE_NAME = process.env.BULLMQ_QUEUE_NAME || `wabot-send-${userId}`
 const MSG_QUEUE_CONCURRENCY = Math.max(1, envNumber('MSG_QUEUE_CONCURRENCY', 2))
-const MSG_QUEUE_TIMEOUT_MS = Math.max(1_000, envNumber('MSG_QUEUE_TIMEOUT_MS', 15_000))
-const MSG_QUEUE_WATCHDOG_MS = Math.max(5_000, envNumber('MSG_QUEUE_WATCHDOG_MS', 30_000))
+// Default subido de 15s -> 25s: dentro do orçamento da incomingQueue cabe
+// scrape de título (3s) + conversão de afiliado (rede) + dedup + DB write.
+// Em Amazon BR (HTML de ~1.3MB) 15s ficava apertado. Watchdog em
+// MSG_QUEUE_WATCHDOG_MS (30s) continua como safety-net pro caso patológico.
+const MSG_QUEUE_TIMEOUT_MS = Math.max(1_000, envNumber('MSG_QUEUE_TIMEOUT_MS', 25_000))
+const MSG_QUEUE_WATCHDOG_MS = Math.max(5_000, envNumber('MSG_QUEUE_WATCHDOG_MS', 40_000))
 const MSG_QUEUE_MAX_SIZE = Math.max(10, envNumber('MSG_QUEUE_MAX_SIZE', 500))
 const MAX_INCOMING_MESSAGE_CHARS = Math.max(500, envNumber('MAX_INCOMING_MESSAGE_CHARS', 8_000))
 
@@ -751,14 +766,15 @@ async function finishSendJob(job, result) {
 }
 
 function withSendTimeout(promise, ctx) {
-  return withSendTimeoutImpl(promise, { ...ctx, timeoutMs: SEND_MESSAGE_TIMEOUT_MS })
+  const timeoutMs = resolveSendTimeoutMs(ctx?.attempt)
+  return withSendTimeoutImpl(promise, { ...ctx, timeoutMs })
 }
 
-async function sendPreparedPayload({ sock, job, payload }) {
+async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
   if (payload && payload._route === 'relay' && payload.relay?.type && payload.relay?.proto) {
     await withSendTimeout(
       sock.relayMessage(job.destJid, { [payload.relay.type]: payload.relay.proto }, {}),
-      { destJid: job.destJid, route: 'relay' },
+      { destJid: job.destJid, route: 'relay', attempt },
     )
     return
   }
@@ -784,7 +800,7 @@ async function sendPreparedPayload({ sock, job, payload }) {
       try {
         await withSendTimeout(
           sock.sendMessage(job.destJid, route.body, route.sendOptions || undefined),
-          { destJid: job.destJid, route: i === 0 ? 'primary' : `fallback[${i - 1}]` },
+          { destJid: job.destJid, route: i === 0 ? 'primary' : `fallback[${i - 1}]`, attempt },
         )
         return
       } catch (err) {
@@ -799,7 +815,7 @@ async function sendPreparedPayload({ sock, job, payload }) {
 
   await withSendTimeout(
     sock.sendMessage(job.destJid, payload),
-    { destJid: job.destJid, route: 'default' },
+    { destJid: job.destJid, route: 'default', attempt },
   )
 }
 
@@ -871,11 +887,15 @@ async function processSendJob(job) {
         if (payload === undefined) throw new Error('Invalid send job: payload/buildPayload ausente')
         await waitDestinationRateLimit(job.destJid)
         if (SMART_DELAY_TYPING_ENABLED && job.typingDelayMs > 0 && !job.skipTyping) {
-          await Promise.resolve(sockForAttempt.sendPresenceUpdate?.('composing', job.destJid)).catch(() => {})
-          await sleep(job.typingDelayMs)
-          await Promise.resolve(sockForAttempt.sendPresenceUpdate?.('paused', job.destJid)).catch(() => {})
+          try {
+            await Promise.resolve(sockForAttempt?.sendPresenceUpdate?.('composing', job.destJid)).catch(() => {})
+            await sleep(job.typingDelayMs)
+            await Promise.resolve((activeSock ?? sockForAttempt)?.sendPresenceUpdate?.('paused', job.destJid)).catch(() => {})
+          } catch (presenceErr) {
+            logger.debug({ err: presenceErr?.message, destJid: job.destJid }, 'sendPresenceUpdate falhou; ignorando typing')
+          }
         }
-        await sendPreparedPayload({ sock: sockForAttempt, job, payload })
+        await sendPreparedPayload({ sock: sockForAttempt, job, payload, attempt })
         const finishedAt = Date.now()
         lastSendByDest.set(job.destJid, finishedAt)
         logger.info({ destJid: job.destJid, platforms: job.platforms, attempt, type: job.type }, 'Mensagem enviada')
@@ -935,9 +955,11 @@ async function processSendJob(job) {
     }
   } catch (err) {
     logger.error({ destJid: job.destJid, err: err.message, type: job.type }, 'Erro ao enviar mensagem da fila')
+    const kind = isChannelForbiddenError(err) ? 'channel_forbidden' : undefined
+    const canonicalErrorMsg = classifyError(err, { destJid: job.destJid, kind })
     await db.messageLog.update({
       where: { id: job.logId },
-      data: { status: 'error', errorMsg: err.message, sentAt: new Date() },
+      data: { status: 'error', errorMsg: canonicalErrorMsg, sentAt: new Date() },
     }).catch(() => {})
     sendMetrics.errorTotal++
     sendMetrics.lastErrorAt = new Date().toISOString()
@@ -961,7 +983,7 @@ async function markInterruptedSendLogs() {
       where: { userId, status: { in: ['queued', 'sending'] } },
       data: {
         status: 'error',
-        errorMsg: 'Envio interrompido por reinício do worker antes da conclusão',
+        errorMsg: classifyError(null, { kind: 'worker_restart' }),
         sentAt: now,
       },
     }),
@@ -1048,7 +1070,7 @@ async function startBotInner() {
   // mesma URL no destino algum tempo depois. Caso real: mesmo amzn.to/4rUx7Gd
   // convertido 3x em 52min porque o canal-fonte reposta a mesma oferta.
   const dedupeWindowMs = Math.max(1_000, Number(process.env.DEDUP_MSGID_WINDOW_MS) || 300_000)
-  const linkDedupWindowMs = Math.max(dedupeWindowMs, Number(process.env.DEDUP_LINK_WINDOW_MS) || 24 * 60 * 60_000)
+  const linkDedupWindowMs = Math.max(dedupeWindowMs, Number(process.env.DEDUP_LINK_WINDOW_MS) || 2 * 60 * 60_000)
   const dedup = pruneDedupStore(
     loadDedup(),
     Date.now(),
@@ -1263,6 +1285,59 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }).catch(() => {})
       }
 
+      // Quando uma URL já enviada nas últimas 2h é vista de novo, em vez de
+      // criar mais uma linha 'skip:dedup_recent_link' (gerando N rows iguais
+      // que poluem o painel), incrementamos um contador na linha existente
+      // mais recente do mesmo (userId, destJid, convertedUrl). Janela de busca
+      // = linkDedupWindowMs. Se não houver linha recente (estado dessincronizado
+      // após restart, por exemplo), cria uma nova como fallback para não perder
+      // visibilidade do evento.
+      async function registerDedupBlock({ reason, platform, destJid, originalUrl: incomingUrl, convertedUrl: outgoingUrl, messageText }) {
+        if (!shouldTrackSkipped) return
+        const since = new Date(Date.now() - linkDedupWindowMs)
+        const lookupUrl = outgoingUrl || incomingUrl || ''
+        try {
+          const recent = lookupUrl
+            ? await db.messageLog.findFirst({
+                where: {
+                  userId,
+                  destGroup: destJid,
+                  OR: [
+                    { convertedUrl: lookupUrl },
+                    { originalUrl: lookupUrl },
+                  ],
+                  sentAt: { gte: since },
+                },
+                orderBy: { sentAt: 'desc' },
+                select: { id: true },
+              })
+            : null
+          if (recent) {
+            await db.messageLog.update({
+              where: { id: recent.id },
+              data: { dedupHits: { increment: 1 } },
+            })
+            return
+          }
+        } catch (err) {
+          logger.warn({ err: err?.message, reason }, 'registerDedupBlock lookup falhou; fallback para create')
+        }
+        await db.messageLog.create({
+          data: {
+            userId,
+            platform: platform || 'unknown',
+            sourceGroup: normalizedJid || 'unknown',
+            destGroup: destJid || 'skipped',
+            originalUrl: incomingUrl || '',
+            convertedUrl: outgoingUrl || '',
+            messageText: sanitizeMessageForLog(messageText || reason),
+            status: 'skipped',
+            errorMsg: reason,
+            dedupHits: 0,
+          },
+        }).catch(() => {})
+      }
+
       if (!cfg.botConfig.feedGlobal && !monitorGroup) {
         return
       }
@@ -1318,7 +1393,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             originalUrl: links[0]?.url || '',
             convertedUrl: '',
             messageText: sanitizeMessageForLog(sanitizedText || text || ''),
-            status: 'error',
+            status: 'skipped',
             errorMsg: `skip:policy:${policy.forwardMode}:${policy.noLinkScope}:${messageKind}`,
           },
         }).catch(() => {})
@@ -1449,7 +1524,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             convertedUrl: '',
             messageText: sanitizeMessageForLog(text),
             status: 'error',
-            errorMsg: reason,
+            errorMsg: `error:conversion:${reason}`,
           },
         }).catch(err => {
           logger.warn({ err: err.message, platform }, 'Falha ao gravar diagnóstico de conversão')
@@ -1481,19 +1556,39 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }
 
         try {
-          const converted = await convertLink(platform, url, cfg.credentials)
-          if (!converted) {
+          const conversionResult = await convertLink(platform, url, cfg.credentials)
+          if (!conversionResult) {
             await recordConversionIssue({ platform, url, jid, text, reason: `Conversor de ${credentialValidation.label} não retornou link convertido. Confira se as credenciais estão válidas.` })
             return null
           }
-          logger.info({ platform, converted }, 'Link convertido')
-          return { platform, url, converted }
+          logger.info({ platform, converted: conversionResult.url, warning: conversionResult.warning }, 'Link convertido')
+          return { platform, url, converted: conversionResult.url, warning: conversionResult.warning }
         } catch (err) {
           await recordConversionIssue({ platform, url, jid, text, reason: `Falha na conversão de ${credentialValidation.label}: ${err.message}` })
           return null
         }
       }))
       const conversions = linkResults.filter(Boolean)
+
+      const warningKinds = new Set(conversions.map(c => c.warning).filter(Boolean))
+      for (const kind of warningKinds) {
+        const sample = conversions.find(c => c.warning === kind)
+        await db.messageLog.create({
+          data: {
+            userId,
+            platform: sample?.platform || 'unknown',
+            sourceGroup: jid,
+            destGroup: 'warning',
+            originalUrl: sample?.url || '',
+            convertedUrl: '',
+            messageText: '',
+            status: 'skipped',
+            errorMsg: `warning:${kind}`,
+          },
+        }).catch(err => {
+          logger.warn({ err: err.message, kind }, 'Falha ao gravar aviso de conversão')
+        })
+      }
 
       let finalText = sanitizedText
       if (links.length) {
@@ -1507,7 +1602,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             originalUrl: links[0]?.url || '',
             convertedUrl: '',
             messageText: sanitizeMessageForLog(sanitizedText || ''),
-            status: 'error',
+            status: 'skipped',
             errorMsg: 'skip:no_valid_conversions',
           },
         }).catch(() => {})
@@ -1566,13 +1661,27 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const dedupSubject = primary.url || `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
         const key = `${destJid}:${dedupSubject}`
         if (dedup.links[key] && Date.now() - dedup.links[key] < linkDedupWindowMs) {
-          await recordSkippedMessage({ reason: 'skip:dedup_recent_link', platform: primary.platform, originalUrl: primary.url, convertedUrl: primary.converted })
+          await registerDedupBlock({
+            reason: 'skip:dedup_recent_link',
+            platform: primary.platform,
+            destJid,
+            originalUrl: primary.url,
+            convertedUrl: primary.converted,
+            messageText: finalText,
+          })
           logger.info({ destJid }, 'Duplicata ignorada'); continue
         }
         if (GLOBAL_DEDUP_MODE !== 'off') {
           const globalDedup = await globalDedupCheckAndSet(key, dedupeWindowMs)
           if (globalDedup.duplicate) {
-            await recordSkippedMessage({ reason: 'skip:dedup_recent_link_global', platform: primary.platform, originalUrl: primary.url, convertedUrl: primary.converted })
+            await registerDedupBlock({
+              reason: 'skip:dedup_recent_link_global',
+              platform: primary.platform,
+              destJid,
+              originalUrl: primary.url,
+              convertedUrl: primary.converted,
+              messageText: finalText,
+            })
             logger.info({ destJid }, 'Duplicata global ignorada')
             continue
           }
@@ -1691,7 +1800,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         if (!accepted) {
           await db.messageLog.update({
             where: { id: log.id },
-            data: { status: 'error', errorMsg: 'Fila interna de envios cheia ou worker encerrando', sentAt: new Date() },
+            data: { status: 'error', errorMsg: classifyError(null, { kind: 'queue_full' }), sentAt: new Date() },
           }).catch(() => {})
           logger.warn({ destJid, platforms, logId: log.id }, 'Mensagem convertida rejeitada pela fila')
         }
@@ -1738,10 +1847,10 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             logger.error({ msgId, dedupKey, err: err.message }, 'Mensagem descartada fora do escopo monitorado — sem log em painel')
             return
           }
-          const raw = String(err?.message || '')
-          const reason = /Bad MAC|MessageCounterError|Key used already or never filled/i.test(raw)
-            ? `skip:decrypt_failed:${raw.slice(0, 80)}`
-            : `skip:incoming_error:${raw.slice(0, 80)}`
+          const reason = classifyError(err, { kind: 'incoming' })
+          // timeout:incoming representa "tentamos processar e não conseguiu a tempo"
+          // — vira status='error'. Demais (decrypt, incoming_error) seguem 'skipped'.
+          const status = reason.startsWith('timeout:') ? 'error' : 'skipped'
           await db.messageLog.create({
             data: {
               userId,
@@ -1756,7 +1865,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
                 msg.message?.imageMessage?.caption ||
                 'incoming_error'
               ),
-              status: 'skipped',
+              status,
               errorMsg: reason,
             },
           }).catch(() => {})
@@ -1987,11 +2096,11 @@ process.on('message', async msg => {
       if (accepted) {
         queued++
       } else {
-        const error = 'Fila interna de envios cheia ou worker encerrando'
-        errors.push({ jid, error })
+        const canonicalErrorMsg = classifyError(null, { kind: 'queue_full' })
+        errors.push({ jid, error: canonicalErrorMsg })
         await db.messageLog.update({
           where: { id: log.id },
-          data: { status: 'error', errorMsg: error, sentAt: new Date() },
+          data: { status: 'error', errorMsg: canonicalErrorMsg, sentAt: new Date() },
         }).catch(() => {})
       }
     }
