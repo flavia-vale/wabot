@@ -218,6 +218,69 @@ test('fetchProductInfo usa título do slug da URL quando Shopee API falhar', asy
   assert.match(info.title, /Kit Maquiagem Completo Com Pincéis Empreendedora Sucesso/i)
 })
 
+test('fetchProductInfo extrai título e preços do HTML da PDP do Mercado Livre (sem API)', async (t) => {
+  const html = `<!doctype html><html><head>
+    <meta property="og:title" content="02 Forma Silicone Retangular Reutilizável Air Fryer"/>
+    <title>Forma Silicone | Mercado Livre</title>
+  </head><body>
+    <h1 class="ui-pdp-title">02 Forma Silicone Retangular Reutilizável Air Fryer</h1>
+    <div class="ui-pdp-price__main-container">
+      <s class="andes-money-amount ui-pdp-price__original-value andes-money-amount--previous">
+        <span class="andes-money-amount__currency-symbol">R$</span>
+        <span class="andes-money-amount__fraction">59</span>
+        <span class="andes-money-amount__cents">99</span>
+      </s>
+      <div class="ui-pdp-price__second-line">
+        <span class="andes-money-amount andes-money-amount--cents-superscript">
+          <span class="andes-money-amount__currency-symbol">R$</span>
+          <span class="andes-money-amount__fraction">39</span>
+          <span class="andes-money-amount__cents">90</span>
+        </span>
+      </div>
+    </div>
+  </body></html>`
+
+  const originalFetch = globalThis.fetch
+  // API de products responde 401 (estado atual) — extração precisa vir do HTML.
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('api.mercadolibre.com')) {
+      return { ok: false, status: 401, headers: { get: () => 'application/json' }, json: async () => ({}) }
+    }
+    return mockHtmlResponse(html, 'https://www.mercadolivre.com.br/forma-silicone/p/MLB69573479')
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://www.mercadolivre.com.br/forma-silicone/p/MLB69573479')
+  assert.match(info.title, /02 Forma Silicone Retangular Reutilizável Air Fryer/i)
+  assert.equal(info.newPrice, '39,90')
+  assert.equal(info.oldPrice, '59,99')
+})
+
+test('fetchProductInfo extrai preços do JSON embarcado da PDP do Mercado Livre', async (t) => {
+  const html = `<!doctype html><html><head>
+    <meta property="og:title" content="Secador De Roupas Elétrico Portátil"/>
+    </head><body><div id="ui-pdp-root"></div>
+    <script type="application/json" id="__PRELOADED_STATE__">
+      {"components":{"price":{"value":189.9,"original_price":259.9,"currency_id":"BRL"}}}
+    </script></body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('api.mercadolibre.com')) {
+      return { ok: false, status: 401, headers: { get: () => 'application/json' }, json: async () => ({}) }
+    }
+    return mockHtmlResponse(html, 'https://www.mercadolivre.com.br/secador/p/MLB70009242')
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://www.mercadolivre.com.br/secador/p/MLB70009242')
+  assert.match(info.title, /Secador De Roupas Elétrico Portátil/i)
+  assert.equal(info.newPrice, '189,90')
+  assert.equal(info.oldPrice, '259,90')
+})
+
 test('fetchProductInfo usa fallback da API de products do Mercado Livre para título e preço em URL /p/', async (t) => {
   const htmlShell = '<!doctype html><html><head><title>Mercado Libre</title></head><body>anti-bot shell</body></html>'
   const mlProductsPayload = {
