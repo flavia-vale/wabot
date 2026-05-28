@@ -214,7 +214,7 @@ export default function AccountPage() {
         <div style={contaStyles.plan}>
           <div style={contaStyles.planMain}>
             <div style={contaStyles.planTitle}>{planPrice}{accessDate ? ` · ${renewLabel} ${accessDate}` : ''}</div>
-            <div style={contaStyles.planSub}>incluído: espelhamento e reescrita por IA</div>
+            <div style={contaStyles.planSub}>incluído: espelhamento</div>
           </div>
           <button type="button" onClick={() => router.push(mobileRoutes.accountSubscription)} style={contaStyles.planBtn}>Gerenciar</button>
         </div>
@@ -240,9 +240,7 @@ export default function AccountPage() {
         <ContaRow icon="plus" title="Modelos de mensagem"
           sub="modelos salvos no backoffice" value="editar" onClick={() => router.push(mobileRoutes.accountTemplates)}/>
         <ContaRow icon="bolt" title="Ritmo de envio"
-          sub="ajuste em grupos e preservação" onClick={() => router.push(mobileRoutes.espelhar)}/>
-        <ContaRow icon="sparkles" tone="accent" title="Reescrita por IA"
-          sub="configurado no painel" value="ver" onClick={() => router.push(mobileRoutes.configPreferences)} last/>
+          sub="ajuste em grupos e preservação" onClick={() => router.push(mobileRoutes.espelhar)} last/>
       </div>
 
       {/* ── ANTI-BANIMENTO (era "Preservação avançada") ── */}
@@ -254,16 +252,6 @@ export default function AccountPage() {
           sub="ajusta o ritmo automaticamente quando o WhatsApp aperta" statusTone="success" onClick={() => router.push(mobileRoutes.espelhar)} last/>
       </div>
 
-      {/* ── PREFERÊNCIAS ── */}
-      <div style={contaStyles.section}>
-        <div style={contaStyles.sectionLabel}>Preferências</div>
-      </div>
-      <div style={contaStyles.card}>
-        <ContaRow icon="chat" title="Notificações"
-          sub="quando avisar de falhas, novos envios e marcos" onClick={() => router.push(mobileRoutes.configPreferences)}/>
-        <ContaRow icon="star" title="Aparência"
-          sub="preferências salvas no backoffice" value="editar" onClick={() => router.push(mobileRoutes.configPreferences)} last/>
-      </div>
 
       {/* ── CONTA + AJUDA ── */}
       <div style={contaStyles.section}>
