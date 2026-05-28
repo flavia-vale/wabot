@@ -513,7 +513,6 @@ export default function OfferPage() {
   const [groups, setGroups] = useState([])
   const [selectedDestinations, setSelectedDestinations] = useState([])
   const [sendFeedback, setSendFeedback] = useState('')
-  const inputRef = useRef(null)
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined
