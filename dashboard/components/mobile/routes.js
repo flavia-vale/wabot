@@ -8,7 +8,7 @@ export const mobileRoutes = {
   configGroups: '/m/config/groups',
   configCredentials: '/m/config/credentials',
   configPreferences: '/m/config/preferences',
-  helpTutorial: '/m/help/tutorial',
+  helpTutorial: '/m/checklistespelhamento',
   account: '/m/account',
   accountSubscription: '/m/account/subscription',
   accountTemplates: '/m/account/templates',
