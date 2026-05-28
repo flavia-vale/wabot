@@ -20,6 +20,10 @@ const criarStyles = {
     fontSize: 11, fontWeight: 600, color:'var(--ink-soft)',
     textTransform:'uppercase', letterSpacing:'0.06em', marginBottom: 8,
   },
+  inputRow: {
+    display:'flex', alignItems:'stretch', gap: 8,
+  },
+  inputFieldWrap: { flex: 1, minWidth: 0, position:'relative' },
   inputField: (filled) => ({
     width:'100%',
     padding:'18px 16px',
@@ -34,6 +38,15 @@ const criarStyles = {
     transition: 'all .2s',
     wordBreak:'break-all', lineHeight: 1.4,
   }),
+  pasteBtn: {
+    width: 76, minHeight: 60, padding:'0 12px',
+    borderRadius: 14, border:'1.5px solid var(--ink)',
+    background:'var(--ink)', color:'white',
+    display:'inline-flex', alignItems:'center', justifyContent:'center', gap: 6,
+    fontSize: 12.5, fontWeight: 700, fontFamily:'inherit',
+    cursor:'pointer', boxShadow:'0 10px 22px rgba(15, 23, 42, 0.12)',
+    flexShrink: 0,
+  },
   inputHint: {
     fontSize: 11.5, color:'var(--ink-faint)',
     marginTop: 8, display:'flex', alignItems:'center', gap: 6,
@@ -434,7 +447,33 @@ export default function OfferPage() {
   const [convertedLink, setConvertedLink] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState('achadinho')
   const [bonuses, setBonuses] = useState('both')
+  const [pasteFeedback, setPasteFeedback] = useState('')
   const bonusLayout = 'unified'
+
+  const handlePasteFromClipboard = async () => {
+    setPasteFeedback('')
+
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.readText) {
+      setPasteFeedback('Não consegui acessar a área de transferência neste navegador. Toque no campo e use Colar.')
+      return
+    }
+
+    try {
+      const clipboardText = await navigator.clipboard.readText()
+      const nextInput = clipboardText.trim()
+
+      if (!nextInput) {
+        setPasteFeedback('Sua área de transferência está vazia.')
+        return
+      }
+
+      setInput(nextInput)
+      setPasteFeedback('Link colado.')
+    } catch (error) {
+      console.warn('Clipboard paste failed:', error)
+      setPasteFeedback('Permita o acesso à área de transferência ou toque no campo e use Colar.')
+    }
+  }
 
   const handleConvert = async () => {
     if (!input.trim()) return
@@ -482,43 +521,47 @@ export default function OfferPage() {
       {/* INPUT — sempre o protagonista */}
       <div style={criarStyles.inputBlock}>
         <div style={criarStyles.inputLabel}>Link do produto</div>
-        <div style={{position:'relative'}}>
-          {isEmpty ? (
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              style={{...criarStyles.inputField(false), minHeight: 60}}
-              placeholder="https://..."
-              autoFocus={false}
-            />
-          ) : (
-            <>
-              <div style={criarStyles.inputField(true)}>{linkOriginal}</div>
-              <div
-                onClick={() => { setInput(''); setState('empty'); setProductData(null) }}
-                style={criarStyles.inputClear}
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-                  <line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>
-                </svg>
-              </div>
-            </>
+        <div style={criarStyles.inputRow}>
+          <div style={criarStyles.inputFieldWrap}>
+            {isEmpty ? (
+              <textarea
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value)
+                  setPasteFeedback('')
+                }}
+                style={{...criarStyles.inputField(false), minHeight: 60, resize: 'none'}}
+                placeholder="https://..."
+                autoFocus={false}
+              />
+            ) : (
+              <>
+                <div style={criarStyles.inputField(true)}>{linkOriginal}</div>
+                <div
+                  onClick={() => { setInput(''); setState('empty'); setProductData(null); setPasteFeedback('') }}
+                  style={criarStyles.inputClear}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                    <line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>
+                  </svg>
+                </div>
+              </>
+            )}
+          </div>
+          {isEmpty && (
+            <button type="button" onClick={handlePasteFromClipboard} style={criarStyles.pasteBtn}>
+              Colar
+            </button>
           )}
         </div>
 
         {isEmpty && (
-          <>
-            <div style={criarStyles.inputHint}>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5"/>
-              </svg>
-              No celular: toque longo e escolha &quot;Colar&quot;.
-            </div>
-            <div style={criarStyles.examples}>
-              <button onClick={() => setInput('https://shopee.com.br/Sandalia-Bege-Verao-i.4738291.928374')} style={criarStyles.examChip}>👟 exemplo Shopee</button>
-              <button onClick={() => setInput('https://www.amazon.com.br/s?k=notebook')} style={criarStyles.examChip}>🔌 exemplo Amazon</button>
-            </div>
-          </>
+          <div style={criarStyles.inputHint}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5"/>
+            </svg>
+            {pasteFeedback || 'Toque em Colar para preencher com o link copiado.'}
+          </div>
         )}
       </div>
 
