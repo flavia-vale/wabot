@@ -1,9 +1,19 @@
 'use client'
 
+import { useState, useEffect, useMemo } from 'react'
+import { api } from '@/lib/api'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
+import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { mobi } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+
+const GROUP_GRADIENTS = [
+  'linear-gradient(135deg,#94A3B8,#475569)',
+  'linear-gradient(135deg,#F4D9E0,#E8A488)',
+  'linear-gradient(135deg,#C8E6D8,#3E9C7A)',
+  'linear-gradient(135deg,#D9CFEA,#7C5CF5)',
+]
 
 const espStyles = {
   pageH: { padding: '18px 20px 0' },
@@ -148,20 +158,81 @@ const espStyles = {
 
 export default function EspelharPage() {
   useMobileRoutePerf('m/op/espelhar')
-  const on = true
 
-  const origens = [
-    {nome:'Promoções Brasil 🔥', plat:'WhatsApp', g:'linear-gradient(135deg,#94A3B8,#475569)'},
-    {nome:'Cupons & Cashback BR', plat:'WhatsApp', g:'linear-gradient(135deg,#F4D9E0,#E8A488)'},
-    {nome:'Ofertas Relâmpago', plat:'Telegram', g:'linear-gradient(135deg,#C8E6D8,#3E9C7A)'},
-    {nome:'Promoções de TI', plat:'WhatsApp', g:'linear-gradient(135deg,#D9CFEA,#7C5CF5)'},
-  ];
+  const [groups, setGroups] = useState([])
+  const [session, setSession] = useState(null)
+  const [summary, setSummary] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  const destinos = [
-    {nome:'Achados da Sol 💜', tipo:'grupo · 247 pessoas', g:'linear-gradient(135deg, var(--accent), var(--accent-2))'},
-    {nome:'Sol · Tech & Casa', tipo:'grupo · 118 pessoas', g:'linear-gradient(135deg, var(--accent-3), var(--warn))'},
-    {nome:'Canal Sol Achados', tipo:'canal · 2.4k inscritos', g:'linear-gradient(135deg, var(--accent-2), var(--accent-strong))'},
-  ];
+  useEffect(() => {
+    let active = true
+    async function load() {
+      setLoading(true)
+      setError('')
+      try {
+        const [g, s, sum] = await Promise.all([
+          api.groups(),
+          api.sessionStatus().catch(() => null),
+          api.logsSummary('today').catch(() => null),
+        ])
+        if (!active) return
+        setGroups(Array.isArray(g) ? g : [])
+        setSession(s)
+        setSummary(sum)
+      } catch (e) {
+        if (active) setError(e.message || 'Não foi possível carregar o espelhamento.')
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    load()
+    return () => { active = false }
+  }, [])
+
+  // Espelhamento "ligado" reflete a sessão WhatsApp rodando — não há flag
+  // própria no backend; o bot espelha enquanto a sessão está conectada.
+  const on = Boolean(session?.running)
+
+  const origens = useMemo(
+    () => groups.filter(g => g.role === 'monitor').map((g, i) => ({
+      nome: g.name,
+      plat: g.kind === 'channel' ? 'Canal WhatsApp' : 'WhatsApp',
+      g: GROUP_GRADIENTS[i % GROUP_GRADIENTS.length],
+    })),
+    [groups],
+  )
+
+  const destinos = useMemo(
+    () => groups.filter(g => g.role === 'post').map((g, i) => ({
+      nome: g.name,
+      tipo: g.kind === 'channel' ? 'canal' : 'grupo',
+      g: GROUP_GRADIENTS[i % GROUP_GRADIENTS.length],
+    })),
+    [groups],
+  )
+
+  const c = summary?.counts
+  const postadosHoje = c?.success ?? 0
+  const errosHoje = (c?.timeoutTotal ?? 0) + (c?.errorOther ?? 0)
+  const vistosHoje = c
+    ? (c.success + c.skippedDedup + c.skippedConfig + c.timeoutTotal + c.errorOther + c.inFlight)
+    : 0
+
+  if (loading) {
+    return (
+      <MobileShell title="Conversor" active="espelhar">
+        <div style={{padding:'18px 16px'}}><MobileLoadingCard label="Carregando espelhamento..." /></div>
+      </MobileShell>
+    )
+  }
+  if (error) {
+    return (
+      <MobileShell title="Conversor" active="espelhar">
+        <div style={{padding:'18px 16px'}}><MobileErrorCard message={error} /></div>
+      </MobileShell>
+    )
+  }
 
   return (
     <MobileShell title="Conversor" active="espelhar">
@@ -169,9 +240,9 @@ export default function EspelharPage() {
         <div style={espStyles.pageEyebrow}>Funcionalidade PRO</div>
         <div style={espStyles.pageTitle}>Espelhamento</div>
         <div style={espStyles.pageSentence}>
-          Você monitora <span style={espStyles.pageNum}>4 grupos</span>.
+          Você monitora <span style={espStyles.pageNum}>{origens.length} {origens.length === 1 ? 'grupo' : 'grupos'}</span>.
           Quando aparece uma promoção, a gente troca o link pela sua afiliada
-          e posta nos <span style={espStyles.pageNum}>3 grupos seus</span>.
+          e posta nos <span style={espStyles.pageNum}>{destinos.length} {destinos.length === 1 ? 'grupo seu' : 'grupos seus'}</span>.
         </div>
       </div>
 
@@ -192,7 +263,7 @@ export default function EspelharPage() {
             {on ? (
               <>
                 <span style={espStyles.controlLive}/>
-                último envio há 2 min
+                {summary?.lastSendAt ? `último envio ${new Date(summary.lastSendAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'monitorando seus grupos'}
               </>
             ) : 'os grupos não estão sendo monitorados'}
           </div>
@@ -206,18 +277,18 @@ export default function EspelharPage() {
       <div style={espStyles.miniStats}>
         <div style={espStyles.miniStat}>
           <div style={espStyles.miniStatLabel}>Hoje</div>
-          <div style={espStyles.miniStatNum}>147</div>
+          <div style={espStyles.miniStatNum}>{postadosHoje}</div>
           <div style={espStyles.miniStatSub}>postados</div>
         </div>
         <div style={espStyles.miniStat}>
           <div style={espStyles.miniStatLabel}>Vistos</div>
-          <div style={espStyles.miniStatNum}>183</div>
+          <div style={espStyles.miniStatNum}>{vistosHoje}</div>
           <div style={espStyles.miniStatSub}>nas origens</div>
         </div>
         <div style={espStyles.miniStat}>
           <div style={espStyles.miniStatLabel}>Erros</div>
-          <div style={{...espStyles.miniStatNum, color: 'var(--danger)'}}>3</div>
-          <div style={{...espStyles.miniStatSub, color: 'var(--danger)'}}>resolver →</div>
+          <div style={{...espStyles.miniStatNum, color: errosHoje > 0 ? 'var(--danger)' : 'var(--ink)'}}>{errosHoje}</div>
+          <div style={{...espStyles.miniStatSub, color: errosHoje > 0 ? 'var(--danger)' : 'var(--ink-soft)'}}>{errosHoje > 0 ? 'resolver →' : 'tudo certo'}</div>
         </div>
       </div>
 
