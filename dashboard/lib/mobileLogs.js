@@ -52,6 +52,43 @@ export function mobileLogDayBucket(date, now) {
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
 }
 
+
+function safeMobileLogUrl(value) {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  try {
+    const url = new URL(trimmed)
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null
+    return trimmed
+  } catch {
+    return null
+  }
+}
+
+export function isSafeMobileLogUrl(value) {
+  return Boolean(safeMobileLogUrl(value))
+}
+
+export function mobileLogLinkActions(item = {}) {
+  const actions = []
+  if (item.link) {
+    actions.push({ key: 'copy-original', kind: 'copy', label: 'Copiar original', value: item.link })
+    const originalHref = safeMobileLogUrl(item.link)
+    if (originalHref) {
+      actions.push({ key: 'open-original', kind: 'open', label: 'Abrir original', href: originalHref })
+    }
+  }
+  if (item.conv) {
+    actions.push({ key: 'copy-converted', kind: 'copy', label: 'Copiar convertido', value: item.conv })
+    const convertedHref = safeMobileLogUrl(item.conv)
+    if (convertedHref) {
+      actions.push({ key: 'open-converted', kind: 'open', label: 'Abrir convertido', href: convertedHref })
+    }
+  }
+  return actions
+}
+
 export function toMobileLogItem(log = {}, now = new Date()) {
   const status = MOBILE_LOG_STATUS_TO_UI[log.status] || 'ignorado'
   const sentAt = new Date(log.sentAt)

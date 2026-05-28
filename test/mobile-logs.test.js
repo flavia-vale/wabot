@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { toMobileLogItem } from '../dashboard/lib/mobileLogs.js'
+import { isSafeMobileLogUrl, mobileLogLinkActions, toMobileLogItem } from '../dashboard/lib/mobileLogs.js'
 
 test('log mobile traduz erro por item de conversão sem ação falsa', () => {
   const item = toMobileLogItem({
@@ -19,4 +19,28 @@ test('log mobile traduz erro por item de conversão sem ação falsa', () => {
   assert.equal(item.source, 'manual')
   assert.match(item.erro, /Credenciais ausentes/)
   assert.equal(item.canRetryInMobile, false)
+})
+
+
+test('helper de logs mobile aceita somente URLs http/https para abrir', () => {
+  assert.equal(isSafeMobileLogUrl('https://example.com/oferta'), true)
+  assert.equal(isSafeMobileLogUrl(' http://example.com/oferta '), true)
+  assert.equal(isSafeMobileLogUrl('javascript:alert(1)'), false)
+  assert.equal(isSafeMobileLogUrl('nota fiscal sem url'), false)
+  assert.equal(isSafeMobileLogUrl(''), false)
+})
+
+test('ações seguras incluem cópia sempre que há link e abertura só para URL válida', () => {
+  const actions = mobileLogLinkActions({
+    link: 'https://loja.test/produto',
+    conv: 'texto convertido sem url',
+  })
+
+  assert.deepEqual(actions.map((action) => action.key), [
+    'copy-original',
+    'open-original',
+    'copy-converted',
+  ])
+  assert.equal(actions.find((action) => action.key === 'open-original')?.href, 'https://loja.test/produto')
+  assert.equal(actions.find((action) => action.key === 'copy-converted')?.value, 'texto convertido sem url')
 })

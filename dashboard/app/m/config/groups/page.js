@@ -11,6 +11,7 @@ import {
   buildExistingJidRoleSet,
   getMobileGroupPickerItem,
   getRoleForMobileGroupTab,
+  prepareMobileGroupAddPayload,
   sortWhatsAppGroupsForMobilePicker,
 } from '@/lib/mobileGroupPicker'
 
@@ -89,11 +90,17 @@ export default function GroupsPage() {
   }
 
   async function addGroupFromData(data) {
-    const waJid = data.waJid || data.jid || data.id
+    const result = prepareMobileGroupAddPayload(data, role, existingJidRoles)
+    if (!result.ok) {
+      setFeedback(result.feedback)
+      return
+    }
+
+    const { waJid, name, kind } = result.payload
     setActionLoading(`add-${waJid}::${role}`)
     setFeedback('')
     try {
-      await api.addGroup(waJid, data.name || data.subject || waJid, role, data.kind || 'group')
+      await api.addGroup(waJid, name, role, kind)
       setFeedback(role === 'monitor' ? 'Grupo adicionado para monitorar.' : 'Grupo adicionado para publicar.')
       setManualForm({ waJid: '', name: '', kind: 'group' })
       await loadGroups()
@@ -118,6 +125,8 @@ export default function GroupsPage() {
       setActionLoading('')
     }
   }
+
+  const feedbackIsError = feedback && (feedback.includes('Não') || feedback === 'Este grupo já está cadastrado para monitorar/publicar.')
 
   if (loading) {
     return (
@@ -158,7 +167,7 @@ export default function GroupsPage() {
         {tab === 'origem' ? 'Grupos onde o bot lê links de promoção.' : 'Destinos onde o bot publica os links convertidos.'}
       </div>
 
-      {feedback && <div style={{margin:'12px 16px 0', fontSize: 12, color: feedback.includes('Não') ? 'var(--danger)' : 'var(--success)'}}>{feedback}</div>}
+      {feedback && <div style={{margin:'12px 16px 0', fontSize: 12, color: feedbackIsError ? 'var(--danger)' : 'var(--success)'}}>{feedback}</div>}
 
       <div style={cfgStyles.cardWrap}>
         <div style={{...cfgStyles.card, overflow:'hidden'}}>

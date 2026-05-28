@@ -35,3 +35,21 @@ export function getMobileConversionSummary(items = []) {
     failed: items.length - converted,
   }
 }
+
+export function validateMobileConverterInput(value = '') {
+  const text = String(value || '').trim()
+  if (!text) return 'Cole pelo menos um link para converter.'
+
+  const httpLinks = text.match(/https?:\/\/\S+/gi) || []
+  if (text.includes(';') && httpLinks.length >= 2) {
+    return 'Separe múltiplos links por linha ou espaço. Não use ponto e vírgula entre links.'
+  }
+
+  return ''
+}
+
+export function buildMobileOfferUrlFromConversion(item, basePath = '/m/op/offer') {
+  if (!item?.ok || !String(item?.convertedUrl || '').trim()) return basePath
+  const params = new URLSearchParams({ url: String(item.convertedUrl).trim() })
+  return `${basePath}?${params.toString()}`
+}

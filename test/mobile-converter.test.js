@@ -1,9 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  buildMobileOfferUrlFromConversion,
   getConvertedLinksText,
   getMobileConversionSummary,
   normalizeMobileConversionResults,
+  validateMobileConverterInput,
 } from '../dashboard/lib/mobileConverter.js'
 
 test('normaliza múltiplos resultados convertidos e com erro por item', () => {
@@ -39,4 +41,21 @@ test('resumo mobile usa contagem real dos itens normalizados', () => {
   ])
 
   assert.deepEqual(summary, { total: 3, converted: 2, failed: 1 })
+})
+
+test('handoff para oferta usa convertedUrl apenas quando o item converteu', () => {
+  assert.equal(
+    buildMobileOfferUrlFromConversion({ ok: true, convertedUrl: ' https://afiliado.test/produto?x=1&y=2 ' }),
+    '/m/op/offer?url=https%3A%2F%2Fafiliado.test%2Fproduto%3Fx%3D1%26y%3D2',
+  )
+  assert.equal(
+    buildMobileOfferUrlFromConversion({ ok: false, convertedUrl: 'https://nao-deve-ir.test', originalUrl: 'https://original.test' }),
+    '/m/op/offer',
+  )
+})
+
+test('validação mobile bloqueia texto vazio e links separados por ponto e vírgula', () => {
+  assert.match(validateMobileConverterInput('   '), /pelo menos um link/i)
+  assert.match(validateMobileConverterInput('https://a.test; https://b.test'), /ponto e vírgula/i)
+  assert.equal(validateMobileConverterInput('https://a.test\nhttps://b.test'), '')
 })

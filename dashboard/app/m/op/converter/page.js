@@ -6,8 +6,10 @@ import { MobileShell } from '@/components/mobile/MobileShell'
 import { api } from '@/lib/api'
 import {
   getConvertedLinksText,
+  buildMobileOfferUrlFromConversion,
   getMobileConversionSummary,
   normalizeMobileConversionResults,
+  validateMobileConverterInput,
 } from '@/lib/mobileConverter'
 
 export default function ConverterPage() {
@@ -32,7 +34,12 @@ export default function ConverterPage() {
   }
 
   const handleConvert = async () => {
-    if (!input.trim()) return
+    const validationError = validateMobileConverterInput(input)
+    if (validationError) {
+      setError(validationError)
+      setCopyFeedback('')
+      return
+    }
     setConverting(true)
     setError('')
     setCopyFeedback('')
@@ -161,22 +168,16 @@ export default function ConverterPage() {
                   <div style={{ fontSize: 10, color:'var(--ink-soft)', textTransform:'uppercase', letterSpacing:'0.06em' }}>Convertido</div>
                   <div style={{ fontFamily:"'JetBrains Mono', monospace", fontSize: 11.5, color:'var(--success)', fontWeight: 700, wordBreak:'break-all' }}>{item.convertedUrl}</div>
                   {item.warning && <div style={{ fontSize: 12, color:'var(--warn)', lineHeight: 1.45 }}>{item.warning}</div>}
-                  <button type="button" onClick={() => copyText(item.convertedUrl, 'Link convertido copiado.')} style={{ padding:'10px', borderRadius: 999, border:'1px solid var(--line)', background:'var(--surface)', color:'var(--ink)', fontWeight: 700 }}>Copiar este link</button>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <button type="button" onClick={() => copyText(item.convertedUrl, 'Link convertido copiado.')} style={{ padding:'10px', borderRadius: 999, border:'1px solid var(--line)', background:'var(--surface)', color:'var(--ink)', fontWeight: 700 }}>Copiar este link</button>
+                    <Link href={buildMobileOfferUrlFromConversion(item)} style={{ padding:'10px', borderRadius: 999, border:'1px solid var(--accent-strong)', background:'var(--accent-strong)', color:'white', fontWeight: 800, textAlign:'center', textDecoration:'none' }}>Criar oferta</Link>
+                  </div>
                 </>
               ) : (
                 <div style={{ padding: 10, borderRadius: 10, background:'color-mix(in oklab, var(--danger) 10%, var(--surface))', color:'var(--danger)', fontSize: 12, lineHeight: 1.45 }}>{item.error}</div>
               )}
             </div>
           ))}
-
-          {hasConverted && (
-            <Link
-              href="/m/op/offer"
-              style={{ padding: '12px', borderRadius: 999, background: 'var(--accent-strong)', color: 'white', fontSize: 13, fontWeight: 800, textAlign: 'center', textDecoration: 'none' }}
-            >
-              Criar oferta
-            </Link>
-          )}
         </div>
       )}
 

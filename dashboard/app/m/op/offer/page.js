@@ -507,6 +507,15 @@ export default function OfferPage() {
   const [sendFeedback, setSendFeedback] = useState('')
 
   useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    const timer = window.setTimeout(() => {
+      const urlFromQuery = new URLSearchParams(window.location.search).get('url')?.trim()
+      if (urlFromQuery) setInput((current) => current || urlFromQuery)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  useEffect(() => {
     let active = true
     api.groups()
       .then((list) => {
