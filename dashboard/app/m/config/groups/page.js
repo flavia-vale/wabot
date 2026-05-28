@@ -65,13 +65,14 @@ export default function GroupsPage() {
 
   const role = tab === 'origem' ? 'monitor' : 'post'
   const currentGroups = useMemo(() => groups.filter((group) => group.role === role), [groups, role])
+  const existingJidRoles = useMemo(() => new Set(groups.map((group) => `${group.waJid || group.jid}::${group.role}`)), [groups])
 
   async function loadWhatsAppGroups() {
     setActionLoading('wa-groups')
     setFeedback('')
     try {
       const list = await api.sessionWAGroups()
-      setWaGroups(Array.isArray(list) ? list : [])
+      setWaGroups(Array.isArray(list) ? [...list].sort((a, b) => String(a.name || a.subject || a.waJid || a.jid || '').localeCompare(String(b.name || b.subject || b.waJid || b.jid || ''), 'pt-BR')) : [])
       setShowAdd(true)
     } catch (err) {
       setFeedback(err.message || 'Não foi possível listar grupos do WhatsApp. Use o cadastro manual.')
@@ -81,12 +82,12 @@ export default function GroupsPage() {
     }
   }
 
-  async function addGroupFromData(data) {
-    setActionLoading(`add-${data.waJid}`)
+  async function addGroupFromData(data, nextRole = role) {
+    setActionLoading(`add-${data.waJid}::${nextRole}`)
     setFeedback('')
     try {
-      await api.addGroup(data.waJid, data.name || data.subject || data.waJid, role, data.kind || 'group')
-      setFeedback('Grupo adicionado.')
+      await api.addGroup(data.waJid, data.name || data.subject || data.waJid, nextRole, data.kind || 'group')
+      setFeedback(nextRole === 'monitor' ? 'Grupo adicionado para monitorar.' : 'Grupo adicionado para postar.')
       setManualForm({ waJid: '', name: '', kind: 'group' })
       await loadGroups()
     } catch (err) {
@@ -202,11 +203,39 @@ export default function GroupsPage() {
         <div style={cfgStyles.cardWrap}>
           <div style={{...cfgStyles.cardP, display:'grid', gap: 12}}>
             <div style={cfgStyles.rowTitle}>Adicionar via WhatsApp</div>
-            {waGroups.slice(0, 12).map((group) => (
-              <button key={group.id || group.jid} type="button" onClick={() => addGroupFromData({ waJid: group.id || group.jid, name: group.subject || group.name, kind: group.kind || 'group' })} style={{...cfgStyles.field, textAlign:'left', background:'var(--surface)'}}>
-                {group.subject || group.name || group.id || group.jid}
-              </button>
-            ))}
+            <p style={{fontSize: 12, color:'var(--ink-soft)', lineHeight: 1.45}}>Mesmo fluxo do painel desktop: carregue os grupos onde o WhatsApp conectado participa e escolha se quer monitorar, postar ou ambos.</p>
+            {waGroups.length === 0 ? (
+              <div style={{fontSize: 12, color:'var(--ink-soft)'}}>Nenhum grupo carregado do WhatsApp. Confirme se o bot está conectado ou use o cadastro manual.</div>
+            ) : waGroups.map((group) => {
+              const waJid = group.waJid || group.jid || group.id
+              const name = group.name || group.subject || waJid
+              const monitorAlready = existingJidRoles.has(`${waJid}::monitor`)
+              const postAlready = existingJidRoles.has(`${waJid}::post`)
+              const bothAlready = monitorAlready && postAlready
+              return (
+                <div key={waJid} style={{...cfgStyles.field, background: bothAlready ? 'var(--bg-soft)' : 'var(--surface)', display:'grid', gap: 8}}>
+                  <div style={{display:'flex', justifyContent:'space-between', gap: 10, alignItems:'flex-start'}}>
+                    <div style={{fontSize: 13, fontWeight: 700, color: bothAlready ? 'var(--ink-soft)' : 'var(--ink)', lineHeight: 1.35}}>{name}</div>
+                    {bothAlready && <span style={cfgStyles.pill('neutral')}>já cadastrado</span>}
+                  </div>
+                  <div style={{fontSize: 11, color:'var(--ink-faint)', wordBreak:'break-all'}}>{waJid}</div>
+                  {!bothAlready && (
+                    <div style={{display:'flex', gap: 8, flexWrap:'wrap'}}>
+                      {!monitorAlready && (
+                        <button type="button" onClick={() => addGroupFromData({ waJid, name, kind: group.kind || 'group' }, 'monitor')} disabled={actionLoading === `add-${waJid}::monitor`} style={{...mobi.btn('ghost', false), fontSize: 12, padding:'9px 12px'}}>
+                          👀 {actionLoading === `add-${waJid}::monitor` ? 'Adicionando...' : 'Monitorar'}
+                        </button>
+                      )}
+                      {!postAlready && (
+                        <button type="button" onClick={() => addGroupFromData({ waJid, name, kind: group.kind || 'group' }, 'post')} disabled={actionLoading === `add-${waJid}::post`} style={{...mobi.btn('accent', false), fontSize: 12, padding:'9px 12px'}}>
+                          📢 {actionLoading === `add-${waJid}::post` ? 'Adicionando...' : 'Postar'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
             <div style={cfgStyles.rowTitle}>Ou cadastrar manualmente</div>
             <input style={cfgStyles.field} placeholder="JID do grupo/canal" value={manualForm.waJid} onChange={(event) => setManualForm((current) => ({...current, waJid: event.target.value}))}/>
             <input style={cfgStyles.field} placeholder="Nome" value={manualForm.name} onChange={(event) => setManualForm((current) => ({...current, name: event.target.value}))}/>
