@@ -197,13 +197,19 @@ test('POST /convert aplica timeout por item para evitar request preso', async (t
   assert.match(body.results[0].error, /Tempo limite de conversão excedido/i)
 })
 
-test('POST /scrape-offer retorna título e preços sem converter o link', async (t) => {
-  let calls = 0
+test('POST /scrape-offer tenta converter e usa link convertido para scrape quando sucesso', async (t) => {
+  let converterCalls = 0
+  let scraperUrl = ''
   const { app } = await buildApp({
-    converter: async () => { throw new Error('não deve converter') },
+    credentials: [credential()],
+    converter: async (platform, url) => {
+      converterCalls += 1
+      assert.equal(platform, 'amazon')
+      assert.equal(url, 'https://www.amazon.com.br/dp/B09VQ39F41')
+      return 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20'
+    },
     fetchProductInfo: async (url) => {
-      calls += 1
-      assert.equal(url, 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20')
+      scraperUrl = url
       return { title: 'Mixer Vertical Turbo Chef', oldPrice: '199,90', newPrice: '149,90', finalUrl: url }
     },
   })
@@ -212,7 +218,7 @@ test('POST /scrape-offer retorna título e preços sem converter o link', async 
   const res = await app.inject({
     method: 'POST',
     url: '/api/link-conversion/scrape-offer',
-    payload: { url: 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20' },
+    payload: { url: 'https://www.amazon.com.br/dp/B09VQ39F41' },
   })
 
   assert.equal(res.statusCode, 200)
@@ -220,7 +226,13 @@ test('POST /scrape-offer retorna título e preços sem converter o link', async 
   assert.equal(body.title, 'Mixer Vertical Turbo Chef')
   assert.equal(body.oldPrice, '199,90')
   assert.equal(body.newPrice, '149,90')
-  assert.equal(calls, 1)
+  assert.equal(body.offerUrl, 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20')
+  assert.equal(scraperUrl, 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20')
+  assert.equal(converterCalls, 1)
+  assert.equal(body.conversion.attempted, true)
+  assert.equal(body.conversion.success, true)
+  assert.equal(body.conversion.usedOriginalUrl, false)
+  assert.equal(body.conversion.reasonCode, null)
 })
 
 test('POST /scrape-offer rejeita url inválida', async (t) => {
@@ -241,7 +253,7 @@ test('POST /scrape-offer rejeita url inválida', async (t) => {
   assert.equal(body.code, 'SCRAPE_OFFER_INVALID_URL')
 })
 
-test('POST /scrape-offer trata erros do scraper com 502', async (t) => {
+test('POST /scrape-offer trata erros do scraper com fallback 200 e aviso', async (t) => {
   const { app } = await buildApp({
     converter: async () => 'never',
     fetchProductInfo: async () => { throw new Error('timeout') },
@@ -251,10 +263,113 @@ test('POST /scrape-offer trata erros do scraper com 502', async (t) => {
   const res = await app.inject({
     method: 'POST',
     url: '/api/link-conversion/scrape-offer',
-    payload: { url: 'https://exemplo.com/produto' },
+    payload: { url: 'https://www.amazon.com.br/produto-teste/dp/B09VQ39F41' },
   })
 
-  assert.equal(res.statusCode, 502)
+  assert.equal(res.statusCode, 200)
   const body = JSON.parse(res.body)
-  assert.equal(body.code, 'SCRAPE_OFFER_FETCH_FAILED')
+  assert.equal(body.scrapeWarning?.code, 'SCRAPE_OFFER_FETCH_FAILED')
+  assert.match(body.scrapeWarning?.message || '', /não foi possível ler as informações/i)
+  assert.equal(body.title, 'produto teste')
+  assert.equal(body.newPrice, '')
+})
+
+
+test('POST /scrape-offer reprocessa link curto de afiliado e mantém conversão', async (t) => {
+  let converterCalls = 0
+  const { app } = await buildApp({
+    credentials: [credential()],
+    converter: async () => {
+      converterCalls += 1
+      return 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20'
+    },
+    fetchProductInfo: async (url) => ({ title: 'Produto', oldPrice: '', newPrice: '99,90', finalUrl: url }),
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/link-conversion/scrape-offer',
+    payload: { url: 'https://amzn.to/abc123' },
+  })
+
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(converterCalls, 1)
+  assert.equal(body.conversion.success, true)
+})
+
+test('POST /scrape-offer usa link original quando credencial faltar', async (t) => {
+  let scraperUrl = ''
+  const original = 'https://www.amazon.com.br/dp/B09VQ39F41'
+  const { app } = await buildApp({
+    converter: async () => 'não deveria chamar',
+    fetchProductInfo: async (url) => {
+      scraperUrl = url
+      return { title: 'Produto', oldPrice: '', newPrice: '99,90', finalUrl: url }
+    },
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({ method: 'POST', url: '/api/link-conversion/scrape-offer', payload: { url: original } })
+
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.offerUrl, original)
+  assert.equal(scraperUrl, original)
+  assert.equal(body.conversion.success, false)
+  assert.equal(body.conversion.usedOriginalUrl, true)
+  assert.equal(body.conversion.reasonCode, 'MISSING_CREDENTIALS')
+})
+
+test('POST /scrape-offer usa link original quando loja não é suportada para conversão', async (t) => {
+  const original = 'https://exemplo.com/produto'
+  const { app } = await buildApp({
+    converter: async () => 'não deveria chamar',
+    fetchProductInfo: async (url) => ({ title: 'Produto', oldPrice: '', newPrice: '49,90', finalUrl: url }),
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({ method: 'POST', url: '/api/link-conversion/scrape-offer', payload: { url: original } })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.offerUrl, original)
+  assert.equal(body.conversion.success, false)
+  assert.equal(body.conversion.reasonCode, 'UNSUPPORTED_PLATFORM')
+})
+
+test('POST /scrape-offer usa link original quando conversão falha', async (t) => {
+  const original = 'https://www.magazineluiza.com.br/produto/p/abc123'
+  const { app } = await buildApp({
+    credentials: [credential('magazineluiza', { tag: 'parceira' })],
+    converter: async () => { throw new Error('serviço fora') },
+    fetchProductInfo: async (url) => ({ title: 'Produto', oldPrice: '', newPrice: '59,90', finalUrl: url }),
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({ method: 'POST', url: '/api/link-conversion/scrape-offer', payload: { url: original } })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.offerUrl, original)
+  assert.equal(body.conversion.success, false)
+  assert.equal(body.conversion.reasonCode, 'CONVERSION_FAILED')
+})
+
+
+test('POST /scrape-offer marca CONVERSION_TIMEOUT quando conversor estoura tempo', async (t) => {
+  const original = 'https://www.magazineluiza.com.br/produto/p/abc123'
+  const { app } = await buildApp({
+    credentials: [credential('magazineluiza', { tag: 'parceira' })],
+    routeOptions: { conversionTimeoutMs: 5 },
+    converter: async () => new Promise(resolve => setTimeout(() => resolve('late'), 50)),
+    fetchProductInfo: async (url) => ({ title: 'Produto', oldPrice: '', newPrice: '59,90', finalUrl: url }),
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({ method: 'POST', url: '/api/link-conversion/scrape-offer', payload: { url: original } })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.offerUrl, original)
+  assert.equal(body.conversion.success, false)
+  assert.equal(body.conversion.reasonCode, 'CONVERSION_TIMEOUT')
 })
