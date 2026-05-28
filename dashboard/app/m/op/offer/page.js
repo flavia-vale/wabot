@@ -447,7 +447,6 @@ export default function OfferPage() {
   const [convertedLink, setConvertedLink] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState('achadinho')
   const [bonuses, setBonuses] = useState('both')
-  const [pasteFeedback, setPasteFeedback] = useState('')
   const bonusLayout = 'unified'
 
   const handlePasteFromClipboard = async () => {
