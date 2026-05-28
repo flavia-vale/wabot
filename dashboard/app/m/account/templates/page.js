@@ -26,7 +26,10 @@ export default function TemplatesPage() {
   const [editName, setEditName] = useState('')
   const [editBody, setEditBody] = useState('')
 
-  useEffect(() => { setTemplates(loadAllTemplates()) }, [])
+  useEffect(() => {
+    const timer = window.setTimeout(() => { setTemplates(loadAllTemplates()) }, 0)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   const editingTemplate = templates.find((t) => t.key === editingKey) || null
 
