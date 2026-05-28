@@ -7,6 +7,12 @@ import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAs
 import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { api } from '@/lib/api'
+import {
+  buildExistingJidRoleSet,
+  getMobileGroupPickerItem,
+  getRoleForMobileGroupTab,
+  sortWhatsAppGroupsForMobilePicker,
+} from '@/lib/mobileGroupPicker'
 
 const avatarColor = (name = '') => {
   const hues = [210, 145, 280, 50, 180, 0]
@@ -63,16 +69,16 @@ export default function GroupsPage() {
     return () => { active = false }
   }, [])
 
-  const role = tab === 'origem' ? 'monitor' : 'post'
+  const role = getRoleForMobileGroupTab(tab)
   const currentGroups = useMemo(() => groups.filter((group) => group.role === role), [groups, role])
-  const existingJidRoles = useMemo(() => new Set(groups.map((group) => `${group.waJid || group.jid}::${group.role}`)), [groups])
+  const existingJidRoles = useMemo(() => buildExistingJidRoleSet(groups), [groups])
 
   async function loadWhatsAppGroups() {
     setActionLoading('wa-groups')
     setFeedback('')
     try {
       const list = await api.sessionWAGroups()
-      setWaGroups(Array.isArray(list) ? [...list].sort((a, b) => String(a.name || a.subject || a.waJid || a.jid || '').localeCompare(String(b.name || b.subject || b.waJid || b.jid || ''), 'pt-BR')) : [])
+      setWaGroups(Array.isArray(list) ? sortWhatsAppGroupsForMobilePicker(list) : [])
       setShowAdd(true)
     } catch (err) {
       setFeedback(err.message || 'Não foi possível listar grupos do WhatsApp. Use o cadastro manual.')
@@ -210,30 +216,28 @@ export default function GroupsPage() {
             {waGroups.length === 0 ? (
               <div style={{fontSize: 12, color:'var(--ink-soft)'}}>Nenhum grupo carregado do WhatsApp. Confirme se o bot está conectado ou use o cadastro manual.</div>
             ) : waGroups.map((group) => {
-              const waJid = group.waJid || group.jid || group.id
-              const name = group.name || group.subject || waJid
-              const alreadyInCurrentRole = existingJidRoles.has(`${waJid}::${role}`)
-              const loadingThisGroup = actionLoading === `add-${waJid}::${role}`
+              const pickerItem = getMobileGroupPickerItem(group, role, existingJidRoles)
+              const loadingThisGroup = actionLoading === `add-${pickerItem.waJid}::${role}`
               return (
                 <button
-                  key={waJid}
+                  key={pickerItem.waJid}
                   type="button"
-                  onClick={() => !alreadyInCurrentRole && addGroupFromData({ waJid, name, kind: group.kind || 'group' })}
-                  disabled={alreadyInCurrentRole || loadingThisGroup}
+                  onClick={() => !pickerItem.disabled && addGroupFromData({ waJid: pickerItem.waJid, name: pickerItem.name, kind: pickerItem.kind })}
+                  disabled={pickerItem.disabled || loadingThisGroup}
                   style={{
                     ...cfgStyles.field,
-                    background: alreadyInCurrentRole ? 'var(--bg-soft)' : 'var(--surface)',
+                    background: pickerItem.disabled ? 'var(--bg-soft)' : 'var(--surface)',
                     display:'flex', alignItems:'center', justifyContent:'space-between', gap: 12,
-                    textAlign:'left', cursor: alreadyInCurrentRole ? 'not-allowed' : 'pointer',
-                    opacity: alreadyInCurrentRole ? 0.7 : 1,
+                    textAlign:'left', cursor: pickerItem.disabled ? 'not-allowed' : 'pointer',
+                    opacity: pickerItem.disabled ? 0.7 : 1,
                   }}
                 >
                   <span style={{minWidth: 0}}>
-                    <span style={{display:'block', fontSize: 13, fontWeight: 700, color:'var(--ink)', lineHeight: 1.35}}>{name}</span>
-                    <span style={{display:'block', fontSize: 11, color:'var(--ink-faint)', wordBreak:'break-all', marginTop: 3}}>{waJid}</span>
+                    <span style={{display:'block', fontSize: 13, fontWeight: 700, color:'var(--ink)', lineHeight: 1.35}}>{pickerItem.name}</span>
+                    <span style={{display:'block', fontSize: 11, color:'var(--ink-faint)', wordBreak:'break-all', marginTop: 3}}>{pickerItem.waJid}</span>
                   </span>
-                  <span style={cfgStyles.pill(alreadyInCurrentRole ? 'neutral' : 'success')}>
-                    {alreadyInCurrentRole ? 'já está na lista' : loadingThisGroup ? 'adicionando...' : role === 'monitor' ? 'Monitorar' : 'Publicar'}
+                  <span style={cfgStyles.pill(pickerItem.disabled ? 'neutral' : 'success')}>
+                    {loadingThisGroup ? 'adicionando...' : pickerItem.pill}
                   </span>
                 </button>
               )

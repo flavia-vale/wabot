@@ -6,6 +6,11 @@ import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard } from '@/components/mobile/MobileAsyncState'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { api } from '@/lib/api'
+import {
+  COUPON_STORES,
+  TEMPLATE_OPTIONS,
+  buildMobileOfferText,
+} from '@/lib/mobileOfferComposer'
 
 const criarStyles = {
   pageH: { padding:'18px 20px 0' },
@@ -410,48 +415,6 @@ const criarStyles = {
 
 // Por-estado: tom, título, sub
 
-const TEMPLATE_OPTIONS = [
-  { key: 'achadinho', name: 'Achadinho ✨', preview: `✨ Achadinho do dia
-
-[produto]
-De R$ 79 por R$ 39,90` },
-  { key: 'relampago', name: 'Relâmpago ⚡', preview: `⚡ ÚLTIMAS HORAS ⚡
-
-[produto]
-De R$ 99 por R$ 49!` },
-  { key: 'tech', name: 'Tech 🔌', preview: `🔌 Achado tech
-
-[produto]
-De R$ 199 por R$ 149` },
-  { key: 'beleza', name: 'Beleza 💄', preview: `💄 Pra mimar você
-
-[produto]
-De R$ 89 por R$ 59` },
-]
-
-const COUPON_STORES = [
-  { key: 'shopee', nome: 'Shopee', cor: '#EE4D2D' },
-  { key: 'mercadolivre', nome: 'Mercado Livre', cor: '#FFE600' },
-  { key: 'amazon', nome: 'Amazon', cor: '#FF9900' },
-  { key: 'magazineluiza', nome: 'Magalu', cor: '#0086FF' },
-]
-
-function firstText(...values) {
-  for (const value of values) {
-    const text = String(value ?? '').trim()
-    if (text) return text
-  }
-  return ''
-}
-
-function normalizeOfferProduct(product = {}, manual = {}) {
-  return {
-    title: firstText(product?.title, manual.title, 'Produto em oferta'),
-    price: firstText(product?.price, product?.newPrice, product?.priceNow, manual.price),
-    oldPrice: firstText(product?.oldPrice, product?.priceWas, manual.oldPrice),
-  }
-}
-
 const STATE_CFG = {
   converted: {
     tone:'ok',
@@ -548,41 +511,21 @@ export default function OfferPage() {
     bonusMode = bonuses,
     overrides = {},
   ) {
-    const product = normalizeOfferProduct(nextProduct, manualProduct)
-    const lines = []
-    if (template === 'relampago') lines.push('⚡ Oferta relâmpago')
-    else if (template === 'tech') lines.push('🔌 Achado tech')
-    else if (template === 'beleza') lines.push('💄 Achadinho de beleza')
-    else lines.push('✨ Achadinho do dia')
+    return buildMobileOfferText({
+      product: nextProduct || {},
+      manualProduct,
+      link,
+      template,
+      bonusMode,
+      groupBonus: overrides.groupBonus || groupBonus,
+      couponLinks: overrides.couponLinks || couponLinks,
+      selectedCouponStores: overrides.selectedCouponStores || selectedCouponStores,
+      couponCta: overrides.couponCta || couponCta,
+    })
+  }
 
-    lines.push('', product.title)
-    if (product.price) {
-      lines.push(product.oldPrice ? `De ${product.oldPrice} por *${product.price}*` : `Por *${product.price}*`)
-    } else {
-      lines.push('De {preço_de} por *{preço}*')
-    }
-    lines.push('', `👉 ${link}`)
-
-    const nextGroupBonus = overrides.groupBonus || groupBonus
-    const nextCouponLinks = overrides.couponLinks || couponLinks
-    const nextCouponStores = overrides.selectedCouponStores || selectedCouponStores
-    const nextCouponCta = overrides.couponCta || couponCta
-
-    if ((bonusMode === 'group' || bonusMode === 'both') && nextGroupBonus.link.trim()) {
-      lines.push('', `${nextGroupBonus.cta.trim() || 'Entre no nosso grupo:'}`)
-      lines.push(nextGroupBonus.link.trim())
-    }
-
-    if (bonusMode === 'coupons' || bonusMode === 'both') {
-      const firstCouponStore = nextCouponStores.find((storeKey) => String(nextCouponLinks[storeKey] || '').trim())
-      if (firstCouponStore) {
-        const store = COUPON_STORES.find((item) => item.key === firstCouponStore)
-        lines.push('', (nextCouponCta.trim() || 'Mais cupons da {loja}:').replace('{loja}', store?.nome || 'loja'))
-        lines.push(String(nextCouponLinks[firstCouponStore] || '').trim())
-      }
-    }
-
-    return lines.join('\n')
+  function refreshEditorWithBonuses(nextBonusMode = bonuses, overrides = {}) {
+    setEditorText(buildOfferText(productData, convertedLink || input, selectedTemplate, nextBonusMode, overrides))
   }
 
   function refreshEditorWithBonuses(nextBonusMode = bonuses, overrides = {}) {
