@@ -431,7 +431,9 @@ export default function OfferPage() {
   const [expand, setExpand] = useState(false)
   const [converting, setConverting] = useState(false)
   const [productData, setProductData] = useState(null)
-  const bonuses = 'both'
+  const [convertedLink, setConvertedLink] = useState('')
+  const [selectedTemplate, setSelectedTemplate] = useState('achadinho')
+  const [bonuses, setBonuses] = useState('both')
   const bonusLayout = 'unified'
 
   const handleConvert = async () => {
@@ -440,6 +442,7 @@ export default function OfferPage() {
     try {
       const convResult = await api.convertLinks(input)
       const converted = convResult?.results?.[0]?.convertedUrl || input
+      setConvertedLink(converted)
 
       try {
         const scrapeResult = await api.scrapeOffer(input)
@@ -463,7 +466,7 @@ export default function OfferPage() {
   const isFail = state === 'scrapeFail';
 
   const linkOriginal = input || 'shopee.com.br/sandalia-bege-verao-i.4738291.928374'
-  const linkAfiliada = 's.shopee.com.br/3As9XkLp2'
+  const linkAfiliada = convertedLink || input || 's.shopee.com.br/3As9XkLp2'
 
   return (
     <MobileShell title="Conversor" active="criar">
@@ -670,14 +673,14 @@ export default function OfferPage() {
 
           <div style={criarStyles.templateRow}>
             {[
-              {key:'achadinho', name:'Achadinho ✨', preview:'✨ Achadinho do dia\n\n[produto]\nPor R$ 39,90 com frete!', sel: true},
-              {key:'relampago', name:'Relâmpago ⚡', preview:'⚡ ÚLTIMAS HORAS ⚡\n\n[produto]\nDe R$ 79 por R$ 39!', sel: false},
-              {key:'tech', name:'Tech 🔌', preview:'🔌 Achado tech\n\n[produto]\nspecs · cupom · link', sel: false},
-              {key:'beleza', name:'Beleza 💄', preview:'💄 Pra mimar você\n\n[produto]\npreço cheio R$ 79, hoje:', sel: false},
+              {key:'achadinho', name:'Achadinho ✨', preview:'✨ Achadinho do dia\n\n[produto]\nPor R$ 39,90 com frete!'},
+              {key:'relampago', name:'Relâmpago ⚡', preview:'⚡ ÚLTIMAS HORAS ⚡\n\n[produto]\nDe R$ 79 por R$ 39!'},
+              {key:'tech', name:'Tech 🔌', preview:'🔌 Achado tech\n\n[produto]\nspecs · cupom · link'},
+              {key:'beleza', name:'Beleza 💄', preview:'💄 Pra mimar você\n\n[produto]\npreço cheio R$ 79, hoje:'},
             ].map(t => (
-              <button key={t.key} style={criarStyles.templateCard(t.sel)}>
+              <button key={t.key} onClick={() => setSelectedTemplate(t.key)} style={criarStyles.templateCard(selectedTemplate === t.key)}>
                 <div style={criarStyles.templateName}>{t.name}</div>
-                <div style={criarStyles.templatePreview(t.sel)}>{t.preview}</div>
+                <div style={criarStyles.templatePreview(selectedTemplate === t.key)}>{t.preview}</div>
               </button>
             ))}
           </div>
@@ -711,8 +714,22 @@ export default function OfferPage() {
             ];
 
             // ─── conteúdo de cada bônus (reaproveitado em ambos os layouts) ───
+            const toggleGroup = () => {
+              if (bonuses === 'group' || bonuses === 'both') {
+                setBonuses(bonuses === 'both' ? 'coupons' : '');
+              } else {
+                setBonuses(bonuses === 'coupons' ? 'both' : 'group');
+              }
+            };
+            const toggleCoupons = () => {
+              if (bonuses === 'coupons' || bonuses === 'both') {
+                setBonuses(bonuses === 'both' ? 'group' : '');
+              } else {
+                setBonuses(bonuses === 'group' ? 'both' : 'coupons');
+              }
+            };
             const groupHead = (on) => (
-              <div style={{display:'flex', alignItems:'center', gap: 12}}>
+              <div style={{display:'flex', alignItems:'center', gap: 12}} onClick={toggleGroup}>
                 <div style={criarStyles.bonusIcon(on)}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
@@ -753,7 +770,7 @@ export default function OfferPage() {
             );
 
             const couponsHead = (on) => (
-              <div style={{display:'flex', alignItems:'center', gap: 12}}>
+              <div style={{display:'flex', alignItems:'center', gap: 12}} onClick={toggleCoupons}>
                 <div style={criarStyles.bonusIcon(on)}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M20 12V8H4v8h16v-4z"/><path d="M9 8v8M15 8v8"/>
