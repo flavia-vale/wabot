@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
@@ -13,6 +13,14 @@ export default function WhatsAppPage() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  const daysSinceConnect = useMemo(() => {
+    // eslint-disable-next-line react-hooks/purity
+    return !session?.connectedAt ? 0 : Math.floor((Date.now() - new Date(session.connectedAt).getTime()) / (1000 * 60 * 60 * 24))
+  }, [session])
+  const postLimit = session?.config?.postLimitDaily || 250
+  const postsToday = session?.statsToday?.posts || 0
+  const postPercentage = Math.round((postsToday / postLimit) * 100)
 
   useEffect(() => {
     let active = true
@@ -50,10 +58,6 @@ export default function WhatsAppPage() {
 
   const running = session?.running
   const phone = session?.phone || '+55 11 9 XXXX-XXXX'
-  const daysSinceConnect = session?.connectedAt ? Math.floor((Date.now() - new Date(session.connectedAt).getTime()) / (1000 * 60 * 60 * 24)) : 0
-  const postLimit = session?.config?.postLimitDaily || 250
-  const postsToday = session?.statsToday?.posts || 0
-  const postPercentage = Math.round((postsToday / postLimit) * 100)
   const postInterval = session?.config?.postIntervalMs ? Math.round(session.config.postIntervalMs / 1000) : 45
   const sleepMode = session?.config?.sleepMode?.enabled !== false
 

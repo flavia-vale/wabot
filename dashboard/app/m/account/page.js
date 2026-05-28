@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
@@ -136,6 +136,11 @@ export default function AccountPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  const daysSinceConnect = useMemo(() => {
+    // eslint-disable-next-line react-hooks/purity
+    return !session?.connectedAt ? 0 : Math.floor((Date.now() - new Date(session.connectedAt).getTime()) / (1000 * 60 * 60 * 24))
+  }, [session])
+
   useEffect(() => {
     let active = true
     async function load() {
@@ -211,7 +216,7 @@ export default function AccountPage() {
       </div>
       <div style={contaStyles.card}>
         <ContaRow icon="whatsapp" tone="success" title="WhatsApp"
-          sub={session?.phone ? `${session.phone} · ativo há ${Math.floor((Date.now() - new Date(session.connectedAt).getTime()) / (1000 * 60 * 60 * 24))} dias` : 'não conectado'}
+          sub={session?.phone ? `${session.phone} · ativo há ${daysSinceConnect} dias` : 'não conectado'}
           statusTone={session?.running ? "success" : "danger"} last={false}/>
         <ContaRow icon="link" tone="accent" title="Suas afiliadas"
           sub="Shopee · ML · Amazon · Magalu" value="4 de 5" last/>
