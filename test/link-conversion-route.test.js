@@ -88,6 +88,31 @@ test('POST /convert retorna erro por item quando faltam credenciais', async (t) 
   assert.equal(calls, 0)
 })
 
+test('POST /convert aceita Mercado Livre com cookie (sem ssid) como credencial válida', async (t) => {
+  let calls = 0
+  const { app } = await buildApp({
+    credentials: [credential('mercadolivre', { tag: '475630078', cookie: 'ssid=abc12345678901234567890; _csrf=csrf-token' })],
+    converter: async (platform) => {
+      calls += 1
+      assert.equal(platform, 'mercadolivre')
+      return 'https://meli.la/abc123'
+    },
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/link-conversion/convert',
+    payload: { text: 'https://www.mercadolivre.com.br/secador-de-roupas-600w-eletrico-portatil-suspenso-cortina-compacto-econmico-seca-rapido-110v/p/MLB70009242' },
+  })
+
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.results[0].status, 'converted')
+  assert.equal(body.results[0].convertedUrl, 'https://meli.la/abc123')
+  assert.equal(calls, 1)
+})
+
 test('POST /convert mantém lote vivo quando conversor lança erro', async (t) => {
   const userId = `link-conversion-user-${++counter}`
   const { app } = await buildApp({
@@ -197,13 +222,19 @@ test('POST /convert aplica timeout por item para evitar request preso', async (t
   assert.match(body.results[0].error, /Tempo limite de conversão excedido/i)
 })
 
-test('POST /scrape-offer retorna título e preços sem converter o link', async (t) => {
-  let calls = 0
+test('POST /scrape-offer tenta converter e usa link convertido para scrape quando sucesso', async (t) => {
+  let converterCalls = 0
+  let scraperUrl = ''
   const { app } = await buildApp({
-    converter: async () => { throw new Error('não deve converter') },
+    credentials: [credential()],
+    converter: async (platform, url) => {
+      converterCalls += 1
+      assert.equal(platform, 'amazon')
+      assert.equal(url, 'https://www.amazon.com.br/dp/B09VQ39F41')
+      return 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20'
+    },
     fetchProductInfo: async (url) => {
-      calls += 1
-      assert.equal(url, 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20')
+      scraperUrl = url
       return { title: 'Mixer Vertical Turbo Chef', oldPrice: '199,90', newPrice: '149,90', finalUrl: url }
     },
   })
@@ -212,7 +243,7 @@ test('POST /scrape-offer retorna título e preços sem converter o link', async 
   const res = await app.inject({
     method: 'POST',
     url: '/api/link-conversion/scrape-offer',
-    payload: { url: 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20' },
+    payload: { url: 'https://www.amazon.com.br/dp/B09VQ39F41' },
   })
 
   assert.equal(res.statusCode, 200)
@@ -220,7 +251,42 @@ test('POST /scrape-offer retorna título e preços sem converter o link', async 
   assert.equal(body.title, 'Mixer Vertical Turbo Chef')
   assert.equal(body.oldPrice, '199,90')
   assert.equal(body.newPrice, '149,90')
-  assert.equal(calls, 1)
+  assert.equal(body.offerUrl, 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20')
+  assert.equal(scraperUrl, 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20')
+  assert.equal(converterCalls, 1)
+  assert.equal(body.conversion.attempted, true)
+  assert.equal(body.conversion.success, true)
+  assert.equal(body.conversion.usedOriginalUrl, false)
+  assert.equal(body.conversion.reasonCode, null)
+})
+
+test('POST /scrape-offer tenta original quando convertido não traz dados', async (t) => {
+  let calls = []
+  const converted = 'https://s.shopee.com.br/abc123'
+  const original = 'https://shopee.com.br/KIT-TERERE-BLACK-i.1750300958.23499408546'
+  const { app } = await buildApp({
+    credentials: [credential('shopee', { appId: '123456', secretKey: 'secret-key-very-long' })],
+    converter: async () => converted,
+    fetchProductInfo: async (url) => {
+      calls.push(url)
+      if (url === converted) return { title: '', oldPrice: '', newPrice: '', finalUrl: converted }
+      return {
+        title: 'KIT TERERÉ BLACK ERVA SABOR CEREJA ICE – GARRAFA TÉRMICA + COPO INOX + BOMBA + ERVA 500G',
+        oldPrice: '',
+        newPrice: '245,67',
+        finalUrl: original,
+      }
+    },
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({ method: 'POST', url: '/api/link-conversion/scrape-offer', payload: { url: original } })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.offerUrl, converted)
+  assert.equal(body.title, 'KIT TERERÉ BLACK ERVA SABOR CEREJA ICE – GARRAFA TÉRMICA + COPO INOX + BOMBA + ERVA 500G')
+  assert.equal(body.newPrice, '245,67')
+  assert.deepEqual(calls, [converted, original])
 })
 
 test('POST /scrape-offer rejeita url inválida', async (t) => {
@@ -241,7 +307,7 @@ test('POST /scrape-offer rejeita url inválida', async (t) => {
   assert.equal(body.code, 'SCRAPE_OFFER_INVALID_URL')
 })
 
-test('POST /scrape-offer trata erros do scraper com 502', async (t) => {
+test('POST /scrape-offer trata erros do scraper com fallback 200 e aviso', async (t) => {
   const { app } = await buildApp({
     converter: async () => 'never',
     fetchProductInfo: async () => { throw new Error('timeout') },
@@ -251,10 +317,130 @@ test('POST /scrape-offer trata erros do scraper com 502', async (t) => {
   const res = await app.inject({
     method: 'POST',
     url: '/api/link-conversion/scrape-offer',
-    payload: { url: 'https://exemplo.com/produto' },
+    payload: { url: 'https://www.amazon.com.br/produto-teste/dp/B09VQ39F41' },
   })
 
-  assert.equal(res.statusCode, 502)
+  assert.equal(res.statusCode, 200)
   const body = JSON.parse(res.body)
-  assert.equal(body.code, 'SCRAPE_OFFER_FETCH_FAILED')
+  assert.equal(body.scrapeWarning?.code, 'SCRAPE_OFFER_FETCH_FAILED')
+  assert.match(body.scrapeWarning?.message || '', /não foi possível ler as informações/i)
+  assert.equal(body.title, 'produto teste')
+  assert.equal(body.newPrice, '')
+})
+
+
+test('POST /scrape-offer reprocessa link curto de afiliado e mantém conversão', async (t) => {
+  let converterCalls = 0
+  const { app } = await buildApp({
+    credentials: [credential()],
+    converter: async () => {
+      converterCalls += 1
+      return 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20'
+    },
+    fetchProductInfo: async (url) => ({ title: 'Produto', oldPrice: '', newPrice: '99,90', finalUrl: url }),
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/link-conversion/scrape-offer',
+    payload: { url: 'https://amzn.to/abc123' },
+  })
+
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(converterCalls, 1)
+  assert.equal(body.conversion.success, true)
+})
+
+test('POST /scrape-offer usa link original quando credencial faltar', async (t) => {
+  let scraperUrl = ''
+  const original = 'https://www.amazon.com.br/dp/B09VQ39F41'
+  const { app } = await buildApp({
+    converter: async () => 'não deveria chamar',
+    fetchProductInfo: async (url) => {
+      scraperUrl = url
+      return { title: 'Produto', oldPrice: '', newPrice: '99,90', finalUrl: url }
+    },
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({ method: 'POST', url: '/api/link-conversion/scrape-offer', payload: { url: original } })
+
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.offerUrl, original)
+  assert.equal(scraperUrl, original)
+  assert.equal(body.conversion.success, false)
+  assert.equal(body.conversion.usedOriginalUrl, true)
+  assert.equal(body.conversion.reasonCode, 'MISSING_CREDENTIALS')
+})
+
+test('POST /scrape-offer usa link original quando loja não é suportada para conversão', async (t) => {
+  const original = 'https://exemplo.com/produto'
+  const { app } = await buildApp({
+    converter: async () => 'não deveria chamar',
+    fetchProductInfo: async (url) => ({ title: 'Produto', oldPrice: '', newPrice: '49,90', finalUrl: url }),
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({ method: 'POST', url: '/api/link-conversion/scrape-offer', payload: { url: original } })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.offerUrl, original)
+  assert.equal(body.conversion.success, false)
+  assert.equal(body.conversion.reasonCode, 'UNSUPPORTED_PLATFORM')
+})
+
+test('POST /scrape-offer usa link original quando conversão falha', async (t) => {
+  const original = 'https://www.magazineluiza.com.br/produto/p/abc123'
+  const { app } = await buildApp({
+    credentials: [credential('magazineluiza', { tag: 'parceira' })],
+    converter: async () => { throw new Error('serviço fora') },
+    fetchProductInfo: async (url) => ({ title: 'Produto', oldPrice: '', newPrice: '59,90', finalUrl: url }),
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({ method: 'POST', url: '/api/link-conversion/scrape-offer', payload: { url: original } })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.offerUrl, original)
+  assert.equal(body.conversion.success, false)
+  assert.equal(body.conversion.reasonCode, 'CONVERSION_FAILED')
+})
+
+test('POST /scrape-offer sinaliza renovação de credencial ML quando API de afiliado rejeita auth', async (t) => {
+  const original = 'https://www.mercadolivre.com.br/secador-de-roupas-600w-eletrico-portatil-suspenso-cortina-compacto-econmico-seca-rapido-110v/p/MLB70009242'
+  const { app } = await buildApp({
+    credentials: [credential('mercadolivre', { tag: '475630078', ssid: 'ssid-expirado-123456' })],
+    converter: async () => { throw new Error('Credencial Mercado Livre inválida/expirada. Renove o SSID (ou cookie) e tente novamente.') },
+    fetchProductInfo: async (url) => ({ title: 'Secador de roupas', oldPrice: '', newPrice: '189,90', finalUrl: url }),
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({ method: 'POST', url: '/api/link-conversion/scrape-offer', payload: { url: original } })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.conversion.success, false)
+  assert.equal(body.conversion.reasonCode, 'CONVERSION_FAILED')
+  assert.match(body.conversion.reasonMessage || '', /renove o ssid|cookie/i)
+})
+
+
+test('POST /scrape-offer marca CONVERSION_TIMEOUT quando conversor estoura tempo', async (t) => {
+  const original = 'https://www.magazineluiza.com.br/produto/p/abc123'
+  const { app } = await buildApp({
+    credentials: [credential('magazineluiza', { tag: 'parceira' })],
+    routeOptions: { conversionTimeoutMs: 5 },
+    converter: async () => new Promise(resolve => setTimeout(() => resolve('late'), 50)),
+    fetchProductInfo: async (url) => ({ title: 'Produto', oldPrice: '', newPrice: '59,90', finalUrl: url }),
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({ method: 'POST', url: '/api/link-conversion/scrape-offer', payload: { url: original } })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.offerUrl, original)
+  assert.equal(body.conversion.success, false)
+  assert.equal(body.conversion.reasonCode, 'CONVERSION_TIMEOUT')
 })

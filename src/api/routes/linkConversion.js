@@ -68,7 +68,11 @@ function buildErrorResult(index, link, validation, code, error) {
 async function withTimeout(promise, timeoutMs, message) {
   let timer
   const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(message)), Math.max(1, timeoutMs))
+    timer = setTimeout(() => {
+      const err = new Error(message)
+      err.code = 'CONVERSION_TIMEOUT'
+      reject(err)
+    }, Math.max(1, timeoutMs))
     timer.unref?.()
   })
   try {
@@ -92,6 +96,47 @@ function resolveOperationalOptions(opts) {
 
 const SCRAPE_OFFER_URL_RE = /^https?:\/\/[^\s]+$/i
 
+
+function extractSingleLink(url) {
+  const links = detectLinks(url)
+  return links[0] ?? null
+}
+
+function conversionFailureFromContext(context, err) {
+  if (context === 'unsupported') return { reasonCode: 'UNSUPPORTED_PLATFORM', reasonMessage: 'Loja ainda sem conversão automática.' }
+  if (context === 'missing_credentials') return { reasonCode: 'MISSING_CREDENTIALS', reasonMessage: 'Credenciais ausentes ou incompletas para esta loja.' }
+  if (context === 'empty_result') return { reasonCode: 'CONVERSION_RETURNED_EMPTY', reasonMessage: 'O conversor não retornou um link válido.' }
+  if (err?.code === 'CONVERSION_TIMEOUT') return { reasonCode: 'CONVERSION_TIMEOUT', reasonMessage: err.message }
+  return { reasonCode: 'CONVERSION_FAILED', reasonMessage: err?.message || 'Falha na conversão do link.' }
+}
+
+function inferTitleFromUrl(url) {
+  try {
+    const u = new URL(String(url || ''))
+    const host = u.hostname.replace(/^www\./, '')
+    if (/mercadolivre\.com\.br$/.test(host)) {
+      const m = u.pathname.match(/^\/([^/]+)\/(?:p|up)\//i)
+      if (m?.[1]) return decodeURIComponent(m[1]).replace(/-/g, ' ').trim()
+    }
+    if (/amazon\.com\.br$/.test(host)) {
+      const m = u.pathname.match(/^\/([^/]+)\/dp\//i)
+      if (m?.[1]) return decodeURIComponent(m[1]).replace(/-/g, ' ').trim()
+    }
+    if (/shopee\.com\.br$/.test(host)) {
+      const m = u.pathname.match(/^\/([^/]+)-i\.\d+\.\d+/i)
+      if (m?.[1]) return decodeURIComponent(m[1]).replace(/-/g, ' ').trim()
+    }
+  } catch {}
+  return ''
+}
+
+function hasUsefulOfferInfo(info) {
+  const title = typeof info?.title === 'string' ? info.title.trim() : ''
+  const newPrice = typeof info?.newPrice === 'string' ? info.newPrice.trim() : ''
+  const oldPrice = typeof info?.oldPrice === 'string' ? info.oldPrice.trim() : ''
+  return Boolean(title || newPrice || oldPrice)
+}
+
 export async function linkConversionRoutes(app, opts = {}) {
   const convertLink = opts.converter ?? defaultConvertLink
   const fetchProductInfo = opts.fetchProductInfo ?? defaultFetchProductInfo
@@ -109,20 +154,139 @@ export async function linkConversionRoutes(app, opts = {}) {
         code: 'SCRAPE_OFFER_INVALID_URL',
       })
     }
+
+    const userId = req.user.sub
+    const parsedLink = extractSingleLink(url)
+    const platform = parsedLink?.platform ?? null
+
+    let offerUrl = url
+    let conversionSuccess = false
+    let reasonCode = null
+    let reasonMessage = null
+
+    if (!platform) {
+      const failure = conversionFailureFromContext('unsupported')
+      reasonCode = failure.reasonCode
+      reasonMessage = failure.reasonMessage
+    } else {
+      const credentials = await findCredentials(userId)
+      const credentialsMap = buildCredentialsMap(credentials)
+      const validation = validateCredentialData(platform, credentialsMap[platform])
+
+      if (!validation.configured) {
+        const failure = conversionFailureFromContext('missing_credentials')
+        reasonCode = failure.reasonCode
+        reasonMessage = missingCredentialMessage(validation)
+      } else {
+        try {
+          const convertedUrl = await withTimeout(
+            convertLink(platform, url, credentialsMap),
+            operational.conversionTimeoutMs,
+            `Tempo limite de conversão excedido para ${validation.label}. Tente novamente.`,
+          )
+          if (convertedUrl) {
+            offerUrl = convertedUrl
+            conversionSuccess = true
+          } else {
+            const failure = conversionFailureFromContext('empty_result')
+            reasonCode = failure.reasonCode
+            reasonMessage = failure.reasonMessage
+          }
+        } catch (err) {
+          const failure = conversionFailureFromContext('error', err)
+          reasonCode = failure.reasonCode
+          reasonMessage = failure.reasonMessage
+        }
+      }
+    }
+
     try {
-      const info = await fetchProductInfo(url)
+      let info = await fetchProductInfo(offerUrl)
+
+      // Quando o link convertido é short-link (ex.: Shopee/Amazon) pode haver
+      // bloqueio de redirect/anti-bot no scrape do convertido. Nesses casos,
+      // tentamos o original para resgatar título/preço sem perder o offerUrl.
+      if (conversionSuccess && offerUrl !== url && !hasUsefulOfferInfo(info)) {
+        try {
+          const fallbackInfo = await fetchProductInfo(url)
+          if (hasUsefulOfferInfo(fallbackInfo)) {
+            info = {
+              ...fallbackInfo,
+              finalUrl: fallbackInfo?.finalUrl || info?.finalUrl || offerUrl,
+            }
+          }
+        } catch {
+          // mantém resultado do convertido
+        }
+      }
+
       return {
         title: info?.title || '',
         oldPrice: info?.oldPrice || '',
         newPrice: info?.newPrice || '',
-        finalUrl: info?.finalUrl || url,
+        finalUrl: info?.finalUrl || offerUrl,
+        offerUrl,
+        conversion: {
+          attempted: true,
+          success: conversionSuccess,
+          usedOriginalUrl: !conversionSuccess,
+          reasonCode: conversionSuccess ? null : reasonCode,
+          reasonMessage: conversionSuccess ? null : reasonMessage,
+          platform,
+        },
       }
     } catch (err) {
-      app.log.warn({ err: err.message, url }, 'Falha ao buscar informações do produto')
-      return reply.code(502).send({
-        error: 'Não foi possível ler as informações do produto agora. Preencha o template manualmente ou tente outro link.',
-        code: 'SCRAPE_OFFER_FETCH_FAILED',
-      })
+      app.log.warn({ err: err.message, url: offerUrl }, 'Falha ao buscar informações do produto; retornando fallback mínimo')
+
+      if (conversionSuccess && offerUrl !== url) {
+        try {
+          const originalInfo = await fetchProductInfo(url)
+          if (hasUsefulOfferInfo(originalInfo)) {
+            return {
+              title: originalInfo?.title || '',
+              oldPrice: originalInfo?.oldPrice || '',
+              newPrice: originalInfo?.newPrice || '',
+              finalUrl: originalInfo?.finalUrl || url,
+              offerUrl,
+              conversion: {
+                attempted: true,
+                success: conversionSuccess,
+                usedOriginalUrl: !conversionSuccess,
+                reasonCode: conversionSuccess ? null : reasonCode,
+                reasonMessage: conversionSuccess ? null : reasonMessage,
+                platform,
+              },
+              scrapeWarning: {
+                code: 'SCRAPE_OFFER_FETCH_FALLBACK_ORIGINAL',
+                message: 'Não foi possível ler dados pelo link convertido. Usamos o link original para preencher a oferta.',
+              },
+            }
+          }
+        } catch {
+          // cai no fallback mínimo abaixo
+        }
+      }
+
+      const fallbackTitle = inferTitleFromUrl(offerUrl) || inferTitleFromUrl(url)
+      return {
+        title: fallbackTitle,
+        oldPrice: '',
+        newPrice: '',
+        finalUrl: offerUrl,
+        offerUrl,
+        conversion: {
+          attempted: true,
+          success: conversionSuccess,
+          usedOriginalUrl: !conversionSuccess,
+          reasonCode: conversionSuccess ? null : reasonCode,
+          reasonMessage: conversionSuccess ? null : reasonMessage,
+          platform,
+        },
+        scrapeWarning: {
+          code: 'SCRAPE_OFFER_FETCH_FAILED',
+          message: 'Não foi possível ler as informações do produto agora. Preencha o template manualmente ou tente outro link.',
+        },
+      }
     }
   })
 
