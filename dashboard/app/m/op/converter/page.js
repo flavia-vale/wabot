@@ -33,7 +33,7 @@ export default function ConverterPage() {
   const isEmpty = !converted
 
   return (
-    <MobileShell title="Conversor" active="converter">
+    <MobileShell title="Conversor" active="criar">
       <div style={{ padding: '20px 16px 0' }}>
         <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Cole o link original</div>
         <div style={{ marginTop: 8, position: 'relative' }}>

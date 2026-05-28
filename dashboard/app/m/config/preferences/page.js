@@ -2,18 +2,26 @@
 
 import { useEffect, useState } from 'react'
 import { MobileShell } from '@/components/mobile/MobileShell'
-import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { api } from '@/lib/api'
 
+const preferenceItems = [
+  { key: 'notifyNewSale', label: 'Toda nova venda confirmada', sub: 'aviso no WhatsApp privado', defaultValue: true },
+  { key: 'notifyDailySummary', label: 'Resumo diário', sub: 'top do dia e comissões', defaultValue: true },
+  { key: 'notifyDisconnect', label: 'Bot desconectado', sub: 'alerta urgente', defaultValue: true },
+  { key: 'notifyPostLimit', label: 'Limite de posts próximo', sub: 'aviso aos 90%', defaultValue: false },
+  { key: 'notifyNews', label: 'Novidades do produto', sub: 'no máximo 1× por mês', defaultValue: false },
+]
 
 export default function PreferencesPage() {
   useMobileRoutePerf('m/config/preferences')
-  const [config, setConfig] = useState(null)
+  const [draft, setDraft] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [savedMessage, setSavedMessage] = useState('')
 
   useEffect(() => {
     let active = true
@@ -21,9 +29,8 @@ export default function PreferencesPage() {
       setLoading(true)
       setError('')
       try {
-        const c = await api.getConfig().catch(() => null)
-        if (!active) return
-        setConfig(c || {})
+        const config = await api.getConfig()
+        if (active) setDraft(config || {})
       } catch (e) {
         if (active) setError(e.message || 'Não foi possível carregar preferências.')
       } finally {
@@ -34,13 +41,25 @@ export default function PreferencesPage() {
     return () => { active = false }
   }, [])
 
-  const items = [
-    {label:'Toda nova venda confirmada', sub:'WhatsApp privado', on: config?.notifyNewSale !== false},
-    {label:'Resumo diário às 22h', sub:'top do dia, comissões', on: config?.notifyDailySummary !== false},
-    {label:'Bot desconectado', sub:'alerta urgente', on: config?.notifyDisconnect !== false},
-    {label:'Limite de posts próximo', sub:'aviso aos 90%', on: config?.notifyPostLimit === true},
-    {label:'Novidades do produto', sub:'no máximo 1× por mês', on: config?.notifyNews === true},
-  ];
+  function toggle(key, fallback) {
+    setSavedMessage('')
+    setDraft((current) => ({ ...(current || {}), [key]: !(current?.[key] ?? fallback) }))
+  }
+
+  async function savePreferences() {
+    setSaving(true)
+    setError('')
+    setSavedMessage('')
+    try {
+      const saved = await api.saveConfig(draft || {})
+      setDraft(saved || draft || {})
+      setSavedMessage('Preferências salvas no backoffice.')
+    } catch (e) {
+      setError(e.message || 'Não foi possível salvar preferências.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -49,7 +68,7 @@ export default function PreferencesPage() {
       </MobileShell>
     )
   }
-  if (error) {
+  if (error && !draft) {
     return (
       <MobileShell title="Conversor" active="conta">
         <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
@@ -64,64 +83,42 @@ export default function PreferencesPage() {
         <div style={cfgStyles.pageTitle}>Preferências</div>
       </div>
 
-      <div style={cfgStyles.sectionLabel}>Aparência</div>
-      <div style={{padding:'0 16px'}}>
-        <div style={cfgStyles.card}>
-          <div style={cfgStyles.row()}>
-            <div style={cfgStyles.rowMain}>
-              <div style={cfgStyles.rowTitle}>Tema</div>
-              <div style={cfgStyles.rowSub}>seguindo o sistema</div>
-            </div>
-            <span style={{fontSize: 13, color:'var(--ink-soft)'}}>Auto ›</span>
-          </div>
-          <div style={cfgStyles.row()}>
-            <div style={cfgStyles.rowMain}>
-              <div style={cfgStyles.rowTitle}>Idioma</div>
-            </div>
-            <span style={{fontSize: 13, color:'var(--ink-soft)'}}>Português BR ›</span>
-          </div>
-          <div style={cfgStyles.row(true)}>
-            <div style={cfgStyles.rowMain}>
-              <div style={cfgStyles.rowTitle}>Fuso horário</div>
-            </div>
-            <span style={{fontSize: 13, color:'var(--ink-soft)'}}>GMT-3 ›</span>
-          </div>
-        </div>
-      </div>
-
       <div style={cfgStyles.sectionLabel}>Notificações no WhatsApp</div>
       <div style={{padding:'0 16px'}}>
         <div style={cfgStyles.card}>
-          {items.map((n, i, a) => (
-            <div key={i} style={cfgStyles.row(i === a.length-1)}>
-              <div style={cfgStyles.rowMain}>
-                <div style={cfgStyles.rowTitle}>{n.label}</div>
-                <div style={cfgStyles.rowSub}>{n.sub}</div>
-              </div>
-              <div style={cfgStyles.toggle(n.on)}><div style={cfgStyles.toggleKnob(n.on)}/></div>
-            </div>
-          ))}
+          {preferenceItems.map((item, index) => {
+            const on = draft?.[item.key] ?? item.defaultValue
+            return (
+              <button key={item.key} type="button" onClick={() => toggle(item.key, item.defaultValue)} style={cfgStyles.rowButton(index === preferenceItems.length - 1)}>
+                <div style={cfgStyles.rowMain}>
+                  <div style={cfgStyles.rowTitle}>{item.label}</div>
+                  <div style={cfgStyles.rowSub}>{item.sub}</div>
+                </div>
+                <div style={cfgStyles.toggle(on)}><div style={cfgStyles.toggleKnob(on)}/></div>
+              </button>
+            )
+          })}
         </div>
       </div>
 
-      <div style={cfgStyles.sectionLabel}>Conta</div>
-      <div style={{padding:'0 16px 24px'}}>
-        <div style={cfgStyles.card}>
-          <div style={cfgStyles.row()}>
-            <div style={cfgStyles.rowMain}>
-              <div style={cfgStyles.rowTitle}>Senha</div>
-              <div style={cfgStyles.rowSub}>alterada há 23 dias</div>
-            </div>
-            <span style={{fontSize: 13, color:'var(--ink-soft)'}}>›</span>
-          </div>
-          <div style={cfgStyles.row(true)}>
-            <div style={cfgStyles.rowMain}>
-              <div style={cfgStyles.rowTitle}>Verificação em 2 etapas</div>
-              <div style={cfgStyles.rowSub}>SMS para login novo</div>
-            </div>
-            <span style={cfgStyles.pill('success')}>● ativada</span>
-          </div>
+      <div style={cfgStyles.sectionLabel}>Mensagem e marca</div>
+      <div style={{padding:'0 16px'}}>
+        <div style={{...cfgStyles.cardP, display:'grid', gap: 12}}>
+          <label style={{display:'grid', gap: 6}}>
+            <span style={cfgStyles.label}>Mensagem padrão de boas-vindas</span>
+            <textarea style={{...cfgStyles.field, minHeight: 80}} value={draft?.welcomeMsg || ''} onChange={(event) => setDraft((current) => ({ ...(current || {}), welcomeMsg: event.target.value }))} />
+          </label>
+          <label style={{display:'grid', gap: 6}}>
+            <span style={cfgStyles.label}>Link do grupo principal</span>
+            <input style={cfgStyles.field} value={draft?.brandingGroupLink || ''} onChange={(event) => setDraft((current) => ({ ...(current || {}), brandingGroupLink: event.target.value }))} placeholder="https://chat.whatsapp.com/..." />
+          </label>
         </div>
+      </div>
+
+      <div style={{padding:'18px 16px 24px', display:'grid', gap: 8}}>
+        <button type="button" onClick={savePreferences} disabled={saving} style={{...mobi.btn('primary', true), opacity: saving ? 0.65 : 1}}>{saving ? 'Salvando...' : 'Salvar preferências'}</button>
+        {savedMessage && <div style={{fontSize: 12, color:'var(--success)'}}>{savedMessage}</div>}
+        {error && <div style={{fontSize: 12, color:'var(--danger)'}}>{error}</div>}
       </div>
     </MobileShell>
   )

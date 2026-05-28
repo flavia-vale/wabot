@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+import { mobileRoutes } from '@/components/mobile/routes'
 import { api } from '@/lib/api'
 
 const contaStyles = {
@@ -114,8 +116,8 @@ const contaStyles = {
 };
 
 // Linha de configuração
-const ContaRow = ({ icon, tone, title, sub, statusTone, value, last }) => (
-  <div style={contaStyles.row(last)}>
+const ContaRow = ({ icon, tone, title, sub, statusTone, value, last, onClick }) => (
+  <button type="button" onClick={onClick} style={{...contaStyles.row(last), width:'100%', border:'none', background:'transparent', textAlign:'left', fontFamily:'inherit'}}>
     <div style={contaStyles.rowIcon(tone)}>
       <MobileIcon name={icon} size={15} stroke={1.8}/>
     </div>
@@ -126,7 +128,7 @@ const ContaRow = ({ icon, tone, title, sub, statusTone, value, last }) => (
     {statusTone && <div style={contaStyles.statusDot(statusTone)}/>}
     {value && <span style={contaStyles.rowValue}>{value}</span>}
     <MobileIcon name="arrow" size={13}/>
-  </div>
+  </button>
 );
 
 export default function AccountPage() {
@@ -135,11 +137,7 @@ export default function AccountPage() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-
-  const daysSinceConnect = useMemo(() => {
-    // eslint-disable-next-line react-hooks/purity
-    return !session?.connectedAt ? 0 : Math.floor((Date.now() - new Date(session.connectedAt).getTime()) / (1000 * 60 * 60 * 24))
-  }, [session])
+  const router = useRouter()
 
   useEffect(() => {
     let active = true
@@ -164,6 +162,15 @@ export default function AccountPage() {
     return () => { active = false }
   }, [])
 
+
+  async function handleLogout() {
+    try {
+      await api.logout()
+    } finally {
+      router.replace('/login')
+    }
+  }
+
   if (loading) {
     return (
       <MobileShell title="Conversor" active="conta">
@@ -186,6 +193,7 @@ export default function AccountPage() {
   const plan = user?.plan?.toUpperCase() || 'FREE'
   const planPrice = user?.plan === 'pro' ? 'R$ 39/mês' : 'Grátis'
   const renewDate = user?.subscriptionRenewalAt ? new Date(user.subscriptionRenewalAt).toLocaleDateString('pt-BR') : ''
+  const connectedLabel = session?.connectedAt ? `desde ${new Date(session.connectedAt).toLocaleDateString('pt-BR')}` : 'conectado'
 
   return (
     <MobileShell title="Conversor" active="conta">
@@ -206,7 +214,7 @@ export default function AccountPage() {
             <div style={contaStyles.planTitle}>{planPrice}{renewDate ? ` · renova em ${renewDate}` : ''}</div>
             <div style={contaStyles.planSub}>incluído: espelhamento e reescrita por IA</div>
           </div>
-          <button style={contaStyles.planBtn}>Gerenciar</button>
+          <button type="button" onClick={() => router.push(mobileRoutes.accountSubscription)} style={contaStyles.planBtn}>Gerenciar</button>
         </div>
       )}
 
@@ -216,10 +224,10 @@ export default function AccountPage() {
       </div>
       <div style={contaStyles.card}>
         <ContaRow icon="whatsapp" tone="success" title="WhatsApp"
-          sub={session?.phone ? `${session.phone} · ativo há ${daysSinceConnect} dias` : 'não conectado'}
-          statusTone={session?.running ? "success" : "danger"} last={false}/>
+          sub={session?.phone ? `${session.phone} · ${connectedLabel}` : 'não conectado'}
+          statusTone={session?.running ? "success" : "danger"} onClick={() => router.push(mobileRoutes.configWhatsApp)} last={false}/>
         <ContaRow icon="link" tone="accent" title="Suas afiliadas"
-          sub="Shopee · ML · Amazon · Magalu" value="4 de 5" last/>
+          sub="Shopee · ML · Amazon · Magalu" value="editar" onClick={() => router.push(mobileRoutes.configCredentials)} last/>
       </div>
 
       {/* ── ENVIOS — atalhos, não duplicação ── */}
@@ -228,11 +236,11 @@ export default function AccountPage() {
       </div>
       <div style={contaStyles.card}>
         <ContaRow icon="plus" title="Modelos de mensagem"
-          sub="achadinho · relâmpago · tech · beleza" value="4"/>
+          sub="modelos salvos no backoffice" value="editar" onClick={() => router.push(mobileRoutes.accountTemplates)}/>
         <ContaRow icon="bolt" title="Ritmo de envio"
-          sub="1 envio a cada 12 minutos"/>
+          sub="ajuste em grupos e preservação" onClick={() => router.push(mobileRoutes.espelhar)}/>
         <ContaRow icon="sparkles" tone="accent" title="Reescrita por IA"
-          sub="evita repetições · grátis no PRO" value="ativo" last/>
+          sub="configurado no painel" value="ver" onClick={() => router.push(mobileRoutes.configPreferences)} last/>
       </div>
 
       {/* ── ANTI-BANIMENTO (era "Preservação avançada") ── */}
@@ -241,7 +249,7 @@ export default function AccountPage() {
       </div>
       <div style={contaStyles.card}>
         <ContaRow icon="shield" tone="success" title="Anti-banimento"
-          sub="ajusta o ritmo automaticamente quando o WhatsApp aperta" statusTone="success" last/>
+          sub="ajusta o ritmo automaticamente quando o WhatsApp aperta" statusTone="success" onClick={() => router.push(mobileRoutes.espelhar)} last/>
       </div>
 
       {/* ── PREFERÊNCIAS ── */}
@@ -250,9 +258,9 @@ export default function AccountPage() {
       </div>
       <div style={contaStyles.card}>
         <ContaRow icon="chat" title="Notificações"
-          sub="quando avisar de falhas, novos envios e marcos"/>
+          sub="quando avisar de falhas, novos envios e marcos" onClick={() => router.push(mobileRoutes.configPreferences)}/>
         <ContaRow icon="star" title="Aparência"
-          sub="tema · idioma" value="Menta · Claro" last/>
+          sub="preferências salvas no backoffice" value="editar" onClick={() => router.push(mobileRoutes.configPreferences)} last/>
       </div>
 
       {/* ── CONTA + AJUDA ── */}
@@ -261,15 +269,15 @@ export default function AccountPage() {
       </div>
       <div style={contaStyles.card}>
         <ContaRow icon="star" title="Assinatura e cobrança"
-          sub="histórico · forma de pagamento · cancelar"/>
+          sub="histórico · forma de pagamento · renovar" onClick={() => router.push(mobileRoutes.accountSubscription)}/>
         <ContaRow icon="chat" title="Falar com a gente"
-          sub="WhatsApp · responde em até 1h em horário comercial"/>
+          sub="guia rápido e próximos passos" onClick={() => router.push(mobileRoutes.helpTutorial)}/>
         <ContaRow icon="shield" title="Privacidade e dados"
-          sub="o que coletamos e como excluir" last/>
+          sub="termos e privacidade no site" onClick={() => router.push('/privacidade')} last/>
       </div>
 
       {/* ── SAIR ── */}
-      <button style={contaStyles.signout}>
+      <button type="button" onClick={handleLogout} style={contaStyles.signout}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
         </svg>

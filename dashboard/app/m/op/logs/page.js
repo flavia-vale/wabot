@@ -155,6 +155,10 @@ const envStyles = {
     border:'1px solid ' + (expanded ? 'color-mix(in oklab, var(--accent) 30%, var(--line))' : 'var(--line)'),
     borderRadius: 14,
     cursor:'pointer',
+    width: 'calc(100% - 32px)',
+    textAlign: 'left',
+    fontFamily: 'inherit',
+    color: 'inherit',
   }),
   itemTop: { display:'flex', alignItems:'flex-start', gap: 10 },
   statusDot: (status) => ({
@@ -246,7 +250,10 @@ export default function LogsPage() {
   const [search, setSearch] = useState('');
 
   const [rawLogs, setRawLogs] = useState([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -255,9 +262,11 @@ export default function LogsPage() {
       setLoading(true);
       setError('');
       try {
-        const data = await api.logs('all', 1, 50);
+        const data = await api.logs('all', 1, 30);
         if (!active) return;
         setRawLogs(Array.isArray(data?.logs) ? data.logs : []);
+        setTotal(Number(data?.total) || 0);
+        setPage(1);
       } catch (e) {
         if (active) setError(e.message || 'Não foi possível carregar os envios.');
       } finally {
@@ -267,6 +276,27 @@ export default function LogsPage() {
     load();
     return () => { active = false };
   }, []);
+
+
+  const hasMoreLogs = rawLogs.length < total;
+
+  async function loadMoreLogs() {
+    if (loadingMore || !hasMoreLogs) return;
+    setLoadingMore(true);
+    setError('');
+    try {
+      const nextPage = page + 1;
+      const data = await api.logs('all', nextPage, 30);
+      const nextLogs = Array.isArray(data?.logs) ? data.logs : [];
+      setRawLogs((current) => [...current, ...nextLogs]);
+      setTotal(Number(data?.total) || total);
+      setPage((current) => current + 1);
+    } catch (e) {
+      setError(e.message || 'Não foi possível carregar mais envios.');
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   const items = useMemo(() => {
     const now = new Date();
@@ -333,7 +363,7 @@ export default function LogsPage() {
             </svg>
           </div>
         </div>
-        <button style={envStyles.cadenceBtn} title="Ajustar ritmo · 1 a cada 12 min">
+        <button type="button" style={envStyles.cadenceBtn} aria-label="Ajustar ritmo de envio" title="Ajustar ritmo · 1 a cada 12 min">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
           </svg>
@@ -344,7 +374,7 @@ export default function LogsPage() {
       {/* Filtros em palavras claras */}
       <div style={envStyles.chipRow}>
         {filters.map(f => (
-          <button key={f.key} onClick={() => setFilter(f.key)} style={envStyles.chip(filter === f.key)}>
+          <button key={f.key} type="button" onClick={() => setFilter(f.key)} style={envStyles.chip(filter === f.key)}>
             {f.label}
             <span style={envStyles.chipCount(filter === f.key)}>{f.n}</span>
           </button>
@@ -372,7 +402,7 @@ export default function LogsPage() {
           const it = row;
           const isExp = expanded === it.id;
           return (
-            <div key={it.id} style={envStyles.item(isExp)} onClick={() => setExpanded(isExp ? null : it.id)}>
+            <button key={it.id} type="button" style={envStyles.item(isExp)} onClick={() => setExpanded(isExp ? null : it.id)} aria-expanded={isExp} aria-label={`${it.produto}: ${statusLabel(it.status)}`}>
               <div style={envStyles.itemTop}>
                 <div style={envStyles.statusDot(it.status)}/>
                 <div style={envStyles.itemMain}>
@@ -443,23 +473,23 @@ export default function LogsPage() {
                           <strong style={{color:'var(--ink)'}}>Por que não foi postado:</strong> {it.motivo}
                         </div>
                       )}
-                      <div style={envStyles.exActions}>
-                        {it.status === 'falha' && <button style={envStyles.actionBtn('primary')}>Tentar de novo</button>}
-                        {it.status === 'fila' && <button style={envStyles.actionBtn('primary')}>Enviar agora</button>}
-                        {it.status === 'fila' && <button style={envStyles.actionBtn('ghost')}>Reagendar</button>}
-                        {it.status === 'fila' && <button style={envStyles.actionBtn('ghost')}>Cancelar</button>}
-                        {it.status === 'ignorado' && <button style={envStyles.actionBtn('ghost')}>Postar mesmo assim</button>}
-                        {it.status === 'ignorado' && <button style={envStyles.actionBtn('ghost')}>Mudar regra</button>}
-                        {it.status === 'ok' && <button style={envStyles.actionBtn('ghost')}>Repostar</button>}
-                        {it.status === 'ok' && <button style={envStyles.actionBtn('ghost')}>Ver no WhatsApp</button>}
+                      <div style={envStyles.reasonBox}>
+                        Ações de reenvio, cancelamento e repostagem ainda não têm contrato seguro no backend mobile. Use o painel desktop quando precisar intervir manualmente.
                       </div>
                     </div>
                   )}
                 </div>
               </div>
-            </div>
+            </button>
           );
         })}
+        {!loading && !error && hasMoreLogs && (
+          <div style={{padding:'16px'}}>
+            <button type="button" onClick={loadMoreLogs} disabled={loadingMore} style={{width:'100%', padding:'12px', borderRadius: 999, border:'1px solid var(--line)', background:'var(--surface)', color:'var(--ink)', fontWeight: 700}}>
+              {loadingMore ? 'Carregando...' : 'Carregar mais envios'}
+            </button>
+          </div>
+        )}
       </div>
 
       <div style={{height: 20}}/>

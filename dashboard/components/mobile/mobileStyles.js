@@ -14,6 +14,7 @@ export const mobi = {
   btn: (kind, full) => ({
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
     padding: '12px 18px',
+    minHeight: 44,
     borderRadius: 999,
     fontSize: 14, fontWeight: 600,
     width: full ? '100%' : 'auto',
@@ -21,6 +22,7 @@ export const mobi = {
     background: kind === 'primary' ? 'var(--ink)' : kind === 'accent' ? 'var(--accent-strong)' : 'transparent',
     color: kind === 'primary' || kind === 'accent' ? 'white' : 'var(--ink)',
     fontFamily: 'inherit', cursor: 'pointer',
+    textDecoration: 'none',
   }),
 }
 
@@ -32,15 +34,28 @@ export const cfgStyles = {
   cardP: { background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 18 },
   cardWrap: { padding: '14px 16px 0' },
   field: {
-    width: '100%', padding: '12px 14px', fontSize: 14,
+    width: '100%', padding: '12px 14px', minHeight: 44, fontSize: 14,
     background: 'var(--bg-soft)', border: '1px solid var(--line)', borderRadius: 12,
     fontFamily: 'inherit', color: 'var(--ink)',
   },
   label: { fontSize: 12, fontWeight: 600, color: 'var(--ink)', marginBottom: 8 },
   row: (last) => ({
     display: 'flex', alignItems: 'center', gap: 12,
+    minHeight: 44,
     padding: '14px 16px',
     borderBottom: last ? 'none' : '1px solid var(--line)',
+  }),
+
+  rowButton: (last, active = false) => ({
+    ...cfgStyles.row(last),
+    width: '100%',
+    border: 'none',
+    borderBottom: last ? 'none' : '1px solid var(--line)',
+    background: active ? 'color-mix(in oklab, var(--accent) 12%, var(--surface))' : 'transparent',
+    textAlign: 'left',
+    fontFamily: 'inherit',
+    color: 'inherit',
+    cursor: 'pointer',
   }),
   rowMain: { flex: 1, minWidth: 0 },
   rowTitle: { fontSize: 13.5, fontWeight: 500, color: 'var(--ink)' },
