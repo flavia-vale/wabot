@@ -1,99 +1,162 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import http from 'node:http'
 import { fetchProductInfo } from '../src/converters/productInfoScraper.js'
 
-function startServer(html, { contentType = 'text/html; charset=utf-8' } = {}) {
-  return new Promise((resolve) => {
-    const server = http.createServer((req, res) => {
-      res.setHeader('content-type', contentType)
-      res.end(html)
-    })
-    server.listen(0, '127.0.0.1', () => resolve(server))
-  })
+function mockHtmlResponse(html, url = 'https://www.amazon.com.br/dp/B0CXGBT3Z9') {
+  return {
+    ok: true,
+    url,
+    headers: { get: (name) => (name.toLowerCase() === 'content-type' ? 'text/html; charset=utf-8' : null) },
+    body: null,
+    text: async () => html,
+  }
 }
 
-function close(server) {
-  return new Promise((resolve) => server.close(resolve))
-}
+test('fetchProductInfo extrai título e preço de página Amazon mesmo sem json-ld útil', async (t) => {
+  const html = `<!doctype html><html><head><title>Amazon.com.br</title></head><body>
+    <span id="productTitle">Amai, Absorvente Externo Fluxo Regular, Algodão Sem Químicos, Hipoalergênico, Sem plástico comum, Com Abas - 14 unidades</span>
+    <span class="a-price"><span class="a-offscreen">R$&nbsp;64,99</span></span>
+  </body></html>`
 
-test('fetchProductInfo extrai título e preços de JSON-LD Product', async (t) => {
-  const html = `
-    <html><head>
-      <title>Loja</title>
-      <meta property="og:title" content="Mixer Vertical Turbo Chef" />
-      <script type="application/ld+json">
-        {"@context":"https://schema.org","@type":"Product","name":"Mixer Vertical Turbo Chef Elgin",
-         "offers":{"@type":"Offer","price":"149.90","priceCurrency":"BRL",
-         "priceSpecification":{"@type":"UnitPriceSpecification","priceType":"https://schema.org/ListPrice","price":"199.90"}}}
-      </script>
-    </head><body></body></html>`
-  const server = await startServer(html)
-  t.after(() => close(server))
-  const { port } = server.address()
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => mockHtmlResponse(html)
+  t.after(() => { globalThis.fetch = originalFetch })
 
-  const info = await fetchProductInfo(`http://127.0.0.1:${port}/produto`)
-  assert.equal(info.title, 'Mixer Vertical Turbo Chef Elgin')
-  assert.equal(info.newPrice, '149,90')
-  assert.equal(info.oldPrice, '199,90')
+  const info = await fetchProductInfo('https://amazon.com.br/qualquer')
+  assert.match(info.title, /Amai, Absorvente Externo Fluxo Regular/i)
+  assert.equal(info.newPrice, '64,99')
 })
 
-test('fetchProductInfo cai para og:title e meta price quando não há JSON-LD', async (t) => {
-  const html = `
-    <html><head>
-      <meta property="og:title" content="Produto Top" />
-      <meta property="product:price:amount" content="89.50" />
-    </head></html>`
-  const server = await startServer(html)
-  t.after(() => close(server))
-  const { port } = server.address()
+test('fetchProductInfo extrai preço Amazon via a-price-whole/fraction quando a-offscreen não existir', async (t) => {
+  const html = `<!doctype html><html><body>
+    <span id="productTitle">Milagre Creme de Pentear, Lola Cosmetics</span>
+    <span class="a-price-whole">35</span><span class="a-price-fraction">90</span>
+  </body></html>`
 
-  const info = await fetchProductInfo(`http://127.0.0.1:${port}/x`)
-  assert.equal(info.title, 'Produto Top')
-  assert.equal(info.newPrice, '89,50')
-  assert.equal(info.oldPrice, '')
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => mockHtmlResponse(html)
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://www.amazon.com.br/Milagre-Creme-Pentear-Lola-Cosmetics/dp/B07GTMGKY1')
+  assert.match(info.title, /Milagre Creme de Pentear/i)
+  assert.equal(info.newPrice, '35,90')
 })
 
-test('fetchProductInfo extrai preços de landing social do Mercado Livre', async (t) => {
-  const html = `
-    <html><head>
-      <meta property="og:title" content="Tênis Nike Quest 6 Masculino" />
-    </head><body>
-      <script>
-        x={"components":[{"type":"price","id":"price","price":{"previous_price":{"value":599.99,"currency":"BRL"},"current_price":{"value":399.99,"currency":"BRL"},"discount":{"value":33}}}]};
-      </script>
-    </body></html>`
-  const server = await startServer(html)
-  t.after(() => close(server))
-  const { port } = server.address()
 
-  const info = await fetchProductInfo(`http://127.0.0.1:${port}/social`)
-  assert.equal(info.title, 'Tênis Nike Quest 6 Masculino')
-  assert.equal(info.oldPrice, '599,99')
-  assert.equal(info.newPrice, '399,99')
+test('fetchProductInfo usa fallback da API da Shopee para título e preços', async (t) => {
+  const shellHtml = '<!doctype html><html><head><title>Shopee Brasil | Ofertas incríveis</title></head><body>app shell</body></html>'
+  const shopeeApiPayload = {
+    data: {
+      item: {
+        name: 'Kit Maquiagem Completo Com Pincéis Empreendedora Sucesso',
+        price_before_discount: 7900000,
+        price_min: 3318000,
+      },
+    },
+  }
+
+  let calls = 0
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    calls += 1
+    const url = String(input)
+    if (calls === 1) return mockHtmlResponse(shellHtml, 'https://shopee.com.br/Kit-Maquiagem-Completo-Com-Pinc%C3%A9is-Empreendedora-Sucesso-i.358101010.21697493290')
+    if (url.includes('/api/v4/item/get?itemid=21697493290&shopid=358101010')) {
+      return {
+        ok: true,
+        headers: { get: () => 'application/json; charset=utf-8' },
+        json: async () => shopeeApiPayload,
+      }
+    }
+    throw new Error(`unexpected fetch: ${url}`)
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://shopee.com.br/Kit-Maquiagem-Completo-Com-Pinc%C3%A9is-Empreendedora-Sucesso-i.358101010.21697493290?extraParams=1')
+  assert.equal(info.title, 'Kit Maquiagem Completo Com Pincéis Empreendedora Sucesso')
+  assert.equal(info.oldPrice, '79,00')
+  assert.equal(info.newPrice, '33,18')
 })
 
-test('fetchProductInfo aceita current_price sozinho quando não há previous_price', async (t) => {
-  const html = `
-    <html><head><meta property="og:title" content="Produto sem desconto" /></head>
-    <body><script>x={"current_price":{"value":89.90,"currency":"BRL"}}</script></body></html>`
-  const server = await startServer(html)
-  t.after(() => close(server))
-  const { port } = server.address()
+test('fetchProductInfo resolve short link da Shopee antes de consultar a API', async (t) => {
+  const shellHtml = '<!doctype html><html><head><title>Shopee Brasil</title></head><body>app shell</body></html>'
+  const shopeeApiPayload = {
+    data: {
+      item: {
+        name: 'Kit Maquiagem Completo Com Pincéis Empreendedora Sucesso',
+        price_before_discount: 7900000,
+        price_min: 3318000,
+      },
+    },
+  }
 
-  const info = await fetchProductInfo(`http://127.0.0.1:${port}/p`)
-  assert.equal(info.title, 'Produto sem desconto')
-  assert.equal(info.newPrice, '89,90')
-  assert.equal(info.oldPrice, '')
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url === 'https://s.shopee.com.br/6L1arzoKKY') {
+      return mockHtmlResponse(shellHtml, 'https://shopee.com.br/Kit-Maquiagem-Completo-Com-Pinc%C3%A9is-Empreendedora-Sucesso-i.358101010.21697493290')
+    }
+    if (url.includes('/api/v4/item/get?itemid=21697493290&shopid=358101010')) {
+      return {
+        ok: true,
+        headers: { get: () => 'application/json; charset=utf-8' },
+        json: async () => shopeeApiPayload,
+      }
+    }
+    if (url.includes('shopee.com.br/Kit-Maquiagem-Completo-Com-Pinc')) {
+      return mockHtmlResponse(shellHtml, 'https://shopee.com.br/Kit-Maquiagem-Completo-Com-Pinc%C3%A9is-Empreendedora-Sucesso-i.358101010.21697493290')
+    }
+    throw new Error(`unexpected fetch: ${url}`)
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://s.shopee.com.br/6L1arzoKKY')
+  assert.equal(info.title, 'Kit Maquiagem Completo Com Pincéis Empreendedora Sucesso')
+  assert.equal(info.oldPrice, '79,00')
+  assert.equal(info.newPrice, '33,18')
 })
 
-test('fetchProductInfo devolve campos vazios quando não há HTML utilizável', async (t) => {
-  const server = await startServer('{}', { contentType: 'application/json' })
-  t.after(() => close(server))
-  const { port } = server.address()
+test('fetchProductInfo usa título do slug da URL quando Shopee API falhar', async (t) => {
+  const shellHtml = '<!doctype html><html><head><title>Shopee Brasil</title></head><body>app shell</body></html>'
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('/api/v4/item/get?')) {
+      return { ok: false, headers: { get: () => 'application/json' } }
+    }
+    return mockHtmlResponse(shellHtml, 'https://shopee.com.br/Kit-Maquiagem-Completo-Com-Pinc%C3%A9is-Empreendedora-Sucesso-i.358101010.21697493290')
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
 
-  const info = await fetchProductInfo(`http://127.0.0.1:${port}/api`)
-  assert.equal(info.title, '')
-  assert.equal(info.newPrice, '')
-  assert.equal(info.oldPrice, '')
+  const info = await fetchProductInfo('https://shopee.com.br/Kit-Maquiagem-Completo-Com-Pinc%C3%A9is-Empreendedora-Sucesso-i.358101010.21697493290?extraParams=1')
+  assert.match(info.title, /Kit Maquiagem Completo Com Pincéis Empreendedora Sucesso/i)
+})
+
+test('fetchProductInfo usa fallback da API de products do Mercado Livre para título e preço em URL /p/', async (t) => {
+  const htmlShell = '<!doctype html><html><head><title>Mercado Libre</title></head><body>anti-bot shell</body></html>'
+  const mlProductsPayload = {
+    name: 'Secador de roupas 600w elétrico portátil suspenso cortina compacto econômico seca rápido 110v',
+    buy_box_winner: { price: 189.9 },
+  }
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('mercadolivre.com.br/secador-de-roupas') && !url.includes('api.mercadolibre.com')) {
+      return mockHtmlResponse(htmlShell, 'https://www.mercadolivre.com.br/secador-de-roupas-600w-eletrico-portatil-suspenso-cortina-compacto-econmico-seca-rapido-110v/p/MLB70009242')
+    }
+    if (url === 'https://api.mercadolibre.com/products/MLB70009242') {
+      return {
+        ok: true,
+        headers: { get: () => 'application/json; charset=utf-8' },
+        json: async () => mlProductsPayload,
+      }
+    }
+    throw new Error(`unexpected fetch: ${url}`)
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://www.mercadolivre.com.br/secador-de-roupas-600w-eletrico-portatil-suspenso-cortina-compacto-econmico-seca-rapido-110v/p/MLB70009242')
+  assert.match(info.title, /Secador de roupas 600w elétrico portátil/i)
+  assert.equal(info.newPrice, '189,90')
 })
