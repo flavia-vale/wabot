@@ -1,227 +1,214 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { mobileRoutes } from '@/components/mobile/routes'
+import { MobileIcon } from '@/components/mobile/MobileIcons'
 
-function MobileIcon({ name, size = 16, stroke = 1.8 }) {
-  const props = {
-    width: size, height: size, viewBox: '0 0 24 24',
-    fill: 'none', stroke: 'currentColor', strokeWidth: stroke,
-    strokeLinecap: 'round', strokeLinejoin: 'round',
-    'aria-hidden': 'true',
-  }
+const shellStyles = {
+  root: {
+    position: 'relative',
+    margin: '0 auto',
+    minHeight: '100vh',
+    width: '100%',
+    maxWidth: 480,
+    background: 'var(--bg)',
+    color: 'var(--ink)',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  topbar: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '12px 16px 10px',
+    background: 'var(--surface)',
+    borderBottom: '1px solid var(--line)',
+    position: 'sticky', top: 0, zIndex: 10,
+  },
+  topbarBrand: { display: 'flex', alignItems: 'center', gap: 10 },
+  brandMark: {
+    width: 32, height: 32, borderRadius: 9,
+    background: 'linear-gradient(135deg, var(--accent), var(--accent-2))',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    color: 'white', fontWeight: 700, fontSize: 14,
+  },
+  brandTxt: { fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--ink)' },
+  iconBtn: {
+    width: 36, height: 36, borderRadius: 10,
+    background: 'var(--bg-soft)', border: '1px solid var(--line)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    color: 'var(--ink)', cursor: 'pointer',
+    position: 'relative',
+  },
+  notifDot: {
+    position: 'absolute', top: 6, right: 6,
+    width: 8, height: 8, borderRadius: '50%',
+    background: 'var(--danger)',
+    border: '2px solid var(--surface)',
+  },
+  content: {
+    flex: 1,
+    overflow: 'auto',
+    background: 'var(--bg)',
+    paddingBottom: 92,
+  },
+  bottomNav: {
+    position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)',
+    width: '100%', maxWidth: 480,
+    background: 'color-mix(in oklab, var(--surface) 95%, transparent)',
+    backdropFilter: 'blur(12px)',
+    borderTop: '1px solid var(--line)',
+    paddingBottom: 24,
+    paddingTop: 6,
+    display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)',
+    zIndex: 9,
+  },
+  navItem: (active) => ({
+    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+    padding: '8px 4px',
+    color: active ? 'var(--accent-strong)' : 'var(--ink-soft)',
+    fontSize: 10.5, fontWeight: 500,
+    textDecoration: 'none',
+  }),
+  navIconWrap: (active) => ({
+    width: 44, height: 28, borderRadius: 12,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: active ? 'color-mix(in oklab, var(--accent) 28%, var(--surface))' : 'transparent',
+    transition: 'background .15s',
+  }),
+  navCenterBtn: {
+    width: 44, height: 44, borderRadius: 14,
+    background: 'var(--ink)', color: 'white',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    marginTop: -10, boxShadow: '0 6px 14px -4px rgba(0,0,0,0.25)',
+  },
+}
 
-  switch (name) {
-    case 'menu':
-      return <svg {...props}><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="14" y2="18" /></svg>
-    case 'home':
-      return <svg {...props}><path d="M3 11l9-8 9 8v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>
-    case 'link':
-      return <svg {...props}><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 1 0-7.07-7.07L11 5" /><path d="M14 11a5 5 0 0 0-7.07 0l-3 3A5 5 0 1 0 11 21l1.5-1.5" /></svg>
-    case 'plus':
-      return <svg {...props}><path d="M12 5v14M5 12h14" /></svg>
-    case 'send':
-      return <svg {...props}><path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4 20-7z" /></svg>
-    case 'logs':
-      return <svg {...props}><rect x="4" y="4" width="16" height="16" rx="2" /><line x1="8" y1="9" x2="16" y2="9" /><line x1="8" y1="13" x2="16" y2="13" /><line x1="8" y1="17" x2="12" y2="17" /></svg>
-    default:
-      return null
+function NavIcon({ name }) {
+  if (name === 'inicio') {
+    return (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M3 11l9-8 9 8v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9z"/>
+        <polyline points="9 22 9 12 15 12 15 22"/>
+      </svg>
+    )
   }
+  if (name === 'espelhar') {
+    return (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M3 7a5 5 0 0 1 5-5h4"/><path d="M7 12l-4-5 5-2"/>
+        <path d="M21 17a5 5 0 0 1-5 5h-4"/><path d="M17 12l4 5-5 2"/>
+      </svg>
+    )
+  }
+  if (name === 'criar') {
+    return (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M12 5v14M5 12h14"/>
+      </svg>
+    )
+  }
+  if (name === 'envios') {
+    return (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>
+      </svg>
+    )
+  }
+  if (name === 'conta') {
+    return (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>
+      </svg>
+    )
+  }
+  return null
 }
 
 const tabs = [
-  { key: 'inicio', href: mobileRoutes.home, label: 'Início', icon: 'home' },
-  { key: 'converter', href: mobileRoutes.converter, label: 'Converter', icon: 'link' },
-  { key: 'criar', href: mobileRoutes.offer, label: 'Criar', icon: 'plus' },
-  { key: 'envios', href: mobileRoutes.sends, label: 'Envios', icon: 'send' },
-  { key: 'logs', href: mobileRoutes.logs, label: 'Logs', icon: 'logs' },
+  { key: 'inicio',   label: 'Início',   href: mobileRoutes.home },
+  { key: 'espelhar', label: 'Espelhar', href: mobileRoutes.espelhar },
+  { key: 'criar',    label: 'Criar',    href: mobileRoutes.offer, accent: true },
+  { key: 'envios',   label: 'Envios',   href: mobileRoutes.logs },
+  { key: 'conta',    label: 'Conta',    href: mobileRoutes.account },
 ]
 
-const drawerLinks = [
-  { href: mobileRoutes.home, label: 'Início' },
-  { href: mobileRoutes.converter, label: 'Conversor' },
-  { href: mobileRoutes.offer, label: 'Gerar oferta' },
-  { href: mobileRoutes.sends, label: 'Envios' },
-  { href: mobileRoutes.logs, label: 'Logs' },
-  { href: mobileRoutes.configGroups, label: 'Grupos e canais' },
-  { href: mobileRoutes.configWhatsApp, label: 'Conexão WhatsApp' },
-]
-
-function useFocusTrap({ open, onClose, containerRef, firstFocusRef }) {
-  useEffect(() => {
-    if (!open || !containerRef.current) return undefined
-    const container = containerRef.current
-    const prevActive = document.activeElement
-    const focusables = () => Array.from(container.querySelectorAll('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'))
-
-    const focusFirst = () => {
-      if (firstFocusRef.current) {
-        firstFocusRef.current.focus()
-        return
-      }
-      focusables()[0]?.focus()
-    }
-
-    focusFirst()
-
-    const onKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        onClose()
-        return
-      }
-      if (event.key !== 'Tab') return
-
-      const nodes = focusables()
-      if (!nodes.length) return
-      const first = nodes[0]
-      const last = nodes[nodes.length - 1]
-      const active = document.activeElement
-
-      if (event.shiftKey && active === first) {
-        event.preventDefault()
-        last.focus()
-      } else if (!event.shiftKey && active === last) {
-        event.preventDefault()
-        first.focus()
-      }
-    }
-
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('keydown', onKeyDown)
-      if (prevActive && typeof prevActive.focus === 'function') prevActive.focus()
-    }
-  }, [open, onClose, containerRef, firstFocusRef])
-}
-
-export function MobileShell({ title = 'Conversor', active = 'inicio', children }) {
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const drawerId = useId()
-  const drawerRef = useRef(null)
-  const closeBtnRef = useRef(null)
-
-  useFocusTrap({
-    open: drawerOpen,
-    onClose: () => setDrawerOpen(false),
-    containerRef: drawerRef,
-    firstFocusRef: closeBtnRef,
-  })
-
-  const headerClass = useMemo(
-    () => 'sticky top-0 z-20 flex items-center justify-between border-b border-[#d7e7de] bg-[#FCFEFD] px-4 py-3',
-    [],
-  )
-
+export function MobileShell({ title = 'Conversor', active = 'inicio', hasAlert = false, children }) {
   return (
-    <div className="relative mx-auto min-h-screen w-full max-w-md bg-[#EEF6F2] text-[#1F2D2A]">
-      <header className={headerClass}>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="rounded-md border border-[#d7e7de] px-2 py-1 text-xs font-semibold"
-            aria-label="Abrir menu"
-            aria-expanded={drawerOpen}
-            aria-controls={drawerId}
-            onClick={() => setDrawerOpen(true)}
-          >
-            <MobileIcon name="menu" size={14} />
-            <span>Menu</span>
-          </button>
-          <h1 className="text-sm font-semibold">{title}</h1>
+    <div style={shellStyles.root}>
+      <header style={shellStyles.topbar}>
+        <div style={shellStyles.topbarBrand}>
+          <div style={shellStyles.brandMark}>b</div>
+          <div style={shellStyles.brandTxt}>{title}</div>
         </div>
-        <Link className="text-xs font-semibold text-[#3E9C7A]" href="/m?view=mobile" aria-label="Manter visual mobile">Mobile</Link>
+        <button type="button" style={shellStyles.iconBtn} aria-label="Notificações">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+          </svg>
+          {hasAlert ? <span style={shellStyles.notifDot} aria-hidden="true"/> : null}
+        </button>
       </header>
 
-      {drawerOpen ? (
-        <>
-          <button
-            type="button"
-            aria-label="Fechar menu"
-            className="fixed inset-0 z-30 bg-black/30"
-            onClick={() => setDrawerOpen(false)}
-          />
-          <aside
-            id={drawerId}
-            ref={drawerRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Navegação mobile"
-            className="fixed left-0 top-0 z-40 h-full w-[82%] max-w-sm border-r border-[#d7e7de] bg-white p-4 shadow-xl"
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-semibold">Navegação</p>
-              <button
-                ref={closeBtnRef}
-                type="button"
-                className="rounded-md border border-[#d7e7de] px-2 py-1 text-xs"
-                onClick={() => setDrawerOpen(false)}
-              >
-                Fechar
-              </button>
-            </div>
-            <nav className="flex flex-col gap-2" aria-label="Links do menu mobile">
-              {drawerLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="rounded-lg border border-[#e4efe9] px-3 py-2 text-sm"
-                  onClick={() => setDrawerOpen(false)}
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <MobileIcon
-                      name={
-                        link.href === mobileRoutes.home ? 'home'
-                          : link.href === mobileRoutes.converter ? 'link'
-                            : link.href === mobileRoutes.offer ? 'plus'
-                              : link.href === mobileRoutes.sends ? 'send'
-                                : 'logs'
-                      }
-                      size={14}
-                    />
-                    {link.label}
-                  </span>
-                </Link>
-              ))}
-            </nav>
-          </aside>
-        </>
-      ) : null}
+      <main style={shellStyles.content} role="main">{children}</main>
 
-      <main className="px-4 py-4 pb-24" role="main">{children}</main>
-
-      <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-[#d7e7de] bg-[#FCFEFD]" aria-label="Navegação principal mobile">
-        <ul className="mx-auto grid max-w-md grid-cols-5">
-          {tabs.map((tab) => {
-            const isActive = active === tab.key
-            return (
-              <li key={tab.key}>
-                <Link
-                  href={tab.href}
-                  aria-current={isActive ? 'page' : undefined}
-                  className={`flex flex-col items-center justify-center gap-1 py-2 text-center text-[11px] font-semibold ${isActive ? 'text-[#3E9C7A]' : 'text-[#5A6E68]'}`}
-                >
-                  <MobileIcon name={tab.icon} size={16} />
-                  {tab.label}
-                </Link>
-              </li>
-            )
-          })}
-        </ul>
+      <nav style={shellStyles.bottomNav} aria-label="Navegação principal mobile">
+        {tabs.map((tab) => {
+          const isActive = active === tab.key
+          return (
+            <Link
+              key={tab.key}
+              href={tab.href}
+              aria-current={isActive ? 'page' : undefined}
+              style={shellStyles.navItem(isActive)}
+            >
+              {tab.accent ? (
+                <div style={shellStyles.navCenterBtn}><NavIcon name={tab.key}/></div>
+              ) : (
+                <div style={shellStyles.navIconWrap(isActive)}><NavIcon name={tab.key}/></div>
+              )}
+              <span>{tab.label}</span>
+            </Link>
+          )
+        })}
       </nav>
     </div>
   )
 }
 
 export function MobileStateCard({ title, description, actionLabel, onAction, tone = 'neutral' }) {
-  const toneClass = tone === 'error' ? 'border-[#f3c8be] bg-[#fff6f3]' : tone === 'success' ? 'border-[#bde3d2] bg-[#f3fbf7]' : 'border-[#d7e7de] bg-white'
+  const bg = tone === 'error' ? 'color-mix(in oklab, var(--danger) 10%, var(--surface))'
+            : tone === 'success' ? 'color-mix(in oklab, var(--success) 10%, var(--surface))'
+            : 'var(--surface)'
+  const border = tone === 'error' ? 'color-mix(in oklab, var(--danger) 30%, var(--line))'
+              : tone === 'success' ? 'color-mix(in oklab, var(--success) 30%, var(--line))'
+              : 'var(--line)'
   return (
-    <section className={`rounded-2xl border p-4 ${toneClass}`} aria-live="polite">
-      <h3 className="text-sm font-semibold">{title}</h3>
-      <p className="mt-1 text-xs text-[#5A6E68]">{description}</p>
+    <section
+      style={{
+        background: bg,
+        border: `1px solid ${border}`,
+        borderRadius: 18,
+        padding: 16,
+        margin: '16px',
+      }}
+      aria-live="polite"
+    >
+      <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{title}</h3>
+      <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 4 }}>{description}</p>
       {actionLabel ? (
-        <button type="button" onClick={onAction} className="mt-3 rounded-full border border-[#d7e7de] px-3 py-2 text-xs font-semibold">
+        <button
+          type="button"
+          onClick={onAction}
+          style={{
+            marginTop: 12,
+            padding: '8px 14px',
+            borderRadius: 999,
+            border: '1px solid var(--line)',
+            background: 'var(--surface)',
+            color: 'var(--ink)',
+            fontSize: 12, fontWeight: 600,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
           {actionLabel}
         </button>
       ) : null}

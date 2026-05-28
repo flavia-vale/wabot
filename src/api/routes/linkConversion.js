@@ -131,7 +131,7 @@ function inferTitleFromUrl(url) {
 }
 
 export async function linkConversionRoutes(app, opts = {}) {
-  const convertLink = opts.converter ?? defaultConvertLink
+  const convertLink = opts.converter ? normalizeConverter(opts.converter) : defaultConvertLink
   const fetchProductInfo = opts.fetchProductInfo ?? defaultFetchProductInfo
   const findCredentials = opts.findCredentials ?? ((userId) => db.credential.findMany({ where: { userId } }))
   const rateState = opts.rateState ?? new Map()
@@ -331,12 +331,12 @@ export async function linkConversionRoutes(app, opts = {}) {
         }
 
         try {
-          const convertedUrl = await withTimeout(
+          const conversionResult = await withTimeout(
             convertLink(link.platform, link.url, credentialsMap),
             Math.min(operational.conversionTimeoutMs, remainingMs),
             `Tempo limite de conversão excedido para ${validation.label}. Tente novamente ou envie menos links por vez.`,
           )
-          if (!convertedUrl) {
+          if (!conversionResult?.url) {
             results.push(buildErrorResult(
               index,
               link,
@@ -352,7 +352,8 @@ export async function linkConversionRoutes(app, opts = {}) {
             platform: link.platform,
             label: validation.label,
             originalUrl: link.url,
-            convertedUrl,
+            convertedUrl: conversionResult.url,
+            warning: conversionResult.warning ?? null,
             status: 'converted',
             code: null,
             error: null,

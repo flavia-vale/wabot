@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { api } from '@/lib/api'
 import { EmptyState, ErrorState, LoadingState } from '@/components/States'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { LogsSummary } from '@/components/logs/LogsSummary'
 
 const PLATFORM_COLORS = {
   shopee:        'bg-orange-100 text-orange-700',
@@ -16,6 +17,7 @@ const STATUS_TABS = [
   ['queued', 'Na fila'],
   ['sending', 'Enviando'],
   ['success', 'Sucesso'],
+  ['skipped', 'Ignorados'],
   ['error', 'Erros'],
 ]
 
@@ -32,10 +34,95 @@ const STATUS_META = {
     label: '✓ Enviado',
     className: 'bg-green-100 text-green-700',
   },
+  skipped: {
+    label: '⏭ Ignorado',
+    className: 'bg-slate-100 text-slate-600',
+  },
   error: {
     label: '✗ Erro',
     className: 'bg-red-100 text-red-700',
   },
+}
+
+// Tradução dos prefixos canônicos de errorMsg para linguagem de cliente.
+// Mantém-se sincronizado com src/errorTaxonomy.js.
+function explainErrorMsg(errorMsg) {
+  if (!errorMsg) return null
+  if (errorMsg.startsWith('warning:amazon_cookies_expired')) {
+    return 'Seus cookies da Amazon (sitestripe) expiraram. As ofertas continuam saindo com link longo de afiliado e creditando comissão, mas para voltar a gerar links curtos amzn.to, renove os cookies em Configurações → Credenciais → Amazon.'
+  }
+  if (errorMsg.startsWith('skip:dedup')) {
+    return 'Link já enviado nas últimas 2 horas — bloqueado para não duplicar.'
+  }
+  if (errorMsg.startsWith('skip:blocked_keyword')) {
+    return 'Contém uma palavra que você marcou para bloquear.'
+  }
+  if (errorMsg.startsWith('skip:title_mismatch')) {
+    return 'O texto da oferta não combina com o produto do link. Bloqueado por segurança.'
+  }
+  if (errorMsg.startsWith('skip:text_too_large')) {
+    return 'Mensagem muito grande — ignorada para não atrasar o restante da fila.'
+  }
+  if (errorMsg.startsWith('skip:no_valid_conversions')) {
+    return 'Nenhum link da mensagem pôde ser convertido em link de afiliado.'
+  }
+  if (errorMsg.startsWith('skip:policy')) {
+    if (errorMsg.endsWith(':unsupported_store')) {
+      return 'Essa promoção foi ignorada porque ainda não fazemos conversão automática de afiliado para essa loja.'
+    }
+    return 'Mensagem fora das regras de encaminhamento que você configurou para este grupo.'
+  }
+  if (errorMsg.startsWith('skip:decrypt_failed')) {
+    return 'O WhatsApp não conseguiu decifrar essa mensagem na sua ponta. Costuma ser pontual.'
+  }
+  if (errorMsg.startsWith('skip:incoming_error')) {
+    return 'Tivemos um erro ao processar essa mensagem antes de enviar.'
+  }
+  if (errorMsg.startsWith('timeout:send')) {
+    return 'O envio para o canal/grupo de destino demorou demais e foi cancelado.'
+  }
+  if (errorMsg.startsWith('timeout:incoming')) {
+    return 'A leitura e o preparo dessa promoção demoraram demais. Costuma ser site de produto lento.'
+  }
+  if (errorMsg.startsWith('error:queue_full')) {
+    return 'Fila interna de envios cheia neste instante — tente novamente em alguns minutos.'
+  }
+  if (errorMsg.startsWith('error:worker_restart')) {
+    return 'O bot reiniciou enquanto essa mensagem estava esperando para ser enviada.'
+  }
+  if (errorMsg.startsWith('error:channel_forbidden')) {
+    return 'O bot não tem permissão para postar nesse canal. Verifique se ele ainda é admin.'
+  }
+  if (errorMsg.startsWith('error:channel_throttled')) {
+    return 'O WhatsApp limitou temporariamente os envios para esse canal. Tentaremos novamente.'
+  }
+  if (errorMsg.startsWith('error:baileys')) {
+    return 'O WhatsApp recusou o envio. Pode ser instabilidade momentânea.'
+  }
+  if (errorMsg.startsWith('error:conversion')) {
+    return `Não conseguimos converter o link em afiliado: ${errorMsg.slice('error:conversion:'.length)}`
+  }
+  if (errorMsg.startsWith('error:other')) {
+    return errorMsg.slice('error:other:'.length) || 'Falha não classificada.'
+  }
+  return errorMsg
+}
+
+function isBenignStatus(log) {
+  return log.status === 'skipped'
+}
+
+function DedupHitsChip({ hits }) {
+  const n = Number(hits) || 0
+  if (n <= 0) return null
+  return (
+    <span
+      className="ml-2 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600"
+      title="Mesmo link bloqueado novamente nas últimas 2h — proteção contra repetição."
+    >
+      +{n.toLocaleString('pt-BR')} {n === 1 ? 'repetição bloqueada' : 'repetições bloqueadas'}
+    </span>
+  )
 }
 
 const LIMIT = 20
@@ -64,7 +151,19 @@ function formatSentAt(sentAt) {
 function ErrorDetails({ log, expanded, onToggle }) {
   if (!log.errorMsg) return null
 
+  const benign = isBenignStatus(log)
   const detailsId = `log-error-${log.id}`
+  const explained = explainErrorMsg(log.errorMsg)
+  const buttonText = expanded
+    ? (benign ? 'Ocultar motivo' : 'Ocultar detalhes do erro')
+    : (benign ? 'Ver motivo' : 'Ver detalhes do erro')
+
+  const buttonTone = benign
+    ? 'text-slate-600 hover:text-slate-800 focus-visible:ring-slate-400'
+    : 'text-red-600 hover:text-red-700 focus-visible:ring-red-500'
+  const detailTone = benign
+    ? 'bg-slate-50 text-slate-700'
+    : 'bg-red-50 text-red-700'
 
   return (
     <div className="mt-2">
@@ -73,13 +172,13 @@ function ErrorDetails({ log, expanded, onToggle }) {
         onClick={onToggle}
         aria-expanded={expanded}
         aria-controls={detailsId}
-        className="text-xs font-semibold text-red-600 underline underline-offset-2 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
+        className={`text-xs font-semibold underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${buttonTone}`}
       >
-        {expanded ? 'Ocultar detalhes do erro' : 'Ver detalhes do erro'}
+        {buttonText}
       </button>
       {expanded && (
-        <p id={detailsId} className="mt-2 whitespace-pre-wrap rounded-lg bg-red-50 p-2 text-xs text-red-700" role="status">
-          {log.errorMsg}
+        <p id={detailsId} className={`mt-2 whitespace-pre-wrap rounded-lg p-2 text-xs ${detailTone}`} role="status">
+          {explained}
         </p>
       )}
     </div>
@@ -98,7 +197,7 @@ function LogMobileCard({ log, errorExpanded, onToggleError }) {
       <p className="text-gray-700 mt-2"><strong>Origem:</strong> {log.sourceGroupName}</p>
       <p className="text-gray-700"><strong>Destino:</strong> {log.destGroupName}</p>
       <p className="text-gray-600 truncate" title={log.messageText}>{log.messageText}</p>
-      <div className="mt-2"><StatusBadge log={log} /></div>
+      <div className="mt-2 flex flex-wrap items-center"><StatusBadge log={log} /><DedupHitsChip hits={log.dedupHits} /></div>
       <ErrorDetails log={log} expanded={errorExpanded} onToggle={onToggleError} />
     </div>
   )
@@ -215,6 +314,8 @@ export default function LogsPage() {
         </button>
       </div>
 
+      <LogsSummary />
+
       <div className="flex gap-0 mb-4 border-b border-gray-200 overflow-x-auto" aria-label="Filtrar logs por status">
         {STATUS_TABS.map(([value, label]) => (
           <button
@@ -301,7 +402,7 @@ export default function LogsPage() {
                       {log.messageText}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <StatusBadge log={log} />
+                      <div className="flex flex-wrap items-center"><StatusBadge log={log} /><DedupHitsChip hits={log.dedupHits} /></div>
                       <ErrorDetails
                         log={log}
                         expanded={expandedErrorIds.has(log.id)}
