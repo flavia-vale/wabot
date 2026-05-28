@@ -1,9 +1,12 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
+import { MobileLoadingCard } from '@/components/mobile/MobileAsyncState'
 import { mobi } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+import { api } from '@/lib/api'
 
 const criarStyles = {
   pageH: { padding:'18px 20px 0' },
@@ -423,10 +426,35 @@ const STATE_CFG = {
 
 export default function OfferPage() {
   useMobileRoutePerf('m/op/offer')
-  const state = 'converted'
-  const expand = false
+  const [input, setInput] = useState('')
+  const [state, setState] = useState('empty')
+  const [expand, setExpand] = useState(false)
+  const [converting, setConverting] = useState(false)
+  const [productData, setProductData] = useState(null)
   const bonuses = 'both'
   const bonusLayout = 'unified'
+
+  const handleConvert = async () => {
+    if (!input.trim()) return
+    setConverting(true)
+    try {
+      const convResult = await api.convertLinks(input)
+      const converted = convResult?.results?.[0]?.convertedUrl || input
+
+      try {
+        const scrapeResult = await api.scrapeOffer(input)
+        setProductData(scrapeResult)
+        setState(scrapeResult?.title ? 'converted' : 'scrapeFail')
+      } catch {
+        setState('converted')
+      }
+    } catch (e) {
+      console.error('Conversion failed:', e)
+      setState('noConverter')
+    } finally {
+      setConverting(false)
+    }
+  }
 
   const isEmpty = state === 'empty';
   const cfg = STATE_CFG[state];
@@ -434,12 +462,8 @@ export default function OfferPage() {
   const isNoConv = state === 'noConverter';
   const isFail = state === 'scrapeFail';
 
-  const linkOriginal = state === 'updated'
-    ? 's.shopee.com.br/2BkXjT41R'
-    : state === 'noConverter'
-      ? 'loja-xyz.com.br/produto/2837/cafeteira'
-      : 'shopee.com.br/sandalia-bege-verao-i.4738291.928374';
-  const linkAfiliada = 's.shopee.com.br/3As9XkLp2';
+  const linkOriginal = input || 'shopee.com.br/sandalia-bege-verao-i.4738291.928374'
+  const linkAfiliada = 's.shopee.com.br/3As9XkLp2'
 
   return (
     <MobileShell title="Conversor" active="criar">
@@ -457,15 +481,20 @@ export default function OfferPage() {
         <div style={criarStyles.inputLabel}>Link do produto</div>
         <div style={{position:'relative'}}>
           {isEmpty ? (
-            <input
-              style={criarStyles.inputField(false)}
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              style={{...criarStyles.inputField(false), minHeight: 60}}
               placeholder="https://..."
               autoFocus={false}
             />
           ) : (
             <>
               <div style={criarStyles.inputField(true)}>{linkOriginal}</div>
-              <div style={criarStyles.inputClear}>
+              <div
+                onClick={() => { setInput(''); setState('empty'); setProductData(null) }}
+                style={criarStyles.inputClear}
+              >
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
                   <line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>
                 </svg>
@@ -483,8 +512,8 @@ export default function OfferPage() {
               No celular: toque longo e escolha &quot;Colar&quot;.
             </div>
             <div style={criarStyles.examples}>
-              <button style={criarStyles.examChip}>👟 exemplo Shopee</button>
-              <button style={criarStyles.examChip}>🔌 exemplo Amazon</button>
+              <button onClick={() => setInput('https://shopee.com.br/Sandalia-Bege-Verao-i.4738291.928374')} style={criarStyles.examChip}>👟 exemplo Shopee</button>
+              <button onClick={() => setInput('https://www.amazon.com.br/s?k=notebook')} style={criarStyles.examChip}>🔌 exemplo Amazon</button>
             </div>
           </>
         )}
@@ -576,9 +605,27 @@ export default function OfferPage() {
       )}
 
       {/* CTA pra ir pro próximo passo (montar oferta) */}
+      {isEmpty && input.trim() && !converting && (
+        <div style={criarStyles.ctaWrap}>
+          <button onClick={handleConvert} style={criarStyles.cta}>
+            <MobileIcon name="sparkles" size={15}/>
+            Converter
+            <MobileIcon name="arrow" size={14}/>
+          </button>
+        </div>
+      )}
+
+      {converting && (
+        <div style={criarStyles.ctaWrap}>
+          <div style={{...criarStyles.cta, opacity: 0.6, cursor: 'not-allowed', justifyContent: 'center'}}>
+            <MobileLoadingCard label="Convertendo..." />
+          </div>
+        </div>
+      )}
+
       {!isEmpty && !expand && (
         <div style={criarStyles.ctaWrap}>
-          <button style={{...criarStyles.cta, ...(isNoConv ? criarStyles.ctaWarn : {})}}>
+          <button onClick={() => setExpand(true)} style={{...criarStyles.cta, ...(isNoConv ? criarStyles.ctaWarn : {})}}>
             <MobileIcon name="sparkles" size={15}/>
             Montar oferta
             <MobileIcon name="arrow" size={14}/>
