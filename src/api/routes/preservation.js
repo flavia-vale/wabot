@@ -7,6 +7,10 @@ import {
 import { getHealth as getChannelHealth } from '../../core/channelHealth.js'
 import { recomputeScore as recomputeReportRiskScore } from '../../core/reportRiskScore.js'
 import { getClickStats } from '../../core/clickTracker.js'
+import { getProbeMonitoringSummary } from '../../core/probeEvidence.js'
+
+
+import { getProbeSessionSnapshot, isProbeSessionSelectable, setProbeSession } from '../../core/probeSessions.js'
 
 const PRESERVATION_CONFIG_KEYS = [
   'channelMinIntervalSec',
@@ -107,6 +111,60 @@ export async function preservationRoutes(app) {
     return { config: pickConfig(updated) }
   })
 
+  // ---------- Probe session (PR-1 foundation) ----------
+  app.post('/probe/session/start', async (req, reply) => {
+    if (await requirePreservationAccess(req, reply)) return
+    const userId = req.user.sub
+    const snapshot = getProbeSessionSnapshot(userId)
+    if (snapshot.state === 'connected' || snapshot.state === 'connecting' || snapshot.state === 'qr_pending') {
+      return reply.code(409).send({ error: 'Já existe sessão probe ativa para este usuário.', session: snapshot })
+    }
+
+    const sessionId = `probe_${userId}`
+    const session = setProbeSession(userId, {
+      sessionId,
+      state: 'qr_pending',
+      qrExpiresAt: new Date(Date.now() + 60 * 1000),
+      lastError: null,
+    })
+    return { ok: true, session }
+  })
+
+  app.get('/probe/session/status', async (req, reply) => {
+    if (await requirePreservationAccess(req, reply)) return
+    return { ok: true, session: getProbeSessionSnapshot(req.user.sub) }
+  })
+
+  app.post('/probe/session/stop', async (req, reply) => {
+    if (await requirePreservationAccess(req, reply)) return
+    const session = setProbeSession(req.user.sub, {
+      state: 'disconnected',
+      qrExpiresAt: null,
+      lastError: null,
+    })
+    return { ok: true, session }
+  })
+
+  app.post('/probe/session/select', async (req, reply) => {
+    if (await requirePreservationAccess(req, reply)) return
+    const probeAccountSessionId = String(req.body?.probeAccountSessionId ?? '').trim()
+    if (!probeAccountSessionId) return reply.code(400).send({ error: 'probeAccountSessionId é obrigatório.' })
+    if (!/^probe_[a-zA-Z0-9_-]{3,120}$/.test(probeAccountSessionId)) {
+      return reply.code(400).send({ error: 'probeAccountSessionId inválido.' })
+    }
+    if (!isProbeSessionSelectable(req.user.sub, probeAccountSessionId)) {
+      return reply.code(409).send({ error: 'Sessão probe não está ativa para seleção.' })
+    }
+
+    const updated = await db.botConfig.upsert({
+      where: { userId: req.user.sub },
+      update: { probeAccountSessionId },
+      create: { userId: req.user.sub, probeAccountSessionId },
+    })
+
+    return { ok: true, config: pickConfig(updated) }
+  })
+
   // ---------- Monitoring ----------
   app.get('/monitoring/health', async (req, reply) => {
     if (await requirePreservationAccess(req, reply)) return
@@ -199,15 +257,22 @@ export async function preservationRoutes(app) {
       where: { userId: req.user.sub, role: 'post', kind: 'channel' },
       include: { channelHealth: true },
     })
-    const items = channels.map((g) => ({
-      groupId: g.id,
-      name: g.name,
-      waJid: g.waJid,
-      lastProbeSeenAt: g.channelHealth?.lastProbeSeenAt ?? null,
-    }))
+    const evidenceMap = await getProbeMonitoringSummary({ userId: req.user.sub }, { db })
+    const items = channels.map((g) => {
+      const ev = evidenceMap.get(g.id)
+      return {
+        groupId: g.id,
+        name: g.name,
+        waJid: g.waJid,
+        lastProbeSeenAt: g.channelHealth?.lastProbeSeenAt ?? null,
+        lastLatencyMs: ev?.lastLatencyMs ?? null,
+        misses24h: ev?.misses24h ?? 0,
+      }
+    })
     return {
       enabled: Boolean(cfg?.probeEnabled),
       probeAccountSessionId: cfg?.probeAccountSessionId ?? null,
+      sessionState: getProbeSessionSnapshot(req.user.sub).state,
       items,
     }
   })
