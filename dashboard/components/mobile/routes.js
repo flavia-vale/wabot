@@ -9,6 +9,7 @@ export const mobileRoutes = {
   configCredentials: '/m/config/credentials',
   configPreferences: '/m/config/preferences',
   helpTutorial: '/m/help/tutorial',
+  tutorial: '/m/tutorial',
   account: '/m/account',
   accountSubscription: '/m/account/subscription',
   accountTemplates: '/m/account/templates',
