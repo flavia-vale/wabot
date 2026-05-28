@@ -1,9 +1,12 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
+import { MobileLoadingCard } from '@/components/mobile/MobileAsyncState'
 import { mobi } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+import { api } from '@/lib/api'
 
 const criarStyles = {
   pageH: { padding:'18px 20px 0' },
@@ -423,10 +426,38 @@ const STATE_CFG = {
 
 export default function OfferPage() {
   useMobileRoutePerf('m/op/offer')
-  const state = 'converted'
-  const expand = false
-  const bonuses = 'both'
+  const [input, setInput] = useState('')
+  const [state, setState] = useState('empty')
+  const [expand, setExpand] = useState(false)
+  const [converting, setConverting] = useState(false)
+  const [productData, setProductData] = useState(null)
+  const [convertedLink, setConvertedLink] = useState('')
+  const [selectedTemplate, setSelectedTemplate] = useState('achadinho')
+  const [bonuses, setBonuses] = useState('')
   const bonusLayout = 'unified'
+
+  const handleConvert = async () => {
+    if (!input.trim()) return
+    setConverting(true)
+    try {
+      const convResult = await api.convertLinks(input)
+      const converted = convResult?.results?.[0]?.convertedUrl || input
+      setConvertedLink(converted)
+
+      try {
+        const scrapeResult = await api.scrapeOffer(input)
+        setProductData(scrapeResult)
+        setState(scrapeResult?.title ? 'converted' : 'scrapeFail')
+      } catch {
+        setState('converted')
+      }
+    } catch (e) {
+      console.error('Conversion failed:', e)
+      setState('noConverter')
+    } finally {
+      setConverting(false)
+    }
+  }
 
   const isEmpty = state === 'empty';
   const cfg = STATE_CFG[state];
@@ -434,12 +465,8 @@ export default function OfferPage() {
   const isNoConv = state === 'noConverter';
   const isFail = state === 'scrapeFail';
 
-  const linkOriginal = state === 'updated'
-    ? 's.shopee.com.br/2BkXjT41R'
-    : state === 'noConverter'
-      ? 'loja-xyz.com.br/produto/2837/cafeteira'
-      : 'shopee.com.br/sandalia-bege-verao-i.4738291.928374';
-  const linkAfiliada = 's.shopee.com.br/3As9XkLp2';
+  const linkOriginal = input || 'shopee.com.br/sandalia-bege-verao-i.4738291.928374'
+  const linkAfiliada = convertedLink || input || 's.shopee.com.br/3As9XkLp2'
 
   return (
     <MobileShell title="Conversor" active="criar">
@@ -457,15 +484,20 @@ export default function OfferPage() {
         <div style={criarStyles.inputLabel}>Link do produto</div>
         <div style={{position:'relative'}}>
           {isEmpty ? (
-            <input
-              style={criarStyles.inputField(false)}
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              style={{...criarStyles.inputField(false), minHeight: 60}}
               placeholder="https://..."
               autoFocus={false}
             />
           ) : (
             <>
               <div style={criarStyles.inputField(true)}>{linkOriginal}</div>
-              <div style={criarStyles.inputClear}>
+              <div
+                onClick={() => { setInput(''); setState('empty'); setProductData(null) }}
+                style={criarStyles.inputClear}
+              >
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
                   <line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>
                 </svg>
@@ -480,11 +512,11 @@ export default function OfferPage() {
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5"/>
               </svg>
-              No celular: toque longo e escolha "Colar".
+              No celular: toque longo e escolha &quot;Colar&quot;.
             </div>
             <div style={criarStyles.examples}>
-              <button style={criarStyles.examChip}>👟 exemplo Shopee</button>
-              <button style={criarStyles.examChip}>🔌 exemplo Amazon</button>
+              <button onClick={() => setInput('https://shopee.com.br/Sandalia-Bege-Verao-i.4738291.928374')} style={criarStyles.examChip}>👟 exemplo Shopee</button>
+              <button onClick={() => setInput('https://www.amazon.com.br/s?k=notebook')} style={criarStyles.examChip}>🔌 exemplo Amazon</button>
             </div>
           </>
         )}
@@ -539,15 +571,15 @@ export default function OfferPage() {
             </div>
           </div>
 
-          {productDetected && (
+          {productDetected && productData && (
             <div style={criarStyles.productCard}>
-              <div style={criarStyles.productImg}>IMG</div>
+              <div style={criarStyles.productImg}>{productData.imageUrl ? '🖼' : 'IMG'}</div>
               <div style={criarStyles.productInfo}>
-                <div style={criarStyles.productTitle}>Sandália Bege Verão 2026 — Conforto Anatômico</div>
+                <div style={criarStyles.productTitle}>{productData.title || 'Produto'}</div>
                 <div style={criarStyles.productPrices}>
-                  <span style={criarStyles.priceNow}>R$ 39,90</span>
-                  <span style={criarStyles.priceWas}>R$ 79,90</span>
-                  <span style={criarStyles.pill}>−50%</span>
+                  <span style={criarStyles.priceNow}>{productData.priceNow || 'R$ --'}</span>
+                  {productData.priceWas && <span style={criarStyles.priceWas}>{productData.priceWas}</span>}
+                  {productData.discount && <span style={criarStyles.pill}>−{productData.discount}%</span>}
                 </div>
               </div>
             </div>
@@ -576,9 +608,27 @@ export default function OfferPage() {
       )}
 
       {/* CTA pra ir pro próximo passo (montar oferta) */}
+      {isEmpty && input.trim() && !converting && (
+        <div style={criarStyles.ctaWrap}>
+          <button onClick={handleConvert} style={criarStyles.cta}>
+            <MobileIcon name="sparkles" size={15}/>
+            Converter
+            <MobileIcon name="arrow" size={14}/>
+          </button>
+        </div>
+      )}
+
+      {converting && (
+        <div style={criarStyles.ctaWrap}>
+          <div style={{...criarStyles.cta, opacity: 0.6, cursor: 'not-allowed', justifyContent: 'center'}}>
+            <MobileLoadingCard label="Convertendo..." />
+          </div>
+        </div>
+      )}
+
       {!isEmpty && !expand && (
         <div style={criarStyles.ctaWrap}>
-          <button style={{...criarStyles.cta, ...(isNoConv ? criarStyles.ctaWarn : {})}}>
+          <button onClick={() => setExpand(true)} style={{...criarStyles.cta, ...(isNoConv ? criarStyles.ctaWarn : {})}}>
             <MobileIcon name="sparkles" size={15}/>
             Montar oferta
             <MobileIcon name="arrow" size={14}/>
@@ -623,21 +673,27 @@ export default function OfferPage() {
 
           <div style={criarStyles.templateRow}>
             {[
-              {key:'achadinho', name:'Achadinho ✨', preview:'✨ Achadinho do dia\n\n[produto]\nPor R$ 39,90 com frete!', sel: true},
-              {key:'relampago', name:'Relâmpago ⚡', preview:'⚡ ÚLTIMAS HORAS ⚡\n\n[produto]\nDe R$ 79 por R$ 39!', sel: false},
-              {key:'tech', name:'Tech 🔌', preview:'🔌 Achado tech\n\n[produto]\nspecs · cupom · link', sel: false},
-              {key:'beleza', name:'Beleza 💄', preview:'💄 Pra mimar você\n\n[produto]\npreço cheio R$ 79, hoje:', sel: false},
+              {key:'achadinho', name:'Achadinho ✨', preview:'✨ Achadinho do dia\n\n[produto]\nPor R$ 39,90 com frete!'},
+              {key:'relampago', name:'Relâmpago ⚡', preview:'⚡ ÚLTIMAS HORAS ⚡\n\n[produto]\nDe R$ 79 por R$ 39!'},
+              {key:'tech', name:'Tech 🔌', preview:'🔌 Achado tech\n\n[produto]\nspecs · cupom · link'},
+              {key:'beleza', name:'Beleza 💄', preview:'💄 Pra mimar você\n\n[produto]\npreço cheio R$ 79, hoje:'},
             ].map(t => (
-              <button key={t.key} style={criarStyles.templateCard(t.sel)}>
+              <button key={t.key} onClick={() => setSelectedTemplate(t.key)} style={criarStyles.templateCard(selectedTemplate === t.key)}>
                 <div style={criarStyles.templateName}>{t.name}</div>
-                <div style={criarStyles.templatePreview(t.sel)}>{t.preview}</div>
+                <div style={criarStyles.templatePreview(selectedTemplate === t.key)}>{t.preview}</div>
               </button>
             ))}
           </div>
 
           {/* Editor */}
           <div style={criarStyles.editorWrap}>
-            <textarea style={criarStyles.editor} defaultValue={`✨ Achadinho do dia\n\nSandália Bege Verão 2026 — só hoje por *R$ 39,90* com frete grátis!\n\nDe ~R$ 79,90~ por R$ 39,90 🔥\n\n👉 ${isNoConv ? linkOriginal : linkAfiliada}${bonuses === 'both' || bonuses === 'coupons' ? '\n\n🎟 Mais cupons da Shopee:\ns.shopee.com.br/cupons-sol' : ''}${bonuses === 'both' || bonuses === 'group' ? '\n\n💜 Entra no nosso grupo:\nwa.me/achadosdasol' : ''}\n\n#achados #moda`}/>
+            <textarea style={criarStyles.editor} defaultValue={(() => {
+              const title = productData?.title || 'Produto';
+              const price = productData?.priceNow || 'R$ --';
+              const oldPrice = productData?.priceWas ? `De ~${productData.priceWas}~` : '';
+              return `✨ Achadinho do dia\n\n${title} — só hoje por *${price}* com frete grátis!\n\n${oldPrice}${oldPrice ? ' por ' : ''}${price} 🔥\n\n👉 ${isNoConv ? linkOriginal : linkAfiliada}${bonuses === 'both' || bonuses === 'coupons' ? '\n\n🎟 Mais cupons da Shopee:\ns.shopee.com.br/cupons-sol' : ''}${bonuses === 'both' || bonuses === 'group' ? '\n\n💜 Entra no nosso grupo:\nwa.me/achadosdasol' : ''}\n\n#achados #moda`;
+            })()}/>
+
             <div style={criarStyles.vars}>
               {['{produto}','{preço}','{preço_de}','{link}','{loja}'].map(v => (
                 <span key={v} style={criarStyles.varChip}>{v}</span>
@@ -664,8 +720,22 @@ export default function OfferPage() {
             ];
 
             // ─── conteúdo de cada bônus (reaproveitado em ambos os layouts) ───
+            const toggleGroup = () => {
+              if (bonuses === 'group' || bonuses === 'both') {
+                setBonuses(bonuses === 'both' ? 'coupons' : '');
+              } else {
+                setBonuses(bonuses === 'coupons' ? 'both' : 'group');
+              }
+            };
+            const toggleCoupons = () => {
+              if (bonuses === 'coupons' || bonuses === 'both') {
+                setBonuses(bonuses === 'both' ? 'group' : '');
+              } else {
+                setBonuses(bonuses === 'group' ? 'both' : 'coupons');
+              }
+            };
             const groupHead = (on) => (
-              <div style={{display:'flex', alignItems:'center', gap: 12}}>
+              <div style={{display:'flex', alignItems:'center', gap: 12}} onClick={toggleGroup}>
                 <div style={criarStyles.bonusIcon(on)}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
@@ -706,7 +776,7 @@ export default function OfferPage() {
             );
 
             const couponsHead = (on) => (
-              <div style={{display:'flex', alignItems:'center', gap: 12}}>
+              <div style={{display:'flex', alignItems:'center', gap: 12}} onClick={toggleCoupons}>
                 <div style={criarStyles.bonusIcon(on)}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M20 12V8H4v8h16v-4z"/><path d="M9 8v8M15 8v8"/>
