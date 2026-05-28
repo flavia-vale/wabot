@@ -137,6 +137,19 @@ function hasUsefulOfferInfo(info) {
   return Boolean(title || newPrice || oldPrice)
 }
 
+// Normaliza um conversor injetado (testes) para o mesmo contrato de
+// `defaultConvertLink`: `{ url, warning } | null`. O conversor injetado pode
+// devolver string (caso comum), objeto `{ url, warning }` ou null.
+function normalizeConverter(converter) {
+  return async (platform, url, credentials) => {
+    const result = await converter(platform, url, credentials)
+    if (!result) return null
+    if (typeof result === 'string') return { url: result, warning: null }
+    if (result.url) return { url: result.url, warning: result.warning ?? null }
+    return null
+  }
+}
+
 export async function linkConversionRoutes(app, opts = {}) {
   const convertLink = opts.converter ? normalizeConverter(opts.converter) : defaultConvertLink
   const fetchProductInfo = opts.fetchProductInfo ?? defaultFetchProductInfo
@@ -179,13 +192,13 @@ export async function linkConversionRoutes(app, opts = {}) {
         reasonMessage = missingCredentialMessage(validation)
       } else {
         try {
-          const convertedUrl = await withTimeout(
+          const conversionResult = await withTimeout(
             convertLink(platform, url, credentialsMap),
             operational.conversionTimeoutMs,
             `Tempo limite de conversão excedido para ${validation.label}. Tente novamente.`,
           )
-          if (convertedUrl) {
-            offerUrl = convertedUrl
+          if (conversionResult?.url) {
+            offerUrl = conversionResult.url
             conversionSuccess = true
           } else {
             const failure = conversionFailureFromContext('empty_result')

@@ -1,29 +1,77 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
+import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+import { api } from '@/lib/api'
 
+const avatarColor = (name) => {
+  const hues = [210, 145, 280, 50, 180, 0]
+  const hash = name.split('').reduce((h, c) => h + c.charCodeAt(0), 0)
+  const hue = hues[hash % hues.length]
+  return `linear-gradient(135deg, hsl(${hue}, 70%, 50%), hsl(${hue + 20}, 70%, 60%))`
+}
 
 export default function GroupsPage() {
   useMobileRoutePerf('m/config/groups')
 
-  const [tab, setTab] = React.useState('origem');
-  const origem = [
-    {nome:'Promoções Brasil 🔥', m:'1.842 membros', last:'agora · 124 hoje', on:true, g:'linear-gradient(135deg,#94A3B8,#475569)'},
-    {nome:'Cupons & Cashback BR', m:'2.340 membros', last:'4 min · 87 hoje', on:true, g:'linear-gradient(135deg,#F4D9E0,#E8A488)'},
-    {nome:'Ofertas Relâmpago Shopee', m:'967 membros', last:'12 min · 58 hoje', on:true, g:'linear-gradient(135deg,#C8E6D8,#3E9C7A)'},
-    {nome:'Promoções de TI', m:'580 membros', last:'23 min · 34 hoje', on:true, g:'linear-gradient(135deg,#D9CFEA,#7C5CF5)'},
-    {nome:'Achadinhos Mães', m:'412 membros', last:'pausado', on:false, g:'linear-gradient(135deg,#F6E8D8,#E8A488)'},
-  ];
-  const destino = [
-    {nome:'Achados da Sol 💜', m:'grupo · 247 membros', last:'89 posts hoje', on:true, g:'linear-gradient(135deg,#7CC9A9,#D9CFEA)'},
-    {nome:'Sol · Tech & Casa', m:'grupo · 118 membros', last:'38 posts hoje', on:true, g:'linear-gradient(135deg,#D9CFEA,#7C5CF5)'},
-    {nome:'Canal Sol Achados', m:'canal · 2.4k inscritos', last:'72 posts hoje', on:true, g:'linear-gradient(135deg,#F6E8D8,#7CC9A9)'},
-  ];
+  const [tab, setTab] = useState('origem')
+  const [groups, setGroups] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    async function load() {
+      setLoading(true)
+      setError('')
+      try {
+        const g = await api.groups().catch(() => [])
+        if (!active) return
+        setGroups(Array.isArray(g) ? g : [])
+      } catch (e) {
+        if (active) setError(e.message || 'Não foi possível carregar os grupos.')
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    load()
+    return () => { active = false }
+  }, [])
+
+  const origem = groups.filter(g => g.role === 'monitor').map(g => ({
+    nome: g.subject || g.name || 'Sem nome',
+    m: g.participantCount ? `${g.participantCount} membros` : 'membros desconhecido',
+    last: g.lastMessageTimestamp ? `${new Date(g.lastMessageTimestamp).toLocaleDateString('pt-BR')}` : 'sem mensagens',
+    on: g.active !== false,
+    g: avatarColor(g.name || g.subject),
+  }))
+  const destino = groups.filter(g => g.role === 'post').map(g => ({
+    nome: g.subject || g.name || 'Sem nome',
+    m: g.isChannel ? `canal · ${g.participantCount || '?'} inscritos` : `grupo · ${g.participantCount || '?'} membros`,
+    last: g.postCount ? `${g.postCount} posts hoje` : 'sem posts',
+    on: g.active !== false,
+    g: avatarColor(g.name || g.subject),
+  }))
   const data = tab === 'origem' ? origem : destino;
+
+  if (loading) {
+    return (
+      <MobileShell title="Conversor" active="conta">
+        <div style={{ padding: '18px 16px' }}><MobileLoadingCard label="Carregando grupos..." /></div>
+      </MobileShell>
+    )
+  }
+  if (error) {
+    return (
+      <MobileShell title="Conversor" active="conta">
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+      </MobileShell>
+    )
+  }
 
   return (
     <MobileShell title="Conversor" active="conta">
@@ -63,18 +111,24 @@ export default function GroupsPage() {
       {/* Lista */}
       <div style={cfgStyles.cardWrap}>
         <div style={{...cfgStyles.card, overflow:'hidden'}}>
-          {data.map((g, i, a) => (
-            <div key={g.nome} style={{...cfgStyles.row(i === a.length-1), opacity: g.on ? 1 : 0.55}}>
-              <div style={{width: 40, height: 40, borderRadius:'50%', background: g.g, display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontWeight: 700, fontSize: 12, flexShrink: 0}}>
-                {g.nome.replace(/[^A-Za-zÀ-ÿ ]/g,'').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase().slice(0,2)}
-              </div>
-              <div style={cfgStyles.rowMain}>
-                <div style={cfgStyles.rowTitle}>{g.nome}</div>
-                <div style={cfgStyles.rowSub}>{g.m} · {g.last}</div>
-              </div>
-              <div style={cfgStyles.toggle(g.on)}><div style={cfgStyles.toggleKnob(g.on)}/></div>
+          {data.length === 0 ? (
+            <div style={{padding:'24px 16px', textAlign:'center', color:'var(--ink-soft)', fontSize: 13}}>
+              Nenhum grupo {tab === 'origem' ? 'para monitorar' : 'para publicar'} configurado
             </div>
-          ))}
+          ) : (
+            data.map((g, i, a) => (
+              <div key={g.nome} style={{...cfgStyles.row(i === a.length-1), opacity: g.on ? 1 : 0.55}}>
+                <div style={{width: 40, height: 40, borderRadius:'50%', background: g.g, display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontWeight: 700, fontSize: 12, flexShrink: 0}}>
+                  {g.nome.replace(/[^A-Za-zÀ-ÿ ]/g,'').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase().slice(0,2)}
+                </div>
+                <div style={cfgStyles.rowMain}>
+                  <div style={cfgStyles.rowTitle}>{g.nome}</div>
+                  <div style={cfgStyles.rowSub}>{g.m} · {g.last}</div>
+                </div>
+                <div style={cfgStyles.toggle(g.on)}><div style={cfgStyles.toggleKnob(g.on)}/></div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

@@ -292,6 +292,23 @@ function extractShopeePriceRangeFromHtml(html) {
   return { oldPrice: toPriceString(max), newPrice: toPriceString(min) }
 }
 
+function extractShopeePriceRangeFromJsonInHtml(html) {
+  if (!html) return null
+
+  const minMatch = html.match(/"price_min"\s*:\s*(\d{4,})/)
+  const oldMatch = html.match(/"price_before_discount"\s*:\s*(\d{4,})/)
+  const maxOldMatch = html.match(/"price_max_before_discount"\s*:\s*(\d{4,})/)
+  const fallbackPriceMatch = html.match(/"price"\s*:\s*(\d{4,})/)
+
+  const currentRaw = firstPositiveShopeePrice(minMatch?.[1], fallbackPriceMatch?.[1])
+  const oldRaw = firstPositiveShopeePrice(oldMatch?.[1], maxOldMatch?.[1])
+
+  const newPrice = shopeePriceIntToString(currentRaw)
+  const oldPrice = shopeePriceIntToString(oldRaw)
+  if (newPrice || oldPrice) return { newPrice, oldPrice }
+  return null
+}
+
 async function fetchShopeeItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS } = {}) {
   const canonical = await resolveShopeeUrl(url, { timeoutMs })
   const ids = parseShopeeIdsFromUrl(canonical)
@@ -370,10 +387,11 @@ export async function fetchProductInfo(url, opts = {}) {
   const amazonFallback = html ? extractAmazonTitleAndPrice(html) : null
   const shopeeApiFallback = await fetchShopeeItemInfo(finalUrl || url, opts)
   const shopeeHtmlRange = extractShopeePriceRangeFromHtml(html)
+  const shopeeJsonRange = extractShopeePriceRangeFromJsonInHtml(html)
   const mercadoLivreApiFallback = await fetchMercadoLivreProductInfo(finalUrl || url, opts)
   const titleFromUrl = extractTitleFromUrl(finalUrl || url)
   const title = jsonLd?.title || amazonFallback?.title || shopeeApiFallback?.title || mercadoLivreApiFallback?.title || titleFromUrl || extractTitleFallback(html)
-  const newPrice = jsonLd?.newPrice || mlLanding?.newPrice || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || shopeeHtmlRange?.newPrice || mercadoLivreApiFallback?.newPrice || extractMetaPrice(html) || extractShopeePriceFromHtml(html)
-  const oldPrice = jsonLd?.oldPrice || mlLanding?.oldPrice || shopeeApiFallback?.oldPrice || shopeeHtmlRange?.oldPrice || mercadoLivreApiFallback?.oldPrice || ''
+  const newPrice = jsonLd?.newPrice || mlLanding?.newPrice || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || shopeeJsonRange?.newPrice || shopeeHtmlRange?.newPrice || mercadoLivreApiFallback?.newPrice || extractMetaPrice(html) || extractShopeePriceFromHtml(html)
+  const oldPrice = jsonLd?.oldPrice || mlLanding?.oldPrice || shopeeApiFallback?.oldPrice || shopeeJsonRange?.oldPrice || shopeeHtmlRange?.oldPrice || mercadoLivreApiFallback?.oldPrice || ''
   return { title, oldPrice, newPrice, finalUrl }
 }

@@ -1,8 +1,11 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
+import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+import { api } from '@/lib/api'
 
 const modStyles = {
   pageH: { padding:'18px 20px 10px' },
@@ -229,7 +232,44 @@ const modStyles = {
 
 export default function TemplatesPage() {
   useMobileRoutePerf('m/account/templates')
+  const [config, setConfig] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const view = 'list'
+
+  useEffect(() => {
+    let active = true
+    async function load() {
+      setLoading(true)
+      setError('')
+      try {
+        const c = await api.getConfig().catch(() => null)
+        if (!active) return
+        setConfig(c || {})
+      } catch (e) {
+        if (active) setError(e.message || 'Não foi possível carregar modelos.')
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    load()
+    return () => { active = false }
+  }, [])
+
+  if (loading) {
+    return (
+      <MobileShell title="Conversor" active="conta">
+        <div style={{ padding: '18px 16px' }}><MobileLoadingCard label="Carregando modelos..." /></div>
+      </MobileShell>
+    )
+  }
+  if (error) {
+    return (
+      <MobileShell title="Conversor" active="conta">
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+      </MobileShell>
+    )
+  }
 
   if (view === 'list') {
     const templates = [
