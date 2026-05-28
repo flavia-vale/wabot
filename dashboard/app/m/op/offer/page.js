@@ -442,7 +442,7 @@ export default function OfferPage() {
   const linkAfiliada = 's.shopee.com.br/3As9XkLp2';
 
   return (
-    <MobileShell title="Criar oferta" active="criar">
+    <MobileShell title="Conversor" active="criar">
       {/* Header — limpo, sem italianização */}
       <div style={criarStyles.pageH}>
         <div style={criarStyles.pageEyebrow}>Grátis · sem limite</div>
