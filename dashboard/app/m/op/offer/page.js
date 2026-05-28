@@ -498,6 +498,7 @@ export default function OfferPage() {
   const [manualProduct, setManualProduct] = useState({ title: '', price: '', oldPrice: '' })
   const [convertedLink, setConvertedLink] = useState('')
   const [pasteFeedback, setPasteFeedback] = useState('')
+  const inputRef = useRef(null)
   const [selectedTemplate, setSelectedTemplate] = useState('achadinho')
   const [allTemplates, setAllTemplates] = useState(TEMPLATE_OPTIONS)
   const [bonuses, setBonuses] = useState('')
