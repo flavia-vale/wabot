@@ -23,3 +23,37 @@ test('convert sinaliza warning ml_ssid_expired quando API de afiliado rejeita au
   assert.equal(result.warning, 'ml_ssid_expired')
   assert.match(result.url, /partner_id=475630078/)
 })
+
+test('convert mantém short_url quando validação é inconclusiva (muro anti-bot do VPS)', async (t) => {
+  // createLink devolve short_url válido para o produto de catálogo
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: { urls: [{ short_url: 'https://mercadolivre.com/sec/2Abcd' }] },
+    headers: {},
+  }))
+  // Ao validar, o resolve do VPS cai no muro de verificação — sem MLB
+  // extraível. Antes isso descartava o link e caía no partner_id; agora mantém.
+  const wall = 'https://www.mercadolivre.com.br/gz/account-verification?go=https%3A%2F%2Fwww.mercadolivre.com.br%2Fsocial%2Floja&tid=abc'
+  t.mock.method(global, 'fetch', async () => ({ url: wall }))
+
+  const url = 'https://www.mercadolivre.com.br/secador/p/MLB70009242'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  assert.equal(result, 'https://mercadolivre.com/sec/2Abcd')
+})
+
+test('convert descarta short_url quando validação comprova MLB diferente', async (t) => {
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: { urls: [{ short_url: 'https://mercadolivre.com/sec/9Zxy' }] },
+    headers: {},
+  }))
+  // resolve devolve um produto real, mas de outro MLB → mismatch comprovado.
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/p/MLB99999999' }))
+
+  const url = 'https://www.mercadolivre.com.br/secador/p/MLB70009242'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  // short_url descartado → cai no fallback partner_id preservando o MLB certo
+  assert.equal(typeof result, 'string')
+  assert.match(result, /partner_id=475630078/)
+  assert.match(result, /MLB70009242/)
+})
