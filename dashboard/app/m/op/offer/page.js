@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
@@ -498,6 +498,7 @@ export default function OfferPage() {
   const [manualProduct, setManualProduct] = useState({ title: '', price: '', oldPrice: '' })
   const [convertedLink, setConvertedLink] = useState('')
   const [pasteFeedback, setPasteFeedback] = useState('')
+  const inputRef = useRef(null)
   const [selectedTemplate, setSelectedTemplate] = useState('achadinho')
   const [allTemplates, setAllTemplates] = useState(TEMPLATE_OPTIONS)
   const [bonuses, setBonuses] = useState('')
