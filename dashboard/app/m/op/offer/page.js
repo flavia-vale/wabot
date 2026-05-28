@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
@@ -489,6 +489,7 @@ const STATE_CFG = {
 export default function OfferPage() {
   useMobileRoutePerf('m/op/offer')
   const router = useRouter()
+  const inputRef = useRef(null)
   const [input, setInput] = useState('')
   const [state, setState] = useState('empty')
   const [expand, setExpand] = useState(false)
