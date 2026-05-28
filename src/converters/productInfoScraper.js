@@ -276,6 +276,22 @@ function extractShopeePriceFromHtml(html) {
   return ''
 }
 
+function extractShopeePriceRangeFromHtml(html) {
+  if (!html) return null
+  const matches = [...html.matchAll(/R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/g)]
+  if (!matches.length) return null
+  const values = matches
+    .map((m) => String(m[1] || '').trim())
+    .map((v) => Number.parseFloat(v.replace(/\./g, '').replace(',', '.')))
+    .filter((n) => Number.isFinite(n) && n > 0)
+  if (!values.length) return null
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null
+  if (min === max) return { oldPrice: '', newPrice: toPriceString(min) }
+  return { oldPrice: toPriceString(max), newPrice: toPriceString(min) }
+}
+
 async function fetchShopeeItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS } = {}) {
   const canonical = await resolveShopeeUrl(url, { timeoutMs })
   const ids = parseShopeeIdsFromUrl(canonical)
@@ -353,10 +369,11 @@ export async function fetchProductInfo(url, opts = {}) {
   const mlLanding = html ? extractFromMercadoLivreLanding(html) : null
   const amazonFallback = html ? extractAmazonTitleAndPrice(html) : null
   const shopeeApiFallback = await fetchShopeeItemInfo(finalUrl || url, opts)
+  const shopeeHtmlRange = extractShopeePriceRangeFromHtml(html)
   const mercadoLivreApiFallback = await fetchMercadoLivreProductInfo(finalUrl || url, opts)
   const titleFromUrl = extractTitleFromUrl(finalUrl || url)
   const title = jsonLd?.title || amazonFallback?.title || shopeeApiFallback?.title || mercadoLivreApiFallback?.title || titleFromUrl || extractTitleFallback(html)
-  const newPrice = jsonLd?.newPrice || mlLanding?.newPrice || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || mercadoLivreApiFallback?.newPrice || extractMetaPrice(html) || extractShopeePriceFromHtml(html)
-  const oldPrice = jsonLd?.oldPrice || mlLanding?.oldPrice || shopeeApiFallback?.oldPrice || mercadoLivreApiFallback?.oldPrice || ''
+  const newPrice = jsonLd?.newPrice || mlLanding?.newPrice || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || shopeeHtmlRange?.newPrice || mercadoLivreApiFallback?.newPrice || extractMetaPrice(html) || extractShopeePriceFromHtml(html)
+  const oldPrice = jsonLd?.oldPrice || mlLanding?.oldPrice || shopeeApiFallback?.oldPrice || shopeeHtmlRange?.oldPrice || mercadoLivreApiFallback?.oldPrice || ''
   return { title, oldPrice, newPrice, finalUrl }
 }
