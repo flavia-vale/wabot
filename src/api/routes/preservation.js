@@ -257,7 +257,7 @@ export async function preservationRoutes(app) {
       where: { userId: req.user.sub, role: 'post', kind: 'channel' },
       include: { channelHealth: true },
     })
-    const evidenceMap = await getProbeMonitoringSummary({ userId: req.user.sub }, { db })
+    const evidenceMap = await getProbeMonitoringSummary({ userId: req.user.sub, channels }, { db })
     const items = channels.map((g) => {
       const ev = evidenceMap.get(g.id)
       return {
