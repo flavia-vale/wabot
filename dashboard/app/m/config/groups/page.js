@@ -11,6 +11,7 @@ import {
   buildExistingJidRoleSet,
   getMobileGroupPickerItem,
   getRoleForMobileGroupTab,
+  prepareMobileGroupAddPayload,
   sortWhatsAppGroupsForMobilePicker,
 } from '@/lib/mobileGroupPicker'
 
@@ -89,11 +90,17 @@ export default function GroupsPage() {
   }
 
   async function addGroupFromData(data) {
-    const waJid = data.waJid || data.jid || data.id
+    const result = prepareMobileGroupAddPayload(data, role, existingJidRoles)
+    if (!result.ok) {
+      setFeedback(result.feedback)
+      return
+    }
+
+    const { waJid, name, kind } = result.payload
     setActionLoading(`add-${waJid}::${role}`)
     setFeedback('')
     try {
-      await api.addGroup(waJid, data.name || data.subject || waJid, role, data.kind || 'group')
+      await api.addGroup(waJid, name, role, kind)
       setFeedback(role === 'monitor' ? 'Grupo adicionado para monitorar.' : 'Grupo adicionado para publicar.')
       setManualForm({ waJid: '', name: '', kind: 'group' })
       await loadGroups()
@@ -104,18 +111,6 @@ export default function GroupsPage() {
     }
   }
 
-  async function toggleGroup(group) {
-    const nextActive = group.active === false
-    setGroups((current) => current.map((item) => item.id === group.id ? { ...item, active: nextActive } : item))
-    setFeedback('')
-    try {
-      await api.updateGroup(group.id, { active: nextActive })
-      setFeedback(nextActive ? 'Grupo ativado.' : 'Grupo pausado.')
-    } catch (err) {
-      setGroups((current) => current.map((item) => item.id === group.id ? group : item))
-      setFeedback(err.message || 'Não foi possível atualizar o grupo.')
-    }
-  }
 
   async function deleteGroup(group) {
     setActionLoading(`delete-${group.id}`)
@@ -130,6 +125,8 @@ export default function GroupsPage() {
       setActionLoading('')
     }
   }
+
+  const feedbackIsError = feedback && (feedback.includes('Não') || feedback === 'Este grupo já está cadastrado para monitorar/publicar.')
 
   if (loading) {
     return (
@@ -170,7 +167,7 @@ export default function GroupsPage() {
         {tab === 'origem' ? 'Grupos onde o bot lê links de promoção.' : 'Destinos onde o bot publica os links convertidos.'}
       </div>
 
-      {feedback && <div style={{margin:'12px 16px 0', fontSize: 12, color: feedback.includes('Não') ? 'var(--danger)' : 'var(--success)'}}>{feedback}</div>}
+      {feedback && <div style={{margin:'12px 16px 0', fontSize: 12, color: feedbackIsError ? 'var(--danger)' : 'var(--success)'}}>{feedback}</div>}
 
       <div style={cfgStyles.cardWrap}>
         <div style={{...cfgStyles.card, overflow:'hidden'}}>
@@ -180,17 +177,14 @@ export default function GroupsPage() {
             </div>
           ) : currentGroups.map((group, index) => {
             const name = group.subject || group.name || 'Sem nome'
-            const active = group.active !== false
             return (
-              <div key={group.id} style={{...cfgStyles.row(index === currentGroups.length - 1), opacity: active ? 1 : 0.55}}>
+              <div key={group.id} style={cfgStyles.row(index === currentGroups.length - 1)}>
                 <div style={{width: 40, height: 40, borderRadius:'50%', background: avatarColor(name), display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontWeight: 700, fontSize: 12, flexShrink: 0}}>{initials(name)}</div>
                 <div style={cfgStyles.rowMain}>
                   <div style={cfgStyles.rowTitle}>{name}</div>
                   <div style={cfgStyles.rowSub}>{group.kind === 'channel' ? 'canal' : 'grupo'} · {group.waJid || group.jid || 'sem JID'}</div>
                 </div>
-                <button type="button" onClick={() => toggleGroup(group)} aria-label={active ? 'Pausar grupo' : 'Ativar grupo'} style={{border:'none', background:'transparent', padding: 0}}>
-                  <div style={cfgStyles.toggle(active)}><div style={cfgStyles.toggleKnob(active)}/></div>
-                </button>
+                <span style={cfgStyles.pill('success')}>cadastrado</span>
                 <button type="button" onClick={() => deleteGroup(group)} disabled={actionLoading === `delete-${group.id}`} style={{border:'1px solid var(--line)', background:'transparent', borderRadius: 999, color:'var(--danger)', padding:'6px 9px', fontSize: 11, fontWeight: 700}}>
                   Remover
                 </button>

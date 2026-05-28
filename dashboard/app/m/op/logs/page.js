@@ -1,89 +1,11 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { api } from '@/lib/api'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
-
-// Backend MessageLog.status -> chip de status da UI mobile.
-const STATUS_TO_UI = {
-  success: 'ok',
-  error: 'falha',
-  queued: 'fila',
-  sending: 'fila',
-  skipped: 'ignorado',
-}
-
-const PLATFORM_LABEL = {
-  shopee: 'Shopee',
-  amazon: 'Amazon',
-  mercadolivre: 'Mercado Livre',
-  magazineluiza: 'Magalu',
-  magalu: 'Magalu',
-  aliexpress: 'AliExpress',
-}
-
-// Mesmas traduções amigáveis do painel desktop (dashboard/app/dashboard/logs).
-function friendlyError(errorMsg) {
-  if (!errorMsg) return null
-  if (errorMsg.startsWith('warning:amazon_cookies_expired')) return 'Seus cookies da Amazon expiraram. As ofertas continuam saindo, mas para gerar links curtos amzn.to renove em Conta → Credenciais → Amazon.'
-  if (errorMsg.startsWith('skip:dedup')) return 'Link já enviado nas últimas 2 horas — bloqueado para não duplicar.'
-  if (errorMsg.startsWith('skip:blocked_keyword')) return 'Contém uma palavra que você marcou para bloquear.'
-  if (errorMsg.startsWith('skip:title_mismatch')) return 'O texto da oferta não combina com o produto do link. Bloqueado por segurança.'
-  if (errorMsg.startsWith('skip:text_too_large')) return 'Mensagem muito grande — ignorada para não atrasar o restante da fila.'
-  if (errorMsg.startsWith('skip:no_valid_conversions')) return 'Nenhum link da mensagem pôde ser convertido em link de afiliado.'
-  if (errorMsg.startsWith('skip:policy')) return errorMsg.endsWith(':unsupported_store') ? 'Ignorada: ainda não fazemos conversão de afiliado para essa loja.' : 'Mensagem fora das regras de encaminhamento que você configurou para este grupo.'
-  if (errorMsg.startsWith('skip:decrypt_failed')) return 'O WhatsApp não conseguiu decifrar essa mensagem na sua ponta. Costuma ser pontual.'
-  if (errorMsg.startsWith('skip:incoming_error')) return 'Tivemos um erro ao processar essa mensagem antes de enviar.'
-  if (errorMsg.startsWith('timeout:send')) return 'O envio para o grupo/canal de destino demorou demais e foi cancelado.'
-  if (errorMsg.startsWith('timeout:incoming')) return 'A leitura e o preparo dessa promoção demoraram demais. Costuma ser site de produto lento.'
-  if (errorMsg.startsWith('error:queue_full')) return 'Fila interna de envios cheia neste instante — tente novamente em alguns minutos.'
-  if (errorMsg.startsWith('error:worker_restart')) return 'O bot reiniciou enquanto essa mensagem estava esperando para ser enviada.'
-  if (errorMsg.startsWith('error:channel_forbidden')) return 'O bot não tem permissão para postar nesse canal. Verifique se ele ainda é admin.'
-  if (errorMsg.startsWith('error:channel_throttled')) return 'O WhatsApp limitou temporariamente os envios para esse canal. Tentaremos novamente.'
-  if (errorMsg.startsWith('error:baileys')) return 'O WhatsApp recusou o envio. Pode ser instabilidade momentânea.'
-  if (errorMsg.startsWith('error:conversion')) return `Não conseguimos converter o link em afiliado: ${errorMsg.slice('error:conversion:'.length)}`
-  if (errorMsg.startsWith('error:other')) return errorMsg.slice('error:other:'.length) || 'Falha não classificada.'
-  return errorMsg
-}
-
-function isRealGroup(jid) {
-  return typeof jid === 'string' && jid.includes('@') && jid !== 'skipped' && jid !== 'conversion'
-}
-
-function dayBucket(date, now) {
-  const d = new Date(date)
-  const startOfToday = new Date(now); startOfToday.setHours(0, 0, 0, 0)
-  const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60_000)
-  if (d >= startOfToday) return 'hoje'
-  if (d >= startOfYesterday) return 'ontem'
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-}
-
-// MessageLog (backend) -> item esperado pelo render da UI mobile.
-function toMobileItem(log, now) {
-  const status = STATUS_TO_UI[log.status] || 'ignorado'
-  const sentAt = new Date(log.sentAt)
-  const firstLine = String(log.messageText || '').split('\n').find(l => l.trim()) || ''
-  const produto = (firstLine || log.convertedUrl || log.originalUrl || '(sem texto)').slice(0, 80)
-  const source = isRealGroup(log.sourceGroup) ? 'auto' : 'manual'
-  return {
-    id: log.id,
-    status,
-    source,
-    hora: sentAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-    day: dayBucket(log.sentAt, now),
-    loja: PLATFORM_LABEL[String(log.platform || '').toLowerCase()] || log.platform || '—',
-    produto,
-    de: source === 'auto' ? (log.sourceGroupName || log.sourceGroup) : 'Você criou',
-    para: isRealGroup(log.destGroup) ? (log.destGroupName || log.destGroup) : null,
-    link: log.originalUrl || null,
-    conv: status === 'ok' && log.convertedUrl ? log.convertedUrl : null,
-    erro: status === 'falha' ? friendlyError(log.errorMsg) : null,
-    motivo: status === 'ignorado' ? friendlyError(log.errorMsg) : null,
-  }
-}
+import { mobileLogLinkActions, toMobileLogItem } from '@/lib/mobileLogs'
 
 const envStyles = {
   pageH: {
@@ -92,6 +14,13 @@ const envStyles = {
   },
   pageEyebrow: { fontSize: 12, color:'var(--ink-soft)' },
   pageTitle: { fontSize: 22, fontWeight: 600, color:'var(--ink)', letterSpacing:'-0.01em', marginTop: 2 },
+  refreshBtn: {
+    padding:'9px 13px', borderRadius: 999,
+    background:'var(--surface)', border:'1px solid var(--line)',
+    color:'var(--ink)', fontSize: 12, fontWeight: 700,
+    cursor:'pointer', fontFamily:'inherit',
+    display:'inline-flex', alignItems:'center', gap: 6,
+  },
 
   // Toolbar — busca + ritmo (icon) lado a lado
   toolbar: { padding:'0 16px 0', display:'flex', gap: 8 },
@@ -138,6 +67,12 @@ const envStyles = {
     padding:'1px 6px', borderRadius: 999,
     background: active ? 'rgba(255,255,255,0.15)' : 'var(--bg-soft)',
   }),
+  loadedHint: {
+    padding:'6px 20px 4px',
+    fontSize: 11.5,
+    color:'var(--ink-soft)',
+    lineHeight: 1.35,
+  },
 
   // Day separator
   daySep: {
@@ -233,13 +168,16 @@ const envStyles = {
   },
   exActions: { display:'flex', gap: 6, flexWrap:'wrap', marginTop: 2 },
   actionBtn: (kind) => ({
-    padding:'8px 14px', borderRadius: 999,
-    fontSize: 12, fontWeight: 600,
+    padding:'8px 12px', borderRadius: 999,
+    fontSize: 12, fontWeight: 700,
     cursor:'pointer', fontFamily:'inherit',
-    background: kind === 'primary' ? 'var(--ink)' : 'transparent',
+    textDecoration:'none',
+    display:'inline-flex', alignItems:'center', justifyContent:'center',
+    background: kind === 'primary' ? 'var(--ink)' : 'var(--surface)',
     color: kind === 'primary' ? 'white' : 'var(--ink)',
     border: kind === 'primary' ? '1px solid var(--ink)' : '1px solid var(--line)',
   }),
+  copiedHint: { fontSize: 11, color:'var(--success)', fontWeight: 700 },
 };
 
 export default function LogsPage() {
@@ -255,28 +193,35 @@ export default function LogsPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
+  const [copyNotice, setCopyNotice] = useState('');
+
+  const loadFirstPage = useCallback(async ({ silent = false, isActive = () => true } = {}) => {
+    if (!silent) setLoading(true);
+    setError('');
+    try {
+      const data = await api.logs('all', 1, 30);
+      if (!isActive()) return;
+      setRawLogs(Array.isArray(data?.logs) ? data.logs : []);
+      setTotal(Number(data?.total) || 0);
+      setPage(1);
+      setExpanded(null);
+    } catch (e) {
+      if (isActive()) setError(e.message || 'Não foi possível carregar os envios.');
+    } finally {
+      if (!silent && isActive()) setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
-    async function load() {
-      setLoading(true);
-      setError('');
-      try {
-        const data = await api.logs('all', 1, 30);
-        if (!active) return;
-        setRawLogs(Array.isArray(data?.logs) ? data.logs : []);
-        setTotal(Number(data?.total) || 0);
-        setPage(1);
-      } catch (e) {
-        if (active) setError(e.message || 'Não foi possível carregar os envios.');
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-    load();
-    return () => { active = false };
-  }, []);
-
+    const timer = window.setTimeout(() => {
+      loadFirstPage({ isActive: () => active });
+    }, 0);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [loadFirstPage]);
 
   const hasMoreLogs = rawLogs.length < total;
 
@@ -298,9 +243,21 @@ export default function LogsPage() {
     }
   }
 
+  async function copyLogLink(value, label) {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopyNotice(`${label} copiado`);
+      window.setTimeout(() => setCopyNotice(''), 1800);
+    } catch {
+      setCopyNotice('Não foi possível copiar neste navegador');
+      window.setTimeout(() => setCopyNotice(''), 2200);
+    }
+  }
+
   const items = useMemo(() => {
     const now = new Date();
-    return rawLogs.map(log => toMobileItem(log, now));
+    return rawLogs.map(log => toMobileLogItem(log, now));
   }, [rawLogs]);
 
   // Contadores dos chips a partir dos itens carregados (mantém chip e lista consistentes).
@@ -346,6 +303,12 @@ export default function LogsPage() {
           <div style={envStyles.pageEyebrow}>Tudo que sai do bot</div>
           <div style={envStyles.pageTitle}>Envios</div>
         </div>
+        <button type="button" style={envStyles.refreshBtn} onClick={() => loadFirstPage({ silent: rawLogs.length > 0 })} disabled={loading}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 12a9 9 0 0 1-15.5 6.2"/><path d="M3 12A9 9 0 0 1 18.5 5.8"/><path d="M18 2v4h4"/><path d="M6 22v-4H2"/>
+          </svg>
+          Atualizar
+        </button>
       </div>
 
       {/* Toolbar: busca + ritmo (icon button discreto) */}
@@ -372,13 +335,16 @@ export default function LogsPage() {
       </div>
 
       {/* Filtros em palavras claras */}
-      <div style={envStyles.chipRow}>
+      <div style={envStyles.chipRow} aria-label="Filtros — contagens somente dos envios carregados">
         {filters.map(f => (
-          <button key={f.key} type="button" onClick={() => setFilter(f.key)} style={envStyles.chip(filter === f.key)}>
+          <button key={f.key} type="button" onClick={() => setFilter(f.key)} style={envStyles.chip(filter === f.key)} title={`${f.n} envios carregados neste filtro`}>
             {f.label}
             <span style={envStyles.chipCount(filter === f.key)}>{f.n}</span>
           </button>
         ))}
+      </div>
+      <div style={envStyles.loadedHint}>
+        Contadores dos filtros mostram apenas os {items.length} envios carregados nesta tela{hasMoreLogs ? ` de ${total} no histórico.` : '.'}
       </div>
 
       {/* Lista */}
@@ -402,7 +368,7 @@ export default function LogsPage() {
           const it = row;
           const isExp = expanded === it.id;
           return (
-            <button key={it.id} type="button" style={envStyles.item(isExp)} onClick={() => setExpanded(isExp ? null : it.id)} aria-expanded={isExp} aria-label={`${it.produto}: ${statusLabel(it.status)}`}>
+            <div key={it.id} role="button" tabIndex={0} style={envStyles.item(isExp)} onClick={() => setExpanded(isExp ? null : it.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(isExp ? null : it.id); } }} aria-expanded={isExp} aria-label={`${it.produto}: ${statusLabel(it.status)}`}>
               <div style={envStyles.itemTop}>
                 <div style={envStyles.statusDot(it.status)}/>
                 <div style={envStyles.itemMain}>
@@ -460,6 +426,20 @@ export default function LogsPage() {
                           <div style={envStyles.exLinkSuccess}>{it.conv}</div>
                         </div>
                       )}
+                      {mobileLogLinkActions(it).length > 0 && (
+                        <div style={envStyles.exActions} onClick={(e) => e.stopPropagation()}>
+                          {mobileLogLinkActions(it).map((action) => action.kind === 'copy' ? (
+                            <button key={action.key} type="button" style={envStyles.actionBtn('secondary')} onClick={() => copyLogLink(action.value, action.key.includes('original') ? 'Link original' : 'Link convertido')}>
+                              {action.label}
+                            </button>
+                          ) : (
+                            <a key={action.key} style={envStyles.actionBtn('primary')} href={action.href} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                              {action.label}
+                            </a>
+                          ))}
+                          {copyNotice && <span style={envStyles.copiedHint}>{copyNotice}</span>}
+                        </div>
+                      )}
                       {it.erro && (
                         <div style={envStyles.errorBox}>
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" style={{flexShrink:0, marginTop: 1}}>
@@ -480,7 +460,7 @@ export default function LogsPage() {
                   )}
                 </div>
               </div>
-            </button>
+            </div>
           );
         })}
         {!loading && !error && hasMoreLogs && (

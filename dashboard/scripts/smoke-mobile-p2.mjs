@@ -32,17 +32,19 @@ includes('app/m/account/subscription/page.js', 'api.paymentsCheckout', 'subscrip
 includes('app/m/account/subscription/page.js', 'api.paymentsRecover', 'subscription must support payment recovery')
 includes('app/m/account/subscription/page.js', 'Indisponível', 'missing stats must show unavailable state')
 
-includes('app/m/config/preferences/page.js', 'api.saveConfig', 'preferences toggles must persist')
+includes('app/m/config/preferences/page.js', 'buildMobilePreferencesPayload', 'preferences must save only supported config fields')
 includes('app/m/config/preferences/page.js', 'setDraft', 'preferences must be controlled')
 excludes('app/m/config/preferences/page.js', 'alterada há 23 dias', 'preferences must not show fake account data')
 excludes('app/m/config/preferences/page.js', 'Verificação em 2 etapas', 'unsupported settings must be removed')
 
-includes('app/m/account/templates/page.js', 'api.saveConfig', 'templates must save to config')
-includes('app/m/account/templates/page.js', 'messageTemplates', 'templates must align with config field')
+includes('app/m/account/templates/page.js', 'getMobileTemplatePresetNotice', 'templates must disclose local preset behavior')
+excludes('app/m/account/templates/page.js', 'api.saveConfig', 'templates must not pretend backend persistence exists')
 excludes('app/m/account/templates/page.js', 'wa.me/achadosdasol', 'templates must not ship fake group links')
 excludes('app/m/account/templates/page.js', 'usado em 84%', 'templates must not fake usage metrics')
 
 includes('app/m/help/tutorial/page.js', 'mobileRoutes.offer', 'tutorial must link first offer flow')
+includes('app/m/op/converter/page.js', 'normalizeMobileConversionResults', 'converter must render per-item backend results')
+includes('app/m/op/converter/page.js', 'Copiar todos convertidos', 'converter must provide copy feedback/action for converted links')
 includes('app/m/help/tutorial/page.js', 'mobileRoutes.configPreferences', 'tutorial must link preferences/templates')
 includes('app/m/help/tutorial/page.js', 'mobileRoutes.logs', 'tutorial must link logs')
 

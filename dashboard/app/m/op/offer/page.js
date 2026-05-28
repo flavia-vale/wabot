@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard } from '@/components/mobile/MobileAsyncState'
@@ -10,7 +10,32 @@ import {
   COUPON_STORES,
   TEMPLATE_OPTIONS,
   buildMobileOfferText,
+  detectMobileOfferStoreKey,
+  getMobileOfferSingleLinkWarning,
+  isValidHttpUrl,
 } from '@/lib/mobileOfferComposer'
+
+const COUPON_LINKS_STORAGE_KEY = 'wabot.mobile.offer.couponLinks.v1'
+const DEFAULT_COUPON_LINKS = { shopee: '', mercadolivre: '', amazon: '', magazineluiza: '' }
+
+function readStoredCouponLinks() {
+  if (typeof window === 'undefined') return DEFAULT_COUPON_LINKS
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(COUPON_LINKS_STORAGE_KEY) || '{}')
+    return { ...DEFAULT_COUPON_LINKS, ...stored }
+  } catch {
+    return DEFAULT_COUPON_LINKS
+  }
+}
+
+function saveStoredCouponLinks(links) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(COUPON_LINKS_STORAGE_KEY, JSON.stringify(links))
+  } catch {
+    // localStorage indisponível: mantém os links editáveis só na sessão atual.
+  }
+}
 
 const criarStyles = {
   pageH: { padding:'18px 20px 0' },
@@ -176,6 +201,20 @@ const criarStyles = {
     borderRadius: 10,
     fontSize: 11.5, color:'var(--ink)', lineHeight: 1.45,
     display:'flex', alignItems:'flex-start', gap: 8,
+  },
+  inlineWarn: {
+    padding:'9px 11px',
+    background:'color-mix(in oklab, var(--warn) 10%, var(--surface))',
+    border:'1px solid color-mix(in oklab, var(--warn) 26%, var(--line))',
+    borderRadius: 9,
+    fontSize: 11.5, color:'var(--ink)', lineHeight: 1.45,
+  },
+  inlineInfo: {
+    padding:'9px 11px',
+    background:'var(--bg-soft)',
+    border:'1px solid var(--line)',
+    borderRadius: 9,
+    fontSize: 11.5, color:'var(--ink-soft)', lineHeight: 1.45,
   },
 
   // Form manual
@@ -457,12 +496,24 @@ export default function OfferPage() {
   const [bonuses, setBonuses] = useState('')
   const [groupBonus, setGroupBonus] = useState({ link: '', cta: '💜 Entra no nosso grupo:' })
   const [couponCta, setCouponCta] = useState('🎟 Mais cupons da {loja}:')
-  const [couponLinks, setCouponLinks] = useState({ shopee: '', mercadolivre: '', amazon: '', magazineluiza: '' })
-  const [selectedCouponStores, setSelectedCouponStores] = useState(['shopee', 'mercadolivre'])
+  const [couponLinks, setCouponLinks] = useState(DEFAULT_COUPON_LINKS)
+  const [selectedCouponStores] = useState(COUPON_STORES.map((store) => store.key))
+  const [baseOfferText, setBaseOfferText] = useState('')
   const [editorText, setEditorText] = useState('')
+  const [editorDirty, setEditorDirty] = useState(false)
+  const [bonusRegenerateNotice, setBonusRegenerateNotice] = useState('')
   const [groups, setGroups] = useState([])
   const [selectedDestinations, setSelectedDestinations] = useState([])
   const [sendFeedback, setSendFeedback] = useState('')
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    const timer = window.setTimeout(() => {
+      const urlFromQuery = new URLSearchParams(window.location.search).get('url')?.trim()
+      if (urlFromQuery) setInput((current) => current || urlFromQuery)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -477,6 +528,15 @@ export default function OfferPage() {
         if (active) setGroups([])
       })
     return () => { active = false }
+  }, [])
+
+
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setCouponLinks(readStoredCouponLinks())
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
   const handlePasteFromClipboard = async () => {
@@ -511,6 +571,7 @@ export default function OfferPage() {
     bonusMode = bonuses,
     overrides = {},
   ) {
+    const offerStoreKey = overrides.offerStoreKey ?? detectMobileOfferStoreKey({ product: nextProduct || {}, link: input || link })
     return buildMobileOfferText({
       product: nextProduct || {},
       manualProduct,
@@ -519,21 +580,43 @@ export default function OfferPage() {
       bonusMode,
       groupBonus: overrides.groupBonus || groupBonus,
       couponLinks: overrides.couponLinks || couponLinks,
-      selectedCouponStores: overrides.selectedCouponStores || selectedCouponStores,
+      selectedCouponStores,
       couponCta: overrides.couponCta || couponCta,
+      offerStoreKey,
     })
   }
 
-  function refreshEditorWithBonuses(nextBonusMode = bonuses, overrides = {}) {
-    setEditorText(buildOfferText(productData, convertedLink || input, selectedTemplate, nextBonusMode, overrides))
+  function setGeneratedOfferText(text) {
+    setBaseOfferText(text)
+    setEditorText(text)
+    setEditorDirty(false)
+    setBonusRegenerateNotice('')
   }
 
   function refreshEditorWithBonuses(nextBonusMode = bonuses, overrides = {}) {
-    setEditorText(buildOfferText(productData, convertedLink || input, selectedTemplate, nextBonusMode, overrides))
+    const nextText = buildOfferText(productData, convertedLink || input, selectedTemplate, nextBonusMode, overrides)
+    setBaseOfferText(nextText)
+    if (editorDirty) {
+      setBonusRegenerateNotice('Atualizar bônus vai regenerar a mensagem.')
+      return
+    }
+    setEditorText(nextText)
+    setBonusRegenerateNotice('')
+  }
+
+  function applyRegeneratedMessage() {
+    setEditorText(baseOfferText)
+    setEditorDirty(false)
+    setBonusRegenerateNotice('')
   }
 
   const handleConvert = async () => {
     if (!input.trim()) return
+    const singleLinkWarning = getMobileOfferSingleLinkWarning(input)
+    if (singleLinkWarning) {
+      setPasteFeedback(singleLinkWarning)
+      return
+    }
     setConverting(true)
     setSendFeedback('')
     try {
@@ -551,12 +634,12 @@ export default function OfferPage() {
         setProductData(null)
         setState('scrapeFail')
       }
-      setEditorText(buildOfferText(scraped, converted))
+      setGeneratedOfferText(buildOfferText(scraped, converted))
     } catch (e) {
       console.error('Conversion failed:', e)
       setConvertedLink(input)
       setState('noConverter')
-      setEditorText(buildOfferText(null, input))
+      setGeneratedOfferText(buildOfferText(null, input))
     } finally {
       setConverting(false)
     }
@@ -564,13 +647,13 @@ export default function OfferPage() {
 
   function updateTemplate(template) {
     setSelectedTemplate(template)
-    setEditorText(buildOfferText(productData, convertedLink || input, template, bonuses))
+    setGeneratedOfferText(buildOfferText(productData, convertedLink || input, template, bonuses))
   }
 
   function updateManualProduct(field, value) {
     const next = { ...manualProduct, [field]: value }
     setManualProduct(next)
-    setEditorText(buildOfferText({ title: next.title, price: next.price, oldPrice: next.oldPrice }, convertedLink || input))
+    setGeneratedOfferText(buildOfferText({ title: next.title, price: next.price, oldPrice: next.oldPrice }, convertedLink || input))
   }
 
   function toggleDestination(jid) {
@@ -601,6 +684,9 @@ export default function OfferPage() {
   const selectedNames = groups
     .filter((group) => selectedDestinations.includes(group.waJid || group.jid || group.id))
     .map((group) => group.name || group.subject || group.waJid || group.jid)
+  const singleLinkWarning = getMobileOfferSingleLinkWarning(input)
+  const currentOfferStoreKey = useMemo(() => detectMobileOfferStoreKey({ product: productData || {}, link: input || convertedLink }), [productData, input, convertedLink])
+  const currentOfferStore = COUPON_STORES.find((store) => store.key === currentOfferStoreKey)
 
   return (
     <MobileShell title="Conversor" active="criar">
@@ -611,7 +697,7 @@ export default function OfferPage() {
       </div>
 
       <div style={criarStyles.inputBlock}>
-        <div style={criarStyles.inputLabel}>Link do produto</div>
+        <div style={criarStyles.inputLabel}>Link do produto · apenas 1 por oferta</div>
         <div style={criarStyles.inputRow}>
           <div style={criarStyles.inputFieldWrap}>
             {isEmpty ? (
@@ -625,7 +711,7 @@ export default function OfferPage() {
             ) : (
               <>
                 <div style={criarStyles.inputField(true)}>{linkOriginal}</div>
-                <button type="button" onClick={() => { setInput(''); setState('empty'); setProductData(null); setConvertedLink(''); setExpand(false); setPasteFeedback(''); setEditorText('') }} style={criarStyles.inputClear} aria-label="Limpar link">
+                <button type="button" onClick={() => { setInput(''); setState('empty'); setProductData(null); setConvertedLink(''); setExpand(false); setPasteFeedback(''); setGeneratedOfferText('') }} style={criarStyles.inputClear} aria-label="Limpar link">
                   ×
                 </button>
               </>
@@ -633,12 +719,12 @@ export default function OfferPage() {
           </div>
           {isEmpty && <button type="button" onClick={handlePasteFromClipboard} style={criarStyles.pasteBtn}>Colar</button>}
         </div>
-        {isEmpty && <div style={criarStyles.inputHint}>{pasteFeedback || 'Toque em Colar para preencher com o link copiado.'}</div>}
+        {isEmpty && <div style={{...criarStyles.inputHint, color: singleLinkWarning ? 'var(--danger)' : 'var(--ink-faint)'}}>{singleLinkWarning || pasteFeedback || 'Cole apenas um link de produto por oferta. Para vários links, use o Conversor.'}</div>}
       </div>
 
       {isEmpty && input.trim() && !converting && (
         <div style={criarStyles.ctaWrap}>
-          <button type="button" onClick={handleConvert} style={criarStyles.cta}>
+          <button type="button" onClick={handleConvert} disabled={Boolean(singleLinkWarning)} style={{...criarStyles.cta, opacity: singleLinkWarning ? 0.6 : 1, cursor: singleLinkWarning ? 'not-allowed' : 'pointer'}}>
             <MobileIcon name="sparkles" size={15}/> Converter <MobileIcon name="arrow" size={14}/>
           </button>
         </div>
@@ -721,15 +807,152 @@ export default function OfferPage() {
           </div>
 
           <div style={criarStyles.editorWrap}>
-            <textarea style={criarStyles.editor} value={editorText} onChange={(event) => setEditorText(event.target.value)} />
+            <textarea style={criarStyles.editor} value={editorText} onChange={(event) => { setEditorText(event.target.value); setEditorDirty(event.target.value !== baseOfferText) }} />
+              {editorDirty && <div style={{...criarStyles.inlineInfo, marginTop: 8}}>Você editou a mensagem manualmente. Atualizar bônus vai regenerar a mensagem.</div>}
           </div>
 
           <div style={criarStyles.sectionH}>
             <div style={criarStyles.sectionTitle}>Adicionar à mensagem</div>
           </div>
           <div style={criarStyles.sectionHint}>
-            Configure links extras do modelo sem sair da oferta. Só entra na mensagem quando o campo tiver link real.
+            Configure links extras do modelo sem sair da oferta. Atualizar bônus vai regenerar a mensagem.
           </div>
+          {bonusRegenerateNotice && (
+            <div style={{margin:'0 16px 10px', display:'grid', gap: 8}}>
+              <div style={criarStyles.inlineWarn}>{bonusRegenerateNotice}</div>
+              <button type="button" onClick={applyRegeneratedMessage} style={criarStyles.flatBtn('primary', true)}>Atualizar mensagem com bônus</button>
+            </div>
+          )}
+
+          {(() => {
+            const groupOn = bonuses === 'group' || bonuses === 'both'
+            const couponsOn = bonuses === 'coupons' || bonuses === 'both'
+            const toggleGroup = () => {
+              const next = groupOn ? (bonuses === 'both' ? 'coupons' : '') : (couponsOn ? 'both' : 'group')
+              setBonuses(next)
+              refreshEditorWithBonuses(next)
+            }
+            const toggleCoupons = () => {
+              const next = couponsOn ? (bonuses === 'both' ? 'group' : '') : (groupOn ? 'both' : 'coupons')
+              setBonuses(next)
+              refreshEditorWithBonuses(next)
+            }
+            const updateGroupBonus = (field, value) => {
+              const nextGroupBonus = { ...groupBonus, [field]: value }
+              setGroupBonus(nextGroupBonus)
+              refreshEditorWithBonuses(bonuses, { groupBonus: nextGroupBonus })
+            }
+            const updateCouponLink = (storeKey, value) => {
+              const nextCouponLinks = { ...couponLinks, [storeKey]: value }
+              setCouponLinks(nextCouponLinks)
+              saveStoredCouponLinks(nextCouponLinks)
+              refreshEditorWithBonuses(bonuses, { couponLinks: nextCouponLinks })
+            }
+            const updateCouponCta = (value) => {
+              setCouponCta(value)
+              refreshEditorWithBonuses(bonuses, { couponCta: value })
+            }
+            const groupLinkInvalid = groupBonus.link.trim() && !isValidHttpUrl(groupBonus.link)
+            const groupPreview = groupLinkInvalid
+              ? 'Link inválido. Use uma URL começando com http:// ou https://.'
+              : groupBonus.link.trim()
+                ? `${groupBonus.cta.trim() || 'Entre no nosso grupo:'}
+${groupBonus.link.trim()}`
+                : 'Preencha o link do grupo para ele aparecer na mensagem.'
+            const currentCouponLink = currentOfferStoreKey ? String(couponLinks[currentOfferStoreKey] || '').trim() : ''
+            const currentCouponInvalid = currentCouponLink && !isValidHttpUrl(currentCouponLink)
+            const couponPreview = !currentOfferStore
+              ? 'Não detectei a loja desta oferta. O cupom não será adicionado automaticamente.'
+              : currentCouponInvalid
+                ? `O link de cupom da ${currentOfferStore.nome} não é uma URL válida. Use http:// ou https://.`
+                : currentCouponLink
+                  ? `${(couponCta.trim() || 'Mais cupons da {loja}:').replace('{loja}', currentOfferStore.nome)}
+${currentCouponLink}`
+                  : `Preencha o link de cupom da ${currentOfferStore.nome}. Só esse link será usado nesta oferta.`
+
+            const groupHead = (on) => (
+              <button type="button" style={{...criarStyles.unifiedRowHead, width:'100%', border:'none', background:'transparent', padding:0, textAlign:'left', fontFamily:'inherit'}} onClick={toggleGroup} aria-pressed={on}>
+                <div style={criarStyles.bonusIcon(on)}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                </div>
+                <div style={criarStyles.bonusMain}>
+                  <div style={criarStyles.bonusTitle}>Link do seu grupo</div>
+                  <div style={criarStyles.bonusSub}>{on ? 'aparece no fim da mensagem quando houver link' : 'convida pra entrar no seu grupo principal'}</div>
+                </div>
+                <div style={criarStyles.bonusToggle(on)}><div style={criarStyles.bonusKnob(on)}/></div>
+              </button>
+            )
+            const couponsHead = (on) => (
+              <button type="button" style={{...criarStyles.unifiedRowHead, width:'100%', border:'none', background:'transparent', padding:0, textAlign:'left', fontFamily:'inherit'}} onClick={toggleCoupons} aria-pressed={on}>
+                <div style={criarStyles.bonusIcon(on)}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M20 12V8H4v8h16v-4z"/><path d="M9 8v8M15 8v8"/>
+                  </svg>
+                </div>
+                <div style={criarStyles.bonusMain}>
+                  <div style={criarStyles.bonusTitle}>Página de cupons da loja</div>
+                  <div style={criarStyles.bonusSub}>{on ? 'usa somente o cupom da loja desta oferta' : 'links ficam salvos neste navegador e editáveis'}</div>
+                </div>
+                <div style={criarStyles.bonusToggle(on)}><div style={criarStyles.bonusKnob(on)}/></div>
+              </button>
+            )
+
+            return (
+              <div style={{...criarStyles.unifiedCard, marginTop: 4}}>
+                <div style={criarStyles.unifiedRow(groupOn, false)}>
+                  {groupHead(groupOn)}
+                  {groupOn && (
+                    <div style={criarStyles.unifiedBody}>
+                      <label style={criarStyles.bonusField}>
+                        <div style={criarStyles.bonusLabel}>Link de convite</div>
+                        <input style={criarStyles.bonusInput} value={groupBonus.link} onChange={(event) => updateGroupBonus('link', event.target.value)} placeholder="https://chat.whatsapp.com/..." />
+                        {groupLinkInvalid && <div style={{...criarStyles.inlineWarn, marginTop: 6}}>Use uma URL começando com http:// ou https://.</div>}
+                      </label>
+                      <label style={criarStyles.bonusField}>
+                        <div style={criarStyles.bonusLabel}>Chamada (CTA)</div>
+                        <input style={criarStyles.bonusInputText} value={groupBonus.cta} onChange={(event) => updateGroupBonus('cta', event.target.value)} />
+                      </label>
+                      <div>
+                        <div style={criarStyles.bonusPreviewLabel}><MobileIcon name="check" size={10} stroke={3}/>como vai aparecer</div>
+                        <div style={criarStyles.bonusPreview}>{groupPreview}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div style={criarStyles.unifiedRow(couponsOn, true)}>
+                  {couponsHead(couponsOn)}
+                  {couponsOn && (
+                    <div style={criarStyles.unifiedBody}>
+                      <div style={criarStyles.inlineInfo}>
+                        {currentOfferStore ? `Nesta oferta será usado apenas o link de cupom da ${currentOfferStore.nome}. Os links preenchidos ficam memorizados neste navegador para as próximas ofertas e continuam editáveis abaixo.` : 'Preencha os links de cupom por loja. Quando a loja da oferta for detectada, usamos apenas o link correspondente.'}
+                      </div>
+                      {COUPON_STORES.filter((store) => selectedCouponStores.includes(store.key)).map((store) => (
+                        <label key={store.key} style={criarStyles.bonusField}>
+                          <div style={criarStyles.storeRow}>
+                            <div style={criarStyles.storeBadge(store.cor)}>{store.nome.slice(0,2).toUpperCase()}</div>
+                            <span style={criarStyles.storeName}>Link {store.nome}</span>
+                          </div>
+                          <input style={{...criarStyles.bonusInput, marginTop: 6}} value={couponLinks[store.key] || ''} onChange={(event) => updateCouponLink(store.key, event.target.value)} placeholder="https://..." />
+                          {couponLinks[store.key]?.trim() && !isValidHttpUrl(couponLinks[store.key]) && <div style={{...criarStyles.inlineWarn, marginTop: 6}}>Este link não é uma URL válida. Use http:// ou https://.</div>}
+                        </label>
+                      ))}
+                      <label style={criarStyles.bonusField}>
+                        <div style={criarStyles.bonusLabel}>Chamada (CTA) · use {'{loja}'} pro nome</div>
+                        <input style={criarStyles.bonusInputText} value={couponCta} onChange={(event) => updateCouponCta(event.target.value)} />
+                      </label>
+                      <div>
+                        <div style={criarStyles.bonusPreviewLabel}><MobileIcon name="check" size={10} stroke={3}/>nesta oferta</div>
+                        <div style={criarStyles.bonusPreview}>{couponPreview}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
 
           {(() => {
             const groupOn = bonuses === 'group' || bonuses === 'both'

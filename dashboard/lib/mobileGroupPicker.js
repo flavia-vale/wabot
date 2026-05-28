@@ -3,7 +3,7 @@ export function getRoleForMobileGroupTab(tab) {
 }
 
 export function getWhatsAppGroupJid(group = {}) {
-  return group.waJid || group.jid || group.id || ''
+  return String(group.waJid || group.jid || group.id || '')
 }
 
 export function getWhatsAppGroupName(group = {}) {
@@ -11,7 +11,14 @@ export function getWhatsAppGroupName(group = {}) {
 }
 
 export function buildExistingJidRoleSet(groups = []) {
-  return new Set(groups.map((group) => `${group.waJid || group.jid}::${group.role}`))
+  return new Set(
+    groups
+      .map((group) => {
+        const waJid = getWhatsAppGroupJid(group).trim()
+        return waJid && group.role ? `${waJid}::${group.role}` : ''
+      })
+      .filter(Boolean)
+  )
 }
 
 export function sortWhatsAppGroupsForMobilePicker(groups = []) {
@@ -19,7 +26,7 @@ export function sortWhatsAppGroupsForMobilePicker(groups = []) {
 }
 
 export function getMobileGroupPickerItem(group = {}, role, existingJidRoles = new Set()) {
-  const waJid = getWhatsAppGroupJid(group)
+  const waJid = getWhatsAppGroupJid(group).trim()
   const name = getWhatsAppGroupName(group)
   const alreadyInCurrentRole = existingJidRoles.has(`${waJid}::${role}`)
   return {
@@ -28,5 +35,22 @@ export function getMobileGroupPickerItem(group = {}, role, existingJidRoles = ne
     kind: group.kind || 'group',
     disabled: alreadyInCurrentRole,
     pill: alreadyInCurrentRole ? 'já está na lista' : role === 'monitor' ? 'Monitorar' : 'Publicar',
+  }
+}
+
+export const MOBILE_GROUP_DUPLICATE_FEEDBACK = 'Este grupo já está cadastrado para monitorar/publicar.'
+
+export function prepareMobileGroupAddPayload(data = {}, role, existingJidRoles = new Set()) {
+  const waJid = getWhatsAppGroupJid(data).trim()
+  const name = String(data.name || data.subject || waJid).trim()
+  const kind = data.kind || 'group'
+
+  if (existingJidRoles.has(`${waJid}::${role}`)) {
+    return { ok: false, reason: 'duplicate', feedback: MOBILE_GROUP_DUPLICATE_FEEDBACK }
+  }
+
+  return {
+    ok: true,
+    payload: { waJid, name, role, kind },
   }
 }

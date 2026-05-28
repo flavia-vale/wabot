@@ -40,12 +40,35 @@ export const COUPON_STORES = [
   { key: 'magazineluiza', nome: 'Magalu', cor: '#0086FF' },
 ]
 
+const HTTP_URL_RE = /https?:\/\/[^\s]+/gi
+
 export function firstText(...values) {
   for (const value of values) {
     const text = String(value ?? '').trim()
     if (text) return text
   }
   return ''
+}
+
+export function isValidHttpUrl(value) {
+  const text = String(value || '').trim()
+  if (!text) return false
+  try {
+    const url = new URL(text)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+export function countMobileOfferHttpLinks(text = '') {
+  return String(text || '').match(HTTP_URL_RE)?.length || 0
+}
+
+export function getMobileOfferSingleLinkWarning(text = '') {
+  return countMobileOfferHttpLinks(text) > 1
+    ? 'Cole apenas um link por oferta. Para vários links, use o Conversor e crie uma oferta por produto.'
+    : ''
 }
 
 export function normalizeMobileOfferProduct(product = {}, manual = {}) {
@@ -63,6 +86,20 @@ export function getMobileOfferTemplateHeading(template) {
   return '✨ Achadinho do dia'
 }
 
+export function detectMobileOfferStoreKey({ product = {}, link = '' } = {}) {
+  const explicit = firstText(product?.conversion?.platform, product?.platform, product?.storeKey).toLowerCase()
+  if (COUPON_STORES.some((store) => store.key === explicit)) return explicit
+
+  const urlText = firstText(link, product?.finalUrl, product?.offerUrl)
+  if (!isValidHttpUrl(urlText)) return ''
+  const host = new URL(urlText).hostname.toLowerCase()
+  if (host.includes('shopee')) return 'shopee'
+  if (host.includes('mercadolivre') || host.includes('mercadolibre') || host.includes('meli.')) return 'mercadolivre'
+  if (host.includes('amazon') || host.includes('amzn.')) return 'amazon'
+  if (host.includes('magazineluiza') || host.includes('magalu')) return 'magazineluiza'
+  return ''
+}
+
 export function buildMobileOfferText({
   product = {},
   manualProduct = {},
@@ -73,6 +110,7 @@ export function buildMobileOfferText({
   couponLinks = {},
   selectedCouponStores = [],
   couponCta = '🎟 Mais cupons da {loja}:',
+  offerStoreKey = '',
 } = {}) {
   const normalized = normalizeMobileOfferProduct(product, manualProduct)
   const lines = [getMobileOfferTemplateHeading(template), '', normalized.title]
@@ -86,17 +124,19 @@ export function buildMobileOfferText({
   lines.push('', `👉 ${link}`)
 
   const groupLink = String(groupBonus?.link || '').trim()
-  if ((bonusMode === 'group' || bonusMode === 'both') && groupLink) {
+  if ((bonusMode === 'group' || bonusMode === 'both') && isValidHttpUrl(groupLink)) {
     lines.push('', String(groupBonus?.cta || '').trim() || 'Entre no nosso grupo:')
     lines.push(groupLink)
   }
 
   if (bonusMode === 'coupons' || bonusMode === 'both') {
-    const firstCouponStore = selectedCouponStores.find((storeKey) => String(couponLinks?.[storeKey] || '').trim())
-    if (firstCouponStore) {
-      const store = COUPON_STORES.find((item) => item.key === firstCouponStore)
+    const detectedStoreKey = offerStoreKey || detectMobileOfferStoreKey({ product, link })
+    const selectedOrDetected = selectedCouponStores.includes(detectedStoreKey) || !selectedCouponStores.length
+    const couponLink = String(couponLinks?.[detectedStoreKey] || '').trim()
+    if (detectedStoreKey && selectedOrDetected && isValidHttpUrl(couponLink)) {
+      const store = COUPON_STORES.find((item) => item.key === detectedStoreKey)
       lines.push('', (String(couponCta || '').trim() || 'Mais cupons da {loja}:').replace('{loja}', store?.nome || 'loja'))
-      lines.push(String(couponLinks[firstCouponStore] || '').trim())
+      lines.push(couponLink)
     }
   }
 
