@@ -68,12 +68,38 @@ async function readLimitedText(res) {
   return new TextDecoder().decode(body)
 }
 
-async function fetchHtml(url, { ua = BROWSER_UA, timeoutMs = HTML_FETCH_TIMEOUT_MS } = {}) {
+// UA mobile usado nas chamadas autenticadas ao ML — uma sessão logada
+// (cookie ssid) com esse UA evita o desafio anti-bot "suspicious-traffic"
+// que devolve a página /gz/account-verification em requests anônimos.
+const ML_MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
+
+function isMercadoLivreUrl(url) {
+  try {
+    return /(^|\.)mercado(livre|libre)\.com(\.br)?$/i.test(new URL(String(url)).hostname)
+  } catch {
+    return false
+  }
+}
+
+// Monta o header Cookie a partir das credenciais de sessão do ML
+// (mesmo formato usado por src/converters/mercadolivre.js).
+function buildMlCookieHeader(creds) {
+  if (!creds || typeof creds !== 'object') return ''
+  if (creds.cookie) return String(creds.cookie)
+  const pairs = []
+  if (creds.id) pairs.push(`id=${creds.id}`)
+  if (creds.csrf) pairs.push(`_csrf=${creds.csrf}`)
+  if (creds.ssid) pairs.push(`ssid=${creds.ssid}`)
+  return pairs.join('; ')
+}
+
+async function fetchHtml(url, { ua = BROWSER_UA, timeoutMs = HTML_FETCH_TIMEOUT_MS, cookieHeader = '' } = {}) {
   const res = await fetch(url, {
     headers: {
       'User-Agent': ua,
       Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+      ...(cookieHeader ? { Cookie: cookieHeader } : {}),
     },
     signal: AbortSignal.timeout(timeoutMs),
     redirect: 'follow',
@@ -426,10 +452,20 @@ function extractFromMercadoLivreLanding(html) {
 }
 
 export async function fetchProductInfo(url, opts = {}) {
+  // Para URLs do ML, usa a sessão autenticada do usuário (cookie ssid) e o UA
+  // mobile: sem isso o ML responde com a página anti-bot /gz/account-verification
+  // (title "Mercado Libre", sem og:title nem preço) e nada é extraído.
+  const mlCookieHeader = opts.mlCookieHeader || buildMlCookieHeader(opts.mlCredentials)
+  const fetchOpts = { ...opts }
+  if (mlCookieHeader && isMercadoLivreUrl(url)) {
+    fetchOpts.cookieHeader = mlCookieHeader
+    fetchOpts.ua = opts.ua || ML_MOBILE_UA
+  }
+
   let html = null
   let finalUrl = url
   try {
-    const fetched = await fetchHtml(url, opts)
+    const fetched = await fetchHtml(url, fetchOpts)
     html = fetched?.html ?? null
     finalUrl = fetched?.finalUrl || url
   } catch {
