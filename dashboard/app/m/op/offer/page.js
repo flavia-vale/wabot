@@ -20,6 +20,10 @@ const criarStyles = {
     fontSize: 11, fontWeight: 600, color:'var(--ink-soft)',
     textTransform:'uppercase', letterSpacing:'0.06em', marginBottom: 8,
   },
+  inputRow: {
+    display:'flex', alignItems:'stretch', gap: 8,
+  },
+  inputFieldWrap: { flex: 1, minWidth: 0, position:'relative' },
   inputField: (filled) => ({
     width:'100%',
     padding:'18px 16px',
@@ -34,6 +38,15 @@ const criarStyles = {
     transition: 'all .2s',
     wordBreak:'break-all', lineHeight: 1.4,
   }),
+  pasteBtn: {
+    width: 76, minHeight: 60, padding:'0 12px',
+    borderRadius: 14, border:'1.5px solid var(--ink)',
+    background:'var(--ink)', color:'white',
+    display:'inline-flex', alignItems:'center', justifyContent:'center', gap: 6,
+    fontSize: 12.5, fontWeight: 700, fontFamily:'inherit',
+    cursor:'pointer', boxShadow:'0 10px 22px rgba(15, 23, 42, 0.12)',
+    flexShrink: 0,
+  },
   inputHint: {
     fontSize: 11.5, color:'var(--ink-faint)',
     marginTop: 8, display:'flex', alignItems:'center', gap: 6,

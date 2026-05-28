@@ -13,7 +13,7 @@ import { getHealth as getChannelHealth } from '../../core/channelHealth.js'
 import { captureSnapshot } from '../../jobs/channelSnapshot.js'
 import { lintChannelTitle, lintCopyTemplate } from '../../core/copyLinter.js'
 import { recomputeScore as recomputeReportRiskScore } from '../../core/reportRiskScore.js'
-import { recordProbeSeen } from '../../core/channelProbe.js'
+import { registerProbeEvidence, resolveLatestSentForGroup } from '../../core/probeEvidence.js'
 import { FORWARD_MODE, NO_LINK_SCOPE, normalizeForwardingPolicy } from '../../forwardingPolicy.js'
 import { buildFeatureGateError, canUseAdvancedPreservation, canUseChannels, FEATURE_CODES } from '../../billing/plans.js'
 
@@ -335,7 +335,16 @@ export async function groupsRoutes(app, opts = {}) {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo/canal não encontrado' })
     if (group.kind !== JID_KIND.CHANNEL) return reply.code(400).send({ error: 'probe só vale pra canais' })
-    await recordProbeSeen(group.id)
+    const cfg = await db.botConfig.findUnique({ where: { userId: req.user.sub } })
+    const latestSentAt = await resolveLatestSentForGroup({ userId: req.user.sub, groupWaJid: group.waJid }, { db })
+    await registerProbeEvidence({
+      userId: req.user.sub,
+      groupId: group.id,
+      probeSessionId: cfg?.probeAccountSessionId || 'manual',
+      sentAt: latestSentAt,
+      messageFingerprint: latestSentAt ? `${group.id}:${Math.floor(new Date(latestSentAt).getTime() / 60000)}` : null,
+      matchSource: 'manual-ping-fallback',
+    }, { db })
     return { ok: true, groupId: group.id }
   })
 

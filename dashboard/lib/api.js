@@ -315,6 +315,10 @@ export const api = {
   preservationFollows: (limit = 20) => apiFetch(`/api/preservation/monitoring/follows?limit=${limit}`),
   preservationSnapshots: () => apiFetch('/api/preservation/monitoring/snapshots'),
   preservationProbe: () => apiFetch('/api/preservation/monitoring/probe'),
+  preservationProbeSessionStart: () => apiFetch('/api/preservation/probe/session/start', { method: 'POST' }),
+  preservationProbeSessionStatus: () => apiFetch('/api/preservation/probe/session/status'),
+  preservationProbeSessionStop: () => apiFetch('/api/preservation/probe/session/stop', { method: 'POST' }),
+  preservationProbeSessionSelect: (probeAccountSessionId) => apiFetch('/api/preservation/probe/session/select', { method: 'POST', body: JSON.stringify({ probeAccountSessionId }) }),
   preservationClicks: () => apiFetch('/api/preservation/monitoring/clicks'),
 
   logs: (status = 'all', page = 1, limit = 20) =>
