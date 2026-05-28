@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
@@ -20,16 +20,12 @@ const VARIABLES = ['{produto}', '{preço}', '{preço_de}', '{link}', '{loja}']
 export default function TemplatesPage() {
   useMobileRoutePerf('m/account/templates')
   const router = useRouter()
-  const [templates, setTemplates] = useState([])
+  const [templates, setTemplates] = useState(() => loadAllTemplates())
   const [mode, setMode] = useState('list')
   const [editingKey, setEditingKey] = useState(null)
   const [editName, setEditName] = useState('')
   const [editBody, setEditBody] = useState('')
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => { setTemplates(loadAllTemplates()) }, 0)
-    return () => window.clearTimeout(timer)
-  }, [])
 
   const editingTemplate = templates.find((t) => t.key === editingKey) || null
 
