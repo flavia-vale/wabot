@@ -1,8 +1,10 @@
-'use client'
-
-import { MobileShell } from '@/components/mobile/MobileShell'
-import { MobileIcon } from '@/components/mobile/MobileIcons'
-import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+// HOME v2 — princípio: dizer 3 coisas, nessa ordem.
+// 1. Está tudo ok? (alerta no topo se NÃO)
+// 2. O que aconteceu hoje (resumo factual, sem vibe)
+// 3. O que dá pra fazer agora (1 ação primária + 2 atalhos)
+//
+// Cortado da v1: "O espelhamento está fluindo." (vibe), mini stats triplicados,
+// 4 quick-actions (uma era status disfarçado), upsell PRO (vai pra Conta).
 
 const homeStyles = {
   // Alerta inline (só quando há falhas/desconexões)
@@ -192,7 +194,7 @@ const homeStyles = {
 };
 
 // Sparkline mini para o foot do hero
-function HomeSparkline() {
+const HomeSparkline = () => {
   const data = [2, 4, 3, 6, 8, 5, 9, 12, 14, 10, 13, 16, 14, 18, 22, 19, 24, 21, 26, 28, 25, 30, 32, 28];
   const max = Math.max(...data);
   const w = 100, h = 14;
@@ -202,24 +204,21 @@ function HomeSparkline() {
       <polyline points={points} fill="none" stroke="rgba(217,207,234,0.7)" strokeWidth="1.4" strokeLinecap="round"/>
     </svg>
   );
-}
+};
 
-export default function MobileHomePage() {
-  useMobileRoutePerf('m/home')
-  const checklistDone = 5
-  const hasAlert = true
-  const isOnboarding = checklistDone < 5
+const MobileHome = ({ checklistDone = 5, hasAlert = true }) => {
+  const isOnboarding = checklistDone < 5;
 
   const checklist = [
-    { label: 'Suas afiliadas (Shopee, ML…)', done: true },
-    { label: 'Conectar WhatsApp',             done: true },
-    { label: '1 grupo de origem',             done: true },
-    { label: '1 grupo de destino',            done: true },
-    { label: 'Ligar o espelhamento',          done: false, current: true },
-  ]
+    {label:'Suas afiliadas (Shopee, ML…)',    done: true},
+    {label:'Conectar WhatsApp',               done: true},
+    {label:'1 grupo de origem',                done: true},
+    {label:'1 grupo de destino',               done: true},
+    {label:'Ligar o espelhamento',             done: false, current: true},
+  ];
 
   return (
-    <MobileShell title="Conversor" active="inicio" hasAlert={hasAlert}>
+    <MobileFrame title="Conversor" active="inicio">
       {/* Alerta inline — só quando há problemas reais */}
       {hasAlert && !isOnboarding && (
         <div style={homeStyles.alert}>
@@ -232,7 +231,7 @@ export default function MobileHomePage() {
             <div style={homeStyles.alertTitle}>3 envios falharam hoje</div>
             <div style={homeStyles.alertSub}>AliExpress desconectou · toque para resolver</div>
           </div>
-          <MobileIcon name="arrow" size={14}/>
+          <Icon name="arrow" size={14}/>
         </div>
       )}
 
@@ -295,7 +294,7 @@ export default function MobileHomePage() {
                 borderBottom: i === a.length-1 ? 'none' : '1px solid var(--line)',
               }}>
                 <div style={homeStyles.setupCheck(c.done)}>
-                  {c.done && <MobileIcon name="check" size={11} stroke={3}/>}
+                  {c.done && <Icon name="check" size={11} stroke={3}/>}
                 </div>
                 <span style={homeStyles.setupItemLabel(c.done)}>{c.label}</span>
                 {c.current && <button style={homeStyles.setupItemAction}>Fazer</button>}
@@ -309,13 +308,13 @@ export default function MobileHomePage() {
       <div style={homeStyles.primaryWrap}>
         <button style={homeStyles.primaryBtn}>
           <div style={homeStyles.primaryIcon}>
-            <MobileIcon name="sparkles" size={20}/>
+            <Icon name="sparkles" size={20}/>
           </div>
           <div style={homeStyles.primaryText}>
             <div style={homeStyles.primaryTitle}>Criar oferta agora</div>
             <div style={homeStyles.primarySub}>cole um link e a gente faz o resto</div>
           </div>
-          <MobileIcon name="arrow" size={16}/>
+          <Icon name="arrow" size={16}/>
         </button>
       </div>
 
@@ -374,6 +373,8 @@ export default function MobileHomePage() {
       )}
 
       <div style={{height: 20}}/>
-    </MobileShell>
-  )
-}
+    </MobileFrame>
+  );
+};
+
+window.MobileHome = MobileHome;

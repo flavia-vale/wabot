@@ -1,4 +1,40 @@
 import db from '../../db.js'
+import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
+
+// Cache leve do /summary — métricas não precisam ser real-time-real-time.
+// Chave: `${userId}:${period}`. TTL curto para não pesar no banco em refresh
+// frenético do painel.
+const SUMMARY_TTL_MS = 30_000
+const summaryCache = new Map()
+
+function getCachedSummary(key) {
+  const hit = summaryCache.get(key)
+  if (!hit) return null
+  if (hit.expiresAt < Date.now()) {
+    summaryCache.delete(key)
+    return null
+  }
+  return hit.payload
+}
+
+function setCachedSummary(key, payload) {
+  summaryCache.set(key, { payload, expiresAt: Date.now() + SUMMARY_TTL_MS })
+}
+
+function resolvePeriodRange(period) {
+  const now = new Date()
+  const to = now
+  let from
+  if (period === 'today') {
+    from = new Date(now)
+    from.setHours(0, 0, 0, 0)
+  } else if (period === '30d') {
+    from = new Date(now.getTime() - 30 * 24 * 60 * 60_000)
+  } else {
+    from = new Date(now.getTime() - 7 * 24 * 60 * 60_000)
+  }
+  return { from, to }
+}
 
 export async function logsRoutes(app) {
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
@@ -81,5 +117,132 @@ export async function logsRoutes(app) {
   app.delete('/clear', { onRequest: [app.authenticate] }, async (req) => {
     await db.messageLog.deleteMany({ where: { userId: req.user.sub } })
     return { ok: true }
+  })
+
+  // Resumo agregado para os cards da página de Logs do cliente.
+  // Conta sucessos, bloqueios por proteção (dedup) ou configuração, timeouts
+  // e falhas reais no período pedido. As categorias vêm do errorTaxonomy.
+  app.get('/summary', { onRequest: [app.authenticate] }, async (req) => {
+    const userId = req.user.sub
+    const rawPeriod = String(req.query?.period || '7d').toLowerCase()
+    const period = ['today', '7d', '30d'].includes(rawPeriod) ? rawPeriod : '7d'
+    const cacheKey = `${userId}:${period}`
+    const cached = getCachedSummary(cacheKey)
+    if (cached) return cached
+
+    const { from, to } = resolvePeriodRange(period)
+
+    const logs = await db.messageLog.findMany({
+      where: { userId, sentAt: { gte: from, lte: to } },
+      select: { status: true, errorMsg: true, sourceGroup: true, destGroup: true, dedupHits: true },
+    })
+
+    const counts = {
+      success: 0,
+      skippedDedup: 0,
+      skippedConfig: 0,
+      timeoutTotal: 0,
+      errorOther: 0,
+      inFlight: 0,
+    }
+    const sourceAgg = new Map()
+    const destAgg = new Map()
+
+    for (const log of logs) {
+      const hits = Number(log.dedupHits) || 0
+      if (log.status === 'queued' || log.status === 'sending') {
+        counts.inFlight++
+        continue
+      }
+      if (log.status === 'success') {
+        counts.success++
+        // Repostas agregadas nesta linha (envio bem-sucedido + N duplicatas
+        // bloqueadas depois) entram no card de "bloqueadas por repetição".
+        counts.skippedDedup += hits
+        const cur = sourceAgg.get(log.sourceGroup) || { sent: 0, blocked: 0 }
+        cur.sent++
+        cur.blocked += hits
+        sourceAgg.set(log.sourceGroup, cur)
+        if (log.destGroup && log.destGroup !== 'skipped' && log.destGroup !== 'conversion') {
+          const dcur = destAgg.get(log.destGroup) || { sent: 0, errors: 0 }
+          dcur.sent++
+          destAgg.set(log.destGroup, dcur)
+        }
+        continue
+      }
+
+      const category = categorizeErrorMsg(log.errorMsg)
+
+      if (category === ERROR_CATEGORIES.DEDUP) {
+        // Fallback row (não havia linha original encontrável). +1 pela linha
+        // + N pelas repetições agregadas nela.
+        counts.skippedDedup += 1 + hits
+        const cur = sourceAgg.get(log.sourceGroup) || { sent: 0, blocked: 0 }
+        cur.blocked += 1 + hits
+        sourceAgg.set(log.sourceGroup, cur)
+        continue
+      }
+      if (category === ERROR_CATEGORIES.CONFIG_BLOCK) {
+        counts.skippedConfig++
+        continue
+      }
+      if (category === ERROR_CATEGORIES.TIMEOUT) {
+        counts.timeoutTotal++
+      } else if (log.status === 'error') {
+        // Tudo que sobrou em status='error' e não é timeout vira "outras falhas":
+        // queue_full, worker_restart, baileys, channel_forbidden/throttled,
+        // conversion, outros legados não classificados.
+        counts.errorOther++
+      } else {
+        // skip:decrypt_failed, skip:incoming_error, etc. — descarte técnico
+        // que não interessa ao card. Contamos como "outras falhas" só se
+        // ainda forem 'error'; senão ignoramos (caem em status='skipped' não
+        // mapeado para card específico).
+      }
+
+      if (log.destGroup && log.destGroup !== 'skipped' && log.destGroup !== 'conversion' && log.status === 'error') {
+        const dcur = destAgg.get(log.destGroup) || { sent: 0, errors: 0 }
+        dcur.errors++
+        destAgg.set(log.destGroup, dcur)
+      }
+    }
+
+    const deliveryDenominator = counts.success + counts.timeoutTotal + counts.errorOther
+    const deliveryRate = deliveryDenominator > 0
+      ? counts.success / deliveryDenominator
+      : null
+
+    // Resolve nomes amigáveis dos grupos para os top lists.
+    const groups = await db.group.findMany({ where: { userId } })
+    const groupMap = Object.fromEntries(groups.map(g => [g.waJid, g.name]))
+    const nameFor = (jid) => groupMap[jid] || jid
+
+    const topSources = Array.from(sourceAgg.entries())
+      .map(([jid, v]) => ({ jid, name: nameFor(jid), sent: v.sent, blocked: v.blocked }))
+      .sort((a, b) => (b.sent + b.blocked) - (a.sent + a.blocked))
+      .slice(0, 5)
+
+    const topDestinations = Array.from(destAgg.entries())
+      .map(([jid, v]) => ({ jid, name: nameFor(jid), sent: v.sent, errors: v.errors }))
+      .sort((a, b) => b.sent - a.sent)
+      .slice(0, 5)
+
+    const lastSendAt = await db.messageLog.findFirst({
+      where: { userId, status: 'success' },
+      orderBy: { sentAt: 'desc' },
+      select: { sentAt: true },
+    })
+
+    const payload = {
+      period,
+      range: { from: from.toISOString(), to: to.toISOString() },
+      counts,
+      deliveryRate,
+      topSources,
+      topDestinations,
+      lastSendAt: lastSendAt?.sentAt?.toISOString?.() || null,
+    }
+    setCachedSummary(cacheKey, payload)
+    return payload
   })
 }
