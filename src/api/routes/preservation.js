@@ -269,10 +269,13 @@ export async function preservationRoutes(app) {
         misses24h: ev?.misses24h ?? 0,
       }
     })
+    const probeMode = process.env.PROBE_MODE === 'full' ? 'full' : 'manual_fallback'
     return {
       enabled: Boolean(cfg?.probeEnabled),
       probeAccountSessionId: cfg?.probeAccountSessionId ?? null,
       sessionState: (await getProbeSessionSnapshot(req.user.sub)).state,
+      probeMode,
+      telemetryConfidence: probeMode === 'full' ? 'high' : 'medium',
       items,
     }
   })

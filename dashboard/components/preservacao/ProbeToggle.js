@@ -28,7 +28,18 @@ export function ProbeToggle({ value, onChange, disabled, probeAccountSessionId }
   }
 
   useEffect(() => {
-    refreshStatus()
+    let active = true
+    api.preservationProbeSessionStatus()
+      .then((out) => {
+        if (!active) return
+        setSession(out?.session || null)
+        if (!sessionInput && out?.session?.sessionId) setSessionInput(out.session.sessionId)
+      })
+      .catch((err) => {
+        if (!active) return
+        setMsg(err?.message || 'Falha ao carregar status da sessão probe.')
+      })
+    return () => { active = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -61,7 +72,7 @@ export function ProbeToggle({ value, onChange, disabled, probeAccountSessionId }
     <fieldset className="bg-white rounded-2xl shadow p-5">
       <legend className="text-base font-semibold text-gray-800">🔭 Probe externo</legend>
       <p className="text-xs text-gray-500 mb-3">
-        Configure uma segunda conta WhatsApp como observadora. Ela valida se as mensagens chegam no canal e ajuda a detectar risco de shadowban.
+        Configure uma conta observadora para monitoramento. No modo atual (manual_fallback), a confirmação depende de pings de observação e não de leitura automática nativa do WhatsApp.
       </p>
 
       <div className="grid gap-2 mb-3 rounded-lg border border-slate-200 p-3 bg-slate-50">
@@ -108,6 +119,7 @@ export function ProbeToggle({ value, onChange, disabled, probeAccountSessionId }
       <p className="text-[11px] text-gray-500 mt-2">
         Conta probe vinculada no config: <span className="font-mono">{probeAccountSessionId ?? 'nenhuma'}</span>.
       </p>
+      <p className="mt-2 text-[11px] text-amber-700">Modo atual: <strong>manual_fallback</strong> (beta). Use os dados como sinal preventivo, não como prova absoluta de entrega.</p>
       {msg ? <p className="mt-2 text-xs text-slate-600">{msg}</p> : null}
     </fieldset>
   )

@@ -33,7 +33,7 @@ export function ProbeStatus() {
         <div>
           <h3 className="font-semibold text-gray-800 text-sm">🔭 Observador externo</h3>
           <p className="text-xs text-gray-500">
-            A conta observadora confirma entrega por canal e expõe latência de confirmação para identificar risco antes de queda total.
+            Painel de sinais de observação. Em modo manual_fallback, os dados são estimativas operacionais (não confirmação nativa ponta a ponta).
           </p>
         </div>
         <button onClick={load} className="text-xs text-green-700 hover:underline">Atualizar</button>
@@ -45,6 +45,8 @@ export function ProbeStatus() {
           <p className="text-xs text-gray-700 mb-2">
             Estado: <strong>{data.enabled ? 'Ativado' : 'Desativado'}</strong>
             <span className="ml-2 text-gray-500">Sessão: {STATE_LABEL[data.sessionState] || 'Desconhecida'}</span>
+            <span className="ml-2 text-gray-500">Modo: {data.probeMode || 'manual_fallback'}</span>
+            <span className="ml-2 text-gray-500">Confiança: {data.telemetryConfidence || 'medium'}</span>
           </p>
           {data.items?.length > 0 && (
             <ul className="text-xs space-y-1">
@@ -55,7 +57,7 @@ export function ProbeStatus() {
                     <span className="text-gray-400">{it.lastProbeSeenAt ? `visto ${new Date(it.lastProbeSeenAt).toLocaleString('pt-BR')}` : 'nunca'}</span>
                   </div>
                   <div className="text-[11px] text-slate-500 mt-0.5">
-                    Latência: {it.lastLatencyMs != null ? `${Math.round(it.lastLatencyMs / 1000)}s` : '—'} · misses 24h: {it.misses24h ?? 0}
+                    Latência estimada: {it.lastLatencyMs != null ? `${Math.round(it.lastLatencyMs / 1000)}s` : '—'} · misses 24h (estimado): {it.misses24h ?? 0}
                   </div>
                 </li>
               ))}
