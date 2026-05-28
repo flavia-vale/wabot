@@ -191,8 +191,10 @@ export default function AccountPage() {
   const firstName = name.split(' ')[0]
   const initials = name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
   const plan = user?.plan?.toUpperCase() || 'FREE'
-  const planPrice = user?.plan === 'pro' ? 'R$ 39/mês' : 'Grátis'
-  const renewDate = user?.subscriptionRenewalAt ? new Date(user.subscriptionRenewalAt).toLocaleDateString('pt-BR') : ''
+  const isPro = user?.plan === 'pro'
+  const planPrice = isPro ? 'R$ 39/mês' : 'Grátis'
+  const accessDate = user?.accessExpiresAt ? new Date(user.accessExpiresAt).toLocaleDateString('pt-BR') : ''
+  const renewLabel = isPro ? 'renova em' : 'válido até'
   const connectedLabel = session?.connectedAt ? `desde ${new Date(session.connectedAt).toLocaleDateString('pt-BR')}` : 'conectado'
 
   return (
@@ -211,7 +213,7 @@ export default function AccountPage() {
       {user?.plan && (
         <div style={contaStyles.plan}>
           <div style={contaStyles.planMain}>
-            <div style={contaStyles.planTitle}>{planPrice}{renewDate ? ` · renova em ${renewDate}` : ''}</div>
+            <div style={contaStyles.planTitle}>{planPrice}{accessDate ? ` · ${renewLabel} ${accessDate}` : ''}</div>
             <div style={contaStyles.planSub}>incluído: espelhamento e reescrita por IA</div>
           </div>
           <button type="button" onClick={() => router.push(mobileRoutes.accountSubscription)} style={contaStyles.planBtn}>Gerenciar</button>

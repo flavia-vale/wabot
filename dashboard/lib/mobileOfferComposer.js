@@ -1,5 +1,15 @@
 export const TEMPLATE_OPTIONS = [
   {
+    key: 'simples',
+    name: 'Simples',
+    preview: `🛍️ [produto]
+
+De R$ 499
+💥 Por R$ 398
+
+🛒 Compre aqui 👉 link`,
+  },
+  {
     key: 'achadinho',
     name: 'Achadinho ✨',
     preview: `✨ Achadinho do dia
