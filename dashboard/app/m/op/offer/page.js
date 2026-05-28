@@ -433,7 +433,7 @@ export default function OfferPage() {
   const [productData, setProductData] = useState(null)
   const [convertedLink, setConvertedLink] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState('achadinho')
-  const [bonuses, setBonuses] = useState('both')
+  const [bonuses, setBonuses] = useState('')
   const bonusLayout = 'unified'
 
   const handleConvert = async () => {
@@ -571,15 +571,15 @@ export default function OfferPage() {
             </div>
           </div>
 
-          {productDetected && (
+          {productDetected && productData && (
             <div style={criarStyles.productCard}>
-              <div style={criarStyles.productImg}>IMG</div>
+              <div style={criarStyles.productImg}>{productData.imageUrl ? '🖼' : 'IMG'}</div>
               <div style={criarStyles.productInfo}>
-                <div style={criarStyles.productTitle}>Sandália Bege Verão 2026 — Conforto Anatômico</div>
+                <div style={criarStyles.productTitle}>{productData.title || 'Produto'}</div>
                 <div style={criarStyles.productPrices}>
-                  <span style={criarStyles.priceNow}>R$ 39,90</span>
-                  <span style={criarStyles.priceWas}>R$ 79,90</span>
-                  <span style={criarStyles.pill}>−50%</span>
+                  <span style={criarStyles.priceNow}>{productData.priceNow || 'R$ --'}</span>
+                  {productData.priceWas && <span style={criarStyles.priceWas}>{productData.priceWas}</span>}
+                  {productData.discount && <span style={criarStyles.pill}>−{productData.discount}%</span>}
                 </div>
               </div>
             </div>
@@ -687,7 +687,13 @@ export default function OfferPage() {
 
           {/* Editor */}
           <div style={criarStyles.editorWrap}>
-            <textarea style={criarStyles.editor} defaultValue={`✨ Achadinho do dia\n\nSandália Bege Verão 2026 — só hoje por *R$ 39,90* com frete grátis!\n\nDe ~R$ 79,90~ por R$ 39,90 🔥\n\n👉 ${isNoConv ? linkOriginal : linkAfiliada}${bonuses === 'both' || bonuses === 'coupons' ? '\n\n🎟 Mais cupons da Shopee:\ns.shopee.com.br/cupons-sol' : ''}${bonuses === 'both' || bonuses === 'group' ? '\n\n💜 Entra no nosso grupo:\nwa.me/achadosdasol' : ''}\n\n#achados #moda`}/>
+            <textarea style={criarStyles.editor} defaultValue={(() => {
+              const title = productData?.title || 'Produto';
+              const price = productData?.priceNow || 'R$ --';
+              const oldPrice = productData?.priceWas ? `De ~${productData.priceWas}~` : '';
+              return `✨ Achadinho do dia\n\n${title} — só hoje por *${price}* com frete grátis!\n\n${oldPrice}${oldPrice ? ' por ' : ''}${price} 🔥\n\n👉 ${isNoConv ? linkOriginal : linkAfiliada}${bonuses === 'both' || bonuses === 'coupons' ? '\n\n🎟 Mais cupons da Shopee:\ns.shopee.com.br/cupons-sol' : ''}${bonuses === 'both' || bonuses === 'group' ? '\n\n💜 Entra no nosso grupo:\nwa.me/achadosdasol' : ''}\n\n#achados #moda`;
+            })()}/>
+
             <div style={criarStyles.vars}>
               {['{produto}','{preço}','{preço_de}','{link}','{loja}'].map(v => (
                 <span key={v} style={criarStyles.varChip}>{v}</span>
