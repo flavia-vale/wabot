@@ -152,13 +152,20 @@ ensure_pm2_app_running() {
   local app_name="$1"
 
   if pm2 describe "$app_name" >/dev/null 2>&1; then
-    pm2 restart "$app_name" --update-env
-    return 0
+    # Processo está na lista do PM2; tenta restart.
+    # "Process N not found" pode ocorrer quando o processo virou órfão
+    # (está na lista mas o PID real morreu). Nesse caso, delete + start.
+    if pm2 restart "$app_name" --update-env 2>/tmp/wabot_pm2_restart_${app_name}.log; then
+      return 0
+    fi
+    echo "  Aviso: pm2 restart falhou para '$app_name' (possivelmente processo órfão). Fazendo delete + start..."
+    cat /tmp/wabot_pm2_restart_${app_name}.log || true
+    pm2 delete "$app_name" 2>/dev/null || true
   fi
 
-  echo "  Aviso: processo PM2 '$app_name' não encontrado. Tentando criar via ecosystem.config.cjs..."
+  echo "  Iniciando '$app_name' via ecosystem.config.cjs..."
   if pm2 start "$ROOT_DIR/ecosystem.config.cjs" --only "$app_name" --update-env >/tmp/wabot_pm2_start_${app_name}.log 2>&1; then
-    echo "  PM2 app '$app_name' criado com sucesso via ecosystem.config.cjs."
+    echo "  PM2 app '$app_name' iniciado com sucesso via ecosystem.config.cjs."
     return 0
   fi
 

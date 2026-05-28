@@ -195,9 +195,33 @@ else
   exit 1
 fi
 
+ensure_pm2_app_running_prod() {
+  local app_name="$1"
+
+  if pm2 describe "$app_name" >/dev/null 2>&1; then
+    if pm2 restart "$app_name" --update-env 2>/tmp/wabot_pm2_restart_${app_name}.log; then
+      return 0
+    fi
+    echo "  Aviso: pm2 restart falhou para '$app_name' (possivelmente processo órfão). Fazendo delete + start..."
+    cat /tmp/wabot_pm2_restart_${app_name}.log || true
+    pm2 delete "$app_name" 2>/dev/null || true
+  fi
+
+  echo "  Iniciando '$app_name' via ecosystem.config.cjs..."
+  if pm2 start "$ROOT_DIR/ecosystem.config.cjs" --only "$app_name" --update-env >/tmp/wabot_pm2_start_${app_name}.log 2>&1; then
+    echo "  PM2 app '$app_name' iniciado com sucesso via ecosystem.config.cjs."
+    return 0
+  fi
+
+  echo "ERRO: não foi possível iniciar '$app_name' via ecosystem.config.cjs."
+  cat /tmp/wabot_pm2_start_${app_name}.log || true
+  echo "Dica: valide o nome do app no PM2 (pm2 status) e no ecosystem/config de produção."
+  exit 1
+}
+
 echo "[7b/9] Restart PM2 apps"
-pm2 restart dashboard --update-env
-pm2 restart api --update-env
+ensure_pm2_app_running_prod "dashboard"
+ensure_pm2_app_running_prod "api"
 
 # bot-supervisor (prod) é INTENCIONALMENTE preservado: ver comentário
 # detalhado em scripts/deploy_safe_staging.sh. Reinicie manualmente quando
@@ -205,7 +229,7 @@ pm2 restart api --update-env
 # Para forçar restart nesse pipeline, exporte RESTART_SUPERVISOR=1.
 if [[ "${RESTART_SUPERVISOR:-0}" == "1" ]]; then
   echo "  RESTART_SUPERVISOR=1 — reiniciando bot-supervisor"
-  pm2 restart bot-supervisor --update-env
+  ensure_pm2_app_running_prod "bot-supervisor"
 else
   echo "  bot-supervisor preservado. Sessões WhatsApp continuam ativas."
 fi
