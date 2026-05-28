@@ -8,6 +8,7 @@ import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAs
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileRoutes } from '@/components/mobile/routes'
 import { api } from '@/lib/api'
+import { DEFAULT_LANDING_PLANS } from '@/lib/marketing-content'
 
 const contaStyles = {
   // Perfil — discreto, sem blob
@@ -192,7 +193,8 @@ export default function AccountPage() {
   const initials = name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
   const plan = user?.plan?.toUpperCase() || 'FREE'
   const isPro = user?.plan === 'pro'
-  const planPrice = isPro ? 'R$ 39/mês' : 'Grátis'
+  const planDef = DEFAULT_LANDING_PLANS.find(p => p.id === user?.plan)
+  const planPrice = planDef?.priceValue > 0 ? `${planDef.price}/mês` : 'Grátis'
   const accessDate = user?.accessExpiresAt ? new Date(user.accessExpiresAt).toLocaleDateString('pt-BR') : ''
   const renewLabel = isPro ? 'renova em' : 'válido até'
   const connectedLabel = session?.connectedAt ? `desde ${new Date(session.connectedAt).toLocaleDateString('pt-BR')}` : 'conectado'
