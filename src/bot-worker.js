@@ -1384,6 +1384,8 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         policy,
       })
       if (!canForwardCurrentMessage) {
+        const hasGenericUrl = /https?:\/\//i.test(sanitizedText)
+        const unsupportedStoreSuffix = links.length === 0 && hasGenericUrl ? ':unsupported_store' : ''
         await db.messageLog.create({
           data: {
             userId,
@@ -1394,7 +1396,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             convertedUrl: '',
             messageText: sanitizeMessageForLog(sanitizedText || text || ''),
             status: 'skipped',
-            errorMsg: `skip:policy:${policy.forwardMode}:${policy.noLinkScope}:${messageKind}`,
+            errorMsg: `skip:policy:${policy.forwardMode}:${policy.noLinkScope}:${messageKind}${unsupportedStoreSuffix}`,
           },
         }).catch(() => {})
         return
