@@ -242,6 +242,40 @@ function shopeePriceIntToString(value) {
   return toPriceString(num / 100000)
 }
 
+function firstPositiveShopeePrice(...values) {
+  for (const value of values) {
+    const num = Number(value)
+    if (Number.isFinite(num) && num > 0) return value
+  }
+  return null
+}
+
+function extractShopeeModelPrices(item) {
+  const models = Array.isArray(item?.models) ? item.models : []
+  let minCurrent = null
+  let maxOld = null
+  for (const model of models) {
+    const current = Number(firstPositiveShopeePrice(model?.price, model?.price_stocks?.[0]?.price, model?.price_info?.price))
+    const old = Number(firstPositiveShopeePrice(model?.price_before_discount, model?.price_info?.price_before_discount))
+    if (Number.isFinite(current) && current > 0) {
+      minCurrent = minCurrent == null ? current : Math.min(minCurrent, current)
+    }
+    if (Number.isFinite(old) && old > 0) {
+      maxOld = maxOld == null ? old : Math.max(maxOld, old)
+    }
+  }
+  return { minCurrent, maxOld }
+}
+
+function extractShopeePriceFromHtml(html) {
+  if (!html) return ''
+  const ptBr = html.match(/R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/)
+  if (ptBr?.[1]) return toPriceString(ptBr[1])
+  const jsonDecimal = html.match(/"(?:price|current_price)"\s*:\s*"?([0-9]+\.[0-9]{2})"?/) || html.match(/"(?:price|current_price)"\s*:\s*([0-9]+\.[0-9]{2})/)
+  if (jsonDecimal?.[1]) return toPriceString(jsonDecimal[1])
+  return ''
+}
+
 async function fetchShopeeItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS } = {}) {
   const canonical = await resolveShopeeUrl(url, { timeoutMs })
   const ids = parseShopeeIdsFromUrl(canonical)
@@ -261,10 +295,15 @@ async function fetchShopeeItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS } = 
     const payload = await res.json().catch(() => null)
     const item = payload?.data?.item
     if (!item) return null
+
+    const modelPrices = extractShopeeModelPrices(item)
+    const oldRaw = firstPositiveShopeePrice(item.price_before_discount, item.price_max_before_discount, item.price_min_before_discount, modelPrices.maxOld)
+    const currentRaw = firstPositiveShopeePrice(item.price_min, item.price, item.price_max, modelPrices.minCurrent)
+
     return {
       title: normalizeText(item.name || ''),
-      oldPrice: shopeePriceIntToString(item.price_before_discount),
-      newPrice: shopeePriceIntToString(item.price_min || item.price),
+      oldPrice: shopeePriceIntToString(oldRaw),
+      newPrice: shopeePriceIntToString(currentRaw),
     }
   } catch {
     return null
@@ -317,7 +356,7 @@ export async function fetchProductInfo(url, opts = {}) {
   const mercadoLivreApiFallback = await fetchMercadoLivreProductInfo(finalUrl || url, opts)
   const titleFromUrl = extractTitleFromUrl(finalUrl || url)
   const title = jsonLd?.title || amazonFallback?.title || shopeeApiFallback?.title || mercadoLivreApiFallback?.title || titleFromUrl || extractTitleFallback(html)
-  const newPrice = jsonLd?.newPrice || mlLanding?.newPrice || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || mercadoLivreApiFallback?.newPrice || extractMetaPrice(html)
+  const newPrice = jsonLd?.newPrice || mlLanding?.newPrice || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || mercadoLivreApiFallback?.newPrice || extractMetaPrice(html) || extractShopeePriceFromHtml(html)
   const oldPrice = jsonLd?.oldPrice || mlLanding?.oldPrice || shopeeApiFallback?.oldPrice || mercadoLivreApiFallback?.oldPrice || ''
   return { title, oldPrice, newPrice, finalUrl }
 }

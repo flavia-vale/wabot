@@ -78,6 +78,38 @@ test('fetchProductInfo usa fallback da API da Shopee para título e preços', as
   assert.equal(info.newPrice, '33,18')
 })
 
+test('fetchProductInfo usa campos alternativos de preço da Shopee quando price_min não vier', async (t) => {
+  const shellHtml = '<!doctype html><html><head><title>Shopee Brasil</title></head><body>app shell</body></html>'
+  const shopeeApiPayload = {
+    data: {
+      item: {
+        name: 'KIT TERERÉ BLACK ERVA SABOR CEREJA ICE – GARRAFA TÉRMICA + COPO INOX + BOMBA + ERVA 500G',
+        price_min: 0,
+        price: 24567000,
+        price_before_discount: 0,
+      },
+    },
+  }
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('/api/v4/item/get?itemid=23499408546&shopid=1750300958')) {
+      return {
+        ok: true,
+        headers: { get: () => 'application/json; charset=utf-8' },
+        json: async () => shopeeApiPayload,
+      }
+    }
+    return mockHtmlResponse(shellHtml, 'https://shopee.com.br/KIT-TERERE-BLACK-ERVA-SABOR-CEREJA-ICE-i.1750300958.23499408546')
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://shopee.com.br/KIT-TERERE-BLACK-ERVA-SABOR-CEREJA-ICE-i.1750300958.23499408546')
+  assert.match(info.title, /KIT TERERÉ BLACK ERVA SABOR CEREJA ICE/i)
+  assert.equal(info.newPrice, '245,67')
+})
+
 test('fetchProductInfo resolve short link da Shopee antes de consultar a API', async (t) => {
   const shellHtml = '<!doctype html><html><head><title>Shopee Brasil</title></head><body>app shell</body></html>'
   const shopeeApiPayload = {
