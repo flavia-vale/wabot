@@ -151,11 +151,6 @@ const espStyles = {
   filtersMain: { flex: 1, minWidth: 0 },
   filtersTitle: { fontSize: 13.5, fontWeight: 600, color:'var(--ink)' },
   filtersSub: { fontSize: 11.5, color:'var(--ink-soft)', marginTop: 2 },
-  filtersCount: {
-    fontSize: 11, fontWeight: 700, color:'var(--ink)',
-    background:'var(--bg-soft)', padding:'3px 8px', borderRadius: 999,
-    border:'1px solid var(--line)',
-  },
 };
 
 export default function EspelharPage() {
@@ -224,7 +219,6 @@ export default function EspelharPage() {
   const vistosHoje = c
     ? (c.success + c.skippedDedup + c.skippedConfig + c.timeoutTotal + c.errorOther + c.inFlight)
     : 0
-  const activeFilters = [config?.blockedKeywords, config?.allowedStores, config?.minDiscountPercent].filter((value) => Array.isArray(value) ? value.length > 0 : Boolean(value)).length
   const postIntervalMinutes = config?.postIntervalMs ? Math.max(1, Math.round(config.postIntervalMs / 60000)) : null
 
   if (loading) {
@@ -363,26 +357,6 @@ export default function EspelharPage() {
         </button>
       </div>
 
-      {/* ── FILTROS / REGRAS — entry secundário ── */}
-      <div style={espStyles.sectionH}>
-        <div style={espStyles.sectionTitle}>Refinar o que entra</div>
-      </div>
-
-      <div style={espStyles.filtersEntry}>
-        <div style={espStyles.filtersIcon}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
-          </svg>
-        </div>
-        <div style={espStyles.filtersMain}>
-          <div style={espStyles.filtersTitle}>Filtros de preço, categoria e loja</div>
-          <div style={espStyles.filtersSub}>
-            ex: só postar se ≤ R$ 200 com 30%+ de desconto
-          </div>
-        </div>
-        <span style={espStyles.filtersCount}>{activeFilters} ativos</span>
-        <MobileIcon name="arrow" size={14}/>
-      </div>
 
       {/* Ritmo de envio */}
       <div style={espStyles.sectionH}>
