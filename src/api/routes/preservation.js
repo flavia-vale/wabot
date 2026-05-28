@@ -115,13 +115,13 @@ export async function preservationRoutes(app) {
   app.post('/probe/session/start', async (req, reply) => {
     if (await requirePreservationAccess(req, reply)) return
     const userId = req.user.sub
-    const snapshot = getProbeSessionSnapshot(userId)
+    const snapshot = await getProbeSessionSnapshot(userId)
     if (snapshot.state === 'connected' || snapshot.state === 'connecting' || snapshot.state === 'qr_pending') {
       return reply.code(409).send({ error: 'Já existe sessão probe ativa para este usuário.', session: snapshot })
     }
 
     const sessionId = `probe_${userId}`
-    const session = setProbeSession(userId, {
+    const session = await setProbeSession(userId, {
       sessionId,
       state: 'qr_pending',
       qrExpiresAt: new Date(Date.now() + 60 * 1000),
@@ -132,12 +132,12 @@ export async function preservationRoutes(app) {
 
   app.get('/probe/session/status', async (req, reply) => {
     if (await requirePreservationAccess(req, reply)) return
-    return { ok: true, session: getProbeSessionSnapshot(req.user.sub) }
+    return { ok: true, session: await getProbeSessionSnapshot(req.user.sub) }
   })
 
   app.post('/probe/session/stop', async (req, reply) => {
     if (await requirePreservationAccess(req, reply)) return
-    const session = setProbeSession(req.user.sub, {
+    const session = await setProbeSession(req.user.sub, {
       state: 'disconnected',
       qrExpiresAt: null,
       lastError: null,
@@ -152,7 +152,7 @@ export async function preservationRoutes(app) {
     if (!/^probe_[a-zA-Z0-9_-]{3,120}$/.test(probeAccountSessionId)) {
       return reply.code(400).send({ error: 'probeAccountSessionId inválido.' })
     }
-    if (!isProbeSessionSelectable(req.user.sub, probeAccountSessionId)) {
+    if (!(await isProbeSessionSelectable(req.user.sub, probeAccountSessionId))) {
       return reply.code(409).send({ error: 'Sessão probe não está ativa para seleção.' })
     }
 
@@ -272,7 +272,7 @@ export async function preservationRoutes(app) {
     return {
       enabled: Boolean(cfg?.probeEnabled),
       probeAccountSessionId: cfg?.probeAccountSessionId ?? null,
-      sessionState: getProbeSessionSnapshot(req.user.sub).state,
+      sessionState: (await getProbeSessionSnapshot(req.user.sub)).state,
       items,
     }
   })
