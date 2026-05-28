@@ -260,6 +260,35 @@ test('POST /scrape-offer tenta converter e usa link convertido para scrape quand
   assert.equal(body.conversion.reasonCode, null)
 })
 
+test('POST /scrape-offer tenta original quando convertido não traz dados', async (t) => {
+  let calls = []
+  const converted = 'https://s.shopee.com.br/abc123'
+  const original = 'https://shopee.com.br/KIT-TERERE-BLACK-i.1750300958.23499408546'
+  const { app } = await buildApp({
+    credentials: [credential('shopee', { appId: '123456', secretKey: 'secret-key-very-long' })],
+    converter: async () => converted,
+    fetchProductInfo: async (url) => {
+      calls.push(url)
+      if (url === converted) return { title: '', oldPrice: '', newPrice: '', finalUrl: converted }
+      return {
+        title: 'KIT TERERÉ BLACK ERVA SABOR CEREJA ICE – GARRAFA TÉRMICA + COPO INOX + BOMBA + ERVA 500G',
+        oldPrice: '',
+        newPrice: '245,67',
+        finalUrl: original,
+      }
+    },
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({ method: 'POST', url: '/api/link-conversion/scrape-offer', payload: { url: original } })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.offerUrl, converted)
+  assert.equal(body.title, 'KIT TERERÉ BLACK ERVA SABOR CEREJA ICE – GARRAFA TÉRMICA + COPO INOX + BOMBA + ERVA 500G')
+  assert.equal(body.newPrice, '245,67')
+  assert.deepEqual(calls, [converted, original])
+})
+
 test('POST /scrape-offer rejeita url inválida', async (t) => {
   const { app } = await buildApp({
     converter: async () => 'never',
