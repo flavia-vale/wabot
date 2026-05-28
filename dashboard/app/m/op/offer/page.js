@@ -4,9 +4,13 @@ import { useState, useEffect } from 'react'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard } from '@/components/mobile/MobileAsyncState'
-import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { api } from '@/lib/api'
+import {
+  COUPON_STORES,
+  TEMPLATE_OPTIONS,
+  buildMobileOfferText,
+} from '@/lib/mobileOfferComposer'
 
 const criarStyles = {
   pageH: { padding:'18px 20px 0' },
@@ -410,6 +414,7 @@ const criarStyles = {
 };
 
 // Por-estado: tom, título, sub
+
 const STATE_CFG = {
   converted: {
     tone:'ok',
@@ -449,7 +454,11 @@ export default function OfferPage() {
   const [convertedLink, setConvertedLink] = useState('')
   const [pasteFeedback, setPasteFeedback] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState('achadinho')
-  const [bonuses, setBonuses] = useState('none')
+  const [bonuses, setBonuses] = useState('')
+  const [groupBonus, setGroupBonus] = useState({ link: '', cta: '💜 Entra no nosso grupo:' })
+  const [couponCta, setCouponCta] = useState('🎟 Mais cupons da {loja}:')
+  const [couponLinks, setCouponLinks] = useState({ shopee: '', mercadolivre: '', amazon: '', magazineluiza: '' })
+  const [selectedCouponStores, setSelectedCouponStores] = useState(['shopee', 'mercadolivre'])
   const [editorText, setEditorText] = useState('')
   const [groups, setGroups] = useState([])
   const [selectedDestinations, setSelectedDestinations] = useState([])
@@ -495,20 +504,28 @@ export default function OfferPage() {
     }
   }
 
-  function buildOfferText(nextProduct = productData, link = convertedLink || input, template = selectedTemplate, bonusMode = bonuses) {
-    const title = nextProduct?.title || manualProduct.title || 'Produto em oferta'
-    const price = nextProduct?.price || manualProduct.price
-    const oldPrice = nextProduct?.oldPrice || manualProduct.oldPrice
-    const lines = []
-    if (template === 'relampago') lines.push('⚡ Oferta relâmpago')
-    else if (template === 'tech') lines.push('🔌 Achado tech')
-    else if (template === 'beleza') lines.push('💄 Achadinho de beleza')
-    else lines.push('✨ Achadinho do dia')
-    lines.push('', title)
-    if (price) lines.push(oldPrice ? `De ${oldPrice} por *${price}*` : `Por *${price}*`)
-    lines.push('', `👉 ${link}`)
-    if (bonusMode === 'group') lines.push('', 'Entre no grupo para ver novas ofertas.')
-    return lines.join('\n')
+  function buildOfferText(
+    nextProduct = productData,
+    link = convertedLink || input,
+    template = selectedTemplate,
+    bonusMode = bonuses,
+    overrides = {},
+  ) {
+    return buildMobileOfferText({
+      product: nextProduct || {},
+      manualProduct,
+      link,
+      template,
+      bonusMode,
+      groupBonus: overrides.groupBonus || groupBonus,
+      couponLinks: overrides.couponLinks || couponLinks,
+      selectedCouponStores: overrides.selectedCouponStores || selectedCouponStores,
+      couponCta: overrides.couponCta || couponCta,
+    })
+  }
+
+  function refreshEditorWithBonuses(nextBonusMode = bonuses, overrides = {}) {
+    setEditorText(buildOfferText(productData, convertedLink || input, selectedTemplate, nextBonusMode, overrides))
   }
 
   const handleConvert = async () => {
@@ -524,7 +541,7 @@ export default function OfferPage() {
       try {
         scraped = await api.scrapeOffer(input)
         setProductData(scraped)
-        setManualProduct({ title: scraped?.title || '', price: scraped?.price || '', oldPrice: scraped?.oldPrice || '' })
+        setManualProduct({ title: scraped?.title || '', price: scraped?.price || scraped?.newPrice || scraped?.priceNow || '', oldPrice: scraped?.oldPrice || scraped?.priceWas || '' })
         setState(scraped?.title ? 'converted' : 'scrapeFail')
       } catch {
         setProductData(null)
@@ -544,11 +561,6 @@ export default function OfferPage() {
   function updateTemplate(template) {
     setSelectedTemplate(template)
     setEditorText(buildOfferText(productData, convertedLink || input, template, bonuses))
-  }
-
-  function updateBonuses(nextBonuses) {
-    setBonuses(nextBonuses)
-    setEditorText(buildOfferText(productData, convertedLink || input, selectedTemplate, nextBonuses))
   }
 
   function updateManualProduct(field, value) {
@@ -650,9 +662,9 @@ export default function OfferPage() {
               <div style={criarStyles.productImg}>{productData?.imageUrl ? 'IMG' : '—'}</div>
               <div style={criarStyles.productInfo}>
                 <div style={criarStyles.productTitle}>{productData?.title}</div>
-                {(productData?.price || productData?.oldPrice) && (
+                {(productData?.price || productData?.newPrice || productData?.priceNow || productData?.oldPrice) && (
                   <div style={criarStyles.productPrices}>
-                    {productData?.price && <span style={criarStyles.priceNow}>{productData.price}</span>}
+                    {(productData?.price || productData?.newPrice || productData?.priceNow) && <span style={criarStyles.priceNow}>{productData.price || productData.newPrice || productData.priceNow}</span>}
                     {productData?.oldPrice && <span style={criarStyles.priceWas}>{productData.oldPrice}</span>}
                   </div>
                 )}
@@ -696,14 +708,10 @@ export default function OfferPage() {
             <div style={criarStyles.sectionTitle}>Escolha um modelo</div>
           </div>
           <div style={criarStyles.templateRow}>
-            {[
-              {key:'achadinho', name:'Achadinho ✨'},
-              {key:'relampago', name:'Relâmpago ⚡'},
-              {key:'tech', name:'Tech 🔌'},
-              {key:'beleza', name:'Beleza 💄'},
-            ].map((template) => (
+            {TEMPLATE_OPTIONS.map((template) => (
               <button key={template.key} type="button" onClick={() => updateTemplate(template.key)} style={criarStyles.templateCard(selectedTemplate === template.key)}>
                 <div style={criarStyles.templateName}>{template.name}</div>
+                <div style={criarStyles.templatePreview(selectedTemplate === template.key)}>{template.preview}</div>
               </button>
             ))}
           </div>
@@ -715,11 +723,146 @@ export default function OfferPage() {
           <div style={criarStyles.sectionH}>
             <div style={criarStyles.sectionTitle}>Adicionar à mensagem</div>
           </div>
-          <div style={{padding:'0 16px'}}>
-            <button type="button" onClick={() => updateBonuses(bonuses === 'group' ? 'none' : 'group')} style={{...cfgStyles.field, background: bonuses === 'group' ? 'color-mix(in oklab, var(--accent) 12%, var(--surface))' : 'var(--surface)'}}>
-              {bonuses === 'group' ? '✓' : '+'} convite para grupo no fim da mensagem
-            </button>
+          <div style={criarStyles.sectionHint}>
+            Configure links extras do modelo sem sair da oferta. Só entra na mensagem quando o campo tiver link real.
           </div>
+
+          {(() => {
+            const groupOn = bonuses === 'group' || bonuses === 'both'
+            const couponsOn = bonuses === 'coupons' || bonuses === 'both'
+            const toggleGroup = () => {
+              const next = groupOn ? (bonuses === 'both' ? 'coupons' : '') : (couponsOn ? 'both' : 'group')
+              setBonuses(next)
+              refreshEditorWithBonuses(next)
+            }
+            const toggleCoupons = () => {
+              const next = couponsOn ? (bonuses === 'both' ? 'group' : '') : (groupOn ? 'both' : 'coupons')
+              setBonuses(next)
+              refreshEditorWithBonuses(next)
+            }
+            const updateGroupBonus = (field, value) => {
+              const nextGroupBonus = { ...groupBonus, [field]: value }
+              setGroupBonus(nextGroupBonus)
+              refreshEditorWithBonuses(bonuses, { groupBonus: nextGroupBonus })
+            }
+            const updateCouponLink = (storeKey, value) => {
+              const nextCouponLinks = { ...couponLinks, [storeKey]: value }
+              setCouponLinks(nextCouponLinks)
+              refreshEditorWithBonuses(bonuses, { couponLinks: nextCouponLinks })
+            }
+            const toggleCouponStore = (storeKey) => {
+              const nextSelected = selectedCouponStores.includes(storeKey)
+                ? selectedCouponStores.filter((item) => item !== storeKey)
+                : [...selectedCouponStores, storeKey]
+              setSelectedCouponStores(nextSelected)
+              refreshEditorWithBonuses(bonuses, { selectedCouponStores: nextSelected })
+            }
+            const updateCouponCta = (value) => {
+              setCouponCta(value)
+              refreshEditorWithBonuses(bonuses, { couponCta: value })
+            }
+            const groupPreview = groupBonus.link.trim()
+              ? `${groupBonus.cta.trim() || 'Entre no nosso grupo:'}
+${groupBonus.link.trim()}`
+              : 'Preencha o link do grupo para ele aparecer na mensagem.'
+            const firstCouponStore = selectedCouponStores.find((storeKey) => couponLinks[storeKey]?.trim())
+            const firstCoupon = firstCouponStore ? COUPON_STORES.find((store) => store.key === firstCouponStore) : null
+            const couponPreview = firstCoupon
+              ? `${(couponCta.trim() || 'Mais cupons da {loja}:').replace('{loja}', firstCoupon.nome)}
+${couponLinks[firstCoupon.key].trim()}`
+              : 'Selecione uma loja e preencha o link de cupons para aparecer na mensagem.'
+
+            const groupHead = (on) => (
+              <button type="button" style={{...criarStyles.unifiedRowHead, width:'100%', border:'none', background:'transparent', padding:0, textAlign:'left', fontFamily:'inherit'}} onClick={toggleGroup} aria-pressed={on}>
+                <div style={criarStyles.bonusIcon(on)}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                </div>
+                <div style={criarStyles.bonusMain}>
+                  <div style={criarStyles.bonusTitle}>Link do seu grupo</div>
+                  <div style={criarStyles.bonusSub}>{on ? 'aparece no fim da mensagem quando houver link' : 'convida pra entrar no seu grupo principal'}</div>
+                </div>
+                <div style={criarStyles.bonusToggle(on)}><div style={criarStyles.bonusKnob(on)}/></div>
+              </button>
+            )
+            const couponsHead = (on) => (
+              <button type="button" style={{...criarStyles.unifiedRowHead, width:'100%', border:'none', background:'transparent', padding:0, textAlign:'left', fontFamily:'inherit'}} onClick={toggleCoupons} aria-pressed={on}>
+                <div style={criarStyles.bonusIcon(on)}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M20 12V8H4v8h16v-4z"/><path d="M9 8v8M15 8v8"/>
+                  </svg>
+                </div>
+                <div style={criarStyles.bonusMain}>
+                  <div style={criarStyles.bonusTitle}>Página de cupons da loja</div>
+                  <div style={criarStyles.bonusSub}>{on ? 'só aparece quando a loja tiver link preenchido' : 'leva pra sua página de cupons da loja'}</div>
+                </div>
+                <div style={criarStyles.bonusToggle(on)}><div style={criarStyles.bonusKnob(on)}/></div>
+              </button>
+            )
+
+            return (
+              <div style={{...criarStyles.unifiedCard, marginTop: 4}}>
+                <div style={criarStyles.unifiedRow(groupOn, false)}>
+                  {groupHead(groupOn)}
+                  {groupOn && (
+                    <div style={criarStyles.unifiedBody}>
+                      <label style={criarStyles.bonusField}>
+                        <div style={criarStyles.bonusLabel}>Link de convite</div>
+                        <input style={criarStyles.bonusInput} value={groupBonus.link} onChange={(event) => updateGroupBonus('link', event.target.value)} placeholder="https://chat.whatsapp.com/..." />
+                      </label>
+                      <label style={criarStyles.bonusField}>
+                        <div style={criarStyles.bonusLabel}>Chamada (CTA)</div>
+                        <input style={criarStyles.bonusInputText} value={groupBonus.cta} onChange={(event) => updateGroupBonus('cta', event.target.value)} />
+                      </label>
+                      <div>
+                        <div style={criarStyles.bonusPreviewLabel}><MobileIcon name="check" size={10} stroke={3}/>como vai aparecer</div>
+                        <div style={criarStyles.bonusPreview}>{groupPreview}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div style={criarStyles.unifiedRow(couponsOn, true)}>
+                  {couponsHead(couponsOn)}
+                  {couponsOn && (
+                    <div style={criarStyles.unifiedBody}>
+                      <div style={criarStyles.bonusField}>
+                        <div style={criarStyles.bonusLabel}>Quais lojas você tem cupom?</div>
+                        <div style={criarStyles.storeChips}>
+                          {COUPON_STORES.map((store) => {
+                            const selected = selectedCouponStores.includes(store.key)
+                            return (
+                              <button key={store.key} type="button" onClick={() => toggleCouponStore(store.key)} style={criarStyles.storeChip(selected)} aria-pressed={selected}>
+                                {selected && <MobileIcon name="check" size={10} stroke={3}/>} {store.nome}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                      {COUPON_STORES.filter((store) => selectedCouponStores.includes(store.key)).map((store) => (
+                        <label key={store.key} style={criarStyles.bonusField}>
+                          <div style={criarStyles.storeRow}>
+                            <div style={criarStyles.storeBadge(store.cor)}>{store.nome.slice(0,2).toUpperCase()}</div>
+                            <span style={criarStyles.storeName}>Link {store.nome}</span>
+                          </div>
+                          <input style={{...criarStyles.bonusInput, marginTop: 6}} value={couponLinks[store.key] || ''} onChange={(event) => updateCouponLink(store.key, event.target.value)} placeholder="https://..." />
+                        </label>
+                      ))}
+                      <label style={criarStyles.bonusField}>
+                        <div style={criarStyles.bonusLabel}>Chamada (CTA) · use {'{loja}'} pro nome</div>
+                        <input style={criarStyles.bonusInputText} value={couponCta} onChange={(event) => updateCouponCta(event.target.value)} />
+                      </label>
+                      <div>
+                        <div style={criarStyles.bonusPreviewLabel}><MobileIcon name="check" size={10} stroke={3}/>nesta oferta</div>
+                        <div style={criarStyles.bonusPreview}>{couponPreview}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
 
           <div style={criarStyles.sectionH}>
             <div style={criarStyles.sectionTitle}>Postar em</div>

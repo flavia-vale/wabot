@@ -1,46 +1,68 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { api } from '@/lib/api'
+import {
+  getConvertedLinksText,
+  getMobileConversionSummary,
+  normalizeMobileConversionResults,
+} from '@/lib/mobileConverter'
 
 export default function ConverterPage() {
   const [input, setInput] = useState('')
-  const [converted, setConverted] = useState('')
+  const [results, setResults] = useState([])
   const [converting, setConverting] = useState(false)
+  const [error, setError] = useState('')
+  const [copyFeedback, setCopyFeedback] = useState('')
+
+  const summary = useMemo(() => getMobileConversionSummary(results), [results])
+  const hasConverted = summary.converted > 0
+
+  async function copyText(value, feedback) {
+    if (!value) return
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopyFeedback(feedback)
+      window.setTimeout(() => setCopyFeedback(''), 2500)
+    } catch {
+      setError('Não foi possível copiar automaticamente. Selecione o link e copie manualmente.')
+    }
+  }
 
   const handleConvert = async () => {
     if (!input.trim()) return
     setConverting(true)
+    setError('')
+    setCopyFeedback('')
+    setResults([])
     try {
-      const result = await api.convertLinks(input)
-      const links = result?.results || []
-      if (links.length > 0) {
-        setConverted(links[0]?.convertedUrl || links[0]?.originalUrl || input)
-      }
+      const response = await api.convertLinks(input)
+      setResults(normalizeMobileConversionResults(response))
     } catch (e) {
-      console.error('Conversion failed:', e)
+      setError(e.message || 'Falha ao converter links. Tente novamente em instantes.')
     } finally {
       setConverting(false)
     }
   }
 
-  const handleCopyConverted = () => {
-    if (converted) navigator.clipboard.writeText(converted)
+  const clearAll = () => {
+    setInput('')
+    setResults([])
+    setError('')
+    setCopyFeedback('')
   }
-
-  const isEmpty = !converted
 
   return (
     <MobileShell title="Conversor" active="criar">
       <div style={{ padding: '20px 16px 0' }}>
-        <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Cole o link original</div>
+        <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Cole um ou mais links originais</div>
         <div style={{ marginTop: 8, position: 'relative' }}>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Cole seu link aqui..."
+            placeholder="Cole um link por linha ou uma mensagem com links..."
             style={{
               width: '100%',
               padding: '14px',
@@ -50,14 +72,16 @@ export default function ConverterPage() {
               background: 'var(--surface)',
               color: 'var(--ink)',
               fontFamily: 'inherit',
-              minHeight: 80,
+              minHeight: 96,
               resize: 'none',
               outline: 'none',
             }}
           />
           {input && (
             <button
-              onClick={() => { setInput(''); setConverted('') }}
+              type="button"
+              aria-label="Limpar links"
+              onClick={clearAll}
               style={{
                 position: 'absolute',
                 right: 10,
@@ -79,6 +103,7 @@ export default function ConverterPage() {
           )}
         </div>
         <button
+          type="button"
           onClick={handleConvert}
           disabled={converting || !input.trim()}
           style={{
@@ -95,63 +120,63 @@ export default function ConverterPage() {
             opacity: converting || !input.trim() ? 0.6 : 1,
           }}
         >
-          {converting ? 'Convertendo...' : 'Converter'}
+          {converting ? 'Convertendo...' : 'Converter links'}
         </button>
+        {error && <div style={{ marginTop: 10, fontSize: 12, color: 'var(--danger)', lineHeight: 1.45 }}>{error}</div>}
+        {copyFeedback && <div style={{ marginTop: 10, fontSize: 12, color: 'var(--success)', lineHeight: 1.45 }}>{copyFeedback}</div>}
       </div>
 
-      {!isEmpty && (
-        <div style={{ padding: '20px 16px 0' }}>
-          <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>✓ Link convertido</div>
-          <div
-            style={{
-              marginTop: 8,
-              padding: 12,
-              borderRadius: 10,
-              background: 'var(--surface)',
-              border: '1px solid var(--line)',
-              fontSize: 12,
-              color: 'var(--ink)',
-              fontFamily: "'JetBrains Mono', monospace",
-              wordBreak: 'break-all',
-            }}
-          >
-            {converted}
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+      {results.length > 0 && (
+        <div style={{ padding: '20px 16px 0', display: 'grid', gap: 12 }}>
+          <div style={{ padding: 12, borderRadius: 12, background: 'var(--surface)', border: '1px solid var(--line)', display:'grid', gap: 10 }}>
+            <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Resultado</div>
+            <div style={{ display: 'grid', gridTemplateColumns:'repeat(3, 1fr)', gap: 8 }}>
+              {[['Total', summary.total], ['OK', summary.converted], ['Erros', summary.failed]].map(([label, value]) => (
+                <div key={label} style={{ padding: 8, borderRadius: 10, background:'var(--bg-soft)', textAlign:'center' }}>
+                  <div style={{ fontSize: 10, color:'var(--ink-soft)' }}>{label}</div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color:'var(--ink)' }}>{value}</div>
+                </div>
+              ))}
+            </div>
             <button
-              onClick={handleCopyConverted}
-              style={{
-                flex: 1,
-                padding: '10px',
-                borderRadius: 8,
-                background: 'var(--surface)',
-                border: '1px solid var(--line)',
-                color: 'var(--ink)',
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
+              type="button"
+              onClick={() => copyText(getConvertedLinksText(results), `${summary.converted} link(s) convertido(s) copiado(s).`)}
+              disabled={!hasConverted}
+              style={{ width:'100%', padding:'10px', borderRadius: 999, border:'1px solid var(--line)', background:'var(--ink)', color:'white', fontWeight: 700, opacity: hasConverted ? 1 : 0.5 }}
             >
-              Copiar
+              Copiar todos convertidos
             </button>
+          </div>
+
+          {results.map((item) => (
+            <div key={`${item.index}-${item.originalUrl}`} style={{ padding: 12, borderRadius: 12, background: 'var(--surface)', border: '1px solid var(--line)', display:'grid', gap: 8 }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 800, color:'var(--ink)' }}>{item.label}</span>
+                <span style={{ fontSize: 11, fontWeight: 800, color: item.ok ? 'var(--success)' : 'var(--danger)' }}>{item.ok ? 'convertido' : 'erro'}</span>
+              </div>
+              <div style={{ fontSize: 10, color:'var(--ink-soft)', textTransform:'uppercase', letterSpacing:'0.06em' }}>Original</div>
+              <div style={{ fontFamily:"'JetBrains Mono', monospace", fontSize: 11.5, color:'var(--ink-soft)', wordBreak:'break-all' }}>{item.originalUrl || '—'}</div>
+              {item.ok ? (
+                <>
+                  <div style={{ fontSize: 10, color:'var(--ink-soft)', textTransform:'uppercase', letterSpacing:'0.06em' }}>Convertido</div>
+                  <div style={{ fontFamily:"'JetBrains Mono', monospace", fontSize: 11.5, color:'var(--success)', fontWeight: 700, wordBreak:'break-all' }}>{item.convertedUrl}</div>
+                  {item.warning && <div style={{ fontSize: 12, color:'var(--warn)', lineHeight: 1.45 }}>{item.warning}</div>}
+                  <button type="button" onClick={() => copyText(item.convertedUrl, 'Link convertido copiado.')} style={{ padding:'10px', borderRadius: 999, border:'1px solid var(--line)', background:'var(--surface)', color:'var(--ink)', fontWeight: 700 }}>Copiar este link</button>
+                </>
+              ) : (
+                <div style={{ padding: 10, borderRadius: 10, background:'color-mix(in oklab, var(--danger) 10%, var(--surface))', color:'var(--danger)', fontSize: 12, lineHeight: 1.45 }}>{item.error}</div>
+              )}
+            </div>
+          ))}
+
+          {hasConverted && (
             <Link
               href="/m/op/offer"
-              style={{
-                flex: 1,
-                padding: '10px',
-                borderRadius: 8,
-                background: 'var(--accent-strong)',
-                color: 'white',
-                fontSize: 12,
-                fontWeight: 600,
-                textAlign: 'center',
-                textDecoration: 'none',
-                cursor: 'pointer',
-              }}
+              style={{ padding: '12px', borderRadius: 999, background: 'var(--accent-strong)', color: 'white', fontSize: 13, fontWeight: 800, textAlign: 'center', textDecoration: 'none' }}
             >
               Criar oferta
             </Link>
-          </div>
+          )}
         </div>
       )}
 

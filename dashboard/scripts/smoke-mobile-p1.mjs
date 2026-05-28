@@ -27,7 +27,7 @@ expectNotIncludes('app/m/config/credentials/page.js', 'cred.value', 'legacy valu
 
 expectIncludes('app/m/config/groups/page.js', 'api.sessionWAGroups', 'mobile groups add flow should use WhatsApp groups from backend')
 expectIncludes('app/m/config/groups/page.js', 'api.addGroup', 'mobile groups must add through backoffice API')
-expectIncludes('app/m/config/groups/page.js', 'api.updateGroup', 'mobile group toggles must persist through API')
+expectNotIncludes('app/m/config/groups/page.js', 'api.updateGroup(group.id, { active:', 'mobile must not show unsupported active toggle as persisted')
 expectIncludes('app/m/config/groups/page.js', 'api.deleteGroup', 'mobile groups must support delete through API')
 
 expectIncludes('app/m/op/offer/page.js', 'api.groups', 'mobile offer destinations must come from configured groups')
