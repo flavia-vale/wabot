@@ -528,6 +528,10 @@ export default function OfferPage() {
     setEditorText(buildOfferText(productData, convertedLink || input, selectedTemplate, nextBonusMode, overrides))
   }
 
+  function refreshEditorWithBonuses(nextBonusMode = bonuses, overrides = {}) {
+    setEditorText(buildOfferText(productData, convertedLink || input, selectedTemplate, nextBonusMode, overrides))
+  }
+
   const handleConvert = async () => {
     if (!input.trim()) return
     setConverting(true)
