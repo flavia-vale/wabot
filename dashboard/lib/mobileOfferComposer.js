@@ -1,5 +1,15 @@
 export const TEMPLATE_OPTIONS = [
   {
+    key: 'simples',
+    name: 'Simples',
+    preview: `🛍️ [produto]
+
+De R$ 499
+💥 Por R$ 398
+
+🛒 Compre aqui 👉 link`,
+  },
+  {
     key: 'achadinho',
     name: 'Achadinho ✨',
     preview: `✨ Achadinho do dia
@@ -104,7 +114,7 @@ export function buildMobileOfferText({
   product = {},
   manualProduct = {},
   link = '',
-  template = 'achadinho',
+  template = 'simples',
   bonusMode = '',
   groupBonus = {},
   couponLinks = {},
@@ -113,6 +123,33 @@ export function buildMobileOfferText({
   offerStoreKey = '',
 } = {}) {
   const normalized = normalizeMobileOfferProduct(product, manualProduct)
+
+  if (template === 'simples') {
+    const lines = [`🛍️ ${normalized.title}`, '']
+    if (normalized.oldPrice) lines.push(`De ${normalized.oldPrice}`)
+    lines.push(normalized.price ? `💥 Por ${normalized.price}` : '💥 Por *{preço}*')
+    lines.push('', `🛒 Compre aqui 👉 ${link}`)
+
+    const groupLink = String(groupBonus?.link || '').trim()
+    if ((bonusMode === 'group' || bonusMode === 'both') && isValidHttpUrl(groupLink)) {
+      lines.push('', String(groupBonus?.cta || '').trim() || 'Entre no nosso grupo:')
+      lines.push(groupLink)
+    }
+
+    if (bonusMode === 'coupons' || bonusMode === 'both') {
+      const detectedStoreKey = offerStoreKey || detectMobileOfferStoreKey({ product, link })
+      const selectedOrDetected = selectedCouponStores.includes(detectedStoreKey) || !selectedCouponStores.length
+      const couponLink = String(couponLinks?.[detectedStoreKey] || '').trim()
+      if (detectedStoreKey && selectedOrDetected && isValidHttpUrl(couponLink)) {
+        const store = COUPON_STORES.find((item) => item.key === detectedStoreKey)
+        lines.push('', (String(couponCta || '').trim() || 'Mais cupons da {loja}:').replace('{loja}', store?.nome || 'loja'))
+        lines.push(couponLink)
+      }
+    }
+
+    return lines.join('\n')
+  }
+
   const lines = [getMobileOfferTemplateHeading(template), '', normalized.title]
 
   if (normalized.price) {
