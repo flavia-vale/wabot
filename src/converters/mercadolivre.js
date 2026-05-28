@@ -318,28 +318,63 @@ async function createAffiliateLink(mlUrl, tag, creds) {
   }
 
   let lastError = null
+  let authFailed = false
+  const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504])
+  const retryBackoffMs = [400, 1200, 2800]
   for (const attempt of attempts) {
-    try {
-      logger.info({ attempt: attempt.label, mlUrl, hasSsid: !!ssid, hasCsrf: !!csrf }, 'ML createLink: tentando chamada API')
-      const res = await callCreateLinkApi(mlUrl, tag, attempt)
-      const result = res.data?.urls?.[0]
-      if (result?.short_url) {
-        logger.info({ attempt: attempt.label, mlUrl }, 'ML createLink: short_url gerado')
-        return result.short_url
+    for (let i = 0; i <= retryBackoffMs.length; i++) {
+      try {
+        logger.info({ attempt: attempt.label, retry: i, mlUrl, hasSsid: !!ssid, hasCsrf: !!csrf }, 'ML createLink: tentando chamada API')
+        const res = await callCreateLinkApi(mlUrl, tag, attempt)
+        const result = res.data?.urls?.[0]
+        if (result?.short_url) {
+          logger.info({ attempt: attempt.label, retry: i, mlUrl }, 'ML createLink: short_url gerado')
+          return result.short_url
+        }
+
+        const status = Number(res.status) || 0
+        const apiError = String(result?.error || result?.message || res.data?.error || res.data?.message || '')
+        const looksAuthIssue = status === 401 || status === 403 || /auth|unauthoriz|forbidden|login|sess[aã]o|expirad/i.test(apiError)
+        if (looksAuthIssue) authFailed = true
+
+        lastError = {
+          status,
+          attempt: attempt.label,
+          retry: i,
+          apiError,
+          urls: res.data?.urls,
+          rawBody: typeof res.data === 'string' ? res.data.slice(0, 500) : JSON.stringify(res.data).slice(0, 500),
+          responseHeaders: { 'content-type': res.headers?.['content-type'], 'set-cookie': res.headers?.['set-cookie']?.length },
+        }
+
+        if (RETRYABLE_STATUS.has(status) && i < retryBackoffMs.length) {
+          const wait = retryBackoffMs[i]
+          logger.warn({ ...lastError, retryInMs: wait }, 'ML createLink: status transitório sem short_url — retry')
+          await new Promise(resolve => setTimeout(resolve, wait))
+          continue
+        }
+
+        logger.warn(lastError, 'ML createLink: API respondeu sem short_url')
+        break
+      } catch (err) {
+        const status = Number(err.response?.status) || 0
+        lastError = { attempt: attempt.label, retry: i, err: err.message, status }
+
+        if (RETRYABLE_STATUS.has(status) && i < retryBackoffMs.length) {
+          const wait = retryBackoffMs[i]
+          logger.warn({ ...lastError, retryInMs: wait }, 'ML createLink: erro transitório — retry')
+          await new Promise(resolve => setTimeout(resolve, wait))
+          continue
+        }
+
+        logger.warn(lastError, 'ML createLink: erro ao chamar API')
+        break
       }
-      lastError = {
-        status: res.status,
-        attempt: attempt.label,
-        apiError: result?.error || result?.message || res.data?.error || res.data?.message,
-        urls: res.data?.urls,
-        rawBody: typeof res.data === 'string' ? res.data.slice(0, 500) : JSON.stringify(res.data).slice(0, 500),
-        responseHeaders: { 'content-type': res.headers?.['content-type'], 'set-cookie': res.headers?.['set-cookie']?.length },
-      }
-      logger.warn(lastError, 'ML createLink: API respondeu sem short_url')
-    } catch (err) {
-      lastError = { attempt: attempt.label, err: err.message, status: err.response?.status }
-      logger.warn(lastError, 'ML createLink: erro ao chamar API')
     }
+  }
+
+  if (authFailed) {
+    throw new Error('Credencial Mercado Livre inválida/expirada. Renove o SSID (ou cookie) e tente novamente.')
   }
 
   return null
@@ -397,10 +432,19 @@ export async function resolveToCleanProductUrl(url) {
     const preCanonical = target
     target = canonicalizeMlProductUrl(target)
     if (!extractMlbId(target)) {
-      const u = new URL(target)
-      if (/^\/social\//i.test(u.pathname) || /^\/up\//i.test(u.pathname) || /^\/$/.test(u.pathname)) {
-        const extracted = await tryExtractProductFromLanding(preCanonical)
-        if (extracted) target = extracted
+      // Links de recomendação/anúncio (/up/MLBU..., vip-pads, etc.) trazem o
+      // path como id de catálogo (MLBU...) e o produto real compartilhado em
+      // `wid=MLB...` dentro do fragmento (#...), que canonicalize descarta.
+      // Recuperamos o MLB direto do fragmento, sem round-trip de rede.
+      const widMlb = extractMlbId(String(preCanonical).match(/[?#&;]wid=(MLB[-_]?[0-9]+)/i)?.[1])
+      if (widMlb) {
+        target = `https://produto.mercadolivre.com.br/${widMlb}-x-_JM`
+      } else {
+        const u = new URL(target)
+        if (/^\/social\//i.test(u.pathname) || /(?:^|\/)up\//i.test(u.pathname) || /^\/$/.test(u.pathname)) {
+          const extracted = await tryExtractProductFromLanding(preCanonical)
+          if (extracted) target = extracted
+        }
       }
     }
     return target
@@ -426,6 +470,11 @@ export async function convert(url, creds) {
     // errado-com-errado e passaria.
     const anchorMlbId = extractMlbId(target)
     logger.info({ inputUrl: url, target, anchorMlbId, hasSsid: !!ssid }, 'ML convert: target resolvido')
+
+    // Sinaliza quando o SSID/cookie do afiliado expirou: a oferta ainda sai
+    // via fallback partner_id, mas o painel avisa o usuário para renovar a
+    // credencial e voltar a gerar short links meli.la.
+    let authExpired = false
 
     // Sem MLB no target, não há como validar — chamar a API neste caso é
     // tiro no escuro (o ML pode devolver short para produto qualquer).
@@ -470,6 +519,12 @@ export async function convert(url, creds) {
           return affiliateUrl
         } catch (err) {
           logger.warn({ candidate, err: err.message }, 'ML createLink: tentativa falhou')
+          // Credencial expirada falha igual em todos os candidates: marca e
+          // para de tentar (poupa chamadas) — cai no fallback com aviso.
+          if (/credencial|inv[aá]lida|expirad/i.test(err.message)) {
+            authExpired = true
+            break
+          }
         }
       }
 
@@ -490,6 +545,7 @@ export async function convert(url, creds) {
     // Fallback: injetar partner_id na URL resolvida (ou na meli.la original se resolve falhou)
     u.searchParams.delete('partner_id')
     if (tag) u.searchParams.set('partner_id', tag)
+    if (authExpired) return { url: u.toString(), warning: 'ml_ssid_expired' }
     return u.toString()
   } catch {
     return null

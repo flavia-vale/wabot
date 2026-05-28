@@ -42,6 +42,7 @@ model User {
   customerContactActors CustomerContactLog[] @relation("CustomerContactActor")
   followLogs            FollowLog[]
   affiliateLinks        AffiliateLink[]
+  probeEvidences       ProbeEvidence[]
 
   @@index([status, plan, accessExpiresAt])
   @@index([lastActivityAt])
@@ -84,6 +85,7 @@ model Group {
   channelHealth    ChannelHealth?
   channelThrottle  ChannelThrottle?
   channelSnapshots ChannelSnapshot[]
+  probeEvidences  ProbeEvidence[]
 
   @@unique([userId, waJid, role])
   @@index([userId, kind])
@@ -418,4 +420,23 @@ model AnalyticsEvent {
 
   @@index([event, createdAt])
   @@index([userId, createdAt])
+}
+
+
+model ProbeEvidence {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groupId            String
+  group              Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  probeSessionId     String
+  messageFingerprint String
+  sentAt             DateTime
+  seenAt             DateTime
+  latencyMs          Int
+  matchSource        String   @default("manual-ping-fallback")
+  createdAt          DateTime @default(now())
+
+  @@index([userId, groupId, seenAt])
+  @@index([groupId, messageFingerprint])
 }
