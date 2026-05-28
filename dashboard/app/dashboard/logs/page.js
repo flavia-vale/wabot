@@ -67,6 +67,9 @@ function explainErrorMsg(errorMsg) {
     return 'Nenhum link da mensagem pôde ser convertido em link de afiliado.'
   }
   if (errorMsg.startsWith('skip:policy')) {
+    if (errorMsg.endsWith(':unsupported_store')) {
+      return 'Essa promoção foi ignorada porque ainda não fazemos conversão automática de afiliado para essa loja.'
+    }
     return 'Mensagem fora das regras de encaminhamento que você configurou para este grupo.'
   }
   if (errorMsg.startsWith('skip:decrypt_failed')) {
