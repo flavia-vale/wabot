@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard } from '@/components/mobile/MobileAsyncState'
@@ -494,6 +494,7 @@ export default function OfferPage() {
   const [manualProduct, setManualProduct] = useState({ title: '', price: '', oldPrice: '' })
   const [convertedLink, setConvertedLink] = useState('')
   const [pasteFeedback, setPasteFeedback] = useState('')
+  const inputRef = useRef(null)
   const [selectedTemplate, setSelectedTemplate] = useState('simples')
   const [bonuses, setBonuses] = useState('')
   const [groupBonus, setGroupBonus] = useState({ link: '', cta: '💜 Entra no nosso grupo:' })
@@ -544,26 +545,33 @@ export default function OfferPage() {
   const handlePasteFromClipboard = async () => {
     setPasteFeedback('')
 
-    if (typeof navigator === 'undefined' || !navigator.clipboard?.readText) {
-      setPasteFeedback('Não consegui acessar a área de transferência neste navegador. Toque no campo e use Colar.')
-      return
-    }
-
-    try {
-      const clipboardText = await navigator.clipboard.readText()
-      const nextInput = clipboardText.trim()
-
-      if (!nextInput) {
-        setPasteFeedback('Sua área de transferência está vazia.')
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.readText) {
+      try {
+        const clipboardText = await navigator.clipboard.readText()
+        const nextInput = clipboardText.trim()
+        if (!nextInput) {
+          setPasteFeedback('Área de transferência vazia.')
+          inputRef.current?.focus()
+          return
+        }
+        setInput(nextInput)
+        setPasteFeedback('Link colado.')
         return
+      } catch {
+        // clipboard permission denied — fall through to focus fallback
       }
-
-      setInput(nextInput)
-      setPasteFeedback('Link colado.')
-    } catch (error) {
-      console.warn('Clipboard paste failed:', error)
-      setPasteFeedback('Permita o acesso à área de transferência ou toque no campo e use Colar.')
     }
+
+    inputRef.current?.focus()
+    setPasteFeedback('Campo focado — agora cole o link (toque longo → Colar).')
+  }
+
+  const handleInputPaste = (e) => {
+    const text = e.clipboardData?.getData('text')?.trim()
+    if (!text) return
+    e.preventDefault()
+    setInput(text)
+    setPasteFeedback('Link colado.')
   }
 
   function buildOfferText(
@@ -704,8 +712,10 @@ export default function OfferPage() {
           <div style={criarStyles.inputFieldWrap}>
             {isEmpty ? (
               <textarea
+                ref={inputRef}
                 value={input}
                 onChange={(e) => { setInput(e.target.value); setPasteFeedback('') }}
+                onPaste={handleInputPaste}
                 style={{...criarStyles.inputField(false), minHeight: 60, resize: 'none'}}
                 placeholder="https://..."
                 autoFocus={false}
