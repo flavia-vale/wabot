@@ -50,25 +50,54 @@ export async function convert(url, creds) {
 }
 
 // Resolve short links (shope.ee, s.shopee.com.br) para a URL canônica
-// e extrai (shopid, itemid) — ambos no formato `-i.{shopid}.{itemid}`.
+// e normaliza para o formato que a API de afiliado aceita como origem.
+//
+// Shopee BR ressuscitou em 2026 um shortlink no formato `/opaanlp/{shopId}/{itemId}`
+// (campanha "Open Anuncio Link de Produto") já carimbado como afiliado de
+// terceiros (`utm_medium=affiliates&utm_source=an_<id>` + assinatura
+// `gads_t_sig`). A `generateShortLink` recusa URLs assim com "Invalid origin URL"
+// porque o programa não reetiqueta link de outro afiliado. Solução: extrair
+// (shopId, itemId) do path e reescrever para `/product/{shopId}/{itemId}` sem
+// query string — formato canônico aceito.
+const SHOPEE_PRODUCT_PATH_RE = /\/(?:opaanlp|product|universal-link\/product)\/(\d+)\/(\d+)(?:\/|$)/
+const SHOPEE_DASH_I_RE = /-i\.(\d+)\.(\d+)(?:\/|$)/
+
+export function normalizeShopeeUrl(rawUrl) {
+  try {
+    const u = new URL(rawUrl)
+    if (!/(^|\.)shopee\.com\.br$/.test(u.hostname)) return rawUrl
+    const dashI = u.pathname.match(SHOPEE_DASH_I_RE)
+    if (dashI) {
+      return `https://shopee.com.br/product/${dashI[1]}/${dashI[2]}`
+    }
+    const prod = u.pathname.match(SHOPEE_PRODUCT_PATH_RE)
+    if (prod) {
+      return `https://shopee.com.br/product/${prod[1]}/${prod[2]}`
+    }
+    return rawUrl
+  } catch { return rawUrl }
+}
+
 async function resolveCanonical(url) {
   try {
     const u = new URL(url)
-    if (!/^(shope\.ee|s\.shopee\.com\.br)$/.test(u.hostname)) return url
-    const res = await fetch(url, {
-      redirect: 'follow',
-      signal: AbortSignal.timeout(5000),
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-    })
-    return res.url || url
+    const isShort = /^(shope\.ee|s\.shopee\.com\.br)$/.test(u.hostname)
+    const resolved = isShort
+      ? (await fetch(url, {
+          redirect: 'follow',
+          signal: AbortSignal.timeout(5000),
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+        })).url || url
+      : url
+    return normalizeShopeeUrl(resolved)
   } catch { return url }
 }
 
 function parseIds(url) {
   try {
     const u = new URL(url)
-    const m = u.pathname.match(/-i\.(\d+)\.(\d+)(?:\/|$)/)
-      || u.pathname.match(/^\/product\/(\d+)\/(\d+)(?:\/|$)/)
+    const m = u.pathname.match(SHOPEE_DASH_I_RE)
+      || u.pathname.match(SHOPEE_PRODUCT_PATH_RE)
     if (!m) return null
     return { shopId: m[1], itemId: m[2] }
   } catch { return null }

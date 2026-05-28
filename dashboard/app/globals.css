@@ -1,6 +1,24 @@
 /* dashboard/app/globals.css */
 @import 'tailwindcss';
 
+:root {
+  --bg: #EEF6F2;
+  --bg-soft: #DDEDE5;
+  --surface: #FCFEFD;
+  --ink: #1F2D2A;
+  --ink-soft: #5A6E68;
+  --ink-faint: #8FA09A;
+  --accent: #7CC9A9;
+  --accent-strong: #3E9C7A;
+  --accent-2: #D9CFEA;
+  --accent-3: #F6E8D8;
+  --line: rgba(31,45,42,0.10);
+  --line-strong: rgba(31,45,42,0.18);
+  --danger: #D97757;
+  --success: #3E9C7A;
+  --warn: #E8A45A;
+}
+
 html, body {
   margin: 0;
   padding: 0;
