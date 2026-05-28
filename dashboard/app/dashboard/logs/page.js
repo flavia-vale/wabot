@@ -51,6 +51,9 @@ function explainErrorMsg(errorMsg) {
   if (errorMsg.startsWith('warning:amazon_cookies_expired')) {
     return 'Seus cookies da Amazon (sitestripe) expiraram. As ofertas continuam saindo com link longo de afiliado e creditando comissão, mas para voltar a gerar links curtos amzn.to, renove os cookies em Configurações → Credenciais → Amazon.'
   }
+  if (errorMsg.startsWith('warning:ml_ssid_expired')) {
+    return 'Sua credencial do Mercado Livre (SSID/cookie) expirou. As ofertas continuam saindo com link longo de afiliado (partner_id) e creditando comissão, mas para voltar a gerar links curtos meli.la, renove o SSID em Configurações → Credenciais → Mercado Livre.'
+  }
   if (errorMsg.startsWith('skip:dedup')) {
     return 'Link já enviado nas últimas 2 horas — bloqueado para não duplicar.'
   }

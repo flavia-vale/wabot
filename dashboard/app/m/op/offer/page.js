@@ -1,9 +1,44 @@
 'use client'
 
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
-import { mobi } from '@/components/mobile/mobileStyles'
+import { MobileLoadingCard } from '@/components/mobile/MobileAsyncState'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+import { mobileRoutes } from '@/components/mobile/routes'
+import { api } from '@/lib/api'
+import {
+  COUPON_STORES,
+  TEMPLATE_OPTIONS,
+  buildMobileOfferText,
+  detectMobileOfferStoreKey,
+  getMobileOfferSingleLinkWarning,
+  isValidHttpUrl,
+} from '@/lib/mobileOfferComposer'
+import { loadAllTemplates } from '@/lib/mobileTemplateStore'
+
+const COUPON_LINKS_STORAGE_KEY = 'wabot.mobile.offer.couponLinks.v1'
+const DEFAULT_COUPON_LINKS = { shopee: '', mercadolivre: '', amazon: '', magazineluiza: '' }
+
+function readStoredCouponLinks() {
+  if (typeof window === 'undefined') return DEFAULT_COUPON_LINKS
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(COUPON_LINKS_STORAGE_KEY) || '{}')
+    return { ...DEFAULT_COUPON_LINKS, ...stored }
+  } catch {
+    return DEFAULT_COUPON_LINKS
+  }
+}
+
+function saveStoredCouponLinks(links) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(COUPON_LINKS_STORAGE_KEY, JSON.stringify(links))
+  } catch {
+    // localStorage indisponível: mantém os links editáveis só na sessão atual.
+  }
+}
 
 const criarStyles = {
   pageH: { padding:'18px 20px 0' },
@@ -17,6 +52,10 @@ const criarStyles = {
     fontSize: 11, fontWeight: 600, color:'var(--ink-soft)',
     textTransform:'uppercase', letterSpacing:'0.06em', marginBottom: 8,
   },
+  inputRow: {
+    display:'flex', alignItems:'stretch', gap: 8,
+  },
+  inputFieldWrap: { flex: 1, minWidth: 0, position:'relative' },
   inputField: (filled) => ({
     width:'100%',
     padding:'18px 16px',
@@ -31,6 +70,15 @@ const criarStyles = {
     transition: 'all .2s',
     wordBreak:'break-all', lineHeight: 1.4,
   }),
+  pasteBtn: {
+    width: 76, minHeight: 60, padding:'0 12px',
+    borderRadius: 14, border:'1.5px solid var(--ink)',
+    background:'var(--ink)', color:'white',
+    display:'inline-flex', alignItems:'center', justifyContent:'center', gap: 6,
+    fontSize: 12.5, fontWeight: 700, fontFamily:'inherit',
+    cursor:'pointer', boxShadow:'0 10px 22px rgba(15, 23, 42, 0.12)',
+    flexShrink: 0,
+  },
   inputHint: {
     fontSize: 11.5, color:'var(--ink-faint)',
     marginTop: 8, display:'flex', alignItems:'center', gap: 6,
@@ -76,12 +124,14 @@ const criarStyles = {
       : 'var(--line)'),
     borderRadius: 16,
     padding: 14,
+    overflow: 'hidden',
+    minWidth: 0,
   }),
   beforeLabel: { fontSize: 10.5, color:'var(--ink-faint)', marginBottom: 4 },
   beforeLink: {
     fontFamily:"'JetBrains Mono', monospace", fontSize: 11.5,
     color:'var(--ink-faint)', textDecoration:'line-through',
-    wordBreak:'break-all', lineHeight: 1.45,
+    overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
   },
   afterArrow: {
     display:'flex', alignItems:'center', gap: 6,
@@ -92,7 +142,7 @@ const criarStyles = {
   afterLink: {
     fontFamily:"'JetBrains Mono', monospace", fontSize: 13,
     color:'var(--ink)', fontWeight: 500,
-    wordBreak:'break-all', lineHeight: 1.45,
+    overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
   },
   copyBtn: {
     marginTop: 12, display:'flex', gap: 6,
@@ -156,6 +206,20 @@ const criarStyles = {
     borderRadius: 10,
     fontSize: 11.5, color:'var(--ink)', lineHeight: 1.45,
     display:'flex', alignItems:'flex-start', gap: 8,
+  },
+  inlineWarn: {
+    padding:'9px 11px',
+    background:'color-mix(in oklab, var(--warn) 10%, var(--surface))',
+    border:'1px solid color-mix(in oklab, var(--warn) 26%, var(--line))',
+    borderRadius: 9,
+    fontSize: 11.5, color:'var(--ink)', lineHeight: 1.45,
+  },
+  inlineInfo: {
+    padding:'9px 11px',
+    background:'var(--bg-soft)',
+    border:'1px solid var(--line)',
+    borderRadius: 9,
+    fontSize: 11.5, color:'var(--ink-soft)', lineHeight: 1.45,
   },
 
   // Form manual
@@ -394,6 +458,7 @@ const criarStyles = {
 };
 
 // Por-estado: tom, título, sub
+
 const STATE_CFG = {
   converted: {
     tone:'ok',
@@ -423,424 +488,537 @@ const STATE_CFG = {
 
 export default function OfferPage() {
   useMobileRoutePerf('m/op/offer')
-  const state = 'converted'
-  const expand = false
-  const bonuses = 'both'
-  const bonusLayout = 'unified'
+  const router = useRouter()
+  const [input, setInput] = useState('')
+  const [state, setState] = useState('empty')
+  const [expand, setExpand] = useState(false)
+  const [converting, setConverting] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [productData, setProductData] = useState(null)
+  const [manualProduct, setManualProduct] = useState({ title: '', price: '', oldPrice: '' })
+  const [convertedLink, setConvertedLink] = useState('')
+  const [pasteFeedback, setPasteFeedback] = useState('')
+  const inputRef = useRef(null)
+  const [selectedTemplate, setSelectedTemplate] = useState('achadinho')
+  const [allTemplates, setAllTemplates] = useState(TEMPLATE_OPTIONS)
+  const [bonuses, setBonuses] = useState('')
+  const [groupBonus, setGroupBonus] = useState({ link: '', cta: '💜 Entra no nosso grupo:' })
+  const [couponCta, setCouponCta] = useState('🎟 Mais cupons da {loja}:')
+  const [couponLinks, setCouponLinks] = useState(DEFAULT_COUPON_LINKS)
+  const [selectedCouponStores] = useState(COUPON_STORES.map((store) => store.key))
+  const [baseOfferText, setBaseOfferText] = useState('')
+  const [editorText, setEditorText] = useState('')
+  const [editorDirty, setEditorDirty] = useState(false)
+  const [bonusRegenerateNotice, setBonusRegenerateNotice] = useState('')
+  const [groups, setGroups] = useState([])
+  const [selectedDestinations, setSelectedDestinations] = useState([])
+  const [sendFeedback, setSendFeedback] = useState('')
 
-  const isEmpty = state === 'empty';
-  const cfg = STATE_CFG[state];
-  const productDetected = state === 'converted' || state === 'updated';
-  const isNoConv = state === 'noConverter';
-  const isFail = state === 'scrapeFail';
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    const timer = window.setTimeout(() => {
+      const urlFromQuery = new URLSearchParams(window.location.search).get('url')?.trim()
+      if (urlFromQuery) setInput((current) => current || urlFromQuery)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [])
 
-  const linkOriginal = state === 'updated'
-    ? 's.shopee.com.br/2BkXjT41R'
-    : state === 'noConverter'
-      ? 'loja-xyz.com.br/produto/2837/cafeteira'
-      : 'shopee.com.br/sandalia-bege-verao-i.4738291.928374';
-  const linkAfiliada = 's.shopee.com.br/3As9XkLp2';
+  useEffect(() => {
+    let active = true
+    api.groups()
+      .then((list) => {
+        if (!active) return
+        const destinations = Array.isArray(list) ? list.filter((group) => group.role === 'post' && group.active !== false) : []
+        setGroups(destinations)
+        setSelectedDestinations(destinations.slice(0, 1).map((group) => group.waJid || group.jid || group.id).filter(Boolean))
+      })
+      .catch(() => {
+        if (active) setGroups([])
+      })
+    return () => { active = false }
+  }, [])
+
+
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setCouponLinks(readStoredCouponLinks())
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setAllTemplates(loadAllTemplates())
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  const handlePasteFromClipboard = async () => {
+    setPasteFeedback('')
+
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.readText) {
+      try {
+        const clipboardText = await navigator.clipboard.readText()
+        const nextInput = clipboardText.trim()
+        if (!nextInput) {
+          setPasteFeedback('Área de transferência vazia.')
+          inputRef.current?.focus()
+          return
+        }
+        setInput(nextInput)
+        setPasteFeedback('Link colado.')
+        return
+      } catch {
+        // clipboard permission denied — fall through to focus fallback
+      }
+    }
+
+    inputRef.current?.focus()
+    setPasteFeedback('Campo focado — agora cole o link (toque longo → Colar).')
+  }
+
+  const handleInputPaste = (e) => {
+    const text = e.clipboardData?.getData('text')?.trim()
+    if (!text) return
+    e.preventDefault()
+    setInput(text)
+    setPasteFeedback('Link colado.')
+  }
+
+  function buildOfferText(
+    nextProduct = productData,
+    link = convertedLink || input,
+    template = selectedTemplate,
+    bonusMode = bonuses,
+    overrides = {},
+  ) {
+    const offerStoreKey = overrides.offerStoreKey ?? detectMobileOfferStoreKey({ product: nextProduct || {}, link: input || link })
+    const tpl = allTemplates.find((t) => t.key === template)
+    return buildMobileOfferText({
+      product: nextProduct || {},
+      manualProduct,
+      link,
+      template,
+      templateBody: tpl?.body || null,
+      bonusMode,
+      groupBonus: overrides.groupBonus || groupBonus,
+      couponLinks: overrides.couponLinks || couponLinks,
+      selectedCouponStores,
+      couponCta: overrides.couponCta || couponCta,
+      offerStoreKey,
+    })
+  }
+
+  function setGeneratedOfferText(text) {
+    setBaseOfferText(text)
+    setEditorText(text)
+    setEditorDirty(false)
+    setBonusRegenerateNotice('')
+  }
+
+  function refreshEditorWithBonuses(nextBonusMode = bonuses, overrides = {}) {
+    const nextText = buildOfferText(productData, convertedLink || input, selectedTemplate, nextBonusMode, overrides)
+    setBaseOfferText(nextText)
+    if (editorDirty) {
+      setBonusRegenerateNotice('Atualizar bônus vai regenerar a mensagem.')
+      return
+    }
+    setEditorText(nextText)
+    setBonusRegenerateNotice('')
+  }
+
+  function applyRegeneratedMessage() {
+    setEditorText(baseOfferText)
+    setEditorDirty(false)
+    setBonusRegenerateNotice('')
+  }
+
+  const handleConvert = async () => {
+    if (!input.trim()) return
+    const singleLinkWarning = getMobileOfferSingleLinkWarning(input)
+    if (singleLinkWarning) {
+      setPasteFeedback(singleLinkWarning)
+      return
+    }
+    setConverting(true)
+    setSendFeedback('')
+    try {
+      const convResult = await api.convertLinks(input)
+      const converted = convResult?.results?.[0]?.convertedUrl || input
+      setConvertedLink(converted)
+
+      let scraped = null
+      try {
+        scraped = await api.scrapeOffer(input)
+        setProductData(scraped)
+        setManualProduct({ title: scraped?.title || '', price: scraped?.price || scraped?.newPrice || scraped?.priceNow || '', oldPrice: scraped?.oldPrice || scraped?.priceWas || '' })
+        setState(scraped?.title ? 'converted' : 'scrapeFail')
+      } catch {
+        setProductData(null)
+        setState('scrapeFail')
+      }
+      setGeneratedOfferText(buildOfferText(scraped, converted))
+    } catch (e) {
+      console.error('Conversion failed:', e)
+      setConvertedLink(input)
+      setState('noConverter')
+      setGeneratedOfferText(buildOfferText(null, input))
+    } finally {
+      setConverting(false)
+    }
+  }
+
+  function updateTemplate(template) {
+    setSelectedTemplate(template)
+    setGeneratedOfferText(buildOfferText(productData, convertedLink || input, template, bonuses))
+  }
+
+  function updateManualProduct(field, value) {
+    const next = { ...manualProduct, [field]: value }
+    setManualProduct(next)
+    setGeneratedOfferText(buildOfferText({ title: next.title, price: next.price, oldPrice: next.oldPrice }, convertedLink || input))
+  }
+
+  function toggleDestination(jid) {
+    setSelectedDestinations((current) => current.includes(jid) ? current.filter((item) => item !== jid) : [...current, jid])
+  }
+
+  async function sendNow() {
+    if (!editorText.trim() || selectedDestinations.length === 0) return
+    setSending(true)
+    setSendFeedback('')
+    try {
+      await api.broadcastSend(editorText, selectedDestinations)
+      setSendFeedback('Oferta enviada para os destinos selecionados.')
+    } catch (error) {
+      setSendFeedback(error.message || 'Não foi possível enviar a oferta.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const isEmpty = state === 'empty'
+  const cfg = STATE_CFG[state]
+  const productDetected = state === 'converted'
+  const isNoConv = state === 'noConverter'
+  const isFail = state === 'scrapeFail'
+  const linkOriginal = input
+  const linkAfiliada = convertedLink || input
+  const selectedNames = groups
+    .filter((group) => selectedDestinations.includes(group.waJid || group.jid || group.id))
+    .map((group) => group.name || group.subject || group.waJid || group.jid)
+  const singleLinkWarning = getMobileOfferSingleLinkWarning(input)
+  const currentOfferStoreKey = useMemo(() => detectMobileOfferStoreKey({ product: productData || {}, link: input || convertedLink }), [productData, input, convertedLink])
+  const currentOfferStore = COUPON_STORES.find((store) => store.key === currentOfferStoreKey)
 
   return (
     <MobileShell title="Conversor" active="criar">
-      {/* Header — limpo, sem italianização */}
       <div style={criarStyles.pageH}>
-        <div style={criarStyles.pageEyebrow}>Grátis · sem limite</div>
+        <div style={criarStyles.pageEyebrow}>Oferta manual</div>
         <div style={criarStyles.pageTitle}>Cole um link, posta oferta.</div>
-        <div style={criarStyles.pageSub}>
-          A gente converte pro seu link de afiliada e gera a mensagem pronta.
-        </div>
+        <div style={criarStyles.pageSub}>A gente converte pro seu link de afiliada e monta a mensagem com destinos reais do backoffice.</div>
       </div>
 
-      {/* INPUT — sempre o protagonista */}
       <div style={criarStyles.inputBlock}>
-        <div style={criarStyles.inputLabel}>Link do produto</div>
-        <div style={{position:'relative'}}>
-          {isEmpty ? (
-            <input
-              style={criarStyles.inputField(false)}
-              placeholder="https://..."
-              autoFocus={false}
-            />
-          ) : (
-            <>
-              <div style={criarStyles.inputField(true)}>{linkOriginal}</div>
-              <div style={criarStyles.inputClear}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-                  <line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>
-                </svg>
-              </div>
-            </>
-          )}
+        <div style={criarStyles.inputLabel}>Link do produto · apenas 1 por oferta</div>
+        <div style={criarStyles.inputRow}>
+          <div style={criarStyles.inputFieldWrap}>
+            {isEmpty ? (
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => { setInput(e.target.value); setPasteFeedback('') }}
+                onPaste={handleInputPaste}
+                style={{...criarStyles.inputField(false), minHeight: 60, resize: 'none'}}
+                placeholder="https://..."
+                autoFocus={false}
+              />
+            ) : (
+              <>
+                <div style={criarStyles.inputField(true)}>{linkOriginal}</div>
+                <button type="button" onClick={() => { setInput(''); setState('empty'); setProductData(null); setConvertedLink(''); setExpand(false); setPasteFeedback(''); setGeneratedOfferText('') }} style={criarStyles.inputClear} aria-label="Limpar link">
+                  ×
+                </button>
+              </>
+            )}
+          </div>
+          {isEmpty && <button type="button" onClick={handlePasteFromClipboard} style={criarStyles.pasteBtn}>Colar</button>}
         </div>
-
-        {isEmpty && (
-          <>
-            <div style={criarStyles.inputHint}>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5"/>
-              </svg>
-              No celular: toque longo e escolha &quot;Colar&quot;.
-            </div>
-            <div style={criarStyles.examples}>
-              <button style={criarStyles.examChip}>👟 exemplo Shopee</button>
-              <button style={criarStyles.examChip}>🔌 exemplo Amazon</button>
-            </div>
-          </>
-        )}
+        {isEmpty && <div style={{...criarStyles.inputHint, color: singleLinkWarning ? 'var(--danger)' : 'var(--ink-faint)'}}>{singleLinkWarning || pasteFeedback || 'Cole apenas um link de produto por oferta. Para vários links, use o Conversor.'}</div>}
       </div>
 
-      {/* RESULTADO — só quando há link */}
+      {isEmpty && input.trim() && !converting && (
+        <div style={criarStyles.ctaWrap}>
+          <button type="button" onClick={handleConvert} disabled={Boolean(singleLinkWarning)} style={{...criarStyles.cta, opacity: singleLinkWarning ? 0.6 : 1, cursor: singleLinkWarning ? 'not-allowed' : 'pointer'}}>
+            <MobileIcon name="sparkles" size={15}/> Converter <MobileIcon name="arrow" size={14}/>
+          </button>
+        </div>
+      )}
+
+      {converting && <div style={criarStyles.ctaWrap}><div style={{...criarStyles.cta, opacity: 0.6, cursor: 'not-allowed', justifyContent: 'center'}}><MobileLoadingCard label="Convertendo..." /></div></div>}
+
       {!isEmpty && (
         <div style={criarStyles.resultBlock}>
           <div style={criarStyles.resultHead}>
-            <div style={criarStyles.resultBadge(cfg.tone)}>
-              {cfg.tone === 'warn' ? (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <line x1="12" y1="8" x2="12" y2="13"/><circle cx="12" cy="17" r=".5"/>
-                </svg>
-              ) : <MobileIcon name="check" size={12} stroke={3}/>}
-            </div>
+            <div style={criarStyles.resultBadge(cfg.tone)}>{cfg.tone === 'warn' ? '!' : <MobileIcon name="check" size={12} stroke={3}/>}</div>
             <div style={criarStyles.resultText}>
               <div style={criarStyles.resultTitle}>{cfg.title}</div>
               <div style={criarStyles.resultSub}>{cfg.sub}</div>
             </div>
           </div>
-
           <div style={criarStyles.linkCard(cfg.tone)}>
-            {cfg.showSingle ? (
-              <>
-                <div style={criarStyles.beforeLabel}>seu link</div>
-                <div style={{...criarStyles.afterLink, fontWeight: 400}}>{linkOriginal}</div>
-              </>
-            ) : (
-              <>
-                <div style={criarStyles.beforeLabel}>
-                  {state === 'updated' ? 'link com afiliada antiga' : 'link original'}
-                </div>
-                <div style={criarStyles.beforeLink}>{linkOriginal}</div>
-                <div style={criarStyles.afterArrow}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                    <path d="M12 5v14M5 12h14"/>
-                  </svg>
-                  seu link de afiliada
-                </div>
-                <div style={criarStyles.afterLink}>{linkAfiliada}</div>
-              </>
-            )}
-
-            <div style={criarStyles.copyBtn}>
-              <button style={criarStyles.flatBtn('ghost', true)}>
-                <MobileIcon name="link" size={12}/> Copiar
-              </button>
-              <button style={criarStyles.flatBtn('ghost', true)}>
-                Compartilhar
-              </button>
-            </div>
+            <div style={criarStyles.beforeLabel}>link original</div>
+            <div style={criarStyles.beforeLink}>{linkOriginal}</div>
+            <div style={criarStyles.afterArrow}>seu link de afiliada</div>
+            <div style={criarStyles.afterLink}>{linkAfiliada}</div>
           </div>
-
           {productDetected && (
             <div style={criarStyles.productCard}>
-              <div style={criarStyles.productImg}>IMG</div>
+              <div style={criarStyles.productImg}>{productData?.imageUrl ? 'IMG' : '—'}</div>
               <div style={criarStyles.productInfo}>
-                <div style={criarStyles.productTitle}>Sandália Bege Verão 2026 — Conforto Anatômico</div>
-                <div style={criarStyles.productPrices}>
-                  <span style={criarStyles.priceNow}>R$ 39,90</span>
-                  <span style={criarStyles.priceWas}>R$ 79,90</span>
-                  <span style={criarStyles.pill}>−50%</span>
-                </div>
+                <div style={criarStyles.productTitle}>{productData?.title}</div>
+                {(productData?.price || productData?.newPrice || productData?.priceNow || productData?.oldPrice) && (
+                  <div style={criarStyles.productPrices}>
+                    {(productData?.price || productData?.newPrice || productData?.priceNow) && <span style={criarStyles.priceNow}>{productData.price || productData.newPrice || productData.priceNow}</span>}
+                    {productData?.oldPrice && <span style={criarStyles.priceWas}>{productData.oldPrice}</span>}
+                  </div>
+                )}
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* Form manual — scrape fail OU noConverter */}
       {(isFail || isNoConv) && (
         <div style={criarStyles.manualCard}>
           <div style={criarStyles.fieldRow}>
             <div style={criarStyles.fieldLabel}>Título do produto</div>
-            <input style={criarStyles.fieldInput} defaultValue={isNoConv ? 'Cafeteira Elétrica 3 em 1' : ''} placeholder="ex: Sandália Bege Verão"/>
+            <input style={criarStyles.fieldInput} value={manualProduct.title} onChange={(event) => updateManualProduct('title', event.target.value)} placeholder="Nome do produto" />
           </div>
           <div style={{display:'flex', gap: 10}}>
             <div style={{...criarStyles.fieldRow, flex: 1, marginBottom: 0}}>
               <div style={criarStyles.fieldLabel}>Preço por</div>
-              <input style={criarStyles.fieldInput} defaultValue={isNoConv ? 'R$ 189,00' : ''} placeholder="R$ 39,90"/>
+              <input style={criarStyles.fieldInput} value={manualProduct.price} onChange={(event) => updateManualProduct('price', event.target.value)} placeholder="R$ 0,00" />
             </div>
             <div style={{...criarStyles.fieldRow, flex: 1, marginBottom: 0}}>
               <div style={criarStyles.fieldLabel}>De (opcional)</div>
-              <input style={criarStyles.fieldInput} defaultValue={isNoConv ? 'R$ 279,00' : ''} placeholder="R$ 79,90"/>
+              <input style={criarStyles.fieldInput} value={manualProduct.oldPrice} onChange={(event) => updateManualProduct('oldPrice', event.target.value)} placeholder="R$ 0,00" />
             </div>
           </div>
         </div>
       )}
 
-      {/* CTA pra ir pro próximo passo (montar oferta) */}
       {!isEmpty && !expand && (
         <div style={criarStyles.ctaWrap}>
-          <button style={{...criarStyles.cta, ...(isNoConv ? criarStyles.ctaWarn : {})}}>
-            <MobileIcon name="sparkles" size={15}/>
-            Montar oferta
-            <MobileIcon name="arrow" size={14}/>
+          <button type="button" onClick={() => setExpand(true)} style={{...criarStyles.cta, ...(isNoConv ? criarStyles.ctaWarn : {})}}>
+            <MobileIcon name="sparkles" size={15}/> Montar oferta <MobileIcon name="arrow" size={14}/>
           </button>
-          <div style={criarStyles.ctaNote}>
-            {isNoConv
-              ? 'a oferta vai sair sem afiliada'
-              : 'ou só copia o link aí em cima ↑'}
-          </div>
+          <div style={criarStyles.ctaNote}>{isNoConv ? 'a oferta vai sair sem afiliada se o link não converter' : 'ou só copie o link convertido acima'}</div>
         </div>
       )}
 
-      {/* OFERTA EXPANDIDA — template + editor + destinos + enviar */}
       {!isEmpty && expand && (
         <>
-          {isNoConv && (
-            <div style={criarStyles.warnBanner}>
-              <span style={{color:'var(--warn)', flexShrink:0, marginTop: 1}}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="13"/><circle cx="12" cy="17" r=".5"/></svg>
-              </span>
-              <span><strong style={{color:'var(--warn)'}}>Sem comissão:</strong> essa oferta vai com o link direto da loja.</span>
-            </div>
-          )}
-
           <div style={criarStyles.sectionH}>
             <div style={criarStyles.sectionTitle}>Escolha um modelo</div>
-            <div style={{display:'flex', alignItems:'center', gap: 4}}>
-              <button style={criarStyles.editTemplateLink}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-                </svg>
-                Gerenciar
-              </button>
-              <button style={criarStyles.aiPill}>
-                <MobileIcon name="sparkles" size={11}/> Reescrever
-              </button>
-            </div>
+            <button type="button" onClick={() => router.push(mobileRoutes.accountTemplates)} style={criarStyles.editTemplateLink}>Editar</button>
           </div>
-          <div style={criarStyles.sectionHint}>
-            Cada modelo tem mensagem, link do grupo e cupons configurados.
-          </div>
-
           <div style={criarStyles.templateRow}>
-            {[
-              {key:'achadinho', name:'Achadinho ✨', preview:'✨ Achadinho do dia\n\n[produto]\nPor R$ 39,90 com frete!', sel: true},
-              {key:'relampago', name:'Relâmpago ⚡', preview:'⚡ ÚLTIMAS HORAS ⚡\n\n[produto]\nDe R$ 79 por R$ 39!', sel: false},
-              {key:'tech', name:'Tech 🔌', preview:'🔌 Achado tech\n\n[produto]\nspecs · cupom · link', sel: false},
-              {key:'beleza', name:'Beleza 💄', preview:'💄 Pra mimar você\n\n[produto]\npreço cheio R$ 79, hoje:', sel: false},
-            ].map(t => (
-              <button key={t.key} style={criarStyles.templateCard(t.sel)}>
-                <div style={criarStyles.templateName}>{t.name}</div>
-                <div style={criarStyles.templatePreview(t.sel)}>{t.preview}</div>
+            {allTemplates.map((template) => (
+              <button key={template.key} type="button" onClick={() => updateTemplate(template.key)} style={criarStyles.templateCard(selectedTemplate === template.key)}>
+                <div style={criarStyles.templateName}>{template.name}</div>
+                <div style={criarStyles.templatePreview(selectedTemplate === template.key)}>{(template.body || template.preview || '').split('\n').slice(0, 4).join('\n')}</div>
               </button>
             ))}
           </div>
 
-          {/* Editor */}
           <div style={criarStyles.editorWrap}>
-            <textarea style={criarStyles.editor} defaultValue={`✨ Achadinho do dia\n\nSandália Bege Verão 2026 — só hoje por *R$ 39,90* com frete grátis!\n\nDe ~R$ 79,90~ por R$ 39,90 🔥\n\n👉 ${isNoConv ? linkOriginal : linkAfiliada}${bonuses === 'both' || bonuses === 'coupons' ? '\n\n🎟 Mais cupons da Shopee:\ns.shopee.com.br/cupons-sol' : ''}${bonuses === 'both' || bonuses === 'group' ? '\n\n💜 Entra no nosso grupo:\nwa.me/achadosdasol' : ''}\n\n#achados #moda`}/>
-            <div style={criarStyles.vars}>
-              {['{produto}','{preço}','{preço_de}','{link}','{loja}'].map(v => (
-                <span key={v} style={criarStyles.varChip}>{v}</span>
-              ))}
-            </div>
+            <textarea style={criarStyles.editor} value={editorText} onChange={(event) => { setEditorText(event.target.value); setEditorDirty(event.target.value !== baseOfferText) }} />
+              {editorDirty && <div style={{...criarStyles.inlineInfo, marginTop: 8}}>Você editou a mensagem manualmente. Atualizar bônus vai regenerar a mensagem.</div>}
           </div>
 
-          {/* ─── BÔNUS NA MENSAGEM ─── */}
           <div style={criarStyles.sectionH}>
             <div style={criarStyles.sectionTitle}>Adicionar à mensagem</div>
           </div>
           <div style={criarStyles.sectionHint}>
-            Configurado aqui vale pra toda oferta com este modelo. Editável a qualquer hora.
+            Configure links extras do modelo sem sair da oferta. Atualizar bônus vai regenerar a mensagem.
           </div>
+          {bonusRegenerateNotice && (
+            <div style={{margin:'0 16px 10px', display:'grid', gap: 8}}>
+              <div style={criarStyles.inlineWarn}>{bonusRegenerateNotice}</div>
+              <button type="button" onClick={applyRegeneratedMessage} style={criarStyles.flatBtn('primary', true)}>Atualizar mensagem com bônus</button>
+            </div>
+          )}
 
           {(() => {
-            const groupOn   = bonuses === 'group'   || bonuses === 'both';
-            const couponsOn = bonuses === 'coupons' || bonuses === 'both';
-            const lojas = [
-              {key:'shopee', nome:'Shopee',        cor:'#EE4D2D', sel:true, url:'s.shopee.com.br/cupons-sol'},
-              {key:'ml',     nome:'Mercado Livre', cor:'#FFE600', sel:true, url:'mercadolivre.com/loja-sol/cupons'},
-              {key:'amazon', nome:'Amazon',        cor:'#FF9900', sel:false, url:''},
-              {key:'magalu', nome:'Magalu',        cor:'#0086FF', sel:false, url:''},
-            ];
+            const groupOn = bonuses === 'group' || bonuses === 'both'
+            const couponsOn = bonuses === 'coupons' || bonuses === 'both'
+            const toggleGroup = () => {
+              const next = groupOn ? (bonuses === 'both' ? 'coupons' : '') : (couponsOn ? 'both' : 'group')
+              setBonuses(next)
+              refreshEditorWithBonuses(next)
+            }
+            const toggleCoupons = () => {
+              const next = couponsOn ? (bonuses === 'both' ? 'group' : '') : (groupOn ? 'both' : 'coupons')
+              setBonuses(next)
+              refreshEditorWithBonuses(next)
+            }
+            const updateGroupBonus = (field, value) => {
+              const nextGroupBonus = { ...groupBonus, [field]: value }
+              setGroupBonus(nextGroupBonus)
+              refreshEditorWithBonuses(bonuses, { groupBonus: nextGroupBonus })
+            }
+            const updateCouponLink = (storeKey, value) => {
+              const nextCouponLinks = { ...couponLinks, [storeKey]: value }
+              setCouponLinks(nextCouponLinks)
+              saveStoredCouponLinks(nextCouponLinks)
+              refreshEditorWithBonuses(bonuses, { couponLinks: nextCouponLinks })
+            }
+            const updateCouponCta = (value) => {
+              setCouponCta(value)
+              refreshEditorWithBonuses(bonuses, { couponCta: value })
+            }
+            const groupLinkInvalid = groupBonus.link.trim() && !isValidHttpUrl(groupBonus.link)
+            const groupPreview = groupLinkInvalid
+              ? 'Link inválido. Use uma URL começando com http:// ou https://.'
+              : groupBonus.link.trim()
+                ? `${groupBonus.cta.trim() || 'Entre no nosso grupo:'}
+${groupBonus.link.trim()}`
+                : 'Preencha o link do grupo para ele aparecer na mensagem.'
+            const currentCouponLink = currentOfferStoreKey ? String(couponLinks[currentOfferStoreKey] || '').trim() : ''
+            const currentCouponInvalid = currentCouponLink && !isValidHttpUrl(currentCouponLink)
+            const couponPreview = !currentOfferStore
+              ? 'Não detectei a loja desta oferta. O cupom não será adicionado automaticamente.'
+              : currentCouponInvalid
+                ? `O link de cupom da ${currentOfferStore.nome} não é uma URL válida. Use http:// ou https://.`
+                : currentCouponLink
+                  ? `${(couponCta.trim() || 'Mais cupons da {loja}:').replace('{loja}', currentOfferStore.nome)}
+${currentCouponLink}`
+                  : `Preencha o link de cupom da ${currentOfferStore.nome}. Só esse link será usado nesta oferta.`
 
-            // ─── conteúdo de cada bônus (reaproveitado em ambos os layouts) ───
             const groupHead = (on) => (
-              <div style={{display:'flex', alignItems:'center', gap: 12}}>
+              <button type="button" style={{...criarStyles.unifiedRowHead, width:'100%', border:'none', background:'transparent', padding:0, textAlign:'left', fontFamily:'inherit'}} onClick={toggleGroup} aria-pressed={on}>
                 <div style={criarStyles.bonusIcon(on)}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
                     <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
                   </svg>
                 </div>
                 <div style={criarStyles.bonusMain}>
                   <div style={criarStyles.bonusTitle}>Link do seu grupo</div>
-                  <div style={criarStyles.bonusSub}>
-                    {on ? 'aparece no fim de toda mensagem' : 'convida pra entrar no seu grupo principal'}
-                  </div>
+                  <div style={criarStyles.bonusSub}>{on ? 'aparece no fim da mensagem quando houver link' : 'convida pra entrar no seu grupo principal'}</div>
                 </div>
-                <div style={criarStyles.bonusToggle(on)}>
-                  <div style={criarStyles.bonusKnob(on)}/>
-                </div>
-              </div>
-            );
-            const groupBody = (
-              <>
-                <div style={criarStyles.bonusField}>
-                  <div style={criarStyles.bonusLabel}>Link de convite</div>
-                  <input style={criarStyles.bonusInput} defaultValue="wa.me/achadosdasol"/>
-                </div>
-                <div style={criarStyles.bonusField}>
-                  <div style={criarStyles.bonusLabel}>Chamada (CTA)</div>
-                  <input style={criarStyles.bonusInputText} defaultValue="💜 Entra no nosso grupo:"/>
-                </div>
-                <div>
-                  <div style={criarStyles.bonusPreviewLabel}>
-                    <MobileIcon name="check" size={10} stroke={3}/>
-                    como vai aparecer
-                  </div>
-                  <div style={criarStyles.bonusPreview}>
-                    💜 Entra no nosso grupo:{'\n'}wa.me/achadosdasol
-                  </div>
-                </div>
-              </>
-            );
-
+                <div style={criarStyles.bonusToggle(on)}><div style={criarStyles.bonusKnob(on)}/></div>
+              </button>
+            )
             const couponsHead = (on) => (
-              <div style={{display:'flex', alignItems:'center', gap: 12}}>
+              <button type="button" style={{...criarStyles.unifiedRowHead, width:'100%', border:'none', background:'transparent', padding:0, textAlign:'left', fontFamily:'inherit'}} onClick={toggleCoupons} aria-pressed={on}>
                 <div style={criarStyles.bonusIcon(on)}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M20 12V8H4v8h16v-4z"/><path d="M9 8v8M15 8v8"/>
                   </svg>
                 </div>
                 <div style={criarStyles.bonusMain}>
                   <div style={criarStyles.bonusTitle}>Página de cupons da loja</div>
-                  <div style={criarStyles.bonusSub}>
-                    {on ? 'só aparece quando a oferta for da loja correspondente' : 'leva pra sua página de cupons da loja'}
-                  </div>
+                  <div style={criarStyles.bonusSub}>{on ? 'usa somente o cupom da loja desta oferta' : 'links ficam salvos neste navegador e editáveis'}</div>
                 </div>
-                <div style={criarStyles.bonusToggle(on)}>
-                  <div style={criarStyles.bonusKnob(on)}/>
+                <div style={criarStyles.bonusToggle(on)}><div style={criarStyles.bonusKnob(on)}/></div>
+              </button>
+            )
+
+            return (
+              <div style={{...criarStyles.unifiedCard, marginTop: 4}}>
+                <div style={criarStyles.unifiedRow(groupOn, false)}>
+                  {groupHead(groupOn)}
+                  {groupOn && (
+                    <div style={criarStyles.unifiedBody}>
+                      <label style={criarStyles.bonusField}>
+                        <div style={criarStyles.bonusLabel}>Link de convite</div>
+                        <input style={criarStyles.bonusInput} value={groupBonus.link} onChange={(event) => updateGroupBonus('link', event.target.value)} placeholder="https://chat.whatsapp.com/..." />
+                        {groupLinkInvalid && <div style={{...criarStyles.inlineWarn, marginTop: 6}}>Use uma URL começando com http:// ou https://.</div>}
+                      </label>
+                      <label style={criarStyles.bonusField}>
+                        <div style={criarStyles.bonusLabel}>Chamada (CTA)</div>
+                        <input style={criarStyles.bonusInputText} value={groupBonus.cta} onChange={(event) => updateGroupBonus('cta', event.target.value)} />
+                      </label>
+                      <div>
+                        <div style={criarStyles.bonusPreviewLabel}><MobileIcon name="check" size={10} stroke={3}/>como vai aparecer</div>
+                        <div style={criarStyles.bonusPreview}>{groupPreview}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div style={criarStyles.unifiedRow(couponsOn, true)}>
+                  {couponsHead(couponsOn)}
+                  {couponsOn && (
+                    <div style={criarStyles.unifiedBody}>
+                      <div style={criarStyles.inlineInfo}>
+                        {currentOfferStore ? `Nesta oferta será usado apenas o link de cupom da ${currentOfferStore.nome}. Os links preenchidos ficam memorizados neste navegador para as próximas ofertas e continuam editáveis abaixo.` : 'Preencha os links de cupom por loja. Quando a loja da oferta for detectada, usamos apenas o link correspondente.'}
+                      </div>
+                      {COUPON_STORES.filter((store) => selectedCouponStores.includes(store.key)).map((store) => (
+                        <label key={store.key} style={criarStyles.bonusField}>
+                          <div style={criarStyles.storeRow}>
+                            <div style={criarStyles.storeBadge(store.cor)}>{store.nome.slice(0,2).toUpperCase()}</div>
+                            <span style={criarStyles.storeName}>Link {store.nome}</span>
+                          </div>
+                          <input style={{...criarStyles.bonusInput, marginTop: 6}} value={couponLinks[store.key] || ''} onChange={(event) => updateCouponLink(store.key, event.target.value)} placeholder="https://..." />
+                          {couponLinks[store.key]?.trim() && !isValidHttpUrl(couponLinks[store.key]) && <div style={{...criarStyles.inlineWarn, marginTop: 6}}>Este link não é uma URL válida. Use http:// ou https://.</div>}
+                        </label>
+                      ))}
+                      <label style={criarStyles.bonusField}>
+                        <div style={criarStyles.bonusLabel}>Chamada (CTA) · use {'{loja}'} pro nome</div>
+                        <input style={criarStyles.bonusInputText} value={couponCta} onChange={(event) => updateCouponCta(event.target.value)} />
+                      </label>
+                      <div>
+                        <div style={criarStyles.bonusPreviewLabel}><MobileIcon name="check" size={10} stroke={3}/>nesta oferta</div>
+                        <div style={criarStyles.bonusPreview}>{couponPreview}</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            );
-            const couponsBody = (
-              <>
-                <div style={criarStyles.bonusField}>
-                  <div style={criarStyles.bonusLabel}>Quais lojas você tem cupom?</div>
-                  <div style={criarStyles.storeChips}>
-                    {lojas.map(l => (
-                      <button key={l.key} style={criarStyles.storeChip(l.sel)}>
-                        {l.sel && <MobileIcon name="check" size={10} stroke={3}/>}
-                        {l.nome}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {lojas.filter(l => l.sel).map(l => (
-                  <div key={l.key} style={criarStyles.bonusField}>
-                    <div style={criarStyles.storeRow}>
-                      <div style={criarStyles.storeBadge(l.cor)}>{l.nome.slice(0,2).toUpperCase()}</div>
-                      <span style={criarStyles.storeName}>Link {l.nome}</span>
-                    </div>
-                    <input style={{...criarStyles.bonusInput, marginTop: 6}} defaultValue={l.url}/>
-                  </div>
-                ))}
-
-                <div style={criarStyles.bonusField}>
-                  <div style={criarStyles.bonusLabel}>
-                    Chamada (CTA) · use {'{loja}'} pro nome
-                  </div>
-                  <input style={criarStyles.bonusInputText} defaultValue="🎟 Mais cupons da {loja}:"/>
-                </div>
-                <div>
-                  <div style={criarStyles.bonusPreviewLabel}>
-                    <MobileIcon name="check" size={10} stroke={3}/>
-                    nesta oferta (Shopee)
-                  </div>
-                  <div style={criarStyles.bonusPreview}>
-                    🎟 Mais cupons da Shopee:{'\n'}s.shopee.com.br/cupons-sol
-                  </div>
-                </div>
-              </>
-            );
-
-            // ─── LAYOUT UNIFIED — um card só, dividido em sub-rows ───
-            if (bonusLayout === 'unified') {
-              return (
-                <div style={{...criarStyles.unifiedCard, marginTop: 4}}>
-                  <div style={criarStyles.unifiedRow(groupOn, false)}>
-                    <div style={criarStyles.unifiedRowHead}>{groupHead(groupOn)}</div>
-                    {groupOn && <div style={criarStyles.unifiedBody}>{groupBody}</div>}
-                  </div>
-                  <div style={criarStyles.unifiedRow(couponsOn, true)}>
-                    <div style={criarStyles.unifiedRowHead}>{couponsHead(couponsOn)}</div>
-                    {couponsOn && <div style={criarStyles.unifiedBody}>{couponsBody}</div>}
-                  </div>
-                </div>
-              );
-            }
-
-            // ─── LAYOUT SEPARATE — 2 cards ───
-            return (
-              <>
-                <div style={{...criarStyles.bonusCard(groupOn), marginTop: 4}}>
-                  <div style={criarStyles.bonusHead}>{groupHead(groupOn)}</div>
-                  {groupOn && <div style={criarStyles.bonusBody}>{groupBody}</div>}
-                </div>
-                <div style={criarStyles.bonusCard(couponsOn)}>
-                  <div style={criarStyles.bonusHead}>{couponsHead(couponsOn)}</div>
-                  {couponsOn && <div style={criarStyles.bonusBody}>{couponsBody}</div>}
-                </div>
-              </>
-            );
+            )
           })()}
 
-          {/* Destinos — checkbox style com seleção visual clara */}
           <div style={criarStyles.sectionH}>
             <div style={criarStyles.sectionTitle}>Postar em</div>
-            <span style={{fontSize: 11, color:'var(--ink-soft)', fontWeight: 600}}>2 selecionados</span>
+            <span style={{fontSize: 11, color:'var(--ink-soft)', fontWeight: 600}}>{selectedDestinations.length} selecionado(s)</span>
           </div>
-
           <div style={criarStyles.destCard}>
-            {[
-              {nome:'Achados da Sol 💜', tipo:'grupo · 247 pessoas', sel:true, g:'linear-gradient(135deg, var(--accent), var(--accent-2))'},
-              {nome:'Sol · Tech & Casa', tipo:'grupo · 118 pessoas', sel:false, g:'linear-gradient(135deg, var(--accent-3), var(--warn))'},
-              {nome:'Canal Sol Achados', tipo:'canal · 2.4k inscritos', sel:true, g:'linear-gradient(135deg, var(--accent-2), var(--accent-strong))'},
-            ].map((d, i, a) => (
-              <div key={i} style={criarStyles.destRow(d.sel, i === a.length-1)}>
-                <div style={criarStyles.destCheck(d.sel)}>
-                  {d.sel && <MobileIcon name="check" size={11} stroke={3}/>}
-                </div>
-                <div style={criarStyles.destAvatar(d.g)}>
-                  {d.nome.split(' ').slice(0,2).map(w=>w[0]).join('').replace(/[^A-Za-zÀ-ÿ]/g,'').toUpperCase().slice(0,2)}
-                </div>
-                <div style={criarStyles.destMain}>
-                  <div style={criarStyles.destName}>{d.nome}</div>
-                  <div style={criarStyles.destSub}>{d.tipo}</div>
-                </div>
-              </div>
-            ))}
+            {groups.length === 0 ? (
+              <div style={{padding: 16, fontSize: 12, color:'var(--ink-soft)'}}>Nenhum destino ativo configurado em Grupos e canais.</div>
+            ) : groups.map((group, index) => {
+              const jid = group.waJid || group.jid || group.id
+              const selected = selectedDestinations.includes(jid)
+              const name = group.name || group.subject || jid
+              return (
+                <button key={jid} type="button" onClick={() => toggleDestination(jid)} style={{...criarStyles.destRow(selected, index === groups.length - 1), width:'100%', border:'none', background:'transparent', textAlign:'left'}}>
+                  <div style={criarStyles.destCheck(selected)}>{selected && <MobileIcon name="check" size={11} stroke={3}/>}</div>
+                  <div style={criarStyles.destAvatar('linear-gradient(135deg, var(--accent), var(--accent-2))')}>{name.split(' ').slice(0,2).map(w=>w[0]).join('').replace(/[^A-Za-zÀ-ÿ]/g,'').toUpperCase().slice(0,2) || 'WA'}</div>
+                  <div style={criarStyles.destMain}>
+                    <div style={criarStyles.destName}>{name}</div>
+                    <div style={criarStyles.destSub}>{group.kind === 'channel' ? 'canal' : 'grupo'}</div>
+                  </div>
+                </button>
+              )
+            })}
           </div>
 
-          {/* Enviar */}
           <div style={criarStyles.sendWrap}>
             <div style={criarStyles.sendRow}>
-              <button style={criarStyles.schedBtn}>
-                <MobileIcon name="bolt" size={14}/> Agendar
-              </button>
-              <button style={criarStyles.sendBtn}>
-                Enviar agora <MobileIcon name="arrow" size={14}/>
+              <button type="button" disabled style={{...criarStyles.schedBtn, opacity: 0.55}}>Agendar em breve</button>
+              <button type="button" onClick={sendNow} disabled={sending || selectedDestinations.length === 0 || !editorText.trim()} style={{...criarStyles.sendBtn, opacity: sending || selectedDestinations.length === 0 || !editorText.trim() ? 0.6 : 1}}>
+                {sending ? 'Enviando...' : 'Enviar agora'} <MobileIcon name="arrow" size={14}/>
               </button>
             </div>
-            <div style={criarStyles.sendNote}>
-              Vai pra <strong style={{color:'var(--ink)'}}>Achados da Sol 💜</strong> + <strong style={{color:'var(--ink)'}}>Canal Sol Achados</strong>
-            </div>
+            <div style={criarStyles.sendNote}>{selectedNames.length ? `Vai para ${selectedNames.join(', ')}` : 'Selecione pelo menos um destino real.'}</div>
+            {sendFeedback && <div style={{fontSize: 12, color: sendFeedback.includes('Não') ? 'var(--danger)' : 'var(--success)', marginTop: 8}}>{sendFeedback}</div>}
           </div>
         </>
       )}
 
       <div style={{height: 20}}/>
     </MobileShell>
-  );
+  )
 }

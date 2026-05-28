@@ -1,8 +1,14 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
+import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+import { mobileRoutes } from '@/components/mobile/routes'
+import { api } from '@/lib/api'
+import { DEFAULT_LANDING_PLANS } from '@/lib/marketing-content'
 
 const contaStyles = {
   // Perfil — discreto, sem blob
@@ -111,8 +117,8 @@ const contaStyles = {
 };
 
 // Linha de configuração
-const ContaRow = ({ icon, tone, title, sub, statusTone, value, last }) => (
-  <div style={contaStyles.row(last)}>
+const ContaRow = ({ icon, tone, title, sub, statusTone, value, last, onClick }) => (
+  <button type="button" onClick={onClick} style={{...contaStyles.row(last), width:'100%', border:'none', background:'transparent', textAlign:'left', fontFamily:'inherit'}}>
     <div style={contaStyles.rowIcon(tone)}>
       <MobileIcon name={icon} size={15} stroke={1.8}/>
     </div>
@@ -123,31 +129,98 @@ const ContaRow = ({ icon, tone, title, sub, statusTone, value, last }) => (
     {statusTone && <div style={contaStyles.statusDot(statusTone)}/>}
     {value && <span style={contaStyles.rowValue}>{value}</span>}
     <MobileIcon name="arrow" size={13}/>
-  </div>
+  </button>
 );
 
 export default function AccountPage() {
   useMobileRoutePerf('m/account')
+  const [user, setUser] = useState(null)
+  const [session, setSession] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const router = useRouter()
+
+  useEffect(() => {
+    let active = true
+    async function load() {
+      setLoading(true)
+      setError('')
+      try {
+        const [u, s] = await Promise.all([
+          api.me().catch(() => null),
+          api.sessionStatus().catch(() => null),
+        ])
+        if (!active) return
+        setUser(u || {})
+        setSession(s || {})
+      } catch (e) {
+        if (active) setError(e.message || 'Não foi possível carregar os dados.')
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    load()
+    return () => { active = false }
+  }, [])
+
+
+  async function handleLogout() {
+    try {
+      await api.logout()
+    } finally {
+      router.replace('/login')
+    }
+  }
+
+  if (loading) {
+    return (
+      <MobileShell title="Conversor" active="conta">
+        <div style={{ padding: '18px 16px' }}><MobileLoadingCard label="Carregando conta..." /></div>
+      </MobileShell>
+    )
+  }
+  if (error) {
+    return (
+      <MobileShell title="Conversor" active="conta">
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+      </MobileShell>
+    )
+  }
+
+  const name = user?.name || 'Usuário'
+  const email = user?.email || ''
+  const firstName = name.split(' ')[0]
+  const initials = name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
+  const plan = user?.plan?.toUpperCase() || 'FREE'
+  const isPro = user?.plan === 'pro'
+  const planDef = DEFAULT_LANDING_PLANS.find(p => p.id === user?.plan)
+  const planPrice = planDef?.priceValue > 0 ? `${planDef.price}/mês` : 'Grátis'
+  const accessDate = user?.accessExpiresAt ? new Date(user.accessExpiresAt).toLocaleDateString('pt-BR') : ''
+  const renewLabel = isPro ? 'renova em' : 'válido até'
+  const connectedLabel = session?.connectedAt ? `desde ${new Date(session.connectedAt).toLocaleDateString('pt-BR')}` : 'conectado'
+
   return (
     <MobileShell title="Conversor" active="conta">
-      {/* Perfil — limpo */}
+      {/* Perfil */}
       <div style={contaStyles.profile}>
-        <div style={contaStyles.avatar}>SO</div>
+        <div style={contaStyles.avatar}>{initials}</div>
         <div style={contaStyles.profileMain}>
-          <div style={contaStyles.name}>Sol Almeida</div>
-          <div style={contaStyles.email}>sol@almeida.com.br</div>
-          <div style={contaStyles.planRow}>PRO</div>
+          <div style={contaStyles.name}>{name}</div>
+          <div style={contaStyles.email}>{email}</div>
+          <div style={contaStyles.planRow}>{plan}</div>
         </div>
       </div>
 
-      {/* Plano — separado, sem marketing pesado */}
-      <div style={contaStyles.plan}>
-        <div style={contaStyles.planMain}>
-          <div style={contaStyles.planTitle}>R$ 19/mês · renova em 14 dias</div>
-          <div style={contaStyles.planSub}>incluído: espelhamento e reescrita por IA</div>
+      {/* Plano */}
+      {user?.plan && (
+        <div style={contaStyles.plan}>
+          <div style={contaStyles.planMain}>
+            <div style={contaStyles.planTitle}>{planPrice}{accessDate ? ` · ${renewLabel} ${accessDate}` : ''}</div>
+            <div style={contaStyles.planSub}>incluído: espelhamento</div>
+          </div>
+          <button type="button" onClick={() => router.push(mobileRoutes.accountSubscription)} style={contaStyles.planBtn}>Gerenciar</button>
         </div>
-        <button style={contaStyles.planBtn}>Gerenciar</button>
-      </div>
+      )}
 
       {/* ── CONEXÕES ── */}
       <div style={contaStyles.section}>
@@ -155,11 +228,10 @@ export default function AccountPage() {
       </div>
       <div style={contaStyles.card}>
         <ContaRow icon="whatsapp" tone="success" title="WhatsApp"
-          sub="+55 11 9 8765-4321 · ativo há 47 dias" statusTone="success"/>
-        <ContaRow icon="chat" tone="success" title="Telegram"
-          sub="@sol_achados" statusTone="success"/>
+          sub={session?.phone ? `${session.phone} · ${connectedLabel}` : 'não conectado'}
+          statusTone={session?.running ? "success" : "danger"} onClick={() => router.push(mobileRoutes.configWhatsApp)} last={false}/>
         <ContaRow icon="link" tone="accent" title="Suas afiliadas"
-          sub="Shopee · ML · Amazon · Magalu · AliExpress falhou" value="4 de 5" last/>
+          sub="Shopee · ML · Amazon · Magalu" value="editar" onClick={() => router.push(mobileRoutes.configCredentials)} last/>
       </div>
 
       {/* ── ENVIOS — atalhos, não duplicação ── */}
@@ -168,11 +240,9 @@ export default function AccountPage() {
       </div>
       <div style={contaStyles.card}>
         <ContaRow icon="plus" title="Modelos de mensagem"
-          sub="achadinho · relâmpago · tech · beleza" value="4"/>
+          sub="modelos salvos no backoffice" value="editar" onClick={() => router.push(mobileRoutes.accountTemplates)}/>
         <ContaRow icon="bolt" title="Ritmo de envio"
-          sub="1 envio a cada 12 minutos"/>
-        <ContaRow icon="sparkles" tone="accent" title="Reescrita por IA"
-          sub="evita repetições · grátis no PRO" value="ativo" last/>
+          sub="ajuste em grupos e preservação" onClick={() => router.push(mobileRoutes.espelhar)} last/>
       </div>
 
       {/* ── ANTI-BANIMENTO (era "Preservação avançada") ── */}
@@ -181,19 +251,9 @@ export default function AccountPage() {
       </div>
       <div style={contaStyles.card}>
         <ContaRow icon="shield" tone="success" title="Anti-banimento"
-          sub="ajusta o ritmo automaticamente quando o WhatsApp aperta" statusTone="success" last/>
+          sub="ajusta o ritmo automaticamente quando o WhatsApp aperta" statusTone="success" onClick={() => router.push(mobileRoutes.espelhar)} last/>
       </div>
 
-      {/* ── PREFERÊNCIAS ── */}
-      <div style={contaStyles.section}>
-        <div style={contaStyles.sectionLabel}>Preferências</div>
-      </div>
-      <div style={contaStyles.card}>
-        <ContaRow icon="chat" title="Notificações"
-          sub="quando avisar de falhas, novos envios e marcos"/>
-        <ContaRow icon="star" title="Aparência"
-          sub="tema · idioma" value="Menta · Claro" last/>
-      </div>
 
       {/* ── CONTA + AJUDA ── */}
       <div style={contaStyles.section}>
@@ -201,15 +261,15 @@ export default function AccountPage() {
       </div>
       <div style={contaStyles.card}>
         <ContaRow icon="star" title="Assinatura e cobrança"
-          sub="histórico · forma de pagamento · cancelar"/>
+          sub="histórico · forma de pagamento · renovar" onClick={() => router.push(mobileRoutes.accountSubscription)}/>
         <ContaRow icon="chat" title="Falar com a gente"
-          sub="WhatsApp · responde em até 1h em horário comercial"/>
+          sub="guia rápido e próximos passos" onClick={() => router.push(mobileRoutes.helpTutorial)}/>
         <ContaRow icon="shield" title="Privacidade e dados"
-          sub="o que coletamos e como excluir" last/>
+          sub="termos e privacidade no site" onClick={() => router.push('/privacidade')} last/>
       </div>
 
       {/* ── SAIR ── */}
-      <button style={contaStyles.signout}>
+      <button type="button" onClick={handleLogout} style={contaStyles.signout}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
         </svg>
