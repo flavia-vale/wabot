@@ -16,6 +16,19 @@ function formatOfferPrice(raw) {
   return numeric.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
+function normalizeLinkValue(raw, fallback = '') {
+  if (typeof raw === 'string') return raw
+  if (raw && typeof raw === 'object') {
+    if (typeof raw.url === 'string') return raw.url
+    if (typeof raw.href === 'string') return raw.href
+  }
+  return typeof fallback === 'string' ? fallback : ''
+}
+
+function normalizeTextValue(raw) {
+  return typeof raw === 'string' ? raw : ''
+}
+
 function applyTemplate(template, values) {
   return String(template || '')
     .replaceAll('{{title}}', values.title || '')
@@ -72,14 +85,19 @@ export function OfferBuilder({ mode = 'standalone', initialLink = '', onCopy, co
     setLoading(true)
     try {
       const info = await api.scrapeOffer(trimmed)
-      if (!info?.title && !info?.newPrice) {
+      const safeTitle = normalizeTextValue(info?.title)
+      const safeOldPrice = normalizeTextValue(info?.oldPrice)
+      const safeNewPrice = normalizeTextValue(info?.newPrice)
+      const safeOfferUrl = normalizeLinkValue(info?.offerUrl, trimmed)
+
+      if (!safeTitle && !safeNewPrice) {
         setError('Não conseguimos ler título e preço desse link. Preencha os campos manualmente abaixo.')
       }
       setGenerated({
-        title: info?.title || '',
-        oldPrice: info?.oldPrice || '',
-        newPrice: info?.newPrice || '',
-        link: info?.offerUrl || trimmed,
+        title: safeTitle,
+        oldPrice: safeOldPrice,
+        newPrice: safeNewPrice,
+        link: safeOfferUrl,
       })
       setConversionStatus(info?.conversion || null)
     } catch (err) {
