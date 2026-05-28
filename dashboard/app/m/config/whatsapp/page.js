@@ -56,7 +56,12 @@ export default function WhatsAppPage() {
   // Poll when connecting (pairing code flow) to detect successful connection
   useEffect(() => {
     const isConnecting = session?.running && session?.status === 'connecting'
-    if (!isConnecting) {
+    // Poll while there's a pairing code visible OR while the session is in connecting state.
+    // Using only session?.status was unreliable: the first refreshSession after generating the
+    // code sometimes returned a non-'connecting' status due to timing, so the interval never
+    // started and the page got stuck on the code screen after the phone connected.
+    const shouldPoll = isConnecting || Boolean(pairingCode)
+    if (!shouldPoll) {
       if (pollingRef.current) clearInterval(pollingRef.current)
       pollingRef.current = null
       return
@@ -69,7 +74,7 @@ export default function WhatsAppPage() {
       if (latest.status === 'connected') {
         setPairingCode('')
         setFeedback('Bot online ✅ Conexão concluída.')
-        if (pollingRef.current) clearInterval(pollingRef.current)
+        clearInterval(pollingRef.current)
         pollingRef.current = null
       }
     }, 5000)
@@ -77,7 +82,7 @@ export default function WhatsAppPage() {
       if (pollingRef.current) clearInterval(pollingRef.current)
       pollingRef.current = null
     }
-  }, [session?.running, session?.status])
+  }, [session?.running, session?.status, pairingCode])
 
   async function startPairing() {
     if (!pairingPhone.trim()) {
