@@ -68,12 +68,38 @@ async function readLimitedText(res) {
   return new TextDecoder().decode(body)
 }
 
-async function fetchHtml(url, { ua = BROWSER_UA, timeoutMs = HTML_FETCH_TIMEOUT_MS } = {}) {
+// UA mobile usado nas chamadas autenticadas ao ML — uma sessão logada
+// (cookie ssid) com esse UA evita o desafio anti-bot "suspicious-traffic"
+// que devolve a página /gz/account-verification em requests anônimos.
+const ML_MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
+
+function isMercadoLivreUrl(url) {
+  try {
+    return /(^|\.)mercado(livre|libre)\.com(\.br)?$/i.test(new URL(String(url)).hostname)
+  } catch {
+    return false
+  }
+}
+
+// Monta o header Cookie a partir das credenciais de sessão do ML
+// (mesmo formato usado por src/converters/mercadolivre.js).
+function buildMlCookieHeader(creds) {
+  if (!creds || typeof creds !== 'object') return ''
+  if (creds.cookie) return String(creds.cookie)
+  const pairs = []
+  if (creds.id) pairs.push(`id=${creds.id}`)
+  if (creds.csrf) pairs.push(`_csrf=${creds.csrf}`)
+  if (creds.ssid) pairs.push(`ssid=${creds.ssid}`)
+  return pairs.join('; ')
+}
+
+async function fetchHtml(url, { ua = BROWSER_UA, timeoutMs = HTML_FETCH_TIMEOUT_MS, cookieHeader = '' } = {}) {
   const res = await fetch(url, {
     headers: {
       'User-Agent': ua,
       Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+      ...(cookieHeader ? { Cookie: cookieHeader } : {}),
     },
     signal: AbortSignal.timeout(timeoutMs),
     redirect: 'follow',
@@ -343,6 +369,61 @@ async function fetchShopeeItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS } = 
   }
 }
 
+// Converte um bloco DOM `andes-money-amount` (fração + centavos) do Mercado
+// Livre para string "39,90". A fração pode trazer milhar com ponto (1.299).
+function parseAndesAmount(segment) {
+  if (!segment) return ''
+  const fraction = segment.match(/andes-money-amount__fraction[^>]*>\s*([0-9.]+)\s*</i)?.[1]
+  if (!fraction) return ''
+  const cents = segment.match(/andes-money-amount__cents[^>]*>\s*([0-9]{2})\s*</i)?.[1]
+  const whole = fraction.replace(/\./g, '')
+  return cents ? `${whole},${cents}` : `${whole},00`
+}
+
+// Extrai título e preços direto do HTML da página de produto (PDP) do Mercado
+// Livre. Usado como caminho principal desde que a API pública
+// (api.mercadolibre.com/products) passou a exigir autenticação e responder 401.
+// Cobre tanto o DOM renderizado (`ui-pdp-title`, `andes-money-amount`) quanto o
+// JSON embarcado (`"price":{"value":..,"original_value":..}`).
+function extractMercadoLivreFromHtml(html) {
+  if (!html) return null
+  if (!/mercadolivre|mercadolibre|ui-pdp-/i.test(html)) return null
+
+  let title = ''
+  for (const re of OG_TITLE_RE) {
+    const m = html.match(re)
+    if (m?.[1]) { title = normalizeText(m[1]); break }
+  }
+  if (!title) {
+    const h1 = html.match(/<h1[^>]+class=["'][^"']*ui-pdp-title[^"']*["'][^>]*>([\s\S]*?)<\/h1>/i)
+    if (h1?.[1]) title = normalizeText(h1[1].replace(/<[^>]+>/g, ' '))
+  }
+
+  // Preço "de" (riscado) vem num <s class="... ui-pdp-price__original-value ...">.
+  let oldPrice = ''
+  const originalBlock = html.match(/ui-pdp-price__original-value[\s\S]{0,400}?<\/s>/i)
+  if (originalBlock) oldPrice = parseAndesAmount(originalBlock[0])
+
+  // Preço atual: primeiro andes-money-amount dentro do bloco principal de preço.
+  let newPrice = ''
+  const currentBlock = html.match(/ui-pdp-price__second-line[\s\S]{0,600}?<\/div>/i)
+  if (currentBlock) newPrice = parseAndesAmount(currentBlock[0])
+
+  // Fallback via JSON embarcado no HTML (__PRELOADED_STATE__ etc.).
+  if (!newPrice) {
+    const m = html.match(/"price"\s*:\s*\{[^{}]*"value"\s*:\s*([0-9]+(?:\.[0-9]+)?)/i)
+    if (m?.[1]) newPrice = toPriceString(m[1])
+  }
+  if (!oldPrice) {
+    const m = html.match(/"original_price"\s*:\s*([0-9]+(?:\.[0-9]+)?)/i)
+      || html.match(/"original_value"\s*:\s*([0-9]+(?:\.[0-9]+)?)/i)
+    if (m?.[1]) oldPrice = toPriceString(m[1])
+  }
+
+  if (!title && !newPrice && !oldPrice) return null
+  return { title, oldPrice, newPrice }
+}
+
 function extractMetaPrice(html) {
   if (!html) return ''
   for (const re of META_PRICE_RE) {
@@ -371,10 +452,20 @@ function extractFromMercadoLivreLanding(html) {
 }
 
 export async function fetchProductInfo(url, opts = {}) {
+  // Para URLs do ML, usa a sessão autenticada do usuário (cookie ssid) e o UA
+  // mobile: sem isso o ML responde com a página anti-bot /gz/account-verification
+  // (title "Mercado Libre", sem og:title nem preço) e nada é extraído.
+  const mlCookieHeader = opts.mlCookieHeader || buildMlCookieHeader(opts.mlCredentials)
+  const fetchOpts = { ...opts }
+  if (mlCookieHeader && isMercadoLivreUrl(url)) {
+    fetchOpts.cookieHeader = mlCookieHeader
+    fetchOpts.ua = opts.ua || ML_MOBILE_UA
+  }
+
   let html = null
   let finalUrl = url
   try {
-    const fetched = await fetchHtml(url, opts)
+    const fetched = await fetchHtml(url, fetchOpts)
     html = fetched?.html ?? null
     finalUrl = fetched?.finalUrl || url
   } catch {
@@ -383,6 +474,7 @@ export async function fetchProductInfo(url, opts = {}) {
   }
 
   const jsonLd = html ? extractFromJsonLd(html) : null
+  const mlHtml = html ? extractMercadoLivreFromHtml(html) : null
   const mlLanding = html ? extractFromMercadoLivreLanding(html) : null
   const amazonFallback = html ? extractAmazonTitleAndPrice(html) : null
   const shopeeApiFallback = await fetchShopeeItemInfo(finalUrl || url, opts)
@@ -390,8 +482,8 @@ export async function fetchProductInfo(url, opts = {}) {
   const shopeeJsonRange = extractShopeePriceRangeFromJsonInHtml(html)
   const mercadoLivreApiFallback = await fetchMercadoLivreProductInfo(finalUrl || url, opts)
   const titleFromUrl = extractTitleFromUrl(finalUrl || url)
-  const title = jsonLd?.title || amazonFallback?.title || shopeeApiFallback?.title || mercadoLivreApiFallback?.title || titleFromUrl || extractTitleFallback(html)
-  const newPrice = jsonLd?.newPrice || mlLanding?.newPrice || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || shopeeJsonRange?.newPrice || shopeeHtmlRange?.newPrice || mercadoLivreApiFallback?.newPrice || extractMetaPrice(html) || extractShopeePriceFromHtml(html)
-  const oldPrice = jsonLd?.oldPrice || mlLanding?.oldPrice || shopeeApiFallback?.oldPrice || shopeeJsonRange?.oldPrice || shopeeHtmlRange?.oldPrice || mercadoLivreApiFallback?.oldPrice || ''
+  const title = jsonLd?.title || mlHtml?.title || amazonFallback?.title || shopeeApiFallback?.title || mercadoLivreApiFallback?.title || titleFromUrl || extractTitleFallback(html)
+  const newPrice = jsonLd?.newPrice || mlHtml?.newPrice || mlLanding?.newPrice || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || shopeeJsonRange?.newPrice || shopeeHtmlRange?.newPrice || mercadoLivreApiFallback?.newPrice || extractMetaPrice(html) || extractShopeePriceFromHtml(html)
+  const oldPrice = jsonLd?.oldPrice || mlHtml?.oldPrice || mlLanding?.oldPrice || shopeeApiFallback?.oldPrice || shopeeJsonRange?.oldPrice || shopeeHtmlRange?.oldPrice || mercadoLivreApiFallback?.oldPrice || ''
   return { title, oldPrice, newPrice, finalUrl }
 }
