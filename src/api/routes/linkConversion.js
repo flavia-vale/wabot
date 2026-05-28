@@ -176,6 +176,7 @@ export async function linkConversionRoutes(app, opts = {}) {
     let conversionSuccess = false
     let reasonCode = null
     let reasonMessage = null
+    let mlCredentials = null
 
     if (!platform) {
       const failure = conversionFailureFromContext('unsupported')
@@ -184,6 +185,7 @@ export async function linkConversionRoutes(app, opts = {}) {
     } else {
       const credentials = await findCredentials(userId)
       const credentialsMap = buildCredentialsMap(credentials)
+      mlCredentials = credentialsMap.mercadolivre || null
       const validation = validateCredentialData(platform, credentialsMap[platform])
 
       if (!validation.configured) {
@@ -214,14 +216,14 @@ export async function linkConversionRoutes(app, opts = {}) {
     }
 
     try {
-      let info = await fetchProductInfo(offerUrl)
+      let info = await fetchProductInfo(offerUrl, { mlCredentials })
 
       // Quando o link convertido é short-link (ex.: Shopee/Amazon) pode haver
       // bloqueio de redirect/anti-bot no scrape do convertido. Nesses casos,
       // tentamos o original para resgatar título/preço sem perder o offerUrl.
       if (conversionSuccess && offerUrl !== url && !hasUsefulOfferInfo(info)) {
         try {
-          const fallbackInfo = await fetchProductInfo(url)
+          const fallbackInfo = await fetchProductInfo(url, { mlCredentials })
           if (hasUsefulOfferInfo(fallbackInfo)) {
             info = {
               ...fallbackInfo,
@@ -253,7 +255,7 @@ export async function linkConversionRoutes(app, opts = {}) {
 
       if (conversionSuccess && offerUrl !== url) {
         try {
-          const originalInfo = await fetchProductInfo(url)
+          const originalInfo = await fetchProductInfo(url, { mlCredentials })
           if (hasUsefulOfferInfo(originalInfo)) {
             return {
               title: originalInfo?.title || '',

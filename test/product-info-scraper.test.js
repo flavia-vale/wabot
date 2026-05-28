@@ -281,6 +281,40 @@ test('fetchProductInfo extrai preços do JSON embarcado da PDP do Mercado Livre'
   assert.equal(info.oldPrice, '259,90')
 })
 
+test('fetchProductInfo envia cookie de sessão do ML e extrai dados da PDP autenticada', async (t) => {
+  const antiBot = '<!doctype html><html><head><title>Mercado Libre</title></head><body>account-verification</body></html>'
+  const realPdp = `<!doctype html><html><head>
+    <meta property="og:title" content="Forma Universal Air Fryer Forno E Micro-ondas"/>
+    </head><body>
+    <h1 class="ui-pdp-title">Forma Universal Air Fryer Forno E Micro-ondas</h1>
+    <div class="ui-pdp-price__second-line">
+      <span class="andes-money-amount"><span class="andes-money-amount__fraction">29</span><span class="andes-money-amount__cents">90</span></span>
+    </div>
+  </body></html>`
+
+  let sentCookie = null
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const url = String(input)
+    if (url.includes('api.mercadolibre.com')) {
+      return { ok: false, status: 401, headers: { get: () => 'application/json' }, json: async () => ({}) }
+    }
+    const cookie = init?.headers?.Cookie || null
+    if (cookie) sentCookie = cookie
+    // Sem cookie de sessão, o ML devolve a página anti-bot.
+    const body = cookie ? realPdp : antiBot
+    return mockHtmlResponse(body, 'https://www.mercadolivre.com.br/forma-universal/p/MLB26402871')
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://www.mercadolivre.com.br/forma-universal/p/MLB26402871', {
+    mlCredentials: { ssid: 'sessionid1234567890', csrf: 'tok', id: '42' },
+  })
+  assert.equal(sentCookie, 'id=42; _csrf=tok; ssid=sessionid1234567890')
+  assert.match(info.title, /Forma Universal Air Fryer/i)
+  assert.equal(info.newPrice, '29,90')
+})
+
 test('fetchProductInfo usa fallback da API de products do Mercado Livre para título e preço em URL /p/', async (t) => {
   const htmlShell = '<!doctype html><html><head><title>Mercado Libre</title></head><body>anti-bot shell</body></html>'
   const mlProductsPayload = {
