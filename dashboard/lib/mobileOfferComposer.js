@@ -110,11 +110,27 @@ export function detectMobileOfferStoreKey({ product = {}, link = '' } = {}) {
   return ''
 }
 
+export function applyTemplateVariables(body, { title = '', price = '', oldPrice = '', link = '' } = {}) {
+  let result = body
+    .replace(/\{produto\}/g, title || '{produto}')
+    .replace(/\{preço\}/g, price || '{preço}')
+    .replace(/\{link\}/g, link || '{link}')
+  if (oldPrice) {
+    result = result.replace(/\{preço_de\}/g, oldPrice)
+  } else {
+    result = result
+      .replace(/De \{preço_de\} por \*([^*]+)\*/g, '*$1*')
+      .replace(/\{preço_de\}/g, '')
+  }
+  return result
+}
+
 export function buildMobileOfferText({
   product = {},
   manualProduct = {},
   link = '',
-  template = 'simples',
+  template = 'achadinho',
+  templateBody = null,
   bonusMode = '',
   groupBonus = {},
   couponLinks = {},
@@ -124,41 +140,24 @@ export function buildMobileOfferText({
 } = {}) {
   const normalized = normalizeMobileOfferProduct(product, manualProduct)
 
-  if (template === 'simples') {
-    const lines = [`🛍️ ${normalized.title}`, '']
-    if (normalized.oldPrice) lines.push(`De ${normalized.oldPrice}`)
-    lines.push(normalized.price ? `💥 Por ${normalized.price}` : '💥 Por *{preço}*')
-    lines.push('', `🛒 Compre aqui 👉 ${link}`)
-
-    const groupLink = String(groupBonus?.link || '').trim()
-    if ((bonusMode === 'group' || bonusMode === 'both') && isValidHttpUrl(groupLink)) {
-      lines.push('', String(groupBonus?.cta || '').trim() || 'Entre no nosso grupo:')
-      lines.push(groupLink)
-    }
-
-    if (bonusMode === 'coupons' || bonusMode === 'both') {
-      const detectedStoreKey = offerStoreKey || detectMobileOfferStoreKey({ product, link })
-      const selectedOrDetected = selectedCouponStores.includes(detectedStoreKey) || !selectedCouponStores.length
-      const couponLink = String(couponLinks?.[detectedStoreKey] || '').trim()
-      if (detectedStoreKey && selectedOrDetected && isValidHttpUrl(couponLink)) {
-        const store = COUPON_STORES.find((item) => item.key === detectedStoreKey)
-        lines.push('', (String(couponCta || '').trim() || 'Mais cupons da {loja}:').replace('{loja}', store?.nome || 'loja'))
-        lines.push(couponLink)
-      }
-    }
-
-    return lines.join('\n')
-  }
-
-  const lines = [getMobileOfferTemplateHeading(template), '', normalized.title]
-
-  if (normalized.price) {
-    lines.push(normalized.oldPrice ? `De ${normalized.oldPrice} por *${normalized.price}*` : `Por *${normalized.price}*`)
+  let lines
+  if (templateBody) {
+    const bodyText = applyTemplateVariables(templateBody, {
+      title: normalized.title,
+      price: normalized.price,
+      oldPrice: normalized.oldPrice,
+      link,
+    })
+    lines = bodyText.split('\n')
   } else {
-    lines.push('De {preço_de} por *{preço}*')
+    lines = [getMobileOfferTemplateHeading(template), '', normalized.title]
+    if (normalized.price) {
+      lines.push(normalized.oldPrice ? `De ${normalized.oldPrice} por *${normalized.price}*` : `Por *${normalized.price}*`)
+    } else {
+      lines.push('De {preço_de} por *{preço}*')
+    }
+    lines.push('', `👉 ${link}`)
   }
-
-  lines.push('', `👉 ${link}`)
 
   const groupLink = String(groupBonus?.link || '').trim()
   if ((bonusMode === 'group' || bonusMode === 'both') && isValidHttpUrl(groupLink)) {
