@@ -1,6 +1,8 @@
 import 'dotenv/config'
 
 import { fetchProductInfo as defaultFetchProductInfo } from '../converters/productInfoScraper.js'
+import { fetchProductImage as defaultFetchProductImage, fetchImageBuffer as defaultFetchImageBuffer, normalizeImageForWhatsApp as defaultNormalizeImage } from '../converters/imageScrapers.js'
+import { detectLinks } from '../detector.js'
 import { buildMobileOfferText } from '../../dashboard/lib/mobileOfferComposer.js'
 import { PRESET_TEMPLATE_BODIES } from '../../dashboard/lib/mobileTemplateStore.js'
 
@@ -8,6 +10,7 @@ const HTTP_URL_RE = /https?:\/\/[^\s<>()]+/gi
 const DEFAULT_POLL_TIMEOUT_SECONDS = 25
 const DEFAULT_POLL_INTERVAL_MS = 1000
 const MAX_TELEGRAM_MESSAGE_LENGTH = 4096
+const MAX_TELEGRAM_CAPTION_LENGTH = 1024
 const MAX_INCOMING_TEXT_LENGTH = 4000
 export const PRODUCT_NOT_FOUND_MESSAGE = '⚠️ Nenhum produto encontrado para o link enviado!'
 
@@ -79,6 +82,68 @@ export async function buildTelegramOfferText(url, { fetchProductInfo = defaultFe
   return buildOfferMessage({ product, link: url })
 }
 
+function inferPlatformFromUrl(url) {
+  return detectLinks(String(url || ''))[0]?.platform || null
+}
+
+export async function fetchTelegramOfferImage(url, {
+  fetchProductImage = defaultFetchProductImage,
+  fetchImageBuffer = defaultFetchImageBuffer,
+  normalizeImage = defaultNormalizeImage,
+  credentials = {},
+  logger = console,
+} = {}) {
+  if (!isValidHttpUrl(url)) return null
+
+  const platform = inferPlatformFromUrl(url)
+  if (!platform) return null
+
+  try {
+    const imageUrl = await fetchProductImage(platform, url, credentials)
+    if (!imageUrl) return null
+
+    const downloaded = await fetchImageBuffer(imageUrl, url)
+    if (!downloaded?.buffer) return null
+
+    const normalized = await normalizeImage(downloaded.buffer).catch(() => null)
+    if (normalized?.buffer) {
+      return {
+        buffer: normalized.buffer,
+        mimetype: normalized.mimetype || 'image/jpeg',
+      }
+    }
+
+    return {
+      buffer: downloaded.buffer,
+      mimetype: downloaded.mimetype || 'image/jpeg',
+    }
+  } catch (err) {
+    logger.warn?.({ err: err.message, url, platform }, 'Falha ao buscar imagem da oferta para Telegram')
+    return null
+  }
+}
+
+export async function buildTelegramOffer(url, {
+  fetchProductInfo = defaultFetchProductInfo,
+  fetchProductImage = defaultFetchProductImage,
+  fetchImageBuffer = defaultFetchImageBuffer,
+  normalizeImage = defaultNormalizeImage,
+  imageCredentials = {},
+  logger = console,
+} = {}) {
+  const [text, image] = await Promise.all([
+    buildTelegramOfferText(url, { fetchProductInfo }),
+    fetchTelegramOfferImage(url, {
+      fetchProductImage,
+      fetchImageBuffer,
+      normalizeImage,
+      credentials: imageCredentials,
+      logger,
+    }),
+  ])
+  return { text, image }
+}
+
 function buildHelpText() {
   return [
     'Oi! Eu gero uma oferta pronta a partir de um link que você colar aqui.',
@@ -129,6 +194,29 @@ function createTelegramClient({ token, fetchImpl = fetch }) {
         ...extra,
       })
     },
+    async sendPhoto(chatId, image, extra = {}) {
+      if (!image?.buffer) throw new Error('Imagem ausente para sendPhoto')
+
+      const form = new FormData()
+      form.set('chat_id', String(chatId))
+      form.set('photo', new Blob([image.buffer], { type: image.mimetype || 'image/jpeg' }), 'oferta.jpg')
+      for (const [key, value] of Object.entries(extra || {})) {
+        if (value != null) form.set(key, String(value))
+      }
+
+      const res = await fetchImpl(`${baseUrl}/sendPhoto`, {
+        method: 'POST',
+        body: form,
+      })
+      const body = await res.json().catch(() => null)
+      if (!res.ok || body?.ok === false) {
+        const err = new Error(body?.description || `Telegram API error (${res.status})`)
+        err.statusCode = res.status
+        err.response = body
+        throw err
+      }
+      return body.result
+    },
   }
 }
 
@@ -136,6 +224,10 @@ export function createTelegramOfferBot({
   token = process.env.TELEGRAM_OFFER_BOT_TOKEN,
   allowedChatIds = process.env.TELEGRAM_OFFER_BOT_ALLOWED_CHAT_IDS,
   fetchProductInfo = defaultFetchProductInfo,
+  fetchProductImage = defaultFetchProductImage,
+  fetchImageBuffer = defaultFetchImageBuffer,
+  normalizeImage = defaultNormalizeImage,
+  imageCredentials = {},
   telegramClient = null,
   logger = console,
   pollTimeoutSeconds = DEFAULT_POLL_TIMEOUT_SECONDS,
@@ -187,8 +279,29 @@ export function createTelegramOfferBot({
 
     activeChats.add(chatKey)
     try {
-      const offerText = await buildTelegramOfferText(extracted.url, { fetchProductInfo })
-      await client.sendMessage(chatId, offerText)
+      const offer = await buildTelegramOffer(extracted.url, {
+        fetchProductInfo,
+        fetchProductImage,
+        fetchImageBuffer,
+        normalizeImage,
+        imageCredentials,
+        logger,
+      })
+      if (offer.image?.buffer && typeof client.sendPhoto === 'function') {
+        try {
+          await client.sendPhoto(chatId, offer.image, {
+            caption: offer.text.slice(0, MAX_TELEGRAM_CAPTION_LENGTH),
+          })
+          if (offer.text.length > MAX_TELEGRAM_CAPTION_LENGTH) {
+            await client.sendMessage(chatId, offer.text)
+          }
+        } catch (err) {
+          logger.warn?.({ err: err.message, chatId }, 'Falha ao enviar foto pelo Telegram; enviando oferta em texto')
+          await client.sendMessage(chatId, offer.text)
+        }
+      } else {
+        await client.sendMessage(chatId, offer.text)
+      }
     } catch (err) {
       logger.warn?.({ err: err.message, chatId }, 'Falha ao gerar oferta pelo Telegram')
       await client.sendMessage(chatId, 'Não consegui ler os dados do produto agora. Tente novamente em instantes ou use outro link.')

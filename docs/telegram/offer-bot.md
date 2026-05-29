@@ -1,7 +1,7 @@
 # Bot de ofertas no Telegram
 
 Este bot disponibiliza no Telegram o fluxo de **Gerar oferta** usando o link colado pelo usuário.
-Ele busca título/preço via scraper de produto, monta a copy com o template cadastrado **Simples** e **não converte o link**.
+Ele busca título/preço via scraper de produto, tenta baixar a imagem da oferta no próprio marketplace, monta a copy com o template cadastrado **Simples** e **não converte o link**.
 
 ## Variáveis de ambiente
 
@@ -35,6 +35,7 @@ pm2 save
 
 - `/start` ou `/help` retorna instruções de uso.
 - Uma mensagem com exatamente 1 link `http(s)` gera a oferta.
+- Para links suportados de marketplace, o bot tenta enviar a foto do produto junto com a oferta. Se a imagem não puder ser baixada ou o Telegram recusar a mídia, a oferta ainda é enviada em texto.
 - Mensagens sem link, com mais de um link ou grandes demais recebem orientação de correção.
 - O link final da oferta é sempre o link colado no Telegram; `finalUrl` do scraper é ignorado para não substituir o afiliado/manual.
 - Quando o scraper não encontrar título nem preço, o bot responde: `⚠️ Nenhum produto encontrado para o link enviado!`
