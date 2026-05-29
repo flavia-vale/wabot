@@ -8,6 +8,7 @@ import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { mobileRoutes } from '@/components/mobile/routes'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+import { derivePlanState } from '@/components/mobile/planState'
 
 const PLATFORM_LABEL = {
   shopee: 'Shopee', amazon: 'Amazon', mercadolivre: 'Mercado Livre',
@@ -213,7 +214,94 @@ const homeStyles = {
   guideText: { flex: 1, minWidth: 0 },
   guideTitle: { fontSize: 14, fontWeight: 600, color:'var(--ink)' },
   guideSub: { fontSize: 12, color:'var(--ink-soft)', marginTop: 2, lineHeight: 1.4 },
+
+  // ─── Banner de plano vencido ───
+  planBanner: {
+    margin:'14px 16px 0', width:'calc(100% - 32px)',
+    padding:'13px 14px',
+    background:'color-mix(in oklab, var(--warn) 14%, var(--surface))',
+    border:'1px solid color-mix(in oklab, var(--warn) 38%, var(--line))',
+    borderRadius: 14,
+    display:'flex', alignItems:'center', gap: 12,
+    textAlign:'left', fontFamily:'inherit', cursor:'pointer',
+  },
+  planBannerIcon: {
+    width: 30, height: 30, borderRadius: 9,
+    background:'var(--warn)', color:'white', flexShrink: 0,
+    display:'flex', alignItems:'center', justifyContent:'center',
+  },
+  planBannerMain: { flex: 1, minWidth: 0 },
+  planBannerTitle: { fontSize: 13, fontWeight: 600, color:'var(--ink)' },
+  planBannerSub: { fontSize: 11.5, color:'var(--ink-soft)', marginTop: 2, lineHeight: 1.35 },
+  planBannerBtn: {
+    padding:'7px 13px', borderRadius: 999,
+    background:'var(--warn)', color:'white', border:'none',
+    fontSize: 12, fontWeight: 700,
+    cursor:'pointer', fontFamily:'inherit', flexShrink: 0,
+  },
+
+  // ─── Bloco "grátis" protagonista (plano vencido) ───
+  freeHero: {
+    margin:'16px 16px 0', width:'calc(100% - 32px)',
+    padding: 18,
+    background:'linear-gradient(150deg, color-mix(in oklab, var(--success) 16%, var(--surface)), var(--surface))',
+    border:'1.5px solid color-mix(in oklab, var(--success) 42%, var(--line))',
+    borderRadius: 20,
+    position:'relative', overflow:'hidden',
+  },
+  freeHeroTop: { display:'flex', alignItems:'center', gap: 8, marginBottom: 12 },
+  freeHeroLabel: { fontSize: 12.5, fontWeight: 600, color:'var(--success)' },
+  freeHeroBtn: {
+    width:'100%', padding:'16px 18px',
+    background:'var(--ink)', color:'white',
+    border:'none', borderRadius: 16,
+    display:'flex', alignItems:'center', gap: 14,
+    cursor:'pointer', fontFamily:'inherit', textAlign:'left',
+  },
+  freeHeroIcon: {
+    width: 44, height: 44, borderRadius: 12,
+    background:'linear-gradient(135deg, var(--accent-strong), var(--accent))',
+    color:'white', flexShrink: 0,
+    display:'flex', alignItems:'center', justifyContent:'center',
+  },
+  freeHeroNote: {
+    fontSize: 12, color:'var(--ink-soft)', marginTop: 12, lineHeight: 1.45,
+    textAlign:'center',
+  },
+
+  // Selo "Grátis"
+  freeBadge: {
+    display:'inline-flex', alignItems:'center', gap: 4,
+    fontSize: 11, fontWeight: 700, letterSpacing:'0.02em',
+    padding:'3px 9px', borderRadius: 999,
+    background:'var(--success)', color:'white', whiteSpace:'nowrap',
+  },
+
+  // dim wrapper para recursos PRO esmaecidos
+  dimmed: { opacity: 0.5, filter:'saturate(0.6)' },
+  dimLockRow: {
+    display:'flex', alignItems:'center', justifyContent:'center', gap: 6,
+    fontSize: 11.5, color:'var(--ink-soft)', fontWeight: 500,
+    padding:'8px 0 0',
+  },
 };
+
+function LockGlyph({ size = 12, color = 'var(--ink-faint)' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+    </svg>
+  );
+}
+
+function FreeBadge() {
+  return (
+    <span style={homeStyles.freeBadge}>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      Grátis · sempre
+    </span>
+  );
+}
 
 // Sparkline mini para o foot do hero
 function HomeSparkline() {
@@ -300,7 +388,9 @@ export default function MobileHomePage() {
   const checklistDone = checklist.filter(s => s.done).length
   const checklistTotal = checklist.length
   const isOnboarding = checklistDone < checklistTotal
-  const hasAlert = errosHoje > 0
+  const planState = derivePlanState(me)
+  const isExpired = planState === 'expired'
+  const hasAlert = errosHoje > 0 && !isExpired
 
   const recentItems = useMemo(() => recent.map(log => {
     const status = log.status
@@ -332,8 +422,59 @@ export default function MobileHomePage() {
     )
   }
 
+  // Bloco "Criar oferta" — protagonista verde quando o plano venceu,
+  // ação primária discreta caso contrário. Criar segue grátis em qualquer plano.
+  const criarBlock = isExpired ? (
+    <div style={homeStyles.freeHero}>
+      <div style={homeStyles.freeHeroTop}>
+        <FreeBadge/>
+        <span style={homeStyles.freeHeroLabel}>mesmo sem plano ativo</span>
+      </div>
+      <button type="button" style={homeStyles.freeHeroBtn} onClick={() => router.push(mobileRoutes.offer)}>
+        <div style={homeStyles.freeHeroIcon}>
+          <MobileIcon name="sparkles" size={20}/>
+        </div>
+        <div style={{ ...homeStyles.primaryText }}>
+          <div style={{ ...homeStyles.primaryTitle, color:'white' }}>Criar oferta agora</div>
+          <div style={{ ...homeStyles.primarySub, color:'rgba(255,255,255,0.7)' }}>cole um link e a gente faz o resto</div>
+        </div>
+        <MobileIcon name="arrow" size={16}/>
+      </button>
+      <div style={homeStyles.freeHeroNote}>
+        Converter link e gerar oferta é <strong style={{color:'var(--success)'}}>grátis pra sempre</strong>, em qualquer plano.
+      </div>
+    </div>
+  ) : (
+    <div style={homeStyles.primaryWrap}>
+      <button type="button" style={homeStyles.primaryBtn} onClick={() => router.push(mobileRoutes.offer)}>
+        <div style={homeStyles.primaryIcon}>
+          <MobileIcon name="sparkles" size={20}/>
+        </div>
+        <div style={homeStyles.primaryText}>
+          <div style={homeStyles.primaryTitle}>Criar oferta agora</div>
+          <div style={homeStyles.primarySub}>cole um link e a gente faz o resto</div>
+        </div>
+        <MobileIcon name="arrow" size={16}/>
+      </button>
+    </div>
+  )
+
   return (
-    <MobileShell title="Conversor" active="inicio" hasAlert={hasAlert && !isOnboarding}>
+    <MobileShell title="Conversor" active="inicio" hasAlert={hasAlert && !isOnboarding} planExpired={isExpired}>
+      {/* Banner de plano vencido — espelhamento pausado, criar segue grátis */}
+      {isExpired && (
+        <button type="button" style={homeStyles.planBanner} onClick={() => router.push(mobileRoutes.accountSubscription)}>
+          <div style={homeStyles.planBannerIcon}>
+            <LockGlyph size={15} color="white"/>
+          </div>
+          <div style={homeStyles.planBannerMain}>
+            <div style={homeStyles.planBannerTitle}>Seu plano venceu</div>
+            <div style={homeStyles.planBannerSub}>O espelhamento automático está pausado.</div>
+          </div>
+          <span style={homeStyles.planBannerBtn}>Reativar</span>
+        </button>
+      )}
+
       {/* Balão de progresso do checklist — só quando setup incompleto */}
       {isOnboarding && (
         <div style={homeStyles.checklistBalloon} onClick={() => router.push(mobileRoutes.checklistEspelhamento)}>
@@ -376,6 +517,10 @@ export default function MobileHomePage() {
           <div style={homeStyles.greetHead}>
             Falta um passo<br/>pra começar.
           </div>
+        ) : isExpired ? (
+          <div style={homeStyles.greetHead}>
+            Bom te ver de novo.<br/>O que vamos postar hoje?
+          </div>
         ) : (
           <div style={homeStyles.greetHead}>
             {postadosHoje > 0 ? (
@@ -391,69 +536,78 @@ export default function MobileHomePage() {
         )}
       </div>
 
-      {/* Hero — só números factuais, sem rótulos vagos */}
+      {/* No VENCIDO: Criar é protagonista e vem antes do PRO esmaecido */}
+      {isExpired && criarBlock}
+
+      {/* Hero — só números factuais. Esmaecido + cadeado quando o plano venceu */}
       {!isOnboarding && (
-        <div style={homeStyles.hero}>
-          <div style={homeStyles.heroBlob}/>
-          <div style={homeStyles.heroGrid}>
-            <div style={homeStyles.heroStat}>
-              <div style={homeStyles.heroStatLabel}>Detectados</div>
-              <div style={homeStyles.heroStatNum}>{vistosHoje}</div>
-              <div style={homeStyles.heroStatTrend()}>nos grupos monitorados</div>
+        <div style={isExpired ? homeStyles.dimmed : undefined}>
+          <div style={homeStyles.hero}>
+            <div style={homeStyles.heroBlob}/>
+            <div style={homeStyles.heroGrid}>
+              <div style={homeStyles.heroStat}>
+                <div style={homeStyles.heroStatLabel}>Detectados</div>
+                <div style={homeStyles.heroStatNum}>{vistosHoje}</div>
+                <div style={homeStyles.heroStatTrend()}>nos grupos monitorados</div>
+              </div>
+              <div style={homeStyles.heroDivider}/>
+              <div style={homeStyles.heroStat}>
+                <div style={homeStyles.heroStatLabel}>Postados</div>
+                <div style={homeStyles.heroStatNum}>{postadosHoje}</div>
+                <div style={homeStyles.heroStatTrend(!isExpired)}>{isExpired ? 'espelhamento pausado' : 'hoje'}</div>
+              </div>
             </div>
-            <div style={homeStyles.heroDivider}/>
-            <div style={homeStyles.heroStat}>
-              <div style={homeStyles.heroStatLabel}>Postados</div>
-              <div style={homeStyles.heroStatNum}>{postadosHoje}</div>
-              <div style={homeStyles.heroStatTrend(true)}>hoje</div>
+            <div style={homeStyles.heroFoot}>
+              {isExpired ? (
+                <span>sem atividade — plano vencido</span>
+              ) : (
+                <>
+                  <span style={homeStyles.heroLive}/>
+                  <span>{summary?.lastSendAt ? `último envio há ${relativeShort(summary.lastSendAt)}` : 'sem envios ainda hoje'}</span>
+                  <span style={{flex:1}}/>
+                  <HomeSparkline/>
+                </>
+              )}
             </div>
           </div>
-          <div style={homeStyles.heroFoot}>
-            <span style={homeStyles.heroLive}/>
-            <span>{summary?.lastSendAt ? `último envio há ${relativeShort(summary.lastSendAt)}` : 'sem envios ainda hoje'}</span>
-            <span style={{flex:1}}/>
-            <HomeSparkline/>
-          </div>
+          {isExpired && (
+            <div style={homeStyles.dimLockRow}>
+              <LockGlyph size={11}/> reative o plano pra voltar a espelhar
+            </div>
+          )}
         </div>
       )}
 
-      {/* AÇÃO PRIMÁRIA — única, dominante */}
-      <div style={homeStyles.primaryWrap}>
-        <button type="button" style={homeStyles.primaryBtn} onClick={() => router.push(mobileRoutes.offer)}>
-          <div style={homeStyles.primaryIcon}>
-            <MobileIcon name="sparkles" size={20}/>
-          </div>
-          <div style={homeStyles.primaryText}>
-            <div style={homeStyles.primaryTitle}>Criar oferta agora</div>
-            <div style={homeStyles.primarySub}>cole um link e a gente faz o resto</div>
-          </div>
-          <MobileIcon name="arrow" size={16}/>
-        </button>
+      {/* AÇÃO PRIMÁRIA — no plano ativo aparece aqui (no vencido já apareceu no topo) */}
+      {!isExpired && criarBlock}
+
+      {/* Atalhos — só 2, não 4. Esmaecidos + cadeado no vencido */}
+      <div style={isExpired ? homeStyles.dimmed : undefined}>
+        <div style={homeStyles.shortcutsRow}>
+          <button type="button" style={homeStyles.shortcut} onClick={() => router.push(mobileRoutes.espelhar)}>
+            <div style={homeStyles.shortcutIcon('color-mix(in oklab, var(--accent-2) 60%, var(--surface))', 'var(--ink)')}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 7a5 5 0 0 1 5-5h4"/><path d="M7 12l-4-5 5-2"/>
+                <path d="M21 17a5 5 0 0 1-5 5h-4"/><path d="M17 12l4 5-5 2"/>
+              </svg>
+            </div>
+            <div style={homeStyles.shortcutLabel}>Espelhamento</div>
+            {isExpired && <span style={{marginLeft:'auto'}}><LockGlyph size={12}/></span>}
+          </button>
+          <button type="button" style={homeStyles.shortcut} onClick={() => router.push(mobileRoutes.logs)}>
+            <div style={homeStyles.shortcutIcon('var(--bg-soft)', 'var(--ink-soft)')}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>
+              </svg>
+            </div>
+            <div style={homeStyles.shortcutLabel}>Ver envios</div>
+            {isExpired && <span style={{marginLeft:'auto'}}><LockGlyph size={12}/></span>}
+          </button>
+        </div>
       </div>
 
-      {/* Atalhos — só 2, não 4. Nada de "status disfarçado de ação" */}
-      <div style={homeStyles.shortcutsRow}>
-        <button type="button" style={homeStyles.shortcut} onClick={() => router.push(mobileRoutes.espelhar)}>
-          <div style={homeStyles.shortcutIcon('color-mix(in oklab, var(--accent-2) 60%, var(--surface))', 'var(--ink)')}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 7a5 5 0 0 1 5-5h4"/><path d="M7 12l-4-5 5-2"/>
-              <path d="M21 17a5 5 0 0 1-5 5h-4"/><path d="M17 12l4 5-5 2"/>
-            </svg>
-          </div>
-          <div style={homeStyles.shortcutLabel}>Espelhamento</div>
-        </button>
-        <button type="button" style={homeStyles.shortcut} onClick={() => router.push(mobileRoutes.logs)}>
-          <div style={homeStyles.shortcutIcon('var(--bg-soft)', 'var(--ink-soft)')}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>
-            </svg>
-          </div>
-          <div style={homeStyles.shortcutLabel}>Ver envios</div>
-        </button>
-      </div>
-
-      {/* Atividade recente — sempre presente. Quando ainda não há envios,
-          mostra um estado vazio (mensagem muda se o checklist está incompleto). */}
+      {/* Atividade recente — oculta no vencido (espelhamento pausado, sem novos envios) */}
+      {!isExpired && (
       <>
           <div style={homeStyles.sectionH}>
             <div style={homeStyles.sectionTitle}>Últimos envios</div>
@@ -484,6 +638,7 @@ export default function MobileHomePage() {
             ))}
           </div>
       </>
+      )}
 
       {/* Guia rápido — como pegar as credenciais das afiliadas */}
       <button type="button" style={homeStyles.guideCard} onClick={() => router.push(mobileRoutes.tutorial)}>

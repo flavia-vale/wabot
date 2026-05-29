@@ -77,12 +77,37 @@ const shellStyles = {
     transition: 'background .15s',
   }),
   navCenterBtn: {
+    position: 'relative',
     width: 44, height: 44, borderRadius: 14,
     background: 'var(--ink)', color: 'white',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     marginTop: -10, boxShadow: '0 6px 14px -4px rgba(0,0,0,0.25)',
   },
+  // Botão central (Criar) realçado quando o plano venceu — é o que sempre funciona
+  navCenterBtnFree: {
+    background: 'var(--success)',
+    boxShadow: '0 6px 16px -4px color-mix(in oklab, var(--success) 60%, transparent)',
+  },
+  navCenterFreeDot: {
+    position: 'absolute', top: -3, right: -3,
+    width: 8, height: 8, borderRadius: '50%',
+    background: 'var(--success)', border: '2px solid var(--surface)',
+  },
 }
+
+// Pequeno cadeado para tabs PRO quando o plano está vencido
+function NavLock() {
+  return (
+    <span style={{ position: 'absolute', bottom: -2, right: 4 }} aria-hidden="true">
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+    </span>
+  )
+}
+
+// Tabs PRO que ganham cadeado quando o plano está vencido
+const PRO_TABS = ['espelhar', 'envios']
 
 function NavIcon({ name }) {
   if (name === 'inicio') {
@@ -133,7 +158,7 @@ const tabs = [
   { key: 'conta',    label: 'Conta',    href: mobileRoutes.account },
 ]
 
-export function MobileShell({ title = 'Conversor', active = 'inicio', hasAlert = false, showBack = false, onBack, children }) {
+export function MobileShell({ title = 'Conversor', active = 'inicio', hasAlert = false, showBack = false, onBack, planExpired = false, children }) {
   return (
     <div className="mobile-shell" style={shellStyles.root}>
       <style>{`
@@ -180,19 +205,29 @@ export function MobileShell({ title = 'Conversor', active = 'inicio', hasAlert =
       <nav style={shellStyles.bottomNav} aria-label="Navegação principal mobile">
         {tabs.map((tab) => {
           const isActive = active === tab.key
+          const locked = planExpired && PRO_TABS.includes(tab.key)
+          const labelStyle = tab.accent && planExpired
+            ? { color: 'var(--success)', fontWeight: 700 }
+            : undefined
           return (
             <Link
               key={tab.key}
               href={tab.href}
               aria-current={isActive ? 'page' : undefined}
-              style={shellStyles.navItem(isActive)}
+              style={{ ...shellStyles.navItem(isActive), opacity: locked ? 0.45 : 1 }}
             >
               {tab.accent ? (
-                <div style={shellStyles.navCenterBtn}><NavIcon name={tab.key}/></div>
+                <div style={{ ...shellStyles.navCenterBtn, ...(planExpired ? shellStyles.navCenterBtnFree : null) }}>
+                  <NavIcon name={tab.key}/>
+                  {planExpired ? <span style={shellStyles.navCenterFreeDot} aria-hidden="true"/> : null}
+                </div>
               ) : (
-                <div style={shellStyles.navIconWrap(isActive)}><NavIcon name={tab.key}/></div>
+                <div style={{ ...shellStyles.navIconWrap(isActive), position: 'relative' }}>
+                  <NavIcon name={tab.key}/>
+                  {locked ? <NavLock/> : null}
+                </div>
               )}
-              <span>{tab.label}</span>
+              <span style={labelStyle}>{tab.label}</span>
             </Link>
           )
         })}

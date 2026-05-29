@@ -9,6 +9,7 @@ import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAs
 import { mobi } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileRoutes } from '@/components/mobile/routes'
+import { derivePlanState } from '@/components/mobile/planState'
 
 const GROUP_GRADIENTS = [
   'linear-gradient(135deg,#94A3B8,#475569)',
@@ -160,6 +161,7 @@ export default function EspelharPage() {
   const [session, setSession] = useState(null)
   const [summary, setSummary] = useState(null)
   const [config, setConfig] = useState(null)
+  const [me, setMe] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const router = useRouter()
@@ -170,17 +172,19 @@ export default function EspelharPage() {
       setLoading(true)
       setError('')
       try {
-        const [g, s, sum, cfg] = await Promise.all([
+        const [g, s, sum, cfg, m] = await Promise.all([
           api.groups(),
           api.sessionStatus().catch(() => null),
           api.logsSummary('today').catch(() => null),
           api.getConfig().catch(() => null),
+          api.me().catch(() => null),
         ])
         if (!active) return
         setGroups(Array.isArray(g) ? g : [])
         setSession(s)
         setSummary(sum)
         setConfig(cfg)
+        setMe(m)
       } catch (e) {
         if (active) setError(e.message || 'Não foi possível carregar o espelhamento.')
       } finally {
@@ -194,6 +198,7 @@ export default function EspelharPage() {
   // Espelhamento "ligado" reflete a sessão WhatsApp rodando — não há flag
   // própria no backend; o bot espelha enquanto a sessão está conectada.
   const on = Boolean(session?.running)
+  const isExpired = derivePlanState(me) === 'expired'
 
   const origens = useMemo(
     () => groups.filter(g => g.role === 'monitor').map((g, i) => ({
@@ -237,7 +242,7 @@ export default function EspelharPage() {
   }
 
   return (
-    <MobileShell title="Conversor" active="espelhar">
+    <MobileShell title="Conversor" active="espelhar" planExpired={isExpired}>
       <div style={espStyles.pageH}>
         <div style={espStyles.pageEyebrow}>Funcionalidade PRO</div>
         <div style={espStyles.pageTitle}>Espelhamento</div>
@@ -248,6 +253,76 @@ export default function EspelharPage() {
         </div>
       </div>
 
+      {/* VENCIDO: card de reativação + ponte pro recurso grátis (criar) */}
+      {isExpired && (
+        <>
+          <div style={{
+            margin:'16px 16px 0', padding:'18px',
+            background:'var(--ink)', color:'white', borderRadius: 20,
+            position:'relative', overflow:'hidden',
+          }}>
+            <div style={{position:'absolute', right:-40, top:-50, width: 180, height: 180, borderRadius:'50%', background:'var(--warn)', filter:'blur(46px)', opacity:.4, pointerEvents:'none'}}/>
+            <div style={{position:'relative'}}>
+              <div style={{display:'flex', alignItems:'center', gap: 8, marginBottom: 10}}>
+                <span style={{width: 30, height: 30, borderRadius: 9, background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.2)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink: 0}}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                </span>
+                <span style={{fontSize: 12.5, fontWeight: 600, color:'rgba(255,255,255,0.7)'}}>Espelhamento pausado</span>
+              </div>
+              <div style={{fontSize: 16, fontWeight: 600, lineHeight: 1.3, marginBottom: 6}}>
+                Seu plano venceu — o bot parou de monitorar.
+              </div>
+              <div style={{fontSize: 12.5, color:'rgba(255,255,255,0.65)', lineHeight: 1.45, marginBottom: 14}}>
+                Seus grupos e regras estão salvos. Reative pra voltar exatamente de onde parou.
+              </div>
+              <button type="button" onClick={() => router.push(mobileRoutes.accountSubscription)} style={{width:'100%', padding:'13px', background:'var(--warn)', color:'white', border:'none', borderRadius: 12, fontSize: 13.5, fontWeight: 700, cursor:'pointer', fontFamily:'inherit'}}>
+                Reativar plano
+              </button>
+            </div>
+          </div>
+
+          {/* Ponte pro recurso grátis — nunca um beco sem saída */}
+          <button type="button" onClick={() => router.push(mobileRoutes.offer)} style={{
+            margin:'10px 16px 0', width:'calc(100% - 32px)', padding:'14px',
+            background:'color-mix(in oklab, var(--success) 12%, var(--surface))',
+            border:'1px solid color-mix(in oklab, var(--success) 35%, var(--line))',
+            borderRadius: 16, display:'flex', alignItems:'center', gap: 12,
+            textAlign:'left', fontFamily:'inherit', cursor:'pointer',
+          }}>
+            <span style={{width: 38, height: 38, borderRadius: 11, background:'var(--success)', color:'white', flexShrink: 0, display:'flex', alignItems:'center', justifyContent:'center'}}>
+              <MobileIcon name="sparkles" size={18}/>
+            </span>
+            <div style={{flex:1, minWidth: 0}}>
+              <div style={{fontSize: 13, fontWeight: 600, color:'var(--ink)'}}>Enquanto isso, crie ofertas</div>
+              <div style={{fontSize: 11.5, color:'var(--ink-soft)', marginTop: 2}}>manualmente, de graça e sem limite</div>
+            </div>
+            <span style={{display:'inline-flex', alignItems:'center', gap: 4, fontSize: 10, fontWeight: 700, padding:'2px 7px', borderRadius: 999, background:'color-mix(in oklab, var(--success) 16%, var(--surface))', color:'var(--success)', border:'1px solid color-mix(in oklab, var(--success) 35%, var(--line))', whiteSpace:'nowrap'}}>
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Grátis
+            </span>
+            <MobileIcon name="arrow" size={14}/>
+          </button>
+
+          {/* Resumo esmaecido do que está configurado (read-only) */}
+          <div style={espStyles.sectionH}>
+            <div style={espStyles.sectionTitle}>Sua configuração (salva)</div>
+          </div>
+          <div style={{margin:'0 16px', opacity: 0.5, filter:'saturate(0.6)', display:'flex', gap: 8}}>
+            <div style={{flex:1, padding:'14px', background:'var(--surface)', border:'1px solid var(--line)', borderRadius: 14, textAlign:'center'}}>
+              <div style={{fontSize: 24, fontWeight: 600, color:'var(--ink)'}}>{origens.length}</div>
+              <div style={{fontSize: 11, color:'var(--ink-soft)', marginTop: 2}}>grupos monitorados</div>
+            </div>
+            <div style={{flex:1, padding:'14px', background:'var(--surface)', border:'1px solid var(--line)', borderRadius: 14, textAlign:'center'}}>
+              <div style={{fontSize: 24, fontWeight: 600, color:'var(--ink)'}}>{destinos.length}</div>
+              <div style={{fontSize: 11, color:'var(--ink-soft)', marginTop: 2}}>destinos seus</div>
+            </div>
+          </div>
+          <div style={{height: 28}}/>
+        </>
+      )}
+
+      {!isExpired && (
+      <>
       {/* Controle ON/OFF — único toggle visível */}
       <button type="button" onClick={() => router.push(mobileRoutes.configWhatsApp)} style={{...espStyles.control, border:'none', width:'auto', textAlign:'left', fontFamily:'inherit'}}>
         <div style={espStyles.controlBlob}/>
@@ -379,6 +454,8 @@ export default function EspelharPage() {
       </div>
 
       <div style={{height: 24}}/>
+      </>
+      )}
     </MobileShell>
   )
 }
