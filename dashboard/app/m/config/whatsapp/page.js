@@ -39,6 +39,25 @@ export default function WhatsAppPage() {
     }
   }
 
+  // Aguarda o worker subir de fato (running=true). O endpoint /start responde
+  // "aguarde o QR" antes do socket WhatsApp inicializar, então abrir o canal de
+  // QR imediatamente entrega um QR vazio — era a causa do "precisa clicar duas
+  // vezes". Espelha o waitForRunningSession da dashboard desktop.
+  async function waitForRunningSession(timeoutMs = 12000) {
+    const startedAt = Date.now()
+    let latest = null
+    while (Date.now() - startedAt < timeoutMs) {
+      latest = await api.sessionStatusFast().catch(() => null)
+      if (latest?.running) {
+        setSession(latest)
+        return latest
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+    }
+    if (latest) setSession(latest)
+    return latest
+  }
+
   useEffect(() => {
     let active = true
     async function load() {
@@ -91,18 +110,20 @@ export default function WhatsAppPage() {
   }, [session?.running, session?.status, pairingCode, qr])
 
   // Fallback polling for the QR image while connecting via QR (in case the
-  // WebSocket channel never delivers the qr frame).
+  // WebSocket channel never delivers the qr frame). Roda enquanto o worker
+  // está rodando e ainda não conectou — não exige status==='connecting'
+  // porque o QR pode demorar alguns segundos após o socket subir.
   useEffect(() => {
     if (connectMethod !== 'qr') return
-    const connecting = session?.running && session?.status === 'connecting'
-    if (!connecting || qr) return
+    const active = session?.running && session?.status !== 'connected'
+    if (!active || qr) return
     const id = setInterval(async () => {
       const result = await api.sessionQRLatest().catch(() => null)
       if (result?.qr) {
         setQr(result.qr)
         clearInterval(id)
       }
-    }, 4000)
+    }, 3000)
     return () => clearInterval(id)
   }, [connectMethod, session?.running, session?.status, qr])
 
@@ -160,11 +181,18 @@ export default function WhatsAppPage() {
         if (err?.status === 409) return
         throw err
       })
+      // Espera o worker subir antes de abrir o canal de QR. Sem isso o WS
+      // abre cedo demais e o QR só aparecia no segundo clique.
+      const running = await waitForRunningSession(12000)
+      if (running?.status === 'connected') {
+        setFeedback('Bot online ✅ Conexão concluída.')
+        return
+      }
       await openQrSocket().catch(() => {})
       // Fallback imediato: tenta puxar o QR mais recente caso o WS demore.
+      // (Se ainda não houver QR, o polling de fallback continua tentando.)
       const latest = await api.sessionQRLatest().catch(() => null)
       if (latest?.qr) setQr(latest.qr)
-      await refreshSession({ silent: true })
     } catch (err) {
       setError(err.message || 'Não foi possível iniciar a conexão por QR Code.')
     } finally {
