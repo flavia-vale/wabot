@@ -1,8 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { api } from '@/lib/api'
 import { MobileShell } from '@/components/mobile/MobileShell'
+import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+import { mobileLogLinkActions, toMobileLogItem } from '@/lib/mobileLogs'
 
 const envStyles = {
   pageH: {
@@ -11,6 +14,13 @@ const envStyles = {
   },
   pageEyebrow: { fontSize: 12, color:'var(--ink-soft)' },
   pageTitle: { fontSize: 22, fontWeight: 600, color:'var(--ink)', letterSpacing:'-0.01em', marginTop: 2 },
+  refreshBtn: {
+    padding:'9px 13px', borderRadius: 999,
+    background:'var(--surface)', border:'1px solid var(--line)',
+    color:'var(--ink)', fontSize: 12, fontWeight: 700,
+    cursor:'pointer', fontFamily:'inherit',
+    display:'inline-flex', alignItems:'center', gap: 6,
+  },
 
   // Toolbar — busca + ritmo (icon) lado a lado
   toolbar: { padding:'0 16px 0', display:'flex', gap: 8 },
@@ -57,6 +67,12 @@ const envStyles = {
     padding:'1px 6px', borderRadius: 999,
     background: active ? 'rgba(255,255,255,0.15)' : 'var(--bg-soft)',
   }),
+  loadedHint: {
+    padding:'6px 20px 4px',
+    fontSize: 11.5,
+    color:'var(--ink-soft)',
+    lineHeight: 1.35,
+  },
 
   // Day separator
   daySep: {
@@ -74,6 +90,10 @@ const envStyles = {
     border:'1px solid ' + (expanded ? 'color-mix(in oklab, var(--accent) 30%, var(--line))' : 'var(--line)'),
     borderRadius: 14,
     cursor:'pointer',
+    width: 'calc(100% - 32px)',
+    textAlign: 'left',
+    fontFamily: 'inherit',
+    color: 'inherit',
   }),
   itemTop: { display:'flex', alignItems:'flex-start', gap: 10 },
   statusDot: (status) => ({
@@ -148,64 +168,115 @@ const envStyles = {
   },
   exActions: { display:'flex', gap: 6, flexWrap:'wrap', marginTop: 2 },
   actionBtn: (kind) => ({
-    padding:'8px 14px', borderRadius: 999,
-    fontSize: 12, fontWeight: 600,
+    padding:'8px 12px', borderRadius: 999,
+    fontSize: 12, fontWeight: 700,
     cursor:'pointer', fontFamily:'inherit',
-    background: kind === 'primary' ? 'var(--ink)' : 'transparent',
+    textDecoration:'none',
+    display:'inline-flex', alignItems:'center', justifyContent:'center',
+    background: kind === 'primary' ? 'var(--ink)' : 'var(--surface)',
     color: kind === 'primary' ? 'white' : 'var(--ink)',
     border: kind === 'primary' ? '1px solid var(--ink)' : '1px solid var(--line)',
   }),
+  copiedHint: { fontSize: 11, color:'var(--success)', fontWeight: 700 },
 };
 
 export default function LogsPage() {
   useMobileRoutePerf('m/op/logs')
 
   const [filter, setFilter] = useState('todos');
-  const [expanded, setExpanded] = useState(0);
+  const [expanded, setExpanded] = useState(null);
+  const [search, setSearch] = useState('');
 
-  // Filtros em palavras
-  const filters = [
-    {key:'todos',     label:'Tudo',         n: 184},
-    {key:'fila',      label:'Aguardando',   n: 3},
-    {key:'ok',        label:'Postados',     n: 147},
-    {key:'falha',     label:'Erros',        n: 3},
-    {key:'ignorado',  label:'Não postados', n: 34},
-  ];
+  const [rawLogs, setRawLogs] = useState([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState('');
+  const [copyNotice, setCopyNotice] = useState('');
 
-  // source: 'auto' (vem de espelhamento) | 'manual' (vem da aba Criar)
-  const items = [
-    {id:0, hora:'14:48', status:'ok', source:'auto', loja:'Shopee',
-     produto:'Sandália Bege Verão 2026', de:'Promoções Brasil 🔥', para:'Achados da Sol 💜',
-     link:'shopee.com.br/sandalia-bege-A12X9', conv:'s.shopee.com.br/3As9XkLp2', day:'hoje'},
-    {id:1, hora:'14:32', status:'fila', source:'manual', loja:'Shopee',
-     produto:'Fone Bluetooth JBL Tune', destinos:['Achados da Sol 💜'],
-     when:'em 12 min', day:'hoje'},
-    {id:2, hora:'14:23', status:'ok', source:'auto', loja:'Mercado Livre',
-     produto:'Air Fryer Mondial 4L 1500W', de:'Cupons & Cashback', para:'Sol · Tech & Casa', day:'hoje'},
-    {id:3, hora:'13:51', status:'ignorado', source:'auto', loja:'Shopee',
-     produto:'Geladeira Brastemp 375L', de:'Promoções Brasil 🔥', para:null,
-     motivo:'Preço acima de R$ 200 — sua regra "Achadinho" só posta produtos baratos.', day:'hoje'},
-    {id:4, hora:'13:18', status:'falha', source:'auto', loja:'AliExpress',
-     produto:'Carregador USB-C 65W', de:'Promoções Brasil 🔥', para:null,
-     erro:'Sua afiliada AliExpress desconectou. Reconecte em Conta → Afiliadas.', day:'hoje'},
-    {id:5, hora:'12:58', status:'ok', source:'manual', loja:'Shopee',
-     produto:'Vestido Floral Midi', de:'Você criou', para:'Achados da Sol 💜', day:'hoje'},
-    {id:6, hora:'12:14', status:'ok', source:'auto', loja:'Magalu',
-     produto:'Mouse Logitech M170', de:'Promoções de TI', para:'Sol · Tech & Casa', day:'hoje'},
-    {id:7, hora:'22:43', status:'ok', source:'auto', loja:'Shopee',
-     produto:'Tênis Branco Casual Unissex', de:'Cupons & Cashback', para:'Achados da Sol 💜', day:'ontem'},
-    {id:8, hora:'19:12', status:'falha', source:'manual', loja:'Mercado Livre',
-     produto:'Notebook Acer Aspire 5', de:'Você criou', para:null,
-     erro:'Seu ID de afiliado Mercado Livre expirou. Atualize em Conta → Afiliadas.', day:'ontem'},
-  ];
+  const loadFirstPage = useCallback(async ({ silent = false, isActive = () => true } = {}) => {
+    if (!silent) setLoading(true);
+    setError('');
+    try {
+      const data = await api.logs('all', 1, 30);
+      if (!isActive()) return;
+      setRawLogs(Array.isArray(data?.logs) ? data.logs : []);
+      setTotal(Number(data?.total) || 0);
+      setPage(1);
+      setExpanded(null);
+    } catch (e) {
+      if (isActive()) setError(e.message || 'Não foi possível carregar os envios.');
+    } finally {
+      if (!silent && isActive()) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const timer = window.setTimeout(() => {
+      loadFirstPage({ isActive: () => active });
+    }, 0);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [loadFirstPage]);
+
+  const hasMoreLogs = rawLogs.length < total;
+
+  async function loadMoreLogs() {
+    if (loadingMore || !hasMoreLogs) return;
+    setLoadingMore(true);
+    setError('');
+    try {
+      const nextPage = page + 1;
+      const data = await api.logs('all', nextPage, 30);
+      const nextLogs = Array.isArray(data?.logs) ? data.logs : [];
+      setRawLogs((current) => [...current, ...nextLogs]);
+      setTotal(Number(data?.total) || total);
+      setPage((current) => current + 1);
+    } catch (e) {
+      setError(e.message || 'Não foi possível carregar mais envios.');
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  async function copyLogLink(value, label) {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopyNotice(`${label} copiado`);
+      window.setTimeout(() => setCopyNotice(''), 1800);
+    } catch {
+      setCopyNotice('Não foi possível copiar neste navegador');
+      window.setTimeout(() => setCopyNotice(''), 2200);
+    }
+  }
+
+  const items = useMemo(() => {
+    const now = new Date();
+    return rawLogs.map(log => toMobileLogItem(log, now));
+  }, [rawLogs]);
+
+  // Contadores dos chips a partir dos itens carregados (mantém chip e lista consistentes).
+  const filters = useMemo(() => {
+    const count = (s) => items.filter(it => it.status === s).length;
+    return [
+      {key:'todos',     label:'Tudo',         n: items.length},
+      {key:'fila',      label:'Aguardando',   n: count('fila')},
+      {key:'ok',        label:'Postados',     n: count('ok')},
+      {key:'falha',     label:'Erros',        n: count('falha')},
+      {key:'ignorado',  label:'Não postados', n: count('ignorado')},
+    ];
+  }, [items]);
 
   const filtered = items.filter(it => {
-    if (filter === 'todos') return true;
-    if (filter === 'ok') return it.status === 'ok';
-    if (filter === 'fila') return it.status === 'fila';
-    if (filter === 'falha') return it.status === 'falha';
-    if (filter === 'ignorado') return it.status === 'ignorado';
-    return true;
+    if (filter !== 'todos' && it.status !== filter) return false;
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return [it.produto, it.loja, it.de, it.para].some(v => String(v || '').toLowerCase().includes(q));
   });
 
   const grouped = [];
@@ -232,19 +303,30 @@ export default function LogsPage() {
           <div style={envStyles.pageEyebrow}>Tudo que sai do bot</div>
           <div style={envStyles.pageTitle}>Envios</div>
         </div>
+        <button type="button" style={envStyles.refreshBtn} onClick={() => loadFirstPage({ silent: rawLogs.length > 0 })} disabled={loading}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 12a9 9 0 0 1-15.5 6.2"/><path d="M3 12A9 9 0 0 1 18.5 5.8"/><path d="M18 2v4h4"/><path d="M6 22v-4H2"/>
+          </svg>
+          Atualizar
+        </button>
       </div>
 
       {/* Toolbar: busca + ritmo (icon button discreto) */}
       <div style={envStyles.toolbar}>
         <div style={envStyles.searchWrap}>
-          <input placeholder="Buscar produto, grupo ou loja" style={envStyles.searchInput}/>
+          <input
+            placeholder="Buscar produto, grupo ou loja"
+            style={envStyles.searchInput}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
           <div style={envStyles.searchIcon}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
           </div>
         </div>
-        <button style={envStyles.cadenceBtn} title="Ajustar ritmo · 1 a cada 12 min">
+        <button type="button" style={envStyles.cadenceBtn} aria-label="Ajustar ritmo de envio" title="Ajustar ritmo · 1 a cada 12 min">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
           </svg>
@@ -253,18 +335,28 @@ export default function LogsPage() {
       </div>
 
       {/* Filtros em palavras claras */}
-      <div style={envStyles.chipRow}>
+      <div style={envStyles.chipRow} aria-label="Filtros — contagens somente dos envios carregados">
         {filters.map(f => (
-          <button key={f.key} onClick={() => setFilter(f.key)} style={envStyles.chip(filter === f.key)}>
+          <button key={f.key} type="button" onClick={() => setFilter(f.key)} style={envStyles.chip(filter === f.key)} title={`${f.n} envios carregados neste filtro`}>
             {f.label}
             <span style={envStyles.chipCount(filter === f.key)}>{f.n}</span>
           </button>
         ))}
       </div>
+      <div style={envStyles.loadedHint}>
+        Contadores dos filtros mostram apenas os {items.length} envios carregados nesta tela{hasMoreLogs ? ` de ${total} no histórico.` : '.'}
+      </div>
 
       {/* Lista */}
       <div style={{padding:'4px 0 0'}}>
-        {grouped.map((row, gIdx) => {
+        {loading && <div style={{padding:'0 16px'}}><MobileLoadingCard label="Carregando envios..." /></div>}
+        {!loading && error && <div style={{padding:'0 16px'}}><MobileErrorCard message={error} /></div>}
+        {!loading && !error && filtered.length === 0 && (
+          <div style={{padding:'40px 24px', textAlign:'center', color:'var(--ink-soft)', fontSize: 13}}>
+            {items.length === 0 ? 'Nenhum envio ainda. Quando o bot postar ou você criar uma oferta, aparece aqui.' : 'Nenhum envio bate com esse filtro.'}
+          </div>
+        )}
+        {!loading && !error && grouped.map((row, gIdx) => {
           if (row.sep) {
             return (
               <div key={`sep-${row.day}-${gIdx}`} style={envStyles.daySep}>
@@ -276,7 +368,7 @@ export default function LogsPage() {
           const it = row;
           const isExp = expanded === it.id;
           return (
-            <div key={it.id} style={envStyles.item(isExp)} onClick={() => setExpanded(isExp ? null : it.id)}>
+            <div key={it.id} role="button" tabIndex={0} style={envStyles.item(isExp)} onClick={() => setExpanded(isExp ? null : it.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(isExp ? null : it.id); } }} aria-expanded={isExp} aria-label={`${it.produto}: ${statusLabel(it.status)}`}>
               <div style={envStyles.itemTop}>
                 <div style={envStyles.statusDot(it.status)}/>
                 <div style={envStyles.itemMain}>
@@ -299,7 +391,7 @@ export default function LogsPage() {
 
                   <div style={envStyles.itemFoot}>
                     <span style={envStyles.statusPill(it.status)}>
-                      {it.status === 'fila' ? `aguardando · ${it.when}` : statusLabel(it.status)}
+                      {statusLabel(it.status)}
                     </span>
                     <span style={envStyles.sourceBadge(it.source)}>
                       {it.source === 'auto' ? (
@@ -334,6 +426,20 @@ export default function LogsPage() {
                           <div style={envStyles.exLinkSuccess}>{it.conv}</div>
                         </div>
                       )}
+                      {mobileLogLinkActions(it).length > 0 && (
+                        <div style={envStyles.exActions} onClick={(e) => e.stopPropagation()}>
+                          {mobileLogLinkActions(it).map((action) => action.kind === 'copy' ? (
+                            <button key={action.key} type="button" style={envStyles.actionBtn('secondary')} onClick={() => copyLogLink(action.value, action.key.includes('original') ? 'Link original' : 'Link convertido')}>
+                              {action.label}
+                            </button>
+                          ) : (
+                            <a key={action.key} style={envStyles.actionBtn('primary')} href={action.href} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                              {action.label}
+                            </a>
+                          ))}
+                          {copyNotice && <span style={envStyles.copiedHint}>{copyNotice}</span>}
+                        </div>
+                      )}
                       {it.erro && (
                         <div style={envStyles.errorBox}>
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" style={{flexShrink:0, marginTop: 1}}>
@@ -347,15 +453,8 @@ export default function LogsPage() {
                           <strong style={{color:'var(--ink)'}}>Por que não foi postado:</strong> {it.motivo}
                         </div>
                       )}
-                      <div style={envStyles.exActions}>
-                        {it.status === 'falha' && <button style={envStyles.actionBtn('primary')}>Tentar de novo</button>}
-                        {it.status === 'fila' && <button style={envStyles.actionBtn('primary')}>Enviar agora</button>}
-                        {it.status === 'fila' && <button style={envStyles.actionBtn('ghost')}>Reagendar</button>}
-                        {it.status === 'fila' && <button style={envStyles.actionBtn('ghost')}>Cancelar</button>}
-                        {it.status === 'ignorado' && <button style={envStyles.actionBtn('ghost')}>Postar mesmo assim</button>}
-                        {it.status === 'ignorado' && <button style={envStyles.actionBtn('ghost')}>Mudar regra</button>}
-                        {it.status === 'ok' && <button style={envStyles.actionBtn('ghost')}>Repostar</button>}
-                        {it.status === 'ok' && <button style={envStyles.actionBtn('ghost')}>Ver no WhatsApp</button>}
+                      <div style={envStyles.reasonBox}>
+                        Ações de reenvio, cancelamento e repostagem ainda não têm contrato seguro no backend mobile. Use o painel desktop quando precisar intervir manualmente.
                       </div>
                     </div>
                   )}
@@ -364,6 +463,13 @@ export default function LogsPage() {
             </div>
           );
         })}
+        {!loading && !error && hasMoreLogs && (
+          <div style={{padding:'16px'}}>
+            <button type="button" onClick={loadMoreLogs} disabled={loadingMore} style={{width:'100%', padding:'12px', borderRadius: 999, border:'1px solid var(--line)', background:'var(--surface)', color:'var(--ink)', fontWeight: 700}}>
+              {loadingMore ? 'Carregando...' : 'Carregar mais envios'}
+            </button>
+          </div>
+        )}
       </div>
 
       <div style={{height: 20}}/>

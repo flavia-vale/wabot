@@ -1,9 +1,22 @@
 'use client'
 
+import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
+import { api } from '@/lib/api'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
+import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { mobi } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+import { mobileRoutes } from '@/components/mobile/routes'
+import { derivePlanState } from '@/components/mobile/planState'
+
+const GROUP_GRADIENTS = [
+  'linear-gradient(135deg,#94A3B8,#475569)',
+  'linear-gradient(135deg,#F4D9E0,#E8A488)',
+  'linear-gradient(135deg,#C8E6D8,#3E9C7A)',
+  'linear-gradient(135deg,#D9CFEA,#7C5CF5)',
+]
 
 const espStyles = {
   pageH: { padding: '18px 20px 0' },
@@ -139,44 +152,179 @@ const espStyles = {
   filtersMain: { flex: 1, minWidth: 0 },
   filtersTitle: { fontSize: 13.5, fontWeight: 600, color:'var(--ink)' },
   filtersSub: { fontSize: 11.5, color:'var(--ink-soft)', marginTop: 2 },
-  filtersCount: {
-    fontSize: 11, fontWeight: 700, color:'var(--ink)',
-    background:'var(--bg-soft)', padding:'3px 8px', borderRadius: 999,
-    border:'1px solid var(--line)',
-  },
 };
 
 export default function EspelharPage() {
   useMobileRoutePerf('m/op/espelhar')
-  const on = true
 
-  const origens = [
-    {nome:'Promoções Brasil 🔥', plat:'WhatsApp', g:'linear-gradient(135deg,#94A3B8,#475569)'},
-    {nome:'Cupons & Cashback BR', plat:'WhatsApp', g:'linear-gradient(135deg,#F4D9E0,#E8A488)'},
-    {nome:'Ofertas Relâmpago', plat:'Telegram', g:'linear-gradient(135deg,#C8E6D8,#3E9C7A)'},
-    {nome:'Promoções de TI', plat:'WhatsApp', g:'linear-gradient(135deg,#D9CFEA,#7C5CF5)'},
-  ];
+  const [groups, setGroups] = useState([])
+  const [session, setSession] = useState(null)
+  const [summary, setSummary] = useState(null)
+  const [config, setConfig] = useState(null)
+  const [me, setMe] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const router = useRouter()
 
-  const destinos = [
-    {nome:'Achados da Sol 💜', tipo:'grupo · 247 pessoas', g:'linear-gradient(135deg, var(--accent), var(--accent-2))'},
-    {nome:'Sol · Tech & Casa', tipo:'grupo · 118 pessoas', g:'linear-gradient(135deg, var(--accent-3), var(--warn))'},
-    {nome:'Canal Sol Achados', tipo:'canal · 2.4k inscritos', g:'linear-gradient(135deg, var(--accent-2), var(--accent-strong))'},
-  ];
+  useEffect(() => {
+    let active = true
+    async function load() {
+      setLoading(true)
+      setError('')
+      try {
+        const [g, s, sum, cfg, m] = await Promise.all([
+          api.groups(),
+          api.sessionStatus().catch(() => null),
+          api.logsSummary('today').catch(() => null),
+          api.getConfig().catch(() => null),
+          api.me().catch(() => null),
+        ])
+        if (!active) return
+        setGroups(Array.isArray(g) ? g : [])
+        setSession(s)
+        setSummary(sum)
+        setConfig(cfg)
+        setMe(m)
+      } catch (e) {
+        if (active) setError(e.message || 'Não foi possível carregar o espelhamento.')
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    load()
+    return () => { active = false }
+  }, [])
+
+  // Espelhamento "ligado" reflete a sessão WhatsApp rodando — não há flag
+  // própria no backend; o bot espelha enquanto a sessão está conectada.
+  const on = Boolean(session?.running)
+  const isExpired = derivePlanState(me) === 'expired'
+
+  const origens = useMemo(
+    () => groups.filter(g => g.role === 'monitor').map((g, i) => ({
+      nome: g.name,
+      plat: g.kind === 'channel' ? 'Canal WhatsApp' : 'WhatsApp',
+      g: GROUP_GRADIENTS[i % GROUP_GRADIENTS.length],
+    })),
+    [groups],
+  )
+
+  const destinos = useMemo(
+    () => groups.filter(g => g.role === 'post').map((g, i) => ({
+      nome: g.name,
+      tipo: g.kind === 'channel' ? 'canal' : 'grupo',
+      g: GROUP_GRADIENTS[i % GROUP_GRADIENTS.length],
+    })),
+    [groups],
+  )
+
+  const c = summary?.counts
+  const postadosHoje = c?.success ?? 0
+  const errosHoje = (c?.timeoutTotal ?? 0) + (c?.errorOther ?? 0)
+  const vistosHoje = c
+    ? (c.success + c.skippedDedup + c.skippedConfig + c.timeoutTotal + c.errorOther + c.inFlight)
+    : 0
+  const postIntervalMinutes = config?.postIntervalMs ? Math.max(1, Math.round(config.postIntervalMs / 60000)) : null
+
+  if (loading) {
+    return (
+      <MobileShell title="Conversor" active="espelhar">
+        <div style={{padding:'18px 16px'}}><MobileLoadingCard label="Carregando espelhamento..." /></div>
+      </MobileShell>
+    )
+  }
+  if (error) {
+    return (
+      <MobileShell title="Conversor" active="espelhar">
+        <div style={{padding:'18px 16px'}}><MobileErrorCard message={error} /></div>
+      </MobileShell>
+    )
+  }
 
   return (
-    <MobileShell title="Conversor" active="espelhar">
+    <MobileShell title="Conversor" active="espelhar" planExpired={isExpired}>
       <div style={espStyles.pageH}>
         <div style={espStyles.pageEyebrow}>Funcionalidade PRO</div>
         <div style={espStyles.pageTitle}>Espelhamento</div>
         <div style={espStyles.pageSentence}>
-          Você monitora <span style={espStyles.pageNum}>4 grupos</span>.
+          Você monitora <span style={espStyles.pageNum}>{origens.length} {origens.length === 1 ? 'grupo' : 'grupos'}</span>.
           Quando aparece uma promoção, a gente troca o link pela sua afiliada
-          e posta nos <span style={espStyles.pageNum}>3 grupos seus</span>.
+          e posta nos <span style={espStyles.pageNum}>{destinos.length} {destinos.length === 1 ? 'grupo seu' : 'grupos seus'}</span>.
         </div>
       </div>
 
+      {/* VENCIDO: card de reativação + ponte pro recurso grátis (criar) */}
+      {isExpired && (
+        <>
+          <div style={{
+            margin:'16px 16px 0', padding:'18px',
+            background:'var(--ink)', color:'white', borderRadius: 20,
+            position:'relative', overflow:'hidden',
+          }}>
+            <div style={{position:'absolute', right:-40, top:-50, width: 180, height: 180, borderRadius:'50%', background:'var(--warn)', filter:'blur(46px)', opacity:.4, pointerEvents:'none'}}/>
+            <div style={{position:'relative'}}>
+              <div style={{display:'flex', alignItems:'center', gap: 8, marginBottom: 10}}>
+                <span style={{width: 30, height: 30, borderRadius: 9, background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.2)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink: 0}}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                </span>
+                <span style={{fontSize: 12.5, fontWeight: 600, color:'rgba(255,255,255,0.7)'}}>Espelhamento pausado</span>
+              </div>
+              <div style={{fontSize: 16, fontWeight: 600, lineHeight: 1.3, marginBottom: 6}}>
+                Seu plano venceu — o bot parou de monitorar.
+              </div>
+              <div style={{fontSize: 12.5, color:'rgba(255,255,255,0.65)', lineHeight: 1.45, marginBottom: 14}}>
+                Seus grupos e regras estão salvos. Reative pra voltar exatamente de onde parou.
+              </div>
+              <button type="button" onClick={() => router.push(mobileRoutes.accountSubscription)} style={{width:'100%', padding:'13px', background:'var(--warn)', color:'white', border:'none', borderRadius: 12, fontSize: 13.5, fontWeight: 700, cursor:'pointer', fontFamily:'inherit'}}>
+                Reativar plano
+              </button>
+            </div>
+          </div>
+
+          {/* Ponte pro recurso grátis — nunca um beco sem saída */}
+          <button type="button" onClick={() => router.push(mobileRoutes.offer)} style={{
+            margin:'10px 16px 0', width:'calc(100% - 32px)', padding:'14px',
+            background:'color-mix(in oklab, var(--success) 12%, var(--surface))',
+            border:'1px solid color-mix(in oklab, var(--success) 35%, var(--line))',
+            borderRadius: 16, display:'flex', alignItems:'center', gap: 12,
+            textAlign:'left', fontFamily:'inherit', cursor:'pointer',
+          }}>
+            <span style={{width: 38, height: 38, borderRadius: 11, background:'var(--success)', color:'white', flexShrink: 0, display:'flex', alignItems:'center', justifyContent:'center'}}>
+              <MobileIcon name="sparkles" size={18}/>
+            </span>
+            <div style={{flex:1, minWidth: 0}}>
+              <div style={{fontSize: 13, fontWeight: 600, color:'var(--ink)'}}>Enquanto isso, crie ofertas</div>
+              <div style={{fontSize: 11.5, color:'var(--ink-soft)', marginTop: 2}}>manualmente, de graça e sem limite</div>
+            </div>
+            <span style={{display:'inline-flex', alignItems:'center', gap: 4, fontSize: 10, fontWeight: 700, padding:'2px 7px', borderRadius: 999, background:'color-mix(in oklab, var(--success) 16%, var(--surface))', color:'var(--success)', border:'1px solid color-mix(in oklab, var(--success) 35%, var(--line))', whiteSpace:'nowrap'}}>
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Grátis
+            </span>
+            <MobileIcon name="arrow" size={14}/>
+          </button>
+
+          {/* Resumo esmaecido do que está configurado (read-only) */}
+          <div style={espStyles.sectionH}>
+            <div style={espStyles.sectionTitle}>Sua configuração (salva)</div>
+          </div>
+          <div style={{margin:'0 16px', opacity: 0.5, filter:'saturate(0.6)', display:'flex', gap: 8}}>
+            <div style={{flex:1, padding:'14px', background:'var(--surface)', border:'1px solid var(--line)', borderRadius: 14, textAlign:'center'}}>
+              <div style={{fontSize: 24, fontWeight: 600, color:'var(--ink)'}}>{origens.length}</div>
+              <div style={{fontSize: 11, color:'var(--ink-soft)', marginTop: 2}}>grupos monitorados</div>
+            </div>
+            <div style={{flex:1, padding:'14px', background:'var(--surface)', border:'1px solid var(--line)', borderRadius: 14, textAlign:'center'}}>
+              <div style={{fontSize: 24, fontWeight: 600, color:'var(--ink)'}}>{destinos.length}</div>
+              <div style={{fontSize: 11, color:'var(--ink-soft)', marginTop: 2}}>destinos seus</div>
+            </div>
+          </div>
+          <div style={{height: 28}}/>
+        </>
+      )}
+
+      {!isExpired && (
+      <>
       {/* Controle ON/OFF — único toggle visível */}
-      <div style={espStyles.control}>
+      <button type="button" onClick={() => router.push(mobileRoutes.configWhatsApp)} style={{...espStyles.control, border:'none', width:'auto', textAlign:'left', fontFamily:'inherit'}}>
         <div style={espStyles.controlBlob}/>
         <div style={espStyles.controlIcon}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -192,7 +340,7 @@ export default function EspelharPage() {
             {on ? (
               <>
                 <span style={espStyles.controlLive}/>
-                último envio há 2 min
+                {summary?.lastSendAt ? `último envio ${new Date(summary.lastSendAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'monitorando seus grupos'}
               </>
             ) : 'os grupos não estão sendo monitorados'}
           </div>
@@ -200,31 +348,31 @@ export default function EspelharPage() {
         <div style={espStyles.bigToggle(on)}>
           <div style={espStyles.bigToggleKnob(on)}/>
         </div>
-      </div>
+      </button>
 
       {/* Stats compactos do dia */}
       <div style={espStyles.miniStats}>
         <div style={espStyles.miniStat}>
           <div style={espStyles.miniStatLabel}>Hoje</div>
-          <div style={espStyles.miniStatNum}>147</div>
+          <div style={espStyles.miniStatNum}>{postadosHoje}</div>
           <div style={espStyles.miniStatSub}>postados</div>
         </div>
         <div style={espStyles.miniStat}>
           <div style={espStyles.miniStatLabel}>Vistos</div>
-          <div style={espStyles.miniStatNum}>183</div>
+          <div style={espStyles.miniStatNum}>{vistosHoje}</div>
           <div style={espStyles.miniStatSub}>nas origens</div>
         </div>
         <div style={espStyles.miniStat}>
           <div style={espStyles.miniStatLabel}>Erros</div>
-          <div style={{...espStyles.miniStatNum, color: 'var(--danger)'}}>3</div>
-          <div style={{...espStyles.miniStatSub, color: 'var(--danger)'}}>resolver →</div>
+          <div style={{...espStyles.miniStatNum, color: errosHoje > 0 ? 'var(--danger)' : 'var(--ink)'}}>{errosHoje}</div>
+          <div style={{...espStyles.miniStatSub, color: errosHoje > 0 ? 'var(--danger)' : 'var(--ink-soft)'}}>{errosHoje > 0 ? 'resolver →' : 'tudo certo'}</div>
         </div>
       </div>
 
       {/* ── DE ONDE VEM ── */}
       <div style={espStyles.sectionH}>
         <div style={espStyles.sectionTitle}>Grupos que monitoro</div>
-        <div style={espStyles.sectionAction}>Editar</div>
+        <button type="button" onClick={() => router.push(mobileRoutes.configGroups)} style={{...espStyles.sectionAction, border:'none', background:'transparent', fontFamily:'inherit'}}>Editar</button>
       </div>
       <div style={espStyles.sectionHint}>
         De onde a gente captura as promoções.
@@ -246,7 +394,7 @@ export default function EspelharPage() {
             <MobileIcon name="arrow" size={14}/>
           </div>
         ))}
-        <button style={espStyles.addBtn}>
+        <button type="button" onClick={() => router.push(mobileRoutes.configGroups)} style={espStyles.addBtn}>
           <div style={espStyles.addIcon}>
             <MobileIcon name="plus" size={14} stroke={2.4}/>
           </div>
@@ -257,7 +405,7 @@ export default function EspelharPage() {
       {/* ── PRA ONDE VAI ── */}
       <div style={espStyles.sectionH}>
         <div style={espStyles.sectionTitle}>Meus grupos de promoção</div>
-        <div style={espStyles.sectionAction}>Editar</div>
+        <button type="button" onClick={() => router.push(mobileRoutes.configGroups)} style={{...espStyles.sectionAction, border:'none', background:'transparent', fontFamily:'inherit'}}>Editar</button>
       </div>
       <div style={espStyles.sectionHint}>
         Pra onde a gente posta o link já com sua afiliada.
@@ -276,7 +424,7 @@ export default function EspelharPage() {
             <MobileIcon name="arrow" size={14}/>
           </div>
         ))}
-        <button style={espStyles.addBtn}>
+        <button type="button" onClick={() => router.push(mobileRoutes.configGroups)} style={espStyles.addBtn}>
           <div style={espStyles.addIcon}>
             <MobileIcon name="plus" size={14} stroke={2.4}/>
           </div>
@@ -284,26 +432,6 @@ export default function EspelharPage() {
         </button>
       </div>
 
-      {/* ── FILTROS / REGRAS — entry secundário ── */}
-      <div style={espStyles.sectionH}>
-        <div style={espStyles.sectionTitle}>Refinar o que entra</div>
-      </div>
-
-      <div style={espStyles.filtersEntry}>
-        <div style={espStyles.filtersIcon}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
-          </svg>
-        </div>
-        <div style={espStyles.filtersMain}>
-          <div style={espStyles.filtersTitle}>Filtros de preço, categoria e loja</div>
-          <div style={espStyles.filtersSub}>
-            ex: só postar se ≤ R$ 200 com 30%+ de desconto
-          </div>
-        </div>
-        <span style={espStyles.filtersCount}>3 ativos</span>
-        <MobileIcon name="arrow" size={14}/>
-      </div>
 
       {/* Ritmo de envio */}
       <div style={espStyles.sectionH}>
@@ -317,7 +445,7 @@ export default function EspelharPage() {
           </svg>
         </div>
         <div style={espStyles.filtersMain}>
-          <div style={espStyles.filtersTitle}>1 envio a cada 12 minutos</div>
+          <div style={espStyles.filtersTitle}>{postIntervalMinutes ? `1 envio a cada ${postIntervalMinutes} min` : 'Cadência configurada no painel'}</div>
           <div style={espStyles.filtersSub}>
             evita parecer spam · ajustável conforme o uso
           </div>
@@ -326,6 +454,8 @@ export default function EspelharPage() {
       </div>
 
       <div style={{height: 24}}/>
+      </>
+      )}
     </MobileShell>
   )
 }

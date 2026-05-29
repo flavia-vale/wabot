@@ -1,29 +1,147 @@
 'use client'
 
-import React, { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
+import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+import { api } from '@/lib/api'
+import {
+  buildExistingJidRoleSet,
+  getMobileGroupPickerItem,
+  getRoleForMobileGroupTab,
+  prepareMobileGroupAddPayload,
+  sortWhatsAppGroupsForMobilePicker,
+} from '@/lib/mobileGroupPicker'
 
+const avatarColor = (name = '') => {
+  const hues = [210, 145, 280, 50, 180, 0]
+  const hash = name.split('').reduce((h, c) => h + c.charCodeAt(0), 0)
+  const hue = hues[hash % hues.length]
+  return `linear-gradient(135deg, hsl(${hue}, 70%, 50%), hsl(${hue + 20}, 70%, 60%))`
+}
+
+function initials(name = '') {
+  return name.replace(/[^A-Za-zÀ-ÿ ]/g, '').split(' ').filter(Boolean).slice(0, 2).map((word) => word[0]).join('').toUpperCase().slice(0, 2) || 'WA'
+}
 
 export default function GroupsPage() {
   useMobileRoutePerf('m/config/groups')
 
-  const [tab, setTab] = React.useState('origem');
-  const origem = [
-    {nome:'Promoções Brasil 🔥', m:'1.842 membros', last:'agora · 124 hoje', on:true, g:'linear-gradient(135deg,#94A3B8,#475569)'},
-    {nome:'Cupons & Cashback BR', m:'2.340 membros', last:'4 min · 87 hoje', on:true, g:'linear-gradient(135deg,#F4D9E0,#E8A488)'},
-    {nome:'Ofertas Relâmpago Shopee', m:'967 membros', last:'12 min · 58 hoje', on:true, g:'linear-gradient(135deg,#C8E6D8,#3E9C7A)'},
-    {nome:'Promoções de TI', m:'580 membros', last:'23 min · 34 hoje', on:true, g:'linear-gradient(135deg,#D9CFEA,#7C5CF5)'},
-    {nome:'Achadinhos Mães', m:'412 membros', last:'pausado', on:false, g:'linear-gradient(135deg,#F6E8D8,#E8A488)'},
-  ];
-  const destino = [
-    {nome:'Achados da Sol 💜', m:'grupo · 247 membros', last:'89 posts hoje', on:true, g:'linear-gradient(135deg,#7CC9A9,#D9CFEA)'},
-    {nome:'Sol · Tech & Casa', m:'grupo · 118 membros', last:'38 posts hoje', on:true, g:'linear-gradient(135deg,#D9CFEA,#7C5CF5)'},
-    {nome:'Canal Sol Achados', m:'canal · 2.4k inscritos', last:'72 posts hoje', on:true, g:'linear-gradient(135deg,#F6E8D8,#7CC9A9)'},
-  ];
-  const data = tab === 'origem' ? origem : destino;
+  const [tab, setTab] = useState('origem')
+  const [groups, setGroups] = useState([])
+  const [waGroups, setWaGroups] = useState([])
+  const [showAdd, setShowAdd] = useState(false)
+  const [manualForm, setManualForm] = useState({ waJid: '', name: '', kind: 'group' })
+  const [loading, setLoading] = useState(true)
+  const [actionLoading, setActionLoading] = useState('')
+  const [error, setError] = useState('')
+  const [feedback, setFeedback] = useState('')
+
+  async function loadGroups() {
+    setLoading(true)
+    setError('')
+    try {
+      const list = await api.groups()
+      setGroups(Array.isArray(list) ? list : [])
+    } catch (err) {
+      setError(err.message || 'Não foi possível carregar os grupos.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    let active = true
+    async function load() {
+      setLoading(true)
+      setError('')
+      try {
+        const list = await api.groups()
+        if (active) setGroups(Array.isArray(list) ? list : [])
+      } catch (err) {
+        if (active) setError(err.message || 'Não foi possível carregar os grupos.')
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    load()
+    return () => { active = false }
+  }, [])
+
+  const role = getRoleForMobileGroupTab(tab)
+  const currentGroups = useMemo(() => groups.filter((group) => group.role === role), [groups, role])
+  const existingJidRoles = useMemo(() => buildExistingJidRoleSet(groups), [groups])
+
+  async function loadWhatsAppGroups() {
+    setActionLoading('wa-groups')
+    setFeedback('')
+    try {
+      const list = await api.sessionWAGroups()
+      setWaGroups(Array.isArray(list) ? sortWhatsAppGroupsForMobilePicker(list) : [])
+      setShowAdd(true)
+    } catch (err) {
+      setFeedback(err.message || 'Não foi possível listar grupos do WhatsApp. Use o cadastro manual.')
+      setShowAdd(true)
+    } finally {
+      setActionLoading('')
+    }
+  }
+
+  async function addGroupFromData(data) {
+    const result = prepareMobileGroupAddPayload(data, role, existingJidRoles)
+    if (!result.ok) {
+      setFeedback(result.feedback)
+      return
+    }
+
+    const { waJid, name, kind } = result.payload
+    setActionLoading(`add-${waJid}::${role}`)
+    setFeedback('')
+    try {
+      await api.addGroup(waJid, name, role, kind)
+      setFeedback(role === 'monitor' ? 'Grupo adicionado para monitorar.' : 'Grupo adicionado para publicar.')
+      setManualForm({ waJid: '', name: '', kind: 'group' })
+      await loadGroups()
+    } catch (err) {
+      setFeedback(err.message || 'Não foi possível adicionar o grupo.')
+    } finally {
+      setActionLoading('')
+    }
+  }
+
+
+  async function deleteGroup(group) {
+    setActionLoading(`delete-${group.id}`)
+    setFeedback('')
+    try {
+      await api.deleteGroup(group.id)
+      setGroups((current) => current.filter((item) => item.id !== group.id))
+      setFeedback('Grupo removido.')
+    } catch (err) {
+      setFeedback(err.message || 'Não foi possível remover o grupo.')
+    } finally {
+      setActionLoading('')
+    }
+  }
+
+  const feedbackIsError = feedback && (feedback.includes('Não') || feedback === 'Este grupo já está cadastrado para monitorar/publicar.')
+
+  if (loading) {
+    return (
+      <MobileShell title="Conversor" active="conta">
+        <div style={{ padding: '18px 16px' }}><MobileLoadingCard label="Carregando grupos..." /></div>
+      </MobileShell>
+    )
+  }
+  if (error) {
+    return (
+      <MobileShell title="Conversor" active="conta">
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+      </MobileShell>
+    )
+  }
 
   return (
     <MobileShell title="Conversor" active="conta">
@@ -32,58 +150,107 @@ export default function GroupsPage() {
         <div style={cfgStyles.pageTitle}>Grupos e canais</div>
       </div>
 
-      {/* Toggle origem/destino */}
       <div style={{padding:'14px 16px 0'}}>
         <div style={{display:'flex', gap: 4, padding: 4, background:'var(--surface)', border:'1px solid var(--line)', borderRadius: 14}}>
           {[
-            {key:'origem', label:'👁 Monitorar', n: origem.length},
-            {key:'destino', label:'⚡ Publicar', n: destino.length},
-          ].map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)} style={{
-              flex: 1, padding:'10px 8px', borderRadius: 10, border:'none', cursor:'pointer',
-              fontSize: 12.5, fontWeight: 600, fontFamily:'inherit',
-              background: tab === t.key ? 'var(--ink)' : 'transparent',
-              color: tab === t.key ? 'white' : 'var(--ink-soft)',
-              display:'flex', alignItems:'center', justifyContent:'center', gap: 6,
-            }}>
-              {t.label}
-              <span style={{fontSize: 10.5, opacity: tab === t.key ? .7 : .55, padding:'1px 6px', borderRadius: 999, background: tab === t.key ? 'rgba(255,255,255,0.15)' : 'var(--bg-soft)'}}>{t.n}</span>
+            {key:'origem', label:'👁 Monitorar', n: groups.filter((g) => g.role === 'monitor').length},
+            {key:'destino', label:'⚡ Publicar', n: groups.filter((g) => g.role === 'post').length},
+          ].map((item) => (
+            <button key={item.key} type="button" onClick={() => setTab(item.key)} style={{flex: 1, padding:'10px 8px', borderRadius: 10, border:'none', cursor:'pointer', fontSize: 12.5, fontWeight: 600, fontFamily:'inherit', background: tab === item.key ? 'var(--ink)' : 'transparent', color: tab === item.key ? 'white' : 'var(--ink-soft)'}}>
+              {item.label} <span style={{opacity:.7}}>({item.n})</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Texto explicativo */}
       <div style={{padding:'12px 20px 0', fontSize: 12, color:'var(--ink-soft)', lineHeight: 1.5}}>
-        {tab === 'origem'
-          ? 'Grupos onde o bot lê os links de promoção. Você só precisa ser membro — ele não posta aqui.'
-          : 'Seus grupos ou canais onde o bot publica os links já convertidos para o seu ID de afiliada.'}
+        {tab === 'origem' ? 'Grupos onde o bot lê links de promoção.' : 'Destinos onde o bot publica os links convertidos.'}
       </div>
 
-      {/* Lista */}
+      {feedback && <div style={{margin:'12px 16px 0', fontSize: 12, color: feedbackIsError ? 'var(--danger)' : 'var(--success)'}}>{feedback}</div>}
+
       <div style={cfgStyles.cardWrap}>
         <div style={{...cfgStyles.card, overflow:'hidden'}}>
-          {data.map((g, i, a) => (
-            <div key={g.nome} style={{...cfgStyles.row(i === a.length-1), opacity: g.on ? 1 : 0.55}}>
-              <div style={{width: 40, height: 40, borderRadius:'50%', background: g.g, display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontWeight: 700, fontSize: 12, flexShrink: 0}}>
-                {g.nome.replace(/[^A-Za-zÀ-ÿ ]/g,'').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase().slice(0,2)}
-              </div>
-              <div style={cfgStyles.rowMain}>
-                <div style={cfgStyles.rowTitle}>{g.nome}</div>
-                <div style={cfgStyles.rowSub}>{g.m} · {g.last}</div>
-              </div>
-              <div style={cfgStyles.toggle(g.on)}><div style={cfgStyles.toggleKnob(g.on)}/></div>
+          {currentGroups.length === 0 ? (
+            <div style={{padding:'24px 16px', textAlign:'center', color:'var(--ink-soft)', fontSize: 13}}>
+              Nenhum grupo {tab === 'origem' ? 'para monitorar' : 'para publicar'} configurado.
             </div>
-          ))}
+          ) : currentGroups.map((group, index) => {
+            const name = group.subject || group.name || 'Sem nome'
+            return (
+              <div key={group.id} style={cfgStyles.row(index === currentGroups.length - 1)}>
+                <div style={{width: 40, height: 40, borderRadius:'50%', background: avatarColor(name), display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontWeight: 700, fontSize: 12, flexShrink: 0}}>{initials(name)}</div>
+                <div style={cfgStyles.rowMain}>
+                  <div style={cfgStyles.rowTitle}>{name}</div>
+                  <div style={cfgStyles.rowSub}>{group.kind === 'channel' ? 'canal' : 'grupo'} · {group.waJid || group.jid || 'sem JID'}</div>
+                </div>
+                <span style={cfgStyles.pill('success')}>cadastrado</span>
+                <button type="button" onClick={() => deleteGroup(group)} disabled={actionLoading === `delete-${group.id}`} style={{border:'1px solid var(--line)', background:'transparent', borderRadius: 999, color:'var(--danger)', padding:'6px 9px', fontSize: 11, fontWeight: 700}}>
+                  Remover
+                </button>
+              </div>
+            )
+          })}
         </div>
       </div>
 
-      {/* Add CTA */}
-      <div style={{padding:'18px 16px 24px'}}>
-        <button style={{...mobi.btn('primary', true)}}>
-          <MobileIcon name="plus" size={14}/> Adicionar {tab === 'origem' ? 'grupo para monitorar' : 'destino'}
+      <div style={{padding:'18px 16px 0', display:'grid', gap: 10}}>
+        <button type="button" onClick={loadWhatsAppGroups} disabled={actionLoading === 'wa-groups'} style={{...mobi.btn('primary', true)}}>
+          <MobileIcon name="plus" size={14}/> {actionLoading === 'wa-groups' ? 'Buscando...' : `Adicionar grupo para ${role === 'monitor' ? 'monitorar' : 'publicar'}`}
         </button>
       </div>
+
+      {showAdd && (
+        <div style={cfgStyles.cardWrap}>
+          <div style={{...cfgStyles.cardP, display:'grid', gap: 12}}>
+            <div style={cfgStyles.rowTitle}>{role === 'monitor' ? 'Escolha um grupo para monitorar' : 'Escolha um grupo para publicar'}</div>
+            <p style={{fontSize: 12, color:'var(--ink-soft)', lineHeight: 1.45}}>
+              A lista vem do WhatsApp conectado. Como a aba {role === 'monitor' ? 'Monitorar' : 'Publicar'} está marcada, tocar em um grupo já adiciona nessa lista.
+            </p>
+            {waGroups.length === 0 ? (
+              <div style={{fontSize: 12, color:'var(--ink-soft)'}}>Nenhum grupo carregado do WhatsApp. Confirme se o bot está conectado ou use o cadastro manual.</div>
+            ) : waGroups.map((group) => {
+              const pickerItem = getMobileGroupPickerItem(group, role, existingJidRoles)
+              const loadingThisGroup = actionLoading === `add-${pickerItem.waJid}::${role}`
+              return (
+                <button
+                  key={pickerItem.waJid}
+                  type="button"
+                  onClick={() => !pickerItem.disabled && addGroupFromData({ waJid: pickerItem.waJid, name: pickerItem.name, kind: pickerItem.kind })}
+                  disabled={pickerItem.disabled || loadingThisGroup}
+                  style={{
+                    ...cfgStyles.field,
+                    background: pickerItem.disabled ? 'var(--bg-soft)' : 'var(--surface)',
+                    display:'flex', alignItems:'center', justifyContent:'space-between', gap: 12,
+                    textAlign:'left', cursor: pickerItem.disabled ? 'not-allowed' : 'pointer',
+                    opacity: pickerItem.disabled ? 0.7 : 1,
+                  }}
+                >
+                  <span style={{minWidth: 0}}>
+                    <span style={{display:'block', fontSize: 13, fontWeight: 700, color:'var(--ink)', lineHeight: 1.35}}>{pickerItem.name}</span>
+                    <span style={{display:'block', fontSize: 11, color:'var(--ink-faint)', wordBreak:'break-all', marginTop: 3}}>{pickerItem.waJid}</span>
+                  </span>
+                  <span style={cfgStyles.pill(pickerItem.disabled ? 'neutral' : 'success')}>
+                    {loadingThisGroup ? 'adicionando...' : pickerItem.pill}
+                  </span>
+                </button>
+              )
+            })}
+            <div style={cfgStyles.rowTitle}>Ou cadastrar manualmente</div>
+            <input style={cfgStyles.field} placeholder="JID do grupo/canal" value={manualForm.waJid} onChange={(event) => setManualForm((current) => ({...current, waJid: event.target.value}))}/>
+            <input style={cfgStyles.field} placeholder="Nome" value={manualForm.name} onChange={(event) => setManualForm((current) => ({...current, name: event.target.value}))}/>
+            <select style={cfgStyles.field} value={manualForm.kind} onChange={(event) => setManualForm((current) => ({...current, kind: event.target.value}))}>
+              <option value="group">Grupo</option>
+              <option value="channel">Canal</option>
+            </select>
+            <button type="button" onClick={() => addGroupFromData(manualForm)} disabled={!manualForm.waJid.trim() || actionLoading.startsWith('add-')} style={{...mobi.btn('accent', true), opacity: !manualForm.waJid.trim() ? 0.6 : 1}}>
+              Salvar {tab === 'origem' ? 'origem' : 'destino'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div style={{height: 24}}/>
     </MobileShell>
   )
 }

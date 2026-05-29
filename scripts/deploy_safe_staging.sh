@@ -8,6 +8,7 @@ DASHBOARD_DIR="$ROOT_DIR/dashboard"
 BRANCH="${BRANCH:-develop}"
 SYNC_GIT="${SYNC_GIT:-0}"
 AUTO_STASH_ON_DIRTY="${AUTO_STASH_ON_DIRTY:-0}"
+FORCE_RESET_ON_SYNC="${FORCE_RESET_ON_SYNC:-0}"
 VISUAL_APP="${VISUAL_APP:-visual-staging}"
 API_APP="${API_APP:-api-staging}"
 VISUAL_BASE_URL="${VISUAL_BASE_URL:-http://178.105.54.0:3006}"
@@ -181,8 +182,8 @@ git log --oneline -n 3
 if [[ "$SYNC_GIT" == "1" ]]; then
   echo "[2/9] Sync branch $BRANCH"
   if [[ -n "$(git status --porcelain)" ]]; then
-    if [[ "$AUTO_STASH_ON_DIRTY" == "1" ]]; then
-      echo "  Aviso: working tree sujo detectado. Aplicando stash automático para seguir com deploy de staging."
+    if [[ "$AUTO_STASH_ON_DIRTY" == "1" || "$FORCE_RESET_ON_SYNC" == "1" ]]; then
+      echo "  Aviso: working tree sujo detectado. Aplicando stash automático (rede de recuperação) antes do sync."
       git stash push --include-untracked --message "auto-stash deploy_safe_staging $(date -u +%Y-%m-%dT%H:%M:%SZ)" >/tmp/wabot_staging_autostash.log || true
       git status --short --branch
     else
@@ -191,9 +192,21 @@ if [[ "$SYNC_GIT" == "1" ]]; then
       exit 1
     fi
   fi
-  git fetch origin
-  git checkout "$BRANCH"
-  git pull --ff-only origin "$BRANCH"
+  if [[ "$FORCE_RESET_ON_SYNC" == "1" ]]; then
+    # Staging é um espelho descartável: sincroniza de forma idempotente com
+    # origin/$BRANCH. Imune a working tree suja e a arquivos untracked que
+    # colidem com novos arquivos do branch (ex: o git novo >=2.41 aborta o
+    # fast-forward da worktree no fetch/pull quando há mudanças locais).
+    echo "  FORCE_RESET_ON_SYNC=1 -> hard reset para origin/$BRANCH"
+    git fetch origin "$BRANCH"
+    git checkout -f "$BRANCH"
+    git reset --hard "origin/$BRANCH"
+    git clean -fd
+  else
+    git fetch origin
+    git checkout "$BRANCH"
+    git pull --ff-only origin "$BRANCH"
+  fi
 else
   echo "[2/9] Sync git pulado (SYNC_GIT=0). Usando checkout atual."
 fi

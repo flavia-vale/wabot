@@ -3,6 +3,10 @@ name: Deploy Automático Wabot
 on:
   push:
     branches: [ main, develop ]
+  # Roda em toda PR contra develop ou main — lint+build+smoke funcionam como
+  # gate pré-merge. A etapa de SSH deploy é pulada (condição push-only).
+  pull_request:
+    branches: [ main, develop ]
   # Permite disparar manualmente pela UI do GitHub Actions ("Run workflow").
   # Útil para re-rodar deploy no HEAD atual de develop/main sem precisar de
   # commit novo (ex: quando uma execução antiga falhou em SHA já corrigido
@@ -84,7 +88,11 @@ jobs:
           cd ..
           scripts/smoke_mobile_dashboard.sh http://127.0.0.1:4016 / /login
 
+      # Deploy via SSH só executa em push/workflow_dispatch — nunca em PR.
+      # Isso garante que o gate de CI acima rode antes do merge,
+      # e o deploy aconteça somente após o código entrar na branch.
       - name: Deploy via SSH
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.REMOTE_HOST }}
@@ -113,5 +121,5 @@ jobs:
                 git remote set-url origin "git@github.com:${{ github.repository }}.git"
               fi
               chmod +x ./scripts/deploy_safe_staging.sh
-              ROOT_DIR=~/wabot-staging BRANCH=develop SYNC_GIT=1 AUTO_STASH_ON_DIRTY=1 ./scripts/deploy_safe_staging.sh
+              ROOT_DIR=~/wabot-staging BRANCH=develop SYNC_GIT=1 AUTO_STASH_ON_DIRTY=1 FORCE_RESET_ON_SYNC=1 ./scripts/deploy_safe_staging.sh
             fi
