@@ -5,6 +5,7 @@ import { fetchProductImage as defaultFetchProductImage, fetchImageBuffer as defa
 import { detectLinks } from '../detector.js'
 import { buildMobileOfferText } from '../../dashboard/lib/mobileOfferComposer.js'
 import { PRESET_TEMPLATE_BODIES } from '../../dashboard/lib/mobileTemplateStore.js'
+import { recordTelegramOfferLog } from './offerLog.js'
 
 const HTTP_URL_RE = /https?:\/\/[^\s<>()]+/gi
 const DEFAULT_POLL_TIMEOUT_SECONDS = 25
@@ -243,6 +244,7 @@ export function createTelegramOfferBot({
   logger = console,
   pollTimeoutSeconds = DEFAULT_POLL_TIMEOUT_SECONDS,
   pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
+  recordOfferLog = () => {},
 } = {}) {
   if (!token && !telegramClient) {
     throw new Error('TELEGRAM_OFFER_BOT_TOKEN obrigatório para iniciar o bot de ofertas do Telegram.')
@@ -258,6 +260,15 @@ export function createTelegramOfferBot({
 
   function isAllowed(chatId) {
     return allowedChats.size === 0 || allowedChats.has(normalizeChatId(chatId))
+  }
+
+  // O logging nunca pode derrubar o bot nem interromper o atendimento.
+  async function safeRecord(entry) {
+    try {
+      await recordOfferLog(entry)
+    } catch (err) {
+      logger.warn?.({ err: err.message }, 'Falha ao registrar log de oferta do Telegram')
+    }
   }
 
   async function handleUpdate(update) {
@@ -279,6 +290,7 @@ export function createTelegramOfferBot({
     const extracted = extractSingleHttpUrl(text)
     if (extracted.code) {
       await client.sendMessage(chatId, buildUrlErrorText(extracted.code))
+      await safeRecord({ chatId, inputUrl: text, platform: null, status: 'invalid_input', errorMsg: extracted.code })
       return
     }
 
@@ -288,6 +300,8 @@ export function createTelegramOfferBot({
       return
     }
 
+    const startedAt = Date.now()
+    const platform = inferPlatformFromUrl(extracted.url)
     activeChats.add(chatKey)
     try {
       const offer = await buildTelegramOffer(extracted.url, {
@@ -298,11 +312,13 @@ export function createTelegramOfferBot({
         imageCredentials,
         logger,
       })
+      let withImage = false
       if (offer.image?.buffer && typeof client.sendPhoto === 'function') {
         try {
           await client.sendPhoto(chatId, offer.image, {
             caption: offer.text.slice(0, MAX_TELEGRAM_CAPTION_LENGTH),
           })
+          withImage = true
           if (offer.text.length > MAX_TELEGRAM_CAPTION_LENGTH) {
             await client.sendMessage(chatId, offer.text)
           }
@@ -316,14 +332,25 @@ export function createTelegramOfferBot({
 
       // Só oferece o encaminhamento ao WhatsApp quando uma oferta real foi
       // montada (não no caminho "produto não encontrado").
-      if (offer.text !== PRODUCT_NOT_FOUND_MESSAGE) {
+      const productFound = offer.text !== PRODUCT_NOT_FOUND_MESSAGE
+      if (productFound) {
         await client.sendMessage(chatId, WHATSAPP_SHARE_PROMPT, {
           reply_markup: buildWhatsappShareMarkup(offer.text),
         })
       }
+
+      await safeRecord({
+        chatId,
+        inputUrl: extracted.url,
+        platform,
+        status: productFound ? 'success' : 'product_not_found',
+        withImage,
+        latencyMs: Date.now() - startedAt,
+      })
     } catch (err) {
       logger.warn?.({ err: err.message, chatId }, 'Falha ao gerar oferta pelo Telegram')
       await client.sendMessage(chatId, 'Não consegui ler os dados do produto agora. Tente novamente em instantes ou use outro link.')
+      await safeRecord({ chatId, inputUrl: extracted.url, platform, status: 'error', errorMsg: err.message, latencyMs: Date.now() - startedAt })
     } finally {
       activeChats.delete(chatKey)
     }
@@ -366,7 +393,7 @@ export function createTelegramOfferBot({
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const bot = createTelegramOfferBot()
+  const bot = createTelegramOfferBot({ recordOfferLog: recordTelegramOfferLog })
   const stop = () => {
     bot.stop()
   }

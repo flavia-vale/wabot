@@ -56,3 +56,24 @@ Para um teste pontual em foreground (sem PM2): `npm run telegram:offer-bot`.
 - O link final da oferta é sempre o link colado no Telegram; `finalUrl` do scraper é ignorado para não substituir o afiliado/manual.
 - Quando o scraper não encontrar título nem preço, o bot responde: `⚠️ Nenhum produto encontrado para o link enviado!`
 - **Em caso de sucesso**, após enviar a oferta o bot envia uma segunda mensagem — `Quer enviar essa mensagem para o WhatsApp?` — com um botão inline **Sim** que abre `https://wa.me/?text=<oferta-codificada>`, encaminhando a oferta pronta ao WhatsApp. O botão não aparece no caminho "produto não encontrado" nem em erro.
+
+## Métricas e logging (aba /admin)
+
+Cada requisição é registrada na tabela `TelegramOfferLog` (Prisma) por
+`src/telegram/offerLog.js`. O registro é **best-effort**: se o banco falhar,
+o bot loga um warn e segue atendendo — logging nunca derruba o bot.
+
+Cada linha guarda: `chatId`, `inputUrl`, `platform`, `status`
+(`success` | `product_not_found` | `invalid_input` | `error`), `withImage`,
+`errorMsg`, `latencyMs`, `createdAt`.
+
+A aba **Telegram** em `/admin` (`dashboard/app/admin/telegram/page.js`) consome:
+
+- `GET /api/admin/telegram/overview` — status de configuração (token presente,
+  chats autorizados), totais (24h/7d/total, chats distintos), taxa de sucesso,
+  % de ofertas com foto, breakdown por status e por plataforma, último evento.
+- `GET /api/admin/telegram/requests?limit=&status=` — últimas requisições.
+
+Ambos exigem permissão admin `tech:read`. A instrumentação é injetada via DI
+(`recordOfferLog`) em `createTelegramOfferBot`; em testes o default é no-op,
+então a suíte não toca no banco. O entrypoint PM2 injeta o writer real.
