@@ -3,7 +3,7 @@ import { TEMPLATE_OPTIONS } from './mobileOfferComposer.js'
 const STORAGE_KEY = 'wabot.mobile.templates.v1'
 
 export const PRESET_TEMPLATE_BODIES = {
-  simples: '🛍️ {produto}\n\nDe {preço_de}\n💥 Por *{preço}*\n\n🛒 Compre aqui 👉 {link}',
+  simples: '🛍️ {produto}\n\n~De {preço_de}~\n💥 *Por {preço}*\n\n🛒 Compre aqui 👉 {link}',
   achadinho: '✨ Achadinho do dia\n\n{produto}\n\nDe {preço_de} por *{preço}*\n\n👉 {link}',
   relampago: '⚡ Oferta relâmpago\n\n{produto}\n\nDe {preço_de} por *{preço}*\n\n👉 {link}',
   tech: '🔌 Achado tech\n\n{produto}\n\nDe {preço_de} por *{preço}*\n\n👉 {link}',
