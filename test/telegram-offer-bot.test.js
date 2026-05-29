@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
+import { resolve } from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 
 import {
   buildTelegramOffer,
@@ -10,7 +12,21 @@ import {
   buildWhatsappShareUrl,
   buildWhatsappShareMarkup,
   WHATSAPP_SHARE_PROMPT,
+  isTelegramOfferBotEntrypoint,
 } from '../src/telegram/offerBot.js'
+
+test('isTelegramOfferBotEntrypoint reconhece execução direta e PM2 fork', () => {
+  const moduleUrl = new URL('../src/telegram/offerBot.js', import.meta.url).href
+  const modulePath = resolve(fileURLToPath(moduleUrl))
+
+  assert.equal(isTelegramOfferBotEntrypoint({ argv: ['node', modulePath], env: {}, moduleUrl }), true)
+  assert.equal(isTelegramOfferBotEntrypoint({
+    argv: ['node', '/usr/lib/node_modules/pm2/lib/ProcessContainerFork.js'],
+    env: { pm_exec_path: modulePath },
+    moduleUrl,
+  }), true)
+  assert.equal(isTelegramOfferBotEntrypoint({ argv: ['node', '/tmp/test-runner.js'], env: {}, moduleUrl }), false)
+})
 
 test('extractSingleHttpUrl exige exatamente um link http(s)', () => {
   assert.equal(extractSingleHttpUrl('olha https://loja.test/produto?x=1').url, 'https://loja.test/produto?x=1')
