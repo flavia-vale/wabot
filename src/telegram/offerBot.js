@@ -13,6 +13,17 @@ const MAX_TELEGRAM_MESSAGE_LENGTH = 4096
 const MAX_TELEGRAM_CAPTION_LENGTH = 1024
 const MAX_INCOMING_TEXT_LENGTH = 4000
 export const PRODUCT_NOT_FOUND_MESSAGE = '⚠️ Nenhum produto encontrado para o link enviado!'
+export const WHATSAPP_SHARE_PROMPT = 'Quer enviar essa mensagem para o WhatsApp?'
+
+export function buildWhatsappShareUrl(offerText) {
+  return `https://wa.me/?text=${encodeURIComponent(String(offerText || ''))}`
+}
+
+export function buildWhatsappShareMarkup(offerText) {
+  return {
+    inline_keyboard: [[{ text: 'Sim', url: buildWhatsappShareUrl(offerText) }]],
+  }
+}
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -302,6 +313,14 @@ export function createTelegramOfferBot({
       } else {
         await client.sendMessage(chatId, offer.text)
       }
+
+      // Só oferece o encaminhamento ao WhatsApp quando uma oferta real foi
+      // montada (não no caminho "produto não encontrado").
+      if (offer.text !== PRODUCT_NOT_FOUND_MESSAGE) {
+        await client.sendMessage(chatId, WHATSAPP_SHARE_PROMPT, {
+          reply_markup: buildWhatsappShareMarkup(offer.text),
+        })
+      }
     } catch (err) {
       logger.warn?.({ err: err.message, chatId }, 'Falha ao gerar oferta pelo Telegram')
       await client.sendMessage(chatId, 'Não consegui ler os dados do produto agora. Tente novamente em instantes ou use outro link.')
@@ -329,7 +348,11 @@ export function createTelegramOfferBot({
       try {
         await pollOnce()
       } catch (err) {
-        logger.error?.({ err: err.message }, 'Erro no polling do Telegram offer bot')
+        if (err?.statusCode === 409) {
+          logger.error?.({ err: err.message }, 'Telegram getUpdates retornou 409 Conflict: outra instância está fazendo polling com o MESMO token (ou há um webhook setado). Garanta apenas 1 processo rodando e tokens distintos entre prod e staging.')
+        } else {
+          logger.error?.({ err: err.message }, 'Erro no polling do Telegram offer bot')
+        }
         await sleep(pollIntervalMs)
       }
     }
