@@ -49,29 +49,30 @@ const homeStyles = {
   alertTitle: { fontSize: 13, fontWeight: 600, color:'var(--ink)' },
   alertSub: { fontSize: 11.5, color:'var(--ink-soft)', marginTop: 2 },
 
-  // Balão de progresso do checklist (só quando onboarding incompleto)
+  // Balão de progresso do checklist (só quando onboarding incompleto) —
+  // vermelho para chamar atenção: setup ainda não está completo.
   checklistBalloon: {
     margin:'14px 16px 0',
     padding:'12px 14px',
-    background:'color-mix(in oklab, var(--accent-strong) 10%, var(--surface))',
-    border:'1px solid color-mix(in oklab, var(--accent-strong) 30%, var(--line))',
+    background:'color-mix(in oklab, var(--danger) 12%, var(--surface))',
+    border:'1px solid color-mix(in oklab, var(--danger) 35%, var(--line))',
     borderRadius: 14,
     display:'flex', alignItems:'center', gap: 12,
     cursor:'pointer',
   },
   checklistBalloonIcon: {
     width: 28, height: 28, borderRadius: 8,
-    background:'var(--accent-strong)', color:'white',
+    background:'var(--danger)', color:'white',
     display:'flex', alignItems:'center', justifyContent:'center',
     flexShrink: 0,
   },
   checklistBalloonBar: {
-    height: 3, background:'color-mix(in oklab, var(--accent-strong) 20%, var(--surface))',
+    height: 3, background:'color-mix(in oklab, var(--danger) 20%, var(--surface))',
     borderRadius: 999, overflow:'hidden', marginTop: 5,
   },
   checklistBalloonBarFill: (pct) => ({
     height:'100%', borderRadius: 999,
-    background:'var(--accent-strong)',
+    background:'var(--danger)',
     width:`${pct}%`,
   }),
 
@@ -431,9 +432,9 @@ export default function MobileHomePage() {
         </button>
       </div>
 
-      {/* Atividade recente — só quando já tem operação rodando */}
-      {!isOnboarding && (
-        <>
+      {/* Atividade recente — sempre presente. Quando ainda não há envios,
+          mostra um estado vazio (mensagem muda se o checklist está incompleto). */}
+      <>
           <div style={homeStyles.sectionH}>
             <div style={homeStyles.sectionTitle}>Últimos envios</div>
             <button type="button" style={homeStyles.sectionLink} onClick={() => router.push(mobileRoutes.logs)}>Ver tudo →</button>
@@ -441,7 +442,9 @@ export default function MobileHomePage() {
           <div style={homeStyles.activityCard}>
             {recentItems.length === 0 ? (
               <div style={{ padding: '20px 16px', fontSize: 12.5, color: 'var(--ink-soft)', textAlign: 'center' }}>
-                Nenhum envio ainda. Quando o bot postar, aparece aqui.
+                {isOnboarding
+                  ? 'Nenhum envio ainda. Termine o checklist para começar a espelhar seus grupos.'
+                  : 'Nenhum envio ainda. Quando o bot postar, aparece aqui.'}
               </div>
             ) : recentItems.map((a, i, arr) => (
               <div key={i} style={homeStyles.actRow(i === arr.length - 1)}>
@@ -460,8 +463,7 @@ export default function MobileHomePage() {
               </div>
             ))}
           </div>
-        </>
-      )}
+      </>
 
       <div style={{height: 20}}/>
     </MobileShell>
