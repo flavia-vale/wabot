@@ -1,82 +1,83 @@
 # Twin Development Plan
-Generated: 2026-05-29 (revisão 2 — máximo reaproveitamento)
-Task: criar nas rotas /m as funcionalidades críticas ausentes, REUSANDO tudo que já existe nas rotas não-mobile. Nada recriado — só criar o que não existe.
+Generated: 2026-05-29 (revisão 3 — reuso de BACKEND, frontend mobile-nativo)
+Task: criar nas rotas /m as funcionalidades críticas ausentes. Reaproveitar o BACKEND existente (APIs/endpoints). Construir o FRONTEND novo, inspirado no design das rotas /m já existentes.
 Quality Level: pragmatic
 
 ## Princípio desta revisão
-> Reaproveitar TODAS as estruturas existentes das rotas não-mobile. Nada deve ser recriado, tudo reutilizado. Criar apenas o que não existe.
+> Reaproveitar as **funcionalidades de backend** (funções `api.*` e endpoints já existentes). O **frontend** deve ser construído do zero, usando como inspiração o design já existente nas rotas `/m` (inline styles via `cfgStyles`/`mobi`, `MobileShell`, padrões de loading/erro/feedback).
+>
+> NÃO importar componentes do desktop (`components/preservacao/*`, etc.) — eles usam Tailwind/markup de desktop. Criar componentes/telas mobile-nativos.
 
-Fatos verificados que viabilizam o reuso total:
-- **Tailwind v4 é global** (`app/globals.css` → `@import 'tailwindcss'`, importado no root `app/layout.js`). Logo, componentes desktop que usam `className` Tailwind **renderizam dentro das rotas `/m` sem alteração**. A premissa anterior de "recriar por incompatibilidade" estava errada.
-- As páginas desktop de preservação (`monitoramento/page.js` e `configuracoes/page.js`) são **apenas composições finas** de componentes já existentes em `components/preservacao/`. Esses componentes são auto-suficientes (monitores buscam seus próprios dados) ou recebem `{value, onChange, disabled}` (forms).
-- `UpsellShell` (`components/preservacao/UpsellShell.js`) e `canAccessAdvancedPreservation` (`lib/plan.js`) já existem → reusar para o gate Pro.
-- `DELAY_PRESETS` e `normalizeKeywords` existem, porém **inline** em `app/dashboard/configuracoes/page.js`. Para reusar sem duplicar, **extrair para um módulo compartilhado** e importar nos dois lados.
-- `api.scheduledList/Create/Cancel` já existem → reusar; só a UI mobile de agendamento não existe.
+Backend reaproveitado (nada novo no servidor):
+- Config: `api.getConfig()` / `api.saveConfig(data)` — campos `delayMin`, `delayMax`, `blockedKeywords`.
+- Agendamento: `api.scheduledList()` / `api.scheduledCreate(text, scheduledAtISO)` / `api.scheduledCancel(id)`.
+- Preservação config: `api.preservationConfig()` → `{config, flags}` / `api.updatePreservationConfig(patch)`.
+- Preservação monitoramento: `api.preservationHealth/RiskScore/Follows(limit)/Snapshots/Probe/Clicks()`.
+- Gate Pro: `canAccessAdvancedPreservation(me)` em `lib/plan.js` + `api.me()`.
+
+Frontend reaproveitado só como INSPIRAÇÃO/infra mobile já existente:
+- `components/mobile/MobileShell.jsx` (`MobileShell`, `MobileStateCard`), `mobileStyles.js` (`mobi`, `cfgStyles`), `MobileAsyncState.jsx` (`MobileLoadingCard`, `MobileErrorCard`), `MobileObservability.jsx` (`useMobileRoutePerf`), `routes.js` (`mobileRoutes`).
+- Telas-referência de padrão visual: `m/config/preferences`, `m/config/groups`, `m/config/whatsapp`, `m/op/logs`, `m/account`.
 
 ---
 
 ## Plano de Implementação
 
-### A) Extrair lógica compartilhada já existente (refactor sem mudança de comportamento)
+### A) Item 1.3 + 1.4 — Delay e Keywords no mobile
 
-**Criar** `dashboard/lib/configShared.js` movendo (sem alterar) de `app/dashboard/configuracoes/page.js`:
-- `DELAY_PRESETS` (fast 2/5, default 5/15, safe 15/30 + descrições — copiar exatamente)
-- `normalizeKeywords(text)` (split vírgula / trim / lowercase / dedup)
-- `parseDelay(value, label)` (validação 0–300, inteiro)
-
-**Modificar** `app/dashboard/configuracoes/page.js` → passar a importar de `lib/configShared.js` (remove as definições locais; comportamento idêntico). Isso garante que desktop e mobile usem **a mesma** estrutura.
-
-### B) Item 1.3 + 1.4 — Delay e Keywords no mobile (reuso de API e da lógica extraída)
-
-**Modificar** `dashboard/lib/mobileConfigContracts.js`:
+**Modificar** `dashboard/lib/mobileConfigContracts.js` (lib mobile):
 - Adicionar `'delayMin'`, `'delayMax'`, `'blockedKeywords'` a `MOBILE_CONFIG_CONTRACT_KEYS`.
-- Em `buildMobilePreferencesPayload`: `delayMin`/`delayMax` via `parseDelay` (de `lib/configShared.js`); `blockedKeywords` via `normalizeKeywords(...).join(',')`.
+- Em `buildMobilePreferencesPayload`: `delayMin`/`delayMax` como inteiros (parse + clamp 0–300, garantir `min<=max`); `blockedKeywords` normalizado (split vírgula / trim / lowercase / dedup → join `,`). Lógica escrita aqui (mobile), não importada do desktop.
 
-**Modificar** `dashboard/app/m/config/preferences/page.js` (reusa `cfgStyles`, `api.getConfig/saveConfig`, `DELAY_PRESETS`, `normalizeKeywords` já existentes):
-- Seção "Delay de envio": botões dos `DELAY_PRESETS` + dois inputs `number` (`delayMin`/`delayMax`) com a mesma validação `parseDelay`/`min<=max`.
-- Seção "Keywords bloqueadas": textarea ligada a `blockedKeywords`, normalizada com `normalizeKeywords` ao salvar.
+**Modificar** `dashboard/app/m/config/preferences/page.js` (frontend mobile-nativo, padrão das outras seções da própria página):
+- Seção "Delay de envio": 3 chips de preset definidos localmente (`{fast:2/5, default:5/15, safe:15/30}`) + dois inputs `number` (`delayMin`/`delayMax`) usando `cfgStyles.field`/`cfgStyles.label`. Validação inline `0<=min<=max<=300`.
+- Seção "Keywords bloqueadas": textarea (`cfgStyles.field`) ligada a `blockedKeywords` + nota "separe por vírgula". Normaliza no salvar.
 
-### C) Item 1.1 — Preservação/Anti-ban no mobile (reuso TOTAL dos componentes existentes)
-
-**Criar** `dashboard/app/m/config/preservacao/page.js` — única peça nova; apenas **compõe** o que já existe:
-- Gate: `api.me()` + `canAccessAdvancedPreservation` (de `lib/plan.js`). Sem acesso → renderiza `<UpsellShell />` (existente) dentro do `MobileShell`.
-- Seção "Monitoramento": reusa **os mesmos 6 componentes** — `HealthOverview`, `RiskScoreSummary`, `RecentFollowsList`, `SnapshotsList`, `ProbeStatus`, `ClicksSummary` (empilhados em coluna).
-- Seção "Configurações": reusa **os mesmos 7 forms** — `ThrottleForm`, `QuietHoursForm`, `FollowGuardForm`, `CopyVariationPoolEditor`, `ImageMutationToggle`, `ProbeToggle`, `ClickTrackerStatus` — com a **mesma** lógica load/diff/save de `api.preservationConfig`/`api.updatePreservationConfig` (espelhando o `configuracoes/page.js`, enviando só o patch).
-- Wrapper: `MobileShell title="Anti-banimento" active="conta" showBack onBack={router.back}`.
-
-> Nenhum form/card de preservação é recriado — todos importados de `components/preservacao/`.
-
-### D) Item 1.2 — Agendamento no mobile (reuso de `api.scheduled*`)
+### B) Item 1.2 — Agendamento no mobile
 
 **Modificar** `dashboard/app/m/op/offer/page.js`:
-- Trocar o `<button disabled>Agendar em breve</button>` (linha ~1004, `criarStyles.schedBtn` já existe) por botão que abre modal inline com `datetime-local` (min = now+61s) → `api.scheduledCreate(editorText, ISO)`. Desabilitar sem texto. Feedback reusa o `sendFeedback` existente + link "Ver agendamentos".
+- Substituir `<button disabled>Agendar em breve</button>` (linha ~1004, estilo `criarStyles.schedBtn` já existe) por botão que abre um modal/drawer inline mobile-nativo (overlay `position:fixed`, card com `cfgStyles`/`mobi`) com input `datetime-local` (min = now+61s). Confirmar → `api.scheduledCreate(editorText, new Date(value).toISOString())`. Desabilitar sem texto. Capturar erro do servidor (validação > now+60s) e mostrar no `sendFeedback` existente. Link "Ver agendamentos" → `mobileRoutes.scheduled`.
 
-**Criar** `dashboard/app/m/op/scheduled/page.js` — UI nova (não existe em lugar nenhum como componente), reusando `api.scheduledList/Cancel`, `MobileShell`, `cfgStyles`, `MobileLoadingCard/ErrorCard`. Lista itens, status como pill, "Cancelar" para pending/queued.
+**Criar** `dashboard/app/m/op/scheduled/page.js` (frontend mobile-nativo, inspirado em `m/op/logs`):
+- `useMobileRoutePerf('m/op/scheduled')`; carrega `api.scheduledList()`.
+- Lista de cards: texto truncado, data/hora `toLocaleString('pt-BR')`, status como pill (`cfgStyles.pill`/padrão de `m/op/logs`), botão "Cancelar" (`api.scheduledCancel(id)` + reload) p/ status `pending`/`queued`.
+- `MobileLoadingCard`/`MobileErrorCard`; empty state; `MobileShell title="Agendamentos" active="envios" showBack onBack={router.back}`.
 
-### E) Navegação (reuso da infra de rotas existente)
+### C) Item 1.1 — Preservação/Anti-ban no mobile (frontend novo, backend reusado)
+
+**Criar** `dashboard/app/m/config/preservacao/page.js` — tela mobile-nativa que consome os endpoints de preservação:
+- `useMobileRoutePerf('m/config/preservacao')`.
+- Gate: `api.me()` + `canAccessAdvancedPreservation`. Sem acesso → card de upsell mobile-nativo (lista de benefícios em texto + botão p/ `mobileRoutes.accountSubscription`), construído com `cfgStyles`/`mobi` (NÃO importar `UpsellShell` desktop).
+- Carrega `api.preservationConfig()` (config+flags) e os monitores.
+- **Seção Monitoramento** (cards mobile-nativos read-only, inspirados em `m/op/logs`/`m/page`): saúde dos canais (`preservationHealth`), score de risco (`preservationRiskScore`), follows recentes (`preservationFollows`), snapshots (`preservationSnapshots`), probe (`preservationProbe`), cliques (`preservationClicks`). Pills de status reusando padrão visual mobile.
+- **Seção Configurações** (forms mobile-nativos com `cfgStyles`): controles equivalentes aos do desktop, escrevendo os mesmos campos no patch — throttle (`channelMinIntervalSec`, `channelBurstCap`, `channelDailyCap`, `channelStaggerJitterMs` + presets), horário silencioso (`channelQuietHoursJson` start/end/tz), follow guard, pool de variação de texto, mutação de imagem (toggle), probe (toggle + session id), status do click tracker (read-only via `flags`).
+  - Durante a implementação, ler cada componente em `components/preservacao/` apenas para extrair os **nomes exatos dos campos** que o backend espera (não importar markup).
+- Salvar: diff `draft` vs `config` → `api.updatePreservationConfig(patch)` (só `config`, sem `flags`), espelhando a lógica de patch do desktop.
+- `MobileShell title="Anti-banimento" active="conta" showBack onBack={router.back}`.
+
+### D) Navegação (infra mobile existente)
 
 **Modificar** `dashboard/components/mobile/routes.js`: adicionar `preservacao: '/m/config/preservacao'` e `scheduled: '/m/op/scheduled'`.
 
-**Modificar** `dashboard/app/m/account/page.js`: a linha "Anti-banimento" passa a apontar para `mobileRoutes.preservacao` (hoje vai para espelhar).
+**Modificar** `dashboard/app/m/account/page.js`: linha "Anti-banimento" passa a apontar para `mobileRoutes.preservacao` (hoje vai p/ espelhar); ajustar subtexto.
 
 ---
 
 ### Ordem de Implementação
-1. `lib/configShared.js` (extrair) + ajustar `configuracoes/page.js` para importar — base reutilizável.
-2. `mobileConfigContracts.js` — novos campos.
-3. `routes.js` — registrar `preservacao` e `scheduled`.
-4. `m/config/preferences/page.js` — delay + keywords.
-5. `m/op/offer/page.js` — modal de agendamento.
-6. `m/op/scheduled/page.js` — lista de agendados.
-7. `m/config/preservacao/page.js` — compõe componentes existentes + gate.
-8. `m/account/page.js` — link anti-ban → preservacao (por último).
+1. `mobileConfigContracts.js` — campos delay/keywords + normalização (mobile).
+2. `routes.js` — registrar `preservacao` e `scheduled`.
+3. `m/config/preferences/page.js` — seções delay + keywords.
+4. `m/op/offer/page.js` — modal de agendamento.
+5. `m/op/scheduled/page.js` — lista de agendados.
+6. `m/config/preservacao/page.js` — tela de preservação (gate + monitor + config).
+7. `m/account/page.js` — link anti-ban → preservacao (por último).
 
 ### Riscos Técnicos
-- Extração para `lib/configShared.js` não pode mudar comportamento do desktop — manter assinaturas idênticas e validar `configuracoes` ainda salva.
-- `delayMin/Max` inteiros: usar `parseDelay`, não string vazia.
-- `scheduledCreate` valida `> now+60s` no servidor — capturar erro e exibir.
-- Componentes desktop de preservação usam Tailwind (global, ok), mas largura desktop (`max-w-*`, grid 2 col) pode ficar larga no mobile — empilhar em coluna única no wrapper mobile; não alterar os componentes.
-- Salvar preservação: enviar só patch de `config` (sem `flags`).
+- `delayMin/Max` inteiros: parse/clamp no contrato mobile; nunca enviar string vazia.
+- `scheduledCreate` valida `> now+60s` no servidor — capturar e exibir erro se o client ficar stale.
+- Preservação: ao salvar, enviar só patch de `config` (sem `flags`); usar os nomes de campo exatos do backend (conferir nos componentes desktop, sem importá-los).
+- Não importar nenhum componente de `components/preservacao/` ou outros do desktop — todo frontend é mobile-nativo.
+- Cobertura dos controles de preservação no mobile deve mapear 1:1 os campos do backend para não corromper config existente (campos não enviados ficam inalterados pelo patch diferencial).
 
 ## Próximo Passo
 Para implementar: digite ok, continue ou approve. Para cancelar: cancel.
