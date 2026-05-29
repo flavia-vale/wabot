@@ -9,6 +9,7 @@ import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileRoutes } from '@/components/mobile/routes'
 import { api } from '@/lib/api'
 import { DEFAULT_LANDING_PLANS } from '@/lib/marketing-content'
+import { derivePlanState, daysSinceExpiry } from '@/components/mobile/planState'
 
 const contaStyles = {
   // Perfil — discreto, sem blob
@@ -210,28 +211,54 @@ export default function AccountPage() {
   const email = user?.email || ''
   const firstName = name.split(' ')[0]
   const initials = name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
-  const plan = user?.plan?.toUpperCase() || 'FREE'
+  const planState = derivePlanState(user)
+  const isExpired = planState === 'expired'
+  const expiredDays = daysSinceExpiry(user)
+  const plan = isExpired ? 'PLANO VENCIDO' : (user?.plan?.toUpperCase() || 'FREE')
   const isPro = user?.plan === 'pro'
   const planDef = DEFAULT_LANDING_PLANS.find(p => p.id === user?.plan)
   const planPrice = planDef?.priceValue > 0 ? `${planDef.price}/mês` : 'Grátis'
+  const reactivatePrice = planDef?.priceValue > 0 ? planDef.price : 'R$ 19'
   const accessDate = user?.accessExpiresAt ? new Date(user.accessExpiresAt).toLocaleDateString('pt-BR') : ''
   const renewLabel = isPro ? 'renova em' : 'válido até'
   const connectedLabel = session?.connectedAt ? `desde ${new Date(session.connectedAt).toLocaleDateString('pt-BR')}` : 'conectado'
 
   return (
-    <MobileShell title="Conversor" active="conta">
+    <MobileShell title="Conversor" active="conta" planExpired={isExpired}>
       {/* Perfil */}
       <div style={contaStyles.profile}>
         <div style={contaStyles.avatar}>{initials}</div>
         <div style={contaStyles.profileMain}>
           <div style={contaStyles.name}>{name}</div>
           <div style={contaStyles.email}>{email}</div>
-          <div style={contaStyles.planRow}>{plan}</div>
+          <div style={{...contaStyles.planRow, ...(isExpired ? { background:'var(--warn)' } : null)}}>{plan}</div>
         </div>
       </div>
 
-      {/* Plano */}
-      {user?.plan && (
+      {/* Plano — banner de reativação quando vencido, card discreto caso contrário */}
+      {isExpired ? (
+        <div style={{
+          margin:'10px 16px 0', padding:'16px',
+          background:'color-mix(in oklab, var(--warn) 14%, var(--surface))',
+          border:'1.5px solid color-mix(in oklab, var(--warn) 40%, var(--line))',
+          borderRadius: 16,
+        }}>
+          <div style={{display:'flex', alignItems:'center', gap: 8, marginBottom: 8}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span style={{fontSize: 13, fontWeight: 700, color:'var(--warn)'}}>
+              {expiredDays != null && expiredDays > 0
+                ? `Plano vencido há ${expiredDays} ${expiredDays === 1 ? 'dia' : 'dias'}`
+                : 'Plano vencido'}
+            </span>
+          </div>
+          <div style={{fontSize: 12, color:'var(--ink-soft)', lineHeight: 1.45, marginBottom: 12}}>
+            O espelhamento está pausado. Criar ofertas continua grátis. Reative pra voltar a automatizar.
+          </div>
+          <button type="button" onClick={() => router.push(mobileRoutes.accountSubscription)} style={{width:'100%', padding:'13px', background:'var(--warn)', color:'white', border:'none', borderRadius: 12, fontSize: 13.5, fontWeight: 700, cursor:'pointer', fontFamily:'inherit'}}>
+            Reativar por {reactivatePrice}/mês
+          </button>
+        </div>
+      ) : user?.plan && (
         <div style={contaStyles.plan}>
           <div style={contaStyles.planMain}>
             <div style={contaStyles.planTitle}>{planPrice}{accessDate ? ` · ${renewLabel} ${accessDate}` : ''}</div>

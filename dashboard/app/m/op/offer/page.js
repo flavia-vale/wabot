@@ -7,6 +7,7 @@ import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard } from '@/components/mobile/MobileAsyncState'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileRoutes } from '@/components/mobile/routes'
+import { derivePlanState } from '@/components/mobile/planState'
 import { api } from '@/lib/api'
 import {
   COUPON_STORES,
@@ -522,6 +523,8 @@ export default function OfferPage() {
   const [scheduleMin, setScheduleMin] = useState('')
   const [scheduling, setScheduling] = useState(false)
   const [scheduleError, setScheduleError] = useState('')
+  const [me, setMe] = useState(null)
+  const isExpired = derivePlanState(me) === 'expired'
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined
@@ -544,6 +547,14 @@ export default function OfferPage() {
       .catch(() => {
         if (active) setGroups([])
       })
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    api.me()
+      .then((m) => { if (active) setMe(m) })
+      .catch(() => { if (active) setMe(null) })
     return () => { active = false }
   }, [])
 
@@ -733,7 +744,28 @@ export default function OfferPage() {
   const currentOfferStore = COUPON_STORES.find((store) => store.key === currentOfferStoreKey)
 
   return (
-    <MobileShell title="Conversor" active="criar">
+    <MobileShell title="Conversor" active="criar" planExpired={isExpired}>
+      {/* Aviso positivo quando o plano venceu — "isso aqui é seu porto seguro" */}
+      {isExpired && (
+        <div style={{
+          margin:'14px 16px 0', padding:'12px 14px',
+          background:'color-mix(in oklab, var(--success) 12%, var(--surface))',
+          border:'1px solid color-mix(in oklab, var(--success) 35%, var(--line))',
+          borderRadius: 14, display:'flex', alignItems:'center', gap: 10,
+        }}>
+          <span style={{
+            width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+            background:'var(--success)', color:'white',
+            display:'flex', alignItems:'center', justifyContent:'center',
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </span>
+          <div style={{flex:1, fontSize: 12, color:'var(--ink)', lineHeight: 1.4}}>
+            Mesmo com o plano vencido, <strong>criar ofertas é de graça</strong>. Sem limite.
+          </div>
+        </div>
+      )}
+
       <div style={criarStyles.pageH}>
         <div style={criarStyles.pageEyebrow}>Oferta manual</div>
         <div style={criarStyles.pageTitle}>Cole um link, posta oferta.</div>
