@@ -193,6 +193,26 @@ const homeStyles = {
     display:'flex', alignItems:'center', gap: 5, flexWrap:'wrap',
   },
   actTime: { fontSize: 11, color:'var(--ink-faint)', fontFamily:"'JetBrains Mono', monospace", flexShrink: 0 },
+
+  // Card do guia rápido de credenciais
+  guideCard: {
+    margin:'18px 16px 0', width:'calc(100% - 32px)',
+    background:'color-mix(in oklab, var(--accent-2) 35%, var(--surface))',
+    border:'1px solid color-mix(in oklab, var(--accent) 30%, var(--line))',
+    borderRadius: 18, padding:'14px 16px',
+    display:'flex', alignItems:'center', gap: 14,
+    cursor:'pointer', fontFamily:'inherit', textAlign:'left',
+  },
+  guideIcon: {
+    width: 40, height: 40, borderRadius: 11,
+    background:'linear-gradient(135deg, var(--accent-strong), var(--accent))',
+    color:'white',
+    display:'flex', alignItems:'center', justifyContent:'center',
+    flexShrink: 0,
+  },
+  guideText: { flex: 1, minWidth: 0 },
+  guideTitle: { fontSize: 14, fontWeight: 600, color:'var(--ink)' },
+  guideSub: { fontSize: 12, color:'var(--ink-soft)', marginTop: 2, lineHeight: 1.4 },
 };
 
 // Sparkline mini para o foot do hero
@@ -464,6 +484,20 @@ export default function MobileHomePage() {
             ))}
           </div>
       </>
+
+      {/* Guia rápido — como pegar as credenciais das afiliadas */}
+      <button type="button" style={homeStyles.guideCard} onClick={() => router.push(mobileRoutes.tutorial)}>
+        <div style={homeStyles.guideIcon}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+          </svg>
+        </div>
+        <div style={homeStyles.guideText}>
+          <div style={homeStyles.guideTitle}>Guia rápido de credenciais</div>
+          <div style={homeStyles.guideSub}>Aprenda a pegar suas credenciais de afiliada (Shopee, Amazon, ML)</div>
+        </div>
+        <MobileIcon name="arrow" size={16}/>
+      </button>
 
       <div style={{height: 20}}/>
     </MobileShell>
