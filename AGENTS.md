@@ -34,7 +34,7 @@ commits já mergeados — sempre criar commit novo.
 | `telegram-offer-bot-staging` | staging | Espelho do bot do Telegram (token SEPARADO do de prod)     |
 
 **Bot do Telegram (`telegram-offer-bot`)**: long-polling em `getUpdates`
-(`src/telegram/offerBot.js`). Exige **um único poller por token** — duas
+(`src/telegram/offerBotRunner.js`, usando a lógica de `src/telegram/offerBot.js`). Exige **um único poller por token** — duas
 instâncias com o mesmo `TELEGRAM_OFFER_BOT_TOKEN` dão `409 Conflict` e o bot
 para de responder. Prod e staging precisam de tokens **diferentes**. Se o bot
 parar de enviar mensagens, suspeite primeiro de: (1) processo morto fora do

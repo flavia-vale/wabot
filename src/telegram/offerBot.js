@@ -5,7 +5,6 @@ import { fetchProductImage as defaultFetchProductImage, fetchImageBuffer as defa
 import { detectLinks } from '../detector.js'
 import { buildMobileOfferText } from '../../dashboard/lib/mobileOfferComposer.js'
 import { PRESET_TEMPLATE_BODIES } from '../../dashboard/lib/mobileTemplateStore.js'
-import { recordTelegramOfferLog } from './offerLog.js'
 
 const HTTP_URL_RE = /https?:\/\/[^\s<>()]+/gi
 const DEFAULT_POLL_TIMEOUT_SECONDS = 25
@@ -390,14 +389,4 @@ export function createTelegramOfferBot({
   }
 
   return { handleUpdate, pollOnce, start, stop }
-}
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const bot = createTelegramOfferBot({ recordOfferLog: recordTelegramOfferLog })
-  const stop = () => {
-    bot.stop()
-  }
-  process.once('SIGINT', stop)
-  process.once('SIGTERM', stop)
-  await bot.start()
 }
