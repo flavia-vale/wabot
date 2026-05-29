@@ -1,16 +1,19 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
+import { QRCodeCanvas as QRCode } from 'qrcode.react'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
-import { api } from '@/lib/api'
+import { api, openQRSocket } from '@/lib/api'
 
 export default function WhatsAppPage() {
   useMobileRoutePerf('m/config/whatsapp')
   const [session, setSession] = useState(null)
+  const [connectMethod, setConnectMethod] = useState('qr')
+  const [qr, setQr] = useState('')
   const [pairingPhone, setPairingPhone] = useState('')
   const [pairingCode, setPairingCode] = useState('')
   const [loading, setLoading] = useState(true)
@@ -19,6 +22,7 @@ export default function WhatsAppPage() {
   const [feedback, setFeedback] = useState('')
   const [showForgetConfirm, setShowForgetConfirm] = useState(false)
   const pollingRef = useRef(null)
+  const wsRef = useRef(null)
 
   async function refreshSession({ silent = false } = {}) {
     if (!silent) setLoading(true)
@@ -60,7 +64,7 @@ export default function WhatsAppPage() {
     // Using only session?.status was unreliable: the first refreshSession after generating the
     // code sometimes returned a non-'connecting' status due to timing, so the interval never
     // started and the page got stuck on the code screen after the phone connected.
-    const shouldPoll = isConnecting || Boolean(pairingCode)
+    const shouldPoll = isConnecting || Boolean(pairingCode) || Boolean(qr)
     if (!shouldPoll) {
       if (pollingRef.current) clearInterval(pollingRef.current)
       pollingRef.current = null
@@ -73,7 +77,9 @@ export default function WhatsAppPage() {
       setSession(latest)
       if (latest.status === 'connected') {
         setPairingCode('')
+        setQr('')
         setFeedback('Bot online ✅ Conexão concluída.')
+        if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
         clearInterval(pollingRef.current)
         pollingRef.current = null
       }
@@ -82,7 +88,89 @@ export default function WhatsAppPage() {
       if (pollingRef.current) clearInterval(pollingRef.current)
       pollingRef.current = null
     }
-  }, [session?.running, session?.status, pairingCode])
+  }, [session?.running, session?.status, pairingCode, qr])
+
+  // Fallback polling for the QR image while connecting via QR (in case the
+  // WebSocket channel never delivers the qr frame).
+  useEffect(() => {
+    if (connectMethod !== 'qr') return
+    const connecting = session?.running && session?.status === 'connecting'
+    if (!connecting || qr) return
+    const id = setInterval(async () => {
+      const result = await api.sessionQRLatest().catch(() => null)
+      if (result?.qr) {
+        setQr(result.qr)
+        clearInterval(id)
+      }
+    }, 4000)
+    return () => clearInterval(id)
+  }, [connectMethod, session?.running, session?.status, qr])
+
+  // Close the QR WebSocket when the component unmounts.
+  useEffect(() => () => {
+    if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+  }, [])
+
+  function switchMethod(method) {
+    if (method === connectMethod) return
+    setConnectMethod(method)
+    setError('')
+    setFeedback('')
+    if (method === 'qr') {
+      // Saindo do fluxo de número: descarta o código pendente.
+      setPairingCode('')
+    } else {
+      // Saindo do fluxo de QR: descarta o QR e fecha o canal WS.
+      setQr('')
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+    }
+  }
+
+  async function openQrSocket() {
+    if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+    const { ticket } = await api.sessionQRTicket()
+    const ws = openQRSocket(ticket, {
+      onMessage: (msg) => {
+        if (msg.type === 'qr') {
+          setQr(msg.data)
+        }
+        if (msg.type === 'status' && msg.data === 'connected') {
+          setQr('')
+          setPairingCode('')
+          setFeedback('Bot online ✅ Conexão concluída.')
+          setSession((prev) => ({ ...(prev || {}), running: true, status: 'connected' }))
+          if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+          refreshSession({ silent: true })
+        }
+      },
+    })
+    wsRef.current = ws
+  }
+
+  async function startQrConnect() {
+    setActionLoading('qr')
+    setFeedback('')
+    setError('')
+    setPairingCode('')
+    setQr('')
+    setConnectMethod('qr')
+    setSession((prev) => ({ ...(prev || {}), running: true, status: 'connecting' }))
+    try {
+      await api.sessionStart().catch((err) => {
+        if (err?.status === 409) return
+        throw err
+      })
+      await openQrSocket().catch(() => {})
+      // Fallback imediato: tenta puxar o QR mais recente caso o WS demore.
+      const latest = await api.sessionQRLatest().catch(() => null)
+      if (latest?.qr) setQr(latest.qr)
+      await refreshSession({ silent: true })
+    } catch (err) {
+      setError(err.message || 'Não foi possível iniciar a conexão por QR Code.')
+    } finally {
+      setActionLoading('')
+    }
+  }
 
   async function startPairing() {
     if (!pairingPhone.trim()) {
@@ -92,7 +180,10 @@ export default function WhatsAppPage() {
     setActionLoading('pairing')
     setFeedback('')
     setPairingCode('')
+    setQr('')
+    setConnectMethod('pairing')
     setError('')
+    if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
     try {
       const result = await api.sessionPairingCode(pairingPhone.trim())
       setPairingCode(result?.code || '')
@@ -112,6 +203,8 @@ export default function WhatsAppPage() {
     try {
       await api.sessionStop()
       setPairingCode('')
+      setQr('')
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
       setFeedback('WhatsApp desconectado.')
       await refreshSession({ silent: true })
     } catch (err) {
@@ -129,7 +222,9 @@ export default function WhatsAppPage() {
     try {
       await api.sessionForget()
       setPairingCode('')
-      setFeedback('Sessão removida. Conecte novamente por código de pareamento.')
+      setQr('')
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+      setFeedback('Sessão removida. Conecte novamente por QR Code ou código de pareamento.')
       await refreshSession({ silent: true })
     } catch (err) {
       setError(err.message || 'Não foi possível esquecer a sessão.')
@@ -187,8 +282,8 @@ export default function WhatsAppPage() {
   const statusSub = isConnected
     ? `${phone || 'número conectado'}${connectedLabel ? ` · desde ${connectedLabel}` : ''}`
     : isConnecting
-    ? 'aguardando código de pareamento...'
-    : 'gere um código de pareamento para conectar'
+    ? (connectMethod === 'qr' ? 'aguardando leitura do QR Code...' : 'aguardando código de pareamento...')
+    : 'escolha QR Code ou número para conectar'
 
   return (
     <MobileShell title="Conversor" active="conta">
@@ -220,8 +315,71 @@ export default function WhatsAppPage() {
         </div>
       </div>
 
+      {/* Method switcher — alternar entre QR Code e número a qualquer momento */}
+      {!isConnected && (
+        <div style={cfgStyles.cardWrap}>
+          <div style={{display:'flex', gap: 4, padding: 4, background:'var(--bg-soft)', border:'1px solid var(--line)', borderRadius: 999}}>
+            {[{ id: 'qr', label: 'QR Code' }, { id: 'pairing', label: 'Número' }].map((m) => {
+              const active = connectMethod === m.id
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => switchMethod(m.id)}
+                  style={{
+                    flex: 1,
+                    minHeight: 40,
+                    borderRadius: 999,
+                    border: 'none',
+                    fontFamily: 'inherit',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    background: active ? 'var(--ink)' : 'transparent',
+                    color: active ? 'white' : 'var(--ink-soft)',
+                  }}
+                >
+                  {m.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* QR Code connect — show when QR method selected and not connected */}
+      {!isConnected && connectMethod === 'qr' && (
+        <div style={cfgStyles.cardWrap}>
+          <div style={{...cfgStyles.cardP, display:'grid', gap: 12, textAlign:'center'}}>
+            <div style={cfgStyles.rowTitle}>Conectar por QR Code</div>
+            {qr ? (
+              <>
+                <div style={{display:'flex', justifyContent:'center', padding: 14, background:'white', borderRadius: 14, margin:'0 auto'}}>
+                  <QRCode value={qr} size={216} includeMargin={false} />
+                </div>
+                <p style={{fontSize: 11.5, color:'var(--ink-soft)', lineHeight: 1.45}}>
+                  No WhatsApp: <strong>Configurações → Dispositivos vinculados → Vincular um aparelho</strong> e aponte a câmera para o código.
+                </p>
+                <button type="button" onClick={startQrConnect} disabled={actionLoading === 'qr'} style={{...mobi.btn('ghost', true), fontSize: 12.5}}>
+                  {actionLoading === 'qr' ? 'Gerando...' : 'Gerar novo QR Code'}
+                </button>
+              </>
+            ) : (
+              <>
+                <p style={{fontSize: 12, color:'var(--ink-soft)', lineHeight: 1.45}}>
+                  Gere um QR Code e escaneie com o WhatsApp em Dispositivos vinculados → Vincular um aparelho.
+                </p>
+                <button type="button" onClick={startQrConnect} disabled={actionLoading === 'qr'} style={{...mobi.btn('primary', true), opacity: actionLoading === 'qr' ? 0.7 : 1}}>
+                  {actionLoading === 'qr' ? 'Gerando...' : 'Gerar QR Code'}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Pairing code display */}
-      {pairingCode && !isConnected && (
+      {connectMethod === 'pairing' && pairingCode && !isConnected && (
         <div style={cfgStyles.cardWrap}>
           <div style={{...cfgStyles.cardP, display:'grid', gap: 12, textAlign:'center'}}>
             <div style={cfgStyles.rowTitle}>Seu código de pareamento</div>
@@ -242,8 +400,8 @@ export default function WhatsAppPage() {
         </div>
       )}
 
-      {/* Connect form — show when not connected and no code pending */}
-      {!isConnected && !pairingCode && (
+      {/* Connect form — show when pairing method selected, not connected and no code pending */}
+      {!isConnected && connectMethod === 'pairing' && !pairingCode && (
         <div style={cfgStyles.cardWrap}>
           <div style={{...cfgStyles.cardP, display:'grid', gap: 12}}>
             <div style={cfgStyles.rowTitle}>Conectar por código de pareamento</div>
@@ -279,7 +437,7 @@ export default function WhatsAppPage() {
         <div style={{...cfgStyles.cardP, background:'color-mix(in oklab, var(--warn) 8%, var(--surface))', border:'1px solid color-mix(in oklab, var(--warn) 20%, var(--line))'}}>
           <div style={{fontSize: 13, fontWeight: 600, color:'var(--ink)', marginBottom: 4}}>Ações avançadas</div>
           <div style={{fontSize: 12, color:'var(--ink-soft)', marginBottom: 12, lineHeight: 1.45}}>
-            &ldquo;Esquecer número&rdquo; desconecta o WhatsApp e remove a sessão salva. Para usar novamente, você precisará conectar por código de pareamento.
+            &ldquo;Esquecer número&rdquo; desconecta o WhatsApp e remove a sessão salva. Para usar novamente, você precisará conectar por QR Code ou código de pareamento.
           </div>
           {!showForgetConfirm ? (
             <button
