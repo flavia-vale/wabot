@@ -75,12 +75,25 @@ const criarStyles = {
     marginTop: 8, display:'flex', alignItems:'center', gap: 6,
   },
   inputClear: {
-    position:'absolute', right: 12, top: 12,
-    width: 24, height: 24, borderRadius:'50%',
-    background:'var(--bg-soft)', border:'1px solid var(--line)',
+    position:'absolute', right: 10, top: '50%', transform:'translateY(-50%)',
+    width: 34, height: 34, borderRadius:'50%',
+    background:'color-mix(in oklab, var(--danger) 14%, var(--surface))',
+    border:'1.5px solid color-mix(in oklab, var(--danger) 45%, var(--line))',
     display:'flex', alignItems:'center', justifyContent:'center',
-    color:'var(--ink-soft)',
-    cursor:'pointer',
+    color:'var(--danger)',
+    fontSize: 20, fontWeight: 700, lineHeight: 1,
+    cursor:'pointer', padding: 0,
+  },
+  // Botão para descartar o link convertido e colar outro
+  changeLinkBtn: {
+    marginTop: 10, width:'100%',
+    padding:'12px 14px', borderRadius: 12,
+    background:'color-mix(in oklab, var(--danger) 8%, var(--surface))',
+    border:'1px solid color-mix(in oklab, var(--danger) 35%, var(--line))',
+    color:'var(--danger)',
+    fontSize: 13, fontWeight: 600,
+    cursor:'pointer', fontFamily:'inherit',
+    display:'flex', alignItems:'center', justifyContent:'center', gap: 8,
   },
 
   // Quick examples (só no empty state)
@@ -490,7 +503,7 @@ export default function OfferPage() {
   const [convertedLink, setConvertedLink] = useState('')
   const [pasteFeedback, setPasteFeedback] = useState('')
   const inputRef = useRef(null)
-  const [selectedTemplate, setSelectedTemplate] = useState('achadinho')
+  const [selectedTemplate, setSelectedTemplate] = useState('simples')
   const [allTemplates, setAllTemplates] = useState(TEMPLATE_OPTIONS)
   const [bonuses, setBonuses] = useState('')
   const [groupBonus, setGroupBonus] = useState({ link: '', cta: '💜 Entra no nosso grupo:' })
@@ -544,6 +557,16 @@ export default function OfferPage() {
     }, 0)
     return () => window.clearTimeout(timer)
   }, [])
+
+  function resetInput() {
+    setInput('')
+    setState('empty')
+    setProductData(null)
+    setConvertedLink('')
+    setExpand(false)
+    setPasteFeedback('')
+    setGeneratedOfferText('')
+  }
 
   const handleInputPaste = (e) => {
     const text = e.clipboardData?.getData('text')?.trim()
@@ -703,14 +726,19 @@ export default function OfferPage() {
               />
             ) : (
               <>
-                <div style={criarStyles.inputField(true)}>{linkOriginal}</div>
-                <button type="button" onClick={() => { setInput(''); setState('empty'); setProductData(null); setConvertedLink(''); setExpand(false); setPasteFeedback(''); setGeneratedOfferText('') }} style={criarStyles.inputClear} aria-label="Limpar link">
+                <div style={{...criarStyles.inputField(true), minHeight: 60, height: 60, paddingRight: 56, display:'flex', alignItems:'center', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', wordBreak:'normal'}}>{linkOriginal}</div>
+                <button type="button" onClick={resetInput} style={criarStyles.inputClear} aria-label="Apagar link">
                   ×
                 </button>
               </>
             )}
           </div>
         </div>
+        {!isEmpty && (
+          <button type="button" onClick={resetInput} style={criarStyles.changeLinkBtn}>
+            <MobileIcon name="arrow" size={14}/> Trocar link
+          </button>
+        )}
         {isEmpty && <div style={{...criarStyles.inputHint, color: singleLinkWarning ? 'var(--danger)' : 'var(--ink-faint)'}}>{singleLinkWarning || pasteFeedback || 'Cole apenas um link de produto por oferta. Para vários links, use o Conversor.'}</div>}
       </div>
 
