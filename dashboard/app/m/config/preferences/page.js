@@ -183,7 +183,7 @@ export default function PreferencesPage() {
       </div>
 
       <div style={{padding:'18px 16px 24px', display:'grid', gap: 8}}>
-        <button type="button" onClick={savePreferences} disabled={saving} style={{...mobi.btn('primary', true), opacity: saving ? 0.65 : 1}}>{saving ? 'Salvando...' : 'Salvar preferências'}</button>
+        <button type="button" onClick={savePreferences} disabled={saving || delayInvalid} style={{...mobi.btn('primary', true), opacity: (saving || delayInvalid) ? 0.65 : 1}}>{saving ? 'Salvando...' : 'Salvar preferências'}</button>
         {savedMessage && <div style={{fontSize: 12, color:'var(--success)'}}>{savedMessage}</div>}
         {error && <div style={{fontSize: 12, color:'var(--danger)'}}>{error}</div>}
       </div>

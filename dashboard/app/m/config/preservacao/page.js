@@ -113,18 +113,20 @@ export default function PreservacaoPage() {
 
   useEffect(() => {
     let active = true
-    setConfigLoading(true)
-    api.preservationConfig()
-      .then((data) => {
-        if (!active) return
-        setConfig(data.config ?? {})
-        const cfg = data.config ?? {}
-        setDraft({ ...cfg })
-        setQuietHours(parseQuietHours(cfg.channelQuietHoursJson))
-      })
-      .catch((e) => { if (active) setConfigError(e.message || 'Erro ao carregar configurações.') })
-      .finally(() => { if (active) setConfigLoading(false) })
-    return () => { active = false }
+    const timer = window.setTimeout(() => {
+      if (!active) return
+      api.preservationConfig()
+        .then((data) => {
+          if (!active) return
+          setConfig(data.config ?? {})
+          const cfg = data.config ?? {}
+          setDraft({ ...cfg })
+          setQuietHours(parseQuietHours(cfg.channelQuietHoursJson))
+        })
+        .catch((e) => { if (active) setConfigError(e.message || 'Erro ao carregar configurações.') })
+        .finally(() => { if (active) setConfigLoading(false) })
+    }, 0)
+    return () => { active = false; window.clearTimeout(timer) }
   }, [])
 
   const loadMonitoring = useCallback(() => {
@@ -160,7 +162,8 @@ export default function PreservacaoPage() {
   }, [])
 
   useEffect(() => {
-    loadMonitoring()
+    const timer = window.setTimeout(() => { loadMonitoring() }, 0)
+    return () => window.clearTimeout(timer)
   }, [loadMonitoring])
 
   function updateDraft(patch) {
@@ -388,7 +391,7 @@ export default function PreservacaoPage() {
                   min={1} max={86400}
                   style={cfgStyles.field}
                   value={draft.channelMinIntervalSec ?? ''}
-                  onChange={(e) => updateDraft({ channelMinIntervalSec: parseInt(e.target.value, 10) || 0 })}
+                  onChange={(e) => updateDraft({ channelMinIntervalSec: Math.max(1, parseInt(e.target.value, 10) || 1) })}
                 />
               </label>
 
@@ -399,7 +402,7 @@ export default function PreservacaoPage() {
                   min={1} max={1000}
                   style={cfgStyles.field}
                   value={draft.channelBurstCap ?? ''}
-                  onChange={(e) => updateDraft({ channelBurstCap: parseInt(e.target.value, 10) || 0 })}
+                  onChange={(e) => updateDraft({ channelBurstCap: Math.max(1, parseInt(e.target.value, 10) || 1) })}
                 />
               </label>
 
@@ -472,10 +475,10 @@ export default function PreservacaoPage() {
               <span style={cfgStyles.label}>Máx. follows por dia</span>
               <input
                 type="number"
-                min={0}
+                min={1} max={50}
                 style={cfgStyles.field}
                 value={draft.maxDailyFollows ?? ''}
-                onChange={(e) => updateDraft({ maxDailyFollows: parseInt(e.target.value, 10) || 0 })}
+                onChange={(e) => updateDraft({ maxDailyFollows: Math.max(1, parseInt(e.target.value, 10) || 1) })}
               />
             </label>
           </div>

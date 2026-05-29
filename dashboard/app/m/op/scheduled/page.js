@@ -94,7 +94,9 @@ export default function ScheduledPage() {
   }, [])
 
   useEffect(() => {
-    loadScheduled()
+    let active = true
+    const timer = window.setTimeout(() => { if (active) loadScheduled() }, 0)
+    return () => { active = false; window.clearTimeout(timer) }
   }, [loadScheduled])
 
   async function cancelScheduled(id) {
@@ -136,7 +138,7 @@ export default function ScheduledPage() {
       {!loading && !loadError && items && items.length === 0 && (
         <div style={schedStyles.emptyWrap}>
           <div style={schedStyles.emptyTitle}>Sem agendamentos</div>
-          <div style={schedStyles.emptyText}>Agendamentos criados na tela "Criar oferta" aparecem aqui.</div>
+          <div style={schedStyles.emptyText}>Agendamentos criados na tela &quot;Criar oferta&quot; aparecem aqui.</div>
         </div>
       )}
 

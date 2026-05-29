@@ -519,6 +519,7 @@ export default function OfferPage() {
   const [sendFeedback, setSendFeedback] = useState('')
   const [showScheduleModal, setShowScheduleModal] = useState(false)
   const [scheduleAt, setScheduleAt] = useState('')
+  const [scheduleMin, setScheduleMin] = useState('')
   const [scheduling, setScheduling] = useState(false)
   const [scheduleError, setScheduleError] = useState('')
 
@@ -697,6 +698,7 @@ export default function OfferPage() {
     const pad = (n) => String(n).padStart(2, '0')
     const localIso = `${nowPlusOneMinute.getFullYear()}-${pad(nowPlusOneMinute.getMonth() + 1)}-${pad(nowPlusOneMinute.getDate())}T${pad(nowPlusOneMinute.getHours())}:${pad(nowPlusOneMinute.getMinutes())}`
     setScheduleAt(localIso)
+    setScheduleMin(localIso)
     setScheduleError('')
     setShowScheduleModal(true)
   }
@@ -1057,7 +1059,7 @@ ${currentCouponLink}`
               <span style={{fontSize: 12, fontWeight: 600, color:'var(--ink)'}}>Data e hora</span>
               <input
                 type="datetime-local"
-                min={(() => { const nowPlusOne = new Date(Date.now() + 61000); const pad = (n) => String(n).padStart(2,'0'); return `${nowPlusOne.getFullYear()}-${pad(nowPlusOne.getMonth()+1)}-${pad(nowPlusOne.getDate())}T${pad(nowPlusOne.getHours())}:${pad(nowPlusOne.getMinutes())}` })()}
+                min={scheduleMin}
                 value={scheduleAt}
                 onChange={(e) => setScheduleAt(e.target.value)}
                 style={{width:'100%', padding:'12px 14px', minHeight:44, fontSize:14, background:'var(--bg-soft)', border:'1px solid var(--line)', borderRadius:12, fontFamily:'inherit', color:'var(--ink)'}}
