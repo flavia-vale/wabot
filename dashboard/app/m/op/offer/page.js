@@ -70,15 +70,6 @@ const criarStyles = {
     transition: 'all .2s',
     wordBreak:'break-all', lineHeight: 1.4,
   }),
-  pasteBtn: {
-    width: 76, minHeight: 60, padding:'0 12px',
-    borderRadius: 14, border:'1.5px solid var(--ink)',
-    background:'var(--ink)', color:'white',
-    display:'inline-flex', alignItems:'center', justifyContent:'center', gap: 6,
-    fontSize: 12.5, fontWeight: 700, fontFamily:'inherit',
-    cursor:'pointer', boxShadow:'0 10px 22px rgba(15, 23, 42, 0.12)',
-    flexShrink: 0,
-  },
   inputHint: {
     fontSize: 11.5, color:'var(--ink-faint)',
     marginTop: 8, display:'flex', alignItems:'center', gap: 6,
@@ -554,30 +545,6 @@ export default function OfferPage() {
     return () => window.clearTimeout(timer)
   }, [])
 
-  const handlePasteFromClipboard = async () => {
-    setPasteFeedback('')
-
-    if (typeof navigator !== 'undefined' && navigator.clipboard?.readText) {
-      try {
-        const clipboardText = await navigator.clipboard.readText()
-        const nextInput = clipboardText.trim()
-        if (!nextInput) {
-          setPasteFeedback('Área de transferência vazia.')
-          inputRef.current?.focus()
-          return
-        }
-        setInput(nextInput)
-        setPasteFeedback('Link colado.')
-        return
-      } catch {
-        // clipboard permission denied — fall through to focus fallback
-      }
-    }
-
-    inputRef.current?.focus()
-    setPasteFeedback('Campo focado — agora cole o link (toque longo → Colar).')
-  }
-
   const handleInputPaste = (e) => {
     const text = e.clipboardData?.getData('text')?.trim()
     if (!text) return
@@ -743,7 +710,6 @@ export default function OfferPage() {
               </>
             )}
           </div>
-          {isEmpty && <button type="button" onClick={handlePasteFromClipboard} style={criarStyles.pasteBtn}>Colar</button>}
         </div>
         {isEmpty && <div style={{...criarStyles.inputHint, color: singleLinkWarning ? 'var(--danger)' : 'var(--ink-faint)'}}>{singleLinkWarning || pasteFeedback || 'Cole apenas um link de produto por oferta. Para vários links, use o Conversor.'}</div>}
       </div>
