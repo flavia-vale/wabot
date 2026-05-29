@@ -181,8 +181,8 @@ export default function MobileTutorialPage() {
           </div>
           <StepList steps={[
             <>Abra o Google Chrome no computador (não funciona no celular).</>,
-            <><ExternalLink href={LINKS.cookieEditor}>Clique aqui para abrir a Cookie-Editor na Chrome Web Store</ExternalLink> e depois clique em <strong>"Usar no Chrome"</strong>.</>,
-            <>Confirme a instalação clicando em <strong>"Adicionar extensão"</strong> na janelinha que aparecer.</>,
+            <><ExternalLink href={LINKS.cookieEditor}>Clique aqui para abrir a Cookie-Editor na Chrome Web Store</ExternalLink> e depois clique em <strong>&quot;Usar no Chrome&quot;</strong>.</>,
+            <>Confirme a instalação clicando em <strong>&quot;Adicionar extensão&quot;</strong> na janelinha que aparecer.</>,
             <>Pronto! O ícone da extensão (uma bolachinha 🍪) vai aparecer no canto superior direito do navegador.</>,
           ]} />
           <TutorialImage src="https://i.postimg.cc/cvYC69ZD/Captura-de-Tela-2026-05-16-a-s-11-25-44.png" alt="Instalação da extensão Cookie-Editor" />
@@ -207,7 +207,7 @@ export default function MobileTutorialPage() {
           <StepList steps={[
             <>Faça login na sua conta do Mercado Livre com o perfil de afiliado.</>,
             <><ExternalLink href={LINKS.mercadoLivreLinkBuilder}>Acesse o Gerador de Links ML</ExternalLink> — ou navegue por: <strong>Minha Conta → Afiliados e Criadores → Gerador de links</strong>.</>,
-            <>Na página do Gerador de Links, você vai ver um campo chamado <strong>"Etiqueta em uso"</strong> com um código (ex: <code style={s.code}>47xxxxx</code> ou <code style={s.code}>faxxxxx</code>). Esse é o seu <strong>ID</strong>. Copie-o.</>,
+            <>Na página do Gerador de Links, você vai ver um campo chamado <strong>&quot;Etiqueta em uso&quot;</strong> com um código (ex: <code style={s.code}>47xxxxx</code> ou <code style={s.code}>faxxxxx</code>). Esse é o seu <strong>ID</strong>. Copie-o.</>,
           ]} />
           <TutorialImage src="https://i.postimg.cc/cvYC69ZM/Captura-de-Tela-2026-05-16-a-s-11-26-03.png" alt="Mercado Livre: campo etiqueta em uso" />
 
@@ -299,7 +299,7 @@ export default function MobileTutorialPage() {
           </div>
           <StepList steps={[
             <><ExternalLink href={LINKS.shopeeOpenApi}>Acesse o painel Shopee Open API</ExternalLink> diariamente até o acesso ser liberado.</>,
-            <>Quando aparecer o botão <strong>"Redefinir"</strong>, clique nele — a <strong>Key</strong> e o <strong>Secret</strong> serão exibidos na tela.</>,
+            <>Quando aparecer o botão <strong>&quot;Redefinir&quot;</strong>, clique nele — a <strong>Key</strong> e o <strong>Secret</strong> serão exibidos na tela.</>,
             <>Copie os dois valores e cole nos campos correspondentes na tela de <strong>Credenciais</strong> do BOTinho.</>,
           ]} />
           <Tip>

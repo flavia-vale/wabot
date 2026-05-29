@@ -1,12 +1,13 @@
 'use client'
 
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import { api } from '@/lib/api'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { mobileRoutes } from '@/components/mobile/routes'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
-import { mobileRoutes } from '@/components/mobile/routes'
 
 const PLATFORM_LABEL = {
   shopee: 'Shopee', amazon: 'Amazon', mercadolivre: 'Mercado Livre',
@@ -191,7 +192,6 @@ const homeStyles = {
     display:'flex', alignItems:'center', gap: 5, flexWrap:'wrap',
   },
   actTime: { fontSize: 11, color:'var(--ink-faint)', fontFamily:"'JetBrains Mono', monospace", flexShrink: 0 },
-
 };
 
 // Sparkline mini para o foot do hero
@@ -210,10 +210,106 @@ function HomeSparkline() {
 export default function MobileHomePage() {
   useMobileRoutePerf('m/home')
   const router = useRouter()
-  const checklistDone = 5
-  const checklistTotal = 5
-  const hasAlert = true
+
+  const [me, setMe] = useState(null)
+  const [session, setSession] = useState(null)
+  const [groups, setGroups] = useState([])
+  const [creds, setCreds] = useState([])
+  const [summary, setSummary] = useState(null)
+  const [recent, setRecent] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    async function load() {
+      setLoading(true)
+      setError('')
+      try {
+        const [m, s, g, cr, sum, lg] = await Promise.all([
+          api.me().catch(() => null),
+          api.sessionStatus().catch(() => null),
+          api.groups().catch(() => []),
+          api.credentials().catch(() => []),
+          api.logsSummary('today').catch(() => null),
+          api.logs('all', 1, 4).catch(() => null),
+        ])
+        if (!active) return
+        setMe(m)
+        setSession(s)
+        setGroups(Array.isArray(g) ? g : [])
+        setCreds(Array.isArray(cr) ? cr : [])
+        setSummary(sum)
+        setRecent(Array.isArray(lg?.logs) ? lg.logs : [])
+      } catch (e) {
+        if (active) setError(e.message || 'Não foi possível carregar a sua página.')
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    load()
+    return () => { active = false }
+  }, [])
+
+  const firstName = (me?.name || '').trim().split(' ')[0]
+  const whatsappConnected = Boolean(session?.running)
+  const hasCredentials = creds.length > 0
+  const hasSource = groups.some(g => g.role === 'monitor')
+  const hasDest = groups.some(g => g.role === 'post')
+
+  const c = summary?.counts
+  const postadosHoje = c?.success ?? 0
+  const errosHoje = (c?.timeoutTotal ?? 0) + (c?.errorOther ?? 0)
+  const vistosHoje = c
+    ? (c.success + c.skippedDedup + c.skippedConfig + c.timeoutTotal + c.errorOther + c.inFlight)
+    : 0
+
+  const checklist = useMemo(() => {
+    const steps = [
+      { label: 'Suas afiliadas (Shopee, ML…)', done: hasCredentials, route: mobileRoutes.configCredentials },
+      { label: 'Conectar WhatsApp',             done: whatsappConnected, route: mobileRoutes.configWhatsApp },
+      { label: '1 grupo de origem',             done: hasSource, route: mobileRoutes.configGroups },
+      { label: '1 grupo de destino',            done: hasDest, route: mobileRoutes.configGroups },
+      { label: 'Ligar o espelhamento',          done: whatsappConnected && hasSource && hasDest, route: mobileRoutes.espelhar },
+    ]
+    const firstPending = steps.findIndex(s => !s.done)
+    return steps.map((s, i) => ({ ...s, current: i === firstPending }))
+  }, [hasCredentials, whatsappConnected, hasSource, hasDest])
+
+  const checklistDone = checklist.filter(s => s.done).length
+  const checklistTotal = checklist.length
   const isOnboarding = checklistDone < checklistTotal
+  const hasAlert = errosHoje > 0
+
+  const recentItems = useMemo(() => recent.map(log => {
+    const status = log.status
+    const tone = status === 'success' ? 'ok' : status === 'error' ? 'fail' : 'warn'
+    const firstLine = String(log.messageText || '').split('\n').find(l => l.trim()) || ''
+    const dest = log.destGroup && log.destGroup.includes('@') ? (log.destGroupName || log.destGroup) : null
+    return {
+      t: (firstLine || log.convertedUrl || log.originalUrl || '(sem texto)').slice(0, 60),
+      loja: PLATFORM_LABEL[String(log.platform || '').toLowerCase()] || log.platform || '—',
+      dest: status === 'success' ? dest : null,
+      erro: status === 'error' ? 'falhou' : null,
+      when: relativeShort(log.sentAt),
+      tone,
+    }
+  }), [recent])
+
+  if (loading) {
+    return (
+      <MobileShell title="Conversor" active="inicio">
+        <div style={{ padding: '18px 16px' }}><MobileLoadingCard label="Carregando sua página..." /></div>
+      </MobileShell>
+    )
+  }
+  if (error) {
+    return (
+      <MobileShell title="Conversor" active="inicio">
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+      </MobileShell>
+    )
+  }
 
   return (
     <MobileShell title="Conversor" active="inicio" hasAlert={hasAlert && !isOnboarding}>
@@ -300,7 +396,6 @@ export default function MobileHomePage() {
         </div>
       )}
 
-
       {/* AÇÃO PRIMÁRIA — única, dominante */}
       <div style={homeStyles.primaryWrap}>
         <button type="button" style={homeStyles.primaryBtn} onClick={() => router.push(mobileRoutes.offer)}>
@@ -344,26 +439,26 @@ export default function MobileHomePage() {
             <button type="button" style={homeStyles.sectionLink} onClick={() => router.push(mobileRoutes.logs)}>Ver tudo →</button>
           </div>
           <div style={homeStyles.activityCard}>
-        {recentItems.length === 0 ? (
-          <div style={{ padding: '20px 16px', fontSize: 12.5, color: 'var(--ink-soft)', textAlign: 'center' }}>
-            Nenhum envio ainda. Quando o bot postar, aparece aqui.
-          </div>
-        ) : recentItems.map((a, i, arr) => (
-          <div key={i} style={homeStyles.actRow(i === arr.length - 1)}>
-            <div style={homeStyles.actDot(a.tone)}/>
-            <div style={homeStyles.actMain}>
-              <div style={homeStyles.actTitle}>{a.t}</div>
-              <div style={homeStyles.actMeta}>
-                <span>{a.loja}</span>
-                <span style={{color:'var(--ink-faint)'}}>→</span>
-                {a.dest
-                  ? <span style={{color:'var(--ink)', fontWeight: 500}}>{a.dest}</span>
-                  : <span style={{color:'var(--danger)', fontWeight: 500}}>{a.erro || '—'}</span>}
+            {recentItems.length === 0 ? (
+              <div style={{ padding: '20px 16px', fontSize: 12.5, color: 'var(--ink-soft)', textAlign: 'center' }}>
+                Nenhum envio ainda. Quando o bot postar, aparece aqui.
               </div>
-            </div>
-            <div style={homeStyles.actTime}>{a.when}</div>
-          </div>
-        ))}
+            ) : recentItems.map((a, i, arr) => (
+              <div key={i} style={homeStyles.actRow(i === arr.length - 1)}>
+                <div style={homeStyles.actDot(a.tone)}/>
+                <div style={homeStyles.actMain}>
+                  <div style={homeStyles.actTitle}>{a.t}</div>
+                  <div style={homeStyles.actMeta}>
+                    <span>{a.loja}</span>
+                    <span style={{color:'var(--ink-faint)'}}>→</span>
+                    {a.dest
+                      ? <span style={{color:'var(--ink)', fontWeight: 500}}>{a.dest}</span>
+                      : <span style={{color:'var(--danger)', fontWeight: 500}}>{a.erro || '—'}</span>}
+                  </div>
+                </div>
+                <div style={homeStyles.actTime}>{a.when}</div>
+              </div>
+            ))}
           </div>
         </>
       )}
