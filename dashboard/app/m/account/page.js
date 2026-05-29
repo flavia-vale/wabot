@@ -164,6 +164,12 @@ export default function AccountPage() {
   }, [])
 
 
+  function openWhatsApp(message) {
+    const phone = '5532999844020'
+    const url = `https://wa.me/${phone}${message ? `?text=${encodeURIComponent(message)}` : ''}`
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
   async function handleLogout() {
     try {
       await api.logout()
@@ -264,6 +270,10 @@ export default function AccountPage() {
           sub="histórico · forma de pagamento · renovar" onClick={() => router.push(mobileRoutes.accountSubscription)}/>
         <ContaRow icon="chat" title="Guia rápido"
           sub="Tutorial para pegar credenciais" onClick={() => router.push(mobileRoutes.tutorial)}/>
+        <ContaRow icon="whatsapp" tone="success" title="Suporte"
+          sub="fale com a gente pelo WhatsApp" onClick={() => openWhatsApp('Olá! Preciso de suporte.')}/>
+        <ContaRow icon="sparkles" tone="accent" title="Contato"
+          sub="sugestões e melhorias" onClick={() => openWhatsApp('Olá! Tenho uma sugestão de melhoria.')}/>
         <ContaRow icon="shield" title="Privacidade e dados"
           sub="termos e privacidade no site" onClick={() => router.push('/privacidade')} last/>
       </div>
