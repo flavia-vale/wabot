@@ -2,12 +2,12 @@ export const TEMPLATE_OPTIONS = [
   {
     key: 'simples',
     name: 'Simples',
-    preview: `🛍️ [produto]
+    preview: `🛍️ {produto}
 
-De R$ 499
-💥 Por R$ 398
+~De {preço_de}~
+💥 *Por {preço}*
 
-🛒 Compre aqui 👉 link`,
+🛒 Compre aqui 👉 {link}`,
   },
   {
     key: 'achadinho',
@@ -120,6 +120,7 @@ export function applyTemplateVariables(body, { title = '', price = '', oldPrice 
   } else {
     result = result
       .replace(/De \{preço_de\} por \*([^*]+)\*/g, '*$1*')
+      .replace(/^\s*~?De \{preço_de\}~?\s*$/gm, '')
       .replace(/\{preço_de\}/g, '')
   }
   return result

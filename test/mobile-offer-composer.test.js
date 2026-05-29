@@ -8,6 +8,7 @@ import {
   getMobileOfferSingleLinkWarning,
   normalizeMobileOfferProduct,
 } from '../dashboard/lib/mobileOfferComposer.js'
+import { PRESET_TEMPLATE_BODIES } from '../dashboard/lib/mobileTemplateStore.js'
 
 test('normaliza preço raspado quando a API retorna newPrice em vez de price', () => {
   const product = normalizeMobileOfferProduct({ title: 'Tênis leve', newPrice: 'R$ 129,90', oldPrice: 'R$ 199,90' })
@@ -19,9 +20,45 @@ test('normaliza preço raspado quando a API retorna newPrice em vez de price', (
   })
 })
 
+
+test('template padrão Simples usa tags e preenche produto, preços e link', () => {
+  assert.match(PRESET_TEMPLATE_BODIES.simples, /\{produto\}/)
+  assert.match(PRESET_TEMPLATE_BODIES.simples, /\{preço_de\}/)
+  assert.match(PRESET_TEMPLATE_BODIES.simples, /\{preço\}/)
+  assert.match(PRESET_TEMPLATE_BODIES.simples, /\{link\}/)
+
+  const text = buildMobileOfferText({
+    product: { title: 'Cafeteira inox', price: 'R$ 398', oldPrice: 'R$ 499' },
+    link: 'https://afiliado.test/cafeteira',
+    template: 'simples',
+    templateBody: PRESET_TEMPLATE_BODIES.simples,
+  })
+
+  assert.match(text, /🛍️ Cafeteira inox/)
+  assert.match(text, /~De R\$ 499~/)
+  assert.match(text, /💥 \*Por R\$ 398\*/)
+  assert.match(text, /🛒 Compre aqui 👉 https:\/\/afiliado\.test\/cafeteira/)
+  assert.doesNotMatch(text, /\{produto\}|\{preço_de\}|\{preço\}|\{link\}/)
+})
+
+test('template Simples remove a linha de preço antigo quando ele não vem do scrape', () => {
+  const text = buildMobileOfferText({
+    product: { title: 'Produto novo', price: 'R$ 39,90' },
+    link: 'https://afiliado.test/produto',
+    template: 'simples',
+    templateBody: PRESET_TEMPLATE_BODIES.simples,
+  })
+
+  assert.match(text, /🛍️ Produto novo/)
+  assert.match(text, /💥 \*Por R\$ 39,90\*/)
+  assert.doesNotMatch(text, /^\s*~?De\s*~?$/m)
+  assert.doesNotMatch(text, /~De ~/)
+  assert.doesNotMatch(text, /\{preço_de\}/)
+})
+
 test('todos os templates preveem lugar para preço quando produto ainda não tem preço', () => {
   for (const template of TEMPLATE_OPTIONS) {
-    assert.match(template.preview, /R\$/i, `preview sem preço: ${template.key}`)
+    assert.match(template.preview, /R\$|\{preço\}/i, `preview sem preço: ${template.key}`)
     const text = buildMobileOfferText({
       product: { title: 'Produto sem preço' },
       link: 'https://exemplo.test/oferta',

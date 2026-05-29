@@ -86,7 +86,17 @@ const contaStyles = {
     flexShrink: 0,
   }),
   rowMain: { flex: 1, minWidth: 0 },
+  rowTitleLine: { display:'flex', alignItems:'center', gap: 8, flexWrap:'wrap' },
   rowTitle: { fontSize: 13.5, fontWeight: 500, color:'var(--ink)' },
+  rowTag: {
+    display:'inline-flex', alignItems:'center', justifyContent:'center',
+    padding:'2px 7px', borderRadius: 999,
+    background:'color-mix(in oklab, var(--accent) 16%, var(--surface))',
+    border:'1px solid color-mix(in oklab, var(--accent) 28%, var(--line))',
+    color:'var(--accent-strong)',
+    fontSize: 9.5, fontWeight: 800, letterSpacing:'0.06em', textTransform:'uppercase',
+    lineHeight: 1.35, whiteSpace:'nowrap',
+  },
   rowSub: { fontSize: 11.5, color:'var(--ink-soft)', marginTop: 2 },
 
   statusDot: (tone) => ({
@@ -118,13 +128,16 @@ const contaStyles = {
 };
 
 // Linha de configuração
-const ContaRow = ({ icon, tone, title, sub, statusTone, value, last, onClick }) => (
+const ContaRow = ({ icon, tone, title, sub, tag, statusTone, value, last, onClick }) => (
   <button type="button" onClick={onClick} style={{...contaStyles.row(last), width:'100%', border:'none', background:'transparent', textAlign:'left', fontFamily:'inherit'}}>
     <div style={contaStyles.rowIcon(tone)}>
       <MobileIcon name={icon} size={15} stroke={1.8}/>
     </div>
     <div style={contaStyles.rowMain}>
-      <div style={contaStyles.rowTitle}>{title}</div>
+      <div style={contaStyles.rowTitleLine}>
+        <div style={contaStyles.rowTitle}>{title}</div>
+        {tag && <span style={contaStyles.rowTag}>{tag}</span>}
+      </div>
       {sub && <div style={contaStyles.rowSub}>{sub}</div>}
     </div>
     {statusTone && <div style={contaStyles.statusDot(statusTone)}/>}
@@ -283,7 +296,7 @@ export default function AccountPage() {
         <div style={contaStyles.sectionLabel}>Proteção da conta</div>
       </div>
       <div style={contaStyles.card}>
-        <ContaRow icon="shield" tone="success" title="Anti-banimento"
+        <ContaRow icon="shield" tone="success" title="Anti-banimento" tag="Recurso PRO"
           sub="throttle, horário silencioso e saúde dos canais" statusTone="success" onClick={() => router.push(mobileRoutes.preservacao)} last/>
       </div>
 

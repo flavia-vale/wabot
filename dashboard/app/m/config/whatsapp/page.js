@@ -12,7 +12,7 @@ import { api, openQRSocket } from '@/lib/api'
 export default function WhatsAppPage() {
   useMobileRoutePerf('m/config/whatsapp')
   const [session, setSession] = useState(null)
-  const [connectMethod, setConnectMethod] = useState('qr')
+  const [connectMethod, setConnectMethod] = useState('pairing')
   const [qr, setQr] = useState('')
   const [pairingPhone, setPairingPhone] = useState('')
   const [pairingCode, setPairingCode] = useState('')
@@ -311,7 +311,7 @@ export default function WhatsAppPage() {
     ? `${phone || 'número conectado'}${connectedLabel ? ` · desde ${connectedLabel}` : ''}`
     : isConnecting
     ? (connectMethod === 'qr' ? 'aguardando leitura do QR Code...' : 'aguardando código de pareamento...')
-    : 'escolha QR Code ou número para conectar'
+    : 'escolha número ou QR Code para conectar'
 
   return (
     <MobileShell title="Conversor" active="conta">
@@ -343,11 +343,11 @@ export default function WhatsAppPage() {
         </div>
       </div>
 
-      {/* Method switcher — alternar entre QR Code e número a qualquer momento */}
+      {/* Method switcher — número vem primeiro no mobile porque é o fluxo mais comum */}
       {!isConnected && (
         <div style={cfgStyles.cardWrap}>
           <div style={{display:'flex', gap: 4, padding: 4, background:'var(--bg-soft)', border:'1px solid var(--line)', borderRadius: 999}}>
-            {[{ id: 'qr', label: 'QR Code' }, { id: 'pairing', label: 'Número' }].map((m) => {
+            {[{ id: 'pairing', label: 'Número' }, { id: 'qr', label: 'QR Code' }].map((m) => {
               const active = connectMethod === m.id
               return (
                 <button
