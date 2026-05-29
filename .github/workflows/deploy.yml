@@ -121,5 +121,5 @@ jobs:
                 git remote set-url origin "git@github.com:${{ github.repository }}.git"
               fi
               chmod +x ./scripts/deploy_safe_staging.sh
-              ROOT_DIR=~/wabot-staging BRANCH=develop SYNC_GIT=1 AUTO_STASH_ON_DIRTY=1 ./scripts/deploy_safe_staging.sh
+              ROOT_DIR=~/wabot-staging BRANCH=develop SYNC_GIT=1 AUTO_STASH_ON_DIRTY=1 FORCE_RESET_ON_SYNC=1 ./scripts/deploy_safe_staging.sh
             fi
