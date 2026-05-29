@@ -27,9 +27,20 @@ commits já mergeados — sempre criar commit novo.
 | `dashboard`              | prod     | Next.js                                                       |
 | `bot-supervisor`         | prod     | Ciclo de vida das sessões WhatsApp (fork dos bot-workers)     |
 | `snapshot-cron`          | prod     | Cron diário de snapshots de canais                            |
+| `telegram-offer-bot`     | prod     | Bot do Telegram que gera oferta a partir de um link colado    |
 | `api-staging`            | staging  | Espelho da API                                                |
 | `visual-staging`         | staging  | Espelho do dashboard                                          |
 | `bot-supervisor-staging` | staging  | Espelho do supervisor                                         |
+| `telegram-offer-bot-staging` | staging | Espelho do bot do Telegram (token SEPARADO do de prod)     |
+
+**Bot do Telegram (`telegram-offer-bot`)**: long-polling em `getUpdates`
+(`src/telegram/offerBot.js`). Exige **um único poller por token** — duas
+instâncias com o mesmo `TELEGRAM_OFFER_BOT_TOKEN` dão `409 Conflict` e o bot
+para de responder. Prod e staging precisam de tokens **diferentes**. Se o bot
+parar de enviar mensagens, suspeite primeiro de: (1) processo morto fora do
+PM2 (antes não havia entrada PM2 e ele só subia à mão), (2) 409 por token
+duplicado ou webhook setado, (3) token ausente no `.env`. Detalhes em
+`docs/telegram/offer-bot.md`.
 
 **Por que `bot-supervisor` existe**: historicamente a API fazia `fork()`
 dos workers WhatsApp. Toda vez que a API reiniciava (deploy, OOM, bug)

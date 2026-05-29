@@ -132,3 +132,48 @@ export async function fetchShopeeImage(url, creds) {
     return null
   }
 }
+
+function shopeePriceToString(value) {
+  const num = Number(value)
+  if (!Number.isFinite(num) || num <= 0) return ''
+  return (num / 100000).toFixed(2).replace('.', ',')
+}
+
+// Consulta a API de afiliado (GraphQL) para obter título e preço do produto.
+// Retorna { title, newPrice, oldPrice } ou null em caso de falha/sem creds.
+export async function fetchShopeeProductInfo(url, creds) {
+  if (!creds?.appId || !creds?.secretKey) return null
+  try {
+    const canonical = await resolveCanonical(url)
+    const ids = parseIds(canonical)
+    if (!ids) return null
+
+    const body = {
+      query: `{
+        productOfferV2(itemId: ${ids.itemId}, shopId: ${ids.shopId}, listType: 0, sortType: 2, page: 1, limit: 1) {
+          nodes { imageUrl productName price priceMin priceMax priceDiscountRate originPrice }
+        }
+      }`,
+    }
+    const payload = JSON.stringify(body)
+    const { header } = buildAuth(creds.appId, creds.secretKey, payload)
+
+    const { data } = await axios.post(ENDPOINT, body, {
+      headers: { Authorization: header, 'Content-Type': 'application/json' },
+      timeout: 6000,
+    })
+    const node = data?.data?.productOfferV2?.nodes?.[0]
+    if (!node) return null
+
+    const title = typeof node.productName === 'string' ? node.productName.trim() : ''
+    const currentRaw = node.priceMin ?? node.price ?? null
+    const originalRaw = node.originPrice ?? null
+    const newPrice = shopeePriceToString(currentRaw)
+    const oldPrice = shopeePriceToString(originalRaw)
+
+    if (!title && !newPrice) return null
+    return { title, newPrice, oldPrice }
+  } catch {
+    return null
+  }
+}

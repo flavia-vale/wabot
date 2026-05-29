@@ -289,6 +289,54 @@ test('POST /scrape-offer tenta original quando convertido não traz dados', asyn
   assert.deepEqual(calls, [converted, original])
 })
 
+test('POST /scrape-offer busca preço no original quando convertido traz título mas não preço (Fix A)', async (t) => {
+  const calls = []
+  const converted = 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20'
+  const original = 'https://www.amazon.com.br/Mixer-Turbo/dp/B09VQ39F41'
+  const { app } = await buildApp({
+    credentials: [credential()],
+    converter: async () => converted,
+    fetchProductInfo: async (url) => {
+      calls.push(url)
+      // convertido: tem título, sem preço (cenário Amazon anti-bot)
+      if (url === converted) return { title: 'Mixer Vertical Turbo Chef', oldPrice: '', newPrice: '', finalUrl: converted }
+      // original: traz o preço
+      return { title: 'Mixer Original', oldPrice: '199,90', newPrice: '149,90', finalUrl: original }
+    },
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({ method: 'POST', url: '/api/link-conversion/scrape-offer', payload: { url: original } })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  // dispara o fallback mesmo com título presente (antes não disparava)
+  assert.deepEqual(calls, [converted, original])
+  // mantém o título do convertido e completa só o preço do original
+  assert.equal(body.title, 'Mixer Vertical Turbo Chef')
+  assert.equal(body.newPrice, '149,90')
+  assert.equal(body.oldPrice, '199,90')
+  assert.equal(body.offerUrl, converted)
+})
+
+test('POST /scrape-offer propaga conversionWarning do conversor (Fix E)', async (t) => {
+  const { app } = await buildApp({
+    credentials: [credential('mercadolivre', { tag: 'botinho', ssid: 'ssid-value', csrf: 'csrf-value' })],
+    converter: async () => ({ url: 'https://produto.mercadolivre.com.br/MLB123-x-_JM?partner_id=botinho', warning: 'ml_ssid_expired' }),
+    fetchProductInfo: async (url) => ({ title: 'Produto ML', oldPrice: '', newPrice: '99,90', finalUrl: url }),
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/link-conversion/scrape-offer',
+    payload: { url: 'https://www.mercadolivre.com.br/p/MLB123' },
+  })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.conversionWarning, 'ml_ssid_expired')
+  assert.equal(body.conversion.success, true)
+})
+
 test('POST /scrape-offer rejeita url inválida', async (t) => {
   const { app } = await buildApp({
     converter: async () => 'never',
