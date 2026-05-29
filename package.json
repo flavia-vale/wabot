@@ -11,7 +11,8 @@
     "db:readiness": "node scripts/db-migration-readiness.mjs",
     "test": "node --test test/*.test.js test/**/*.test.js",
     "report:marketing-funnel": "node scripts/marketing-funnel-baseline.mjs 7",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "telegram:offer-bot": "node src/telegram/offerBot.js"
   },
   "dependencies": {
     "@fastify/cors": "^11.2.0",
