@@ -9,6 +9,7 @@ const DEFAULT_POLL_TIMEOUT_SECONDS = 25
 const DEFAULT_POLL_INTERVAL_MS = 1000
 const MAX_TELEGRAM_MESSAGE_LENGTH = 4096
 const MAX_INCOMING_TEXT_LENGTH = 4000
+export const PRODUCT_NOT_FOUND_MESSAGE = '⚠️ Nenhum produto encontrado para o link enviado!'
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -45,7 +46,20 @@ export function extractSingleHttpUrl(text = '') {
   return { code: null, url: urls[0] }
 }
 
+function hasProductInfo(product = {}) {
+  return Boolean(
+    String(product?.title || '').trim()
+    || String(product?.price || '').trim()
+    || String(product?.newPrice || '').trim()
+    || String(product?.priceNow || '').trim()
+    || String(product?.oldPrice || '').trim()
+    || String(product?.priceWas || '').trim()
+  )
+}
+
 export function buildOfferMessage({ product = {}, link }) {
+  if (!hasProductInfo(product)) return PRODUCT_NOT_FOUND_MESSAGE
+
   return buildMobileOfferText({
     product,
     link,

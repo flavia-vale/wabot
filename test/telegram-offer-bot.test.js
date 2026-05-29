@@ -30,6 +30,15 @@ test('buildTelegramOfferText monta oferta usando o link original sem converter',
   assert.doesNotMatch(text, /Achadinho do dia/)
 })
 
+
+test('buildTelegramOfferText avisa quando scraper não retorna título nem preço', async () => {
+  const text = await buildTelegramOfferText('https://www.mercadolivre.com.br/02-forma-silicone-retangular-reutilizavel-air-fryer-limpo-forma-de-cozimento-em-silicone-ideal-para-fritadeiras/p/MLB69573479', {
+    fetchProductInfo: async () => ({ title: '', oldPrice: '', newPrice: '' }),
+  })
+
+  assert.equal(text, '⚠️ Nenhum produto encontrado para o link enviado!')
+})
+
 test('createTelegramOfferBot responde mensagens com oferta e não chama conversor', async () => {
   const sent = []
   const bot = createTelegramOfferBot({

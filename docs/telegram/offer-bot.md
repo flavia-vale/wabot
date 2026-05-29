@@ -37,3 +37,4 @@ pm2 save
 - Uma mensagem com exatamente 1 link `http(s)` gera a oferta.
 - Mensagens sem link, com mais de um link ou grandes demais recebem orientação de correção.
 - O link final da oferta é sempre o link colado no Telegram; `finalUrl` do scraper é ignorado para não substituir o afiliado/manual.
+- Quando o scraper não encontrar título nem preço, o bot responde: `⚠️ Nenhum produto encontrado para o link enviado!`
