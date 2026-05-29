@@ -1,5 +1,8 @@
 import 'dotenv/config'
 
+import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
 import { fetchProductInfo as defaultFetchProductInfo } from '../converters/productInfoScraper.js'
 import { fetchProductImage as defaultFetchProductImage, fetchImageBuffer as defaultFetchImageBuffer, normalizeImageForWhatsApp as defaultNormalizeImage } from '../converters/imageScrapers.js'
 import { detectLinks } from '../detector.js'
@@ -392,7 +395,20 @@ export function createTelegramOfferBot({
   return { handleUpdate, pollOnce, start, stop }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+export function isTelegramOfferBotEntrypoint({ argv = process.argv, env = process.env, moduleUrl = import.meta.url } = {}) {
+  const modulePath = resolve(fileURLToPath(moduleUrl))
+  const candidates = [argv?.[1], env?.pm_exec_path]
+  return candidates.some(candidate => {
+    if (!candidate) return false
+    try {
+      return resolve(String(candidate)) === modulePath
+    } catch {
+      return false
+    }
+  })
+}
+
+if (isTelegramOfferBotEntrypoint()) {
   const bot = createTelegramOfferBot({ recordOfferLog: recordTelegramOfferLog })
   const stop = () => {
     bot.stop()
