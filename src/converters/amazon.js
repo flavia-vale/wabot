@@ -100,6 +100,17 @@ async function createAmazonShortLink(longUrl, tag, creds) {
   return { shortUrl: null, transient: lastStatus == null || lastStatus >= 500 }
 }
 
+function buildLongUrl(target, asin) {
+  try {
+    const pathname = new URL(target).pathname
+    if (/\/[^/]+\/dp\/[A-Z0-9]{10}/i.test(pathname)) {
+      const cleanPathname = pathname.replace(/\/dp\/[A-Z0-9]{10}.*/i, `/dp/${asin}`)
+      return `https://www.amazon.com.br${cleanPathname}`
+    }
+  } catch {}
+  return `https://www.amazon.com.br/dp/${asin}`
+}
+
 export async function convert(url, creds) {
   const { tag } = creds
   const hasCookies = !!buildCookieHeader(creds)
@@ -116,7 +127,7 @@ export async function convert(url, creds) {
       return null
     }
 
-    const longUrl = `https://www.amazon.com.br/dp/${asin}`
+    const longUrl = buildLongUrl(target, asin)
 
     if (hasCookies) {
       const { shortUrl, transient } = await createAmazonShortLink(longUrl, tag, creds)
