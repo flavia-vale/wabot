@@ -4,8 +4,8 @@ export const TEMPLATE_OPTIONS = [
     name: 'Simples',
     preview: `🛍️ {produto}
 
-De {preço_de}
-💥 Por *{preço}*
+~De {preço_de}~
+💥 *Por {preço}*
 
 🛒 Compre aqui 👉 {link}`,
   },
@@ -120,7 +120,7 @@ export function applyTemplateVariables(body, { title = '', price = '', oldPrice 
   } else {
     result = result
       .replace(/De \{preço_de\} por \*([^*]+)\*/g, '*$1*')
-      .replace(/^\s*De \{preço_de\}\s*$/gm, '')
+      .replace(/^\s*~?De \{preço_de\}~?\s*$/gm, '')
       .replace(/\{preço_de\}/g, '')
   }
   return result

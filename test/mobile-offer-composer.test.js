@@ -35,8 +35,8 @@ test('template padrão Simples usa tags e preenche produto, preços e link', () 
   })
 
   assert.match(text, /🛍️ Cafeteira inox/)
-  assert.match(text, /De R\$ 499/)
-  assert.match(text, /💥 Por \*R\$ 398\*/)
+  assert.match(text, /~De R\$ 499~/)
+  assert.match(text, /💥 \*Por R\$ 398\*/)
   assert.match(text, /🛒 Compre aqui 👉 https:\/\/afiliado\.test\/cafeteira/)
   assert.doesNotMatch(text, /\{produto\}|\{preço_de\}|\{preço\}|\{link\}/)
 })
@@ -50,8 +50,9 @@ test('template Simples remove a linha de preço antigo quando ele não vem do sc
   })
 
   assert.match(text, /🛍️ Produto novo/)
-  assert.match(text, /💥 Por \*R\$ 39,90\*/)
-  assert.doesNotMatch(text, /^\s*De\s*$/m)
+  assert.match(text, /💥 \*Por R\$ 39,90\*/)
+  assert.doesNotMatch(text, /^\s*~?De\s*~?$/m)
+  assert.doesNotMatch(text, /~De ~/)
   assert.doesNotMatch(text, /\{preço_de\}/)
 })
 
