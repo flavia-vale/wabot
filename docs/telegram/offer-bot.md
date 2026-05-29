@@ -41,7 +41,7 @@ pm2 start ecosystem.config.cjs --only telegram-offer-bot
 pm2 save
 ```
 
-Para um teste pontual em foreground (sem PM2): `npm run telegram:offer-bot`.
+Para um teste pontual em foreground (sem PM2): `npm run telegram:offer-bot` (entrypoint `src/telegram/offerBotRunner.js`).
 
 > Pegadinha #1 (PM2 cacheia env): ao trocar o token, faça
 > `pm2 delete telegram-offer-bot && pm2 start ecosystem.config.cjs --only telegram-offer-bot`.

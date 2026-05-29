@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
@@ -15,17 +15,20 @@ import {
   isTelegramOfferBotEntrypoint,
 } from '../src/telegram/offerBot.js'
 
-test('isTelegramOfferBotEntrypoint reconhece execução direta e PM2 fork', () => {
-  const moduleUrl = new URL('../src/telegram/offerBot.js', import.meta.url).href
-  const modulePath = resolve(fileURLToPath(moduleUrl))
 
-  assert.equal(isTelegramOfferBotEntrypoint({ argv: ['node', modulePath], env: {}, moduleUrl }), true)
-  assert.equal(isTelegramOfferBotEntrypoint({
-    argv: ['node', '/usr/lib/node_modules/pm2/lib/ProcessContainerFork.js'],
-    env: { pm_exec_path: modulePath },
-    moduleUrl,
-  }), true)
-  assert.equal(isTelegramOfferBotEntrypoint({ argv: ['node', '/tmp/test-runner.js'], env: {}, moduleUrl }), false)
+test('telegram offer bot PM2 e npm scripts usam runner explícito', () => {
+  const ecosystem = readFileSync(new URL('../ecosystem.config.cjs', import.meta.url), 'utf8')
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  const runner = readFileSync(new URL('../src/telegram/offerBotRunner.js', import.meta.url), 'utf8')
+
+  assert.match(ecosystem, /name: 'telegram-offer-bot'[\s\S]*script: 'src\/telegram\/offerBotRunner\.js'/)
+  assert.match(ecosystem, /name: 'telegram-offer-bot-staging'[\s\S]*script: 'src\/telegram\/offerBotRunner\.js'/)
+  assert.equal(pkg.scripts['telegram:offer-bot'], 'node src/telegram/offerBotRunner.js')
+  assert.match(runner, /runner booting/)
+  assert.match(runner, /tokenConfigured/)
+  assert.match(runner, /import\('\.\/offerBot\.js'\)/)
+  assert.match(runner, /createTelegramOfferBot\(\{ recordOfferLog: recordTelegramOfferLog \}\)/)
+  assert.match(runner, /await bot\.start\(\)/)
 })
 
 test('extractSingleHttpUrl exige exatamente um link http(s)', () => {
