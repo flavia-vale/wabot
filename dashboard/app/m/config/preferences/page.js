@@ -8,6 +8,12 @@ import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { api } from '@/lib/api'
 import { buildMobilePreferencesPayload } from '@/lib/mobileConfigContracts'
 
+const DELAY_PRESETS = [
+  { id: 'fast', label: 'Rápido', min: 2, max: 5 },
+  { id: 'default', label: 'Padrão', min: 5, max: 15 },
+  { id: 'safe', label: 'Conservador', min: 15, max: 30 },
+]
+
 export default function PreferencesPage() {
   useMobileRoutePerf('m/config/preferences')
   const [draft, setDraft] = useState(null)
@@ -48,6 +54,14 @@ export default function PreferencesPage() {
       setSaving(false)
     }
   }
+
+  function applyDelayPreset(preset) {
+    setDraft((current) => ({ ...(current || {}), delayMin: preset.min, delayMax: preset.max }))
+  }
+
+  const delayMin = Number(draft?.delayMin ?? 5)
+  const delayMax = Number(draft?.delayMax ?? 15)
+  const delayInvalid = delayMin > delayMax
 
   if (loading) {
     return (
@@ -93,8 +107,83 @@ export default function PreferencesPage() {
         </div>
       </div>
 
+      <div style={cfgStyles.sectionLabel}>Delay de envio</div>
+      <div style={{padding:'0 16px'}}>
+        <div style={{...cfgStyles.cardP, display:'grid', gap: 14}}>
+          <div style={{fontSize: 12, color:'var(--ink-soft)', lineHeight: 1.5}}>
+            Tempo aleatório entre envios consecutivos. O bot aguarda entre o mínimo e o máximo antes de cada mensagem.
+          </div>
+          <div style={{display:'flex', gap: 8}}>
+            {DELAY_PRESETS.map((preset) => {
+              const isActive = draft?.delayMin === preset.min && draft?.delayMax === preset.max
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => applyDelayPreset(preset)}
+                  style={{
+                    flex: 1, padding:'8px 4px', borderRadius: 10,
+                    border: isActive ? '1.5px solid var(--ink)' : '1px solid var(--line)',
+                    background: isActive ? 'var(--ink)' : 'var(--surface)',
+                    color: isActive ? 'white' : 'var(--ink)',
+                    fontSize: 12, fontWeight: 600, cursor:'pointer', fontFamily:'inherit',
+                  }}
+                >
+                  {preset.label}
+                  <div style={{fontSize: 10.5, opacity: 0.7, marginTop: 2}}>{preset.min}–{preset.max}s</div>
+                </button>
+              )
+            })}
+          </div>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap: 10}}>
+            <label style={{display:'grid', gap: 6}}>
+              <span style={cfgStyles.label}>Mínimo (segundos)</span>
+              <input
+                type="number"
+                min={0} max={300}
+                style={{...cfgStyles.field, borderColor: delayInvalid ? 'var(--danger)' : undefined}}
+                value={draft?.delayMin ?? 5}
+                onChange={(event) => setDraft((current) => ({ ...(current || {}), delayMin: event.target.value }))}
+              />
+            </label>
+            <label style={{display:'grid', gap: 6}}>
+              <span style={cfgStyles.label}>Máximo (segundos)</span>
+              <input
+                type="number"
+                min={0} max={300}
+                style={{...cfgStyles.field, borderColor: delayInvalid ? 'var(--danger)' : undefined}}
+                value={draft?.delayMax ?? 15}
+                onChange={(event) => setDraft((current) => ({ ...(current || {}), delayMax: event.target.value }))}
+              />
+            </label>
+          </div>
+          {delayInvalid && (
+            <div style={{fontSize: 12, color:'var(--danger)'}}>O mínimo não pode ser maior que o máximo.</div>
+          )}
+        </div>
+      </div>
+
+      <div style={cfgStyles.sectionLabel}>Palavras bloqueadas</div>
+      <div style={{padding:'0 16px'}}>
+        <div style={{...cfgStyles.cardP, display:'grid', gap: 10}}>
+          <div style={{fontSize: 12, color:'var(--ink-soft)', lineHeight: 1.5}}>
+            Mensagens que contêm essas palavras serão ignoradas pelo bot. Separe por vírgula.
+          </div>
+          <label style={{display:'grid', gap: 6}}>
+            <span style={cfgStyles.label}>Palavras bloqueadas</span>
+            <textarea
+              style={{...cfgStyles.field, minHeight: 72}}
+              value={draft?.blockedKeywords || ''}
+              onChange={(event) => setDraft((current) => ({ ...(current || {}), blockedKeywords: event.target.value }))}
+              placeholder="proibido, spam, casino"
+            />
+          </label>
+          <div style={{fontSize: 11, color:'var(--ink-soft)'}}>Separe por vírgula. Maiúsculas e espaços são normalizados ao salvar.</div>
+        </div>
+      </div>
+
       <div style={{padding:'18px 16px 24px', display:'grid', gap: 8}}>
-        <button type="button" onClick={savePreferences} disabled={saving} style={{...mobi.btn('primary', true), opacity: saving ? 0.65 : 1}}>{saving ? 'Salvando...' : 'Salvar preferências'}</button>
+        <button type="button" onClick={savePreferences} disabled={saving || delayInvalid} style={{...mobi.btn('primary', true), opacity: (saving || delayInvalid) ? 0.65 : 1}}>{saving ? 'Salvando...' : 'Salvar preferências'}</button>
         {savedMessage && <div style={{fontSize: 12, color:'var(--success)'}}>{savedMessage}</div>}
         {error && <div style={{fontSize: 12, color:'var(--danger)'}}>{error}</div>}
       </div>

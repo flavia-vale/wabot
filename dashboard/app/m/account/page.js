@@ -251,7 +251,7 @@ export default function AccountPage() {
       </div>
       <div style={contaStyles.card}>
         <ContaRow icon="shield" tone="success" title="Anti-banimento"
-          sub="ajusta o ritmo automaticamente quando o WhatsApp aperta" statusTone="success" onClick={() => router.push(mobileRoutes.espelhar)} last/>
+          sub="throttle, horário silencioso e saúde dos canais" statusTone="success" onClick={() => router.push(mobileRoutes.preservacao)} last/>
       </div>
 
 
