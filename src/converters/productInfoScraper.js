@@ -232,7 +232,7 @@ async function fetchMercadoLivreProductInfo(url, { timeoutMs = HTML_FETCH_TIMEOU
 
 
 function extractAmazonPriceFromBuyBoxContext(html) {
-  const buyBoxRe = /(?:apexPriceToPay|priceToPay|corePriceDisplay)[\s\S]{0,600}?a-offscreen[^>]*>[^0-9]*([0-9]+(?:[\.,][0-9]{2})?)<\/span>/i
+  const buyBoxRe = /(?:apexPriceToPay|priceToPay|corePriceDisplay)[\s\S]{0,600}?a-offscreen[^>]*>[^0-9]*([0-9]{1,3}(?:\.[0-9]{3})+,[0-9]{2}|[0-9]+(?:[\.,][0-9]{2})?)<\/span>/i
   const buyBoxMatch = html.match(buyBoxRe)
   if (buyBoxMatch?.[1]) return toPriceString(buyBoxMatch[1])
   return ''
@@ -245,7 +245,7 @@ function extractAmazonTitleAndPrice(html) {
   const buyBoxPrice = extractAmazonPriceFromBuyBoxContext(html)
   if (buyBoxPrice) return { title, newPrice: buyBoxPrice }
 
-  const offscreenPrice = html.match(/<span[^>]+class=["'][^"']*a-offscreen[^"']*["'][^>]*>[^0-9]*([0-9]+(?:[\.,][0-9]{2})?)<\/span>/i)
+  const offscreenPrice = html.match(/<span[^>]+class=["'][^"']*a-offscreen[^"']*["'][^>]*>[^0-9]*([0-9]{1,3}(?:\.[0-9]{3})+,[0-9]{2}|[0-9]+(?:[\.,][0-9]{2})?)<\/span>/i)
   const whole = html.match(/<span[^>]+class=["'][^"']*a-price-whole[^"']*["'][^>]*>([0-9\.]+)<\/span>/i)?.[1]
   const fraction = html.match(/<span[^>]+class=["'][^"']*a-price-fraction[^"']*["'][^>]*>([0-9]{2})<\/span>/i)?.[1]
   const inlinePrice = whole && fraction ? `${whole},${fraction}` : ''
@@ -488,17 +488,22 @@ export async function fetchProductInfo(url, opts = {}) {
   const mlCookieHeader = opts.mlCookieHeader || buildMlCookieHeader(opts.mlCredentials)
   const shopeeCreds = opts.shopeeCreds || opts.shopeeCredentials || null
   const fetchOpts = { ...opts }
-  if (mlCookieHeader && isMercadoLivreUrl(url)) {
-    fetchOpts.cookieHeader = mlCookieHeader
-    fetchOpts.ua = opts.ua || ML_MOBILE_UA
-  }
 
-  // Fix C: pre-resolve ML landing pages to canonical product URLs so we
-  // fetch the actual product page instead of the social landing content.
+  // Pré-resolve landings sociais do ML (/social/, meli.la, mluvem.com) para a
+  // URL canônica do produto ANTES de aplicar cookie/UA, senão a landing pega o
+  // preço de uma recomendação (ex.: 1,00 em vez do preço real do produto).
   let resolvedUrl = url
   if (isMercadoLivreLandingUrl(url)) {
     const canonical = await resolveToCleanProductUrl(url).catch(() => null)
     if (canonical) resolvedUrl = canonical
+  }
+
+  // Cookie/UA mobile são checados sobre a URL JÁ resolvida: meli.la/mluvem.com
+  // não casam isMercadoLivreUrl, mas a canônica produto.mercadolivre.com.br
+  // sim — sem isso o fetch da resolvida cai no anti-bot /gz/account-verification.
+  if (mlCookieHeader && isMercadoLivreUrl(resolvedUrl)) {
+    fetchOpts.cookieHeader = mlCookieHeader
+    fetchOpts.ua = opts.ua || ML_MOBILE_UA
   }
 
   let html = null
