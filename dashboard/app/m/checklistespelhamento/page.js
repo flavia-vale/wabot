@@ -1,10 +1,13 @@
 'use client'
 
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
+import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileRoutes } from '@/components/mobile/routes'
+import { api } from '@/lib/api'
 
 const pageStyles = {
   container: { padding: '16px 16px 32px' },
@@ -111,46 +114,98 @@ const pageStyles = {
   completeBannerSub: { fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 },
 }
 
-const STEPS = [
-  {
-    label: 'Suas afiliadas (Shopee, ML…)',
-    desc: 'Conecte suas contas de afiliada para converter links automaticamente',
-    route: 'configCredentials',
-    done: true,
-  },
-  {
-    label: 'Conectar WhatsApp',
-    desc: 'Escaneie o QR Code para vincular seu número ao bot',
-    route: 'configWhatsApp',
-    done: true,
-  },
-  {
-    label: '1 grupo de origem',
-    desc: 'Escolha de qual grupo o bot vai monitorar as promoções',
-    route: 'configGroups',
-    done: true,
-  },
-  {
-    label: '1 grupo de destino',
-    desc: 'Defina para qual grupo as promoções serão encaminhadas',
-    route: 'configGroups',
-    done: true,
-  },
-  {
-    label: 'Ligar o espelhamento',
-    desc: 'Ative o bot para começar a espelhar promoções automaticamente',
-    route: 'espelhar',
-    done: false,
-  },
-]
-
 export default function ChecklistEspelhamentoPage() {
   useMobileRoutePerf('m/checklistespelhamento')
   const router = useRouter()
 
+  const [session, setSession] = useState(null)
+  const [groups, setGroups] = useState([])
+  const [creds, setCreds] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    async function load() {
+      setLoading(true)
+      setError('')
+      try {
+        const [s, g, cr] = await Promise.all([
+          api.sessionStatus().catch(() => null),
+          api.groups().catch(() => []),
+          api.credentials().catch(() => []),
+        ])
+        if (!active) return
+        setSession(s)
+        setGroups(Array.isArray(g) ? g : [])
+        setCreds(Array.isArray(cr) ? cr : [])
+      } catch (e) {
+        if (active) setError(e.message || 'Não foi possível carregar o checklist.')
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    load()
+    return () => { active = false }
+  }, [])
+
+  const hasCredentials = creds.length > 0
+  const whatsappConnected = Boolean(session?.running)
+  const hasSource = groups.some(g => g.role === 'monitor')
+  const hasDest = groups.some(g => g.role === 'post')
+
+  // Mesmos 5 passos do balão da home (/m) — mantém o "X de 5" coerente entre as telas.
+  const STEPS = useMemo(() => [
+    {
+      label: 'Suas afiliadas (Shopee, ML…)',
+      desc: 'Conecte suas contas de afiliada para converter links automaticamente',
+      route: 'configCredentials',
+      done: hasCredentials,
+    },
+    {
+      label: 'Conectar WhatsApp',
+      desc: 'Escaneie o QR Code para vincular seu número ao bot',
+      route: 'configWhatsApp',
+      done: whatsappConnected,
+    },
+    {
+      label: '1 grupo de origem',
+      desc: 'Escolha de qual grupo o bot vai monitorar as promoções',
+      route: 'configGroups',
+      done: hasSource,
+    },
+    {
+      label: '1 grupo de destino',
+      desc: 'Defina para qual grupo as promoções serão encaminhadas',
+      route: 'configGroups',
+      done: hasDest,
+    },
+    {
+      label: 'Ligar o espelhamento',
+      desc: 'Ative o bot para começar a espelhar promoções automaticamente',
+      route: 'espelhar',
+      done: whatsappConnected && hasSource && hasDest,
+    },
+  ], [hasCredentials, whatsappConnected, hasSource, hasDest])
+
   const done = STEPS.filter(s => s.done).length
   const total = STEPS.length
   const isComplete = done === total
+
+  if (loading) {
+    return (
+      <MobileShell title="Checklist de espelhamento" active="inicio" showBack onBack={() => router.push(mobileRoutes.home)}>
+        <div style={{ padding: '18px 16px' }}><MobileLoadingCard label="Carregando checklist..." /></div>
+      </MobileShell>
+    )
+  }
+  if (error) {
+    return (
+      <MobileShell title="Checklist de espelhamento" active="inicio" showBack onBack={() => router.push(mobileRoutes.home)}>
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+      </MobileShell>
+    )
+  }
 
   return (
     <MobileShell title="Checklist de espelhamento" active="inicio" showBack onBack={() => router.push(mobileRoutes.home)}>
