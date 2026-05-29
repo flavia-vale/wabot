@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 
 import {
   buildTelegramOffer,
@@ -11,6 +12,7 @@ import {
   buildWhatsappShareUrl,
   buildWhatsappShareMarkup,
   WHATSAPP_SHARE_PROMPT,
+  isTelegramOfferBotEntrypoint,
 } from '../src/telegram/offerBot.js'
 
 
