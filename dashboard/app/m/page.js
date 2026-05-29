@@ -142,7 +142,18 @@ const homeStyles = {
     flexShrink: 0,
   },
   primaryText: { flex: 1, minWidth: 0, textAlign:'left' },
+  primaryTitleRow: { display:'flex', alignItems:'center', gap: 8, flexWrap:'wrap' },
   primaryTitle: { fontSize: 15, fontWeight: 600, color:'var(--ink)' },
+  primaryFreeTag: {
+    display:'inline-flex', alignItems:'center', justifyContent:'center',
+    padding:'3px 7px 2px', borderRadius: 999,
+    background:'color-mix(in oklab, var(--success) 18%, var(--surface))',
+    border:'1px solid color-mix(in oklab, var(--success) 42%, var(--line))',
+    color:'var(--success)',
+    fontSize: 9.5, lineHeight: 1, fontWeight: 800, letterSpacing:'0.08em',
+    textTransform:'uppercase',
+    boxShadow:'0 3px 10px rgba(46, 160, 67, 0.12)',
+  },
   primarySub: { fontSize: 12, color:'var(--ink-soft)', marginTop: 2 },
 
   // Atalhos secundários
@@ -424,7 +435,10 @@ export default function MobileHomePage() {
             <MobileIcon name="sparkles" size={20}/>
           </div>
           <div style={homeStyles.primaryText}>
-            <div style={homeStyles.primaryTitle}>Criar oferta agora</div>
+            <div style={homeStyles.primaryTitleRow}>
+              <div style={homeStyles.primaryTitle}>Criar oferta agora</div>
+              <span style={homeStyles.primaryFreeTag}>Grátis</span>
+            </div>
             <div style={homeStyles.primarySub}>cole um link e a gente faz o resto</div>
           </div>
           <MobileIcon name="arrow" size={16}/>
