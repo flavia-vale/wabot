@@ -23,9 +23,11 @@ test('buildTelegramOfferText monta oferta usando o link original sem converter',
     },
   })
 
-  assert.match(text, /Cafeteira inox/)
-  assert.match(text, /De R\$ 499 por \*R\$ 398\*/)
-  assert.match(text, /👉 https:\/\/afiliado\.test\/produto\?tag=minha-tag/)
+  assert.match(text, /🛍️ Cafeteira inox/)
+  assert.match(text, /De R\$ 499/)
+  assert.match(text, /💥 Por \*R\$ 398\*/)
+  assert.match(text, /🛒 Compre aqui 👉 https:\/\/afiliado\.test\/produto\?tag=minha-tag/)
+  assert.doesNotMatch(text, /Achadinho do dia/)
 })
 
 test('createTelegramOfferBot responde mensagens com oferta e não chama conversor', async () => {
@@ -45,7 +47,8 @@ test('createTelegramOfferBot responde mensagens com oferta e não chama converso
 
   assert.equal(sent.length, 1)
   assert.equal(sent[0].chatId, 42)
-  assert.match(sent[0].text, /Tênis leve/)
-  assert.match(sent[0].text, /https:\/\/afiliado\.test\/tenis\?tag=abc/)
+  assert.match(sent[0].text, /🛍️ Tênis leve/)
+  assert.match(sent[0].text, /💥 Por \*R\$ 129,90\*/)
+  assert.match(sent[0].text, /🛒 Compre aqui 👉 https:\/\/afiliado\.test\/tenis\?tag=abc/)
   assert.doesNotMatch(sent[0].text, /redirect=ignored/)
 })

@@ -1,6 +1,8 @@
 import 'dotenv/config'
 
 import { fetchProductInfo as defaultFetchProductInfo } from '../converters/productInfoScraper.js'
+import { buildMobileOfferText } from '../../dashboard/lib/mobileOfferComposer.js'
+import { PRESET_TEMPLATE_BODIES } from '../../dashboard/lib/mobileTemplateStore.js'
 
 const HTTP_URL_RE = /https?:\/\/[^\s<>()]+/gi
 const DEFAULT_POLL_TIMEOUT_SECONDS = 25
@@ -29,22 +31,6 @@ function isValidHttpUrl(value) {
   }
 }
 
-function firstText(...values) {
-  for (const value of values) {
-    const text = String(value ?? '').trim()
-    if (text) return text
-  }
-  return ''
-}
-
-function normalizeProduct(product = {}) {
-  return {
-    title: firstText(product.title, 'Produto em oferta'),
-    price: firstText(product.price, product.newPrice, product.priceNow),
-    oldPrice: firstText(product.oldPrice, product.priceWas),
-  }
-}
-
 export function extractSingleHttpUrl(text = '') {
   const rawText = String(text || '')
   if (!rawText.trim()) return { code: 'EMPTY_TEXT', url: null }
@@ -60,17 +46,12 @@ export function extractSingleHttpUrl(text = '') {
 }
 
 export function buildOfferMessage({ product = {}, link }) {
-  const normalized = normalizeProduct(product)
-  const lines = ['✨ Achadinho do dia', '', normalized.title]
-
-  if (normalized.price) {
-    lines.push(normalized.oldPrice ? `De ${normalized.oldPrice} por *${normalized.price}*` : `Por *${normalized.price}*`)
-  } else {
-    lines.push('De {preço_de} por *{preço}*')
-  }
-
-  lines.push('', `👉 ${link}`)
-  return lines.join('\n')
+  return buildMobileOfferText({
+    product,
+    link,
+    template: 'simples',
+    templateBody: PRESET_TEMPLATE_BODIES.simples,
+  })
 }
 
 export async function buildTelegramOfferText(url, { fetchProductInfo = defaultFetchProductInfo } = {}) {

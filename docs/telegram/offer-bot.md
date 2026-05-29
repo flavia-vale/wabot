@@ -1,7 +1,7 @@
 # Bot de ofertas no Telegram
 
 Este bot disponibiliza no Telegram o fluxo de **Gerar oferta** usando o link colado pelo usuário.
-Ele busca título/preço via scraper de produto, monta a copy da oferta e **não converte o link**.
+Ele busca título/preço via scraper de produto, monta a copy com o template cadastrado **Simples** e **não converte o link**.
 
 ## Variáveis de ambiente
 
