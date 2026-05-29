@@ -177,6 +177,8 @@ export async function linkConversionRoutes(app, opts = {}) {
     let reasonCode = null
     let reasonMessage = null
     let mlCredentials = null
+    let shopeeCredentials = null
+    let conversionWarning = null
 
     if (!platform) {
       const failure = conversionFailureFromContext('unsupported')
@@ -186,6 +188,7 @@ export async function linkConversionRoutes(app, opts = {}) {
       const credentials = await findCredentials(userId)
       const credentialsMap = buildCredentialsMap(credentials)
       mlCredentials = credentialsMap.mercadolivre || null
+      shopeeCredentials = credentialsMap.shopee || null
       const validation = validateCredentialData(platform, credentialsMap[platform])
 
       if (!validation.configured) {
@@ -202,6 +205,7 @@ export async function linkConversionRoutes(app, opts = {}) {
           if (conversionResult?.url) {
             offerUrl = conversionResult.url
             conversionSuccess = true
+            conversionWarning = conversionResult.warning ?? null
           } else {
             const failure = conversionFailureFromContext('empty_result')
             reasonCode = failure.reasonCode
@@ -216,17 +220,21 @@ export async function linkConversionRoutes(app, opts = {}) {
     }
 
     try {
-      let info = await fetchProductInfo(offerUrl, { mlCredentials })
+      let info = await fetchProductInfo(offerUrl, { mlCredentials, shopeeCredentials })
 
       // Quando o link convertido é short-link (ex.: Shopee/Amazon) pode haver
-      // bloqueio de redirect/anti-bot no scrape do convertido. Nesses casos,
-      // tentamos o original para resgatar título/preço sem perder o offerUrl.
-      if (conversionSuccess && offerUrl !== url && !hasUsefulOfferInfo(info)) {
+      // bloqueio de redirect/anti-bot no scrape do convertido, ou o scrape pode
+      // trazer título mas não preço. Nesses casos tentamos o original para
+      // complementar título/preço sem perder o offerUrl convertido.
+      if (conversionSuccess && offerUrl !== url && !info?.newPrice) {
         try {
-          const fallbackInfo = await fetchProductInfo(url, { mlCredentials })
+          const fallbackInfo = await fetchProductInfo(url, { mlCredentials, shopeeCredentials })
           if (hasUsefulOfferInfo(fallbackInfo)) {
             info = {
-              ...fallbackInfo,
+              ...info,
+              title: info?.title || fallbackInfo?.title,
+              newPrice: info?.newPrice || fallbackInfo?.newPrice || '',
+              oldPrice: info?.oldPrice || fallbackInfo?.oldPrice || '',
               finalUrl: fallbackInfo?.finalUrl || info?.finalUrl || offerUrl,
             }
           }
@@ -241,6 +249,7 @@ export async function linkConversionRoutes(app, opts = {}) {
         newPrice: info?.newPrice || '',
         finalUrl: info?.finalUrl || offerUrl,
         offerUrl,
+        conversionWarning,
         conversion: {
           attempted: true,
           success: conversionSuccess,
@@ -255,7 +264,7 @@ export async function linkConversionRoutes(app, opts = {}) {
 
       if (conversionSuccess && offerUrl !== url) {
         try {
-          const originalInfo = await fetchProductInfo(url, { mlCredentials })
+          const originalInfo = await fetchProductInfo(url, { mlCredentials, shopeeCredentials })
           if (hasUsefulOfferInfo(originalInfo)) {
             return {
               title: originalInfo?.title || '',
@@ -263,6 +272,7 @@ export async function linkConversionRoutes(app, opts = {}) {
               newPrice: originalInfo?.newPrice || '',
               finalUrl: originalInfo?.finalUrl || url,
               offerUrl,
+              conversionWarning,
               conversion: {
                 attempted: true,
                 success: conversionSuccess,
@@ -289,6 +299,7 @@ export async function linkConversionRoutes(app, opts = {}) {
         newPrice: '',
         finalUrl: offerUrl,
         offerUrl,
+        conversionWarning,
         conversion: {
           attempted: true,
           success: conversionSuccess,

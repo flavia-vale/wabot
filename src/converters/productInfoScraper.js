@@ -2,6 +2,9 @@
 // A ferramenta "Gerar oferta" recebe um link que JÁ é de afiliado — não deve
 // re-converter. Aqui buscamos título e preços para preencher o template.
 
+import { fetchShopeeProductInfo } from './shopee.js'
+import { resolveToCleanProductUrl } from './mercadolivre.js'
+
 const HTML_FETCH_TIMEOUT_MS = Number(process.env.PRODUCT_INFO_TIMEOUT_MS) || 8_000
 const HTML_MAX_BYTES = Number(process.env.PRODUCT_INFO_MAX_BYTES) || 2 * 1024 * 1024
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
@@ -228,12 +231,23 @@ async function fetchMercadoLivreProductInfo(url, { timeoutMs = HTML_FETCH_TIMEOU
 }
 
 
+function extractAmazonPriceFromBuyBoxContext(html) {
+  const buyBoxRe = /(?:apexPriceToPay|priceToPay|corePriceDisplay)[\s\S]{0,600}?a-offscreen[^>]*>[^0-9]*([0-9]{1,3}(?:\.[0-9]{3})+,[0-9]{2}|[0-9]+(?:[\.,][0-9]{2})?)<\/span>/i
+  const buyBoxMatch = html.match(buyBoxRe)
+  if (buyBoxMatch?.[1]) return toPriceString(buyBoxMatch[1])
+  return ''
+}
+
 function extractAmazonTitleAndPrice(html) {
   const titleMatch = html.match(/<span[^>]+id=["']productTitle["'][^>]*>([\s\S]*?)<\/span>/i)
-  const offscreenPrice = html.match(/<span[^>]+class=["'][^"']*a-offscreen[^"']*["'][^>]*>[^0-9]*([0-9]+(?:[\.,][0-9]{2})?)<\/span>/i)
+  const title = titleMatch?.[1] ? normalizeText(titleMatch[1]) : ''
+
+  const buyBoxPrice = extractAmazonPriceFromBuyBoxContext(html)
+  if (buyBoxPrice) return { title, newPrice: buyBoxPrice }
+
+  const offscreenPrice = html.match(/<span[^>]+class=["'][^"']*a-offscreen[^"']*["'][^>]*>[^0-9]*([0-9]{1,3}(?:\.[0-9]{3})+,[0-9]{2}|[0-9]+(?:[\.,][0-9]{2})?)<\/span>/i)
   const whole = html.match(/<span[^>]+class=["'][^"']*a-price-whole[^"']*["'][^>]*>([0-9\.]+)<\/span>/i)?.[1]
   const fraction = html.match(/<span[^>]+class=["'][^"']*a-price-fraction[^"']*["'][^>]*>([0-9]{2})<\/span>/i)?.[1]
-  const title = titleMatch?.[1] ? normalizeText(titleMatch[1]) : ''
   const inlinePrice = whole && fraction ? `${whole},${fraction}` : ''
   const newPrice = offscreenPrice?.[1] ? toPriceString(offscreenPrice[1]) : toPriceString(inlinePrice)
   return { title, newPrice }
@@ -335,7 +349,12 @@ function extractShopeePriceRangeFromJsonInHtml(html) {
   return null
 }
 
-async function fetchShopeeItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS } = {}) {
+async function fetchShopeeItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS, shopeeCreds = null } = {}) {
+  if (shopeeCreds?.appId) {
+    const affiliateResult = await fetchShopeeProductInfo(url, shopeeCreds)
+    if (affiliateResult) return affiliateResult
+  }
+
   const canonical = await resolveShopeeUrl(url, { timeoutMs })
   const ids = parseShopeeIdsFromUrl(canonical)
   if (!ids) return null
@@ -451,33 +470,58 @@ function extractFromMercadoLivreLanding(html) {
   return null
 }
 
+function isMercadoLivreLandingUrl(url) {
+  try {
+    const u = new URL(String(url || ''))
+    if (/meli\.la|mluvem\.com/.test(u.hostname)) return true
+    if (/\/social\//i.test(u.pathname)) return true
+    return false
+  } catch {
+    return false
+  }
+}
+
 export async function fetchProductInfo(url, opts = {}) {
   // Para URLs do ML, usa a sessão autenticada do usuário (cookie ssid) e o UA
   // mobile: sem isso o ML responde com a página anti-bot /gz/account-verification
   // (title "Mercado Libre", sem og:title nem preço) e nada é extraído.
   const mlCookieHeader = opts.mlCookieHeader || buildMlCookieHeader(opts.mlCredentials)
+  const shopeeCreds = opts.shopeeCreds || opts.shopeeCredentials || null
   const fetchOpts = { ...opts }
-  if (mlCookieHeader && isMercadoLivreUrl(url)) {
+
+  // Pré-resolve landings sociais do ML (/social/, meli.la, mluvem.com) para a
+  // URL canônica do produto ANTES de aplicar cookie/UA, senão a landing pega o
+  // preço de uma recomendação (ex.: 1,00 em vez do preço real do produto).
+  let resolvedUrl = url
+  if (isMercadoLivreLandingUrl(url)) {
+    const canonical = await resolveToCleanProductUrl(url).catch(() => null)
+    if (canonical) resolvedUrl = canonical
+  }
+
+  // Cookie/UA mobile são checados sobre a URL JÁ resolvida: meli.la/mluvem.com
+  // não casam isMercadoLivreUrl, mas a canônica produto.mercadolivre.com.br
+  // sim — sem isso o fetch da resolvida cai no anti-bot /gz/account-verification.
+  if (mlCookieHeader && isMercadoLivreUrl(resolvedUrl)) {
     fetchOpts.cookieHeader = mlCookieHeader
     fetchOpts.ua = opts.ua || ML_MOBILE_UA
   }
 
   let html = null
-  let finalUrl = url
+  let finalUrl = resolvedUrl
   try {
-    const fetched = await fetchHtml(url, fetchOpts)
+    const fetched = await fetchHtml(resolvedUrl, fetchOpts)
     html = fetched?.html ?? null
-    finalUrl = fetched?.finalUrl || url
+    finalUrl = fetched?.finalUrl || resolvedUrl
   } catch {
     html = null
-    finalUrl = url
+    finalUrl = resolvedUrl
   }
 
   const jsonLd = html ? extractFromJsonLd(html) : null
   const mlHtml = html ? extractMercadoLivreFromHtml(html) : null
   const mlLanding = html ? extractFromMercadoLivreLanding(html) : null
   const amazonFallback = html ? extractAmazonTitleAndPrice(html) : null
-  const shopeeApiFallback = await fetchShopeeItemInfo(finalUrl || url, opts)
+  const shopeeApiFallback = await fetchShopeeItemInfo(finalUrl || url, { ...opts, shopeeCreds })
   const shopeeHtmlRange = extractShopeePriceRangeFromHtml(html)
   const shopeeJsonRange = extractShopeePriceRangeFromJsonInHtml(html)
   const mercadoLivreApiFallback = await fetchMercadoLivreProductInfo(finalUrl || url, opts)
