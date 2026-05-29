@@ -14,4 +14,6 @@ export const mobileRoutes = {
   accountSubscription: '/m/account/subscription',
   accountTemplates: '/m/account/templates',
   checklistEspelhamento: '/m/checklistespelhamento',
+  preservacao: '/m/config/preservacao',
+  scheduled: '/m/op/scheduled',
 }

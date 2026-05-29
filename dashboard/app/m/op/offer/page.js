@@ -517,6 +517,10 @@ export default function OfferPage() {
   const [groups, setGroups] = useState([])
   const [selectedDestinations, setSelectedDestinations] = useState([])
   const [sendFeedback, setSendFeedback] = useState('')
+  const [showScheduleModal, setShowScheduleModal] = useState(false)
+  const [scheduleAt, setScheduleAt] = useState('')
+  const [scheduling, setScheduling] = useState(false)
+  const [scheduleError, setScheduleError] = useState('')
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined
@@ -685,6 +689,30 @@ export default function OfferPage() {
       setSendFeedback(error.message || 'Não foi possível enviar a oferta.')
     } finally {
       setSending(false)
+    }
+  }
+
+  function openScheduleModal() {
+    const nowPlusOneMinute = new Date(Date.now() + 61000)
+    const pad = (n) => String(n).padStart(2, '0')
+    const localIso = `${nowPlusOneMinute.getFullYear()}-${pad(nowPlusOneMinute.getMonth() + 1)}-${pad(nowPlusOneMinute.getDate())}T${pad(nowPlusOneMinute.getHours())}:${pad(nowPlusOneMinute.getMinutes())}`
+    setScheduleAt(localIso)
+    setScheduleError('')
+    setShowScheduleModal(true)
+  }
+
+  async function confirmSchedule() {
+    if (!scheduleAt) return
+    setScheduling(true)
+    setScheduleError('')
+    try {
+      await api.scheduledCreate(editorText, new Date(scheduleAt).toISOString())
+      setShowScheduleModal(false)
+      setSendFeedback('Agendado! Ver em agendamentos →')
+    } catch (e) {
+      setScheduleError(e.message || 'Não foi possível agendar.')
+    } finally {
+      setScheduling(false)
     }
   }
 
@@ -1001,18 +1029,61 @@ ${currentCouponLink}`
 
           <div style={criarStyles.sendWrap}>
             <div style={criarStyles.sendRow}>
-              <button type="button" disabled style={{...criarStyles.schedBtn, opacity: 0.55}}>Agendar em breve</button>
+              <button type="button" onClick={openScheduleModal} disabled={!editorText.trim()} style={{...criarStyles.schedBtn, opacity: !editorText.trim() ? 0.55 : 1}}>Agendar</button>
               <button type="button" onClick={sendNow} disabled={sending || selectedDestinations.length === 0 || !editorText.trim()} style={{...criarStyles.sendBtn, opacity: sending || selectedDestinations.length === 0 || !editorText.trim() ? 0.6 : 1}}>
                 {sending ? 'Enviando...' : 'Enviar agora'} <MobileIcon name="arrow" size={14}/>
               </button>
             </div>
             <div style={criarStyles.sendNote}>{selectedNames.length ? `Vai para ${selectedNames.join(', ')}` : 'Selecione pelo menos um destino real.'}</div>
-            {sendFeedback && <div style={{fontSize: 12, color: sendFeedback.includes('Não') ? 'var(--danger)' : 'var(--success)', marginTop: 8}}>{sendFeedback}</div>}
+            {sendFeedback && (
+              <div style={{fontSize: 12, color: sendFeedback.includes('Não') ? 'var(--danger)' : 'var(--success)', marginTop: 8}}>
+                {sendFeedback.includes('Agendado') ? (
+                  <>Agendado! <a href={mobileRoutes.scheduled} style={{color:'var(--accent-strong)', fontWeight: 600}}>Ver agendamentos →</a></>
+                ) : sendFeedback}
+              </div>
+            )}
           </div>
         </>
       )}
 
       <div style={{height: 20}}/>
+
+      {showScheduleModal && (
+        <div style={{position:'fixed', inset:0, zIndex:200, background:'rgba(0,0,0,0.55)', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 16px'}} onClick={() => setShowScheduleModal(false)}>
+          <div style={{background:'var(--surface)', border:'1px solid var(--line)', borderRadius:20, padding:22, width:'100%', maxWidth:400}} onClick={(e) => e.stopPropagation()}>
+            <div style={{fontSize: 16, fontWeight: 700, color:'var(--ink)', marginBottom: 4}}>Agendar envio</div>
+            <div style={{fontSize: 12, color:'var(--ink-soft)', marginBottom: 16, lineHeight: 1.5}}>Escolha a data e hora para o envio automático. Mínimo: 1 minuto a partir de agora.</div>
+            <label style={{display:'grid', gap: 6, marginBottom: 16}}>
+              <span style={{fontSize: 12, fontWeight: 600, color:'var(--ink)'}}>Data e hora</span>
+              <input
+                type="datetime-local"
+                min={(() => { const nowPlusOne = new Date(Date.now() + 61000); const pad = (n) => String(n).padStart(2,'0'); return `${nowPlusOne.getFullYear()}-${pad(nowPlusOne.getMonth()+1)}-${pad(nowPlusOne.getDate())}T${pad(nowPlusOne.getHours())}:${pad(nowPlusOne.getMinutes())}` })()}
+                value={scheduleAt}
+                onChange={(e) => setScheduleAt(e.target.value)}
+                style={{width:'100%', padding:'12px 14px', minHeight:44, fontSize:14, background:'var(--bg-soft)', border:'1px solid var(--line)', borderRadius:12, fontFamily:'inherit', color:'var(--ink)'}}
+              />
+            </label>
+            {scheduleError && <div style={{fontSize: 12, color:'var(--danger)', marginBottom: 12}}>{scheduleError}</div>}
+            <div style={{display:'grid', gap: 8}}>
+              <button
+                type="button"
+                onClick={confirmSchedule}
+                disabled={scheduling || !scheduleAt}
+                style={{padding:'13px', borderRadius:12, background:'var(--ink)', border:'none', color:'white', fontWeight:700, fontSize:14, cursor:'pointer', fontFamily:'inherit', opacity: (scheduling || !scheduleAt) ? 0.6 : 1}}
+              >
+                {scheduling ? 'Agendando...' : 'Confirmar agendamento'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowScheduleModal(false)}
+                style={{padding:'12px', borderRadius:12, background:'transparent', border:'1px solid var(--line)', color:'var(--ink)', fontWeight:600, fontSize:14, cursor:'pointer', fontFamily:'inherit'}}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </MobileShell>
   )
 }
