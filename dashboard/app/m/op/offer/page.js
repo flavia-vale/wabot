@@ -89,9 +89,9 @@ const criarStyles = {
   changeLinkBtn: {
     marginTop: 10, width:'100%',
     padding:'12px 14px', borderRadius: 12,
-    background:'color-mix(in oklab, var(--danger) 8%, var(--surface))',
-    border:'1px solid color-mix(in oklab, var(--danger) 35%, var(--line))',
-    color:'var(--danger)',
+    background:'color-mix(in oklab, var(--success) 10%, var(--surface))',
+    border:'1px solid color-mix(in oklab, var(--success) 35%, var(--line))',
+    color:'var(--success)',
     fontSize: 13, fontWeight: 600,
     cursor:'pointer', fontFamily:'inherit',
     display:'flex', alignItems:'center', justifyContent:'center', gap: 8,
