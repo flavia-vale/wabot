@@ -230,6 +230,11 @@ export const api = {
   adminSystemHealth: () => apiFetch('/api/admin/system/health'),
   adminSystemMetrics: () => apiFetch('/api/admin/system/metrics'),
   adminSystemObservability: () => apiFetch('/api/admin/system/observability'),
+  adminTelegramOverview: () => apiFetch('/api/admin/telegram/overview'),
+  adminTelegramRequests: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/telegram/requests${query ? `?${query}` : ''}`)
+  },
   adminSuccessOverview: () => apiFetch('/api/admin/success/overview'),
   adminSuccessQueue: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
