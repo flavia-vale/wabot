@@ -6,6 +6,7 @@ DEFAULT_ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 ROOT_DIR="${ROOT_DIR:-$DEFAULT_ROOT_DIR}"
 DASHBOARD_DIR="$ROOT_DIR/dashboard"
 BRANCH="${BRANCH:-main}"
+FORCE_RESET_ON_SYNC="${FORCE_RESET_ON_SYNC:-0}"
 
 if [[ ! -d "$ROOT_DIR/.git" ]]; then
   echo "ERRO: ROOT_DIR inválido ($ROOT_DIR). Defina ROOT_DIR apontando para a raiz do repositório wabot."
@@ -103,7 +104,19 @@ configure_public_git_dependencies
 echo "[1/9] Sync branch $BRANCH"
 git fetch origin
 git checkout "$BRANCH"
-git pull --ff-only origin "$BRANCH"
+
+if [[ "$FORCE_RESET_ON_SYNC" == "1" ]]; then
+  # Loga commits locais que seriam descartados (trilha de auditoria).
+  local_ahead="$(git log "origin/$BRANCH..HEAD" --oneline 2>/dev/null || true)"
+  if [[ -n "$local_ahead" ]]; then
+    echo "  Aviso: commits locais descartados pelo hard reset (não estão no remote):"
+    echo "$local_ahead" | sed 's/^/    /'
+  fi
+  echo "  FORCE_RESET_ON_SYNC=1 -> hard reset para origin/$BRANCH"
+  git reset --hard "origin/$BRANCH"
+else
+  git pull --ff-only origin "$BRANCH"
+fi
 
 echo "[2/9] Install root dependencies sem alterar lockfile"
 run_npm_ci_with_recovery "root"

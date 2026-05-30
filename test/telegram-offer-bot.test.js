@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
 
 import {
   buildTelegramOffer,
@@ -12,7 +11,6 @@ import {
   buildWhatsappShareUrl,
   buildWhatsappShareMarkup,
   WHATSAPP_SHARE_PROMPT,
-  isTelegramOfferBotEntrypoint,
 } from '../src/telegram/offerBot.js'
 
 
@@ -116,6 +114,19 @@ test('buildTelegramOfferText avisa quando scraper não retorna título nem preç
   })
 
   assert.equal(text, '⚠️ Nenhum produto encontrado para o link enviado!')
+})
+
+test('buildTelegramOfferText não envia placeholder {preço} quando scraper acha título mas não acha preço', async () => {
+  const text = await buildTelegramOfferText('https://www.amazon.com.br/Cafeteira-Eletrica-Inox/dp/B09ABC123', {
+    fetchProductInfo: async () => ({ title: 'Cafeteira Elétrica Inox', oldPrice: '', newPrice: '' }),
+  })
+
+  assert.doesNotMatch(text, /\{preço\}/)
+  assert.doesNotMatch(text, /\{preço_de\}/)
+  assert.doesNotMatch(text, /\{produto\}/)
+  assert.doesNotMatch(text, /\{link\}/)
+  assert.match(text, /Cafeteira Elétrica Inox/)
+  assert.match(text, /https:\/\/www\.amazon\.com\.br\/Cafeteira-Eletrica-Inox\/dp\/B09ABC123/)
 })
 
 test('createTelegramOfferBot responde mensagens com oferta e não chama conversor', async () => {

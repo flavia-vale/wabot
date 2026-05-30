@@ -109,8 +109,14 @@ jobs:
               else
                 git remote set-url origin "git@github.com:${{ github.repository }}.git"
               fi
+              # Hard reset inline para resolver divergência antes de chamar o script
+              # (necessário quando o VPS tem commits locais que bloqueiam ff-only).
+              git fetch origin main
+              git checkout main
+              git reset --hard origin/main
+              git clean -fd
               chmod +x ./scripts/deploy_safe_dashboard.sh
-              ROOT_DIR=~/wabot BRANCH=main ./scripts/deploy_safe_dashboard.sh
+              ROOT_DIR=~/wabot BRANCH=main FORCE_RESET_ON_SYNC=1 ./scripts/deploy_safe_dashboard.sh
             else
               echo "🧪 Enviando para STAGING..."
               cd ~/wabot-staging
