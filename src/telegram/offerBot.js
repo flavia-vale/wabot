@@ -78,12 +78,24 @@ function hasProductInfo(product = {}) {
 export function buildOfferMessage({ product = {}, link }) {
   if (!hasProductInfo(product)) return PRODUCT_NOT_FOUND_MESSAGE
 
-  return buildMobileOfferText({
+  const raw = buildMobileOfferText({
     product,
     link,
     template: 'simples',
     templateBody: PRESET_TEMPLATE_BODIES.simples,
   })
+
+  // buildMobileOfferText preserves unfilled {variable} placeholders intentionally
+  // for the dashboard UI (where users type in the missing fields). In the bot
+  // context those raw placeholders must never reach the end user — strip them.
+  const cleaned = raw
+    .split('\n')
+    .filter(line => !/\{[^}]+\}/.test(line))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+  return cleaned || PRODUCT_NOT_FOUND_MESSAGE
 }
 
 export async function buildTelegramOfferText(url, { fetchProductInfo = defaultFetchProductInfo } = {}) {
