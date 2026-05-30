@@ -15,6 +15,13 @@ test('detecta www. e domínio nu de mercadolivre', () => {
   assert.equal(detectLinks('https://mercadolivre.com.br/p/MLB123456').length, 1)
 })
 
+test('detecta host nu mercadolivre.com (links /sec/ de compartilhamento)', () => {
+  const links = detectLinks('https://mercadolivre.com/sec/16tPGB4')
+  assert.equal(links.length, 1)
+  assert.equal(links[0].platform, 'mercadolivre')
+  assert.equal(links[0].url, 'https://mercadolivre.com/sec/16tPGB4')
+})
+
 test('detecta s.shopee.com.br e shopee.com.br via subdomínio genérico', () => {
   assert.equal(detectLinks('https://s.shopee.com.br/abc123').length, 1)
   assert.equal(detectLinks('https://shopee.com.br/product/1/2').length, 1)
