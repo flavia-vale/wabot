@@ -409,13 +409,28 @@ function extractMercadoLivreFromHtml(html) {
   if (!/mercadolivre|mercadolibre|ui-pdp-/i.test(html)) return null
 
   let title = ''
-  for (const re of OG_TITLE_RE) {
-    const m = html.match(re)
-    if (m?.[1]) { title = normalizeText(m[1]); break }
+
+  // h1.ui-pdp-title é a fonte mais confiável — só existe em páginas de produto reais.
+  const h1 = html.match(/<h1[^>]+class=["'][^"']*ui-pdp-title[^"']*["'][^>]*>([\s\S]*?)<\/h1>/i)
+  if (h1?.[1]) {
+    title = normalizeText(h1[1].replace(/<[^>]+>/g, ' '))
   }
+
+  // Fallback para og:title, mas removendo sufixo da plataforma e rejeitando
+  // títulos genéricos (anti-bot / landing retorna só "Mercado Libre/Livre").
   if (!title) {
-    const h1 = html.match(/<h1[^>]+class=["'][^"']*ui-pdp-title[^"']*["'][^>]*>([\s\S]*?)<\/h1>/i)
-    if (h1?.[1]) title = normalizeText(h1[1].replace(/<[^>]+>/g, ' '))
+    for (const re of OG_TITLE_RE) {
+      const m = html.match(re)
+      if (m?.[1]) {
+        const candidate = normalizeText(m[1])
+          .replace(/\s*[|\-—]\s*mercado\s*li(bre|vre)\s*$/i, '')
+          .trim()
+        if (candidate && !/^mercado\s*li(bre|vre)$/i.test(candidate)) {
+          title = candidate
+        }
+        break
+      }
+    }
   }
 
   // Preço "de" (riscado) vem num <s class="... ui-pdp-price__original-value ...">.

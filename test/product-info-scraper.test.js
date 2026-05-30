@@ -371,3 +371,63 @@ test('fetchProductInfo mantém fallback de API do Mercado Livre mesmo quando fet
   assert.match(info.title, /Secador de roupas 600w elétrico portátil/i)
   assert.equal(info.newPrice, '189,90')
 })
+
+test('fetchProductInfo ignora og:title genérico "Mercado Libre" e usa slug da URL', async (t) => {
+  const antiBotHtml = `<!doctype html><html>
+  <head>
+    <meta property="og:title" content="Mercado Libre" />
+    <title>Mercado Livre - Onde comprar e vender de Tudo</title>
+  </head>
+  <body>mercadolivre</body>
+  </html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('mercadolivre.com.br')) {
+      return {
+        ok: true, url,
+        headers: { get: (h) => h.toLowerCase() === 'content-type' ? 'text/html' : null },
+        body: null,
+        text: async () => antiBotHtml,
+      }
+    }
+    if (url.includes('api.mercadolibre.com')) return { ok: false }
+    throw new Error(`unexpected fetch: ${url}`)
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://www.mercadolivre.com.br/02-forma-silicone-retangular-reutilizavel-air-fryer/p/MLB69573479')
+  assert.notEqual((info?.title || '').toLowerCase(), 'mercado libre')
+  assert.notEqual((info?.title || '').toLowerCase(), 'mercado livre')
+  assert.match(info?.title || '', /forma.+silicone/i)
+})
+
+test('fetchProductInfo strip " | Mercado Livre" do og:title para extrair nome do produto', async (t) => {
+  const pageHtml = `<!doctype html><html>
+  <head>
+    <meta property="og:title" content="Forma De Silicone Retangular Reutilizável Air Fryer | Mercado Livre" />
+  </head>
+  <body>mercadolivre ui-pdp-container</body>
+  </html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('mercadolivre.com.br')) {
+      return {
+        ok: true, url,
+        headers: { get: (h) => h.toLowerCase() === 'content-type' ? 'text/html' : null },
+        body: null,
+        text: async () => pageHtml,
+      }
+    }
+    if (url.includes('api.mercadolibre.com')) return { ok: false }
+    throw new Error(`unexpected fetch: ${url}`)
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://www.mercadolivre.com.br/02-forma-silicone-retangular/p/MLB69573479')
+  assert.match(info?.title || '', /Forma De Silicone Retangular Reutilizável Air Fryer/)
+  assert.doesNotMatch(info?.title || '', /Mercado Livre|Mercado Libre/)
+})
