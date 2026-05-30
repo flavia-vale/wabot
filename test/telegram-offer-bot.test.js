@@ -25,7 +25,7 @@ test('telegram offer bot PM2 e npm scripts usam runner explícito', () => {
   assert.match(runner, /runner booting/)
   assert.match(runner, /tokenConfigured/)
   assert.match(runner, /import\('\.\/offerBot\.js'\)/)
-  assert.match(runner, /createTelegramOfferBot\(\{ recordOfferLog: recordTelegramOfferLog \}\)/)
+  assert.match(runner, /createTelegramOfferBot\(\{[\s\S]*?recordOfferLog: recordTelegramOfferLog[\s\S]*?\}\)/)
   assert.match(runner, /await bot\.start\(\)/)
 })
 
