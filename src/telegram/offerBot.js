@@ -1,8 +1,5 @@
 import 'dotenv/config'
 
-import { resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
-
 import { fetchProductInfo as defaultFetchProductInfo } from '../converters/productInfoScraper.js'
 import { fetchProductImage as defaultFetchProductImage, fetchImageBuffer as defaultFetchImageBuffer, normalizeImageForWhatsApp as defaultNormalizeImage } from '../converters/imageScrapers.js'
 import { detectLinks } from '../detector.js'
