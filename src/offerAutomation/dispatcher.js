@@ -76,17 +76,19 @@ export async function runAutomation(automation, { sendBroadcastFn = sendBroadcas
   const botConfig = await db.botConfig.findUnique({ where: { userId: automation.userId } })
   const poolJson = botConfig?.copyVariationPoolJson ?? '{}'
 
+  const sentIds = []
   for (const offer of toSend) {
     const base = formatOfferMessage(offer, automation.keyword)
     const text = applyVariation(base, { groupId: automation.destGroupJid, poolJson, random: true })
     await sendBroadcastFn(automation.userId, text, [automation.destGroupJid])
+    sentIds.push(offer.itemId)
   }
 
-  const newSentIds = addSentIds(sentItemIds, toSend.map(o => o.itemId))
+  const newSentIds = addSentIds(sentItemIds, sentIds)
   await db.offerAutomation.update({
     where: { id: automation.id },
     data: { lastSentAt: new Date(), sentItemIds: JSON.stringify(newSentIds) },
   })
 
-  return { sent: toSend.length }
+  return { sent: sentIds.length }
 }

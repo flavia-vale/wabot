@@ -13,7 +13,7 @@ function buildAuth(appId, secretKey, payload) {
 }
 
 export function buildOffersQuery({ keyword, page, limit, sortType = 2, isAMSOffer = false, isKeySeller = false }) {
-  const safeKeyword = keyword.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  const safeKeyword = keyword.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\n\r]/g, ' ')
   const amsParam = isAMSOffer ? ', isAMSOffer: true' : ''
   const keySellerParam = isKeySeller ? ', isKeySeller: true' : ''
   return `{

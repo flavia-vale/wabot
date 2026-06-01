@@ -66,8 +66,18 @@ export async function offerAutomationRoutes(app, opts = {}) {
       }
       updates.intervalMinutes = Number(intervalMinutes)
     }
-    if (offersPerSend !== undefined) updates.offersPerSend = Number(offersPerSend)
-    if (minDiscountPct !== undefined) updates.minDiscountPct = Number(minDiscountPct)
+    if (offersPerSend !== undefined) {
+      const ps = Number(offersPerSend)
+      if (!ps || ps < 1 || ps > MAX_OFFERS_PER_SEND)
+        return reply.code(400).send({ error: `offersPerSend deve ser entre 1 e ${MAX_OFFERS_PER_SEND}` })
+      updates.offersPerSend = ps
+    }
+    if (minDiscountPct !== undefined) {
+      const pct = Number(minDiscountPct)
+      if (pct < 0 || pct > 100)
+        return reply.code(400).send({ error: 'minDiscountPct deve estar entre 0 e 100' })
+      updates.minDiscountPct = pct
+    }
     if (enabled !== undefined) updates.enabled = Boolean(enabled)
 
     return db.offerAutomation.update({ where: { id: req.params.id }, data: updates })
