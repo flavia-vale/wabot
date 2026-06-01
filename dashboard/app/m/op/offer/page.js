@@ -18,6 +18,7 @@ import {
   isValidHttpUrl,
 } from '@/lib/mobileOfferComposer'
 import { loadAllTemplates } from '@/lib/mobileTemplateStore'
+import { filterDestGroups, selectAllVisible, clearVisible, groupKey } from '@/lib/mobileOfferFilters'
 
 const COUPON_LINKS_STORAGE_KEY = 'wabot.mobile.offer.couponLinks.v1'
 const DEFAULT_COUPON_LINKS = { shopee: '', mercadolivre: '', amazon: '', magazineluiza: '' }
@@ -524,6 +525,8 @@ export default function OfferPage() {
   const [scheduling, setScheduling] = useState(false)
   const [scheduleError, setScheduleError] = useState('')
   const [me, setMe] = useState(null)
+  const [destSearch, setDestSearch] = useState('')
+  const [includeChannels, setIncludeChannels] = useState(false)
   const isExpired = derivePlanState(me) === 'expired'
 
   useEffect(() => {
@@ -542,7 +545,7 @@ export default function OfferPage() {
         if (!active) return
         const destinations = Array.isArray(list) ? list.filter((group) => group.role === 'post' && group.active !== false) : []
         setGroups(destinations)
-        setSelectedDestinations(destinations.slice(0, 1).map((group) => group.waJid || group.jid || group.id).filter(Boolean))
+        setSelectedDestinations(destinations.slice(0, 1).map((group) => groupKey(group)).filter(Boolean))
       })
       .catch(() => {
         if (active) setGroups([])
@@ -737,7 +740,7 @@ export default function OfferPage() {
   const linkOriginal = input
   const linkAfiliada = convertedLink || input
   const selectedNames = groups
-    .filter((group) => selectedDestinations.includes(group.waJid || group.jid || group.id))
+    .filter((group) => selectedDestinations.includes(groupKey(group)))
     .map((group) => group.name || group.subject || group.waJid || group.jid)
   const singleLinkWarning = getMobileOfferSingleLinkWarning(input)
   const currentOfferStoreKey = useMemo(() => detectMobileOfferStoreKey({ product: productData || {}, link: input || convertedLink }), [productData, input, convertedLink])
@@ -1041,25 +1044,69 @@ ${currentCouponLink}`
             <div style={criarStyles.sectionTitle}>Postar em</div>
             <span style={{fontSize: 11, color:'var(--ink-soft)', fontWeight: 600}}>{selectedDestinations.length} selecionado(s)</span>
           </div>
-          <div style={criarStyles.destCard}>
-            {groups.length === 0 ? (
-              <div style={{padding: 16, fontSize: 12, color:'var(--ink-soft)'}}>Nenhum destino ativo configurado em Grupos e canais.</div>
-            ) : groups.map((group, index) => {
-              const jid = group.waJid || group.jid || group.id
-              const selected = selectedDestinations.includes(jid)
-              const name = group.name || group.subject || jid
-              return (
-                <button key={jid} type="button" onClick={() => toggleDestination(jid)} style={{...criarStyles.destRow(selected, index === groups.length - 1), width:'100%', border:'none', background:'transparent', textAlign:'left'}}>
-                  <div style={criarStyles.destCheck(selected)}>{selected && <MobileIcon name="check" size={11} stroke={3}/>}</div>
-                  <div style={criarStyles.destAvatar('linear-gradient(135deg, var(--accent), var(--accent-2))')}>{name.split(' ').slice(0,2).map(w=>w[0]).join('').replace(/[^A-Za-zÀ-ÿ]/g,'').toUpperCase().slice(0,2) || 'WA'}</div>
-                  <div style={criarStyles.destMain}>
-                    <div style={criarStyles.destName}>{name}</div>
-                    <div style={criarStyles.destSub}>{group.kind === 'channel' ? 'canal' : 'grupo'}</div>
+          {(() => {
+            const visibleGroups = filterDestGroups(groups, { search: destSearch, includeChannels })
+            return (
+              <>
+                <div style={{padding:'0 16px 8px', display:'grid', gap: 8}}>
+                  <input
+                    style={{...criarStyles.fieldInput, width:'100%', boxSizing:'border-box'}}
+                    placeholder="Buscar destino..."
+                    value={destSearch}
+                    onChange={(event) => setDestSearch(event.target.value)}
+                  />
+                  <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap: 8}}>
+                    <label style={{display:'flex', alignItems:'center', gap: 6, fontSize: 12, color:'var(--ink)', cursor:'pointer'}}>
+                      <input
+                        type="checkbox"
+                        checked={includeChannels}
+                        onChange={(event) => setIncludeChannels(event.target.checked)}
+                        style={{width: 16, height: 16}}
+                      />
+                      Incluir canais
+                    </label>
+                    <div style={{display:'flex', gap: 6}}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDestinations(selectAllVisible(selectedDestinations, visibleGroups))}
+                        style={{...criarStyles.flatBtn('ghost', false), fontSize: 11, padding:'6px 10px'}}
+                      >
+                        Selecionar visíveis
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDestinations(clearVisible(selectedDestinations, visibleGroups))}
+                        style={{...criarStyles.flatBtn('ghost', false), fontSize: 11, padding:'6px 10px'}}
+                      >
+                        Limpar visíveis
+                      </button>
+                    </div>
                   </div>
-                </button>
-              )
-            })}
-          </div>
+                </div>
+                <div style={criarStyles.destCard}>
+                  {groups.length === 0 ? (
+                    <div style={{padding: 16, fontSize: 12, color:'var(--ink-soft)'}}>Nenhum destino ativo configurado em Grupos e canais.</div>
+                  ) : visibleGroups.length === 0 ? (
+                    <div style={{padding: 16, fontSize: 12, color:'var(--ink-soft)'}}>Nenhum destino encontrado para a busca.</div>
+                  ) : visibleGroups.map((group, index) => {
+                    const jid = groupKey(group)
+                    const selected = selectedDestinations.includes(jid)
+                    const name = group.name || group.subject || jid
+                    return (
+                      <button key={jid} type="button" onClick={() => toggleDestination(jid)} style={{...criarStyles.destRow(selected, index === visibleGroups.length - 1), width:'100%', border:'none', background:'transparent', textAlign:'left'}}>
+                        <div style={criarStyles.destCheck(selected)}>{selected && <MobileIcon name="check" size={11} stroke={3}/>}</div>
+                        <div style={criarStyles.destAvatar('linear-gradient(135deg, var(--accent), var(--accent-2))')}>{name.split(' ').slice(0,2).map(w=>w[0]).join('').replace(/[^A-Za-zÀ-ÿ]/g,'').toUpperCase().slice(0,2) || 'WA'}</div>
+                        <div style={criarStyles.destMain}>
+                          <div style={criarStyles.destName}>{name}</div>
+                          <div style={criarStyles.destSub}>{group.kind === 'channel' ? 'canal' : 'grupo'}</div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
+            )
+          })()}
 
           <div style={criarStyles.sendWrap}>
             <div style={criarStyles.sendRow}>

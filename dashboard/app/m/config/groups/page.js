@@ -7,6 +7,7 @@ import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAs
 import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { api } from '@/lib/api'
+import { getHealthChipStyle } from '@/lib/mobileChannelHealth'
 import {
   MOBILE_GROUP_PLATFORMS,
   buildExistingJidRoleSet,
@@ -48,6 +49,9 @@ export default function GroupsPage() {
   const [targetEditorId, setTargetEditorId] = useState(null)
   const [targetPostIds, setTargetPostIds] = useState([])
   const [targetLoading, setTargetLoading] = useState(false)
+  const [followStatus, setFollowStatus] = useState({})
+  const [adminStatus, setAdminStatus] = useState({})
+  const [healthMap, setHealthMap] = useState({})
 
   async function loadGroups() {
     setLoading(true)
@@ -80,6 +84,24 @@ export default function GroupsPage() {
     return () => { active = false }
   }, [])
 
+  useEffect(() => {
+    const channelDestGroups = groups.filter((group) => group.role === 'post' && group.kind === 'channel')
+    const unfetched = channelDestGroups.filter((group) => !(group.id in healthMap))
+    if (unfetched.length === 0) return
+    Promise.allSettled(unfetched.map((group) => api.channelHealth(group.id).then((result) => ({ id: group.id, result }))))
+      .then((outcomes) => {
+        const updates = {}
+        for (const outcome of outcomes) {
+          if (outcome.status === 'fulfilled') {
+            updates[outcome.value.id] = outcome.value.result
+          }
+        }
+        if (Object.keys(updates).length > 0) {
+          setHealthMap((current) => ({ ...current, ...updates }))
+        }
+      })
+  }, [groups])
+
   const role = getRoleForMobileGroupTab(tab)
   const currentGroups = useMemo(() => groups.filter((group) => group.role === role), [groups, role])
   const existingJidRoles = useMemo(() => buildExistingJidRoleSet(groups), [groups])
@@ -110,10 +132,17 @@ export default function GroupsPage() {
     setActionLoading(`add-${waJid}::${role}`)
     setFeedback('')
     try {
-      await api.addGroup(waJid, name, role, kind)
+      const addedGroup = await api.addGroup(waJid, name, role, kind)
       setFeedback(role === 'monitor' ? 'Grupo adicionado para monitorar.' : 'Grupo adicionado para publicar.')
       setManualForm({ waJid: '', name: '', kind: 'group' })
       await loadGroups()
+      if (kind === 'channel' && role === 'monitor' && addedGroup?.id) {
+        const newId = addedGroup.id
+        setFollowStatus((current) => ({ ...current, [newId]: 'loading' }))
+        api.followChannelNow(newId)
+          .then(() => setFollowStatus((current) => ({ ...current, [newId]: 'done' })))
+          .catch(() => setFollowStatus((current) => ({ ...current, [newId]: 'error' })))
+      }
     } catch (err) {
       setFeedback(err.message || 'Não foi possível adicionar o grupo.')
     } finally {
@@ -255,6 +284,42 @@ export default function GroupsPage() {
                   <div style={cfgStyles.rowMain}>
                     <div style={cfgStyles.rowTitle}>{name}</div>
                     <div style={cfgStyles.rowSub}>{group.kind === 'channel' ? 'canal' : 'grupo'} · {group.waJid || group.jid || 'sem JID'}</div>
+                    {!isMonitor && group.kind === 'channel' && (() => {
+                      const healthData = healthMap[group.id]
+                      const healthStatus = typeof healthData === 'string' ? healthData : healthData?.status ?? null
+                      const chip = getHealthChipStyle(healthStatus)
+                      const warnStyle = chip.tone === 'warn'
+                        ? { background:'color-mix(in oklab, var(--warn) 18%, var(--surface))', color:'var(--warn)', border:'1px solid color-mix(in oklab, var(--warn) 35%, var(--line))' }
+                        : {}
+                      return (
+                        <div style={{display:'flex', alignItems:'center', gap: 6, marginTop: 5, flexWrap:'wrap'}}>
+                          <span style={{...cfgStyles.pill(chip.tone), ...warnStyle}}>{chip.label}</span>
+                          <button
+                            type="button"
+                            disabled={adminStatus[group.id] === 'loading'}
+                            onClick={async () => {
+                              setAdminStatus((current) => ({ ...current, [group.id]: 'loading' }))
+                              try {
+                                const result = await api.refreshChannelAdmin(group.id)
+                                setAdminStatus((current) => ({ ...current, [group.id]: result?.isViewerOwner ? 'admin ok' : 'não é admin' }))
+                              } catch {
+                                setAdminStatus((current) => ({ ...current, [group.id]: 'erro' }))
+                              }
+                            }}
+                            style={{border:'1px solid var(--line)', background:'transparent', borderRadius: 999, color:'var(--ink)', padding:'3px 8px', fontSize: 10.5, fontWeight: 600, cursor:'pointer'}}
+                          >
+                            {adminStatus[group.id] === 'loading' ? 'verificando...' : adminStatus[group.id] || 'Verificar admin'}
+                          </button>
+                        </div>
+                      )
+                    })()}
+                    {isMonitor && group.kind === 'channel' && followStatus[group.id] && (
+                      <div style={{marginTop: 4}}>
+                        <span style={cfgStyles.pill(followStatus[group.id] === 'done' ? 'success' : followStatus[group.id] === 'error' ? 'danger' : 'neutral')}>
+                          {followStatus[group.id] === 'loading' ? 'seguindo…' : followStatus[group.id] === 'done' ? 'seguindo' : 'falha ao seguir'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   {savingGroupId === group.id && <span style={{fontSize: 10.5, color:'var(--accent-strong)', fontWeight: 600}}>salvando…</span>}
                   {savedGroupId === group.id && <span style={{fontSize: 10.5, color:'var(--success)', fontWeight: 600}}>salvo</span>}

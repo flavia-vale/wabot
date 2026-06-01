@@ -8,6 +8,7 @@ import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAs
 import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { api, openQRSocket } from '@/lib/api'
+import { deriveTimelineSteps } from '@/lib/mobileSessionTimeline'
 
 export default function WhatsAppPage() {
   useMobileRoutePerf('m/config/whatsapp')
@@ -21,6 +22,7 @@ export default function WhatsAppPage() {
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState('')
   const [showForgetConfirm, setShowForgetConfirm] = useState(false)
+  const [isRestarting, setIsRestarting] = useState(false)
   const pollingRef = useRef(null)
   const wsRef = useRef(null)
 
@@ -261,6 +263,22 @@ export default function WhatsAppPage() {
     }
   }
 
+  async function handleRestart() {
+    setIsRestarting(true)
+    setFeedback('')
+    setError('')
+    try {
+      api.sessionTelemetry({ stage: 'restart', event: 'requested' }).catch(() => {})
+      await api.sessionStop().catch(() => {})
+      setPairingCode('')
+      setQr('')
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+      await startQrConnect()
+    } finally {
+      setIsRestarting(false)
+    }
+  }
+
   async function copyPairingCode() {
     try {
       await navigator.clipboard.writeText(pairingCode)
@@ -342,6 +360,30 @@ export default function WhatsAppPage() {
           </div>
         </div>
       </div>
+
+      {/* Timeline de conexão — visível quando não conectado */}
+      {!isConnected && (() => {
+        const isQrScanned = Boolean(running && isConnecting && !qr && !pairingCode)
+        const timelineSteps = deriveTimelineSteps({ running, qr: Boolean(qr), isQrScanned, isConnected })
+        const stepColor = (status) => status === 'done' ? 'var(--success)' : status === 'active' ? 'var(--accent-strong)' : 'var(--line-strong)'
+        const stepTextColor = (status) => status === 'done' ? 'var(--success)' : status === 'active' ? 'var(--accent-strong)' : 'var(--ink-faint)'
+        return (
+          <div style={{padding:'8px 16px 0', display:'flex', alignItems:'flex-start', gap: 0}}>
+            {timelineSteps.map((step, index) => (
+              <div key={step.key} style={{flex: 1, display:'flex', flexDirection:'column', alignItems:'center', position:'relative'}}>
+                {index > 0 && (
+                  <div style={{position:'absolute', top: 10, right:'50%', width:'100%', height: 2, background: timelineSteps[index - 1].status === 'done' ? 'var(--success)' : 'var(--line-strong)', zIndex: 0}}/>
+                )}
+                <div style={{width: 20, height: 20, borderRadius:'50%', background: stepColor(step.status), border: step.status === 'active' ? '2px solid var(--accent-strong)' : '2px solid transparent', display:'flex', alignItems:'center', justifyContent:'center', zIndex: 1, flexShrink: 0}}>
+                  {step.status === 'done' && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                  {step.status === 'active' && <div style={{width: 6, height: 6, borderRadius:'50%', background:'white'}}/>}
+                </div>
+                <div style={{fontSize: 9.5, fontWeight: 600, color: stepTextColor(step.status), marginTop: 4, textAlign:'center', lineHeight: 1.2}}>{step.label}</div>
+              </div>
+            ))}
+          </div>
+        )
+      })()}
 
       {/* Method switcher — número vem primeiro no mobile porque é o fluxo mais comum */}
       {!isConnected && (
@@ -467,6 +509,16 @@ export default function WhatsAppPage() {
           <div style={{fontSize: 12, color:'var(--ink-soft)', marginBottom: 12, lineHeight: 1.45}}>
             &ldquo;Esquecer número&rdquo; desconecta o WhatsApp e remove a sessão salva. Para usar novamente, você precisará conectar por QR Code ou código de pareamento.
           </div>
+          {running && (
+            <button
+              type="button"
+              onClick={handleRestart}
+              disabled={isRestarting || !!actionLoading}
+              style={{...mobi.btn('ghost', true), fontSize: 12.5, marginBottom: 8}}
+            >
+              {isRestarting ? 'Reiniciando...' : 'Reiniciar conexão'}
+            </button>
+          )}
           {!showForgetConfirm ? (
             <button
               type="button"

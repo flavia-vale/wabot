@@ -6,6 +6,7 @@ import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAs
 import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { api } from '@/lib/api'
+import { PIX_KEY, SUPPORT_WA_NUMBER, SUPPORT_PHONE_LABEL, buildPixWaLink } from '@/lib/mobilePixUtils'
 
 function formatDate(value) {
   if (!value) return 'Indisponível'
@@ -21,11 +22,14 @@ export default function SubscriptionPage() {
   useMobileRoutePerf('m/account/subscription')
   const [billing, setBilling] = useState(null)
   const [overview, setOverview] = useState(null)
+  const [me, setMe] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [checkoutPlan, setCheckoutPlan] = useState('')
   const [paymentId, setPaymentId] = useState('')
   const [feedback, setFeedback] = useState('')
+  const [pixCopied, setPixCopied] = useState(false)
+  const [pixFallback, setPixFallback] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -33,13 +37,15 @@ export default function SubscriptionPage() {
       setLoading(true)
       setError('')
       try {
-        const [status, billingOverview] = await Promise.all([
+        const [status, billingOverview, meData] = await Promise.all([
           api.paymentsStatus().catch(() => null),
           api.paymentsOverview().catch(() => null),
+          api.me().catch(() => null),
         ])
         if (!active) return
         setBilling(status || {})
         setOverview(billingOverview || null)
+        setMe(meData || null)
       } catch (e) {
         if (active) setError(e.message || 'Não foi possível carregar assinatura.')
       } finally {
@@ -93,6 +99,7 @@ export default function SubscriptionPage() {
     )
   }
 
+  const userEmail = me?.email || ''
   const plan = (overview?.plan || billing?.plan || 'trial').toUpperCase()
   const payments = Array.isArray(billing?.payments) ? billing.payments : []
   const lastApproved = overview?.lastApprovedPayment
@@ -156,13 +163,56 @@ export default function SubscriptionPage() {
         </div>
       </div>
 
+      <div style={cfgStyles.sectionLabel}>Pagar via PIX</div>
+      <div style={{padding:'0 16px'}}>
+        <div style={{...cfgStyles.cardP, display:'grid', gap: 12}}>
+          <p style={{fontSize: 12, color:'var(--ink-soft)', lineHeight: 1.45}}>Prefere pagar por PIX? Copie a chave abaixo, faça o pagamento e envie o comprovante no WhatsApp para ativar sua conta.</p>
+          <div style={{display:'flex', alignItems:'center', gap: 10}}>
+            <code style={{flex: 1, fontFamily:"'JetBrains Mono', monospace", fontSize: 12, color:'var(--ink)', background:'var(--bg-soft)', border:'1px solid var(--line)', borderRadius: 8, padding:'10px 12px', wordBreak:'break-all'}}>{PIX_KEY}</code>
+          </div>
+          {pixFallback && (
+            <div style={{display:'grid', gap: 6}}>
+              <input readOnly style={{...cfgStyles.field, fontFamily:"'JetBrains Mono', monospace", fontSize: 12}} value={PIX_KEY} onFocus={(event) => event.target.select()} />
+              <div style={{fontSize: 11.5, color:'var(--ink-soft)'}}>Selecione o campo acima e copie manualmente.</div>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(PIX_KEY)
+                setPixCopied(true)
+                window.setTimeout(() => setPixCopied(false), 2500)
+              } catch {
+                setPixFallback(true)
+              }
+            }}
+            style={{...mobi.btn('ghost', true)}}
+          >
+            {pixCopied ? 'Chave copiada!' : 'Copiar chave PIX'}
+          </button>
+          <a
+            href={buildPixWaLink(
+              'Plano Pro',
+              lastApproved?.amount != null ? formatMoney(lastApproved.amount) : 'R$ —',
+              userEmail,
+            )}
+            target="_blank"
+            rel="noreferrer"
+            style={{...mobi.btn('accent', true), textDecoration:'none'}}
+          >
+            Enviar comprovante no WhatsApp
+          </a>
+        </div>
+      </div>
+
       <div style={cfgStyles.sectionLabel}>Recuperar pagamento</div>
       <div style={{padding:'0 16px 24px'}}>
         <div style={{...cfgStyles.cardP, display:'grid', gap: 10}}>
           <p style={{fontSize: 12, color:'var(--ink-soft)', lineHeight: 1.45}}>Se o Mercado Pago aprovou mas o acesso não atualizou, informe o ID do pagamento.</p>
           <input style={cfgStyles.field} value={paymentId} onChange={(event) => setPaymentId(event.target.value)} placeholder="ID do pagamento" />
           <button type="button" onClick={recoverPayment} style={{...mobi.btn('ghost', true)}}>Recuperar com payment_id</button>
-          <a href="https://wa.me/5591999999999" style={{...mobi.btn('accent', true), textDecoration:'none'}}>Falar com suporte</a>
+          <a href={`https://wa.me/${SUPPORT_WA_NUMBER}`} style={{...mobi.btn('accent', true), textDecoration:'none'}}>Falar com suporte ({SUPPORT_PHONE_LABEL})</a>
           {feedback && <div style={{fontSize: 12, color: feedback.includes('Não') || feedback.includes('Informe') ? 'var(--danger)' : 'var(--success)'}}>{feedback}</div>}
         </div>
       </div>
