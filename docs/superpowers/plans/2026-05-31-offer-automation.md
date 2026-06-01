@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Permite que usuários configurem envio automático de ofertas Shopee (via `productOfferV2`) para grupos WhatsApp em intervalos definidos, com filtros por palavra-chave e desconto mínimo.
+**Goal:** Permite que usuários configurem envio automático de ofertas Shopee (via `productOfferV2`) para grupos WhatsApp em intervalos definidos, com filtros por palavra-chave, desconto mínimo, ordenação, ofertas com bônus do vendedor e lojas verificadas.
 
 **Architecture:** Um novo modelo `OfferAutomation` no banco guarda a configuração por grupo (keyword, intervalo, desconto mínimo, deduplicação por itemId). Um `setInterval` dentro do processo `api` verifica a cada 60s quais automações estão vencidas, busca ofertas via API Shopee, formata e envia via `sendBroadcast`. O painel expõe uma nova página de CRUD com linguagem leiga.
 
@@ -53,6 +53,9 @@ model OfferAutomation {
   intervalMinutes Int
   offersPerSend   Int       @default(1)
   minDiscountPct  Int       @default(0)
+  sortType        Int       @default(2)
+  isAMSOffer      Boolean   @default(false)
+  isKeySeller     Boolean   @default(false)
   enabled         Boolean   @default(true)
   lastSentAt      DateTime?
   sentItemIds     String    @default("[]")
@@ -142,6 +145,21 @@ test('buildOffersQuery: generates valid GraphQL string', () => {
   assert.ok(q.includes('offerLink'))
   assert.ok(q.includes('priceDiscountRate'))
 })
+
+test('buildOffersQuery: includes isAMSOffer when true', () => {
+  const q = buildOffersQuery({ keyword: 'festa', page: 1, limit: 10, isAMSOffer: true })
+  assert.ok(q.includes('isAMSOffer: true'))
+})
+
+test('buildOffersQuery: includes isKeySeller when true', () => {
+  const q = buildOffersQuery({ keyword: 'festa', page: 1, limit: 10, isKeySeller: true })
+  assert.ok(q.includes('isKeySeller: true'))
+})
+
+test('buildOffersQuery: uses custom sortType', () => {
+  const q = buildOffersQuery({ keyword: 'festa', page: 1, limit: 10, sortType: 5 })
+  assert.ok(q.includes('sortType: 5'))
+})
 ```
 
 - [ ] **Step 2: Executar teste para confirmar falha**
@@ -169,15 +187,17 @@ function buildAuth(appId, secretKey, payload) {
   return `SHA256 Credential=${appId}, Timestamp=${timestamp}, Signature=${sig}`
 }
 
-export function buildOffersQuery({ keyword, page, limit }) {
+export function buildOffersQuery({ keyword, page, limit, sortType = 2, isAMSOffer = false, isKeySeller = false }) {
   const safeKeyword = keyword.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  const amsParam = isAMSOffer ? ', isAMSOffer: true' : ''
+  const keySellerParam = isKeySeller ? ', isKeySeller: true' : ''
   return `{
     productOfferV2(
       keyword: "${safeKeyword}",
       listType: 2,
-      sortType: 2,
+      sortType: ${sortType},
       page: ${page},
-      limit: ${limit}
+      limit: ${limit}${amsParam}${keySellerParam}
     ) {
       nodes {
         itemId shopId productName imageUrl offerLink
@@ -201,9 +221,9 @@ export function filterOffers(offers, { minDiscountPct, excludeItemIds }) {
   })
 }
 
-export async function fetchOffers({ keyword, minDiscountPct, limit, excludeItemIds, creds }) {
+export async function fetchOffers({ keyword, minDiscountPct, limit, excludeItemIds, creds, sortType = 2, isAMSOffer = false, isKeySeller = false }) {
   const { appId, secretKey } = creds
-  const query = buildOffersQuery({ keyword, page: 1, limit: Math.min(limit * 4, 100) })
+  const query = buildOffersQuery({ keyword, page: 1, limit: Math.min(limit * 4, 100), sortType, isAMSOffer, isKeySeller })
   const body = { query }
   const payload = JSON.stringify(body)
   const authHeader = buildAuth(appId, secretKey, payload)
@@ -352,6 +372,9 @@ export async function runAutomation(automation, { sendBroadcastFn = sendBroadcas
     limit: automation.offersPerSend,
     excludeItemIds: sentItemIds,
     creds,
+    sortType: automation.sortType ?? 2,
+    isAMSOffer: automation.isAMSOffer ?? false,
+    isKeySeller: automation.isKeySeller ?? false,
   })
 
   if (!offers.length) return { skipped: 'no_offers_found' }
@@ -568,7 +591,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
   })
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const { destGroupJid, destGroupName, keyword, intervalMinutes, offersPerSend, minDiscountPct } = req.body ?? {}
+    const { destGroupJid, destGroupName, keyword, intervalMinutes, offersPerSend, minDiscountPct, sortType, isAMSOffer, isKeySeller } = req.body ?? {}
 
     if (!keyword?.trim()) return reply.code(400).send({ error: 'Palavra-chave obrigatória' })
     if (!destGroupJid) return reply.code(400).send({ error: 'Grupo de destino obrigatório' })
@@ -578,6 +601,11 @@ export async function offerAutomationRoutes(app, opts = {}) {
     const perSend = Number(offersPerSend)
     if (!perSend || perSend < 1 || perSend > MAX_OFFERS_PER_SEND) {
       return reply.code(400).send({ error: `offersPerSend deve ser entre 1 e ${MAX_OFFERS_PER_SEND}` })
+    }
+    const VALID_SORT_TYPES = [2, 5]
+    const parsedSortType = Number(sortType ?? 2)
+    if (!VALID_SORT_TYPES.includes(parsedSortType)) {
+      return reply.code(400).send({ error: 'sortType inválido. Use 2 (mais vendidos) ou 5 (maior comissão)' })
     }
 
     return db.offerAutomation.create({
@@ -589,6 +617,9 @@ export async function offerAutomationRoutes(app, opts = {}) {
         intervalMinutes: Number(intervalMinutes),
         offersPerSend: perSend,
         minDiscountPct: Number(minDiscountPct) || 0,
+        sortType: parsedSortType,
+        isAMSOffer: Boolean(isAMSOffer ?? false),
+        isKeySeller: Boolean(isKeySeller ?? false),
       },
     })
   })
