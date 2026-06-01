@@ -4,7 +4,7 @@ import db from '../db.js'
 import { parseCredentialData } from '../credentialHealth.js'
 import { applyVariation } from '../core/copyVariation.js'
 
-const PRICE_DIVISOR = 100000
+const PRICE_DIVISOR = 1
 
 function priceStr(raw) {
   const num = Number(raw)

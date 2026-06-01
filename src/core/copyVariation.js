@@ -42,5 +42,13 @@ export function applyVariation(text, opts = {}) {
     })
   }
 
-  return `${greeting}${text}${trailer}`
+  const prefix = greeting ? `${greeting}\n\n` : ''
+  const suffix = trailer ? `\n\n${trailer}` : ''
+
+  if (!cta) return `${prefix}${text}${suffix}`
+
+  // Inserir CTA antes da última seção (a linha do link 👉)
+  const lastSep = text.lastIndexOf('\n\n')
+  if (lastSep < 0) return `${prefix}${text}\n\n${cta}${suffix}`
+  return `${prefix}${text.slice(0, lastSep)}\n\n${cta}\n${text.slice(lastSep + 2)}${suffix}`
 }

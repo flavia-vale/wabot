@@ -115,6 +115,11 @@ async function run() {
   const nodes = data?.data?.productOfferV2?.nodes ?? []
   console.log(`\n  nodes retornados: ${nodes.length}`)
 
+  if (nodes.length) {
+    console.log('\n=== TODOS OS CAMPOS DO PRIMEIRO PRODUTO (raw) ===')
+    console.log(JSON.stringify(nodes[0], null, 2))
+  }
+
   if (!nodes.length) {
     console.log('\n  DIAGNÓSTICO: A API retornou 0 produtos. Possíveis causas:')
     console.log('    1. Credenciais inválidas/expiradas (a API às vezes retorna vazio em vez de 401)')
