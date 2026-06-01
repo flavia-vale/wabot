@@ -330,6 +330,19 @@ export const api = {
     apiFetch(`/api/logs?status=${status}&page=${page}&limit=${limit}`),
   logsSummary: (period = '7d') => apiFetch(`/api/logs/summary?period=${encodeURIComponent(period)}`),
   logsClear: () => apiFetch('/api/logs/clear', { method: 'DELETE' }),
+
+  offerAutomations: () => apiFetch('/api/offer-automations'),
+  offerAutomationCreate: (data) =>
+    apiFetch('/api/offer-automations', { method: 'POST', body: JSON.stringify(data) }),
+  offerAutomationUpdate: (id, data) =>
+    apiFetch(`/api/offer-automations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  offerAutomationDelete: (id) =>
+    apiFetch(`/api/offer-automations/${id}`, { method: 'DELETE' }),
+  offerAutomationTrigger: (id) =>
+    apiFetch(`/api/offer-automations/${id}/trigger`, { method: 'POST' }),
+  variationsGet: () => apiFetch('/api/config'),
+  variationsUpdate: (copyVariationPoolJson) =>
+    apiFetch('/api/config', { method: 'PUT', body: JSON.stringify({ copyVariationPoolJson }) }),
 }
 
 export function openQRSocket(token, handlers = {}) {

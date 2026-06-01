@@ -1,11 +1,3 @@
-// PR-5.B.2: variação de copy para reduzir fingerprint de fan-out
-// "mesmo texto em N canais simultâneos". Sub-fingerprint dos mais óbvios
-// na visão dos classificadores da Meta.
-//
-// Escolha é determinística por (groupId, date) — mesmo texto sai pro
-// mesmo canal no mesmo dia (não confunde dedupe), mas varia entre canais
-// e ao longo dos dias.
-
 function hash32(s) {
   let h = 2166136261 >>> 0
   for (let i = 0; i < s.length; i++) {
@@ -15,9 +7,10 @@ function hash32(s) {
   return h
 }
 
-export function pickVariant(bucket, groupId, date) {
+export function pickVariant(bucket, groupId, date, random = false) {
   if (!Array.isArray(bucket) || bucket.length === 0) return ''
   if (bucket.length === 1) return bucket[0]
+  if (random) return bucket[Math.floor(Math.random() * bucket.length)]
   const idx = hash32(`${groupId}|${date}`) % bucket.length
   return bucket[idx]
 }
@@ -25,7 +18,7 @@ export function pickVariant(bucket, groupId, date) {
 const PLACEHOLDER_RE = /\{\{(greeting|cta|trailer)\}\}/g
 
 export function applyVariation(text, opts = {}) {
-  const { groupId, date, pool, poolJson } = opts
+  const { groupId, date, pool, poolJson, random = false } = opts
   if (text == null) return text
   let p = pool
   if (!p && poolJson) {
@@ -35,9 +28,9 @@ export function applyVariation(text, opts = {}) {
 
   const today = date ?? new Date().toISOString().slice(0, 10)
 
-  const greeting = pickVariant(p.greetings, groupId, today)
-  const cta = pickVariant(p.ctas, groupId, today + 'c')
-  const trailer = pickVariant(p.trailers, groupId, today + 't')
+  const greeting = pickVariant(p.greetings, groupId, today, random)
+  const cta = pickVariant(p.ctas, groupId, today + 'c', random)
+  const trailer = pickVariant(p.trailers, groupId, today + 't', random)
 
   if (PLACEHOLDER_RE.test(text)) {
     PLACEHOLDER_RE.lastIndex = 0
@@ -49,6 +42,5 @@ export function applyVariation(text, opts = {}) {
     })
   }
 
-  // Sem placeholders: prefixa greeting + sufixa trailer (concatenação leve).
   return `${greeting}${text}${trailer}`
 }

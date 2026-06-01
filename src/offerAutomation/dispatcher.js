@@ -1,0 +1,94 @@
+import { fetchOffers } from './shopeeOffers.js'
+import { sendBroadcast, isRunning } from '../manager.js'
+import db from '../db.js'
+import { parseCredentialData } from '../credentialHealth.js'
+import { applyVariation } from '../core/copyVariation.js'
+
+const PRICE_DIVISOR = 100000
+
+function priceStr(raw) {
+  const num = Number(raw)
+  if (!num || num <= 0) return null
+  return (num / PRICE_DIVISOR).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+export function formatOfferMessage(offer, keyword) {
+  const name = offer.productName ?? 'Produto Shopee'
+  const current = priceStr(offer.priceMin ?? offer.price)
+  const original = priceStr(offer.originPrice)
+  const pct = Number(offer.priceDiscountRate) || 0
+  const stars = offer.ratingStar ? `⭐ ${Number(offer.ratingStar).toFixed(1)}` : ''
+  const sold = offer.sales ? `🛒 ${Number(offer.sales).toLocaleString('pt-BR')}+ vendidos` : ''
+
+  const lines = [`🏷️ *${name}*`, '']
+
+  if (original && current && pct > 0) {
+    lines.push(`💰 ~${original}~ → *${current}* (*-${pct}% OFF*)`)
+  } else if (current) {
+    lines.push(`💰 *${current}*`)
+  }
+
+  const meta = [stars, sold].filter(Boolean).join(' | ')
+  if (meta) lines.push(meta)
+
+  lines.push('', `👉 ${offer.offerLink}`)
+  return lines.join('\n')
+}
+
+function addSentIds(existing, newIds) {
+  const all = [...existing, ...newIds.map(String)]
+  return all.length > 200 ? all.slice(all.length - 200) : all
+}
+
+export async function runAutomation(automation, { sendBroadcastFn = sendBroadcast, isRunningFn = isRunning } = {}) {
+  if (!isRunningFn(automation.userId)) return { skipped: 'bot_not_running' }
+
+  const credRow = await db.credential.findUnique({
+    where: { userId_platform: { userId: automation.userId, platform: 'shopee' } },
+  })
+  if (!credRow) return { skipped: 'no_shopee_credentials' }
+
+  const creds = parseCredentialData(credRow.data)
+  if (!creds?.appId || !creds?.secretKey) return { skipped: 'invalid_shopee_credentials' }
+
+  let sentItemIds
+  try {
+    sentItemIds = JSON.parse(automation.sentItemIds ?? '[]')
+  } catch {
+    sentItemIds = []
+  }
+
+  const offers = await fetchOffers({
+    keyword: automation.keyword,
+    minDiscountPct: automation.minDiscountPct,
+    limit: automation.offersPerSend,
+    excludeItemIds: sentItemIds,
+    creds,
+    sortType: automation.sortType ?? 2,
+    isAMSOffer: automation.isAMSOffer ?? false,
+    isKeySeller: automation.isKeySeller ?? false,
+  })
+
+  if (!offers.length) return { skipped: 'no_offers_found' }
+
+  const toSend = offers.slice(0, automation.offersPerSend)
+
+  const botConfig = await db.botConfig.findUnique({ where: { userId: automation.userId } })
+  const poolJson = botConfig?.copyVariationPoolJson ?? '{}'
+
+  const sentIds = []
+  for (const offer of toSend) {
+    const base = formatOfferMessage(offer, automation.keyword)
+    const text = applyVariation(base, { groupId: automation.destGroupJid, poolJson, random: true })
+    await sendBroadcastFn(automation.userId, text, [automation.destGroupJid])
+    sentIds.push(offer.itemId)
+  }
+
+  const newSentIds = addSentIds(sentItemIds, sentIds)
+  await db.offerAutomation.update({
+    where: { id: automation.id },
+    data: { lastSentAt: new Date(), sentItemIds: JSON.stringify(newSentIds) },
+  })
+
+  return { sent: sentIds.length }
+}
