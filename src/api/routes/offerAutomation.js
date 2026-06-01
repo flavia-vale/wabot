@@ -57,7 +57,11 @@ export async function offerAutomationRoutes(app, opts = {}) {
     const { keyword, intervalMinutes, offersPerSend, minDiscountPct, enabled, destGroupJid, destGroupName } = req.body ?? {}
     const updates = {}
 
-    if (keyword !== undefined) updates.keyword = keyword.trim()
+    if (keyword !== undefined) {
+      const k = keyword.trim()
+      if (!k) return reply.code(400).send({ error: 'Palavra-chave não pode ficar vazia' })
+      updates.keyword = k
+    }
     if (destGroupJid !== undefined) updates.destGroupJid = destGroupJid
     if (destGroupName !== undefined) updates.destGroupName = destGroupName
     if (intervalMinutes !== undefined) {

@@ -351,9 +351,11 @@ export default function OfertasAutomaticasPage() {
 
       {deleteTarget && (
         <ConfirmDialog
+          open
           title="Remover automação"
-          description={`Tem certeza que deseja remover a automação para "${deleteTarget.keyword}"?`}
+          message={`Tem certeza que deseja remover a automação para "${deleteTarget.keyword}"?`}
           confirmLabel="Remover"
+          danger
           onConfirm={() => handleDelete(deleteTarget)}
           onCancel={() => setDeleteTarget(null)}
         />
