@@ -41,6 +41,7 @@ model User {
   customerContacts      CustomerContactLog[]
   customerContactActors CustomerContactLog[] @relation("CustomerContactActor")
   followLogs            FollowLog[]
+  offerAutomations      OfferAutomation[]
   affiliateLinks        AffiliateLink[]
   probeEvidences       ProbeEvidence[]
 
@@ -455,4 +456,27 @@ model TelegramOfferLog {
   @@index([createdAt])
   @@index([status, createdAt])
   @@index([platform, createdAt])
+}
+
+model OfferAutomation {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  destGroupJid    String
+  destGroupName   String
+  keyword         String
+  intervalMinutes Int
+  offersPerSend   Int       @default(1)
+  minDiscountPct  Int       @default(0)
+  sortType        Int       @default(2)
+  isAMSOffer      Boolean   @default(false)
+  isKeySeller     Boolean   @default(false)
+  enabled         Boolean   @default(true)
+  lastSentAt      DateTime?
+  sentItemIds     String    @default("[]")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId, enabled])
+  @@index([enabled, lastSentAt])
 }
