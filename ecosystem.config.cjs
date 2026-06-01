@@ -139,7 +139,7 @@ module.exports = {
     },
     {
       // telegram-offer-bot: bot do Telegram que gera uma oferta pronta a
-      // partir de um link colado (src/telegram/offerBot.js). Faz long-polling
+      // partir de um link colado (src/telegram/offerBotRunner.js). Faz long-polling
       // em getUpdates, então precisa de UM ÚNICO processo por token — rodar
       // duas instâncias com o mesmo TELEGRAM_OFFER_BOT_TOKEN causa 409
       // Conflict e o bot para de receber/responder. Token e
@@ -148,7 +148,7 @@ module.exports = {
       // disso o bot só subia via `npm run telegram:offer-bot` e morria sem
       // ninguém reiniciar.
       name: 'telegram-offer-bot',
-      script: 'src/telegram/offerBot.js',
+      script: 'src/telegram/offerBotRunner.js',
       exec_mode: 'fork',
       instances: 1,
       autorestart: true,
@@ -164,7 +164,7 @@ module.exports = {
       // SEPARADO do de produção no .env de staging — senão os dois pollers
       // colidem em 409 Conflict e ambos param.
       name: 'telegram-offer-bot-staging',
-      script: 'src/telegram/offerBot.js',
+      script: 'src/telegram/offerBotRunner.js',
       exec_mode: 'fork',
       instances: 1,
       autorestart: true,

@@ -38,6 +38,51 @@ export function getMobileGroupPickerItem(group = {}, role, existingJidRoles = ne
   }
 }
 
+// Plataformas que podem ser filtradas por grupo de origem. Mesma lista do
+// painel desktop (app/dashboard/grupos/page.js → ALL_PLATFORMS); manter
+// sincronizado para não divergir o comportamento entre as duas UIs.
+export const MOBILE_GROUP_PLATFORMS = [
+  { id: 'shopee', label: 'Shopee' },
+  { id: 'amazon', label: 'Amazon' },
+  { id: 'mercadolivre', label: 'Mercado Livre' },
+  { id: 'magazineluiza', label: 'Magazine Luiza' },
+]
+
+function parsePlatformCsv(allowedPlatforms) {
+  return String(allowedPlatforms || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+}
+
+// Sem seleção explícita (csv vazio/null) significa "todas as plataformas
+// liberadas" — exatamente como o desktop trata um grupo recém-cadastrado.
+export function isMobilePlatformSelected(allowedPlatforms, platformId) {
+  if (!allowedPlatforms) return true
+  return new Set(parsePlatformCsv(allowedPlatforms)).has(platformId)
+}
+
+// Retorna o novo csv de allowedPlatforms ao ligar/desligar uma plataforma.
+// Quando o grupo ainda não tem seleção manual, parte do conjunto completo
+// para que desmarcar uma plataforma deixe as demais ativas (igual desktop).
+export function toggleMobilePlatform(allowedPlatforms, platformId) {
+  const current = allowedPlatforms
+    ? parsePlatformCsv(allowedPlatforms)
+    : MOBILE_GROUP_PLATFORMS.map((platform) => platform.id)
+  const next = current.includes(platformId)
+    ? current.filter((id) => id !== platformId)
+    : [...current, platformId]
+  return next.join(',')
+}
+
+// Liga/desliga um grupo de destino na lista de alvos de um grupo monitorado.
+export function toggleMobileTargetPostId(postIds = [], postId) {
+  const current = Array.isArray(postIds) ? postIds : []
+  return current.includes(postId)
+    ? current.filter((id) => id !== postId)
+    : [...current, postId]
+}
+
 export const MOBILE_GROUP_DUPLICATE_FEEDBACK = 'Este grupo já está cadastrado para monitorar/publicar.'
 
 export function prepareMobileGroupAddPayload(data = {}, role, existingJidRoles = new Set()) {

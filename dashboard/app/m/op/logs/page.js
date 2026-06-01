@@ -194,6 +194,8 @@ export default function LogsPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [copyNotice, setCopyNotice] = useState('');
+  const [clearArmed, setClearArmed] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   const loadFirstPage = useCallback(async ({ silent = false, isActive = () => true } = {}) => {
     if (!silent) setLoading(true);
@@ -240,6 +242,25 @@ export default function LogsPage() {
       setError(e.message || 'Não foi possível carregar mais envios.');
     } finally {
       setLoadingMore(false);
+    }
+  }
+
+  async function clearLogs() {
+    if (clearing) return;
+    setClearing(true);
+    setError('');
+    try {
+      await api.logsClear();
+      setClearArmed(false);
+      setRawLogs([]);
+      setTotal(0);
+      setPage(1);
+      setExpanded(null);
+      await loadFirstPage({ silent: true });
+    } catch (e) {
+      setError(e.message || 'Não foi possível limpar o histórico.');
+    } finally {
+      setClearing(false);
     }
   }
 
@@ -471,6 +492,33 @@ export default function LogsPage() {
           </div>
         )}
       </div>
+
+      {!loading && !error && items.length > 0 && (
+        <div style={{padding:'8px 16px 0'}}>
+          {clearArmed ? (
+            <div style={{padding: 14, background:'color-mix(in oklab, var(--danger) 8%, var(--surface))', border:'1px solid color-mix(in oklab, var(--danger) 25%, var(--line))', borderRadius: 14, display:'grid', gap: 10}}>
+              <div style={{fontSize: 12.5, color:'var(--ink)', lineHeight: 1.45}}>
+                Isso apaga <strong>todo o histórico de envios</strong>. Não dá para desfazer. Os grupos e configurações não são afetados.
+              </div>
+              <div style={{display:'flex', gap: 8}}>
+                <button type="button" onClick={() => setClearArmed(false)} disabled={clearing} style={{flex: 1, padding:'11px', borderRadius: 999, border:'1px solid var(--line)', background:'var(--surface)', color:'var(--ink)', fontWeight: 700, fontFamily:'inherit', cursor:'pointer'}}>
+                  Cancelar
+                </button>
+                <button type="button" onClick={clearLogs} disabled={clearing} style={{flex: 1, padding:'11px', borderRadius: 999, border:'1px solid var(--danger)', background:'var(--danger)', color:'white', fontWeight: 700, fontFamily:'inherit', cursor:'pointer'}}>
+                  {clearing ? 'Apagando…' : 'Apagar tudo'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setClearArmed(true)} style={{width:'100%', padding:'12px', borderRadius: 999, border:'1px solid var(--line)', background:'var(--surface)', color:'var(--danger)', fontWeight: 700, fontFamily:'inherit', cursor:'pointer', display:'inline-flex', alignItems:'center', justifyContent:'center', gap: 6}}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+              </svg>
+              Limpar histórico de envios
+            </button>
+          )}
+        </div>
+      )}
 
       <div style={{height: 20}}/>
     </MobileShell>

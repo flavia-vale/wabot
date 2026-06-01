@@ -1,14 +1,10 @@
 import 'dotenv/config'
 
-import { resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
-
 import { fetchProductInfo as defaultFetchProductInfo } from '../converters/productInfoScraper.js'
 import { fetchProductImage as defaultFetchProductImage, fetchImageBuffer as defaultFetchImageBuffer, normalizeImageForWhatsApp as defaultNormalizeImage } from '../converters/imageScrapers.js'
 import { detectLinks } from '../detector.js'
 import { buildMobileOfferText } from '../../dashboard/lib/mobileOfferComposer.js'
 import { PRESET_TEMPLATE_BODIES } from '../../dashboard/lib/mobileTemplateStore.js'
-import { recordTelegramOfferLog } from './offerLog.js'
 
 const HTTP_URL_RE = /https?:\/\/[^\s<>()]+/gi
 const DEFAULT_POLL_TIMEOUT_SECONDS = 25
@@ -405,27 +401,4 @@ export function createTelegramOfferBot({
   }
 
   return { handleUpdate, pollOnce, start, stop }
-}
-
-export function isTelegramOfferBotEntrypoint({ argv = process.argv, env = process.env, moduleUrl = import.meta.url } = {}) {
-  const modulePath = resolve(fileURLToPath(moduleUrl))
-  const candidates = [argv?.[1], env?.pm_exec_path]
-  return candidates.some(candidate => {
-    if (!candidate) return false
-    try {
-      return resolve(String(candidate)) === modulePath
-    } catch {
-      return false
-    }
-  })
-}
-
-if (isTelegramOfferBotEntrypoint()) {
-  const bot = createTelegramOfferBot({ recordOfferLog: recordTelegramOfferLog })
-  const stop = () => {
-    bot.stop()
-  }
-  process.once('SIGINT', stop)
-  process.once('SIGTERM', stop)
-  await bot.start()
 }

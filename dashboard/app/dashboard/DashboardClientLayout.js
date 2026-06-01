@@ -14,6 +14,8 @@ const navGroups = [
       { href: '/dashboard/envio', icon: '✉️', label: 'Envio de mensagens' },
       { href: '/dashboard/converte-links', icon: '🔗', label: 'Converte links' },
       { href: '/dashboard/gerar-oferta', icon: '🛍️', label: 'Gerar oferta' },
+      { href: '/dashboard/ofertas-automaticas', icon: '🤖', label: 'Ofertas automáticas' },
+      { href: '/dashboard/variacoes-de-texto', icon: '🎲', label: 'Ganchos e CTAs' },
       { href: '/dashboard/logs', icon: '📋', label: 'Logs' },
     ],
   },
