@@ -95,6 +95,24 @@ export async function getAdvancedPreservationAccess(userId, opts = {}) {
   return { active, plan: user.plan, accessExpiresAt }
 }
 
+/**
+ * Preservação EFETIVA = o plano permite (Pro ou Trial ativo) **E** o usuário
+ * ligou o flag mestre `BotConfig.preservationEnabled`.
+ *
+ * O flag é opt-in (default false): mesmo um usuário Pro não tem o pipeline de
+ * preservação (throttle, stagger, mutação de imagem, snapshots, follow-guard)
+ * ativo enquanto não ligar explicitamente. O gate das rotas continua sendo só
+ * por plano (`getAdvancedPreservationAccess`), para que o Pro consiga religar.
+ *
+ * @param {boolean|{ active?: boolean }} planAccess  resultado de getAdvancedPreservationAccess ou booleano
+ * @param {{ preservationEnabled?: boolean }|null} botConfig
+ * @returns {boolean}
+ */
+export function isPreservationActive(planAccess, botConfig) {
+  const planAllows = typeof planAccess === 'boolean' ? planAccess : Boolean(planAccess?.active)
+  return planAllows && botConfig?.preservationEnabled === true
+}
+
 export function buildFeatureGateError(feature = FEATURE_CODES.CHANNELS) {
   const featureCode = String(feature || FEATURE_CODES.CHANNELS)
   if (featureCode === FEATURE_CODES.ADVANCED_PRESERVATION) {
