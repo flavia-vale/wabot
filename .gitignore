@@ -12,4 +12,7 @@ dashboard/.next/
 *.db-journal
 *.db-wal
 *.db-shm
-.claude/worktrees/
+
+# Twin workflow scratch/artefatos (não versionar)
+twin-plan-current.md
+twin-plans/
