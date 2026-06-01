@@ -9,6 +9,7 @@ import { cfgStyles, mobi } from '@/components/mobile/mobileStyles'
 import { mobileRoutes } from '@/components/mobile/routes'
 import { api } from '@/lib/api'
 import { canAccessAdvancedPreservation } from '@/lib/plan'
+import { parsePool, writePool, countPool } from '@/lib/mobileCopyVariationPool'
 
 const THROTTLE_PRESETS = [
   {
@@ -77,6 +78,7 @@ export default function PreservacaoPage() {
 
   const [draft, setDraft] = useState(null)
   const [quietHours, setQuietHours] = useState({ startHour: 0, endHour: 8, tz: 'America/Sao_Paulo' })
+  const [poolDraft, setPoolDraft] = useState({ greetings: [], ctas: [], trailers: [] })
 
   const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState('')
@@ -122,6 +124,7 @@ export default function PreservacaoPage() {
           const cfg = data.config ?? {}
           setDraft({ ...cfg })
           setQuietHours(parseQuietHours(cfg.channelQuietHoursJson))
+          setPoolDraft(parsePool(cfg.copyVariationPoolJson))
         })
         .catch((e) => { if (active) setConfigError(e.message || 'Erro ao carregar configurações.') })
         .finally(() => { if (active) setConfigLoading(false) })
@@ -183,6 +186,7 @@ export default function PreservacaoPage() {
       const builtDraft = {
         ...draft,
         channelQuietHoursJson: JSON.stringify(quietHours),
+        copyVariationPoolJson: writePool(poolDraft),
       }
       const patch = buildDifferentialPatch(config, builtDraft)
       if (Object.keys(patch).length === 0) {
@@ -194,6 +198,7 @@ export default function PreservacaoPage() {
       setConfig(updatedConfig)
       setDraft({ ...updatedConfig })
       setQuietHours(parseQuietHours(updatedConfig.channelQuietHoursJson))
+      setPoolDraft(parsePool(updatedConfig.copyVariationPoolJson))
       setSaveSuccess('Configurações salvas.')
     } catch (e) {
       setSaveError(e.message || 'Erro ao salvar configurações.')
@@ -516,6 +521,32 @@ export default function PreservacaoPage() {
               >
                 <div style={cfgStyles.toggleKnob(!!draft.probeEnabled)} />
               </button>
+            </div>
+          </div>
+
+          <div style={cfgStyles.cardP}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>
+              Variações de texto
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--ink-soft)', marginBottom: 12, lineHeight: 1.5 }}>
+              O bot alterna entre essas variações para parecer mais humano. {countPool(poolDraft).total} variações no total.
+            </div>
+            <div style={{ display: 'grid', gap: 12 }}>
+              {[
+                { key: 'greetings', label: 'Saudações' },
+                { key: 'ctas', label: 'Chamadas (CTA)' },
+                { key: 'trailers', label: 'Encerramentos' },
+              ].map(({ key, label }) => (
+                <label key={key} style={{ display: 'grid', gap: 6 }}>
+                  <span style={cfgStyles.label}>{label}</span>
+                  <textarea
+                    style={{ ...cfgStyles.field, minHeight: 68, resize: 'vertical' }}
+                    placeholder="Uma variação por linha"
+                    value={poolDraft[key].join('\n')}
+                    onChange={(e) => setPoolDraft((current) => ({ ...current, [key]: e.target.value.split('\n') }))}
+                  />
+                </label>
+              ))}
             </div>
           </div>
 
