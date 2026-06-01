@@ -54,3 +54,37 @@ test('buildOffersQuery: uses custom sortType', () => {
   const q = buildOffersQuery({ keyword: 'festa', page: 1, limit: 10, sortType: 5 })
   assert.ok(q.includes('sortType: 5'))
 })
+
+import { formatOfferMessage } from '../src/offerAutomation/dispatcher.js'
+
+test('formatOfferMessage: includes product name and price', () => {
+  const offer = {
+    productName: 'Balão Metalizado Estrela',
+    priceMin: 1990000,
+    originPrice: 3500000,
+    priceDiscountRate: 43,
+    offerLink: 'https://shope.ee/abc123',
+    sales: 1250,
+    ratingStar: 4.8,
+  }
+  const msg = formatOfferMessage(offer, 'decoração de festas')
+  assert.ok(msg.includes('Balão Metalizado Estrela'))
+  assert.ok(msg.includes('43%'))
+  assert.ok(msg.includes('https://shope.ee/abc123'))
+  assert.ok(msg.includes('R$'))
+})
+
+test('formatOfferMessage: handles missing originPrice gracefully', () => {
+  const offer = {
+    productName: 'Kit Festa Junina',
+    priceMin: 2500000,
+    originPrice: 0,
+    priceDiscountRate: 0,
+    offerLink: 'https://shope.ee/xyz456',
+    sales: 80,
+    ratingStar: 4.2,
+  }
+  const msg = formatOfferMessage(offer, 'festa')
+  assert.ok(msg.includes('Kit Festa Junina'))
+  assert.ok(msg.includes('https://shope.ee/xyz456'))
+})
