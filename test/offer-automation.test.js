@@ -21,13 +21,13 @@ test('filterOffers: excludes already-sent itemIds', () => {
   assert.deepEqual(result.map(o => o.itemId), ['2'])
 })
 
-test('filterOffers: requires originPrice > priceMin for real discount when rate is 0', () => {
+test('filterOffers: exclui produto com priceDiscountRate = 0 (originPrice não existe na API)', () => {
   const offers = [
-    { itemId: '1', priceDiscountRate: 0, originPrice: 0, priceMin: 500 },
-    { itemId: '2', priceDiscountRate: 0, originPrice: 1000, priceMin: 800 },
+    { itemId: '1', priceDiscountRate: 0, priceMin: 500 },
+    { itemId: '2', priceDiscountRate: 0, priceMin: 800 },
   ]
   const result = filterOffers(offers, { minDiscountPct: 0, excludeItemIds: [] })
-  assert.deepEqual(result.map(o => o.itemId), ['2'])
+  assert.deepEqual(result.map(o => o.itemId), [])
 })
 
 test('buildOffersQuery: generates valid GraphQL string', () => {

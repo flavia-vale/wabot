@@ -14,9 +14,13 @@ function priceStr(raw) {
 
 export function formatOfferMessage(offer, keyword) {
   const name = offer.productName ?? 'Produto Shopee'
-  const current = priceStr(offer.priceMin ?? offer.price)
-  const original = priceStr(offer.originPrice)
+  const currentRaw = Number(offer.priceMin ?? offer.price) || 0
   const pct = Number(offer.priceDiscountRate) || 0
+  const current = priceStr(currentRaw)
+
+  // originPrice não existe na API — calcular via álgebra reversa do desconto
+  const originalRaw = pct > 0 && currentRaw > 0 ? Math.round(currentRaw * 100 / (100 - pct)) : 0
+  const original = priceStr(originalRaw)
   const stars = offer.ratingStar ? `⭐ ${Number(offer.ratingStar).toFixed(1)}` : ''
   const sold = offer.sales ? `🛒 ${Number(offer.sales).toLocaleString('pt-BR')}+ vendidos` : ''
 

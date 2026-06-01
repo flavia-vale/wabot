@@ -28,7 +28,7 @@ export function buildOffersQuery({ keyword, page, limit, sortType = 2, listType 
     ) {
       nodes {
         itemId shopId productName imageUrl offerLink
-        price priceMin priceMax originPrice priceDiscountRate
+        price priceMin priceMax priceDiscountRate
         commissionRate sales ratingStar
       }
     }
@@ -40,11 +40,7 @@ export function filterOffers(offers, { minDiscountPct, excludeItemIds }) {
   return offers.filter(o => {
     if (excludeSet.has(String(o.itemId))) return false
     const rate = Number(o.priceDiscountRate) || 0
-    const origin = Number(o.originPrice) || 0
-    const current = Number(o.priceMin ?? o.price) || 0
-    const hasRealDiscount = rate > 0 || (origin > 0 && current > 0 && current < origin)
-    if (!hasRealDiscount) return false
-    return rate >= minDiscountPct
+    return rate > 0 && rate >= minDiscountPct
   })
 }
 

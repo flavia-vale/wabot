@@ -53,17 +53,17 @@ test('filterOffers: trata itemId numérico e string como equivalentes no exclude
   assert.deepEqual(result.map(o => o.itemId), [99])
 })
 
-test('filterOffers: aceita desconto de 0% quando minDiscountPct é 0 e há desconto real em preço', () => {
+test('filterOffers: exclui produto com rate=0 mesmo que minDiscountPct seja 0', () => {
   const offers = [
-    { itemId: 'x', priceDiscountRate: 0, originPrice: 2000, priceMin: 1500 },
+    { itemId: 'x', priceDiscountRate: 0, priceMin: 1500 },
   ]
   const result = filterOffers(offers, { minDiscountPct: 0, excludeItemIds: [] })
-  assert.equal(result.length, 1)
+  assert.equal(result.length, 0)
 })
 
-test('filterOffers: usa price como fallback de priceMin', () => {
+test('filterOffers: aceita produto com rate > 0 quando minDiscountPct é 0', () => {
   const offers = [
-    { itemId: 'y', priceDiscountRate: 0, originPrice: 2000, price: 1500, priceMin: null },
+    { itemId: 'y', priceDiscountRate: 5, price: 1500, priceMin: null },
   ]
   const result = filterOffers(offers, { minDiscountPct: 0, excludeItemIds: [] })
   assert.equal(result.length, 1)
