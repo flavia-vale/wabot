@@ -13,6 +13,7 @@ const DEFAULTS = {
   postToStatus: false,
   brandingGroupLink: '',
   brandingCtaText: DEFAULT_BRANDING_CTA_TEXT,
+  copyVariationPoolJson: '{}',
 }
 
 
@@ -34,12 +35,13 @@ function isIntegerInRange(value) {
 export async function configRoutes(app) {
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
     const cfg = await db.botConfig.findUnique({ where: { userId: req.user.sub } })
-    return cfg ?? { ...DEFAULTS, userId: req.user.sub }
+    if (!cfg) return { ...DEFAULTS, userId: req.user.sub }
+    return { ...cfg, copyVariationPoolJson: cfg.copyVariationPoolJson ?? '{}' }
   })
 
   app.put('/', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
-    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg, feedGlobal, postToStatus, brandingGroupLink, brandingCtaText } = req.body ?? {}
+    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg, feedGlobal, postToStatus, brandingGroupLink, brandingCtaText, copyVariationPoolJson } = req.body ?? {}
 
     if (delayMin !== undefined && !isIntegerInRange(delayMin)) {
       return reply.code(400).send({ error: 'delayMin deve ser um número inteiro entre 0 e 300' })
@@ -52,6 +54,15 @@ export async function configRoutes(app) {
     }
     if (postToStatus !== undefined && typeof postToStatus !== 'boolean') {
       return reply.code(400).send({ error: 'postToStatus deve ser boolean' })
+    }
+
+    if (copyVariationPoolJson !== undefined) {
+      if (typeof copyVariationPoolJson !== 'string') {
+        return reply.code(400).send({ error: 'copyVariationPoolJson deve ser string JSON' })
+      }
+      try { JSON.parse(copyVariationPoolJson) } catch {
+        return reply.code(400).send({ error: 'copyVariationPoolJson contém JSON inválido' })
+      }
     }
 
     const requestsAdvancedPreservation = feedGlobal === true || postToStatus === true
@@ -86,6 +97,7 @@ export async function configRoutes(app) {
         postToStatus: postToStatus ?? DEFAULTS.postToStatus,
         brandingGroupLink: normalizedBrandingGroupLink,
         brandingCtaText: normalizedBrandingCtaText,
+        ...(copyVariationPoolJson !== undefined && { copyVariationPoolJson }),
       },
       update: {
         ...(delayMin !== undefined && { delayMin }),
@@ -97,6 +109,7 @@ export async function configRoutes(app) {
         ...(postToStatus !== undefined && { postToStatus }),
         ...(brandingGroupLink !== undefined && { brandingGroupLink: normalizedBrandingGroupLink }),
         ...(brandingCtaText !== undefined && { brandingCtaText: normalizedBrandingCtaText }),
+        ...(copyVariationPoolJson !== undefined && { copyVariationPoolJson }),
       },
     })
     reloadConfig(userId)
