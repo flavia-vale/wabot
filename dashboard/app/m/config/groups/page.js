@@ -8,11 +8,15 @@ import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { api } from '@/lib/api'
 import {
+  MOBILE_GROUP_PLATFORMS,
   buildExistingJidRoleSet,
   getMobileGroupPickerItem,
   getRoleForMobileGroupTab,
+  isMobilePlatformSelected,
   prepareMobileGroupAddPayload,
   sortWhatsAppGroupsForMobilePicker,
+  toggleMobilePlatform,
+  toggleMobileTargetPostId,
 } from '@/lib/mobileGroupPicker'
 
 const avatarColor = (name = '') => {
@@ -38,6 +42,12 @@ export default function GroupsPage() {
   const [actionLoading, setActionLoading] = useState('')
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState('')
+  const [expandedConfigId, setExpandedConfigId] = useState(null)
+  const [savingGroupId, setSavingGroupId] = useState(null)
+  const [savedGroupId, setSavedGroupId] = useState(null)
+  const [targetEditorId, setTargetEditorId] = useState(null)
+  const [targetPostIds, setTargetPostIds] = useState([])
+  const [targetLoading, setTargetLoading] = useState(false)
 
   async function loadGroups() {
     setLoading(true)
@@ -126,6 +136,64 @@ export default function GroupsPage() {
     }
   }
 
+  async function handleUpdateGroup(id, data) {
+    // Otimista: reflete na UI antes da resposta para o toggle parecer instantâneo.
+    setGroups((current) => current.map((group) => (group.id === id ? { ...group, ...data } : group)))
+    setSavingGroupId(id)
+    setSavedGroupId(null)
+    setFeedback('')
+    try {
+      await api.updateGroup(id, data)
+      setSavedGroupId(id)
+      window.setTimeout(() => setSavedGroupId((value) => (value === id ? null : value)), 1500)
+    } catch (err) {
+      setFeedback(err.message || 'Não foi possível salvar o filtro do grupo.')
+      await loadGroups()
+    } finally {
+      setSavingGroupId((value) => (value === id ? null : value))
+    }
+  }
+
+  function toggleGroupPlatform(group, platformId) {
+    handleUpdateGroup(group.id, { allowedPlatforms: toggleMobilePlatform(group.allowedPlatforms, platformId) })
+  }
+
+  async function openTargetEditor(groupId) {
+    setFeedback('')
+    setTargetLoading(true)
+    setTargetEditorId(groupId)
+    try {
+      const data = await api.groupTargets(groupId)
+      setTargetPostIds(Array.isArray(data?.postIds) ? data.postIds : [])
+    } catch (err) {
+      setFeedback(err.message || 'Não foi possível carregar os destinos deste grupo.')
+      setTargetEditorId(null)
+    } finally {
+      setTargetLoading(false)
+    }
+  }
+
+  function toggleTargetPost(postId) {
+    setTargetPostIds((current) => toggleMobileTargetPostId(current, postId))
+  }
+
+  async function saveTargetPosts() {
+    if (!targetEditorId) return
+    setTargetLoading(true)
+    setFeedback('')
+    try {
+      await api.updateGroupTargets(targetEditorId, targetPostIds)
+      setTargetEditorId(null)
+      setFeedback('Destinos atualizados.')
+    } catch (err) {
+      setFeedback(err.message || 'Não foi possível salvar os destinos.')
+    } finally {
+      setTargetLoading(false)
+    }
+  }
+
+  const postGroups = useMemo(() => groups.filter((group) => group.role === 'post'), [groups])
+
   const feedbackIsError = feedback && (feedback.includes('Não') || feedback === 'Este grupo já está cadastrado para monitorar/publicar.')
 
   if (loading) {
@@ -177,17 +245,70 @@ export default function GroupsPage() {
             </div>
           ) : currentGroups.map((group, index) => {
             const name = group.subject || group.name || 'Sem nome'
+            const isLast = index === currentGroups.length - 1
+            const isMonitor = role === 'monitor'
+            const configOpen = expandedConfigId === group.id
             return (
-              <div key={group.id} style={cfgStyles.row(index === currentGroups.length - 1)}>
-                <div style={{width: 40, height: 40, borderRadius:'50%', background: avatarColor(name), display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontWeight: 700, fontSize: 12, flexShrink: 0}}>{initials(name)}</div>
-                <div style={cfgStyles.rowMain}>
-                  <div style={cfgStyles.rowTitle}>{name}</div>
-                  <div style={cfgStyles.rowSub}>{group.kind === 'channel' ? 'canal' : 'grupo'} · {group.waJid || group.jid || 'sem JID'}</div>
+              <div key={group.id} style={{ borderBottom: isLast && !configOpen ? 'none' : '1px solid var(--line)' }}>
+                <div style={{ ...cfgStyles.row(true), borderBottom: 'none' }}>
+                  <div style={{width: 40, height: 40, borderRadius:'50%', background: avatarColor(name), display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontWeight: 700, fontSize: 12, flexShrink: 0}}>{initials(name)}</div>
+                  <div style={cfgStyles.rowMain}>
+                    <div style={cfgStyles.rowTitle}>{name}</div>
+                    <div style={cfgStyles.rowSub}>{group.kind === 'channel' ? 'canal' : 'grupo'} · {group.waJid || group.jid || 'sem JID'}</div>
+                  </div>
+                  {savingGroupId === group.id && <span style={{fontSize: 10.5, color:'var(--accent-strong)', fontWeight: 600}}>salvando…</span>}
+                  {savedGroupId === group.id && <span style={{fontSize: 10.5, color:'var(--success)', fontWeight: 600}}>salvo</span>}
+                  {isMonitor && (
+                    <button type="button" onClick={() => setExpandedConfigId(configOpen ? null : group.id)} aria-expanded={configOpen} style={{border:'1px solid var(--line)', background:'transparent', borderRadius: 999, color:'var(--ink)', padding:'6px 9px', fontSize: 11, fontWeight: 700}}>
+                      {configOpen ? 'Fechar' : 'Filtros'}
+                    </button>
+                  )}
+                  <button type="button" onClick={() => deleteGroup(group)} disabled={actionLoading === `delete-${group.id}`} style={{border:'1px solid var(--line)', background:'transparent', borderRadius: 999, color:'var(--danger)', padding:'6px 9px', fontSize: 11, fontWeight: 700}}>
+                    Remover
+                  </button>
                 </div>
-                <span style={cfgStyles.pill('success')}>cadastrado</span>
-                <button type="button" onClick={() => deleteGroup(group)} disabled={actionLoading === `delete-${group.id}`} style={{border:'1px solid var(--line)', background:'transparent', borderRadius: 999, color:'var(--danger)', padding:'6px 9px', fontSize: 11, fontWeight: 700}}>
-                  Remover
-                </button>
+
+                {isMonitor && configOpen && (
+                  <div style={{padding:'4px 16px 16px', display:'grid', gap: 14}}>
+                    <div>
+                      <div style={{...cfgStyles.label, marginBottom: 6}}>Palavras bloqueadas só neste grupo</div>
+                      <input
+                        style={cfgStyles.field}
+                        placeholder="ex: usado, recondicionado"
+                        defaultValue={group.blockedKeywords ?? ''}
+                        onBlur={(event) => {
+                          const value = event.target.value
+                          if (value !== (group.blockedKeywords ?? '')) handleUpdateGroup(group.id, { blockedKeywords: value })
+                        }}
+                      />
+                      <div style={{fontSize: 11, color:'var(--ink-faint)', marginTop: 6, lineHeight: 1.4}}>Some além da lista global de Preferências. Separe por vírgula.</div>
+                    </div>
+
+                    <div>
+                      <div style={{...cfgStyles.label, marginBottom: 8}}>Lojas que esse grupo aceita</div>
+                      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap: 8}}>
+                        {MOBILE_GROUP_PLATFORMS.map((platform) => {
+                          const checked = isMobilePlatformSelected(group.allowedPlatforms, platform.id)
+                          return (
+                            <label key={platform.id} style={{display:'flex', alignItems:'center', gap: 8, fontSize: 13, color:'var(--ink)', cursor:'pointer'}}>
+                              <input type="checkbox" checked={checked} onChange={() => toggleGroupPlatform(group, platform.id)} style={{width: 17, height: 17}} />
+                              {platform.label}
+                            </label>
+                          )
+                        })}
+                      </div>
+                      <div style={{fontSize: 11, color:'var(--ink-faint)', marginTop: 6, lineHeight: 1.4}}>Sem marcar nada específico, usa as lojas globais.</div>
+                    </div>
+
+                    <div>
+                      <div style={{...cfgStyles.label, marginBottom: 6}}>Para onde esse grupo envia</div>
+                      <button type="button" onClick={() => openTargetEditor(group.id)} style={{...mobi.btn('ghost', true)}}>
+                        Escolher destinos
+                      </button>
+                      <div style={{fontSize: 11, color:'var(--ink-faint)', marginTop: 6, lineHeight: 1.4}}>Sem escolha, envia para todos os grupos de publicação.</div>
+                    </div>
+                  </div>
+                )}
               </div>
             )
           })}
@@ -246,6 +367,48 @@ export default function GroupsPage() {
             <button type="button" onClick={() => addGroupFromData(manualForm)} disabled={!manualForm.waJid.trim() || actionLoading.startsWith('add-')} style={{...mobi.btn('accent', true), opacity: !manualForm.waJid.trim() ? 0.6 : 1}}>
               Salvar {tab === 'origem' ? 'origem' : 'destino'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {targetEditorId && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Escolher destinos do grupo"
+          onClick={() => !targetLoading && setTargetEditorId(null)}
+          style={{position:'fixed', inset: 0, zIndex: 80, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'flex-end', justifyContent:'center'}}
+        >
+          <div onClick={(event) => event.stopPropagation()} style={{width:'100%', maxWidth: 520, background:'var(--surface)', borderTopLeftRadius: 22, borderTopRightRadius: 22, padding:'20px 18px 24px', display:'grid', gap: 14, maxHeight:'80vh', overflowY:'auto'}}>
+            <div>
+              <div style={cfgStyles.rowTitle}>Para onde esse grupo envia</div>
+              <p style={{fontSize: 12, color:'var(--ink-soft)', lineHeight: 1.45, marginTop: 4}}>
+                Marque os grupos de publicação que recebem o que esse grupo capta. Sem nenhum marcado, envia para todos.
+              </p>
+            </div>
+            {postGroups.length === 0 ? (
+              <div style={{fontSize: 13, color:'var(--warn)', lineHeight: 1.45}}>
+                Cadastre ao menos um grupo na aba Publicar para escolher destinos.
+              </div>
+            ) : postGroups.map((group) => {
+              const name = group.subject || group.name || 'Sem nome'
+              const checked = targetPostIds.includes(group.id)
+              return (
+                <label key={group.id} style={{display:'flex', alignItems:'center', gap: 10, padding:'12px 14px', border:'1px solid var(--line)', borderRadius: 12, fontSize: 13, color:'var(--ink)', cursor:'pointer'}}>
+                  <input type="checkbox" checked={checked} onChange={() => toggleTargetPost(group.id)} style={{width: 17, height: 17}} />
+                  <span style={{minWidth: 0}}>
+                    <span style={{display:'block', fontWeight: 600}}>{name}</span>
+                    <span style={{display:'block', fontSize: 11, color:'var(--ink-faint)', wordBreak:'break-all'}}>{group.kind === 'channel' ? 'canal' : 'grupo'}</span>
+                  </span>
+                </label>
+              )
+            })}
+            <div style={{display:'flex', gap: 8}}>
+              <button type="button" onClick={() => setTargetEditorId(null)} disabled={targetLoading} style={{...mobi.btn('ghost', true)}}>Cancelar</button>
+              <button type="button" onClick={saveTargetPosts} disabled={targetLoading || postGroups.length === 0} style={{...mobi.btn('accent', true)}}>
+                {targetLoading ? 'Salvando…' : 'Salvar destinos'}
+              </button>
+            </div>
           </div>
         </div>
       )}

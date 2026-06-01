@@ -2,11 +2,15 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   MOBILE_GROUP_DUPLICATE_FEEDBACK,
+  MOBILE_GROUP_PLATFORMS,
   buildExistingJidRoleSet,
   getMobileGroupPickerItem,
   getRoleForMobileGroupTab,
+  isMobilePlatformSelected,
   prepareMobileGroupAddPayload,
   sortWhatsAppGroupsForMobilePicker,
+  toggleMobilePlatform,
+  toggleMobileTargetPostId,
 } from '../dashboard/lib/mobileGroupPicker.js'
 
 test('aba ativa define se o grupo será adicionado como monitor ou post', () => {
@@ -80,4 +84,43 @@ test('add-flow manual detecta duplicidade antes de montar chamada para API', () 
   assert.equal(result.reason, 'duplicate')
   assert.equal(result.feedback, MOBILE_GROUP_DUPLICATE_FEEDBACK)
   assert.equal('payload' in result, false)
+})
+
+test('sem seleção manual de plataforma, todas contam como selecionadas', () => {
+  for (const platform of MOBILE_GROUP_PLATFORMS) {
+    assert.equal(isMobilePlatformSelected('', platform.id), true)
+    assert.equal(isMobilePlatformSelected(null, platform.id), true)
+  }
+})
+
+test('com csv explícito, só as plataformas listadas contam como selecionadas', () => {
+  assert.equal(isMobilePlatformSelected('shopee,amazon', 'shopee'), true)
+  assert.equal(isMobilePlatformSelected('shopee,amazon', 'mercadolivre'), false)
+})
+
+test('desmarcar a primeira plataforma parte do conjunto completo', () => {
+  // grupo sem seleção (todas ativas) → desmarcar shopee mantém as outras 3
+  const next = toggleMobilePlatform('', 'shopee')
+  assert.deepEqual(next.split(',').sort(), ['amazon', 'magazineluiza', 'mercadolivre'])
+})
+
+test('marcar e desmarcar plataforma sobre csv existente é idempotente em par', () => {
+  const removed = toggleMobilePlatform('shopee,amazon', 'amazon')
+  assert.equal(removed, 'shopee')
+  const readded = toggleMobilePlatform(removed, 'amazon')
+  assert.deepEqual(readded.split(','), ['shopee', 'amazon'])
+})
+
+test('toggle de alvo adiciona e remove o id de destino sem mutar o array', () => {
+  const base = [1, 2]
+  const added = toggleMobileTargetPostId(base, 3)
+  assert.deepEqual(added, [1, 2, 3])
+  assert.deepEqual(base, [1, 2])
+
+  const removed = toggleMobileTargetPostId(added, 2)
+  assert.deepEqual(removed, [1, 3])
+})
+
+test('toggle de alvo tolera lista ausente', () => {
+  assert.deepEqual(toggleMobileTargetPostId(undefined, 7), [7])
 })
