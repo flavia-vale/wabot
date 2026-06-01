@@ -88,3 +88,81 @@ test('formatOfferMessage: handles missing originPrice gracefully', () => {
   assert.ok(msg.includes('Kit Festa Junina'))
   assert.ok(msg.includes('https://shope.ee/xyz456'))
 })
+
+import Fastify from 'fastify'
+import { offerAutomationRoutes } from '../src/api/routes/offerAutomation.js'
+
+function buildApp(dbMock) {
+  const app = Fastify()
+  app.decorate('authenticate', async (req) => { req.user = { sub: 'user-1' } })
+  app.register(offerAutomationRoutes, { prefix: '/api/offer-automations', db: dbMock })
+  return app
+}
+
+test('GET /api/offer-automations: returns user automations', async () => {
+  const fakeList = [
+    { id: 'a1', userId: 'user-1', keyword: 'festa', intervalMinutes: 120,
+      offersPerSend: 2, minDiscountPct: 20, enabled: true, destGroupJid: '123@g.us',
+      destGroupName: 'Grupo Festas', lastSentAt: null, sentItemIds: '[]',
+      createdAt: new Date(), updatedAt: new Date() },
+  ]
+  const dbMock = {
+    offerAutomation: {
+      findMany: async ({ where }) => where.userId === 'user-1' ? fakeList : [],
+    },
+  }
+  const app = buildApp(dbMock)
+  const res = await app.inject({ method: 'GET', url: '/api/offer-automations' })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.length, 1)
+  assert.equal(body[0].keyword, 'festa')
+})
+
+test('POST /api/offer-automations: creates automation', async () => {
+  let created = null
+  const dbMock = {
+    offerAutomation: {
+      create: async ({ data }) => { created = data; return { id: 'new-1', ...data } },
+    },
+  }
+  const app = buildApp(dbMock)
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/offer-automations',
+    payload: {
+      destGroupJid: '123@g.us',
+      destGroupName: 'Grupo Festas',
+      keyword: 'decoração festa',
+      intervalMinutes: 240,
+      offersPerSend: 1,
+      minDiscountPct: 20,
+    },
+  })
+  assert.equal(res.statusCode, 200)
+  assert.equal(created.keyword, 'decoração festa')
+  assert.equal(created.userId, 'user-1')
+})
+
+test('POST /api/offer-automations: rejects missing keyword', async () => {
+  const dbMock = { offerAutomation: {} }
+  const app = buildApp(dbMock)
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/offer-automations',
+    payload: { destGroupJid: '123@g.us', destGroupName: 'G', intervalMinutes: 60, offersPerSend: 1, minDiscountPct: 0 },
+  })
+  assert.equal(res.statusCode, 400)
+})
+
+test('DELETE /api/offer-automations/:id: deletes owned automation', async () => {
+  const dbMock = {
+    offerAutomation: {
+      findFirst: async () => ({ id: 'a1', userId: 'user-1' }),
+      delete: async () => ({ id: 'a1' }),
+    },
+  }
+  const app = buildApp(dbMock)
+  const res = await app.inject({ method: 'DELETE', url: '/api/offer-automations/a1' })
+  assert.equal(res.statusCode, 200)
+})
