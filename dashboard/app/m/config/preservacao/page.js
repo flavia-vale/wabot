@@ -367,6 +367,30 @@ export default function PreservacaoPage() {
         <div style={{ padding: '0 16px', display: 'grid', gap: 12 }}>
 
           <div style={cfgStyles.cardP}>
+            <div style={cfgStyles.row(false)}>
+              <div style={cfgStyles.rowMain}>
+                <div style={cfgStyles.rowTitle}>Módulo de Preservação Avançada</div>
+                <div style={cfgStyles.rowSub}>Interruptor mestre das defesas. Desligado, nenhum dos controles abaixo roda.</div>
+              </div>
+              <button
+                type="button"
+                style={cfgStyles.toggle(!!draft.preservationEnabled)}
+                onClick={() => updateDraft({ preservationEnabled: !draft.preservationEnabled })}
+                aria-label="Alternar módulo de preservação avançada"
+                aria-checked={!!draft.preservationEnabled}
+                role="switch"
+              >
+                <div style={cfgStyles.toggleKnob(!!draft.preservationEnabled)} />
+              </button>
+            </div>
+            {!draft.preservationEnabled && (
+              <div style={{ fontSize: 11.5, color: 'var(--warn, #b45309)', marginTop: 8 }}>
+                Os ajustes abaixo só passam a valer depois de ligar o módulo.
+              </div>
+            )}
+          </div>
+
+          <div style={cfgStyles.cardP}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 12 }}>Throttle (espaçamento entre canais)</div>
 
             <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>

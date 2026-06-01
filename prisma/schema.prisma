@@ -195,6 +195,7 @@ model BotConfig {
   copyVariationPoolJson   String  @default("{}")
   probeAccountSessionId   String?
   probeEnabled            Boolean @default(false)
+  preservationEnabled     Boolean @default(false)
   updatedAt       DateTime @updatedAt
 }
 
