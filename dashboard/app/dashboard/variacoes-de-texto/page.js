@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
@@ -66,7 +67,7 @@ export default function VariacoesDeTextoPage() {
       </div>
 
       <p className="text-xs text-gray-400">
-        ← <a href="/dashboard/ofertas-automaticas" className="hover:underline">Voltar para Ofertas automáticas</a>
+        ← <Link href="/dashboard/ofertas-automaticas" className="hover:underline">Voltar para Ofertas automáticas</Link>
       </p>
     </div>
   )

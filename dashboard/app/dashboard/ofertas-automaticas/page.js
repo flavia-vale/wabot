@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { api } from '@/lib/api'
 import { LoadingState } from '@/components/States'
 import { Alert } from '@/components/Alert'
@@ -178,9 +179,9 @@ export default function OfertasAutomaticasPage() {
 
       <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 flex items-center justify-between text-sm">
         <span className="text-gray-600">🎲 Quer que cada mensagem saia diferente? Configure ganchos e CTAs.</span>
-        <a href="/dashboard/variacoes-de-texto" className="text-green-700 font-medium hover:underline shrink-0 ml-4">
+        <Link href="/dashboard/variacoes-de-texto" className="text-green-700 font-medium hover:underline shrink-0 ml-4">
           Editar ganchos e CTAs →
-        </a>
+        </Link>
       </div>
 
       {error && <Alert type="error">{error}</Alert>}
@@ -304,7 +305,7 @@ export default function OfertasAutomaticasPage() {
             <div key={a.id} className="border rounded-lg p-4 bg-white">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="font-medium text-gray-900 truncate">"{a.keyword}"</p>
+                  <p className="font-medium text-gray-900 truncate">&ldquo;{a.keyword}&rdquo;</p>
                   <p className="text-sm text-gray-500">→ {a.destGroupName}</p>
                   <p className="text-xs text-gray-400 mt-1">
                     {INTERVAL_OPTIONS.find(o => o.value === a.intervalMinutes)?.label ?? `${a.intervalMinutes} min`}
