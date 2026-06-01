@@ -199,7 +199,6 @@ export default function LogsPage() {
   const [clearing, setClearing] = useState(false);
 
   const [summary, setSummary] = useState(null);
-  const [summaryLoading, setSummaryLoading] = useState(false);
 
   const loadFirstPage = useCallback(async ({ silent = false, isActive = () => true } = {}) => {
     if (!silent) setLoading(true);
@@ -231,11 +230,9 @@ export default function LogsPage() {
 
   useEffect(() => {
     let active = true;
-    setSummaryLoading(true);
     api.logsSummary('7d')
       .then((data) => { if (active) setSummary(data); })
-      .catch(() => {})
-      .finally(() => { if (active) setSummaryLoading(false); });
+      .catch(() => {});
     return () => { active = false; };
   }, []);
 
