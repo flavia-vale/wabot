@@ -77,7 +77,7 @@ async function run() {
     ) {
       nodes {
         itemId shopId productName imageUrl offerLink
-        price priceMin priceMax originPrice priceDiscountRate
+        price priceMin priceMax priceDiscountRate
         commissionRate sales ratingStar
       }
     }
