@@ -772,6 +772,48 @@ function withSendTimeout(promise, ctx) {
   return withSendTimeoutImpl(promise, { ...ctx, timeoutMs })
 }
 
+
+function isHttpUrl(value) {
+  if (typeof value !== 'string') return false
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function buildBroadcastImageRecipe(text, options = {}) {
+  if (!isHttpUrl(options.imageUrl)) return null
+  return {
+    type: 'imageUrl',
+    text: String(text || ''),
+    imageUrl: options.imageUrl,
+    refererUrl: isHttpUrl(options.imageRefererUrl) ? options.imageRefererUrl : undefined,
+  }
+}
+
+async function buildPayloadFromRecipe(recipe) {
+  if (recipe?.type !== 'imageUrl') return undefined
+
+  let image = null
+  try {
+    const fetched = await fetchImageBuffer(recipe.imageUrl, recipe.refererUrl)
+    image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
+    if (fetched && !image) {
+      logger.warn({ srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'broadcast image: normalizeImageForWhatsApp falhou — enviando texto com preview')
+    }
+  } catch (err) {
+    logger.warn({ err: err?.message, imageUrl: recipe.imageUrl }, 'broadcast image: falha ao baixar imagem — enviando texto com preview')
+  }
+
+  return buildMonitoredMessagePayload({
+    finalText: recipe.text,
+    image,
+    useLinkPreview: !image,
+  })
+}
+
 async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
   if (payload && payload._route === 'relay' && payload.relay?.type && payload.relay?.proto) {
     await withSendTimeout(
@@ -884,6 +926,7 @@ async function processSendJob(job) {
         if (!sockForAttempt) throw new Error('Bot não conectado')
         if (payload === null) {
           if (typeof job.buildPayload === 'function') payload = await job.buildPayload()
+          else if (job.payloadRecipe) payload = await buildPayloadFromRecipe(job.payloadRecipe)
           else payload = job.payload
         }
         if (payload === undefined) throw new Error('Invalid send job: payload/buildPayload ausente')
@@ -2087,6 +2130,7 @@ process.on('message', async msg => {
           status: 'queued',
         },
       })
+      const imageRecipe = buildBroadcastImageRecipe(msg.text, msg.options)
       const accepted = await enqueueSendJob({
         type: 'broadcast',
         logId: log.id,
@@ -2095,7 +2139,7 @@ process.on('message', async msg => {
         plan: 'broadcast',
         delayMs: buildSmartDelayMs((await getConfig()).botConfig),
         typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
-        payload: { text: msg.text },
+        ...(imageRecipe ? { payloadRecipe: imageRecipe } : { payload: { text: msg.text } }),
       })
       if (accepted) {
         queued++
