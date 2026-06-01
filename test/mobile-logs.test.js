@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { isSafeMobileLogUrl, mobileLogLinkActions, toMobileLogItem } from '../dashboard/lib/mobileLogs.js'
+import { friendlyMobileLogError, isSafeMobileLogUrl, mobileLogLinkActions, toMobileLogItem } from '../dashboard/lib/mobileLogs.js'
 
 test('log mobile traduz erro por item de conversão sem ação falsa', () => {
   const item = toMobileLogItem({
@@ -28,6 +28,12 @@ test('helper de logs mobile aceita somente URLs http/https para abrir', () => {
   assert.equal(isSafeMobileLogUrl('javascript:alert(1)'), false)
   assert.equal(isSafeMobileLogUrl('nota fiscal sem url'), false)
   assert.equal(isSafeMobileLogUrl(''), false)
+})
+
+test('friendlyMobileLogError traduz warning:ml_ssid_expired com texto PT-BR', () => {
+  const result = friendlyMobileLogError('warning:ml_ssid_expired')
+  assert.ok(result.includes('Mercado Livre'), 'deve mencionar Mercado Livre')
+  assert.ok(result.includes('SSID') || result.includes('credencial'), 'deve mencionar credencial/SSID')
 })
 
 test('ações seguras incluem cópia sempre que há link e abertura só para URL válida', () => {

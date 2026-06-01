@@ -7,6 +7,7 @@ import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAs
 import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { api } from '@/lib/api'
+import { canAccessAdvancedPreservation } from '@/lib/plan'
 import { getHealthChipStyle } from '@/lib/mobileChannelHealth'
 import {
   MOBILE_GROUP_PLATFORMS,
@@ -19,6 +20,12 @@ import {
   toggleMobilePlatform,
   toggleMobileTargetPostId,
 } from '@/lib/mobileGroupPicker'
+
+const NO_LINK_SCOPE_OPTIONS = [
+  { id: 'TEXT_ONLY', label: 'Só texto' },
+  { id: 'TEXT_IMAGE_WITH_CAPTION', label: 'Texto e imagem com legenda' },
+  { id: 'ALL', label: 'Tudo (inclusive sem link)' },
+]
 
 const avatarColor = (name = '') => {
   const hues = [210, 145, 280, 50, 180, 0]
@@ -35,6 +42,7 @@ export default function GroupsPage() {
   useMobileRoutePerf('m/config/groups')
 
   const [tab, setTab] = useState('origem')
+  const [me, setMe] = useState(null)
   const [groups, setGroups] = useState([])
   const [waGroups, setWaGroups] = useState([])
   const [showAdd, setShowAdd] = useState(false)
@@ -72,8 +80,11 @@ export default function GroupsPage() {
       setLoading(true)
       setError('')
       try {
-        const list = await api.groups()
-        if (active) setGroups(Array.isArray(list) ? list : [])
+        const [list, meData] = await Promise.all([api.groups(), api.me().catch(() => null)])
+        if (active) {
+          setGroups(Array.isArray(list) ? list : [])
+          setMe(meData)
+        }
       } catch (err) {
         if (active) setError(err.message || 'Não foi possível carregar os grupos.')
       } finally {
@@ -223,6 +234,8 @@ export default function GroupsPage() {
 
   const postGroups = useMemo(() => groups.filter((group) => group.role === 'post'), [groups])
 
+  const canUseChannels = canAccessAdvancedPreservation(me)
+
   const feedbackIsError = feedback && (feedback.includes('Não') || feedback === 'Este grupo já está cadastrado para monitorar/publicar.')
 
   if (loading) {
@@ -328,6 +341,11 @@ export default function GroupsPage() {
                       {configOpen ? 'Fechar' : 'Filtros'}
                     </button>
                   )}
+                  {!isMonitor && (
+                    <button type="button" onClick={() => setExpandedConfigId(configOpen ? null : group.id)} aria-expanded={configOpen} style={{border:'1px solid var(--line)', background:'transparent', borderRadius: 999, color:'var(--ink)', padding:'6px 9px', fontSize: 11, fontWeight: 700}}>
+                      {configOpen ? 'Fechar' : 'Config'}
+                    </button>
+                  )}
                   <button type="button" onClick={() => deleteGroup(group)} disabled={actionLoading === `delete-${group.id}`} style={{border:'1px solid var(--line)', background:'transparent', borderRadius: 999, color:'var(--danger)', padding:'6px 9px', fontSize: 11, fontWeight: 700}}>
                     Remover
                   </button>
@@ -366,11 +384,70 @@ export default function GroupsPage() {
                     </div>
 
                     <div>
+                      <div style={{...cfgStyles.label, marginBottom: 6}}>Mensagens sem link</div>
+                      <label style={{display:'flex', alignItems:'center', gap: 10, cursor: canUseChannels ? 'pointer' : 'not-allowed'}}>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={(group.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK'}
+                          disabled={!canUseChannels}
+                          onClick={() => {
+                            const isCurrentlyAllowing = (group.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK'
+                            if (isCurrentlyAllowing) {
+                              handleUpdateGroup(group.id, { forwardMode: 'LINK_ONLY', noLinkScope: null })
+                            } else {
+                              handleUpdateGroup(group.id, { forwardMode: 'ALLOW_NO_LINK', noLinkScope: group.noLinkScope ?? 'TEXT_ONLY' })
+                            }
+                          }}
+                          style={cfgStyles.toggle((group.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK')}
+                          aria-label="Permitir mensagens sem link"
+                        >
+                          <div style={cfgStyles.toggleKnob((group.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK')} />
+                        </button>
+                        <span style={{fontSize: 12.5, color:'var(--ink)'}}>Encaminhar mensagens sem link</span>
+                      </label>
+                      {!canUseChannels && (
+                        <div style={{fontSize: 11, color:'var(--ink-soft)', marginTop: 5}}>(disponível no Pro / Trial ativo)</div>
+                      )}
+                      {canUseChannels && (group.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK' && (
+                        <select
+                          style={{...cfgStyles.field, marginTop: 8}}
+                          value={group.noLinkScope ?? 'TEXT_ONLY'}
+                          onChange={(e) => handleUpdateGroup(group.id, { forwardMode: 'ALLOW_NO_LINK', noLinkScope: e.target.value })}
+                        >
+                          {NO_LINK_SCOPE_OPTIONS.map((opt) => (
+                            <option key={opt.id} value={opt.id}>{opt.label}</option>
+                          ))}
+                        </select>
+                      )}
+                      <div style={{fontSize: 11, color:'var(--ink-faint)', marginTop: 6, lineHeight: 1.4}}>Ativar pode aumentar o volume de mensagens no grupo de destino.</div>
+                    </div>
+
+                    <div>
                       <div style={{...cfgStyles.label, marginBottom: 6}}>Para onde esse grupo envia</div>
                       <button type="button" onClick={() => openTargetEditor(group.id)} style={{...mobi.btn('ghost', true)}}>
                         Escolher destinos
                       </button>
                       <div style={{fontSize: 11, color:'var(--ink-faint)', marginTop: 6, lineHeight: 1.4}}>Sem escolha, envia para todos os grupos de publicação.</div>
+                    </div>
+                  </div>
+                )}
+
+                {!isMonitor && configOpen && (
+                  <div style={{padding:'4px 16px 16px', display:'grid', gap: 14}}>
+                    <div>
+                      <div style={{...cfgStyles.label, marginBottom: 6}}>Mensagem de boas-vindas</div>
+                      <textarea
+                        style={{...cfgStyles.field, minHeight: 80, resize:'vertical'}}
+                        placeholder="Mensagem enviada quando alguém entra no grupo (opcional)"
+                        defaultValue={group.welcomeMsg ?? ''}
+                        onBlur={(event) => {
+                          const value = event.target.value.trim() || null
+                          const current = group.welcomeMsg ?? null
+                          if (value !== current) handleUpdateGroup(group.id, { welcomeMsg: value })
+                        }}
+                      />
+                      <div style={{fontSize: 11, color:'var(--ink-faint)', marginTop: 6, lineHeight: 1.4}}>Texto enviado automaticamente para novos membros deste grupo de publicação.</div>
                     </div>
                   </div>
                 )}

@@ -6,6 +6,7 @@ import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileLogLinkActions, toMobileLogItem } from '@/lib/mobileLogs'
+import { normalizeSummaryCounts, summaryDeliveryRateLabel } from '@/lib/mobileLogsSummary'
 
 const envStyles = {
   pageH: {
@@ -197,6 +198,8 @@ export default function LogsPage() {
   const [clearArmed, setClearArmed] = useState(false);
   const [clearing, setClearing] = useState(false);
 
+  const [summary, setSummary] = useState(null);
+
   const loadFirstPage = useCallback(async ({ silent = false, isActive = () => true } = {}) => {
     if (!silent) setLoading(true);
     setError('');
@@ -224,6 +227,14 @@ export default function LogsPage() {
       window.clearTimeout(timer);
     };
   }, [loadFirstPage]);
+
+  useEffect(() => {
+    let active = true;
+    api.logsSummary('7d')
+      .then((data) => { if (active) setSummary(data); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   const hasMoreLogs = rawLogs.length < total;
 
@@ -354,6 +365,38 @@ export default function LogsPage() {
           <div style={envStyles.cadenceDot}/>
         </button>
       </div>
+
+      {summary != null && (() => {
+        const counts = normalizeSummaryCounts(summary.counts)
+        const rateLabel = summaryDeliveryRateLabel(summary.deliveryRate)
+        return (
+          <div style={{margin:'12px 16px 0', padding:'12px 14px', background:'var(--surface)', border:'1px solid var(--line)', borderRadius: 14, display:'grid', gap: 8}}>
+            <div style={{fontSize: 11, fontWeight: 600, color:'var(--ink-soft)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom: 2}}>Últimos 7 dias</div>
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap: 8}}>
+              <div style={{display:'flex', flexDirection:'column', gap: 2}}>
+                <span style={{fontSize: 18, fontWeight: 700, color:'var(--success)'}}>{counts.success}</span>
+                <span style={{fontSize: 10.5, color:'var(--ink-soft)', lineHeight: 1.3}}>Enviados</span>
+              </div>
+              <div style={{display:'flex', flexDirection:'column', gap: 2}}>
+                <span style={{fontSize: 18, fontWeight: 700, color:'var(--ink)'}}>{counts.skippedDedup}</span>
+                <span style={{fontSize: 10.5, color:'var(--ink-soft)', lineHeight: 1.3}}>Bloq. repetição</span>
+              </div>
+              <div style={{display:'flex', flexDirection:'column', gap: 2}}>
+                <span style={{fontSize: 18, fontWeight: 700, color:'var(--ink)'}}>{counts.skippedConfig}</span>
+                <span style={{fontSize: 10.5, color:'var(--ink-soft)', lineHeight: 1.3}}>Bloq. config</span>
+              </div>
+              <div style={{display:'flex', flexDirection:'column', gap: 2}}>
+                <span style={{fontSize: 18, fontWeight: 700, color: counts.errorOther > 0 ? 'var(--danger)' : 'var(--ink)'}}>{counts.errorOther}</span>
+                <span style={{fontSize: 10.5, color:'var(--ink-soft)', lineHeight: 1.3}}>Erros</span>
+              </div>
+              <div style={{display:'flex', flexDirection:'column', gap: 2}}>
+                <span style={{fontSize: 18, fontWeight: 700, color:'var(--accent-strong)'}}>{rateLabel}</span>
+                <span style={{fontSize: 10.5, color:'var(--ink-soft)', lineHeight: 1.3}}>Taxa de entrega</span>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Filtros em palavras claras */}
       <div style={envStyles.chipRow} aria-label="Filtros — contagens somente dos envios carregados">
