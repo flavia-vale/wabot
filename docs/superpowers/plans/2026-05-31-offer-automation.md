@@ -15,15 +15,18 @@
 | Ação | Arquivo | Responsabilidade |
 |------|---------|-----------------|
 | Create | `src/offerAutomation/shopeeOffers.js` | Busca `productOfferV2`, filtra por desconto, exclui itemIds já enviados |
-| Create | `src/offerAutomation/dispatcher.js` | Formata mensagem WhatsApp + despacha via `sendBroadcast` |
+| Create | `src/offerAutomation/dispatcher.js` | Formata mensagem WhatsApp + aplica variação aleatória + despacha via `sendBroadcast` |
 | Create | `src/offerAutomation/cron.js` | `setInterval` de 60s, busca automações vencidas, chama dispatcher |
 | Create | `src/api/routes/offerAutomation.js` | CRUD: list / create / update / delete + toggle enable + trigger manual |
 | Create | `test/offer-automation.test.js` | Testa shopeeOffers (filtro), dispatcher (formatação), rotas (CRUD) |
 | Modify | `prisma/schema.prisma` | Adiciona model `OfferAutomation` + relação em `User` |
 | Modify | `src/api/server.js` | Registra rotas + `startOfferAutomationCron()` no boot |
-| Modify | `dashboard/lib/api.js` | Adiciona métodos `offerAutomations*` |
-| Modify | `dashboard/app/dashboard/DashboardClientLayout.js` | Adiciona item de nav "Ofertas automáticas" |
-| Create | `dashboard/app/dashboard/ofertas-automaticas/page.js` | Página de CRUD com linguagem leiga |
+| Modify | `src/core/copyVariation.js` | Adiciona opção `random: true` em `pickVariant` e `applyVariation` |
+| Modify | `src/api/routes/config.js` | Expõe `copyVariationPoolJson` no GET/PUT (sem gate de plano) |
+| Modify | `dashboard/lib/api.js` | Adiciona métodos `offerAutomations*` + `variationsGet` / `variationsUpdate` |
+| Modify | `dashboard/app/dashboard/DashboardClientLayout.js` | Adiciona itens de nav "Ofertas automáticas" e "Ganchos e CTAs" |
+| Create | `dashboard/app/dashboard/ofertas-automaticas/page.js` | Página de CRUD com linguagem leiga + botão "Editar ganchos e CTAs →" |
+| Create | `dashboard/app/dashboard/variacoes-de-texto/page.js` | Editor de ganchos, CTAs e fechamentos — livre para todos os planos |
 
 ---
 
@@ -316,6 +319,7 @@ import { fetchOffers } from './shopeeOffers.js'
 import { sendBroadcast, isRunning } from '../manager.js'
 import db from '../db.js'
 import { parseCredentialData } from '../credentialHealth.js'
+import { applyVariation } from '../core/copyVariation.js'
 
 const PRICE_DIVISOR = 100000
 
@@ -381,8 +385,12 @@ export async function runAutomation(automation, { sendBroadcastFn = sendBroadcas
 
   const toSend = offers.slice(0, automation.offersPerSend)
 
+  const botConfig = await db.botConfig.findUnique({ where: { userId: automation.userId } })
+  const poolJson = botConfig?.copyVariationPoolJson ?? '{}'
+
   for (const offer of toSend) {
-    const text = formatOfferMessage(offer, automation.keyword)
+    const base = formatOfferMessage(offer, automation.keyword)
+    const text = applyVariation(base, { groupId: automation.destGroupJid, poolJson, random: true })
     await sendBroadcastFn(automation.userId, text, [automation.destGroupJid])
   }
 
@@ -758,13 +766,16 @@ offerAutomationDelete: (id) =>
   apiFetch(`/api/offer-automations/${id}`, { method: 'DELETE' }),
 offerAutomationTrigger: (id) =>
   apiFetch(`/api/offer-automations/${id}/trigger`, { method: 'POST' }),
+variationsGet: () => apiFetch('/api/config'),
+variationsUpdate: (copyVariationPoolJson) =>
+  apiFetch('/api/config', { method: 'PUT', body: JSON.stringify({ copyVariationPoolJson }) }),
 ```
 
 - [ ] **Step 2: Commit**
 
 ```bash
 git add dashboard/lib/api.js
-git commit -m "feat: add offer automation API client methods"
+git commit -m "feat: add offer automation and variations API client methods"
 ```
 
 ---
@@ -780,13 +791,14 @@ Em `DashboardClientLayout.js`, no array `navGroups`, dentro do grupo `'Operaçã
 
 ```js
 { href: '/dashboard/ofertas-automaticas', icon: '🤖', label: 'Ofertas automáticas' },
+{ href: '/dashboard/variacoes-de-texto', icon: '🎲', label: 'Ganchos e CTAs' },
 ```
 
 - [ ] **Step 2: Commit**
 
 ```bash
 git add dashboard/app/dashboard/DashboardClientLayout.js
-git commit -m "feat: add Ofertas automáticas nav item"
+git commit -m "feat: add Ofertas automáticas and Ganchos e CTAs nav items"
 ```
 
 ---
@@ -979,6 +991,13 @@ export default function OfertasAutomaticasPage() {
         </button>
       </div>
 
+      <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 flex items-center justify-between text-sm">
+        <span className="text-gray-600">🎲 Quer que cada mensagem saia diferente? Configure ganchos e CTAs.</span>
+        <a href="/dashboard/variacoes-de-texto" className="text-green-700 font-medium hover:underline shrink-0 ml-4">
+          Editar ganchos e CTAs →
+        </a>
+      </div>
+
       {error && <Alert type="error">{error}</Alert>}
 
       {!automations.length && !showForm && (
@@ -1168,7 +1187,194 @@ git commit -m "feat: offer automation dashboard page with layman-friendly copy"
 
 ---
 
-## Task 10: Executar suite completa e push
+## Task 10: Desbloquear copyVariationPoolJson e modo random
+
+**Files:**
+- Modify: `src/core/copyVariation.js`
+- Modify: `src/api/routes/config.js`
+
+- [ ] **Step 1: Adicionar opção `random` em `pickVariant` e `applyVariation`**
+
+Em `src/core/copyVariation.js`, substituir a função `pickVariant`:
+
+```js
+export function pickVariant(bucket, groupId, date, random = false) {
+  if (!Array.isArray(bucket) || bucket.length === 0) return ''
+  if (bucket.length === 1) return bucket[0]
+  if (random) return bucket[Math.floor(Math.random() * bucket.length)]
+  const idx = hash32(`${groupId}|${date}`) % bucket.length
+  return bucket[idx]
+}
+```
+
+E em `applyVariation`, adicionar `random` no destructure de `opts` e passar para `pickVariant`:
+
+```js
+export function applyVariation(text, opts = {}) {
+  const { groupId, date, pool, poolJson, random = false } = opts
+  if (text == null) return text
+  let p = pool
+  if (!p && poolJson) {
+    try { p = typeof poolJson === 'string' ? JSON.parse(poolJson) : poolJson } catch { p = null }
+  }
+  if (!p || typeof p !== 'object') return text
+
+  const today = date ?? new Date().toISOString().slice(0, 10)
+
+  const greeting = pickVariant(p.greetings, groupId, today, random)
+  const cta = pickVariant(p.ctas, groupId, today + 'c', random)
+  const trailer = pickVariant(p.trailers, groupId, today + 't', random)
+
+  if (PLACEHOLDER_RE.test(text)) {
+    PLACEHOLDER_RE.lastIndex = 0
+    return text.replace(PLACEHOLDER_RE, (_, key) => {
+      if (key === 'greeting') return greeting
+      if (key === 'cta') return cta
+      if (key === 'trailer') return trailer
+      return ''
+    })
+  }
+
+  return `${greeting}${text}${trailer}`
+}
+```
+
+- [ ] **Step 2: Expor `copyVariationPoolJson` no `/api/config`**
+
+Em `src/api/routes/config.js`, no GET da config, incluir `copyVariationPoolJson` no select e no retorno:
+
+```js
+// No SELECT do findUnique (ou no objeto retornado):
+copyVariationPoolJson: cfg?.copyVariationPoolJson ?? '{}'
+```
+
+No PUT, aceitar e salvar `copyVariationPoolJson`:
+
+```js
+const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg,
+        feedGlobal, postToStatus, brandingGroupLink, brandingCtaText,
+        copyVariationPoolJson } = req.body ?? {}
+
+// Antes do upsert, adicionar validação:
+if (copyVariationPoolJson !== undefined) {
+  if (typeof copyVariationPoolJson !== 'string') {
+    return reply.code(400).send({ error: 'copyVariationPoolJson deve ser string JSON' })
+  }
+  try { JSON.parse(copyVariationPoolJson) } catch {
+    return reply.code(400).send({ error: 'copyVariationPoolJson contém JSON inválido' })
+  }
+  updates.copyVariationPoolJson = copyVariationPoolJson
+}
+```
+
+- [ ] **Step 3: Verificar que o encaminhamento normal não quebrou**
+
+```bash
+node --test test/ 2>&1 | grep -E "pass|fail|ok"
+```
+
+Esperado: todos passando, nenhuma regressão em `copyVariation`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/core/copyVariation.js src/api/routes/config.js
+git commit -m "feat: random variation mode for offer automation, expose copyVariationPoolJson in /api/config"
+```
+
+---
+
+## Task 11: Página de Ganchos e CTAs
+
+**Files:**
+- Create: `dashboard/app/dashboard/variacoes-de-texto/page.js`
+
+- [ ] **Step 1: Criar página**
+
+Criar `dashboard/app/dashboard/variacoes-de-texto/page.js`:
+
+```js
+'use client'
+import { useEffect, useState } from 'react'
+import { api } from '@/lib/api'
+import { Alert } from '@/components/Alert'
+import { LoadingState } from '@/components/States'
+import { CopyVariationPoolEditor } from '@/components/preservacao/CopyVariationPoolEditor'
+
+export default function VariacoesDeTextoPage() {
+  const [value, setValue] = useState({ copyVariationPoolJson: '{}' })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api.variationsGet()
+      .then(cfg => setValue({ copyVariationPoolJson: cfg.copyVariationPoolJson ?? '{}' }))
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false))
+  }, [])
+
+  async function handleSave() {
+    setSaving(true)
+    setSaved(false)
+    setError('')
+    try {
+      await api.variationsUpdate(value.copyVariationPoolJson)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <LoadingState />
+
+  return (
+    <div className="p-4 max-w-2xl mx-auto space-y-4">
+      <div>
+        <h1 className="text-xl font-bold text-gray-900">Ganchos e CTAs</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          Configure variações de texto para que suas ofertas automáticas nunca saiam iguais.
+          O bot escolhe aleatoriamente uma opção de cada grupo a cada envio.
+        </p>
+      </div>
+
+      {error && <Alert type="error">{error}</Alert>}
+
+      <CopyVariationPoolEditor value={value} onChange={next => setValue(v => ({ ...v, ...next }))} disabled={saving} />
+
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+        >
+          {saving ? 'Salvando...' : 'Salvar variações'}
+        </button>
+        {saved && <span className="text-sm text-green-600">✓ Salvo!</span>}
+      </div>
+
+      <p className="text-xs text-gray-400">
+        ← <a href="/dashboard/ofertas-automaticas" className="hover:underline">Voltar para Ofertas automáticas</a>
+      </p>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add dashboard/app/dashboard/variacoes-de-texto/page.js
+git commit -m "feat: Ganchos e CTAs page — free for all plans, wired to offer automation"
+```
+
+---
+
+## Task 13: Executar suite completa e push
 
 - [ ] **Step 1: Executar todos os testes**
 
@@ -1213,6 +1419,10 @@ git push -u origin claude/shopee-affiliate-offers-api-ADOlJ
 | Ativar/Pausar automação | Tasks 5, 9 |
 | Envio manual (teste) | Tasks 5, 9 |
 | Credenciais Shopee reutilizadas do banco | Task 3 — `db.credential` |
+| Variação aleatória por envio (ganchos/CTAs) | Tasks 3, 10 — `applyVariation` com `random: true` |
+| Desbloquear variações para todos os planos | Task 10 — `/api/config` expõe `copyVariationPoolJson` sem gate |
+| Página dedicada de Ganchos e CTAs | Task 11 — `/dashboard/variacoes-de-texto` |
+| Botão de atalho na página de automação | Task 9 — banner com link para `/dashboard/variacoes-de-texto` |
 
 ### Sem placeholders
 Todos os blocos de código são implementações completas.
