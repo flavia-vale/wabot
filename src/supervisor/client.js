@@ -27,7 +27,7 @@ import {
  * @property {(userId:string)=>Promise<any>} isRunning
  * @property {()=>Promise<any>} listRunningBots
  * @property {(userId:string)=>Promise<any>} listGroups
- * @property {(userId:string,text:string,jids:string[])=>Promise<any>} sendBroadcast
+ * @property {(userId:string,text:string,jids:string[],options?:Object)=>Promise<any>} sendBroadcast
  * @property {(userId:string,phone:string)=>Promise<any>} requestPairingCode
  * @property {(userId:string)=>Promise<any>} getBotMetrics
  * @property {(userId:string)=>Promise<any>} reloadConfig
@@ -143,7 +143,7 @@ export function createSupervisorClient({
   const isRunning = userId => send(COMMAND.IS_RUNNING, { userId })
   const listRunningBots = () => send(COMMAND.LIST_RUNNING_BOTS, {})
   const listGroups = userId => send(COMMAND.LIST_GROUPS, { userId })
-  const sendBroadcast = (userId, text, jids) => send(COMMAND.SEND_BROADCAST, { userId, text, jids })
+  const sendBroadcast = (userId, text, jids, options = {}) => send(COMMAND.SEND_BROADCAST, { userId, text, jids, options })
   const requestPairingCode = (userId, phone) => send(COMMAND.REQUEST_PAIRING_CODE, { userId, phone })
   const getBotMetrics = userId => send(COMMAND.GET_BOT_METRICS, { userId })
   const reloadConfig = userId => send(COMMAND.RELOAD_CONFIG, { userId })
