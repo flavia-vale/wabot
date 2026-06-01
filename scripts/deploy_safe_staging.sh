@@ -227,6 +227,40 @@ restart_apps_stopped_for_migration() {
   done
 }
 
+# Mata processos órfãos que ainda seguram o arquivo do banco antes do migrate.
+# Em modo inline a api faz fork() dos bot-workers; `pm2 stop` para só o processo
+# pai e os forks viram órfãos segurando conexões WAL no .db, o que trava o DDL
+# com `database is locked` (vide AGENTS.md pegadinha #8). Resolvemos o caminho do
+# banco a partir do DATABASE_URL do .env DESTE ambiente e usamos apenas os
+# arquivos dentro de $ROOT_DIR/prisma — sem risco de cruzar ambientes.
+kill_db_holders_for_migration() {
+  local env_file="$ROOT_DIR/.env"
+  [ -f "$env_file" ] || return 0
+
+  local db_url db_basename db_path
+  db_url="$(grep -E '^[[:space:]]*DATABASE_URL=' "$env_file" | tail -1 | cut -d= -f2-)"
+  db_url="${db_url%\"}"; db_url="${db_url#\"}"
+  db_url="${db_url%\'}"; db_url="${db_url#\'}"
+  db_basename="$(basename "${db_url#file:}")"
+  case "$db_basename" in
+    *.db) ;;
+    *) return 0 ;;  # não-SQLite (ex: postgres): nada a matar
+  esac
+  db_path="$ROOT_DIR/prisma/$db_basename"
+  [ -e "$db_path" ] || return 0
+
+  if command -v fuser >/dev/null 2>&1; then
+    if fuser -s "$db_path" "$db_path-wal" "$db_path-shm" 2>/dev/null; then
+      echo "    Matando processos órfãos segurando $db_basename..."
+      fuser -k -TERM "$db_path" "$db_path-wal" "$db_path-shm" 2>/dev/null || true
+      sleep 2
+      fuser -k -KILL "$db_path" "$db_path-wal" "$db_path-shm" 2>/dev/null || true
+    fi
+  else
+    echo "    Aviso: 'fuser' indisponível — não foi possível matar órfãos do banco."
+  fi
+}
+
 if npx prisma migrate status 2>&1 | grep -q "Database schema is up to date"; then
   echo "  Nenhuma migration pendente — pulando migrate deploy."
 else
@@ -245,6 +279,9 @@ else
     fi
   done
   sleep 2
+  # `pm2 stop` não reapa os bot-workers forkados; mata os órfãos que ainda
+  # seguram o .db para liberar o lock exclusivo do DDL.
+  kill_db_holders_for_migration
 
   migrate_attempt=0
   until npx prisma migrate deploy; do
@@ -257,6 +294,8 @@ else
     wait_s=$((migrate_attempt * 3))
     echo "  migrate falhou (tentativa $migrate_attempt/5) — aguardando ${wait_s}s..."
     sleep "$wait_s"
+    # Órfão pode ter reaberto o banco entre tentativas; limpa de novo.
+    kill_db_holders_for_migration
   done
 
   if [ -n "$MIGRATE_STOPPED_APPS" ]; then
