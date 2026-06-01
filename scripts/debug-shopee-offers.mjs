@@ -19,8 +19,6 @@ if (!automationId) {
 }
 
 const ENDPOINT = 'https://open-api.affiliate.shopee.com.br/graphql'
-const PRICE_DIVISOR = 100_000
-
 const db = new PrismaClient()
 
 function buildAuth(appId, secretKey, payload) {
@@ -34,7 +32,7 @@ function buildAuth(appId, secretKey, payload) {
 
 function fmt(raw) {
   const n = Number(raw)
-  return n ? `R$${(n / PRICE_DIVISOR).toFixed(2)}` : 'N/A'
+  return n ? `R$${n.toFixed(2)}` : 'N/A'
 }
 
 async function run() {
