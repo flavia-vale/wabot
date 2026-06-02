@@ -34,7 +34,7 @@ import {
   recordStreamError as recordChannelStreamError,
 } from './core/channelHealth.js'
 import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
-import { applyVariation } from './core/copyVariation.js'
+import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
 import { mutate as mutateChannelImage } from './core/imageMutation.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
@@ -1770,7 +1770,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const isChannelDest = isChannelDestination(destJid)
         const variantText = isChannelDest
           ? (cfg.preservationActive
-              ? applyVariation(finalText, { groupId: destJid, poolJson: cfg.botConfig.copyVariationPoolJson })
+              ? applyVariation(finalText, { groupId: destJid, poolJson: resolveCopyVariationPoolJson(cfg.botConfig.copyVariationPoolJson) })
               : finalText)
           : finalText
 

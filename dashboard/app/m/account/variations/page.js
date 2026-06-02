@@ -9,7 +9,7 @@ import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { api } from '@/lib/api'
 
 const GROUPS = [
-  { key: 'greetings', label: 'Saudações', helper: 'Aparecem antes da oferta.', placeholder: '🔥 ' },
+  { key: 'greetings', label: 'Ganchos', helper: 'Aparecem antes da oferta.', placeholder: '🚨 COOOOOORRE QUE TÁ ACABANDO!' },
   { key: 'ctas', label: 'Chamadas pra ação', helper: 'Chamam a pessoa para clicar.', placeholder: 'Pega já:' },
   { key: 'trailers', label: 'Fechamentos', helper: 'Aparecem depois da mensagem.', placeholder: ' 👀' },
 ]
