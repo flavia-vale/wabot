@@ -7,6 +7,9 @@ import { Alert } from '@/components/Alert'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 
 const INTERVAL_OPTIONS = [
+  { value: 15,   label: 'A cada 15 minutos' },
+  { value: 30,   label: 'A cada 30 minutos' },
+  { value: 45,   label: 'A cada 45 minutos' },
   { value: 60,   label: 'A cada 1 hora' },
   { value: 120,  label: 'A cada 2 horas' },
   { value: 240,  label: 'A cada 4 horas' },
@@ -48,6 +51,7 @@ const emptyForm = {
   intervalMinutes: 240,
   offersPerSend: 1,
   minDiscountPct: 20,
+  prioritizeAMS: false,
 }
 
 function nextSendLabel(lastSentAt, intervalMinutes) {
@@ -109,6 +113,7 @@ export default function OfertasAutomaticasPage() {
       intervalMinutes: a.intervalMinutes,
       offersPerSend: a.offersPerSend,
       minDiscountPct: a.minDiscountPct,
+      prioritizeAMS: a.prioritizeAMS ?? false,
     })
     setSaveError('')
     setShowForm(true)
@@ -290,6 +295,23 @@ export default function OfertasAutomaticasPage() {
             <p className="text-xs text-gray-400 mt-1">Só produtos com desconto real serão enviados.</p>
           </div>
 
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.prioritizeAMS}
+              onChange={e => setForm(f => ({ ...f, prioritizeAMS: e.target.checked }))}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-green-600"
+            />
+            <span>
+              <span className="text-sm font-medium text-gray-700 block">
+                Priorizar ofertas com comissão extra do vendedor
+              </span>
+              <span className="text-xs text-gray-400">
+                Se ativado, o bot busca as duas e envia primeiro as com comissão extra.
+              </span>
+            </span>
+          </label>
+
           {saveError && <Alert type="error">{saveError}</Alert>}
 
           <div className="flex gap-2">
@@ -327,6 +349,11 @@ export default function OfertasAutomaticasPage() {
                     {DISCOUNT_OPTIONS.find(o => o.value === a.minDiscountPct)?.label ?? `${a.minDiscountPct}% OFF mín.`}
                   </p>
                   <p className="text-xs text-gray-400">{nextSendLabel(a.lastSentAt, a.intervalMinutes)}</p>
+                  {a.prioritizeAMS && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 mt-1">
+                      ⚡ Comissão extra priorizada
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
