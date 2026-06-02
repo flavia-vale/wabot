@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
+import { MobileConfirmDialog } from '@/components/mobile/MobileModal'
 import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileRoutes } from '@/components/mobile/routes'
@@ -29,6 +30,7 @@ export default function TemplatesPage() {
   const [editBody, setEditBody] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   const templates = composeTemplates(store)
   const editingTemplate = templates.find((t) => t.key === editingKey) || null
@@ -94,6 +96,7 @@ export default function TemplatesPage() {
 
   function handleDelete() {
     if (editingKey && editingTemplate?.isCustom) commit(withoutCustomTemplate(store, editingKey))
+    setDeleteOpen(false)
   }
 
   const canSave = mode === 'create' ? editName.trim() && editBody.trim() : editBody.trim()
@@ -151,12 +154,23 @@ export default function TemplatesPage() {
           <button type="button" onClick={handleSave} disabled={!canSave || saving} style={{ ...mobi.btn('accent', true), opacity: (canSave && !saving) ? 1 : 0.5 }}>{saving ? 'Salvando…' : 'Salvar'}</button>
           <button type="button" onClick={() => setMode('list')} style={mobi.btn('ghost', true)}>Cancelar</button>
           {editingTemplate?.isCustom && (
-            <button type="button" onClick={handleDelete} style={{ ...mobi.btn('ghost', true), color: 'var(--danger)', borderColor: 'transparent' }}>Excluir modelo</button>
+            <button type="button" onClick={() => setDeleteOpen(true)} style={{ ...mobi.btn('ghost', true), color: 'var(--danger)', borderColor: 'transparent' }}>Excluir modelo</button>
           )}
           {isPreset && editingTemplate?.isOverridden && (
             <button type="button" onClick={handleReset} style={{ ...mobi.btn('ghost', true), color: 'var(--ink-soft)', borderColor: 'transparent' }}>Restaurar padrão</button>
           )}
         </div>
+
+        <MobileConfirmDialog
+          open={deleteOpen}
+          title="Excluir modelo?"
+          message={`O modelo "${editName || editingTemplate?.name || 'sem nome'}" será removido. Essa ação não pode ser desfeita.`}
+          confirmLabel="Excluir"
+          cancelLabel="Cancelar"
+          danger
+          onConfirm={handleDelete}
+          onCancel={() => setDeleteOpen(false)}
+        />
       </MobileShell>
     )
   }

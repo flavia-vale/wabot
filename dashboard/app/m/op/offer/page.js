@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
+import { MobileModal } from '@/components/mobile/MobileModal'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard } from '@/components/mobile/MobileAsyncState'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
@@ -1133,9 +1134,13 @@ ${currentCouponLink}`
 
       <div style={{height: 20}}/>
 
-      {showScheduleModal && (
-        <div style={{position:'fixed', inset:0, zIndex:200, background:'rgba(0,0,0,0.55)', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 16px'}} onClick={() => setShowScheduleModal(false)}>
-          <div style={{background:'var(--surface)', border:'1px solid var(--line)', borderRadius:20, padding:22, width:'100%', maxWidth:400}} onClick={(e) => e.stopPropagation()}>
+      <MobileModal
+        open={showScheduleModal}
+        onClose={() => !scheduling && setShowScheduleModal(false)}
+        dismissible={!scheduling}
+        ariaLabel="Agendar envio"
+        maxWidth={400}
+      >
             <div style={{fontSize: 16, fontWeight: 700, color:'var(--ink)', marginBottom: 4}}>Agendar envio</div>
             <div style={{fontSize: 12, color:'var(--ink-soft)', marginBottom: 12, lineHeight: 1.5}}>Escolha a data e hora para o envio automático. Mínimo: 1 minuto a partir de agora.</div>
             <div style={{fontSize: 12, color:'var(--ink)', marginBottom: 16, lineHeight: 1.45, padding:'10px 12px', borderRadius:12, background:'var(--bg-soft)', border:'1px solid var(--line)'}}>
@@ -1164,14 +1169,13 @@ ${currentCouponLink}`
               <button
                 type="button"
                 onClick={() => setShowScheduleModal(false)}
+                disabled={scheduling}
                 style={{padding:'12px', borderRadius:12, background:'transparent', border:'1px solid var(--line)', color:'var(--ink)', fontWeight:600, fontSize:14, cursor:'pointer', fontFamily:'inherit'}}
               >
                 Cancelar
               </button>
             </div>
-          </div>
-        </div>
-      )}
+      </MobileModal>
     </MobileShell>
   )
 }

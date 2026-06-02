@@ -29,7 +29,7 @@ const shellStyles = {
   },
   topbar: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '12px 16px 10px',
+    padding: 'calc(12px + env(safe-area-inset-top)) 16px 10px',
     background: 'var(--surface)',
     borderBottom: '1px solid var(--line)',
     position: 'sticky', top: 0, zIndex: 10,
