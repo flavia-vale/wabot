@@ -5,6 +5,7 @@ import { parseCredentialData } from '../credentialHealth.js'
 import { applyVariation, resolveCopyVariationPoolJson } from '../core/copyVariation.js'
 
 const PRICE_DIVISOR = 1
+const DEFAULT_AUTOMATION_TEMPLATE_KEY = 'automatico_classico'
 
 function priceStr(raw) {
   const num = Number(raw)
@@ -12,7 +13,61 @@ function priceStr(raw) {
   return (num / PRICE_DIVISOR).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-export function formatOfferMessage(offer, keyword) {
+function salesStr(raw) {
+  const num = Number(raw)
+  if (!num || num <= 0) return ''
+  return `🛒 ${num.toLocaleString('pt-BR')}+ vendidos`
+}
+
+function ratingStr(raw) {
+  const num = Number(raw)
+  if (!num || num <= 0) return ''
+  return `⭐ ${num.toFixed(1)}`
+}
+
+function discountStr(raw) {
+  const pct = Number(raw) || 0
+  return pct > 0 ? `-${pct}% OFF` : ''
+}
+
+function automationOfferProduct(offer) {
+  const currentRaw = Number(offer.priceMin ?? offer.price) || 0
+  const pct = Number(offer.priceDiscountRate) || 0
+  const originalRaw = pct > 0 && currentRaw > 0 ? Math.round(currentRaw * 100 / (100 - pct)) : 0
+  return {
+    title: offer.productName ?? 'Produto Shopee',
+    price: priceStr(currentRaw),
+    oldPrice: priceStr(originalRaw),
+    discount: discountStr(pct),
+    rating: ratingStr(offer.ratingStar),
+    sales: salesStr(offer.sales),
+    storeName: 'Shopee',
+  }
+}
+
+function parseTemplateStore(mobileTemplatesJson) {
+  try { return JSON.parse(mobileTemplatesJson || '{}') } catch { return {} }
+}
+
+function resolveAutomationTemplateBody(botConfig, templateKey) {
+  const templates = composeTemplates(parseTemplateStore(botConfig?.mobileTemplatesJson))
+  const key = templateKey || DEFAULT_AUTOMATION_TEMPLATE_KEY
+  return templates.find((template) => template.key === key)?.body
+    || templates.find((template) => template.key === DEFAULT_AUTOMATION_TEMPLATE_KEY)?.body
+    || null
+}
+
+
+export function formatOfferMessage(offer, keyword, templateBody = null) {
+  if (templateBody) {
+    return buildMobileOfferText({
+      product: automationOfferProduct(offer),
+      link: offer.offerLink,
+      template: DEFAULT_AUTOMATION_TEMPLATE_KEY,
+      templateBody,
+    })
+  }
+
   const name = offer.productName ?? 'Produto Shopee'
   const currentRaw = Number(offer.priceMin ?? offer.price) || 0
   const pct = Number(offer.priceDiscountRate) || 0
@@ -37,6 +92,7 @@ export function formatOfferMessage(offer, keyword) {
   lines.push('', `👉 ${offer.offerLink}`)
   return lines.join('\n')
 }
+
 
 function addSentIds(existing, newIds) {
   const all = [...existing, ...newIds.map(String)]
@@ -112,10 +168,11 @@ export async function runAutomation(automation, {
   const poolJson = resolveCopyVariationPoolJson(botConfig?.copyVariationPoolJson)
   const groupInviteLink = botConfig?.brandingGroupLink ?? ''
   const couponLink = botConfig?.couponLink ?? ''
+  const templateBody = resolveAutomationTemplateBody(botConfig, automation.templateKey)
 
   const sentIds = []
   for (const offer of toSend) {
-    const base = formatOfferMessage(offer, automation.keyword)
+    const base = formatOfferMessage(offer, automation.keyword, templateBody)
     const text = applyVariation(base, {
       groupId: automation.destGroupJid,
       poolJson,

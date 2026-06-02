@@ -3,6 +3,14 @@ import { runAutomation } from '../../offerAutomation/dispatcher.js'
 
 const VALID_INTERVALS = [15, 30, 45, 60, 120, 240, 360, 720, 1440]
 const MAX_OFFERS_PER_SEND = 5
+const DEFAULT_TEMPLATE_KEY = 'automatico_classico'
+const TEMPLATE_KEY_RE = /^[a-zA-Z0-9_-]{1,80}$/
+
+function normalizeTemplateKey(value) {
+  const key = String(value ?? DEFAULT_TEMPLATE_KEY).trim() || DEFAULT_TEMPLATE_KEY
+  if (!TEMPLATE_KEY_RE.test(key)) return null
+  return key
+}
 
 export async function offerAutomationRoutes(app, opts = {}) {
   const db = opts.db ?? dbDefault
@@ -15,7 +23,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
   })
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const { destGroupJid, destGroupName, keyword, intervalMinutes, offersPerSend, minDiscountPct, sortType, prioritizeAMS, isKeySeller } = req.body ?? {}
+    const { destGroupJid, destGroupName, keyword, intervalMinutes, offersPerSend, minDiscountPct, sortType, prioritizeAMS, isKeySeller, templateKey } = req.body ?? {}
 
     if (!keyword?.trim()) return reply.code(400).send({ error: 'Palavra-chave obrigatória' })
     if (!destGroupJid) return reply.code(400).send({ error: 'Grupo de destino obrigatório' })
@@ -31,6 +39,8 @@ export async function offerAutomationRoutes(app, opts = {}) {
     if (!VALID_SORT_TYPES.includes(parsedSortType)) {
       return reply.code(400).send({ error: 'sortType inválido. Use 2 (mais vendidos) ou 5 (maior comissão)' })
     }
+    const parsedTemplateKey = normalizeTemplateKey(templateKey)
+    if (!parsedTemplateKey) return reply.code(400).send({ error: 'templateKey inválido' })
 
     return db.offerAutomation.create({
       data: {
@@ -38,6 +48,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
         destGroupJid,
         destGroupName: destGroupName ?? destGroupJid,
         keyword: keyword.trim(),
+        templateKey: parsedTemplateKey,
         intervalMinutes: Number(intervalMinutes),
         offersPerSend: perSend,
         minDiscountPct: Number(minDiscountPct) || 0,
@@ -54,7 +65,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
     })
     if (!existing) return reply.code(404).send({ error: 'Automação não encontrada' })
 
-    const { keyword, intervalMinutes, offersPerSend, minDiscountPct, enabled, destGroupJid, destGroupName, prioritizeAMS } = req.body ?? {}
+    const { keyword, intervalMinutes, offersPerSend, minDiscountPct, enabled, destGroupJid, destGroupName, prioritizeAMS, templateKey } = req.body ?? {}
     const updates = {}
 
     if (keyword !== undefined) {
@@ -84,6 +95,11 @@ export async function offerAutomationRoutes(app, opts = {}) {
     }
     if (enabled !== undefined) updates.enabled = Boolean(enabled)
     if (prioritizeAMS !== undefined) updates.prioritizeAMS = Boolean(prioritizeAMS)
+    if (templateKey !== undefined) {
+      const parsedTemplateKey = normalizeTemplateKey(templateKey)
+      if (!parsedTemplateKey) return reply.code(400).send({ error: 'templateKey inválido' })
+      updates.templateKey = parsedTemplateKey
+    }
 
     return db.offerAutomation.update({ where: { id: req.params.id }, data: updates })
   })

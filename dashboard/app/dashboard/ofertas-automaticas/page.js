@@ -5,6 +5,7 @@ import { api } from '@/lib/api'
 import { LoadingState } from '@/components/States'
 import { Alert } from '@/components/Alert'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 
 const INTERVAL_OPTIONS = [
   { value: 15,   label: 'A cada 15 minutos' },
@@ -48,6 +49,7 @@ const emptyForm = {
   destGroupJid: '',
   destGroupName: '',
   keyword: '',
+  templateKey: 'automatico_classico',
   intervalMinutes: 240,
   offersPerSend: 1,
   minDiscountPct: 20,
@@ -68,6 +70,7 @@ export default function OfertasAutomaticasPage() {
   const [automations, setAutomations] = useState([])
   const [loading, setLoading] = useState(true)
   const [waGroups, setWaGroups] = useState([])
+  const [templates, setTemplates] = useState([])
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
@@ -82,12 +85,14 @@ export default function OfertasAutomaticasPage() {
     setLoading(true)
     setError('')
     try {
-      const [list, groups] = await Promise.all([
+      const [list, groups, templateStore] = await Promise.all([
         api.offerAutomations(),
         api.groups().then(gs => gs.filter(g => g.role === 'post')),
+        loadTemplateStore(),
       ])
       setAutomations(list)
       setWaGroups(groups)
+      setTemplates(composeTemplates(templateStore))
     } catch (err) {
       setError(err.message)
     } finally {
@@ -110,6 +115,7 @@ export default function OfertasAutomaticasPage() {
       destGroupJid: a.destGroupJid,
       destGroupName: a.destGroupName,
       keyword: a.keyword,
+      templateKey: a.templateKey || 'automatico_classico',
       intervalMinutes: a.intervalMinutes,
       offersPerSend: a.offersPerSend,
       minDiscountPct: a.minDiscountPct,
@@ -226,6 +232,24 @@ export default function OfertasAutomaticasPage() {
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
             />
             <p className="text-xs text-gray-400 mt-1">Use palavras que descrevem o tipo de produto.</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Modelo da mensagem
+            </label>
+            <select
+              value={form.templateKey}
+              onChange={e => setForm(f => ({ ...f, templateKey: e.target.value }))}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+            >
+              {templates.map(t => (
+                <option key={t.key} value={t.key}>{t.name}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">
+              Edite os modelos em Ganchos e CTAs. O padrão “Automático clássico” mantém o texto atual.
+            </p>
           </div>
 
           <div>

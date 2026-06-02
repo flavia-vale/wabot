@@ -22,7 +22,7 @@ test('preferências mobile enviam apenas campos com contrato real no BotConfig',
   assert.equal('notifyNewSale' in payload, false)
 })
 
-test('templates mobile são anunciados como presets locais quando não há contrato backend', () => {
+test('templates mobile são anunciados como presets editáveis salvos no backend', () => {
   assert.match(getMobileTemplatePresetNotice(), /preset/i)
-  assert.match(getMobileTemplatePresetNotice(), /não são salvos/i)
+  assert.match(getMobileTemplatePresetNotice(), /salvos no backend/i)
 })

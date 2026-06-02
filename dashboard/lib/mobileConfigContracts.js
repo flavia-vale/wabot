@@ -35,5 +35,5 @@ export function buildMobilePreferencesPayload(draft = {}) {
 }
 
 export function getMobileTemplatePresetNotice() {
-  return 'Estes modelos são presets locais para montar ofertas rapidamente; eles não são salvos no backend ainda.'
+  return 'Estes modelos são presets editáveis para montar ofertas rapidamente; eles são salvos no backend e sincronizam entre celular e computador.'
 }

@@ -8,6 +8,7 @@ import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileRoutes } from '@/components/mobile/routes'
 import { api } from '@/lib/api'
+import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 
 const INTERVAL_OPTIONS = [
   { value: 60, label: 'A cada 1 hora' },
@@ -46,6 +47,7 @@ const emptyForm = {
   destGroupJid: '',
   destGroupName: '',
   keyword: '',
+  templateKey: 'automatico_classico',
   intervalMinutes: 240,
   offersPerSend: 1,
   minDiscountPct: 20,
@@ -76,6 +78,7 @@ export default function MobileAutomationsPage() {
   const router = useRouter()
   const [automations, setAutomations] = useState([])
   const [groups, setGroups] = useState([])
+  const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -90,12 +93,14 @@ export default function MobileAutomationsPage() {
     setLoading(true)
     setError('')
     try {
-      const [list, allGroups] = await Promise.all([
+      const [list, allGroups, templateStore] = await Promise.all([
         api.offerAutomations(),
         api.groups().then((items) => Array.isArray(items) ? items.filter((group) => group.role === 'post') : []),
+        loadTemplateStore(),
       ])
       setAutomations(Array.isArray(list) ? list : [])
       setGroups(allGroups)
+      setTemplates(composeTemplates(templateStore))
     } catch (err) {
       setError(err.message || 'Não foi possível carregar automações.')
     } finally {
@@ -118,6 +123,7 @@ export default function MobileAutomationsPage() {
       destGroupJid: item.destGroupJid || '',
       destGroupName: item.destGroupName || '',
       keyword: item.keyword || '',
+      templateKey: item.templateKey || 'automatico_classico',
       intervalMinutes: item.intervalMinutes || 240,
       offersPerSend: item.offersPerSend || 1,
       minDiscountPct: item.minDiscountPct ?? 20,
@@ -216,6 +222,12 @@ export default function MobileAutomationsPage() {
             <label>
               <div style={cfgStyles.label}>O que vender?</div>
               <input style={cfgStyles.field} value={form.keyword} onChange={(event) => setForm((current) => ({ ...current, keyword: event.target.value }))} placeholder="Ex: decoração de festa" />
+            </label>
+            <label>
+              <div style={cfgStyles.label}>Modelo da mensagem</div>
+              <select style={cfgStyles.field} value={form.templateKey} onChange={(event) => setForm((current) => ({ ...current, templateKey: event.target.value }))}>
+                {templates.map((template) => <option key={template.key} value={template.key}>{template.name}</option>)}
+              </select>
             </label>
             <label>
               <div style={cfgStyles.label}>Destino</div>
