@@ -12,14 +12,16 @@ function buildAuth(appId, secretKey, payload) {
   return `SHA256 Credential=${appId}, Timestamp=${timestamp}, Signature=${sig}`
 }
 
-export function buildOffersQuery({ keyword, page, limit, sortType = 2, isAMSOffer = false, isKeySeller = false }) {
+// listType=1 keeps the search broad enough for keyword automations.
+// listType=2 (top performance) is narrower and caused false no_offers_found skips.
+export function buildOffersQuery({ keyword, page, limit, sortType = 2, listType = 1, isAMSOffer = false, isKeySeller = false }) {
   const safeKeyword = keyword.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\n\r]/g, ' ')
   const amsParam = isAMSOffer ? ', isAMSOffer: true' : ''
   const keySellerParam = isKeySeller ? ', isKeySeller: true' : ''
   return `{
     productOfferV2(
       keyword: "${safeKeyword}",
-      listType: 2,
+      listType: ${listType},
       sortType: ${sortType},
       page: ${page},
       limit: ${limit}${amsParam}${keySellerParam}
@@ -46,9 +48,16 @@ export function filterOffers(offers, { minDiscountPct, excludeItemIds }) {
   })
 }
 
+export function buildOfferCandidateLimit(limit) {
+  // Fetch more than offersPerSend because filters remove already-sent items
+  // and products that do not meet the user's minimum discount threshold.
+  return Math.min(Math.max(limit * 10, 20), 100)
+}
+
 export async function fetchOffers({ keyword, minDiscountPct, limit, excludeItemIds, creds, sortType = 2, isAMSOffer = false, isKeySeller = false }) {
   const { appId, secretKey } = creds
-  const query = buildOffersQuery({ keyword, page: 1, limit: Math.min(limit * 4, 100), sortType, isAMSOffer, isKeySeller })
+  const candidateLimit = buildOfferCandidateLimit(limit)
+  const query = buildOffersQuery({ keyword, page: 1, limit: candidateLimit, sortType, listType: 1, isAMSOffer, isKeySeller })
   const body = { query }
   const payload = JSON.stringify(body)
   const authHeader = buildAuth(appId, secretKey, payload)
