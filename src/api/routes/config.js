@@ -117,6 +117,11 @@ export async function configRoutes(app) {
     if (brandingGroupLink !== undefined && rawBrandingGroupLink && !normalizedBrandingGroupLink) {
       return reply.code(400).send({ error: 'Informe um link válido começando com http:// ou https://' })
     }
+    const rawCouponLink = String(couponLink ?? '').trim()
+    const normalizedCouponLink = normalizeBrandingLink(rawCouponLink)
+    if (couponLink !== undefined && rawCouponLink && !normalizedCouponLink) {
+      return reply.code(400).send({ error: 'Link de cupom inválido. Informe uma URL começando com http:// ou https://' })
+    }
     const normalizedBrandingCtaText = normalizeBrandingCtaText(brandingCtaText)
     if (brandingCtaText !== undefined && String(brandingCtaText ?? '').trim().length > MAX_BRANDING_CTA_CHARS) {
       return reply.code(400).send({ error: `Texto do CTA deve ter no máximo ${MAX_BRANDING_CTA_CHARS} caracteres` })
@@ -142,7 +147,7 @@ export async function configRoutes(app) {
         postToStatus: postToStatus ?? DEFAULTS.postToStatus,
         brandingGroupLink: normalizedBrandingGroupLink,
         brandingCtaText: normalizedBrandingCtaText,
-        couponLink: String(couponLink ?? '').trim(),
+        couponLink: normalizedCouponLink,
         ...(copyVariationPoolJson !== undefined && { copyVariationPoolJson }),
       },
       update: {
@@ -155,7 +160,7 @@ export async function configRoutes(app) {
         ...(postToStatus !== undefined && { postToStatus }),
         ...(brandingGroupLink !== undefined && { brandingGroupLink: normalizedBrandingGroupLink }),
         ...(brandingCtaText !== undefined && { brandingCtaText: normalizedBrandingCtaText }),
-        ...(couponLink !== undefined && { couponLink: String(couponLink ?? '').trim() }),
+        ...(couponLink !== undefined && { couponLink: normalizedCouponLink }),
         ...(copyVariationPoolJson !== undefined && { copyVariationPoolJson }),
       },
     })

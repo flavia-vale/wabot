@@ -504,22 +504,26 @@ test('applyVariation: poolJson em string é parseado corretamente', () => {
 // configRoutes não aceita injeção de DB, portanto validamos o contrato
 // do campo copyVariationPoolJson via análise do código-fonte.
 
-test('GET /api/config: contrato estático — campo copyVariationPoolJson sempre presente', async () => {
-  // Verificamos na implementação que:
-  // 1. DEFAULTS inclui copyVariationPoolJson: '{}'
-  // 2. quando cfg === null, retorna { ...DEFAULTS, userId } → inclui o campo
-  // 3. quando cfg existe mas copyVariationPoolJson é null, normaliza para '{}'
-  const src = await import('node:fs').then(fs =>
-    fs.promises.readFile('/home/user/wabot/src/api/routes/config.js', 'utf8')
-  )
-  assert.ok(
-    src.includes("copyVariationPoolJson: '{}'"),
-    'DEFAULTS deve declarar copyVariationPoolJson com valor padrão {}'
-  )
-  assert.ok(
-    src.includes('copyVariationPoolJson: cfg.copyVariationPoolJson ?? \'{}\''),
-    'GET deve normalizar copyVariationPoolJson nulo para {}'
-  )
+test('GET /api/config: contrato comportamental — campo copyVariationPoolJson sempre presente', async () => {
+  const { DEFAULT_COPY_VARIATION_POOL_JSON } = await import('../src/api/routes/config.js')
+
+  // Quando não existe config no DB, o GET retorna DEFAULTS que inclui copyVariationPoolJson
+  const appNoConfig = buildConfigApp()
+  const resNoConfig = await appNoConfig.inject({ method: 'GET', url: '/api/config' })
+  assert.equal(resNoConfig.statusCode, 200)
+  const bodyNoConfig = JSON.parse(resNoConfig.body)
+  assert.ok('copyVariationPoolJson' in bodyNoConfig, 'campo deve estar presente quando não há config no DB')
+  assert.equal(bodyNoConfig.copyVariationPoolJson, DEFAULT_COPY_VARIATION_POOL_JSON,
+    'usuário sem config deve receber o pool padrão e não uma string vazia')
+
+  // O pool padrão é JSON válido com as chaves esperadas
+  const parsedDefault = JSON.parse(DEFAULT_COPY_VARIATION_POOL_JSON)
+  assert.ok(Array.isArray(parsedDefault.greetings) && parsedDefault.greetings.length > 0,
+    'pool padrão deve ter greetings')
+  assert.ok(Array.isArray(parsedDefault.ctas) && parsedDefault.ctas.length > 0,
+    'pool padrão deve ter ctas')
+  assert.ok(Array.isArray(parsedDefault.trailers) && parsedDefault.trailers.length > 0,
+    'pool padrão deve ter trailers')
 })
 
 // ═══════════════════════════════════════════════
