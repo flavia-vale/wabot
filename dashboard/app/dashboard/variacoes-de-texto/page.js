@@ -16,6 +16,7 @@ import {
   withoutCustomTemplate,
 } from '@/lib/mobileTemplateStore'
 import { OFFER_TEMPLATE_VARIABLE_GROUPS } from '@/lib/mobileOfferComposer'
+import { buildRenderedOfferTemplatePreview, summarizeAutomationTemplateUsage } from '@/lib/offerTemplatePreview'
 
 export default function VariacoesDeTextoPage() {
   const [value, setValue] = useState({
@@ -24,6 +25,7 @@ export default function VariacoesDeTextoPage() {
     couponLink: '',
   })
   const [templateStore, setTemplateStore] = useState(() => readLocalTemplateStore())
+  const [automations, setAutomations] = useState([])
   const [templateMode, setTemplateMode] = useState('list')
   const [editingTemplateKey, setEditingTemplateKey] = useState(null)
   const [editTemplateName, setEditTemplateName] = useState('')
@@ -34,6 +36,7 @@ export default function VariacoesDeTextoPage() {
   const [error, setError] = useState('')
 
   const templates = composeTemplates(templateStore)
+  const templateUsage = summarizeAutomationTemplateUsage(automations)
   const editingTemplate = templates.find(t => t.key === editingTemplateKey) || null
 
   useEffect(() => {
@@ -41,8 +44,9 @@ export default function VariacoesDeTextoPage() {
     Promise.all([
       api.variationsGet(),
       loadTemplateStore(),
+      api.offerAutomations().catch(() => []),
     ])
-      .then(([cfg, store]) => {
+      .then(([cfg, store, automationList]) => {
         if (!active) return
         setValue({
           copyVariationPoolJson: cfg.copyVariationPoolJson ?? '{}',
@@ -50,6 +54,7 @@ export default function VariacoesDeTextoPage() {
           couponLink: cfg.couponLink ?? '',
         })
         setTemplateStore(store)
+        setAutomations(Array.isArray(automationList) ? automationList : [])
       })
       .catch(err => { if (active) setError(err.message) })
       .finally(() => { if (active) setLoading(false) })
@@ -220,21 +225,60 @@ export default function VariacoesDeTextoPage() {
           )}
         </div>
 
-        {templateMode === 'list' && templates.map(template => (
-          <div key={template.key} className="rounded-lg border px-3 py-2 flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-                <span>{template.name}</span>
-                {template.isOverridden && <span className="text-[10px] rounded-full bg-gray-100 px-2 py-0.5 text-gray-500">editado</span>}
-                {template.isCustom && <span className="text-[10px] rounded-full bg-gray-100 px-2 py-0.5 text-gray-500">personalizado</span>}
+        {templateMode === 'list' && templates.map(template => {
+          const usage = templateUsage.get(template.key)
+          const isInUse = !!usage?.enabled
+          const isPausedOnly = !isInUse && !!usage?.paused
+          const renderedPreview = buildRenderedOfferTemplatePreview({
+            template,
+            copyVariationPoolJson: value.copyVariationPoolJson,
+            groupInviteLink: value.brandingGroupLink,
+            couponLink: value.couponLink,
+          })
+          return (
+            <div
+              key={template.key}
+              className={`rounded-xl border px-3 py-3 ${isInUse ? 'border-green-200 bg-green-50/50 shadow-sm' : 'border-gray-200 bg-white'}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <div className="text-sm font-semibold text-gray-800 flex flex-wrap items-center gap-2">
+                    <span>{template.name}</span>
+                    {isInUse && <span className="text-[10px] rounded-full bg-green-600 px-2 py-0.5 font-bold uppercase tracking-wide text-white">ativo</span>}
+                    {isPausedOnly && <span className="text-[10px] rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-700">usado em automação pausada</span>}
+                    {template.key === 'automatico_classico' && <span className="text-[10px] rounded-full bg-blue-50 px-2 py-0.5 font-semibold text-blue-700">padrão de novas automações</span>}
+                    {template.isOverridden && <span className="text-[10px] rounded-full bg-gray-100 px-2 py-0.5 text-gray-500">editado</span>}
+                    {template.isCustom && <span className="text-[10px] rounded-full bg-gray-100 px-2 py-0.5 text-gray-500">personalizado</span>}
+                  </div>
+                  {usage ? (
+                    <p className="text-xs text-gray-600">
+                      {usage.enabled ? `Em uso em ${usage.enabled} automação${usage.enabled === 1 ? '' : 'ões'} ativa${usage.enabled === 1 ? '' : 's'}` : 'Nenhuma automação ativa usando este modelo'}
+                      {usage.paused ? ` · ${usage.paused} pausada${usage.paused === 1 ? '' : 's'}` : ''}
+                      {usage.groups.length ? ` · ${usage.groups.join(', ')}` : ''}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-500">Ainda não foi selecionado em nenhuma automação salva.</p>
+                  )}
+                </div>
+                <button type="button" onClick={() => startEditTemplate(template)} className="shrink-0 text-xs text-green-700 font-semibold hover:underline">
+                  Editar
+                </button>
               </div>
-              <div className="text-xs text-gray-500 truncate">{(template.body || '').replace(/\n/g, ' · ')}</div>
+
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Corpo salvo do modelo</p>
+                  <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words text-xs leading-5 text-gray-600">{template.body || ''}</pre>
+                </div>
+                <div className="rounded-lg border border-green-100 bg-white p-3 ring-1 ring-green-50">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-green-700">Prévia real enviada pelo bot</p>
+                  <p className="mt-1 text-[11px] text-gray-500">Inclui gancho, CTA, aviso final e links variáveis quando configurados.</p>
+                  <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words text-xs leading-5 text-gray-800">{renderedPreview}</pre>
+                </div>
+              </div>
             </div>
-            <button type="button" onClick={() => startEditTemplate(template)} className="text-xs text-green-700 font-semibold hover:underline">
-              Editar
-            </button>
-          </div>
-        ))}
+          )
+        })}
 
         {(templateMode === 'edit' || templateMode === 'create') && (
           <div className="space-y-3 rounded-lg border border-green-100 bg-green-50/40 p-3">
