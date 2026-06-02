@@ -17,30 +17,9 @@ import {
   getMobileOfferSingleLinkWarning,
   isValidHttpUrl,
 } from '@/lib/mobileOfferComposer'
-import { loadAllTemplates } from '@/lib/mobileTemplateStore'
+import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
+import { DEFAULT_COUPON_LINKS, DEFAULT_COUPON_CTA, loadCouponPrefs, persistCouponPrefs } from '@/lib/mobileCouponStore'
 import { filterDestGroups, selectAllVisible, clearVisible, groupKey } from '@/lib/mobileOfferFilters'
-
-const COUPON_LINKS_STORAGE_KEY = 'wabot.mobile.offer.couponLinks.v1'
-const DEFAULT_COUPON_LINKS = { shopee: '', mercadolivre: '', amazon: '', magazineluiza: '' }
-
-function readStoredCouponLinks() {
-  if (typeof window === 'undefined') return DEFAULT_COUPON_LINKS
-  try {
-    const stored = JSON.parse(window.localStorage.getItem(COUPON_LINKS_STORAGE_KEY) || '{}')
-    return { ...DEFAULT_COUPON_LINKS, ...stored }
-  } catch {
-    return DEFAULT_COUPON_LINKS
-  }
-}
-
-function saveStoredCouponLinks(links) {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(COUPON_LINKS_STORAGE_KEY, JSON.stringify(links))
-  } catch {
-    // localStorage indisponível: mantém os links editáveis só na sessão atual.
-  }
-}
 
 const criarStyles = {
   pageH: { padding:'18px 20px 0' },
@@ -509,7 +488,7 @@ export default function OfferPage() {
   const [allTemplates, setAllTemplates] = useState(TEMPLATE_OPTIONS)
   const [bonuses, setBonuses] = useState('')
   const [groupBonus, setGroupBonus] = useState({ link: '', cta: '💜 Entra no nosso grupo:' })
-  const [couponCta, setCouponCta] = useState('🎟 Mais cupons da {loja}:')
+  const [couponCta, setCouponCta] = useState(DEFAULT_COUPON_CTA)
   const [couponLinks, setCouponLinks] = useState(DEFAULT_COUPON_LINKS)
   const [selectedCouponStores] = useState(COUPON_STORES.map((store) => store.key))
   const [baseOfferText, setBaseOfferText] = useState('')
@@ -564,18 +543,35 @@ export default function OfferPage() {
 
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setCouponLinks(readStoredCouponLinks())
-    }, 0)
-    return () => window.clearTimeout(timer)
+    let active = true
+    loadCouponPrefs()
+      .then((prefs) => {
+        if (!active) return
+        setCouponLinks(prefs.links)
+        setCouponCta(prefs.cta)
+      })
+      .catch(() => {})
+    return () => { active = false }
   }, [])
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setAllTemplates(loadAllTemplates())
-    }, 0)
-    return () => window.clearTimeout(timer)
+    let active = true
+    loadTemplateStore()
+      .then((store) => { if (active) setAllTemplates(composeTemplates(store)) })
+      .catch(() => {})
+    return () => { active = false }
   }, [])
+
+  // Persiste preferências de cupom com debounce — o usuário digita link/CTA
+  // letra a letra e não queremos um PUT por tecla.
+  const couponPersistTimer = useRef(null)
+  useEffect(() => () => { if (couponPersistTimer.current) window.clearTimeout(couponPersistTimer.current) }, [])
+  function schedulePersistCoupons(prefs) {
+    if (couponPersistTimer.current) window.clearTimeout(couponPersistTimer.current)
+    couponPersistTimer.current = window.setTimeout(() => {
+      persistCouponPrefs(prefs).catch(() => {})
+    }, 600)
+  }
 
   function resetInput() {
     setInput('')
@@ -931,11 +927,12 @@ export default function OfferPage() {
             const updateCouponLink = (storeKey, value) => {
               const nextCouponLinks = { ...couponLinks, [storeKey]: value }
               setCouponLinks(nextCouponLinks)
-              saveStoredCouponLinks(nextCouponLinks)
+              schedulePersistCoupons({ links: nextCouponLinks, cta: couponCta })
               refreshEditorWithBonuses(bonuses, { couponLinks: nextCouponLinks })
             }
             const updateCouponCta = (value) => {
               setCouponCta(value)
+              schedulePersistCoupons({ links: couponLinks, cta: value })
               refreshEditorWithBonuses(bonuses, { couponCta: value })
             }
             const groupLinkInvalid = groupBonus.link.trim() && !isValidHttpUrl(groupBonus.link)

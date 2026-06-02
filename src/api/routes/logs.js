@@ -86,13 +86,30 @@ export async function logsRoutes(app) {
         }
       : {}
 
+    // `status` aceita um valor único ('success') ou lista separada por vírgula
+    // ('queued,sending') — o mobile usa a lista para o filtro "Aguardando".
+    const statusList = String(status)
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => s && s !== 'all')
+    const statusFilter = statusList.length === 0
+      ? {}
+      : statusList.length === 1
+        ? { status: statusList[0] }
+        : { status: { in: statusList } }
+
     const where = {
       userId,
-      ...(status !== 'all' ? { status } : {}),
+      ...statusFilter,
       ...searchWhere,
     }
 
-    const [total, logs] = await Promise.all([
+    // Contagens por status de TODO o histórico (respeitando a busca, mas
+    // ignorando o filtro de status ativo) para os chips refletirem o total
+    // real — não apenas os itens carregados na tela.
+    const countWhere = { userId, ...searchWhere }
+
+    const [total, logs, grouped] = await Promise.all([
       db.messageLog.count({ where }),
       db.messageLog.findMany({
         where,
@@ -100,12 +117,27 @@ export async function logsRoutes(app) {
         take: limitNum,
         skip: (pageNum - 1) * limitNum,
       }),
+      db.messageLog.groupBy({
+        by: ['status'],
+        where: countWhere,
+        _count: { _all: true },
+      }),
     ])
+
+    const statusCounts = {}
+    let statusCountsTotal = 0
+    for (const row of grouped) {
+      const n = row._count?._all || 0
+      statusCounts[row.status] = n
+      statusCountsTotal += n
+    }
 
     return {
       total,
       page: pageNum,
       limit: limitNum,
+      statusCounts,
+      statusCountsTotal,
       logs: logs.map(log => ({
         ...log,
         sourceGroupName: groupMap[log.sourceGroup] || log.sourceGroup,

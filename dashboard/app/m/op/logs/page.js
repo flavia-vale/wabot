@@ -181,16 +181,30 @@ const envStyles = {
   copiedHint: { fontSize: 11, color:'var(--success)', fontWeight: 700 },
 };
 
+// Cada chip vira um filtro real no backend. "Aguardando" cobre dois status
+// (na fila + enviando), então mandamos a lista separada por vírgula.
+const FILTER_TO_STATUS = {
+  todos: 'all',
+  fila: 'queued,sending',
+  ok: 'success',
+  falha: 'error',
+  ignorado: 'skipped',
+};
+const PAGE_SIZE = 30;
+
 export default function LogsPage() {
   useMobileRoutePerf('m/op/logs')
 
   const [filter, setFilter] = useState('todos');
   const [expanded, setExpanded] = useState(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
   const [rawLogs, setRawLogs] = useState([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [statusCounts, setStatusCounts] = useState({});
+  const [statusCountsTotal, setStatusCountsTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
@@ -200,14 +214,22 @@ export default function LogsPage() {
 
   const [summary, setSummary] = useState(null);
 
-  const loadFirstPage = useCallback(async ({ silent = false, isActive = () => true } = {}) => {
+  // Debounce da busca antes de bater no backend (mesma janela do desktop).
+  useEffect(() => {
+    const handle = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => window.clearTimeout(handle);
+  }, [search]);
+
+  const loadFirstPage = useCallback(async ({ filterKey, searchTerm, silent = false, isActive = () => true } = {}) => {
     if (!silent) setLoading(true);
     setError('');
     try {
-      const data = await api.logs('all', 1, 30);
+      const data = await api.logs(FILTER_TO_STATUS[filterKey] || 'all', 1, PAGE_SIZE, searchTerm || '');
       if (!isActive()) return;
       setRawLogs(Array.isArray(data?.logs) ? data.logs : []);
       setTotal(Number(data?.total) || 0);
+      setStatusCounts(data?.statusCounts || {});
+      setStatusCountsTotal(Number(data?.statusCountsTotal) || 0);
       setPage(1);
       setExpanded(null);
     } catch (e) {
@@ -217,16 +239,16 @@ export default function LogsPage() {
     }
   }, []);
 
+  // Recarrega a primeira página sempre que o filtro ou a busca mudam.
+  // O setTimeout(0) tira o setState do corpo síncrono do effect (regra do
+  // react-hooks/set-state-in-effect nesta versão do Next).
   useEffect(() => {
     let active = true;
     const timer = window.setTimeout(() => {
-      loadFirstPage({ isActive: () => active });
+      loadFirstPage({ filterKey: filter, searchTerm: debouncedSearch, silent: false, isActive: () => active });
     }, 0);
-    return () => {
-      active = false;
-      window.clearTimeout(timer);
-    };
-  }, [loadFirstPage]);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [filter, debouncedSearch, loadFirstPage]);
 
   useEffect(() => {
     let active = true;
@@ -244,7 +266,7 @@ export default function LogsPage() {
     setError('');
     try {
       const nextPage = page + 1;
-      const data = await api.logs('all', nextPage, 30);
+      const data = await api.logs(FILTER_TO_STATUS[filter] || 'all', nextPage, PAGE_SIZE, debouncedSearch);
       const nextLogs = Array.isArray(data?.logs) ? data.logs : [];
       setRawLogs((current) => [...current, ...nextLogs]);
       setTotal(Number(data?.total) || total);
@@ -267,7 +289,7 @@ export default function LogsPage() {
       setTotal(0);
       setPage(1);
       setExpanded(null);
-      await loadFirstPage({ silent: true });
+      await loadFirstPage({ filterKey: filter, searchTerm: debouncedSearch, silent: true });
     } catch (e) {
       setError(e.message || 'Não foi possível limpar o histórico.');
     } finally {
@@ -292,28 +314,23 @@ export default function LogsPage() {
     return rawLogs.map(log => toMobileLogItem(log, now));
   }, [rawLogs]);
 
-  // Contadores dos chips a partir dos itens carregados (mantém chip e lista consistentes).
+  // Contadores dos chips vêm do backend (todo o histórico, respeitando a
+  // busca) — não apenas dos itens carregados na tela.
   const filters = useMemo(() => {
-    const count = (s) => items.filter(it => it.status === s).length;
+    const c = (s) => Number(statusCounts?.[s]) || 0;
     return [
-      {key:'todos',     label:'Tudo',         n: items.length},
-      {key:'fila',      label:'Aguardando',   n: count('fila')},
-      {key:'ok',        label:'Postados',     n: count('ok')},
-      {key:'falha',     label:'Erros',        n: count('falha')},
-      {key:'ignorado',  label:'Não postados', n: count('ignorado')},
+      {key:'todos',     label:'Tudo',         n: statusCountsTotal},
+      {key:'fila',      label:'Aguardando',   n: c('queued') + c('sending')},
+      {key:'ok',        label:'Postados',     n: c('success')},
+      {key:'falha',     label:'Erros',        n: c('error')},
+      {key:'ignorado',  label:'Não postados', n: c('skipped')},
     ];
-  }, [items]);
+  }, [statusCounts, statusCountsTotal]);
 
-  const filtered = items.filter(it => {
-    if (filter !== 'todos' && it.status !== filter) return false;
-    const q = search.trim().toLowerCase();
-    if (!q) return true;
-    return [it.produto, it.loja, it.de, it.para].some(v => String(v || '').toLowerCase().includes(q));
-  });
-
+  // A lista já vem filtrada pelo backend (status + busca); só agrupamos por dia.
   const grouped = [];
   let currentDay = null;
-  filtered.forEach(it => {
+  items.forEach(it => {
     if (it.day !== currentDay) {
       grouped.push({sep: true, day: it.day});
       currentDay = it.day;
@@ -398,26 +415,28 @@ export default function LogsPage() {
         )
       })()}
 
-      {/* Filtros em palavras claras */}
-      <div style={envStyles.chipRow} aria-label="Filtros — contagens somente dos envios carregados">
+      {/* Filtros em palavras claras — contagens reais do histórico (backend) */}
+      <div style={envStyles.chipRow} aria-label="Filtros por status">
         {filters.map(f => (
-          <button key={f.key} type="button" onClick={() => setFilter(f.key)} style={envStyles.chip(filter === f.key)} title={`${f.n} envios carregados neste filtro`}>
+          <button key={f.key} type="button" onClick={() => setFilter(f.key)} style={envStyles.chip(filter === f.key)} title={`${f.n} no histórico`}>
             {f.label}
             <span style={envStyles.chipCount(filter === f.key)}>{f.n}</span>
           </button>
         ))}
       </div>
       <div style={envStyles.loadedHint}>
-        Contadores dos filtros mostram apenas os {items.length} envios carregados nesta tela{hasMoreLogs ? ` de ${total} no histórico.` : '.'}
+        {total > 0
+          ? `Mostrando ${items.length} de ${total}${debouncedSearch ? ' que batem com a busca' : (filter !== 'todos' ? ' neste filtro' : ' no histórico')}.`
+          : 'Filtre por status ou busque por produto, grupo ou loja.'}
       </div>
 
       {/* Lista */}
       <div style={{padding:'4px 0 0'}}>
         {loading && <div style={{padding:'0 16px'}}><MobileLoadingCard label="Carregando envios..." /></div>}
         {!loading && error && <div style={{padding:'0 16px'}}><MobileErrorCard message={error} /></div>}
-        {!loading && !error && filtered.length === 0 && (
+        {!loading && !error && items.length === 0 && (
           <div style={{padding:'40px 24px', textAlign:'center', color:'var(--ink-soft)', fontSize: 13}}>
-            {items.length === 0 ? 'Nenhum envio ainda. Quando o bot postar ou você criar uma oferta, aparece aqui.' : 'Nenhum envio bate com esse filtro.'}
+            {debouncedSearch || filter !== 'todos' ? 'Nenhum envio bate com esse filtro ou busca.' : 'Nenhum envio ainda. Quando o bot postar ou você criar uma oferta, aparece aqui.'}
           </div>
         )}
         {!loading && !error && grouped.map((row, gIdx) => {

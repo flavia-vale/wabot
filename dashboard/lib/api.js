@@ -326,8 +326,8 @@ export const api = {
   preservationProbeSessionSelect: (probeAccountSessionId) => apiFetch('/api/preservation/probe/session/select', { method: 'POST', body: JSON.stringify({ probeAccountSessionId }) }),
   preservationClicks: () => apiFetch('/api/preservation/monitoring/clicks'),
 
-  logs: (status = 'all', page = 1, limit = 20) =>
-    apiFetch(`/api/logs?status=${status}&page=${page}&limit=${limit}`),
+  logs: (status = 'all', page = 1, limit = 20, search = '') =>
+    apiFetch(`/api/logs?status=${encodeURIComponent(status)}&page=${page}&limit=${limit}${search ? `&search=${encodeURIComponent(search)}` : ''}`),
   logsSummary: (period = '7d') => apiFetch(`/api/logs/summary?period=${encodeURIComponent(period)}`),
   logsClear: () => apiFetch('/api/logs/clear', { method: 'DELETE' }),
 

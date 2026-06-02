@@ -1,18 +1,21 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileRoutes } from '@/components/mobile/routes'
 import {
-  loadAllTemplates,
-  savePresetBody,
-  resetPresetBody,
-  createCustomTemplate,
-  updateCustomTemplate,
-  deleteCustomTemplate,
+  composeTemplates,
+  readLocalTemplateStore,
+  loadTemplateStore,
+  persistTemplateStore,
+  withPresetBody,
+  withoutPresetBody,
+  withNewCustomTemplate,
+  withUpdatedCustomTemplate,
+  withoutCustomTemplate,
 } from '@/lib/mobileTemplateStore'
 
 const VARIABLES = ['{produto}', '{preço}', '{preço_de}', '{link}', '{loja}']
@@ -20,21 +23,48 @@ const VARIABLES = ['{produto}', '{preço}', '{preço_de}', '{link}', '{loja}']
 export default function TemplatesPage() {
   useMobileRoutePerf('m/account/templates')
   const router = useRouter()
-  const [templates, setTemplates] = useState(() => loadAllTemplates())
+  const [store, setStore] = useState(() => readLocalTemplateStore())
   const [mode, setMode] = useState('list')
   const [editingKey, setEditingKey] = useState(null)
   const [editName, setEditName] = useState('')
   const [editBody, setEditBody] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
-
+  const templates = composeTemplates(store)
   const editingTemplate = templates.find((t) => t.key === editingKey) || null
 
-  function refresh() { setTemplates(loadAllTemplates()) }
+  // Reconcilia com o servidor após o render inicial (que usa o cache local).
+  useEffect(() => {
+    let active = true
+    loadTemplateStore()
+      .then((serverStore) => { if (active) setStore(serverStore) })
+      .catch(() => {})
+    return () => { active = false }
+  }, [])
+
+  // Aplica a mutação de forma otimista e persiste no servidor em seguida.
+  async function commit(nextStore) {
+    const previous = store
+    setStore(nextStore)
+    setMode('list')
+    setSaving(true)
+    setSaveError('')
+    try {
+      await persistTemplateStore(nextStore)
+    } catch {
+      setStore(previous)
+      setSaveError('Não foi possível salvar no servidor. Tente novamente.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   function startEdit(template) {
     setEditingKey(template.key)
     setEditName(template.name)
     setEditBody(template.body || '')
+    setSaveError('')
     setMode('edit')
   }
 
@@ -42,38 +72,29 @@ export default function TemplatesPage() {
     setEditingKey(null)
     setEditName('')
     setEditBody('')
+    setSaveError('')
     setMode('create')
   }
 
   function handleSave() {
     if (mode === 'create') {
       if (!editName.trim() || !editBody.trim()) return
-      createCustomTemplate({ name: editName.trim(), body: editBody })
+      const { store: nextStore } = withNewCustomTemplate(store, { name: editName.trim(), body: editBody })
+      commit(nextStore)
     } else if (editingKey && editingTemplate) {
-      if (editingTemplate.isCustom) {
-        updateCustomTemplate(editingKey, { name: editName.trim(), body: editBody })
-      } else {
-        savePresetBody(editingKey, editBody)
-      }
+      const nextStore = editingTemplate.isCustom
+        ? withUpdatedCustomTemplate(store, editingKey, { name: editName.trim(), body: editBody })
+        : withPresetBody(store, editingKey, editBody)
+      commit(nextStore)
     }
-    refresh()
-    setMode('list')
   }
 
   function handleReset() {
-    if (editingKey) {
-      resetPresetBody(editingKey)
-      refresh()
-      setMode('list')
-    }
+    if (editingKey) commit(withoutPresetBody(store, editingKey))
   }
 
   function handleDelete() {
-    if (editingKey && editingTemplate?.isCustom) {
-      deleteCustomTemplate(editingKey)
-      refresh()
-      setMode('list')
-    }
+    if (editingKey && editingTemplate?.isCustom) commit(withoutCustomTemplate(store, editingKey))
   }
 
   const canSave = mode === 'create' ? editName.trim() && editBody.trim() : editBody.trim()
@@ -121,7 +142,7 @@ export default function TemplatesPage() {
         </div>
 
         <div style={{ padding: '12px 16px 24px', display: 'grid', gap: 8 }}>
-          <button type="button" onClick={handleSave} disabled={!canSave} style={{ ...mobi.btn('accent', true), opacity: canSave ? 1 : 0.5 }}>Salvar</button>
+          <button type="button" onClick={handleSave} disabled={!canSave || saving} style={{ ...mobi.btn('accent', true), opacity: (canSave && !saving) ? 1 : 0.5 }}>{saving ? 'Salvando…' : 'Salvar'}</button>
           <button type="button" onClick={() => setMode('list')} style={mobi.btn('ghost', true)}>Cancelar</button>
           {editingTemplate?.isCustom && (
             <button type="button" onClick={handleDelete} style={{ ...mobi.btn('ghost', true), color: 'var(--danger)', borderColor: 'transparent' }}>Excluir modelo</button>
@@ -144,6 +165,12 @@ export default function TemplatesPage() {
       <div style={{ padding: '12px 16px 0' }}>
         <button type="button" onClick={startCreate} style={mobi.btn('accent', true)}>+ Criar novo modelo</button>
       </div>
+
+      {saveError && (
+        <div style={{ margin: '10px 16px 0', padding: '10px 12px', borderRadius: 12, background: 'color-mix(in oklab, var(--danger) 10%, var(--surface))', border: '1px solid color-mix(in oklab, var(--danger) 25%, var(--line))', fontSize: 12.5, color: 'var(--danger)' }}>
+          {saveError}
+        </div>
+      )}
 
       <div style={cfgStyles.cardWrap}>
         <div style={{ ...cfgStyles.card, overflow: 'hidden' }}>
@@ -169,7 +196,7 @@ export default function TemplatesPage() {
       </div>
 
       <div style={{ padding: '12px 16px 0', fontSize: 11.5, color: 'var(--ink-soft)', lineHeight: 1.5 }}>
-        Os 4 modelos padrão podem ser editados. Modelos personalizados são salvos neste navegador.
+        Os 4 modelos padrão podem ser editados. Seus modelos ficam salvos na sua conta e sincronizam entre celular e computador.
       </div>
 
       <div style={{ padding: '18px 16px 24px' }}>

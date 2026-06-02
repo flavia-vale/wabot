@@ -14,6 +14,8 @@ const DEFAULTS = {
   brandingGroupLink: '',
   brandingCtaText: DEFAULT_BRANDING_CTA_TEXT,
   copyVariationPoolJson: '{}',
+  mobileTemplatesJson: '{}',
+  mobileCouponLinksJson: '{}',
 }
 
 
@@ -36,12 +38,17 @@ export async function configRoutes(app) {
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
     const cfg = await db.botConfig.findUnique({ where: { userId: req.user.sub } })
     if (!cfg) return { ...DEFAULTS, userId: req.user.sub }
-    return { ...cfg, copyVariationPoolJson: cfg.copyVariationPoolJson ?? '{}' }
+    return {
+      ...cfg,
+      copyVariationPoolJson: cfg.copyVariationPoolJson ?? '{}',
+      mobileTemplatesJson: cfg.mobileTemplatesJson ?? '{}',
+      mobileCouponLinksJson: cfg.mobileCouponLinksJson ?? '{}',
+    }
   })
 
   app.put('/', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
-    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg, feedGlobal, postToStatus, brandingGroupLink, brandingCtaText, copyVariationPoolJson } = req.body ?? {}
+    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg, feedGlobal, postToStatus, brandingGroupLink, brandingCtaText, copyVariationPoolJson, mobileTemplatesJson, mobileCouponLinksJson } = req.body ?? {}
 
     if (delayMin !== undefined && !isIntegerInRange(delayMin)) {
       return reply.code(400).send({ error: 'delayMin deve ser um número inteiro entre 0 e 300' })
@@ -62,6 +69,19 @@ export async function configRoutes(app) {
       }
       try { JSON.parse(copyVariationPoolJson) } catch {
         return reply.code(400).send({ error: 'copyVariationPoolJson contém JSON inválido' })
+      }
+    }
+
+    for (const [field, value] of [['mobileTemplatesJson', mobileTemplatesJson], ['mobileCouponLinksJson', mobileCouponLinksJson]]) {
+      if (value === undefined) continue
+      if (typeof value !== 'string') {
+        return reply.code(400).send({ error: `${field} deve ser string JSON` })
+      }
+      if (value.length > 20_000) {
+        return reply.code(400).send({ error: `${field} excede o tamanho máximo permitido` })
+      }
+      try { JSON.parse(value) } catch {
+        return reply.code(400).send({ error: `${field} contém JSON inválido` })
       }
     }
 
@@ -98,6 +118,8 @@ export async function configRoutes(app) {
         brandingGroupLink: normalizedBrandingGroupLink,
         brandingCtaText: normalizedBrandingCtaText,
         ...(copyVariationPoolJson !== undefined && { copyVariationPoolJson }),
+        ...(mobileTemplatesJson !== undefined && { mobileTemplatesJson }),
+        ...(mobileCouponLinksJson !== undefined && { mobileCouponLinksJson }),
       },
       update: {
         ...(delayMin !== undefined && { delayMin }),
@@ -110,6 +132,8 @@ export async function configRoutes(app) {
         ...(brandingGroupLink !== undefined && { brandingGroupLink: normalizedBrandingGroupLink }),
         ...(brandingCtaText !== undefined && { brandingCtaText: normalizedBrandingCtaText }),
         ...(copyVariationPoolJson !== undefined && { copyVariationPoolJson }),
+        ...(mobileTemplatesJson !== undefined && { mobileTemplatesJson }),
+        ...(mobileCouponLinksJson !== undefined && { mobileCouponLinksJson }),
       },
     })
     reloadConfig(userId)
