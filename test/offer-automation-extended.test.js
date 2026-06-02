@@ -9,7 +9,7 @@ import assert from 'node:assert/strict'
 import Fastify from 'fastify'
 import { filterOffers, buildOffersQuery } from '../src/offerAutomation/shopeeOffers.js'
 import { formatOfferMessage, runAutomation } from '../src/offerAutomation/dispatcher.js'
-import { pickVariant, applyVariation } from '../src/core/copyVariation.js'
+import { DEFAULT_COPY_VARIATION_POOL_JSON, pickVariant, applyVariation, resolveCopyVariationPoolJson } from '../src/core/copyVariation.js'
 import { offerAutomationRoutes } from '../src/api/routes/offerAutomation.js'
 import { configRoutes } from '../src/api/routes/config.js'
 
@@ -498,6 +498,19 @@ test('applyVariation: poolJson em string é parseado corretamente', () => {
   assert.ok(result.includes('Oferta'))
 })
 
+test('resolveCopyVariationPoolJson: usa defaults oficiais quando pool salvo está vazio', () => {
+  assert.equal(resolveCopyVariationPoolJson('{}'), DEFAULT_COPY_VARIATION_POOL_JSON)
+  const parsed = JSON.parse(resolveCopyVariationPoolJson('{}'))
+  assert.equal(parsed.greetings[0], '🚨 COOOOOORRE QUE TÁ ACABANDO!')
+  assert.equal(parsed.ctas[0], '📲 Entre no nosso grupo oficial:')
+  assert.equal(parsed.trailers[0], '⚠️ Atenção: Preços e estoque podem mudar a qualquer momento!')
+})
+
+test('resolveCopyVariationPoolJson: preserva pool editado pelo usuário', () => {
+  const custom = JSON.stringify({ greetings: ['Meu gancho'], ctas: ['Meu CTA'], trailers: ['Meu fechamento'] })
+  assert.equal(resolveCopyVariationPoolJson(custom), custom)
+})
+
 // ═══════════════════════════════════════════════
 // config routes — GET copyVariationPoolJson (análise estática)
 // ═══════════════════════════════════════════════
@@ -505,8 +518,6 @@ test('applyVariation: poolJson em string é parseado corretamente', () => {
 // do campo copyVariationPoolJson via análise do código-fonte.
 
 test('GET /api/config: contrato comportamental — campo copyVariationPoolJson sempre presente', async () => {
-  const { DEFAULT_COPY_VARIATION_POOL_JSON } = await import('../src/api/routes/config.js')
-
   // Quando não existe config no DB, o GET retorna DEFAULTS que inclui copyVariationPoolJson
   const appNoConfig = buildConfigApp()
   const resNoConfig = await appNoConfig.inject({ method: 'GET', url: '/api/config' })

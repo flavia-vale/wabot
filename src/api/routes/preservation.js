@@ -8,8 +8,7 @@ import { getHealth as getChannelHealth } from '../../core/channelHealth.js'
 import { recomputeScore as recomputeReportRiskScore } from '../../core/reportRiskScore.js'
 import { getClickStats } from '../../core/clickTracker.js'
 import { getProbeMonitoringSummary } from '../../core/probeEvidence.js'
-
-
+import { resolveCopyVariationPoolJson } from '../../core/copyVariation.js'
 import { getProbeSessionSnapshot, isProbeSessionSelectable, setProbeSession } from '../../core/probeSessions.js'
 
 const PRESERVATION_CONFIG_KEYS = [
@@ -28,7 +27,11 @@ const PRESERVATION_CONFIG_KEYS = [
 
 function pickConfig(botConfig) {
   const out = {}
-  for (const k of PRESERVATION_CONFIG_KEYS) out[k] = botConfig?.[k] ?? null
+  for (const k of PRESERVATION_CONFIG_KEYS) {
+    out[k] = k === 'copyVariationPoolJson'
+      ? resolveCopyVariationPoolJson(botConfig?.[k])
+      : (botConfig?.[k] ?? null)
+  }
   out.probeAccountSessionId = botConfig?.probeAccountSessionId ?? null
   return out
 }
