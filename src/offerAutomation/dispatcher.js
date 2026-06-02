@@ -40,10 +40,10 @@ function addSentIds(existing, newIds) {
   return all.length > 200 ? all.slice(all.length - 200) : all
 }
 
-export async function runAutomation(automation, { sendBroadcastFn = sendBroadcast, isRunningFn = isRunning } = {}) {
+export async function runAutomation(automation, { sendBroadcastFn = sendBroadcast, isRunningFn = isRunning, fetchOffersFn = fetchOffers, dbClient = db } = {}) {
   if (!isRunningFn(automation.userId)) return { skipped: 'bot_not_running' }
 
-  const credRow = await db.credential.findUnique({
+  const credRow = await dbClient.credential.findUnique({
     where: { userId_platform: { userId: automation.userId, platform: 'shopee' } },
   })
   if (!credRow) return { skipped: 'no_shopee_credentials' }
@@ -58,7 +58,7 @@ export async function runAutomation(automation, { sendBroadcastFn = sendBroadcas
     sentItemIds = []
   }
 
-  const offers = await fetchOffers({
+  const offers = await fetchOffersFn({
     keyword: automation.keyword,
     minDiscountPct: automation.minDiscountPct,
     limit: automation.offersPerSend,
@@ -73,19 +73,23 @@ export async function runAutomation(automation, { sendBroadcastFn = sendBroadcas
 
   const toSend = offers.slice(0, automation.offersPerSend)
 
-  const botConfig = await db.botConfig.findUnique({ where: { userId: automation.userId } })
+  const botConfig = await dbClient.botConfig.findUnique({ where: { userId: automation.userId } })
   const poolJson = botConfig?.copyVariationPoolJson ?? '{}'
 
   const sentIds = []
   for (const offer of toSend) {
     const base = formatOfferMessage(offer, automation.keyword)
     const text = applyVariation(base, { groupId: automation.destGroupJid, poolJson, random: true })
-    await sendBroadcastFn(automation.userId, text, [automation.destGroupJid])
+    await sendBroadcastFn(automation.userId, text, [automation.destGroupJid], {
+      imageUrl: offer.imageUrl,
+      imageRefererUrl: offer.offerLink,
+      source: 'offerAutomation',
+    })
     sentIds.push(offer.itemId)
   }
 
   const newSentIds = addSentIds(sentItemIds, sentIds)
-  await db.offerAutomation.update({
+  await dbClient.offerAutomation.update({
     where: { id: automation.id },
     data: { lastSentAt: new Date(), sentItemIds: JSON.stringify(newSentIds) },
   })

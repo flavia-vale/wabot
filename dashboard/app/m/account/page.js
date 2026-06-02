@@ -285,10 +285,20 @@ export default function AccountPage() {
         <div style={contaStyles.sectionLabel}>Como o bot posta</div>
       </div>
       <div style={contaStyles.card}>
-        <ContaRow icon="plus" title="Modelos de mensagem"
-          sub="modelos salvos no backoffice" value="editar" onClick={() => router.push(mobileRoutes.accountTemplates)}/>
-        <ContaRow icon="bolt" title="Ritmo de envio"
-          sub="ajuste em grupos e preservação" onClick={() => router.push(mobileRoutes.espelhar)} last/>
+        <ContaRow icon="chat" tone="accent" title="Enviar mensagem livre"
+          sub="broadcast com segmentação de destinos" value="abrir" onClick={() => router.push(mobileRoutes.broadcast)}/>
+        <ContaRow icon="link" tone="success" title="Converter links"
+          sub="transforme links originais em links de afiliado" value="abrir" onClick={() => router.push(mobileRoutes.converter)}/>
+        <ContaRow icon="bolt" tone="success" title="Ofertas automáticas"
+          sub="buscas recorrentes, ligar/desligar e teste" value="abrir" onClick={() => router.push(mobileRoutes.automations)}/>
+        <ContaRow icon="sparkles" tone="accent" title="Ganchos e CTAs"
+          sub="variações persistidas no backend" value="editar" onClick={() => router.push(mobileRoutes.accountVariations)}/>
+        <ContaRow icon="plus" title="Modelos de oferta"
+          sub="modelos locais para criar oferta manual" value="editar" onClick={() => router.push(mobileRoutes.accountTemplates)}/>
+        <ContaRow icon="shield" title="Ritmo de envio"
+          sub="ajuste em grupos e preservação" onClick={() => router.push(mobileRoutes.espelhar)}/>
+        <ContaRow icon="link" title="Preferências do bot"
+          sub="delay, marca e palavras bloqueadas" onClick={() => router.push(mobileRoutes.configPreferences)} last/>
       </div>
 
       {/* ── ANTI-BANIMENTO (era "Preservação avançada") ── */}
@@ -309,7 +319,9 @@ export default function AccountPage() {
         <ContaRow icon="star" title="Assinatura e cobrança"
           sub="histórico · forma de pagamento · renovar" onClick={() => router.push(mobileRoutes.accountSubscription)}/>
         <ContaRow icon="chat" title="Guia rápido"
-          sub="Tutorial para pegar credenciais" onClick={() => router.push(mobileRoutes.tutorial)}/>
+          sub="passo a passo de ativação" onClick={() => router.push(mobileRoutes.helpTutorial)}/>
+        <ContaRow icon="link" title="Guia de credenciais"
+          sub="Shopee, Amazon e Mercado Livre" onClick={() => router.push(mobileRoutes.tutorial)}/>
         <ContaRow icon="whatsapp" tone="success" title="Suporte"
           sub="fale com a gente pelo WhatsApp" onClick={() => openWhatsApp('Olá! Preciso de suporte.')}/>
         <ContaRow icon="sparkles" tone="accent" title="Contato"

@@ -197,6 +197,7 @@ model BotConfig {
   probeEnabled            Boolean @default(false)
   mobileTemplatesJson     String  @default("{}")
   mobileCouponLinksJson   String  @default("{}")
+  preservationEnabled     Boolean @default(false)
   updatedAt       DateTime @updatedAt
 }
 

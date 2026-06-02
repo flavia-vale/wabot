@@ -512,7 +512,10 @@ export default function OfferPage() {
     if (typeof window === 'undefined') return undefined
     const timer = window.setTimeout(() => {
       const urlFromQuery = new URLSearchParams(window.location.search).get('url')?.trim()
-      if (urlFromQuery) setInput((current) => current || urlFromQuery)
+      if (urlFromQuery) {
+        setInput((current) => current || urlFromQuery)
+        setPasteFeedback('Link convertido carregado do Conversor. Gere a oferta para montar a mensagem.')
+      }
     }, 0)
     return () => window.clearTimeout(timer)
   }, [])
@@ -704,6 +707,10 @@ export default function OfferPage() {
   }
 
   function openScheduleModal() {
+    if (selectedDestinations.length === 0) {
+      setSendFeedback('Selecione pelo menos um destino antes de agendar.')
+      return
+    }
     const nowPlusOneMinute = new Date(Date.now() + 61000)
     const pad = (n) => String(n).padStart(2, '0')
     const localIso = `${nowPlusOneMinute.getFullYear()}-${pad(nowPlusOneMinute.getMonth() + 1)}-${pad(nowPlusOneMinute.getDate())}T${pad(nowPlusOneMinute.getHours())}:${pad(nowPlusOneMinute.getMinutes())}`
@@ -718,7 +725,7 @@ export default function OfferPage() {
     setScheduling(true)
     setScheduleError('')
     try {
-      await api.scheduledCreate(editorText, new Date(scheduleAt).toISOString())
+      await api.scheduledCreate(editorText, new Date(scheduleAt).toISOString(), selectedDestinations)
       setShowScheduleModal(false)
       setSendFeedback('Agendado! Ver em agendamentos →')
     } catch (e) {
@@ -1107,7 +1114,7 @@ ${currentCouponLink}`
 
           <div style={criarStyles.sendWrap}>
             <div style={criarStyles.sendRow}>
-              <button type="button" onClick={openScheduleModal} disabled={!editorText.trim()} style={{...criarStyles.schedBtn, opacity: !editorText.trim() ? 0.55 : 1}}>Agendar</button>
+              <button type="button" onClick={openScheduleModal} disabled={!editorText.trim() || selectedDestinations.length === 0} style={{...criarStyles.schedBtn, opacity: (!editorText.trim() || selectedDestinations.length === 0) ? 0.55 : 1}}>Agendar</button>
               <button type="button" onClick={sendNow} disabled={sending || selectedDestinations.length === 0 || !editorText.trim()} style={{...criarStyles.sendBtn, opacity: sending || selectedDestinations.length === 0 || !editorText.trim() ? 0.6 : 1}}>
                 {sending ? 'Enviando...' : 'Enviar agora'} <MobileIcon name="arrow" size={14}/>
               </button>
@@ -1130,7 +1137,10 @@ ${currentCouponLink}`
         <div style={{position:'fixed', inset:0, zIndex:200, background:'rgba(0,0,0,0.55)', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 16px'}} onClick={() => setShowScheduleModal(false)}>
           <div style={{background:'var(--surface)', border:'1px solid var(--line)', borderRadius:20, padding:22, width:'100%', maxWidth:400}} onClick={(e) => e.stopPropagation()}>
             <div style={{fontSize: 16, fontWeight: 700, color:'var(--ink)', marginBottom: 4}}>Agendar envio</div>
-            <div style={{fontSize: 12, color:'var(--ink-soft)', marginBottom: 16, lineHeight: 1.5}}>Escolha a data e hora para o envio automático. Mínimo: 1 minuto a partir de agora.</div>
+            <div style={{fontSize: 12, color:'var(--ink-soft)', marginBottom: 12, lineHeight: 1.5}}>Escolha a data e hora para o envio automático. Mínimo: 1 minuto a partir de agora.</div>
+            <div style={{fontSize: 12, color:'var(--ink)', marginBottom: 16, lineHeight: 1.45, padding:'10px 12px', borderRadius:12, background:'var(--bg-soft)', border:'1px solid var(--line)'}}>
+              O agendamento será salvo para {selectedNames.length} destino(s): {selectedNames.length ? selectedNames.join(', ') : 'nenhum destino selecionado'}.
+            </div>
             <label style={{display:'grid', gap: 6, marginBottom: 16}}>
               <span style={{fontSize: 12, fontWeight: 600, color:'var(--ink)'}}>Data e hora</span>
               <input
@@ -1146,8 +1156,8 @@ ${currentCouponLink}`
               <button
                 type="button"
                 onClick={confirmSchedule}
-                disabled={scheduling || !scheduleAt}
-                style={{padding:'13px', borderRadius:12, background:'var(--ink)', border:'none', color:'white', fontWeight:700, fontSize:14, cursor:'pointer', fontFamily:'inherit', opacity: (scheduling || !scheduleAt) ? 0.6 : 1}}
+                disabled={scheduling || !scheduleAt || selectedDestinations.length === 0}
+                style={{padding:'13px', borderRadius:12, background:'var(--ink)', border:'none', color:'white', fontWeight:700, fontSize:14, cursor:'pointer', fontFamily:'inherit', opacity: (scheduling || !scheduleAt || selectedDestinations.length === 0) ? 0.6 : 1}}
               >
                 {scheduling ? 'Agendando...' : 'Confirmar agendamento'}
               </button>

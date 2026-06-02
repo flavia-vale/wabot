@@ -23,6 +23,7 @@ const PRESERVATION_CONFIG_KEYS = [
   'copyVariationPoolJson',
   'imageMutationEnabled',
   'probeEnabled',
+  'preservationEnabled',
 ]
 
 function pickConfig(botConfig) {
@@ -67,6 +68,7 @@ function validatePartialUpdate(body = {}) {
   json('copyVariationPoolJson')
   bool('imageMutationEnabled')
   bool('probeEnabled')
+  bool('preservationEnabled')
 
   return { updates, errors }
 }

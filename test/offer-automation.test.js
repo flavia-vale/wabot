@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { filterOffers, buildOffersQuery } from '../src/offerAutomation/shopeeOffers.js'
+import { filterOffers, buildOffersQuery, buildOfferCandidateLimit } from '../src/offerAutomation/shopeeOffers.js'
 
 test('filterOffers: remove offers below minDiscountPct', () => {
   const offers = [
@@ -55,7 +55,19 @@ test('buildOffersQuery: uses custom sortType', () => {
   assert.ok(q.includes('sortType: 5'))
 })
 
-import { formatOfferMessage } from '../src/offerAutomation/dispatcher.js'
+test('buildOffersQuery: usa lista ampla por padrão para evitar no_offers_found falso', () => {
+  const q = buildOffersQuery({ keyword: 'festa', page: 1, limit: 10 })
+  assert.ok(q.includes('listType: 1'))
+  assert.ok(!q.includes('listType: 2'))
+})
+
+test('buildOfferCandidateLimit: busca candidatos suficientes para filtrar descontos e deduplicados', () => {
+  assert.equal(buildOfferCandidateLimit(1), 20)
+  assert.equal(buildOfferCandidateLimit(3), 30)
+  assert.equal(buildOfferCandidateLimit(50), 100)
+})
+
+import { formatOfferMessage, runAutomation } from '../src/offerAutomation/dispatcher.js'
 
 test('formatOfferMessage: includes product name and price', () => {
   const offer = {
@@ -165,4 +177,59 @@ test('DELETE /api/offer-automations/:id: deletes owned automation', async () => 
   const app = buildApp(dbMock)
   const res = await app.inject({ method: 'DELETE', url: '/api/offer-automations/a1' })
   assert.equal(res.statusCode, 200)
+})
+
+test('runAutomation: envia imagem do anúncio junto com a oferta automática', async () => {
+  const sent = []
+  const updates = []
+  const automation = {
+    id: 'auto-img',
+    userId: 'user-img',
+    keyword: 'fone bluetooth',
+    minDiscountPct: 10,
+    offersPerSend: 1,
+    destGroupJid: 'grupo@g.us',
+    sentItemIds: '[]',
+    sortType: 2,
+    isAMSOffer: false,
+    isKeySeller: false,
+  }
+
+  const dbClient = {
+    credential: {
+      findUnique: async () => ({ data: JSON.stringify({ appId: 'app', secretKey: 'secret' }) }),
+    },
+    botConfig: {
+      findUnique: async () => ({ copyVariationPoolJson: '{}' }),
+    },
+    offerAutomation: {
+      update: async ({ data }) => { updates.push(data); return { ...automation, ...data } },
+    },
+  }
+
+  const result = await runAutomation(automation, {
+    dbClient,
+    isRunningFn: () => true,
+    fetchOffersFn: async () => ([{
+      itemId: '42',
+      productName: 'Fone Bluetooth',
+      priceMin: 990000,
+      originPrice: 1990000,
+      priceDiscountRate: 50,
+      offerLink: 'https://shope.ee/oferta42',
+      imageUrl: 'https://down-br.img.susercontent.com/file/anuncio42',
+    }]),
+    sendBroadcastFn: async (...args) => { sent.push(args); return { queued: 1 } },
+  })
+
+  assert.deepEqual(result, { sent: 1 })
+  assert.equal(sent.length, 1)
+  assert.equal(sent[0][0], 'user-img')
+  assert.deepEqual(sent[0][2], ['grupo@g.us'])
+  assert.deepEqual(sent[0][3], {
+    imageUrl: 'https://down-br.img.susercontent.com/file/anuncio42',
+    imageRefererUrl: 'https://shope.ee/oferta42',
+    source: 'offerAutomation',
+  })
+  assert.deepEqual(updates[0].sentItemIds, JSON.stringify(['42']))
 })

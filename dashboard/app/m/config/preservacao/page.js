@@ -104,6 +104,13 @@ export default function PreservacaoPage() {
   const [clicksLoading, setClicksLoading] = useState(true)
   const [clicksError, setClicksError] = useState('')
 
+  const [probe, setProbe] = useState(null)
+  const [probeSession, setProbeSession] = useState(null)
+  const [probeLoading, setProbeLoading] = useState(true)
+  const [probeError, setProbeError] = useState('')
+  const [probeAction, setProbeAction] = useState('')
+  const [probeAccountSessionId, setProbeAccountSessionId] = useState('')
+
   useEffect(() => {
     let active = true
     api.me()
@@ -162,12 +169,58 @@ export default function PreservacaoPage() {
       .then((data) => setClicks(data))
       .catch((e) => setClicksError(e.message || 'Erro ao carregar cliques.'))
       .finally(() => setClicksLoading(false))
+
+    setProbeLoading(true)
+    setProbeError('')
+    Promise.all([api.preservationProbe(), api.preservationProbeSessionStatus()])
+      .then(([probeData, sessionData]) => {
+        setProbe(probeData)
+        setProbeSession(sessionData?.session ?? sessionData)
+        if (probeData?.probeAccountSessionId) setProbeAccountSessionId(probeData.probeAccountSessionId)
+      })
+      .catch((e) => setProbeError(e.message || 'Erro ao carregar probe.'))
+      .finally(() => setProbeLoading(false))
   }, [])
 
   useEffect(() => {
     const timer = window.setTimeout(() => { loadMonitoring() }, 0)
     return () => window.clearTimeout(timer)
   }, [loadMonitoring])
+
+
+
+  async function runProbeAction(action, handler) {
+    setProbeAction(action)
+    setProbeError('')
+    try {
+      const result = await handler()
+      setProbeSession(result?.session ?? result)
+      const [probeData, sessionData] = await Promise.all([api.preservationProbe(), api.preservationProbeSessionStatus()])
+      setProbe(probeData)
+      setProbeSession(sessionData?.session ?? sessionData)
+    } catch (e) {
+      setProbeError(e.message || 'Não foi possível executar ação do probe.')
+    } finally {
+      setProbeAction('')
+    }
+  }
+
+  function startProbeSession() {
+    runProbeAction('start', () => api.preservationProbeSessionStart())
+  }
+
+  function stopProbeSession() {
+    runProbeAction('stop', () => api.preservationProbeSessionStop())
+  }
+
+  function selectProbeSession() {
+    const value = probeAccountSessionId.trim()
+    if (!value) {
+      setProbeError('Informe o ID da sessão probe.')
+      return
+    }
+    runProbeAction('select', () => api.preservationProbeSessionSelect(value))
+  }
 
   function updateDraft(patch) {
     setDraft((current) => ({ ...(current ?? {}), ...patch }))
@@ -347,6 +400,34 @@ export default function PreservacaoPage() {
             </div>
           )}
         </MonitoringCard>
+
+        <MonitoringCard title="Probe externo" loading={probeLoading} error={probeError}>
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div style={{ ...cfgStyles.field, background: 'var(--bg-soft)' }}>
+                <div style={{ fontSize: 10.5, color: 'var(--ink-faint)', textTransform: 'uppercase', fontWeight: 800 }}>Monitor</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginTop: 3 }}>{probe?.enabled ? `ativo · ${probe.probeMode ?? 'manual'}` : 'desligado'}</div>
+              </div>
+              <div style={{ ...cfgStyles.field, background: 'var(--bg-soft)' }}>
+                <div style={{ fontSize: 10.5, color: 'var(--ink-faint)', textTransform: 'uppercase', fontWeight: 800 }}>Sessão</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginTop: 3 }}>{probeSession?.state ?? probeSession?.status ?? (probeSession?.running ? 'rodando' : 'parada')}</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--ink-soft)', lineHeight: 1.45 }}>
+              Use uma sessão probe separada para observar canais sem depender da sessão principal. Iniciar/parar/selecionar usa os mesmos endpoints do desktop.
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <button type="button" onClick={startProbeSession} disabled={probeAction === 'start'} style={mobi.btn('ghost', true)}>{probeAction === 'start' ? 'Iniciando...' : 'Iniciar probe'}</button>
+              <button type="button" onClick={stopProbeSession} disabled={probeAction === 'stop'} style={mobi.btn('ghost', true)}>{probeAction === 'stop' ? 'Parando...' : 'Parar probe'}</button>
+            </div>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={cfgStyles.label}>ID da sessão probe</span>
+              <input style={cfgStyles.field} value={probeAccountSessionId} onChange={(event) => setProbeAccountSessionId(event.target.value)} placeholder="probe-account-session-id" />
+            </label>
+            <button type="button" onClick={selectProbeSession} disabled={probeAction === 'select'} style={mobi.btn('ghost', true)}>{probeAction === 'select' ? 'Selecionando...' : 'Selecionar sessão probe'}</button>
+          </div>
+        </MonitoringCard>
+
       </div>
 
       <div style={cfgStyles.sectionLabel}>Configurações</div>
@@ -365,6 +446,30 @@ export default function PreservacaoPage() {
 
       {!configLoading && !configError && draft && (
         <div style={{ padding: '0 16px', display: 'grid', gap: 12 }}>
+
+          <div style={cfgStyles.cardP}>
+            <div style={cfgStyles.row(false)}>
+              <div style={cfgStyles.rowMain}>
+                <div style={cfgStyles.rowTitle}>Módulo de Preservação Avançada</div>
+                <div style={cfgStyles.rowSub}>Interruptor mestre das defesas. Desligado, nenhum dos controles abaixo roda.</div>
+              </div>
+              <button
+                type="button"
+                style={cfgStyles.toggle(!!draft.preservationEnabled)}
+                onClick={() => updateDraft({ preservationEnabled: !draft.preservationEnabled })}
+                aria-label="Alternar módulo de preservação avançada"
+                aria-checked={!!draft.preservationEnabled}
+                role="switch"
+              >
+                <div style={cfgStyles.toggleKnob(!!draft.preservationEnabled)} />
+              </button>
+            </div>
+            {!draft.preservationEnabled && (
+              <div style={{ fontSize: 11.5, color: 'var(--warn, #b45309)', marginTop: 8 }}>
+                Os ajustes abaixo só passam a valer depois de ligar o módulo.
+              </div>
+            )}
+          </div>
 
           <div style={cfgStyles.cardP}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 12 }}>Throttle (espaçamento entre canais)</div>
