@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { filterOffers, buildOffersQuery } from '../src/offerAutomation/shopeeOffers.js'
+import { filterOffers, buildOffersQuery, buildOfferCandidateLimit } from '../src/offerAutomation/shopeeOffers.js'
 
 test('filterOffers: remove offers below minDiscountPct', () => {
   const offers = [
@@ -53,6 +53,18 @@ test('buildOffersQuery: includes isKeySeller when true', () => {
 test('buildOffersQuery: uses custom sortType', () => {
   const q = buildOffersQuery({ keyword: 'festa', page: 1, limit: 10, sortType: 5 })
   assert.ok(q.includes('sortType: 5'))
+})
+
+test('buildOffersQuery: usa lista ampla por padrão para evitar no_offers_found falso', () => {
+  const q = buildOffersQuery({ keyword: 'festa', page: 1, limit: 10 })
+  assert.ok(q.includes('listType: 1'))
+  assert.ok(!q.includes('listType: 2'))
+})
+
+test('buildOfferCandidateLimit: busca candidatos suficientes para filtrar descontos e deduplicados', () => {
+  assert.equal(buildOfferCandidateLimit(1), 20)
+  assert.equal(buildOfferCandidateLimit(3), 30)
+  assert.equal(buildOfferCandidateLimit(50), 100)
 })
 
 import { formatOfferMessage, runAutomation } from '../src/offerAutomation/dispatcher.js'
