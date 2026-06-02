@@ -101,7 +101,11 @@ export async function offerAutomationRoutes(app, opts = {}) {
       where: { id: req.params.id, userId: req.user.sub },
     })
     if (!automation) return reply.code(404).send({ error: 'Automação não encontrada' })
-    const result = await runAutomation(automation)
-    return { ok: true, result }
+    try {
+      const result = await runAutomation(automation)
+      return { ok: true, result }
+    } catch (err) {
+      return { ok: true, result: { error: err.message } }
+    }
   })
 }

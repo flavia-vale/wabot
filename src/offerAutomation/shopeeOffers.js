@@ -67,6 +67,18 @@ export async function fetchOffers({ keyword, minDiscountPct, limit, excludeItemI
     timeout: 10000,
   })
 
+  // A API de afiliado da Shopee responde 200 mesmo em erro, sinalizando via
+  // `errors` (ex.: credencial inválida, assinatura errada, error 90309999,
+  // rate limit). Sem este check, `data.data` vem null, nodes = [] e o erro
+  // real se disfarçava de "no_offers_found". Propagamos para o chamador.
+  if (Array.isArray(data?.errors) && data.errors.length) {
+    const detail = data.errors
+      .map(e => [e.code, e.message].filter(Boolean).join(' '))
+      .filter(Boolean)
+      .join('; ') || 'erro desconhecido'
+    throw new Error(`shopee_api_error: ${detail}`)
+  }
+
   const nodes = data?.data?.productOfferV2?.nodes ?? []
-  return filterOffers(nodes, { minDiscountPct, excludeItemIds })
+  return { offers: filterOffers(nodes, { minDiscountPct, excludeItemIds }), rawCount: nodes.length }
 }
