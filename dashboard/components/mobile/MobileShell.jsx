@@ -1,8 +1,19 @@
 'use client'
 
 import Link from 'next/link'
+import { usePathname, useRouter } from 'next/navigation'
 import { mobileRoutes } from '@/components/mobile/routes'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
+
+// Rotas-raiz acessíveis pela bottom nav — nelas mostramos o brand mark; em
+// qualquer página secundária a setinha de voltar aparece automaticamente.
+const ROOT_ROUTES = [
+  mobileRoutes.home,
+  mobileRoutes.espelhar,
+  mobileRoutes.offer,
+  mobileRoutes.logs,
+  mobileRoutes.account,
+]
 
 const shellStyles = {
   root: {
@@ -158,7 +169,13 @@ const tabs = [
   { key: 'conta',    label: 'Conta',    href: mobileRoutes.account },
 ]
 
-export function MobileShell({ title = 'Conversor', active = 'inicio', hasAlert = false, showBack = false, onBack, planExpired = false, children }) {
+export function MobileShell({ title = 'Conversor', active = 'inicio', hasAlert = false, showBack, onBack, planExpired = false, children }) {
+  const router = useRouter()
+  const pathname = usePathname()
+  // Se a página não definir showBack explicitamente, derivamos da rota: toda
+  // página que não é raiz da bottom nav ganha a setinha de voltar.
+  const displayBack = showBack ?? !ROOT_ROUTES.includes(pathname)
+  const handleBack = onBack ?? (() => router.back())
   return (
     <div className="mobile-shell" style={shellStyles.root}>
       <style>{`
@@ -176,12 +193,12 @@ export function MobileShell({ title = 'Conversor', active = 'inicio', hasAlert =
       `}</style>
       <header style={shellStyles.topbar}>
         <div style={shellStyles.topbarBrand}>
-          {showBack ? (
+          {displayBack ? (
             <button
               type="button"
               style={{ ...shellStyles.iconBtn, marginRight: 6 }}
               aria-label="Voltar"
-              onClick={onBack}
+              onClick={handleBack}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <polyline points="15 18 9 12 15 6"/>
