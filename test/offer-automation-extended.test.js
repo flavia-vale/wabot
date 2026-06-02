@@ -53,17 +53,17 @@ test('filterOffers: trata itemId numérico e string como equivalentes no exclude
   assert.deepEqual(result.map(o => o.itemId), [99])
 })
 
-test('filterOffers: aceita desconto de 0% quando minDiscountPct é 0 e há desconto real em preço', () => {
+test('filterOffers: exclui produto com rate=0 mesmo que minDiscountPct seja 0', () => {
   const offers = [
-    { itemId: 'x', priceDiscountRate: 0, originPrice: 2000, priceMin: 1500 },
+    { itemId: 'x', priceDiscountRate: 0, priceMin: 1500 },
   ]
   const result = filterOffers(offers, { minDiscountPct: 0, excludeItemIds: [] })
-  assert.equal(result.length, 1)
+  assert.equal(result.length, 0)
 })
 
-test('filterOffers: usa price como fallback de priceMin', () => {
+test('filterOffers: aceita produto com rate > 0 quando minDiscountPct é 0', () => {
   const offers = [
-    { itemId: 'y', priceDiscountRate: 0, originPrice: 2000, price: 1500, priceMin: null },
+    { itemId: 'y', priceDiscountRate: 5, price: 1500, priceMin: null },
   ]
   const result = filterOffers(offers, { minDiscountPct: 0, excludeItemIds: [] })
   assert.equal(result.length, 1)
@@ -179,7 +179,7 @@ test('runAutomation: retorna skipped quando não há credenciais Shopee', async 
   const automation = {
     id: 'auto2', userId: 'u1', keyword: 'festa', minDiscountPct: 0,
     offersPerSend: 2, destGroupJid: '123@g.us', sentItemIds: '[]',
-    intervalMinutes: 120, sortType: 2, isAMSOffer: false, isKeySeller: false,
+    intervalMinutes: 120, sortType: 2, prioritizeAMS: false, isKeySeller: false,
   }
   // Com bot não rodando, retorna imediatamente sem tocar em DB
   const result = await runAutomation(automation, { isRunningFn: () => false })
@@ -504,22 +504,26 @@ test('applyVariation: poolJson em string é parseado corretamente', () => {
 // configRoutes não aceita injeção de DB, portanto validamos o contrato
 // do campo copyVariationPoolJson via análise do código-fonte.
 
-test('GET /api/config: contrato estático — campo copyVariationPoolJson sempre presente', async () => {
-  // Verificamos na implementação que:
-  // 1. DEFAULTS inclui copyVariationPoolJson: '{}'
-  // 2. quando cfg === null, retorna { ...DEFAULTS, userId } → inclui o campo
-  // 3. quando cfg existe mas copyVariationPoolJson é null, normaliza para '{}'
-  const src = await import('node:fs').then(fs =>
-    fs.promises.readFile('/home/user/wabot/src/api/routes/config.js', 'utf8')
-  )
-  assert.ok(
-    src.includes("copyVariationPoolJson: '{}'"),
-    'DEFAULTS deve declarar copyVariationPoolJson com valor padrão {}'
-  )
-  assert.ok(
-    src.includes('copyVariationPoolJson: cfg.copyVariationPoolJson ?? \'{}\''),
-    'GET deve normalizar copyVariationPoolJson nulo para {}'
-  )
+test('GET /api/config: contrato comportamental — campo copyVariationPoolJson sempre presente', async () => {
+  const { DEFAULT_COPY_VARIATION_POOL_JSON } = await import('../src/api/routes/config.js')
+
+  // Quando não existe config no DB, o GET retorna DEFAULTS que inclui copyVariationPoolJson
+  const appNoConfig = buildConfigApp()
+  const resNoConfig = await appNoConfig.inject({ method: 'GET', url: '/api/config' })
+  assert.equal(resNoConfig.statusCode, 200)
+  const bodyNoConfig = JSON.parse(resNoConfig.body)
+  assert.ok('copyVariationPoolJson' in bodyNoConfig, 'campo deve estar presente quando não há config no DB')
+  assert.equal(bodyNoConfig.copyVariationPoolJson, DEFAULT_COPY_VARIATION_POOL_JSON,
+    'usuário sem config deve receber o pool padrão e não uma string vazia')
+
+  // O pool padrão é JSON válido com as chaves esperadas
+  const parsedDefault = JSON.parse(DEFAULT_COPY_VARIATION_POOL_JSON)
+  assert.ok(Array.isArray(parsedDefault.greetings) && parsedDefault.greetings.length > 0,
+    'pool padrão deve ter greetings')
+  assert.ok(Array.isArray(parsedDefault.ctas) && parsedDefault.ctas.length > 0,
+    'pool padrão deve ter ctas')
+  assert.ok(Array.isArray(parsedDefault.trailers) && parsedDefault.trailers.length > 0,
+    'pool padrão deve ter trailers')
 })
 
 // ═══════════════════════════════════════════════

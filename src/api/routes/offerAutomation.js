@@ -1,7 +1,7 @@
 import dbDefault from '../../db.js'
 import { runAutomation } from '../../offerAutomation/dispatcher.js'
 
-const VALID_INTERVALS = [60, 120, 240, 360, 720, 1440]
+const VALID_INTERVALS = [15, 30, 45, 60, 120, 240, 360, 720, 1440]
 const MAX_OFFERS_PER_SEND = 5
 
 export async function offerAutomationRoutes(app, opts = {}) {
@@ -15,7 +15,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
   })
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const { destGroupJid, destGroupName, keyword, intervalMinutes, offersPerSend, minDiscountPct, sortType, isAMSOffer, isKeySeller } = req.body ?? {}
+    const { destGroupJid, destGroupName, keyword, intervalMinutes, offersPerSend, minDiscountPct, sortType, prioritizeAMS, isKeySeller } = req.body ?? {}
 
     if (!keyword?.trim()) return reply.code(400).send({ error: 'Palavra-chave obrigatória' })
     if (!destGroupJid) return reply.code(400).send({ error: 'Grupo de destino obrigatório' })
@@ -42,7 +42,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
         offersPerSend: perSend,
         minDiscountPct: Number(minDiscountPct) || 0,
         sortType: parsedSortType,
-        isAMSOffer: Boolean(isAMSOffer ?? false),
+        prioritizeAMS: Boolean(prioritizeAMS ?? false),
         isKeySeller: Boolean(isKeySeller ?? false),
       },
     })
@@ -54,7 +54,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
     })
     if (!existing) return reply.code(404).send({ error: 'Automação não encontrada' })
 
-    const { keyword, intervalMinutes, offersPerSend, minDiscountPct, enabled, destGroupJid, destGroupName } = req.body ?? {}
+    const { keyword, intervalMinutes, offersPerSend, minDiscountPct, enabled, destGroupJid, destGroupName, prioritizeAMS } = req.body ?? {}
     const updates = {}
 
     if (keyword !== undefined) {
@@ -83,6 +83,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
       updates.minDiscountPct = pct
     }
     if (enabled !== undefined) updates.enabled = Boolean(enabled)
+    if (prioritizeAMS !== undefined) updates.prioritizeAMS = Boolean(prioritizeAMS)
 
     return db.offerAutomation.update({ where: { id: req.params.id }, data: updates })
   })
@@ -101,7 +102,11 @@ export async function offerAutomationRoutes(app, opts = {}) {
       where: { id: req.params.id, userId: req.user.sub },
     })
     if (!automation) return reply.code(404).send({ error: 'Automação não encontrada' })
-    const result = await runAutomation(automation)
-    return { ok: true, result }
+    try {
+      const result = await runAutomation(automation)
+      return { ok: true, result }
+    } catch (err) {
+      return { ok: true, result: { error: err.message } }
+    }
   })
 }

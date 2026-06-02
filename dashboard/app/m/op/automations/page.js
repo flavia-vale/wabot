@@ -32,6 +32,16 @@ const OFFERS_PER_SEND_OPTIONS = [
   { value: 3, label: '3 produtos por envio' },
 ]
 
+const SKIP_LABELS = {
+  bot_not_running: 'O bot não está conectado. Conecte o WhatsApp e tente de novo.',
+  no_shopee_credentials: 'Sem credenciais da Shopee. Configure appId e secretKey.',
+  invalid_shopee_credentials: 'Credenciais da Shopee incompletas (appId/secretKey).',
+  no_offers_found: 'A Shopee não retornou produtos para essa palavra-chave.',
+  all_offers_filtered: 'A Shopee trouxe produtos, mas todos foram filtrados (desconto mínimo alto ou já enviados). Tente reduzir o desconto mínimo.',
+}
+
+const explainSkip = (code) => SKIP_LABELS[code] ?? `Ignorado: ${code}`
+
 const emptyForm = {
   destGroupJid: '',
   destGroupName: '',
@@ -267,7 +277,7 @@ export default function MobileAutomationsPage() {
                 <button type="button" style={s.actionLink} onClick={() => openEdit(item)}>Editar</button>
                 <button type="button" style={s.dangerLink} onClick={() => remove(item)} disabled={busyId === `delete-${item.id}`}>Remover</button>
               </div>
-              {result && <div style={s.result(Boolean(result.error))}>{result.error ? `Erro: ${result.error}` : result.skipped ? `Ignorado: ${result.skipped}` : `✓ ${result.sent ?? 0} produto(s) enviado(s)`}</div>}
+              {result && <div style={s.result(Boolean(result.error))}>{result.error ? `Erro: ${result.error}` : result.skipped ? explainSkip(result.skipped) : `✓ ${result.sent ?? 0} produto(s) enviado(s)`}</div>}
             </div>
           )
         })}

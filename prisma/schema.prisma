@@ -183,6 +183,7 @@ model BotConfig {
   feedGlobal      Boolean  @default(false)
   postToStatus    Boolean  @default(false)
   brandingGroupLink String   @default("")
+  couponLink        String   @default("")
   brandingCtaText String   @default("Participe do grupo:")
   maxDailyFollows         Int     @default(3)
   channelMinIntervalSec   Int     @default(30)
@@ -472,7 +473,7 @@ model OfferAutomation {
   offersPerSend   Int       @default(1)
   minDiscountPct  Int       @default(0)
   sortType        Int       @default(2)
-  isAMSOffer      Boolean   @default(false)
+  prioritizeAMS   Boolean   @default(false)
   isKeySeller     Boolean   @default(false)
   enabled         Boolean   @default(true)
   lastSentAt      DateTime?
