@@ -470,3 +470,39 @@ test('POST /api/offer-automations: rejects invalid templateKey characters', asyn
   assert.equal(res.statusCode, 400)
   assert.match(JSON.parse(res.body).error, /template/i)
 })
+
+
+test('runAutomation: template pode usar ganchos, CTAs e links globais como variáveis', async () => {
+  const automation = {
+    id: 'auto-vars', userId: 'user-vars', keyword: 'festa', minDiscountPct: 0,
+    offersPerSend: 1, destGroupJid: 'grupo@g.us', sentItemIds: '[]', intervalMinutes: 60,
+    sortType: 2, prioritizeAMS: false, isKeySeller: false, templateKey: 'tpl_vars',
+  }
+  const sent = []
+  const dbMock = {
+    credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'app', secretKey: 'secret' }) }) },
+    botConfig: { findUnique: async () => ({
+      mobileTemplatesJson: JSON.stringify({ overrides: {}, custom: [{ key: 'tpl_vars', name: 'Com variáveis', body: '{{greeting}}\n{produto}\n{{cta}}\n{{grupoLink}}\n{{cupomLink}}\n{{trailer}}\n{link}' }] }),
+      copyVariationPoolJson: JSON.stringify({ greetings: ['GANCHO'], ctas: ['CTA'], trailers: ['FECHAMENTO'] }),
+      brandingGroupLink: 'https://chat.whatsapp.com/grupo',
+      couponLink: 'https://cupom.test/oferta',
+    }) },
+    offerAutomation: { update: async () => ({}) },
+  }
+
+  await runAutomation(automation, {
+    dbOverride: dbMock,
+    isRunningFn: () => true,
+    fetchOffersFn: async () => ({ rawCount: 1, offers: [{
+      itemId: '55', productName: 'Painel festa', priceMin: '30', priceDiscountRate: '15', offerLink: 'https://shope.ee/painel',
+    }] }),
+    sendBroadcastFn: async (_userId, text) => sent.push(text),
+  })
+
+  assert.match(sent[0], /GANCHO/)
+  assert.match(sent[0], /CTA/)
+  assert.match(sent[0], /FECHAMENTO/)
+  assert.match(sent[0], /https:\/\/chat\.whatsapp\.com\/grupo/)
+  assert.match(sent[0], /https:\/\/cupom\.test\/oferta/)
+  assert.doesNotMatch(sent[0], /\{\{greeting\}\}|\{\{cta\}\}|\{\{trailer\}\}|\{\{grupoLink\}\}|\{\{cupomLink\}\}/)
+})

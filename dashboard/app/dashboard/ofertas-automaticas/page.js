@@ -39,10 +39,21 @@ function explainSkip(code) {
   return SKIP_LABELS[code] ?? `Ignorado: ${code}`
 }
 
+function templateName(templates, key) {
+  return templates.find(t => t.key === key)?.name ?? 'Automático clássico'
+}
+
+function templatePreview(templates, key) {
+  const body = templates.find(t => t.key === key)?.body || ''
+  return body.split('\n').slice(0, 5).join('\n')
+}
+
 const OFFERS_PER_SEND_OPTIONS = [
   { value: 1, label: '1 produto por envio' },
   { value: 2, label: '2 produtos por envio' },
   { value: 3, label: '3 produtos por envio' },
+  { value: 4, label: '4 produtos por envio' },
+  { value: 5, label: '5 produtos por envio' },
 ]
 
 const emptyForm = {
@@ -183,6 +194,8 @@ export default function OfertasAutomaticasPage() {
 
   if (loading) return <LoadingState />
 
+  const selectedTemplatePreview = templatePreview(templates, form.templateKey)
+
   return (
     <div className="p-4 max-w-2xl mx-auto space-y-4">
       <div className="flex items-center justify-between">
@@ -207,12 +220,19 @@ export default function OfertasAutomaticasPage() {
         </Link>
       </div>
 
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="font-semibold">Checklist antes de automatizar</div>
+        <p className="mt-1 text-xs leading-5 text-amber-800">
+          Conecte o WhatsApp, confira suas credenciais da Shopee, escolha um grupo de destino e use “Enviar agora” para validar o modelo antes de deixar a recorrência ligada.
+        </p>
+      </div>
+
       {error && <Alert type="error">{error}</Alert>}
 
       {!automations.length && !showForm && (
         <div className="text-center py-12 text-gray-400 text-sm border-2 border-dashed rounded-lg">
           Nenhuma automação configurada ainda.<br />
-          Clique em <strong>+ Nova automação</strong> para começar.
+          Crie uma busca por nicho, escolha o modelo da mensagem e teste com <strong>Enviar agora</strong> antes de ativar a recorrência.
         </div>
       )}
 
@@ -250,6 +270,11 @@ export default function OfertasAutomaticasPage() {
             <p className="text-xs text-gray-400 mt-1">
               Edite os modelos em Ganchos e CTAs. O padrão “Automático clássico” mantém o texto atual.
             </p>
+            {selectedTemplatePreview && (
+              <pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-[11px] leading-5 text-gray-600 border">
+                {selectedTemplatePreview}
+              </pre>
+            )}
           </div>
 
           <div>
@@ -372,7 +397,7 @@ export default function OfertasAutomaticasPage() {
                     {' · '}
                     {DISCOUNT_OPTIONS.find(o => o.value === a.minDiscountPct)?.label ?? `${a.minDiscountPct}% OFF mín.`}
                   </p>
-                  <p className="text-xs text-gray-400">{nextSendLabel(a.lastSentAt, a.intervalMinutes)}</p>
+                  <p className="text-xs text-gray-400">Modelo: {templateName(templates, a.templateKey || 'automatico_classico')} · {nextSendLabel(a.lastSentAt, a.intervalMinutes)}</p>
                   {a.prioritizeAMS && (
                     <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 mt-1">
                       ⚡ Comissão extra priorizada

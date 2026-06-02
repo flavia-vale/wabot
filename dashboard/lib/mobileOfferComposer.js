@@ -53,16 +53,37 @@ De R$ 89 por R$ 59`,
   },
 ]
 
-export const OFFER_TEMPLATE_VARIABLES = [
-  { token: '{produto}', label: 'Nome do produto', example: 'Liquidificador turbo' },
-  { token: '{preço}', label: 'Preço atual', example: 'R$ 89,90' },
-  { token: '{preço_de}', label: 'Preço antigo', example: 'R$ 129,90' },
-  { token: '{desconto}', label: 'Desconto', example: '-31% OFF' },
-  { token: '{rating}', label: 'Avaliação', example: '⭐ 4.8' },
-  { token: '{vendas}', label: 'Vendas', example: '🛒 1.200+ vendidos' },
-  { token: '{link}', label: 'Link da oferta', example: 'https://shope.ee/abc' },
-  { token: '{loja}', label: 'Loja/plataforma', example: 'Shopee' },
+export const OFFER_TEMPLATE_VARIABLE_GROUPS = [
+  {
+    key: 'offer',
+    title: 'Dados da oferta',
+    helper: 'Substituídas no Gerar oferta e nas ofertas automáticas.',
+    variables: [
+      { token: '{produto}', label: 'Nome do produto', example: 'Liquidificador turbo' },
+      { token: '{preço}', label: 'Preço atual', example: 'R$ 89,90' },
+      { token: '{preço_de}', label: 'Preço antigo', example: 'R$ 129,90' },
+      { token: '{desconto}', label: 'Desconto', example: '-31% OFF' },
+      { token: '{rating}', label: 'Avaliação', example: '⭐ 4.8' },
+      { token: '{vendas}', label: 'Vendas', example: '🛒 1.200+ vendidos' },
+      { token: '{link}', label: 'Link da oferta', example: 'https://shope.ee/abc' },
+      { token: '{loja}', label: 'Loja/plataforma', example: 'Shopee' },
+    ],
+  },
+  {
+    key: 'automation',
+    title: 'Ganchos, CTAs e links globais',
+    helper: 'Substituídas nas ofertas automáticas usando as variações e links configurados nesta página.',
+    variables: [
+      { token: '{{greeting}}', label: 'Gancho aleatório', example: '🚨 COOOOOORRE QUE TÁ ACABANDO!' },
+      { token: '{{cta}}', label: 'CTA aleatório', example: '📲 Entre no nosso grupo oficial:' },
+      { token: '{{trailer}}', label: 'Fechamento aleatório', example: '⚠️ Preço sujeito a alteração.' },
+      { token: '{{grupoLink}}', label: 'Link de convite do grupo', example: 'https://chat.whatsapp.com/...' },
+      { token: '{{cupomLink}}', label: 'Link de cupom global', example: 'https://...' },
+    ],
+  },
 ]
+
+export const OFFER_TEMPLATE_VARIABLES = OFFER_TEMPLATE_VARIABLE_GROUPS.flatMap((group) => group.variables)
 
 export const COUPON_STORES = [
   { key: 'shopee', nome: 'Shopee', cor: '#EE4D2D' },

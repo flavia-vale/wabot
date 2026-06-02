@@ -2,6 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   TEMPLATE_OPTIONS,
+  OFFER_TEMPLATE_VARIABLE_GROUPS,
+  OFFER_TEMPLATE_VARIABLES,
   buildMobileOfferText,
   countMobileOfferHttpLinks,
   detectMobileOfferStoreKey,
@@ -210,4 +212,14 @@ test('template remove linha de metadata vazia quando rating e vendas faltam', ()
   assert.doesNotMatch(text, /^\s*\|\s*$/m)
   assert.doesNotMatch(text, /vendidos/)
   assert.doesNotMatch(text, /⭐/)
+})
+
+
+test('variáveis de template incluem dados da oferta e automação', () => {
+  const tokens = OFFER_TEMPLATE_VARIABLES.map((variable) => variable.token)
+  assert.ok(OFFER_TEMPLATE_VARIABLE_GROUPS.some((group) => group.key === 'offer'))
+  assert.ok(OFFER_TEMPLATE_VARIABLE_GROUPS.some((group) => group.key === 'automation'))
+  for (const token of ['{produto}', '{preço}', '{preço_de}', '{desconto}', '{rating}', '{vendas}', '{link}', '{loja}', '{{greeting}}', '{{cta}}', '{{trailer}}', '{{grupoLink}}', '{{cupomLink}}']) {
+    assert.ok(tokens.includes(token), `variável ausente: ${token}`)
+  }
 })

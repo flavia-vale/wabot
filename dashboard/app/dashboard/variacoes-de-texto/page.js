@@ -15,7 +15,7 @@ import {
   withUpdatedCustomTemplate,
   withoutCustomTemplate,
 } from '@/lib/mobileTemplateStore'
-import { OFFER_TEMPLATE_VARIABLES } from '@/lib/mobileOfferComposer'
+import { OFFER_TEMPLATE_VARIABLE_GROUPS } from '@/lib/mobileOfferComposer'
 
 export default function VariacoesDeTextoPage() {
   const [value, setValue] = useState({
@@ -182,17 +182,25 @@ export default function VariacoesDeTextoPage() {
             Clique em uma variável para copiar e cole no corpo do modelo. O bot substitui no envio automático e no Gerar oferta.
           </p>
         </div>
-        <div className="grid sm:grid-cols-2 gap-2">
-          {OFFER_TEMPLATE_VARIABLES.map(variable => (
-            <button
-              key={variable.token}
-              type="button"
-              onClick={() => copyVariable(variable.token)}
-              className="text-left rounded-lg border px-3 py-2 hover:bg-gray-50"
-            >
-              <code className="text-green-700 font-semibold">{variable.token}</code>
-              <div className="text-xs text-gray-500">{variable.label} · Ex: {variable.example}</div>
-            </button>
+        <div className="space-y-3">
+          {OFFER_TEMPLATE_VARIABLE_GROUPS.map(group => (
+            <div key={group.key} className="rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+              <div className="text-xs font-semibold text-gray-700">{group.title}</div>
+              <p className="text-[11px] text-gray-500 mt-0.5">{group.helper}</p>
+              <div className="grid sm:grid-cols-2 gap-2 mt-2">
+                {group.variables.map(variable => (
+                  <button
+                    key={variable.token}
+                    type="button"
+                    onClick={() => copyVariable(variable.token)}
+                    className="text-left rounded-lg border bg-white px-3 py-2 hover:bg-gray-50"
+                  >
+                    <code className="text-green-700 font-semibold">{variable.token}</code>
+                    <div className="text-xs text-gray-500">{variable.label} · Ex: {variable.example}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       </div>
@@ -249,11 +257,18 @@ export default function VariacoesDeTextoPage() {
                 className="w-full border rounded-lg px-3 py-2 text-xs font-mono leading-5 focus:outline-none focus:ring-2 focus:ring-green-500"
               />
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {OFFER_TEMPLATE_VARIABLES.map(variable => (
-                <button key={variable.token} type="button" onClick={() => copyVariable(variable.token)} className="rounded-full bg-white border px-2 py-1 text-xs font-semibold text-green-700">
-                  {variable.token}
-                </button>
+            <div className="space-y-2">
+              {OFFER_TEMPLATE_VARIABLE_GROUPS.map(group => (
+                <div key={group.key}>
+                  <div className="text-[11px] font-semibold text-gray-500 mb-1">{group.title}</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {group.variables.map(variable => (
+                      <button key={variable.token} type="button" onClick={() => copyVariable(variable.token)} className="rounded-full bg-white border px-2 py-1 text-xs font-semibold text-green-700">
+                        {variable.token}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
             <div className="flex flex-wrap gap-2">

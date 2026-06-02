@@ -6,6 +6,7 @@ import { MobileShell } from '@/components/mobile/MobileShell'
 import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileRoutes } from '@/components/mobile/routes'
+import { OFFER_TEMPLATE_VARIABLE_GROUPS } from '@/lib/mobileOfferComposer'
 import {
   composeTemplates,
   readLocalTemplateStore,
@@ -17,8 +18,6 @@ import {
   withUpdatedCustomTemplate,
   withoutCustomTemplate,
 } from '@/lib/mobileTemplateStore'
-
-const VARIABLES = ['{produto}', '{preço}', '{preço_de}', '{desconto}', '{rating}', '{vendas}', '{link}', '{loja}']
 
 export default function TemplatesPage() {
   useMobileRoutePerf('m/account/templates')
@@ -132,9 +131,16 @@ export default function TemplatesPage() {
             </label>
             <div>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Variáveis disponíveis</div>
-              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                {VARIABLES.map((v) => (
-                  <span key={v} style={cfgStyles.pill('neutral')}>{v}</span>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {OFFER_TEMPLATE_VARIABLE_GROUPS.map((group) => (
+                  <div key={group.key}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink)', marginBottom: 5 }}>{group.title}</div>
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                      {group.variables.map((v) => (
+                        <span key={v.token} style={cfgStyles.pill('neutral')}>{v.token}</span>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
