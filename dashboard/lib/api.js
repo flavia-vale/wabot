@@ -213,6 +213,9 @@ export const api = {
   adminUpdateFaq: (id, data) => apiFetch(`/api/admin/faq/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   adminDeleteFaq: (id) => apiFetch(`/api/admin/faq/${id}`, { method: 'DELETE' }),
   adminOverview: () => apiFetch('/api/admin/overview'),
+  adminPipeline: () => apiFetch('/api/admin/pipeline'),
+  adminUpdatePipelineIssueStatus: (id, status) =>
+    apiFetch(`/api/admin/pipeline/issues/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   adminUsers: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/users${query ? `?${query}` : ''}`)
