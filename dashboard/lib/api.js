@@ -348,8 +348,11 @@ export const api = {
   offerAutomationTrigger: (id) =>
     apiFetch(`/api/offer-automations/${id}/trigger`, { method: 'POST' }),
   variationsGet: () => apiFetch('/api/config'),
-  variationsUpdate: (copyVariationPoolJson) =>
-    apiFetch('/api/config', { method: 'PUT', body: JSON.stringify({ copyVariationPoolJson }) }),
+  variationsUpdate: (data) =>
+    apiFetch('/api/config', {
+      method: 'PUT',
+      body: JSON.stringify(typeof data === 'string' ? { copyVariationPoolJson: data } : data),
+    }),
 }
 
 export function openQRSocket(token, handlers = {}) {
