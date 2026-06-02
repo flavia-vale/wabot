@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
+import { MobileConfirmDialog } from '@/components/mobile/MobileModal'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileRoutes } from '@/components/mobile/routes'
 import { api } from '@/lib/api'
@@ -152,6 +153,8 @@ export default function AccountPage() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [logoutOpen, setLogoutOpen] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -185,6 +188,7 @@ export default function AccountPage() {
   }
 
   async function handleLogout() {
+    setLoggingOut(true)
     try {
       await api.logout()
     } finally {
@@ -331,7 +335,7 @@ export default function AccountPage() {
       </div>
 
       {/* ── SAIR ── */}
-      <button type="button" onClick={handleLogout} style={contaStyles.signout}>
+      <button type="button" onClick={() => setLogoutOpen(true)} style={contaStyles.signout}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
         </svg>
@@ -341,6 +345,18 @@ export default function AccountPage() {
       <div style={contaStyles.footer}>
         Conversor Bot v 2.4
       </div>
+
+      <MobileConfirmDialog
+        open={logoutOpen}
+        title="Sair da conta?"
+        message="Você precisará entrar de novo para acessar o painel. A conexão do WhatsApp continua ativa."
+        confirmLabel="Sair"
+        cancelLabel="Continuar conectado"
+        danger
+        busy={loggingOut}
+        onConfirm={handleLogout}
+        onCancel={() => setLogoutOpen(false)}
+      />
     </MobileShell>
   )
 }

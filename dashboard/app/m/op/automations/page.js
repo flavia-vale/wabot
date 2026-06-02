@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
+import { MobileConfirmDialog } from '@/components/mobile/MobileModal'
 import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileRoutes } from '@/components/mobile/routes'
@@ -101,6 +102,7 @@ export default function MobileAutomationsPage() {
   const [saveError, setSaveError] = useState('')
   const [busyId, setBusyId] = useState('')
   const [resultById, setResultById] = useState({})
+  const [pendingDelete, setPendingDelete] = useState(null)
 
   async function load() {
     setLoading(true)
@@ -192,15 +194,18 @@ export default function MobileAutomationsPage() {
     }
   }
 
-  async function remove(item) {
-    if (!window.confirm(`Remover automação "${item.keyword}"?`)) return
+  async function confirmRemove() {
+    const item = pendingDelete
+    if (!item) return
     setBusyId(`delete-${item.id}`)
     setError('')
     try {
       await api.offerAutomationDelete(item.id)
+      setPendingDelete(null)
       await load()
     } catch (err) {
       setError(err.message || 'Não foi possível remover.')
+      setPendingDelete(null)
     } finally {
       setBusyId('')
     }
@@ -305,13 +310,25 @@ export default function MobileAutomationsPage() {
               <div style={s.cardActions}>
                 <button type="button" style={s.actionLink} onClick={() => trigger(item)} disabled={busyId === `trigger-${item.id}`}>{busyId === `trigger-${item.id}` ? 'Enviando...' : 'Enviar agora'}</button>
                 <button type="button" style={s.actionLink} onClick={() => openEdit(item)}>Editar</button>
-                <button type="button" style={s.dangerLink} onClick={() => remove(item)} disabled={busyId === `delete-${item.id}`}>Remover</button>
+                <button type="button" style={s.dangerLink} onClick={() => setPendingDelete(item)} disabled={busyId === `delete-${item.id}`}>Remover</button>
               </div>
               {result && <div style={s.result(Boolean(result.error))}>{result.error ? `Erro: ${result.error}` : result.skipped ? explainSkip(result.skipped) : `✓ ${result.sent ?? 0} produto(s) enviado(s)`}</div>}
             </div>
           )
         })}
       </div>
+
+      <MobileConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Remover automação?"
+        message={pendingDelete ? `A automação "${pendingDelete.keyword}" deixará de enviar ofertas automaticamente.` : ''}
+        confirmLabel="Remover"
+        cancelLabel="Cancelar"
+        danger
+        busy={Boolean(pendingDelete) && busyId === `delete-${pendingDelete.id}`}
+        onConfirm={confirmRemove}
+        onCancel={() => setPendingDelete(null)}
+      />
     </MobileShell>
   )
 }

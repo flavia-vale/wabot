@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { MobileShell } from '@/components/mobile/MobileShell'
+import { MobileModal } from '@/components/mobile/MobileModal'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
@@ -110,9 +111,11 @@ export default function GroupsPage() {
   useEffect(() => {
     const channelDestGroups = groups.filter((group) => group.role === 'post' && group.kind === 'channel')
     const unfetched = channelDestGroups.filter((group) => !(group.id in healthMap))
-    if (unfetched.length === 0) return
+    if (unfetched.length === 0) return undefined
+    let cancelled = false
     Promise.allSettled(unfetched.map((group) => api.channelHealth(group.id).then((result) => ({ id: group.id, result }))))
       .then((outcomes) => {
+        if (cancelled) return
         const updates = {}
         for (const outcome of outcomes) {
           if (outcome.status === 'fulfilled') {
@@ -123,6 +126,7 @@ export default function GroupsPage() {
           setHealthMap((current) => ({ ...current, ...updates }))
         }
       })
+    return () => { cancelled = true }
   }, [groups, healthMap])
 
   const role = getRoleForMobileGroupTab(tab)
@@ -835,15 +839,14 @@ export default function GroupsPage() {
         </div>
       )}
 
-      {targetEditorId && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Escolher destinos do grupo"
-          onClick={() => !targetLoading && setTargetEditorId(null)}
-          style={{position:'fixed', inset: 0, zIndex: 80, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'flex-end', justifyContent:'center'}}
-        >
-          <div onClick={(event) => event.stopPropagation()} style={{width:'100%', maxWidth: 520, background:'var(--surface)', borderTopLeftRadius: 22, borderTopRightRadius: 22, padding:'20px 18px 24px', display:'grid', gap: 14, maxHeight:'80vh', overflowY:'auto'}}>
+      <MobileModal
+        open={Boolean(targetEditorId)}
+        onClose={() => !targetLoading && setTargetEditorId(null)}
+        dismissible={!targetLoading}
+        variant="sheet"
+        ariaLabel="Escolher destinos do grupo"
+      >
+          <div style={{display:'grid', gap: 14}}>
             <div>
               <div style={cfgStyles.rowTitle}>Para onde esse grupo envia</div>
               <p style={{fontSize: 12, color:'var(--ink-soft)', lineHeight: 1.45, marginTop: 4}}>
@@ -874,8 +877,7 @@ export default function GroupsPage() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+      </MobileModal>
 
       <div style={{height: 24}}/>
     </MobileShell>

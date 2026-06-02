@@ -10,6 +10,16 @@ import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { api, openQRSocket } from '@/lib/api'
 import { deriveTimelineSteps } from '@/lib/mobileSessionTimeline'
 
+// Mantém apenas dígitos. O WhatsApp espera o número com DDI + DDD, sem
+// símbolos (ex.: 5511999999999). Aceitamos de 12 (fixo/8 dígitos) a 13
+// (celular/9 dígitos) caracteres para cobrir Brasil e DDIs próximos.
+function sanitizePhoneDigits(value) {
+  return (value || '').replace(/\D/g, '').slice(0, 15)
+}
+function isValidPairingPhone(digits) {
+  return digits.length >= 12 && digits.length <= 15
+}
+
 export default function WhatsAppPage() {
   useMobileRoutePerf('m/config/whatsapp')
   const [session, setSession] = useState(null)
@@ -25,6 +35,9 @@ export default function WhatsAppPage() {
   const [isRestarting, setIsRestarting] = useState(false)
   const pollingRef = useRef(null)
   const wsRef = useRef(null)
+  // Evita setState após desmontar quando um fetch de polling resolve tarde.
+  const mountedRef = useRef(true)
+  useEffect(() => () => { mountedRef.current = false }, [])
 
   async function refreshSession({ silent = false } = {}) {
     if (!silent) setLoading(true)
@@ -94,7 +107,7 @@ export default function WhatsAppPage() {
     if (pollingRef.current) return
     pollingRef.current = setInterval(async () => {
       const latest = await api.sessionStatusFast().catch(() => null)
-      if (!latest) return
+      if (!latest || !mountedRef.current) return
       setSession(latest)
       if (latest.status === 'connected') {
         setPairingCode('')
@@ -121,7 +134,7 @@ export default function WhatsAppPage() {
     if (!active || qr) return
     const id = setInterval(async () => {
       const result = await api.sessionQRLatest().catch(() => null)
-      if (result?.qr) {
+      if (result?.qr && mountedRef.current) {
         setQr(result.qr)
         clearInterval(id)
       }
@@ -203,8 +216,13 @@ export default function WhatsAppPage() {
   }
 
   async function startPairing() {
-    if (!pairingPhone.trim()) {
-      setFeedback('Informe o número com DDI e DDD para gerar o código.')
+    const digits = sanitizePhoneDigits(pairingPhone)
+    if (!digits) {
+      setError('Informe o número com DDI e DDD para gerar o código.')
+      return
+    }
+    if (!isValidPairingPhone(digits)) {
+      setError('Número inválido. Use DDI + DDD + número, só dígitos (ex.: 5511999999999).')
       return
     }
     setActionLoading('pairing')
@@ -215,7 +233,7 @@ export default function WhatsAppPage() {
     setError('')
     if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
     try {
-      const result = await api.sessionPairingCode(pairingPhone.trim())
+      const result = await api.sessionPairingCode(digits)
       setPairingCode(result?.code || '')
       setFeedback('Código gerado. Digite no WhatsApp: Configurações → Dispositivos vinculados → Vincular pelo número.')
       await refreshSession({ silent: true })
@@ -480,13 +498,19 @@ export default function WhatsAppPage() {
             </p>
             <input
               type="tel"
-              inputMode="tel"
+              inputMode="numeric"
+              autoComplete="tel"
+              aria-label="Número do WhatsApp com DDI e DDD"
+              aria-invalid={pairingPhone.length > 0 && !isValidPairingPhone(sanitizePhoneDigits(pairingPhone))}
               placeholder="5511999999999"
               value={pairingPhone}
-              onChange={(event) => setPairingPhone(event.target.value)}
-              style={cfgStyles.field}
+              onChange={(event) => setPairingPhone(sanitizePhoneDigits(event.target.value))}
+              style={{...cfgStyles.field, borderColor: (pairingPhone.length > 0 && !isValidPairingPhone(sanitizePhoneDigits(pairingPhone))) ? 'var(--danger)' : undefined}}
             />
-            <button type="button" onClick={startPairing} disabled={actionLoading === 'pairing'} style={{...mobi.btn('primary', true), opacity: actionLoading === 'pairing' ? 0.7 : 1}}>
+            {pairingPhone.length > 0 && !isValidPairingPhone(sanitizePhoneDigits(pairingPhone)) && (
+              <div style={{fontSize: 11.5, color:'var(--danger)'}}>Use DDI + DDD + número, só dígitos (ex.: 5511999999999).</div>
+            )}
+            <button type="button" onClick={startPairing} disabled={actionLoading === 'pairing' || !isValidPairingPhone(sanitizePhoneDigits(pairingPhone))} style={{...mobi.btn('primary', true), opacity: (actionLoading === 'pairing' || !isValidPairingPhone(sanitizePhoneDigits(pairingPhone))) ? 0.7 : 1}}>
               {actionLoading === 'pairing' ? 'Gerando...' : 'Gerar código'}
             </button>
           </div>
