@@ -42,6 +42,12 @@ PM2 (antes não havia entrada PM2 e ele só subia à mão), (2) 409 por token
 duplicado ou webhook setado, (3) token ausente no `.env`. Detalhes em
 `docs/telegram/offer-bot.md`.
 
+**O bot do Telegram roda SOMENTE em produção.** O processo `telegram-offer-bot-staging`
+NÃO está ativo em staging e o `.env` de staging NÃO contém `TELEGRAM_OFFER_BOT_TOKEN`
+nem nenhuma variável `TELEGRAM_*`. Não adicionar essas variáveis ao staging — sem um
+token separado, dois pollers com o mesmo token causam `409 Conflict` e ambos param.
+Como não há token de bot dedicado para staging, o processo simplesmente não sobe lá.
+
 **Por que `bot-supervisor` existe**: historicamente a API fazia `fork()`
 dos workers WhatsApp. Toda vez que a API reiniciava (deploy, OOM, bug)
 **todas as sessões caíam juntas**, com risco de ban em massa e perda de
