@@ -138,12 +138,15 @@ if npx prisma migrate status 2>&1 | grep -q "Database schema is up to date"; the
   echo "  Nenhuma migration pendente — pulando migrate deploy."
 else
   # Há migration pendente. DDL como ALTER TABLE precisa de lock exclusivo no
-  # SQLite — incompatível com api e bot-supervisor segurando conexões WAL.
-  # Paramos os dois antes de migrar e religamos logo depois. Janela de
+  # SQLite — incompatível com QUALQUER processo segurando conexão WAL no
+  # prod.db. Além de api e bot-supervisor, snapshot-cron e telegram-offer-bot
+  # também importam src/db.js (este via offerLog.js) e mantêm a conexão aberta;
+  # se ficarem de pé o migrate falha com "database is locked" (pegadinha #8).
+  # Paramos todos antes de migrar e religamos logo depois. Janela de
   # indisponibilidade ~10-30s, mas SÓ ocorre quando há migration pendente
   # (eventos raros, planejados).
   echo "  Migrations pendentes — parando processos que travam o banco..."
-  for app in "api" "bot-supervisor"; do
+  for app in "api" "bot-supervisor" "snapshot-cron" "telegram-offer-bot"; do
     if pm2 describe "$app" >/dev/null 2>&1; then
       if pm2 stop "$app" >/dev/null 2>&1; then
         MIGRATE_STOPPED_APPS_PROD="$MIGRATE_STOPPED_APPS_PROD $app"

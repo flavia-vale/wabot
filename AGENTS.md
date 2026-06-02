@@ -515,29 +515,38 @@ escapam de qualquer code review.
 ### 8. `prisma migrate deploy` quebra com SQLITE_BUSY se API/supervisor estão rodando
 
 Migrations DML (INSERT/UPDATE) convivem com o WAL ligado; **DDL** (ALTER
-TABLE, CREATE INDEX) exige lock exclusivo do SQLite. Enquanto
-`api-staging` ou `bot-supervisor-staging` (ou os equivalentes de prod)
-seguram conexões abertas no `.db`, qualquer ALTER falha com
+TABLE, CREATE INDEX) exige lock exclusivo do SQLite. Enquanto **qualquer**
+processo PM2 segurar conexão aberta no `.db`, qualquer ALTER falha com
 `Error: SQLite database error / database is locked`. Os 5s de
-`busy_timeout` não bastam — a app nunca solta.
+`busy_timeout` não bastam — a app nunca solta. Importam `src/db.js` (e
+portanto seguram conexão): `api`, `bot-supervisor`, `snapshot-cron` e
+`telegram-offer-bot` (este via `src/telegram/offerLog.js`) — e os
+equivalentes `-staging`.
 
 Sintoma observado no autodeploy do PR #651 (2026-05-27): `prisma migrate
 deploy` falhou 5x consecutivas dentro do retry loop, deployment abortou.
+**Reincidência (2026-06-02):** mesmo erro no deploy de prod porque o
+script só parava `api` + `bot-supervisor`, deixando `snapshot-cron` e
+`telegram-offer-bot` segurando o `prod.db`. A lista de apps parados foi
+ampliada nos dois scripts para incluir todos os que abrem o banco.
 
 Correção aplicada nos dois scripts (`deploy_safe_staging.sh` e
 `deploy_safe_dashboard.sh`): quando `prisma migrate status` reporta
-pendências, o script faz `pm2 stop` na API e no bot-supervisor
-**antes** do migrate, e religa logo após (ou no erro). Janela de
-indisponibilidade ~10-30s, mas só ocorre em deploy com migration nova
-— raro e planejado. Sem migration pendente, o passo é pulado e
-sessões/API seguem intocadas.
+pendências, o script faz `pm2 stop` em **todos** os apps que abrem o
+banco (prod: `api`, `bot-supervisor`, `snapshot-cron`,
+`telegram-offer-bot`; staging: os `-staging` correspondentes) **antes**
+do migrate, e religa logo após (ou no erro). Janela de indisponibilidade
+~10-30s, mas só ocorre em deploy com migration nova — raro e planejado.
+Sem migration pendente, o passo é pulado e sessões/API seguem intocadas.
 
 Se um deploy futuro falhar com `database is locked` mesmo após esse
 fix: confirmar que os apps PM2 estão sendo de fato parados (`pm2
-describe <app>` retorna ok antes do stop?). Para destravar manualmente
-em emergência: `pm2 stop api-staging bot-supervisor-staging && cd
-~/wabot-staging && npx prisma migrate deploy && pm2 restart
-api-staging bot-supervisor-staging --update-env`.
+describe <app>` retorna ok antes do stop?) e que nenhum processo fora
+do PM2 abriu o `.db`. Para destravar manualmente em emergência (prod):
+`pm2 stop api bot-supervisor snapshot-cron telegram-offer-bot && cd
+~/wabot && npx prisma migrate deploy && pm2 restart api bot-supervisor
+snapshot-cron telegram-offer-bot --update-env` (em staging, troque pelos
+apps `-staging`).
 
 ## Image scrapers — configuração canônica (PR #422, não regredir)
 

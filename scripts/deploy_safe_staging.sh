@@ -219,6 +219,10 @@ echo "[4/9] Apply database migrations no banco isolado de staging"
 # PM2 (api-staging / bot-supervisor-staging) está escrevendo, o que dispara
 # SQLITE_BUSY mesmo com busy_timeout=5000 do src/db.js.
 SUPERVISOR_APP_FOR_MIGRATION="${SUPERVISOR_APP:-bot-supervisor-staging}"
+# telegram-offer-bot-staging também importa src/db.js (via offerLog.js) e
+# segura conexão WAL no staging.db; sem pará-lo o migrate dá "database is
+# locked" (pegadinha #8).
+TELEGRAM_APP_FOR_MIGRATION="${TELEGRAM_OFFER_BOT_APP:-telegram-offer-bot-staging}"
 MIGRATE_STOPPED_APPS=""
 
 restart_apps_stopped_for_migration() {
@@ -236,7 +240,7 @@ else
   # Janela de indisponibilidade ~10-30s; aceitável por ser staging e por só
   # acontecer quando realmente há migration pendente.
   echo "  Migrations pendentes — parando processos que travam o banco..."
-  for app in "$API_APP" "$SUPERVISOR_APP_FOR_MIGRATION"; do
+  for app in "$API_APP" "$SUPERVISOR_APP_FOR_MIGRATION" "$TELEGRAM_APP_FOR_MIGRATION"; do
     if pm2 describe "$app" >/dev/null 2>&1; then
       if pm2 stop "$app" >/dev/null 2>&1; then
         MIGRATE_STOPPED_APPS="$MIGRATE_STOPPED_APPS $app"
