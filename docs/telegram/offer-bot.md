@@ -12,7 +12,18 @@ TELEGRAM_OFFER_BOT_TOKEN=<token criado no BotFather>
 # Opcional: limita o uso a chats específicos, separados por vírgula.
 # Se ficar vazio, qualquer chat que falar com o bot pode usar.
 TELEGRAM_OFFER_BOT_ALLOWED_CHAT_IDS=123456789,-1001234567890
+# Opcional: id do usuário do sistema cujas credenciais (cookie ML, tag de
+# afiliado) o bot "empresta" SÓ para buscar título/preço. Sem ele o bot roda
+# anônimo e links que exigem login (ex.: ML /up/) podem não trazer dados.
+# O link devolvido ao usuário é SEMPRE o original colado — nunca o convertido.
+TELEGRAM_OFFER_BOT_USER_ID=<id do usuário dono no banco>
 ```
+
+> O bot compartilha o mesmo motor de busca de oferta do painel "Criar oferta"
+> (`src/converters/offerEngine.js`). Ele pode **converter o link para buscar
+> dados** (ganhando resolução de short link/`/up/` e cookie ML), mas a oferta
+> final usa o link **original** que o usuário colou (`keepOriginalLink=true`).
+> Ver seção "Motor único de oferta" no `AGENTS.md`.
 
 ## Processos PM2 (canônico)
 
