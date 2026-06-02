@@ -2,48 +2,8 @@ import db from '../../db.js'
 import { reloadConfig } from '../../manager.js'
 import { DEFAULT_BRANDING_CTA_TEXT, MAX_BRANDING_CTA_CHARS, normalizeBrandingCtaText, normalizeBrandingLink } from '../../messageProcessor.js'
 import { buildFeatureGateError, canUseAdvancedPreservation, FEATURE_CODES } from '../../billing/plans.js'
-
-const DEFAULT_COPY_VARIATION_POOL = {
-  greetings: [
-    '🚨 COOOOOORRE QUE TÁ ACABANDO!',
-    '💡 UTILIDADE PÚBLICA!!',
-    '😱 TÁ BARATOOO DEMAIS!',
-    '🍌 PREÇO DE BANANA!!',
-    '🔥 PARA TUDO E OLHA ISSO!',
-    '💸 O GERENTE ENLOUQUECEU!!',
-    '⚡ OFERTA RELÂMPAGO, CLICA JÁ!',
-    '🎁 QUASE DE GRAÇA, SÉRIO!!',
-    '💎 ACHADO DE MILHÕES!!',
-    '🏃 VOLTOU PRO ESTOQUE, VOA!',
-    '💥 CHOCADO COM ESSE VALOR!',
-    '🤑 SÓ QUEM FOR RÁPIDO VAI PEGAR!',
-  ],
-  ctas: [
-    '📲 Entre no nosso grupo oficial:',
-    '👥 Vem pro grupo economizar com a gente:',
-    '👇 Clique aqui e faça parte do nosso grupo VIP:',
-    '🤫 Acesse nosso grupo secreto de ofertas:',
-    '🚀 Receba os melhores achadinhos direto no grupo:',
-    '🔔 Quer ver as promoções primeiro? Entre no grupo:',
-    '💥 Não perca nenhum bug! Faça parte do grupo:',
-    '🛒 Garanta os melhores descontos entrando no grupo:',
-    '🤝 Junte-se à nossa comunidade de achadinhos:',
-    '👀 Para não perder nadinha, vem pro grupo:',
-  ],
-  trailers: [
-    '⚠️ Atenção: Preços e estoque podem mudar a qualquer momento!',
-    '🚨 O valor promocional e a disponibilidade dependem do estoque da loja.',
-    '⏳ Corra! Oferta por tempo limitado ou até durarem os estoques.',
-    '📝 Preço sujeito a alteração e produto sujeito a esgotar sem aviso prévio.',
-    '🏃💨 Garanta logo, porque o estoque voa e o preço pode subir rapidinho!',
-    '🔔 Aviso: A loja parceira pode alterar o valor ou encerrar a oferta a qualquer minuto.',
-    '🛒 Unidades promocionais limitadas! Preço sujeito a reajuste no site.',
-    '📉 Desconto válido por tempo limitado, sujeito a alteração e fim de estoque.',
-    'ℹ️ Os preços e a disponibilidade do produto são de responsabilidade total da loja.',
-    '💥 Aproveite rápido: Estoques limitados e valores sujeitos a alteração.',
-  ],
-}
-export const DEFAULT_COPY_VARIATION_POOL_JSON = JSON.stringify(DEFAULT_COPY_VARIATION_POOL)
+import { DEFAULT_COPY_VARIATION_POOL_JSON, resolveCopyVariationPoolJson } from '../../core/copyVariation.js'
+export { DEFAULT_COPY_VARIATION_POOL_JSON } from '../../core/copyVariation.js'
 
 const DEFAULTS = {
   delayMin: 5,
@@ -54,8 +14,9 @@ const DEFAULTS = {
   feedGlobal: false,
   postToStatus: false,
   brandingGroupLink: '',
+  couponLink: '',
   brandingCtaText: DEFAULT_BRANDING_CTA_TEXT,
-  copyVariationPoolJson: '{}',
+  copyVariationPoolJson: DEFAULT_COPY_VARIATION_POOL_JSON,
   mobileTemplatesJson: '{}',
   mobileCouponLinksJson: '{}',
 }
@@ -82,7 +43,7 @@ export async function configRoutes(app) {
     if (!cfg) return { ...DEFAULTS, userId: req.user.sub }
     return {
       ...cfg,
-      copyVariationPoolJson: cfg.copyVariationPoolJson ?? '{}',
+      copyVariationPoolJson: resolveCopyVariationPoolJson(cfg.copyVariationPoolJson),
       mobileTemplatesJson: cfg.mobileTemplatesJson ?? '{}',
       mobileCouponLinksJson: cfg.mobileCouponLinksJson ?? '{}',
     }
@@ -90,7 +51,7 @@ export async function configRoutes(app) {
 
   app.put('/', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
-    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg, feedGlobal, postToStatus, brandingGroupLink, brandingCtaText, copyVariationPoolJson, mobileTemplatesJson, mobileCouponLinksJson } = req.body ?? {}
+    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg, feedGlobal, postToStatus, brandingGroupLink, brandingCtaText, couponLink, copyVariationPoolJson, mobileTemplatesJson, mobileCouponLinksJson } = req.body ?? {}
 
     if (delayMin !== undefined && !isIntegerInRange(delayMin)) {
       return reply.code(400).send({ error: 'delayMin deve ser um número inteiro entre 0 e 300' })
@@ -165,7 +126,9 @@ export async function configRoutes(app) {
         brandingGroupLink: normalizedBrandingGroupLink,
         brandingCtaText: normalizedBrandingCtaText,
         couponLink: normalizedCouponLink,
-        ...(copyVariationPoolJson !== undefined && { copyVariationPoolJson }),
+        copyVariationPoolJson: copyVariationPoolJson === undefined
+          ? DEFAULTS.copyVariationPoolJson
+          : resolveCopyVariationPoolJson(copyVariationPoolJson),
         ...(mobileTemplatesJson !== undefined && { mobileTemplatesJson }),
         ...(mobileCouponLinksJson !== undefined && { mobileCouponLinksJson }),
       },
@@ -180,7 +143,7 @@ export async function configRoutes(app) {
         ...(brandingGroupLink !== undefined && { brandingGroupLink: normalizedBrandingGroupLink }),
         ...(brandingCtaText !== undefined && { brandingCtaText: normalizedBrandingCtaText }),
         ...(couponLink !== undefined && { couponLink: normalizedCouponLink }),
-        ...(copyVariationPoolJson !== undefined && { copyVariationPoolJson }),
+        ...(copyVariationPoolJson !== undefined && { copyVariationPoolJson: resolveCopyVariationPoolJson(copyVariationPoolJson) }),
         ...(mobileTemplatesJson !== undefined && { mobileTemplatesJson }),
         ...(mobileCouponLinksJson !== undefined && { mobileCouponLinksJson }),
       },

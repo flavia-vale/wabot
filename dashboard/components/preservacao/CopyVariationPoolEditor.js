@@ -5,7 +5,7 @@ import { PresetButtons } from './PresetButtons'
 const MAX_PER_GROUP = 20
 
 const GROUPS = [
-  { key: 'greetings', label: 'Saudações (vão antes da mensagem)', placeholder: 'Ex: 🔥 ', emptyLabel: '(vazio — sem prefixo)' },
+  { key: 'greetings', label: 'Ganchos (vão antes da mensagem)', placeholder: 'Ex: 🚨 COOOOOORRE QUE TÁ ACABANDO!', emptyLabel: '(vazio — sem prefixo)' },
   { key: 'ctas',      label: 'Chamadas pra ação',                  placeholder: 'Ex: Pega já:',  emptyLabel: '(vazio — sem CTA)' },
   { key: 'trailers',  label: 'Fechamentos (vão depois da mensagem)', placeholder: 'Ex:  👀', emptyLabel: '(vazio — sem sufixo)' },
 ]

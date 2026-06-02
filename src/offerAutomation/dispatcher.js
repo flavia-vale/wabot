@@ -2,7 +2,7 @@ import { fetchOffers as defaultFetchOffers } from './shopeeOffers.js'
 import { sendBroadcast, isRunning } from '../manager.js'
 import db from '../db.js'
 import { parseCredentialData } from '../credentialHealth.js'
-import { applyVariation } from '../core/copyVariation.js'
+import { applyVariation, resolveCopyVariationPoolJson } from '../core/copyVariation.js'
 
 const PRICE_DIVISOR = 1
 
@@ -109,7 +109,7 @@ export async function runAutomation(automation, {
   const toSend = offers.slice(0, automation.offersPerSend)
 
   const botConfig = await dbInstance.botConfig.findUnique({ where: { userId: automation.userId } })
-  const poolJson = botConfig?.copyVariationPoolJson ?? '{}'
+  const poolJson = resolveCopyVariationPoolJson(botConfig?.copyVariationPoolJson)
   const groupInviteLink = botConfig?.brandingGroupLink ?? ''
   const couponLink = botConfig?.couponLink ?? ''
 
