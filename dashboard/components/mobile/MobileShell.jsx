@@ -1,19 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { mobileRoutes } from '@/components/mobile/routes'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
-
-// Rotas-raiz acessíveis pela bottom nav — nelas mostramos o brand mark; em
-// qualquer página secundária a setinha de voltar aparece automaticamente.
-const ROOT_ROUTES = [
-  mobileRoutes.home,
-  mobileRoutes.espelhar,
-  mobileRoutes.offer,
-  mobileRoutes.logs,
-  mobileRoutes.account,
-]
 
 const shellStyles = {
   root: {
@@ -171,10 +161,9 @@ const tabs = [
 
 export function MobileShell({ title = 'Conversor', active = 'inicio', hasAlert = false, showBack, onBack, planExpired = false, children }) {
   const router = useRouter()
-  const pathname = usePathname()
-  // Se a página não definir showBack explicitamente, derivamos da rota: toda
-  // página que não é raiz da bottom nav ganha a setinha de voltar.
-  const displayBack = showBack ?? !ROOT_ROUTES.includes(pathname)
+  // Setinha de voltar em todas as rotas /m por padrão. Páginas podem desligar
+  // com showBack={false} se necessário.
+  const displayBack = showBack ?? true
   const handleBack = onBack ?? (() => router.back())
   return (
     <div className="mobile-shell" style={shellStyles.root}>
