@@ -191,8 +191,11 @@ export const api = {
   broadcastSend: (text, jids) =>
     apiFetch('/api/broadcast/send', { method: 'POST', body: JSON.stringify({ text, jids }) }),
   scheduledList: () => apiFetch('/api/broadcast/scheduled'),
-  scheduledCreate: (text, scheduledAt) =>
-    apiFetch('/api/broadcast/scheduled', { method: 'POST', body: JSON.stringify({ text, scheduledAt }) }),
+  scheduledCreate: (text, scheduledAt, jids) =>
+    apiFetch('/api/broadcast/scheduled', {
+      method: 'POST',
+      body: JSON.stringify({ text, scheduledAt, ...(Array.isArray(jids) ? { jids } : {}) }),
+    }),
   scheduledCancel: (id) => apiFetch(`/api/broadcast/scheduled/${id}`, { method: 'DELETE' }),
 
   dashboardStatus: () => apiFetch('/api/dashboard/status'),

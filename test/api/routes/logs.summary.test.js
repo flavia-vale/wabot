@@ -127,3 +127,26 @@ test('GET /summary com banco vazio devolve zeros e deliveryRate null', async (t)
   assert.equal(body.topSources.length, 0)
   assert.equal(body.lastSendAt, null)
 })
+
+test('GET / aceita filtro de múltiplos status separados por vírgula', async (t) => {
+  const { app, userId } = await buildApp()
+  t.after(async () => {
+    await db.messageLog.deleteMany({ where: { userId } })
+    await db.user.deleteMany({ where: { id: userId } })
+    await app.close()
+  })
+
+  await Promise.all([
+    seedLog(userId, { status: 'queued', messageText: 'fila' }),
+    seedLog(userId, { status: 'sending', messageText: 'enviando' }),
+    seedLog(userId, { status: 'success', messageText: 'sucesso' }),
+  ])
+
+  const res = await app.inject({ method: 'GET', url: '/?status=queued,sending&limit=10' })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  const statuses = body.logs.map((log) => log.status).sort()
+
+  assert.equal(body.total, 2)
+  assert.deepEqual(statuses, ['queued', 'sending'])
+})

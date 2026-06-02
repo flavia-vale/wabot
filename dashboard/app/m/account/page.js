@@ -287,6 +287,8 @@ export default function AccountPage() {
       <div style={contaStyles.card}>
         <ContaRow icon="chat" tone="accent" title="Enviar mensagem livre"
           sub="broadcast com segmentação de destinos" value="abrir" onClick={() => router.push(mobileRoutes.broadcast)}/>
+        <ContaRow icon="link" tone="success" title="Converter links"
+          sub="transforme links originais em links de afiliado" value="abrir" onClick={() => router.push(mobileRoutes.converter)}/>
         <ContaRow icon="bolt" tone="success" title="Ofertas automáticas"
           sub="buscas recorrentes, ligar/desligar e teste" value="abrir" onClick={() => router.push(mobileRoutes.automations)}/>
         <ContaRow icon="sparkles" tone="accent" title="Ganchos e CTAs"

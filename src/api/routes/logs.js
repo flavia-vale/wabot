@@ -40,6 +40,10 @@ export async function logsRoutes(app) {
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
     const userId = req.user.sub
     const { status = 'all', page = '1', limit = '20', search = '' } = req.query
+    const statusList = String(status || 'all')
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item && item !== 'all')
     const pageNum = Math.max(1, parseInt(page) || 1)
     const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20))
     const rawQuery = String(search).trim()
@@ -88,7 +92,8 @@ export async function logsRoutes(app) {
 
     const where = {
       userId,
-      ...(status !== 'all' ? { status } : {}),
+      ...(statusList.length === 1 ? { status: statusList[0] } : {}),
+      ...(statusList.length > 1 ? { status: { in: statusList } } : {}),
       ...searchWhere,
     }
 
