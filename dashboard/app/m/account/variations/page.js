@@ -14,12 +14,6 @@ const GROUPS = [
   { key: 'trailers', label: 'Fechamentos', helper: 'Aparecem depois da mensagem.', placeholder: ' 👀' },
 ]
 
-const PRESETS = [
-  { label: 'Conservador', values: { greetings: [''], ctas: [''], trailers: [''] } },
-  { label: 'Médio', values: { greetings: ['', '🔥 ', '💥 '], ctas: ['Confira:', 'Pega já:', 'Olha essa:'], trailers: ['', ' 👀', ' 💸'] } },
-  { label: 'Leve', values: { greetings: ['', '🔥 ', '💥 ', '⚡ ', '🚨 '], ctas: ['Confira:', 'Pega já:', 'Olha essa:', 'Não perde:', 'Aproveita:'], trailers: ['', ' 👀', ' 💸', ' 🎯', ' 🛒'] } },
-]
-
 function parsePool(json) {
   try {
     const data = JSON.parse(json || '{}')
@@ -97,15 +91,6 @@ export default function MobileVariationsPage() {
       <div style={cfgStyles.pageH}>
         <div style={cfgStyles.pageEyebrow}>Persistido no backend</div>
         <div style={cfgStyles.pageTitle}>Ganchos e CTAs</div>
-      </div>
-
-      <div style={cfgStyles.cardWrap}>
-        <div style={{ ...cfgStyles.cardP, display: 'grid', gap: 12 }}>
-          <div style={{ fontSize: 12.5, color: 'var(--ink-soft)', lineHeight: 1.5 }}>Essas variações são usadas pelo bot nas automações e na preservação para evitar mensagens sempre iguais.</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-            {PRESETS.map((preset) => <button key={preset.label} type="button" onClick={() => setPool(preset.values)} style={{ padding: '9px 4px', borderRadius: 12, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)', fontSize: 12, fontWeight: 700, fontFamily: 'inherit' }}>{preset.label}</button>)}
-          </div>
-        </div>
       </div>
 
       {GROUPS.map((group) => (
