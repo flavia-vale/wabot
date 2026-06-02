@@ -209,8 +209,34 @@ else
 fi
 
 echo "[7b/9] Restart PM2 apps"
-pm2 restart dashboard --update-env
-pm2 restart api --update-env
+
+ensure_pm2_app_running() {
+  local app_name="$1"
+
+  if pm2 describe "$app_name" >/dev/null 2>&1; then
+    if pm2 restart "$app_name" --update-env; then
+      return 0
+    fi
+    # App existe na lista do PM2 mas o restart falhou (ex.: "Process N not
+    # found" — metadado stale após o processo morrer fora do PM2). Recriar via
+    # delete + ecosystem é a recuperação canônica (AGENTS.md pegadinha #1).
+    echo "  Aviso: restart de '$app_name' falhou (processo PM2 inconsistente). Recriando via delete + ecosystem..."
+    pm2 delete "$app_name" >/dev/null 2>&1 || true
+  fi
+
+  echo "  Aviso: processo PM2 '$app_name' não disponível. Tentando criar via ecosystem.config.cjs..."
+  if pm2 start "$ROOT_DIR/ecosystem.config.cjs" --only "$app_name" --update-env >/tmp/wabot_pm2_start_${app_name}.log 2>&1; then
+    echo "  PM2 app '$app_name' criado com sucesso via ecosystem.config.cjs."
+    return 0
+  fi
+
+  echo "ERRO: não foi possível iniciar '$app_name' via ecosystem.config.cjs."
+  cat /tmp/wabot_pm2_start_${app_name}.log || true
+  exit 1
+}
+
+ensure_pm2_app_running dashboard
+ensure_pm2_app_running api
 
 # bot-supervisor (prod) é INTENCIONALMENTE preservado: ver comentário
 # detalhado em scripts/deploy_safe_staging.sh. Reinicie manualmente quando

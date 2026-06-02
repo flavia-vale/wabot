@@ -153,11 +153,17 @@ ensure_pm2_app_running() {
   local app_name="$1"
 
   if pm2 describe "$app_name" >/dev/null 2>&1; then
-    pm2 restart "$app_name" --update-env
-    return 0
+    if pm2 restart "$app_name" --update-env; then
+      return 0
+    fi
+    # O app existe na lista do PM2 mas o restart falhou (ex.: "Process N not
+    # found" — metadado stale após o processo morrer fora do PM2). Recriar via
+    # delete + ecosystem, que é a recuperação canônica (AGENTS.md pegadinha #1).
+    echo "  Aviso: restart de '$app_name' falhou (processo PM2 em estado inconsistente). Recriando via delete + ecosystem..."
+    pm2 delete "$app_name" >/dev/null 2>&1 || true
   fi
 
-  echo "  Aviso: processo PM2 '$app_name' não encontrado. Tentando criar via ecosystem.config.cjs..."
+  echo "  Aviso: processo PM2 '$app_name' não disponível. Tentando criar via ecosystem.config.cjs..."
   if pm2 start "$ROOT_DIR/ecosystem.config.cjs" --only "$app_name" --update-env >/tmp/wabot_pm2_start_${app_name}.log 2>&1; then
     echo "  PM2 app '$app_name' criado com sucesso via ecosystem.config.cjs."
     return 0
