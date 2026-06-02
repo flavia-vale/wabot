@@ -597,6 +597,58 @@ amzn.to short     → 1500x300 jpeg
 
 `node --test test/image-scrapers.test.js` → 12/12 pass.
 
+## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
+
+Existem dois pontos que montam uma oferta (título + preço + link) a partir de
+um link colado:
+
+1. **Painel "Criar oferta"** (`/m/op/offer` → `POST /api/link-conversion/scrape-offer`).
+2. **Bot do Telegram** (`src/telegram/offerBot.js`).
+
+Antes da unificação cada um buscava os dados de forma diferente: o painel
+convertia o link, passava credenciais (cookie ML) e tinha fallback; o Telegram
+scrapava o link **cru, anônimo e sem fallback**. Resultado: o MESMO link rendia
+ofertas diferentes (ML `/up/` falhava no Telegram, Amazon divergia nos dois
+sentidos). Hoje ambos chamam **`buildScrapedOffer()` em
+`src/converters/offerEngine.js`** — a busca de título/preço (converter →
+resolver URL → scrapar com credenciais → fallback) vive em **um só lugar**.
+
+A **única** diferença permitida entre os dois consumidores é qual link aparece
+na oferta final, via flag `keepOriginalLink`:
+
+| Consumidor              | `keepOriginalLink` | `displayUrl` (link na oferta) |
+|-------------------------|--------------------|-------------------------------|
+| Painel "Criar oferta"   | `false`            | link **convertido** (afiliado) |
+| Bot do Telegram         | `true`             | link **original** colado pelo usuário |
+
+O Telegram **converte para buscar dados** (ganha resolução de short link/`/up/`
+e cookie ML), mas **devolve ao usuário o link que ele colou** — nunca o
+convertido.
+
+**Credenciais do bot do Telegram:** ele não tem usuário logado (só chat IDs
+autorizados). As credenciais (cookie ML, tag de afiliado) vêm de um **usuário
+fixo** definido pela env `TELEGRAM_OFFER_BOT_USER_ID` (lido por
+`defaultLoadCredentialsMap()` em `offerBot.js`). Sem a env, o bot roda
+**anônimo** (`credentialsMap {}`) — comportamento histórico, mantém os testes
+db-free. Para o ML `/up/` e outros links que exigem login funcionarem no
+Telegram, esse usuário precisa ter credenciais ML configuradas.
+
+**Regras:**
+- **Não duplicar** a lógica de converter/scrapar/fallback fora de
+  `offerEngine.js`. Qualquer novo consumidor de oferta (ex.: outro bot) deve
+  chamar `buildScrapedOffer()`.
+- O painel **não pode** passar a devolver link original, nem o Telegram o
+  convertido — isso inverteria o contrato `keepOriginalLink`.
+- Exceção no scraper **não** vira erro pro usuário: o motor degrada para
+  fallback mínimo (`inferTitleFromUrl` + `scrapeWarning`), igual nos dois.
+- Links de recomendação ML `/up/MLBU...` são reconhecidos como landing em
+  `isMercadoLivreLandingUrl` (`productInfoScraper.js`) e resolvidos para a URL
+  canônica do produto via `wid=MLB...` do fragmento — defesa em profundidade
+  mesmo quando o link não passa pela conversão.
+
+Testes: `test/offer-engine.test.js` (motor), `test/telegram-offer-bot.test.js`,
+`test/link-conversion-route.test.js`.
+
 ## Triagem de novas demandas (implementar agora vs. backlog)
 
 - **Sempre que surgir uma nova demanda**, pergunte à usuária se vamos

@@ -297,8 +297,13 @@ test('createTelegramOfferBot registra invalid_input quando não há link válido
   assert.equal(logs[0].errorMsg, 'MULTIPLE_LINKS')
 })
 
-test('createTelegramOfferBot registra error quando geração lança', async () => {
+test('createTelegramOfferBot degrada graciosamente quando scraper lança (motor único não derruba atendimento)', async () => {
+  // Após unificar o motor com o painel "Criar oferta", uma exceção no scraper
+  // não vira mais status 'error': o motor captura, tenta inferir título da URL
+  // e, sem dados úteis, devolve "produto não encontrado". O atendimento segue
+  // sem crash — mesmo comportamento resiliente do endpoint /scrape-offer.
   const logs = []
+  const sent = []
   const bot = createTelegramOfferBot({
     token: '123:test',
     allowedChatIds: ['42'],
@@ -306,14 +311,42 @@ test('createTelegramOfferBot registra error quando geração lança', async () =
     fetchProductImage: async () => null,
     logger: { warn() {} },
     recordOfferLog: async (entry) => { logs.push(entry) },
-    telegramClient: { async sendMessage() {} },
+    telegramClient: { async sendMessage(chatId, text) { sent.push({ chatId, text }) } },
+  })
+
+  await bot.handleUpdate({ update_id: 1, message: { message_id: 10, chat: { id: 42 }, text: 'https://www.amazon.com.br/dp/B0ABC' } })
+
+  assert.equal(logs.length, 1)
+  assert.equal(logs[0].status, 'product_not_found')
+  assert.equal(sent.length, 1)
+  assert.equal(sent[0].text, '⚠️ Nenhum produto encontrado para o link enviado!')
+})
+
+test('createTelegramOfferBot registra error quando envio ao Telegram falha', async () => {
+  // O status 'error' permanece como rede de segurança para falhas fora do
+  // motor de oferta — ex.: a API do Telegram recusando o envio.
+  const logs = []
+  let sendCalls = 0
+  const bot = createTelegramOfferBot({
+    token: '123:test',
+    allowedChatIds: ['42'],
+    fetchProductInfo: async () => ({ title: 'Echo Pop', newPrice: 'R$ 199' }),
+    fetchProductImage: async () => null,
+    logger: { warn() {} },
+    recordOfferLog: async (entry) => { logs.push(entry) },
+    telegramClient: {
+      async sendMessage() {
+        sendCalls += 1
+        if (sendCalls === 1) throw new Error('telegram indisponível')
+      },
+    },
   })
 
   await bot.handleUpdate({ update_id: 1, message: { message_id: 10, chat: { id: 42 }, text: 'https://www.amazon.com.br/dp/B0ABC' } })
 
   assert.equal(logs.length, 1)
   assert.equal(logs[0].status, 'error')
-  assert.match(logs[0].errorMsg, /scraper explodiu/)
+  assert.match(logs[0].errorMsg, /telegram indisponível/)
 })
 
 test('createTelegramOfferBot não derruba atendimento se recordOfferLog falhar', async () => {

@@ -2,6 +2,7 @@ import 'dotenv/config'
 
 import { fetchProductInfo as defaultFetchProductInfo } from '../converters/productInfoScraper.js'
 import { fetchProductImage as defaultFetchProductImage, fetchImageBuffer as defaultFetchImageBuffer, normalizeImageForWhatsApp as defaultNormalizeImage } from '../converters/imageScrapers.js'
+import { buildScrapedOffer, buildCredentialsMap } from '../converters/offerEngine.js'
 import { detectLinks } from '../detector.js'
 import { buildMobileOfferText } from '../../dashboard/lib/mobileOfferComposer.js'
 import { PRESET_TEMPLATE_BODIES } from '../../dashboard/lib/mobileTemplateStore.js'
@@ -94,15 +95,44 @@ export function buildOfferMessage({ product = {}, link }) {
   return cleaned || PRODUCT_NOT_FOUND_MESSAGE
 }
 
-export async function buildTelegramOfferText(url, { fetchProductInfo = defaultFetchProductInfo } = {}) {
+// Carrega as credenciais (cookie ML, tag de afiliado) de um usuário fixo
+// definido por TELEGRAM_OFFER_BOT_USER_ID. O bot do Telegram não tem usuário
+// logado (só chat IDs autorizados), então ele "empresta" as credenciais desse
+// usuário só para BUSCAR dados — o link devolvido ao usuário continua sendo o
+// original (keepOriginalLink=true). Sem a env, roda anônimo (credenciais {}),
+// mantendo o comportamento histórico e os testes db-free.
+export async function defaultLoadCredentialsMap() {
+  const userId = String(process.env.TELEGRAM_OFFER_BOT_USER_ID || '').trim()
+  if (!userId) return {}
+  const { default: db } = await import('../db.js')
+  const credentials = await db.credential.findMany({ where: { userId } })
+  return buildCredentialsMap(credentials)
+}
+
+export async function buildTelegramOfferText(url, {
+  fetchProductInfo = defaultFetchProductInfo,
+  buildOffer = buildScrapedOffer,
+  credentialsMap = {},
+  convertLink,
+} = {}) {
   if (!isValidHttpUrl(url)) {
     const err = new Error('Link inválido. Cole uma URL começando com http(s)://.')
     err.code = 'INVALID_URL'
     throw err
   }
 
-  const product = await fetchProductInfo(url)
-  return buildOfferMessage({ product, link: url })
+  // Motor único compartilhado com o painel "Criar oferta". keepOriginalLink
+  // garante que a oferta devolva o link COLADO pelo usuário, mesmo quando a
+  // busca de dados usou um link convertido/resolvido internamente.
+  const offer = await buildOffer({
+    url,
+    credentialsMap,
+    keepOriginalLink: true,
+    fetchProductInfo,
+    ...(convertLink ? { convertLink } : {}),
+  })
+  const product = { title: offer.title, oldPrice: offer.oldPrice, newPrice: offer.newPrice }
+  return buildOfferMessage({ product, link: offer.displayUrl || url })
 }
 
 function inferPlatformFromUrl(url) {
@@ -151,16 +181,21 @@ export async function buildTelegramOffer(url, {
   fetchProductImage = defaultFetchProductImage,
   fetchImageBuffer = defaultFetchImageBuffer,
   normalizeImage = defaultNormalizeImage,
-  imageCredentials = {},
+  credentialsMap = {},
+  imageCredentials,
+  convertLink,
   logger = console,
 } = {}) {
+  // Imagem usa as credenciais da Shopee quando disponíveis (resolveShopeeImage
+  // exige appId/secretKey); demais lojas ignoram o argumento.
+  const resolvedImageCredentials = imageCredentials ?? credentialsMap.shopee ?? {}
   const [text, image] = await Promise.all([
-    buildTelegramOfferText(url, { fetchProductInfo }),
+    buildTelegramOfferText(url, { fetchProductInfo, credentialsMap, convertLink }),
     fetchTelegramOfferImage(url, {
       fetchProductImage,
       fetchImageBuffer,
       normalizeImage,
-      credentials: imageCredentials,
+      credentials: resolvedImageCredentials,
       logger,
     }),
   ])
@@ -250,7 +285,9 @@ export function createTelegramOfferBot({
   fetchProductImage = defaultFetchProductImage,
   fetchImageBuffer = defaultFetchImageBuffer,
   normalizeImage = defaultNormalizeImage,
-  imageCredentials = {},
+  imageCredentials,
+  loadCredentialsMap = defaultLoadCredentialsMap,
+  convertLink,
   telegramClient = null,
   logger = console,
   pollTimeoutSeconds = DEFAULT_POLL_TIMEOUT_SECONDS,
@@ -315,12 +352,24 @@ export function createTelegramOfferBot({
     const platform = inferPlatformFromUrl(extracted.url)
     activeChats.add(chatKey)
     try {
+      // Carrega as credenciais do usuário fixo (env) para que a busca de
+      // título/preço use cookie ML / resolução de afiliado igual ao painel.
+      // Falha ao carregar nunca derruba o atendimento — cai para anônimo.
+      let credentialsMap = {}
+      try {
+        credentialsMap = (await loadCredentialsMap()) || {}
+      } catch (err) {
+        logger.warn?.({ err: err.message }, 'Falha ao carregar credenciais para oferta do Telegram; seguindo anônimo')
+      }
+
       const offer = await buildTelegramOffer(extracted.url, {
         fetchProductInfo,
         fetchProductImage,
         fetchImageBuffer,
         normalizeImage,
+        credentialsMap,
         imageCredentials,
+        convertLink,
         logger,
       })
       let withImage = false
