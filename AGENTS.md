@@ -597,6 +597,15 @@ amzn.to short     → 1500x300 jpeg
 
 `node --test test/image-scrapers.test.js` → 12/12 pass.
 
+## Triagem de novas demandas (implementar agora vs. backlog)
+
+- **Sempre que surgir uma nova demanda**, pergunte à usuária se vamos
+  implementá-la agora ou se ela prefere adicioná-la como issue ao backlog.
+- Se a escolha for **backlog**, releia este `AGENTS.md` para entender o
+  padrão de como as issues devem ser criadas (fluxo `feature → develop →
+  main`, convenções de processos, portas, taxonomias e demais regras
+  canônicas) antes de redigir a issue.
+
 ## Regras para qualquer agente de IA neste repo
 
 - **Não trocar portas** sem atualizar os 3 lugares listados acima.
