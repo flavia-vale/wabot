@@ -68,6 +68,10 @@ export default function GroupsPage() {
   const [followStatus, setFollowStatus] = useState({})
   const [adminStatus, setAdminStatus] = useState({})
   const [healthMap, setHealthMap] = useState({})
+  const [snapshotMap, setSnapshotMap] = useState({})
+  const [channelAction, setChannelAction] = useState('')
+  const [channelErrors, setChannelErrors] = useState({})
+  const [recreateDrafts, setRecreateDrafts] = useState({})
 
   async function loadGroups() {
     setLoading(true)
@@ -340,6 +344,90 @@ export default function GroupsPage() {
     }
   }
 
+  function setChannelError(groupId, message = '') {
+    setChannelErrors((current) => ({ ...current, [groupId]: message }))
+  }
+
+  async function refreshSingleChannelHealth(groupId) {
+    setChannelAction(`health-${groupId}`)
+    setChannelError(groupId)
+    try {
+      const result = await api.channelHealth(groupId)
+      setHealthMap((current) => ({ ...current, [groupId]: result }))
+    } catch (err) {
+      setChannelError(groupId, err.message || 'Não foi possível atualizar a saúde do canal.')
+    } finally {
+      setChannelAction('')
+    }
+  }
+
+  async function recomputeChannelRisk(groupId) {
+    setChannelAction(`risk-${groupId}`)
+    setChannelError(groupId)
+    try {
+      const result = await api.channelRiskScore(groupId, 7)
+      setHealthMap((current) => ({ ...current, [groupId]: { ...(current[groupId] || {}), reportRiskScore: result?.score ?? result?.riskScore ?? result?.reportRiskScore ?? current[groupId]?.reportRiskScore } }))
+      setFeedback('Score de risco recalculado.')
+    } catch (err) {
+      setChannelError(groupId, err.message || 'Não foi possível recalcular o risco.')
+    } finally {
+      setChannelAction('')
+    }
+  }
+
+  async function snapshotChannelNow(groupId) {
+    setChannelAction(`snapshot-${groupId}`)
+    setChannelError(groupId)
+    try {
+      const result = await api.channelSnapshotNow(groupId)
+      const nextSnapshot = result?.snapshot ?? result
+      setSnapshotMap((current) => ({
+        ...current,
+        [groupId]: [nextSnapshot, ...(current[groupId] || [])].filter(Boolean).slice(0, 5),
+      }))
+      setFeedback('Snapshot do canal criado.')
+    } catch (err) {
+      setChannelError(groupId, err.message || 'Não foi possível tirar snapshot agora.')
+    } finally {
+      setChannelAction('')
+    }
+  }
+
+  async function loadChannelSnapshots(groupId) {
+    setChannelAction(`snapshots-${groupId}`)
+    setChannelError(groupId)
+    try {
+      const result = await api.channelSnapshots(groupId)
+      const items = Array.isArray(result?.items) ? result.items : Array.isArray(result) ? result : []
+      setSnapshotMap((current) => ({ ...current, [groupId]: items.slice(0, 5) }))
+    } catch (err) {
+      setChannelError(groupId, err.message || 'Não foi possível carregar snapshots.')
+    } finally {
+      setChannelAction('')
+    }
+  }
+
+  async function recreateChannel(groupId) {
+    const newJid = (recreateDrafts[groupId] || '').trim()
+    if (!newJid.endsWith('@newsletter')) {
+      setChannelError(groupId, 'Informe um JID de canal terminando com @newsletter.')
+      return
+    }
+    setChannelAction(`recreate-${groupId}`)
+    setChannelError(groupId)
+    try {
+      await api.channelRecreate(groupId, newJid)
+      setRecreateDrafts((current) => ({ ...current, [groupId]: '' }))
+      setFeedback('Canal recriado. Lista atualizada.')
+      await loadGroups()
+    } catch (err) {
+      setChannelError(groupId, err.message || 'Não foi possível recriar o canal.')
+    } finally {
+      setChannelAction('')
+    }
+  }
+
+
   const postGroups = useMemo(() => groups.filter((group) => group.role === 'post'), [groups])
 
   const canUseChannels = canAccessAdvancedPreservation(me)
@@ -557,6 +645,55 @@ export default function GroupsPage() {
                       />
                       <div style={{fontSize: 11, color:'var(--ink-faint)', marginTop: 6, lineHeight: 1.4}}>Texto enviado automaticamente para novos membros deste grupo de publicação.</div>
                     </div>
+
+                    {group.kind === 'channel' && (() => {
+                      const healthData = healthMap[group.id] || {}
+                      const snapshots = snapshotMap[group.id] || []
+                      const riskValue = healthData?.reportRiskScore ?? healthData?.riskScore ?? healthData?.score ?? '—'
+                      return (
+                        <div style={{borderTop:'1px solid var(--line)', paddingTop: 14, display:'grid', gap: 10}}>
+                          <div>
+                            <div style={{...cfgStyles.label, marginBottom: 4}}>Painel anti-ban do canal</div>
+                            <div style={{fontSize: 11.5, color:'var(--ink-soft)', lineHeight: 1.45}}>Atualize saúde, recalcule risco, faça snapshot manual ou recrie o destino quando o canal mudar.</div>
+                          </div>
+                          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap: 8}}>
+                            <div style={{...cfgStyles.field, background:'var(--bg-soft)'}}>
+                              <div style={{fontSize: 10.5, color:'var(--ink-faint)', textTransform:'uppercase', fontWeight: 800}}>Status</div>
+                              <div style={{fontSize: 13, fontWeight: 700, color:'var(--ink)', marginTop: 3}}>{healthData?.status ?? 'sem dados'}</div>
+                            </div>
+                            <div style={{...cfgStyles.field, background:'var(--bg-soft)'}}>
+                              <div style={{fontSize: 10.5, color:'var(--ink-faint)', textTransform:'uppercase', fontWeight: 800}}>Risco</div>
+                              <div style={{fontSize: 13, fontWeight: 700, color:'var(--ink)', marginTop: 3}}>{riskValue}</div>
+                            </div>
+                          </div>
+                          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap: 8}}>
+                            <button type="button" onClick={() => refreshSingleChannelHealth(group.id)} disabled={channelAction === `health-${group.id}`} style={mobi.btn('ghost', true)}>{channelAction === `health-${group.id}` ? 'Atualizando...' : 'Atualizar saúde'}</button>
+                            <button type="button" onClick={() => recomputeChannelRisk(group.id)} disabled={channelAction === `risk-${group.id}`} style={mobi.btn('ghost', true)}>{channelAction === `risk-${group.id}` ? 'Calculando...' : 'Recalcular risco'}</button>
+                            <button type="button" onClick={() => snapshotChannelNow(group.id)} disabled={channelAction === `snapshot-${group.id}`} style={mobi.btn('ghost', true)}>{channelAction === `snapshot-${group.id}` ? 'Criando...' : 'Snapshot agora'}</button>
+                            <button type="button" onClick={() => loadChannelSnapshots(group.id)} disabled={channelAction === `snapshots-${group.id}`} style={mobi.btn('ghost', true)}>{channelAction === `snapshots-${group.id}` ? 'Carregando...' : 'Ver snapshots'}</button>
+                          </div>
+                          {snapshots.length > 0 && (
+                            <div style={{display:'grid', gap: 6}}>
+                              {snapshots.map((snapshot, snapIndex) => (
+                                <div key={snapshot.id || snapIndex} style={{fontSize: 11.5, color:'var(--ink-soft)', borderTop:'1px solid var(--line)', paddingTop: 6}}>
+                                  {(snapshot.snapshotedAt || snapshot.createdAt) ? new Date(snapshot.snapshotedAt || snapshot.createdAt).toLocaleString('pt-BR') : 'snapshot'} · {snapshot.status ?? snapshot.healthStatus ?? snapshot.subscribersCount ?? 'sem status'}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div style={{display:'grid', gap: 8}}>
+                            <input
+                              style={cfgStyles.field}
+                              placeholder="novo JID @newsletter"
+                              value={recreateDrafts[group.id] || ''}
+                              onChange={(event) => setRecreateDrafts((current) => ({ ...current, [group.id]: event.target.value }))}
+                            />
+                            <button type="button" onClick={() => recreateChannel(group.id)} disabled={channelAction === `recreate-${group.id}`} style={{...mobi.btn('ghost', true), color:'var(--danger)'}}>{channelAction === `recreate-${group.id}` ? 'Recriando...' : 'Recriar canal'}</button>
+                          </div>
+                          {channelErrors[group.id] && <div style={{fontSize: 12, color:'var(--danger)'}}>{channelErrors[group.id]}</div>}
+                        </div>
+                      )
+                    })()}
                   </div>
                 )}
               </div>

@@ -533,7 +533,10 @@ export default function OfferPage() {
     if (typeof window === 'undefined') return undefined
     const timer = window.setTimeout(() => {
       const urlFromQuery = new URLSearchParams(window.location.search).get('url')?.trim()
-      if (urlFromQuery) setInput((current) => current || urlFromQuery)
+      if (urlFromQuery) {
+        setInput((current) => current || urlFromQuery)
+        setPasteFeedback('Link convertido carregado do Conversor. Gere a oferta para montar a mensagem.')
+      }
     }, 0)
     return () => window.clearTimeout(timer)
   }, [])
@@ -1133,7 +1136,7 @@ ${currentCouponLink}`
         <div style={{position:'fixed', inset:0, zIndex:200, background:'rgba(0,0,0,0.55)', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 16px'}} onClick={() => setShowScheduleModal(false)}>
           <div style={{background:'var(--surface)', border:'1px solid var(--line)', borderRadius:20, padding:22, width:'100%', maxWidth:400}} onClick={(e) => e.stopPropagation()}>
             <div style={{fontSize: 16, fontWeight: 700, color:'var(--ink)', marginBottom: 4}}>Agendar envio</div>
-            <div style={{fontSize: 12, color:'var(--ink-soft)', marginBottom: 16, lineHeight: 1.5}}>Escolha a data e hora para o envio automático. Mínimo: 1 minuto a partir de agora.</div>
+            <div style={{fontSize: 12, color:'var(--ink-soft)', marginBottom: 16, lineHeight: 1.5}}>Escolha a data e hora para o envio automático. Mínimo: 1 minuto a partir de agora. O backend atual agenda a mensagem pelo contrato global e ainda não persiste a seleção manual de destinos desta tela.</div>
             <label style={{display:'grid', gap: 6, marginBottom: 16}}>
               <span style={{fontSize: 12, fontWeight: 600, color:'var(--ink)'}}>Data e hora</span>
               <input

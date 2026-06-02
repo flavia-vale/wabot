@@ -173,8 +173,9 @@ export default function TemplatesPage() {
         {getMobileTemplatePresetNotice()} Os 4 modelos padrão podem ser editados. Modelos personalizados são salvos neste navegador.
       </div>
 
-      <div style={{ padding: '18px 16px 24px' }}>
+      <div style={{ padding: '18px 16px 24px', display: 'grid', gap: 8 }}>
         <button type="button" onClick={() => router.push(mobileRoutes.offer)} style={mobi.btn('accent', true)}>Usar em uma oferta</button>
+        <button type="button" onClick={() => router.push(mobileRoutes.accountVariations)} style={mobi.btn('ghost', true)}>Editar ganchos/CTAs globais</button>
       </div>
     </MobileShell>
   )

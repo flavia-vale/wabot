@@ -14,6 +14,13 @@ const DELAY_PRESETS = [
   { id: 'safe', label: 'Conservador', min: 15, max: 30 },
 ]
 
+const PLATFORM_OPTIONS = [
+  { id: 'shopee', label: 'Shopee' },
+  { id: 'amazon', label: 'Amazon' },
+  { id: 'mercadolivre', label: 'Mercado Livre' },
+  { id: 'magazineluiza', label: 'Magalu' },
+]
+
 export default function PreferencesPage() {
   useMobileRoutePerf('m/config/preferences')
   const [draft, setDraft] = useState(null)
@@ -57,6 +64,14 @@ export default function PreferencesPage() {
 
   function applyDelayPreset(preset) {
     setDraft((current) => ({ ...(current || {}), delayMin: preset.min, delayMax: preset.max }))
+  }
+
+  function togglePlatform(platformId) {
+    setDraft((current) => {
+      const list = Array.isArray(current?.platforms) ? current.platforms : []
+      const next = list.includes(platformId) ? list.filter((id) => id !== platformId) : [...list, platformId]
+      return { ...(current || {}), platforms: next }
+    })
   }
 
   const delayMin = Number(draft?.delayMin ?? 5)
@@ -103,6 +118,44 @@ export default function PreferencesPage() {
           <label style={{display:'grid', gap: 6}}>
             <span style={cfgStyles.label}>Link do grupo principal</span>
             <input style={cfgStyles.field} value={draft?.brandingGroupLink || ''} onChange={(event) => setDraft((current) => ({ ...(current || {}), brandingGroupLink: event.target.value }))} placeholder="https://chat.whatsapp.com/..." />
+          </label>
+        </div>
+      </div>
+
+      <div style={cfgStyles.sectionLabel}>Lojas e destinos globais</div>
+      <div style={{padding:'0 16px'}}>
+        <div style={{...cfgStyles.cardP, display:'grid', gap: 14}}>
+          <div style={{fontSize: 12, color:'var(--ink-soft)', lineHeight: 1.5}}>
+            Mesmo contrato usado no desktop: escolha as plataformas aceitas pelo espelhamento e se o bot publica no feed/status quando o backend permitir.
+          </div>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap: 8}}>
+            {PLATFORM_OPTIONS.map((platform) => {
+              const checked = Array.isArray(draft?.platforms) && draft.platforms.includes(platform.id)
+              return (
+                <label key={platform.id} style={{display:'flex', alignItems:'center', gap: 8, fontSize: 13, color:'var(--ink)', cursor:'pointer'}}>
+                  <input type="checkbox" checked={checked} onChange={() => togglePlatform(platform.id)} style={{width: 17, height: 17}} />
+                  {platform.label}
+                </label>
+              )
+            })}
+          </div>
+          <label style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap: 12}}>
+            <span>
+              <span style={{display:'block', fontSize: 13, fontWeight: 650, color:'var(--ink)'}}>Feed global</span>
+              <span style={{display:'block', fontSize: 11.5, color:'var(--ink-soft)', marginTop: 2}}>Replica para o feed global quando estiver habilitado no backend.</span>
+            </span>
+            <button type="button" role="switch" aria-checked={!!draft?.feedGlobal} onClick={() => setDraft((current) => ({ ...(current || {}), feedGlobal: !current?.feedGlobal }))} style={cfgStyles.toggle(!!draft?.feedGlobal)}>
+              <div style={cfgStyles.toggleKnob(!!draft?.feedGlobal)} />
+            </button>
+          </label>
+          <label style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap: 12}}>
+            <span>
+              <span style={{display:'block', fontSize: 13, fontWeight: 650, color:'var(--ink)'}}>Postar no Status</span>
+              <span style={{display:'block', fontSize: 11.5, color:'var(--ink-soft)', marginTop: 2}}>Mantém paridade com o toggle do dashboard desktop.</span>
+            </span>
+            <button type="button" role="switch" aria-checked={!!draft?.postToStatus} onClick={() => setDraft((current) => ({ ...(current || {}), postToStatus: !current?.postToStatus }))} style={cfgStyles.toggle(!!draft?.postToStatus)}>
+              <div style={cfgStyles.toggleKnob(!!draft?.postToStatus)} />
+            </button>
           </label>
         </div>
       </div>

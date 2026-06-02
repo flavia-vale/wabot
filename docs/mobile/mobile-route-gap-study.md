@@ -179,3 +179,17 @@ Paridade parcial. Ambas fazem checkout e PIX. Desktop usa catálogo dinâmico de
 - Unificar templates locais mobile com variações backend pode afetar automações e preservação; tratar como produto novo, não simples refactor.
 - Canais e preservação mexem em fluxos sensíveis a restrição/banimento; implementar primeiro em staging e validar com conta/canal de teste.
 - Qualquer mudança em `/dashboard` e `/m` deve manter o proxy de API e portas existentes; não alterar portas sem atualizar os três pontos canônicos do AGENTS.md.
+
+
+## Atualização 2026-06-02 — P1/P2 implementados
+
+- P1.5: `/m/config/groups` agora expõe ações de saúde anti-ban por canal: atualizar saúde, recomputar risco, criar snapshot manual, carregar snapshots e recriar canal por JID.
+- P1.6: `/m/config/preservacao` agora consome `preservationProbe`, `preservationProbeSessionStart`, `preservationProbeSessionStop`, `preservationProbeSessionStatus` e `preservationProbeSessionSelect`.
+- P1.7/P1.8: o checklist mobile e a home usam `dashboardStatus.hasSuccessfulLog`; a home exibe a saúde operacional da fila quando `dashboardStatus.queue` está disponível.
+- P1.9: o conversor mobile mantém o atalho por resultado para `/m/op/offer?url=...` e o montador mobile agora carrega esse link automaticamente.
+- P1.10: assinaturas mobile usam o catálogo dinâmico de `publicPlans` e iniciam checkout/PIX com o plano selecionado.
+- P2.11: destinos explícitos em agendamento seguem bloqueados pelo contrato atual `scheduledCreate(text, scheduledAt)`; a UI mobile agora deixa essa limitação clara para evitar falsa expectativa.
+- P2.12: preferências mobile alinham o contrato com plataformas, feed global e status.
+- P2.13: logs mobile enviam busca 3+ caracteres para o servidor e mantêm agrupamento mobile.
+- P2.14: templates locais e variações globais persistidas continuam conceitos separados, mas agora a tela de templates direciona para as variações globais.
+- P2.15: rotas avançadas aparecem como atalhos na home, preservando as cinco tabs fixas do shell mobile.
