@@ -52,7 +52,7 @@ function parsePool(json) {
   }
 }
 
-export function CopyVariationPoolEditor({ value, onChange, disabled }) {
+export function CopyVariationPoolEditor({ value, onChange, disabled, showPresets = true }) {
   const pool = useMemo(() => parsePool(value.copyVariationPoolJson), [value.copyVariationPoolJson])
 
   const writePool = (next) => onChange({ copyVariationPoolJson: JSON.stringify(next) })
@@ -77,7 +77,7 @@ export function CopyVariationPoolEditor({ value, onChange, disabled }) {
         Pedacinhos de texto que o bot intercala em cada envio, pra mensagens nunca saírem 100% iguais. Quanto mais variações, mais natural — deixe uma caixinha vazia em cada grupo pra que às vezes o texto saia sem o complemento.
       </p>
 
-      <PresetButtons presets={PRESETS} onApply={writePool} disabled={disabled} hint="aplica o conjunto inteiro" />
+      {showPresets && <PresetButtons presets={PRESETS} onApply={writePool} disabled={disabled} hint="aplica o conjunto inteiro" />}
 
       <div className="space-y-4">
         {GROUPS.map(g => (
