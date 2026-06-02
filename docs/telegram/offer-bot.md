@@ -41,6 +41,16 @@ pm2 start ecosystem.config.cjs --only telegram-offer-bot
 pm2 save
 ```
 
+> **Deploy de produção garante o poller automaticamente.** Desde então,
+> `scripts/deploy_safe_dashboard.sh` (passo `[7c/9]`) faz
+> `pm2 delete telegram-offer-bot` + `pm2 start ecosystem.config.cjs --only
+> telegram-offer-bot` + `pm2 save` no fim de todo deploy de `main`. Isso
+> recria o app como **poller único** (start fresco recarrega o token do
+> `.env`) e evita o `409 Conflict` que acontecia quando o `pm2 update` do
+> deploy deixava um poller manual/duplicado vivo. Staging **não** é tocado
+> pelo deploy — siga subindo `telegram-offer-bot-staging` à mão, com token
+> separado.
+
 Para um teste pontual em foreground (sem PM2): `npm run telegram:offer-bot` (entrypoint `src/telegram/offerBotRunner.js`).
 
 > Pegadinha #1 (PM2 cacheia env): ao trocar o token, faça

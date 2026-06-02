@@ -40,7 +40,7 @@ import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
-import { getAdvancedPreservationAccess } from './billing/plans.js'
+import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
@@ -379,7 +379,9 @@ async function loadConfig() {
   botConfig.brandingCtaText = normalizeBrandingCtaText(botConfig.brandingCtaText)
 
   const preservation = await getAdvancedPreservationAccess(userId, { db })
-  return { credentials, groups, plan: user.plan, botConfig, preservationActive: preservation.active }
+  // Efetivo = plano permite (Pro/Trial) E o usuário ligou o flag mestre opt-in.
+  const preservationActive = isPreservationActive(preservation, botConfig)
+  return { credentials, groups, plan: user.plan, botConfig, preservationActive }
 }
 
 async function getConfig() {

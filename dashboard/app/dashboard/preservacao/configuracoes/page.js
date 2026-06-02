@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState, ErrorState } from '@/components/States'
+import { PreservationMasterToggle } from '@/components/preservacao/PreservationMasterToggle'
 import { ThrottleForm } from '@/components/preservacao/ThrottleForm'
 import { FollowGuardForm } from '@/components/preservacao/FollowGuardForm'
 import { QuietHoursForm } from '@/components/preservacao/QuietHoursForm'
@@ -67,6 +68,7 @@ export default function ConfiguracoesAvancadasPage() {
       {savedAt && <div className="mb-4"><Alert type="success" message={`Configurações salvas às ${savedAt.toLocaleTimeString('pt-BR')}.`} /></div>}
 
       <div className="flex flex-col gap-4">
+        <PreservationMasterToggle value={draft} onChange={update} disabled={saving} />
         <ThrottleForm value={draft} onChange={update} disabled={saving} />
         <QuietHoursForm value={draft} onChange={update} disabled={saving} />
         <FollowGuardForm value={draft} onChange={update} disabled={saving} />
