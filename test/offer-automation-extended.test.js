@@ -506,6 +506,11 @@ test('resolveCopyVariationPoolJson: usa defaults oficiais quando pool salvo est�
   assert.equal(parsed.trailers[0], '⚠️ Atenção: Preços e estoque podem mudar a qualquer momento!')
 })
 
+test('resolveCopyVariationPoolJson: usa defaults quando editor salvou apenas buckets em branco', () => {
+  const blankEditorPool = JSON.stringify({ greetings: [''], ctas: ['   '], trailers: [] })
+  assert.equal(resolveCopyVariationPoolJson(blankEditorPool), DEFAULT_COPY_VARIATION_POOL_JSON)
+})
+
 test('resolveCopyVariationPoolJson: preserva pool editado pelo usuário', () => {
   const custom = JSON.stringify({ greetings: ['Meu gancho'], ctas: ['Meu CTA'], trailers: ['Meu fechamento'] })
   assert.equal(resolveCopyVariationPoolJson(custom), custom)

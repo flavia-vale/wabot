@@ -45,11 +45,23 @@ function isEmptyObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0
 }
 
+function bucketHasContent(bucket) {
+  return Array.isArray(bucket) && bucket.some(item => String(item ?? '').trim() !== '')
+}
+
+export function isEmptyCopyVariationPool(pool) {
+  if (!pool || typeof pool !== 'object' || Array.isArray(pool)) return false
+  if (isEmptyObject(pool)) return true
+  const hasCanonicalBuckets = ['greetings', 'ctas', 'trailers'].every(key => Array.isArray(pool[key]))
+  if (!hasCanonicalBuckets) return false
+  return !bucketHasContent(pool.greetings) && !bucketHasContent(pool.ctas) && !bucketHasContent(pool.trailers)
+}
+
 export function resolveCopyVariationPoolJson(poolJson) {
   if (poolJson == null || String(poolJson).trim() === '') return DEFAULT_COPY_VARIATION_POOL_JSON
   try {
     const parsed = typeof poolJson === 'string' ? JSON.parse(poolJson) : poolJson
-    if (isEmptyObject(parsed)) return DEFAULT_COPY_VARIATION_POOL_JSON
+    if (isEmptyCopyVariationPool(parsed)) return DEFAULT_COPY_VARIATION_POOL_JSON
     return typeof poolJson === 'string' ? poolJson : JSON.stringify(parsed)
   } catch {
     return DEFAULT_COPY_VARIATION_POOL_JSON

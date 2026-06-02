@@ -3,8 +3,6 @@ import { sendBroadcast, isRunning } from '../manager.js'
 import db from '../db.js'
 import { parseCredentialData } from '../credentialHealth.js'
 import { applyVariation, resolveCopyVariationPoolJson } from '../core/copyVariation.js'
-import { buildMobileOfferText } from '../../dashboard/lib/mobileOfferComposer.js'
-import { composeTemplates } from '../../dashboard/lib/mobileTemplateStore.js'
 
 const PRICE_DIVISOR = 1
 const DEFAULT_AUTOMATION_TEMPLATE_KEY = 'automatico_classico'
