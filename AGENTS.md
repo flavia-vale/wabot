@@ -539,6 +539,25 @@ em emergência: `pm2 stop api-staging bot-supervisor-staging && cd
 ~/wabot-staging && npx prisma migrate deploy && pm2 restart
 api-staging bot-supervisor-staging --update-env`.
 
+**Reincidência (2026-06-01, prod, PR #753):** `pm2 stop api` parou a API
+mas o `migrate` continuou falhando 5x com `database is locked`. Causa:
+no modo `inline` a API faz `fork()` dos bot-workers, e `pm2 stop` para só
+o processo **pai** — os forks viram **órfãos** que continuam segurando
+conexões WAL no `prod.db` (confirmado via `fuser -v`: 5 processos `node`
+com o `.db`/`-wal`/`-shm` abertos mesmo com a API parada). Em prod o
+`bot-supervisor` nem existe (modo inline), então parar "api" e
+"bot-supervisor" não cobre os workers. Destravamos com `fuser -k` nos
+arquivos do banco e o migrate passou de primeira.
+
+Correção definitiva nos dois scripts: a função `kill_db_holders_for_migration`
+resolve o caminho do `.db` a partir do `DATABASE_URL` do `.env` do
+ambiente (apenas dentro de `$ROOT_DIR/prisma`, sem cruzar prod/staging) e
+roda `fuser -k` (TERM, depois KILL) nos órfãos — chamada após o `pm2 stop`
+e em cada retry do loop de migrate. Os workers são recriados no
+`pm2 restart` pós-migrate (`AUTO_START_WHATSAPP_SESSIONS=true`).
+Diagnóstico manual: `fuser -v ~/wabot/prisma/prod.db*` (ou
+`lsof ~/wabot/prisma/prod.db*`) lista quem segura o arquivo.
+
 ## Image scrapers — configuração canônica (PR #422, não regredir)
 
 `src/converters/imageScrapers.js` entrega imagem hi-res para link preview
