@@ -14,6 +14,7 @@ import {
   updateCustomTemplate,
   deleteCustomTemplate,
 } from '@/lib/mobileTemplateStore'
+import { getMobileTemplatePresetNotice } from '@/lib/mobileConfigContracts'
 
 const VARIABLES = ['{produto}', '{preço}', '{preço_de}', '{link}', '{loja}']
 
@@ -169,7 +170,7 @@ export default function TemplatesPage() {
       </div>
 
       <div style={{ padding: '12px 16px 0', fontSize: 11.5, color: 'var(--ink-soft)', lineHeight: 1.5 }}>
-        Os 4 modelos padrão podem ser editados. Modelos personalizados são salvos neste navegador.
+        {getMobileTemplatePresetNotice()} Os 4 modelos padrão podem ser editados. Modelos personalizados são salvos neste navegador.
       </div>
 
       <div style={{ padding: '18px 16px 24px' }}>
