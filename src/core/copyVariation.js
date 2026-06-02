@@ -90,7 +90,7 @@ const LINK_RE_GRUPO = /\{\{grupoLink\}\}/g
 const LINK_RE_CUPOM = /\{\{cupomLink\}\}/g
 
 export function applyVariation(text, opts = {}) {
-  const { groupId, date, pool, poolJson, random = false, groupInviteLink = '', couponLink = '' } = opts
+  const { groupId, date, pool, poolJson, random = false, groupInviteLink = '', couponLink = '', autoInjectWhenMissing = true } = opts
   if (text == null) return text
   let p = pool
   if (!p && poolJson) {
@@ -119,6 +119,8 @@ export function applyVariation(text, opts = {}) {
       return ''
     })
   }
+
+  if (!autoInjectWhenMissing) return result
 
   const prefix = greeting ? `${greeting}\n\n` : ''
   const suffix = trailer ? `\n\n${trailer}` : ''

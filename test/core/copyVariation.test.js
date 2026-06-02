@@ -41,6 +41,17 @@ test('applyVariation prefixa greeting + sufixa trailer quando NÃO há placehold
   assert.ok(out.includes('Texto puro'))
 })
 
+
+test('applyVariation permite desativar injeção automática quando placeholders foram removidos', () => {
+  const out = applyVariation('Texto puro', {
+    groupId: 'g-1',
+    pool: POOL,
+    date: '2026-05-18',
+    autoInjectWhenMissing: false,
+  })
+  assert.equal(out, 'Texto puro')
+})
+
 test('applyVariation aceita pool serializado como JSON', () => {
   const tpl = '{{greeting}}X'
   const out = applyVariation(tpl, { groupId: 'g-1', poolJson: JSON.stringify(POOL), date: '2026-05-18' })

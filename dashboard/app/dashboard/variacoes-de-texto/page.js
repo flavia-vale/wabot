@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
@@ -16,6 +16,7 @@ import {
   withoutCustomTemplate,
 } from '@/lib/mobileTemplateStore'
 import { OFFER_TEMPLATE_VARIABLE_GROUPS } from '@/lib/mobileOfferComposer'
+import { buildRenderedOfferTemplatePreview, summarizeAutomationTemplateUsage } from '@/lib/offerTemplatePreview'
 
 export default function VariacoesDeTextoPage() {
   const [value, setValue] = useState({
@@ -24,6 +25,7 @@ export default function VariacoesDeTextoPage() {
     couponLink: '',
   })
   const [templateStore, setTemplateStore] = useState(() => readLocalTemplateStore())
+  const [automations, setAutomations] = useState([])
   const [templateMode, setTemplateMode] = useState('list')
   const [editingTemplateKey, setEditingTemplateKey] = useState(null)
   const [editTemplateName, setEditTemplateName] = useState('')
@@ -32,8 +34,10 @@ export default function VariacoesDeTextoPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
+  const templateBodyRef = useRef(null)
 
   const templates = composeTemplates(templateStore)
+  const templateUsage = summarizeAutomationTemplateUsage(automations)
   const editingTemplate = templates.find(t => t.key === editingTemplateKey) || null
 
   useEffect(() => {
@@ -41,8 +45,9 @@ export default function VariacoesDeTextoPage() {
     Promise.all([
       api.variationsGet(),
       loadTemplateStore(),
+      api.offerAutomations().catch(() => []),
     ])
-      .then(([cfg, store]) => {
+      .then(([cfg, store, automationList]) => {
         if (!active) return
         setValue({
           copyVariationPoolJson: cfg.copyVariationPoolJson ?? '{}',
@@ -50,6 +55,7 @@ export default function VariacoesDeTextoPage() {
           couponLink: cfg.couponLink ?? '',
         })
         setTemplateStore(store)
+        setAutomations(Array.isArray(automationList) ? automationList : [])
       })
       .catch(err => { if (active) setError(err.message) })
       .finally(() => { if (active) setLoading(false) })
@@ -78,6 +84,23 @@ export default function VariacoesDeTextoPage() {
 
   function copyVariable(token) {
     try { navigator.clipboard?.writeText(token) } catch {}
+  }
+
+  function insertTemplateToken(token) {
+    const textarea = templateBodyRef.current
+    if (!textarea) {
+      copyVariable(token)
+      return
+    }
+    const start = textarea.selectionStart ?? editTemplateBody.length
+    const end = textarea.selectionEnd ?? editTemplateBody.length
+    const nextBody = `${editTemplateBody.slice(0, start)}${token}${editTemplateBody.slice(end)}`
+    setEditTemplateBody(nextBody)
+    window.setTimeout(() => {
+      textarea.focus()
+      const cursor = start + token.length
+      textarea.setSelectionRange(cursor, cursor)
+    }, 0)
   }
 
   function startCreateTemplate() {
@@ -220,21 +243,60 @@ export default function VariacoesDeTextoPage() {
           )}
         </div>
 
-        {templateMode === 'list' && templates.map(template => (
-          <div key={template.key} className="rounded-lg border px-3 py-2 flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-                <span>{template.name}</span>
-                {template.isOverridden && <span className="text-[10px] rounded-full bg-gray-100 px-2 py-0.5 text-gray-500">editado</span>}
-                {template.isCustom && <span className="text-[10px] rounded-full bg-gray-100 px-2 py-0.5 text-gray-500">personalizado</span>}
+        {templateMode === 'list' && templates.map(template => {
+          const usage = templateUsage.get(template.key)
+          const isInUse = !!usage?.enabled
+          const isPausedOnly = !isInUse && !!usage?.paused
+          const renderedPreview = buildRenderedOfferTemplatePreview({
+            template,
+            copyVariationPoolJson: value.copyVariationPoolJson,
+            groupInviteLink: value.brandingGroupLink,
+            couponLink: value.couponLink,
+          })
+          return (
+            <div
+              key={template.key}
+              className={`rounded-xl border px-3 py-3 ${isInUse ? 'border-green-200 bg-green-50/50 shadow-sm' : 'border-gray-200 bg-white'}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <div className="text-sm font-semibold text-gray-800 flex flex-wrap items-center gap-2">
+                    <span>{template.name}</span>
+                    {isInUse && <span className="text-[10px] rounded-full bg-green-600 px-2 py-0.5 font-bold uppercase tracking-wide text-white">ativo</span>}
+                    {isPausedOnly && <span className="text-[10px] rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-700">usado em automação pausada</span>}
+                    {template.key === 'automatico_classico' && <span className="text-[10px] rounded-full bg-blue-50 px-2 py-0.5 font-semibold text-blue-700">padrão de novas automações</span>}
+                    {template.isOverridden && <span className="text-[10px] rounded-full bg-gray-100 px-2 py-0.5 text-gray-500">editado</span>}
+                    {template.isCustom && <span className="text-[10px] rounded-full bg-gray-100 px-2 py-0.5 text-gray-500">personalizado</span>}
+                  </div>
+                  {usage ? (
+                    <p className="text-xs text-gray-600">
+                      {usage.enabled ? `Em uso em ${usage.enabled} automação${usage.enabled === 1 ? '' : 'ões'} ativa${usage.enabled === 1 ? '' : 's'}` : 'Nenhuma automação ativa usando este modelo'}
+                      {usage.paused ? ` · ${usage.paused} pausada${usage.paused === 1 ? '' : 's'}` : ''}
+                      {usage.groups.length ? ` · ${usage.groups.join(', ')}` : ''}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-500">Ainda não foi selecionado em nenhuma automação salva.</p>
+                  )}
+                </div>
+                <button type="button" onClick={() => startEditTemplate(template)} className="shrink-0 text-xs text-green-700 font-semibold hover:underline">
+                  Editar
+                </button>
               </div>
-              <div className="text-xs text-gray-500 truncate">{(template.body || '').replace(/\n/g, ' · ')}</div>
+
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Corpo salvo do modelo</p>
+                  <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words text-xs leading-5 text-gray-600">{template.body || ''}</pre>
+                </div>
+                <div className="rounded-lg border border-green-100 bg-white p-3 ring-1 ring-green-50">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-green-700">Prévia real enviada pelo bot</p>
+                  <p className="mt-1 text-[11px] text-gray-500">Inclui gancho, CTA, aviso final e links variáveis quando configurados.</p>
+                  <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words text-xs leading-5 text-gray-800">{renderedPreview}</pre>
+                </div>
+              </div>
             </div>
-            <button type="button" onClick={() => startEditTemplate(template)} className="text-xs text-green-700 font-semibold hover:underline">
-              Editar
-            </button>
-          </div>
-        ))}
+          )
+        })}
 
         {(templateMode === 'edit' || templateMode === 'create') && (
           <div className="space-y-3 rounded-lg border border-green-100 bg-green-50/40 p-3">
@@ -250,21 +312,31 @@ export default function VariacoesDeTextoPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Corpo da mensagem</label>
+              <p className="mb-2 text-[11px] leading-5 text-gray-500">
+                Posicione <code className="rounded bg-white px-1 text-green-700">{'{{greeting}}'}</code>, <code className="rounded bg-white px-1 text-green-700">{'{{cta}}'}</code> e <code className="rounded bg-white px-1 text-green-700">{'{{trailer}}'}</code> onde quiser. Se apagar um deles, o bot não envia aquele bloco.
+              </p>
               <textarea
+                ref={templateBodyRef}
                 value={editTemplateBody}
                 onChange={e => setEditTemplateBody(e.target.value)}
                 rows={9}
                 className="w-full border rounded-lg px-3 py-2 text-xs font-mono leading-5 focus:outline-none focus:ring-2 focus:ring-green-500"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 rounded-lg border border-green-100 bg-white/70 p-3">
+              <div>
+                <div className="text-xs font-semibold text-gray-700">Inserir variáveis no ponto do cursor</div>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  Para remover gancho, CTA ou fechamento da mensagem, apague o respectivo token do corpo do modelo.
+                </p>
+              </div>
               {OFFER_TEMPLATE_VARIABLE_GROUPS.map(group => (
                 <div key={group.key}>
                   <div className="text-[11px] font-semibold text-gray-500 mb-1">{group.title}</div>
                   <div className="flex flex-wrap gap-1.5">
                     {group.variables.map(variable => (
-                      <button key={variable.token} type="button" onClick={() => copyVariable(variable.token)} className="rounded-full bg-white border px-2 py-1 text-xs font-semibold text-green-700">
-                        {variable.token}
+                      <button key={variable.token} type="button" onClick={() => insertTemplateToken(variable.token)} className="rounded-full bg-white border px-2 py-1 text-xs font-semibold text-green-700 hover:border-green-300 hover:bg-green-50">
+                        + {variable.token}
                       </button>
                     ))}
                   </div>
