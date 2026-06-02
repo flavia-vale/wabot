@@ -597,6 +597,187 @@ amzn.to short     → 1500x300 jpeg
 
 `node --test test/image-scrapers.test.js` → 12/12 pass.
 
+
+## Protocolo de Backlog Técnico — Wabot
+
+Sempre que uma tarefa, bug, melhoria, risco técnico, dívida técnica, ideia de
+produto, follow-up ou pendência surgir durante a conversa, a IA deve perguntar
+antes de encerrar:
+
+> "Quer que eu registre isso como uma issue no backlog técnico em
+> `.backlog/backlog.md`?"
+
+A IA **não deve criar a issue automaticamente** sem confirmação explícita da
+usuária.
+
+### Quando perguntar se deve abrir issue
+
+Pergunte se a usuária quer abrir uma issue quando identificar qualquer um
+destes casos:
+
+- Bug encontrado ou comportamento quebrado.
+- Feature nova ou melhoria de produto.
+- Refactor, limpeza de código morto, simplificação ou otimização.
+- Risco de segurança, estabilidade, antifalha, antiban ou operação.
+- Pendência descoberta durante implementação/teste.
+- Comentário tipo "depois fazemos", "isso precisa melhorar", "tem que
+  revisar", "não esquecer".
+- Falha de teste que não será corrigida no mesmo PR.
+- Ideia que não cabe no escopo atual, mas deve ser rastreada.
+- Qualquer decisão técnica que gere follow-up.
+
+Não pergunte para tarefas triviais de resposta única, dúvidas conceituais sem
+ação futura, ou quando a usuária pedir explicitamente para não registrar nada.
+
+### Arquivo oficial
+
+O backlog técnico do Wabot vive em:
+
+```txt
+.backlog/backlog.md
+```
+
+Esse arquivo é a fonte única da rota `/admin/pipeline`.
+
+### Antes de criar uma issue
+
+1. Ler `.backlog/backlog.md`.
+2. Encontrar o maior ID existente no formato `WABOT-XXX`.
+3. Criar o próximo ID sequencial, preservando três dígitos:
+   - se o último for `WABOT-002`, criar `WABOT-003`.
+4. Não reutilizar IDs.
+5. Não criar outro arquivo.
+6. Não alterar issues existentes, exceto se a tarefa for explicitamente
+   atualizar uma issue já existente.
+7. Inserir a nova issue ao final do arquivo, mantendo uma linha divisória
+   `---`.
+
+### Estrutura obrigatória da issue
+
+Toda issue adicionada em `.backlog/backlog.md` deve seguir exatamente este
+formato:
+
+```md
+<!-- START_ISSUE: WABOT-XXX -->
+### [TIPO] Título curto e claro da issue
+- **ID:** WABOT-XXX
+- **Tipo:** Tipo                  # [Bug | Feature | Refactor | Security | Chore]
+- **Prioridade:** Medium          # [Low | Medium | High | Critical]
+- **Status:** Backlog             # [Backlog | Ready | In Progress | Review | QA | Done]
+- **Epic:** Infra                 # [WhatsApp | Faturamento | UX | Infra]
+- **Criado em:** YYYY-MM-DD
+
+#### Descrição Técnica
+Explique objetivamente o problema, melhoria ou tarefa. Inclua contexto técnico
+suficiente para outra IA ou pessoa conseguir continuar depois.
+
+#### Critérios de Aceite
+- [ ] Critério verificável 1.
+- [ ] Critério verificável 2.
+<!-- END_ISSUE: WABOT-XXX -->
+
+---
+```
+
+### Regras de preenchimento
+
+#### Tipo
+
+Use apenas um destes valores:
+
+- `Bug` — comportamento quebrado ou erro real.
+- `Feature` — nova funcionalidade de produto.
+- `Refactor` — limpeza, organização, performance ou melhoria interna sem
+  mudança funcional esperada.
+- `Security` — segurança, prevenção, antifalha, antiban, permissões,
+  validações críticas.
+- `Chore` — infraestrutura, setup, documentação operacional, tarefas
+  administrativas.
+
+#### Prioridade
+
+Use apenas um destes valores:
+
+- `Low` — desejável, mas não urgente.
+- `Medium` — importante, mas pode esperar.
+- `High` — impacta operação, receita, UX ou estabilidade.
+- `Critical` — pode quebrar produção, causar perda de dados, bloqueio de
+  pagamento, risco de banimento, indisponibilidade ou falha grave.
+
+#### Status
+
+Ao criar issue nova, use por padrão:
+
+```md
+- **Status:** Backlog
+```
+
+Só use outro status se a usuária pedir explicitamente.
+
+Valores permitidos:
+
+- `Backlog`
+- `Ready`
+- `In Progress`
+- `Review`
+- `QA`
+- `Done`
+
+#### Epic
+
+Use apenas um destes valores:
+
+- `WhatsApp`
+- `Faturamento`
+- `UX`
+- `Infra`
+
+Se tiver dúvida, use `Infra`.
+
+### Regras para atualização de status
+
+Quando a usuária pedir para mover uma issue de coluna, atualizar status ou
+"passar para Review/QA/Done":
+
+1. Localizar o bloco entre:
+   - `<!-- START_ISSUE: WABOT-XXX -->`
+   - `<!-- END_ISSUE: WABOT-XXX -->`
+2. Alterar exclusivamente a linha:
+
+```md
+- **Status:** ...
+```
+
+3. Preservar todo o restante do bloco intacto.
+4. Não reformatar o arquivo inteiro.
+5. Não alterar critérios de aceite, descrição, título ou comentários sem
+   pedido explícito.
+
+### Pergunta padrão antes de registrar
+
+Quando identificar uma pendência, pergunte assim:
+
+> Identifiquei uma pendência que vale rastrear no pipeline técnico. Quer que eu
+> abra uma issue em `.backlog/backlog.md`?
+>
+> Sugestão:
+> - Tipo:
+> - Prioridade:
+> - Epic:
+> - Título:
+
+Se a usuária responder "sim", criar a issue seguindo exatamente o formato
+obrigatório.
+
+### Se a IA não tiver acesso ao repositório
+
+Se a IA não puder editar arquivos diretamente, ela deve gerar o bloco Markdown
+completo da issue e dizer:
+
+> "Cole este bloco ao final de `.backlog/backlog.md`."
+
+Nunca inventar outro caminho ou outro formato.
+
 ## Regras para qualquer agente de IA neste repo
 
 - **Não trocar portas** sem atualizar os 3 lugares listados acima.
