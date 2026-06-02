@@ -7,6 +7,7 @@ import { summarizeCredentialHealth } from '../../credentialHealth.js'
 import { getPublicAnalyticsQualitySnapshot } from './public.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { createAdminService } from '../../domain/admin/service.js'
+import { readBacklogPipeline, updateBacklogIssueStatus } from '../../backlogPipeline.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -595,6 +596,30 @@ export async function adminRoutes(app) {
   app.get('/me', async (req, reply) => {
     if (!(await requireAdmin(req, reply))) return
     return req.admin
+  })
+
+
+  app.get('/pipeline', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const pipeline = await readBacklogPipeline()
+    await writeAdminAuditLog(req, { action: 'admin.pipeline.read', resource: 'backlogPipeline', after: { total: pipeline.total } })
+    return pipeline
+  })
+
+  app.patch('/pipeline/issues/:issueId/status', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:write'))) return
+    const issueId = String(req.params.issueId ?? '').trim()
+    const status = String(req.body?.status ?? '').trim()
+
+    try {
+      const pipeline = await updateBacklogIssueStatus({ issueId, status })
+      await writeAdminAuditLog(req, { action: 'admin.pipeline.status.update', resource: 'backlogPipeline', resourceId: issueId, after: { status } })
+      return pipeline
+    } catch (err) {
+      const code = err?.code || 'PIPELINE_UPDATE_FAILED'
+      const statusCode = ['ISSUE_NOT_FOUND', 'STATUS_LINE_NOT_FOUND', 'ISSUE_BLOCK_CORRUPTED'].includes(code) ? 404 : 400
+      return reply.code(statusCode).send({ error: err.message, code })
+    }
   })
 
   app.get('/overview', async (req, reply) => {
