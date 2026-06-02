@@ -23,6 +23,18 @@ const DISCOUNT_OPTIONS = [
   { value: 50, label: 'Só promoções acima de 50% (as maiores ofertas)' },
 ]
 
+const SKIP_LABELS = {
+  bot_not_running: 'O bot não está conectado. Conecte o WhatsApp e tente de novo.',
+  no_shopee_credentials: 'Sem credenciais da Shopee. Configure appId e secretKey.',
+  invalid_shopee_credentials: 'Credenciais da Shopee incompletas (appId/secretKey).',
+  no_offers_found: 'A Shopee não retornou produtos para essa palavra-chave.',
+  all_offers_filtered: 'A Shopee trouxe produtos, mas todos foram filtrados (desconto mínimo alto ou já enviados). Tente reduzir o desconto mínimo.',
+}
+
+function explainSkip(code) {
+  return SKIP_LABELS[code] ?? `Ignorado: ${code}`
+}
+
 const OFFERS_PER_SEND_OPTIONS = [
   { value: 1, label: '1 produto por envio' },
   { value: 2, label: '2 produtos por envio' },
@@ -341,7 +353,7 @@ export default function OfertasAutomaticasPage() {
                   {result.error
                     ? `Erro: ${result.error}`
                     : result.skipped
-                      ? `Ignorado: ${result.skipped}`
+                      ? explainSkip(result.skipped)
                       : `✓ ${result.sent} produto(s) enviado(s)`}
                 </p>
               )}

@@ -101,6 +101,45 @@ test('formatOfferMessage: handles missing originPrice gracefully', () => {
   assert.ok(msg.includes('https://shope.ee/xyz456'))
 })
 
+function baseAutomation(overrides = {}) {
+  return {
+    id: 'auto-x', userId: 'user-x', keyword: 'festa', minDiscountPct: 20,
+    offersPerSend: 1, destGroupJid: 'grupo@g.us', sentItemIds: '[]',
+    sortType: 2, isAMSOffer: false, isKeySeller: false, ...overrides,
+  }
+}
+
+const credOk = {
+  credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'a', secretKey: 's' }) }) },
+  botConfig: { findUnique: async () => ({ copyVariationPoolJson: '{}' }) },
+  offerAutomation: { update: async () => ({}) },
+}
+
+test('runAutomation: distingue all_offers_filtered de no_offers_found', async () => {
+  const filtered = await runAutomation(baseAutomation(), {
+    dbClient: credOk,
+    isRunningFn: () => true,
+    fetchOffersFn: async () => ({ rawCount: 12, offers: [] }),
+  })
+  assert.deepEqual(filtered, { skipped: 'all_offers_filtered' })
+
+  const empty = await runAutomation(baseAutomation(), {
+    dbClient: credOk,
+    isRunningFn: () => true,
+    fetchOffersFn: async () => ({ rawCount: 0, offers: [] }),
+  })
+  assert.deepEqual(empty, { skipped: 'no_offers_found' })
+})
+
+test('runAutomation: surfa erro real da API Shopee em vez de mascarar', async () => {
+  const result = await runAutomation(baseAutomation(), {
+    dbClient: credOk,
+    isRunningFn: () => true,
+    fetchOffersFn: async () => { throw new Error('shopee_api_error: 90309999 invalid signature') },
+  })
+  assert.deepEqual(result, { error: 'shopee_api_error: 90309999 invalid signature' })
+})
+
 import Fastify from 'fastify'
 import { offerAutomationRoutes } from '../src/api/routes/offerAutomation.js'
 
@@ -210,7 +249,7 @@ test('runAutomation: envia imagem do anúncio junto com a oferta automática', a
   const result = await runAutomation(automation, {
     dbClient,
     isRunningFn: () => true,
-    fetchOffersFn: async () => ([{
+    fetchOffersFn: async () => ({ rawCount: 1, offers: [{
       itemId: '42',
       productName: 'Fone Bluetooth',
       priceMin: 990000,
@@ -218,7 +257,7 @@ test('runAutomation: envia imagem do anúncio junto com a oferta automática', a
       priceDiscountRate: 50,
       offerLink: 'https://shope.ee/oferta42',
       imageUrl: 'https://down-br.img.susercontent.com/file/anuncio42',
-    }]),
+    }] }),
     sendBroadcastFn: async (...args) => { sent.push(args); return { queued: 1 } },
   })
 

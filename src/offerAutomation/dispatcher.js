@@ -58,18 +58,28 @@ export async function runAutomation(automation, { sendBroadcastFn = sendBroadcas
     sentItemIds = []
   }
 
-  const offers = await fetchOffersFn({
-    keyword: automation.keyword,
-    minDiscountPct: automation.minDiscountPct,
-    limit: automation.offersPerSend,
-    excludeItemIds: sentItemIds,
-    creds,
-    sortType: automation.sortType ?? 2,
-    isAMSOffer: automation.isAMSOffer ?? false,
-    isKeySeller: automation.isKeySeller ?? false,
-  })
+  let offers, rawCount
+  try {
+    ;({ offers, rawCount } = await fetchOffersFn({
+      keyword: automation.keyword,
+      minDiscountPct: automation.minDiscountPct,
+      limit: automation.offersPerSend,
+      excludeItemIds: sentItemIds,
+      creds,
+      sortType: automation.sortType ?? 2,
+      isAMSOffer: automation.isAMSOffer ?? false,
+      isKeySeller: automation.isKeySeller ?? false,
+    }))
+  } catch (err) {
+    return { error: err.message }
+  }
 
-  if (!offers.length) return { skipped: 'no_offers_found' }
+  if (!offers.length) {
+    // rawCount > 0 significa que a Shopee retornou produtos, mas o filtro de
+    // desconto mínimo ou a dedup (itens já enviados) removeu todos — diferente
+    // de a busca não ter trazido nada.
+    return { skipped: rawCount > 0 ? 'all_offers_filtered' : 'no_offers_found' }
+  }
 
   const toSend = offers.slice(0, automation.offersPerSend)
 
