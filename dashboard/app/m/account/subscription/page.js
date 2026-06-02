@@ -7,6 +7,7 @@ import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { api } from '@/lib/api'
 import { PIX_KEY, SUPPORT_WA_NUMBER, SUPPORT_PHONE_LABEL, buildPixWaLink } from '@/lib/mobilePixUtils'
+import { DEFAULT_LANDING_PLANS } from '@/lib/marketing-content'
 
 function formatDate(value) {
   if (!value) return 'Indisponível'
@@ -18,11 +19,39 @@ function formatMoney(value) {
   return Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
+const PAID_PLAN_IDS = ['basic', 'pro']
+const FALLBACK_PLAN_CARDS = DEFAULT_LANDING_PLANS
+  .filter((plan) => PAID_PLAN_IDS.includes(plan.id))
+  .map((plan) => ({
+    id: plan.id,
+    name: `Plano ${plan.name}`,
+    price: plan.price,
+    period: plan.period,
+    description: plan.desc,
+    features: plan.features,
+  }))
+
+function mergePlanCards(dynamicPlans = []) {
+  const byId = new Map((dynamicPlans ?? []).map((plan) => [plan.id, plan]))
+  return FALLBACK_PLAN_CARDS.map((fallbackPlan) => {
+    const dynamicPlan = byId.get(fallbackPlan.id)
+    return {
+      ...fallbackPlan,
+      name: dynamicPlan?.title ? `Plano ${dynamicPlan.title}` : fallbackPlan.name,
+      price: dynamicPlan?.price || fallbackPlan.price,
+      description: dynamicPlan?.description || fallbackPlan.description,
+      features: Array.isArray(dynamicPlan?.features) && dynamicPlan.features.length ? dynamicPlan.features : fallbackPlan.features,
+    }
+  })
+}
+
 export default function SubscriptionPage() {
   useMobileRoutePerf('m/account/subscription')
   const [billing, setBilling] = useState(null)
   const [overview, setOverview] = useState(null)
   const [me, setMe] = useState(null)
+  const [plans, setPlans] = useState(FALLBACK_PLAN_CARDS)
+  const [selectedPlanId, setSelectedPlanId] = useState('pro')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [checkoutPlan, setCheckoutPlan] = useState('')
@@ -37,15 +66,17 @@ export default function SubscriptionPage() {
       setLoading(true)
       setError('')
       try {
-        const [status, billingOverview, meData] = await Promise.all([
+        const [status, billingOverview, meData, plansData] = await Promise.all([
           api.paymentsStatus().catch(() => null),
           api.paymentsOverview().catch(() => null),
           api.me().catch(() => null),
+          api.publicPlans().catch(() => null),
         ])
         if (!active) return
         setBilling(status || {})
         setOverview(billingOverview || null)
         setMe(meData || null)
+        setPlans(mergePlanCards(Array.isArray(plansData?.plans) ? plansData.plans : []))
       } catch (e) {
         if (active) setError(e.message || 'Não foi possível carregar assinatura.')
       } finally {
@@ -56,7 +87,7 @@ export default function SubscriptionPage() {
     return () => { active = false }
   }, [])
 
-  async function startCheckout(plan = 'pro') {
+  async function startCheckout(plan = selectedPlanId) {
     setCheckoutPlan(plan)
     setFeedback('')
     try {
@@ -103,6 +134,7 @@ export default function SubscriptionPage() {
   const plan = (overview?.plan || billing?.plan || 'trial').toUpperCase()
   const payments = Array.isArray(billing?.payments) ? billing.payments : []
   const lastApproved = overview?.lastApprovedPayment
+  const selectedPlan = plans.find((item) => item.id === selectedPlanId) || plans[0] || FALLBACK_PLAN_CARDS[0]
   const usageRows = [
     { l: 'Grupos ativos', n: billing?.stats?.groupsActive ?? 'Indisponível', m: billing?.stats ? 'dados do backoffice' : 'sem métrica disponível' },
     { l: 'Posts no mês', n: billing?.stats?.postsThisMonth ?? 'Indisponível', m: billing?.stats?.postLimit ? `de ${billing.stats.postLimit}` : 'sem limite informado' },
@@ -125,9 +157,51 @@ export default function SubscriptionPage() {
           <div style={{fontSize: 12, opacity:.75, marginTop: 8}}>
             {overview?.isActive ? `ativo até ${formatDate(overview.accessExpiresAt)}` : overview?.actionRequired || 'Status de acesso indisponível'}
           </div>
-          <button type="button" onClick={() => startCheckout('pro')} disabled={Boolean(checkoutPlan)} style={{marginTop: 16, padding:'10px 16px', borderRadius: 999, background:'var(--accent-2)', color:'var(--ink)', border:'none', fontWeight: 600, fontSize: 13, cursor:'pointer'}}>
-            {checkoutPlan ? 'Abrindo checkout...' : 'Renovar ou mudar plano'}
+          <button type="button" onClick={() => startCheckout(selectedPlanId)} disabled={Boolean(checkoutPlan)} style={{marginTop: 16, padding:'10px 16px', borderRadius: 999, background:'var(--accent-2)', color:'var(--ink)', border:'none', fontWeight: 600, fontSize: 13, cursor:'pointer'}}>
+            {checkoutPlan ? 'Abrindo checkout...' : `Renovar ${selectedPlan?.name || 'plano'}`}
           </button>
+        </div>
+      </div>
+
+
+      <div style={cfgStyles.sectionLabel}>Escolher plano</div>
+      <div style={{padding:'0 16px'}}>
+        <div style={{display:'grid', gap: 10}}>
+          {plans.map((item) => {
+            const selected = item.id === selectedPlanId
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setSelectedPlanId(item.id)}
+                aria-pressed={selected}
+                style={{
+                  ...cfgStyles.cardP,
+                  textAlign:'left',
+                  border: selected ? '1.5px solid var(--accent-strong)' : '1px solid var(--line)',
+                  background: selected ? 'color-mix(in oklab, var(--accent-2) 30%, var(--surface))' : 'var(--surface)',
+                  cursor:'pointer',
+                  fontFamily:'inherit',
+                }}
+              >
+                <div style={{display:'flex', justifyContent:'space-between', gap: 12, alignItems:'flex-start'}}>
+                  <div>
+                    <div style={{fontSize: 15, fontWeight: 800, color:'var(--ink)'}}>{item.name}</div>
+                    <div style={{fontSize: 26, fontWeight: 900, color:'var(--accent-strong)', marginTop: 4}}>{item.price}<span style={{fontSize: 11, color:'var(--ink-soft)', fontWeight: 600}}> /30 dias</span></div>
+                  </div>
+                  <span style={cfgStyles.pill(selected ? 'success' : 'neutral')}>{selected ? 'selecionado' : 'escolher'}</span>
+                </div>
+                <div style={{fontSize: 12, color:'var(--ink-soft)', lineHeight: 1.45, marginTop: 8}}>{item.description}</div>
+                {Array.isArray(item.features) && item.features.length > 0 && (
+                  <div style={{display:'grid', gap: 5, marginTop: 10}}>
+                    {item.features.slice(0, 4).map((feature) => (
+                      <div key={feature} style={{fontSize: 11.5, color:'var(--ink)', lineHeight: 1.35}}>✓ {feature}</div>
+                    ))}
+                  </div>
+                )}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -193,8 +267,8 @@ export default function SubscriptionPage() {
           </button>
           <a
             href={buildPixWaLink(
-              'Plano Pro',
-              lastApproved?.amount != null ? formatMoney(lastApproved.amount) : 'R$ —',
+              selectedPlan?.name || 'Plano Pro',
+              selectedPlan?.price || (lastApproved?.amount != null ? formatMoney(lastApproved.amount) : 'R$ —'),
               userEmail,
             )}
             target="_blank"

@@ -121,6 +121,7 @@ export default function ChecklistEspelhamentoPage() {
   const [session, setSession] = useState(null)
   const [groups, setGroups] = useState([])
   const [creds, setCreds] = useState([])
+  const [dashboardStatus, setDashboardStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -130,15 +131,17 @@ export default function ChecklistEspelhamentoPage() {
       setLoading(true)
       setError('')
       try {
-        const [s, g, cr] = await Promise.all([
+        const [s, g, cr, ds] = await Promise.all([
           api.sessionStatus().catch(() => null),
           api.groups().catch(() => []),
           api.credentials().catch(() => []),
+          api.dashboardStatus().catch(() => null),
         ])
         if (!active) return
         setSession(s)
         setGroups(Array.isArray(g) ? g : [])
         setCreds(Array.isArray(cr) ? cr : [])
+        setDashboardStatus(ds)
       } catch (e) {
         if (active) setError(e.message || 'Não foi possível carregar o checklist.')
       } finally {
@@ -149,10 +152,11 @@ export default function ChecklistEspelhamentoPage() {
     return () => { active = false }
   }, [])
 
-  const hasCredentials = creds.length > 0
-  const whatsappConnected = Boolean(session?.running)
-  const hasSource = groups.some(g => g.role === 'monitor')
-  const hasDest = groups.some(g => g.role === 'post')
+  const hasCredentials = Boolean(dashboardStatus?.hasCredentials ?? (creds.length > 0))
+  const whatsappConnected = Boolean(dashboardStatus?.waConnected ?? session?.running)
+  const hasSource = Boolean(dashboardStatus?.hasMonitorGroup ?? groups.some(g => g.role === 'monitor'))
+  const hasDest = Boolean(dashboardStatus?.hasPostGroup ?? groups.some(g => g.role === 'post'))
+  const hasSuccessfulLog = Boolean(dashboardStatus?.hasSuccessfulLog)
 
   // Mesmos 5 passos do balão da home (/m) — mantém o "X de 5" coerente entre as telas.
   const STEPS = useMemo(() => [
@@ -181,12 +185,12 @@ export default function ChecklistEspelhamentoPage() {
       done: hasDest,
     },
     {
-      label: 'Ligar o espelhamento',
-      desc: 'Ative o bot para começar a espelhar promoções automaticamente',
-      route: 'espelhar',
-      done: whatsappConnected && hasSource && hasDest,
+      label: 'Primeiro envio validado',
+      desc: 'Faça um envio real ou teste manual e confirme que apareceu como sucesso nos logs',
+      route: 'logs',
+      done: hasSuccessfulLog,
     },
-  ], [hasCredentials, whatsappConnected, hasSource, hasDest])
+  ], [hasCredentials, whatsappConnected, hasSource, hasDest, hasSuccessfulLog])
 
   const done = STEPS.filter(s => s.done).length
   const total = STEPS.length
@@ -219,7 +223,7 @@ export default function ChecklistEspelhamentoPage() {
             </div>
             <div style={pageStyles.completeBannerText}>
               <div style={pageStyles.completeBannerTitle}>Tudo pronto!</div>
-              <div style={pageStyles.completeBannerSub}>Seu espelhamento está configurado e ativo.</div>
+              <div style={pageStyles.completeBannerSub}>Seu espelhamento já teve pelo menos um envio real validado.</div>
             </div>
           </div>
         )}
@@ -234,7 +238,7 @@ export default function ChecklistEspelhamentoPage() {
           </div>
           <div style={pageStyles.progressSub}>
             {isComplete
-              ? 'Checklist completo — seu bot está espelhando grupos.'
+              ? 'Checklist completo — seu bot já validou um envio real.'
               : `Falta${total - done === 1 ? '' : 'm'} ${total - done} passo${total - done === 1 ? '' : 's'} para começar a espelhar.`}
           </div>
         </div>

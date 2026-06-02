@@ -187,6 +187,7 @@ export default function LogsPage() {
   const [filter, setFilter] = useState('todos');
   const [expanded, setExpanded] = useState(null);
   const [search, setSearch] = useState('');
+  const [serverSearch, setServerSearch] = useState('');
 
   const [rawLogs, setRawLogs] = useState([]);
   const [page, setPage] = useState(1);
@@ -204,7 +205,7 @@ export default function LogsPage() {
     if (!silent) setLoading(true);
     setError('');
     try {
-      const data = await api.logs('all', 1, 30);
+      const data = await api.logs('all', 1, 30, serverSearch);
       if (!isActive()) return;
       setRawLogs(Array.isArray(data?.logs) ? data.logs : []);
       setTotal(Number(data?.total) || 0);
@@ -215,7 +216,7 @@ export default function LogsPage() {
     } finally {
       if (!silent && isActive()) setLoading(false);
     }
-  }, []);
+  }, [serverSearch]);
 
   useEffect(() => {
     let active = true;
@@ -227,6 +228,15 @@ export default function LogsPage() {
       window.clearTimeout(timer);
     };
   }, [loadFirstPage]);
+
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const q = search.trim();
+      setServerSearch(q.length >= 3 ? q : '');
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
     let active = true;
@@ -244,7 +254,7 @@ export default function LogsPage() {
     setError('');
     try {
       const nextPage = page + 1;
-      const data = await api.logs('all', nextPage, 30);
+      const data = await api.logs('all', nextPage, 30, serverSearch);
       const nextLogs = Array.isArray(data?.logs) ? data.logs : [];
       setRawLogs((current) => [...current, ...nextLogs]);
       setTotal(Number(data?.total) || total);
@@ -306,7 +316,7 @@ export default function LogsPage() {
 
   const filtered = items.filter(it => {
     if (filter !== 'todos' && it.status !== filter) return false;
-    const q = search.trim().toLowerCase();
+    const q = search.trim().length >= 3 ? '' : search.trim().toLowerCase();
     if (!q) return true;
     return [it.produto, it.loja, it.de, it.para].some(v => String(v || '').toLowerCase().includes(q));
   });
@@ -417,7 +427,7 @@ export default function LogsPage() {
         {!loading && error && <div style={{padding:'0 16px'}}><MobileErrorCard message={error} /></div>}
         {!loading && !error && filtered.length === 0 && (
           <div style={{padding:'40px 24px', textAlign:'center', color:'var(--ink-soft)', fontSize: 13}}>
-            {items.length === 0 ? 'Nenhum envio ainda. Quando o bot postar ou você criar uma oferta, aparece aqui.' : 'Nenhum envio bate com esse filtro.'}
+            {items.length === 0 ? (serverSearch ? 'Nenhum envio encontrado no servidor para essa busca.' : 'Nenhum envio ainda. Quando o bot postar ou você criar uma oferta, aparece aqui.') : 'Nenhum envio bate com esse filtro.'}
           </div>
         )}
         {!loading && !error && grouped.map((row, gIdx) => {

@@ -16,4 +16,7 @@ export const mobileRoutes = {
   checklistEspelhamento: '/m/checklistespelhamento',
   preservacao: '/m/config/preservacao',
   scheduled: '/m/op/scheduled',
+  automations: '/m/op/automations',
+  broadcast: '/m/op/broadcast',
+  accountVariations: '/m/account/variations',
 }

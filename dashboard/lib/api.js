@@ -326,8 +326,12 @@ export const api = {
   preservationProbeSessionSelect: (probeAccountSessionId) => apiFetch('/api/preservation/probe/session/select', { method: 'POST', body: JSON.stringify({ probeAccountSessionId }) }),
   preservationClicks: () => apiFetch('/api/preservation/monitoring/clicks'),
 
-  logs: (status = 'all', page = 1, limit = 20) =>
-    apiFetch(`/api/logs?status=${status}&page=${page}&limit=${limit}`),
+  logs: (status = 'all', page = 1, limit = 20, search = '') => {
+    const params = new URLSearchParams({ status, page: String(page), limit: String(limit) })
+    const q = String(search || '').trim()
+    if (q) params.set('search', q)
+    return apiFetch(`/api/logs?${params.toString()}`)
+  },
   logsSummary: (period = '7d') => apiFetch(`/api/logs/summary?period=${encodeURIComponent(period)}`),
   logsClear: () => apiFetch('/api/logs/clear', { method: 'DELETE' }),
 
