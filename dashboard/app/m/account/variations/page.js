@@ -93,6 +93,18 @@ export default function MobileVariationsPage() {
         <div style={cfgStyles.pageTitle}>Ganchos e CTAs</div>
       </div>
 
+      <div style={cfgStyles.cardWrap}>
+        <div style={{ ...cfgStyles.cardP, display: 'grid', gap: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)' }}>Modelos de oferta</div>
+          <div style={{ fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.5 }}>
+            Os modelos do Gerar oferta também podem ser usados nas ofertas automáticas. Lá você vê todas as variáveis disponíveis.
+          </div>
+          <button type="button" onClick={() => router.push('/m/account/templates')} style={mobi.btn('ghost', true)}>
+            Editar modelos e variáveis
+          </button>
+        </div>
+      </div>
+
       {GROUPS.map((group) => (
         <div key={group.key}>
           <div style={cfgStyles.sectionLabel}>{group.label}</div>

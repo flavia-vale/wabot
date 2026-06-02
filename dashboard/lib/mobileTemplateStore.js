@@ -8,6 +8,7 @@ import { api } from './api.js'
 const STORAGE_KEY = 'wabot.mobile.templates.v1'
 
 export const PRESET_TEMPLATE_BODIES = {
+  automatico_classico: '🏷️ *{produto}*\n\n💰 ~{preço_de}~ → *{preço}* (*{desconto}*)\n{rating} | {vendas}\n\n👉 {link}',
   simples: '🛍️ {produto}\n\n~De {preço_de}~\n💥 *Por {preço}*\n\n🛒 Compre aqui 👉 {link}',
   achadinho: '✨ Achadinho do dia\n\n{produto}\n\nDe {preço_de} por *{preço}*\n\n👉 {link}',
   relampago: '⚡ Oferta relâmpago\n\n{produto}\n\nDe {preço_de} por *{preço}*\n\n👉 {link}',

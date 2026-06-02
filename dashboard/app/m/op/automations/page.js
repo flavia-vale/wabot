@@ -8,8 +8,12 @@ import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileRoutes } from '@/components/mobile/routes'
 import { api } from '@/lib/api'
+import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 
 const INTERVAL_OPTIONS = [
+  { value: 15, label: 'A cada 15 minutos' },
+  { value: 30, label: 'A cada 30 minutos' },
+  { value: 45, label: 'A cada 45 minutos' },
   { value: 60, label: 'A cada 1 hora' },
   { value: 120, label: 'A cada 2 horas' },
   { value: 240, label: 'A cada 4 horas' },
@@ -30,6 +34,8 @@ const OFFERS_PER_SEND_OPTIONS = [
   { value: 1, label: '1 produto por envio' },
   { value: 2, label: '2 produtos por envio' },
   { value: 3, label: '3 produtos por envio' },
+  { value: 4, label: '4 produtos por envio' },
+  { value: 5, label: '5 produtos por envio' },
 ]
 
 const SKIP_LABELS = {
@@ -46,6 +52,7 @@ const emptyForm = {
   destGroupJid: '',
   destGroupName: '',
   keyword: '',
+  templateKey: 'automatico_classico',
   intervalMinutes: 240,
   offersPerSend: 1,
   minDiscountPct: 20,
@@ -62,6 +69,14 @@ function optionLabel(options, value, fallback) {
   return options.find((option) => option.value === value)?.label ?? fallback
 }
 
+function templateName(templates, key) {
+  return templates.find((template) => template.key === key)?.name ?? 'Automático clássico'
+}
+
+function templatePreview(templates, key) {
+  return (templates.find((template) => template.key === key)?.body || '').split('\n').slice(0, 4).join('\n')
+}
+
 function nextSendLabel(lastSentAt, intervalMinutes) {
   if (!lastSentAt) return 'Próximo envio: assim que o bot estiver ativo'
   const next = new Date(new Date(lastSentAt).getTime() + intervalMinutes * 60_000)
@@ -76,6 +91,7 @@ export default function MobileAutomationsPage() {
   const router = useRouter()
   const [automations, setAutomations] = useState([])
   const [groups, setGroups] = useState([])
+  const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -90,12 +106,14 @@ export default function MobileAutomationsPage() {
     setLoading(true)
     setError('')
     try {
-      const [list, allGroups] = await Promise.all([
+      const [list, allGroups, templateStore] = await Promise.all([
         api.offerAutomations(),
         api.groups().then((items) => Array.isArray(items) ? items.filter((group) => group.role === 'post') : []),
+        loadTemplateStore(),
       ])
       setAutomations(Array.isArray(list) ? list : [])
       setGroups(allGroups)
+      setTemplates(composeTemplates(templateStore))
     } catch (err) {
       setError(err.message || 'Não foi possível carregar automações.')
     } finally {
@@ -118,6 +136,7 @@ export default function MobileAutomationsPage() {
       destGroupJid: item.destGroupJid || '',
       destGroupName: item.destGroupName || '',
       keyword: item.keyword || '',
+      templateKey: item.templateKey || 'automatico_classico',
       intervalMinutes: item.intervalMinutes || 240,
       offersPerSend: item.offersPerSend || 1,
       minDiscountPct: item.minDiscountPct ?? 20,
@@ -191,6 +210,7 @@ export default function MobileAutomationsPage() {
   if (error && automations.length === 0) return <MobileShell title="Automações" active="espelhar" showBack onBack={() => router.back()}><div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div></MobileShell>
 
   const canSave = form.keyword.trim() && form.destGroupJid
+  const selectedTemplatePreview = templatePreview(templates, form.templateKey)
 
   return (
     <MobileShell title="Automações" active="espelhar" showBack onBack={() => router.back()}>
@@ -202,8 +222,11 @@ export default function MobileAutomationsPage() {
       <div style={cfgStyles.cardWrap}>
         <div style={{ ...cfgStyles.cardP, display: 'grid', gap: 12 }}>
           <div style={{ fontSize: 12.5, color: 'var(--ink-soft)', lineHeight: 1.5 }}>Configure buscas recorrentes e envie promoções automaticamente para seus destinos.</div>
+          <div style={{ fontSize: 11.5, color: 'var(--warn, #a16207)', lineHeight: 1.45, background: 'color-mix(in oklab, #f59e0b 12%, var(--surface))', border: '1px solid color-mix(in oklab, #f59e0b 28%, var(--line))', borderRadius: 12, padding: '9px 10px' }}>
+            Antes de deixar ligado: conecte o WhatsApp, confira as credenciais Shopee e teste com “Enviar agora”.
+          </div>
           <button type="button" onClick={openCreate} style={mobi.btn('accent', true)}>+ Nova automação</button>
-          <button type="button" onClick={() => router.push(mobileRoutes.accountVariations)} style={mobi.btn('ghost', true)}>Editar ganchos e CTAs</button>
+          <button type="button" onClick={() => router.push(mobileRoutes.accountVariations)} style={mobi.btn('ghost', true)}>Editar ganchos, CTAs e modelos</button>
         </div>
       </div>
 
@@ -216,6 +239,13 @@ export default function MobileAutomationsPage() {
             <label>
               <div style={cfgStyles.label}>O que vender?</div>
               <input style={cfgStyles.field} value={form.keyword} onChange={(event) => setForm((current) => ({ ...current, keyword: event.target.value }))} placeholder="Ex: decoração de festa" />
+            </label>
+            <label>
+              <div style={cfgStyles.label}>Modelo da mensagem</div>
+              <select style={cfgStyles.field} value={form.templateKey} onChange={(event) => setForm((current) => ({ ...current, templateKey: event.target.value }))}>
+                {templates.map((template) => <option key={template.key} value={template.key}>{template.name}</option>)}
+              </select>
+              {selectedTemplatePreview && <pre style={{ margin: '8px 0 0', whiteSpace: 'pre-wrap', maxHeight: 110, overflow: 'auto', border: '1px solid var(--line)', borderRadius: 12, padding: 10, fontSize: 11, lineHeight: 1.45, color: 'var(--ink-soft)', background: 'var(--surface-soft)' }}>{selectedTemplatePreview}</pre>}
             </label>
             <label>
               <div style={cfgStyles.label}>Destino</div>
@@ -254,7 +284,7 @@ export default function MobileAutomationsPage() {
       <div style={cfgStyles.sectionLabel}>Automações cadastradas</div>
       <div style={{ padding: '0 16px 24px', display: 'grid', gap: 10 }}>
         {automations.length === 0 && !showForm ? (
-          <div style={{ ...cfgStyles.cardP, textAlign: 'center', color: 'var(--ink-soft)', fontSize: 13 }}>Nenhuma automação cadastrada ainda.</div>
+          <div style={{ ...cfgStyles.cardP, textAlign: 'center', color: 'var(--ink-soft)', fontSize: 13 }}>Nenhuma automação cadastrada ainda. Crie uma busca, escolha um modelo e teste antes de ativar.</div>
         ) : automations.map((item) => {
           const result = resultById[item.id]
           return (
@@ -267,7 +297,7 @@ export default function MobileAutomationsPage() {
                   <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)' }}>“{item.keyword}”</div>
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 3 }}>→ {item.destGroupName || item.destGroupJid}</div>
                   <div style={{ fontSize: 11.5, color: 'var(--ink-faint)', marginTop: 6, lineHeight: 1.45 }}>
-                    {optionLabel(INTERVAL_OPTIONS, item.intervalMinutes, `${item.intervalMinutes} min`)} · {optionLabel(OFFERS_PER_SEND_OPTIONS, item.offersPerSend, `${item.offersPerSend} produto(s)`)} · {optionLabel(DISCOUNT_OPTIONS, item.minDiscountPct, `${item.minDiscountPct}% OFF`)}
+                    {optionLabel(INTERVAL_OPTIONS, item.intervalMinutes, `${item.intervalMinutes} min`)} · {optionLabel(OFFERS_PER_SEND_OPTIONS, item.offersPerSend, `${item.offersPerSend} produto(s)`)} · {optionLabel(DISCOUNT_OPTIONS, item.minDiscountPct, `${item.minDiscountPct}% OFF`)} · Modelo: {templateName(templates, item.templateKey || 'automatico_classico')}
                   </div>
                   <div style={{ fontSize: 11.5, color: 'var(--ink-soft)', marginTop: 4 }}>{nextSendLabel(item.lastSentAt, item.intervalMinutes)}</div>
                 </div>

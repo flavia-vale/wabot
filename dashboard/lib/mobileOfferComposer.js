@@ -1,5 +1,15 @@
 export const TEMPLATE_OPTIONS = [
   {
+    key: 'automatico_classico',
+    name: 'Automático clássico',
+    preview: `🏷️ *{produto}*
+
+💰 ~{preço_de}~ → *{preço}* (*{desconto}*)
+{rating} | {vendas}
+
+👉 {link}`,
+  },
+  {
     key: 'simples',
     name: 'Simples',
     preview: `🛍️ {produto}
@@ -43,6 +53,38 @@ De R$ 89 por R$ 59`,
   },
 ]
 
+export const OFFER_TEMPLATE_VARIABLE_GROUPS = [
+  {
+    key: 'offer',
+    title: 'Dados da oferta',
+    helper: 'Substituídas no Gerar oferta e nas ofertas automáticas.',
+    variables: [
+      { token: '{produto}', label: 'Nome do produto', example: 'Liquidificador turbo' },
+      { token: '{preço}', label: 'Preço atual', example: 'R$ 89,90' },
+      { token: '{preço_de}', label: 'Preço antigo', example: 'R$ 129,90' },
+      { token: '{desconto}', label: 'Desconto', example: '-31% OFF' },
+      { token: '{rating}', label: 'Avaliação', example: '⭐ 4.8' },
+      { token: '{vendas}', label: 'Vendas', example: '🛒 1.200+ vendidos' },
+      { token: '{link}', label: 'Link da oferta', example: 'https://shope.ee/abc' },
+      { token: '{loja}', label: 'Loja/plataforma', example: 'Shopee' },
+    ],
+  },
+  {
+    key: 'automation',
+    title: 'Ganchos, CTAs e links globais',
+    helper: 'Substituídas nas ofertas automáticas usando as variações e links configurados nesta página.',
+    variables: [
+      { token: '{{greeting}}', label: 'Gancho aleatório', example: '🚨 COOOOOORRE QUE TÁ ACABANDO!' },
+      { token: '{{cta}}', label: 'CTA aleatório', example: '📲 Entre no nosso grupo oficial:' },
+      { token: '{{trailer}}', label: 'Fechamento aleatório', example: '⚠️ Preço sujeito a alteração.' },
+      { token: '{{grupoLink}}', label: 'Link de convite do grupo', example: 'https://chat.whatsapp.com/...' },
+      { token: '{{cupomLink}}', label: 'Link de cupom global', example: 'https://...' },
+    ],
+  },
+]
+
+export const OFFER_TEMPLATE_VARIABLES = OFFER_TEMPLATE_VARIABLE_GROUPS.flatMap((group) => group.variables)
+
 export const COUPON_STORES = [
   { key: 'shopee', nome: 'Shopee', cor: '#EE4D2D' },
   { key: 'mercadolivre', nome: 'Mercado Livre', cor: '#FFE600' },
@@ -82,11 +124,20 @@ export function getMobileOfferSingleLinkWarning(text = '') {
 }
 
 export function normalizeMobileOfferProduct(product = {}, manual = {}) {
-  return {
-    title: firstText(product?.title, manual.title, 'Produto em oferta'),
+  const normalized = {
+    title: firstText(product?.title, product?.productName, manual.title, 'Produto em oferta'),
     price: firstText(product?.price, product?.newPrice, product?.priceNow, manual.price),
     oldPrice: firstText(product?.oldPrice, product?.priceWas, manual.oldPrice),
   }
+  const discount = firstText(product?.discount, product?.discountText, manual.discount)
+  const rating = firstText(product?.rating, product?.ratingText, manual.rating)
+  const sales = firstText(product?.sales, product?.salesText, manual.sales)
+  const storeName = firstText(product?.storeName, product?.store, product?.platformName, manual.storeName)
+  if (discount) normalized.discount = discount
+  if (rating) normalized.rating = rating
+  if (sales) normalized.sales = sales
+  if (storeName) normalized.storeName = storeName
+  return normalized
 }
 
 export function getMobileOfferTemplateHeading(template) {
@@ -110,20 +161,32 @@ export function detectMobileOfferStoreKey({ product = {}, link = '' } = {}) {
   return ''
 }
 
-export function applyTemplateVariables(body, { title = '', price = '', oldPrice = '', link = '' } = {}) {
+export function applyTemplateVariables(body, { title = '', price = '', oldPrice = '', link = '', discount = '', rating = '', sales = '', storeName = '' } = {}) {
   let result = body
     .replace(/\{produto\}/g, title || '{produto}')
     .replace(/\{preço\}/g, price || '{preço}')
     .replace(/\{link\}/g, link || '{link}')
+    .replace(/\{desconto\}/g, discount || '')
+    .replace(/\{rating\}/g, rating || '')
+    .replace(/\{vendas\}/g, sales || '')
+    .replace(/\{loja\}/g, storeName || '')
   if (oldPrice) {
     result = result.replace(/\{preço_de\}/g, oldPrice)
   } else {
     result = result
+      .replace(/💰\s*~\{preço_de\}~\s*→\s*\*([^*]+)\*\s*\(\*?\s*\*?\)/g, '💰 *$1*')
       .replace(/De \{preço_de\} por \*([^*]+)\*/g, '*$1*')
       .replace(/^\s*~?De \{preço_de\}~?\s*$/gm, '')
       .replace(/\{preço_de\}/g, '')
   }
   return result
+    .replace(/\(\*?\s*\*?\)/g, '')
+    .replace(/^\s*\|\s*$/gm, '')
+    .replace(/^\s*\|\s*/gm, '')
+    .replace(/\s*\|\s*$/gm, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 export function buildMobileOfferText({
@@ -148,6 +211,10 @@ export function buildMobileOfferText({
       price: normalized.price,
       oldPrice: normalized.oldPrice,
       link,
+      discount: normalized.discount,
+      rating: normalized.rating,
+      sales: normalized.sales,
+      storeName: normalized.storeName,
     })
     lines = bodyText.split('\n')
   } else {

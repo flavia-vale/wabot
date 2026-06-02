@@ -469,6 +469,7 @@ model OfferAutomation {
   destGroupJid    String
   destGroupName   String
   keyword         String
+  templateKey     String    @default("automatico_classico")
   intervalMinutes Int
   offersPerSend   Int       @default(1)
   minDiscountPct  Int       @default(0)

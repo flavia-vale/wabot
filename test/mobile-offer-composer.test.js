@@ -2,6 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   TEMPLATE_OPTIONS,
+  OFFER_TEMPLATE_VARIABLE_GROUPS,
+  OFFER_TEMPLATE_VARIABLES,
   buildMobileOfferText,
   countMobileOfferHttpLinks,
   detectMobileOfferStoreKey,
@@ -154,4 +156,70 @@ test('detecta loja da oferta por dados do scrape, conversão ou hostname', () =>
   assert.equal(detectMobileOfferStoreKey({ product: { conversion: { platform: 'mercadolivre' } }, link: '' }), 'mercadolivre')
   assert.equal(detectMobileOfferStoreKey({ product: { platform: 'amazon' }, link: '' }), 'amazon')
   assert.equal(detectMobileOfferStoreKey({ product: {}, link: 'https://www.magazineluiza.com.br/produto' }), 'magazineluiza')
+})
+
+test('preset Automático clássico reproduz a copy atual das ofertas automáticas', () => {
+  assert.equal(PRESET_TEMPLATE_BODIES.automatico_classico, [
+    '🏷️ *{produto}*',
+    '',
+    '💰 ~{preço_de}~ → *{preço}* (*{desconto}*)',
+    '{rating} | {vendas}',
+    '',
+    '👉 {link}',
+  ].join('\n'))
+})
+
+test('template Automático clássico preenche desconto, rating e vendas', () => {
+  const text = buildMobileOfferText({
+    product: {
+      title: 'Liquidificador turbo',
+      price: 'R$ 89,90',
+      oldPrice: 'R$ 129,90',
+      discount: '-31% OFF',
+      rating: '⭐ 4.8',
+      sales: '🛒 1.200+ vendidos',
+      storeName: 'Shopee',
+    },
+    link: 'https://shope.ee/abc',
+    template: 'automatico_classico',
+    templateBody: PRESET_TEMPLATE_BODIES.automatico_classico,
+  })
+
+  assert.match(text, /🏷️ \*Liquidificador turbo\*/)
+  assert.match(text, /💰 ~R\$ 129,90~ → \*R\$ 89,90\* \(\*-31% OFF\*\)/)
+  assert.match(text, /⭐ 4\.8 \| 🛒 1\.200\+ vendidos/)
+  assert.match(text, /👉 https:\/\/shope\.ee\/abc/)
+  assert.doesNotMatch(text, /\{produto\}|\{preço\}|\{preço_de\}|\{desconto\}|\{rating\}|\{vendas\}|\{link\}/)
+})
+
+test('template remove linha de metadata vazia quando rating e vendas faltam', () => {
+  const text = buildMobileOfferText({
+    product: {
+      title: 'Produto simples',
+      price: 'R$ 39,90',
+      oldPrice: '',
+      discount: '',
+      rating: '',
+      sales: '',
+    },
+    link: 'https://shope.ee/sem-meta',
+    template: 'automatico_classico',
+    templateBody: PRESET_TEMPLATE_BODIES.automatico_classico,
+  })
+
+  assert.match(text, /🏷️ \*Produto simples\*/)
+  assert.match(text, /💰 \*R\$ 39,90\*/)
+  assert.doesNotMatch(text, /^\s*\|\s*$/m)
+  assert.doesNotMatch(text, /vendidos/)
+  assert.doesNotMatch(text, /⭐/)
+})
+
+
+test('variáveis de template incluem dados da oferta e automação', () => {
+  const tokens = OFFER_TEMPLATE_VARIABLES.map((variable) => variable.token)
+  assert.ok(OFFER_TEMPLATE_VARIABLE_GROUPS.some((group) => group.key === 'offer'))
+  assert.ok(OFFER_TEMPLATE_VARIABLE_GROUPS.some((group) => group.key === 'automation'))
+  for (const token of ['{produto}', '{preço}', '{preço_de}', '{desconto}', '{rating}', '{vendas}', '{link}', '{loja}', '{{greeting}}', '{{cta}}', '{{trailer}}', '{{grupoLink}}', '{{cupomLink}}']) {
+    assert.ok(tokens.includes(token), `variável ausente: ${token}`)
+  }
 })
