@@ -37,8 +37,8 @@ includes('app/m/config/preferences/page.js', 'setDraft', 'preferences must be co
 excludes('app/m/config/preferences/page.js', 'alterada há 23 dias', 'preferences must not show fake account data')
 excludes('app/m/config/preferences/page.js', 'Verificação em 2 etapas', 'unsupported settings must be removed')
 
-includes('app/m/account/templates/page.js', 'getMobileTemplatePresetNotice', 'templates must disclose local preset behavior')
-excludes('app/m/account/templates/page.js', 'api.saveConfig', 'templates must not pretend backend persistence exists')
+includes('app/m/account/templates/page.js', 'persistTemplateStore', 'templates must persist through backend config')
+includes('app/m/account/templates/page.js', 'loadTemplateStore', 'templates must load from backend config')
 excludes('app/m/account/templates/page.js', 'wa.me/achadosdasol', 'templates must not ship fake group links')
 excludes('app/m/account/templates/page.js', 'usado em 84%', 'templates must not fake usage metrics')
 

@@ -45,3 +45,15 @@ test('PUT / permite postToStatus=true para trial ativo', async () => {
   assert.equal(JSON.parse(res.body).postToStatus, true)
   await app.close()
 })
+test('PUT / permite apagar ganchos e CTAs com payload parcial sem couponLink', async () => {
+  const { app } = await buildApp({ plan: 'basic' })
+  const emptyPoolJson = JSON.stringify({ greetings: [], ctas: [], trailers: [] })
+
+  const res = await app.inject({ method: 'PUT', url: '/api/config', payload: { copyVariationPoolJson: emptyPoolJson } })
+
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.copyVariationPoolJson, emptyPoolJson)
+  assert.equal(body.couponLink, '')
+  await app.close()
+})

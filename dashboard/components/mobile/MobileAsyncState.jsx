@@ -18,10 +18,22 @@ export function useMockAsyncData(data, delayMs = 120) {
 
 export function MobileLoadingCard({ label = 'Carregando dados...' }) {
   return (
-    <div className="mt-3 animate-pulse rounded-2xl border border-[#d7e7de] bg-white p-4" style={{ minHeight: 96 }} aria-busy="true" aria-live="polite">
-      <div className="h-4 w-36 rounded bg-[#e7f0eb]" />
-      <div className="mt-2 h-3 w-full rounded bg-[#eef5f1]" />
-      <p className="mt-3 text-xs text-[#8FA09A]">{label}</p>
+    <div
+      className="animate-pulse"
+      style={{
+        marginTop: 12,
+        minHeight: 96,
+        padding: 16,
+        borderRadius: 18,
+        border: '1px solid var(--line)',
+        background: 'var(--surface)',
+      }}
+      aria-busy="true"
+      aria-live="polite"
+    >
+      <div style={{ height: 16, width: 144, borderRadius: 6, background: 'var(--bg-soft)' }} />
+      <div style={{ marginTop: 8, height: 12, width: '100%', borderRadius: 6, background: 'var(--bg)' }} />
+      <p style={{ marginTop: 12, fontSize: 12, color: 'var(--ink-faint)' }}>{label}</p>
     </div>
   )
 }

@@ -89,11 +89,13 @@ test('client enfileira comando com nome canônico', async () => {
     ioredisModule: createMockRedis(),
     bullmqModule: { ...bullmq, Queue: SpyQueue },
   })
-  const result = await client.sendBroadcast('user-1', 'hello', ['jid@s.whatsapp.net'])
+  const options = { imageUrl: 'https://down-br.img.susercontent.com/file/teste' }
+  const result = await client.sendBroadcast('user-1', 'hello', ['jid@s.whatsapp.net'], options)
   assert.equal(captured.name, COMMAND.SEND_BROADCAST)
   assert.equal(captured.data.userId, 'user-1')
   assert.equal(captured.data.text, 'hello')
   assert.deepEqual(captured.data.jids, ['jid@s.whatsapp.net'])
+  assert.deepEqual(captured.data.options, options)
   assert.equal(result.acknowledged, true)
   await client.close()
 })

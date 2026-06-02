@@ -14,9 +14,28 @@ function PlatformForm({ platform, credential, onSaved }) {
   const [draft, setDraft] = useState(credentialData)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  const [attempted, setAttempted] = useState(false)
   const complete = isCredentialComplete(platform, credentialData)
 
+  const missingRequired = platform.fields.filter(
+    (field) => field.required !== false && !String(draft[field.key] || '').trim(),
+  )
+  const canSave = missingRequired.length === 0
+
+  // Mensagem de sucesso é efêmera: some sozinha para não poluir a tela ao
+  // editar outra plataforma logo em seguida.
+  useEffect(() => {
+    if (!message.includes('sucesso')) return undefined
+    const timer = setTimeout(() => setMessage(''), 4000)
+    return () => clearTimeout(timer)
+  }, [message])
+
   async function saveCredential() {
+    setAttempted(true)
+    if (!canSave) {
+      setMessage(`Preencha: ${missingRequired.map((field) => field.label).join(', ')}.`)
+      return
+    }
     setSaving(true)
     setMessage('')
     try {
@@ -55,21 +74,28 @@ function PlatformForm({ platform, credential, onSaved }) {
       {open && (
         <div style={{marginTop: 14, display:'grid', gap: 10}}>
           <p style={{fontSize: 12, color:'var(--ink-soft)', lineHeight: 1.45}}>{platform.instructions}</p>
-          {platform.fields.map((field) => (
-            <label key={field.key} style={{display:'grid', gap: 6}}>
-              <span style={cfgStyles.label}>{field.label}{field.required !== false ? ' *' : ''}</span>
-              <input
-                type={field.sensitive ? 'password' : 'text'}
-                value={draft[field.key] || ''}
-                onChange={(event) => setDraft((current) => ({ ...current, [field.key]: event.target.value }))}
-                disabled={saving}
-                style={cfgStyles.field}
-                autoComplete="off"
-              />
-            </label>
-          ))}
+          {platform.fields.map((field) => {
+            const required = field.required !== false
+            const isEmpty = !String(draft[field.key] || '').trim()
+            const invalid = attempted && required && isEmpty
+            return (
+              <label key={field.key} style={{display:'grid', gap: 6}}>
+                <span style={cfgStyles.label}>{field.label}{required ? ' *' : ''}</span>
+                <input
+                  type={field.sensitive ? 'password' : 'text'}
+                  value={draft[field.key] || ''}
+                  onChange={(event) => setDraft((current) => ({ ...current, [field.key]: event.target.value }))}
+                  disabled={saving}
+                  aria-invalid={invalid}
+                  aria-label={field.label}
+                  style={{...cfgStyles.field, borderColor: invalid ? 'var(--danger)' : undefined}}
+                  autoComplete="off"
+                />
+              </label>
+            )
+          })}
           {message && <div style={{fontSize: 12, color: message.includes('sucesso') ? 'var(--success)' : 'var(--danger)'}}>{message}</div>}
-          <button type="button" onClick={saveCredential} disabled={saving} style={{...cfgStyles.field, background:'var(--ink)', color:'white', fontWeight: 700, opacity: saving ? 0.65 : 1}}>
+          <button type="button" onClick={saveCredential} disabled={saving || !canSave} style={{...cfgStyles.field, background:'var(--ink)', color:'white', fontWeight: 700, opacity: (saving || !canSave) ? 0.65 : 1}}>
             {saving ? 'Salvando...' : 'Salvar credenciais'}
           </button>
         </div>

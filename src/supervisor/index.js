@@ -177,12 +177,12 @@ const COMMAND_HANDLERS = {
     }
     return sessionCore.listGroups(userId)
   },
-  [COMMAND.SEND_BROADCAST]: ({ userId, text, jids }) => {
+  [COMMAND.SEND_BROADCAST]: ({ userId, text, jids, options }) => {
     if (!belongsToThisShard(userId)) {
       void noteSessionOwnerMismatch(userId, 'sendBroadcast')
       throw new Error('Session owner mismatch')
     }
-    return sessionCore.sendBroadcast(userId, text, jids)
+    return sessionCore.sendBroadcast(userId, text, jids, options)
   },
   [COMMAND.REQUEST_PAIRING_CODE]: ({ userId, phone }) => {
     if (!belongsToThisShard(userId)) {

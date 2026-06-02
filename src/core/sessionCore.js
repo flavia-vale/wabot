@@ -125,7 +125,7 @@ function requestWithTimeout(userId, type, payload = {}, timeout = 10000, timeout
 }
 
 export const listGroups = userId => requestWithTimeout(userId, 'listGroups', {}, 10000, 'Timeout ao buscar grupos')
-export const sendBroadcast = (userId, text, jids) => requestWithTimeout(userId, 'broadcast', { text, jids }, 30000, 'Timeout ao enviar mensagem')
+export const sendBroadcast = (userId, text, jids, options = {}) => requestWithTimeout(userId, 'broadcast', { text, jids, options }, 30000, 'Timeout ao enviar mensagem')
 export const getBotMetrics = userId => bots.has(userId) ? requestWithTimeout(userId, 'metrics', {}, 5000, 'Timeout ao buscar métricas') : Promise.resolve(null)
 export const requestPairingCode = (userId, phone) => requestWithTimeout(userId, 'requestPairingCode', { phone }, 45000, 'Timeout ao solicitar código de pareamento')
 export function reloadConfig(userId) { const e = bots.get(userId); if (!e) return false; try { e.proc.send({ type: 'reloadConfig' }) } catch {}; return true }

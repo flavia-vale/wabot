@@ -475,6 +475,13 @@ function isMercadoLivreLandingUrl(url) {
     const u = new URL(String(url || ''))
     if (/meli\.la|mluvem\.com/.test(u.hostname)) return true
     if (/\/social\//i.test(u.pathname)) return true
+    // Links de recomendação /up/MLBU... (mercadolivre.com.br/.../up/MLBU...)
+    // não são página de produto: o MLB real vem em `wid=MLB...` no fragmento.
+    // resolveToCleanProductUrl extrai o MLB e gera a URL canônica do produto;
+    // sem isso o scrape do /up/ cru cai na página de recomendação (sem
+    // og:title/preço do produto) ou no anti-bot. Cobre o caso em que o link
+    // chega aqui SEM passar pela conversão (ex.: usuário sem credenciais ML).
+    if (/mercadoli(?:vre|bre)/i.test(u.hostname) && /(?:^|\/)up\//i.test(u.pathname)) return true
     return false
   } catch {
     return false

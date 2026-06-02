@@ -172,6 +172,9 @@ else
   fi
 fi
 
+echo "  Regenerando Prisma Client após validação/aplicação das migrations..."
+npx prisma generate
+
 echo "[4/9] Install dashboard dependencies"
 cd "$DASHBOARD_DIR"
 run_npm_ci_with_recovery "dashboard"

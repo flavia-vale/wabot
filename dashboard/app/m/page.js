@@ -288,6 +288,19 @@ const homeStyles = {
     background:'var(--success)', color:'white', whiteSpace:'nowrap',
   },
 
+  queueCard: {
+    margin:'12px 16px 0',
+    background:'var(--surface)', border:'1px solid var(--line)', borderRadius: 18,
+    padding:'14px 14px', display:'grid', gap: 12,
+  },
+  queueHead: { display:'flex', alignItems:'center', justifyContent:'space-between', gap: 10 },
+  queueTitle: { fontSize: 13.5, fontWeight: 700, color:'var(--ink)' },
+  queueSub: { fontSize: 11.5, color:'var(--ink-soft)', marginTop: 2 },
+  queueGrid: { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap: 8 },
+  queueMetric: { padding:'10px 8px', border:'1px solid var(--line)', borderRadius: 13, background:'var(--bg-soft)' },
+  queueMetricLabel: { fontSize: 10.5, color:'var(--ink-soft)', marginBottom: 4, fontWeight: 650, textTransform:'uppercase', letterSpacing:'0.04em' },
+  queueMetricValue: { fontSize: 16, fontWeight: 800, color:'var(--ink)', fontFamily:"'JetBrains Mono', monospace" },
+
   // dim wrapper para recursos PRO esmaecidos
   dimmed: { opacity: 0.5, filter:'saturate(0.6)' },
   dimLockRow: {
@@ -337,6 +350,7 @@ export default function MobileHomePage() {
   const [creds, setCreds] = useState([])
   const [summary, setSummary] = useState(null)
   const [recent, setRecent] = useState([])
+  const [dashboardStatus, setDashboardStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -346,13 +360,14 @@ export default function MobileHomePage() {
       setLoading(true)
       setError('')
       try {
-        const [m, s, g, cr, sum, lg] = await Promise.all([
+        const [m, s, g, cr, sum, lg, ds] = await Promise.all([
           api.me().catch(() => null),
           api.sessionStatus().catch(() => null),
           api.groups().catch(() => []),
           api.credentials().catch(() => []),
           api.logsSummary('today').catch(() => null),
           api.logs('all', 1, 4).catch(() => null),
+          api.dashboardStatus().catch(() => null),
         ])
         if (!active) return
         setMe(m)
@@ -361,6 +376,7 @@ export default function MobileHomePage() {
         setCreds(Array.isArray(cr) ? cr : [])
         setSummary(sum)
         setRecent(Array.isArray(lg?.logs) ? lg.logs : [])
+        setDashboardStatus(ds)
       } catch (e) {
         if (active) setError(e.message || 'Não foi possível carregar a sua página.')
       } finally {
@@ -372,10 +388,12 @@ export default function MobileHomePage() {
   }, [])
 
   const firstName = (me?.name || '').trim().split(' ')[0]
-  const whatsappConnected = Boolean(session?.running)
-  const hasCredentials = creds.length > 0
-  const hasSource = groups.some(g => g.role === 'monitor')
-  const hasDest = groups.some(g => g.role === 'post')
+  const whatsappConnected = Boolean(dashboardStatus?.waConnected ?? session?.running)
+  const hasCredentials = Boolean(dashboardStatus?.hasCredentials ?? (creds.length > 0))
+  const hasSource = Boolean(dashboardStatus?.hasMonitorGroup ?? groups.some(g => g.role === 'monitor'))
+  const hasDest = Boolean(dashboardStatus?.hasPostGroup ?? groups.some(g => g.role === 'post'))
+  const hasSuccessfulLog = Boolean(dashboardStatus?.hasSuccessfulLog)
+  const queue = dashboardStatus?.queue ?? dashboardStatus?.queueHealth ?? null
 
   const c = summary?.counts
   const postadosHoje = c?.success ?? 0
@@ -390,11 +408,11 @@ export default function MobileHomePage() {
       { label: 'Conectar WhatsApp',             done: whatsappConnected, route: mobileRoutes.configWhatsApp },
       { label: '1 grupo de origem',             done: hasSource, route: mobileRoutes.configGroups },
       { label: '1 grupo de destino',            done: hasDest, route: mobileRoutes.configGroups },
-      { label: 'Ligar o espelhamento',          done: whatsappConnected && hasSource && hasDest, route: mobileRoutes.espelhar },
+      { label: 'Primeiro envio validado',       done: hasSuccessfulLog, route: mobileRoutes.logs },
     ]
     const firstPending = steps.findIndex(s => !s.done)
     return steps.map((s, i) => ({ ...s, current: i === firstPending }))
-  }, [hasCredentials, whatsappConnected, hasSource, hasDest])
+  }, [hasCredentials, whatsappConnected, hasSource, hasDest, hasSuccessfulLog])
 
   const checklistDone = checklist.filter(s => s.done).length
   const checklistTotal = checklist.length
@@ -615,7 +633,54 @@ export default function MobileHomePage() {
             {isExpired && <span style={{marginLeft:'auto'}}><LockGlyph size={12}/></span>}
           </button>
         </div>
+
+        {!isExpired && (
+          <div style={homeStyles.shortcutsRow}>
+            <button type="button" style={homeStyles.shortcut} onClick={() => router.push(mobileRoutes.broadcast)}>
+              <div style={homeStyles.shortcutIcon('color-mix(in oklab, var(--success) 18%, var(--surface))', 'var(--success)')}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>
+                </svg>
+              </div>
+              <div style={homeStyles.shortcutLabel}>Broadcast</div>
+            </button>
+            <button type="button" style={homeStyles.shortcut} onClick={() => router.push(mobileRoutes.automations)}>
+              <div style={homeStyles.shortcutIcon('color-mix(in oklab, var(--accent) 18%, var(--surface))', 'var(--accent-strong)')}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2v4"/><path d="m16.2 7.8 2.8-2.8"/><path d="M18 12h4"/><path d="m16.2 16.2 2.8 2.8"/><path d="M12 18v4"/><path d="m7.8 16.2-2.8 2.8"/><path d="M6 12H2"/><path d="m7.8 7.8-2.8-2.8"/>
+                </svg>
+              </div>
+              <div style={homeStyles.shortcutLabel}>Automações</div>
+            </button>
+          </div>
+        )}
       </div>
+
+      {!isExpired && queue && (
+        <div style={homeStyles.queueCard}>
+          <div style={homeStyles.queueHead}>
+            <div>
+              <div style={homeStyles.queueTitle}>Saúde da fila</div>
+              <div style={homeStyles.queueSub}>{queue.lastError ? `último erro: ${String(queue.lastError).slice(0, 80)}` : 'sem erro recente registrado'}</div>
+            </div>
+            <button type="button" style={homeStyles.sectionLink} onClick={() => router.push(mobileRoutes.logs)}>Logs →</button>
+          </div>
+          <div style={homeStyles.queueGrid}>
+            <div style={homeStyles.queueMetric}>
+              <div style={homeStyles.queueMetricLabel}>Fila</div>
+              <div style={homeStyles.queueMetricValue}>{queue.queueSize ?? 0}/{queue.maxSize ?? '∞'}</div>
+            </div>
+            <div style={homeStyles.queueMetric}>
+              <div style={homeStyles.queueMetricLabel}>Latência</div>
+              <div style={homeStyles.queueMetricValue}>{queue.avgLatencyMs != null ? `${Math.round(queue.avgLatencyMs)}ms` : '—'}</div>
+            </div>
+            <div style={homeStyles.queueMetric}>
+              <div style={homeStyles.queueMetricLabel}>OK/erro</div>
+              <div style={homeStyles.queueMetricValue}>{queue.successTotal ?? 0}/{queue.errorTotal ?? 0}</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Atividade recente — oculta no vencido (espelhamento pausado, sem novos envios) */}
       {!isExpired && (

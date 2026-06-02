@@ -2,6 +2,8 @@ import db from '../../db.js'
 import { reloadConfig } from '../../manager.js'
 import { DEFAULT_BRANDING_CTA_TEXT, MAX_BRANDING_CTA_CHARS, normalizeBrandingCtaText, normalizeBrandingLink } from '../../messageProcessor.js'
 import { buildFeatureGateError, canUseAdvancedPreservation, FEATURE_CODES } from '../../billing/plans.js'
+import { DEFAULT_COPY_VARIATION_POOL_JSON, resolveCopyVariationPoolJson } from '../../core/copyVariation.js'
+export { DEFAULT_COPY_VARIATION_POOL_JSON } from '../../core/copyVariation.js'
 
 const DEFAULTS = {
   delayMin: 5,
@@ -12,8 +14,11 @@ const DEFAULTS = {
   feedGlobal: false,
   postToStatus: false,
   brandingGroupLink: '',
+  couponLink: '',
   brandingCtaText: DEFAULT_BRANDING_CTA_TEXT,
-  copyVariationPoolJson: '{}',
+  copyVariationPoolJson: DEFAULT_COPY_VARIATION_POOL_JSON,
+  mobileTemplatesJson: '{}',
+  mobileCouponLinksJson: '{}',
 }
 
 
@@ -36,12 +41,17 @@ export async function configRoutes(app) {
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
     const cfg = await db.botConfig.findUnique({ where: { userId: req.user.sub } })
     if (!cfg) return { ...DEFAULTS, userId: req.user.sub }
-    return { ...cfg, copyVariationPoolJson: cfg.copyVariationPoolJson ?? '{}' }
+    return {
+      ...cfg,
+      copyVariationPoolJson: resolveCopyVariationPoolJson(cfg.copyVariationPoolJson),
+      mobileTemplatesJson: cfg.mobileTemplatesJson ?? '{}',
+      mobileCouponLinksJson: cfg.mobileCouponLinksJson ?? '{}',
+    }
   })
 
   app.put('/', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
-    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg, feedGlobal, postToStatus, brandingGroupLink, brandingCtaText, copyVariationPoolJson } = req.body ?? {}
+    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg, feedGlobal, postToStatus, brandingGroupLink, brandingCtaText, couponLink, copyVariationPoolJson, mobileTemplatesJson, mobileCouponLinksJson } = req.body ?? {}
 
     if (delayMin !== undefined && !isIntegerInRange(delayMin)) {
       return reply.code(400).send({ error: 'delayMin deve ser um número inteiro entre 0 e 300' })
@@ -65,12 +75,30 @@ export async function configRoutes(app) {
       }
     }
 
+    for (const [field, value] of [['mobileTemplatesJson', mobileTemplatesJson], ['mobileCouponLinksJson', mobileCouponLinksJson]]) {
+      if (value === undefined) continue
+      if (typeof value !== 'string') {
+        return reply.code(400).send({ error: `${field} deve ser string JSON` })
+      }
+      if (value.length > 20_000) {
+        return reply.code(400).send({ error: `${field} excede o tamanho máximo permitido` })
+      }
+      try { JSON.parse(value) } catch {
+        return reply.code(400).send({ error: `${field} contém JSON inválido` })
+      }
+    }
+
     const requestsAdvancedPreservation = feedGlobal === true || postToStatus === true
     if (requestsAdvancedPreservation && !(await ensureAdvancedPreservationAllowed(userId, reply))) return
     const rawBrandingGroupLink = String(brandingGroupLink ?? '').trim()
     const normalizedBrandingGroupLink = normalizeBrandingLink(rawBrandingGroupLink)
     if (brandingGroupLink !== undefined && rawBrandingGroupLink && !normalizedBrandingGroupLink) {
       return reply.code(400).send({ error: 'Informe um link válido começando com http:// ou https://' })
+    }
+    const rawCouponLink = String(couponLink ?? '').trim()
+    const normalizedCouponLink = normalizeBrandingLink(rawCouponLink)
+    if (couponLink !== undefined && rawCouponLink && !normalizedCouponLink) {
+      return reply.code(400).send({ error: 'Link de cupom inválido. Informe uma URL começando com http:// ou https://' })
     }
     const normalizedBrandingCtaText = normalizeBrandingCtaText(brandingCtaText)
     if (brandingCtaText !== undefined && String(brandingCtaText ?? '').trim().length > MAX_BRANDING_CTA_CHARS) {
@@ -97,7 +125,12 @@ export async function configRoutes(app) {
         postToStatus: postToStatus ?? DEFAULTS.postToStatus,
         brandingGroupLink: normalizedBrandingGroupLink,
         brandingCtaText: normalizedBrandingCtaText,
-        ...(copyVariationPoolJson !== undefined && { copyVariationPoolJson }),
+        couponLink: normalizedCouponLink,
+        copyVariationPoolJson: copyVariationPoolJson === undefined
+          ? DEFAULTS.copyVariationPoolJson
+          : resolveCopyVariationPoolJson(copyVariationPoolJson),
+        ...(mobileTemplatesJson !== undefined && { mobileTemplatesJson }),
+        ...(mobileCouponLinksJson !== undefined && { mobileCouponLinksJson }),
       },
       update: {
         ...(delayMin !== undefined && { delayMin }),
@@ -109,7 +142,10 @@ export async function configRoutes(app) {
         ...(postToStatus !== undefined && { postToStatus }),
         ...(brandingGroupLink !== undefined && { brandingGroupLink: normalizedBrandingGroupLink }),
         ...(brandingCtaText !== undefined && { brandingCtaText: normalizedBrandingCtaText }),
-        ...(copyVariationPoolJson !== undefined && { copyVariationPoolJson }),
+        ...(couponLink !== undefined && { couponLink: normalizedCouponLink }),
+        ...(copyVariationPoolJson !== undefined && { copyVariationPoolJson: resolveCopyVariationPoolJson(copyVariationPoolJson) }),
+        ...(mobileTemplatesJson !== undefined && { mobileTemplatesJson }),
+        ...(mobileCouponLinksJson !== undefined && { mobileCouponLinksJson }),
       },
     })
     reloadConfig(userId)

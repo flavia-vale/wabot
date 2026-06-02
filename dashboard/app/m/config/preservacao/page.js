@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
@@ -68,6 +68,10 @@ function MonitoringCard({ title, children, loading, error }) {
 export default function PreservacaoPage() {
   useMobileRoutePerf('m/config/preservacao')
   const router = useRouter()
+  // Guarda contra setState após desmontar: loadMonitoring dispara ~6 fetches
+  // paralelos; sair da página antes deles resolverem causaria updates órfãos.
+  const mountedRef = useRef(true)
+  useEffect(() => () => { mountedRef.current = false }, [])
 
   const [me, setMe] = useState(null)
   const [meLoading, setMeLoading] = useState(true)
@@ -104,6 +108,13 @@ export default function PreservacaoPage() {
   const [clicksLoading, setClicksLoading] = useState(true)
   const [clicksError, setClicksError] = useState('')
 
+  const [probe, setProbe] = useState(null)
+  const [probeSession, setProbeSession] = useState(null)
+  const [probeLoading, setProbeLoading] = useState(true)
+  const [probeError, setProbeError] = useState('')
+  const [probeAction, setProbeAction] = useState('')
+  const [probeAccountSessionId, setProbeAccountSessionId] = useState('')
+
   useEffect(() => {
     let active = true
     api.me()
@@ -133,41 +144,90 @@ export default function PreservacaoPage() {
   }, [])
 
   const loadMonitoring = useCallback(() => {
+    // `guard` ignora o resultado se o componente já desmontou.
+    const guard = (fn) => (arg) => { if (mountedRef.current) fn(arg) }
+
     setHealthLoading(true)
     api.preservationHealth()
-      .then((data) => setHealth(data.items ?? []))
-      .catch((e) => setHealthError(e.message || 'Erro ao carregar saúde.'))
-      .finally(() => setHealthLoading(false))
+      .then(guard((data) => setHealth(data.items ?? [])))
+      .catch(guard((e) => setHealthError(e.message || 'Erro ao carregar saúde.')))
+      .finally(guard(() => setHealthLoading(false)))
 
     setRiskLoading(true)
     api.preservationRiskScore()
-      .then((data) => setRiskScore(data))
-      .catch((e) => setRiskError(e.message || 'Erro ao carregar score.'))
-      .finally(() => setRiskLoading(false))
+      .then(guard((data) => setRiskScore(data)))
+      .catch(guard((e) => setRiskError(e.message || 'Erro ao carregar score.')))
+      .finally(guard(() => setRiskLoading(false)))
 
     setFollowsLoading(true)
     api.preservationFollows(10)
-      .then((data) => setFollows(data.items ?? []))
-      .catch((e) => setFollowsError(e.message || 'Erro ao carregar follows.'))
-      .finally(() => setFollowsLoading(false))
+      .then(guard((data) => setFollows(data.items ?? [])))
+      .catch(guard((e) => setFollowsError(e.message || 'Erro ao carregar follows.')))
+      .finally(guard(() => setFollowsLoading(false)))
 
     setSnapshotsLoading(true)
     api.preservationSnapshots()
-      .then((data) => setSnapshots(data.items ?? []))
-      .catch((e) => setSnapshotsError(e.message || 'Erro ao carregar snapshots.'))
-      .finally(() => setSnapshotsLoading(false))
+      .then(guard((data) => setSnapshots(data.items ?? [])))
+      .catch(guard((e) => setSnapshotsError(e.message || 'Erro ao carregar snapshots.')))
+      .finally(guard(() => setSnapshotsLoading(false)))
 
     setClicksLoading(true)
     api.preservationClicks()
-      .then((data) => setClicks(data))
-      .catch((e) => setClicksError(e.message || 'Erro ao carregar cliques.'))
-      .finally(() => setClicksLoading(false))
+      .then(guard((data) => setClicks(data)))
+      .catch(guard((e) => setClicksError(e.message || 'Erro ao carregar cliques.')))
+      .finally(guard(() => setClicksLoading(false)))
+
+    setProbeLoading(true)
+    setProbeError('')
+    Promise.all([api.preservationProbe(), api.preservationProbeSessionStatus()])
+      .then(guard(([probeData, sessionData]) => {
+        setProbe(probeData)
+        setProbeSession(sessionData?.session ?? sessionData)
+        if (probeData?.probeAccountSessionId) setProbeAccountSessionId(probeData.probeAccountSessionId)
+      }))
+      .catch(guard((e) => setProbeError(e.message || 'Erro ao carregar probe.')))
+      .finally(guard(() => setProbeLoading(false)))
   }, [])
 
   useEffect(() => {
     const timer = window.setTimeout(() => { loadMonitoring() }, 0)
     return () => window.clearTimeout(timer)
   }, [loadMonitoring])
+
+
+
+  async function runProbeAction(action, handler) {
+    setProbeAction(action)
+    setProbeError('')
+    try {
+      const result = await handler()
+      setProbeSession(result?.session ?? result)
+      const [probeData, sessionData] = await Promise.all([api.preservationProbe(), api.preservationProbeSessionStatus()])
+      setProbe(probeData)
+      setProbeSession(sessionData?.session ?? sessionData)
+    } catch (e) {
+      setProbeError(e.message || 'Não foi possível executar ação do probe.')
+    } finally {
+      setProbeAction('')
+    }
+  }
+
+  function startProbeSession() {
+    runProbeAction('start', () => api.preservationProbeSessionStart())
+  }
+
+  function stopProbeSession() {
+    runProbeAction('stop', () => api.preservationProbeSessionStop())
+  }
+
+  function selectProbeSession() {
+    const value = probeAccountSessionId.trim()
+    if (!value) {
+      setProbeError('Informe o ID da sessão probe.')
+      return
+    }
+    runProbeAction('select', () => api.preservationProbeSessionSelect(value))
+  }
 
   function updateDraft(patch) {
     setDraft((current) => ({ ...(current ?? {}), ...patch }))
@@ -347,6 +407,34 @@ export default function PreservacaoPage() {
             </div>
           )}
         </MonitoringCard>
+
+        <MonitoringCard title="Probe externo" loading={probeLoading} error={probeError}>
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div style={{ ...cfgStyles.field, background: 'var(--bg-soft)' }}>
+                <div style={{ fontSize: 10.5, color: 'var(--ink-faint)', textTransform: 'uppercase', fontWeight: 800 }}>Monitor</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginTop: 3 }}>{probe?.enabled ? `ativo · ${probe.probeMode ?? 'manual'}` : 'desligado'}</div>
+              </div>
+              <div style={{ ...cfgStyles.field, background: 'var(--bg-soft)' }}>
+                <div style={{ fontSize: 10.5, color: 'var(--ink-faint)', textTransform: 'uppercase', fontWeight: 800 }}>Sessão</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginTop: 3 }}>{probeSession?.state ?? probeSession?.status ?? (probeSession?.running ? 'rodando' : 'parada')}</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--ink-soft)', lineHeight: 1.45 }}>
+              Use uma sessão probe separada para observar canais sem depender da sessão principal. Iniciar/parar/selecionar usa os mesmos endpoints do desktop.
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <button type="button" onClick={startProbeSession} disabled={probeAction === 'start'} style={mobi.btn('ghost', true)}>{probeAction === 'start' ? 'Iniciando...' : 'Iniciar probe'}</button>
+              <button type="button" onClick={stopProbeSession} disabled={probeAction === 'stop'} style={mobi.btn('ghost', true)}>{probeAction === 'stop' ? 'Parando...' : 'Parar probe'}</button>
+            </div>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={cfgStyles.label}>ID da sessão probe</span>
+              <input style={cfgStyles.field} value={probeAccountSessionId} onChange={(event) => setProbeAccountSessionId(event.target.value)} placeholder="probe-account-session-id" />
+            </label>
+            <button type="button" onClick={selectProbeSession} disabled={probeAction === 'select'} style={mobi.btn('ghost', true)}>{probeAction === 'select' ? 'Selecionando...' : 'Selecionar sessão probe'}</button>
+          </div>
+        </MonitoringCard>
+
       </div>
 
       <div style={cfgStyles.sectionLabel}>Configurações</div>
@@ -470,7 +558,7 @@ export default function PreservacaoPage() {
                   min={0} max={23}
                   style={cfgStyles.field}
                   value={quietHours.startHour}
-                  onChange={(e) => setQuietHours((q) => ({ ...q, startHour: parseInt(e.target.value, 10) || 0 }))}
+                  onChange={(e) => setQuietHours((q) => ({ ...q, startHour: Math.min(23, Math.max(0, parseInt(e.target.value, 10) || 0)) }))}
                 />
               </label>
               <label style={{ display: 'grid', gap: 6 }}>
@@ -480,7 +568,7 @@ export default function PreservacaoPage() {
                   min={0} max={23}
                   style={cfgStyles.field}
                   value={quietHours.endHour}
-                  onChange={(e) => setQuietHours((q) => ({ ...q, endHour: parseInt(e.target.value, 10) || 0 }))}
+                  onChange={(e) => setQuietHours((q) => ({ ...q, endHour: Math.min(23, Math.max(0, parseInt(e.target.value, 10) || 0)) }))}
                 />
               </label>
               <label style={{ display: 'grid', gap: 6 }}>
@@ -495,6 +583,11 @@ export default function PreservacaoPage() {
                   ))}
                 </select>
               </label>
+              {quietHours.startHour === quietHours.endHour && (
+                <div style={{ fontSize: 11.5, color: 'var(--warn)' }}>
+                  Início e fim iguais: nenhum horário fica em silêncio. Use horas diferentes (pode cruzar a meia-noite, ex.: 22 → 6).
+                </div>
+              )}
             </div>
           </div>
 

@@ -191,8 +191,11 @@ export const api = {
   broadcastSend: (text, jids) =>
     apiFetch('/api/broadcast/send', { method: 'POST', body: JSON.stringify({ text, jids }) }),
   scheduledList: () => apiFetch('/api/broadcast/scheduled'),
-  scheduledCreate: (text, scheduledAt) =>
-    apiFetch('/api/broadcast/scheduled', { method: 'POST', body: JSON.stringify({ text, scheduledAt }) }),
+  scheduledCreate: (text, scheduledAt, jids) =>
+    apiFetch('/api/broadcast/scheduled', {
+      method: 'POST',
+      body: JSON.stringify({ text, scheduledAt, ...(Array.isArray(jids) ? { jids } : {}) }),
+    }),
   scheduledCancel: (id) => apiFetch(`/api/broadcast/scheduled/${id}`, { method: 'DELETE' }),
 
   dashboardStatus: () => apiFetch('/api/dashboard/status'),
@@ -210,6 +213,9 @@ export const api = {
   adminUpdateFaq: (id, data) => apiFetch(`/api/admin/faq/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   adminDeleteFaq: (id) => apiFetch(`/api/admin/faq/${id}`, { method: 'DELETE' }),
   adminOverview: () => apiFetch('/api/admin/overview'),
+  adminPipeline: () => apiFetch('/api/admin/pipeline'),
+  adminUpdatePipelineIssueStatus: (id, status) =>
+    apiFetch(`/api/admin/pipeline/issues/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   adminUsers: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/users${query ? `?${query}` : ''}`)
@@ -326,8 +332,12 @@ export const api = {
   preservationProbeSessionSelect: (probeAccountSessionId) => apiFetch('/api/preservation/probe/session/select', { method: 'POST', body: JSON.stringify({ probeAccountSessionId }) }),
   preservationClicks: () => apiFetch('/api/preservation/monitoring/clicks'),
 
-  logs: (status = 'all', page = 1, limit = 20) =>
-    apiFetch(`/api/logs?status=${status}&page=${page}&limit=${limit}`),
+  logs: (status = 'all', page = 1, limit = 20, search = '') => {
+    const params = new URLSearchParams({ status, page: String(page), limit: String(limit) })
+    const q = String(search || '').trim()
+    if (q) params.set('search', q)
+    return apiFetch(`/api/logs?${params.toString()}`)
+  },
   logsSummary: (period = '7d') => apiFetch(`/api/logs/summary?period=${encodeURIComponent(period)}`),
   logsClear: () => apiFetch('/api/logs/clear', { method: 'DELETE' }),
 
@@ -341,8 +351,11 @@ export const api = {
   offerAutomationTrigger: (id) =>
     apiFetch(`/api/offer-automations/${id}/trigger`, { method: 'POST' }),
   variationsGet: () => apiFetch('/api/config'),
-  variationsUpdate: (copyVariationPoolJson) =>
-    apiFetch('/api/config', { method: 'PUT', body: JSON.stringify({ copyVariationPoolJson }) }),
+  variationsUpdate: (data) =>
+    apiFetch('/api/config', {
+      method: 'PUT',
+      body: JSON.stringify(typeof data === 'string' ? { copyVariationPoolJson: data } : data),
+    }),
 }
 
 export function openQRSocket(token, handlers = {}) {

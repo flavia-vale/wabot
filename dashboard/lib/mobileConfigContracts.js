@@ -1,4 +1,4 @@
-export const MOBILE_CONFIG_CONTRACT_KEYS = ['welcomeMsg', 'brandingGroupLink', 'brandingCtaText', 'delayMin', 'delayMax', 'blockedKeywords']
+export const MOBILE_CONFIG_CONTRACT_KEYS = ['welcomeMsg', 'brandingGroupLink', 'brandingCtaText', 'delayMin', 'delayMax', 'blockedKeywords', 'platforms', 'feedGlobal', 'postToStatus']
 
 function normalizeKeywords(text) {
   const parts = String(text || '').split(',').map(k => k.trim().toLowerCase()).filter(Boolean)
@@ -28,9 +28,12 @@ export function buildMobilePreferencesPayload(draft = {}) {
     delayMin,
     delayMax,
     blockedKeywords: normalizeKeywords(draft?.blockedKeywords),
+    platforms: Array.isArray(draft?.platforms) ? draft.platforms : [],
+    feedGlobal: Boolean(draft?.feedGlobal),
+    postToStatus: Boolean(draft?.postToStatus),
   }
 }
 
 export function getMobileTemplatePresetNotice() {
-  return 'Estes modelos são presets locais para montar ofertas rapidamente; eles não são salvos no backend ainda.'
+  return 'Estes modelos são presets editáveis para montar ofertas rapidamente; eles são salvos no backend e sincronizam entre celular e computador.'
 }

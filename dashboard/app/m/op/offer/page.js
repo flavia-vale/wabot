@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
+import { MobileModal } from '@/components/mobile/MobileModal'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard } from '@/components/mobile/MobileAsyncState'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
@@ -17,30 +18,9 @@ import {
   getMobileOfferSingleLinkWarning,
   isValidHttpUrl,
 } from '@/lib/mobileOfferComposer'
-import { loadAllTemplates } from '@/lib/mobileTemplateStore'
+import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
+import { DEFAULT_COUPON_LINKS, DEFAULT_COUPON_CTA, loadCouponPrefs, persistCouponPrefs } from '@/lib/mobileCouponStore'
 import { filterDestGroups, selectAllVisible, clearVisible, groupKey } from '@/lib/mobileOfferFilters'
-
-const COUPON_LINKS_STORAGE_KEY = 'wabot.mobile.offer.couponLinks.v1'
-const DEFAULT_COUPON_LINKS = { shopee: '', mercadolivre: '', amazon: '', magazineluiza: '' }
-
-function readStoredCouponLinks() {
-  if (typeof window === 'undefined') return DEFAULT_COUPON_LINKS
-  try {
-    const stored = JSON.parse(window.localStorage.getItem(COUPON_LINKS_STORAGE_KEY) || '{}')
-    return { ...DEFAULT_COUPON_LINKS, ...stored }
-  } catch {
-    return DEFAULT_COUPON_LINKS
-  }
-}
-
-function saveStoredCouponLinks(links) {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(COUPON_LINKS_STORAGE_KEY, JSON.stringify(links))
-  } catch {
-    // localStorage indisponível: mantém os links editáveis só na sessão atual.
-  }
-}
 
 const criarStyles = {
   pageH: { padding:'18px 20px 0' },
@@ -509,7 +489,7 @@ export default function OfferPage() {
   const [allTemplates, setAllTemplates] = useState(TEMPLATE_OPTIONS)
   const [bonuses, setBonuses] = useState('')
   const [groupBonus, setGroupBonus] = useState({ link: '', cta: '💜 Entra no nosso grupo:' })
-  const [couponCta, setCouponCta] = useState('🎟 Mais cupons da {loja}:')
+  const [couponCta, setCouponCta] = useState(DEFAULT_COUPON_CTA)
   const [couponLinks, setCouponLinks] = useState(DEFAULT_COUPON_LINKS)
   const [selectedCouponStores] = useState(COUPON_STORES.map((store) => store.key))
   const [baseOfferText, setBaseOfferText] = useState('')
@@ -533,7 +513,10 @@ export default function OfferPage() {
     if (typeof window === 'undefined') return undefined
     const timer = window.setTimeout(() => {
       const urlFromQuery = new URLSearchParams(window.location.search).get('url')?.trim()
-      if (urlFromQuery) setInput((current) => current || urlFromQuery)
+      if (urlFromQuery) {
+        setInput((current) => current || urlFromQuery)
+        setPasteFeedback('Link convertido carregado do Conversor. Gere a oferta para montar a mensagem.')
+      }
     }, 0)
     return () => window.clearTimeout(timer)
   }, [])
@@ -564,18 +547,35 @@ export default function OfferPage() {
 
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setCouponLinks(readStoredCouponLinks())
-    }, 0)
-    return () => window.clearTimeout(timer)
+    let active = true
+    loadCouponPrefs()
+      .then((prefs) => {
+        if (!active) return
+        setCouponLinks(prefs.links)
+        setCouponCta(prefs.cta)
+      })
+      .catch(() => {})
+    return () => { active = false }
   }, [])
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setAllTemplates(loadAllTemplates())
-    }, 0)
-    return () => window.clearTimeout(timer)
+    let active = true
+    loadTemplateStore()
+      .then((store) => { if (active) setAllTemplates(composeTemplates(store)) })
+      .catch(() => {})
+    return () => { active = false }
   }, [])
+
+  // Persiste preferências de cupom com debounce — o usuário digita link/CTA
+  // letra a letra e não queremos um PUT por tecla.
+  const couponPersistTimer = useRef(null)
+  useEffect(() => () => { if (couponPersistTimer.current) window.clearTimeout(couponPersistTimer.current) }, [])
+  function schedulePersistCoupons(prefs) {
+    if (couponPersistTimer.current) window.clearTimeout(couponPersistTimer.current)
+    couponPersistTimer.current = window.setTimeout(() => {
+      persistCouponPrefs(prefs).catch(() => {})
+    }, 600)
+  }
 
   function resetInput() {
     setInput('')
@@ -708,6 +708,10 @@ export default function OfferPage() {
   }
 
   function openScheduleModal() {
+    if (selectedDestinations.length === 0) {
+      setSendFeedback('Selecione pelo menos um destino antes de agendar.')
+      return
+    }
     const nowPlusOneMinute = new Date(Date.now() + 61000)
     const pad = (n) => String(n).padStart(2, '0')
     const localIso = `${nowPlusOneMinute.getFullYear()}-${pad(nowPlusOneMinute.getMonth() + 1)}-${pad(nowPlusOneMinute.getDate())}T${pad(nowPlusOneMinute.getHours())}:${pad(nowPlusOneMinute.getMinutes())}`
@@ -722,7 +726,7 @@ export default function OfferPage() {
     setScheduling(true)
     setScheduleError('')
     try {
-      await api.scheduledCreate(editorText, new Date(scheduleAt).toISOString())
+      await api.scheduledCreate(editorText, new Date(scheduleAt).toISOString(), selectedDestinations)
       setShowScheduleModal(false)
       setSendFeedback('Agendado! Ver em agendamentos →')
     } catch (e) {
@@ -931,11 +935,12 @@ export default function OfferPage() {
             const updateCouponLink = (storeKey, value) => {
               const nextCouponLinks = { ...couponLinks, [storeKey]: value }
               setCouponLinks(nextCouponLinks)
-              saveStoredCouponLinks(nextCouponLinks)
+              schedulePersistCoupons({ links: nextCouponLinks, cta: couponCta })
               refreshEditorWithBonuses(bonuses, { couponLinks: nextCouponLinks })
             }
             const updateCouponCta = (value) => {
               setCouponCta(value)
+              schedulePersistCoupons({ links: couponLinks, cta: value })
               refreshEditorWithBonuses(bonuses, { couponCta: value })
             }
             const groupLinkInvalid = groupBonus.link.trim() && !isValidHttpUrl(groupBonus.link)
@@ -1110,7 +1115,7 @@ ${currentCouponLink}`
 
           <div style={criarStyles.sendWrap}>
             <div style={criarStyles.sendRow}>
-              <button type="button" onClick={openScheduleModal} disabled={!editorText.trim()} style={{...criarStyles.schedBtn, opacity: !editorText.trim() ? 0.55 : 1}}>Agendar</button>
+              <button type="button" onClick={openScheduleModal} disabled={!editorText.trim() || selectedDestinations.length === 0} style={{...criarStyles.schedBtn, opacity: (!editorText.trim() || selectedDestinations.length === 0) ? 0.55 : 1}}>Agendar</button>
               <button type="button" onClick={sendNow} disabled={sending || selectedDestinations.length === 0 || !editorText.trim()} style={{...criarStyles.sendBtn, opacity: sending || selectedDestinations.length === 0 || !editorText.trim() ? 0.6 : 1}}>
                 {sending ? 'Enviando...' : 'Enviar agora'} <MobileIcon name="arrow" size={14}/>
               </button>
@@ -1129,11 +1134,18 @@ ${currentCouponLink}`
 
       <div style={{height: 20}}/>
 
-      {showScheduleModal && (
-        <div style={{position:'fixed', inset:0, zIndex:200, background:'rgba(0,0,0,0.55)', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 16px'}} onClick={() => setShowScheduleModal(false)}>
-          <div style={{background:'var(--surface)', border:'1px solid var(--line)', borderRadius:20, padding:22, width:'100%', maxWidth:400}} onClick={(e) => e.stopPropagation()}>
+      <MobileModal
+        open={showScheduleModal}
+        onClose={() => !scheduling && setShowScheduleModal(false)}
+        dismissible={!scheduling}
+        ariaLabel="Agendar envio"
+        maxWidth={400}
+      >
             <div style={{fontSize: 16, fontWeight: 700, color:'var(--ink)', marginBottom: 4}}>Agendar envio</div>
-            <div style={{fontSize: 12, color:'var(--ink-soft)', marginBottom: 16, lineHeight: 1.5}}>Escolha a data e hora para o envio automático. Mínimo: 1 minuto a partir de agora.</div>
+            <div style={{fontSize: 12, color:'var(--ink-soft)', marginBottom: 12, lineHeight: 1.5}}>Escolha a data e hora para o envio automático. Mínimo: 1 minuto a partir de agora.</div>
+            <div style={{fontSize: 12, color:'var(--ink)', marginBottom: 16, lineHeight: 1.45, padding:'10px 12px', borderRadius:12, background:'var(--bg-soft)', border:'1px solid var(--line)'}}>
+              O agendamento será salvo para {selectedNames.length} destino(s): {selectedNames.length ? selectedNames.join(', ') : 'nenhum destino selecionado'}.
+            </div>
             <label style={{display:'grid', gap: 6, marginBottom: 16}}>
               <span style={{fontSize: 12, fontWeight: 600, color:'var(--ink)'}}>Data e hora</span>
               <input
@@ -1149,22 +1161,21 @@ ${currentCouponLink}`
               <button
                 type="button"
                 onClick={confirmSchedule}
-                disabled={scheduling || !scheduleAt}
-                style={{padding:'13px', borderRadius:12, background:'var(--ink)', border:'none', color:'white', fontWeight:700, fontSize:14, cursor:'pointer', fontFamily:'inherit', opacity: (scheduling || !scheduleAt) ? 0.6 : 1}}
+                disabled={scheduling || !scheduleAt || selectedDestinations.length === 0}
+                style={{padding:'13px', borderRadius:12, background:'var(--ink)', border:'none', color:'white', fontWeight:700, fontSize:14, cursor:'pointer', fontFamily:'inherit', opacity: (scheduling || !scheduleAt || selectedDestinations.length === 0) ? 0.6 : 1}}
               >
                 {scheduling ? 'Agendando...' : 'Confirmar agendamento'}
               </button>
               <button
                 type="button"
                 onClick={() => setShowScheduleModal(false)}
+                disabled={scheduling}
                 style={{padding:'12px', borderRadius:12, background:'transparent', border:'1px solid var(--line)', color:'var(--ink)', fontWeight:600, fontSize:14, cursor:'pointer', fontFamily:'inherit'}}
               >
                 Cancelar
               </button>
             </div>
-          </div>
-        </div>
-      )}
+      </MobileModal>
     </MobileShell>
   )
 }

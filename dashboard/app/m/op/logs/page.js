@@ -1,12 +1,26 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileLogLinkActions, toMobileLogItem } from '@/lib/mobileLogs'
 import { normalizeSummaryCounts, summaryDeliveryRateLabel } from '@/lib/mobileLogsSummary'
+import { mobileRoutes } from '@/components/mobile/routes'
+
+const MOBILE_LOG_FILTERS = [
+  { key: 'todos', label: 'Tudo', apiStatus: 'all' },
+  { key: 'fila', label: 'Aguardando', apiStatus: 'queued,sending' },
+  { key: 'ok', label: 'Postados', apiStatus: 'success' },
+  { key: 'falha', label: 'Erros', apiStatus: 'error' },
+  { key: 'ignorado', label: 'Não postados', apiStatus: 'skipped' },
+]
+
+function apiStatusForMobileFilter(filter) {
+  return MOBILE_LOG_FILTERS.find((item) => item.key === filter)?.apiStatus || 'all'
+}
 
 const envStyles = {
   pageH: {
@@ -183,10 +197,12 @@ const envStyles = {
 
 export default function LogsPage() {
   useMobileRoutePerf('m/op/logs')
+  const router = useRouter()
 
   const [filter, setFilter] = useState('todos');
   const [expanded, setExpanded] = useState(null);
   const [search, setSearch] = useState('');
+  const [serverSearch, setServerSearch] = useState('');
 
   const [rawLogs, setRawLogs] = useState([]);
   const [page, setPage] = useState(1);
@@ -204,7 +220,7 @@ export default function LogsPage() {
     if (!silent) setLoading(true);
     setError('');
     try {
-      const data = await api.logs('all', 1, 30);
+      const data = await api.logs(apiStatusForMobileFilter(filter), 1, 30, serverSearch);
       if (!isActive()) return;
       setRawLogs(Array.isArray(data?.logs) ? data.logs : []);
       setTotal(Number(data?.total) || 0);
@@ -215,7 +231,7 @@ export default function LogsPage() {
     } finally {
       if (!silent && isActive()) setLoading(false);
     }
-  }, []);
+  }, [filter, serverSearch]);
 
   useEffect(() => {
     let active = true;
@@ -227,6 +243,15 @@ export default function LogsPage() {
       window.clearTimeout(timer);
     };
   }, [loadFirstPage]);
+
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const q = search.trim();
+      setServerSearch(q.length >= 3 ? q : '');
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
     let active = true;
@@ -244,7 +269,7 @@ export default function LogsPage() {
     setError('');
     try {
       const nextPage = page + 1;
-      const data = await api.logs('all', nextPage, 30);
+      const data = await api.logs(apiStatusForMobileFilter(filter), nextPage, 30, serverSearch);
       const nextLogs = Array.isArray(data?.logs) ? data.logs : [];
       setRawLogs((current) => [...current, ...nextLogs]);
       setTotal(Number(data?.total) || total);
@@ -292,21 +317,19 @@ export default function LogsPage() {
     return rawLogs.map(log => toMobileLogItem(log, now));
   }, [rawLogs]);
 
-  // Contadores dos chips a partir dos itens carregados (mantém chip e lista consistentes).
-  const filters = useMemo(() => {
-    const count = (s) => items.filter(it => it.status === s).length;
-    return [
-      {key:'todos',     label:'Tudo',         n: items.length},
-      {key:'fila',      label:'Aguardando',   n: count('fila')},
-      {key:'ok',        label:'Postados',     n: count('ok')},
-      {key:'falha',     label:'Erros',        n: count('falha')},
-      {key:'ignorado',  label:'Não postados', n: count('ignorado')},
-    ];
-  }, [items]);
+  const filters = MOBILE_LOG_FILTERS;
+
+  function changeFilter(nextFilter) {
+    if (nextFilter === filter) return;
+    setFilter(nextFilter);
+    setRawLogs([]);
+    setTotal(0);
+    setPage(1);
+    setExpanded(null);
+  }
 
   const filtered = items.filter(it => {
-    if (filter !== 'todos' && it.status !== filter) return false;
-    const q = search.trim().toLowerCase();
+    const q = search.trim().length >= 3 ? '' : search.trim().toLowerCase();
     if (!q) return true;
     return [it.produto, it.loja, it.de, it.para].some(v => String(v || '').toLowerCase().includes(q));
   });
@@ -358,7 +381,7 @@ export default function LogsPage() {
             </svg>
           </div>
         </div>
-        <button type="button" style={envStyles.cadenceBtn} aria-label="Ajustar ritmo de envio" title="Ajustar ritmo · 1 a cada 12 min">
+        <button type="button" style={envStyles.cadenceBtn} aria-label="Ajustar ritmo de envio" title="Ajustar ritmo de envio" onClick={() => router.push(mobileRoutes.configPreferences)}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
           </svg>
@@ -399,16 +422,16 @@ export default function LogsPage() {
       })()}
 
       {/* Filtros em palavras claras */}
-      <div style={envStyles.chipRow} aria-label="Filtros — contagens somente dos envios carregados">
+      <div style={envStyles.chipRow} aria-label="Filtros de envios no servidor">
         {filters.map(f => (
-          <button key={f.key} type="button" onClick={() => setFilter(f.key)} style={envStyles.chip(filter === f.key)} title={`${f.n} envios carregados neste filtro`}>
+          <button key={f.key} type="button" onClick={() => changeFilter(f.key)} style={envStyles.chip(filter === f.key)} title={`Filtrar por ${f.label.toLowerCase()}`}>
             {f.label}
-            <span style={envStyles.chipCount(filter === f.key)}>{f.n}</span>
+            {filter === f.key && <span style={envStyles.chipCount(true)}>{total}</span>}
           </button>
         ))}
       </div>
       <div style={envStyles.loadedHint}>
-        Contadores dos filtros mostram apenas os {items.length} envios carregados nesta tela{hasMoreLogs ? ` de ${total} no histórico.` : '.'}
+        Filtro aplicado no servidor. Exibindo {items.length} de {total} envio(s){serverSearch ? ` para “${serverSearch}”` : ''}.
       </div>
 
       {/* Lista */}
@@ -417,7 +440,7 @@ export default function LogsPage() {
         {!loading && error && <div style={{padding:'0 16px'}}><MobileErrorCard message={error} /></div>}
         {!loading && !error && filtered.length === 0 && (
           <div style={{padding:'40px 24px', textAlign:'center', color:'var(--ink-soft)', fontSize: 13}}>
-            {items.length === 0 ? 'Nenhum envio ainda. Quando o bot postar ou você criar uma oferta, aparece aqui.' : 'Nenhum envio bate com esse filtro.'}
+            {items.length === 0 ? (serverSearch ? 'Nenhum envio encontrado no servidor para essa busca.' : 'Nenhum envio ainda. Quando o bot postar ou você criar uma oferta, aparece aqui.') : 'Nenhum envio bate com esse filtro.'}
           </div>
         )}
         {!loading && !error && grouped.map((row, gIdx) => {

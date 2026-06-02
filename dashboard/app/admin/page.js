@@ -761,6 +761,7 @@ export default function AdminPage() {
             {canAccessCustomerSuccess && <Link href="/admin/sucesso-cliente" className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Aba CS</Link>}
             <Link href="/admin/marketing-growth" className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700">Marketing & Growth</Link>
             <Link href="/admin/telegram" className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700">Telegram</Link>
+            <Link href="/admin/pipeline" className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">Pipeline técnico</Link>
             <Link href="/dashboard" className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-100">Voltar ao painel</Link>
           </div>
         </div>
