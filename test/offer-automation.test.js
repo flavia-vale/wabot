@@ -349,3 +349,124 @@ describe('runAutomation — prioritizeAMS', () => {
     assert.ok(secondFetchExcludes.includes('99'), 'segundo fetch deve excluir itemId do AMS')
   })
 })
+
+test('runAutomation: usa templateKey selecionado em mobileTemplatesJson', async () => {
+  const automation = {
+    id: 'auto-template', userId: 'user-template', keyword: 'festa', minDiscountPct: 0,
+    offersPerSend: 1, destGroupJid: 'grupo@g.us', sentItemIds: '[]', intervalMinutes: 60,
+    sortType: 2, prioritizeAMS: false, isKeySeller: false, templateKey: 'tpl_custom',
+  }
+  const sent = []
+  const dbMock = {
+    credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'app', secretKey: 'secret' }) }) },
+    botConfig: { findUnique: async () => ({
+      mobileTemplatesJson: JSON.stringify({ overrides: {}, custom: [{ key: 'tpl_custom', name: 'Meu modelo', body: '🔥 {produto}\n{preço}\n{desconto}\n{rating}\n{vendas}\n{link}' }] }),
+      copyVariationPoolJson: JSON.stringify({ greetings: [''], ctas: [''], trailers: [''] }),
+      brandingGroupLink: '',
+      couponLink: '',
+    }) },
+    offerAutomation: { update: async () => ({}) },
+  }
+
+  const result = await runAutomation(automation, {
+    dbOverride: dbMock,
+    isRunningFn: () => true,
+    fetchOffersFn: async () => ({ rawCount: 1, offers: [{
+      itemId: '42', productName: 'Balão metalizado', priceMin: '19.9', priceDiscountRate: '20',
+      offerLink: 'https://shope.ee/balao', ratingStar: 4.7, sales: 1200, imageUrl: 'https://img.test/balao.jpg',
+    }] }),
+    sendBroadcastFn: async (_userId, text) => sent.push(text),
+  })
+
+  assert.deepEqual(result, { sent: 1 })
+  assert.match(sent[0], /🔥 Balão metalizado/)
+  assert.match(sent[0], /R\$/)
+  assert.match(sent[0], /-20% OFF/)
+  assert.match(sent[0], /⭐ 4\.7/)
+  assert.match(sent[0], /1\.200\+ vendidos/)
+  assert.match(sent[0], /https:\/\/shope\.ee\/balao/)
+})
+
+test('runAutomation: sem templateKey cai no Automático clássico', async () => {
+  const automation = {
+    id: 'auto-default-template', userId: 'user-template', keyword: 'festa', minDiscountPct: 0,
+    offersPerSend: 1, destGroupJid: 'grupo@g.us', sentItemIds: '[]', intervalMinutes: 60,
+    sortType: 2, prioritizeAMS: false, isKeySeller: false,
+  }
+  const sent = []
+  const dbMock = {
+    credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'app', secretKey: 'secret' }) }) },
+    botConfig: { findUnique: async () => ({
+      mobileTemplatesJson: '{}',
+      copyVariationPoolJson: JSON.stringify({ greetings: [''], ctas: [''], trailers: [''] }),
+      brandingGroupLink: '',
+      couponLink: '',
+    }) },
+    offerAutomation: { update: async () => ({}) },
+  }
+
+  await runAutomation(automation, {
+    dbOverride: dbMock,
+    isRunningFn: () => true,
+    fetchOffersFn: async () => ({ rawCount: 1, offers: [{
+      itemId: '99', productName: 'Kit festa', priceMin: '50', priceDiscountRate: '10',
+      offerLink: 'https://shope.ee/kit', ratingStar: null, sales: null,
+    }] }),
+    sendBroadcastFn: async (_userId, text) => sent.push(text),
+  })
+
+  assert.match(sent[0], /🏷️ \*Kit festa\*/)
+  assert.match(sent[0], /👉 https:\/\/shope\.ee\/kit/)
+})
+
+test('POST /api/offer-automations: persists templateKey', async () => {
+  let createdData
+  const dbMock = {
+    offerAutomation: {
+      create: async ({ data }) => { createdData = data; return { id: 'a1', ...data } },
+    },
+  }
+  const app = buildApp(dbMock)
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/offer-automations',
+    payload: {
+      destGroupJid: '123@g.us', destGroupName: 'Grupo', keyword: 'festa',
+      intervalMinutes: 60, offersPerSend: 1, minDiscountPct: 0, templateKey: 'automatico_classico',
+    },
+  })
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(createdData.templateKey, 'automatico_classico')
+})
+
+test('PUT /api/offer-automations/:id: updates templateKey', async () => {
+  let updatedData
+  const dbMock = {
+    offerAutomation: {
+      findFirst: async () => ({ id: 'a1', userId: 'user-1' }),
+      update: async ({ data }) => { updatedData = data; return { id: 'a1', ...data } },
+    },
+  }
+  const app = buildApp(dbMock)
+  const res = await app.inject({ method: 'PUT', url: '/api/offer-automations/a1', payload: { templateKey: 'tpl_custom' } })
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(updatedData.templateKey, 'tpl_custom')
+})
+
+test('POST /api/offer-automations: rejects invalid templateKey characters', async () => {
+  const dbMock = { offerAutomation: { create: async () => ({}) } }
+  const app = buildApp(dbMock)
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/offer-automations',
+    payload: {
+      destGroupJid: '123@g.us', keyword: 'festa', intervalMinutes: 60, offersPerSend: 1,
+      templateKey: '../bad',
+    },
+  })
+
+  assert.equal(res.statusCode, 400)
+  assert.match(JSON.parse(res.body).error, /template/i)
+})

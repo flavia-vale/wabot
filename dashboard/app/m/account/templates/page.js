@@ -18,7 +18,7 @@ import {
   withoutCustomTemplate,
 } from '@/lib/mobileTemplateStore'
 
-const VARIABLES = ['{produto}', '{preço}', '{preço_de}', '{link}', '{loja}']
+const VARIABLES = ['{produto}', '{preço}', '{preço_de}', '{desconto}', '{rating}', '{vendas}', '{link}', '{loja}']
 
 export default function TemplatesPage() {
   useMobileRoutePerf('m/account/templates')
@@ -196,7 +196,7 @@ export default function TemplatesPage() {
       </div>
 
       <div style={{ padding: '12px 16px 0', fontSize: 11.5, color: 'var(--ink-soft)', lineHeight: 1.5 }}>
-        Os 4 modelos padrão podem ser editados. Seus modelos ficam salvos na sua conta e sincronizam entre celular e computador.
+        Os modelos padrão podem ser editados. Seus modelos ficam salvos na sua conta e sincronizam entre celular e computador.
       </div>
 
       <div style={{ padding: '18px 16px 24px', display: 'grid', gap: 8 }}>
