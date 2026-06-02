@@ -196,6 +196,8 @@ model BotConfig {
   copyVariationPoolJson   String  @default("{}")
   probeAccountSessionId   String?
   probeEnabled            Boolean @default(false)
+  mobileTemplatesJson     String  @default("{}")
+  mobileCouponLinksJson   String  @default("{}")
   preservationEnabled     Boolean @default(false)
   updatedAt       DateTime @updatedAt
 }
