@@ -179,7 +179,7 @@ test('runAutomation: retorna skipped quando não há credenciais Shopee', async 
   const automation = {
     id: 'auto2', userId: 'u1', keyword: 'festa', minDiscountPct: 0,
     offersPerSend: 2, destGroupJid: '123@g.us', sentItemIds: '[]',
-    intervalMinutes: 120, sortType: 2, isAMSOffer: false, isKeySeller: false,
+    intervalMinutes: 120, sortType: 2, prioritizeAMS: false, isKeySeller: false,
   }
   // Com bot não rodando, retorna imediatamente sem tocar em DB
   const result = await runAutomation(automation, { isRunningFn: () => false })

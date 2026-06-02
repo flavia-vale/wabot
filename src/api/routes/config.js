@@ -55,6 +55,7 @@ const DEFAULTS = {
   postToStatus: false,
   brandingGroupLink: '',
   brandingCtaText: DEFAULT_BRANDING_CTA_TEXT,
+  couponLink: '',
   copyVariationPoolJson: DEFAULT_COPY_VARIATION_POOL_JSON,
 }
 
@@ -85,7 +86,7 @@ export async function configRoutes(app) {
 
   app.put('/', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
-    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg, feedGlobal, postToStatus, brandingGroupLink, brandingCtaText, copyVariationPoolJson } = req.body ?? {}
+    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg, feedGlobal, postToStatus, brandingGroupLink, brandingCtaText, couponLink, copyVariationPoolJson } = req.body ?? {}
 
     if (delayMin !== undefined && !isIntegerInRange(delayMin)) {
       return reply.code(400).send({ error: 'delayMin deve ser um número inteiro entre 0 e 300' })
@@ -141,6 +142,7 @@ export async function configRoutes(app) {
         postToStatus: postToStatus ?? DEFAULTS.postToStatus,
         brandingGroupLink: normalizedBrandingGroupLink,
         brandingCtaText: normalizedBrandingCtaText,
+        couponLink: String(couponLink ?? '').trim(),
         ...(copyVariationPoolJson !== undefined && { copyVariationPoolJson }),
       },
       update: {
@@ -153,6 +155,7 @@ export async function configRoutes(app) {
         ...(postToStatus !== undefined && { postToStatus }),
         ...(brandingGroupLink !== undefined && { brandingGroupLink: normalizedBrandingGroupLink }),
         ...(brandingCtaText !== undefined && { brandingCtaText: normalizedBrandingCtaText }),
+        ...(couponLink !== undefined && { couponLink: String(couponLink ?? '').trim() }),
         ...(copyVariationPoolJson !== undefined && { copyVariationPoolJson }),
       },
     })
