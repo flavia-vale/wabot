@@ -97,6 +97,7 @@ export default function VariacoesDeTextoPage() {
         value={value}
         onChange={next => setValue(v => ({ ...v, ...next }))}
         disabled={saving}
+        showPresets={false}
       />
 
       <div className="flex items-center gap-3">

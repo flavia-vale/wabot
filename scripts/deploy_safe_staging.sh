@@ -265,6 +265,9 @@ else
   fi
 fi
 
+echo "  Regenerando Prisma Client após validação/aplicação das migrations..."
+npx prisma generate
+
 echo "[5/9] Install dashboard dependencies sem alterar lockfile"
 cd "$DASHBOARD_DIR"
 run_npm_ci_with_recovery "dashboard"
