@@ -347,6 +347,9 @@ export const api = {
     apiFetch(`/api/offer-automations/${id}`, { method: 'DELETE' }),
   offerAutomationTrigger: (id) =>
     apiFetch(`/api/offer-automations/${id}/trigger`, { method: 'POST' }),
+  // [TESTE — temporário] Busca crua na Shopee com parâmetros escolhidos pelo usuário.
+  offerAutomationSearch: (data) =>
+    apiFetch('/api/offer-automations/search', { method: 'POST', body: JSON.stringify(data) }),
   variationsGet: () => apiFetch('/api/config'),
   variationsUpdate: (copyVariationPoolJson) =>
     apiFetch('/api/config', { method: 'PUT', body: JSON.stringify({ copyVariationPoolJson }) }),

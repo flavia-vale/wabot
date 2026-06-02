@@ -41,6 +41,28 @@ const OFFERS_PER_SEND_OPTIONS = [
   { value: 3, label: '3 produtos por envio' },
 ]
 
+// [TESTE — temporário] Opções dos parâmetros crus do productOfferV2 (Shopee).
+const SEARCH_SORT_OPTIONS = [
+  { value: 1, label: 'Relevância', help: 'Ordena pelos produtos mais relevantes para a palavra-chave.' },
+  { value: 2, label: 'Mais vendidos', help: 'Ordena pelos produtos com maior número de vendas.' },
+  { value: 3, label: 'Maior preço', help: 'Do mais caro para o mais barato.' },
+  { value: 4, label: 'Menor preço', help: 'Do mais barato para o mais caro.' },
+  { value: 5, label: 'Maior comissão', help: 'Ordena pela maior taxa de comissão de afiliado.' },
+]
+
+const SEARCH_LIST_OPTIONS = [
+  { value: 1, label: 'Ampla', help: 'Busca aberta — retorna mais resultados para a palavra-chave (recomendada).' },
+  { value: 2, label: 'Top performance', help: 'Lista mais restrita, só produtos de alta performance — pode vir vazia.' },
+]
+
+const emptySearch = {
+  keyword: '',
+  sortType: 2,
+  listType: 1,
+  isAMSOffer: false,
+  isKeySeller: false,
+}
+
 const emptyForm = {
   destGroupJid: '',
   destGroupName: '',
@@ -73,6 +95,11 @@ export default function OfertasAutomaticasPage() {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [triggering, setTriggering] = useState(null)
   const [triggerResult, setTriggerResult] = useState({})
+  // [TESTE — temporário] Estado do painel de busca crua.
+  const [searchForm, setSearchForm] = useState(emptySearch)
+  const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState('')
+  const [searchResult, setSearchResult] = useState(null)
 
   async function load() {
     setLoading(true)
@@ -170,6 +197,25 @@ export default function OfertasAutomaticasPage() {
     }
   }
 
+  // [TESTE — temporário] Dispara a busca crua e mostra o JSON dos resultados.
+  async function handleSearch() {
+    if (!searchForm.keyword.trim()) {
+      setSearchError('Informe uma palavra-chave para buscar.')
+      return
+    }
+    setSearching(true)
+    setSearchError('')
+    setSearchResult(null)
+    try {
+      const res = await api.offerAutomationSearch(searchForm)
+      setSearchResult(res)
+    } catch (err) {
+      setSearchError(err.message)
+    } finally {
+      setSearching(false)
+    }
+  }
+
   if (loading) return <LoadingState />
 
   return (
@@ -194,6 +240,103 @@ export default function OfertasAutomaticasPage() {
         <Link href="/dashboard/variacoes-de-texto" className="text-green-700 font-medium hover:underline shrink-0 ml-4">
           Editar ganchos e CTAs →
         </Link>
+      </div>
+
+      {/* [TESTE — temporário] Painel de busca crua na Shopee. Remover depois. */}
+      <div className="border-2 border-dashed border-amber-300 rounded-lg p-4 bg-amber-50 space-y-3">
+        <div>
+          <h2 className="font-semibold text-amber-900 text-sm">🧪 Busca de teste (temporário)</h2>
+          <p className="text-xs text-amber-700 mt-1">
+            Escolha os parâmetros e veja os 20 primeiros resultados crus da Shopee, sem filtro de desconto nem deduplicação.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-amber-900 mb-1">Palavra-chave</label>
+          <input
+            type="text"
+            value={searchForm.keyword}
+            onChange={e => setSearchForm(f => ({ ...f, keyword: e.target.value }))}
+            placeholder="Ex: fone bluetooth"
+            className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+          />
+          <p className="text-xs text-amber-600 mt-1">Termo de busca enviado à Shopee.</p>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-amber-900 mb-1">Ordenação (sortType)</label>
+          <select
+            value={searchForm.sortType}
+            onChange={e => setSearchForm(f => ({ ...f, sortType: Number(e.target.value) }))}
+            className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+          >
+            {SEARCH_SORT_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.value} — {o.label}</option>
+            ))}
+          </select>
+          <p className="text-xs text-amber-600 mt-1">
+            {SEARCH_SORT_OPTIONS.find(o => o.value === searchForm.sortType)?.help}
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-amber-900 mb-1">Tipo de lista (listType)</label>
+          <select
+            value={searchForm.listType}
+            onChange={e => setSearchForm(f => ({ ...f, listType: Number(e.target.value) }))}
+            className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+          >
+            {SEARCH_LIST_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.value} — {o.label}</option>
+            ))}
+          </select>
+          <p className="text-xs text-amber-600 mt-1">
+            {SEARCH_LIST_OPTIONS.find(o => o.value === searchForm.listType)?.help}
+          </p>
+        </div>
+
+        <label className="flex items-start gap-2 text-xs text-amber-900">
+          <input
+            type="checkbox"
+            checked={searchForm.isAMSOffer}
+            onChange={e => setSearchForm(f => ({ ...f, isAMSOffer: e.target.checked }))}
+            className="mt-0.5"
+          />
+          <span>
+            <strong>isAMSOffer</strong> — retorna apenas ofertas do programa AMS (campanhas pagas/patrocinadas da Shopee).
+          </span>
+        </label>
+
+        <label className="flex items-start gap-2 text-xs text-amber-900">
+          <input
+            type="checkbox"
+            checked={searchForm.isKeySeller}
+            onChange={e => setSearchForm(f => ({ ...f, isKeySeller: e.target.checked }))}
+            className="mt-0.5"
+          />
+          <span>
+            <strong>isKeySeller</strong> — retorna apenas produtos de vendedores-chave (Key Sellers, lojas em destaque da Shopee).
+          </span>
+        </label>
+
+        <button
+          onClick={handleSearch}
+          disabled={searching}
+          className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 disabled:opacity-50"
+        >
+          {searching ? 'Buscando...' : '🔍 Realizar busca'}
+        </button>
+
+        {searchError && <Alert type="error">{searchError}</Alert>}
+
+        {searchResult && (
+          <div>
+            <p className="text-xs text-amber-700 mb-1">{searchResult.count} resultado(s) retornado(s):</p>
+            <pre className="text-xs bg-gray-900 text-green-300 rounded-lg p-3 overflow-auto max-h-96 whitespace-pre-wrap break-all">
+              {JSON.stringify(searchResult.results, null, 2)}
+            </pre>
+          </div>
+        )}
       </div>
 
       {error && <Alert type="error">{error}</Alert>}

@@ -1,5 +1,7 @@
 import dbDefault from '../../db.js'
 import { runAutomation } from '../../offerAutomation/dispatcher.js'
+import { searchOffersRaw, SEARCH_RESULT_LIMIT } from '../../offerAutomation/shopeeOffers.js'
+import { parseCredentialData } from '../../credentialHealth.js'
 
 const VALID_INTERVALS = [60, 120, 240, 360, 720, 1440]
 const MAX_OFFERS_PER_SEND = 5
@@ -94,6 +96,38 @@ export async function offerAutomationRoutes(app, opts = {}) {
     if (!existing) return reply.code(404).send({ error: 'Automação não encontrada' })
     await db.offerAutomation.delete({ where: { id: req.params.id } })
     return { ok: true }
+  })
+
+  // [TESTE — temporário] Busca crua no productOfferV2 com os parâmetros que o
+  // usuário escolher, devolvendo os primeiros resultados sem filtro. Remover
+  // junto com o painel de teste do dashboard.
+  app.post('/search', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const { keyword, sortType, listType, isAMSOffer, isKeySeller } = req.body ?? {}
+    if (!keyword?.trim()) return reply.code(400).send({ error: 'Palavra-chave obrigatória' })
+
+    const credRow = await db.credential.findUnique({
+      where: { userId_platform: { userId: req.user.sub, platform: 'shopee' } },
+    })
+    if (!credRow) return reply.code(400).send({ error: 'Sem credenciais da Shopee. Configure appId e secretKey.' })
+    const creds = parseCredentialData(credRow.data)
+    if (!creds?.appId || !creds?.secretKey) {
+      return reply.code(400).send({ error: 'Credenciais da Shopee incompletas (appId/secretKey).' })
+    }
+
+    try {
+      const results = await searchOffersRaw({
+        keyword: keyword.trim(),
+        creds,
+        sortType: Number(sortType ?? 2),
+        listType: Number(listType ?? 1),
+        isAMSOffer: Boolean(isAMSOffer),
+        isKeySeller: Boolean(isKeySeller),
+        limit: SEARCH_RESULT_LIMIT,
+      })
+      return { ok: true, count: results.length, results }
+    } catch (err) {
+      return reply.code(502).send({ error: err.message })
+    }
   })
 
   app.post('/:id/trigger', { onRequest: [app.authenticate] }, async (req, reply) => {

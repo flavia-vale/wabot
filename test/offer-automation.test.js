@@ -61,6 +61,11 @@ test('buildOffersQuery: usa lista ampla por padrão para evitar no_offers_found 
   assert.ok(!q.includes('listType: 2'))
 })
 
+test('buildOffersQuery: respeita listType customizado escolhido pelo usuário', () => {
+  const q = buildOffersQuery({ keyword: 'festa', page: 1, limit: 20, listType: 2 })
+  assert.ok(q.includes('listType: 2'))
+})
+
 test('buildOfferCandidateLimit: busca candidatos suficientes para filtrar descontos e deduplicados', () => {
   assert.equal(buildOfferCandidateLimit(1), 20)
   assert.equal(buildOfferCandidateLimit(3), 30)
@@ -204,6 +209,23 @@ test('POST /api/offer-automations: rejects missing keyword', async () => {
     payload: { destGroupJid: '123@g.us', destGroupName: 'G', intervalMinutes: 60, offersPerSend: 1, minDiscountPct: 0 },
   })
   assert.equal(res.statusCode, 400)
+})
+
+test('POST /api/offer-automations/search: rejeita sem palavra-chave', async () => {
+  const app = buildApp({ offerAutomation: {}, credential: {} })
+  const res = await app.inject({ method: 'POST', url: '/api/offer-automations/search', payload: { keyword: '  ' } })
+  assert.equal(res.statusCode, 400)
+})
+
+test('POST /api/offer-automations/search: rejeita sem credenciais Shopee', async () => {
+  const dbMock = {
+    offerAutomation: {},
+    credential: { findUnique: async () => null },
+  }
+  const app = buildApp(dbMock)
+  const res = await app.inject({ method: 'POST', url: '/api/offer-automations/search', payload: { keyword: 'fone' } })
+  assert.equal(res.statusCode, 400)
+  assert.match(JSON.parse(res.body).error, /credenciais da Shopee/i)
 })
 
 test('DELETE /api/offer-automations/:id: deletes owned automation', async () => {

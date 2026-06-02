@@ -54,10 +54,14 @@ export function buildOfferCandidateLimit(limit) {
   return Math.min(Math.max(limit * 10, 20), 100)
 }
 
-export async function fetchOffers({ keyword, minDiscountPct, limit, excludeItemIds, creds, sortType = 2, isAMSOffer = false, isKeySeller = false }) {
+export const SEARCH_RESULT_LIMIT = 20
+
+// Faz a chamada bruta ao productOfferV2 e devolve os nodes crus, propagando
+// erro real da API. Compartilhado entre fetchOffers (envio real) e
+// searchOffersRaw (painel de teste).
+async function requestOfferNodes({ creds, keyword, page, limit, sortType, listType, isAMSOffer, isKeySeller }) {
   const { appId, secretKey } = creds
-  const candidateLimit = buildOfferCandidateLimit(limit)
-  const query = buildOffersQuery({ keyword, page: 1, limit: candidateLimit, sortType, listType: 1, isAMSOffer, isKeySeller })
+  const query = buildOffersQuery({ keyword, page, limit, sortType, listType, isAMSOffer, isKeySeller })
   const body = { query }
   const payload = JSON.stringify(body)
   const authHeader = buildAuth(appId, secretKey, payload)
@@ -79,6 +83,19 @@ export async function fetchOffers({ keyword, minDiscountPct, limit, excludeItemI
     throw new Error(`shopee_api_error: ${detail}`)
   }
 
-  const nodes = data?.data?.productOfferV2?.nodes ?? []
+  return data?.data?.productOfferV2?.nodes ?? []
+}
+
+export async function fetchOffers({ keyword, minDiscountPct, limit, excludeItemIds, creds, sortType = 2, isAMSOffer = false, isKeySeller = false }) {
+  const candidateLimit = buildOfferCandidateLimit(limit)
+  const nodes = await requestOfferNodes({ creds, keyword, page: 1, limit: candidateLimit, sortType, listType: 1, isAMSOffer, isKeySeller })
   return { offers: filterOffers(nodes, { minDiscountPct, excludeItemIds }), rawCount: nodes.length }
+}
+
+// Busca de teste: roda a query exatamente com os parâmetros que o usuário
+// escolheu (nada hardcoded além de page 1 e do limite de 20) e devolve os
+// resultados CRUS — sem filtro de desconto nem dedup.
+export async function searchOffersRaw({ keyword, creds, sortType = 2, listType = 1, isAMSOffer = false, isKeySeller = false, limit = SEARCH_RESULT_LIMIT }) {
+  const nodes = await requestOfferNodes({ creds, keyword, page: 1, limit, sortType, listType, isAMSOffer, isKeySeller })
+  return nodes.slice(0, limit)
 }
