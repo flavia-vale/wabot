@@ -33,6 +33,7 @@ export function buildRenderedOfferTemplatePreview({
     link: OFFER_TEMPLATE_PREVIEW_SAMPLE.link,
     template: template?.key,
     templateBody: template?.body,
+    preserveAutomationPlaceholders: true,
   })
 
   return applyVariation(baseText, {
@@ -42,6 +43,7 @@ export function buildRenderedOfferTemplatePreview({
     poolJson: resolveCopyVariationPoolJson(copyVariationPoolJson),
     groupInviteLink: groupInviteLink || OFFER_TEMPLATE_PREVIEW_SAMPLE.groupInviteLink,
     couponLink: couponLink || OFFER_TEMPLATE_PREVIEW_SAMPLE.couponLink,
+    autoInjectWhenMissing: false,
   })
 }
 

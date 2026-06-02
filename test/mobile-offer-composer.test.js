@@ -43,6 +43,20 @@ test('template padrão Simples usa tags e preenche produto, preços e link', () 
   assert.doesNotMatch(text, /\{produto\}|\{preço_de\}|\{preço\}|\{link\}/)
 })
 
+
+test('templates com campos globais não vazam placeholders no Gerar oferta manual', () => {
+  const text = buildMobileOfferText({
+    product: { title: 'Produto manual', price: 'R$ 49,90' },
+    link: 'https://afiliado.test/manual',
+    template: 'simples',
+    templateBody: PRESET_TEMPLATE_BODIES.simples,
+  })
+
+  assert.doesNotMatch(text, /\{\{greeting\}\}|\{\{cta\}\}|\{\{trailer\}\}/)
+  assert.match(text, /Produto manual/)
+  assert.match(text, /https:\/\/afiliado\.test\/manual/)
+})
+
 test('template Simples remove a linha de preço antigo quando ele não vem do scrape', () => {
   const text = buildMobileOfferText({
     product: { title: 'Produto novo', price: 'R$ 39,90' },
@@ -158,14 +172,19 @@ test('detecta loja da oferta por dados do scrape, conversão ou hostname', () =>
   assert.equal(detectMobileOfferStoreKey({ product: {}, link: 'https://www.magazineluiza.com.br/produto' }), 'magazineluiza')
 })
 
-test('preset Automático clássico reproduz a copy atual das ofertas automáticas', () => {
+test('preset Automático clássico mostra onde gancho, CTA e fechamento entram na copy', () => {
   assert.equal(PRESET_TEMPLATE_BODIES.automatico_classico, [
+    '{{greeting}}',
+    '',
     '🏷️ *{produto}*',
     '',
     '💰 ~{preço_de}~ → *{preço}* (*{desconto}*)',
     '{rating} | {vendas}',
     '',
+    '{{cta}}',
     '👉 {link}',
+    '',
+    '{{trailer}}',
   ].join('\n'))
 })
 

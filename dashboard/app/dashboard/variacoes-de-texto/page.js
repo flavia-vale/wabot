@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
@@ -34,6 +34,7 @@ export default function VariacoesDeTextoPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
+  const templateBodyRef = useRef(null)
 
   const templates = composeTemplates(templateStore)
   const templateUsage = summarizeAutomationTemplateUsage(automations)
@@ -83,6 +84,23 @@ export default function VariacoesDeTextoPage() {
 
   function copyVariable(token) {
     try { navigator.clipboard?.writeText(token) } catch {}
+  }
+
+  function insertTemplateToken(token) {
+    const textarea = templateBodyRef.current
+    if (!textarea) {
+      copyVariable(token)
+      return
+    }
+    const start = textarea.selectionStart ?? editTemplateBody.length
+    const end = textarea.selectionEnd ?? editTemplateBody.length
+    const nextBody = `${editTemplateBody.slice(0, start)}${token}${editTemplateBody.slice(end)}`
+    setEditTemplateBody(nextBody)
+    window.setTimeout(() => {
+      textarea.focus()
+      const cursor = start + token.length
+      textarea.setSelectionRange(cursor, cursor)
+    }, 0)
   }
 
   function startCreateTemplate() {
@@ -294,21 +312,31 @@ export default function VariacoesDeTextoPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Corpo da mensagem</label>
+              <p className="mb-2 text-[11px] leading-5 text-gray-500">
+                Posicione <code className="rounded bg-white px-1 text-green-700">{'{{greeting}}'}</code>, <code className="rounded bg-white px-1 text-green-700">{'{{cta}}'}</code> e <code className="rounded bg-white px-1 text-green-700">{'{{trailer}}'}</code> onde quiser. Se apagar um deles, o bot não envia aquele bloco.
+              </p>
               <textarea
+                ref={templateBodyRef}
                 value={editTemplateBody}
                 onChange={e => setEditTemplateBody(e.target.value)}
                 rows={9}
                 className="w-full border rounded-lg px-3 py-2 text-xs font-mono leading-5 focus:outline-none focus:ring-2 focus:ring-green-500"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 rounded-lg border border-green-100 bg-white/70 p-3">
+              <div>
+                <div className="text-xs font-semibold text-gray-700">Inserir variáveis no ponto do cursor</div>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  Para remover gancho, CTA ou fechamento da mensagem, apague o respectivo token do corpo do modelo.
+                </p>
+              </div>
               {OFFER_TEMPLATE_VARIABLE_GROUPS.map(group => (
                 <div key={group.key}>
                   <div className="text-[11px] font-semibold text-gray-500 mb-1">{group.title}</div>
                   <div className="flex flex-wrap gap-1.5">
                     {group.variables.map(variable => (
-                      <button key={variable.token} type="button" onClick={() => copyVariable(variable.token)} className="rounded-full bg-white border px-2 py-1 text-xs font-semibold text-green-700">
-                        {variable.token}
+                      <button key={variable.token} type="button" onClick={() => insertTemplateToken(variable.token)} className="rounded-full bg-white border px-2 py-1 text-xs font-semibold text-green-700 hover:border-green-300 hover:bg-green-50">
+                        + {variable.token}
                       </button>
                     ))}
                   </div>

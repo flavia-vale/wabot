@@ -23,6 +23,18 @@ test('prévia renderizada mostra corpo do modelo com gancho, CTA e aviso aplicad
   assert.match(preview, /https:\/\/s\.shopee\.com\.br\/oferta-afiliada/)
 })
 
+test('prévia respeita remoção de placeholders globais do template', () => {
+  const preview = buildRenderedOfferTemplatePreview({
+    template: { key: 'sem_globais', body: '🏷️ *{produto}*\n\n👉 {link}' },
+    copyVariationPoolJson: JSON.stringify(POOL),
+  })
+
+  assert.doesNotMatch(preview, /GANCHO DE TESTE/)
+  assert.doesNotMatch(preview, /CTA DE TESTE/)
+  assert.doesNotMatch(preview, /AVISO DE TESTE/)
+  assert.match(preview, /Kit 3 Organizadores/)
+})
+
 test('sumariza uso de templates por automações ativas e pausadas', () => {
   const usage = summarizeAutomationTemplateUsage([
     { templateKey: 'automatico_classico', enabled: true, destGroupName: 'Grupo A' },

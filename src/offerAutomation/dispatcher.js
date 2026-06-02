@@ -67,6 +67,7 @@ export function formatOfferMessage(offer, keyword, templateBody = null) {
       link: offer.offerLink,
       template: DEFAULT_AUTOMATION_TEMPLATE_KEY,
       templateBody,
+      preserveAutomationPlaceholders: true,
     })
   }
 
@@ -181,6 +182,7 @@ export async function runAutomation(automation, {
       groupInviteLink,
       couponLink,
       random: true,
+      autoInjectWhenMissing: false,
     })
     await sendBroadcastFn(automation.userId, text, [automation.destGroupJid], {
       imageUrl: offer.imageUrl,

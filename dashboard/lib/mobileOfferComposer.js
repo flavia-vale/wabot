@@ -93,6 +93,7 @@ export const COUPON_STORES = [
 ]
 
 const HTTP_URL_RE = /https?:\/\/[^\s]+/gi
+const AUTOMATION_TEMPLATE_PLACEHOLDER_RE = /\{\{(?:greeting|cta|trailer|grupoLink|cupomLink)\}\}/g
 
 export function firstText(...values) {
   for (const value of values) {
@@ -161,6 +162,14 @@ export function detectMobileOfferStoreKey({ product = {}, link = '' } = {}) {
   return ''
 }
 
+export function stripAutomationTemplatePlaceholders(text = '') {
+  return String(text || '')
+    .replace(AUTOMATION_TEMPLATE_PLACEHOLDER_RE, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 export function applyTemplateVariables(body, { title = '', price = '', oldPrice = '', link = '', discount = '', rating = '', sales = '', storeName = '' } = {}) {
   let result = body
     .replace(/\{produto\}/g, title || '{produto}')
@@ -201,6 +210,7 @@ export function buildMobileOfferText({
   selectedCouponStores = [],
   couponCta = '🎟 Mais cupons da {loja}:',
   offerStoreKey = '',
+  preserveAutomationPlaceholders = false,
 } = {}) {
   const normalized = normalizeMobileOfferProduct(product, manualProduct)
 
@@ -216,7 +226,7 @@ export function buildMobileOfferText({
       sales: normalized.sales,
       storeName: normalized.storeName,
     })
-    lines = bodyText.split('\n')
+    lines = (preserveAutomationPlaceholders ? bodyText : stripAutomationTemplatePlaceholders(bodyText)).split('\n')
   } else {
     lines = [getMobileOfferTemplateHeading(template), '', normalized.title]
     if (normalized.price) {

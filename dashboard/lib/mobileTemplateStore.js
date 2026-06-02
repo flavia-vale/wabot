@@ -8,12 +8,76 @@ import { api } from './api.js'
 const STORAGE_KEY = 'wabot.mobile.templates.v1'
 
 export const PRESET_TEMPLATE_BODIES = {
-  automatico_classico: '🏷️ *{produto}*\n\n💰 ~{preço_de}~ → *{preço}* (*{desconto}*)\n{rating} | {vendas}\n\n👉 {link}',
-  simples: '🛍️ {produto}\n\n~De {preço_de}~\n💥 *Por {preço}*\n\n🛒 Compre aqui 👉 {link}',
-  achadinho: '✨ Achadinho do dia\n\n{produto}\n\nDe {preço_de} por *{preço}*\n\n👉 {link}',
-  relampago: '⚡ Oferta relâmpago\n\n{produto}\n\nDe {preço_de} por *{preço}*\n\n👉 {link}',
-  tech: '🔌 Achado tech\n\n{produto}\n\nDe {preço_de} por *{preço}*\n\n👉 {link}',
-  beleza: '💄 Oferta de beleza\n\n{produto}\n\nDe {preço_de} por *{preço}*\n\n👉 {link}',
+  automatico_classico: `{{greeting}}
+
+🏷️ *{produto}*
+
+💰 ~{preço_de}~ → *{preço}* (*{desconto}*)
+{rating} | {vendas}
+
+{{cta}}
+👉 {link}
+
+{{trailer}}`,
+  simples: `{{greeting}}
+
+🛍️ {produto}
+
+~De {preço_de}~
+💥 *Por {preço}*
+
+{{cta}}
+🛒 Compre aqui 👉 {link}
+
+{{trailer}}`,
+  achadinho: `{{greeting}}
+
+✨ Achadinho do dia
+
+{produto}
+
+De {preço_de} por *{preço}*
+
+{{cta}}
+👉 {link}
+
+{{trailer}}`,
+  relampago: `{{greeting}}
+
+⚡ Oferta relâmpago
+
+{produto}
+
+De {preço_de} por *{preço}*
+
+{{cta}}
+👉 {link}
+
+{{trailer}}`,
+  tech: `{{greeting}}
+
+🔌 Achado tech
+
+{produto}
+
+De {preço_de} por *{preço}*
+
+{{cta}}
+👉 {link}
+
+{{trailer}}`,
+  beleza: `{{greeting}}
+
+💄 Oferta de beleza
+
+{produto}
+
+De {preço_de} por *{preço}*
+
+{{cta}}
+👉 {link}
+
+{{trailer}}`,
 }
 
 const EMPTY_STORE = { overrides: {}, custom: [] }
