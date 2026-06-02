@@ -7,7 +7,11 @@ import { LoadingState } from '@/components/States'
 import { CopyVariationPoolEditor } from '@/components/preservacao/CopyVariationPoolEditor'
 
 export default function VariacoesDeTextoPage() {
-  const [value, setValue] = useState({ copyVariationPoolJson: '{}' })
+  const [value, setValue] = useState({
+    copyVariationPoolJson: '{}',
+    brandingGroupLink: '',
+    couponLink: '',
+  })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -15,7 +19,11 @@ export default function VariacoesDeTextoPage() {
 
   useEffect(() => {
     api.variationsGet()
-      .then(cfg => setValue({ copyVariationPoolJson: cfg.copyVariationPoolJson ?? '{}' }))
+      .then(cfg => setValue({
+        copyVariationPoolJson: cfg.copyVariationPoolJson ?? '{}',
+        brandingGroupLink: cfg.brandingGroupLink ?? '',
+        couponLink: cfg.couponLink ?? '',
+      }))
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
   }, [])
@@ -25,7 +33,11 @@ export default function VariacoesDeTextoPage() {
     setSaved(false)
     setError('')
     try {
-      await api.variationsUpdate(value.copyVariationPoolJson)
+      await api.variationsUpdate({
+        copyVariationPoolJson: value.copyVariationPoolJson,
+        brandingGroupLink: value.brandingGroupLink,
+        couponLink: value.couponLink,
+      })
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (err) {
@@ -48,6 +60,38 @@ export default function VariacoesDeTextoPage() {
       </div>
 
       {error && <Alert type="error">{error}</Alert>}
+
+      <div className="border rounded-lg p-4 bg-white space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-800">Links</h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Use <code className="bg-gray-100 px-1 rounded">{'{{grupoLink}}'}</code> e{' '}
+            <code className="bg-gray-100 px-1 rounded">{'{{cupomLink}}'}</code> nos seus ganchos e CTAs.
+          </p>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Link de convite do grupo</label>
+          <input
+            type="url"
+            value={value.brandingGroupLink}
+            onChange={e => setValue(v => ({ ...v, brandingGroupLink: e.target.value }))}
+            placeholder="https://chat.whatsapp.com/..."
+            disabled={saving}
+            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Link de cupom</label>
+          <input
+            type="url"
+            value={value.couponLink}
+            onChange={e => setValue(v => ({ ...v, couponLink: e.target.value }))}
+            placeholder="https://..."
+            disabled={saving}
+            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
+          />
+        </div>
+      </div>
 
       <CopyVariationPoolEditor
         value={value}
