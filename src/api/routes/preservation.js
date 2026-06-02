@@ -8,7 +8,7 @@ import { getHealth as getChannelHealth } from '../../core/channelHealth.js'
 import { recomputeScore as recomputeReportRiskScore } from '../../core/reportRiskScore.js'
 import { getClickStats } from '../../core/clickTracker.js'
 import { getProbeMonitoringSummary } from '../../core/probeEvidence.js'
-import { resolveCopyVariationPoolJson } from '../../core/copyVariation.js'
+import { DEFAULT_COPY_VARIATION_POOL_JSON, resolveCopyVariationPoolJson } from '../../core/copyVariation.js'
 import { getProbeSessionSnapshot, isProbeSessionSelectable, setProbeSession } from '../../core/probeSessions.js'
 
 const PRESERVATION_CONFIG_KEYS = [
@@ -108,10 +108,16 @@ export async function preservationRoutes(app) {
     if (await requirePreservationAccess(req, reply)) return
     const { updates, errors } = validatePartialUpdate(req.body)
     if (errors.length) return reply.code(400).send({ error: errors.join('; '), errors })
+    const data = { ...updates }
+    if ('copyVariationPoolJson' in data) data.copyVariationPoolJson = resolveCopyVariationPoolJson(data.copyVariationPoolJson)
     const updated = await db.botConfig.upsert({
       where: { userId: req.user.sub },
-      update: updates,
-      create: { userId: req.user.sub, ...updates },
+      update: data,
+      create: {
+        userId: req.user.sub,
+        copyVariationPoolJson: DEFAULT_COPY_VARIATION_POOL_JSON,
+        ...data,
+      },
     })
     return { config: pickConfig(updated) }
   })

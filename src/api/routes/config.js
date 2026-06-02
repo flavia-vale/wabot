@@ -126,7 +126,9 @@ export async function configRoutes(app) {
         brandingGroupLink: normalizedBrandingGroupLink,
         brandingCtaText: normalizedBrandingCtaText,
         couponLink: normalizedCouponLink,
-        ...(copyVariationPoolJson !== undefined && { copyVariationPoolJson }),
+        copyVariationPoolJson: copyVariationPoolJson === undefined
+          ? DEFAULTS.copyVariationPoolJson
+          : resolveCopyVariationPoolJson(copyVariationPoolJson),
         ...(mobileTemplatesJson !== undefined && { mobileTemplatesJson }),
         ...(mobileCouponLinksJson !== undefined && { mobileCouponLinksJson }),
       },
@@ -141,7 +143,7 @@ export async function configRoutes(app) {
         ...(brandingGroupLink !== undefined && { brandingGroupLink: normalizedBrandingGroupLink }),
         ...(brandingCtaText !== undefined && { brandingCtaText: normalizedBrandingCtaText }),
         ...(couponLink !== undefined && { couponLink: normalizedCouponLink }),
-        ...(copyVariationPoolJson !== undefined && { copyVariationPoolJson }),
+        ...(copyVariationPoolJson !== undefined && { copyVariationPoolJson: resolveCopyVariationPoolJson(copyVariationPoolJson) }),
         ...(mobileTemplatesJson !== undefined && { mobileTemplatesJson }),
         ...(mobileCouponLinksJson !== undefined && { mobileCouponLinksJson }),
       },

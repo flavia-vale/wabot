@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto'
 import db from '../../db.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { normalizeEmail } from '../auth-utils.js'
+import { DEFAULT_COPY_VARIATION_POOL_JSON } from '../../core/copyVariation.js'
 
 const loginAttempts = new Map()
 export const STANDARD_TRIAL_DAYS = 7
@@ -105,6 +106,17 @@ async function findUserByNormalizedEmail(email) {
     return db.user.findUnique({ where: { id: legacyUserId } })
   } catch {
     return null
+  }
+}
+
+async function createDefaultBotConfigForUser(userId) {
+  try {
+    await db.botConfig.create({
+      data: { userId, copyVariationPoolJson: DEFAULT_COPY_VARIATION_POOL_JSON },
+    })
+  } catch (err) {
+    if (String(err?.code) === 'P2002' || isPrismaShapeMismatch(err)) return
+    throw err
   }
 }
 
@@ -284,6 +296,8 @@ export async function authRoutes(app) {
         lastActivityAt: now,
         supportStatus: 'new',
       })
+
+      await createDefaultBotConfigForUser(user.id)
 
       if (referrer) {
         const base = referrer.accessExpiresAt && referrer.accessExpiresAt > new Date()
