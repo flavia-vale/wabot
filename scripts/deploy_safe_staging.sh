@@ -216,10 +216,51 @@ run_npm_ci_with_recovery "root"
 
 echo "[4/9] Apply database migrations no banco isolado de staging"
 # Skip se não houver migrations pendentes — evita tocar no DB enquanto
-# PM2 (api-staging / bot-supervisor-staging) está escrevendo, o que dispara
-# SQLITE_BUSY mesmo com busy_timeout=5000 do src/db.js.
+# PM2 está escrevendo, o que dispara SQLITE_BUSY mesmo com busy_timeout=5000
+# do src/db.js. Apps que importam src/db.js e podem segurar staging.db:
+# api-staging, bot-supervisor-staging e telegram-offer-bot-staging.
 SUPERVISOR_APP_FOR_MIGRATION="${SUPERVISOR_APP:-bot-supervisor-staging}"
+TELEGRAM_APP_FOR_MIGRATION="${TELEGRAM_APP:-telegram-offer-bot-staging}"
 MIGRATE_STOPPED_APPS=""
+
+pm2_pid_for_app() {
+  pm2 pid "$1" 2>/dev/null | tail -n 1 | tr -d '[:space:]' || true
+}
+
+wait_pm2_app_stopped_for_migration() {
+  local app="$1"
+  local timeout_seconds="${2:-45}"
+  local waited=0
+  local pid=""
+
+  while [ "$waited" -lt "$timeout_seconds" ]; do
+    pid="$(pm2_pid_for_app "$app")"
+    if [ -z "$pid" ] || [ "$pid" = "0" ]; then
+      return 0
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+
+  echo "  Aviso: $app ainda parece ativo após ${timeout_seconds}s (pid ${pid:-?}); migration pode continuar recebendo SQLITE_BUSY."
+  return 1
+}
+
+stop_app_for_migration() {
+  local app="$1"
+
+  if ! pm2 describe "$app" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if pm2 stop "$app" >/dev/null 2>&1; then
+    wait_pm2_app_stopped_for_migration "$app" 45 || true
+    MIGRATE_STOPPED_APPS="$MIGRATE_STOPPED_APPS $app"
+    echo "    - $app parado"
+  else
+    echo "    - Aviso: não foi possível parar $app via PM2"
+  fi
+}
 
 restart_apps_stopped_for_migration() {
   for app in $MIGRATE_STOPPED_APPS; do
@@ -231,20 +272,14 @@ if npx prisma migrate status 2>&1 | grep -q "Database schema is up to date"; the
   echo "  Nenhuma migration pendente — pulando migrate deploy."
 else
   # Há migration pendente. DDL como ALTER TABLE precisa de lock exclusivo no
-  # SQLite — incompatível com api-staging e bot-supervisor-staging segurando
-  # conexões WAL. Paramos os dois antes de migrar e religamos logo depois.
-  # Janela de indisponibilidade ~10-30s; aceitável por ser staging e por só
-  # acontecer quando realmente há migration pendente.
+  # SQLite — incompatível com processos segurando conexões WAL. Paramos todos
+  # os PM2 versionados que importam Prisma antes de migrar e religamos logo
+  # depois. Janela de indisponibilidade ~10-30s; aceitável por ser staging e
+  # por só acontecer quando realmente há migration pendente.
   echo "  Migrations pendentes — parando processos que travam o banco..."
-  for app in "$API_APP" "$SUPERVISOR_APP_FOR_MIGRATION"; do
-    if pm2 describe "$app" >/dev/null 2>&1; then
-      if pm2 stop "$app" >/dev/null 2>&1; then
-        MIGRATE_STOPPED_APPS="$MIGRATE_STOPPED_APPS $app"
-        echo "    - $app parado"
-      fi
-    fi
-  done
-  sleep 2
+  stop_app_for_migration "$API_APP"
+  stop_app_for_migration "$SUPERVISOR_APP_FOR_MIGRATION"
+  stop_app_for_migration "$TELEGRAM_APP_FOR_MIGRATION"
 
   migrate_attempt=0
   until npx prisma migrate deploy; do
