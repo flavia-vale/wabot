@@ -44,6 +44,31 @@ export function filterOffers(offers, { minDiscountPct, excludeItemIds }) {
   })
 }
 
+// A API de afiliado da Shopee frequentemente retorna o MESMO produto sob
+// itemIds diferentes (lojas/variações distintas) — mesmo productName, preço
+// ligeiramente diferente. A dedup por itemId (filterOffers/sentItemIds) não
+// pega esse caso, então o mesmo anúncio saía duas vezes seguidas no grupo.
+// Aqui colapsamos por identidade de produto (nome normalizado), mantendo a
+// primeira ocorrência (que respeita a ordem de prioridade/sort já aplicada).
+export function productDedupKey(offer) {
+  const name = String(offer?.productName ?? '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+  return name || `item:${offer?.itemId ?? ''}`
+}
+
+export function dedupeOffersByProduct(offers, seenKeys = new Set()) {
+  const result = []
+  for (const offer of offers) {
+    const key = productDedupKey(offer)
+    if (seenKeys.has(key)) continue
+    seenKeys.add(key)
+    result.push(offer)
+  }
+  return result
+}
+
 export function buildOfferCandidateLimit(limit) {
   // Fetch more than offersPerSend because filters remove already-sent items
   // and products that do not meet the user's minimum discount threshold.
