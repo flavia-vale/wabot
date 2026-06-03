@@ -123,35 +123,78 @@ run_npm_ci_with_recovery "root"
 
 echo "[3/9] Apply database migrations"
 # Skip se não houver migrations pendentes — evita tocar no DB enquanto
-# PM2 (api / bot-supervisor) está escrevendo, o que dispara SQLITE_BUSY
-# mesmo com busy_timeout=5000 do src/db.js. Mesmo padrão do
-# deploy_safe_staging.sh.
+# PM2 está escrevendo, o que dispara SQLITE_BUSY mesmo com busy_timeout=5000
+# do src/db.js. Apps que importam src/db.js e podem segurar prod.db:
+# api, bot-supervisor, telegram-offer-bot e snapshot-cron.
 MIGRATE_STOPPED_APPS_PROD=""
+MIGRATE_STOPPED_NO_RESTART_APPS_PROD=""
+
+pm2_pid_for_app_prod() {
+  pm2 pid "$1" 2>/dev/null | tail -n 1 | tr -d '[:space:]' || true
+}
+
+wait_pm2_app_stopped_for_migration_prod() {
+  local app="$1"
+  local timeout_seconds="${2:-45}"
+  local waited=0
+  local pid=""
+
+  while [ "$waited" -lt "$timeout_seconds" ]; do
+    pid="$(pm2_pid_for_app_prod "$app")"
+    if [ -z "$pid" ] || [ "$pid" = "0" ]; then
+      return 0
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+
+  echo "  Aviso: $app ainda parece ativo após ${timeout_seconds}s (pid ${pid:-?}); migration pode continuar recebendo SQLITE_BUSY."
+  return 1
+}
+
+stop_app_for_migration_prod() {
+  local app="$1"
+  local restart_after="${2:-1}"
+
+  if ! pm2 describe "$app" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if pm2 stop "$app" >/dev/null 2>&1; then
+    wait_pm2_app_stopped_for_migration_prod "$app" 45 || true
+    if [ "$restart_after" = "1" ]; then
+      MIGRATE_STOPPED_APPS_PROD="$MIGRATE_STOPPED_APPS_PROD $app"
+      echo "    - $app parado"
+    else
+      MIGRATE_STOPPED_NO_RESTART_APPS_PROD="$MIGRATE_STOPPED_NO_RESTART_APPS_PROD $app"
+      echo "    - $app parado (não será reiniciado fora da janela do cron)"
+    fi
+  else
+    echo "    - Aviso: não foi possível parar $app via PM2"
+  fi
+}
 
 restart_apps_stopped_for_migration_prod() {
   for app in $MIGRATE_STOPPED_APPS_PROD; do
     pm2 restart "$app" --update-env >/dev/null 2>&1 || true
   done
+  if [ -n "$MIGRATE_STOPPED_NO_RESTART_APPS_PROD" ]; then
+    echo "  Apps parados para liberar o banco e preservados sem restart imediato:$MIGRATE_STOPPED_NO_RESTART_APPS_PROD"
+  fi
 }
 
 if npx prisma migrate status 2>&1 | grep -q "Database schema is up to date"; then
   echo "  Nenhuma migration pendente — pulando migrate deploy."
 else
   # Há migration pendente. DDL como ALTER TABLE precisa de lock exclusivo no
-  # SQLite — incompatível com api e bot-supervisor segurando conexões WAL.
-  # Paramos os dois antes de migrar e religamos logo depois. Janela de
-  # indisponibilidade ~10-30s, mas SÓ ocorre quando há migration pendente
-  # (eventos raros, planejados).
+  # SQLite — incompatível com processos segurando conexões WAL. Paramos todos
+  # os PM2 versionados que importam Prisma antes de migrar e religamos os
+  # serviços long-running logo depois.
   echo "  Migrations pendentes — parando processos que travam o banco..."
-  for app in "api" "bot-supervisor"; do
-    if pm2 describe "$app" >/dev/null 2>&1; then
-      if pm2 stop "$app" >/dev/null 2>&1; then
-        MIGRATE_STOPPED_APPS_PROD="$MIGRATE_STOPPED_APPS_PROD $app"
-        echo "    - $app parado"
-      fi
-    fi
-  done
-  sleep 2
+  stop_app_for_migration_prod "api" 1
+  stop_app_for_migration_prod "bot-supervisor" 1
+  stop_app_for_migration_prod "telegram-offer-bot" 1
+  stop_app_for_migration_prod "snapshot-cron" 0
 
   migrate_attempt=0
   until npx prisma migrate deploy; do
@@ -166,7 +209,7 @@ else
     sleep "$wait_s"
   done
 
-  if [ -n "$MIGRATE_STOPPED_APPS_PROD" ]; then
+  if [ -n "$MIGRATE_STOPPED_APPS_PROD" ] || [ -n "$MIGRATE_STOPPED_NO_RESTART_APPS_PROD" ]; then
     echo "  Migrations aplicadas. Religando:$MIGRATE_STOPPED_APPS_PROD"
     restart_apps_stopped_for_migration_prod
   fi
