@@ -24,7 +24,6 @@ export function MobileHScroll({ children, fadeColor = 'var(--bg)', style, conten
     if (!el) return undefined
     window.addEventListener('resize', recompute)
     return () => window.removeEventListener('resize', recompute)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [children])
 
   const fade = (side, visible) => ({

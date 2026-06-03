@@ -66,17 +66,20 @@ export default function MobileBroadcastPage() {
 
   useEffect(() => {
     let active = true
-    setLoading(true)
-    setError('')
-    api.groups()
-      .then((list) => {
-        if (!active) return
-        const postGroups = Array.isArray(list) ? list.filter((group) => group.role === 'post') : []
-        setGroups(postGroups)
-        setSelected(postGroups.filter((group) => !isChannelGroup(group)).map(groupKey))
-      })
-      .catch((err) => { if (active) setError(err.message || 'Não foi possível carregar destinos.') })
-      .finally(() => { if (active) setLoading(false) })
+    function load() {
+      setLoading(true)
+      setError('')
+      api.groups()
+        .then((list) => {
+          if (!active) return
+          const postGroups = Array.isArray(list) ? list.filter((group) => group.role === 'post') : []
+          setGroups(postGroups)
+          setSelected(postGroups.filter((group) => !isChannelGroup(group)).map(groupKey))
+        })
+        .catch((err) => { if (active) setError(err.message || 'Não foi possível carregar destinos.') })
+        .finally(() => { if (active) setLoading(false) })
+    }
+    load()
     return () => { active = false }
   }, [reloadKey])
 
