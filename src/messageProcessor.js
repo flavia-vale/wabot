@@ -1,3 +1,5 @@
+import { isOfferUrl } from './detector.js'
+
 const DEFAULT_BRANDING_CTA_TEXT = 'Participe do grupo:'
 const MAX_BRANDING_CTA_CHARS = 80
 const URL_TOKEN_CHARS = "[^\\s<>\"'`]+"
@@ -17,8 +19,8 @@ const INVITE_HOST_HINT_RE = /(?:chat\.whatsapp\.com\/|whatsapp\.com\/(?:channel|
 const CTA_KEYWORD_RE = /\b(participe|entre|acesse|siga|junte|venha|clique|link|grupo|canal|conheca)\b/i
 const CTA_DESTINATION_RE = /\b(grupo|grupos|canal|canais|whatsapp|telegram)\b/i
 const TRAILING_INVITE_CTA_RE = /(?:^|[\s|•\-–—:])(?:[^\p{L}\p{N}\s]{1,6}\s*)?(?:participe|entre|acesse|siga|junte-se|venha|clique)(?:\s+\S{1,40}){0,8}\s+(?:grupo|canal|whatsapp|telegram)(?:\s+\S{1,40}){0,4}[:：\-–—|•]*\s*$/iu
-const TRAILING_HTTP_URL_RE = /https?:\/\/[^\s<>"]+[^\s<>".,;!?)]$/i
-const ALLOWED_OFFER_HOST_RE = /(?:^|\.)((?:s\.)?shopee\.com\.br|shope\.ee|amazon\.com\.br|amzn\.to|a\.co|amzn\.divulgador\.link|amzlink\.to|mercadolivre\.com\.br|mercadolibre\.com|meli\.la|mluvem\.com|magazineluiza\.com\.br|magazinevoce\.com\.br|mlz\.me)$/i
+const ANY_HTTP_URL_RE = /https?:\/\/[^\s<>"'`]+/gi
+const TRAILING_URL_NOISE_RE = /[.,;!?)\]}'">]+$/
 
 function hasInviteLinkCandidate(text) {
   return INVITE_HOST_HINT_RE.test(String(text ?? ''))
@@ -57,34 +59,29 @@ function removeOrphanInviteCtas(text) {
     .join('\n')
 }
 
-function isAllowedOfferUrl(raw) {
-  try {
-    const url = new URL(String(raw ?? '').trim())
-    return ['http:', 'https:'].includes(url.protocol) && ALLOWED_OFFER_HOST_RE.test(url.hostname)
-  } catch {
-    return false
-  }
-}
-
-function removeTrailingIrrelevantUrlBlock(text) {
-  const lines = String(text ?? '').split('\n')
-  const idx = lines.findLastIndex(line => line.trim())
-  if (idx <= 0) return String(text ?? '')
-  const lastLine = lines[idx].trim()
-  if (!TRAILING_HTTP_URL_RE.test(lastLine)) return String(text ?? '')
-  if (isAllowedOfferUrl(lastLine)) return String(text ?? '')
-  const prev = lines[idx - 1]?.trim() || ''
-  if (!isInviteCtaOnlyLine(prev)) return String(text ?? '')
-  lines.splice(idx - 1, 2)
-  return lines.join('\n')
+// Remove qualquer URL http(s) que NÃO seja de um marketplace de oferta
+// suportado (Amazon, Shopee, Mercado Livre, Magalu). Links de outras
+// origens — landing pages, lovable.app, encurtadores aleatórios, sites do
+// próprio grupo monitorado — não são ofertas e não devem ser repassados.
+// A pontuação final ("https://x.com.") é preservada para não deixar o
+// texto truncado de forma estranha. Os links de oferta ficam intactos para
+// que applyConversionsAndBranding os substitua pelo link de afiliado.
+function removeNonOfferUrls(text) {
+  return String(text ?? '').replace(ANY_HTTP_URL_RE, (match) => {
+    const trailing = match.match(TRAILING_URL_NOISE_RE)?.[0] ?? ''
+    const core = trailing ? match.slice(0, match.length - trailing.length) : match
+    return isOfferUrl(core) ? match : trailing
+  })
 }
 
 export function sanitizeInviteLinks(text) {
   const raw = String(text ?? '')
-  if (!hasInviteLinkCandidate(raw)) return normalizeMessageWhitespace(removeTrailingIrrelevantUrlBlock(raw))
   GROUP_INVITE_URL_RE.lastIndex = 0
-  const withoutInviteLinks = raw.replace(GROUP_INVITE_URL_RE, removeInviteUrl)
-  return normalizeMessageWhitespace(removeTrailingIrrelevantUrlBlock(removeOrphanInviteCtas(withoutInviteLinks)))
+  const withoutInviteLinks = hasInviteLinkCandidate(raw)
+    ? raw.replace(GROUP_INVITE_URL_RE, removeInviteUrl)
+    : raw
+  const withoutNonOfferUrls = removeNonOfferUrls(withoutInviteLinks)
+  return normalizeMessageWhitespace(removeOrphanInviteCtas(withoutNonOfferUrls))
 }
 
 export function normalizeBrandingCtaText(text) {

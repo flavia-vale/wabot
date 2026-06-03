@@ -4,13 +4,25 @@ import assert from 'node:assert/strict'
 import { applyConversionsAndBranding, appendBrandingFooter, buildProcessedMessage, DEFAULT_BRANDING_CTA_TEXT, extractKeywordTokens, hasSignificantTokenOverlap, isValidBrandingLink, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from '../src/messageProcessor.js'
 
 test('sanitizeInviteLinks remove convites WhatsApp e Telegram preservando oferta', () => {
-  const original = 'Oferta top https://produto.example/item\nEntre no grupo https://chat.whatsapp.com/AbCdEf12345 e t.me/+ConviteXYZ'
+  const original = 'Oferta top https://amzn.to/item\nEntre no grupo https://chat.whatsapp.com/AbCdEf12345 e t.me/+ConviteXYZ'
   const sanitized = sanitizeInviteLinks(original)
 
   assert.equal(sanitized.includes('chat.whatsapp.com'), false)
   assert.equal(sanitized.includes('t.me/+'), false)
-  assert.equal(sanitized.includes('https://produto.example/item'), true)
+  assert.equal(sanitized.includes('https://amzn.to/item'), true)
   assert.equal(sanitized.startsWith('Oferta top'), true)
+})
+
+test('sanitizeInviteLinks remove links que não são de marketplace de oferta em qualquer posição', () => {
+  const sanitized = sanitizeInviteLinks([
+    '🔥 Oferta imperdível https://amzn.to/produto',
+    'Veja mais no nosso site https://ofertasdagrasi.lovable.app hoje',
+    'Outro link aleatório: https://bit.ly/xyz',
+  ].join('\n'))
+
+  assert.equal(sanitized.includes('lovable.app'), false)
+  assert.equal(sanitized.includes('bit.ly'), false)
+  assert.equal(sanitized.includes('https://amzn.to/produto'), true)
 })
 
 test('sanitizeInviteLinks remove convites com querystring, canais e grupos publicos do Telegram', () => {
@@ -31,7 +43,7 @@ test('sanitizeInviteLinks remove convites com querystring, canais e grupos publi
 })
 
 test('buildProcessedMessage sanitiza antes de converter e anexa branding válido', () => {
-  const originalUrl = 'https://produto.example/item'
+  const originalUrl = 'https://amazon.com.br/item'
   const converted = 'https://afiliado.example/item?tag=abc'
   const brandingLink = 'https://chat.whatsapp.com/MeuGrupo123'
   const finalText = buildProcessedMessage(
@@ -110,8 +122,8 @@ test('appendBrandingFooter permite CTA personalizado e normaliza texto vazio par
 
 test('buildProcessedMessage usa CTA personalizado no rodape', () => {
   const finalText = buildProcessedMessage(
-    'Oferta https://produto.example/item',
-    [{ url: 'https://produto.example/item', converted: 'https://afiliado.example/item' }],
+    'Oferta https://amazon.com.br/item',
+    [{ url: 'https://amazon.com.br/item', converted: 'https://afiliado.example/item' }],
     'https://t.me/meu_grupo',
     'Receba mais ofertas:',
   )
@@ -135,10 +147,10 @@ test('applyConversionsAndBranding reutiliza texto já sanitizado sem segunda lim
 })
 
 test('sanitizeInviteLinks processa entrada grande hostil sem backtracking catastrófico', () => {
-  const hostile = `${'x'.repeat(20_000)} t.me/${'a'.repeat(20_000)} https://produto.example/item`
+  const hostile = `${'x'.repeat(20_000)} t.me/${'a'.repeat(20_000)} https://amzn.to/item`
   const sanitized = sanitizeInviteLinks(hostile)
 
-  assert.equal(sanitized.includes('https://produto.example/item'), true)
+  assert.equal(sanitized.includes('https://amzn.to/item'), true)
   assert.equal(sanitized.includes('t.me/'), false)
 })
 
