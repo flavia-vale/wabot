@@ -1,10 +1,12 @@
 import dbDefault from '../../db.js'
 import { runAutomation } from '../../offerAutomation/dispatcher.js'
+import { normalizeDailyRunTime } from '../../offerAutomation/schedule.js'
 
 const VALID_INTERVALS = [15, 30, 45, 60, 120, 240, 360, 720, 1440]
 const MAX_OFFERS_PER_SEND = 5
 const DEFAULT_TEMPLATE_KEY = 'automatico_classico'
 const TEMPLATE_KEY_RE = /^[a-zA-Z0-9_-]{1,80}$/
+const DAILY_INTERVAL_MINUTES = 1440
 
 function normalizeTemplateKey(value) {
   const key = String(value ?? DEFAULT_TEMPLATE_KEY).trim() || DEFAULT_TEMPLATE_KEY
@@ -23,12 +25,17 @@ export async function offerAutomationRoutes(app, opts = {}) {
   })
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const { destGroupJid, destGroupName, keyword, intervalMinutes, offersPerSend, minDiscountPct, sortType, prioritizeAMS, isKeySeller, templateKey } = req.body ?? {}
+    const { destGroupJid, destGroupName, keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, sortType, prioritizeAMS, isKeySeller, templateKey } = req.body ?? {}
 
     if (!keyword?.trim()) return reply.code(400).send({ error: 'Palavra-chave obrigatória' })
     if (!destGroupJid) return reply.code(400).send({ error: 'Grupo de destino obrigatório' })
     if (!VALID_INTERVALS.includes(Number(intervalMinutes))) {
       return reply.code(400).send({ error: `Intervalo inválido. Valores aceitos: ${VALID_INTERVALS.join(', ')} minutos` })
+    }
+    const parsedIntervalMinutes = Number(intervalMinutes)
+    const parsedDailyRunTime = dailyRunTime == null || dailyRunTime === '' ? null : normalizeDailyRunTime(dailyRunTime)
+    if (parsedIntervalMinutes === DAILY_INTERVAL_MINUTES && dailyRunTime && !parsedDailyRunTime) {
+      return reply.code(400).send({ error: 'Horário diário inválido. Use HH:mm.' })
     }
     const perSend = Number(offersPerSend)
     if (!perSend || perSend < 1 || perSend > MAX_OFFERS_PER_SEND) {
@@ -49,7 +56,8 @@ export async function offerAutomationRoutes(app, opts = {}) {
         destGroupName: destGroupName ?? destGroupJid,
         keyword: keyword.trim(),
         templateKey: parsedTemplateKey,
-        intervalMinutes: Number(intervalMinutes),
+        intervalMinutes: parsedIntervalMinutes,
+        dailyRunTime: parsedIntervalMinutes === DAILY_INTERVAL_MINUTES ? parsedDailyRunTime : null,
         offersPerSend: perSend,
         minDiscountPct: Number(minDiscountPct) || 0,
         sortType: parsedSortType,
@@ -65,7 +73,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
     })
     if (!existing) return reply.code(404).send({ error: 'Automação não encontrada' })
 
-    const { keyword, intervalMinutes, offersPerSend, minDiscountPct, enabled, destGroupJid, destGroupName, prioritizeAMS, templateKey } = req.body ?? {}
+    const { keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, enabled, destGroupJid, destGroupName, prioritizeAMS, templateKey } = req.body ?? {}
     const updates = {}
 
     if (keyword !== undefined) {
@@ -80,6 +88,15 @@ export async function offerAutomationRoutes(app, opts = {}) {
         return reply.code(400).send({ error: 'Intervalo inválido' })
       }
       updates.intervalMinutes = Number(intervalMinutes)
+      if (Number(intervalMinutes) !== DAILY_INTERVAL_MINUTES) updates.dailyRunTime = null
+    }
+    if (dailyRunTime !== undefined) {
+      const parsedDailyRunTime = dailyRunTime === '' || dailyRunTime === null ? null : normalizeDailyRunTime(dailyRunTime)
+      if (dailyRunTime && !parsedDailyRunTime) {
+        return reply.code(400).send({ error: 'Horário diário inválido. Use HH:mm.' })
+      }
+      const effectiveInterval = updates.intervalMinutes ?? existing.intervalMinutes
+      updates.dailyRunTime = Number(effectiveInterval) === DAILY_INTERVAL_MINUTES ? parsedDailyRunTime : null
     }
     if (offersPerSend !== undefined) {
       const ps = Number(offersPerSend)

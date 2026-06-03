@@ -1,5 +1,6 @@
 import db from '../db.js'
 import { runAutomation } from './dispatcher.js'
+import { isOfferAutomationDue } from './schedule.js'
 
 const TICK_MS = 60_000
 
@@ -15,11 +16,7 @@ async function tick() {
     })
 
     for (const automation of automations) {
-      const dueAt = automation.lastSentAt
-        ? new Date(automation.lastSentAt.getTime() + automation.intervalMinutes * 60_000)
-        : new Date(0)
-
-      if (now < dueAt) continue
+      if (!isOfferAutomationDue(automation, now)) continue
 
       try {
         await runAutomation(automation)
