@@ -1,4 +1,4 @@
-import { fetchOffers as defaultFetchOffers } from './shopeeOffers.js'
+import { fetchOffers as defaultFetchOffers, dedupeOffersByProduct } from './shopeeOffers.js'
 import { sendBroadcast, isRunning } from '../manager.js'
 import db from '../db.js'
 import { parseCredentialData } from '../credentialHealth.js'
@@ -157,6 +157,11 @@ export async function runAutomation(automation, {
   } catch (err) {
     return { error: err.message }
   }
+
+  // A Shopee devolve o mesmo produto sob itemIds diferentes (mesmo nome, preço
+  // ligeiramente distinto). Sem colapsar por nome, ofertas idênticas saíam em
+  // duplicata no mesmo envio. A dedup por itemId (sentItemIds) não cobre isso.
+  offers = dedupeOffersByProduct(offers)
 
   if (!offers.length) {
     // rawCount > 0 significa que a Shopee retornou produtos, mas o filtro de

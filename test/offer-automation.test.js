@@ -1,6 +1,6 @@
 import test, { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { filterOffers, buildOffersQuery, buildOfferCandidateLimit } from '../src/offerAutomation/shopeeOffers.js'
+import { filterOffers, buildOffersQuery, buildOfferCandidateLimit, dedupeOffersByProduct, productDedupKey } from '../src/offerAutomation/shopeeOffers.js'
 
 test('filterOffers: remove offers below minDiscountPct', () => {
   const offers = [
@@ -65,6 +65,22 @@ test('buildOfferCandidateLimit: busca candidatos suficientes para filtrar descon
   assert.equal(buildOfferCandidateLimit(1), 20)
   assert.equal(buildOfferCandidateLimit(3), 30)
   assert.equal(buildOfferCandidateLimit(50), 100)
+})
+
+test('productDedupKey: normaliza nome (case/espaços) e cai em itemId quando sem nome', () => {
+  assert.equal(productDedupKey({ productName: '  Balão  Metalizado   Estrela ' }), 'balão metalizado estrela')
+  assert.equal(productDedupKey({ productName: 'BALÃO metalizado estrela' }), 'balão metalizado estrela')
+  assert.equal(productDedupKey({ itemId: '42' }), 'item:42')
+})
+
+test('dedupeOffersByProduct: colapsa mesmo produto com itemIds diferentes mantendo o primeiro', () => {
+  const offers = [
+    { itemId: '1', productName: 'Kit Decoração Balão', priceMin: 7157 },
+    { itemId: '2', productName: 'Kit Decoração Balão', priceMin: 7320 },
+    { itemId: '3', productName: 'Painel Festa', priceMin: 3000 },
+  ]
+  const result = dedupeOffersByProduct(offers)
+  assert.deepEqual(result.map(o => o.itemId), ['1', '3'])
 })
 
 import { formatOfferMessage, runAutomation } from '../src/offerAutomation/dispatcher.js'
@@ -271,6 +287,34 @@ test('runAutomation: envia imagem do anúncio junto com a oferta automática', a
     source: 'offerAutomation',
   })
   assert.deepEqual(updates[0].sentItemIds, JSON.stringify(['42']))
+})
+
+test('runAutomation: não envia o mesmo produto duas vezes quando a Shopee repete sob itemIds diferentes', async () => {
+  const sent = []
+  const updates = []
+  const automation = baseAutomation({
+    id: 'auto-dup', userId: 'user-dup', minDiscountPct: 0, offersPerSend: 2,
+  })
+  const dbOverride = {
+    credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'a', secretKey: 's' }) }) },
+    botConfig: { findUnique: async () => ({ copyVariationPoolJson: '{}' }) },
+    offerAutomation: { update: async ({ data }) => { updates.push(data); return {} } },
+  }
+
+  const result = await runAutomation(automation, {
+    dbOverride,
+    isRunningFn: () => true,
+    fetchOffersFn: async () => ({ rawCount: 2, offers: [
+      { itemId: '100', productName: 'Decoração Aniversário Balão', priceMin: 7157, priceDiscountRate: 47, offerLink: 'https://s.shopee.com.br/a' },
+      { itemId: '200', productName: 'Decoração Aniversário Balão', priceMin: 7320, priceDiscountRate: 37, offerLink: 'https://s.shopee.com.br/b' },
+    ] }),
+    sendBroadcastFn: async (...args) => { sent.push(args) },
+  })
+
+  assert.deepEqual(result, { sent: 1 })
+  assert.equal(sent.length, 1)
+  // grava o itemId efetivamente enviado para dedup futura
+  assert.deepEqual(JSON.parse(updates[0].sentItemIds), ['100'])
 })
 
 describe('runAutomation — prioritizeAMS', () => {
