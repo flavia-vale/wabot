@@ -28,32 +28,32 @@ test('buildScrapedOffer: painel usa link convertido como displayUrl (keepOrigina
   assert.equal(offer.conversion.success, true)
 })
 
-test('buildScrapedOffer: Telegram busca pelo convertido mas devolve link original (keepOriginalLink=true)', async () => {
+test('buildScrapedOffer: Telegram busca pelo ORIGINAL (um hit) e devolve o link original', async () => {
   const original = 'https://www.amazon.com.br/dp/B09VQ39F41'
-  const converted = 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20'
+  let converterCalls = 0
   const scraped = []
 
   const offer = await buildScrapedOffer({
     url: original,
     credentialsMap: amazonCreds,
     keepOriginalLink: true,
-    convertLink: async () => ({ url: converted }),
+    convertLink: async () => { converterCalls += 1; return { url: original + '?tag=botinho-20' } },
     fetchProductInfo: async (url) => {
       scraped.push(url)
       return { title: 'Mixer', oldPrice: '199', newPrice: '149', finalUrl: url }
     },
   })
 
-  // Buscou os dados pelo link CONVERTIDO (ganha cookie/afiliado)...
-  assert.deepEqual(scraped, [converted])
-  // ...mas o link mostrado ao usuário é o ORIGINAL colado.
+  // Telegram: o original já trouxe preço → NÃO converte (evita 2º hit na loja).
+  assert.equal(converterCalls, 0)
+  assert.deepEqual(scraped, [original])
   assert.equal(offer.displayUrl, original)
-  assert.equal(offer.offerUrl, converted)
+  assert.equal(offer.offerUrl, original)
   assert.equal(offer.title, 'Mixer')
   assert.equal(offer.newPrice, '149')
 })
 
-test('buildScrapedOffer: sem credenciais não converte e scrapa o link cru', async () => {
+test('buildScrapedOffer: sem credenciais não converte e scrapa o link original', async () => {
   const original = 'https://www.amazon.com.br/dp/B09VQ39F41'
   let converterCalls = 0
   const scraped = []
@@ -71,10 +71,9 @@ test('buildScrapedOffer: sem credenciais não converte e scrapa o link cru', asy
   assert.equal(offer.offerUrl, original)
   assert.equal(offer.displayUrl, original)
   assert.equal(offer.conversion.success, false)
-  assert.equal(offer.conversion.reasonCode, 'MISSING_CREDENTIALS')
 })
 
-test('buildScrapedOffer: completa preço pelo original quando convertido traz só título', async () => {
+test('buildScrapedOffer: Telegram converte como FALLBACK quando o original não traz preço', async () => {
   const original = 'https://www.amazon.com.br/Mixer/dp/B09VQ39F41'
   const converted = 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20'
   const scraped = []
@@ -86,16 +85,19 @@ test('buildScrapedOffer: completa preço pelo original quando convertido traz s�
     convertLink: async () => ({ url: converted }),
     fetchProductInfo: async (url) => {
       scraped.push(url)
-      if (url === converted) return { title: 'Mixer Turbo', oldPrice: '', newPrice: '', finalUrl: converted }
-      return { title: 'Mixer Original', oldPrice: '199', newPrice: '149', finalUrl: original }
+      // original: título sem preço → dispara conversão+scrape do convertido
+      if (url === original) return { title: 'Mixer Original', oldPrice: '', newPrice: '', finalUrl: original }
+      return { title: 'Mixer Turbo', oldPrice: '199', newPrice: '149', finalUrl: converted }
     },
   })
 
-  assert.deepEqual(scraped, [converted, original])
-  assert.equal(offer.title, 'Mixer Turbo')
+  // Ordem: original primeiro; só então o convertido (fallback de dados).
+  assert.deepEqual(scraped, [original, converted])
+  // Mantém título do original e completa o preço do convertido.
+  assert.equal(offer.title, 'Mixer Original')
   assert.equal(offer.newPrice, '149')
   assert.equal(offer.oldPrice, '199')
-  // Mesmo no fallback de dados, Telegram mantém o link original.
+  // Telegram mantém o link original na oferta, mesmo tendo convertido p/ dados.
   assert.equal(offer.displayUrl, original)
 })
 

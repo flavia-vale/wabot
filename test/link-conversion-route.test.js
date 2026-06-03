@@ -222,7 +222,7 @@ test('POST /convert aplica timeout por item para evitar request preso', async (t
   assert.match(body.results[0].error, /Tempo limite de conversão excedido/i)
 })
 
-test('POST /scrape-offer tenta converter e usa link convertido para scrape quando sucesso', async (t) => {
+test('POST /scrape-offer scrapa o ORIGINAL para dados e converte só para o link de exibição', async (t) => {
   let converterCalls = 0
   let scraperUrl = ''
   const { app } = await buildApp({
@@ -251,8 +251,10 @@ test('POST /scrape-offer tenta converter e usa link convertido para scrape quand
   assert.equal(body.title, 'Mixer Vertical Turbo Chef')
   assert.equal(body.oldPrice, '199,90')
   assert.equal(body.newPrice, '149,90')
+  // Link de exibição é o convertido (afiliado)...
   assert.equal(body.offerUrl, 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20')
-  assert.equal(scraperUrl, 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20')
+  // ...mas os dados vieram do ORIGINAL (um único hit na loja, evita throttle).
+  assert.equal(scraperUrl, 'https://www.amazon.com.br/dp/B09VQ39F41')
   assert.equal(converterCalls, 1)
   assert.equal(body.conversion.attempted, true)
   assert.equal(body.conversion.success, true)
@@ -260,7 +262,7 @@ test('POST /scrape-offer tenta converter e usa link convertido para scrape quand
   assert.equal(body.conversion.reasonCode, null)
 })
 
-test('POST /scrape-offer tenta original quando convertido não traz dados', async (t) => {
+test('POST /scrape-offer pega dados do original num só hit quando ele já traz tudo', async (t) => {
   let calls = []
   const converted = 'https://s.shopee.com.br/abc123'
   const original = 'https://shopee.com.br/KIT-TERERE-BLACK-i.1750300958.23499408546'
@@ -269,13 +271,13 @@ test('POST /scrape-offer tenta original quando convertido não traz dados', asyn
     converter: async () => converted,
     fetchProductInfo: async (url) => {
       calls.push(url)
-      if (url === converted) return { title: '', oldPrice: '', newPrice: '', finalUrl: converted }
-      return {
+      if (url === original) return {
         title: 'KIT TERERÉ BLACK ERVA SABOR CEREJA ICE – GARRAFA TÉRMICA + COPO INOX + BOMBA + ERVA 500G',
         oldPrice: '',
         newPrice: '245,67',
         finalUrl: original,
       }
+      return { title: '', oldPrice: '', newPrice: '', finalUrl: converted }
     },
   })
   t.after(async () => { await app.close() })
@@ -286,10 +288,11 @@ test('POST /scrape-offer tenta original quando convertido não traz dados', asyn
   assert.equal(body.offerUrl, converted)
   assert.equal(body.title, 'KIT TERERÉ BLACK ERVA SABOR CEREJA ICE – GARRAFA TÉRMICA + COPO INOX + BOMBA + ERVA 500G')
   assert.equal(body.newPrice, '245,67')
-  assert.deepEqual(calls, [converted, original])
+  // Original já trouxe preço → não há 2º hit na loja.
+  assert.deepEqual(calls, [original])
 })
 
-test('POST /scrape-offer busca preço no original quando convertido traz título mas não preço (Fix A)', async (t) => {
+test('POST /scrape-offer completa preço pelo convertido quando o original não traz (fallback)', async (t) => {
   const calls = []
   const converted = 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20'
   const original = 'https://www.amazon.com.br/Mixer-Turbo/dp/B09VQ39F41'
@@ -298,10 +301,10 @@ test('POST /scrape-offer busca preço no original quando convertido traz título
     converter: async () => converted,
     fetchProductInfo: async (url) => {
       calls.push(url)
-      // convertido: tem título, sem preço (cenário Amazon anti-bot)
-      if (url === converted) return { title: 'Mixer Vertical Turbo Chef', oldPrice: '', newPrice: '', finalUrl: converted }
-      // original: traz o preço
-      return { title: 'Mixer Original', oldPrice: '199,90', newPrice: '149,90', finalUrl: original }
+      // original: título sem preço → dispara fallback no convertido
+      if (url === original) return { title: 'Mixer Original', oldPrice: '', newPrice: '', finalUrl: original }
+      // convertido: traz o preço
+      return { title: 'Mixer Vertical Turbo Chef', oldPrice: '199,90', newPrice: '149,90', finalUrl: converted }
     },
   })
   t.after(async () => { await app.close() })
@@ -309,10 +312,10 @@ test('POST /scrape-offer busca preço no original quando convertido traz título
   const res = await app.inject({ method: 'POST', url: '/api/link-conversion/scrape-offer', payload: { url: original } })
   assert.equal(res.statusCode, 200)
   const body = JSON.parse(res.body)
-  // dispara o fallback mesmo com título presente (antes não disparava)
-  assert.deepEqual(calls, [converted, original])
-  // mantém o título do convertido e completa só o preço do original
-  assert.equal(body.title, 'Mixer Vertical Turbo Chef')
+  // Ordem nova: original primeiro, convertido como fallback de dados.
+  assert.deepEqual(calls, [original, converted])
+  // Mantém o título do original e completa só o preço do convertido.
+  assert.equal(body.title, 'Mixer Original')
   assert.equal(body.newPrice, '149,90')
   assert.equal(body.oldPrice, '199,90')
   assert.equal(body.offerUrl, converted)

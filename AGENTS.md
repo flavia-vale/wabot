@@ -619,8 +619,27 @@ convertia o link, passava credenciais (cookie ML) e tinha fallback; o Telegram
 scrapava o link **cru, anônimo e sem fallback**. Resultado: o MESMO link rendia
 ofertas diferentes (ML `/up/` falhava no Telegram, Amazon divergia nos dois
 sentidos). Hoje ambos chamam **`buildScrapedOffer()` em
-`src/converters/offerEngine.js`** — a busca de título/preço (converter →
-resolver URL → scrapar com credenciais → fallback) vive em **um só lugar**.
+`src/converters/offerEngine.js`** — a busca de título/preço vive em **um só
+lugar**.
+
+**Ordem canônica do motor (NÃO inverter):**
+
+1. **DADOS = scrape do link ORIGINAL** (`fetchProductInfo(url, creds)`). O
+   `fetchProductInfo` já resolve short links, landings `/social/`,
+   recomendações `/up/` e aplica o cookie ML **internamente**, então **uma
+   única requisição** traz título+preço na maioria dos casos.
+2. **CONVERSÃO** (afiliado) só para o **link de exibição** do painel — e como
+   **fallback de dados** quando o original não trouxe preço.
+3. **Fallback de dados:** se o original não trouxe preço E a conversão gerou um
+   link diferente, scrapa o convertido para completar.
+
+**Por que original-primeiro (lição do bug de 2026-06-03):** scrapar o link
+CONVERTIDO primeiro e cair no original como fallback fazia **dois hits** na
+mesma loja em sequência. Amazon e Shopee respondem com **anti-bot/throttle no
+2º hit** (Amazon devolve a página "stripped" sem preço), derrubando o preço da
+oferta. Scrapar o ORIGINAL num único hit é o caminho confiável; o convertido
+(afiliado) não precisa ser scrapado — o conteúdo do produto é o mesmo. **Nunca
+voltar a scrapar o convertido como fonte primária de dados.**
 
 A **única** diferença permitida entre os dois consumidores é qual link aparece
 na oferta final, via flag `keepOriginalLink`:
@@ -630,9 +649,9 @@ na oferta final, via flag `keepOriginalLink`:
 | Painel "Criar oferta"   | `false`            | link **convertido** (afiliado) |
 | Bot do Telegram         | `true`             | link **original** colado pelo usuário |
 
-O Telegram **converte para buscar dados** (ganha resolução de short link/`/up/`
-e cookie ML), mas **devolve ao usuário o link que ele colou** — nunca o
-convertido.
+O Telegram **só converte se precisar completar dados** (o original não trouxe
+preço) — no caminho feliz nem chama o conversor, evitando hit extra na loja —
+e **sempre devolve ao usuário o link que ele colou**, nunca o convertido.
 
 **Credenciais do bot do Telegram:** ele não tem usuário logado (só chat IDs
 autorizados). As credenciais (cookie ML, tag de afiliado) vêm de um **usuário

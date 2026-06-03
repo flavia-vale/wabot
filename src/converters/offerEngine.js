@@ -127,20 +127,51 @@ export async function buildScrapedOffer({
   const parsedLink = extractSingleLink(url)
   const platform = platformArg ?? parsedLink?.platform ?? null
 
+  const mlCredentials = credentialsMap.mercadolivre || null
+  const shopeeCredentials = credentialsMap.shopee || null
+  const scrapeCreds = { mlCredentials, shopeeCredentials }
+
+  const hasPrice = (i) => Boolean(typeof i?.newPrice === 'string' && i.newPrice.trim())
+
+  // 1) DADOS: scrapa o link ORIGINAL. O fetchProductInfo já resolve short
+  //    links, landings /social/, recomendações /up/ e aplica o cookie ML
+  //    internamente, então UMA requisição traz título+preço na maioria dos
+  //    casos. Scrapar o link CONVERTIDO (afiliado) aqui era pior: Amazon e
+  //    Shopee respondem com anti-bot/throttle no 2º hit em sequência (o
+  //    fallback), derrubando o preço. Buscar o original num único hit é o
+  //    caminho confiável; a conversão entra só para o link de exibição
+  //    (afiliado) e como fallback de dados quando o original não traz preço.
+  let info = {}
+  let scrapeThrew = false
+  try {
+    info = (await fetchProductInfo(url, scrapeCreds)) || {}
+  } catch (err) {
+    logger.warn?.({ err: err.message, url }, 'Falha ao buscar dados pelo link original')
+    info = {}
+    scrapeThrew = true
+  }
+
   let offerUrl = url
+  let conversionAttempted = false
   let conversionSuccess = false
   let reasonCode = null
   let reasonMessage = null
   let conversionWarning = null
 
-  const mlCredentials = credentialsMap.mercadolivre || null
-  const shopeeCredentials = credentialsMap.shopee || null
+  // 2) CONVERSÃO: necessária para o link de exibição do painel (afiliado) e,
+  //    em ambos os consumidores, como fallback de dados quando o original não
+  //    trouxe preço. O Telegram exibe o link original, então só converte se
+  //    precisar completar dados — evitando um hit extra na loja no caminho
+  //    feliz (preço já obtido do original).
+  const needConversionForDisplay = !keepOriginalLink
+  const needConversionForData = !hasPrice(info)
 
   if (!platform) {
     const failure = conversionFailureFromContext('unsupported')
     reasonCode = failure.reasonCode
     reasonMessage = failure.reasonMessage
-  } else {
+  } else if (needConversionForDisplay || needConversionForData) {
+    conversionAttempted = true
     const validation = validateCredentialData(platform, credentialsMap[platform])
     if (!validation.configured) {
       const failure = conversionFailureFromContext('missing_credentials')
@@ -170,8 +201,28 @@ export async function buildScrapedOffer({
     }
   }
 
+  // 3) FALLBACK DE DADOS: só quando o original não trouxe preço E a conversão
+  //    gerou um link diferente. Raro — cobre links que apenas o conversor
+  //    consegue resolver. No caminho feliz (preço veio do original) não há
+  //    segundo hit na loja.
+  if (!hasPrice(info) && conversionSuccess && offerUrl !== url) {
+    try {
+      const alt = await fetchProductInfo(offerUrl, scrapeCreds)
+      if (hasUsefulOfferInfo(alt)) {
+        info = {
+          title: info?.title || alt?.title || '',
+          newPrice: info?.newPrice || alt?.newPrice || '',
+          oldPrice: info?.oldPrice || alt?.oldPrice || '',
+          finalUrl: info?.finalUrl || alt?.finalUrl || offerUrl,
+        }
+      }
+    } catch {
+      // mantém o que veio do original
+    }
+  }
+
   const conversionMeta = () => ({
-    attempted: true,
+    attempted: conversionAttempted,
     success: conversionSuccess,
     usedOriginalUrl: !conversionSuccess,
     reasonCode: conversionSuccess ? null : reasonCode,
@@ -179,79 +230,35 @@ export async function buildScrapedOffer({
     platform,
   })
 
-  // Link exibido ao usuário: Telegram quer SEMPRE o original colado; o painel
-  // quer o convertido (offerUrl).
-  const displayUrlFor = (finalUrl) => keepOriginalLink ? url : (finalUrl || offerUrl)
+  // Link exibido ao usuário: Telegram SEMPRE o original colado; painel o
+  // convertido (offerUrl).
+  const displayUrl = keepOriginalLink ? url : offerUrl
 
-  try {
-    let info = await fetchProductInfo(offerUrl, { mlCredentials, shopeeCredentials })
-
-    // Quando o link convertido é short-link (ex.: Shopee/Amazon) pode haver
-    // bloqueio de redirect/anti-bot no scrape do convertido, ou o scrape pode
-    // trazer título mas não preço. Nesses casos tentamos o original para
-    // complementar título/preço sem perder o offerUrl convertido.
-    if (conversionSuccess && offerUrl !== url && !info?.newPrice) {
-      try {
-        const fallbackInfo = await fetchProductInfo(url, { mlCredentials, shopeeCredentials })
-        if (hasUsefulOfferInfo(fallbackInfo)) {
-          info = {
-            ...info,
-            title: info?.title || fallbackInfo?.title,
-            newPrice: info?.newPrice || fallbackInfo?.newPrice || '',
-            oldPrice: info?.oldPrice || fallbackInfo?.oldPrice || '',
-            finalUrl: fallbackInfo?.finalUrl || info?.finalUrl || offerUrl,
-          }
-        }
-      } catch {
-        // mantém resultado do convertido
-      }
-    }
-
+  if (hasUsefulOfferInfo(info)) {
     return {
       title: info?.title || '',
       oldPrice: info?.oldPrice || '',
       newPrice: info?.newPrice || '',
       finalUrl: info?.finalUrl || offerUrl,
       offerUrl,
-      displayUrl: displayUrlFor(info?.finalUrl),
+      displayUrl,
       conversionWarning,
       conversion: conversionMeta(),
     }
-  } catch (err) {
-    logger.warn?.({ err: err.message, url: offerUrl }, 'Falha ao buscar informações do produto; retornando fallback mínimo')
+  }
 
-    if (conversionSuccess && offerUrl !== url) {
-      try {
-        const originalInfo = await fetchProductInfo(url, { mlCredentials, shopeeCredentials })
-        if (hasUsefulOfferInfo(originalInfo)) {
-          return {
-            title: originalInfo?.title || '',
-            oldPrice: originalInfo?.oldPrice || '',
-            newPrice: originalInfo?.newPrice || '',
-            finalUrl: originalInfo?.finalUrl || url,
-            offerUrl,
-            displayUrl: displayUrlFor(originalInfo?.finalUrl),
-            conversionWarning,
-            conversion: conversionMeta(),
-            scrapeWarning: {
-              code: 'SCRAPE_OFFER_FETCH_FALLBACK_ORIGINAL',
-              message: 'Não foi possível ler dados pelo link convertido. Usamos o link original para preencher a oferta.',
-            },
-          }
-        }
-      } catch {
-        // cai no fallback mínimo abaixo
-      }
-    }
-
+  // A busca FALHOU (exceção): degrada inferindo o título do slug da URL e
+  // sinaliza scrapeWarning, para o painel exibir um template parcial editável.
+  // (No Telegram, se o slug não render título, vira "produto não encontrado".)
+  if (scrapeThrew) {
     const fallbackTitle = inferTitleFromUrl(offerUrl) || inferTitleFromUrl(url)
     return {
       title: fallbackTitle,
       oldPrice: '',
       newPrice: '',
-      finalUrl: offerUrl,
+      finalUrl: info?.finalUrl || offerUrl,
       offerUrl,
-      displayUrl: displayUrlFor(null),
+      displayUrl,
       conversionWarning,
       conversion: conversionMeta(),
       scrapeWarning: {
@@ -259,5 +266,18 @@ export async function buildScrapedOffer({
         message: 'Não foi possível ler as informações do produto agora. Preencha o template manualmente ou tente outro link.',
       },
     }
+  }
+
+  // Scrape OK porém sem dados úteis → "produto não encontrado". NÃO inferimos
+  // título da URL aqui: evita o Telegram montar oferta-lixo só com slug.
+  return {
+    title: '',
+    oldPrice: '',
+    newPrice: '',
+    finalUrl: info?.finalUrl || offerUrl,
+    offerUrl,
+    displayUrl,
+    conversionWarning,
+    conversion: conversionMeta(),
   }
 }
