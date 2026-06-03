@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { mobileRoutes } from '@/components/mobile/routes'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
+import { tint } from '@/components/mobile/mobileStyles'
 
 const shellStyles = {
   root: {
@@ -55,7 +56,7 @@ const shellStyles = {
   bottomNav: {
     position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)',
     width: '100%', maxWidth: 480,
-    background: 'color-mix(in oklab, var(--surface) 95%, transparent)',
+    background: tint('--surface', 95, 'transparent'),
     backdropFilter: 'blur(12px)',
     borderTop: '1px solid var(--line)',
     paddingBottom: 'calc(10px + env(safe-area-inset-bottom))',
@@ -74,7 +75,7 @@ const shellStyles = {
   navIconWrap: (active) => ({
     width: 44, height: 28, borderRadius: 12,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: active ? 'color-mix(in oklab, var(--accent) 28%, var(--surface))' : 'transparent',
+    background: active ? tint('--accent', 28) : 'transparent',
     transition: 'background .15s',
   }),
   navCenterBtn: {
@@ -87,7 +88,7 @@ const shellStyles = {
   // Botão central (Criar) realçado quando o plano venceu — é o que sempre funciona
   navCenterBtnFree: {
     background: 'var(--success)',
-    boxShadow: '0 6px 16px -4px color-mix(in oklab, var(--success) 60%, transparent)',
+    boxShadow: `0 6px 16px -4px ${tint('--success', 60, 'transparent')}`,
   },
   navCenterFreeDot: {
     position: 'absolute', top: -3, right: -3,
@@ -243,11 +244,11 @@ export function MobileShell({ title = 'Conversor', active = 'inicio', hasAlert =
 }
 
 export function MobileStateCard({ title, description, actionLabel, onAction, tone = 'neutral' }) {
-  const bg = tone === 'error' ? 'color-mix(in oklab, var(--danger) 10%, var(--surface))'
-            : tone === 'success' ? 'color-mix(in oklab, var(--success) 10%, var(--surface))'
+  const bg = tone === 'error' ? tint('--danger', 10)
+            : tone === 'success' ? tint('--success', 10)
             : 'var(--surface)'
-  const border = tone === 'error' ? 'color-mix(in oklab, var(--danger) 30%, var(--line))'
-              : tone === 'success' ? 'color-mix(in oklab, var(--success) 30%, var(--line))'
+  const border = tone === 'error' ? tint('--danger', 30, '--line')
+              : tone === 'success' ? tint('--success', 30, '--line')
               : 'var(--line)'
   return (
     <section
