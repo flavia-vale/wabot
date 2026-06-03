@@ -33,6 +33,16 @@ export default function WhatsAppPage() {
   const [feedback, setFeedback] = useState('')
   const [showForgetConfirm, setShowForgetConfirm] = useState(false)
   const [isRestarting, setIsRestarting] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  // QR responsivo: em telas estreitas (<312px) o tamanho fixo 216 estourava
+  // a viewport. Recalcula no mount e em resize, descontando paddings do card.
+  const [qrSize, setQrSize] = useState(216)
+  useEffect(() => {
+    const update = () => setQrSize(Math.max(160, Math.min(216, window.innerWidth - 96)))
+    update()
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [])
   const pollingRef = useRef(null)
   const wsRef = useRef(null)
   // Evita setState após desmontar quando um fetch de polling resolve tarde.
@@ -316,7 +326,7 @@ export default function WhatsAppPage() {
   if (error && !session) {
     return (
       <MobileShell title="Conversor" active="conta">
-        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} onRetry={() => refreshSession()} /></div>
       </MobileShell>
     )
   }
@@ -369,7 +379,14 @@ export default function WhatsAppPage() {
             </div>
           </div>
           <div style={{display:'flex', gap: 8}}>
-            <button type="button" onClick={() => refreshSession({ silent: true })} style={{...mobi.btn('ghost', false), flex: 1, fontSize: 12.5, padding:'10px 14px'}}>Sincronizar</button>
+            <button
+              type="button"
+              onClick={async () => { setSyncing(true); try { await refreshSession({ silent: true }) } finally { setSyncing(false) } }}
+              disabled={syncing}
+              style={{...mobi.btn('ghost', false), flex: 1, fontSize: 12.5, padding:'10px 14px', opacity: syncing ? 0.6 : 1}}
+            >
+              {syncing ? 'Sincronizando…' : 'Sincronizar'}
+            </button>
             {running && (
               <button type="button" onClick={disconnect} disabled={!!actionLoading} style={{...mobi.btn('ghost', false), flex: 1, fontSize: 12.5, padding:'10px 14px', color:'var(--danger)'}}>
                 {actionLoading === 'stop' ? 'Desconectando...' : 'Desconectar'}
@@ -443,7 +460,7 @@ export default function WhatsAppPage() {
             {qr ? (
               <>
                 <div style={{display:'flex', justifyContent:'center', padding: 14, background:'white', borderRadius: 14, margin:'0 auto'}}>
-                  <QRCode value={qr} size={216} includeMargin={false} />
+                  <QRCode value={qr} size={qrSize} includeMargin={false} />
                 </div>
                 <p style={{fontSize: 11.5, color:'var(--ink-soft)', lineHeight: 1.45}}>
                   No WhatsApp: <strong>Configurações → Dispositivos vinculados → Vincular um aparelho</strong> e aponte a câmera para o código.

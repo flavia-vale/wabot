@@ -125,6 +125,7 @@ export default function ChecklistEspelhamentoPage() {
   const [dashboardStatus, setDashboardStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -151,7 +152,7 @@ export default function ChecklistEspelhamentoPage() {
     }
     load()
     return () => { active = false }
-  }, [])
+  }, [reloadKey])
 
   const hasCredentials = Boolean(dashboardStatus?.hasCredentials ?? (creds.length > 0))
   const whatsappConnected = Boolean(dashboardStatus?.waConnected ?? session?.running)
@@ -207,7 +208,7 @@ export default function ChecklistEspelhamentoPage() {
   if (error) {
     return (
       <MobileShell title="Checklist de espelhamento" active="inicio" showBack onBack={() => router.push(mobileRoutes.home)}>
-        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} onRetry={() => setReloadKey((k) => k + 1)} /></div>
       </MobileShell>
     )
   }

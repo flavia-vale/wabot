@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
-import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
+import { MobileLoadingCard, MobileErrorCard, MobileSpinner } from '@/components/mobile/MobileAsyncState'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { cfgStyles, mobi, tint, tintBorder } from '@/components/mobile/mobileStyles'
 import { api } from '@/lib/api'
@@ -131,7 +131,7 @@ export default function ScheduledPage() {
 
       {!loading && loadError && (
         <div style={{ padding: '0 16px' }}>
-          <MobileErrorCard message={loadError} />
+          <MobileErrorCard message={loadError} onRetry={() => loadScheduled()} />
         </div>
       )}
 
@@ -163,10 +163,11 @@ export default function ScheduledPage() {
                   {isCancellable && (
                     <button
                       type="button"
-                      style={{ ...schedStyles.cancelBtn, opacity: isCancelling ? 0.6 : 1 }}
+                      style={{ ...schedStyles.cancelBtn, opacity: isCancelling ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                       onClick={() => cancelScheduled(item.id)}
                       disabled={isCancelling}
                     >
+                      {isCancelling && <MobileSpinner size={13} />}
                       {isCancelling ? 'Cancelando...' : 'Cancelar'}
                     </button>
                   )}

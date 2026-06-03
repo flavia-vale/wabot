@@ -156,6 +156,7 @@ export default function AccountPage() {
   const [error, setError] = useState('')
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
   const router = useRouter()
 
   useEffect(() => {
@@ -179,7 +180,7 @@ export default function AccountPage() {
     }
     load()
     return () => { active = false }
-  }, [])
+  }, [reloadKey])
 
 
   function openWhatsApp(message) {
@@ -207,7 +208,7 @@ export default function AccountPage() {
   if (error) {
     return (
       <MobileShell title="Conversor" active="conta">
-        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} onRetry={() => setReloadKey((k) => k + 1)} /></div>
       </MobileShell>
     )
   }

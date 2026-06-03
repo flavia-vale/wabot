@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
+import { MobileHScroll } from '@/components/mobile/MobileHScroll'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileLogLinkActions, toMobileLogItem } from '@/lib/mobileLogs'
 import { normalizeSummaryCounts, summaryDeliveryRateLabel } from '@/lib/mobileLogsSummary'
@@ -423,14 +424,14 @@ export default function LogsPage() {
       })()}
 
       {/* Filtros em palavras claras */}
-      <div style={envStyles.chipRow} aria-label="Filtros de envios no servidor">
+      <MobileHScroll contentStyle={{ gap: 6, padding: '14px 16px 4px' }} aria-label="Filtros de envios no servidor">
         {filters.map(f => (
           <button key={f.key} type="button" onClick={() => changeFilter(f.key)} style={envStyles.chip(filter === f.key)} title={`Filtrar por ${f.label.toLowerCase()}`}>
             {f.label}
             {filter === f.key && <span style={envStyles.chipCount(true)}>{total}</span>}
           </button>
         ))}
-      </div>
+      </MobileHScroll>
       <div style={envStyles.loadedHint}>
         Filtro aplicado no servidor. Exibindo {items.length} de {total} envio(s){serverSearch ? ` para “${serverSearch}”` : ''}.
       </div>
@@ -438,7 +439,7 @@ export default function LogsPage() {
       {/* Lista */}
       <div style={{padding:'4px 0 0'}}>
         {loading && <div style={{padding:'0 16px'}}><MobileLoadingCard label="Carregando envios..." /></div>}
-        {!loading && error && <div style={{padding:'0 16px'}}><MobileErrorCard message={error} /></div>}
+        {!loading && error && <div style={{padding:'0 16px'}}><MobileErrorCard message={error} onRetry={() => loadFirstPage()} /></div>}
         {!loading && !error && filtered.length === 0 && (
           <div style={{padding:'40px 24px', textAlign:'center', color:'var(--ink-soft)', fontSize: 13}}>
             {items.length === 0 ? (serverSearch ? 'Nenhum envio encontrado no servidor para essa busca.' : 'Nenhum envio ainda. Quando o bot postar ou você criar uma oferta, aparece aqui.') : 'Nenhum envio bate com esse filtro.'}
