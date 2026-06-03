@@ -313,7 +313,7 @@ export default function VariacoesDeTextoPage() {
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Corpo da mensagem</label>
               <p className="mb-2 text-[11px] leading-5 text-gray-500">
-                Posicione <code className="rounded bg-white px-1 text-green-700">{'{{greeting}}'}</code>, <code className="rounded bg-white px-1 text-green-700">{'{{cta}}'}</code> e <code className="rounded bg-white px-1 text-green-700">{'{{trailer}}'}</code> onde quiser. Se apagar um deles, o bot não envia aquele bloco.
+                Posicione <code className="rounded bg-white px-1 text-green-700">{'{{gancho}}'}</code>, <code className="rounded bg-white px-1 text-green-700">{'{{cta}}'}</code> e <code className="rounded bg-white px-1 text-green-700">{'{{convitegrupo}}'}</code> onde quiser. Se apagar um deles, o bot não envia aquele bloco.
               </p>
               <textarea
                 ref={templateBodyRef}
