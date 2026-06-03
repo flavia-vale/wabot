@@ -109,6 +109,7 @@ export default function CredentialsPage() {
   const [credentials, setCredentials] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -126,7 +127,7 @@ export default function CredentialsPage() {
     }
     load()
     return () => { active = false }
-  }, [])
+  }, [reloadKey])
 
   const credentialByPlatform = useMemo(() => {
     const map = new Map()
@@ -151,7 +152,7 @@ export default function CredentialsPage() {
   if (error) {
     return (
       <MobileShell title="Conversor" active="conta">
-        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} onRetry={() => setReloadKey((k) => k + 1)} /></div>
       </MobileShell>
     )
   }

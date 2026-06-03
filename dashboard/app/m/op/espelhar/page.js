@@ -164,6 +164,7 @@ export default function EspelharPage() {
   const [me, setMe] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
   const router = useRouter()
 
   useEffect(() => {
@@ -193,7 +194,7 @@ export default function EspelharPage() {
     }
     load()
     return () => { active = false }
-  }, [])
+  }, [reloadKey])
 
   // Espelhamento "ligado" reflete a sessão WhatsApp rodando — não há flag
   // própria no backend; o bot espelha enquanto a sessão está conectada.
@@ -236,7 +237,7 @@ export default function EspelharPage() {
   if (error) {
     return (
       <MobileShell title="Conversor" active="espelhar">
-        <div style={{padding:'18px 16px'}}><MobileErrorCard message={error} /></div>
+        <div style={{padding:'18px 16px'}}><MobileErrorCard message={error} onRetry={() => setReloadKey((k) => k + 1)} /></div>
       </MobileShell>
     )
   }

@@ -16,6 +16,15 @@ export function useMockAsyncData(data, delayMs = 120) {
   return state
 }
 
+export function MobileSpinner({ size = 14, color = 'currentColor' }) {
+  return (
+    <svg className="animate-spin" width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <circle cx="12" cy="12" r="9" stroke={color} strokeWidth="3" strokeOpacity="0.25" />
+      <path d="M21 12a9 9 0 0 0-9-9" stroke={color} strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function MobileLoadingCard({ label = 'Carregando dados...' }) {
   return (
     <div
@@ -38,6 +47,14 @@ export function MobileLoadingCard({ label = 'Carregando dados...' }) {
   )
 }
 
-export function MobileErrorCard({ message = 'Não foi possível carregar os dados.' }) {
-  return <MobileStateCard title="Falha ao carregar" description={message} tone="error" />
+export function MobileErrorCard({ message = 'Não foi possível carregar os dados.', onRetry }) {
+  return (
+    <MobileStateCard
+      title="Falha ao carregar"
+      description={message}
+      tone="error"
+      actionLabel={onRetry ? 'Tentar de novo' : undefined}
+      onAction={onRetry}
+    />
+  )
 }

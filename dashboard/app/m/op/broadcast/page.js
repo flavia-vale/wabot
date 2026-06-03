@@ -62,9 +62,12 @@ export default function MobileBroadcastPage() {
   const [topN, setTopN] = useState('10')
   const [sending, setSending] = useState(false)
   const [feedback, setFeedback] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let active = true
+    setLoading(true)
+    setError('')
     api.groups()
       .then((list) => {
         if (!active) return
@@ -75,7 +78,7 @@ export default function MobileBroadcastPage() {
       .catch((err) => { if (active) setError(err.message || 'Não foi possível carregar destinos.') })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [])
+  }, [reloadKey])
 
   const visibleGroups = useMemo(() => {
     const min = Number(minMembers || 0)
@@ -123,7 +126,7 @@ export default function MobileBroadcastPage() {
   }
 
   if (error) {
-    return <MobileShell title="Enviar mensagem" active="envios" showBack onBack={() => router.back()}><div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div></MobileShell>
+    return <MobileShell title="Enviar mensagem" active="envios" showBack onBack={() => router.back()}><div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} onRetry={() => setReloadKey((k) => k + 1)} /></div></MobileShell>
   }
 
   return (
@@ -157,8 +160,8 @@ export default function MobileBroadcastPage() {
             <input style={cfgStyles.field} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar grupo/canal" />
             <input style={cfgStyles.field} type="number" min={0} value={minMembers} onChange={(event) => setMinMembers(event.target.value)} placeholder="Mínimo de participantes" />
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--ink)' }}>
-            <input type="checkbox" checked={includeChannels} onChange={(event) => setIncludeChannels(event.target.checked)} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 44, fontSize: 13, color: 'var(--ink)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={includeChannels} onChange={(event) => setIncludeChannels(event.target.checked)} style={{ width: 20, height: 20, accentColor: 'var(--accent-strong)', flexShrink: 0 }} />
             Incluir canais na seleção
           </label>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -175,8 +178,8 @@ export default function MobileBroadcastPage() {
               const jid = groupKey(group)
               const checked = selected.includes(jid)
               return (
-                <label key={`${group.id}-${jid}`} style={pageStyles.destRow(checked)}>
-                  <input type="checkbox" checked={checked} onChange={() => toggleDestination(jid)} />
+                <label key={`${group.id}-${jid}`} style={{ ...pageStyles.destRow(checked), minHeight: 44 }}>
+                  <input type="checkbox" checked={checked} onChange={() => toggleDestination(jid)} style={{ width: 20, height: 20, accentColor: 'var(--accent-strong)', flexShrink: 0 }} />
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.name || jid}</span>
                     <span style={{ display: 'block', fontSize: 11, color: 'var(--ink-soft)' }}>{isChannelGroup(group) ? 'canal' : 'grupo'} · {groupParticipants(group) || 'sem contagem'} participantes</span>

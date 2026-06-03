@@ -448,7 +448,7 @@ export default function GroupsPage() {
   if (error) {
     return (
       <MobileShell title="Conversor" active="conta">
-        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} onRetry={() => loadGroups()} /></div>
       </MobileShell>
     )
   }

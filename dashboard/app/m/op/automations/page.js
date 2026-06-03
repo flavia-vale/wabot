@@ -212,7 +212,7 @@ export default function MobileAutomationsPage() {
   }
 
   if (loading) return <MobileShell title="Automações" active="espelhar" showBack onBack={() => router.back()}><div style={{ padding: '18px 16px' }}><MobileLoadingCard label="Carregando automações..." /></div></MobileShell>
-  if (error && automations.length === 0) return <MobileShell title="Automações" active="espelhar" showBack onBack={() => router.back()}><div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div></MobileShell>
+  if (error && automations.length === 0) return <MobileShell title="Automações" active="espelhar" showBack onBack={() => router.back()}><div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} onRetry={() => load()} /></div></MobileShell>
 
   const canSave = form.keyword.trim() && form.destGroupJid
   const selectedTemplatePreview = templatePreview(templates, form.templateKey)
