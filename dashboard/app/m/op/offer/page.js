@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileModal } from '@/components/mobile/MobileModal'
+import { MobileHScroll } from '@/components/mobile/MobileHScroll'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard } from '@/components/mobile/MobileAsyncState'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
@@ -887,14 +888,14 @@ export default function OfferPage() {
             <div style={criarStyles.sectionTitle}>Escolha um modelo</div>
             <button type="button" onClick={() => router.push(mobileRoutes.accountTemplates)} style={criarStyles.editTemplateLink}>Editar</button>
           </div>
-          <div style={criarStyles.templateRow}>
+          <MobileHScroll contentStyle={{ padding:'0 16px', gap: 8, paddingBottom: 4 }}>
             {allTemplates.map((template) => (
               <button key={template.key} type="button" onClick={() => updateTemplate(template.key)} style={criarStyles.templateCard(selectedTemplate === template.key)}>
                 <div style={criarStyles.templateName}>{template.name}</div>
                 <div style={criarStyles.templatePreview(selectedTemplate === template.key)}>{(template.body || template.preview || '').split('\n').slice(0, 4).join('\n')}</div>
               </button>
             ))}
-          </div>
+          </MobileHScroll>
 
           <div style={criarStyles.editorWrap}>
             <textarea style={criarStyles.editor} value={editorText} onChange={(event) => { setEditorText(event.target.value); setEditorDirty(event.target.value !== baseOfferText) }} />
@@ -1061,12 +1062,12 @@ ${currentCouponLink}`
                     onChange={(event) => setDestSearch(event.target.value)}
                   />
                   <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap: 8}}>
-                    <label style={{display:'flex', alignItems:'center', gap: 6, fontSize: 12, color:'var(--ink)', cursor:'pointer'}}>
+                    <label style={{display:'flex', alignItems:'center', gap: 8, minHeight: 44, fontSize: 12, color:'var(--ink)', cursor:'pointer'}}>
                       <input
                         type="checkbox"
                         checked={includeChannels}
                         onChange={(event) => setIncludeChannels(event.target.checked)}
-                        style={{width: 16, height: 16}}
+                        style={{width: 20, height: 20, accentColor: 'var(--accent-strong)', flexShrink: 0}}
                       />
                       Incluir canais
                     </label>

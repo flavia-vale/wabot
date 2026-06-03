@@ -54,6 +54,7 @@ export default function SubscriptionPage() {
   const [selectedPlanId, setSelectedPlanId] = useState('pro')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
   const [checkoutPlan, setCheckoutPlan] = useState('')
   const [paymentId, setPaymentId] = useState('')
   const [feedback, setFeedback] = useState('')
@@ -85,7 +86,7 @@ export default function SubscriptionPage() {
     }
     load()
     return () => { active = false }
-  }, [])
+  }, [reloadKey])
 
   async function startCheckout(plan = selectedPlanId) {
     setCheckoutPlan(plan)
@@ -125,7 +126,7 @@ export default function SubscriptionPage() {
   if (error) {
     return (
       <MobileShell title="Conversor" active="conta">
-        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} onRetry={() => setReloadKey((k) => k + 1)} /></div>
       </MobileShell>
     )
   }
