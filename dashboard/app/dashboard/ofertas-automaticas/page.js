@@ -7,6 +7,9 @@ import { Alert } from '@/components/Alert'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 
+const DAILY_INTERVAL_MINUTES = 1440
+const DEFAULT_DAILY_RUN_TIME = '09:00'
+
 const INTERVAL_OPTIONS = [
   { value: 15,   label: 'A cada 15 minutos' },
   { value: 30,   label: 'A cada 30 minutos' },
@@ -62,12 +65,17 @@ const emptyForm = {
   keyword: '',
   templateKey: 'automatico_classico',
   intervalMinutes: 240,
+  dailyRunTime: DEFAULT_DAILY_RUN_TIME,
   offersPerSend: 1,
   minDiscountPct: 20,
   prioritizeAMS: false,
 }
 
-function nextSendLabel(lastSentAt, intervalMinutes) {
+function nextSendLabel(lastSentAt, intervalMinutes, dailyRunTime) {
+  if (intervalMinutes === DAILY_INTERVAL_MINUTES && dailyRunTime) {
+    if (!lastSentAt) return `Próximo envio: hoje quando chegar às ${dailyRunTime} (horário de Brasília)`
+    return `Próximo envio: próximo dia às ${dailyRunTime} (horário de Brasília)`
+  }
   if (!lastSentAt) return 'Próximo envio: assim que o bot estiver ativo'
   const next = new Date(new Date(lastSentAt).getTime() + intervalMinutes * 60_000)
   const now = new Date()
@@ -128,6 +136,7 @@ export default function OfertasAutomaticasPage() {
       keyword: a.keyword,
       templateKey: a.templateKey || 'automatico_classico',
       intervalMinutes: a.intervalMinutes,
+      dailyRunTime: a.dailyRunTime || DEFAULT_DAILY_RUN_TIME,
       offersPerSend: a.offersPerSend,
       minDiscountPct: a.minDiscountPct,
       prioritizeAMS: a.prioritizeAMS ?? false,
@@ -304,7 +313,10 @@ export default function OfertasAutomaticasPage() {
             </label>
             <select
               value={form.intervalMinutes}
-              onChange={e => setForm(f => ({ ...f, intervalMinutes: Number(e.target.value) }))}
+              onChange={e => {
+                const intervalMinutes = Number(e.target.value)
+                setForm(f => ({ ...f, intervalMinutes, dailyRunTime: intervalMinutes === DAILY_INTERVAL_MINUTES ? (f.dailyRunTime || DEFAULT_DAILY_RUN_TIME) : f.dailyRunTime }))
+              }}
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
             >
               {INTERVAL_OPTIONS.map(o => (
@@ -312,6 +324,23 @@ export default function OfertasAutomaticasPage() {
               ))}
             </select>
           </div>
+
+          {form.intervalMinutes === DAILY_INTERVAL_MINUTES && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Horário do envio diário
+              </label>
+              <input
+                type="time"
+                value={form.dailyRunTime}
+                onChange={e => setForm(f => ({ ...f, dailyRunTime: e.target.value }))}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                A automação roda uma vez por dia nesse horário (horário de Brasília). Se o bot/API estiverem offline no minuto exato, ela envia assim que o cron voltar no mesmo dia.
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -366,7 +395,7 @@ export default function OfertasAutomaticasPage() {
           <div className="flex gap-2">
             <button
               onClick={handleSave}
-              disabled={saving || !form.keyword.trim() || !form.destGroupJid}
+              disabled={saving || !form.keyword.trim() || !form.destGroupJid || (form.intervalMinutes === DAILY_INTERVAL_MINUTES && !form.dailyRunTime)}
               className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
             >
               {saving ? 'Salvando...' : 'Salvar'}
@@ -391,13 +420,13 @@ export default function OfertasAutomaticasPage() {
                   <p className="font-medium text-gray-900 truncate">&ldquo;{a.keyword}&rdquo;</p>
                   <p className="text-sm text-gray-500">→ {a.destGroupName}</p>
                   <p className="text-xs text-gray-400 mt-1">
-                    {INTERVAL_OPTIONS.find(o => o.value === a.intervalMinutes)?.label ?? `${a.intervalMinutes} min`}
+                    {INTERVAL_OPTIONS.find(o => o.value === a.intervalMinutes)?.label ?? `${a.intervalMinutes} min`}{a.intervalMinutes === DAILY_INTERVAL_MINUTES && a.dailyRunTime ? ` às ${a.dailyRunTime}` : ''}
                     {' · '}
                     {OFFERS_PER_SEND_OPTIONS.find(o => o.value === a.offersPerSend)?.label ?? `${a.offersPerSend} produto(s)`}
                     {' · '}
                     {DISCOUNT_OPTIONS.find(o => o.value === a.minDiscountPct)?.label ?? `${a.minDiscountPct}% OFF mín.`}
                   </p>
-                  <p className="text-xs text-gray-400">Modelo: {templateName(templates, a.templateKey || 'automatico_classico')} · {nextSendLabel(a.lastSentAt, a.intervalMinutes)}</p>
+                  <p className="text-xs text-gray-400">Modelo: {templateName(templates, a.templateKey || 'automatico_classico')} · {nextSendLabel(a.lastSentAt, a.intervalMinutes, a.dailyRunTime)}</p>
                   {a.prioritizeAMS && (
                     <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 mt-1">
                       ⚡ Comissão extra priorizada

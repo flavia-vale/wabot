@@ -11,6 +11,9 @@ import { mobileRoutes } from '@/components/mobile/routes'
 import { api } from '@/lib/api'
 import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 
+const DAILY_INTERVAL_MINUTES = 1440
+const DEFAULT_DAILY_RUN_TIME = '09:00'
+
 const INTERVAL_OPTIONS = [
   { value: 15, label: 'A cada 15 minutos' },
   { value: 30, label: 'A cada 30 minutos' },
@@ -55,6 +58,7 @@ const emptyForm = {
   keyword: '',
   templateKey: 'automatico_classico',
   intervalMinutes: 240,
+  dailyRunTime: DEFAULT_DAILY_RUN_TIME,
   offersPerSend: 1,
   minDiscountPct: 20,
 }
@@ -78,7 +82,11 @@ function templatePreview(templates, key) {
   return (templates.find((template) => template.key === key)?.body || '').split('\n').slice(0, 4).join('\n')
 }
 
-function nextSendLabel(lastSentAt, intervalMinutes) {
+function nextSendLabel(lastSentAt, intervalMinutes, dailyRunTime) {
+  if (intervalMinutes === DAILY_INTERVAL_MINUTES && dailyRunTime) {
+    if (!lastSentAt) return `Próximo envio: hoje quando chegar às ${dailyRunTime} (horário de Brasília)`
+    return `Próximo envio: próximo dia às ${dailyRunTime} (horário de Brasília)`
+  }
   if (!lastSentAt) return 'Próximo envio: assim que o bot estiver ativo'
   const next = new Date(new Date(lastSentAt).getTime() + intervalMinutes * 60_000)
   if (next <= new Date()) return 'Próximo envio: em breve'
@@ -140,6 +148,7 @@ export default function MobileAutomationsPage() {
       keyword: item.keyword || '',
       templateKey: item.templateKey || 'automatico_classico',
       intervalMinutes: item.intervalMinutes || 240,
+      dailyRunTime: item.dailyRunTime || DEFAULT_DAILY_RUN_TIME,
       offersPerSend: item.offersPerSend || 1,
       minDiscountPct: item.minDiscountPct ?? 20,
     })
@@ -214,7 +223,7 @@ export default function MobileAutomationsPage() {
   if (loading) return <MobileShell title="Automações" active="espelhar" showBack onBack={() => router.back()}><div style={{ padding: '18px 16px' }}><MobileLoadingCard label="Carregando automações..." /></div></MobileShell>
   if (error && automations.length === 0) return <MobileShell title="Automações" active="espelhar" showBack onBack={() => router.back()}><div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} onRetry={() => load()} /></div></MobileShell>
 
-  const canSave = form.keyword.trim() && form.destGroupJid
+  const canSave = form.keyword.trim() && form.destGroupJid && (form.intervalMinutes !== DAILY_INTERVAL_MINUTES || form.dailyRunTime)
   const selectedTemplatePreview = templatePreview(templates, form.templateKey)
 
   return (
@@ -261,10 +270,20 @@ export default function MobileAutomationsPage() {
             </label>
             <label>
               <div style={cfgStyles.label}>Frequência</div>
-              <select style={cfgStyles.field} value={form.intervalMinutes} onChange={(event) => setForm((current) => ({ ...current, intervalMinutes: Number(event.target.value) }))}>
+              <select style={cfgStyles.field} value={form.intervalMinutes} onChange={(event) => {
+                  const intervalMinutes = Number(event.target.value)
+                  setForm((current) => ({ ...current, intervalMinutes, dailyRunTime: intervalMinutes === DAILY_INTERVAL_MINUTES ? (current.dailyRunTime || DEFAULT_DAILY_RUN_TIME) : current.dailyRunTime }))
+                }}>
                 {INTERVAL_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </label>
+            {form.intervalMinutes === DAILY_INTERVAL_MINUTES && (
+              <label>
+                <div style={cfgStyles.label}>Horário do envio diário</div>
+                <input type="time" style={cfgStyles.field} value={form.dailyRunTime} onChange={(event) => setForm((current) => ({ ...current, dailyRunTime: event.target.value }))} />
+                <div style={{ fontSize: 11.5, color: 'var(--ink-soft)', marginTop: 6, lineHeight: 1.4 }}>A automação roda uma vez por dia nesse horário (horário de Brasília). Se o bot/API estiverem offline no minuto exato, ela envia assim que o cron voltar no mesmo dia.</div>
+              </label>
+            )}
             <label>
               <div style={cfgStyles.label}>Produtos por envio</div>
               <select style={cfgStyles.field} value={form.offersPerSend} onChange={(event) => setForm((current) => ({ ...current, offersPerSend: Number(event.target.value) }))}>
@@ -302,9 +321,9 @@ export default function MobileAutomationsPage() {
                   <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)' }}>“{item.keyword}”</div>
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 3 }}>→ {item.destGroupName || item.destGroupJid}</div>
                   <div style={{ fontSize: 11.5, color: 'var(--ink-faint)', marginTop: 6, lineHeight: 1.45 }}>
-                    {optionLabel(INTERVAL_OPTIONS, item.intervalMinutes, `${item.intervalMinutes} min`)} · {optionLabel(OFFERS_PER_SEND_OPTIONS, item.offersPerSend, `${item.offersPerSend} produto(s)`)} · {optionLabel(DISCOUNT_OPTIONS, item.minDiscountPct, `${item.minDiscountPct}% OFF`)} · Modelo: {templateName(templates, item.templateKey || 'automatico_classico')}
+                    {optionLabel(INTERVAL_OPTIONS, item.intervalMinutes, `${item.intervalMinutes} min`)}{item.intervalMinutes === DAILY_INTERVAL_MINUTES && item.dailyRunTime ? ` às ${item.dailyRunTime}` : ''} · {optionLabel(OFFERS_PER_SEND_OPTIONS, item.offersPerSend, `${item.offersPerSend} produto(s)`) } · {optionLabel(DISCOUNT_OPTIONS, item.minDiscountPct, `${item.minDiscountPct}% OFF`)} · Modelo: {templateName(templates, item.templateKey || 'automatico_classico')}
                   </div>
-                  <div style={{ fontSize: 11.5, color: 'var(--ink-soft)', marginTop: 4 }}>{nextSendLabel(item.lastSentAt, item.intervalMinutes)}</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--ink-soft)', marginTop: 4 }}>{nextSendLabel(item.lastSentAt, item.intervalMinutes, item.dailyRunTime)}</div>
                 </div>
               </div>
               <div style={s.cardActions}>
