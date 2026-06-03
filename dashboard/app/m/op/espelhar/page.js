@@ -6,7 +6,7 @@ import { api } from '@/lib/api'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
-import { mobi } from '@/components/mobile/mobileStyles'
+import { mobi, tint, tintBorder } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileRoutes } from '@/components/mobile/routes'
 import { derivePlanState } from '@/components/mobile/planState'
@@ -128,7 +128,7 @@ const espStyles = {
   },
   addIcon: {
     width: 36, height: 36, borderRadius:'50%',
-    background:'color-mix(in oklab, var(--accent) 18%, var(--surface))',
+    background:tint('--accent', 18),
     border:'1.5px dashed var(--accent-strong)',
     display:'flex', alignItems:'center', justifyContent:'center',
     flexShrink: 0,
@@ -144,7 +144,7 @@ const espStyles = {
   },
   filtersIcon: {
     width: 36, height: 36, borderRadius: 10,
-    background:'color-mix(in oklab, var(--accent-2) 50%, var(--surface))',
+    background:tint('--accent-2', 50),
     color:'var(--ink)',
     display:'flex', alignItems:'center', justifyContent:'center',
     flexShrink: 0,
@@ -284,8 +284,8 @@ export default function EspelharPage() {
           {/* Ponte pro recurso grátis — nunca um beco sem saída */}
           <button type="button" onClick={() => router.push(mobileRoutes.offer)} style={{
             margin:'10px 16px 0', width:'calc(100% - 32px)', padding:'14px',
-            background:'color-mix(in oklab, var(--success) 12%, var(--surface))',
-            border:'1px solid color-mix(in oklab, var(--success) 35%, var(--line))',
+            background:tint('--success', 12),
+            border:tintBorder('--success', 35),
             borderRadius: 16, display:'flex', alignItems:'center', gap: 12,
             textAlign:'left', fontFamily:'inherit', cursor:'pointer',
           }}>
@@ -296,7 +296,7 @@ export default function EspelharPage() {
               <div style={{fontSize: 13, fontWeight: 600, color:'var(--ink)'}}>Enquanto isso, crie ofertas</div>
               <div style={{fontSize: 11.5, color:'var(--ink-soft)', marginTop: 2}}>manualmente, de graça e sem limite</div>
             </div>
-            <span style={{display:'inline-flex', alignItems:'center', gap: 4, fontSize: 10, fontWeight: 700, padding:'2px 7px', borderRadius: 999, background:'color-mix(in oklab, var(--success) 16%, var(--surface))', color:'var(--success)', border:'1px solid color-mix(in oklab, var(--success) 35%, var(--line))', whiteSpace:'nowrap'}}>
+            <span style={{display:'inline-flex', alignItems:'center', gap: 4, fontSize: 10, fontWeight: 700, padding:'2px 7px', borderRadius: 999, background:tint('--success', 16), color:'var(--success)', border:tintBorder('--success', 35), whiteSpace:'nowrap'}}>
               <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
               Grátis
             </span>

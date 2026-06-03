@@ -5,7 +5,7 @@ import { QRCodeCanvas as QRCode } from 'qrcode.react'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
-import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
+import { mobi, cfgStyles, tint, tintBorder } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { api, openQRSocket } from '@/lib/api'
 import { deriveTimelineSteps } from '@/lib/mobileSessionTimeline'
@@ -332,15 +332,15 @@ export default function WhatsAppPage() {
   const postInterval = session?.config?.postIntervalMs ? Math.round(session.config.postIntervalMs / 1000) : 45
 
   const statusBg = isConnected
-    ? 'color-mix(in oklab, var(--success) 12%, var(--surface))'
+    ? tint('--success', 12)
     : isConnecting
-    ? 'color-mix(in oklab, var(--warn) 12%, var(--surface))'
-    : 'color-mix(in oklab, var(--danger) 8%, var(--surface))'
+    ? tint('--warn', 12)
+    : tint('--danger', 8)
   const statusBorder = isConnected
-    ? '1px solid color-mix(in oklab, var(--success) 30%, var(--line))'
+    ? tintBorder('--success', 30)
     : isConnecting
-    ? '1px solid color-mix(in oklab, var(--warn) 30%, var(--line))'
-    : '1px solid color-mix(in oklab, var(--danger) 20%, var(--line))'
+    ? tintBorder('--warn', 30)
+    : tintBorder('--danger', 20)
   const statusIconBg = isConnected ? 'var(--success)' : isConnecting ? 'var(--warn)' : 'var(--danger)'
   const statusLabel = isConnected ? 'conectado' : isConnecting ? 'conectando...' : 'desconectado'
   const statusSub = isConnected
@@ -528,7 +528,7 @@ export default function WhatsAppPage() {
 
       {/* Advanced actions — forget session */}
       <div style={{...cfgStyles.cardWrap, marginTop: 8}}>
-        <div style={{...cfgStyles.cardP, background:'color-mix(in oklab, var(--warn) 8%, var(--surface))', border:'1px solid color-mix(in oklab, var(--warn) 20%, var(--line))'}}>
+        <div style={{...cfgStyles.cardP, background:tint('--warn', 8), border:tintBorder('--warn', 20)}}>
           <div style={{fontSize: 13, fontWeight: 600, color:'var(--ink)', marginBottom: 4}}>Ações avançadas</div>
           <div style={{fontSize: 12, color:'var(--ink-soft)', marginBottom: 12, lineHeight: 1.45}}>
             &ldquo;Esquecer número&rdquo; desconecta o WhatsApp e remove a sessão salva. Para usar novamente, você precisará conectar por QR Code ou código de pareamento.

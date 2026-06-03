@@ -1,3 +1,21 @@
+// ── Helpers de cor (fonte única de tints) ──────────────────────────────────
+// Antes, `color-mix(in oklab, var(--x) N%, var(--y))` aparecia ~100x inline
+// pelas telas /m. Estes helpers centralizam o idioma. Aceitam tokens com ou
+// sem `--`, cores literais (#hex) e a base `transparent`. As strings geradas
+// são idênticas às anteriores — refactor sem mudança visual.
+function resolveColor(value) {
+  if (typeof value !== 'string') return value
+  return value.startsWith('--') ? `var(${value})` : value
+}
+
+export function tint(color, amount, base = '--surface') {
+  return `color-mix(in oklab, ${resolveColor(color)} ${amount}%, ${resolveColor(base)})`
+}
+
+export function tintBorder(color, amount, { base = '--line', width = 1, style = 'solid' } = {}) {
+  return `${width}px ${style} ${tint(color, amount, base)}`
+}
+
 export const mobi = {
   card: {
     background: 'var(--surface)',
@@ -51,7 +69,7 @@ export const cfgStyles = {
     width: '100%',
     border: 'none',
     borderBottom: last ? 'none' : '1px solid var(--line)',
-    background: active ? 'color-mix(in oklab, var(--accent) 12%, var(--surface))' : 'transparent',
+    background: active ? tint('--accent', 12, '--surface') : 'transparent',
     textAlign: 'left',
     fontFamily: 'inherit',
     color: 'inherit',
@@ -70,16 +88,18 @@ export const cfgStyles = {
     position: 'absolute', top: 2, left: on ? 18 : 2,
     boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
   }),
-  pill: (tone) => ({
-    display: 'inline-flex', alignItems: 'center', gap: 5,
-    fontSize: 10.5, fontWeight: 600,
-    padding: '3px 8px', borderRadius: 999,
-    background: tone === 'success' ? 'color-mix(in oklab, var(--success) 18%, var(--surface))'
-              : tone === 'danger' ? 'color-mix(in oklab, var(--danger) 18%, var(--surface))'
-              : 'var(--bg-soft)',
-    color: tone === 'success' ? 'var(--success)' : tone === 'danger' ? 'var(--danger)' : 'var(--ink)',
-    border: '1px solid var(--line)',
-  }),
+  pill: (tone) => {
+    // Tons semânticos suportados: success, danger, warn, accent (+ neutro).
+    const toneColor = { success: '--success', danger: '--danger', warn: '--warn', accent: '--accent-strong' }[tone]
+    return {
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      fontSize: 10.5, fontWeight: 600,
+      padding: '3px 8px', borderRadius: 999,
+      background: toneColor ? tint(toneColor, 18, '--surface') : 'var(--bg-soft)',
+      color: toneColor ? `var(${toneColor})` : 'var(--ink)',
+      border: '1px solid var(--line)',
+    }
+  },
   sectionLabel: { padding: '20px 20px 8px', fontSize: 11, fontWeight: 600, color: 'var(--ink-faint)', textTransform: 'uppercase', letterSpacing: '0.08em' },
   storeBadge: (color) => ({
     width: 32, height: 32, borderRadius: 8,

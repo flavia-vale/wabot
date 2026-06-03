@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
-import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
+import { mobi, cfgStyles, tint } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileRoutes } from '@/components/mobile/routes'
 import { api } from '@/lib/api'
@@ -36,8 +36,8 @@ const pageStyles = {
   destRow: (checked) => ({
     display: 'flex', alignItems: 'center', gap: 10,
     padding: '10px 12px', borderRadius: 13,
-    border: `1px solid ${checked ? 'color-mix(in oklab, var(--accent) 45%, var(--line))' : 'var(--line)'}`,
-    background: checked ? 'color-mix(in oklab, var(--accent) 10%, var(--surface))' : 'var(--surface)',
+    border: `1px solid ${checked ? tint('--accent', 45, '--line') : 'var(--line)'}`,
+    background: checked ? tint('--accent', 10) : 'var(--surface)',
     cursor: 'pointer',
   }),
   preview: { whiteSpace: 'pre-wrap', background: 'var(--bg-soft)', border: '1px solid var(--line)', borderRadius: 14, padding: 12, fontSize: 13, color: 'var(--ink)', lineHeight: 1.5, minHeight: 70 },

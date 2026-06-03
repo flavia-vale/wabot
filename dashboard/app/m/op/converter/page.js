@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { MobileShell } from '@/components/mobile/MobileShell'
+import { tint } from '@/components/mobile/mobileStyles'
 import { api } from '@/lib/api'
 import {
   getConvertedLinksText,
@@ -174,7 +175,7 @@ export default function ConverterPage() {
                   </div>
                 </>
               ) : (
-                <div style={{ padding: 10, borderRadius: 10, background:'color-mix(in oklab, var(--danger) 10%, var(--surface))', color:'var(--danger)', fontSize: 12, lineHeight: 1.45 }}>{item.error}</div>
+                <div style={{ padding: 10, borderRadius: 10, background:tint('--danger', 10), color:'var(--danger)', fontSize: 12, lineHeight: 1.45 }}>{item.error}</div>
               )}
             </div>
           ))}

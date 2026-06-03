@@ -11,6 +11,7 @@ import { mobileRoutes } from '@/components/mobile/routes'
 import { api } from '@/lib/api'
 import { DEFAULT_LANDING_PLANS } from '@/lib/marketing-content'
 import { derivePlanState, daysSinceExpiry } from '@/components/mobile/planState'
+import { tint, tintBorder } from '@/components/mobile/mobileStyles'
 
 const contaStyles = {
   // Perfil — discreto, sem blob
@@ -41,7 +42,7 @@ const contaStyles = {
   plan: {
     margin:'10px 16px 0',
     padding: 14,
-    background:'color-mix(in oklab, var(--accent-2) 50%, var(--surface))',
+    background:tint('--accent-2', 50),
     border:'1px solid var(--line)', borderRadius: 14,
     display:'flex', alignItems:'center', gap: 12,
   },
@@ -72,10 +73,10 @@ const contaStyles = {
   }),
   rowIcon: (tone) => ({
     width: 32, height: 32, borderRadius: 9,
-    background: tone === 'success' ? 'color-mix(in oklab, var(--success) 16%, var(--surface))'
-              : tone === 'warn'    ? 'color-mix(in oklab, var(--warn) 18%, var(--surface))'
-              : tone === 'danger'  ? 'color-mix(in oklab, var(--danger) 16%, var(--surface))'
-              : tone === 'accent'  ? 'color-mix(in oklab, var(--accent) 22%, var(--surface))'
+    background: tone === 'success' ? tint('--success', 16)
+              : tone === 'warn'    ? tint('--warn', 18)
+              : tone === 'danger'  ? tint('--danger', 16)
+              : tone === 'accent'  ? tint('--accent', 22)
               : 'var(--bg-soft)',
     border:'1px solid var(--line)',
     display:'flex', alignItems:'center', justifyContent:'center',
@@ -92,8 +93,8 @@ const contaStyles = {
   rowTag: {
     display:'inline-flex', alignItems:'center', justifyContent:'center',
     padding:'2px 7px', borderRadius: 999,
-    background:'color-mix(in oklab, var(--accent) 16%, var(--surface))',
-    border:'1px solid color-mix(in oklab, var(--accent) 28%, var(--line))',
+    background:tint('--accent', 16),
+    border:tintBorder('--accent', 28),
     color:'var(--accent-strong)',
     fontSize: 9.5, fontWeight: 800, letterSpacing:'0.06em', textTransform:'uppercase',
     lineHeight: 1.35, whiteSpace:'nowrap',
@@ -243,8 +244,8 @@ export default function AccountPage() {
       {isExpired ? (
         <div style={{
           margin:'10px 16px 0', padding:'16px',
-          background:'color-mix(in oklab, var(--warn) 14%, var(--surface))',
-          border:'1.5px solid color-mix(in oklab, var(--warn) 40%, var(--line))',
+          background:tint('--warn', 14),
+          border:tintBorder('--warn', 40, { width: 1.5 }),
           borderRadius: 16,
         }}>
           <div style={{display:'flex', alignItems:'center', gap: 8, marginBottom: 8}}>
