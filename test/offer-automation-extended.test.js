@@ -458,7 +458,7 @@ test('applyVariation: modo random aplica variações aos placeholders', () => {
     ctas: ['Confira:', 'Pega já:'],
     trailers: [' 👀', ' 💸'],
   }
-  const text = '{{greeting}} Produto em oferta! {{cta}} {{trailer}}'
+  const text = '{{gancho}} Produto em oferta! {{cta}} {{convitegrupo}}'
   const result = applyVariation(text, { groupId: 'g', pool, random: true })
   assert.ok(result.includes('Produto em oferta!'))
   assert.ok(

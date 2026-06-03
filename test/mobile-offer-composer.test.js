@@ -23,6 +23,11 @@ test('normaliza preço raspado quando a API retorna newPrice em vez de price', (
 })
 
 
+test('lista apenas os presets Automático clássico e Simples', () => {
+  assert.deepEqual(TEMPLATE_OPTIONS.map((template) => template.key), ['automatico_classico', 'simples'])
+})
+
+
 test('template padrão Simples usa tags e preenche produto, preços e link', () => {
   assert.match(PRESET_TEMPLATE_BODIES.simples, /\{produto\}/)
   assert.match(PRESET_TEMPLATE_BODIES.simples, /\{preço_de\}/)
@@ -52,7 +57,7 @@ test('templates com campos globais não vazam placeholders no Gerar oferta manua
     templateBody: PRESET_TEMPLATE_BODIES.simples,
   })
 
-  assert.doesNotMatch(text, /\{\{greeting\}\}|\{\{cta\}\}|\{\{trailer\}\}/)
+  assert.doesNotMatch(text, /\{\{gancho\}\}|\{\{greeting\}\}|\{\{cta\}\}|\{\{convitegrupo\}\}|\{\{trailer\}\}/)
   assert.match(text, /Produto manual/)
   assert.match(text, /https:\/\/afiliado\.test\/manual/)
 })
@@ -174,7 +179,7 @@ test('detecta loja da oferta por dados do scrape, conversão ou hostname', () =>
 
 test('preset Automático clássico mostra onde gancho, CTA e fechamento entram na copy', () => {
   assert.equal(PRESET_TEMPLATE_BODIES.automatico_classico, [
-    '{{greeting}}',
+    '{{gancho}}',
     '',
     '🏷️ *{produto}*',
     '',
@@ -184,7 +189,7 @@ test('preset Automático clássico mostra onde gancho, CTA e fechamento entram n
     '{{cta}}',
     '👉 {link}',
     '',
-    '{{trailer}}',
+    '{{convitegrupo}}',
   ].join('\n'))
 })
 
@@ -238,7 +243,7 @@ test('variáveis de template incluem dados da oferta e automação', () => {
   const tokens = OFFER_TEMPLATE_VARIABLES.map((variable) => variable.token)
   assert.ok(OFFER_TEMPLATE_VARIABLE_GROUPS.some((group) => group.key === 'offer'))
   assert.ok(OFFER_TEMPLATE_VARIABLE_GROUPS.some((group) => group.key === 'automation'))
-  for (const token of ['{produto}', '{preço}', '{preço_de}', '{desconto}', '{rating}', '{vendas}', '{link}', '{loja}', '{{greeting}}', '{{cta}}', '{{trailer}}', '{{grupoLink}}', '{{cupomLink}}']) {
+  for (const token of ['{produto}', '{preço}', '{preço_de}', '{desconto}', '{rating}', '{vendas}', '{link}', '{loja}', '{{gancho}}', '{{cta}}', '{{convitegrupo}}', '{{grupoLink}}', '{{cupomLink}}']) {
     assert.ok(tokens.includes(token), `variável ausente: ${token}`)
   }
 })

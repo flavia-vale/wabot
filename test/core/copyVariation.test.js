@@ -15,7 +15,7 @@ test('applyVariation sem pool retorna texto original', () => {
 })
 
 test('applyVariation substitui placeholders pelo pool', () => {
-  const tpl = '{{greeting}}{{cta}} https://ex.com{{trailer}}'
+  const tpl = '{{gancho}}{{cta}} https://ex.com{{convitegrupo}}'
   const out = applyVariation(tpl, { groupId: 'g-1', pool: POOL, date: '2026-05-18' })
   // determinístico: mesma combinação groupId+date → mesma escolha
   const out2 = applyVariation(tpl, { groupId: 'g-1', pool: POOL, date: '2026-05-18' })
@@ -26,7 +26,7 @@ test('applyVariation substitui placeholders pelo pool', () => {
 })
 
 test('applyVariation muda escolha quando muda groupId ou date', () => {
-  const tpl = '{{greeting}}{{cta}}{{trailer}}'
+  const tpl = '{{gancho}}{{cta}}{{convitegrupo}}'
   const a = applyVariation(tpl, { groupId: 'g-1', pool: POOL, date: '2026-05-18' })
   const b = applyVariation(tpl, { groupId: 'g-2', pool: POOL, date: '2026-05-18' })
   const c = applyVariation(tpl, { groupId: 'g-1', pool: POOL, date: '2026-05-19' })
@@ -53,7 +53,7 @@ test('applyVariation permite desativar injeção automática quando placeholders
 })
 
 test('applyVariation aceita pool serializado como JSON', () => {
-  const tpl = '{{greeting}}X'
+  const tpl = '{{gancho}}X'
   const out = applyVariation(tpl, { groupId: 'g-1', poolJson: JSON.stringify(POOL), date: '2026-05-18' })
   assert.ok(out.endsWith('X'))
 })

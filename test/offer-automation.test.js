@@ -482,7 +482,7 @@ test('runAutomation: template pode usar ganchos, CTAs e links globais como vari√
   const dbMock = {
     credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'app', secretKey: 'secret' }) }) },
     botConfig: { findUnique: async () => ({
-      mobileTemplatesJson: JSON.stringify({ overrides: {}, custom: [{ key: 'tpl_vars', name: 'Com vari√°veis', body: '{{greeting}}\n{produto}\n{{cta}}\n{{grupoLink}}\n{{cupomLink}}\n{{trailer}}\n{link}' }] }),
+      mobileTemplatesJson: JSON.stringify({ overrides: {}, custom: [{ key: 'tpl_vars', name: 'Com vari√°veis', body: '{{gancho}}\n{produto}\n{{cta}}\n{{grupoLink}}\n{{cupomLink}}\n{{convitegrupo}}\n{link}' }] }),
       copyVariationPoolJson: JSON.stringify({ greetings: ['GANCHO'], ctas: ['CTA'], trailers: ['FECHAMENTO'] }),
       brandingGroupLink: 'https://chat.whatsapp.com/grupo',
       couponLink: 'https://cupom.test/oferta',
@@ -504,5 +504,5 @@ test('runAutomation: template pode usar ganchos, CTAs e links globais como vari√
   assert.match(sent[0], /FECHAMENTO/)
   assert.match(sent[0], /https:\/\/chat\.whatsapp\.com\/grupo/)
   assert.match(sent[0], /https:\/\/cupom\.test\/oferta/)
-  assert.doesNotMatch(sent[0], /\{\{greeting\}\}|\{\{cta\}\}|\{\{trailer\}\}|\{\{grupoLink\}\}|\{\{cupomLink\}\}/)
+  assert.doesNotMatch(sent[0], /\{\{gancho\}\}|\{\{greeting\}\}|\{\{cta\}\}|\{\{convitegrupo\}\}|\{\{trailer\}\}|\{\{grupoLink\}\}|\{\{cupomLink\}\}/)
 })

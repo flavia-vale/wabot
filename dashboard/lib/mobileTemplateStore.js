@@ -8,7 +8,7 @@ import { api } from './api.js'
 const STORAGE_KEY = 'wabot.mobile.templates.v1'
 
 export const PRESET_TEMPLATE_BODIES = {
-  automatico_classico: `{{greeting}}
+  automatico_classico: `{{gancho}}
 
 🏷️ *{produto}*
 
@@ -18,8 +18,8 @@ export const PRESET_TEMPLATE_BODIES = {
 {{cta}}
 👉 {link}
 
-{{trailer}}`,
-  simples: `{{greeting}}
+{{convitegrupo}}`,
+  simples: `{{gancho}}
 
 🛍️ {produto}
 
@@ -29,55 +29,7 @@ export const PRESET_TEMPLATE_BODIES = {
 {{cta}}
 🛒 Compre aqui 👉 {link}
 
-{{trailer}}`,
-  achadinho: `{{greeting}}
-
-✨ Achadinho do dia
-
-{produto}
-
-De {preço_de} por *{preço}*
-
-{{cta}}
-👉 {link}
-
-{{trailer}}`,
-  relampago: `{{greeting}}
-
-⚡ Oferta relâmpago
-
-{produto}
-
-De {preço_de} por *{preço}*
-
-{{cta}}
-👉 {link}
-
-{{trailer}}`,
-  tech: `{{greeting}}
-
-🔌 Achado tech
-
-{produto}
-
-De {preço_de} por *{preço}*
-
-{{cta}}
-👉 {link}
-
-{{trailer}}`,
-  beleza: `{{greeting}}
-
-💄 Oferta de beleza
-
-{produto}
-
-De {preço_de} por *{preço}*
-
-{{cta}}
-👉 {link}
-
-{{trailer}}`,
+{{convitegrupo}}`,
 }
 
 const EMPTY_STORE = { overrides: {}, custom: [] }
