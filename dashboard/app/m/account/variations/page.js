@@ -48,12 +48,15 @@ export default function MobileVariationsPage() {
 
   useEffect(() => {
     let active = true
-    setLoading(true)
-    setError('')
-    api.variationsGet()
-      .then((cfg) => { if (active) setPool(parsePool(cfg?.copyVariationPoolJson)) })
-      .catch((err) => { if (active) setError(err.message || 'Não foi possível carregar variações.') })
-      .finally(() => { if (active) setLoading(false) })
+    function load() {
+      setLoading(true)
+      setError('')
+      api.variationsGet()
+        .then((cfg) => { if (active) setPool(parsePool(cfg?.copyVariationPoolJson)) })
+        .catch((err) => { if (active) setError(err.message || 'Não foi possível carregar variações.') })
+        .finally(() => { if (active) setLoading(false) })
+    }
+    load()
     return () => { active = false }
   }, [reloadKey])
 

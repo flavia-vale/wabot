@@ -127,10 +127,10 @@ export default function PreservacaoPage() {
 
   useEffect(() => {
     let active = true
-    setConfigLoading(true)
-    setConfigError('')
     const timer = window.setTimeout(() => {
       if (!active) return
+      setConfigLoading(true)
+      setConfigError('')
       api.preservationConfig()
         .then((data) => {
           if (!active) return
