@@ -591,3 +591,72 @@ test('cron tick: executa sem erro quando db não tem automações', async () => 
   const mod = await import('../src/offerAutomation/cron.js')
   assert.equal(typeof mod.startOfferAutomationCron, 'function')
 })
+
+// ═══════════════════════════════════════════════
+// offerAutomation schedule — horário diário
+// ═══════════════════════════════════════════════
+
+test('isOfferAutomationDue: automação diária aguarda horário de Brasília escolhido', async () => {
+  const { isOfferAutomationDue } = await import('../src/offerAutomation/schedule.js')
+  const automation = { intervalMinutes: 1440, dailyRunTime: '09:30', lastSentAt: null }
+
+  assert.equal(isOfferAutomationDue(automation, new Date('2026-06-03T12:29:00.000Z')), false)
+  assert.equal(isOfferAutomationDue(automation, new Date('2026-06-03T12:30:00.000Z')), true)
+})
+
+test('isOfferAutomationDue: automação diária não roda duas vezes no mesmo dia de Brasília', async () => {
+  const { isOfferAutomationDue } = await import('../src/offerAutomation/schedule.js')
+  const automation = {
+    intervalMinutes: 1440,
+    dailyRunTime: '09:30',
+    lastSentAt: new Date('2026-06-03T12:35:00.000Z'),
+  }
+
+  assert.equal(isOfferAutomationDue(automation, new Date('2026-06-03T20:00:00.000Z')), false)
+  assert.equal(isOfferAutomationDue(automation, new Date('2026-06-04T12:30:00.000Z')), true)
+})
+
+test('POST /api/offer-automations: salva horário diário quando frequência é uma vez por dia', async () => {
+  let created = null
+  const dbMock = {
+    offerAutomation: {
+      create: async ({ data }) => { created = data; return { id: 'daily-1', ...data } },
+    },
+  }
+  const app = buildOfferApp(dbMock)
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/offer-automations',
+    payload: {
+      destGroupJid: '123@g.us',
+      destGroupName: 'G',
+      keyword: 'ofertas do dia',
+      intervalMinutes: 1440,
+      dailyRunTime: '08:15',
+      offersPerSend: 1,
+      minDiscountPct: 0,
+    },
+  })
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(created.dailyRunTime, '08:15')
+})
+
+test('PUT /api/offer-automations/:id: rejeita horário diário inválido', async () => {
+  const dbMock = {
+    offerAutomation: {
+      findFirst: async () => ({ id: 'a1', userId: 'user-1', intervalMinutes: 1440 }),
+      update: async () => { throw new Error('não deve atualizar horário inválido') },
+    },
+  }
+  const app = buildOfferApp(dbMock)
+  const res = await app.inject({
+    method: 'PUT',
+    url: '/api/offer-automations/a1',
+    payload: { dailyRunTime: '25:99' },
+  })
+
+  assert.equal(res.statusCode, 400)
+  const body = JSON.parse(res.body)
+  assert.ok(body.error.toLowerCase().includes('horário'))
+})
