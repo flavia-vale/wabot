@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileConfirmDialog } from '@/components/mobile/MobileModal'
-import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
+import { mobi, cfgStyles, tint, tintBorder } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileRoutes } from '@/components/mobile/routes'
 import { OFFER_TEMPLATE_VARIABLE_GROUPS } from '@/lib/mobileOfferComposer'
@@ -187,7 +187,7 @@ export default function TemplatesPage() {
       </div>
 
       {saveError && (
-        <div style={{ margin: '10px 16px 0', padding: '10px 12px', borderRadius: 12, background: 'color-mix(in oklab, var(--danger) 10%, var(--surface))', border: '1px solid color-mix(in oklab, var(--danger) 25%, var(--line))', fontSize: 12.5, color: 'var(--danger)' }}>
+        <div style={{ margin: '10px 16px 0', padding: '10px 12px', borderRadius: 12, background: tint('--danger', 10), border: tintBorder('--danger', 25), fontSize: 12.5, color: 'var(--danger)' }}>
           {saveError}
         </div>
       )}

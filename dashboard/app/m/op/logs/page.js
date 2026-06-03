@@ -10,6 +10,7 @@ import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileLogLinkActions, toMobileLogItem } from '@/lib/mobileLogs'
 import { normalizeSummaryCounts, summaryDeliveryRateLabel } from '@/lib/mobileLogsSummary'
 import { mobileRoutes } from '@/components/mobile/routes'
+import { tint, tintBorder } from '@/components/mobile/mobileStyles'
 
 const MOBILE_LOG_FILTERS = [
   { key: 'todos', label: 'Tudo', apiStatus: 'all' },
@@ -102,8 +103,8 @@ const envStyles = {
   item: (expanded) => ({
     margin:'0 16px 8px',
     padding: 14,
-    background: expanded ? 'color-mix(in oklab, var(--accent) 6%, var(--surface))' : 'var(--surface)',
-    border:'1px solid ' + (expanded ? 'color-mix(in oklab, var(--accent) 30%, var(--line))' : 'var(--line)'),
+    background: expanded ? tint('--accent', 6) : 'var(--surface)',
+    border:'1px solid ' + (expanded ? tint('--accent', 30, '--line') : 'var(--line)'),
     borderRadius: 14,
     cursor:'pointer',
     width: 'calc(100% - 32px)',
@@ -120,7 +121,7 @@ const envStyles = {
               : status === 'fila' ? 'var(--warn)'
               : status === 'ignorado' ? 'var(--ink-faint)'
               : 'var(--ink-faint)',
-    boxShadow: status === 'fila' ? '0 0 0 3px color-mix(in oklab, var(--warn) 30%, transparent)' : 'none',
+    boxShadow: status === 'fila' ? `0 0 0 3px ${tint('--warn', 30, 'transparent')}` : 'none',
   }),
   itemMain: { flex: 1, minWidth: 0 },
   itemHead: { display:'flex', alignItems:'baseline', justifyContent:'space-between', gap: 8, marginBottom: 5 },
@@ -139,9 +140,9 @@ const envStyles = {
   statusPill: (status) => ({
     fontSize: 10.5, fontWeight: 600,
     padding:'2px 8px', borderRadius: 999,
-    background: status === 'ok' ? 'color-mix(in oklab, var(--success) 16%, var(--surface))'
-              : status === 'falha' ? 'color-mix(in oklab, var(--danger) 16%, var(--surface))'
-              : status === 'fila' ? 'color-mix(in oklab, var(--warn) 18%, var(--surface))'
+    background: status === 'ok' ? tint('--success', 16)
+              : status === 'falha' ? tint('--danger', 16)
+              : status === 'fila' ? tint('--warn', 18)
               : status === 'ignorado' ? 'var(--bg-soft)'
               : 'var(--bg-soft)',
     color: status === 'ok' ? 'var(--success)'
@@ -170,8 +171,8 @@ const envStyles = {
   exLinkSuccess: { fontFamily:"'JetBrains Mono', monospace", fontSize: 11.5, color:'var(--success)', fontWeight: 500, wordBreak:'break-all' },
   errorBox: {
     padding: 10,
-    background:'color-mix(in oklab, var(--danger) 10%, var(--surface))',
-    border:'1px solid color-mix(in oklab, var(--danger) 25%, var(--line))',
+    background:tint('--danger', 10),
+    border:tintBorder('--danger', 25),
     borderRadius: 10,
     fontSize: 12, color:'var(--danger)',
     display:'flex', alignItems:'flex-start', gap: 8,
@@ -563,7 +564,7 @@ export default function LogsPage() {
       {!loading && !error && items.length > 0 && (
         <div style={{padding:'8px 16px 0'}}>
           {clearArmed ? (
-            <div style={{padding: 14, background:'color-mix(in oklab, var(--danger) 8%, var(--surface))', border:'1px solid color-mix(in oklab, var(--danger) 25%, var(--line))', borderRadius: 14, display:'grid', gap: 10}}>
+            <div style={{padding: 14, background:tint('--danger', 8), border:tintBorder('--danger', 25), borderRadius: 14, display:'grid', gap: 10}}>
               <div style={{fontSize: 12.5, color:'var(--ink)', lineHeight: 1.45}}>
                 Isso apaga <strong>todo o histórico de envios</strong>. Não dá para desfazer. Os grupos e configurações não são afetados.
               </div>

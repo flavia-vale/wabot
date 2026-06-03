@@ -5,7 +5,7 @@ import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileModal } from '@/components/mobile/MobileModal'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
-import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
+import { mobi, cfgStyles, tint, tintBorder } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { api } from '@/lib/api'
 import { canAccessAdvancedPreservation } from '@/lib/plan'
@@ -502,7 +502,7 @@ export default function GroupsPage() {
                       const healthStatus = typeof healthData === 'string' ? healthData : healthData?.status ?? null
                       const chip = getHealthChipStyle(healthStatus)
                       const warnStyle = chip.tone === 'warn'
-                        ? { background:'color-mix(in oklab, var(--warn) 18%, var(--surface))', color:'var(--warn)', border:'1px solid color-mix(in oklab, var(--warn) 35%, var(--line))' }
+                        ? { background:tint('--warn', 18), color:'var(--warn)', border:tintBorder('--warn', 35) }
                         : {}
                       return (
                         <div style={{display:'flex', alignItems:'center', gap: 6, marginTop: 5, flexWrap:'wrap'}}>
