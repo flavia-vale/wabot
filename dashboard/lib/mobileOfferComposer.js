@@ -19,38 +19,6 @@ export const TEMPLATE_OPTIONS = [
 
 🛒 Compre aqui 👉 {link}`,
   },
-  {
-    key: 'achadinho',
-    name: 'Achadinho ✨',
-    preview: `✨ Achadinho do dia
-
-[produto]
-De R$ 79 por R$ 39,90`,
-  },
-  {
-    key: 'relampago',
-    name: 'Relâmpago ⚡',
-    preview: `⚡ ÚLTIMAS HORAS ⚡
-
-[produto]
-De R$ 99 por R$ 49!`,
-  },
-  {
-    key: 'tech',
-    name: 'Tech 🔌',
-    preview: `🔌 Achado tech
-
-[produto]
-De R$ 199 por R$ 149`,
-  },
-  {
-    key: 'beleza',
-    name: 'Beleza 💄',
-    preview: `💄 Pra mimar você
-
-[produto]
-De R$ 89 por R$ 59`,
-  },
 ]
 
 export const OFFER_TEMPLATE_VARIABLE_GROUPS = [
@@ -74,9 +42,9 @@ export const OFFER_TEMPLATE_VARIABLE_GROUPS = [
     title: 'Ganchos, CTAs e links globais',
     helper: 'Substituídas nas ofertas automáticas usando as variações e links configurados nesta página.',
     variables: [
-      { token: '{{greeting}}', label: 'Gancho aleatório', example: '🚨 COOOOOORRE QUE TÁ ACABANDO!' },
+      { token: '{{gancho}}', label: 'Gancho aleatório', example: '🚨 COOOOOORRE QUE TÁ ACABANDO!' },
       { token: '{{cta}}', label: 'CTA aleatório', example: '📲 Entre no nosso grupo oficial:' },
-      { token: '{{trailer}}', label: 'Fechamento aleatório', example: '⚠️ Preço sujeito a alteração.' },
+      { token: '{{convitegrupo}}', label: 'Convite/fechamento aleatório', example: '⚠️ Preço sujeito a alteração.' },
       { token: '{{grupoLink}}', label: 'Link de convite do grupo', example: 'https://chat.whatsapp.com/...' },
       { token: '{{cupomLink}}', label: 'Link de cupom global', example: 'https://...' },
     ],
@@ -93,7 +61,7 @@ export const COUPON_STORES = [
 ]
 
 const HTTP_URL_RE = /https?:\/\/[^\s]+/gi
-const AUTOMATION_TEMPLATE_PLACEHOLDER_RE = /\{\{(?:greeting|cta|trailer|grupoLink|cupomLink)\}\}/g
+const AUTOMATION_TEMPLATE_PLACEHOLDER_RE = /\{\{(?:gancho|greeting|cta|convitegrupo|trailer|grupoLink|cupomLink)\}\}/g
 
 export function firstText(...values) {
   for (const value of values) {

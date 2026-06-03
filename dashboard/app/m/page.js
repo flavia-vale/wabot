@@ -9,6 +9,7 @@ import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAs
 import { mobileRoutes } from '@/components/mobile/routes'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { derivePlanState } from '@/components/mobile/planState'
+import { tint, tintBorder } from '@/components/mobile/mobileStyles'
 
 const PLATFORM_LABEL = {
   shopee: 'Shopee', amazon: 'Amazon', mercadolivre: 'Mercado Livre',
@@ -31,8 +32,8 @@ const homeStyles = {
   alert: {
     margin:'14px 16px 0',
     padding:'12px 14px',
-    background:'color-mix(in oklab, var(--danger) 12%, var(--surface))',
-    border:'1px solid color-mix(in oklab, var(--danger) 35%, var(--line))',
+    background:tint('--danger', 12),
+    border:tintBorder('--danger', 35),
     borderRadius: 14,
     display:'flex', alignItems:'center', gap: 12,
     width:'calc(100% - 32px)',
@@ -55,8 +56,8 @@ const homeStyles = {
   checklistBalloon: {
     margin:'14px 16px 0',
     padding:'12px 14px',
-    background:'color-mix(in oklab, var(--danger) 12%, var(--surface))',
-    border:'1px solid color-mix(in oklab, var(--danger) 35%, var(--line))',
+    background:tint('--danger', 12),
+    border:tintBorder('--danger', 35),
     borderRadius: 14,
     display:'flex', alignItems:'center', gap: 12,
     cursor:'pointer',
@@ -68,7 +69,7 @@ const homeStyles = {
     flexShrink: 0,
   },
   checklistBalloonBar: {
-    height: 3, background:'color-mix(in oklab, var(--danger) 20%, var(--surface))',
+    height: 3, background:tint('--danger', 20),
     borderRadius: 999, overflow:'hidden', marginTop: 5,
   },
   checklistBalloonBarFill: (pct) => ({
@@ -148,8 +149,8 @@ const homeStyles = {
   primaryFreeTag: {
     display:'inline-flex', alignItems:'center', justifyContent:'center',
     padding:'3px 7px 2px', borderRadius: 999,
-    background:'color-mix(in oklab, var(--success) 18%, var(--surface))',
-    border:'1px solid color-mix(in oklab, var(--success) 42%, var(--line))',
+    background:tint('--success', 18),
+    border:tintBorder('--success', 42),
     color:'var(--success)',
     fontSize: 9.5, lineHeight: 1, fontWeight: 800, letterSpacing:'0.08em',
     textTransform:'uppercase',
@@ -209,8 +210,8 @@ const homeStyles = {
   // Card do guia rápido de credenciais
   guideCard: {
     margin:'18px 16px 0', width:'calc(100% - 32px)',
-    background:'color-mix(in oklab, var(--accent-2) 35%, var(--surface))',
-    border:'1px solid color-mix(in oklab, var(--accent) 30%, var(--line))',
+    background:tint('--accent-2', 35),
+    border:tintBorder('--accent', 30),
     borderRadius: 18, padding:'14px 16px',
     display:'flex', alignItems:'center', gap: 14,
     cursor:'pointer', fontFamily:'inherit', textAlign:'left',
@@ -230,8 +231,8 @@ const homeStyles = {
   planBanner: {
     margin:'14px 16px 0', width:'calc(100% - 32px)',
     padding:'13px 14px',
-    background:'color-mix(in oklab, var(--warn) 14%, var(--surface))',
-    border:'1px solid color-mix(in oklab, var(--warn) 38%, var(--line))',
+    background:tint('--warn', 14),
+    border:tintBorder('--warn', 38),
     borderRadius: 14,
     display:'flex', alignItems:'center', gap: 12,
     textAlign:'left', fontFamily:'inherit', cursor:'pointer',
@@ -255,8 +256,8 @@ const homeStyles = {
   freeHero: {
     margin:'16px 16px 0', width:'calc(100% - 32px)',
     padding: 18,
-    background:'linear-gradient(150deg, color-mix(in oklab, var(--success) 16%, var(--surface)), var(--surface))',
-    border:'1.5px solid color-mix(in oklab, var(--success) 42%, var(--line))',
+    background:`linear-gradient(150deg, ${tint('--success', 16)}, var(--surface))`,
+    border:tintBorder('--success', 42, { width: 1.5 }),
     borderRadius: 20,
     position:'relative', overflow:'hidden',
   },
@@ -353,6 +354,7 @@ export default function MobileHomePage() {
   const [dashboardStatus, setDashboardStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -385,7 +387,7 @@ export default function MobileHomePage() {
     }
     load()
     return () => { active = false }
-  }, [])
+  }, [reloadKey])
 
   const firstName = (me?.name || '').trim().split(' ')[0]
   const whatsappConnected = Boolean(dashboardStatus?.waConnected ?? session?.running)
@@ -446,7 +448,7 @@ export default function MobileHomePage() {
   if (error) {
     return (
       <MobileShell title="Conversor" active="inicio">
-        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} onRetry={() => setReloadKey((k) => k + 1)} /></div>
       </MobileShell>
     )
   }
@@ -614,7 +616,7 @@ export default function MobileHomePage() {
       <div style={isExpired ? homeStyles.dimmed : undefined}>
         <div style={homeStyles.shortcutsRow}>
           <button type="button" style={homeStyles.shortcut} onClick={() => router.push(mobileRoutes.espelhar)}>
-            <div style={homeStyles.shortcutIcon('color-mix(in oklab, var(--accent-2) 60%, var(--surface))', 'var(--ink)')}>
+            <div style={homeStyles.shortcutIcon(tint('--accent-2', 60), 'var(--ink)')}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 7a5 5 0 0 1 5-5h4"/><path d="M7 12l-4-5 5-2"/>
                 <path d="M21 17a5 5 0 0 1-5 5h-4"/><path d="M17 12l4 5-5 2"/>
@@ -637,7 +639,7 @@ export default function MobileHomePage() {
         {!isExpired && (
           <div style={homeStyles.shortcutsRow}>
             <button type="button" style={homeStyles.shortcut} onClick={() => router.push(mobileRoutes.broadcast)}>
-              <div style={homeStyles.shortcutIcon('color-mix(in oklab, var(--success) 18%, var(--surface))', 'var(--success)')}>
+              <div style={homeStyles.shortcutIcon(tint('--success', 18), 'var(--success)')}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>
                 </svg>
@@ -645,7 +647,7 @@ export default function MobileHomePage() {
               <div style={homeStyles.shortcutLabel}>Broadcast</div>
             </button>
             <button type="button" style={homeStyles.shortcut} onClick={() => router.push(mobileRoutes.automations)}>
-              <div style={homeStyles.shortcutIcon('color-mix(in oklab, var(--accent) 18%, var(--surface))', 'var(--accent-strong)')}>
+              <div style={homeStyles.shortcutIcon(tint('--accent', 18), 'var(--accent-strong)')}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 2v4"/><path d="m16.2 7.8 2.8-2.8"/><path d="M18 12h4"/><path d="m16.2 16.2 2.8 2.8"/><path d="M12 18v4"/><path d="m7.8 16.2-2.8 2.8"/><path d="M6 12H2"/><path d="m7.8 7.8-2.8-2.8"/>
                 </svg>

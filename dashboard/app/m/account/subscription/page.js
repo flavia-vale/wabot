@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
-import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
+import { mobi, cfgStyles, tint } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { api } from '@/lib/api'
 import { PIX_KEY, SUPPORT_WA_NUMBER, SUPPORT_PHONE_LABEL, buildPixWaLink } from '@/lib/mobilePixUtils'
@@ -54,6 +54,7 @@ export default function SubscriptionPage() {
   const [selectedPlanId, setSelectedPlanId] = useState('pro')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
   const [checkoutPlan, setCheckoutPlan] = useState('')
   const [paymentId, setPaymentId] = useState('')
   const [feedback, setFeedback] = useState('')
@@ -85,7 +86,7 @@ export default function SubscriptionPage() {
     }
     load()
     return () => { active = false }
-  }, [])
+  }, [reloadKey])
 
   async function startCheckout(plan = selectedPlanId) {
     setCheckoutPlan(plan)
@@ -125,7 +126,7 @@ export default function SubscriptionPage() {
   if (error) {
     return (
       <MobileShell title="Conversor" active="conta">
-        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} onRetry={() => setReloadKey((k) => k + 1)} /></div>
       </MobileShell>
     )
   }
@@ -152,7 +153,7 @@ export default function SubscriptionPage() {
         <div style={{...cfgStyles.cardP, background:'var(--ink)', color:'white', position:'relative', overflow:'hidden'}}>
           <div style={{fontSize: 11, fontWeight: 600, letterSpacing:'0.08em', textTransform:'uppercase', color:'rgba(255,255,255,0.6)'}}>Plano atual</div>
           <div style={{display:'flex', alignItems:'baseline', gap: 8, marginTop: 8}}>
-            <span className="serif" style={{fontStyle:'italic', fontSize: 42, lineHeight: 1}}>{plan}</span>
+            <span style={{fontFamily: "'Instrument Serif', serif", fontStyle:'italic', fontSize: 42, lineHeight: 1}}>{plan}</span>
           </div>
           <div style={{fontSize: 12, opacity:.75, marginTop: 8}}>
             {overview?.isActive ? `ativo até ${formatDate(overview.accessExpiresAt)}` : overview?.actionRequired || 'Status de acesso indisponível'}
@@ -179,7 +180,7 @@ export default function SubscriptionPage() {
                   ...cfgStyles.cardP,
                   textAlign:'left',
                   border: selected ? '1.5px solid var(--accent-strong)' : '1px solid var(--line)',
-                  background: selected ? 'color-mix(in oklab, var(--accent-2) 30%, var(--surface))' : 'var(--surface)',
+                  background: selected ? tint('--accent-2', 30) : 'var(--surface)',
                   cursor:'pointer',
                   fontFamily:'inherit',
                 }}

@@ -8,6 +8,7 @@ import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAs
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileRoutes } from '@/components/mobile/routes'
 import { api } from '@/lib/api'
+import { tint, tintBorder } from '@/components/mobile/mobileStyles'
 
 const pageStyles = {
   container: { padding: '16px 16px 32px' },
@@ -27,7 +28,7 @@ const pageStyles = {
   progressCount: {
     fontSize: 11, fontWeight: 700, color: 'var(--accent-strong)',
     fontFamily: "'JetBrains Mono', monospace",
-    background: 'color-mix(in oklab, var(--accent-strong) 12%, var(--surface))',
+    background: tint('--accent-strong', 12),
     padding: '3px 8px', borderRadius: 999,
   },
   progressBar: {
@@ -47,10 +48,10 @@ const pageStyles = {
   },
   step: (done) => ({
     background: done
-      ? 'color-mix(in oklab, var(--success) 6%, var(--surface))'
+      ? tint('--success', 6)
       : 'var(--surface)',
     border: '1px solid ' + (done
-      ? 'color-mix(in oklab, var(--success) 25%, var(--line))'
+      ? tint('--success', 25, '--line')
       : 'var(--line)'),
     borderRadius: 14,
     padding: '14px 14px',
@@ -90,15 +91,15 @@ const pageStyles = {
     fontSize: 11, fontWeight: 600,
     color: 'var(--success)',
     padding: '4px 10px',
-    border: '1px solid color-mix(in oklab, var(--success) 30%, var(--line))',
+    border: tintBorder('--success', 30),
     borderRadius: 999,
-    background: 'color-mix(in oklab, var(--success) 8%, var(--surface))',
+    background: tint('--success', 8),
     flexShrink: 0,
   },
 
   completeBanner: {
-    background: 'color-mix(in oklab, var(--success) 10%, var(--surface))',
-    border: '1px solid color-mix(in oklab, var(--success) 30%, var(--line))',
+    background: tint('--success', 10),
+    border: tintBorder('--success', 30),
     borderRadius: 14, padding: '14px 16px',
     display: 'flex', alignItems: 'center', gap: 12,
     marginBottom: 16,
@@ -124,6 +125,7 @@ export default function ChecklistEspelhamentoPage() {
   const [dashboardStatus, setDashboardStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -150,7 +152,7 @@ export default function ChecklistEspelhamentoPage() {
     }
     load()
     return () => { active = false }
-  }, [])
+  }, [reloadKey])
 
   const hasCredentials = Boolean(dashboardStatus?.hasCredentials ?? (creds.length > 0))
   const whatsappConnected = Boolean(dashboardStatus?.waConnected ?? session?.running)
@@ -206,7 +208,7 @@ export default function ChecklistEspelhamentoPage() {
   if (error) {
     return (
       <MobileShell title="Checklist de espelhamento" active="inicio" showBack onBack={() => router.push(mobileRoutes.home)}>
-        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} onRetry={() => setReloadKey((k) => k + 1)} /></div>
       </MobileShell>
     )
   }

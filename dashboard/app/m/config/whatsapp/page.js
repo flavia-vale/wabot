@@ -5,7 +5,7 @@ import { QRCodeCanvas as QRCode } from 'qrcode.react'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
-import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
+import { mobi, cfgStyles, tint, tintBorder } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { api, openQRSocket } from '@/lib/api'
 import { deriveTimelineSteps } from '@/lib/mobileSessionTimeline'
@@ -33,6 +33,16 @@ export default function WhatsAppPage() {
   const [feedback, setFeedback] = useState('')
   const [showForgetConfirm, setShowForgetConfirm] = useState(false)
   const [isRestarting, setIsRestarting] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  // QR responsivo: em telas estreitas (<312px) o tamanho fixo 216 estourava
+  // a viewport. Recalcula no mount e em resize, descontando paddings do card.
+  const [qrSize, setQrSize] = useState(216)
+  useEffect(() => {
+    const update = () => setQrSize(Math.max(160, Math.min(216, window.innerWidth - 96)))
+    update()
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [])
   const pollingRef = useRef(null)
   const wsRef = useRef(null)
   // Evita setState após desmontar quando um fetch de polling resolve tarde.
@@ -316,7 +326,7 @@ export default function WhatsAppPage() {
   if (error && !session) {
     return (
       <MobileShell title="Conversor" active="conta">
-        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} onRetry={() => refreshSession()} /></div>
       </MobileShell>
     )
   }
@@ -332,15 +342,15 @@ export default function WhatsAppPage() {
   const postInterval = session?.config?.postIntervalMs ? Math.round(session.config.postIntervalMs / 1000) : 45
 
   const statusBg = isConnected
-    ? 'color-mix(in oklab, var(--success) 12%, var(--surface))'
+    ? tint('--success', 12)
     : isConnecting
-    ? 'color-mix(in oklab, var(--warn) 12%, var(--surface))'
-    : 'color-mix(in oklab, var(--danger) 8%, var(--surface))'
+    ? tint('--warn', 12)
+    : tint('--danger', 8)
   const statusBorder = isConnected
-    ? '1px solid color-mix(in oklab, var(--success) 30%, var(--line))'
+    ? tintBorder('--success', 30)
     : isConnecting
-    ? '1px solid color-mix(in oklab, var(--warn) 30%, var(--line))'
-    : '1px solid color-mix(in oklab, var(--danger) 20%, var(--line))'
+    ? tintBorder('--warn', 30)
+    : tintBorder('--danger', 20)
   const statusIconBg = isConnected ? 'var(--success)' : isConnecting ? 'var(--warn)' : 'var(--danger)'
   const statusLabel = isConnected ? 'conectado' : isConnecting ? 'conectando...' : 'desconectado'
   const statusSub = isConnected
@@ -369,7 +379,14 @@ export default function WhatsAppPage() {
             </div>
           </div>
           <div style={{display:'flex', gap: 8}}>
-            <button type="button" onClick={() => refreshSession({ silent: true })} style={{...mobi.btn('ghost', false), flex: 1, fontSize: 12.5, padding:'10px 14px'}}>Sincronizar</button>
+            <button
+              type="button"
+              onClick={async () => { setSyncing(true); try { await refreshSession({ silent: true }) } finally { setSyncing(false) } }}
+              disabled={syncing}
+              style={{...mobi.btn('ghost', false), flex: 1, fontSize: 12.5, padding:'10px 14px', opacity: syncing ? 0.6 : 1}}
+            >
+              {syncing ? 'Sincronizando…' : 'Sincronizar'}
+            </button>
             {running && (
               <button type="button" onClick={disconnect} disabled={!!actionLoading} style={{...mobi.btn('ghost', false), flex: 1, fontSize: 12.5, padding:'10px 14px', color:'var(--danger)'}}>
                 {actionLoading === 'stop' ? 'Desconectando...' : 'Desconectar'}
@@ -443,7 +460,7 @@ export default function WhatsAppPage() {
             {qr ? (
               <>
                 <div style={{display:'flex', justifyContent:'center', padding: 14, background:'white', borderRadius: 14, margin:'0 auto'}}>
-                  <QRCode value={qr} size={216} includeMargin={false} />
+                  <QRCode value={qr} size={qrSize} includeMargin={false} />
                 </div>
                 <p style={{fontSize: 11.5, color:'var(--ink-soft)', lineHeight: 1.45}}>
                   No WhatsApp: <strong>Configurações → Dispositivos vinculados → Vincular um aparelho</strong> e aponte a câmera para o código.
@@ -528,7 +545,7 @@ export default function WhatsAppPage() {
 
       {/* Advanced actions — forget session */}
       <div style={{...cfgStyles.cardWrap, marginTop: 8}}>
-        <div style={{...cfgStyles.cardP, background:'color-mix(in oklab, var(--warn) 8%, var(--surface))', border:'1px solid color-mix(in oklab, var(--warn) 20%, var(--line))'}}>
+        <div style={{...cfgStyles.cardP, background:tint('--warn', 8), border:tintBorder('--warn', 20)}}>
           <div style={{fontSize: 13, fontWeight: 600, color:'var(--ink)', marginBottom: 4}}>Ações avançadas</div>
           <div style={{fontSize: 12, color:'var(--ink-soft)', marginBottom: 12, lineHeight: 1.45}}>
             &ldquo;Esquecer número&rdquo; desconecta o WhatsApp e remove a sessão salva. Para usar novamente, você precisará conectar por QR Code ou código de pareamento.

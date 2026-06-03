@@ -21,3 +21,15 @@ export function detectLinks(text) {
   }
   return found
 }
+
+// Fonte única de verdade para "este URL é de um marketplace de oferta?".
+// Usa exatamente os mesmos padrões de detectLinks para que o sanitizador
+// (messageProcessor) nunca remova um link que o pipeline iria converter.
+export function isOfferUrl(url) {
+  const raw = String(url ?? '')
+  for (const regex of Object.values(PATTERNS)) {
+    regex.lastIndex = 0
+    if (regex.test(raw)) return true
+  }
+  return false
+}

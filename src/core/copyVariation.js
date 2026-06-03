@@ -85,7 +85,7 @@ export function pickVariant(bucket, groupId, date, random = false) {
   return bucket[idx]
 }
 
-const PLACEHOLDER_RE = /\{\{(greeting|cta|trailer)\}\}/g
+const PLACEHOLDER_RE = /\{\{(gancho|greeting|cta|convitegrupo|trailer)\}\}/g
 const LINK_RE_GRUPO = /\{\{grupoLink\}\}/g
 const LINK_RE_CUPOM = /\{\{cupomLink\}\}/g
 
@@ -113,9 +113,9 @@ export function applyVariation(text, opts = {}) {
   if (PLACEHOLDER_RE.test(result)) {
     PLACEHOLDER_RE.lastIndex = 0
     return result.replace(PLACEHOLDER_RE, (_, key) => {
-      if (key === 'greeting') return greeting
+      if (key === 'gancho' || key === 'greeting') return greeting
       if (key === 'cta') return cta
-      if (key === 'trailer') return trailer
+      if (key === 'convitegrupo' || key === 'trailer') return trailer
       return ''
     })
   }

@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
-import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
+import { MobileLoadingCard, MobileErrorCard, MobileSpinner } from '@/components/mobile/MobileAsyncState'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
-import { cfgStyles, mobi } from '@/components/mobile/mobileStyles'
+import { cfgStyles, mobi, tint, tintBorder } from '@/components/mobile/mobileStyles'
 import { api } from '@/lib/api'
 
 const STATUS_PILL_TONE = {
@@ -60,8 +60,8 @@ const schedStyles = {
   itemDate: { fontSize: 11.5, color: 'var(--ink-soft)' },
   cancelBtn: {
     padding: '6px 12px', borderRadius: 999,
-    background: 'color-mix(in oklab, var(--danger) 10%, var(--surface))',
-    border: '1px solid color-mix(in oklab, var(--danger) 35%, var(--line))',
+    background: tint('--danger', 10),
+    border: tintBorder('--danger', 35),
     color: 'var(--danger)', fontSize: 11.5, fontWeight: 600,
     cursor: 'pointer', fontFamily: 'inherit',
   },
@@ -131,7 +131,7 @@ export default function ScheduledPage() {
 
       {!loading && loadError && (
         <div style={{ padding: '0 16px' }}>
-          <MobileErrorCard message={loadError} />
+          <MobileErrorCard message={loadError} onRetry={() => loadScheduled()} />
         </div>
       )}
 
@@ -163,10 +163,11 @@ export default function ScheduledPage() {
                   {isCancellable && (
                     <button
                       type="button"
-                      style={{ ...schedStyles.cancelBtn, opacity: isCancelling ? 0.6 : 1 }}
+                      style={{ ...schedStyles.cancelBtn, opacity: isCancelling ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                       onClick={() => cancelScheduled(item.id)}
                       disabled={isCancelling}
                     >
+                      {isCancelling && <MobileSpinner size={13} />}
                       {isCancelling ? 'Cancelando...' : 'Cancelar'}
                     </button>
                   )}

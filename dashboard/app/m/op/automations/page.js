@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { MobileConfirmDialog } from '@/components/mobile/MobileModal'
-import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
+import { mobi, cfgStyles, tint, tintBorder } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileRoutes } from '@/components/mobile/routes'
 import { api } from '@/lib/api'
@@ -212,7 +212,7 @@ export default function MobileAutomationsPage() {
   }
 
   if (loading) return <MobileShell title="Automações" active="espelhar" showBack onBack={() => router.back()}><div style={{ padding: '18px 16px' }}><MobileLoadingCard label="Carregando automações..." /></div></MobileShell>
-  if (error && automations.length === 0) return <MobileShell title="Automações" active="espelhar" showBack onBack={() => router.back()}><div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div></MobileShell>
+  if (error && automations.length === 0) return <MobileShell title="Automações" active="espelhar" showBack onBack={() => router.back()}><div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} onRetry={() => load()} /></div></MobileShell>
 
   const canSave = form.keyword.trim() && form.destGroupJid
   const selectedTemplatePreview = templatePreview(templates, form.templateKey)
@@ -227,7 +227,7 @@ export default function MobileAutomationsPage() {
       <div style={cfgStyles.cardWrap}>
         <div style={{ ...cfgStyles.cardP, display: 'grid', gap: 12 }}>
           <div style={{ fontSize: 12.5, color: 'var(--ink-soft)', lineHeight: 1.5 }}>Configure buscas recorrentes e envie promoções automaticamente para seus destinos.</div>
-          <div style={{ fontSize: 11.5, color: 'var(--warn, #a16207)', lineHeight: 1.45, background: 'color-mix(in oklab, #f59e0b 12%, var(--surface))', border: '1px solid color-mix(in oklab, #f59e0b 28%, var(--line))', borderRadius: 12, padding: '9px 10px' }}>
+          <div style={{ fontSize: 11.5, color: 'var(--warn, #a16207)', lineHeight: 1.45, background: tint('#f59e0b', 12), border: tintBorder('#f59e0b', 28), borderRadius: 12, padding: '9px 10px' }}>
             Antes de deixar ligado: conecte o WhatsApp, confira as credenciais Shopee e teste com “Enviar agora”.
           </div>
           <button type="button" onClick={openCreate} style={mobi.btn('accent', true)}>+ Nova automação</button>

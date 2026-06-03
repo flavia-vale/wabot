@@ -5,10 +5,12 @@ import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
+import { MobileHScroll } from '@/components/mobile/MobileHScroll'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileLogLinkActions, toMobileLogItem } from '@/lib/mobileLogs'
 import { normalizeSummaryCounts, summaryDeliveryRateLabel } from '@/lib/mobileLogsSummary'
 import { mobileRoutes } from '@/components/mobile/routes'
+import { tint, tintBorder } from '@/components/mobile/mobileStyles'
 
 const MOBILE_LOG_FILTERS = [
   { key: 'todos', label: 'Tudo', apiStatus: 'all' },
@@ -101,8 +103,8 @@ const envStyles = {
   item: (expanded) => ({
     margin:'0 16px 8px',
     padding: 14,
-    background: expanded ? 'color-mix(in oklab, var(--accent) 6%, var(--surface))' : 'var(--surface)',
-    border:'1px solid ' + (expanded ? 'color-mix(in oklab, var(--accent) 30%, var(--line))' : 'var(--line)'),
+    background: expanded ? tint('--accent', 6) : 'var(--surface)',
+    border:'1px solid ' + (expanded ? tint('--accent', 30, '--line') : 'var(--line)'),
     borderRadius: 14,
     cursor:'pointer',
     width: 'calc(100% - 32px)',
@@ -119,7 +121,7 @@ const envStyles = {
               : status === 'fila' ? 'var(--warn)'
               : status === 'ignorado' ? 'var(--ink-faint)'
               : 'var(--ink-faint)',
-    boxShadow: status === 'fila' ? '0 0 0 3px color-mix(in oklab, var(--warn) 30%, transparent)' : 'none',
+    boxShadow: status === 'fila' ? `0 0 0 3px ${tint('--warn', 30, 'transparent')}` : 'none',
   }),
   itemMain: { flex: 1, minWidth: 0 },
   itemHead: { display:'flex', alignItems:'baseline', justifyContent:'space-between', gap: 8, marginBottom: 5 },
@@ -138,9 +140,9 @@ const envStyles = {
   statusPill: (status) => ({
     fontSize: 10.5, fontWeight: 600,
     padding:'2px 8px', borderRadius: 999,
-    background: status === 'ok' ? 'color-mix(in oklab, var(--success) 16%, var(--surface))'
-              : status === 'falha' ? 'color-mix(in oklab, var(--danger) 16%, var(--surface))'
-              : status === 'fila' ? 'color-mix(in oklab, var(--warn) 18%, var(--surface))'
+    background: status === 'ok' ? tint('--success', 16)
+              : status === 'falha' ? tint('--danger', 16)
+              : status === 'fila' ? tint('--warn', 18)
               : status === 'ignorado' ? 'var(--bg-soft)'
               : 'var(--bg-soft)',
     color: status === 'ok' ? 'var(--success)'
@@ -169,8 +171,8 @@ const envStyles = {
   exLinkSuccess: { fontFamily:"'JetBrains Mono', monospace", fontSize: 11.5, color:'var(--success)', fontWeight: 500, wordBreak:'break-all' },
   errorBox: {
     padding: 10,
-    background:'color-mix(in oklab, var(--danger) 10%, var(--surface))',
-    border:'1px solid color-mix(in oklab, var(--danger) 25%, var(--line))',
+    background:tint('--danger', 10),
+    border:tintBorder('--danger', 25),
     borderRadius: 10,
     fontSize: 12, color:'var(--danger)',
     display:'flex', alignItems:'flex-start', gap: 8,
@@ -422,14 +424,14 @@ export default function LogsPage() {
       })()}
 
       {/* Filtros em palavras claras */}
-      <div style={envStyles.chipRow} aria-label="Filtros de envios no servidor">
+      <MobileHScroll contentStyle={{ gap: 6, padding: '14px 16px 4px' }} aria-label="Filtros de envios no servidor">
         {filters.map(f => (
           <button key={f.key} type="button" onClick={() => changeFilter(f.key)} style={envStyles.chip(filter === f.key)} title={`Filtrar por ${f.label.toLowerCase()}`}>
             {f.label}
             {filter === f.key && <span style={envStyles.chipCount(true)}>{total}</span>}
           </button>
         ))}
-      </div>
+      </MobileHScroll>
       <div style={envStyles.loadedHint}>
         Filtro aplicado no servidor. Exibindo {items.length} de {total} envio(s){serverSearch ? ` para “${serverSearch}”` : ''}.
       </div>
@@ -437,7 +439,7 @@ export default function LogsPage() {
       {/* Lista */}
       <div style={{padding:'4px 0 0'}}>
         {loading && <div style={{padding:'0 16px'}}><MobileLoadingCard label="Carregando envios..." /></div>}
-        {!loading && error && <div style={{padding:'0 16px'}}><MobileErrorCard message={error} /></div>}
+        {!loading && error && <div style={{padding:'0 16px'}}><MobileErrorCard message={error} onRetry={() => loadFirstPage()} /></div>}
         {!loading && !error && filtered.length === 0 && (
           <div style={{padding:'40px 24px', textAlign:'center', color:'var(--ink-soft)', fontSize: 13}}>
             {items.length === 0 ? (serverSearch ? 'Nenhum envio encontrado no servidor para essa busca.' : 'Nenhum envio ainda. Quando o bot postar ou você criar uma oferta, aparece aqui.') : 'Nenhum envio bate com esse filtro.'}
@@ -562,7 +564,7 @@ export default function LogsPage() {
       {!loading && !error && items.length > 0 && (
         <div style={{padding:'8px 16px 0'}}>
           {clearArmed ? (
-            <div style={{padding: 14, background:'color-mix(in oklab, var(--danger) 8%, var(--surface))', border:'1px solid color-mix(in oklab, var(--danger) 25%, var(--line))', borderRadius: 14, display:'grid', gap: 10}}>
+            <div style={{padding: 14, background:tint('--danger', 8), border:tintBorder('--danger', 25), borderRadius: 14, display:'grid', gap: 10}}>
               <div style={{fontSize: 12.5, color:'var(--ink)', lineHeight: 1.45}}>
                 Isso apaga <strong>todo o histórico de envios</strong>. Não dá para desfazer. Os grupos e configurações não são afetados.
               </div>

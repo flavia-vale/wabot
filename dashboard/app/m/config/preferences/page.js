@@ -20,6 +20,7 @@ export default function PreferencesPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [savedMessage, setSavedMessage] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -37,7 +38,7 @@ export default function PreferencesPage() {
     }
     load()
     return () => { active = false }
-  }, [])
+  }, [reloadKey])
 
   async function savePreferences() {
     setSaving(true)
@@ -76,7 +77,7 @@ export default function PreferencesPage() {
   if (error && !draft) {
     return (
       <MobileShell title="Conversor" active="conta">
-        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div>
+        <div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} onRetry={() => setReloadKey((k) => k + 1)} /></div>
       </MobileShell>
     )
   }

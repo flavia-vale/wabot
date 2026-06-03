@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileModal } from '@/components/mobile/MobileModal'
+import { MobileHScroll } from '@/components/mobile/MobileHScroll'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { MobileLoadingCard } from '@/components/mobile/MobileAsyncState'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
@@ -21,6 +22,7 @@ import {
 import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import { DEFAULT_COUPON_LINKS, DEFAULT_COUPON_CTA, loadCouponPrefs, persistCouponPrefs } from '@/lib/mobileCouponStore'
 import { filterDestGroups, selectAllVisible, clearVisible, groupKey } from '@/lib/mobileOfferFilters'
+import { tint, tintBorder } from '@/components/mobile/mobileStyles'
 
 const criarStyles = {
   pageH: { padding:'18px 20px 0' },
@@ -59,8 +61,8 @@ const criarStyles = {
   inputClear: {
     position:'absolute', right: 10, top: '50%', transform:'translateY(-50%)',
     width: 34, height: 34, borderRadius:'50%',
-    background:'color-mix(in oklab, var(--danger) 14%, var(--surface))',
-    border:'1.5px solid color-mix(in oklab, var(--danger) 45%, var(--line))',
+    background:tint('--danger', 14),
+    border:tintBorder('--danger', 45, { width: 1.5 }),
     display:'flex', alignItems:'center', justifyContent:'center',
     color:'var(--danger)',
     fontSize: 20, fontWeight: 700, lineHeight: 1,
@@ -70,8 +72,8 @@ const criarStyles = {
   changeLinkBtn: {
     marginTop: 10, width:'100%',
     padding:'12px 14px', borderRadius: 12,
-    background:'color-mix(in oklab, var(--success) 10%, var(--surface))',
-    border:'1px solid color-mix(in oklab, var(--success) 35%, var(--line))',
+    background:tint('--success', 10),
+    border:tintBorder('--success', 35),
     color:'var(--success)',
     fontSize: 13, fontWeight: 600,
     cursor:'pointer', fontFamily:'inherit',
@@ -103,10 +105,10 @@ const criarStyles = {
   // Card de link convertido — clean, focado
   linkCard: (tone) => ({
     background: tone === 'warn'
-      ? 'color-mix(in oklab, var(--warn) 10%, var(--surface))'
+      ? tint('--warn', 10)
       : 'var(--surface)',
     border:'1px solid ' + (tone === 'warn'
-      ? 'color-mix(in oklab, var(--warn) 28%, var(--line))'
+      ? tint('--warn', 28, '--line')
       : 'var(--line)'),
     borderRadius: 16,
     padding: 14,
@@ -165,7 +167,7 @@ const criarStyles = {
   productPrices: { display:'flex', gap: 8, alignItems:'baseline', marginTop: 6 },
   priceNow: { fontSize: 18, fontWeight: 600, color:'var(--ink)' },
   priceWas: { fontSize: 11.5, color:'var(--ink-faint)', textDecoration:'line-through' },
-  pill: { fontSize: 10.5, fontWeight: 600, padding:'2px 7px', borderRadius: 999, background:'color-mix(in oklab, var(--success) 18%, var(--surface))', color:'var(--success)', border:'1px solid var(--line)' },
+  pill: { fontSize: 10.5, fontWeight: 600, padding:'2px 7px', borderRadius: 999, background:tint('--success', 18), color:'var(--success)', border:'1px solid var(--line)' },
 
   // CTA grande
   ctaWrap: { padding:'20px 16px 0' },
@@ -187,16 +189,16 @@ const criarStyles = {
   warnBanner: {
     margin:'16px 16px 0',
     padding:'10px 12px',
-    background:'color-mix(in oklab, var(--warn) 12%, var(--surface))',
-    border:'1px solid color-mix(in oklab, var(--warn) 30%, var(--line))',
+    background:tint('--warn', 12),
+    border:tintBorder('--warn', 30),
     borderRadius: 10,
     fontSize: 11.5, color:'var(--ink)', lineHeight: 1.45,
     display:'flex', alignItems:'flex-start', gap: 8,
   },
   inlineWarn: {
     padding:'9px 11px',
-    background:'color-mix(in oklab, var(--warn) 10%, var(--surface))',
-    border:'1px solid color-mix(in oklab, var(--warn) 26%, var(--line))',
+    background:tint('--warn', 10),
+    border:tintBorder('--warn', 26),
     borderRadius: 9,
     fontSize: 11.5, color:'var(--ink)', lineHeight: 1.45,
   },
@@ -228,7 +230,7 @@ const criarStyles = {
   sectionHint: { padding:'0 20px', fontSize: 11.5, color:'var(--ink-soft)', marginBottom: 6, lineHeight: 1.4 },
   aiPill: {
     padding:'5px 10px', borderRadius: 999,
-    background:'color-mix(in oklab, var(--accent-2) 60%, var(--surface))',
+    background:tint('--accent-2', 60),
     border:'1px solid var(--line)', fontSize: 11, fontWeight: 600,
     color:'var(--ink)', cursor:'pointer', fontFamily:'inherit',
     display:'inline-flex', alignItems:'center', gap: 4,
@@ -273,7 +275,7 @@ const criarStyles = {
   bonusCard: (on) => ({
     margin:'0 16px 10px',
     background: on ? 'var(--surface)' : 'var(--bg-soft)',
-    border:'1px solid ' + (on ? 'color-mix(in oklab, var(--accent) 35%, var(--line))' : 'var(--line)'),
+    border:'1px solid ' + (on ? tint('--accent', 35, '--line') : 'var(--line)'),
     borderRadius: 14,
     overflow:'hidden',
     transition:'all .2s',
@@ -285,9 +287,9 @@ const criarStyles = {
   },
   bonusIcon: (on) => ({
     width: 32, height: 32, borderRadius: 9,
-    background: on ? 'color-mix(in oklab, var(--accent) 22%, var(--surface))' : 'var(--surface)',
+    background: on ? tint('--accent', 22) : 'var(--surface)',
     color: on ? 'var(--accent-strong)' : 'var(--ink-soft)',
-    border:'1px solid ' + (on ? 'color-mix(in oklab, var(--accent) 30%, var(--line))' : 'var(--line)'),
+    border:'1px solid ' + (on ? tint('--accent', 30, '--line') : 'var(--line)'),
     display:'flex', alignItems:'center', justifyContent:'center',
     flexShrink: 0,
   }),
@@ -360,8 +362,8 @@ const criarStyles = {
   // Preview do bônus aplicado
   bonusPreview: {
     padding:'10px 12px',
-    background:'color-mix(in oklab, var(--success) 8%, var(--bg-soft))',
-    border:'1px dashed color-mix(in oklab, var(--success) 30%, var(--line))',
+    background:tint('--success', 8, '--bg-soft'),
+    border:tintBorder('--success', 30, { style: 'dashed' }),
     borderRadius: 9,
     fontSize: 11.5, lineHeight: 1.5,
     color:'var(--ink)',
@@ -403,7 +405,7 @@ const criarStyles = {
     display:'flex', alignItems:'center', gap: 12,
     padding:'13px 14px',
     borderBottom: last ? 'none' : '1px solid var(--line)',
-    background: sel ? 'color-mix(in oklab, var(--accent) 8%, var(--surface))' : 'transparent',
+    background: sel ? tint('--accent', 8) : 'transparent',
     cursor:'pointer',
   }),
   destCheck: (sel) => ({
@@ -756,8 +758,8 @@ export default function OfferPage() {
       {isExpired && (
         <div style={{
           margin:'14px 16px 0', padding:'12px 14px',
-          background:'color-mix(in oklab, var(--success) 12%, var(--surface))',
-          border:'1px solid color-mix(in oklab, var(--success) 35%, var(--line))',
+          background:tint('--success', 12),
+          border:tintBorder('--success', 35),
           borderRadius: 14, display:'flex', alignItems:'center', gap: 10,
         }}>
           <span style={{
@@ -887,14 +889,14 @@ export default function OfferPage() {
             <div style={criarStyles.sectionTitle}>Escolha um modelo</div>
             <button type="button" onClick={() => router.push(mobileRoutes.accountTemplates)} style={criarStyles.editTemplateLink}>Editar</button>
           </div>
-          <div style={criarStyles.templateRow}>
+          <MobileHScroll contentStyle={{ padding:'0 16px', gap: 8, paddingBottom: 4 }}>
             {allTemplates.map((template) => (
               <button key={template.key} type="button" onClick={() => updateTemplate(template.key)} style={criarStyles.templateCard(selectedTemplate === template.key)}>
                 <div style={criarStyles.templateName}>{template.name}</div>
                 <div style={criarStyles.templatePreview(selectedTemplate === template.key)}>{(template.body || template.preview || '').split('\n').slice(0, 4).join('\n')}</div>
               </button>
             ))}
-          </div>
+          </MobileHScroll>
 
           <div style={criarStyles.editorWrap}>
             <textarea style={criarStyles.editor} value={editorText} onChange={(event) => { setEditorText(event.target.value); setEditorDirty(event.target.value !== baseOfferText) }} />
@@ -1061,12 +1063,12 @@ ${currentCouponLink}`
                     onChange={(event) => setDestSearch(event.target.value)}
                   />
                   <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap: 8}}>
-                    <label style={{display:'flex', alignItems:'center', gap: 6, fontSize: 12, color:'var(--ink)', cursor:'pointer'}}>
+                    <label style={{display:'flex', alignItems:'center', gap: 8, minHeight: 44, fontSize: 12, color:'var(--ink)', cursor:'pointer'}}>
                       <input
                         type="checkbox"
                         checked={includeChannels}
                         onChange={(event) => setIncludeChannels(event.target.checked)}
-                        style={{width: 16, height: 16}}
+                        style={{width: 20, height: 20, accentColor: 'var(--accent-strong)', flexShrink: 0}}
                       />
                       Incluir canais
                     </label>

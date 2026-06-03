@@ -77,6 +77,7 @@ export default function PreservacaoPage() {
   const [meLoading, setMeLoading] = useState(true)
 
   const [config, setConfig] = useState(null)
+  const [configReloadKey, setConfigReloadKey] = useState(0)
   const [configLoading, setConfigLoading] = useState(true)
   const [configError, setConfigError] = useState('')
 
@@ -128,6 +129,8 @@ export default function PreservacaoPage() {
     let active = true
     const timer = window.setTimeout(() => {
       if (!active) return
+      setConfigLoading(true)
+      setConfigError('')
       api.preservationConfig()
         .then((data) => {
           if (!active) return
@@ -141,7 +144,7 @@ export default function PreservacaoPage() {
         .finally(() => { if (active) setConfigLoading(false) })
     }, 0)
     return () => { active = false; window.clearTimeout(timer) }
-  }, [])
+  }, [configReloadKey])
 
   const loadMonitoring = useCallback(() => {
     // `guard` ignora o resultado se o componente já desmontou.
@@ -447,7 +450,7 @@ export default function PreservacaoPage() {
 
       {!configLoading && configError && (
         <div style={{ padding: '0 16px' }}>
-          <MobileErrorCard message={configError} />
+          <MobileErrorCard message={configError} onRetry={() => setConfigReloadKey((k) => k + 1)} />
         </div>
       )}
 

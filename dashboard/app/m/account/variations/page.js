@@ -6,6 +6,7 @@ import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { mobi, cfgStyles } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
+import { mobileRoutes } from '@/components/mobile/routes'
 import { api } from '@/lib/api'
 
 const GROUPS = [
@@ -43,15 +44,21 @@ export default function MobileVariationsPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let active = true
-    api.variationsGet()
-      .then((cfg) => { if (active) setPool(parsePool(cfg?.copyVariationPoolJson)) })
-      .catch((err) => { if (active) setError(err.message || 'Não foi possível carregar variações.') })
-      .finally(() => { if (active) setLoading(false) })
+    function load() {
+      setLoading(true)
+      setError('')
+      api.variationsGet()
+        .then((cfg) => { if (active) setPool(parsePool(cfg?.copyVariationPoolJson)) })
+        .catch((err) => { if (active) setError(err.message || 'Não foi possível carregar variações.') })
+        .finally(() => { if (active) setLoading(false) })
+    }
+    load()
     return () => { active = false }
-  }, [])
+  }, [reloadKey])
 
   function setItem(groupKey, index, value) {
     setPool((current) => ({ ...current, [groupKey]: current[groupKey].map((item, itemIndex) => itemIndex === index ? value : item) }))
@@ -83,11 +90,11 @@ export default function MobileVariationsPage() {
     }
   }
 
-  if (loading) return <MobileShell title="Ganchos e CTAs" active="conta" showBack onBack={() => router.back()}><div style={{ padding: '18px 16px' }}><MobileLoadingCard label="Carregando variações..." /></div></MobileShell>
-  if (error && !pool) return <MobileShell title="Ganchos e CTAs" active="conta" showBack onBack={() => router.back()}><div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} /></div></MobileShell>
+  if (loading) return <MobileShell title="Ganchos e CTAs" active="conta" showBack onBack={() => router.push(mobileRoutes.account)}><div style={{ padding: '18px 16px' }}><MobileLoadingCard label="Carregando variações..." /></div></MobileShell>
+  if (error && !pool) return <MobileShell title="Ganchos e CTAs" active="conta" showBack onBack={() => router.push(mobileRoutes.account)}><div style={{ padding: '18px 16px' }}><MobileErrorCard message={error} onRetry={() => setReloadKey((k) => k + 1)} /></div></MobileShell>
 
   return (
-    <MobileShell title="Ganchos e CTAs" active="conta" showBack onBack={() => router.back()}>
+    <MobileShell title="Ganchos e CTAs" active="conta" showBack onBack={() => router.push(mobileRoutes.account)}>
       <div style={cfgStyles.pageH}>
         <div style={cfgStyles.pageEyebrow}>Persistido no backend</div>
         <div style={cfgStyles.pageTitle}>Ganchos e CTAs</div>
@@ -114,7 +121,7 @@ export default function MobileVariationsPage() {
               {(pool[group.key] || ['']).map((value, index) => (
                 <div key={`${group.key}-${index}`} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center' }}>
                   <input style={cfgStyles.field} value={value} onChange={(event) => setItem(group.key, index, event.target.value)} placeholder={index === 0 ? '(vazio)' : group.placeholder} />
-                  <button type="button" onClick={() => removeItem(group.key, index)} style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--danger)', borderRadius: 12, minWidth: 44, minHeight: 44, fontWeight: 800 }}>×</button>
+                  <button type="button" aria-label={`Remover ${group.label.toLowerCase()} ${index + 1}`} onClick={() => removeItem(group.key, index)} style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--danger)', borderRadius: 12, minWidth: 44, minHeight: 44, fontWeight: 800 }}>×</button>
                 </div>
               ))}
               <button type="button" onClick={() => addItem(group.key)} style={mobi.btn('ghost', true)}>+ Adicionar variação</button>
