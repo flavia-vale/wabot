@@ -18,6 +18,17 @@ on:
         required: false
         default: 'manual'
 
+# Serializa deploys por branch/ambiente. Sem isto, merges em sequência rápida
+# em develop (ou main) disparam workflows que rodam ao mesmo tempo no MESMO
+# diretório do VPS (~/wabot-staging ou ~/wabot) e pisam no node_modules/.next
+# um do outro — sintoma observado: build do dashboard falhando com
+# "_webpack.WebpackError is not a constructor" + "rm: Directory not empty".
+# cancel-in-progress:false faz os runs ENFILEIRAREM (nunca cancela um deploy
+# no meio do SSH, o que deixaria o VPS num estado inconsistente).
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
