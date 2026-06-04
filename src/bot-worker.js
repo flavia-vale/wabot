@@ -1111,11 +1111,15 @@ async function startBotInner() {
   }
 
   // Duas janelas: msgIds (curta) protege contra redelivery do WhatsApp do
-  // mesmo msg.key.id; links (longa) protege contra a fonte republicar a
-  // mesma URL no destino algum tempo depois. Caso real: mesmo amzn.to/4rUx7Gd
-  // convertido 3x em 52min porque o canal-fonte reposta a mesma oferta.
+  // mesmo msg.key.id; links (longa) protege contra a MESMA oferta cair no
+  // mesmo destino mais de uma vez por dia. Caso real: várias automações
+  // (canais-fonte diferentes) apontando pro mesmo grupo republicam a mesma
+  // URL ao longo do dia — sem janela diária a oferta saía repetida. A chave
+  // de dedup é `destJid:convertedUrl` (independe da fonte), então duas
+  // automações com o mesmo produto pro mesmo grupo colidem e só a 1ª passa.
+  // Default 24h = "no máximo uma vez por dia"; override via DEDUP_LINK_WINDOW_MS.
   const dedupeWindowMs = Math.max(1_000, Number(process.env.DEDUP_MSGID_WINDOW_MS) || 300_000)
-  const linkDedupWindowMs = Math.max(dedupeWindowMs, Number(process.env.DEDUP_LINK_WINDOW_MS) || 2 * 60 * 60_000)
+  const linkDedupWindowMs = Math.max(dedupeWindowMs, Number(process.env.DEDUP_LINK_WINDOW_MS) || 24 * 60 * 60_000)
   const dedup = pruneDedupStore(
     loadDedup(),
     Date.now(),
@@ -1719,7 +1723,11 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           logger.info({ destJid }, 'Duplicata ignorada'); continue
         }
         if (GLOBAL_DEDUP_MODE !== 'off') {
-          const globalDedup = await globalDedupCheckAndSet(key, dedupeWindowMs)
+          // Usa a janela longa (diária) também na dedup cross-instância via
+          // Redis — antes usava dedupeWindowMs (5min), o que deixava a mesma
+          // oferta passar de novo poucos minutos depois quando o bloqueio
+          // in-memory não pegava (ex.: outro processo/instância).
+          const globalDedup = await globalDedupCheckAndSet(key, linkDedupWindowMs)
           if (globalDedup.duplicate) {
             await registerDedupBlock({
               reason: 'skip:dedup_recent_link_global',

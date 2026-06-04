@@ -295,15 +295,44 @@ Settings → Secrets and variables → Actions:
 Falha do smoke 9 geralmente é `.env` faltando, `JWT_SECRET` ausente
 ou porta divergente do que está em `apiPortByDashboardPort`.
 
+## Dedup das ofertas automáticas (cruzada entre automações, por grupo)
+
+Os **envios automáticos** (`src/offerAutomation/dispatcher.js`) NÃO passam pela
+dedup de link do `bot-worker.js` (essa só vale para mensagens encaminhadas de
+grupos monitorados). Eles enviam via `sendBroadcast` (manager.js) e têm dedup
+própria. Antes, a dedup era só `automation.sentItemIds` — **per-automação**.
+Resultado: N automações apontando pro mesmo grupo reenviavam o MESMO produto
+(uma vez por automação), porque uma não conhecia o que a outra mandou.
+
+Hoje há uma camada **cruzada por grupo de destino**, na tabela
+`OfferAutomationSentLog (userId, destGroupJid, productKey, priceCents, sentAt)`:
+
+1. Antes de enviar, o dispatcher carrega o que já saiu pro grupo dentro de
+   `OFFER_AUTOMATION_DEDUP_WINDOW_MS` (default **24h** = "no máximo uma vez por
+   dia") e filtra os produtos por `productKey` (de `productDedupKey`).
+2. **Exceção por preço:** se o `priceCents` atual difere de todos os preços
+   com que aquele produto saiu nas últimas 24h, a oferta **passa** — é uma
+   oferta nova de fato (relâmpago da manhã a R$X vs. da tarde a R$Y). Isso
+   concilia o "1x/dia" com o pedido histórico de não prender oferta legítima
+   que voltou mais barata.
+3. Cada envio grava uma linha em `OfferAutomationSentLog`; registros fora da
+   janela são podados a cada run (a tabela fica limitada à janela por grupo).
+4. `dedupeOffersByProduct` continua colapsando o mesmo produto **dentro de um
+   lote** (mantém o primeiro), então mesmo-produto/preços-diferentes no MESMO
+   envio vira uma oferta só — a exceção por preço só atua entre execuções.
+
+Teste: `test/offer-automation.test.js`.
+
 ## Agregação de duplicatas em `MessageLog.dedupHits`
 
-Em vez de criar N linhas de `skip:dedup_recent_link` quando o mesmo
-link é republicado pela fonte ao longo de 2h, agregamos no contador
+Em vez de criar N linhas de `skip:dedup_recent_link` quando a mesma
+oferta cai no mesmo destino ao longo do dia (várias automações/canais-fonte
+apontando pro mesmo grupo, ou a fonte republicando), agregamos no contador
 `dedupHits` da linha mais recente do mesmo `(userId, destGroup,
 convertedUrl)`. Implementado em `registerDedupBlock()` no `bot-worker.js`:
 
-1. Procura a linha mais recente dentro de `linkDedupWindowMs` (default 2h,
-   override via env `DEDUP_LINK_WINDOW_MS`)
+1. Procura a linha mais recente dentro de `linkDedupWindowMs` (default 24h
+   = "no máximo uma vez por dia", override via env `DEDUP_LINK_WINDOW_MS`)
    filtrando por `userId`, `destGroup` e `convertedUrl OR originalUrl`.
 2. Se achar → `UPDATE` com `dedupHits = dedupHits + 1`.
 3. Senão (estado dessincronizado, fallback raro) → cria linha
@@ -331,7 +360,7 @@ tradutor `explainErrorMsg` em `dashboard/app/dashboard/logs/page.js`):
 
 | Prefixo                          | Categoria          | Significado                                                  |
 |----------------------------------|--------------------|--------------------------------------------------------------|
-| `skip:dedup_recent_link`         | DEDUP              | Link já enviado nas últimas 2h (per-dest)                    |
+| `skip:dedup_recent_link`         | DEDUP              | Mesma oferta já enviada ao destino nas últimas 24h (per-dest) |
 | `skip:dedup_recent_link_global`  | DEDUP              | Idem, via Redis global                                       |
 | `skip:blocked_keyword`           | CONFIG_BLOCK       | Palavra-chave bloqueada pelo usuário                         |
 | `skip:title_mismatch`            | CONFIG_BLOCK       | Caption não bate com og:title raspado                        |

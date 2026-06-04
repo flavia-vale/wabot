@@ -55,7 +55,7 @@ function explainErrorMsg(errorMsg) {
     return 'Sua credencial do Mercado Livre (SSID/cookie) expirou. As ofertas continuam saindo com link longo de afiliado (partner_id) e creditando comissão, mas para voltar a gerar links curtos meli.la, renove o SSID em Configurações → Credenciais → Mercado Livre.'
   }
   if (errorMsg.startsWith('skip:dedup')) {
-    return 'Link já enviado nas últimas 2 horas — bloqueado para não duplicar.'
+    return 'Mesma oferta já enviada para este destino nas últimas 24 horas — bloqueada para não duplicar (no máximo uma vez por dia).'
   }
   if (errorMsg.startsWith('skip:blocked_keyword')) {
     return 'Contém uma palavra que você marcou para bloquear.'
@@ -121,7 +121,7 @@ function DedupHitsChip({ hits }) {
   return (
     <span
       className="ml-2 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600"
-      title="Mesmo link bloqueado novamente nas últimas 2h — proteção contra repetição."
+      title="Mesma oferta bloqueada novamente nas últimas 24h — proteção contra repetição (no máximo uma vez por dia)."
     >
       +{n.toLocaleString('pt-BR')} {n === 1 ? 'repetição bloqueada' : 'repetições bloqueadas'}
     </span>
