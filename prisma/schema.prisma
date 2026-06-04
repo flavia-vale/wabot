@@ -475,6 +475,7 @@ model OfferAutomation {
   offersPerSend   Int       @default(1)
   minDiscountPct  Int       @default(0)
   sortType        Int       @default(2)
+  listType        Int       @default(1)
   prioritizeAMS   Boolean   @default(false)
   isKeySeller     Boolean   @default(false)
   enabled         Boolean   @default(true)

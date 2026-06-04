@@ -1,4 +1,4 @@
-import { fetchOffers as defaultFetchOffers, dedupeOffersByProduct, productDedupKey } from './shopeeOffers.js'
+import { fetchOffers as defaultFetchOffers, dedupeOffersByProduct, productDedupKey, buildOfferCandidateLimit } from './shopeeOffers.js'
 import { sendBroadcast, isRunning } from '../manager.js'
 import db from '../db.js'
 import { parseCredentialData } from '../credentialHealth.js'
@@ -113,13 +113,15 @@ function addSentIds(existing, newIds) {
   return all.length > 200 ? all.slice(all.length - 200) : all
 }
 
-async function resolveOffers({ automation, sentItemIds, creds, fetchOffersFn }) {
+export async function resolveOffers({ automation, sentItemIds, creds, fetchOffersFn = defaultFetchOffers }) {
   const base = {
     keyword: automation.keyword,
     minDiscountPct: automation.minDiscountPct,
     limit: automation.offersPerSend,
     creds,
     sortType: automation.sortType ?? 2,
+    listType: automation.listType ?? 1,
+    page: automation.page ?? 1,
     isKeySeller: automation.isKeySeller ?? false,
   }
 
@@ -251,4 +253,40 @@ export async function runAutomation(automation, {
   })
 
   return { sent: sentIds.length }
+}
+
+// Dry-run da busca: roda a MESMA pipeline de fetch (resolveOffers + dedupe por
+// produto) que runAutomation usa, mas SEM enviar e SEM tocar no banco. Serve
+// pro botão "Executar busca" do painel visualizar o que cada combinação de
+// parâmetros traz. Não exclui sentItemIds nem aplica dedup 24h por grupo —
+// é leitura pura da API Shopee a partir das escolhas do usuário.
+export async function searchOffersPreview({ params = {}, creds, fetchOffersFn = defaultFetchOffers }) {
+  const automation = {
+    keyword: params.keyword,
+    minDiscountPct: Number(params.minDiscountPct) || 0,
+    offersPerSend: Number(params.offersPerSend) || 1,
+    sortType: Number(params.sortType) || 2,
+    listType: Number.isFinite(Number(params.listType)) ? Number(params.listType) : 1,
+    page: Number(params.page) || 1,
+    prioritizeAMS: Boolean(params.prioritizeAMS ?? false),
+    isKeySeller: Boolean(params.isKeySeller ?? false),
+  }
+  const { offers, rawCount } = await resolveOffers({ automation, sentItemIds: [], creds, fetchOffersFn })
+  const deduped = dedupeOffersByProduct(offers)
+  return {
+    params: {
+      keyword: automation.keyword,
+      sortType: automation.sortType,
+      listType: automation.listType,
+      page: automation.page,
+      minDiscountPct: automation.minDiscountPct,
+      prioritizeAMS: automation.prioritizeAMS,
+      isKeySeller: automation.isKeySeller,
+      candidateLimit: buildOfferCandidateLimit(automation.offersPerSend),
+    },
+    rawCount,
+    afterDiscountFilter: offers.length,
+    afterProductDedupe: deduped.length,
+    offers: deduped,
+  }
 }

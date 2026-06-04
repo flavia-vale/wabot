@@ -289,6 +289,63 @@ test('PUT /api/offer-automations/:id: aceita minDiscountPct = 0 e offersPerSend 
   assert.equal(updated.offersPerSend, 1)
 })
 
+test('PUT /api/offer-automations/:id: aceita sortType, listType e isKeySeller', async () => {
+  let updated = null
+  const dbMock = {
+    offerAutomation: {
+      findFirst: async () => ({ id: 'a1', userId: 'user-1' }),
+      update: async ({ data }) => { updated = data; return { id: 'a1', ...data } },
+    },
+  }
+  const app = buildOfferApp(dbMock)
+  const res = await app.inject({
+    method: 'PUT', url: '/api/offer-automations/a1',
+    payload: { sortType: 5, listType: 0, isKeySeller: true },
+  })
+  assert.equal(res.statusCode, 200)
+  assert.equal(updated.sortType, 5)
+  assert.equal(updated.listType, 0)
+  assert.equal(updated.isKeySeller, true)
+})
+
+test('PUT /api/offer-automations/:id: rejeita sortType e listType inválidos', async () => {
+  const dbMock = { offerAutomation: { findFirst: async () => ({ id: 'a1', userId: 'user-1' }), update: async () => ({}) } }
+  const app = buildOfferApp(dbMock)
+  const bad1 = await app.inject({ method: 'PUT', url: '/api/offer-automations/a1', payload: { sortType: 9 } })
+  assert.equal(bad1.statusCode, 400)
+  const bad2 = await app.inject({ method: 'PUT', url: '/api/offer-automations/a1', payload: { listType: 7 } })
+  assert.equal(bad2.statusCode, 400)
+})
+
+// ═══════════════════════════════════════════════
+// POST /search-preview — dry-run da busca (validação + gating de credenciais)
+// ═══════════════════════════════════════════════
+
+test('POST /search-preview: 400 sem palavra-chave', async () => {
+  const app = buildOfferApp({})
+  const res = await app.inject({ method: 'POST', url: '/api/offer-automations/search-preview', payload: { keyword: '' } })
+  assert.equal(res.statusCode, 400)
+})
+
+test('POST /search-preview: 400 com sortType/listType inválidos', async () => {
+  const app = buildOfferApp({})
+  const r1 = await app.inject({ method: 'POST', url: '/api/offer-automations/search-preview', payload: { keyword: 'fone', sortType: 9 } })
+  assert.equal(r1.statusCode, 400)
+  const r2 = await app.inject({ method: 'POST', url: '/api/offer-automations/search-preview', payload: { keyword: 'fone', listType: 9 } })
+  assert.equal(r2.statusCode, 400)
+})
+
+test('POST /search-preview: 400 quando não há credenciais Shopee', async () => {
+  const dbMock = { credential: { findUnique: async () => null } }
+  const app = buildOfferApp(dbMock)
+  const res = await app.inject({
+    method: 'POST', url: '/api/offer-automations/search-preview',
+    payload: { keyword: 'fone bluetooth', sortType: 2, listType: 1 },
+  })
+  assert.equal(res.statusCode, 400)
+  assert.ok(JSON.parse(res.body).error.includes('Shopee'))
+})
+
 test('PUT /api/offer-automations/:id: aceita minDiscountPct = 100 (boundary)', async () => {
   let updated = null
   const dbMock = {
