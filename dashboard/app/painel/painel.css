@@ -443,6 +443,22 @@
 
 .pnl-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
 
+.pnl-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.pnl-preset {
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--pnl-radius-sm);
+  padding: 12px;
+  cursor: pointer;
+}
+.pnl-preset:hover { border-color: var(--accent-strong); }
+.pnl-preset.is-active { border-color: var(--accent-strong); background: color-mix(in oklab, var(--accent) 14%, transparent); }
+.pnl-preset b { display: block; font-size: 13px; font-weight: 600; }
+.pnl-preset span { display: block; font-size: 11.5px; color: var(--ink-soft); }
+.pnl-preset small { display: block; font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
+@media (max-width: 560px) { .pnl-presets { grid-template-columns: 1fr; } }
+
 /* Modal simples */
 .pnl-modal-overlay { position: fixed; inset: 0; background: rgba(31, 45, 42, 0.45); z-index: 80; display: flex; align-items: center; justify-content: center; padding: 20px; }
 .pnl-modal { background: var(--surface); border-radius: var(--pnl-radius); padding: 22px; max-width: 420px; width: 100%; box-shadow: var(--pnl-shadow); }
