@@ -57,7 +57,7 @@ export const NAV_GROUPS = [
       },
       {
         label: 'IDs de afiliada',
-        href: '/dashboard/credenciais',
+        href: '/painel/ids-afiliada',
         icon: i(<><circle cx="7.5" cy="15.5" r="5.5" /><path d="M21 2l-9.6 9.6" /><path d="M15.5 7.5 18 10l3-3-2.5-2.5z" /></>),
       },
       {

@@ -422,6 +422,27 @@
 
 .pnl-cards-mobile { display: none; }
 
+/* ── Formulários (campos, labels, ajuda) ─────────────────────────────── */
+.pnl-field { display: flex; flex-direction: column; gap: 5px; }
+.pnl-label { font-size: 12px; font-weight: 600; color: var(--ink-soft); }
+.pnl-hint { font-size: 11px; color: var(--ink-faint); }
+.pnl-field-row { display: flex; gap: 8px; }
+.pnl-help { font-size: 11.5px; color: var(--ink-soft); }
+.pnl-help summary { cursor: pointer; font-weight: 600; color: var(--accent-strong); }
+.pnl-help p { margin-top: 5px; line-height: 1.5; }
+.pnl-field-error { font-size: 11.5px; font-weight: 600; color: var(--danger); }
+
+.pnl-btn.is-ghost { padding: 9px 14px; }
+.pnl-btn-sm { font-size: 12px; padding: 8px 12px; border-radius: 10px; }
+
+.pnl-note-box { border-radius: var(--pnl-radius-sm); padding: 12px 14px; font-size: 12.5px; line-height: 1.5; }
+.pnl-note-box.is-info { background: color-mix(in oklab, var(--accent) 16%, transparent); color: var(--ink); }
+.pnl-note-box.is-warn { background: color-mix(in oklab, var(--warn) 18%, transparent); color: #8a5a1e; }
+.pnl-note-box.is-success { background: color-mix(in oklab, var(--success) 16%, transparent); color: var(--accent-strong); }
+.pnl-note-box.is-error { background: color-mix(in oklab, var(--danger) 14%, transparent); color: var(--danger); }
+
+.pnl-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+
 /* Modal simples */
 .pnl-modal-overlay { position: fixed; inset: 0; background: rgba(31, 45, 42, 0.45); z-index: 80; display: flex; align-items: center; justify-content: center; padding: 20px; }
 .pnl-modal { background: var(--surface); border-radius: var(--pnl-radius); padding: 22px; max-width: 420px; width: 100%; box-shadow: var(--pnl-shadow); }
