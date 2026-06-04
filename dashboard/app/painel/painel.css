@@ -342,6 +342,37 @@
 }
 .pnl-input::placeholder { color: var(--ink-faint); }
 .pnl-input:focus { outline: none; border-color: var(--accent-strong); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 30%, transparent); }
+textarea.pnl-input { resize: vertical; min-height: 96px; line-height: 1.5; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px; }
+
+.pnl-check { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 600; color: var(--ink-soft); cursor: pointer; }
+.pnl-check input { width: 17px; height: 17px; accent-color: var(--accent-strong); }
+
+.pnl-inline-form { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+@media (max-width: 480px) { .pnl-inline-form { grid-template-columns: 1fr; } }
+
+.pnl-price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 480px) { .pnl-price-grid { grid-template-columns: 1fr; } }
+
+/* Preview estilo WhatsApp */
+.pnl-wa {
+  background: #E5F5EC;
+  border-radius: var(--pnl-radius-sm);
+  padding: 14px;
+  background-image: radial-gradient(color-mix(in oklab, var(--accent) 22%, transparent) 0.7px, transparent 0.7px);
+  background-size: 14px 14px;
+}
+.pnl-wa-bubble {
+  background: #fff;
+  border-radius: 12px 12px 12px 4px;
+  padding: 9px 12px 7px;
+  max-width: 86%;
+  box-shadow: 0 1px 1px rgba(31, 45, 42, 0.08);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.pnl-wa-meta { display: flex; align-items: center; gap: 4px; justify-content: flex-end; margin-top: 3px; font-size: 10px; color: var(--ink-faint); }
 
 .pnl-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--pnl-radius); background: var(--surface); }
 .pnl-table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 13px; }
