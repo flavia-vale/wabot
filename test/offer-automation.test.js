@@ -129,6 +129,7 @@ const credOk = {
   credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'a', secretKey: 's' }) }) },
   botConfig: { findUnique: async () => ({ copyVariationPoolJson: '{}' }) },
   offerAutomation: { update: async () => ({}) },
+  offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
 }
 
 test('runAutomation: distingue all_offers_filtered de no_offers_found', async () => {
@@ -260,6 +261,7 @@ test('runAutomation: envia imagem do anúncio junto com a oferta automática', a
     offerAutomation: {
       update: async ({ data }) => { updates.push(data); return { ...automation, ...data } },
     },
+    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
   }
 
   const result = await runAutomation(automation, {
@@ -299,6 +301,7 @@ test('runAutomation: não envia o mesmo produto duas vezes quando a Shopee repet
     credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'a', secretKey: 's' }) }) },
     botConfig: { findUnique: async () => ({ copyVariationPoolJson: '{}' }) },
     offerAutomation: { update: async ({ data }) => { updates.push(data); return {} } },
+    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
   }
 
   const result = await runAutomation(automation, {
@@ -317,6 +320,63 @@ test('runAutomation: não envia o mesmo produto duas vezes quando a Shopee repet
   assert.deepEqual(JSON.parse(updates[0].sentItemIds), ['100'])
 })
 
+test('runAutomation: dedup cruzada por grupo — mesmo produto a preço NOVO passa (relâmpago da tarde)', async () => {
+  const sent = []
+  const created = []
+  const automation = baseAutomation({ id: 'auto-cross', userId: 'user-cross', minDiscountPct: 0, offersPerSend: 2 })
+  const dbOverride = {
+    credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'a', secretKey: 's' }) }) },
+    botConfig: { findUnique: async () => ({ copyVariationPoolJson: '{}' }) },
+    offerAutomation: { update: async () => ({}) },
+    offerAutomationSentLog: {
+      // Outra automação já enviou "Fritadeira Air Fryer" a 199,90 (19990 cents) ao mesmo grupo hoje.
+      findMany: async () => [{ productKey: 'fritadeira air fryer', priceCents: 19990 }],
+      create: async ({ data }) => { created.push(data) },
+      deleteMany: async () => ({}),
+    },
+  }
+
+  const result = await runAutomation(automation, {
+    dbOverride,
+    isRunningFn: () => true,
+    fetchOffersFn: async () => ({ rawCount: 1, offers: [
+      // mesmo produto, preço DIFERENTE → passa (oferta nova de fato)
+      { itemId: '200', productName: 'Fritadeira Air Fryer', priceMin: 179.90, priceDiscountRate: 40, offerLink: 'https://s.shopee.com.br/b' },
+    ] }),
+    sendBroadcastFn: async (...args) => { sent.push(args) },
+  })
+
+  assert.deepEqual(result, { sent: 1 })
+  assert.equal(sent.length, 1)
+  // o que passou foi o de preço novo (17990 cents) e foi registrado no log cruzado
+  assert.equal(created.length, 1)
+  assert.equal(created[0].priceCents, 17990)
+  assert.equal(created[0].destGroupJid, 'grupo@g.us')
+})
+
+test('runAutomation: dedup cruzada — mesmo produto/preço já enviado ao grupo no dia → all_offers_filtered', async () => {
+  const automation = baseAutomation({ id: 'auto-cross2', userId: 'user-cross2', minDiscountPct: 0, offersPerSend: 2 })
+  const dbOverride = {
+    credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'a', secretKey: 's' }) }) },
+    botConfig: { findUnique: async () => ({ copyVariationPoolJson: '{}' }) },
+    offerAutomation: { update: async () => ({}) },
+    offerAutomationSentLog: {
+      findMany: async () => [{ productKey: 'kit churrasco', priceCents: 9990 }],
+      create: async () => ({}),
+      deleteMany: async () => ({}),
+    },
+  }
+  const result = await runAutomation(automation, {
+    dbOverride,
+    isRunningFn: () => true,
+    fetchOffersFn: async () => ({ rawCount: 1, offers: [
+      { itemId: '300', productName: 'Kit Churrasco', priceMin: 99.90, priceDiscountRate: 25, offerLink: 'https://s.shopee.com.br/c' },
+    ] }),
+    sendBroadcastFn: async () => {},
+  })
+  assert.deepEqual(result, { skipped: 'all_offers_filtered' })
+})
+
 describe('runAutomation — prioritizeAMS', () => {
   const baseCreds = { appId: 'a', secretKey: 's' }
 
@@ -325,6 +385,7 @@ describe('runAutomation — prioritizeAMS', () => {
       credential: { findUnique: async () => ({ data: JSON.stringify(baseCreds) }) },
       offerAutomation: { update: async () => {} },
       botConfig: { findUnique: async () => null },
+      offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
     }
   }
 
@@ -410,6 +471,7 @@ test('runAutomation: usa templateKey selecionado em mobileTemplatesJson', async 
       couponLink: '',
     }) },
     offerAutomation: { update: async () => ({}) },
+    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
   }
 
   const result = await runAutomation(automation, {
@@ -447,6 +509,7 @@ test('runAutomation: sem templateKey cai no Automático clássico', async () => 
       couponLink: '',
     }) },
     offerAutomation: { update: async () => ({}) },
+    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
   }
 
   await runAutomation(automation, {
@@ -532,6 +595,7 @@ test('runAutomation: template pode usar ganchos, CTAs e links globais como vari�
       couponLink: 'https://cupom.test/oferta',
     }) },
     offerAutomation: { update: async () => ({}) },
+    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
   }
 
   await runAutomation(automation, {
