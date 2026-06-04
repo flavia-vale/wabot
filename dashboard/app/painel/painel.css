@@ -282,6 +282,9 @@
 .pnl-center { min-height: 100vh; display: flex; align-items: center; justify-content: center; color: var(--ink-soft); font-size: 14px; gap: 8px; }
 .pnl-spin { width: 9px; height: 9px; border-radius: 50%; background: var(--accent-strong); animation: pnl-pulse 1s ease-in-out infinite; }
 @keyframes pnl-pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+.pnl-pulse { animation: pnl-pulse 1.2s ease-in-out infinite; }
+.pnl-rotate { animation: pnl-rotate 1s linear infinite; }
+@keyframes pnl-rotate { to { transform: rotate(360deg); } }
 
 .pnl-skel { background: linear-gradient(90deg, var(--bg-soft) 25%, color-mix(in oklab, var(--bg-soft) 50%, var(--surface)) 50%, var(--bg-soft) 75%); background-size: 200% 100%; animation: pnl-shimmer 1.3s infinite; border-radius: 8px; }
 @keyframes pnl-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
