@@ -37,7 +37,7 @@ export const NAV_GROUPS = [
       },
       {
         label: 'Envios',
-        href: '/dashboard/logs',
+        href: '/painel/envios',
         icon: i(<><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7z" /></>),
       },
     ],
