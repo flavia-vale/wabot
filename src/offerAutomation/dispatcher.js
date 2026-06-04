@@ -1,4 +1,4 @@
-import { fetchOffers as defaultFetchOffers, dedupeOffersByProduct } from './shopeeOffers.js'
+import { fetchOffers as defaultFetchOffers, dedupeOffersByProduct, productDedupKey } from './shopeeOffers.js'
 import { sendBroadcast, isRunning } from '../manager.js'
 import db from '../db.js'
 import { parseCredentialData } from '../credentialHealth.js'
@@ -8,6 +8,17 @@ import { composeTemplates } from '../../dashboard/lib/mobileTemplateStore.js'
 
 const PRICE_DIVISOR = 1
 const DEFAULT_AUTOMATION_TEMPLATE_KEY = 'automatico_classico'
+
+// Janela da dedup cruzada por grupo (default 24h = "no máximo uma vez por
+// dia"). Override em ms via env OFFER_AUTOMATION_DEDUP_WINDOW_MS.
+const CROSS_GROUP_DEDUP_WINDOW_MS = Math.max(
+  60_000,
+  Number(process.env.OFFER_AUTOMATION_DEDUP_WINDOW_MS) || 24 * 60 * 60_000,
+)
+
+function offerPriceCents(offer) {
+  return Math.round((Number(offer?.priceMin ?? offer?.price) || 0) * 100)
+}
 
 function priceStr(raw) {
   const num = Number(raw)
@@ -163,10 +174,30 @@ export async function runAutomation(automation, {
   // duplicata no mesmo envio. A dedup por itemId (sentItemIds) não cobre isso.
   offers = dedupeOffersByProduct(offers)
 
+  // Dedup cruzada entre automações, por grupo de destino: `sentItemIds` é
+  // per-automação, então N automações pro mesmo grupo reenviavam o mesmo
+  // produto. Aqui filtramos contra o que JÁ saiu pro grupo nas últimas 24h
+  // (independe de qual automação enviou). Liberamos se o PREÇO mudou — é uma
+  // oferta nova de fato.
+  const dedupSince = new Date(Date.now() - CROSS_GROUP_DEDUP_WINDOW_MS)
+  const recentSends = await dbInstance.offerAutomationSentLog.findMany({
+    where: { userId: automation.userId, destGroupJid: automation.destGroupJid, sentAt: { gte: dedupSince } },
+    select: { productKey: true, priceCents: true },
+  })
+  const recentPricesByKey = new Map()
+  for (const row of recentSends) {
+    if (!recentPricesByKey.has(row.productKey)) recentPricesByKey.set(row.productKey, new Set())
+    recentPricesByKey.get(row.productKey).add(row.priceCents)
+  }
+  offers = offers.filter((offer) => {
+    const prices = recentPricesByKey.get(productDedupKey(offer))
+    return !prices || !prices.has(offerPriceCents(offer))
+  })
+
   if (!offers.length) {
     // rawCount > 0 significa que a Shopee retornou produtos, mas o filtro de
-    // desconto mínimo ou a dedup (itens já enviados) removeu todos — diferente
-    // de a busca não ter trazido nada.
+    // desconto mínimo / a dedup (itens já enviados ou já enviados ao grupo no
+    // dia) removeu todos — diferente de a busca não ter trazido nada.
     return { skipped: rawCount > 0 ? 'all_offers_filtered' : 'no_offers_found' }
   }
 
@@ -195,7 +226,23 @@ export async function runAutomation(automation, {
       source: 'offerAutomation',
     })
     sentIds.push(offer.itemId)
+    // Registra no log cruzado por grupo (com preço) pra próxima automação que
+    // mire o mesmo grupo não reenviar este produto no mesmo dia.
+    await dbInstance.offerAutomationSentLog.create({
+      data: {
+        userId: automation.userId,
+        destGroupJid: automation.destGroupJid,
+        productKey: productDedupKey(offer),
+        priceCents: offerPriceCents(offer),
+        itemId: offer.itemId != null ? String(offer.itemId) : null,
+      },
+    }).catch(() => {})
   }
+
+  // Poda registros fora da janela pra tabela não crescer indefinidamente.
+  await dbInstance.offerAutomationSentLog.deleteMany({
+    where: { userId: automation.userId, destGroupJid: automation.destGroupJid, sentAt: { lt: dedupSince } },
+  }).catch(() => {})
 
   const newSentIds = addSentIds(sentItemIds, sentIds)
   await dbInstance.offerAutomation.update({

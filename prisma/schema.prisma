@@ -486,3 +486,22 @@ model OfferAutomation {
   @@index([userId, enabled])
   @@index([enabled, lastSentAt])
 }
+
+// Dedup cruzada entre automações, por grupo de destino. `sentItemIds` é
+// per-automação, então N automações apontando pro mesmo grupo reenviavam o
+// MESMO produto (uma vez por automação). Aqui registramos cada produto
+// enviado a um grupo COM o preço; antes de enviar, o dispatcher pula se o
+// mesmo (userId, destGroupJid, productKey, priceCents) saiu nas últimas 24h.
+// Se o PREÇO mudou, a oferta passa (é uma oferta nova de fato — relâmpago da
+// manhã a R$X vs. da tarde a R$Y).
+model OfferAutomationSentLog {
+  id           String   @id @default(cuid())
+  userId       String
+  destGroupJid String
+  productKey   String
+  priceCents   Int
+  itemId       String?
+  sentAt       DateTime @default(now())
+
+  @@index([userId, destGroupJid, sentAt])
+}
