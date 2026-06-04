@@ -11,7 +11,7 @@ const i = (paths) => paths // SVG children prontos para <svg>
 export const TOP_CTA = {
   label: 'Criar oferta',
   note: 'cole um link · grátis',
-  href: '/dashboard/gerar-oferta',
+  href: '/painel/criar-oferta',
 }
 
 export const NAV_GROUPS = [
@@ -25,13 +25,13 @@ export const NAV_GROUPS = [
       },
       {
         label: 'Espelhamento',
-        href: '/dashboard/grupos',
+        href: '/painel/grupos',
         pro: true,
         icon: i(<><path d="M17 2l4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v1a4 4 0 0 1-4 4H3" /></>),
       },
       {
         label: 'Ofertas automáticas',
-        href: '/dashboard/ofertas-automaticas',
+        href: '/painel/ofertas-automaticas',
         pro: true,
         icon: i(<><path d="M12 2v4" /><path d="M12 18v4" /><path d="M4.9 4.9l2.8 2.8" /><path d="M16.3 16.3l2.8 2.8" /><circle cx="12" cy="12" r="4" /></>),
       },
@@ -47,12 +47,12 @@ export const NAV_GROUPS = [
     items: [
       {
         label: 'Grupos',
-        href: '/dashboard/grupos',
+        href: '/painel/grupos',
         icon: i(<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>),
       },
       {
         label: 'Mensagens',
-        href: '/dashboard/variacoes-de-texto',
+        href: '/painel/mensagens',
         icon: i(<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />),
       },
       {
@@ -77,7 +77,7 @@ export const NAV_GROUPS = [
       },
       {
         label: 'Plano e cobrança',
-        href: '/dashboard/assinaturas',
+        href: '/painel/plano',
         icon: i(<><rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" /></>),
       },
       {
