@@ -42,6 +42,21 @@ const OFFERS_PER_SEND_OPTIONS = [
   { value: 5, label: '5 produtos por envio' },
 ]
 
+// Valores da API productOfferV2 da Shopee (doc oficial BR).
+const SORT_TYPE_OPTIONS = [
+  { value: 2, label: 'Mais vendidos (recomendado)' },
+  { value: 5, label: 'Maior comissão' },
+  { value: 1, label: 'Relevância' },
+  { value: 3, label: 'Maior preço' },
+  { value: 4, label: 'Menor preço' },
+]
+
+const LIST_TYPE_OPTIONS = [
+  { value: 1, label: 'Maior comissão (padrão)' },
+  { value: 0, label: 'Recomendados' },
+  { value: 2, label: 'Melhor desempenho' },
+]
+
 const SKIP_LABELS = {
   bot_not_running: 'O bot não está conectado. Conecte o WhatsApp e tente de novo.',
   no_shopee_credentials: 'Sem credenciais da Shopee. Configure appId e secretKey.',
@@ -61,6 +76,10 @@ const emptyForm = {
   dailyRunTime: DEFAULT_DAILY_RUN_TIME,
   offersPerSend: 1,
   minDiscountPct: 20,
+  sortType: 2,
+  listType: 1,
+  prioritizeAMS: false,
+  isKeySeller: false,
 }
 
 const s = {
@@ -111,6 +130,37 @@ export default function MobileAutomationsPage() {
   const [busyId, setBusyId] = useState('')
   const [resultById, setResultById] = useState({})
   const [pendingDelete, setPendingDelete] = useState(null)
+  const [previewing, setPreviewing] = useState(false)
+  const [previewResult, setPreviewResult] = useState(null)
+  const [previewError, setPreviewError] = useState('')
+
+  function resetPreview() {
+    setPreviewResult(null)
+    setPreviewError('')
+  }
+
+  async function runPreview() {
+    setPreviewing(true)
+    setPreviewError('')
+    setPreviewResult(null)
+    try {
+      const res = await api.offerAutomationSearchPreview({
+        keyword: form.keyword,
+        offersPerSend: form.offersPerSend,
+        minDiscountPct: form.minDiscountPct,
+        sortType: form.sortType,
+        listType: form.listType,
+        prioritizeAMS: form.prioritizeAMS,
+        isKeySeller: form.isKeySeller,
+      })
+      if (res.ok === false) setPreviewError(res.error || 'Falha na busca')
+      else setPreviewResult(res)
+    } catch (err) {
+      setPreviewError(err.message || 'Falha na busca')
+    } finally {
+      setPreviewing(false)
+    }
+  }
 
   async function load() {
     setLoading(true)
@@ -137,6 +187,7 @@ export default function MobileAutomationsPage() {
     setEditId(null)
     setForm(emptyForm)
     setSaveError('')
+    resetPreview()
     setShowForm(true)
   }
 
@@ -151,8 +202,13 @@ export default function MobileAutomationsPage() {
       dailyRunTime: item.dailyRunTime || DEFAULT_DAILY_RUN_TIME,
       offersPerSend: item.offersPerSend || 1,
       minDiscountPct: item.minDiscountPct ?? 20,
+      sortType: item.sortType ?? 2,
+      listType: item.listType ?? 1,
+      prioritizeAMS: item.prioritizeAMS ?? false,
+      isKeySeller: item.isKeySeller ?? false,
     })
     setSaveError('')
+    resetPreview()
     setShowForm(true)
   }
 
@@ -296,6 +352,48 @@ export default function MobileAutomationsPage() {
                 {DISCOUNT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </label>
+            <label>
+              <div style={cfgStyles.label}>Ordenar resultados por</div>
+              <select style={cfgStyles.field} value={form.sortType} onChange={(event) => setForm((current) => ({ ...current, sortType: Number(event.target.value) }))}>
+                {SORT_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <label>
+              <div style={cfgStyles.label}>Tipo de lista</div>
+              <select style={cfgStyles.field} value={form.listType} onChange={(event) => setForm((current) => ({ ...current, listType: Number(event.target.value) }))}>
+                {LIST_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              <div style={{ fontSize: 11.5, color: 'var(--ink-soft)', marginTop: 6, lineHeight: 1.4 }}>“Melhor desempenho” é mais restrito e pode retornar menos produtos.</div>
+            </label>
+            <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer' }}>
+              <input type="checkbox" checked={form.prioritizeAMS} onChange={(event) => setForm((current) => ({ ...current, prioritizeAMS: event.target.checked }))} style={{ marginTop: 2, width: 16, height: 16 }} />
+              <span>
+                <span style={{ ...cfgStyles.label, display: 'block', marginBottom: 2 }}>Priorizar ofertas com comissão extra</span>
+                <span style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>Busca as duas e envia primeiro as com comissão extra do vendedor.</span>
+              </span>
+            </label>
+            <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer' }}>
+              <input type="checkbox" checked={form.isKeySeller} onChange={(event) => setForm((current) => ({ ...current, isKeySeller: event.target.checked }))} style={{ marginTop: 2, width: 16, height: 16 }} />
+              <span>
+                <span style={{ ...cfgStyles.label, display: 'block', marginBottom: 2 }}>Apenas vendedores oficiais (Key Seller)</span>
+                <span style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>Restringe a busca a lojas oficiais/parceiras Key da Shopee.</span>
+              </span>
+            </label>
+
+            <div style={{ display: 'grid', gap: 8, border: tintBorder('#3b82f6', 28), background: tint('#3b82f6', 8), borderRadius: 12, padding: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <span style={{ ...cfgStyles.label, margin: 0 }}>Pré-visualizar a busca</span>
+                <button type="button" onClick={runPreview} disabled={previewing || !form.keyword.trim()} style={{ ...mobi.btn('accent', false), opacity: previewing || !form.keyword.trim() ? 0.55 : 1 }}>{previewing ? 'Buscando…' : 'Executar busca'}</button>
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--ink-soft)', lineHeight: 1.4 }}>Roda a busca na Shopee com os parâmetros acima e mostra o JSON. Nada é enviado aos grupos.</div>
+              {previewError && <div style={{ fontSize: 12, color: 'var(--danger)' }}>{previewError}</div>}
+              {previewResult && (
+                <>
+                  <div style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>Retornados: <strong>{previewResult.rawCount}</strong> · após desconto: <strong>{previewResult.afterDiscountFilter}</strong> · únicos: <strong>{previewResult.afterProductDedupe}</strong></div>
+                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap', maxHeight: 280, overflow: 'auto', borderRadius: 10, padding: 10, fontSize: 10.5, lineHeight: 1.45, color: '#bbf7d0', background: '#0f172a' }}>{JSON.stringify(previewResult, null, 2)}</pre>
+                </>
+              )}
+            </div>
             {saveError && <div style={{ fontSize: 12, color: 'var(--danger)' }}>{saveError}</div>}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               <button type="button" onClick={() => setShowForm(false)} style={mobi.btn('ghost', true)}>Cancelar</button>

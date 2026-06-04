@@ -350,6 +350,8 @@ export const api = {
     apiFetch(`/api/offer-automations/${id}`, { method: 'DELETE' }),
   offerAutomationTrigger: (id) =>
     apiFetch(`/api/offer-automations/${id}/trigger`, { method: 'POST' }),
+  offerAutomationSearchPreview: (params) =>
+    apiFetch('/api/offer-automations/search-preview', { method: 'POST', body: JSON.stringify(params) }),
   variationsGet: () => apiFetch('/api/config'),
   variationsUpdate: (data) =>
     apiFetch('/api/config', {

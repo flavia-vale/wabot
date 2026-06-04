@@ -323,6 +323,36 @@ Hoje há uma camada **cruzada por grupo de destino**, na tabela
 
 Teste: `test/offer-automation.test.js`.
 
+## Parâmetros da busca Shopee + preview (`productOfferV2`)
+
+A busca usa a query `productOfferV2` da API de afiliado da Shopee
+(`src/offerAutomation/shopeeOffers.js`). Valores aceitos pela API (doc oficial
+BR), validados em `src/api/routes/offerAutomation.js`:
+
+| Param      | Valores                                                                 | Onde |
+|------------|-------------------------------------------------------------------------|------|
+| `sortType` | 1=Relevância, 2=Mais vendidos, 3=Maior preço, 4=Menor preço, 5=Maior comissão | API search |
+| `listType` | 0=Recomendados, 1=Maior comissão, 2=Melhor desempenho                   | API search |
+| `isKeySeller` | boolean (só lojas oficiais/Key)                                      | API search |
+| `prioritizeAMS` | boolean → faz 2 buscas (AMS + regular) e concatena                 | dispatcher |
+| `minDiscountPct` | 0..100 (filtro client-side, não é param da API)                  | `filterOffers` |
+| `offersPerSend` | 1..5 → `limit` via `buildOfferCandidateLimit` (×10, teto 100)     | candidate limit |
+
+Todos são editáveis no formulário (create **e** PUT). `listType` foi adicionado
+ao model `OfferAutomation` (migration `..._add_offer_automation_list_type`);
+`sortType`/`isKeySeller`/`prioritizeAMS` já existiam. **Não** restringir
+`sortType` de volta a `[2,5]` nem fixar `listType=1` — a UI agora expõe a faixa
+completa documentada.
+
+**Preview / dry-run (`POST /api/offer-automations/search-preview`):** roda a
+MESMA pipeline (`searchOffersPreview` → `resolveOffers` + `dedupeOffersByProduct`)
+**sem enviar** e **sem tocar no banco**, devolvendo o JSON do que a busca traria
+(`rawCount`, `afterDiscountFilter`, `afterProductDedupe`, `offers`, `params`).
+Não exige automação salva nem `destGroupJid`; só precisa das credenciais Shopee
+do usuário. É o que alimenta o botão "Executar busca" do painel. Não duplicar a
+lógica de busca: novos consumidores devem chamar `resolveOffers`/
+`searchOffersPreview`, não refazer o fetch.
+
 ## Agregação de duplicatas em `MessageLog.dedupHits`
 
 Em vez de criar N linhas de `skip:dedup_recent_link` quando a mesma
