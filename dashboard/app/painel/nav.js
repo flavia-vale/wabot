@@ -62,7 +62,7 @@ export const NAV_GROUPS = [
       },
       {
         label: 'Conexão WhatsApp',
-        href: '/dashboard',
+        href: '/painel/whatsapp',
         icon: i(<><rect x="5" y="2" width="14" height="20" rx="2.5" /><line x1="12" y1="18" x2="12" y2="18" /></>),
       },
     ],
