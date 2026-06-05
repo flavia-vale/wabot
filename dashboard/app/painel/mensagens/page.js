@@ -22,6 +22,7 @@ import {
 import { OFFER_TEMPLATE_VARIABLE_GROUPS } from '@/lib/mobileOfferComposer'
 import { buildRenderedOfferTemplatePreview, summarizeAutomationTemplateUsage } from '@/lib/offerTemplatePreview'
 import { usePainelHeader, PainelTopbarAction } from '../PainelShell'
+import { WhatsAppBubble, TokenText } from '../WhatsAppBubble'
 
 export default function MensagensPage() {
   usePainelHeader({ title: 'Mensagens', subtitle: 'Ganchos, CTAs, variáveis e modelos das suas ofertas' })
@@ -265,12 +266,12 @@ export default function MensagensPage() {
                   <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', marginTop: 12 }}>
                     <div className="pnl-subcard">
                       <p className="pnl-eyebrow">Corpo salvo do modelo</p>
-                      <pre className="pnl-pre">{template.body || ''}</pre>
+                      <pre className="pnl-pre"><TokenText text={template.body || ''} /></pre>
                     </div>
                     <div className="pnl-subcard" style={{ borderColor: 'var(--accent-strong)' }}>
                       <p className="pnl-eyebrow" style={{ color: 'var(--accent-strong)' }}>Prévia real enviada pelo bot</p>
-                      <p className="pnl-card-note" style={{ marginTop: 2 }}>Inclui gancho, CTA, aviso final e links variáveis quando configurados.</p>
-                      <pre className="pnl-pre" style={{ color: 'var(--ink)', maxHeight: 260 }}>{renderedPreview}</pre>
+                      <p className="pnl-card-note" style={{ marginTop: 2, marginBottom: 8 }}>Como vai chegar no grupo — com gancho, CTA, aviso final e links variáveis.</p>
+                      <WhatsAppBubble text={renderedPreview} />
                     </div>
                   </div>
                 </div>
@@ -301,6 +302,12 @@ export default function MensagensPage() {
               onChange={(e) => setEditTemplateBody(e.target.value)}
               rows={9}
             />
+            {editTemplateBody.trim() && (
+              <div style={{ marginTop: 12 }}>
+                <p className="pnl-eyebrow" style={{ color: 'var(--accent-strong)', marginBottom: 6 }}>Prévia ao vivo</p>
+                <WhatsAppBubble text={editTemplateBody} highlight />
+              </div>
+            )}
             <div className="pnl-subcard" style={{ marginTop: 12 }}>
               <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>Inserir variáveis no ponto do cursor</div>
               <p className="pnl-card-note" style={{ marginTop: 2, marginBottom: 8 }}>
