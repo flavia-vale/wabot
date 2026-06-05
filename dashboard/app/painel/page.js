@@ -60,6 +60,7 @@ export default function PainelPage() {
   const [summary, setSummary] = useState(null)
   const [recent, setRecent] = useState(null)
   const [loadError, setLoadError] = useState('')
+  const [period, setPeriod] = useState('today')
 
   const now = useMemo(() => new Date(), [])
   const dateLabel = useMemo(
@@ -71,15 +72,22 @@ export default function PainelPage() {
 
   useEffect(() => {
     let active = true
-    Promise.allSettled([api.logsSummary('today'), api.logs('all', 1, 6)]).then(([s, r]) => {
+    Promise.allSettled([api.logsSummary(period), api.logs('all', 1, 6)]).then(([s, r]) => {
       if (!active) return
       if (s.status === 'fulfilled') setSummary(s.value)
-      else setLoadError('Não foi possível carregar as métricas de hoje.')
+      else setLoadError('Não foi possível carregar as métricas do período.')
       if (r.status === 'fulfilled') setRecent(Array.isArray(r.value?.logs) ? r.value.logs : [])
       else setRecent([])
     })
     return () => { active = false }
-  }, [])
+  }, [period])
+
+  const PERIODS = [
+    { key: 'today', label: 'Hoje', word: 'hoje' },
+    { key: '7d', label: '7 dias', word: 'em 7 dias' },
+    { key: '30d', label: '30 dias', word: 'em 30 dias' },
+  ]
+  const periodWord = PERIODS.find((p) => p.key === period)?.word ?? 'hoje'
 
   const counts = summary?.counts
   const success = num(counts?.success)
@@ -92,6 +100,16 @@ export default function PainelPage() {
   const lastRel = relativeFromNow(summary?.lastSendAt)
   const topDest = Array.isArray(summary?.topDestinations) ? summary.topDestinations : []
   const maxDest = topDest.reduce((m, d) => Math.max(m, num(d.sent)), 0) || 1
+  const topSrc = Array.isArray(summary?.topSources) ? summary.topSources : []
+  const maxSrc = topSrc.reduce((m, d) => Math.max(m, num(d.sent) + num(d.blocked)), 0) || 1
+
+  const donutSegments = [
+    { label: 'Entregues', value: success, color: 'var(--accent-strong)' },
+    { label: 'Repetições bloqueadas', value: dedup, color: 'var(--accent-2)' },
+    { label: 'Bloqueados pela regra', value: blocked, color: 'var(--accent-3)' },
+    { label: 'Falhas', value: failed, color: 'var(--danger)' },
+  ].filter((s) => s.value > 0)
+  const donutTotal = donutSegments.reduce((sum, s) => sum + s.value, 0)
 
   const funnel = [
     { label: 'Detectados nos grupos', value: detected },
@@ -105,10 +123,19 @@ export default function PainelPage() {
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 1080, margin: '0 auto' }}>
+      {/* Seletor de período */}
+      <div className="pnl-chips">
+        {PERIODS.map((p) => (
+          <button key={p.key} type="button" className={`pnl-chip${period === p.key ? ' is-active' : ''}`} onClick={() => setPeriod(p.key)}>
+            {p.label}
+          </button>
+        ))}
+      </div>
+
       {/* Hero */}
       <section className="pnl-hero">
         <div>
-          <div className="pnl-hero-label">Mensagens postadas hoje</div>
+          <div className="pnl-hero-label">Mensagens postadas {periodWord}</div>
           {loadingSummary
             ? <div className="pnl-skel" style={{ width: 120, height: 48, margin: '8px 0' }} />
             : <div className="pnl-hero-num pnl-serif">{success}</div>}
@@ -194,6 +221,57 @@ export default function PainelPage() {
         </section>
       </div>
 
+      {/* Distribuição (rosca) + top origens */}
+      <div className="pnl-grid" style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.1fr)' }}>
+        <section className="pnl-card">
+          <div className="pnl-card-title">Distribuição dos links</div>
+          <div className="pnl-card-note">o que aconteceu com cada link · {periodWord}</div>
+          {loadingSummary ? (
+            <div className="pnl-skel" style={{ height: 160, marginTop: 12 }} />
+          ) : donutTotal === 0 ? (
+            <p className="pnl-empty">Nenhum link processado no período.</p>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginTop: 12, flexWrap: 'wrap' }}>
+              <Donut segments={donutSegments} total={donutTotal} />
+              <div className="pnl-legend">
+                {donutSegments.map((s) => (
+                  <div key={s.label} className="pnl-legend-row">
+                    <span className="pnl-legend-dot" style={{ background: s.color }} />
+                    {s.label}
+                    <span className="pnl-legend-val">{s.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="pnl-card">
+          <div className="pnl-card-title">Top grupos de origem</div>
+          <div className="pnl-card-note">de onde mais vieram links · {periodWord}</div>
+          {loadingSummary ? (
+            <div className="pnl-bars">
+              {[0, 1, 2].map((k) => <div key={k} className="pnl-skel" style={{ height: 28 }} />)}
+            </div>
+          ) : topSrc.length === 0 ? (
+            <p className="pnl-empty">Nenhum grupo de origem com atividade no período.</p>
+          ) : (
+            <div className="pnl-bars">
+              {topSrc.map((d) => {
+                const total = num(d.sent) + num(d.blocked)
+                return (
+                  <div key={d.jid} className="pnl-bar-row">
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
+                    <span className="pnl-bar-val">{total}</span>
+                    <span className="pnl-bar-track"><span className="pnl-bar-fill" style={{ width: `${Math.round((total / maxSrc) * 100)}%` }} /></span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      </div>
+
       {/* Últimos envios */}
       <section className="pnl-card">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -233,6 +311,41 @@ export default function PainelPage() {
         )}
       </section>
     </div>
+  )
+}
+
+function Donut({ segments, total }) {
+  const size = 160
+  const r = 58
+  const sw = 20
+  const cx = size / 2
+  const cy = size / 2
+  const C = 2 * Math.PI * r
+  const fracs = segments.map((s) => (total ? s.value / total : 0))
+  const offsets = fracs.map((_, i) => fracs.slice(0, i).reduce((a, b) => a + b, 0))
+  return (
+    <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size} style={{ flexShrink: 0 }} aria-hidden="true">
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--bg-soft)" strokeWidth={sw} />
+      {segments.map((s, i) => {
+        const dash = fracs[i] * C
+        return (
+          <circle
+            key={i}
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill="none"
+            stroke={s.color}
+            strokeWidth={sw}
+            strokeDasharray={`${dash} ${C - dash}`}
+            strokeDashoffset={-offsets[i] * C}
+            transform={`rotate(-90 ${cx} ${cy})`}
+          />
+        )
+      })}
+      <text x={cx} y={cy - 1} textAnchor="middle" fontSize="30" fontWeight="600" fill="var(--ink)" style={{ letterSpacing: '-0.02em' }}>{total}</text>
+      <text x={cx} y={cy + 18} textAnchor="middle" fontSize="11" fill="var(--ink-soft)">processados</text>
+    </svg>
   )
 }
 

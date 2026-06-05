@@ -270,7 +270,7 @@ export default function OfertasAutomaticasPage() {
               <div key={s.label} className="pnl-kpi">
                 <div className="pnl-kpi-label">{s.label}</div>
                 <div className="pnl-kpi-num">{s.value}</div>
-                <div className="pnl-kpi-sub">{s.sub}</div>
+                <div className="pnl-kpi-foot">{s.sub}</div>
               </div>
             ))}
           </div>
