@@ -419,6 +419,9 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
   word-break: break-word;
 }
 .pnl-wa-meta { display: flex; align-items: center; gap: 4px; justify-content: flex-end; margin-top: 3px; font-size: 10px; color: var(--ink-faint); }
+.pnl-wa-sender { font-size: 11px; font-weight: 600; color: #7C5CF5; margin-bottom: 5px; display: flex; align-items: center; gap: 6px; }
+.pnl-wa-badge { padding: 1px 6px; border-radius: 5px; background: var(--accent-3); font-size: 9.5px; color: var(--ink); font-weight: 700; }
+.pnl-wa-var { background: color-mix(in oklab, var(--accent-2) 60%, transparent); padding: 1px 5px; border-radius: 5px; color: var(--ink); font-weight: 500; }
 
 .pnl-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--pnl-radius); background: var(--surface); }
 .pnl-table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 13px; }

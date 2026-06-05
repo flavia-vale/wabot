@@ -10,6 +10,7 @@
 import { useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { usePainelHeader, PainelTopbarAction } from '../PainelShell'
+import { WhatsAppBubble } from '../WhatsAppBubble'
 import {
   buildOfferPriceBlocks,
   getConversionStatusPresentation,
@@ -175,12 +176,7 @@ export default function CriarOfertaPage() {
         <section className="pnl-card">
           <div className="pnl-card-title">Prévia no WhatsApp</div>
           <div className="pnl-card-note" style={{ marginBottom: 12 }}>como vai chegar no grupo</div>
-          <div className="pnl-wa">
-            <div className="pnl-wa-bubble">
-              {offerMessage || '—'}
-              <div className="pnl-wa-meta">{now} ✓✓</div>
-            </div>
-          </div>
+          <WhatsAppBubble text={offerMessage} time={now} />
           <button type="button" className="pnl-btn is-primary" style={{ marginTop: 14, width: '100%', justifyContent: 'center' }} onClick={copyMessage}>Copiar oferta</button>
           {copyFeedback && <div className="pnl-note-box is-success" style={{ marginTop: 10 }} role="status">{copyFeedback}</div>}
         </section>
