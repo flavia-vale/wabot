@@ -10,7 +10,7 @@ import Link from 'next/link'
 import { api } from '@/lib/api'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
-import { usePainelHeader } from '../PainelShell'
+import { usePainelHeader, PainelTopbarAction } from '../PainelShell'
 
 const DAILY_INTERVAL_MINUTES = 1440
 const DEFAULT_DAILY_RUN_TIME = '09:00'
@@ -213,9 +213,9 @@ export default function OfertasAutomaticasPage() {
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 720, margin: '0 auto' }}>
-      <div className="pnl-toolbar" style={{ justifyContent: 'flex-end' }}>
+      <PainelTopbarAction>
         <button type="button" className="pnl-btn is-primary" onClick={openCreate}>+ Nova automação</button>
-      </div>
+      </PainelTopbarAction>
 
       <Link className="pnl-note-box" href="/painel/mensagens" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, textDecoration: 'none' }}>
         <span>🎲 Quer que cada mensagem saia diferente? Configure ganchos e CTAs.</span>

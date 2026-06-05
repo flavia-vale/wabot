@@ -9,7 +9,7 @@
 
 import { useMemo, useState } from 'react'
 import { api } from '@/lib/api'
-import { usePainelHeader } from '../PainelShell'
+import { usePainelHeader, PainelTopbarAction } from '../PainelShell'
 import {
   buildOfferPriceBlocks,
   getConversionStatusPresentation,
@@ -113,6 +113,9 @@ export default function CriarOfertaPage() {
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 760, margin: '0 auto' }}>
+      <PainelTopbarAction>
+        <span className="pnl-tag is-success" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>✓ GRÁTIS</span>
+      </PainelTopbarAction>
       {/* Link */}
       <section className="pnl-card">
         <div className="pnl-card-title">Seu link</div>
