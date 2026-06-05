@@ -14,7 +14,7 @@ import { HelpLink } from '@/components/HelpLink'
 import { AddChannelModal } from '@/components/AddChannelModal'
 import { TypeBadge, FollowBadge, AdminBadge, HealthBadge } from '@/components/ChannelStatusBadges'
 import { ChannelHealthPanel } from '@/components/ChannelHealthPanel'
-import { usePainelHeader } from '../PainelShell'
+import { usePainelHeader, PainelTopbarAction } from '../PainelShell'
 
 const roleLabels = {
   monitor: 'Monitorar (origem)',
@@ -295,17 +295,7 @@ export default function GruposPage() {
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 720, margin: '0 auto' }}>
-      <div className="pnl-toolbar" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-        <div className="pnl-chips">
-          {['all', 'group', 'channel'].map((f) => (
-            <button key={f} type="button" className={`pnl-chip${filter === f ? ' is-active' : ''}`} onClick={() => setFilter(f)}>
-              {f === 'all' ? 'Todos' : f === 'group' ? 'Grupos' : 'Canais'}
-              <span className="pnl-chip-count">
-                {f === 'all' ? groups.length : f === 'group' ? groups.filter((g) => g.kind !== 'channel').length : groups.filter((g) => g.kind === 'channel').length}
-              </span>
-            </button>
-          ))}
-        </div>
+      <PainelTopbarAction>
         <div className="pnl-toolbar">
           <HelpLink topic="como-cadastrar-grupos">Ajuda</HelpLink>
           <button
@@ -316,6 +306,17 @@ export default function GruposPage() {
             + Adicionar canal {!canUseChannels && '(Pro)'}
           </button>
         </div>
+      </PainelTopbarAction>
+
+      <div className="pnl-chips">
+        {['all', 'group', 'channel'].map((f) => (
+          <button key={f} type="button" className={`pnl-chip${filter === f ? ' is-active' : ''}`} onClick={() => setFilter(f)}>
+            {f === 'all' ? 'Todos' : f === 'group' ? 'Grupos' : 'Canais'}
+            <span className="pnl-chip-count">
+              {f === 'all' ? groups.length : f === 'group' ? groups.filter((g) => g.kind !== 'channel').length : groups.filter((g) => g.kind === 'channel').length}
+            </span>
+          </button>
+        ))}
       </div>
 
       {actionError && <div className="pnl-note-box is-error" role="alert"><strong style={{ fontWeight: 600 }}>Falha ao atualizar grupos</strong><p style={{ marginTop: 4 }}>{actionError}</p></div>}

@@ -21,7 +21,7 @@ import {
 } from '@/lib/mobileTemplateStore'
 import { OFFER_TEMPLATE_VARIABLE_GROUPS } from '@/lib/mobileOfferComposer'
 import { buildRenderedOfferTemplatePreview, summarizeAutomationTemplateUsage } from '@/lib/offerTemplatePreview'
-import { usePainelHeader } from '../PainelShell'
+import { usePainelHeader, PainelTopbarAction } from '../PainelShell'
 
 export default function MensagensPage() {
   usePainelHeader({ title: 'Mensagens', subtitle: 'Ganchos, CTAs, variáveis e modelos das suas ofertas' })
@@ -147,6 +147,12 @@ export default function MensagensPage() {
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 720, margin: '0 auto' }}>
+      {templateMode === 'list' && (
+        <PainelTopbarAction>
+          <button type="button" className="pnl-btn is-primary" onClick={startCreateTemplate}>+ Novo modelo</button>
+        </PainelTopbarAction>
+      )}
+
       {error && <div className="pnl-note-box is-error" role="alert">{error}</div>}
 
       {/* Links */}
@@ -217,9 +223,6 @@ export default function MensagensPage() {
             <div className="pnl-card-title">Modelos de oferta</div>
             <p className="pnl-card-note" style={{ marginTop: 2 }}>Os mesmos modelos do Gerar oferta e das ofertas automáticas.</p>
           </div>
-          {templateMode === 'list' && (
-            <button type="button" className="pnl-btn is-primary" onClick={startCreateTemplate}>+ Novo modelo</button>
-          )}
         </div>
 
         {templateMode === 'list' && (
