@@ -391,3 +391,4 @@ export function ActivationChecklist({ onActivated }) {
     </div>
   )
 }
+
