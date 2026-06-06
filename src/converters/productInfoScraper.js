@@ -367,12 +367,18 @@ async function fetchShopeeItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS, sho
   const ids = parseShopeeIdsFromUrl(canonical)
   if (!ids) return null
   const endpoint = `https://shopee.com.br/api/v4/item/get?itemid=${ids.itemId}&shopid=${ids.shopId}`
+  // Shopee v4 API exige csrf token para não retornar error 90309999.
+  // SPC_F é o fingerprint de sessão anônima; csrftoken deve corresponder.
+  const spcToken = Array.from({ length: 32 }, () => Math.floor(Math.random() * 36).toString(36)).join('')
   try {
     const res = await fetch(endpoint, {
       headers: {
         'User-Agent': BROWSER_UA,
         Accept: 'application/json,text/plain,*/*',
-        Referer: String(canonical || 'https://shopee.com.br/'),
+        Referer: `https://shopee.com.br/product/${ids.shopId}/${ids.itemId}`,
+        Cookie: `SPC_F=${spcToken}; csrftoken=${spcToken}`,
+        'x-csrftoken': spcToken,
+        'x-api-source': 'pc',
       },
       signal: AbortSignal.timeout(timeoutMs),
       redirect: 'follow',
