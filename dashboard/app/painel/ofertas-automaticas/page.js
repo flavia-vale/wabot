@@ -10,7 +10,7 @@ import Link from 'next/link'
 import { api } from '@/lib/api'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
-import { usePainelHeader } from '../PainelShell'
+import { usePainelHeader, PainelTopbarAction } from '../PainelShell'
 
 const DAILY_INTERVAL_MINUTES = 1440
 const DEFAULT_DAILY_RUN_TIME = '09:00'
@@ -211,11 +211,71 @@ export default function OfertasAutomaticasPage() {
 
   const selectedTemplatePreview = templatePreview(templates, form.templateKey)
 
+  // Métricas do card-mestre/stats — todas derivadas das automações reais.
+  const activeCount = automations.filter((a) => a.enabled).length
+  const pausedCount = automations.length - activeCount
+  const destGroupCount = new Set(automations.map((a) => a.destGroupJid).filter(Boolean)).size
+  const lastSentTimes = automations.map((a) => a.lastSentAt).filter(Boolean).map((d) => new Date(d).getTime()).filter((n) => Number.isFinite(n))
+  const lastRunMs = lastSentTimes.length ? Math.max(...lastSentTimes) : null
+  function relativeAgo(ms) {
+    if (!ms) return null
+    const diff = Math.round((Date.now() - ms) / 60000)
+    if (diff < 1) return 'agora mesmo'
+    if (diff < 60) return `há ${diff} min`
+    const h = Math.round(diff / 60)
+    if (h < 24) return `há ${h} h`
+    return `há ${Math.round(h / 24)} d`
+  }
+  const lastRunLabel = relativeAgo(lastRunMs)
+
   return (
     <div className="pnl-grid" style={{ maxWidth: 720, margin: '0 auto' }}>
-      <div className="pnl-toolbar" style={{ justifyContent: 'flex-end' }}>
+      <PainelTopbarAction>
         <button type="button" className="pnl-btn is-primary" onClick={openCreate}>+ Nova automação</button>
-      </div>
+      </PainelTopbarAction>
+
+      {automations.length > 0 && (
+        <>
+          <section className="pnl-master">
+            <div className="pnl-master-ico">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="10" cy="10" r="7" /><path d="M21 21l-4.3-4.3" /><path d="M10.5 6.5 8.5 10.2h3L9.5 13.8" />
+              </svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span className="pnl-master-title">{activeCount > 0 ? 'Garimpo automático ligado' : 'Garimpo automático pausado'}</span>
+                <span className="pnl-master-status">
+                  <span className={`pnl-dot ${activeCount > 0 ? 'is-on' : 'is-idle'}`} aria-hidden="true" />
+                  {activeCount > 0 ? 'buscando' : 'nada ativo'}
+                </span>
+              </div>
+              <div className="pnl-master-sub">
+                {activeCount} {activeCount === 1 ? 'automação ativa' : 'automações ativas'}
+                {lastRunLabel ? ` · última busca ${lastRunLabel}` : ' · ainda não buscou'}
+              </div>
+            </div>
+            <svg width="120" height="40" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true" style={{ flexShrink: 0, opacity: 0.85 }}>
+              <polyline points="0,34 18,30 36,32 54,24 72,26 90,18 108,21 126,12 144,15 162,8 180,11 200,5" fill="none" stroke="var(--accent-2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </section>
+
+          <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+            {[
+              { label: 'Automações ativas', value: activeCount, sub: `de ${automations.length}` },
+              { label: 'Pausadas', value: pausedCount, sub: pausedCount === 1 ? 'automação' : 'automações' },
+              { label: 'Grupos de destino', value: destGroupCount, sub: 'recebendo ofertas' },
+              { label: 'Última busca', value: lastRunLabel || '—', sub: 'envio automático' },
+            ].map((s) => (
+              <div key={s.label} className="pnl-kpi">
+                <div className="pnl-kpi-label">{s.label}</div>
+                <div className="pnl-kpi-num">{s.value}</div>
+                <div className="pnl-kpi-foot">{s.sub}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       <Link className="pnl-note-box" href="/painel/mensagens" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, textDecoration: 'none' }}>
         <span>🎲 Quer que cada mensagem saia diferente? Configure ganchos e CTAs.</span>
@@ -338,7 +398,10 @@ export default function OfertasAutomaticasPage() {
             <div key={a.id} className="pnl-card">
               <div className="pnl-card-head" style={{ marginBottom: 0, alignItems: 'flex-start' }}>
                 <div style={{ minWidth: 0 }}>
-                  <p style={{ fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>“{a.keyword}”</p>
+                  <p style={{ fontWeight: 600, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                    <span style={{ width: 18, height: 18, borderRadius: 5, background: '#EE4D2D', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, flexShrink: 0 }} title="Shopee" aria-hidden="true">S</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>“{a.keyword}”</span>
+                  </p>
                   <p className="pnl-card-note" style={{ marginTop: 2 }}>→ {a.destGroupName}</p>
                   <p className="pnl-hint" style={{ marginTop: 4 }}>
                     {INTERVAL_OPTIONS.find((o) => o.value === a.intervalMinutes)?.label ?? `${a.intervalMinutes} min`}{a.intervalMinutes === DAILY_INTERVAL_MINUTES && a.dailyRunTime ? ` às ${a.dailyRunTime}` : ''}

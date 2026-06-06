@@ -339,6 +339,7 @@ export const api = {
     return apiFetch(`/api/logs?${params.toString()}`)
   },
   logsSummary: (period = '7d') => apiFetch(`/api/logs/summary?period=${encodeURIComponent(period)}`),
+  logsSeries: (days = 7) => apiFetch(`/api/logs/series?days=${encodeURIComponent(days)}`),
   logsClear: () => apiFetch('/api/logs/clear', { method: 'DELETE' }),
 
   offerAutomations: () => apiFetch('/api/offer-automations'),
@@ -350,6 +351,8 @@ export const api = {
     apiFetch(`/api/offer-automations/${id}`, { method: 'DELETE' }),
   offerAutomationTrigger: (id) =>
     apiFetch(`/api/offer-automations/${id}/trigger`, { method: 'POST' }),
+  offerAutomationSearchPreview: (params) =>
+    apiFetch('/api/offer-automations/search-preview', { method: 'POST', body: JSON.stringify(params) }),
   variationsGet: () => apiFetch('/api/config'),
   variationsUpdate: (data) =>
     apiFetch('/api/config', {

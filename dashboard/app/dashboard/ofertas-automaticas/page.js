@@ -59,6 +59,21 @@ const OFFERS_PER_SEND_OPTIONS = [
   { value: 5, label: '5 produtos por envio' },
 ]
 
+// Valores da API productOfferV2 da Shopee (doc oficial BR).
+const SORT_TYPE_OPTIONS = [
+  { value: 2, label: 'Mais vendidos (recomendado)' },
+  { value: 5, label: 'Maior comissão' },
+  { value: 1, label: 'Relevância' },
+  { value: 3, label: 'Maior preço' },
+  { value: 4, label: 'Menor preço' },
+]
+
+const LIST_TYPE_OPTIONS = [
+  { value: 1, label: 'Maior comissão (padrão)' },
+  { value: 0, label: 'Recomendados' },
+  { value: 2, label: 'Melhor desempenho' },
+]
+
 const emptyForm = {
   destGroupJid: '',
   destGroupName: '',
@@ -68,7 +83,10 @@ const emptyForm = {
   dailyRunTime: DEFAULT_DAILY_RUN_TIME,
   offersPerSend: 1,
   minDiscountPct: 20,
+  sortType: 2,
+  listType: 1,
   prioritizeAMS: false,
+  isKeySeller: false,
 }
 
 function nextSendLabel(lastSentAt, intervalMinutes, dailyRunTime) {
@@ -99,6 +117,9 @@ export default function OfertasAutomaticasPage() {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [triggering, setTriggering] = useState(null)
   const [triggerResult, setTriggerResult] = useState({})
+  const [previewing, setPreviewing] = useState(false)
+  const [previewResult, setPreviewResult] = useState(null)
+  const [previewError, setPreviewError] = useState('')
 
   async function load() {
     setLoading(true)
@@ -121,10 +142,16 @@ export default function OfertasAutomaticasPage() {
 
   useEffect(() => { load() }, [])
 
+  function resetPreview() {
+    setPreviewResult(null)
+    setPreviewError('')
+  }
+
   function openCreate() {
     setEditId(null)
     setForm(emptyForm)
     setSaveError('')
+    resetPreview()
     setShowForm(true)
   }
 
@@ -139,9 +166,13 @@ export default function OfertasAutomaticasPage() {
       dailyRunTime: a.dailyRunTime || DEFAULT_DAILY_RUN_TIME,
       offersPerSend: a.offersPerSend,
       minDiscountPct: a.minDiscountPct,
+      sortType: a.sortType ?? 2,
+      listType: a.listType ?? 1,
       prioritizeAMS: a.prioritizeAMS ?? false,
+      isKeySeller: a.isKeySeller ?? false,
     })
     setSaveError('')
+    resetPreview()
     setShowForm(true)
   }
 
@@ -184,6 +215,29 @@ export default function OfertasAutomaticasPage() {
       await load()
     } catch (err) {
       setError(err.message)
+    }
+  }
+
+  async function handlePreviewSearch() {
+    setPreviewing(true)
+    setPreviewError('')
+    setPreviewResult(null)
+    try {
+      const res = await api.offerAutomationSearchPreview({
+        keyword: form.keyword,
+        offersPerSend: form.offersPerSend,
+        minDiscountPct: form.minDiscountPct,
+        sortType: form.sortType,
+        listType: form.listType,
+        prioritizeAMS: form.prioritizeAMS,
+        isKeySeller: form.isKeySeller,
+      })
+      if (res.ok === false) setPreviewError(res.error || 'Falha na busca')
+      else setPreviewResult(res)
+    } catch (err) {
+      setPreviewError(err.message)
+    } finally {
+      setPreviewing(false)
     }
   }
 
@@ -373,6 +427,38 @@ export default function OfertasAutomaticasPage() {
             <p className="text-xs text-gray-400 mt-1">Só produtos com desconto real serão enviados.</p>
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Ordenar resultados por
+            </label>
+            <select
+              value={form.sortType}
+              onChange={e => setForm(f => ({ ...f, sortType: Number(e.target.value) }))}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+            >
+              {SORT_TYPE_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">Como a Shopee ordena os produtos retornados na busca.</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Tipo de lista
+            </label>
+            <select
+              value={form.listType}
+              onChange={e => setForm(f => ({ ...f, listType: Number(e.target.value) }))}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+            >
+              {LIST_TYPE_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">“Melhor desempenho” é mais restrito e pode retornar menos produtos.</p>
+          </div>
+
           <label className="flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
@@ -389,6 +475,53 @@ export default function OfertasAutomaticasPage() {
               </span>
             </span>
           </label>
+
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.isKeySeller}
+              onChange={e => setForm(f => ({ ...f, isKeySeller: e.target.checked }))}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-green-600"
+            />
+            <span>
+              <span className="text-sm font-medium text-gray-700 block">
+                Apenas vendedores oficiais (Key Seller)
+              </span>
+              <span className="text-xs text-gray-400">
+                Restringe a busca a lojas oficiais/parceiras Key da Shopee.
+              </span>
+            </span>
+          </label>
+
+          <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium text-gray-700">Pré-visualizar a busca</span>
+              <button
+                type="button"
+                onClick={handlePreviewSearch}
+                disabled={previewing || !form.keyword.trim()}
+                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+              >
+                {previewing ? 'Buscando…' : 'Executar busca'}
+              </button>
+            </div>
+            <p className="text-xs text-gray-500">
+              Roda a busca na Shopee com os parâmetros acima e mostra o resultado em JSON. Nada é enviado aos grupos.
+            </p>
+            {previewError && <Alert type="error">{previewError}</Alert>}
+            {previewResult && (
+              <div className="space-y-2">
+                <p className="text-xs text-gray-600">
+                  Retornados: <strong>{previewResult.rawCount}</strong>
+                  {' · '}após desconto mín.: <strong>{previewResult.afterDiscountFilter}</strong>
+                  {' · '}produtos únicos: <strong>{previewResult.afterProductDedupe}</strong>
+                </p>
+                <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-gray-900 p-3 text-[11px] leading-5 text-green-200 border">
+                  {JSON.stringify(previewResult, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
 
           {saveError && <Alert type="error">{saveError}</Alert>}
 

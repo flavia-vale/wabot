@@ -232,9 +232,17 @@ async function fetchMercadoLivreProductInfo(url, { timeoutMs = HTML_FETCH_TIMEOU
 
 
 function extractAmazonPriceFromBuyBoxContext(html) {
-  const buyBoxRe = /(?:apexPriceToPay|priceToPay|corePriceDisplay)[\s\S]{0,600}?a-offscreen[^>]*>[^0-9]*([0-9]{1,3}(?:\.[0-9]{3})+,[0-9]{2}|[0-9]+(?:[\.,][0-9]{2})?)<\/span>/i
+  // Nomes de classe que o buy box usa (Amazon muda com frequência; tentamos
+  // vários em ordem de confiança).
+  const buyBoxRe = /(?:apexPriceToPay|priceToPay|corePriceDisplay|corePrice_desktop|apex_desktop)[\s\S]{0,800}?a-offscreen[^>]*>[^0-9]*([0-9]{1,3}(?:\.[0-9]{3})+,[0-9]{2}|[0-9]+(?:[\.,][0-9]{2})?)<\/span>/i
   const buyBoxMatch = html.match(buyBoxRe)
   if (buyBoxMatch?.[1]) return toPriceString(buyBoxMatch[1])
+
+  // Fallback: primeiro `a-offscreen` dentro de um `a-price` span (estrutura
+  // semântica que a Amazon usa para todos os preços exibidos em moeda).
+  const aPriceOffscreen = html.match(/<span[^>]+class=["'][^"']*a-price[^"']*["'][^>]*>[\s\S]{0,200}?<span[^>]+class=["'][^"']*a-offscreen[^"']*["'][^>]*>[^0-9]*([0-9]{1,3}(?:\.[0-9]{3})+,[0-9]{2}|[0-9]+(?:[\.,][0-9]{2})?)<\/span>/i)
+  if (aPriceOffscreen?.[1]) return toPriceString(aPriceOffscreen[1])
+
   return ''
 }
 
@@ -524,6 +532,31 @@ export async function fetchProductInfo(url, opts = {}) {
     finalUrl = resolvedUrl
   }
 
+  // Bug: links curtos do ML (meli.la, mluvem.com) redirecionam para
+  // mercadolivre.com.br, mas o fetch() descarta o cabeçalho Cookie em
+  // redirects cross-domain (undici/browser — segurança contra CSRF). Dois
+  // cenários surgem:
+  //   a) html=null  → ML retornou 403 sem autenticação
+  //   b) html=antibot → ML retornou 200 com /gz/account-verification (sem ssid)
+  //
+  // Solução: se chegamos a uma URL ML (redirect funcionou), temos credenciais
+  // mas não as aplicamos na requisição inicial (URL de origem não era ML) →
+  // refaz diretamente na URL ML com cookie + UA mobile.
+  const needsMlCookieRetry = mlCookieHeader && !fetchOpts.cookieHeader && isMercadoLivreUrl(finalUrl)
+  if (needsMlCookieRetry) {
+    const noUsefulMlHtml = !html
+      || (html.length < 50_000 && !html.includes('ui-pdp') && !html.includes('andes-money-amount'))
+    if (noUsefulMlHtml) {
+      try {
+        const retried = await fetchHtml(finalUrl, { ...fetchOpts, cookieHeader: mlCookieHeader, ua: ML_MOBILE_UA })
+        if (retried?.html) {
+          html = retried.html
+          finalUrl = retried.finalUrl || finalUrl
+        }
+      } catch {}
+    }
+  }
+
   const jsonLd = html ? extractFromJsonLd(html) : null
   const mlHtml = html ? extractMercadoLivreFromHtml(html) : null
   const mlLanding = html ? extractFromMercadoLivreLanding(html) : null
@@ -531,8 +564,18 @@ export async function fetchProductInfo(url, opts = {}) {
   const shopeeApiFallback = await fetchShopeeItemInfo(finalUrl || url, { ...opts, shopeeCreds })
   const shopeeHtmlRange = extractShopeePriceRangeFromHtml(html)
   const shopeeJsonRange = extractShopeePriceRangeFromJsonInHtml(html)
-  const mercadoLivreApiFallback = await fetchMercadoLivreProductInfo(finalUrl || url, opts)
-  const titleFromUrl = extractTitleFromUrl(finalUrl || url)
+
+  // ML Products API como último recurso: só chamar se não temos título E preço
+  // do HTML (a API requer autenticação OAuth em acessos de IP de datacenter,
+  // chamá-la quando o HTML já deu o suficiente desperdiça até 8s por oferta).
+  const hasHtmlTitleAndPrice = !!(
+    (jsonLd?.title && jsonLd?.newPrice) || (mlHtml?.title && mlHtml?.newPrice)
+  )
+  const mercadoLivreApiFallback = hasHtmlTitleAndPrice
+    ? null
+    : await fetchMercadoLivreProductInfo(finalUrl || url, opts)
+
+  const titleFromUrl = extractTitleFromUrl(finalUrl || url) || extractTitleFromUrl(resolvedUrl) || extractTitleFromUrl(url)
   const title = jsonLd?.title || mlHtml?.title || amazonFallback?.title || shopeeApiFallback?.title || mercadoLivreApiFallback?.title || titleFromUrl || extractTitleFallback(html)
   const newPrice = jsonLd?.newPrice || mlHtml?.newPrice || mlLanding?.newPrice || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || shopeeJsonRange?.newPrice || shopeeHtmlRange?.newPrice || mercadoLivreApiFallback?.newPrice || extractMetaPrice(html) || extractShopeePriceFromHtml(html)
   const oldPrice = jsonLd?.oldPrice || mlHtml?.oldPrice || mlLanding?.oldPrice || shopeeApiFallback?.oldPrice || shopeeJsonRange?.oldPrice || shopeeHtmlRange?.oldPrice || mercadoLivreApiFallback?.oldPrice || ''

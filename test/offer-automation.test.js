@@ -83,7 +83,56 @@ test('dedupeOffersByProduct: colapsa mesmo produto com itemIds diferentes manten
   assert.deepEqual(result.map(o => o.itemId), ['1', '3'])
 })
 
-import { formatOfferMessage, runAutomation } from '../src/offerAutomation/dispatcher.js'
+import { formatOfferMessage, runAutomation, searchOffersPreview } from '../src/offerAutomation/dispatcher.js'
+
+test('searchOffersPreview: roda a busca sem enviar e retorna funil + ofertas', async () => {
+  const calls = []
+  const fetchOffersFn = async (args) => {
+    calls.push(args)
+    return { rawCount: 20, offers: [
+      { itemId: '1', productName: 'Fone X', priceMin: 99, priceDiscountRate: 30, offerLink: 'l1' },
+      { itemId: '2', productName: 'Fone X', priceMin: 95, priceDiscountRate: 35, offerLink: 'l2' },
+      { itemId: '3', productName: 'Caixa Som', priceMin: 199, priceDiscountRate: 20, offerLink: 'l3' },
+    ] }
+  }
+  const result = await searchOffersPreview({
+    params: { keyword: 'fone', offersPerSend: 2, minDiscountPct: 10, sortType: 5, listType: 0, page: 1, isKeySeller: true },
+    creds: { appId: 'a', secretKey: 's' },
+    fetchOffersFn,
+  })
+
+  // não envia nada (sem sendBroadcast); apenas busca
+  assert.equal(result.rawCount, 20)
+  assert.equal(result.afterDiscountFilter, 3)
+  assert.equal(result.afterProductDedupe, 2) // "Fone X" colapsa
+  assert.equal(result.offers.length, 2)
+  // parâmetros escolhidos são ecoados, inclusive listType e o candidateLimit
+  assert.equal(result.params.sortType, 5)
+  assert.equal(result.params.listType, 0)
+  assert.equal(result.params.isKeySeller, true)
+  assert.equal(result.params.candidateLimit, 20) // offersPerSend 2 -> max(20,20)
+  // os parâmetros chegaram ao fetch (não exclui itens; preview é leitura pura)
+  assert.equal(calls[0].sortType, 5)
+  assert.equal(calls[0].listType, 0)
+  assert.deepEqual(calls[0].excludeItemIds, [])
+})
+
+test('searchOffersPreview: prioritizeAMS concatena AMS + regular sem enviar', async () => {
+  const seen = []
+  const fetchOffersFn = async (args) => {
+    seen.push(args.isAMSOffer)
+    return args.isAMSOffer
+      ? { rawCount: 5, offers: [{ itemId: '10', productName: 'AMS', priceMin: 50, priceDiscountRate: 40, offerLink: 'a' }] }
+      : { rawCount: 7, offers: [{ itemId: '20', productName: 'Reg', priceMin: 60, priceDiscountRate: 25, offerLink: 'b' }] }
+  }
+  const result = await searchOffersPreview({
+    params: { keyword: 'x', offersPerSend: 2, minDiscountPct: 0, prioritizeAMS: true },
+    creds: { appId: 'a', secretKey: 's' },
+    fetchOffersFn,
+  })
+  assert.deepEqual(seen, [true, false])
+  assert.equal(result.afterProductDedupe, 2)
+})
 
 test('formatOfferMessage: includes product name and price', () => {
   const offer = {

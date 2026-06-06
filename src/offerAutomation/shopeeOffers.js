@@ -75,10 +75,10 @@ export function buildOfferCandidateLimit(limit) {
   return Math.min(Math.max(limit * 10, 20), 100)
 }
 
-export async function fetchOffers({ keyword, minDiscountPct, limit, excludeItemIds, creds, sortType = 2, isAMSOffer = false, isKeySeller = false }) {
+export async function fetchOffers({ keyword, minDiscountPct, limit, excludeItemIds, creds, sortType = 2, listType = 1, page = 1, isAMSOffer = false, isKeySeller = false }) {
   const { appId, secretKey } = creds
   const candidateLimit = buildOfferCandidateLimit(limit)
-  const query = buildOffersQuery({ keyword, page: 1, limit: candidateLimit, sortType, listType: 1, isAMSOffer, isKeySeller })
+  const query = buildOffersQuery({ keyword, page, limit: candidateLimit, sortType, listType, isAMSOffer, isKeySeller })
   const body = { query }
   const payload = JSON.stringify(body)
   const authHeader = buildAuth(appId, secretKey, payload)

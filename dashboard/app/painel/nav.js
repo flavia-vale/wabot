@@ -8,12 +8,6 @@
 
 const i = (paths) => paths // SVG children prontos para <svg>
 
-export const TOP_CTA = {
-  label: 'Criar oferta',
-  note: 'cole um link · grátis',
-  href: '/painel/criar-oferta',
-}
-
 export const NAV_GROUPS = [
   {
     title: 'Operação',
@@ -22,6 +16,12 @@ export const NAV_GROUPS = [
         label: 'Painel',
         href: '/painel',
         icon: i(<><rect x="3" y="3" width="7" height="9" rx="1.5" /><rect x="14" y="3" width="7" height="5" rx="1.5" /><rect x="14" y="12" width="7" height="9" rx="1.5" /><rect x="3" y="16" width="7" height="5" rx="1.5" /></>),
+      },
+      {
+        label: 'Criar oferta',
+        href: '/painel/criar-oferta',
+        free: true,
+        icon: i(<><path d="M12 5v14" /><path d="M5 12h14" /><path d="M4 4h16v16H4z" /></>),
       },
       {
         label: 'Espelhamento',
