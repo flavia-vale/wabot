@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 
 const ONBOARDING_DONE_KEY = 'wb_onboarding_done'
@@ -202,22 +202,20 @@ export function ActivationChecklist({ onActivated }) {
     return 'list'
   })
 
-  const fetchStatus = useCallback(async () => {
-    try {
-      const data = await api.dashboardStatus()
-      setStatus(data)
-    } catch { /* ignore — keep polling */ }
-  }, [])
-
   useEffect(() => {
     if (phase === 'hidden') {
       onActivated?.()
       return
     }
-    fetchStatus()
-    const id = setInterval(fetchStatus, 10_000)
-    return () => clearInterval(id)
-  }, [phase, fetchStatus, onActivated])
+    let cancelled = false
+    const poll = () =>
+      api.dashboardStatus()
+        .then(data => { if (!cancelled) setStatus(data) })
+        .catch(() => {})
+    poll()
+    const id = setInterval(poll, 10_000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [phase, onActivated])
 
   const completedSet = new Set(STEPS.filter(s => status?.[s.key]).map(s => s.key))
   const count = completedSet.size
