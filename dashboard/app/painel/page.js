@@ -61,6 +61,7 @@ export default function PainelPage() {
   const [recent, setRecent] = useState(null)
   const [loadError, setLoadError] = useState('')
   const [period, setPeriod] = useState('today')
+  const [series, setSeries] = useState(null)
 
   const now = useMemo(() => new Date(), [])
   const dateLabel = useMemo(
@@ -81,6 +82,15 @@ export default function PainelPage() {
     })
     return () => { active = false }
   }, [period])
+
+  // Série de 7 dias para o gráfico de colunas — independente do período dos KPIs.
+  useEffect(() => {
+    let active = true
+    api.logsSeries(7)
+      .then((s) => { if (active) setSeries(Array.isArray(s?.buckets) ? s.buckets : []) })
+      .catch(() => { if (active) setSeries([]) })
+    return () => { active = false }
+  }, [])
 
   const PERIODS = [
     { key: 'today', label: 'Hoje', word: 'hoje' },
@@ -272,6 +282,32 @@ export default function PainelPage() {
         </section>
       </div>
 
+      {/* Atividade — colunas dos últimos 7 dias */}
+      <section className="pnl-card">
+        <div className="pnl-card-title">Atividade · últimos 7 dias</div>
+        <div className="pnl-card-note">entregues, bloqueados pela regra e falhas por dia</div>
+        {series === null ? (
+          <div className="pnl-skel" style={{ height: 180, marginTop: 12 }} />
+        ) : series.every((b) => b.success + b.blocked + b.failed === 0) ? (
+          <p className="pnl-empty">Sem atividade nos últimos 7 dias.</p>
+        ) : (
+          <>
+            <StackedColumns buckets={series} />
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 10 }}>
+              {[
+                { label: 'Entregues', color: 'var(--accent-strong)' },
+                { label: 'Bloqueados', color: 'var(--accent-3)' },
+                { label: 'Falhas', color: 'var(--danger)' },
+              ].map((s) => (
+                <span key={s.label} className="pnl-legend-row" style={{ flex: 'none' }}>
+                  <span className="pnl-legend-dot" style={{ background: s.color }} />{s.label}
+                </span>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
+
       {/* Últimos envios */}
       <section className="pnl-card">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -311,6 +347,51 @@ export default function PainelPage() {
         )}
       </section>
     </div>
+  )
+}
+
+function StackedColumns({ buckets }) {
+  const W = 560
+  const H = 180
+  const padL = 8
+  const padR = 8
+  const padB = 24
+  const padT = 10
+  const n = buckets.length || 1
+  const plotH = H - padB - padT
+  const plotW = W - padL - padR
+  const slot = plotW / n
+  const barW = Math.min(30, slot * 0.6)
+  const totals = buckets.map((b) => b.success + b.blocked + b.failed)
+  const max = Math.max(...totals, 1)
+  const grid = [0, 0.25, 0.5, 0.75, 1]
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{ display: 'block', marginTop: 12 }} aria-hidden="true">
+      {grid.map((g, i) => {
+        const y = padT + plotH * (1 - g)
+        return <line key={i} x1={padL} y1={y} x2={W - padR} y2={y} stroke="var(--line)" strokeWidth="1" strokeDasharray={g === 0 ? '0' : '2 4'} />
+      })}
+      {buckets.map((b, i) => {
+        const cx = padL + slot * i + slot / 2
+        const segs = [
+          { v: b.success, c: 'var(--accent-strong)' },
+          { v: b.blocked, c: 'var(--accent-3)' },
+          { v: b.failed, c: 'var(--danger)' },
+        ]
+        const heights = segs.map((s) => (s.v / max) * plotH)
+        const offsets = heights.map((_, k) => heights.slice(0, k).reduce((a, c) => a + c, 0))
+        return (
+          <g key={b.key}>
+            {segs.map((s, k) => (
+              heights[k] > 0
+                ? <rect key={k} x={cx - barW / 2} y={padT + plotH - offsets[k] - heights[k]} width={barW} height={heights[k]} fill={s.c} rx={k === segs.length - 1 ? 3 : 0} />
+                : null
+            ))}
+            <text x={cx} y={H - 7} textAnchor="middle" fontSize="9.5" fill="var(--ink-faint)" fontFamily="Inter, sans-serif">{b.label}</text>
+          </g>
+        )
+      })}
+    </svg>
   )
 }
 
