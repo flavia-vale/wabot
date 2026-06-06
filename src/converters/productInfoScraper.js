@@ -575,7 +575,7 @@ export async function fetchProductInfo(url, opts = {}) {
     ? null
     : await fetchMercadoLivreProductInfo(finalUrl || url, opts)
 
-  const titleFromUrl = extractTitleFromUrl(finalUrl || url)
+  const titleFromUrl = extractTitleFromUrl(finalUrl || url) || extractTitleFromUrl(resolvedUrl) || extractTitleFromUrl(url)
   const title = jsonLd?.title || mlHtml?.title || amazonFallback?.title || shopeeApiFallback?.title || mercadoLivreApiFallback?.title || titleFromUrl || extractTitleFallback(html)
   const newPrice = jsonLd?.newPrice || mlHtml?.newPrice || mlLanding?.newPrice || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || shopeeJsonRange?.newPrice || shopeeHtmlRange?.newPrice || mercadoLivreApiFallback?.newPrice || extractMetaPrice(html) || extractShopeePriceFromHtml(html)
   const oldPrice = jsonLd?.oldPrice || mlHtml?.oldPrice || mlLanding?.oldPrice || shopeeApiFallback?.oldPrice || shopeeJsonRange?.oldPrice || shopeeHtmlRange?.oldPrice || mercadoLivreApiFallback?.oldPrice || ''
