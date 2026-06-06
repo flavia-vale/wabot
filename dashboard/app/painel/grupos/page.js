@@ -34,6 +34,27 @@ const NO_LINK_SCOPE_OPTIONS = [
   { id: 'TEXT_IMAGE_WITH_CAPTION', label: 'Texto + imagem com legenda' },
 ]
 
+function groupInitials(name) {
+  const parts = String(name || '?').trim().split(/\s+/).filter(Boolean)
+  const raw = (parts.length >= 2 ? parts[0][0] + parts[1][0] : (parts[0] || '?').slice(0, 2))
+  return raw.replace(/[^\p{L}\p{N}]/gu, '').toUpperCase().slice(0, 2) || '#'
+}
+
+function GroupAvatar({ name, role }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 13, fontWeight: 600,
+        background: role === 'post' ? 'linear-gradient(135deg, var(--accent), var(--accent-2))' : 'var(--bg-soft)',
+        color: role === 'post' ? '#fff' : 'var(--ink-soft)',
+      }}
+    >{groupInitials(name)}</span>
+  )
+}
+
 export default function GruposPage() {
   usePainelHeader({ title: 'Grupos', subtitle: 'Defina quais grupos o bot escuta e onde ele publica' })
 
@@ -319,6 +340,20 @@ export default function GruposPage() {
         ))}
       </div>
 
+      {/* Banner explicativo origem × destino (fiel ao mockup) */}
+      <section className="pnl-card" style={{ padding: 0, overflow: 'hidden', background: 'color-mix(in oklab, var(--accent) 12%, var(--surface))' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+          <div style={{ padding: 20, borderRight: '1px solid var(--line)' }}>
+            <div className="pnl-eyebrow">👁 Origem · monitora</div>
+            <p style={{ fontSize: 14, lineHeight: 1.5, color: 'var(--ink)', marginTop: 8 }}>Grupos de promoção, ofertas ou achadinhos que você participa. O bot só lê os links.</p>
+          </div>
+          <div style={{ padding: 20 }}>
+            <div className="pnl-eyebrow" style={{ color: 'var(--accent-strong)' }}>⚡ Destino · publica</div>
+            <p style={{ fontSize: 14, lineHeight: 1.5, color: 'var(--ink)', marginTop: 8 }}>Seus grupos de clientes/seguidoras. O bot posta o link já com o seu código.</p>
+          </div>
+        </div>
+      </section>
+
       {actionError && <div className="pnl-note-box is-error" role="alert"><strong style={{ fontWeight: 600 }}>Falha ao atualizar grupos</strong><p style={{ marginTop: 4 }}>{actionError}</p></div>}
       {!canUseChannels && (
         <div className="pnl-note-box"><strong style={{ fontWeight: 600 }}>Canais bloqueados no Basic</strong><p style={{ marginTop: 4 }}>Canais já cadastrados ficam preservados. Faça upgrade para o Pro para reativar monitoramento e envio em canais.</p></div>
@@ -384,14 +419,18 @@ export default function GruposPage() {
             {monitor.filter(matchesFilter).map((g) => (
               <li key={g.id} className="pnl-subcard">
                 <div className="pnl-card-head" style={{ marginBottom: 0, alignItems: 'flex-start' }}>
-                  <div style={{ minWidth: 0, wordBreak: 'break-word' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{g.name}</span>
-                    <span className="pnl-hint" style={{ marginLeft: 8 }}>{g.waJid}</span>
-                    <span style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <TypeBadge kind={g.kind} />
-                      {!canUseChannels && g.kind === 'channel' && <span className="pnl-tag is-flight">Pro</span>}
-                      {g.kind === 'channel' && g.role === 'monitor' && <FollowBadge status={followStatus[g.id] ?? 'unknown'} />}
-                    </span>
+                  <div style={{ display: 'flex', gap: 10, minWidth: 0 }}>
+                    <GroupAvatar name={g.name} role="monitor" />
+                    <div style={{ minWidth: 0, wordBreak: 'break-word' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{g.name}</span>
+                        <span className="pnl-tag" style={{ background: 'color-mix(in oklab, var(--accent-2) 50%, var(--surface))' }}>👁 monitorar</span>
+                        <TypeBadge kind={g.kind} />
+                        {!canUseChannels && g.kind === 'channel' && <span className="pnl-tag is-flight">Pro</span>}
+                        {g.kind === 'channel' && g.role === 'monitor' && <FollowBadge status={followStatus[g.id] ?? 'unknown'} />}
+                      </span>
+                      <span className="pnl-hint" style={{ display: 'block', marginTop: 2 }}>{g.waJid}</span>
+                    </div>
                   </div>
                   <div className="pnl-toolbar">
                     {savingGroupId === g.id && <span className="pnl-hint" style={{ color: 'var(--accent-strong)' }}>Salvando…</span>}
@@ -474,22 +513,26 @@ export default function GruposPage() {
             {post.filter(matchesFilter).map((g) => (
               <li key={g.id} className="pnl-subcard">
                 <div className="pnl-card-head" style={{ marginBottom: 0, alignItems: 'flex-start' }}>
-                  <div style={{ minWidth: 0, wordBreak: 'break-word' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{g.name}</span>
-                    <span className="pnl-hint" style={{ marginLeft: 8 }}>{g.waJid}</span>
-                    <span style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                      <TypeBadge kind={g.kind} />
-                      {!canUseChannels && g.kind === 'channel' && <span className="pnl-tag is-flight">Pro</span>}
-                      {g.kind === 'channel' && g.role === 'post' && (
-                        <>
-                          <AdminBadge status={adminStatus[g.id] ?? 'unknown'} onRefresh={() => refreshAdmin(g)} refreshing={refreshingAdminId === g.id} />
-                          {healthByGroup[g.id] && <HealthBadge status={healthByGroup[g.id].status} />}
-                          <button type="button" className="pnl-link-btn" onClick={() => setExpandedHealthId(expandedHealthId === g.id ? null : g.id)} title="Saúde, snapshots e risco do canal">
-                            {expandedHealthId === g.id ? 'Fechar painel' : 'Painel anti-ban'}
-                          </button>
-                        </>
-                      )}
-                    </span>
+                  <div style={{ display: 'flex', gap: 10, minWidth: 0 }}>
+                    <GroupAvatar name={g.name} role="post" />
+                    <div style={{ minWidth: 0, wordBreak: 'break-word' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{g.name}</span>
+                        <span className="pnl-tag is-success">⚡ publicar</span>
+                        <TypeBadge kind={g.kind} />
+                        {!canUseChannels && g.kind === 'channel' && <span className="pnl-tag is-flight">Pro</span>}
+                        {g.kind === 'channel' && g.role === 'post' && (
+                          <>
+                            <AdminBadge status={adminStatus[g.id] ?? 'unknown'} onRefresh={() => refreshAdmin(g)} refreshing={refreshingAdminId === g.id} />
+                            {healthByGroup[g.id] && <HealthBadge status={healthByGroup[g.id].status} />}
+                            <button type="button" className="pnl-link-btn" onClick={() => setExpandedHealthId(expandedHealthId === g.id ? null : g.id)} title="Saúde, snapshots e risco do canal">
+                              {expandedHealthId === g.id ? 'Fechar painel' : 'Painel anti-ban'}
+                            </button>
+                          </>
+                        )}
+                      </span>
+                      <span className="pnl-hint" style={{ display: 'block', marginTop: 2 }}>{g.waJid}</span>
+                    </div>
                   </div>
                   <button type="button" className="pnl-link-btn" style={{ color: 'var(--danger)' }} onClick={() => setDeleteTarget(g)}>Remover</button>
                 </div>
