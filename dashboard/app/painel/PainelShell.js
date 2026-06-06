@@ -40,7 +40,6 @@ export function PainelTopbarAction({ children }) {
 const STAR_ICON = <path d="M12 2.5l2.9 6 6.6.6-5 4.4 1.5 6.5L12 16.9 5.5 20.5 7 14 2 9.6l6.6-.6z" />
 const LOCK_ICON = <><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></>
 const CHEVRON_ICON = <path d="M9 18l6-6-6-6" />
-const BELL_ICON = <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></>
 
 function planInfo(user) {
   const plan = user?.plan
@@ -221,9 +220,6 @@ export default function PainelShell({ children }) {
             </div>
             <div className="pnl-header-right">
               <OnlinePill online={online} groupCount={groupCount} />
-              <button type="button" className="pnl-bell has-dot" aria-label="Notificações" title="Notificações">
-                <Icon path={BELL_ICON} />
-              </button>
               <div className="pnl-header-actions" ref={setActionSlot} />
             </div>
           </header>
