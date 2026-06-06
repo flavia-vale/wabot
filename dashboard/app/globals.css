@@ -137,3 +137,26 @@ table {
     padding-inline: clamp(0.75rem, 2.5vw, 1.25rem);
   }
 }
+
+/* ── Checklist de ativação ── */
+@keyframes ck-pop {
+  from { transform: scale(.4); opacity: 0 }
+  to   { transform: scale(1);  opacity: 1 }
+}
+@keyframes ck-fadeup {
+  from { transform: translateY(10px); opacity: 0 }
+  to   { transform: translateY(0);    opacity: 1 }
+}
+@keyframes ck-celebrate {
+  from { transform: scale(.97); opacity: 0 }
+  to   { transform: scale(1);   opacity: 1 }
+}
+@keyframes ck-pulse {
+  0%, 100% { opacity: 1 }
+  50%       { opacity: .35 }
+}
+@keyframes ck-spark {
+  0%   { opacity: 0; transform: translateY(6px) scale(.6) }
+  30%  { opacity: 1 }
+  100% { opacity: 0; transform: translateY(-14px) scale(1) }
+}
