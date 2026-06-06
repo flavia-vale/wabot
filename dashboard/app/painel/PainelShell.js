@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { api } from '@/lib/api'
-import { NAV_GROUPS, TOP_CTA } from './nav'
+import { NAV_GROUPS } from './nav'
 
 /* Contexto compartilhado: dados de sessão/usuário buscados uma vez pelo shell
  * e reusados pelas páginas (sem refetch). Páginas também publicam o título do
@@ -158,12 +158,6 @@ export default function PainelShell({ children }) {
           <Link href="/painel" className="pnl-brand" onClick={() => setMenuOpen(false)}>
             BOTinho <small>.app</small>
           </Link>
-
-          <Link href={TOP_CTA.href} className="pnl-cta" onClick={() => setMenuOpen(false)}>
-            <b>{TOP_CTA.label}</b>
-            <span>{TOP_CTA.note}</span>
-          </Link>
-
           <nav className="pnl-nav" aria-label="Navegação do painel">
             {NAV_GROUPS.map((group) => (
               <div key={group.title} className="pnl-nav-group">
@@ -179,6 +173,7 @@ export default function PainelShell({ children }) {
                     <Icon path={item.icon} />
                     <span>{item.label}</span>
                     {item.pro && <span className="pnl-pro">PRO</span>}
+                    {item.free && <span className="pnl-free">GRÁTIS</span>}
                   </Link>
                 ))}
               </div>

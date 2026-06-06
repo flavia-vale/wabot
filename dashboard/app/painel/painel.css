@@ -66,18 +66,6 @@
   letter-spacing: 0;
 }
 
-.pnl-cta {
-  margin: 0 16px 14px;
-  padding: 13px 14px;
-  border-radius: var(--pnl-radius-sm);
-  background: var(--ink);
-  color: var(--surface);
-  text-decoration: none;
-  display: block;
-}
-.pnl-cta b { display: block; font-size: 13.5px; font-weight: 600; }
-.pnl-cta span { display: block; font-size: 11px; color: rgba(255, 255, 255, 0.62); margin-top: 1px; }
-.pnl-cta:hover { background: #16201d; }
 
 .pnl-nav { flex: 1; overflow-y: auto; padding: 6px 12px 12px; }
 .pnl-nav-group { margin-bottom: 14px; }
@@ -105,15 +93,22 @@
 .pnl-nav-item:hover { background: var(--bg-soft); color: var(--ink); }
 .pnl-nav-item.is-active { background: var(--bg-soft); color: var(--ink); font-weight: 600; }
 .pnl-nav-item .pnl-ico { width: 17px; height: 17px; flex-shrink: 0; opacity: 0.85; }
-.pnl-nav-item .pnl-pro {
+.pnl-nav-item .pnl-pro,
+.pnl-nav-item .pnl-free {
   margin-left: auto;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.04em;
-  color: var(--accent-strong);
-  background: color-mix(in oklab, var(--accent) 28%, transparent);
   padding: 2px 6px;
   border-radius: 999px;
+}
+.pnl-nav-item .pnl-pro {
+  color: var(--accent-strong);
+  background: color-mix(in oklab, var(--accent) 28%, transparent);
+}
+.pnl-nav-item .pnl-free {
+  color: #0f7a43;
+  background: #dff8e8;
 }
 
 .pnl-user {
