@@ -117,6 +117,7 @@ export async function linkConversionRoutes(app, opts = {}) {
       title: offer.title,
       oldPrice: offer.oldPrice,
       newPrice: offer.newPrice,
+      image: offer.image || '',
       finalUrl: offer.finalUrl,
       offerUrl: offer.offerUrl,
       conversionWarning: offer.conversionWarning,
