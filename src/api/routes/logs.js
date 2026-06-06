@@ -273,4 +273,60 @@ export async function logsRoutes(app) {
     setCachedSummary(cacheKey, payload)
     return payload
   })
+
+  // Série diária para o gráfico de colunas do painel. Devolve um bucket por dia
+  // nos últimos `days` dias (1..30, default 7), cada um com a contagem por
+  // categoria (entregues / bloqueados / repetições / falhas). Buckets vazios
+  // vêm com zero, para o gráfico não "pular" dias sem atividade.
+  app.get('/series', { onRequest: [app.authenticate] }, async (req) => {
+    const userId = req.user.sub
+    const days = Math.min(Math.max(parseInt(req.query?.days, 10) || 7, 1), 30)
+
+    const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+    const start = new Date()
+    start.setHours(0, 0, 0, 0)
+    start.setDate(start.getDate() - (days - 1))
+    const to = new Date()
+
+    const buckets = []
+    const byKey = new Map()
+    for (let i = 0; i < days; i++) {
+      const d = new Date(start)
+      d.setDate(start.getDate() + i)
+      const bucket = {
+        key: dayKey(d),
+        label: `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`,
+        success: 0,
+        blocked: 0,
+        dedup: 0,
+        failed: 0,
+      }
+      byKey.set(bucket.key, bucket)
+      buckets.push(bucket)
+    }
+
+    const logs = await db.messageLog.findMany({
+      where: { userId, sentAt: { gte: start, lte: to } },
+      select: { status: true, errorMsg: true, sentAt: true, dedupHits: true },
+    })
+
+    for (const log of logs) {
+      const bucket = byKey.get(dayKey(new Date(log.sentAt)))
+      if (!bucket) continue
+      const hits = Number(log.dedupHits) || 0
+      if (log.status === 'queued' || log.status === 'sending') continue
+      if (log.status === 'success') {
+        bucket.success++
+        bucket.dedup += hits
+        continue
+      }
+      const category = categorizeErrorMsg(log.errorMsg)
+      if (category === ERROR_CATEGORIES.DEDUP) bucket.dedup += 1 + hits
+      else if (category === ERROR_CATEGORIES.CONFIG_BLOCK) bucket.blocked++
+      else if (category === ERROR_CATEGORIES.TIMEOUT || log.status === 'error') bucket.failed++
+    }
+
+    return { days, buckets }
+  })
 }

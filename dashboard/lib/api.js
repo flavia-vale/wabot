@@ -339,6 +339,7 @@ export const api = {
     return apiFetch(`/api/logs?${params.toString()}`)
   },
   logsSummary: (period = '7d') => apiFetch(`/api/logs/summary?period=${encodeURIComponent(period)}`),
+  logsSeries: (days = 7) => apiFetch(`/api/logs/series?days=${encodeURIComponent(days)}`),
   logsClear: () => apiFetch('/api/logs/clear', { method: 'DELETE' }),
 
   offerAutomations: () => apiFetch('/api/offer-automations'),
