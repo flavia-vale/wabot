@@ -344,6 +344,101 @@ test('fetchProductInfo usa fallback da API de products do Mercado Livre para tí
   assert.equal(info.newPrice, '189,90')
 })
 
+test('fetchProductInfo retenta URL ML com cookie quando meli.la redireciona cross-domain sem cookie (caso html=null)', async (t) => {
+  const realPdp = `<!doctype html><html><head>
+    <meta property="og:title" content="02 Forma Silicone Retangular Reutilizável Air Fryer"/>
+  </head><body>
+    <h1 class="ui-pdp-title">02 Forma Silicone Retangular Reutilizável Air Fryer</h1>
+    <div class="ui-pdp-price__second-line">
+      <span class="andes-money-amount">
+        <span class="andes-money-amount__fraction">39</span>
+        <span class="andes-money-amount__cents">90</span>
+      </span>
+    </div>
+  </body></html>`
+
+  let retryCookieSent = null
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const url = String(input)
+    const cookie = init?.headers?.Cookie
+    // meli.la redireciona para ML, mas a URL final retorna 403 sem cookie
+    // (simula o redirect cross-domain onde o cookie foi descartado pelo fetch)
+    if (/meli\.la/.test(url)) {
+      return { ok: false, status: 403, url: 'https://www.mercadolivre.com.br/forma-silicone/p/MLB69573479', headers: { get: () => null }, body: null, text: async () => '' }
+    }
+    if (url.includes('api.mercadolibre.com')) {
+      return { ok: false, status: 403, headers: { get: () => 'application/json' }, json: async () => ({}) }
+    }
+    // Retry direto na URL ML: com cookie → produto real
+    if (url.includes('mercadolivre.com.br/forma-silicone')) {
+      if (cookie) {
+        retryCookieSent = cookie
+        return { ok: true, status: 200, url, headers: { get: (n) => n === 'content-type' ? 'text/html' : null }, body: null, text: async () => realPdp }
+      }
+      return { ok: false, status: 403, url, headers: { get: () => null }, body: null, text: async () => '' }
+    }
+    throw new Error(`unexpected fetch: ${url}`)
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://meli.la/2jUq4U9', {
+    mlCredentials: { ssid: 'sessionid1234567890', tag: '123456', id: '42' },
+  })
+
+  assert.ok(retryCookieSent, 'deve ter reenviado o cookie no retry')
+  assert.match(retryCookieSent, /ssid=sessionid1234567890/)
+  assert.match(info.title, /02 Forma Silicone Retangular Reutiliz/i)
+  assert.equal(info.newPrice, '39,90')
+})
+
+test('fetchProductInfo retenta URL ML com cookie quando meli.la redireciona para página anti-bot (caso html=antibot)', async (t) => {
+  const antiBot = '<!doctype html><html><head><title>Mercado Libre</title></head><body>account-verification</body></html>'
+  const realPdp = `<!doctype html><html><head>
+    <meta property="og:title" content="Fritadeira Air Fryer Digital 4L"/>
+  </head><body>
+    <h1 class="ui-pdp-title">Fritadeira Air Fryer Digital 4L</h1>
+    <div class="ui-pdp-price__second-line">
+      <span class="andes-money-amount">
+        <span class="andes-money-amount__fraction">299</span>
+        <span class="andes-money-amount__cents">00</span>
+      </span>
+    </div>
+  </body></html>`
+
+  let fetchSequence = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const url = String(input)
+    const cookie = init?.headers?.Cookie
+    fetchSequence.push({ url: url.slice(0, 60), hasCookie: !!cookie })
+    if (/meli\.la/.test(url)) {
+      // Redirect para ML, mas sem cookie o ML serve anti-bot (200 status)
+      return { ok: true, status: 200, url: 'https://www.mercadolivre.com.br/fritadeira/p/MLB99991111', headers: { get: (n) => n === 'content-type' ? 'text/html' : null }, body: null, text: async () => antiBot }
+    }
+    if (url.includes('api.mercadolibre.com')) {
+      return { ok: false, status: 403, headers: { get: () => 'application/json' }, json: async () => ({}) }
+    }
+    if (url.includes('mercadolivre.com.br/fritadeira')) {
+      if (cookie) {
+        return { ok: true, status: 200, url, headers: { get: (n) => n === 'content-type' ? 'text/html' : null }, body: null, text: async () => realPdp }
+      }
+      return { ok: true, status: 200, url, headers: { get: (n) => n === 'content-type' ? 'text/html' : null }, body: null, text: async () => antiBot }
+    }
+    throw new Error(`unexpected fetch: ${url}`)
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://meli.la/ABCDE123', {
+    mlCredentials: { ssid: 'sessionid1234567890', tag: '123456', id: '42' },
+  })
+
+  const retryCall = fetchSequence.find(c => c.url.includes('mercadolivre.com.br/fritadeira') && c.hasCookie)
+  assert.ok(retryCall, 'deve ter feito retry com cookie na URL ML')
+  assert.match(info.title, /Fritadeira Air Fryer Digital 4L/i)
+  assert.equal(info.newPrice, '299,00')
+})
+
 test('fetchProductInfo mantém fallback de API do Mercado Livre mesmo quando fetch do HTML falha', async (t) => {
   const mlProductsPayload = {
     name: 'Secador de roupas 600w elétrico portátil suspenso cortina compacto econômico seca rápido 110v',
