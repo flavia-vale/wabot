@@ -41,3 +41,155 @@ Mapear os passos que precisam ser validados em staging antes de qualquer altera�
 <!-- END_ISSUE: WABOT-002 -->
 
 ---
+
+<!-- START_ISSUE: WABOT-003 -->
+### [REFACTOR] Simplificar conversor web de links para fluxo 1:1
+- **ID:** WABOT-003
+- **Tipo:** Refactor              # [Bug | Feature | Refactor | Security | Chore]
+- **Prioridade:** High            # [Low | Medium | High | Critical]
+- **Status:** Backlog             # [Backlog | Ready | In Progress | Review | QA | Done]
+- **Epic:** UX                    # [WhatsApp | Faturamento | UX | Infra]
+- **Criado em:** 2026-06-07
+
+#### Descrição Técnica
+Simplificar a versão web do conversor de links em `/painel/converte-links`, reduzindo complexidade visual e operacional. A experiência desejada pode ser 1:1 e deve se inspirar no fluxo mobile `/m/op/converter`, preservando o comportamento essencial de conversão sem etapas ou opções desnecessárias.
+
+#### Critérios de Aceite
+- [ ] Mapear diferenças entre `/painel/converte-links` e `/m/op/converter` antes de implementar.
+- [ ] Reduzir a interface web para um fluxo simples de entrada de link e resultado convertido.
+- [ ] Manter validações, mensagens de erro e estados de carregamento necessários.
+- [ ] Validar manualmente o fluxo em staging em `http://178.105.54.0:3006/painel/converte-links`.
+<!-- END_ISSUE: WABOT-003 -->
+
+---
+
+<!-- START_ISSUE: WABOT-004 -->
+### [REFACTOR] Simplificar envio manual removendo segmentação avançada
+- **ID:** WABOT-004
+- **Tipo:** Refactor              # [Bug | Feature | Refactor | Security | Chore]
+- **Prioridade:** High            # [Low | Medium | High | Critical]
+- **Status:** Backlog             # [Backlog | Ready | In Progress | Review | QA | Done]
+- **Epic:** UX                    # [WhatsApp | Faturamento | UX | Infra]
+- **Criado em:** 2026-06-07
+
+#### Descrição Técnica
+Simplificar as telas de envio manual em `/painel/envio` e `/m/op/broadcast`, removendo as áreas de Smart Segmentador (MVP) e segmentação de destinos. A tela deve focar apenas no conteúdo da mensagem e na seleção direta de destinos.
+
+#### Critérios de Aceite
+- [ ] Remover/ocultar a seção Smart Segmentador (MVP) das telas de envio.
+- [ ] Remover/ocultar a segmentação avançada de destinos.
+- [ ] Exibir somente o campo de mensagem e a seleção de `Destinos`.
+- [ ] Exibir o texto auxiliar: `Seu grupo de destino não está aqui? Clique aqui para adicionar`.
+- [ ] Adicionar botão/link para a página de cadastro de grupos de destino.
+- [ ] Validar manualmente em staging em `/painel/envio` e `/m/op/broadcast`.
+<!-- END_ISSUE: WABOT-004 -->
+
+---
+
+<!-- START_ISSUE: WABOT-005 -->
+### [BUG] Corrigir identificação de mensagens de oferta automática nos logs
+- **ID:** WABOT-005
+- **Tipo:** Bug                   # [Bug | Feature | Refactor | Security | Chore]
+- **Prioridade:** High            # [Low | Medium | High | Critical]
+- **Status:** Backlog             # [Backlog | Ready | In Progress | Review | QA | Done]
+- **Epic:** UX                    # [WhatsApp | Faturamento | UX | Infra]
+- **Criado em:** 2026-06-07
+
+#### Descrição Técnica
+Nas páginas de logs `/painel/envios` e `/m/op/logs`, mensagens originadas por oferta automática estão aparecendo como envio manual. Ajustar a origem exibida para diferenciar corretamente ofertas automáticas de envios manuais.
+
+#### Critérios de Aceite
+- [ ] Identificar no backend/modelo de log qual campo diferencia envio manual de oferta automática.
+- [ ] Ajustar a renderização da origem nas páginas web e mobile.
+- [ ] Garantir que envios manuais continuem aparecendo como manuais.
+- [ ] Garantir que ofertas automáticas apareçam como oferta automática.
+- [ ] Validar manualmente em staging em `/painel/envios` e `/m/op/logs`.
+<!-- END_ISSUE: WABOT-005 -->
+
+---
+
+<!-- START_ISSUE: WABOT-006 -->
+### [CHORE] Renomear menu Mensagens para Templates, ganchos e CTA
+- **ID:** WABOT-006
+- **Tipo:** Chore                 # [Bug | Feature | Refactor | Security | Chore]
+- **Prioridade:** Medium          # [Low | Medium | High | Critical]
+- **Status:** Backlog             # [Backlog | Ready | In Progress | Review | QA | Done]
+- **Epic:** UX                    # [WhatsApp | Faturamento | UX | Infra]
+- **Criado em:** 2026-06-07
+
+#### Descrição Técnica
+Atualizar a nomenclatura do item de navegação que hoje aparece como `Mensagens` para `Templates, ganchos e CTA` no sidebar web e na área mobile/account, mantendo os links atuais para as mesmas páginas.
+
+#### Critérios de Aceite
+- [ ] Alterar o label no sidebar web relacionado a `/painel/mensagens`.
+- [ ] Alterar o label em `/m/account`.
+- [ ] Manter as rotas e permissões existentes sem alteração funcional.
+- [ ] Validar visualmente em staging no desktop e mobile.
+<!-- END_ISSUE: WABOT-006 -->
+
+---
+
+<!-- START_ISSUE: WABOT-007 -->
+### [REFACTOR] Unificar variáveis de templates com nomes canônicos
+- **ID:** WABOT-007
+- **Tipo:** Refactor              # [Bug | Feature | Refactor | Security | Chore]
+- **Prioridade:** High            # [Low | Medium | High | Critical]
+- **Status:** Backlog             # [Backlog | Ready | In Progress | Review | QA | Done]
+- **Epic:** UX                    # [WhatsApp | Faturamento | UX | Infra]
+- **Criado em:** 2026-06-07
+
+#### Descrição Técnica
+Estudar todos os pontos onde variáveis de templates são exibidas, montadas, salvas ou interpoladas, pois há divergência de nomenclatura como `greeting` em alguns lugares e `gancho` em outros. Unificar para nomes canônicos em português: `gancho`, `cta` e `convitegrupo`.
+
+#### Critérios de Aceite
+- [ ] Mapear todas as variáveis usadas na criação, edição, preview e envio de templates.
+- [ ] Definir compatibilidade/migração para valores legados como `greeting`, se existirem em dados salvos.
+- [ ] Padronizar a UI para exibir `gancho`, `cta` e `convitegrupo`.
+- [ ] Padronizar a interpolação para aceitar os nomes canônicos sem quebrar templates existentes.
+- [ ] Adicionar ou atualizar testes cobrindo interpolação e preview de templates.
+<!-- END_ISSUE: WABOT-007 -->
+
+---
+
+<!-- START_ISSUE: WABOT-008 -->
+### [BUG] Corrigir cópia das variáveis na página de templates
+- **ID:** WABOT-008
+- **Tipo:** Bug                   # [Bug | Feature | Refactor | Security | Chore]
+- **Prioridade:** Medium          # [Low | Medium | High | Critical]
+- **Status:** Backlog             # [Backlog | Ready | In Progress | Review | QA | Done]
+- **Epic:** UX                    # [WhatsApp | Faturamento | UX | Infra]
+- **Criado em:** 2026-06-07
+
+#### Descrição Técnica
+Na página `/painel/mensagens`, as variáveis parecem copiáveis, mas a ação não copia o conteúdo de fato. Ajustar o comportamento para copiar a variável correta para a área de transferência e informar sucesso/erro ao usuário.
+
+#### Critérios de Aceite
+- [ ] Identificar todos os chips/botões de variável que aparentam ser copiáveis.
+- [ ] Implementar cópia real via clipboard com fallback seguro quando necessário.
+- [ ] Exibir feedback visual após copiar com sucesso.
+- [ ] Exibir feedback de erro quando o navegador bloquear a cópia.
+- [ ] Validar manualmente em staging em `/painel/mensagens`.
+<!-- END_ISSUE: WABOT-008 -->
+
+---
+
+<!-- START_ISSUE: WABOT-009 -->
+### [CHORE] Remover seção de branding não funcional das configurações
+- **ID:** WABOT-009
+- **Tipo:** Chore                 # [Bug | Feature | Refactor | Security | Chore]
+- **Prioridade:** Medium          # [Low | Medium | High | Critical]
+- **Status:** Backlog             # [Backlog | Ready | In Progress | Review | QA | Done]
+- **Epic:** UX                    # [WhatsApp | Faturamento | UX | Infra]
+- **Criado em:** 2026-06-07
+
+#### Descrição Técnica
+Remover da página `/painel/configuracoes` a seção de branding que não é mais funcional, evitando que o usuário tente configurar algo sem efeito no produto.
+
+#### Critérios de Aceite
+- [ ] Localizar a seção de branding em `/painel/configuracoes`.
+- [ ] Remover a UI e estados relacionados que não tenham efeito funcional.
+- [ ] Garantir que outras configurações da página continuem funcionando.
+- [ ] Validar manualmente em staging em `/painel/configuracoes`.
+<!-- END_ISSUE: WABOT-009 -->
+
+---
