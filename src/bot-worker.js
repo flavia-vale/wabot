@@ -2130,7 +2130,7 @@ process.on('message', async msg => {
         data: {
           userId,
           platform: 'broadcast',
-          sourceGroup: 'manual',
+          sourceGroup: msg.options?.source === 'offerAutomation' ? 'offerAutomation' : 'manual',
           destGroup: jid,
           originalUrl: '',
           convertedUrl: '',

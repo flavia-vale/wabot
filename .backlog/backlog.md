@@ -47,7 +47,7 @@ Mapear os passos que precisam ser validados em staging antes de qualquer altera�
 - **ID:** WABOT-003
 - **Tipo:** Refactor              # [Bug | Feature | Refactor | Security | Chore]
 - **Prioridade:** High            # [Low | Medium | High | Critical]
-- **Status:** Backlog             # [Backlog | Ready | In Progress | Review | QA | Done]
+- **Status:** QA                  # [Backlog | Ready | In Progress | Review | QA | Done]
 - **Epic:** UX                    # [WhatsApp | Faturamento | UX | Infra]
 - **Criado em:** 2026-06-07
 
@@ -55,10 +55,14 @@ Mapear os passos que precisam ser validados em staging antes de qualquer altera�
 Simplificar a versão web do conversor de links em `/painel/converte-links`, reduzindo complexidade visual e operacional. A experiência desejada pode ser 1:1 e deve se inspirar no fluxo mobile `/m/op/converter`, preservando o comportamento essencial de conversão sem etapas ou opções desnecessárias.
 
 #### Critérios de Aceite
-- [ ] Mapear diferenças entre `/painel/converte-links` e `/m/op/converter` antes de implementar.
-- [ ] Reduzir a interface web para um fluxo simples de entrada de link e resultado convertido.
-- [ ] Manter validações, mensagens de erro e estados de carregamento necessários.
+- [x] Mapear diferenças entre `/painel/converte-links` e `/m/op/converter` antes de implementar.
+- [x] Reduzir a interface web para um fluxo simples de entrada de link e resultado convertido.
+- [x] Manter validações, mensagens de erro e estados de carregamento necessários.
 - [ ] Validar manualmente o fluxo em staging em `http://178.105.54.0:3006/painel/converte-links`.
+
+#### Status de Implementação
+- Sucesso: fluxo web simplificado para 1 link por vez, sem montador de oferta avançado.
+- Pendente: validação manual em staging na porta 3006.
 <!-- END_ISSUE: WABOT-003 -->
 
 ---
@@ -68,7 +72,7 @@ Simplificar a versão web do conversor de links em `/painel/converte-links`, red
 - **ID:** WABOT-004
 - **Tipo:** Refactor              # [Bug | Feature | Refactor | Security | Chore]
 - **Prioridade:** High            # [Low | Medium | High | Critical]
-- **Status:** Backlog             # [Backlog | Ready | In Progress | Review | QA | Done]
+- **Status:** QA                  # [Backlog | Ready | In Progress | Review | QA | Done]
 - **Epic:** UX                    # [WhatsApp | Faturamento | UX | Infra]
 - **Criado em:** 2026-06-07
 
@@ -76,12 +80,16 @@ Simplificar a versão web do conversor de links em `/painel/converte-links`, red
 Simplificar as telas de envio manual em `/painel/envio` e `/m/op/broadcast`, removendo as áreas de Smart Segmentador (MVP) e segmentação de destinos. A tela deve focar apenas no conteúdo da mensagem e na seleção direta de destinos.
 
 #### Critérios de Aceite
-- [ ] Remover/ocultar a seção Smart Segmentador (MVP) das telas de envio.
-- [ ] Remover/ocultar a segmentação avançada de destinos.
-- [ ] Exibir somente o campo de mensagem e a seleção de `Destinos`.
-- [ ] Exibir o texto auxiliar: `Seu grupo de destino não está aqui? Clique aqui para adicionar`.
-- [ ] Adicionar botão/link para a página de cadastro de grupos de destino.
+- [x] Remover/ocultar a seção Smart Segmentador (MVP) das telas de envio.
+- [x] Remover/ocultar a segmentação avançada de destinos.
+- [x] Exibir somente o campo de mensagem e a seleção de `Destinos`.
+- [x] Exibir o texto auxiliar: `Seu grupo de destino não está aqui? Clique aqui para adicionar`.
+- [x] Adicionar botão/link para a página de cadastro de grupos de destino.
 - [ ] Validar manualmente em staging em `/painel/envio` e `/m/op/broadcast`.
+
+#### Status de Implementação
+- Sucesso: telas web e mobile mostram mensagem, destinos diretos e CTA para cadastrar grupo.
+- Pendente: validação manual em staging na porta 3006.
 <!-- END_ISSUE: WABOT-004 -->
 
 ---
@@ -91,7 +99,7 @@ Simplificar as telas de envio manual em `/painel/envio` e `/m/op/broadcast`, rem
 - **ID:** WABOT-005
 - **Tipo:** Bug                   # [Bug | Feature | Refactor | Security | Chore]
 - **Prioridade:** High            # [Low | Medium | High | Critical]
-- **Status:** Backlog             # [Backlog | Ready | In Progress | Review | QA | Done]
+- **Status:** QA                  # [Backlog | Ready | In Progress | Review | QA | Done]
 - **Epic:** UX                    # [WhatsApp | Faturamento | UX | Infra]
 - **Criado em:** 2026-06-07
 
@@ -99,11 +107,15 @@ Simplificar as telas de envio manual em `/painel/envio` e `/m/op/broadcast`, rem
 Nas páginas de logs `/painel/envios` e `/m/op/logs`, mensagens originadas por oferta automática estão aparecendo como envio manual. Ajustar a origem exibida para diferenciar corretamente ofertas automáticas de envios manuais.
 
 #### Critérios de Aceite
-- [ ] Identificar no backend/modelo de log qual campo diferencia envio manual de oferta automática.
-- [ ] Ajustar a renderização da origem nas páginas web e mobile.
-- [ ] Garantir que envios manuais continuem aparecendo como manuais.
-- [ ] Garantir que ofertas automáticas apareçam como oferta automática.
+- [x] Identificar no backend/modelo de log qual campo diferencia envio manual de oferta automática.
+- [x] Ajustar a renderização da origem nas páginas web e mobile.
+- [x] Garantir que envios manuais continuem aparecendo como manuais.
+- [x] Garantir que ofertas automáticas apareçam como oferta automática.
 - [ ] Validar manualmente em staging em `/painel/envios` e `/m/op/logs`.
+
+#### Status de Implementação
+- Sucesso: broadcast de oferta automática grava origem própria e logs web/mobile exibem `Oferta automática`.
+- Pendente: validação manual em staging na porta 3006 com envio real de automação.
 <!-- END_ISSUE: WABOT-005 -->
 
 ---
@@ -113,7 +125,7 @@ Nas páginas de logs `/painel/envios` e `/m/op/logs`, mensagens originadas por o
 - **ID:** WABOT-006
 - **Tipo:** Chore                 # [Bug | Feature | Refactor | Security | Chore]
 - **Prioridade:** Medium          # [Low | Medium | High | Critical]
-- **Status:** Backlog             # [Backlog | Ready | In Progress | Review | QA | Done]
+- **Status:** QA                  # [Backlog | Ready | In Progress | Review | QA | Done]
 - **Epic:** UX                    # [WhatsApp | Faturamento | UX | Infra]
 - **Criado em:** 2026-06-07
 
@@ -121,10 +133,14 @@ Nas páginas de logs `/painel/envios` e `/m/op/logs`, mensagens originadas por o
 Atualizar a nomenclatura do item de navegação que hoje aparece como `Mensagens` para `Templates, ganchos e CTA` no sidebar web e na área mobile/account, mantendo os links atuais para as mesmas páginas.
 
 #### Critérios de Aceite
-- [ ] Alterar o label no sidebar web relacionado a `/painel/mensagens`.
-- [ ] Alterar o label em `/m/account`.
-- [ ] Manter as rotas e permissões existentes sem alteração funcional.
+- [x] Alterar o label no sidebar web relacionado a `/painel/mensagens`.
+- [x] Alterar o label em `/m/account`.
+- [x] Manter as rotas e permissões existentes sem alteração funcional.
 - [ ] Validar visualmente em staging no desktop e mobile.
+
+#### Status de Implementação
+- Sucesso: labels atualizados sem mudar rotas.
+- Pendente: validação visual manual em staging no desktop e mobile.
 <!-- END_ISSUE: WABOT-006 -->
 
 ---
@@ -134,7 +150,7 @@ Atualizar a nomenclatura do item de navegação que hoje aparece como `Mensagens
 - **ID:** WABOT-007
 - **Tipo:** Refactor              # [Bug | Feature | Refactor | Security | Chore]
 - **Prioridade:** High            # [Low | Medium | High | Critical]
-- **Status:** Backlog             # [Backlog | Ready | In Progress | Review | QA | Done]
+- **Status:** QA                  # [Backlog | Ready | In Progress | Review | QA | Done]
 - **Epic:** UX                    # [WhatsApp | Faturamento | UX | Infra]
 - **Criado em:** 2026-06-07
 
@@ -142,11 +158,15 @@ Atualizar a nomenclatura do item de navegação que hoje aparece como `Mensagens
 Estudar todos os pontos onde variáveis de templates são exibidas, montadas, salvas ou interpoladas, pois há divergência de nomenclatura como `greeting` em alguns lugares e `gancho` em outros. Unificar para nomes canônicos em português: `gancho`, `cta` e `convitegrupo`.
 
 #### Critérios de Aceite
-- [ ] Mapear todas as variáveis usadas na criação, edição, preview e envio de templates.
-- [ ] Definir compatibilidade/migração para valores legados como `greeting`, se existirem em dados salvos.
-- [ ] Padronizar a UI para exibir `gancho`, `cta` e `convitegrupo`.
-- [ ] Padronizar a interpolação para aceitar os nomes canônicos sem quebrar templates existentes.
-- [ ] Adicionar ou atualizar testes cobrindo interpolação e preview de templates.
+- [x] Mapear todas as variáveis usadas na criação, edição, preview e envio de templates.
+- [x] Definir compatibilidade/migração para valores legados como `greeting`, se existirem em dados salvos.
+- [x] Padronizar a UI para exibir `gancho`, `cta` e `convitegrupo`.
+- [x] Padronizar a interpolação para aceitar os nomes canônicos sem quebrar templates existentes.
+- [x] Adicionar ou atualizar testes cobrindo interpolação e preview de templates.
+
+#### Status de Implementação
+- Sucesso: UI padronizada para `gancho`, `cta` e `convitegrupo`; aliases legados continuam aceitos internamente para compatibilidade.
+- Pendente: validação manual de templates reais em staging.
 <!-- END_ISSUE: WABOT-007 -->
 
 ---
@@ -156,7 +176,7 @@ Estudar todos os pontos onde variáveis de templates são exibidas, montadas, sa
 - **ID:** WABOT-008
 - **Tipo:** Bug                   # [Bug | Feature | Refactor | Security | Chore]
 - **Prioridade:** Medium          # [Low | Medium | High | Critical]
-- **Status:** Backlog             # [Backlog | Ready | In Progress | Review | QA | Done]
+- **Status:** QA                  # [Backlog | Ready | In Progress | Review | QA | Done]
 - **Epic:** UX                    # [WhatsApp | Faturamento | UX | Infra]
 - **Criado em:** 2026-06-07
 
@@ -164,11 +184,15 @@ Estudar todos os pontos onde variáveis de templates são exibidas, montadas, sa
 Na página `/painel/mensagens`, as variáveis parecem copiáveis, mas a ação não copia o conteúdo de fato. Ajustar o comportamento para copiar a variável correta para a área de transferência e informar sucesso/erro ao usuário.
 
 #### Critérios de Aceite
-- [ ] Identificar todos os chips/botões de variável que aparentam ser copiáveis.
-- [ ] Implementar cópia real via clipboard com fallback seguro quando necessário.
-- [ ] Exibir feedback visual após copiar com sucesso.
-- [ ] Exibir feedback de erro quando o navegador bloquear a cópia.
+- [x] Identificar todos os chips/botões de variável que aparentam ser copiáveis.
+- [x] Implementar cópia real via clipboard com fallback seguro quando necessário.
+- [x] Exibir feedback visual após copiar com sucesso.
+- [x] Exibir feedback de erro quando o navegador bloquear a cópia.
 - [ ] Validar manualmente em staging em `/painel/mensagens`.
+
+#### Status de Implementação
+- Sucesso: chips de variáveis usam helper real de clipboard com fallback e feedback.
+- Pendente: validação manual em navegador real no staging.
 <!-- END_ISSUE: WABOT-008 -->
 
 ---
@@ -178,7 +202,7 @@ Na página `/painel/mensagens`, as variáveis parecem copiáveis, mas a ação n
 - **ID:** WABOT-009
 - **Tipo:** Chore                 # [Bug | Feature | Refactor | Security | Chore]
 - **Prioridade:** Medium          # [Low | Medium | High | Critical]
-- **Status:** Backlog             # [Backlog | Ready | In Progress | Review | QA | Done]
+- **Status:** QA                  # [Backlog | Ready | In Progress | Review | QA | Done]
 - **Epic:** UX                    # [WhatsApp | Faturamento | UX | Infra]
 - **Criado em:** 2026-06-07
 
@@ -186,10 +210,14 @@ Na página `/painel/mensagens`, as variáveis parecem copiáveis, mas a ação n
 Remover da página `/painel/configuracoes` a seção de branding que não é mais funcional, evitando que o usuário tente configurar algo sem efeito no produto.
 
 #### Critérios de Aceite
-- [ ] Localizar a seção de branding em `/painel/configuracoes`.
-- [ ] Remover a UI e estados relacionados que não tenham efeito funcional.
-- [ ] Garantir que outras configurações da página continuem funcionando.
+- [x] Localizar a seção de branding em `/painel/configuracoes`.
+- [x] Remover a UI e estados relacionados que não tenham efeito funcional.
+- [x] Garantir que outras configurações da página continuem funcionando.
 - [ ] Validar manualmente em staging em `/painel/configuracoes`.
+
+#### Status de Implementação
+- Sucesso: seção visual de branding removida da página de configurações, preservando round-trip interno para não apagar dados existentes.
+- Pendente: validação manual em staging na porta 3006.
 <!-- END_ISSUE: WABOT-009 -->
 
 ---

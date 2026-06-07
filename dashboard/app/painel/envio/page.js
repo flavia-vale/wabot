@@ -1,10 +1,11 @@
 'use client'
 
-/* Enviar mensagem (broadcast manual) — versão Menta do painel. A lógica de
- * seleção de destinos (Smart Segmentador), envio imediato e confirmação é a
- * mesma de /dashboard/envio; o título vai para a topbar via usePainelHeader. */
+/* Enviar mensagem (broadcast manual) — versão Menta simplificada.
+ * Mantém o contrato real de api.broadcastSend(text, selectedTargetJids), mas
+ * remove segmentação avançada: a pessoa escolhe destinos diretamente. */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -40,14 +41,8 @@ function MessagePreview({ text, title = 'Prévia da mensagem' }) {
   )
 }
 
-const MESSAGE_TEMPLATES = [
-  { label: 'Oferta relâmpago', text: '⚡ Oferta relâmpago!\n\nProduto:\nPreço:\nLink:' },
-  { label: 'Cupom', text: '🎟️ Cupom disponível!\n\nUse o cupom:\nLink da oferta:' },
-  { label: 'Últimas unidades', text: '🔥 Últimas unidades!\n\nGaranta antes que acabe:' },
-]
-
 export default function EnvioPage() {
-  usePainelHeader({ title: 'Enviar mensagem', subtitle: 'Envie manualmente uma mensagem para os grupos de postagem selecionados' })
+  usePainelHeader({ title: 'Enviar mensagem', subtitle: 'Escreva a mensagem e selecione os destinos que vão receber' })
 
   const [broadcastText, setBroadcastText] = useState('')
   const [broadcastLoading, setBroadcastLoading] = useState(false)
@@ -57,10 +52,6 @@ export default function EnvioPage() {
   const [broadcastConfirmOpen, setBroadcastConfirmOpen] = useState(false)
   const [targetGroups, setTargetGroups] = useState([])
   const [selectedTargetJids, setSelectedTargetJids] = useState([])
-  const [searchTerm, setSearchTerm] = useState('')
-  const [minMembers, setMinMembers] = useState('')
-  const [includeChannels, setIncludeChannels] = useState(false)
-  const [topN, setTopN] = useState(10)
   const [targetGroupsLoading, setTargetGroupsLoading] = useState(true)
   const [targetGroupsError, setTargetGroupsError] = useState('')
 
@@ -72,6 +63,7 @@ export default function EnvioPage() {
       const postGroups = groups.filter((group) => group.role === 'post')
       setTargetGroups(postGroups)
       setSelectedTargetJids((prev) => prev.filter((jid) => postGroups.some((group) => group.waJid === jid)))
+      trackEvent('group_selector_viewed', { total_destinations_loaded: postGroups.length, mode: 'direct' })
     } catch (err) {
       setTargetGroupsError(err.message || 'Não foi possível carregar os grupos de destino.')
     } finally {
@@ -81,25 +73,24 @@ export default function EnvioPage() {
 
   useEffect(() => {
     let active = true
-
-    api.groups()
-      .then((groups) => {
+    async function load() {
+      setTargetGroupsError('')
+      setTargetGroupsLoading(true)
+      try {
+        const groups = await api.groups()
         if (!active) return
         const postGroups = groups.filter((group) => group.role === 'post')
         setTargetGroups(postGroups)
         setSelectedTargetJids((prev) => prev.filter((jid) => postGroups.some((group) => group.waJid === jid)))
-        trackEvent('group_selector_viewed', { total_destinations_loaded: postGroups.length, defaults_applied: true })
-      })
-      .catch((err) => {
+        trackEvent('group_selector_viewed', { total_destinations_loaded: postGroups.length, mode: 'direct' })
+      } catch (err) {
         if (active) setTargetGroupsError(err.message || 'Não foi possível carregar os grupos de destino.')
-      })
-      .finally(() => {
+      } finally {
         if (active) setTargetGroupsLoading(false)
-      })
-
-    return () => {
-      active = false
+      }
     }
+    load()
+    return () => { active = false }
   }, [])
 
   async function sendBroadcastNow() {
@@ -108,7 +99,7 @@ export default function EnvioPage() {
     setBroadcastConfirmOpen(false)
     try {
       const res = await api.broadcastSend(broadcastText.trim(), selectedTargetJids)
-      trackEvent('group_selector_confirmed', { selected_count: selectedTargetJids.length, selection_mode_mix: 'mixed' })
+      trackEvent('group_selector_confirmed', { selected_count: selectedTargetJids.length, selection_mode_mix: 'direct' })
       setBroadcastResult(res)
       setBroadcastText('')
     } catch (err) {
@@ -137,48 +128,13 @@ export default function EnvioPage() {
     setBroadcastConfirmOpen(true)
   }
 
-  const filteredTargetGroups = useMemo(() => {
-    const query = searchTerm.trim().toLowerCase()
-    const min = Number(minMembers || 0)
-    return targetGroups.filter((group) => {
-      if (!includeChannels && group.waJid?.endsWith('@newsletter')) return false
-      if (query && !String(group.name || '').toLowerCase().includes(query)) return false
-      const participants = Number(group.participantsCount || 0)
-      if (Number.isFinite(min) && min > 0 && participants < min) return false
-      return true
-    })
-  }, [targetGroups, searchTerm, minMembers, includeChannels])
-
   function toggleTarget(jid) {
     setSelectedTargetJids((prev) => {
       const exists = prev.includes(jid)
       const next = exists ? prev.filter((item) => item !== jid) : [...prev, jid]
-      trackEvent(exists ? 'group_unselected' : 'group_selected', { destination_id: jid })
+      trackEvent(exists ? 'group_unselected' : 'group_selected', { destination_id: jid, mode: 'direct' })
       return next
     })
-  }
-
-  function applyTopN() {
-    const n = Math.max(1, Number(topN || 1))
-    const ranked = [...filteredTargetGroups].sort((a, b) => {
-      const sizeA = Number(a.participantsCount || 0)
-      const sizeB = Number(b.participantsCount || 0)
-      return sizeB - sizeA
-    })
-    const picked = ranked.slice(0, n).map((group) => group.waJid)
-    setSelectedTargetJids((prev) => [...new Set([...prev, ...picked])])
-    trackEvent('group_top_n_applied', { requested_n: n, applied_count: picked.length })
-  }
-
-  function selectAllVisible() {
-    const jids = filteredTargetGroups.map((group) => group.waJid)
-    setSelectedTargetJids((prev) => [...new Set([...prev, ...jids])])
-    trackEvent('group_bulk_selected', { selected_count: jids.length, source: 'filter_result' })
-  }
-
-  function clearSelection() {
-    setSelectedTargetJids([])
-    trackEvent('group_unselected', { reason: 'bulk_clear' })
   }
 
   const targetGroupCount = targetGroups.length
@@ -190,36 +146,8 @@ export default function EnvioPage() {
     <div className="max-w-xl">
       <div className="bg-white rounded-2xl shadow p-5 mb-4">
         <h3 className="font-semibold text-gray-700 mb-1">📤 Enviar agora</h3>
-        <p className="text-xs text-amber-700 mb-2">Impacto: a mensagem será enviada apenas para os destinos selecionados. Total selecionado: <strong>{selectedTargetJids.length}</strong>{targetGroupsLoading ? '' : ` de ${targetGroupCount}`}. </p>
+        <p className="text-xs text-amber-700 mb-4">Impacto: a mensagem será enviada apenas para os destinos selecionados. Total selecionado: <strong>{selectedTargetJids.length}</strong>{targetGroupsLoading ? '' : ` de ${targetGroupCount}`}. </p>
 
-        <div className="mb-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Smart Segmentador (MVP)</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <input value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); trackEvent('group_filter_changed', { filter_name: 'search', to_value: e.target.value }) }} placeholder="Buscar grupo/canal" className="w-full rounded-lg border px-3 py-2 text-sm" />
-            <input value={minMembers} onChange={(e) => { setMinMembers(e.target.value); trackEvent('group_filter_changed', { filter_name: 'min_members', to_value: e.target.value }) }} type="number" min={0} placeholder="Mín. participantes" className="w-full rounded-lg border px-3 py-2 text-sm" />
-          </div>
-          <label className="mt-2 inline-flex items-center gap-2 text-xs text-gray-600">
-            <input type="checkbox" checked={includeChannels} onChange={(e) => { setIncludeChannels(e.target.checked); trackEvent('group_filter_changed', { filter_name: 'include_channels', to_value: e.target.checked }) }} />
-            Incluir canais
-          </label>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <button type="button" onClick={selectAllVisible} className="rounded-full border px-3 py-1 text-xs">Selecionar visíveis ({filteredTargetGroups.length})</button>
-            <button type="button" onClick={clearSelection} className="rounded-full border px-3 py-1 text-xs">Limpar seleção</button>
-            <input type="number" min={1} value={topN} onChange={(e) => setTopN(e.target.value)} className="w-20 rounded-full border px-2 py-1 text-xs" />
-            <button type="button" onClick={applyTopN} className="rounded-full border px-3 py-1 text-xs">Top N</button>
-          </div>
-          <div className="mt-3 max-h-44 space-y-1 overflow-auto rounded-lg border bg-white p-2">
-            {filteredTargetGroups.length ? filteredTargetGroups.map((group) => {
-              const checked = selectedTargetJids.includes(group.waJid)
-              return (
-                <label key={group.id} className="flex items-center justify-between gap-2 rounded px-2 py-1 text-sm hover:bg-gray-50">
-                  <span className="truncate">{group.name}</span>
-                  <input type="checkbox" checked={checked} onChange={() => toggleTarget(group.waJid)} />
-                </label>
-              )
-            }) : <p className="text-xs text-gray-500">Nenhum destino com os filtros atuais.</p>}
-          </div>
-        </div>
         {targetGroupsError && (
           <div className="mb-3">
             <Alert type="warning" title="Grupos indisponíveis" message={`${targetGroupsError} A confirmação usará a validação da API ao enviar.`} />
@@ -227,30 +155,47 @@ export default function EnvioPage() {
           </div>
         )}
 
-        <div className="mb-3 flex flex-wrap gap-2">
-          {MESSAGE_TEMPLATES.map((template) => (
-            <button
-              key={template.label}
-              type="button"
-              onClick={() => setBroadcastText(template.text)}
-              className="rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 hover:border-green-400 hover:text-green-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2"
-            >
-              {template.label}
-            </button>
-          ))}
-        </div>
-
-        <form onSubmit={handleBroadcast} className="flex flex-col gap-3">
-          <textarea
-            rows={4}
-            placeholder="Digite a mensagem..."
-            value={broadcastText}
-            onChange={(e) => setBroadcastText(e.target.value)}
-            required
-            className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm"
-          />
+        <form onSubmit={handleBroadcast} className="flex flex-col gap-4">
+          <label className="block">
+            <span className="mb-1 block text-sm font-bold text-gray-900">Mensagem</span>
+            <textarea
+              rows={5}
+              placeholder="Digite a mensagem..."
+              value={broadcastText}
+              onChange={(e) => setBroadcastText(e.target.value)}
+              required
+              className="w-full border rounded-lg px-3 py-2.5 min-h-11 text-sm"
+            />
+          </label>
 
           <MessagePreview text={broadcastText} />
+
+          <section className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-gray-900">Destinos</p>
+                <p className="mt-1 text-xs text-gray-600">Selecione os grupos/canais que vão receber esta mensagem.</p>
+              </div>
+              <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-gray-700">{selectedTargetJids.length} selecionado(s)</span>
+            </div>
+            <div className="max-h-56 space-y-1 overflow-auto rounded-lg border bg-white p-2">
+              {targetGroupsLoading ? (
+                <p className="text-xs text-gray-500">Carregando destinos...</p>
+              ) : targetGroups.length ? targetGroups.map((group) => {
+                const checked = selectedTargetJids.includes(group.waJid)
+                return (
+                  <label key={group.id} className="flex items-center justify-between gap-2 rounded px-2 py-2 text-sm hover:bg-gray-50">
+                    <span className="truncate">{group.name}</span>
+                    <input type="checkbox" checked={checked} onChange={() => toggleTarget(group.waJid)} />
+                  </label>
+                )
+              }) : <p className="text-xs text-gray-500">Nenhum destino cadastrado ainda.</p>}
+            </div>
+            <p className="mt-3 text-xs text-gray-600">Seu grupo de destino não está aqui? Clique aqui para adicionar</p>
+            <Link href="/painel/grupos" className="mt-2 inline-flex min-h-10 items-center justify-center rounded-xl bg-gray-900 px-4 py-2 text-xs font-bold text-white transition hover:bg-gray-800">
+              Adicionar grupo de destino
+            </Link>
+          </section>
 
           {broadcastError && (
             <Alert
@@ -277,7 +222,6 @@ export default function EnvioPage() {
           </button>
         </form>
       </div>
-
 
       <ConfirmDialog open={broadcastConfirmOpen} title="Confirmar envio imediato" message={broadcastConfirmMessage} confirmLabel={broadcastLoading ? 'Enviando...' : 'Enviar agora'} onCancel={() => setBroadcastConfirmOpen(false)} onConfirm={sendBroadcastNow} />
     </div>
