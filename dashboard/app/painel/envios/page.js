@@ -21,6 +21,13 @@ function shortText(text) {
   return t.length > 90 ? `${t.slice(0, 89)}…` : t
 }
 
+
+function logOriginLabel(log) {
+  if (log?.sourceGroup === 'offerAutomation') return 'Oferta automática'
+  if (log?.sourceGroup === 'manual') return 'Manual'
+  return log?.sourceGroupName || log?.sourceGroup || '—'
+}
+
 function StatusTag({ status }) {
   const t = statusTag(status)
   return <span className={`pnl-tag ${t.cls}`}>{t.label}</span>
@@ -214,8 +221,8 @@ export default function EnviosPage() {
                       </td>
                       <td className="pnl-td-clip" title={log.messageText}>{shortText(log.messageText)}</td>
                       <td><span className="pnl-store">{log.platform || '—'}</span></td>
-                      <td className="pnl-muted pnl-td-clip" title={`${log.sourceGroupName} → ${dest || '—'}`}>
-                        {log.sourceGroupName}{dest ? ` → ${dest}` : ''}
+                      <td className="pnl-muted pnl-td-clip" title={`${logOriginLabel(log)} → ${dest || '—'}`}>
+                        {logOriginLabel(log)}{dest ? ` → ${dest}` : ''}
                       </td>
                     </tr>
                   )
@@ -235,7 +242,7 @@ export default function EnviosPage() {
                     <span className="pnl-faint" style={{ fontSize: 11.5 }}>{formatDateTime(log.sentAt)}</span>
                   </div>
                   <p style={{ fontSize: 13, margin: '8px 0 4px' }}>{shortText(log.messageText)}</p>
-                  <p className="pnl-muted" style={{ fontSize: 12 }}>{log.sourceGroupName}{dest ? ` → ${dest}` : ''}</p>
+                  <p className="pnl-muted" style={{ fontSize: 12 }}>{logOriginLabel(log)}{dest ? ` → ${dest}` : ''}</p>
                   <div style={{ marginTop: 8 }}><StatusTag status={log.status} /><DedupChip hits={log.dedupHits} /></div>
                   <ErrorDetails log={log} expanded={expanded.has(log.id)} onToggle={() => toggle(log.id)} />
                 </div>

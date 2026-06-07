@@ -25,14 +25,15 @@ import { OFFER_TEMPLATE_VARIABLE_GROUPS } from '@/lib/mobileOfferComposer'
 import { buildRenderedOfferTemplatePreview, summarizeAutomationTemplateUsage } from '@/lib/offerTemplatePreview'
 import { usePainelHeader, PainelTopbarAction } from '../PainelShell'
 import { WhatsAppBubble, TokenText } from '../WhatsAppBubble'
+import { copyTextToClipboard } from '@/lib/clipboard'
 
 const MAX_VARIATIONS = 20
 
 // Acordeões de variação → mapeiam direto para as chaves reais do pool.
 const VARIATION_GROUPS = [
-  { key: 'greetings', emoji: '🎯', nome: 'Ganchos', pos: 'vão antes da mensagem', desc: 'A primeira linha que chama atenção.', placeholder: 'Ex: 🚨 COOOOOORRE QUE TÁ ACABANDO!' },
-  { key: 'ctas', emoji: '📣', nome: 'Chamadas pra ação', pos: 'convidam pro grupo', desc: 'O convite que aparece junto da oferta.', placeholder: 'Ex: 📲 Entre no nosso grupo oficial:' },
-  { key: 'trailers', emoji: '📌', nome: 'Fechamentos', pos: 'vão depois da mensagem', desc: 'O aviso de preço/estoque no rodapé.', placeholder: 'Ex: ⚠️ Preços e estoque podem mudar.' },
+  { key: 'greetings', emoji: '🎯', nome: 'Ganchos', pos: 'vão antes da mensagem', desc: 'A primeira linha que chama atenção. Variável canônica: {{gancho}}.', placeholder: 'Ex: 🚨 COOOOOORRE QUE TÁ ACABANDO!' },
+  { key: 'ctas', emoji: '📣', nome: 'CTAs', pos: 'convidam pro grupo', desc: 'A chamada para ação que aparece junto da oferta. Variável canônica: {{cta}}.', placeholder: 'Ex: 📲 Entre no nosso grupo oficial:' },
+  { key: 'trailers', emoji: '🔗', nome: 'Convite do grupo', pos: 'vai depois da mensagem', desc: 'O convite ou aviso final usado pela variável canônica {{convitegrupo}}.', placeholder: 'Ex: ⚠️ Preços e estoque podem mudar.' },
 ]
 
 function parsePool(json) {
@@ -57,7 +58,7 @@ function Chevron({ open }) {
 }
 
 export default function MensagensPage() {
-  usePainelHeader({ title: 'Mensagens', subtitle: 'Ganchos, CTAs, variáveis e modelos das suas ofertas' })
+  usePainelHeader({ title: 'Templates, ganchos e CTA', subtitle: 'Templates, ganchos, CTAs e variáveis das suas ofertas' })
 
   const [value, setValue] = useState({ copyVariationPoolJson: '{}', brandingGroupLink: '', couponLink: '' })
   const [templateStore, setTemplateStore] = useState(() => readLocalTemplateStore())
@@ -134,10 +135,17 @@ export default function MensagensPage() {
     }
   }
 
-  function copyVar(token) {
-    try { navigator.clipboard?.writeText(token) } catch {}
-    setCopied(token)
-    setTimeout(() => setCopied((c) => (c === token ? null : c)), 1100)
+  async function copyVar(token) {
+    setError('')
+    try {
+      const ok = await copyTextToClipboard(token)
+      if (!ok) throw new Error('clipboard indisponível')
+      setCopied(token)
+      setTimeout(() => setCopied((c) => (c === token ? null : c)), 1100)
+    } catch {
+      setCopied(null)
+      setError('Não foi possível copiar automaticamente. Selecione a variável e copie manualmente.')
+    }
   }
 
   function insertTemplateToken(token) {
@@ -243,7 +251,7 @@ export default function MensagensPage() {
       )}
       <div className="pnl-subcard">
         <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>Inserir variáveis no ponto do cursor</div>
-        <p className="pnl-card-note" style={{ marginTop: 2, marginBottom: 8 }}>Para remover gancho, CTA ou fechamento, apague o token do corpo.</p>
+        <p className="pnl-card-note" style={{ marginTop: 2, marginBottom: 8 }}>Para remover gancho, CTA ou convite do grupo, apague o token do corpo.</p>
         {OFFER_TEMPLATE_VARIABLE_GROUPS.map((group) => (
           <div key={group.key} style={{ marginBottom: 8 }}>
             <div className="pnl-eyebrow" style={{ marginBottom: 4 }}>{group.title}</div>
@@ -362,7 +370,7 @@ export default function MensagensPage() {
       {/* 3 · Variáveis */}
       <section className="pnl-card">
         <div className="pnl-card-title">Variáveis dos modelos</div>
-        <p className="pnl-card-note" style={{ marginBottom: 14 }}>Clique pra copiar e cole no corpo do modelo. O bot substitui no envio automático e no Criar oferta.</p>
+        <p className="pnl-card-note" style={{ marginBottom: 14 }}>Clique para copiar e cole no corpo do modelo. O bot substitui no envio automático e no Criar oferta.</p>
         <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
           {[
             { group: dadosGroup, dot: 'var(--accent-strong)', note: 'preenchidas com o produto' },
@@ -451,7 +459,7 @@ export default function MensagensPage() {
                           </div>
                           <div className="pnl-subcard" style={{ borderColor: 'var(--accent-strong)' }}>
                             <p className="pnl-eyebrow" style={{ color: 'var(--accent-strong)' }}>Prévia real enviada pelo bot</p>
-                            <p className="pnl-card-note" style={{ marginTop: 2, marginBottom: 8 }}>com gancho, CTA e fechamento já sorteados</p>
+                            <p className="pnl-card-note" style={{ marginTop: 2, marginBottom: 8 }}>com gancho, CTA e convite do grupo já sorteados</p>
                             <WhatsAppBubble text={renderedPreview} format />
                           </div>
                         </div>

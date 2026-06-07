@@ -292,14 +292,14 @@ export default function AccountPage() {
       </div>
       <div style={contaStyles.card}>
         <ContaRow icon="chat" tone="accent" title="Enviar mensagem livre"
-          sub="broadcast com segmentação de destinos" value="abrir" onClick={() => router.push(mobileRoutes.broadcast)}/>
+          sub="broadcast com escolha direta de destinos" value="abrir" onClick={() => router.push(mobileRoutes.broadcast)}/>
         <ContaRow icon="link" tone="success" title="Converter links"
           sub="transforme links originais em links de afiliado" value="abrir" onClick={() => router.push(mobileRoutes.converter)}/>
         <ContaRow icon="bolt" tone="success" title="Ofertas automáticas"
           sub="buscas recorrentes, ligar/desligar e teste" value="abrir" onClick={() => router.push(mobileRoutes.automations)}/>
         <ContaRow icon="sparkles" tone="accent" title="Ganchos e CTAs"
-          sub="variações persistidas no backend" value="editar" onClick={() => router.push(mobileRoutes.accountVariations)}/>
-        <ContaRow icon="plus" title="Modelos de oferta"
+          sub="variáveis e textos sorteados" value="editar" onClick={() => router.push(mobileRoutes.accountVariations)}/>
+        <ContaRow icon="plus" title="Templates, ganchos e CTA"
           sub="modelos locais para criar oferta manual" value="editar" onClick={() => router.push(mobileRoutes.accountTemplates)}/>
         <ContaRow icon="shield" title="Ritmo de envio"
           sub="ajuste em grupos e preservação" onClick={() => router.push(mobileRoutes.espelhar)}/>

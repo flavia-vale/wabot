@@ -1,4 +1,4 @@
-import { fetchOffers as defaultFetchOffers, dedupeOffersByProduct, productDedupKey } from './shopeeOffers.js'
+import { fetchOffers as defaultFetchOffers, dedupeOffersByProduct, productDedupKey, buildOfferCandidateLimit } from './shopeeOffers.js'
 import { sendBroadcast, isRunning } from '../manager.js'
 import db from '../db.js'
 import { parseCredentialData } from '../credentialHealth.js'

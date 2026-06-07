@@ -8,10 +8,9 @@
 import { useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
-import { OfferBuilder } from '@/components/OfferBuilder'
 import { usePainelHeader } from '../PainelShell'
 
-const MAX_LINKS = 10
+const MAX_LINKS = 1
 const MAX_TEXT_LENGTH = 12_000
 const SUPPORTED_LINK_RE = /https?:\/\/(?:www\.)?(?:mercadolivre\.com\.br|mercadolibre\.com|meli\.la|mluvem\.com|amazon\.com\.br|amzn\.to|a\.co|amzn\.divulgador\.link|shope\.ee|shopee\.com\.br|s\.shopee\.com\.br|magazineluiza\.com\.br|magazinevoce\.com\.br|mlz\.me)\S*/gi
 
@@ -21,7 +20,7 @@ function countSupportedLinks(text) {
 }
 
 function getLimitMessage(count) {
-  return `Cole no máximo ${MAX_LINKS} links por vez. Encontramos ${count} links no texto; divida em partes menores para converter com segurança.`
+  return `Cole apenas 1 link por vez. Encontramos ${count} links no texto; converta um produto por vez para manter o fluxo simples.`
 }
 
 function hasAmbiguousSeparators(text) {
@@ -110,36 +109,8 @@ function ResultCard({ result, onCopy, copied }) {
 }
 
 
-function OfferBuilderCard({ result, onCopy, copied }) {
-  const [wantsOfferBuilder, setWantsOfferBuilder] = useState(true)
-  return (
-    <article className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4 shadow-sm">
-      <h3 className="text-sm font-black text-indigo-900">Montador de oferta (link {result.index + 1})</h3>
-      <label className="mt-2 flex items-center gap-2 rounded-xl bg-white/80 px-3 py-2 text-xs font-semibold text-indigo-900">
-        <input type="checkbox" checked={wantsOfferBuilder} onChange={(event) => setWantsOfferBuilder(event.target.checked)} className="h-4 w-4 rounded border-gray-300" />
-        Quer criar uma oferta com esse link?
-      </label>
-      {!wantsOfferBuilder ? (
-        <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-gray-600">
-          Sem problemas — você ainda pode copiar apenas o link convertido acima.
-        </p>
-      ) : (
-        <div className="mt-3">
-          <OfferBuilder
-            mode="inline"
-            initialLink={result.convertedUrl}
-            onCopy={onCopy}
-            copyLabelCopied={copied ? 'Mensagem copiada ✅' : 'Copiar mensagem pronta'}
-          />
-        </div>
-      )}
-    </article>
-  )
-}
-
-
 export default function ConverteLinksPage() {
-  usePainelHeader({ title: 'Conversor de links', subtitle: 'Cole links de produto e receba seus links de afiliado — Amazon, Mercado Livre, Shopee e Magazine Luiza' })
+  usePainelHeader({ title: 'Conversor de links', subtitle: 'Cole 1 link de produto e receba o link de afiliado pronto para copiar' })
 
   const [text, setText] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -231,19 +202,17 @@ export default function ConverteLinksPage() {
     <div className="mx-auto max-w-5xl space-y-4 pb-24 sm:space-y-6 sm:pb-0">
       <form onSubmit={handleSubmit} className="rounded-2xl bg-white p-4 shadow-sm sm:p-6">
         <div className="grid grid-cols-2 gap-2 sm:max-w-xl sm:grid-cols-3">
-          <MetricPill label="Por envio" value={`${MAX_LINKS} links`} />
+          <MetricPill label="Por envio" value="1 link" />
           <MetricPill label="Texto" value={`${Math.round(MAX_TEXT_LENGTH / 1000)} mil`} />
-          <MetricPill label="Formato" value="1:1 ou n:n" tone="success" />
+          <MetricPill label="Formato" value="1:1" tone="success" />
         </div>
 
         <div className="mt-4 flex flex-col gap-3">
           <div>
             <label htmlFor="links" className="text-sm font-bold text-gray-900">Links para converter</label>
-            <p className="mt-1 text-xs leading-5 text-gray-500">No celular, cole tudo aqui: um link por linha ou texto completo da oferta.</p>
+            <p className="mt-1 text-xs leading-5 text-gray-500">Cole o link original do produto. O resultado aparece logo abaixo para copiar.</p>
             <div className="mt-2 grid grid-cols-1 gap-1.5 text-[11px] sm:flex sm:flex-wrap sm:gap-2" aria-label="Dicas rápidas de uso">
-              <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 font-semibold text-gray-700">✅ Separe links com Enter (1 por linha)</span>
-              <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 font-semibold text-gray-700">✅ Também aceita texto com links no meio</span>
-              <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-1 font-semibold text-green-800">⚠️ Não use ; para separar links</span>
+              <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-1 font-semibold text-green-800">✅ 1 produto por conversão</span>
             </div>
           </div>
           <button
@@ -259,12 +228,12 @@ export default function ConverteLinksPage() {
           id="links"
           value={text}
           onChange={(event) => setText(event.target.value)}
-          rows={7}
-          placeholder="Exemplo:\nhttps://www.amazon.com.br/dp/...\nhttps://produto.mercadolivre.com.br/..."
+          rows={4}
+          placeholder="Exemplo:\nhttps://www.amazon.com.br/dp/..."
           className="mt-3 w-full rounded-2xl border border-gray-300 px-3 py-3 text-base text-gray-900 shadow-sm outline-none transition placeholder:text-sm placeholder:text-gray-400 focus:border-green-500 focus:ring-2 focus:ring-green-500/20 sm:px-4 sm:text-sm"
         />
 
-        <p className="mt-2 text-xs font-medium text-gray-600">Para vários links: cole um por linha. Exemplo: link1 + Enter + link2 + Enter + link3.</p>
+        <p className="mt-2 text-xs font-medium text-gray-600">Precisa converter outro produto? Limpe o campo e cole o próximo link.</p>
 
         <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-between">
           <MetricPill label="Detectados" value={detectedCount || '0'} tone={linksOverLimit ? 'danger' : detectedCount ? 'success' : 'neutral'} />
@@ -341,13 +310,6 @@ export default function ConverteLinksPage() {
             {response.results.map(result => (
               <div key={`${result.index}-${result.originalUrl}`} className="space-y-3">
                 <ResultCard result={result} onCopy={(value) => copyText(value, 'Link copiado.', `${result.index}-${result.originalUrl}`)} copied={copiedItemKey === `${result.index}-${result.originalUrl}`} />
-                {result.status === 'converted' && result.convertedUrl && (
-                  <OfferBuilderCard
-                    result={result}
-                    onCopy={(value) => copyText(value, 'Mensagem pronta copiada.', `offer-${result.index}-${result.originalUrl}`)}
-                    copied={copiedItemKey === `offer-${result.index}-${result.originalUrl}`}
-                  />
-                )}
               </div>
             ))}
           </div>
