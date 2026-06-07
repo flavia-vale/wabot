@@ -1,9 +1,9 @@
 /* Navegação do novo painel.
  *
- * Apenas a tela "Painel" (/painel) já tem o visual novo. Enquanto as demais
- * telas não são portadas, cada item aponta para a rota /dashboard/* existente,
- * que continua 100% funcional — assim a migração é incremental e nada quebra.
- * Conforme cada tela ganha versão "Menta", basta repontar o href para /painel/*.
+ * Todas as telas de app já têm versão "Menta" em /painel/* — a migração que
+ * aposenta o /dashboard legado foi concluída (ver docs/frontend/parity-matrix.md).
+ * Novos itens devem apontar sempre para /painel/*; o /dashboard só permanece
+ * como redirect de transição.
  */
 
 const i = (paths) => paths // SVG children prontos para <svg>
@@ -24,6 +24,12 @@ export const NAV_GROUPS = [
         icon: i(<><path d="M12 5v14" /><path d="M5 12h14" /><path d="M4 4h16v16H4z" /></>),
       },
       {
+        label: 'Conversor de links',
+        href: '/painel/converte-links',
+        free: true,
+        icon: i(<><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1" /><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" /></>),
+      },
+      {
         label: 'Espelhamento',
         href: '/painel/espelhamento',
         pro: true,
@@ -34,6 +40,11 @@ export const NAV_GROUPS = [
         href: '/painel/ofertas-automaticas',
         pro: true,
         icon: i(<><path d="M12 2v4" /><path d="M12 18v4" /><path d="M4.9 4.9l2.8 2.8" /><path d="M16.3 16.3l2.8 2.8" /><circle cx="12" cy="12" r="4" /></>),
+      },
+      {
+        label: 'Enviar mensagem',
+        href: '/painel/envio',
+        icon: i(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>),
       },
       {
         label: 'Envios',
@@ -68,6 +79,23 @@ export const NAV_GROUPS = [
     ],
   },
   {
+    title: 'Preservação avançada',
+    items: [
+      {
+        label: 'Monitoramento',
+        href: '/painel/preservacao/monitoramento',
+        pro: true,
+        icon: i(<><path d="M3 3v18h18" /><path d="m7 14 3-3 3 3 4-5" /></>),
+      },
+      {
+        label: 'Configurações avançadas',
+        href: '/painel/preservacao/configuracoes',
+        pro: true,
+        icon: i(<><path d="M12 2 4 5v6c0 5 3.5 8 8 11 4.5-3 8-6 8-11V5l-8-3z" /><path d="m9 12 2 2 4-4" /></>),
+      },
+    ],
+  },
+  {
     title: 'Conta',
     items: [
       {
@@ -82,7 +110,7 @@ export const NAV_GROUPS = [
       },
       {
         label: 'Tutorial',
-        href: '/dashboard/tutorial',
+        href: '/painel/tutorial',
         icon: i(<><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></>),
       },
     ],

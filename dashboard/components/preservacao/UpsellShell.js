@@ -12,7 +12,7 @@ const FEATURES = [
   { icon: '📸', title: 'Snapshots diários', desc: 'Histórico do estado de cada canal — 30 dias guardados.' },
 ]
 
-export function UpsellShell() {
+export function UpsellShell({ ctaHref = '/dashboard/assinaturas' }) {
   return (
     <div className="max-w-3xl">
       <header className="mb-6">
@@ -41,7 +41,7 @@ export function UpsellShell() {
       </p>
 
       <div className="mt-4 flex flex-wrap gap-3">
-        <Link href="/dashboard/assinaturas"
+        <Link href={ctaHref}
           className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2">
           Ativar Pro
         </Link>

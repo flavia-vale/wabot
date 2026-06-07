@@ -315,7 +315,7 @@ export default function PainelPage() {
             <div className="pnl-card-title">Últimos envios</div>
             <div className="pnl-card-note">o que o bot processou agora há pouco</div>
           </div>
-          <Link href="/dashboard/logs" className="pnl-link">Ver tudo →</Link>
+          <Link href="/painel/envios" className="pnl-link">Ver tudo →</Link>
         </div>
 
         {loadingRecent ? (
