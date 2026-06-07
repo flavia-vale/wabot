@@ -54,7 +54,13 @@ export default function AgendadosPage() {
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    let active = true
+    // Deferido para fora do corpo síncrono do effect: a regra
+    // react-hooks/set-state-in-effect (React 19) proíbe setState síncrono aqui.
+    const timer = setTimeout(() => { if (active) load() }, 0)
+    return () => { active = false; clearTimeout(timer) }
+  }, [load])
 
   async function cancelScheduled(id) {
     setCancellingId(id)
