@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { mobileRoutes } from '@/components/mobile/routes'
 import { MobileIcon } from '@/components/mobile/MobileIcons'
 import { tint } from '@/components/mobile/mobileStyles'
@@ -162,6 +162,7 @@ const tabs = [
 
 export function MobileShell({ title = 'Conversor', active = 'inicio', hasAlert = false, showBack, onBack, planExpired = false, children }) {
   const router = useRouter()
+  const pathname = usePathname()
   // Setinha de voltar em todas as rotas /m por padrão. Páginas podem desligar
   // com showBack={false} se necessário.
   const displayBack = showBack ?? true
@@ -207,7 +208,26 @@ export function MobileShell({ title = 'Conversor', active = 'inicio', hasAlert =
         </button>
       </header>
 
-      <main style={shellStyles.content} role="main">{children}</main>
+      <main style={shellStyles.content} role="main">
+        {children}
+        {/* Alternância de variante: navegação dura (<a>) p/ o middleware gravar
+            ?view=web no cookie e redirecionar para o /painel equivalente. */}
+        <div style={{ textAlign: 'center', padding: '8px 16px 20px' }}>
+          <a
+            href={`${pathname}?view=web`}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              fontSize: 12, color: 'var(--ink-soft)', textDecoration: 'none',
+            }}
+            title="Abrir a versão para computador"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="2" y="4" width="20" height="13" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+            Ver versão para computador
+          </a>
+        </div>
+      </main>
 
       <nav style={shellStyles.bottomNav} aria-label="Navegação principal mobile">
         {tabs.map((tab) => {
