@@ -195,10 +195,10 @@ function CelebrationBanner() {
   )
 }
 
-export function ActivationChecklist({ onActivated }) {
+export function ActivationChecklist({ onActivated, persist = false }) {
   const [status, setStatus] = useState(null)
   const [phase, setPhase] = useState(() => {
-    if (typeof window !== 'undefined' && getOnboardingDone()) return 'hidden'
+    if (!persist && typeof window !== 'undefined' && getOnboardingDone()) return 'hidden'
     return 'list'
   })
 
@@ -226,14 +226,14 @@ export function ActivationChecklist({ onActivated }) {
   const nextKey = STEPS.find(s => !completedSet.has(s.key))?.key
 
   useEffect(() => {
-    if (botActive && phase === 'list') {
+    if (!persist && botActive && phase === 'list') {
       const t = setTimeout(() => setPhase('celebrate'), 420)
       return () => clearTimeout(t)
     }
-  }, [botActive, phase])
+  }, [persist, botActive, phase])
 
   useEffect(() => {
-    if (phase === 'celebrate') {
+    if (!persist && phase === 'celebrate') {
       const t = setTimeout(() => {
         setOnboardingDone()
         setPhase('hidden')
@@ -241,7 +241,7 @@ export function ActivationChecklist({ onActivated }) {
       }, 2800)
       return () => clearTimeout(t)
     }
-  }, [phase, onActivated])
+  }, [persist, phase, onActivated])
 
   if (phase === 'hidden') return null
   if (phase === 'celebrate') return <CelebrationBanner />
