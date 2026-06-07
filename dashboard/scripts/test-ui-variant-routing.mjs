@@ -43,17 +43,28 @@ test('web em /m/* com tela portada vai para /painel', () => {
   assert.equal(resolveAppRedirect({ pathname: '/m/op/offer', variant: 'web' }), '/painel/criar-oferta')
   assert.equal(resolveAppRedirect({ pathname: '/m/config/groups', variant: 'web' }), '/painel/grupos')
   assert.equal(resolveAppRedirect({ pathname: '/m/op/logs', variant: 'web' }), '/painel/envios')
-})
-
-test('web em /m/* sem tela no painel cai no /dashboard legado', () => {
-  assert.equal(resolveAppRedirect({ pathname: '/m/config/preservacao', variant: 'web' }), '/dashboard/preservacao')
-  assert.equal(resolveAppRedirect({ pathname: '/m/op/broadcast', variant: 'web' }), '/dashboard/envio')
-  assert.equal(resolveAppRedirect({ pathname: '/m/op/converter', variant: 'web' }), '/dashboard/converte-links')
+  assert.equal(resolveAppRedirect({ pathname: '/m/config/preservacao', variant: 'web' }), '/painel/preservacao')
+  assert.equal(resolveAppRedirect({ pathname: '/m/op/broadcast', variant: 'web' }), '/painel/envio')
+  assert.equal(resolveAppRedirect({ pathname: '/m/op/scheduled', variant: 'web' }), '/painel/agendados')
+  assert.equal(resolveAppRedirect({ pathname: '/m/op/converter', variant: 'web' }), '/painel/converte-links')
+  assert.equal(resolveAppRedirect({ pathname: '/m/op/espelhar', variant: 'web' }), '/painel/espelhamento')
+  assert.equal(resolveAppRedirect({ pathname: '/m/tutorial', variant: 'web' }), '/painel/tutorial')
+  assert.equal(resolveAppRedirect({ pathname: '/m/checklistespelhamento', variant: 'web' }), '/painel/checklist')
 })
 
 test('web em /m/* sem equivalente nenhum cai na home /painel', () => {
-  assert.equal(resolveAppRedirect({ pathname: '/m/op/espelhar', variant: 'web' }), '/painel')
   assert.equal(resolveAppRedirect({ pathname: '/m/account/variations', variant: 'web' }), '/painel')
+  assert.equal(resolveAppRedirect({ pathname: '/m/account', variant: 'web' }), '/painel')
+})
+
+test('mobile em /painel/* das telas novas volta para o /m equivalente', () => {
+  assert.equal(resolveAppRedirect({ pathname: '/painel/envio', variant: 'mobile' }), '/m/op/broadcast')
+  assert.equal(resolveAppRedirect({ pathname: '/painel/agendados', variant: 'mobile' }), '/m/op/scheduled')
+  assert.equal(resolveAppRedirect({ pathname: '/painel/converte-links', variant: 'mobile' }), '/m/op/converter')
+  assert.equal(resolveAppRedirect({ pathname: '/painel/espelhamento', variant: 'mobile' }), '/m/op/espelhar')
+  assert.equal(resolveAppRedirect({ pathname: '/painel/tutorial', variant: 'mobile' }), '/m/tutorial')
+  assert.equal(resolveAppRedirect({ pathname: '/painel/preservacao/monitoramento', variant: 'mobile' }), '/m/config/preservacao')
+  assert.equal(resolveAppRedirect({ pathname: '/painel/preservacao/configuracoes', variant: 'mobile' }), '/m/config/preservacao')
 })
 
 test('web em /painel não redireciona', () => {
@@ -78,7 +89,7 @@ test('sub-rotas casam pelo prefixo mais específico', () => {
   )
   assert.equal(
     resolveAppRedirect({ pathname: '/m/config/preservacao/algo', variant: 'web' }),
-    '/dashboard/preservacao',
+    '/painel/preservacao',
   )
 })
 
