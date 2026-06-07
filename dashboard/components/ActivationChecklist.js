@@ -4,12 +4,16 @@ import { api } from '@/lib/api'
 
 const ONBOARDING_DONE_KEY = 'wb_onboarding_done'
 
-function getOnboardingDone() {
-  try { return localStorage.getItem(ONBOARDING_DONE_KEY) === '1' } catch { return false }
+function doneKey(userId) {
+  return userId ? `${ONBOARDING_DONE_KEY}_${userId}` : ONBOARDING_DONE_KEY
 }
 
-function setOnboardingDone() {
-  try { localStorage.setItem(ONBOARDING_DONE_KEY, '1') } catch { /* ignore */ }
+function getOnboardingDone(userId) {
+  try { return localStorage.getItem(doneKey(userId)) === '1' } catch { return false }
+}
+
+function setOnboardingDone(userId) {
+  try { localStorage.setItem(doneKey(userId), '1') } catch { /* ignore */ }
 }
 
 function Icon({ name, size = 20, stroke = 1.6 }) {
@@ -195,10 +199,10 @@ function CelebrationBanner() {
   )
 }
 
-export function ActivationChecklist({ onActivated, persist = false }) {
+export function ActivationChecklist({ onActivated, persist = false, userId }) {
   const [status, setStatus] = useState(null)
   const [phase, setPhase] = useState(() => {
-    if (!persist && typeof window !== 'undefined' && getOnboardingDone()) return 'hidden'
+    if (!persist && typeof window !== 'undefined' && getOnboardingDone(userId)) return 'hidden'
     return 'list'
   })
 
@@ -235,7 +239,7 @@ export function ActivationChecklist({ onActivated, persist = false }) {
   useEffect(() => {
     if (!persist && phase === 'celebrate') {
       const t = setTimeout(() => {
-        setOnboardingDone()
+        setOnboardingDone(userId)
         setPhase('hidden')
         onActivated?.()
       }, 2800)
