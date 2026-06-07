@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { cfgStyles } from '@/components/mobile/mobileStyles'
@@ -55,6 +56,7 @@ function MlOAuthSection({ credentialData }) {
 
 function PlatformForm({ platform, credential, onSaved }) {
   const credentialData = credential.data || {}
+  const [renderedAt] = useState(() => Date.now())
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(credentialData)
   const [saving, setSaving] = useState(false)

@@ -1,11 +1,12 @@
 'use client'
 
-/* Grupos — reskin Menta do corpo. Mesma lógica da tela de dashboard original
- * (app/dashboard/grupos/page.js): api.groups / addGroup / updateGroup /
- * deleteGroup / groupTargets / updateGroupTargets / sessionWAGroups +
- * canais (follow/admin/health). Reusa todos os componentes existentes
- * (Alert, ConfirmDialog, HelpLink, AddChannelModal, badges, ChannelHealthPanel).
- * Nenhuma mudança no back end — só o visual de listas/forms. */
+/* Grupos — reskin Menta inspirado na tela mobile canônica (app/m/config/groups):
+ * abas 👁 Monitorar / ⚡ Publicar com contagem + config por grupo recolhível
+ * (em vez de duas seções longas sempre expandidas). Mesma lógica/back end de
+ * sempre: api.groups / addGroup / updateGroup / deleteGroup / groupTargets /
+ * updateGroupTargets / sessionWAGroups + canais (follow/admin/health). Reusa os
+ * componentes existentes (ConfirmDialog, HelpLink, AddChannelModal, badges,
+ * ChannelHealthPanel). Nenhuma mudança no back end — só o layout. */
 
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
@@ -14,7 +15,7 @@ import { HelpLink } from '@/components/HelpLink'
 import { AddChannelModal } from '@/components/AddChannelModal'
 import { TypeBadge, FollowBadge, AdminBadge, HealthBadge } from '@/components/ChannelStatusBadges'
 import { ChannelHealthPanel } from '@/components/ChannelHealthPanel'
-import { usePainelHeader } from '../PainelShell'
+import { usePainelHeader, PainelTopbarAction } from '../PainelShell'
 
 const roleLabels = {
   monitor: 'Monitorar (origem)',
@@ -34,8 +35,35 @@ const NO_LINK_SCOPE_OPTIONS = [
   { id: 'TEXT_IMAGE_WITH_CAPTION', label: 'Texto + imagem com legenda' },
 ]
 
+const GRADIENTS = [
+  'linear-gradient(135deg,#94A3B8,#475569)',
+  'linear-gradient(135deg,#F4D9E0,#E8A488)',
+  'linear-gradient(135deg,#C8E6D8,#3E9C7A)',
+  'linear-gradient(135deg,#D9CFEA,#7C5CF5)',
+]
+
+function groupInitials(name) {
+  const parts = String(name || '?').trim().split(/\s+/).filter(Boolean)
+  const raw = (parts.length >= 2 ? parts[0][0] + parts[1][0] : (parts[0] || '?').slice(0, 2))
+  return raw.replace(/[^\p{L}\p{N}]/gu, '').toUpperCase().slice(0, 2) || '#'
+}
+
+function GroupAvatar({ name, index }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 13, fontWeight: 700, color: '#fff',
+        background: GRADIENTS[index % GRADIENTS.length],
+      }}
+    >{groupInitials(name)}</span>
+  )
+}
+
 export default function GruposPage() {
-  usePainelHeader({ title: 'Grupos', subtitle: 'Defina quais grupos o bot escuta e onde ele publica' })
+  usePainelHeader({ title: 'Grupos e canais', subtitle: 'Defina quais grupos o bot escuta e onde ele publica' })
 
   const [groups, setGroups] = useState([])
   const [actionError, setActionError] = useState('')
@@ -55,10 +83,10 @@ export default function GruposPage() {
   const [targetEditorId, setTargetEditorId] = useState(null)
   const [targetPostIds, setTargetPostIds] = useState([])
   const [targetLoading, setTargetLoading] = useState(false)
-  const [imageDrafts, setImageDrafts] = useState({})
   const autoFixingImageModeRef = useRef(new Set())
   const [showChannelModal, setShowChannelModal] = useState(false)
-  const [filter, setFilter] = useState('all')
+  const [tab, setTab] = useState('monitor')
+  const [expandedConfigId, setExpandedConfigId] = useState(null)
   const [followStatus, setFollowStatus] = useState({})
   const [adminStatus, setAdminStatus] = useState({})
   const [refreshingAdminId, setRefreshingAdminId] = useState(null)
@@ -142,6 +170,7 @@ export default function GruposPage() {
     if (group.kind === 'channel' && group.role === 'post') {
       refreshAdmin(group)
     }
+    setTab(group.role === 'post' ? 'post' : 'monitor')
   }
 
   async function handleDelete(id) {
@@ -280,6 +309,7 @@ export default function GruposPage() {
 
   const monitor = groups.filter((g) => g.role === 'monitor')
   const post = groups.filter((g) => g.role === 'post')
+  const current = tab === 'monitor' ? monitor : post
   const existingJidRoles = new Set(groups.map((g) => `${g.waJid}::${g.role}`))
 
   const canUseChannels = (() => {
@@ -289,23 +319,115 @@ export default function GruposPage() {
     return !Number.isNaN(expiresAt.getTime()) && expiresAt > new Date()
   })()
 
-  const matchesFilter = (g) => filter === 'all'
-    || (filter === 'channel' && g.kind === 'channel')
-    || (filter === 'group' && g.kind !== 'channel')
+  function renderMonitorConfig(g) {
+    return (
+      <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 14, display: 'grid', gap: 16 }}>
+        <div>
+          <p className="pnl-label" style={{ marginBottom: 6 }}>Palavras bloqueadas só neste grupo</p>
+          <input
+            className="pnl-input"
+            value={g.blockedKeywords ?? ''}
+            onChange={(e) => handleUpdateGroup(g.id, { blockedKeywords: e.target.value })}
+            placeholder="ex: usado, recondicionado"
+          />
+          <p className="pnl-hint" style={{ marginTop: 6 }}>Soma à lista global. Separe por vírgula.</p>
+        </div>
+        <div>
+          <p className="pnl-label" style={{ marginBottom: 8 }}>Lojas que esse grupo aceita</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+            {ALL_PLATFORMS.map((platform) => {
+              const selected = new Set((g.allowedPlatforms || '').split(',').filter(Boolean))
+              const checked = g.allowedPlatforms ? selected.has(platform.id) : true
+              return (
+                <label key={platform.id} className="pnl-check" style={{ fontWeight: 400, fontSize: 12.5 }}>
+                  <input type="checkbox" checked={checked} onChange={() => toggleGroupPlatform(g, platform.id)} />
+                  {platform.label}
+                </label>
+              )
+            })}
+          </div>
+          <p className="pnl-hint" style={{ marginTop: 6 }}>Sem seleção, usa as plataformas globais.</p>
+        </div>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={(g.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK'}
+              disabled={!canUseChannels}
+              className={`pnl-switch${(g.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK' ? ' is-on' : ''}`}
+              onClick={() => {
+                const enabled = (g.forwardMode ?? 'LINK_ONLY') !== 'ALLOW_NO_LINK'
+                if (enabled && !canUseChannels) {
+                  setActionError('O Módulo de Preservação Avançada está disponível no Trial ativo e no plano Pro.')
+                  return
+                }
+                handleUpdateGroup(g.id, {
+                  forwardMode: enabled ? 'ALLOW_NO_LINK' : 'LINK_ONLY',
+                  noLinkScope: enabled ? (g.noLinkScope ?? 'TEXT_ONLY') : null,
+                })
+              }}
+            >
+              <span />
+            </button>
+            <span style={{ fontSize: 13, color: 'var(--ink)' }}>Encaminhar mensagens sem link {!canUseChannels && '(Pro)'}</span>
+          </div>
+          {(g.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK' && (
+            <select
+              className="pnl-input"
+              style={{ marginTop: 8 }}
+              value={g.noLinkScope ?? 'TEXT_ONLY'}
+              onChange={(e) => handleUpdateGroup(g.id, { forwardMode: 'ALLOW_NO_LINK', noLinkScope: e.target.value })}
+            >
+              {NO_LINK_SCOPE_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+          )}
+          <p className="pnl-hint" style={{ marginTop: 6, color: '#b5742a' }}>Ativar pode aumentar o volume de mensagens encaminhadas.</p>
+        </div>
+        <div>
+          <p className="pnl-label" style={{ marginBottom: 6 }}>Para onde esse grupo envia</p>
+          <button type="button" className="pnl-btn" onClick={() => openTargetEditor(g.id)}>Escolher destinos</button>
+          <p className="pnl-hint" style={{ marginTop: 6 }}>Sem escolha, envia para todos os grupos de destino.</p>
+        </div>
+      </div>
+    )
+  }
+
+  function renderPostConfig(g) {
+    return (
+      <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 14, display: 'grid', gap: 14 }}>
+        <div>
+          <p className="pnl-label" style={{ marginBottom: 6 }}>Mensagem de boas-vindas</p>
+          <textarea
+            className="pnl-input"
+            style={{ fontFamily: 'inherit', fontSize: 13, minHeight: 64 }}
+            rows={2}
+            value={g.welcomeMsg ?? ''}
+            onChange={(e) => handleUpdateGroup(g.id, { welcomeMsg: e.target.value })}
+            placeholder="Mensagem enviada quando alguém entra no grupo (opcional)"
+          />
+        </div>
+        {g.kind === 'channel' && (
+          <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+              <AdminBadge status={adminStatus[g.id] ?? 'unknown'} onRefresh={() => refreshAdmin(g)} refreshing={refreshingAdminId === g.id} />
+              {healthByGroup[g.id] && <HealthBadge status={healthByGroup[g.id].status} />}
+              <button type="button" className="pnl-link-btn" onClick={() => setExpandedHealthId(expandedHealthId === g.id ? null : g.id)}>
+                {expandedHealthId === g.id ? 'Fechar painel anti-ban' : 'Painel anti-ban'}
+              </button>
+            </div>
+            {expandedHealthId === g.id && (
+              <ChannelHealthPanel group={g} initialHealth={healthByGroup[g.id]} onHealthChange={(h) => setHealthByGroup((prev) => ({ ...prev, [g.id]: h }))} />
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
-    <div className="pnl-grid" style={{ maxWidth: 720, margin: '0 auto' }}>
-      <div className="pnl-toolbar" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-        <div className="pnl-chips">
-          {['all', 'group', 'channel'].map((f) => (
-            <button key={f} type="button" className={`pnl-chip${filter === f ? ' is-active' : ''}`} onClick={() => setFilter(f)}>
-              {f === 'all' ? 'Todos' : f === 'group' ? 'Grupos' : 'Canais'}
-              <span className="pnl-chip-count">
-                {f === 'all' ? groups.length : f === 'group' ? groups.filter((g) => g.kind !== 'channel').length : groups.filter((g) => g.kind === 'channel').length}
-              </span>
-            </button>
-          ))}
-        </div>
+    <div className="pnl-grid" style={{ maxWidth: 820, margin: '0 auto' }}>
+      <PainelTopbarAction>
         <div className="pnl-toolbar">
           <HelpLink topic="como-cadastrar-grupos">Ajuda</HelpLink>
           <button
@@ -316,12 +438,95 @@ export default function GruposPage() {
             + Adicionar canal {!canUseChannels && '(Pro)'}
           </button>
         </div>
+      </PainelTopbarAction>
+
+      {/* Banner explicativo origem × destino */}
+      <section className="pnl-card" style={{ padding: 0, overflow: 'hidden', background: 'color-mix(in oklab, var(--accent) 12%, var(--surface))' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+          <div style={{ padding: 18, borderRight: '1px solid var(--line)' }}>
+            <div className="pnl-eyebrow">👁 Origem · monitora</div>
+            <p style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--ink)', marginTop: 6 }}>Grupos de promoção que você participa. O bot só lê os links.</p>
+          </div>
+          <div style={{ padding: 18 }}>
+            <div className="pnl-eyebrow" style={{ color: 'var(--accent-strong)' }}>⚡ Destino · publica</div>
+            <p style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--ink)', marginTop: 6 }}>Seus grupos de clientes. O bot posta o link já com o seu código.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* Abas Monitorar / Publicar */}
+      <div className="pnl-seg" role="tablist" style={{ alignSelf: 'flex-start' }}>
+        {[
+          { key: 'monitor', label: '👁 Monitorar', n: monitor.length },
+          { key: 'post', label: '⚡ Publicar', n: post.length },
+        ].map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.key}
+            className={tab === t.key ? 'is-active' : ''}
+            onClick={() => { setTab(t.key); setExpandedConfigId(null) }}
+          >
+            {t.label} <span style={{ opacity: 0.6 }}>({t.n})</span>
+          </button>
+        ))}
       </div>
+
+      <p className="pnl-card-note" style={{ marginTop: -4 }}>
+        {tab === 'monitor'
+          ? 'Grupos onde o bot lê mensagens e procura links para converter.'
+          : 'Grupos onde o bot publica os links já convertidos.'}
+      </p>
 
       {actionError && <div className="pnl-note-box is-error" role="alert"><strong style={{ fontWeight: 600 }}>Falha ao atualizar grupos</strong><p style={{ marginTop: 4 }}>{actionError}</p></div>}
       {!canUseChannels && (
         <div className="pnl-note-box"><strong style={{ fontWeight: 600 }}>Canais bloqueados no Basic</strong><p style={{ marginTop: 4 }}>Canais já cadastrados ficam preservados. Faça upgrade para o Pro para reativar monitoramento e envio em canais.</p></div>
       )}
+
+      {/* Lista de grupos da aba ativa */}
+      <section className="pnl-card" style={{ padding: 0, overflow: 'hidden' }}>
+        {loadingGroups ? (
+          <p className="pnl-empty" style={{ padding: 24 }}>Carregando grupos configurados…</p>
+        ) : current.length === 0 ? (
+          <p className="pnl-empty" style={{ padding: 24 }}>
+            Nenhum grupo {tab === 'monitor' ? 'para monitorar' : 'para publicar'} configurado.
+          </p>
+        ) : (
+          <ul>
+            {current.map((g, i) => {
+              const configOpen = expandedConfigId === g.id
+              return (
+                <li key={g.id} style={{ borderBottom: i === current.length - 1 ? 'none' : '1px solid var(--line)', padding: '14px 18px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                    <GroupAvatar name={g.name} index={i} />
+                    <div style={{ minWidth: 0, flex: 1, wordBreak: 'break-word' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{g.name}</span>
+                        <TypeBadge kind={g.kind} />
+                        {!canUseChannels && g.kind === 'channel' && <span className="pnl-tag is-flight">Pro</span>}
+                        {g.kind === 'channel' && g.role === 'monitor' && <FollowBadge status={followStatus[g.id] ?? 'unknown'} />}
+                        {g.kind === 'channel' && g.role === 'post' && healthByGroup[g.id] && <HealthBadge status={healthByGroup[g.id].status} />}
+                      </div>
+                      <div className="pnl-hint" style={{ marginTop: 2 }}>{g.kind === 'channel' ? 'canal' : 'grupo'} · {g.waJid}</div>
+                    </div>
+                    <div className="pnl-toolbar" style={{ flexShrink: 0 }}>
+                      {savingGroupId === g.id && <span className="pnl-hint" style={{ color: 'var(--accent-strong)' }}>salvando…</span>}
+                      {savedGroupId === g.id && <span className="pnl-hint" style={{ color: 'var(--success)' }}>salvo</span>}
+                      <button type="button" className="pnl-link-btn" aria-expanded={configOpen} onClick={() => setExpandedConfigId(configOpen ? null : g.id)}>
+                        {configOpen ? 'Fechar' : (tab === 'monitor' ? 'Filtros' : 'Config')}
+                      </button>
+                      <button type="button" className="pnl-link-btn" style={{ color: 'var(--danger)' }} onClick={() => setDeleteTarget(g)}>Remover</button>
+                    </div>
+                  </div>
+                  {groupErrors[g.id] && <p className="pnl-hint" style={{ color: 'var(--danger)', marginTop: 6 }}>{groupErrors[g.id]}</p>}
+                  {configOpen && (tab === 'monitor' ? renderMonitorConfig(g) : renderPostConfig(g))}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </section>
 
       {/* Carregar grupos do WhatsApp */}
       <section className="pnl-card">
@@ -370,145 +575,6 @@ export default function GruposPage() {
         )}
       </section>
 
-      {/* Monitorar */}
-      <section className="pnl-card">
-        <div className="pnl-card-title">👀 Monitorar (origem)</div>
-        <p className="pnl-card-note">O bot lê mensagens desses grupos e procura links para converter.</p>
-        {loadingGroups ? (
-          <p className="pnl-empty">Carregando grupos configurados…</p>
-        ) : monitor.length === 0 ? (
-          <p className="pnl-empty">Nenhum grupo cadastrado</p>
-        ) : (
-          <ul className="pnl-grid" style={{ marginTop: 12 }}>
-            {monitor.filter(matchesFilter).map((g) => (
-              <li key={g.id} className="pnl-subcard">
-                <div className="pnl-card-head" style={{ marginBottom: 0, alignItems: 'flex-start' }}>
-                  <div style={{ minWidth: 0, wordBreak: 'break-word' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{g.name}</span>
-                    <span className="pnl-hint" style={{ marginLeft: 8 }}>{g.waJid}</span>
-                    <span style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <TypeBadge kind={g.kind} />
-                      {!canUseChannels && g.kind === 'channel' && <span className="pnl-tag is-flight">Pro</span>}
-                      {g.kind === 'channel' && g.role === 'monitor' && <FollowBadge status={followStatus[g.id] ?? 'unknown'} />}
-                    </span>
-                  </div>
-                  <div className="pnl-toolbar">
-                    {savingGroupId === g.id && <span className="pnl-hint" style={{ color: 'var(--accent-strong)' }}>Salvando…</span>}
-                    {savedGroupId === g.id && <span className="pnl-hint" style={{ color: 'var(--accent-strong)' }}>Salvo</span>}
-                    <button type="button" className="pnl-link-btn" onClick={() => openTargetEditor(g.id)}>Configurar alvos</button>
-                    <button type="button" className="pnl-link-btn" style={{ color: 'var(--danger)' }} onClick={() => setDeleteTarget(g)}>Remover</button>
-                  </div>
-                </div>
-                <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12, marginTop: 12 }}>
-                  <p className="pnl-label" style={{ marginBottom: 8 }}>Filtros deste grupo (opcional):</p>
-                  <input
-                    className="pnl-input"
-                    value={g.blockedKeywords ?? ''}
-                    onChange={(e) => handleUpdateGroup(g.id, { blockedKeywords: e.target.value })}
-                    placeholder="Palavras bloqueadas só neste grupo"
-                  />
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 10 }}>
-                    {ALL_PLATFORMS.map((platform) => {
-                      const selected = new Set((g.allowedPlatforms || '').split(',').filter(Boolean))
-                      const checked = g.allowedPlatforms ? selected.has(platform.id) : true
-                      return (
-                        <label key={platform.id} className="pnl-check" style={{ fontWeight: 400, fontSize: 12.5 }}>
-                          <input type="checkbox" checked={checked} onChange={() => toggleGroupPlatform(g, platform.id)} />
-                          {platform.label}
-                        </label>
-                      )
-                    })}
-                  </div>
-                  <p className="pnl-hint" style={{ marginTop: 6 }}>Sem seleção manual, usa as plataformas globais.</p>
-                </div>
-                <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12, marginTop: 12 }}>
-                  <p className="pnl-label" style={{ marginBottom: 8 }}>Mensagens sem link:</p>
-                  <label className="pnl-check" style={{ fontWeight: 400, fontSize: 12.5 }}>
-                    <input
-                      type="checkbox"
-                      disabled={!canUseChannels}
-                      checked={(g.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK'}
-                      onChange={(e) => {
-                        const enabled = e.target.checked
-                        if (enabled && !canUseChannels) {
-                          setActionError('O Módulo de Preservação Avançada está disponível no Trial ativo e no plano Pro.')
-                          return
-                        }
-                        handleUpdateGroup(g.id, {
-                          forwardMode: enabled ? 'ALLOW_NO_LINK' : 'LINK_ONLY',
-                          noLinkScope: enabled ? (g.noLinkScope ?? 'TEXT_ONLY') : null,
-                        })
-                      }}
-                    />
-                    Incluir mensagens sem link {!canUseChannels && '(Pro)'}
-                  </label>
-                  {(g.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK' && (
-                    <select
-                      className="pnl-input"
-                      style={{ marginTop: 8 }}
-                      value={g.noLinkScope ?? 'TEXT_ONLY'}
-                      onChange={(e) => handleUpdateGroup(g.id, { forwardMode: 'ALLOW_NO_LINK', noLinkScope: e.target.value })}
-                    >
-                      {NO_LINK_SCOPE_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-                    </select>
-                  )}
-                  <p className="pnl-hint" style={{ marginTop: 6, color: '#b5742a' }}>Ativar pode aumentar o volume de mensagens encaminhadas. {!canUseChannels && 'No Basic, esse controle faz parte do Módulo de Preservação Avançada (Pro).'}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* Postar */}
-      <section className="pnl-card">
-        <div className="pnl-card-title">📢 Postar (destino)</div>
-        <p className="pnl-card-note">O bot publica os links convertidos nesses grupos.</p>
-        {loadingGroups ? (
-          <p className="pnl-empty">Carregando grupos configurados…</p>
-        ) : post.length === 0 ? (
-          <p className="pnl-empty">Nenhum grupo cadastrado</p>
-        ) : (
-          <ul className="pnl-grid" style={{ marginTop: 12 }}>
-            {post.filter(matchesFilter).map((g) => (
-              <li key={g.id} className="pnl-subcard">
-                <div className="pnl-card-head" style={{ marginBottom: 0, alignItems: 'flex-start' }}>
-                  <div style={{ minWidth: 0, wordBreak: 'break-word' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{g.name}</span>
-                    <span className="pnl-hint" style={{ marginLeft: 8 }}>{g.waJid}</span>
-                    <span style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                      <TypeBadge kind={g.kind} />
-                      {!canUseChannels && g.kind === 'channel' && <span className="pnl-tag is-flight">Pro</span>}
-                      {g.kind === 'channel' && g.role === 'post' && (
-                        <>
-                          <AdminBadge status={adminStatus[g.id] ?? 'unknown'} onRefresh={() => refreshAdmin(g)} refreshing={refreshingAdminId === g.id} />
-                          {healthByGroup[g.id] && <HealthBadge status={healthByGroup[g.id].status} />}
-                          <button type="button" className="pnl-link-btn" onClick={() => setExpandedHealthId(expandedHealthId === g.id ? null : g.id)} title="Saúde, snapshots e risco do canal">
-                            {expandedHealthId === g.id ? 'Fechar painel' : 'Painel anti-ban'}
-                          </button>
-                        </>
-                      )}
-                    </span>
-                  </div>
-                  <button type="button" className="pnl-link-btn" style={{ color: 'var(--danger)' }} onClick={() => setDeleteTarget(g)}>Remover</button>
-                </div>
-                {expandedHealthId === g.id && (
-                  <ChannelHealthPanel group={g} initialHealth={healthByGroup[g.id]} onHealthChange={(h) => setHealthByGroup((prev) => ({ ...prev, [g.id]: h }))} />
-                )}
-                <textarea
-                  className="pnl-input"
-                  style={{ marginTop: 12, fontFamily: 'inherit', fontSize: 13, minHeight: 60 }}
-                  rows={2}
-                  value={g.welcomeMsg ?? ''}
-                  onChange={(e) => handleUpdateGroup(g.id, { welcomeMsg: e.target.value })}
-                  placeholder="Mensagem de boas-vindas específica deste grupo (opcional)"
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
       {/* Modo avançado (JID manual) */}
       <section className="pnl-card">
         <button type="button" className="pnl-link-btn" style={{ color: 'var(--ink-soft)', textDecoration: 'underline' }} onClick={() => setShowManual((v) => !v)}>
@@ -548,10 +614,10 @@ export default function GruposPage() {
       {targetEditorId && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', padding: 16 }}>
           <div className="pnl-card" style={{ width: '100%', maxWidth: 420 }}>
-            <div className="pnl-card-title">Configurar alvos</div>
+            <div className="pnl-card-title">Configurar destinos</div>
             <p className="pnl-card-note" style={{ marginTop: 4, marginBottom: 12 }}>Escolha quais grupos de destino recebem mensagens deste grupo monitorado. Se nenhum for selecionado, o bot envia para todos.</p>
             {post.length === 0 ? (
-              <p className="pnl-hint" style={{ color: '#b5742a', marginBottom: 12 }}>Cadastre ao menos um grupo de postagem para configurar alvos.</p>
+              <p className="pnl-hint" style={{ color: '#b5742a', marginBottom: 12 }}>Cadastre ao menos um grupo de postagem para configurar destinos.</p>
             ) : (
               <div className="pnl-grid" style={{ maxHeight: 256, overflowY: 'auto', marginBottom: 12 }}>
                 {post.map((group) => (
@@ -564,7 +630,7 @@ export default function GruposPage() {
             )}
             <div className="pnl-toolbar" style={{ justifyContent: 'flex-end' }}>
               <button type="button" className="pnl-btn" onClick={() => setTargetEditorId(null)}>Cancelar</button>
-              <button type="button" className="pnl-btn is-primary" onClick={saveTargetPosts} disabled={targetLoading}>{targetLoading ? 'Salvando…' : 'Salvar alvos'}</button>
+              <button type="button" className="pnl-btn is-primary" onClick={saveTargetPosts} disabled={targetLoading}>{targetLoading ? 'Salvando…' : 'Salvar destinos'}</button>
             </div>
           </div>
         </div>

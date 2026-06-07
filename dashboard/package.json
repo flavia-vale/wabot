@@ -21,7 +21,8 @@
     "smoke:mobile-routes": "node scripts/smoke-mobile-routes.mjs",
     "smoke:mobile-p1": "node scripts/smoke-mobile-p1.mjs",
     "smoke:mobile-p2": "node scripts/smoke-mobile-p2.mjs",
-    "smoke:mobile-p3": "node scripts/smoke-mobile-p3.mjs"
+    "smoke:mobile-p3": "node scripts/smoke-mobile-p3.mjs",
+    "test:routing": "node --test scripts/test-ui-variant-routing.mjs"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4",

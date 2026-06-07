@@ -1,18 +1,12 @@
 /* Navegação do novo painel.
  *
- * Apenas a tela "Painel" (/painel) já tem o visual novo. Enquanto as demais
- * telas não são portadas, cada item aponta para a rota /dashboard/* existente,
- * que continua 100% funcional — assim a migração é incremental e nada quebra.
- * Conforme cada tela ganha versão "Menta", basta repontar o href para /painel/*.
+ * Todas as telas de app já têm versão "Menta" em /painel/* — a migração que
+ * aposenta o /dashboard legado foi concluída (ver docs/frontend/parity-matrix.md).
+ * Novos itens devem apontar sempre para /painel/*; o /dashboard só permanece
+ * como redirect de transição.
  */
 
 const i = (paths) => paths // SVG children prontos para <svg>
-
-export const TOP_CTA = {
-  label: 'Criar oferta',
-  note: 'cole um link · grátis',
-  href: '/painel/criar-oferta',
-}
 
 export const NAV_GROUPS = [
   {
@@ -24,8 +18,19 @@ export const NAV_GROUPS = [
         icon: i(<><rect x="3" y="3" width="7" height="9" rx="1.5" /><rect x="14" y="3" width="7" height="5" rx="1.5" /><rect x="14" y="12" width="7" height="9" rx="1.5" /><rect x="3" y="16" width="7" height="5" rx="1.5" /></>),
       },
       {
+        label: 'Criar oferta',
+        href: '/painel/criar-oferta',
+        free: true,
+        icon: i(<><path d="M12 5v14" /><path d="M5 12h14" /><path d="M4 4h16v16H4z" /></>),
+      },
+      {
+        label: 'Primeiros passos',
+        href: '/painel/checklist',
+        icon: i(<><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></>),
+      },
+      {
         label: 'Espelhamento',
-        href: '/painel/grupos',
+        href: '/painel/espelhamento',
         pro: true,
         icon: i(<><path d="M17 2l4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v1a4 4 0 0 1-4 4H3" /></>),
       },
@@ -34,6 +39,11 @@ export const NAV_GROUPS = [
         href: '/painel/ofertas-automaticas',
         pro: true,
         icon: i(<><path d="M12 2v4" /><path d="M12 18v4" /><path d="M4.9 4.9l2.8 2.8" /><path d="M16.3 16.3l2.8 2.8" /><circle cx="12" cy="12" r="4" /></>),
+      },
+      {
+        label: 'Enviar mensagem',
+        href: '/painel/envio',
+        icon: i(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>),
       },
       {
         label: 'Envios',
@@ -51,7 +61,7 @@ export const NAV_GROUPS = [
         icon: i(<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>),
       },
       {
-        label: 'Mensagens',
+        label: 'Templates, ganchos e CTA',
         href: '/painel/mensagens',
         icon: i(<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />),
       },
@@ -64,6 +74,23 @@ export const NAV_GROUPS = [
         label: 'Conexão WhatsApp',
         href: '/painel/whatsapp',
         icon: i(<><rect x="5" y="2" width="14" height="20" rx="2.5" /><line x1="12" y1="18" x2="12" y2="18" /></>),
+      },
+    ],
+  },
+  {
+    title: 'Preservação avançada',
+    items: [
+      {
+        label: 'Monitoramento',
+        href: '/painel/preservacao/monitoramento',
+        pro: true,
+        icon: i(<><path d="M3 3v18h18" /><path d="m7 14 3-3 3 3 4-5" /></>),
+      },
+      {
+        label: 'Configurações avançadas',
+        href: '/painel/preservacao/configuracoes',
+        pro: true,
+        icon: i(<><path d="M12 2 4 5v6c0 5 3.5 8 8 11 4.5-3 8-6 8-11V5l-8-3z" /><path d="m9 12 2 2 4-4" /></>),
       },
     ],
   },
@@ -82,7 +109,7 @@ export const NAV_GROUPS = [
       },
       {
         label: 'Tutorial',
-        href: '/dashboard/tutorial',
+        href: '/painel/tutorial',
         icon: i(<><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></>),
       },
     ],

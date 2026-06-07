@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { usePainel, usePainelHeader } from './PainelShell'
+import { ActivationChecklist } from '@/components/ActivationChecklist'
 
 function greeting(hour) {
   if (hour < 12) return 'Bom dia'
@@ -60,6 +61,8 @@ export default function PainelPage() {
   const [summary, setSummary] = useState(null)
   const [recent, setRecent] = useState(null)
   const [loadError, setLoadError] = useState('')
+  const [period, setPeriod] = useState('today')
+  const [series, setSeries] = useState(null)
 
   const now = useMemo(() => new Date(), [])
   const dateLabel = useMemo(
@@ -71,15 +74,31 @@ export default function PainelPage() {
 
   useEffect(() => {
     let active = true
-    Promise.allSettled([api.logsSummary('today'), api.logs('all', 1, 6)]).then(([s, r]) => {
+    Promise.allSettled([api.logsSummary(period), api.logs('all', 1, 6)]).then(([s, r]) => {
       if (!active) return
       if (s.status === 'fulfilled') setSummary(s.value)
-      else setLoadError('Não foi possível carregar as métricas de hoje.')
+      else setLoadError('Não foi possível carregar as métricas do período.')
       if (r.status === 'fulfilled') setRecent(Array.isArray(r.value?.logs) ? r.value.logs : [])
       else setRecent([])
     })
     return () => { active = false }
+  }, [period])
+
+  // Série de 7 dias para o gráfico de colunas — independente do período dos KPIs.
+  useEffect(() => {
+    let active = true
+    api.logsSeries(7)
+      .then((s) => { if (active) setSeries(Array.isArray(s?.buckets) ? s.buckets : []) })
+      .catch(() => { if (active) setSeries([]) })
+    return () => { active = false }
   }, [])
+
+  const PERIODS = [
+    { key: 'today', label: 'Hoje', word: 'hoje' },
+    { key: '7d', label: '7 dias', word: 'em 7 dias' },
+    { key: '30d', label: '30 dias', word: 'em 30 dias' },
+  ]
+  const periodWord = PERIODS.find((p) => p.key === period)?.word ?? 'hoje'
 
   const counts = summary?.counts
   const success = num(counts?.success)
@@ -92,6 +111,16 @@ export default function PainelPage() {
   const lastRel = relativeFromNow(summary?.lastSendAt)
   const topDest = Array.isArray(summary?.topDestinations) ? summary.topDestinations : []
   const maxDest = topDest.reduce((m, d) => Math.max(m, num(d.sent)), 0) || 1
+  const topSrc = Array.isArray(summary?.topSources) ? summary.topSources : []
+  const maxSrc = topSrc.reduce((m, d) => Math.max(m, num(d.sent) + num(d.blocked)), 0) || 1
+
+  const donutSegments = [
+    { label: 'Entregues', value: success, color: 'var(--accent-strong)' },
+    { label: 'Repetições bloqueadas', value: dedup, color: 'var(--accent-2)' },
+    { label: 'Bloqueados pela regra', value: blocked, color: 'var(--accent-3)' },
+    { label: 'Falhas', value: failed, color: 'var(--danger)' },
+  ].filter((s) => s.value > 0)
+  const donutTotal = donutSegments.reduce((sum, s) => sum + s.value, 0)
 
   const funnel = [
     { label: 'Detectados nos grupos', value: detected },
@@ -105,10 +134,20 @@ export default function PainelPage() {
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 1080, margin: '0 auto' }}>
+      <ActivationChecklist />
+      {/* Seletor de período */}
+      <div className="pnl-chips">
+        {PERIODS.map((p) => (
+          <button key={p.key} type="button" className={`pnl-chip${period === p.key ? ' is-active' : ''}`} onClick={() => setPeriod(p.key)}>
+            {p.label}
+          </button>
+        ))}
+      </div>
+
       {/* Hero */}
       <section className="pnl-hero">
         <div>
-          <div className="pnl-hero-label">Mensagens postadas hoje</div>
+          <div className="pnl-hero-label">Mensagens postadas {periodWord}</div>
           {loadingSummary
             ? <div className="pnl-skel" style={{ width: 120, height: 48, margin: '8px 0' }} />
             : <div className="pnl-hero-num pnl-serif">{success}</div>}
@@ -194,6 +233,83 @@ export default function PainelPage() {
         </section>
       </div>
 
+      {/* Distribuição (rosca) + top origens */}
+      <div className="pnl-grid" style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.1fr)' }}>
+        <section className="pnl-card">
+          <div className="pnl-card-title">Distribuição dos links</div>
+          <div className="pnl-card-note">o que aconteceu com cada link · {periodWord}</div>
+          {loadingSummary ? (
+            <div className="pnl-skel" style={{ height: 160, marginTop: 12 }} />
+          ) : donutTotal === 0 ? (
+            <p className="pnl-empty">Nenhum link processado no período.</p>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginTop: 12, flexWrap: 'wrap' }}>
+              <Donut segments={donutSegments} total={donutTotal} />
+              <div className="pnl-legend">
+                {donutSegments.map((s) => (
+                  <div key={s.label} className="pnl-legend-row">
+                    <span className="pnl-legend-dot" style={{ background: s.color }} />
+                    {s.label}
+                    <span className="pnl-legend-val">{s.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="pnl-card">
+          <div className="pnl-card-title">Top grupos de origem</div>
+          <div className="pnl-card-note">de onde mais vieram links · {periodWord}</div>
+          {loadingSummary ? (
+            <div className="pnl-bars">
+              {[0, 1, 2].map((k) => <div key={k} className="pnl-skel" style={{ height: 28 }} />)}
+            </div>
+          ) : topSrc.length === 0 ? (
+            <p className="pnl-empty">Nenhum grupo de origem com atividade no período.</p>
+          ) : (
+            <div className="pnl-bars">
+              {topSrc.map((d) => {
+                const total = num(d.sent) + num(d.blocked)
+                return (
+                  <div key={d.jid} className="pnl-bar-row">
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
+                    <span className="pnl-bar-val">{total}</span>
+                    <span className="pnl-bar-track"><span className="pnl-bar-fill" style={{ width: `${Math.round((total / maxSrc) * 100)}%` }} /></span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* Atividade — colunas dos últimos 7 dias */}
+      <section className="pnl-card">
+        <div className="pnl-card-title">Atividade · últimos 7 dias</div>
+        <div className="pnl-card-note">entregues, bloqueados pela regra e falhas por dia</div>
+        {series === null ? (
+          <div className="pnl-skel" style={{ height: 180, marginTop: 12 }} />
+        ) : series.every((b) => b.success + b.blocked + b.failed === 0) ? (
+          <p className="pnl-empty">Sem atividade nos últimos 7 dias.</p>
+        ) : (
+          <>
+            <StackedColumns buckets={series} />
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 10 }}>
+              {[
+                { label: 'Entregues', color: 'var(--accent-strong)' },
+                { label: 'Bloqueados', color: 'var(--accent-3)' },
+                { label: 'Falhas', color: 'var(--danger)' },
+              ].map((s) => (
+                <span key={s.label} className="pnl-legend-row" style={{ flex: 'none' }}>
+                  <span className="pnl-legend-dot" style={{ background: s.color }} />{s.label}
+                </span>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
+
       {/* Últimos envios */}
       <section className="pnl-card">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -201,7 +317,7 @@ export default function PainelPage() {
             <div className="pnl-card-title">Últimos envios</div>
             <div className="pnl-card-note">o que o bot processou agora há pouco</div>
           </div>
-          <Link href="/dashboard/logs" className="pnl-link">Ver tudo →</Link>
+          <Link href="/painel/envios" className="pnl-link">Ver tudo →</Link>
         </div>
 
         {loadingRecent ? (
@@ -233,6 +349,86 @@ export default function PainelPage() {
         )}
       </section>
     </div>
+  )
+}
+
+function StackedColumns({ buckets }) {
+  const W = 560
+  const H = 180
+  const padL = 8
+  const padR = 8
+  const padB = 24
+  const padT = 10
+  const n = buckets.length || 1
+  const plotH = H - padB - padT
+  const plotW = W - padL - padR
+  const slot = plotW / n
+  const barW = Math.min(30, slot * 0.6)
+  const totals = buckets.map((b) => b.success + b.blocked + b.failed)
+  const max = Math.max(...totals, 1)
+  const grid = [0, 0.25, 0.5, 0.75, 1]
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{ display: 'block', marginTop: 12 }} aria-hidden="true">
+      {grid.map((g, i) => {
+        const y = padT + plotH * (1 - g)
+        return <line key={i} x1={padL} y1={y} x2={W - padR} y2={y} stroke="var(--line)" strokeWidth="1" strokeDasharray={g === 0 ? '0' : '2 4'} />
+      })}
+      {buckets.map((b, i) => {
+        const cx = padL + slot * i + slot / 2
+        const segs = [
+          { v: b.success, c: 'var(--accent-strong)' },
+          { v: b.blocked, c: 'var(--accent-3)' },
+          { v: b.failed, c: 'var(--danger)' },
+        ]
+        const heights = segs.map((s) => (s.v / max) * plotH)
+        const offsets = heights.map((_, k) => heights.slice(0, k).reduce((a, c) => a + c, 0))
+        return (
+          <g key={b.key}>
+            {segs.map((s, k) => (
+              heights[k] > 0
+                ? <rect key={k} x={cx - barW / 2} y={padT + plotH - offsets[k] - heights[k]} width={barW} height={heights[k]} fill={s.c} rx={k === segs.length - 1 ? 3 : 0} />
+                : null
+            ))}
+            <text x={cx} y={H - 7} textAnchor="middle" fontSize="9.5" fill="var(--ink-faint)" fontFamily="Inter, sans-serif">{b.label}</text>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+function Donut({ segments, total }) {
+  const size = 160
+  const r = 58
+  const sw = 20
+  const cx = size / 2
+  const cy = size / 2
+  const C = 2 * Math.PI * r
+  const fracs = segments.map((s) => (total ? s.value / total : 0))
+  const offsets = fracs.map((_, i) => fracs.slice(0, i).reduce((a, b) => a + b, 0))
+  return (
+    <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size} style={{ flexShrink: 0 }} aria-hidden="true">
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--bg-soft)" strokeWidth={sw} />
+      {segments.map((s, i) => {
+        const dash = fracs[i] * C
+        return (
+          <circle
+            key={i}
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill="none"
+            stroke={s.color}
+            strokeWidth={sw}
+            strokeDasharray={`${dash} ${C - dash}`}
+            strokeDashoffset={-offsets[i] * C}
+            transform={`rotate(-90 ${cx} ${cy})`}
+          />
+        )
+      })}
+      <text x={cx} y={cy - 1} textAnchor="middle" fontSize="30" fontWeight="600" fill="var(--ink)" style={{ letterSpacing: '-0.02em' }}>{total}</text>
+      <text x={cx} y={cy + 18} textAnchor="middle" fontSize="11" fill="var(--ink-soft)">processados</text>
+    </svg>
   )
 }
 
