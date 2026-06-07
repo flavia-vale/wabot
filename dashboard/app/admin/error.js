@@ -25,10 +25,10 @@ export default function AdminError({ error, reset }) {
             Recarregar Admin
           </button>
           <Link
-            href="/dashboard"
+            href="/painel"
             className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-200"
           >
-            Voltar ao Dashboard
+            Voltar ao painel
           </Link>
         </div>
       </div>
