@@ -169,6 +169,7 @@ export const api = {
   updateGroupTargets: (id, postIds) =>
     apiFetch(`/api/groups/${id}/targets`, { method: 'PUT', body: JSON.stringify({ postIds }) }),
 
+  getMlOAuthStartUrl: () => apiFetch('/api/auth/ml-oauth/start-url'),
   credentials: () => apiFetch('/api/credentials'),
   saveCredential: (platform, data) =>
     apiFetch(`/api/credentials/${platform}`, { method: 'PUT', body: JSON.stringify(data) }),

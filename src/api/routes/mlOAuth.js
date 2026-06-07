@@ -1,19 +1,31 @@
 import db from '../../db.js'
 
+function buildMlAuthUrl(clientId, state, redirectUri) {
+  const authUrl = new URL('https://auth.mercadolivre.com.br/authorization')
+  authUrl.searchParams.set('response_type', 'code')
+  authUrl.searchParams.set('client_id', clientId)
+  authUrl.searchParams.set('redirect_uri', redirectUri)
+  authUrl.searchParams.set('state', state)
+  return authUrl.toString()
+}
+
 export async function mlOAuthRoutes(app) {
+  app.get('/ml-oauth/start-url', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const clientId = process.env.ML_CLIENT_ID
+    if (!clientId) return reply.code(503).send({ error: 'ML_CLIENT_ID não configurado' })
+
+    const state = app.jwt.sign({ userId: req.user.sub, p: 'ml_oauth' }, { expiresIn: '10m' })
+    const redirectUri = `${process.env.DASHBOARD_URL}/api/auth/ml-oauth/callback`
+    return { url: buildMlAuthUrl(clientId, state, redirectUri) }
+  })
+
   app.get('/ml-oauth/start', { onRequest: [app.authenticate] }, async (req, reply) => {
     const clientId = process.env.ML_CLIENT_ID
     if (!clientId) return reply.code(503).send({ error: 'ML_CLIENT_ID não configurado' })
 
     const state = app.jwt.sign({ userId: req.user.sub, p: 'ml_oauth' }, { expiresIn: '10m' })
     const redirectUri = `${process.env.DASHBOARD_URL}/api/auth/ml-oauth/callback`
-    const authUrl = new URL('https://auth.mercadolivre.com.br/authorization')
-    authUrl.searchParams.set('response_type', 'code')
-    authUrl.searchParams.set('client_id', clientId)
-    authUrl.searchParams.set('redirect_uri', redirectUri)
-    authUrl.searchParams.set('state', state)
-
-    return reply.redirect(authUrl.toString())
+    return reply.redirect(buildMlAuthUrl(clientId, state, redirectUri))
   })
 
   app.get('/ml-oauth/callback', async (req, reply) => {
