@@ -14,6 +14,12 @@ const OG_TITLE_RE = [
   /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i,
   /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i,
 ]
+const OG_IMAGE_RE = [
+  /<meta[^>]+property=["']og:image:secure_url["'][^>]+content=["']([^"']+)["']/i,
+  /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
+  /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
+  /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
+]
 const TITLE_TAG_RE = /<title[^>]*>([^<]+)<\/title>/i
 const META_PRICE_RE = [
   /<meta[^>]+(?:property|itemprop)=["']product:price:amount["'][^>]+content=["']([^"']+)["']/i,
@@ -179,6 +185,18 @@ function extractTitleFallback(html) {
   }
   const m = html.match(TITLE_TAG_RE)
   return m?.[1] ? normalizeText(m[1]) : ''
+}
+
+function extractOgImage(html) {
+  if (!html) return ''
+  for (const re of OG_IMAGE_RE) {
+    const m = html.match(re)
+    if (m?.[1]) {
+      const value = decodeEntities(m[1]).trim()
+      if (/^https?:\/\//i.test(value)) return value
+    }
+  }
+  return ''
 }
 
 function extractTitleFromUrl(url) {
@@ -585,5 +603,6 @@ export async function fetchProductInfo(url, opts = {}) {
   const title = jsonLd?.title || mlHtml?.title || amazonFallback?.title || shopeeApiFallback?.title || mercadoLivreApiFallback?.title || titleFromUrl || extractTitleFallback(html)
   const newPrice = jsonLd?.newPrice || mlHtml?.newPrice || mlLanding?.newPrice || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || shopeeJsonRange?.newPrice || shopeeHtmlRange?.newPrice || mercadoLivreApiFallback?.newPrice || extractMetaPrice(html) || extractShopeePriceFromHtml(html)
   const oldPrice = jsonLd?.oldPrice || mlHtml?.oldPrice || mlLanding?.oldPrice || shopeeApiFallback?.oldPrice || shopeeJsonRange?.oldPrice || shopeeHtmlRange?.oldPrice || mercadoLivreApiFallback?.oldPrice || ''
-  return { title, oldPrice, newPrice, finalUrl }
+  const image = extractOgImage(html)
+  return { title, oldPrice, newPrice, finalUrl, image }
 }

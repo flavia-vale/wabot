@@ -86,6 +86,7 @@ export default function CriarOfertaPage() {
   const [error, setError] = useState('')
   const [conversionStatus, setConversionStatus] = useState(null)
   const [copyFeedback, setCopyFeedback] = useState('')
+  const [imgFailed, setImgFailed] = useState(false)
 
   const priceBlocks = buildOfferPriceBlocks({ oldPrice: generated?.oldPrice, newPrice: generated?.newPrice, formatPrice: formatOfferPrice })
 
@@ -100,6 +101,7 @@ export default function CriarOfertaPage() {
   async function runScrape() {
     setError('')
     setConversionStatus(null)
+    setImgFailed(false)
     const trimmed = link.trim()
     if (!trimmed) { setError('Cole seu link para gerar a oferta.'); return }
     setLoading(true)
@@ -112,6 +114,7 @@ export default function CriarOfertaPage() {
         title,
         oldPrice: normalizeText(info?.oldPrice),
         newPrice,
+        image: normalizeText(info?.image),
         link: normalizeLink(info?.offerUrl, trimmed),
       })
       setConversionStatus(info?.conversion || null)
@@ -193,8 +196,13 @@ export default function CriarOfertaPage() {
             <section className="pnl-card">
               <div className="pnl-card-title" style={{ marginBottom: 14 }}>Produto encontrado</div>
               <div style={{ display: 'flex', gap: 14 }}>
-                <span className="pnl-prod-img" aria-hidden="true">
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41 13.42 20.6a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><circle cx="7" cy="7" r="1.2" /></svg>
+                <span className="pnl-prod-img" aria-hidden="true" style={generated.image && !imgFailed ? { overflow: 'hidden', padding: 0 } : undefined}>
+                  {generated.image && !imgFailed ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={generated.image} alt="" referrerPolicy="no-referrer" onError={() => setImgFailed(true)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41 13.42 20.6a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><circle cx="7" cy="7" r="1.2" /></svg>
+                  )}
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.3, color: 'var(--ink)' }}>{generated.title || 'Sem título detectado'}</div>

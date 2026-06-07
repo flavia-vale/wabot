@@ -12,6 +12,36 @@ function mockHtmlResponse(html, url = 'https://www.amazon.com.br/dp/B0CXGBT3Z9')
   }
 }
 
+test('fetchProductInfo extrai a imagem og:image do produto', async (t) => {
+  const html = `<!doctype html><html><head>
+    <meta property="og:title" content="Tênis Casual Branco" />
+    <meta property="og:image" content="https://cdn.exemplo.com/produtos/tenis-branco.jpg" />
+    <title>Loja</title>
+  </head><body>
+    <span class="a-price"><span class="a-offscreen">R$ 99,90</span></span>
+  </body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => mockHtmlResponse(html)
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://amazon.com.br/tenis')
+  assert.equal(info.image, 'https://cdn.exemplo.com/produtos/tenis-branco.jpg')
+})
+
+test('fetchProductInfo ignora og:image não-http e devolve string vazia', async (t) => {
+  const html = `<!doctype html><html><head>
+    <meta property="og:image" content="//cdn.sem-protocolo.com/x.jpg" />
+  </head><body></body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => mockHtmlResponse(html)
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://amazon.com.br/qualquer')
+  assert.equal(info.image, '')
+})
+
 test('fetchProductInfo extrai título e preço de página Amazon mesmo sem json-ld útil', async (t) => {
   const html = `<!doctype html><html><head><title>Amazon.com.br</title></head><body>
     <span id="productTitle">Amai, Absorvente Externo Fluxo Regular, Algodão Sem Químicos, Hipoalergênico, Sem plástico comum, Com Abas - 14 unidades</span>
