@@ -292,26 +292,7 @@ export default function MensagensPage() {
         </span>
       </section>
 
-      {/* 1 · Links */}
-      <section className="pnl-card">
-        <div className="pnl-card-title">Links</div>
-        <p className="pnl-card-note" style={{ marginBottom: 12 }}>
-          Use <code className="pnl-token" style={{ cursor: 'default' }}>{'{{grupoLink}}'}</code> e{' '}
-          <code className="pnl-token" style={{ cursor: 'default' }}>{'{{cupomLink}}'}</code> nos seus ganchos e CTAs.
-        </p>
-        <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
-          <div>
-            <label className="pnl-label">Link de convite do grupo</label>
-            <input type="url" className="pnl-input" value={value.brandingGroupLink} onChange={(e) => setValue((v) => ({ ...v, brandingGroupLink: e.target.value }))} placeholder="https://chat.whatsapp.com/..." disabled={saving} />
-          </div>
-          <div>
-            <label className="pnl-label">Link de cupom</label>
-            <input type="url" className="pnl-input" value={value.couponLink} onChange={(e) => setValue((v) => ({ ...v, couponLink: e.target.value }))} placeholder="https://..." disabled={saving} />
-          </div>
-        </div>
-      </section>
-
-      {/* 2 · Variações de texto */}
+      {/* 1 · Variações de texto */}
       <section>
         <div className="pnl-card-title" style={{ fontSize: 15 }}>🎲 Variações de texto</div>
         <p className="pnl-card-note" style={{ marginBottom: 12 }}>Pedacinhos que o bot intercala em cada envio, pra nenhuma mensagem sair 100% igual. Quanto mais variações, mais natural.</p>
@@ -356,6 +337,25 @@ export default function MensagensPage() {
               </div>
             )
           })}
+        </div>
+      </section>
+
+      {/* 2 · Links */}
+      <section className="pnl-card">
+        <div className="pnl-card-title">Links</div>
+        <p className="pnl-card-note" style={{ marginBottom: 12 }}>
+          Use <code className="pnl-token" style={{ cursor: 'default' }}>{'{{grupoLink}}'}</code> e{' '}
+          <code className="pnl-token" style={{ cursor: 'default' }}>{'{{cupomLink}}'}</code> nos seus ganchos e CTAs.
+        </p>
+        <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+          <div>
+            <label className="pnl-label">Link de convite do grupo</label>
+            <input type="url" className="pnl-input" value={value.brandingGroupLink} onChange={(e) => setValue((v) => ({ ...v, brandingGroupLink: e.target.value }))} placeholder="https://chat.whatsapp.com/..." disabled={saving} />
+          </div>
+          <div>
+            <label className="pnl-label">Link de cupom</label>
+            <input type="url" className="pnl-input" value={value.couponLink} onChange={(e) => setValue((v) => ({ ...v, couponLink: e.target.value }))} placeholder="https://..." disabled={saving} />
+          </div>
         </div>
       </section>
 
