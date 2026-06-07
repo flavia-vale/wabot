@@ -268,21 +268,49 @@ async function fetchMercadoLivreProductInfo(url, { timeoutMs = HTML_FETCH_TIMEOU
   }
 }
 
+async function getMlUserToken(mlCredentials) {
+  if (!mlCredentials?.oauthRefreshToken) return null
+  if (mlCredentials.oauthAccessToken && Date.now() < (mlCredentials.oauthTokenExpiry || 0)) {
+    return mlCredentials.oauthAccessToken
+  }
+  const clientId = process.env.ML_CLIENT_ID
+  const clientSecret = process.env.ML_CLIENT_SECRET
+  if (!clientId || !clientSecret) return null
+  try {
+    const res = await fetch('https://api.mercadolibre.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: mlCredentials.oauthRefreshToken,
+      }).toString(),
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) return null
+    const data = await res.json().catch(() => null)
+    return data?.access_token || null
+  } catch {
+    return null
+  }
+}
+
 function parseMercadoLivreItemIdFromUrl(url) {
   const m = String(url || '').match(/\/(MLB[0-9]+)/i)
   return m?.[1]?.toUpperCase() || null
 }
 
-async function fetchMercadoLivreItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS } = {}) {
+async function fetchMercadoLivreItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS, mlCredentials = null } = {}) {
   if (parseMercadoLivreProductIdFromUrl(url)) return null
   const itemId = parseMercadoLivreItemIdFromUrl(url)
   if (!itemId) return null
   const endpoint = `https://api.mercadolibre.com/items/${itemId}`
   try {
-    const appToken = await getMlAppToken()
-    if (!appToken) return null
+    const userToken = await getMlUserToken(mlCredentials)
+    if (!userToken) return null
     const res = await fetch(endpoint, {
-      headers: { 'User-Agent': BROWSER_UA, Accept: 'application/json,text/plain,*/*', Authorization: `Bearer ${appToken}` },
+      headers: { 'User-Agent': BROWSER_UA, Accept: 'application/json,text/plain,*/*', Authorization: `Bearer ${userToken}` },
       signal: AbortSignal.timeout(timeoutMs),
       redirect: 'follow',
     })
