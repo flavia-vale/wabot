@@ -9,6 +9,29 @@ const HTML_FETCH_TIMEOUT_MS = Number(process.env.PRODUCT_INFO_TIMEOUT_MS) || 8_0
 const HTML_MAX_BYTES = Number(process.env.PRODUCT_INFO_MAX_BYTES) || 2 * 1024 * 1024
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
+let _mlAppTokenCache = { token: null, expiresAt: 0 }
+async function getMlAppToken() {
+  const clientId = process.env.ML_CLIENT_ID
+  const clientSecret = process.env.ML_CLIENT_SECRET
+  if (!clientId || !clientSecret) return null
+  if (_mlAppTokenCache.token && Date.now() < _mlAppTokenCache.expiresAt) return _mlAppTokenCache.token
+  try {
+    const res = await fetch('https://api.mercadolibre.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `grant_type=client_credentials&client_id=${clientId}&client_secret=${clientSecret}`,
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) return null
+    const data = await res.json().catch(() => null)
+    if (!data?.access_token) return null
+    _mlAppTokenCache = { token: data.access_token, expiresAt: Date.now() + (data.expires_in - 300) * 1000 }
+    return _mlAppTokenCache.token
+  } catch {
+    return null
+  }
+}
+
 const JSON_LD_RE = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi
 const OG_TITLE_RE = [
   /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i,
@@ -230,14 +253,10 @@ async function fetchMercadoLivreProductInfo(url, { timeoutMs = HTML_FETCH_TIMEOU
   if (!productId) return null
   const endpoint = `https://api.mercadolibre.com/products/${productId}`
   try {
-    const res = await fetch(endpoint, {
-      headers: {
-        'User-Agent': BROWSER_UA,
-        Accept: 'application/json,text/plain,*/*',
-      },
-      signal: AbortSignal.timeout(timeoutMs),
-      redirect: 'follow',
-    })
+    const appToken = await getMlAppToken()
+    const headers = { 'User-Agent': BROWSER_UA, Accept: 'application/json,text/plain,*/*' }
+    if (appToken) headers['Authorization'] = `Bearer ${appToken}`
+    const res = await fetch(endpoint, { headers, signal: AbortSignal.timeout(timeoutMs), redirect: 'follow' })
     if (!res.ok) return null
     const payload = await res.json().catch(() => null)
     const name = normalizeText(payload?.name || '')
@@ -260,11 +279,10 @@ async function fetchMercadoLivreItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_M
   if (!itemId) return null
   const endpoint = `https://api.mercadolibre.com/items/${itemId}`
   try {
+    const appToken = await getMlAppToken()
+    if (!appToken) return null
     const res = await fetch(endpoint, {
-      headers: {
-        'User-Agent': BROWSER_UA,
-        Accept: 'application/json,text/plain,*/*',
-      },
+      headers: { 'User-Agent': BROWSER_UA, Accept: 'application/json,text/plain,*/*', Authorization: `Bearer ${appToken}` },
       signal: AbortSignal.timeout(timeoutMs),
       redirect: 'follow',
     })
