@@ -8,31 +8,10 @@ import { mobi, cfgStyles, tint } from '@/components/mobile/mobileStyles'
 import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileRoutes } from '@/components/mobile/routes'
 import { api } from '@/lib/api'
-import { filterDestGroups, selectAllVisible, clearVisible, groupKey, isChannelGroup } from '@/lib/mobileOfferFilters'
-
-const MESSAGE_TEMPLATES = [
-  { label: 'Relâmpago', text: '⚡ Oferta relâmpago!\n\nProduto:\nPreço:\nLink:' },
-  { label: 'Cupom', text: '🎟️ Cupom disponível!\n\nUse o cupom:\nLink da oferta:' },
-  { label: 'Últimas unidades', text: '🔥 Últimas unidades!\n\nGaranta antes que acabe:' },
-]
 
 const pageStyles = {
   hint: { fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.5 },
-  chipRow: { display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 },
-  chip: (active = false) => ({
-    flexShrink: 0,
-    padding: '8px 12px',
-    borderRadius: 999,
-    border: `1px solid ${active ? 'var(--ink)' : 'var(--line)'}`,
-    background: active ? 'var(--ink)' : 'var(--surface)',
-    color: active ? 'white' : 'var(--ink)',
-    fontSize: 12,
-    fontWeight: 700,
-    fontFamily: 'inherit',
-    cursor: 'pointer',
-  }),
-  smallBtn: { padding: '8px 10px', borderRadius: 999, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' },
-  destList: { maxHeight: 260, overflowY: 'auto', display: 'grid', gap: 8 },
+  destList: { maxHeight: 300, overflowY: 'auto', display: 'grid', gap: 8 },
   destRow: (checked) => ({
     display: 'flex', alignItems: 'center', gap: 10,
     padding: '10px 12px', borderRadius: 13,
@@ -41,6 +20,15 @@ const pageStyles = {
     cursor: 'pointer',
   }),
   preview: { whiteSpace: 'pre-wrap', background: 'var(--bg-soft)', border: '1px solid var(--line)', borderRadius: 14, padding: 12, fontSize: 13, color: 'var(--ink)', lineHeight: 1.5, minHeight: 70 },
+  addBox: { padding: 12, borderRadius: 14, background: tint('--accent', 7), border: `1px solid ${tint('--accent', 24, 'var(--line)')}`, display: 'grid', gap: 8 },
+}
+
+function groupKey(group) {
+  return group?.waJid || group?.id || ''
+}
+
+function isChannelGroup(group) {
+  return String(group?.waJid || '').endsWith('@newsletter')
 }
 
 function groupParticipants(group) {
@@ -55,11 +43,7 @@ export default function MobileBroadcastPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [text, setText] = useState('')
-  const [search, setSearch] = useState('')
-  const [minMembers, setMinMembers] = useState('')
-  const [includeChannels, setIncludeChannels] = useState(false)
   const [selected, setSelected] = useState([])
-  const [topN, setTopN] = useState('10')
   const [sending, setSending] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
@@ -74,7 +58,7 @@ export default function MobileBroadcastPage() {
           if (!active) return
           const postGroups = Array.isArray(list) ? list.filter((group) => group.role === 'post') : []
           setGroups(postGroups)
-          setSelected(postGroups.filter((group) => !isChannelGroup(group)).map(groupKey))
+          setSelected((current) => current.filter((jid) => postGroups.some((group) => groupKey(group) === jid)))
         })
         .catch((err) => { if (active) setError(err.message || 'Não foi possível carregar destinos.') })
         .finally(() => { if (active) setLoading(false) })
@@ -83,24 +67,10 @@ export default function MobileBroadcastPage() {
     return () => { active = false }
   }, [reloadKey])
 
-  const visibleGroups = useMemo(() => {
-    const min = Number(minMembers || 0)
-    return filterDestGroups(groups, { search, includeChannels }).filter((group) => {
-      if (!min) return true
-      return groupParticipants(group) >= min
-    })
-  }, [groups, search, includeChannels, minMembers])
-
   const selectedNames = useMemo(() => groups.filter((group) => selected.includes(groupKey(group))).map((group) => group.name || group.waJid), [groups, selected])
 
   function toggleDestination(jid) {
     setSelected((current) => current.includes(jid) ? current.filter((item) => item !== jid) : [...current, jid])
-  }
-
-  function applyTopN() {
-    const n = Math.max(1, Number(topN) || 1)
-    const ranked = [...visibleGroups].sort((a, b) => groupParticipants(b) - groupParticipants(a)).slice(0, n).map(groupKey)
-    setSelected((current) => [...new Set([...current, ...ranked])])
   }
 
   async function sendNow() {
@@ -141,43 +111,24 @@ export default function MobileBroadcastPage() {
 
       <div style={cfgStyles.cardWrap}>
         <div style={{ ...cfgStyles.cardP, display: 'grid', gap: 12 }}>
-          <div style={pageStyles.hint}>Escreva uma mensagem livre e escolha exatamente quais grupos ou canais vão receber. Para ofertas com scraping, use a tela Criar.</div>
-          <div style={pageStyles.chipRow}>
-            {MESSAGE_TEMPLATES.map((template) => (
-              <button key={template.label} type="button" style={pageStyles.chip(false)} onClick={() => setText(template.text)}>{template.label}</button>
-            ))}
-          </div>
+          <div style={pageStyles.hint}>Escreva a mensagem que será enviada exatamente para os destinos selecionados abaixo.</div>
           <label>
             <div style={cfgStyles.label}>Mensagem</div>
-            <textarea style={{ ...cfgStyles.field, minHeight: 130, resize: 'vertical' }} value={text} onChange={(event) => setText(event.target.value)} placeholder="Digite a mensagem..." />
+            <textarea style={{ ...cfgStyles.field, minHeight: 140, resize: 'vertical' }} value={text} onChange={(event) => setText(event.target.value)} placeholder="Digite a mensagem..." />
           </label>
           <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>{text.length} caractere(s)</div>
           <div style={pageStyles.preview}>{text.trim() || 'Prévia da mensagem aparecerá aqui.'}</div>
         </div>
       </div>
 
-      <div style={cfgStyles.sectionLabel}>Segmentar destinos</div>
+      <div style={cfgStyles.sectionLabel}>Destinos</div>
       <div style={cfgStyles.cardWrap}>
         <div style={{ ...cfgStyles.cardP, display: 'grid', gap: 12 }}>
-          <div style={{ display: 'grid', gap: 8 }}>
-            <input style={cfgStyles.field} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar grupo/canal" />
-            <input style={cfgStyles.field} type="number" min={0} value={minMembers} onChange={(event) => setMinMembers(event.target.value)} placeholder="Mínimo de participantes" />
-          </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 44, fontSize: 13, color: 'var(--ink)', cursor: 'pointer' }}>
-            <input type="checkbox" checked={includeChannels} onChange={(event) => setIncludeChannels(event.target.checked)} style={{ width: 20, height: 20, accentColor: 'var(--accent-strong)', flexShrink: 0 }} />
-            Incluir canais na seleção
-          </label>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" style={pageStyles.smallBtn} onClick={() => setSelected(selectAllVisible(selected, visibleGroups))}>Selecionar visíveis ({visibleGroups.length})</button>
-            <button type="button" style={pageStyles.smallBtn} onClick={() => setSelected(clearVisible(selected, visibleGroups))}>Limpar visíveis</button>
-            <input style={{ ...cfgStyles.field, width: 86, minHeight: 36, padding: '8px 10px' }} type="number" min={1} value={topN} onChange={(event) => setTopN(event.target.value)} />
-            <button type="button" style={pageStyles.smallBtn} onClick={applyTopN}>Top N</button>
-          </div>
           <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{selected.length} selecionado(s){selectedNames.length ? `: ${selectedNames.slice(0, 2).join(', ')}${selectedNames.length > 2 ? '…' : ''}` : ''}</div>
           <div style={pageStyles.destList}>
-            {visibleGroups.length === 0 ? (
-              <div style={pageStyles.hint}>Nenhum destino com os filtros atuais. Cadastre destinos em Grupos e Canais.</div>
-            ) : visibleGroups.map((group) => {
+            {groups.length === 0 ? (
+              <div style={pageStyles.hint}>Nenhum destino cadastrado ainda.</div>
+            ) : groups.map((group) => {
               const jid = groupKey(group)
               const checked = selected.includes(jid)
               return (
@@ -191,6 +142,10 @@ export default function MobileBroadcastPage() {
               )
             })}
           </div>
+          <div style={pageStyles.addBox}>
+            <div style={{ fontSize: 12, color: 'var(--ink)', fontWeight: 700 }}>Seu grupo de destino não está aqui? Clique aqui para adicionar</div>
+            <button type="button" onClick={() => router.push(mobileRoutes.configGroups)} style={mobi.btn('ghost', true)}>Adicionar grupo de destino</button>
+          </div>
         </div>
       </div>
 
@@ -198,7 +153,6 @@ export default function MobileBroadcastPage() {
         <button type="button" onClick={sendNow} disabled={sending || !text.trim() || selected.length === 0} style={{ ...mobi.btn('accent', true), opacity: sending || !text.trim() || selected.length === 0 ? 0.55 : 1 }}>
           {sending ? 'Enviando...' : `Enviar para ${selected.length} destino(s)`}
         </button>
-        <button type="button" onClick={() => router.push(mobileRoutes.configGroups)} style={mobi.btn('ghost', true)}>Gerenciar grupos e canais</button>
         {feedback && <div style={{ fontSize: 12, color: feedback.includes('Não') || feedback.includes('Selecione') || feedback.includes('Digite') ? 'var(--danger)' : 'var(--success)' }}>{feedback}</div>}
       </div>
     </MobileShell>

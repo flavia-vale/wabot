@@ -4,8 +4,6 @@ import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { usePainelHeader } from '../PainelShell'
 
-const DEFAULT_CTA = 'Participe do grupo:'
-const MAX_CTA = 80
 
 const DELAY_PRESETS = [
   { id: 'fast', label: 'Rápido', min: 2, max: 5, desc: 'Baixo volume, operação acompanhada.' },
@@ -13,10 +11,9 @@ const DELAY_PRESETS = [
   { id: 'safe', label: 'Conservador', min: 15, max: 30, desc: 'Alto volume ou maior cautela.' },
 ]
 
-const hasHttp = (v) => /^https?:\/\//i.test(String(v ?? '').trim())
 
 export default function ConfiguracoesPage() {
-  usePainelHeader({ title: 'Configurações', subtitle: 'Ajuste a cadência de envio e o branding das mensagens' })
+  usePainelHeader({ title: 'Configurações', subtitle: 'Ajuste a cadência de envio das mensagens' })
 
   // form mantém TODOS os campos do config para round-trip fiel no saveConfig.
   const [form, setForm] = useState(null)
@@ -38,7 +35,7 @@ export default function ConfiguracoesPage() {
           feedGlobal: cfg.feedGlobal ?? false,
           postToStatus: cfg.postToStatus ?? false,
           brandingGroupLink: cfg.brandingGroupLink ?? '',
-          brandingCtaText: cfg.brandingCtaText ?? DEFAULT_CTA,
+          brandingCtaText: cfg.brandingCtaText ?? '',
         })
       })
       .catch((err) => { if (active) setLoadError(err?.message || 'Não foi possível carregar as configurações.') })
@@ -65,13 +62,6 @@ export default function ConfiguracoesPage() {
       if (min.value > max.value) return setFeedback({ type: 'error', message: 'O mínimo não pode ser maior que o máximo.' })
     }
 
-    const brandingGroupLink = form.brandingGroupLink.trim()
-    const brandingCtaText = form.brandingCtaText.trim() || DEFAULT_CTA
-    if (section === 'branding') {
-      if (brandingGroupLink && !hasHttp(brandingGroupLink)) return setFeedback({ type: 'error', message: 'Informe um link começando com http:// ou https://' })
-      if (brandingCtaText.length > MAX_CTA) return setFeedback({ type: 'error', message: `O texto do CTA deve ter no máximo ${MAX_CTA} caracteres.` })
-    }
-
     setSaving(true)
     try {
       await api.saveConfig({
@@ -82,8 +72,8 @@ export default function ConfiguracoesPage() {
         welcomeMsg: form.welcomeMsg,
         feedGlobal: form.feedGlobal,
         postToStatus: form.postToStatus,
-        brandingGroupLink,
-        brandingCtaText,
+        brandingGroupLink: form.brandingGroupLink,
+        brandingCtaText: form.brandingCtaText,
       })
       setFeedback({ type: 'success', message: 'Configurações salvas com sucesso.' })
     } catch (err) {
@@ -107,9 +97,6 @@ export default function ConfiguracoesPage() {
   if (!form) {
     return <div className="pnl-grid" style={{ maxWidth: 640, margin: '0 auto' }}>{[0, 1].map((k) => <div key={k} className="pnl-skel" style={{ height: 220 }} />)}</div>
   }
-
-  const ctaText = form.brandingCtaText.trim() || DEFAULT_CTA
-  const previewLink = form.brandingGroupLink.trim() || '[Link do seu grupo]'
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 640, margin: '0 auto' }}>
@@ -147,31 +134,6 @@ export default function ConfiguracoesPage() {
         </button>
       </section>
 
-      {/* Branding */}
-      <section className="pnl-card">
-        <div className="pnl-card-title">Branding das mensagens</div>
-        <p className="pnl-card-note" style={{ marginBottom: 14 }}>Anexe o link do seu grupo no final das mensagens. Deixe em branco para não adicionar rodapé.</p>
-
-        <div className="pnl-field" style={{ marginBottom: 12 }}>
-          <label className="pnl-label" htmlFor="cta">Mensagem antes do link</label>
-          <input id="cta" className="pnl-input" type="text" maxLength={MAX_CTA} placeholder={DEFAULT_CTA} value={form.brandingCtaText} onChange={(e) => patch({ brandingCtaText: e.target.value })} />
-          <p className="pnl-hint">Pré-preenchido como “{DEFAULT_CTA}”. Se apagar, o padrão é usado.</p>
-        </div>
-
-        <div className="pnl-field">
-          <label className="pnl-label" htmlFor="groupLink">Link do seu grupo (opcional)</label>
-          <input id="groupLink" className="pnl-input" type="url" placeholder="https://chat.whatsapp.com/seu-grupo" value={form.brandingGroupLink} onChange={(e) => patch({ brandingGroupLink: e.target.value })} />
-        </div>
-
-        <div className="pnl-note-box is-info" style={{ marginTop: 14 }}>
-          <strong style={{ fontWeight: 600 }}>Prévia do rodapé</strong>
-          <p style={{ marginTop: 6 }}>{ctaText} {previewLink}</p>
-        </div>
-
-        <button type="button" className="pnl-btn is-primary" style={{ marginTop: 16, width: '100%', justifyContent: 'center' }} onClick={() => save('branding')} disabled={saving}>
-          {saving ? 'Salvando…' : 'Salvar branding'}
-        </button>
-      </section>
 
       {feedback && <div className={`pnl-note-box is-${feedback.type}`} role="status">{feedback.message}</div>}
     </div>
