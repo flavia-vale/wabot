@@ -136,7 +136,7 @@ export async function logsRoutes(app) {
       statusCountsTotal,
       logs: logs.map(log => ({
         ...log,
-        sourceGroupName: groupMap[log.sourceGroup] || log.sourceGroup,
+        sourceGroupName: log.sourceGroup === 'offerAutomation' ? 'Oferta automática' : (groupMap[log.sourceGroup] || log.sourceGroup),
         destGroupName: groupMap[log.destGroup] || log.destGroup,
       })),
     }

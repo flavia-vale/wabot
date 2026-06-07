@@ -6,6 +6,7 @@ import fastifyCors from '@fastify/cors'
 import { createCorsOriginChecker, getAllowedOrigins } from './cors.js'
 
 import { authRoutes } from './routes/auth.js'
+import { mlOAuthRoutes } from './routes/mlOAuth.js'
 import { sessionRoutes } from './routes/session.js'
 import { groupsRoutes } from './routes/groups.js'
 import { credentialsRoutes } from './routes/credentials.js'
@@ -235,6 +236,7 @@ app.decorate('authenticate', async function (req, reply) {
 })
 
 app.register(authRoutes, { prefix: '/api/auth' })
+app.register(mlOAuthRoutes, { prefix: '/api/auth' })
 app.register(sessionRoutes, { prefix: '/api/session' })
 app.register(groupsRoutes, { prefix: '/api/groups' })
 app.register(credentialsRoutes, { prefix: '/api/credentials' })

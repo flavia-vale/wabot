@@ -483,7 +483,14 @@ export default function LogsPage() {
                       {statusLabel(it.status)}
                     </span>
                     <span style={envStyles.sourceBadge(it.source)}>
-                      {it.source === 'auto' ? (
+                      {it.source === 'offerAutomation' ? (
+                        <>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.9 4.9l2.8 2.8"/><path d="M16.3 16.3l2.8 2.8"/><circle cx="12" cy="12" r="4"/>
+                          </svg>
+                          oferta automática
+                        </>
+                      ) : it.source === 'auto' ? (
                         <>
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M3 7a5 5 0 0 1 5-5h4"/><path d="M7 12l-4-5 5-2"/><path d="M21 17a5 5 0 0 1-5 5h-4"/><path d="M17 12l4 5-5 2"/>
