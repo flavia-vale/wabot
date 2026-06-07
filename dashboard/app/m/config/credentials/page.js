@@ -8,6 +8,51 @@ import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileCredentialPlatforms, credentialSummary, isCredentialComplete } from '@/components/mobile/mobileCredentialPlatforms'
 import { api } from '@/lib/api'
 
+function MlOAuthSection({ credentialData }) {
+  const [renderedAt] = useState(() => Date.now())
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const connected = credentialData.oauthAccessToken && renderedAt < (credentialData.oauthTokenExpiry || 0)
+
+  async function handleConnect() {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await api.getMlOAuthStartUrl()
+      window.location.href = data.url
+    } catch (err) {
+      setError(err.message || 'Não foi possível iniciar OAuth')
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--line)'}}>
+      <div style={{fontSize: 11, color: 'var(--ink-soft)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em'}}>OAuth (API de Itens)</div>
+      {connected
+        ? (
+          <span style={{display:'inline-flex', alignItems:'center', gap: 4, fontSize: 12, color: 'var(--success)', fontWeight: 600, background: 'color-mix(in srgb, var(--success) 10%, transparent)', padding: '4px 10px', borderRadius: 999}}>
+            OAuth conectado ✓
+          </span>
+        )
+        : (
+          <>
+            <button
+              type="button"
+              onClick={handleConnect}
+              disabled={loading}
+              style={{display:'inline-flex', alignItems:'center', gap: 4, fontSize: 12, color: 'white', fontWeight: 600, background: 'var(--ink)', padding: '8px 14px', borderRadius: 999, border: 'none', cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.65 : 1}}
+            >
+              {loading ? 'Aguarde...' : 'Conectar ML via OAuth'}
+            </button>
+            {error && <div style={{marginTop: 6, fontSize: 12, color: 'var(--danger)'}}>{error}</div>}
+          </>
+        )
+      }
+    </div>
+  )
+}
+
 function PlatformForm({ platform, credential, onSaved }) {
   const credentialData = credential.data || {}
   const [open, setOpen] = useState(false)
@@ -100,6 +145,10 @@ function PlatformForm({ platform, credential, onSaved }) {
           </button>
         </div>
       )}
+
+      {platform.id === 'mercadolivre' && (
+        <MlOAuthSection credentialData={credentialData} />
+      )}
     </div>
   )
 }
@@ -110,6 +159,13 @@ export default function CredentialsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
+  const [mlOAuthMsg] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    const mlOAuthParam = new URLSearchParams(window.location.search).get('ml_oauth')
+    if (mlOAuthParam === 'success') return 'ML conectado via OAuth ✓'
+    if (mlOAuthParam === 'error') return 'Falha ao conectar ML OAuth'
+    return ''
+  })
 
   useEffect(() => {
     let active = true
@@ -167,6 +223,12 @@ export default function CredentialsPage() {
       <div style={{padding:'12px 20px 0', fontSize: 12, color:'var(--ink-soft)', lineHeight: 1.5}}>
         Edite suas chaves de afiliada direto no mobile. Os dados são salvos no mesmo backoffice do painel desktop.
       </div>
+
+      {mlOAuthMsg && (
+        <div style={{margin:'10px 16px 0', padding:'10px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: mlOAuthMsg.includes('✓') ? 'color-mix(in srgb, var(--success) 12%, transparent)' : 'color-mix(in srgb, var(--danger) 12%, transparent)', color: mlOAuthMsg.includes('✓') ? 'var(--success)' : 'var(--danger)'}}>
+          {mlOAuthMsg}
+        </div>
+      )}
 
       <div style={cfgStyles.cardWrap}>
         <div style={{...cfgStyles.card, overflow:'hidden'}}>
