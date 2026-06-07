@@ -1,10 +1,11 @@
 'use client'
 
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { api } from '@/lib/api'
-import { NAV_GROUPS, TOP_CTA } from './nav'
+import { NAV_GROUPS } from './nav'
 
 /* Contexto compartilhado: dados de sessão/usuário buscados uma vez pelo shell
  * e reusados pelas páginas (sem refetch). Páginas também publicam o título do
@@ -25,6 +26,38 @@ export function usePainelHeader(header) {
   useEffect(() => {
     setHeader({ title, subtitle })
   }, [title, subtitle, setHeader])
+}
+
+/* Slot de ação na topbar. A página renderiza <PainelTopbarAction>…</> e o
+ * conteúdo aparece à direita do header (como no mockup App.html), via portal —
+ * sem precisar furar o layout do shell nem disputar estado por effect. */
+export function PainelTopbarAction({ children }) {
+  const { actionSlot } = usePainel()
+  if (!actionSlot) return null
+  return createPortal(children, actionSlot)
+}
+
+const STAR_ICON = <path d="M12 2.5l2.9 6 6.6.6-5 4.4 1.5 6.5L12 16.9 5.5 20.5 7 14 2 9.6l6.6-.6z" />
+const LOCK_ICON = <><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></>
+const CHEVRON_ICON = <path d="M9 18l6-6-6-6" />
+const BELL_ICON = <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></>
+
+function planInfo(user) {
+  const plan = user?.plan
+  const exp = user?.accessExpiresAt ? new Date(user.accessExpiresAt) : null
+  const validExp = exp && !Number.isNaN(exp.getTime())
+  const expired = validExp && exp < new Date()
+  const label = expired
+    ? 'Plano vencido'
+    : plan === 'pro' ? 'Plano Pro'
+      : plan === 'basic' ? 'Plano Basic'
+        : plan === 'trial' ? 'Trial'
+          : 'Plano e cobrança'
+  const dateLabel = validExp ? exp.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : null
+  const sub = expired
+    ? 'reative para automatizar'
+    : dateLabel ? `renova em ${dateLabel}` : 'gerencie sua assinatura'
+  return { expired, label, sub }
 }
 
 function initialsOf(name, email) {
@@ -68,6 +101,7 @@ export default function PainelShell({ children }) {
   const [groupCount, setGroupCount] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [header, setHeader] = useState({ title: 'Painel', subtitle: '' })
+  const [actionSlot, setActionSlot] = useState(null)
 
   // Autenticação — mesmo contrato do dashboard atual (api.me → /login no erro).
   useEffect(() => {
@@ -101,8 +135,8 @@ export default function PainelShell({ children }) {
   }
 
   const ctxValue = useMemo(
-    () => ({ user, online, phone, groupCount, setHeader }),
-    [user, online, phone, groupCount],
+    () => ({ user, online, phone, groupCount, setHeader, actionSlot }),
+    [user, online, phone, groupCount, actionSlot],
   )
 
   if (checking) {
@@ -124,12 +158,6 @@ export default function PainelShell({ children }) {
           <Link href="/painel" className="pnl-brand" onClick={() => setMenuOpen(false)}>
             BOTinho <small>.app</small>
           </Link>
-
-          <Link href={TOP_CTA.href} className="pnl-cta" onClick={() => setMenuOpen(false)}>
-            <b>{TOP_CTA.label}</b>
-            <span>{TOP_CTA.note}</span>
-          </Link>
-
           <nav className="pnl-nav" aria-label="Navegação do painel">
             {NAV_GROUPS.map((group) => (
               <div key={group.title} className="pnl-nav-group">
@@ -145,11 +173,26 @@ export default function PainelShell({ children }) {
                     <Icon path={item.icon} />
                     <span>{item.label}</span>
                     {item.pro && <span className="pnl-pro">PRO</span>}
+                    {item.free && <span className="pnl-free">GRÁTIS</span>}
                   </Link>
                 ))}
               </div>
             ))}
           </nav>
+
+          {(() => {
+            const pi = planInfo(user)
+            return (
+              <Link href="/painel/plano" className={`pnl-plan${pi.expired ? ' is-expired' : ''}`} onClick={() => setMenuOpen(false)}>
+                <span className="pnl-plan-ico"><Icon path={pi.expired ? LOCK_ICON : STAR_ICON} /></span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span className="pnl-plan-title" style={{ display: 'block' }}>{pi.label}</span>
+                  <span className="pnl-plan-sub" style={{ display: 'block' }}>{pi.sub}</span>
+                </span>
+                {pi.expired ? <span className="pnl-plan-cta">Reativar</span> : <Icon path={CHEVRON_ICON} />}
+              </Link>
+            )
+          })()}
 
           <button type="button" className="pnl-user" onClick={logout} title="Sair da conta" style={{ background: 'none', border: 'none', borderTop: '1px solid var(--line)', textAlign: 'left', cursor: 'pointer', width: '100%' }}>
             <span className="pnl-avatar" aria-hidden="true">{initialsOf(user?.name, user?.email)}</span>
@@ -173,6 +216,10 @@ export default function PainelShell({ children }) {
             </div>
             <div className="pnl-header-right">
               <OnlinePill online={online} groupCount={groupCount} />
+              <button type="button" className="pnl-bell has-dot" aria-label="Notificações" title="Notificações">
+                <Icon path={BELL_ICON} />
+              </button>
+              <div className="pnl-header-actions" ref={setActionSlot} />
             </div>
           </header>
 

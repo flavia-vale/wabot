@@ -1,133 +1,295 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
-import { Alert } from '@/components/Alert'
-import { LoadingState } from '@/components/States'
+import { ActivationChecklist } from '@/components/ActivationChecklist'
 
-const STEPS = [
-  { key: 'waConnected', title: 'WhatsApp conectado', ok: 'Número conectado ao bot', pending: 'Conecte seu WhatsApp para permitir que o bot monitore e poste ofertas.', description: 'Permite que o bot leia e envie mensagens pelos seus grupos.', href: '/dashboard' },
-  { key: 'hasCredentials', title: 'Chaves de afiliado', ok: 'Credenciais de afiliado configuradas', pending: 'Adicione suas chaves para converter links com suas tags.', description: 'Garante que os links convertidos usem suas credenciais de afiliado.', href: '/dashboard/credenciais' },
-  { key: 'hasMonitorGroup', title: 'Grupo monitorado', ok: 'Grupo de origem configurado', pending: 'Escolha onde o bot deve encontrar os links originais.', description: 'É o grupo de origem onde o bot procura ofertas para converter.', href: '/dashboard/grupos' },
-  { key: 'hasPostGroup', title: 'Grupo de envio', ok: 'Grupo de destino configurado', pending: 'Escolha onde publicar os links convertidos.', description: 'É o destino onde os links convertidos serão publicados.', href: '/dashboard/grupos' },
-  { key: 'hasSuccessfulLog', title: 'Primeiro envio validado', ok: 'Já existe log de envio com sucesso', pending: 'Faça um teste de envio e confirme sucesso nos logs.', description: 'Confirma que a operação completa está funcionando antes do uso diário.', href: '/dashboard/envio' },
-]
+function CheckIcon({ size = 24 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 12.5 10 17 19 7"/>
+    </svg>
+  )
+}
+
+function LockIcon({ size = 14 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+    </svg>
+  )
+}
+
+function ArrowIcon({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 12h14M13 6l6 6-6 6"/>
+    </svg>
+  )
+}
+
+function StatCard({ label, value, live }) {
+  return (
+    <div style={{
+      background: 'var(--surface)', border: '1px solid var(--line)',
+      borderRadius: 18, padding: 20,
+      opacity: live ? 1 : 0.55,
+      transition: 'opacity .5s',
+    }}>
+      <div style={{
+        fontSize: 12, color: 'var(--ink-soft)', marginBottom: 9,
+        display: 'flex', alignItems: 'center', gap: 7,
+      }}>
+        {!live && <LockIcon />}
+        {label}
+      </div>
+      <div style={{
+        fontWeight: 600, fontSize: 30, letterSpacing: '-0.03em', lineHeight: 1,
+        color: live ? 'var(--ink)' : 'var(--ink-faint)',
+      }}>
+        {live ? value : '—'}
+      </div>
+      <div style={{
+        fontSize: 11.5, marginTop: 9, fontWeight: 500,
+        color: live ? 'var(--success)' : 'var(--ink-faint)',
+      }}>
+        {live ? 'pronto para começar' : 'após ativar o bot'}
+      </div>
+    </div>
+  )
+}
+
+function MotorCard({ icon, title, isPro, activeSub, inactiveSub, href, live }) {
+  return (
+    <Link href={live ? href : '#'} style={{
+      display: 'flex', alignItems: 'center', gap: 14,
+      background: 'var(--surface)', border: '1px solid var(--line)',
+      borderRadius: 18, padding: 20, textDecoration: 'none',
+      opacity: live ? 1 : 0.55, transition: 'opacity .5s',
+      pointerEvents: live ? 'auto' : 'none',
+    }}>
+      <div style={{
+        width: 42, height: 42, borderRadius: 12, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: live
+          ? 'color-mix(in oklab, var(--accent) 22%, var(--surface))'
+          : 'var(--bg-soft)',
+        color: live ? 'var(--accent-strong)' : 'var(--ink-faint)',
+      }}>
+        {icon}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--ink)' }}>{title}</span>
+          {isPro && (
+            <span style={{
+              fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em',
+              padding: '2px 6px', borderRadius: 999,
+              background: 'color-mix(in oklab, var(--accent-2) 70%, var(--surface))',
+              color: 'var(--ink)', border: '1px solid var(--line)',
+            }}>PRO</span>
+          )}
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            fontSize: 11.5, fontWeight: 600,
+            color: live ? 'var(--success)' : 'var(--ink-faint)',
+          }}>
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: live ? 'var(--success)' : 'var(--ink-faint)',
+            }} />
+            {live ? 'ativo' : 'aguardando'}
+          </span>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 3 }}>
+          {live ? activeSub : inactiveSub}
+        </div>
+      </div>
+      {live
+        ? <ArrowIcon size={16} />
+        : <LockIcon size={14} />}
+    </Link>
+  )
+}
 
 export default function InicioPage() {
-  const [status, setStatus] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState('')
-
-  async function fetchStatus() {
-    setLoadError('')
-    setLoading(true)
-    try {
-      const data = await api.dashboardStatus()
-      setStatus(data)
-    } catch {
-      setLoadError('Não foi possível carregar o status agora. Verifique sua conexão e tente novamente.')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const [activated, setActivated] = useState(false)
+  const [queue, setQueue] = useState(null)
 
   useEffect(() => {
-    let active = true
+    if (!activated) return
     api.dashboardStatus()
-      .then((data) => { if (active) setStatus(data) })
-      .catch(() => { if (active) setLoadError('Não foi possível carregar o status agora. Verifique sua conexão e tente novamente.') })
-      .finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
-  }, [])
-
-  const completedCount = useMemo(
-    () => STEPS.filter((step) => status?.[step.key]).length,
-    [status],
-  )
-  const allOk = status && completedCount === STEPS.length
-  const nextStep = status ? STEPS.find((step) => !status?.[step.key]) : null
-  const progressPercent = Math.round((completedCount / STEPS.length) * 100)
-  const queue = status?.queue
-
-  if (loading) return <LoadingState message="Carregando status do bot..." />
+      .then(d => setQueue(d?.queue ?? null))
+      .catch(() => {})
+  }, [activated])
 
   return (
-    <div className="max-w-lg">
-      <h2 className="text-2xl font-bold text-gray-800 mb-1">Checklist de ativação</h2>
-      <p className="text-gray-500 text-sm mb-6">Complete estes passos para deixar o bot pronto para converter e postar links.</p>
+    <div style={{ maxWidth: 860, margin: '0 auto' }}>
+      {/* Checklist — some when bot is activated */}
+      {!activated && (
+        <ActivationChecklist onActivated={() => setActivated(true)} />
+      )}
 
-      {loadError && (
-        <div className="mb-4 space-y-3">
-          <Alert type="error" title="Falha ao carregar status" message={`${loadError} Se continuar, confira sua conexão e tente recarregar o painel.`} />
-          <button onClick={fetchStatus} className="text-sm bg-gray-800 text-white px-3 py-2 rounded-lg hover:bg-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2">Tentar novamente</button>
+      {/* Bot active banner */}
+      {activated && (
+        <div style={{
+          background: 'var(--ink)', color: 'white',
+          borderRadius: 18, padding: 28, marginBottom: 22,
+          border: '1px solid var(--ink)',
+          position: 'relative', overflow: 'hidden',
+          animation: 'ck-fadeup .5s ease both',
+        }}>
+          <div style={{
+            position: 'absolute', right: -40, top: -40,
+            width: 220, height: 220, borderRadius: '50%',
+            background: 'var(--accent-strong)', filter: 'blur(60px)', opacity: .5,
+          }} />
+          <div style={{
+            position: 'relative', display: 'flex',
+            alignItems: 'center', gap: 18, flexWrap: 'wrap',
+          }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: 14,
+              background: 'var(--accent-strong)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              <CheckIcon size={26} />
+            </div>
+            <div style={{ flex: '1 1 280px' }}>
+              <div style={{ fontSize: 19, fontWeight: 600, letterSpacing: '-0.015em' }}>
+                Bot ativo e configurado
+              </div>
+              <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.7)', marginTop: 4 }}>
+                O motor está ligado. Assim que a primeira oferta aparecer nos seus grupos, ela é postada aqui automaticamente.
+              </div>
+            </div>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              fontSize: 13, fontWeight: 600, padding: '8px 14px',
+              borderRadius: 999, background: 'rgba(255,255,255,0.1)', color: 'white',
+            }}>
+              <span style={{
+                width: 7, height: 7, borderRadius: '50%', background: 'var(--success)',
+                boxShadow: '0 0 0 3px rgba(46,160,67,0.35)',
+                animation: 'ck-pulse 1.8s ease-in-out infinite',
+              }} />
+              bot ouvindo seus grupos
+            </span>
+          </div>
         </div>
       )}
 
-      <div className={`rounded-2xl p-4 mb-6 text-sm font-semibold ${allOk ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-yellow-50 text-yellow-800 border border-yellow-200'}`}>
-        <div className="flex items-center justify-between gap-3">
-          <span>{allOk ? '🤖 Checklist completo: seu bot já teve um envio validado.' : '⚠️ Siga a ordem abaixo para configurar e testar sua operação sem depender do suporte.'}</span>
-          <span className="shrink-0 rounded-full bg-white/70 px-2 py-1 text-xs">{completedCount} de {STEPS.length}</span>
+      {/* Motores de automação */}
+      <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--ink-faint)' }}>
+          Motores de automação
         </div>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/70" aria-label={`${completedCount} de ${STEPS.length} passos concluídos`}>
-          <div className={`h-full rounded-full ${allOk ? 'bg-green-600' : 'bg-amber-500'}`} style={{ width: `${progressPercent}%` }} />
-        </div>
-        {!allOk && nextStep && (
-          <Link href={nextStep.href} className="mt-3 inline-flex rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2">
-            Próximo passo: {nextStep.title}
-          </Link>
-        )}
-        {allOk && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Link href="/dashboard/envio" className="rounded-lg bg-green-700 px-3 py-2 text-xs font-semibold text-white hover:bg-green-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">Enviar mensagem agora</Link>
-            <Link href="/dashboard/logs" className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-green-800 ring-1 ring-green-200 hover:bg-green-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">Ver logs</Link>
+        {!activated && (
+          <div style={{ fontSize: 12.5, color: 'var(--ink-faint)', display: 'flex', alignItems: 'center', gap: 7 }}>
+            <LockIcon /> ligam quando o bot estiver ativo
           </div>
         )}
       </div>
 
-      {queue && (
-        <div className="bg-white rounded-2xl shadow p-5 mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-gray-800 text-sm">Saúde operacional</h3>
-            <span className={`text-xs px-2 py-1 rounded-full ${queue.queueSize > 0 ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
-              {queue.queueSize > 0 ? 'Fila ativa' : 'Fila vazia'}
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div className="rounded-xl bg-gray-50 p-3"><p className="text-gray-400">Fila atual</p><p className="text-lg font-bold text-gray-800">{queue.queueSize}/{queue.maxSize}</p></div>
-            <div className="rounded-xl bg-gray-50 p-3"><p className="text-gray-400">Latência média</p><p className="text-lg font-bold text-gray-800">{queue.avgLatencyMs ?? 0}ms</p></div>
-            <div className="rounded-xl bg-green-50 p-3"><p className="text-green-600">Sucessos</p><p className="text-lg font-bold text-green-700">{queue.successTotal ?? 0}</p></div>
-            <div className="rounded-xl bg-red-50 p-3"><p className="text-red-600">Erros</p><p className="text-lg font-bold text-red-700">{queue.errorTotal ?? 0}</p></div>
-          </div>
-          {queue.lastError && <p className="text-xs text-red-500 mt-3">Último erro: {queue.lastError}</p>}
-        </div>
-      )}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 28 }}>
+        <MotorCard
+          icon={
+            <svg width={20} height={20} viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 7a5 5 0 0 1 5-5h4"/><path d="M7 12l-4-5 5-2"/>
+              <path d="M21 17a5 5 0 0 1-5 5h-4"/><path d="M17 12l4 5-5 2"/>
+            </svg>
+          }
+          title="Espelhamento"
+          isPro
+          activeSub="Repostando ofertas dos grupos que você monitora."
+          inactiveSub="Reposta ofertas dos grupos que você monitora."
+          href="/dashboard/grupos"
+          live={activated}
+        />
+        <MotorCard
+          icon={
+            <svg width={20} height={20} viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="10" cy="10" r="7"/><path d="M21 21l-4.3-4.3"/>
+              <path d="M10.5 6.5 8.5 10.2h3L9.5 13.8"/>
+            </svg>
+          }
+          title="Ofertas automáticas"
+          isPro
+          activeSub="Garimpando ofertas por tema nas lojas, sozinho."
+          inactiveSub="Garimpa ofertas por tema nas lojas, sem grupo de origem."
+          href="/dashboard/ofertas-automaticas"
+          live={activated}
+        />
+      </div>
 
-      <div className="flex flex-col gap-3">
-        {STEPS.map((step) => {
-          const ok = status?.[step.key]
-          const isNext = nextStep?.key === step.key
-          return (
-            <Link
-              key={step.key}
-              href={step.href}
-              aria-label={`${step.title}: ${ok ? 'concluído' : 'pendente'}. ${ok ? step.ok : step.pending}`}
-              className={`w-full text-left bg-white rounded-2xl shadow p-5 flex items-start gap-4 hover:shadow-md transition border-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 ${ok ? 'border-green-200' : isNext ? 'border-amber-400 ring-2 ring-amber-100' : 'border-amber-200'}`}
-            >
-              <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${ok ? 'bg-green-500' : 'bg-amber-500'}`} aria-hidden="true">
-                {ok ? '✓' : '!'}
-              </div>
-              <div className="flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-semibold text-gray-800 text-sm">{step.title}</p>
-                  {isNext && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">Próximo passo</span>}
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${ok ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'}`}>{ok ? 'Concluído' : 'Pendente'}</span>
-                </div>
-                <p className={`text-xs mt-1 ${ok ? 'text-gray-400' : 'text-amber-700'}`}>{ok ? step.ok : step.pending}</p>
-                <p className="text-xs mt-1 text-gray-500">{step.description}</p>
-              </div>
+      {/* Prévia do painel */}
+      <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--ink-faint)' }}>
+          {activated ? 'Seu painel' : 'Prévia do seu painel'}
+        </div>
+        {!activated && (
+          <div style={{ fontSize: 12.5, color: 'var(--ink-faint)', display: 'flex', alignItems: 'center', gap: 7 }}>
+            <LockIcon /> desbloqueia quando o bot estiver ativo
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginBottom: 24 }}>
+        <StatCard label="Postados hoje" value={queue?.successTotal ?? 0} live={activated} />
+        <StatCard label="Na fila agora" value={queue?.queueSize ?? 0} live={activated} />
+        <StatCard label="Taxa de sucesso" value={queue?.successTotal ? `${Math.round((queue.successTotal / (queue.successTotal + (queue.errorTotal ?? 0))) * 100)}%` : '—'} live={activated} />
+        <StatCard label="Latência média" value={queue?.avgLatencyMs ? `${queue.avgLatencyMs}ms` : '0ms'} live={activated} />
+      </div>
+
+      {/* Últimos envios */}
+      <div style={{
+        background: 'var(--surface)', border: '1px solid var(--line)',
+        borderRadius: 18, overflow: 'hidden',
+        opacity: activated ? 1 : 0.55, transition: 'opacity .5s',
+      }}>
+        <div style={{
+          padding: '18px 24px', borderBottom: '1px solid var(--line)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <div style={{ fontSize: 15, fontWeight: 600 }}>Últimos envios</div>
+          {activated && (
+            <Link href="/dashboard/logs" style={{
+              fontSize: 12.5, fontWeight: 600, color: 'var(--accent-strong)',
+              textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 5,
+            }}>
+              Ver todos <ArrowIcon size={14} />
             </Link>
-          )
-        })}
+          )}
+          {!activated && <LockIcon />}
+        </div>
+        <div style={{ padding: '48px 24px', textAlign: 'center' }}>
+          <div style={{
+            width: 52, height: 52, borderRadius: 15, margin: '0 auto 16px',
+            background: 'var(--bg-soft)', color: 'var(--ink-faint)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <svg width={24} height={24} viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+              {activated
+                ? <><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></>
+                : <><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></>}
+            </svg>
+          </div>
+          <div style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--ink)' }}>
+            {activated ? 'Aguardando a primeira oferta' : 'Nenhum envio ainda'}
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 6, maxWidth: 380, marginInline: 'auto', lineHeight: 1.5 }}>
+            {activated
+              ? 'O bot está ouvindo seus grupos. O primeiro produto convertido aparece aqui em instantes.'
+              : 'Conclua os primeiros passos acima e o bot começa a postar ofertas sozinho.'}
+          </p>
+        </div>
       </div>
     </div>
   )

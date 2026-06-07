@@ -1,12 +1,18 @@
 import dbDefault from '../../db.js'
-import { runAutomation } from '../../offerAutomation/dispatcher.js'
+import { runAutomation, searchOffersPreview } from '../../offerAutomation/dispatcher.js'
 import { normalizeDailyRunTime } from '../../offerAutomation/schedule.js'
+import { parseCredentialData } from '../../credentialHealth.js'
 
 const VALID_INTERVALS = [15, 30, 45, 60, 120, 240, 360, 720, 1440]
 const MAX_OFFERS_PER_SEND = 5
 const DEFAULT_TEMPLATE_KEY = 'automatico_classico'
 const TEMPLATE_KEY_RE = /^[a-zA-Z0-9_-]{1,80}$/
 const DAILY_INTERVAL_MINUTES = 1440
+// Valores aceitos pela API productOfferV2 da Shopee (doc oficial BR):
+// sortType 1=Relevância 2=Mais vendidos 3=Maior preço 4=Menor preço 5=Maior comissão
+// listType 0=Recomendados 1=Maior comissão 2=Melhor desempenho
+const VALID_SORT_TYPES = [1, 2, 3, 4, 5]
+const VALID_LIST_TYPES = [0, 1, 2]
 
 function normalizeTemplateKey(value) {
   const key = String(value ?? DEFAULT_TEMPLATE_KEY).trim() || DEFAULT_TEMPLATE_KEY
@@ -25,7 +31,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
   })
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const { destGroupJid, destGroupName, keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, sortType, prioritizeAMS, isKeySeller, templateKey } = req.body ?? {}
+    const { destGroupJid, destGroupName, keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, sortType, listType, prioritizeAMS, isKeySeller, templateKey } = req.body ?? {}
 
     if (!keyword?.trim()) return reply.code(400).send({ error: 'Palavra-chave obrigatória' })
     if (!destGroupJid) return reply.code(400).send({ error: 'Grupo de destino obrigatório' })
@@ -41,10 +47,13 @@ export async function offerAutomationRoutes(app, opts = {}) {
     if (!perSend || perSend < 1 || perSend > MAX_OFFERS_PER_SEND) {
       return reply.code(400).send({ error: `offersPerSend deve ser entre 1 e ${MAX_OFFERS_PER_SEND}` })
     }
-    const VALID_SORT_TYPES = [2, 5]
     const parsedSortType = Number(sortType ?? 2)
     if (!VALID_SORT_TYPES.includes(parsedSortType)) {
-      return reply.code(400).send({ error: 'sortType inválido. Use 2 (mais vendidos) ou 5 (maior comissão)' })
+      return reply.code(400).send({ error: 'sortType inválido. Use 1 (relevância), 2 (mais vendidos), 3 (maior preço), 4 (menor preço) ou 5 (maior comissão)' })
+    }
+    const parsedListType = Number(listType ?? 1)
+    if (!VALID_LIST_TYPES.includes(parsedListType)) {
+      return reply.code(400).send({ error: 'listType inválido. Use 0 (recomendados), 1 (maior comissão) ou 2 (melhor desempenho)' })
     }
     const parsedTemplateKey = normalizeTemplateKey(templateKey)
     if (!parsedTemplateKey) return reply.code(400).send({ error: 'templateKey inválido' })
@@ -61,6 +70,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
         offersPerSend: perSend,
         minDiscountPct: Number(minDiscountPct) || 0,
         sortType: parsedSortType,
+        listType: parsedListType,
         prioritizeAMS: Boolean(prioritizeAMS ?? false),
         isKeySeller: Boolean(isKeySeller ?? false),
       },
@@ -73,7 +83,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
     })
     if (!existing) return reply.code(404).send({ error: 'Automação não encontrada' })
 
-    const { keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, enabled, destGroupJid, destGroupName, prioritizeAMS, templateKey } = req.body ?? {}
+    const { keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, enabled, destGroupJid, destGroupName, prioritizeAMS, isKeySeller, sortType, listType, templateKey } = req.body ?? {}
     const updates = {}
 
     if (keyword !== undefined) {
@@ -112,6 +122,17 @@ export async function offerAutomationRoutes(app, opts = {}) {
     }
     if (enabled !== undefined) updates.enabled = Boolean(enabled)
     if (prioritizeAMS !== undefined) updates.prioritizeAMS = Boolean(prioritizeAMS)
+    if (isKeySeller !== undefined) updates.isKeySeller = Boolean(isKeySeller)
+    if (sortType !== undefined) {
+      const st = Number(sortType)
+      if (!VALID_SORT_TYPES.includes(st)) return reply.code(400).send({ error: 'sortType inválido' })
+      updates.sortType = st
+    }
+    if (listType !== undefined) {
+      const lt = Number(listType)
+      if (!VALID_LIST_TYPES.includes(lt)) return reply.code(400).send({ error: 'listType inválido' })
+      updates.listType = lt
+    }
     if (templateKey !== undefined) {
       const parsedTemplateKey = normalizeTemplateKey(templateKey)
       if (!parsedTemplateKey) return reply.code(400).send({ error: 'templateKey inválido' })
@@ -140,6 +161,51 @@ export async function offerAutomationRoutes(app, opts = {}) {
       return { ok: true, result }
     } catch (err) {
       return { ok: true, result: { error: err.message } }
+    }
+  })
+
+  // Dry-run da busca a partir dos parâmetros escolhidos no formulário, SEM
+  // enviar nada e SEM precisar de automação salva. Devolve o JSON do que a
+  // busca traria para o usuário visualizar antes de criar/disparar.
+  app.post('/search-preview', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const { keyword, offersPerSend, minDiscountPct, sortType, listType, prioritizeAMS, isKeySeller, page } = req.body ?? {}
+
+    if (!keyword?.trim()) return reply.code(400).send({ error: 'Palavra-chave obrigatória' })
+    const perSend = Number(offersPerSend ?? 1)
+    if (!perSend || perSend < 1 || perSend > MAX_OFFERS_PER_SEND) {
+      return reply.code(400).send({ error: `offersPerSend deve ser entre 1 e ${MAX_OFFERS_PER_SEND}` })
+    }
+    const parsedSortType = Number(sortType ?? 2)
+    if (!VALID_SORT_TYPES.includes(parsedSortType)) return reply.code(400).send({ error: 'sortType inválido' })
+    const parsedListType = Number(listType ?? 1)
+    if (!VALID_LIST_TYPES.includes(parsedListType)) return reply.code(400).send({ error: 'listType inválido' })
+    const pct = Number(minDiscountPct) || 0
+    if (pct < 0 || pct > 100) return reply.code(400).send({ error: 'minDiscountPct deve estar entre 0 e 100' })
+
+    const credRow = await db.credential.findUnique({
+      where: { userId_platform: { userId: req.user.sub, platform: 'shopee' } },
+    })
+    if (!credRow) return reply.code(400).send({ error: 'Credenciais Shopee não configuradas' })
+    const creds = parseCredentialData(credRow.data)
+    if (!creds?.appId || !creds?.secretKey) return reply.code(400).send({ error: 'Credenciais Shopee inválidas ou incompletas' })
+
+    try {
+      const preview = await searchOffersPreview({
+        params: {
+          keyword: keyword.trim(),
+          offersPerSend: perSend,
+          minDiscountPct: pct,
+          sortType: parsedSortType,
+          listType: parsedListType,
+          page: Number(page) || 1,
+          prioritizeAMS: Boolean(prioritizeAMS ?? false),
+          isKeySeller: Boolean(isKeySeller ?? false),
+        },
+        creds,
+      })
+      return { ok: true, ...preview }
+    } catch (err) {
+      return reply.code(200).send({ ok: false, error: err.message })
     }
   })
 }

@@ -9,6 +9,29 @@ const HTML_FETCH_TIMEOUT_MS = Number(process.env.PRODUCT_INFO_TIMEOUT_MS) || 8_0
 const HTML_MAX_BYTES = Number(process.env.PRODUCT_INFO_MAX_BYTES) || 2 * 1024 * 1024
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
+let _mlAppTokenCache = { token: null, expiresAt: 0 }
+async function getMlAppToken() {
+  const clientId = process.env.ML_CLIENT_ID
+  const clientSecret = process.env.ML_CLIENT_SECRET
+  if (!clientId || !clientSecret) return null
+  if (_mlAppTokenCache.token && Date.now() < _mlAppTokenCache.expiresAt) return _mlAppTokenCache.token
+  try {
+    const res = await fetch('https://api.mercadolibre.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `grant_type=client_credentials&client_id=${clientId}&client_secret=${clientSecret}`,
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) return null
+    const data = await res.json().catch(() => null)
+    if (!data?.access_token) return null
+    _mlAppTokenCache = { token: data.access_token, expiresAt: Date.now() + (data.expires_in - 300) * 1000 }
+    return _mlAppTokenCache.token
+  } catch {
+    return null
+  }
+}
+
 const JSON_LD_RE = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi
 const OG_TITLE_RE = [
   /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i,
@@ -171,6 +194,25 @@ function extractFromJsonLd(html) {
   return null
 }
 
+const BOGUS_SCRAPE_TITLES = [
+  'amazon.com.br',
+  'mercado livre',
+  'mercado livre brasil',
+  'shopee brasil',
+  'shopee',
+  'página não encontrada',
+  'acesso negado',
+  'access denied',
+  'robot check',
+  '404',
+]
+
+function isBogusScrapeTitle(title) {
+  if (!title) return true
+  const lower = title.trim().toLowerCase()
+  return BOGUS_SCRAPE_TITLES.some(bad => lower === bad || lower.startsWith(bad + ' |') || lower.startsWith(bad + ':'))
+}
+
 function extractTitleFallback(html) {
   if (!html) return ''
   for (const re of OG_TITLE_RE) {
@@ -211,18 +253,71 @@ async function fetchMercadoLivreProductInfo(url, { timeoutMs = HTML_FETCH_TIMEOU
   if (!productId) return null
   const endpoint = `https://api.mercadolibre.com/products/${productId}`
   try {
+    const appToken = await getMlAppToken()
+    const headers = { 'User-Agent': BROWSER_UA, Accept: 'application/json,text/plain,*/*' }
+    if (appToken) headers['Authorization'] = `Bearer ${appToken}`
+    const res = await fetch(endpoint, { headers, signal: AbortSignal.timeout(timeoutMs), redirect: 'follow' })
+    if (!res.ok) return null
+    const payload = await res.json().catch(() => null)
+    const name = normalizeText(payload?.name || '')
+    const price = toPriceString(payload?.buy_box_winner?.price || payload?.buy_box_winner?.sale_price?.amount)
+    if (!name && !price) return null
+    return { title: name, oldPrice: '', newPrice: price }
+  } catch {
+    return null
+  }
+}
+
+async function getMlUserToken(mlCredentials) {
+  if (!mlCredentials?.oauthRefreshToken) return null
+  if (mlCredentials.oauthAccessToken && Date.now() < (mlCredentials.oauthTokenExpiry || 0)) {
+    return mlCredentials.oauthAccessToken
+  }
+  const clientId = process.env.ML_CLIENT_ID
+  const clientSecret = process.env.ML_CLIENT_SECRET
+  if (!clientId || !clientSecret) return null
+  try {
+    const res = await fetch('https://api.mercadolibre.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: mlCredentials.oauthRefreshToken,
+      }).toString(),
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) return null
+    const data = await res.json().catch(() => null)
+    return data?.access_token || null
+  } catch {
+    return null
+  }
+}
+
+function parseMercadoLivreItemIdFromUrl(url) {
+  const m = String(url || '').match(/\/(MLB[0-9]+)/i)
+  return m?.[1]?.toUpperCase() || null
+}
+
+async function fetchMercadoLivreItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS, mlCredentials = null } = {}) {
+  if (parseMercadoLivreProductIdFromUrl(url)) return null
+  const itemId = parseMercadoLivreItemIdFromUrl(url)
+  if (!itemId) return null
+  const endpoint = `https://api.mercadolibre.com/items/${itemId}`
+  try {
+    const userToken = await getMlUserToken(mlCredentials)
+    if (!userToken) return null
     const res = await fetch(endpoint, {
-      headers: {
-        'User-Agent': BROWSER_UA,
-        Accept: 'application/json,text/plain,*/*',
-      },
+      headers: { 'User-Agent': BROWSER_UA, Accept: 'application/json,text/plain,*/*', Authorization: `Bearer ${userToken}` },
       signal: AbortSignal.timeout(timeoutMs),
       redirect: 'follow',
     })
     if (!res.ok) return null
     const payload = await res.json().catch(() => null)
-    const name = normalizeText(payload?.name || '')
-    const price = toPriceString(payload?.buy_box_winner?.price || payload?.buy_box_winner?.sale_price?.amount)
+    const name = normalizeText(payload?.title || '')
+    const price = toPriceString(payload?.price)
     if (!name && !price) return null
     return { title: name, oldPrice: '', newPrice: price }
   } catch {
@@ -264,7 +359,8 @@ function extractAmazonTitleAndPrice(html) {
 
 function parseShopeeIdsFromUrl(url) {
   const raw = String(url || '')
-  const m = raw.match(/-i\.(\d+)\.(\d+)(?:[/?#]|$)/) || raw.match(/\/product\/(\d+)\/(\d+)(?:[/?#]|$)/)
+  const m = raw.match(/-i\.(\d+)\.(\d+)(?:[/?#]|$)/)
+    || raw.match(/\/(?:product|opaanlp)\/(\d+)\/(\d+)(?:[/?#]|$)/)
   if (!m) return null
   return { shopId: m[1], itemId: m[2] }
 }
@@ -367,12 +463,18 @@ async function fetchShopeeItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS, sho
   const ids = parseShopeeIdsFromUrl(canonical)
   if (!ids) return null
   const endpoint = `https://shopee.com.br/api/v4/item/get?itemid=${ids.itemId}&shopid=${ids.shopId}`
+  // Shopee v4 API exige csrf token para não retornar error 90309999.
+  // SPC_F é o fingerprint de sessão anônima; csrftoken deve corresponder.
+  const spcToken = Array.from({ length: 32 }, () => Math.floor(Math.random() * 36).toString(36)).join('')
   try {
     const res = await fetch(endpoint, {
       headers: {
         'User-Agent': BROWSER_UA,
         Accept: 'application/json,text/plain,*/*',
-        Referer: String(canonical || 'https://shopee.com.br/'),
+        Referer: `https://shopee.com.br/product/${ids.shopId}/${ids.itemId}`,
+        Cookie: `SPC_F=${spcToken}; csrftoken=${spcToken}`,
+        'x-csrftoken': spcToken,
+        'x-api-source': 'pc',
       },
       signal: AbortSignal.timeout(timeoutMs),
       redirect: 'follow',
@@ -574,10 +676,15 @@ export async function fetchProductInfo(url, opts = {}) {
   const mercadoLivreApiFallback = hasHtmlTitleAndPrice
     ? null
     : await fetchMercadoLivreProductInfo(finalUrl || url, opts)
+  const mlItemApiFallback = (hasHtmlTitleAndPrice || mercadoLivreApiFallback)
+    ? null
+    : await fetchMercadoLivreItemInfo(finalUrl || url, opts)
 
-  const titleFromUrl = extractTitleFromUrl(finalUrl || url)
-  const title = jsonLd?.title || mlHtml?.title || amazonFallback?.title || shopeeApiFallback?.title || mercadoLivreApiFallback?.title || titleFromUrl || extractTitleFallback(html)
-  const newPrice = jsonLd?.newPrice || mlHtml?.newPrice || mlLanding?.newPrice || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || shopeeJsonRange?.newPrice || shopeeHtmlRange?.newPrice || mercadoLivreApiFallback?.newPrice || extractMetaPrice(html) || extractShopeePriceFromHtml(html)
-  const oldPrice = jsonLd?.oldPrice || mlHtml?.oldPrice || mlLanding?.oldPrice || shopeeApiFallback?.oldPrice || shopeeJsonRange?.oldPrice || shopeeHtmlRange?.oldPrice || mercadoLivreApiFallback?.oldPrice || ''
+  const titleFromUrl = extractTitleFromUrl(finalUrl || url) || extractTitleFromUrl(resolvedUrl) || extractTitleFromUrl(url)
+  const rawFallbackTitle = extractTitleFallback(html)
+  const fallbackTitle = isBogusScrapeTitle(rawFallbackTitle) ? null : rawFallbackTitle
+  const title = jsonLd?.title || mlHtml?.title || amazonFallback?.title || shopeeApiFallback?.title || mercadoLivreApiFallback?.title || mlItemApiFallback?.title || titleFromUrl || fallbackTitle
+  const newPrice = jsonLd?.newPrice || mlHtml?.newPrice || mlLanding?.newPrice || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || shopeeJsonRange?.newPrice || shopeeHtmlRange?.newPrice || mercadoLivreApiFallback?.newPrice || mlItemApiFallback?.newPrice || extractMetaPrice(html) || extractShopeePriceFromHtml(html)
+  const oldPrice = jsonLd?.oldPrice || mlHtml?.oldPrice || mlLanding?.oldPrice || shopeeApiFallback?.oldPrice || shopeeJsonRange?.oldPrice || shopeeHtmlRange?.oldPrice || mercadoLivreApiFallback?.oldPrice || mlItemApiFallback?.oldPrice || ''
   return { title, oldPrice, newPrice, finalUrl }
 }
