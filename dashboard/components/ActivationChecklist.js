@@ -64,7 +64,7 @@ const STEPS = [
     desc: 'Escaneie o QR code para vincular sua conta ao bot.',
     cta: 'Conectar',
     done: 'WhatsApp conectado',
-    href: '/dashboard',
+    href: '/painel/whatsapp',
   },
   {
     key: 'hasMonitorGroup',
@@ -74,7 +74,7 @@ const STEPS = [
     desc: 'De onde o bot vai espelhar as ofertas que aparecem.',
     cta: 'Adicionar grupo',
     done: '1 grupo monitorado',
-    href: '/dashboard/grupos',
+    href: '/painel/grupos',
   },
   {
     key: 'hasPostGroup',
@@ -84,7 +84,7 @@ const STEPS = [
     desc: 'Para onde o bot vai postar as ofertas convertidas.',
     cta: 'Adicionar grupo',
     done: '1 grupo de destino',
-    href: '/dashboard/grupos',
+    href: '/painel/grupos',
   },
   {
     key: 'hasCredentials',
@@ -94,7 +94,7 @@ const STEPS = [
     desc: 'Para que toda comissão das vendas fique com você.',
     cta: 'Cadastrar IDs',
     done: 'IDs cadastradas',
-    href: '/dashboard/credenciais',
+    href: '/painel/ids-afiliada',
   },
 ]
 

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { usePainel, usePainelHeader } from './PainelShell'
+import { ActivationChecklist } from '@/components/ActivationChecklist'
 
 function greeting(hour) {
   if (hour < 12) return 'Bom dia'
@@ -133,6 +134,7 @@ export default function PainelPage() {
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 1080, margin: '0 auto' }}>
+      <ActivationChecklist />
       {/* Seletor de período */}
       <div className="pnl-chips">
         {PERIODS.map((p) => (
