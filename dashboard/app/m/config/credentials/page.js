@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { MobileShell } from '@/components/mobile/MobileShell'
 import { MobileLoadingCard, MobileErrorCard } from '@/components/mobile/MobileAsyncState'
 import { cfgStyles } from '@/components/mobile/mobileStyles'
@@ -10,6 +11,7 @@ import { api } from '@/lib/api'
 
 function PlatformForm({ platform, credential, onSaved }) {
   const credentialData = credential.data || {}
+  const [renderedAt] = useState(() => Date.now())
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(credentialData)
   const [saving, setSaving] = useState(false)
@@ -104,19 +106,20 @@ function PlatformForm({ platform, credential, onSaved }) {
       {platform.id === 'mercadolivre' && (
         <div style={{marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--line)'}}>
           <div style={{fontSize: 11, color: 'var(--ink-soft)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em'}}>OAuth (API de Itens)</div>
-          {credentialData.oauthAccessToken && Date.now() < (credentialData.oauthTokenExpiry || 0)
+          {credentialData.oauthAccessToken && renderedAt < (credentialData.oauthTokenExpiry || 0)
             ? (
               <span style={{display:'inline-flex', alignItems:'center', gap: 4, fontSize: 12, color: 'var(--success)', fontWeight: 600, background: 'color-mix(in srgb, var(--success) 10%, transparent)', padding: '4px 10px', borderRadius: 999}}>
                 OAuth conectado ✓
               </span>
             )
             : (
-              <a
+              <Link
                 href="/api/auth/ml-oauth/start"
+                prefetch={false}
                 style={{display:'inline-flex', alignItems:'center', gap: 4, fontSize: 12, color: 'white', fontWeight: 600, background: 'var(--ink)', padding: '8px 14px', borderRadius: 999, textDecoration: 'none'}}
               >
                 Conectar ML via OAuth
-              </a>
+              </Link>
             )
           }
         </div>
@@ -131,13 +134,13 @@ export default function CredentialsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
-  const [mlOAuthMsg, setMlOAuthMsg] = useState('')
-
-  useEffect(() => {
+  const [mlOAuthMsg] = useState(() => {
+    if (typeof window === 'undefined') return ''
     const mlOAuthParam = new URLSearchParams(window.location.search).get('ml_oauth')
-    if (mlOAuthParam === 'success') setMlOAuthMsg('ML conectado via OAuth ✓')
-    else if (mlOAuthParam === 'error') setMlOAuthMsg('Falha ao conectar ML OAuth')
-  }, [])
+    if (mlOAuthParam === 'success') return 'ML conectado via OAuth ✓'
+    if (mlOAuthParam === 'error') return 'Falha ao conectar ML OAuth'
+    return ''
+  })
 
   useEffect(() => {
     let active = true
