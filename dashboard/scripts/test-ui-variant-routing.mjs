@@ -72,9 +72,19 @@ test('web em /painel não redireciona', () => {
   assert.equal(resolveAppRedirect({ pathname: '/painel/plano', variant: 'web' }), null)
 })
 
-test('web em /dashboard NÃO redireciona na Fase 1 (legado segue como fallback)', () => {
-  assert.equal(resolveAppRedirect({ pathname: '/dashboard/logs', variant: 'web' }), null)
-  assert.equal(resolveAppRedirect({ pathname: '/dashboard/preservacao', variant: 'web' }), null)
+test('web em /dashboard/* (legado aposentado) redireciona para /painel', () => {
+  assert.equal(resolveAppRedirect({ pathname: '/dashboard/logs', variant: 'web' }), '/painel/envios')
+  assert.equal(resolveAppRedirect({ pathname: '/dashboard/preservacao', variant: 'web' }), '/painel/preservacao')
+  assert.equal(resolveAppRedirect({ pathname: '/dashboard/envio', variant: 'web' }), '/painel/envio')
+  assert.equal(resolveAppRedirect({ pathname: '/dashboard/gerar-oferta', variant: 'web' }), '/painel/criar-oferta')
+  assert.equal(resolveAppRedirect({ pathname: '/dashboard', variant: 'web' }), '/painel/whatsapp')
+  assert.equal(resolveAppRedirect({ pathname: '/dashboard/pagamento/sucesso', variant: 'web' }), '/painel/pagamento/sucesso')
+})
+
+test('web em /dashboard/* sem mapeamento específico cai na home legada (whatsapp)', () => {
+  // /dashboard (bare) era o hub de conexão; serve de catch-all para sub-rotas
+  // legadas sem mapeamento próprio (ex.: /dashboard/planos, que redirecionava).
+  assert.equal(resolveAppRedirect({ pathname: '/dashboard/planos', variant: 'web' }), '/painel/whatsapp')
 })
 
 test('homes trocam corretamente entre fronts', () => {
@@ -114,6 +124,8 @@ test('sem loop: aplicar o redirect duas vezes é estável', () => {
     { pathname: '/m/op/offer', variant: 'web' },
     { pathname: '/m/config/preservacao', variant: 'web' },
     { pathname: '/m/op/espelhar', variant: 'web' },
+    { pathname: '/dashboard/logs', variant: 'web' },
+    { pathname: '/dashboard/pagamento/sucesso', variant: 'web' },
   ]
   for (const c of cases) {
     const first = resolveAppRedirect(c)

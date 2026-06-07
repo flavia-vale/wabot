@@ -90,7 +90,7 @@ export default function SupportPage() {
           <section className="rounded-2xl bg-gray-50 p-5">
             <h2 className="text-xl font-bold text-gray-900">Já tem conta?</h2>
             <p className="mt-2">Entre no painel para verificar conexão, credenciais, grupos, planos e logs da sua operação.</p>
-            <Link href="/dashboard/inicio" className="mt-4 inline-flex rounded-xl bg-green-600 px-5 py-3 font-bold text-white hover:bg-green-700">
+            <Link href="/painel" className="mt-4 inline-flex rounded-xl bg-green-600 px-5 py-3 font-bold text-white hover:bg-green-700">
               Acessar painel
             </Link>
           </section>

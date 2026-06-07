@@ -12,7 +12,7 @@ const FEATURES = [
   { icon: '📸', title: 'Snapshots diários', desc: 'Histórico do estado de cada canal — 30 dias guardados.' },
 ]
 
-export function UpsellShell({ ctaHref = '/dashboard/assinaturas' }) {
+export function UpsellShell({ ctaHref = '/painel/plano' }) {
   return (
     <div className="max-w-3xl">
       <header className="mb-6">

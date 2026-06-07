@@ -34,6 +34,7 @@ export const ROUTE_MAP = [
   { feature: 'tutorial',    m: '/m/tutorial',              painel: '/painel/tutorial',           dashboard: '/dashboard/tutorial' },
   { feature: 'account',     m: '/m/account',               painel: null,                         dashboard: null },
   { feature: 'checklist',   m: '/m/checklistespelhamento', painel: '/painel/checklist',          dashboard: null },
+  { feature: 'payment',     m: null,                       painel: '/painel/pagamento/sucesso',  dashboard: '/dashboard/pagamento/sucesso' },
 ]
 
 /** Identifica a qual árvore de app um pathname pertence (ou null). */
@@ -63,12 +64,11 @@ function findFeature(pathname, tree) {
 /**
  * Decide o redirect de roteamento por device.
  *
- * Regras (Fase 1):
+ * Regras:
  * - variant `mobile` em /painel/* ou /dashboard/* → equivalente em /m (ou /m).
- * - variant `web` em /m/* → equivalente em /painel; se a tela ainda não foi
- *   portada (painel null), cai no /dashboard correspondente; senão /painel.
- * - variant `web` em /dashboard/* → SEM redirect (legado segue como fallback
- *   web até a Fase 2 aposentá-lo).
+ * - variant `web` em /m/* ou /dashboard/* → equivalente em /painel (ou /painel).
+ * - O legado /dashboard/* foi aposentado: ambas as variantes são encaminhadas
+ *   para a front canônica (mobile→/m, web→/painel).
  *
  * Retorna o pathname de destino, ou `null` quando nenhum redirect é preciso.
  * Nunca redireciona para dentro da mesma variante de destino → sem loop.
@@ -85,7 +85,13 @@ export function resolveAppRedirect({ pathname, variant }) {
   }
 
   // variant === 'web'
-  if (tree === 'painel' || tree === 'dashboard') return null
+  if (tree === 'painel') return null
+  if (tree === 'dashboard') {
+    const entry = findFeature(pathname, 'dashboard')
+    const target = entry?.painel || '/painel'
+    return target === pathname ? null : target
+  }
+  // tree === 'm'
   const entry = findFeature(pathname, 'm')
   const target = entry?.painel || entry?.dashboard || '/painel'
   return target === pathname ? null : target

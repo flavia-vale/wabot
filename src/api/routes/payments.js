@@ -564,17 +564,17 @@ export async function paymentsRoutes(app) {
     const paymentStatus = String(collection_status ?? status ?? '').trim()
 
     if (paymentStatus === 'pending') {
-      return reply.redirect(`${dashboardUrl}/dashboard/planos?status=pending`)
+      return reply.redirect(`${dashboardUrl}/painel/plano?status=pending`)
     }
 
     if (paymentStatus !== 'approved' || !mpPaymentId) {
-      return reply.redirect(`${dashboardUrl}/dashboard/planos?status=failure`)
+      return reply.redirect(`${dashboardUrl}/painel/plano?status=failure`)
     }
 
     const accessToken = getMpAccessToken()
     if (!accessToken) {
       req.log.error('MP_ACCESS_TOKEN ausente no callback de pagamento')
-      return reply.redirect(`${dashboardUrl}/dashboard/planos?status=pending`)
+      return reply.redirect(`${dashboardUrl}/painel/plano?status=pending`)
     }
 
     // Verify payment with MP API — do not trust query params alone
@@ -582,21 +582,21 @@ export async function paymentsRoutes(app) {
 
     if (!snapshot.ok || snapshot.providerStatus !== 'approved') {
       req.log.warn({ mpPaymentId, snapshot }, 'Callback com pagamento não aprovado na verificação MP')
-      return reply.redirect(`${dashboardUrl}/dashboard/planos?status=failure`)
+      return reply.redirect(`${dashboardUrl}/painel/plano?status=failure`)
     }
 
     // external_reference from MP API is authoritative (set by us when creating the preference)
     const userId = snapshot.externalReference ?? external_reference ?? null
     if (!userId) {
       req.log.warn({ mpPaymentId }, 'Callback sem external_reference — não foi possível identificar usuário')
-      return reply.redirect(`${dashboardUrl}/dashboard/planos?status=pending`)
+      return reply.redirect(`${dashboardUrl}/painel/plano?status=pending`)
     }
 
     const plans = await getBillingPlans()
     const plan = resolvePlanForPayment({ preferredPlan: snapshot.preferredPlan, amount: snapshot.transactionAmount, plans })
     if (!plan) {
       req.log.warn({ mpPaymentId, amount: snapshot.transactionAmount }, 'Valor do pagamento não corresponde a nenhum plano')
-      return reply.redirect(`${dashboardUrl}/dashboard/planos?status=pending`)
+      return reply.redirect(`${dashboardUrl}/painel/plano?status=pending`)
     }
 
     try {
@@ -604,13 +604,13 @@ export async function paymentsRoutes(app) {
         activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount: plans[plan].price })
       )
       trackAnalyticsEventSafe({ userId, event: 'payment_approved', metadata: { plan, source: 'callback' } })
-      return reply.redirect(`${dashboardUrl}/dashboard/pagamento/sucesso`)
+      return reply.redirect(`${dashboardUrl}/painel/pagamento/sucesso`)
     } catch (err) {
       if (err?.code === 'PAYMENT_ALREADY_USED') {
-        return reply.redirect(`${dashboardUrl}/dashboard/planos?status=failure&reason=already_used`)
+        return reply.redirect(`${dashboardUrl}/painel/plano?status=failure&reason=already_used`)
       }
       req.log.error({ err: err?.message, mpPaymentId, userId }, 'Erro ao ativar acesso no callback')
-      return reply.redirect(`${dashboardUrl}/dashboard/planos?status=pending`)
+      return reply.redirect(`${dashboardUrl}/painel/plano?status=pending`)
     }
   })
 

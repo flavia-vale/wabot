@@ -84,17 +84,18 @@ foi atualizado para apontar essas telas (antes mandava o usuário web para o leg
 
 ### Pendências restantes
 
-- 🟡 **Gap inverso no mobile**: `/m/config/preferences` só salva delays —
-  **keywords bloqueadas / branding / welcome message** ainda sem UI no `/m`
-  (existem em `/painel/configuracoes`).
-- 🟢 **Aposentar o legado**: `app/dashboard/*` (19 telas) ainda existe. Próximo
-  passo é transformar `/dashboard/*` em redirect 308 → `/painel/*` e, após
-  observação, remover as pastas.
+- ✅ **Gap inverso no mobile resolvido**: `/m/config/preferences` e
+  `/painel/configuracoes` agora têm **branding (CTA+link), palavras bloqueadas e
+  mensagem de boas-vindas**, além do delay.
+- ✅ **Legado aposentado**: `app/dashboard/*` foi **removido**. O `routeMap`
+  encaminha qualquer URL `/dashboard/*` remanescente (bookmark/return de
+  pagamento) para o `/painel/*` equivalente (web) ou `/m/*` (mobile). Redirects
+  de pagamento (`payments.js`) e links internos repontados para `/painel`.
 
 ---
 
 ## Conclusão
 
-Paridade web **fechada**: todas as telas de feature têm equivalente em `/painel`.
-Resta **1 ajuste de paridade no mobile** (keywords/branding) e o **corte final do
-`/dashboard` legado** (redirect + remoção).
+Consolidação completa: **mobile → `/m`**, **web → `/painel`**, login e API únicos,
+override manual por `?view=`, e o `/dashboard` legado removido com encaminhamento
+automático. Paridade de features fechada nas duas fronts.
