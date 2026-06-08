@@ -3,6 +3,7 @@ import { detectLinks } from '../../detector.js'
 import { convertLink as defaultConvertLink } from '../../converters/index.js'
 import { fetchProductInfo as defaultFetchProductInfo } from '../../converters/productInfoScraper.js'
 import { validateCredentialData } from '../../credentialHealth.js'
+import { assertPublicUrl } from '../../core/ssrfGuard.js'
 import {
   buildScrapedOffer,
   buildCredentialsMap,
@@ -93,6 +94,21 @@ export async function linkConversionRoutes(app, opts = {}) {
         error: 'Cole um link válido começando com http(s):// para gerar a oferta.',
         code: 'SCRAPE_OFFER_INVALID_URL',
       })
+    }
+
+    // D-2 (anti-SSRF): /scrape-offer aceita qualquer URL pública de produto,
+    // mas o servidor vai buscá-la (fetch). Bloqueia hosts internos/privados
+    // (127.0.0.1, 169.254.169.254, Redis local, etc.) antes de chamar o motor.
+    try {
+      await assertPublicUrl(url)
+    } catch (err) {
+      if (err?.code === 'SSRF_BLOCKED') {
+        return reply.code(400).send({
+          error: 'Não foi possível buscar esse link. Cole um link público de produto de uma loja suportada.',
+          code: 'SCRAPE_OFFER_BLOCKED_URL',
+        })
+      }
+      throw err
     }
 
     const userId = req.user.sub

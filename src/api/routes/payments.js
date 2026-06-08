@@ -389,7 +389,6 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
         }
       }
 
-      await markWebhookDlq({ eventId: event.eventId, requestId: event.requestId, payload: event.payload, error: err?.message ?? 'processing_error' }).catch(() => {})
       await db.webhookEvent.update({
         where: { id: event.id },
         data: {
@@ -740,8 +739,18 @@ export async function paymentsRoutes(app) {
 
     if (!mpPayRes) return sendError(reply, 404, 'PAYMENT_NOT_FOUND', 'Pagamento não encontrado no Mercado Pago')
 
-    const { status, transaction_amount } = mpPayRes.data
+    const { status, transaction_amount, external_reference: mpExternalReference } = mpPayRes.data
     if (status !== 'approved') return sendError(reply, 402, 'PAYMENT_NOT_APPROVED', `Pagamento com status: ${status}`)
+
+    // P-1: o external_reference é definido por nós (=userId) na criação da
+    // Preference e é autoritativo. Se o pagamento pertence a outra conta,
+    // recusa antes de registrar/ativar — impede reivindicar pagamento alheio
+    // ainda não persistido em Payment (a trava por mpPaymentId só cobre os já
+    // registrados).
+    const mpUserRef = String(mpExternalReference ?? '').trim()
+    if (mpUserRef && mpUserRef !== String(userId)) {
+      return sendError(reply, 403, 'PAYMENT_NOT_OWNED', 'Este pagamento pertence a outra conta.')
+    }
 
     const plans = await getBillingPlans()
     const plan = resolvePlanForPayment({ amount: transaction_amount, plans })

@@ -5,6 +5,7 @@
 import db from '../../db.js'
 import { createShortlink, resolveShortlink, recordClick, getClickStats } from '../../core/clickTracker.js'
 import { JID_KIND } from '../../core/jid.js'
+import { isSafePublicUrl } from '../../core/ssrfGuard.js'
 
 export async function clickTrackerRoutes(app, opts = {}) {
   // Endpoint público: 302 redireciona pro originalUrl e loga click async.
@@ -12,6 +13,13 @@ export async function clickTrackerRoutes(app, opts = {}) {
   app.get('/r/:hash', async (req, reply) => {
     const link = await resolveShortlink(req.params.hash)
     if (!link) return reply.code(404).send({ error: 'Link não encontrado' })
+
+    // API-4 (defesa em profundidade): nunca redireciona para esquema não-http(s)
+    // ou host interno, mesmo que algo assim tenha sido persistido.
+    if (!isSafePublicUrl(link.originalUrl)) {
+      req.log.warn({ linkId: link.id }, 'Shortlink com destino inseguro bloqueado no redirect')
+      return reply.code(404).send({ error: 'Link não encontrado' })
+    }
 
     // Hash do IP considera X-Forwarded-For atrás de proxy (já confiável
     // porque trustProxy=true no server). UA bate direto.
@@ -29,6 +37,11 @@ export async function clickTrackerRoutes(app, opts = {}) {
     const { originalUrl, groupId, messageLogId } = req.body ?? {}
     if (!originalUrl || typeof originalUrl !== 'string') {
       return reply.code(400).send({ error: 'originalUrl obrigatório' })
+    }
+    // API-4 (anti open-redirect): o shortlink é servido pelo domínio oficial;
+    // só aceita destino http(s) público para não virar fachada de phishing.
+    if (!isSafePublicUrl(originalUrl)) {
+      return reply.code(400).send({ error: 'originalUrl deve ser um link público http(s) válido' })
     }
     // Validar groupId se fornecido (precisa pertencer ao user).
     if (groupId) {
