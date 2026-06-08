@@ -1,4 +1,7 @@
-export function buildMlAuthUrl(clientId, state, redirectUri) {
+import db from '../../db.js'
+import { encryptCredential, decryptCredential } from '../../credentialCrypto.js'
+
+function buildMlAuthUrl(clientId, state, redirectUri) {
   const authUrl = new URL('https://auth.mercadolivre.com.br/authorization')
   authUrl.searchParams.set('response_type', 'code')
   authUrl.searchParams.set('client_id', clientId)
@@ -97,13 +100,14 @@ export async function mlOAuthRoutes(app) {
       const existing = await db.credential.findUnique({
         where: { userId_platform: { userId, platform: 'mercadolivre' } },
       })
-      const existingData = existing?.data ? (() => { try { return JSON.parse(existing.data) } catch { return {} } })() : {}
+      const existingData = existing?.data ? (() => { try { return JSON.parse(decryptCredential(existing.data)) } catch { return {} } })() : {}
       const mergedData = { ...existingData, oauthAccessToken, oauthRefreshToken, oauthTokenExpiry }
+      const encryptedData = encryptCredential(JSON.stringify(mergedData))
 
       await db.credential.upsert({
         where: { userId_platform: { userId, platform: 'mercadolivre' } },
-        create: { userId, platform: 'mercadolivre', data: JSON.stringify(mergedData) },
-        update: { data: JSON.stringify(mergedData) },
+        create: { userId, platform: 'mercadolivre', data: encryptedData },
+        update: { data: encryptedData },
       })
     } catch {
       return reply.redirect(errorRedirect)

@@ -51,6 +51,8 @@ export const ANALYTICS_EVENTS = new Set([
   'cs_offer_accepted',
   'cs_retained_7d',
   'cs_retained_30d',
+  'login_failed',
+  'login_blocked',
 ])
 
 const SENSITIVE_KEY_PATTERN = /(token|secret|password|cookie|credential|csrf|ssid|key|message|text|url|phone|email)/i

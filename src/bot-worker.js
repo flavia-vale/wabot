@@ -22,6 +22,7 @@ import db from './db.js'
 import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { validateCredentialData } from './credentialHealth.js'
+import { decryptCredential } from './credentialCrypto.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode } from './sendQueueBackend.js'
 import { withSendTimeout as withSendTimeoutImpl } from './sendMessageTimeout.js'
@@ -350,7 +351,9 @@ async function loadConfig() {
   const credentials = {}
   for (const c of user.credentials) {
     try {
-      credentials[c.platform] = JSON.parse(c.data)
+      // D-3: `data` pode estar cifrado (v1:...). decryptCredential é transparente
+      // para texto puro/legado. dotenv/config no topo garante a chave no worker.
+      credentials[c.platform] = JSON.parse(decryptCredential(c.data))
     } catch (err) {
       logger.warn({ platform: c.platform, err: err.message }, 'Credencial inválida ignorada')
     }
