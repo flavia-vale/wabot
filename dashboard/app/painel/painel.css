@@ -111,6 +111,69 @@
   background: #dff8e8;
 }
 
+/* ── Card de onboarding (topo da sidebar) ────────────────────────────── */
+.pnl-onboard {
+  display: block;
+  margin: 2px 2px 16px;
+  padding: 12px 13px;
+  border-radius: 13px;
+  text-decoration: none;
+  color: var(--ink);
+  background: color-mix(in oklab, var(--accent) 12%, var(--surface));
+  border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--line));
+  transition: border-color 0.12s, background 0.12s;
+}
+.pnl-onboard:hover {
+  border-color: var(--accent-strong);
+  background: color-mix(in oklab, var(--accent) 18%, var(--surface));
+}
+.pnl-onboard-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pnl-onboard-title {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px; font-weight: 700; color: var(--accent-strong);
+}
+.pnl-onboard-title .pnl-ico { width: 14px; height: 14px; }
+.pnl-onboard-count {
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--accent-strong);
+  padding: 1px 7px; border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 28%, transparent);
+}
+.pnl-onboard-track {
+  height: 6px; border-radius: 999px; margin: 9px 0 6px;
+  background: color-mix(in oklab, var(--accent) 22%, var(--surface));
+  overflow: hidden;
+}
+.pnl-onboard-fill {
+  height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-strong), var(--accent));
+  transition: width 0.45s cubic-bezier(.2,.8,.25,1);
+}
+.pnl-onboard-sub { font-size: 11px; font-weight: 600; color: var(--ink-soft); }
+
+/* ── Grupo recolhível (ex.: Preservação avançada) ────────────────────── */
+.pnl-nav-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  padding: 6px 10px;
+  border-radius: 8px;
+  margin-bottom: 2px;
+}
+.pnl-nav-toggle:hover { background: var(--bg-soft); color: var(--ink-soft); }
+.pnl-nav-caret { width: 13px; height: 13px; transition: transform 0.18s ease; opacity: 0.7; }
+.pnl-nav-toggle.is-open .pnl-nav-caret { transform: rotate(90deg); }
+
 .pnl-user {
   display: flex;
   align-items: center;
@@ -133,6 +196,46 @@
 }
 .pnl-user-name { font-size: 13px; font-weight: 600; line-height: 1.2; }
 .pnl-user-mail { font-size: 11px; color: var(--ink-soft); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+.pnl-user:hover { background: var(--bg-soft) !important; }
+.pnl-user-caret { width: 15px; height: 15px; flex-shrink: 0; color: var(--ink-faint); transition: transform 0.18s ease; }
+.pnl-user.is-open .pnl-user-caret { transform: rotate(180deg); }
+
+/* ── Menu da conta (popover acima do avatar) ─────────────────────────── */
+.pnl-usermenu-wrap { position: relative; }
+.pnl-usermenu-scrim { position: fixed; inset: 0; z-index: 40; background: none; border: none; cursor: default; }
+.pnl-usermenu {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: calc(100% + 6px);
+  z-index: 50;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: var(--pnl-shadow);
+}
+.pnl-usermenu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  text-decoration: none;
+  border-radius: 9px;
+  text-align: left;
+}
+.pnl-usermenu-item:hover { background: var(--bg-soft); color: var(--ink); }
+.pnl-usermenu-item .pnl-ico { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.85; }
+.pnl-usermenu-item.is-danger { color: var(--danger); }
+.pnl-usermenu-item.is-danger:hover { background: color-mix(in oklab, var(--danger) 12%, transparent); }
 
 /* ── Card de plano (rodapé da sidebar) ───────────────────────────────── */
 .pnl-plan {
@@ -353,6 +456,64 @@
   border-radius: 999px;
 }
 .pnl-seg button.is-active { background: var(--ink); color: var(--surface); }
+
+.pnl-groups-role-toggle {
+  width: min(100%, 560px);
+  align-self: stretch;
+  padding: 6px;
+  gap: 6px;
+  background: linear-gradient(135deg, color-mix(in oklab, var(--surface) 94%, #d9f99d), color-mix(in oklab, var(--surface) 90%, #86efac));
+  border-color: color-mix(in oklab, var(--accent-strong) 32%, var(--line));
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+.pnl-groups-role-toggle button {
+  flex: 1 1 0;
+  min-height: 54px;
+  justify-content: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 18px;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease, color 160ms ease;
+}
+.pnl-groups-role-toggle button:hover { transform: translateY(-1px); }
+.pnl-groups-role-toggle button:focus-visible {
+  outline: 3px solid color-mix(in oklab, var(--accent-strong) 45%, transparent);
+  outline-offset: 3px;
+}
+.pnl-groups-role-toggle button.is-active {
+  background: linear-gradient(135deg, #10231d, #1f6f52 58%, #2f9f75);
+  box-shadow: 0 12px 22px rgba(31, 111, 82, 0.26);
+}
+.pnl-groups-role-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in oklab, var(--accent-strong) 14%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent-strong) 18%, transparent);
+  font-size: 16px;
+}
+.pnl-groups-role-toggle button.is-active .pnl-groups-role-icon { background: rgba(255, 255, 255, 0.18); box-shadow: none; }
+.pnl-groups-role-label { font-weight: 800; }
+.pnl-groups-role-count {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.08);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+.pnl-groups-role-toggle button.is-active .pnl-groups-role-count { background: rgba(255, 255, 255, 0.2); color: var(--surface); }
 
 .pnl-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .pnl-chip {

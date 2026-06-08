@@ -1,12 +1,17 @@
 import bcrypt from 'bcryptjs'
-import { randomBytes } from 'crypto'
+import { randomBytes, createHash } from 'crypto'
 import db from '../../db.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { normalizeEmail } from '../auth-utils.js'
 import { DEFAULT_COPY_VARIATION_POOL_JSON } from '../../core/copyVariation.js'
 import { sendWelcomeEmail } from '../../email/welcomeEmail.js'
 
+// A-1 (anti brute-force): dois mapas de tentativas. `loginAttempts` é por
+// (email|ip) — pega o caso comum de força bruta de um IP. `loginAttemptsByEmail`
+// é só por email — pega ataque DISTRIBUÍDO (mesma conta atacada de vários IPs),
+// que o limite por IP e o rate limit global do servidor não cobririam.
 const loginAttempts = new Map()
+const loginAttemptsByEmail = new Map()
 export const STANDARD_TRIAL_DAYS = 7
 export const PROMO_VIP_TRIAL_DAYS = 7
 
@@ -15,19 +20,34 @@ function getLoginAttemptMaxEntries() {
   return Number.isFinite(value) && value > 100 ? Math.trunc(value) : 20000
 }
 
-function pruneLoginAttempts(now = Date.now()) {
-  for (const [key, value] of loginAttempts.entries()) {
-    if (!value || now > value.resetAt) loginAttempts.delete(key)
+function pruneMap(map, now, maxEntries) {
+  for (const [key, value] of map.entries()) {
+    if (!value || now > value.resetAt) map.delete(key)
   }
-  const maxEntries = getLoginAttemptMaxEntries()
-  if (loginAttempts.size <= maxEntries) return
-  const overflow = loginAttempts.size - maxEntries
+  if (map.size <= maxEntries) return
+  const overflow = map.size - maxEntries
   let dropped = 0
-  for (const key of loginAttempts.keys()) {
-    loginAttempts.delete(key)
+  for (const key of map.keys()) {
+    map.delete(key)
     dropped += 1
     if (dropped >= overflow) break
   }
+}
+
+function pruneLoginAttempts(now = Date.now()) {
+  const maxEntries = getLoginAttemptMaxEntries()
+  pruneMap(loginAttempts, now, maxEntries)
+  pruneMap(loginAttemptsByEmail, now, maxEntries)
+}
+
+// Limpeza periódica: sem isso, uma chave só some na próxima requisição que a
+// toca — chaves de ataques que param ficam retidas até o cap de entradas.
+let loginAttemptsCleanupTimer = null
+export function startLoginAttemptsCleanup() {
+  if (loginAttemptsCleanupTimer) return loginAttemptsCleanupTimer
+  loginAttemptsCleanupTimer = setInterval(() => pruneLoginAttempts(), 5 * 60_000)
+  loginAttemptsCleanupTimer.unref?.()
+  return loginAttemptsCleanupTimer
 }
 
 
@@ -66,25 +86,54 @@ function randomToken(size = 8) {
   return randomBytes(size).toString('hex')
 }
 
+// Identificador de auditoria sem PII: hash curto do email. Permite correlacionar
+// tentativas contra a mesma conta (ataque distribuído) nos logs de analytics sem
+// gravar o email em claro — o sanitizador já removeria a chave `email` mesmo.
+function accountAuditId(email) {
+  return createHash('sha256').update(String(email ?? '')).digest('hex').slice(0, 12)
+}
+
 function generateFallbackEmail() {
   return `user_${randomToken(6)}@sistema.com`
 }
 
+function bumpAttempt(map, key, windowMs, now) {
+  const existing = map.get(key)
+  const item = !existing || now > existing.resetAt ? { attempts: 0, resetAt: now + windowMs } : existing
+  item.attempts += 1
+  map.set(key, item)
+  return item
+}
+
 export function consumeLoginAttempt({ email, ip }) {
-  const key = `${email}|${ip ?? 'unknown'}`
+  const ipKey = `${email}|${ip ?? 'unknown'}`
   const now = Date.now()
   pruneLoginAttempts(now)
   const windowMs = Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MS ?? 15 * 60 * 1000)
   const maxAttempts = Number(process.env.LOGIN_RATE_LIMIT_MAX_ATTEMPTS ?? 8)
-  const existing = loginAttempts.get(key)
-  const item = !existing || now > existing.resetAt ? { attempts: 0, resetAt: now + windowMs } : existing
-  item.attempts += 1
-  loginAttempts.set(key, item)
-  return { blocked: item.attempts > maxAttempts, resetAt: item.resetAt, attempts: item.attempts }
+  const emailMaxAttempts = Number(process.env.LOGIN_RATE_LIMIT_EMAIL_MAX_ATTEMPTS ?? 20)
+
+  const ipItem = bumpAttempt(loginAttempts, ipKey, windowMs, now)
+  const emailItem = bumpAttempt(loginAttemptsByEmail, email, windowMs, now)
+
+  const ipBlocked = ipItem.attempts > maxAttempts
+  const emailBlocked = emailItem.attempts > emailMaxAttempts
+  // resetAt reportado é o do escopo que efetivamente bloqueou (o maior, se ambos).
+  const resetAt = emailBlocked && !ipBlocked ? emailItem.resetAt
+    : ipBlocked && !emailBlocked ? ipItem.resetAt
+    : Math.max(ipItem.resetAt, emailItem.resetAt)
+  return {
+    blocked: ipBlocked || emailBlocked,
+    blockedScope: emailBlocked && !ipBlocked ? 'email' : ipBlocked ? 'ip' : null,
+    resetAt,
+    attempts: ipItem.attempts,
+    emailAttempts: emailItem.attempts,
+  }
 }
 
 export function clearLoginAttempts({ email, ip }) {
   loginAttempts.delete(`${email}|${ip ?? 'unknown'}`)
+  loginAttemptsByEmail.delete(email)
 }
 
 function isPrismaShapeMismatch(err) {
@@ -353,17 +402,27 @@ export async function authRoutes(app) {
     if (attempt.blocked) {
       const retryAfter = Math.max(1, Math.ceil((attempt.resetAt - Date.now()) / 1000))
       reply.header('Retry-After', String(retryAfter))
+      trackAnalyticsEventSafe({
+        event: 'login_blocked',
+        metadata: { acct: accountAuditId(email), ip: req.ip, scope: attempt.blockedScope, attempts: attempt.attempts, emailAttempts: attempt.emailAttempts },
+      })
       return reply.code(429).send({ error: 'Muitas tentativas. Tente novamente mais tarde.' })
     }
 
     const user = await findUserByNormalizedEmail(email)
-    if (!user) return reply.code(401).send({ error: 'Credenciais inválidas' })
+    if (!user) {
+      trackAnalyticsEventSafe({ event: 'login_failed', metadata: { acct: accountAuditId(email), ip: req.ip, reason: 'no_user', attempts: attempt.attempts } })
+      return reply.code(401).send({ error: 'Credenciais inválidas' })
+    }
     if (user.status === 'banned' || user.status === 'suspended') {
       return reply.code(403).send({ error: 'Conta bloqueada. Entre em contato com o suporte.' })
     }
 
     const valid = await bcrypt.compare(password, user.passwordHash)
-    if (!valid) return reply.code(401).send({ error: 'Credenciais inválidas' })
+    if (!valid) {
+      trackAnalyticsEventSafe({ userId: user.id, event: 'login_failed', metadata: { acct: accountAuditId(email), ip: req.ip, reason: 'bad_password', attempts: attempt.attempts } })
+      return reply.code(401).send({ error: 'Credenciais inválidas' })
+    }
     clearLoginAttempts({ email, ip: req.ip })
 
     const updated = await updateLoginActivity(user)
@@ -405,4 +464,9 @@ export async function authRoutes(app) {
   })
 }
 
+// Ativa a limpeza periódica assim que o módulo é importado (igual ao padrão de
+// activityCacheCleanup em server.js). `unref()` garante que não segura o event loop.
+startLoginAttemptsCleanup()
+
 export function __debugLoginAttemptsSize() { return loginAttempts.size }
+export function __debugLoginAttemptsByEmailSize() { return loginAttemptsByEmail.size }

@@ -139,6 +139,7 @@ APP_ENV=staging
 API_PORT=3004
 DATABASE_URL=file:./prisma/staging.db
 JWT_SECRET=<segredo exclusivo de staging — NÃO reaproveitar de prod>
+CREDENTIAL_ENCRYPTION_KEY=<64 chars hex exclusivo de staging — ver seção D-3>
 AUTH_INFO_DIR=/home/deploy/wabot-staging-shared/auth_info
 BOT_LOG_DIR=/home/deploy/wabot-staging-shared/logs
 AUTO_START_WHATSAPP_SESSIONS=true
@@ -163,6 +164,7 @@ APP_ENV=production
 API_PORT=3001
 DATABASE_URL=file:./prisma/prod.db
 JWT_SECRET=<segredo exclusivo de produção>
+CREDENTIAL_ENCRYPTION_KEY=<64 chars hex exclusivo de produção — ver seção D-3>
 AUTH_INFO_DIR=/home/deploy/BOTinho-shared/auth_info
 BOT_LOG_DIR=/home/deploy/BOTinho-shared/logs
 AUTO_START_WHATSAPP_SESSIONS=true
@@ -182,6 +184,78 @@ NEXT_PUBLIC_FORCE_SAME_ORIGIN_API=true
 Sem `JWT_SECRET` a API mata o processo no boot
 (`src/api/server.js:201-204`), o que faz o smoke test
 `assert_login_api_not_next_404` falhar e o deploy automático ficar vermelho.
+
+Sem `CREDENTIAL_ENCRYPTION_KEY` (ou com formato inválido) a API **também** mata
+o processo no boot — vide seção "D-3" abaixo. Gere uma por ambiente com:
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+## D-3 — Criptografia de credenciais em repouso (canônico)
+
+As credenciais de afiliado (cookie de sessão ML/Amazon, tokens OAuth, secret da
+Shopee) ficam no campo `Credential.data` (SQLite). Antes ficavam em **texto
+puro**; hoje são cifradas com **AES-256-GCM** na camada de aplicação
+(`src/credentialCrypto.js`).
+
+**Formato armazenado** (texto puro, compatível com campo `String` do Prisma, sem
+migration de schema): `v1:<iv_hex>:<authTag_hex>:<ciphertext_hex>`. O prefixo
+`v1` permite rotação futura de chave/algoritmo.
+
+**Chave:** env `CREDENTIAL_ENCRYPTION_KEY` = 64 chars hex (32 bytes). **Diferente
+por ambiente** (NÃO reaproveitar staging em prod). `validateEncryptionKey()` no
+boot (`src/api/server.js`) mata o processo se ausente/malformada.
+
+**Migração graciosa (não regredir):**
+- `decryptCredential` devolve a string original quando ela **não** tem prefixo
+  `v1:` — leituras de dados legados em texto puro continuam funcionando antes/
+  durante a migração.
+- Sem a env configurada (dev/test), encrypt/decrypt viram **no-ops** — mantém os
+  testes db-free. A exigência de chave é só no boot da API.
+- `encryptCredential` é **idempotente**: não recifra valor já cifrado.
+
+**Pontos acoplados (todos precisam decifrar/cifrar):**
+- Leitura: `parseCredentialData` em `src/credentialHealth.js` (cobre painel,
+  `offerEngine`, `offerAutomation`, bot Telegram automaticamente).
+- Leitura direta (único bypass): `src/bot-worker.js` (~linha 353) — decifra antes
+  do `JSON.parse`. Por isso o worker tem `import 'dotenv/config'` no topo (precisa
+  da env).
+- Escrita: `src/api/routes/credentials.js` (PUT) e `src/api/routes/mlOAuth.js`
+  (merge OAuth).
+
+**Migração das linhas existentes:** `scripts/migrate-credentials-encrypt.mjs`
+(idempotente). **Parar a API antes** (`pm2 stop api`) para evitar SQLITE_BUSY
+(pegadinha #8), rodar, religar. Em prod, rodar `scripts/backup_prod.sh` antes.
+
+```bash
+# staging
+pm2 stop api-staging && cd ~/wabot-staging && node scripts/migrate-credentials-encrypt.mjs && pm2 start ecosystem.config.cjs --only api-staging
+# prod (backup antes!)
+scripts/backup_prod.sh && pm2 stop api && cd ~/wabot && node scripts/migrate-credentials-encrypt.mjs && pm2 start ecosystem.config.cjs --only api && pm2 save
+```
+
+**Rollback:** como `decryptCredential` tolera texto puro, reverter o código
+mantém leituras funcionando em ambos os formatos. Testes:
+`test/credential-crypto.test.js`.
+
+## A-1 — Proteção contra brute-force no login (canônico)
+
+`src/api/routes/auth.js` rastreia tentativas de login em **dois** mapas
+in-memory (funciona sem Redis):
+- `loginAttempts` por `(email|ip)` — limite `LOGIN_RATE_LIMIT_MAX_ATTEMPTS`
+  (default 8) na janela `LOGIN_RATE_LIMIT_WINDOW_MS` (default 15min). Pega força
+  bruta de um IP.
+- `loginAttemptsByEmail` só por email — limite
+  `LOGIN_RATE_LIMIT_EMAIL_MAX_ATTEMPTS` (default 20). Pega ataque
+  **distribuído** (mesma conta de vários IPs), que o limite por IP e o rate
+  limit global do servidor não cobririam.
+
+A tentativa é contada **antes** do lookup do usuário (evita enumeration via
+timing de rate limit). Bloqueio retorna 429 + `Retry-After`. Tentativas falhadas
+e bloqueios geram eventos `login_failed`/`login_blocked` em `AnalyticsEvent`
+(com hash curto do email — `acct` — sem PII em claro). Cleanup periódico via
+`startLoginAttemptsCleanup()` (top-level, `unref()`). Testes:
+`test/auth-rate-limit.test.js`.
 
 ## Configurações do Mercado Pago (envs obrigatórias)
 

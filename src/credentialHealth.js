@@ -1,3 +1,5 @@
+import { decryptCredential } from './credentialCrypto.js'
+
 const PLATFORM_LABELS = {
   shopee: 'Shopee',
   amazon: 'Amazon',
@@ -94,7 +96,11 @@ export function validateCredentialData(platform, data = {}) {
 
 export function parseCredentialData(rawData) {
   try {
-    const parsed = typeof rawData === 'string' ? JSON.parse(rawData) : rawData
+    // D-3: o campo `data` pode vir cifrado (formato v1:...). decryptCredential é
+    // transparente para texto puro/legado, então cobre os dois casos. Único ponto
+    // de leitura que NÃO passa por aqui é bot-worker.js (decifrado lá direto).
+    const decoded = typeof rawData === 'string' ? decryptCredential(rawData) : rawData
+    const parsed = typeof decoded === 'string' ? JSON.parse(decoded) : decoded
     return parsed && typeof parsed === 'object' ? parsed : {}
   } catch {
     return {}

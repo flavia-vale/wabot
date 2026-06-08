@@ -1,6 +1,7 @@
 import db from '../../db.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { getCredentialSaveMessage, parseCredentialData, PLATFORMS, validateCredentialData } from '../../credentialHealth.js'
+import { encryptCredential } from '../../credentialCrypto.js'
 
 export async function credentialsRoutes(app) {
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
@@ -23,10 +24,11 @@ export async function credentialsRoutes(app) {
       })
     }
 
+    const encryptedData = encryptCredential(JSON.stringify(req.body))
     const cred = await db.credential.upsert({
       where: { userId_platform: { userId: req.user.sub, platform } },
-      create: { userId: req.user.sub, platform, data: JSON.stringify(req.body) },
-      update: { data: JSON.stringify(req.body) },
+      create: { userId: req.user.sub, platform, data: encryptedData },
+      update: { data: encryptedData },
     })
     trackAnalyticsEventSafe({ userId: req.user.sub, event: 'credential_saved', metadata: { platform, status: validation.status } })
     return { ...cred, data: parseCredentialData(cred.data), validation, message: getCredentialSaveMessage(validation) }
