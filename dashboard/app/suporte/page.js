@@ -1,6 +1,13 @@
 import Link from 'next/link'
 import { PublicPage } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
+import {
+  SUPPORT_EMAIL,
+  SUPPORT_WHATSAPP_NUMBER,
+  SUPPORT_WHATSAPP_URL,
+  SUPPORT_HOURS,
+  SUPPORT_RESPONSE_SLA,
+} from '@/lib/marketing-content'
 
 export const metadata = {
   title: 'Suporte | BOTinho',
@@ -44,9 +51,30 @@ function buildSupportJsonLd() {
     ],
   }
 
+  const contactSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'ContactPage',
+    name: 'Suporte BOTinho',
+    url: `${siteUrl}/suporte`,
+    mainEntity: {
+      '@type': 'Organization',
+      name: 'BOTinho',
+      url: siteUrl,
+      contactPoint: [
+        {
+          '@type': 'ContactPoint',
+          contactType: 'customer support',
+          email: SUPPORT_EMAIL,
+          url: SUPPORT_WHATSAPP_URL,
+          availableLanguage: ['Portuguese'],
+        },
+      ],
+    },
+  }
+
   return {
     '@context': 'https://schema.org',
-    '@graph': [faqSchema, breadcrumbSchema],
+    '@graph': [faqSchema, breadcrumbSchema, contactSchema],
   }
 }
 
@@ -70,9 +98,11 @@ export default function SupportPage() {
             </ol>
           </nav>
           <section className="rounded-2xl bg-green-50 p-5 text-green-900">
-            <h2 className="text-xl font-bold">Canal oficial</h2>
-            <p className="mt-2">WhatsApp oficial: <a href="https://wa.me/5532999844020" target="_blank" rel="noopener noreferrer" className="font-bold underline">5532999844020</a></p>
-            <p className="mt-2">Expectativa de resposta: assim que possível em dias úteis. Ainda não há SLA formal na fase MVP.</p>
+            <h2 className="text-xl font-bold">Canais oficiais</h2>
+            <p className="mt-2">WhatsApp: <a href={SUPPORT_WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="font-bold underline">{SUPPORT_WHATSAPP_NUMBER}</a></p>
+            <p className="mt-2">E-mail: <a href={`mailto:${SUPPORT_EMAIL}`} className="font-bold underline">{SUPPORT_EMAIL}</a></p>
+            <p className="mt-2"><span className="font-semibold">Horário de atendimento:</span> {SUPPORT_HOURS}.</p>
+            <p className="mt-1"><span className="font-semibold">Tempo de resposta:</span> {SUPPORT_RESPONSE_SLA}. Fora do horário, respondemos no próximo dia útil.</p>
           </section>
 
           <section>

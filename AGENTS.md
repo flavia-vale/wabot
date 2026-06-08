@@ -215,6 +215,33 @@ pm2 save
 de produção em staging dispara cobranças reais. Para testes, usar token de
 sandbox no `.env` de staging.
 
+## E-mail transacional (boas-vindas) — opcional, no-op sem SMTP
+
+O e-mail de boas-vindas pós-signup (`src/email/welcomeEmail.js`) é enviado
+por `src/email/mailer.js`, um transporte SMTP provider-agnóstico (nodemailer).
+É **opcional**: sem as envs `SMTP_*`, todas as funções viram **no-op
+silencioso** (`{ skipped: true }`) — o signup nunca quebra e os testes seguem
+db-free/env-free. O envio é fire-and-forget no `POST /register` e só dispara
+para e-mails **reais** informados pelo usuário (não para o fallback
+`user_*@sistema.com`).
+
+| Env             | Obrigatória? | O que faz                                                       |
+|-----------------|--------------|-----------------------------------------------------------------|
+| `SMTP_HOST`     | para ativar  | Host do servidor SMTP (ex.: `smtp.gmail.com`). Sem ela → no-op. |
+| `SMTP_PORT`     | não          | Porta (default `587`).                                          |
+| `SMTP_SECURE`   | não          | `true` para TLS direto (porta 465); default `false`.            |
+| `SMTP_USER`     | para ativar  | Usuário de autenticação.                                        |
+| `SMTP_PASS`     | para ativar  | Senha / app password.                                           |
+| `SMTP_FROM`     | não          | Remetente exibido (default = `SMTP_USER`).                      |
+
+**Contato de suporte (dashboard):** o e-mail e WhatsApp de suporte exibidos no
+site vêm de constantes em `dashboard/lib/marketing-content.js`
+(`SUPPORT_EMAIL`, `SUPPORT_WHATSAPP_*`, `SUPPORT_HOURS`, `SUPPORT_RESPONSE_SLA`).
+O e-mail é overridável por `NEXT_PUBLIC_SUPPORT_EMAIL` (default
+`contato@espelhagrupos.com.br`, domínio já registrado — não usar
+`@botinho.com.br` sem comprar o domínio). Trocar o e-mail = mudar a env ou o
+default nesse arquivo, num lugar só. Teste: `test/welcome-email.test.js`.
+
 ## Isolamento de bancos (não substituir prod por staging)
 
 Quatro camadas de isolamento em produção:
