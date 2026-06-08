@@ -60,11 +60,29 @@ export default function WhatsAppPage() {
   const [pairingPhone, setPairingPhone] = useState('')
   const [pairingCode, setPairingCode] = useState('')
   const [connectMethod, setConnectMethod] = useState('qr')
+  const autoConnectMethodAppliedRef = useRef(false)
   const [showForgetConfirm, setShowForgetConfirm] = useState(false)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
 
   const trackTelemetry = useCallback((payload) => {
     api.sessionTelemetry(payload).catch(() => {})
+  }, [])
+
+  // No celular o usuário não consegue escanear um QR exibido na MESMA tela do
+  // telefone; pareamento por código é o método correto. Defaultamos para
+  // 'pairing' uma única vez no mount (SSR renderiza 'qr' para evitar mismatch
+  // de hidratação; o flip acontece só no cliente). Não sobrescreve escolha do
+  // usuário porque roda apenas uma vez.
+  useEffect(() => {
+    if (autoConnectMethodAppliedRef.current) return
+    autoConnectMethodAppliedRef.current = true
+    if (typeof window === 'undefined') return
+    const coarsePointer = window.matchMedia?.('(pointer: coarse)')?.matches
+    const smallViewport = window.matchMedia?.('(max-width: 820px)')?.matches
+    const mobileUa = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator?.userAgent || '')
+    if (smallViewport || coarsePointer || mobileUa) {
+      setConnectMethod('pairing')
+    }
   }, [])
 
   const waitForRunningSession = useCallback(async (timeoutMs = 12000) => {
