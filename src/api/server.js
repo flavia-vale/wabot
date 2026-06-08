@@ -27,6 +27,7 @@ import { registerApiMetricsHooks, renderPrometheusMetrics } from './metrics.js'
 import { getSupervisorOperationalCounters } from '../supervisor/operationalCounters.js'
 import db from '../db.js'
 import { revokeTokenJtiGlobal, isTokenRevokedGlobal } from '../core/tokenRevocationStore.js'
+import { validateEncryptionKey } from '../credentialCrypto.js'
 import { resumePersistedBots, startSessionHealthMonitor, stopAllBots } from '../manager.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
@@ -225,6 +226,16 @@ app.addHook('onSend', async (req, reply) => {
 const jwtSecret = resolveJwtSecret()
 if (!jwtSecret) {
   app.log.fatal('JWT secret ausente. Configure JWT_SECRET (ou AUTH_JWT_SECRET/JWT_TOKEN) e reinicie a API.')
+  process.exit(1)
+}
+
+// D-3: exige chave de criptografia de credenciais no boot (mesma postura do JWT).
+// Sem ela, credenciais novas seriam gravadas em texto puro e as cifradas não
+// poderiam ser lidas. Em dev/test sem a env, encrypt/decrypt são no-ops.
+try {
+  validateEncryptionKey()
+} catch (err) {
+  app.log.fatal({ err: err.message }, 'Chave de criptografia de credenciais ausente/inválida.')
   process.exit(1)
 }
 await app.register(fastifyJwt, { secret: jwtSecret })
