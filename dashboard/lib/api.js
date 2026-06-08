@@ -95,7 +95,12 @@ async function apiFetch(path, options = {}) {
   const data = contentType.includes('application/json')
     ? await res.json().catch(() => ({}))
     : { error: await res.text().catch(() => '') }
-  if (res.status === 401 && !path.startsWith('/api/auth/')) {
+  const isCredentialAuthAttempt = [
+    '/api/auth/login',
+    '/api/auth/register',
+    '/api/auth/logout',
+  ].some((authPath) => path === authPath || path.startsWith(`${authPath}?`))
+  if (res.status === 401 && !isCredentialAuthAttempt) {
     handleSessionExpiredRedirect()
     const err = new Error(SESSION_EXPIRED_MESSAGE)
     err.code = 'SESSION_EXPIRED'
@@ -169,6 +174,7 @@ export const api = {
   updateGroupTargets: (id, postIds) =>
     apiFetch(`/api/groups/${id}/targets`, { method: 'PUT', body: JSON.stringify({ postIds }) }),
 
+  getMlOAuthStartUrl: () => apiFetch('/api/auth/ml-oauth/start-url'),
   credentials: () => apiFetch('/api/credentials'),
   saveCredential: (platform, data) =>
     apiFetch(`/api/credentials/${platform}`, { method: 'PUT', body: JSON.stringify(data) }),

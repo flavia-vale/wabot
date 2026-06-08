@@ -20,20 +20,21 @@ export const ROUTE_MAP = [
   { feature: 'groups',      m: '/m/config/groups',         painel: '/painel/grupos',             dashboard: '/dashboard/grupos' },
   { feature: 'credentials', m: '/m/config/credentials',    painel: '/painel/ids-afiliada',       dashboard: '/dashboard/credenciais' },
   { feature: 'preferences', m: '/m/config/preferences',    painel: '/painel/configuracoes',      dashboard: '/dashboard/configuracoes' },
-  { feature: 'preservacao', m: '/m/config/preservacao',    painel: null,                         dashboard: '/dashboard/preservacao' },
+  { feature: 'preservacao', m: '/m/config/preservacao',    painel: '/painel/preservacao',        dashboard: '/dashboard/preservacao' },
   { feature: 'logs',        m: '/m/op/logs',               painel: '/painel/envios',             dashboard: '/dashboard/logs' },
-  { feature: 'broadcast',   m: '/m/op/broadcast',          painel: null,                         dashboard: '/dashboard/envio' },
-  { feature: 'scheduled',   m: '/m/op/scheduled',          painel: null,                         dashboard: null },
-  { feature: 'converter',   m: '/m/op/converter',          painel: null,                         dashboard: '/dashboard/converte-links' },
+  { feature: 'broadcast',   m: '/m/op/broadcast',          painel: '/painel/envio',              dashboard: '/dashboard/envio' },
+  { feature: 'scheduled',   m: '/m/op/scheduled',          painel: '/painel/agendados',          dashboard: null },
+  { feature: 'converter',   m: '/m/op/converter',          painel: '/painel/converte-links',     dashboard: '/dashboard/converte-links' },
   { feature: 'offer',       m: '/m/op/offer',              painel: '/painel/criar-oferta',       dashboard: '/dashboard/gerar-oferta' },
   { feature: 'automations', m: '/m/op/automations',        painel: '/painel/ofertas-automaticas', dashboard: '/dashboard/ofertas-automaticas' },
-  { feature: 'espelhar',    m: '/m/op/espelhar',           painel: null,                         dashboard: null },
+  { feature: 'espelhar',    m: '/m/op/espelhar',           painel: '/painel/espelhamento',       dashboard: null },
   { feature: 'messages',    m: '/m/account/templates',     painel: '/painel/mensagens',          dashboard: '/dashboard/variacoes-de-texto' },
   { feature: 'variations',  m: '/m/account/variations',    painel: null,                         dashboard: null },
   { feature: 'plan',        m: '/m/account/subscription',  painel: '/painel/plano',              dashboard: '/dashboard/assinaturas' },
-  { feature: 'tutorial',    m: '/m/tutorial',              painel: null,                         dashboard: '/dashboard/tutorial' },
+  { feature: 'tutorial',    m: '/m/tutorial',              painel: '/painel/tutorial',           dashboard: '/dashboard/tutorial' },
   { feature: 'account',     m: '/m/account',               painel: null,                         dashboard: null },
-  { feature: 'checklist',   m: '/m/checklistespelhamento', painel: null,                         dashboard: null },
+  { feature: 'checklist',   m: '/m/checklistespelhamento', painel: '/painel/checklist',          dashboard: null },
+  { feature: 'payment',     m: null,                       painel: '/painel/pagamento/sucesso',  dashboard: '/dashboard/pagamento/sucesso' },
 ]
 
 /** Identifica a qual árvore de app um pathname pertence (ou null). */
@@ -63,12 +64,11 @@ function findFeature(pathname, tree) {
 /**
  * Decide o redirect de roteamento por device.
  *
- * Regras (Fase 1):
+ * Regras:
  * - variant `mobile` em /painel/* ou /dashboard/* → equivalente em /m (ou /m).
- * - variant `web` em /m/* → equivalente em /painel; se a tela ainda não foi
- *   portada (painel null), cai no /dashboard correspondente; senão /painel.
- * - variant `web` em /dashboard/* → SEM redirect (legado segue como fallback
- *   web até a Fase 2 aposentá-lo).
+ * - variant `web` em /m/* ou /dashboard/* → equivalente em /painel (ou /painel).
+ * - O legado /dashboard/* foi aposentado: ambas as variantes são encaminhadas
+ *   para a front canônica (mobile→/m, web→/painel).
  *
  * Retorna o pathname de destino, ou `null` quando nenhum redirect é preciso.
  * Nunca redireciona para dentro da mesma variante de destino → sem loop.
@@ -85,7 +85,13 @@ export function resolveAppRedirect({ pathname, variant }) {
   }
 
   // variant === 'web'
-  if (tree === 'painel' || tree === 'dashboard') return null
+  if (tree === 'painel') return null
+  if (tree === 'dashboard') {
+    const entry = findFeature(pathname, 'dashboard')
+    const target = entry?.painel || '/painel'
+    return target === pathname ? null : target
+  }
+  // tree === 'm'
   const entry = findFeature(pathname, 'm')
   const target = entry?.painel || entry?.dashboard || '/painel'
   return target === pathname ? null : target

@@ -4,12 +4,16 @@ import { api } from '@/lib/api'
 
 const ONBOARDING_DONE_KEY = 'wb_onboarding_done'
 
-function getOnboardingDone() {
-  try { return localStorage.getItem(ONBOARDING_DONE_KEY) === '1' } catch { return false }
+function doneKey(userId) {
+  return userId ? `${ONBOARDING_DONE_KEY}_${userId}` : ONBOARDING_DONE_KEY
 }
 
-function setOnboardingDone() {
-  try { localStorage.setItem(ONBOARDING_DONE_KEY, '1') } catch { /* ignore */ }
+function getOnboardingDone(userId) {
+  try { return localStorage.getItem(doneKey(userId)) === '1' } catch { return false }
+}
+
+function setOnboardingDone(userId) {
+  try { localStorage.setItem(doneKey(userId), '1') } catch { /* ignore */ }
 }
 
 function Icon({ name, size = 20, stroke = 1.6 }) {
@@ -195,15 +199,18 @@ function CelebrationBanner() {
   )
 }
 
-export function ActivationChecklist({ onActivated }) {
+export function ActivationChecklist({ onActivated, persist = false, userId }) {
   const [status, setStatus] = useState(null)
   const [phase, setPhase] = useState(() => {
-    if (typeof window !== 'undefined' && getOnboardingDone()) return 'hidden'
+    if (!persist && typeof window !== 'undefined' && getOnboardingDone(userId)) return 'hidden'
     return 'list'
   })
+  // Páginas dedicadas (ex.: /painel/checklist) precisam continuar visíveis
+  // mesmo quando o onboarding da home já foi concluído e salvo no localStorage.
+  const visiblePhase = persist ? 'list' : phase
 
   useEffect(() => {
-    if (phase === 'hidden') {
+    if (visiblePhase === 'hidden') {
       onActivated?.()
       return
     }
@@ -215,7 +222,7 @@ export function ActivationChecklist({ onActivated }) {
     poll()
     const id = setInterval(poll, 10_000)
     return () => { cancelled = true; clearInterval(id) }
-  }, [phase, onActivated])
+  }, [visiblePhase, onActivated])
 
   const completedSet = new Set(STEPS.filter(s => status?.[s.key]).map(s => s.key))
   const count = completedSet.size
@@ -226,25 +233,25 @@ export function ActivationChecklist({ onActivated }) {
   const nextKey = STEPS.find(s => !completedSet.has(s.key))?.key
 
   useEffect(() => {
-    if (botActive && phase === 'list') {
+    if (!persist && botActive && visiblePhase === 'list') {
       const t = setTimeout(() => setPhase('celebrate'), 420)
       return () => clearTimeout(t)
     }
-  }, [botActive, phase])
+  }, [persist, botActive, visiblePhase])
 
   useEffect(() => {
-    if (phase === 'celebrate') {
+    if (!persist && visiblePhase === 'celebrate') {
       const t = setTimeout(() => {
-        setOnboardingDone()
+        setOnboardingDone(userId)
         setPhase('hidden')
         onActivated?.()
       }, 2800)
       return () => clearTimeout(t)
     }
-  }, [phase, onActivated])
+  }, [persist, visiblePhase, onActivated, userId])
 
-  if (phase === 'hidden') return null
-  if (phase === 'celebrate') return <CelebrationBanner />
+  if (visiblePhase === 'hidden') return null
+  if (visiblePhase === 'celebrate') return <CelebrationBanner />
 
   const timeLabel = count === 0
     ? '≈ 4 min para terminar'

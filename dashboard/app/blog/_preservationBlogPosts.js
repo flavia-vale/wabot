@@ -120,6 +120,63 @@ export const PRESERVATION_BLOG_POSTS = {
       { q: 'O que devo ativar primeiro?', a: 'Chip dedicado, limites por destino, horário de silêncio, variações e monitoramento básico de cliques e entrega.' },
     ],
   },
+  'comecar-afiliado-whatsapp-sem-grupo-grande': {
+    slug: '/blog/comecar-afiliado-whatsapp-sem-grupo-grande',
+    title: 'Como começar como afiliado no WhatsApp sem ter grupo grande',
+    description: 'Guia para afiliado iniciante começar a divulgar ofertas no WhatsApp mesmo sem audiência grande: chip dedicado, primeiros grupos, conversão de link e cadência responsável.',
+    eyebrow: 'Para quem está começando · Passo a passo',
+    origin: 'blog_comecar_afiliado_whatsapp_sem_grupo_grande',
+    intro: 'Você não precisa de um grupo gigante para começar a ganhar comissão no WhatsApp. Precisa de um chip dedicado, links de afiliado convertidos certo e uma rotina de envio que não pareça spam. O resto cresce com consistência.',
+    sections: [
+      { h2: 'Resposta direta', paragraphs: ['Comece pequeno e organizado: separe um chip só para a operação, cadastre seus IDs de afiliada (Mercado Livre, Amazon, Shopee), monte 1 ou 2 grupos/canais de destino e publique poucas ofertas boas por dia com texto que pareça você falando.', 'Grupo grande é consequência, não pré-requisito. Quem começa focando em volume costuma queimar o número antes de ter audiência.'] },
+      { h2: 'O que você precisa no dia 1', bullets: ['Um chip dedicado (nunca o número pessoal).', 'Contas de afiliado nas plataformas que você vai divulgar.', 'Um grupo ou canal de destino, mesmo que pequeno.', 'Uma fonte de ofertas (grupos que você acompanha, sites, encartes).', 'Uma ferramenta que converte o link e mantém cadência.'] },
+      { h2: 'O erro mais comum de quem começa', paragraphs: ['O iniciante cola o link cru, sem converter para afiliado — e perde a comissão da venda que ele mesmo gerou. O segundo erro é despejar 30 ofertas seguidas no mesmo dia, o que parece spam e arrisca o número.', 'A correção é simples: converta todo link antes de enviar e limite a frequência. Poucas ofertas boas convertem mais do que muitas ofertas repetidas.'] },
+      { h2: 'Como o BOTinho ajuda quem está começando', paragraphs: ['O BOTinho converte automaticamente os links de Mercado Livre, Amazon e Shopee para o seu código de afiliada antes de enviar, espelha as ofertas dos grupos que você acompanha para os seus destinos e mantém uma cadência responsável para reduzir risco no número.', 'Para quem está começando, isso elimina a parte chata (copiar, converter, reescrever, reenviar) e deixa você focar em escolher boas ofertas.'] },
+    ],
+    faq: [
+      { q: 'Preciso de muitos seguidores para começar?', a: 'Não. Dá para começar com um grupo ou canal pequeno. O que importa no início é converter os links corretamente e manter consistência, não o tamanho da audiência.' },
+      { q: 'Posso usar meu WhatsApp pessoal?', a: 'Não é recomendado. Use um chip dedicado para a operação, separando do seu número pessoal e reduzindo o risco de perder seus contatos se algo der errado.' },
+      { q: 'O BOTinho converte os links sozinho?', a: 'Sim. Ele converte links suportados (Mercado Livre, Amazon, Shopee) para o seu código de afiliada antes do envio, então você não esquece de marcar a comissão.' },
+    ],
+  },
+  'como-ser-afiliado-shopee-whatsapp': {
+    slug: '/blog/como-ser-afiliado-shopee-whatsapp',
+    title: 'Como ser afiliado Shopee e divulgar ofertas no WhatsApp',
+    description: 'Passo a passo para se tornar afiliado Shopee, gerar seu link de afiliado e divulgar ofertas no WhatsApp com conversão automática e cadência responsável.',
+    eyebrow: 'Afiliado Shopee · Primeiros passos',
+    origin: 'blog_como_ser_afiliado_shopee_whatsapp',
+    intro: 'Ser afiliado Shopee e divulgar no WhatsApp tem três etapas: entrar no programa de afiliados, gerar o link com o seu código e enviar as ofertas para grupos e canais sem parecer spam. A parte que mais trava o iniciante é manter o link sempre convertido.',
+    sections: [
+      { h2: 'Resposta direta', paragraphs: ['Cadastre-se no Programa de Afiliados Shopee, pegue suas credenciais de afiliado, gere o link de cada produto com o seu código e divulgue no WhatsApp com texto próprio e frequência controlada.', 'O ponto crítico é garantir que TODO link enviado já esteja convertido para o seu código — senão a venda acontece, mas a comissão não cai para você.'] },
+      { h2: 'Passo a passo para entrar', bullets: ['Cadastre-se no Programa de Afiliados Shopee.', 'Confirme seus dados e aguarde a aprovação.', 'Localize suas credenciais de afiliado (appId / secret).', 'Gere links com o seu código para os produtos que vai divulgar.', 'Organize seus grupos e canais de destino no WhatsApp.'] },
+      { h2: 'Como divulgar sem queimar o número', paragraphs: ['Use um chip dedicado, publique poucas ofertas boas por vez, varie o texto e evite mandar a mesma mensagem idêntica para todos os destinos ao mesmo tempo.', 'Quem dispara dezenas de links iguais em sequência arrisca o número e ainda cansa a audiência. Cadência responsável vende mais no médio prazo.'] },
+      { h2: 'Como o BOTinho automatiza a Shopee', paragraphs: ['Com as credenciais de afiliada Shopee cadastradas, o BOTinho converte os links para o seu código automaticamente antes de enviar, monta a oferta com título e preço e distribui para os seus grupos e canais com cadência controlada.', 'Assim você não precisa gerar link a link na mão nem corre o risco de enviar um link sem comissão.'] },
+    ],
+    faq: [
+      { q: 'Ser afiliado Shopee é gratuito?', a: 'Sim, a entrada no programa de afiliados não tem custo. Você ganha comissão sobre as vendas geradas pelos seus links.' },
+      { q: 'Preciso gerar cada link na mão?', a: 'Não, se usar uma ferramenta de conversão. Com as credenciais Shopee no BOTinho, os links são convertidos automaticamente para o seu código antes do envio.' },
+      { q: 'Posso divulgar Shopee e outras lojas juntas?', a: 'Sim. É comum divulgar Shopee, Mercado Livre e Amazon na mesma operação. O importante é manter cada link com o código de afiliado correto.' },
+    ],
+  },
+  'como-divulgar-ofertas-amazon-whatsapp': {
+    slug: '/blog/como-divulgar-ofertas-amazon-whatsapp',
+    title: 'Como divulgar ofertas da Amazon no WhatsApp como afiliado',
+    description: 'Aprenda a divulgar ofertas da Amazon no WhatsApp como afiliado: tag de associado, link convertido, preview com imagem e cadência que protege seu número.',
+    eyebrow: 'Afiliado Amazon · Divulgação',
+    origin: 'blog_como_divulgar_ofertas_amazon_whatsapp',
+    intro: 'Divulgar Amazon no WhatsApp dá certo quando o link sai com a sua tag de associado, o preview mostra a imagem do produto e o envio respeita uma cadência que não queima o número. Errar a tag é o jeito mais rápido de trabalhar de graça.',
+    sections: [
+      { h2: 'Resposta direta', paragraphs: ['Entre no Amazon Associados, pegue sua tag de afiliado, gere o link do produto com essa tag e divulgue no WhatsApp com imagem, preço e texto próprio — controlando a frequência de envio.', 'A regra de ouro: confira sempre se a sua tag está no link antes de enviar. Sem a tag, a venda não gera comissão para você.'] },
+      { h2: 'O que cuidar nos links da Amazon', bullets: ['Garantir que a tag de associado está presente no link.', 'Usar link curto quando possível, sem perder a tag.', 'Conferir se o preview mostra imagem em boa resolução.', 'Evitar links com parâmetros que quebram o rastreamento.', 'Atualizar a oferta se o preço mudar.'] },
+      { h2: 'Cadência e preservação do número', paragraphs: ['A Amazon costuma ter muitas ofertas, e a tentação é mandar tudo de uma vez. Resista: poucas ofertas selecionadas por vez, com variação de texto, performam melhor e protegem o número.', 'Use chip dedicado e horário de silêncio para a operação não parecer um robô disparando.'] },
+      { h2: 'Como o BOTinho cuida da Amazon', paragraphs: ['Com a sua tag de associado cadastrada, o BOTinho converte os links da Amazon automaticamente, busca a imagem em alta resolução para o preview do WhatsApp e distribui a oferta para seus grupos e canais com cadência responsável.', 'Isso evita o erro clássico de enviar um link sem tag e garante que a oferta chegue com cara profissional.'] },
+    ],
+    faq: [
+      { q: 'Como sei se o link tem minha tag?', a: 'O link de afiliado da Amazon inclui um parâmetro de tag (tag=seucodigo). Sem ela, a venda não é atribuída a você. Uma ferramenta de conversão garante isso automaticamente.' },
+      { q: 'Por que a imagem do produto importa?', a: 'O preview com imagem em boa resolução aumenta o clique. O BOTinho busca a imagem em alta para o link preview do WhatsApp.' },
+      { q: 'Posso agendar as ofertas da Amazon?', a: 'Sim. Distribuir ao longo do dia, com cadência controlada, costuma converter melhor do que despejar tudo de uma vez e ainda protege o número.' },
+    ],
+  },
 }
 
 export function getPreservationBlogMetadata(postKey) {

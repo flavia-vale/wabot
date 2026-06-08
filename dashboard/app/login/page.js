@@ -107,7 +107,7 @@ function LoginContent() {
         trackEvent(TRACKING_EVENTS.LOGIN_SUCCESS, { origin: 'login_page' })
       }
       setSuccess(isRegister ? 'Conta criada. Agora vamos conectar seu WhatsApp e validar o primeiro teste guiado.' : 'Login realizado. Redirecionando para o checklist...')
-      setTimeout(() => router.push('/dashboard/inicio'), 300)
+      setTimeout(() => router.push('/painel/checklist'), 300)
     } catch (err) {
       trackEvent(TRACKING_EVENTS.AUTH_ERROR, {
         origin: 'login_page',

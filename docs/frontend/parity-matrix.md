@@ -64,33 +64,38 @@
 
 ## Backlog para aposentar o `/dashboard` (entra na Fase 2)
 
-Telas a portar para `/painel`, por impacto:
+### ✅ Telas portadas para `/painel` (concluído)
 
-| Prioridade | Tela faltante no `/painel` | Origem a portar | Por que trava |
-|---|---|---|---|
-| 🔴 Alta | **Preservação/anti-ban** (config + monitoramento) | `/dashboard/preservacao/*` | Feature Pro inteira sem equivalente web |
-| 🔴 Alta | **Envio manual + agendamento** | `/dashboard/envio` | Operação central sem equivalente web (mobile tem) |
-| 🔴 Alta | **Retorno de pagamento** | `/dashboard/pagamento/sucesso` | É a *return URL* do checkout MP — não pode 404 |
-| 🟡 Média | **Conversor de links avulso** | `/dashboard/converte-links` | Mobile tem; web só tem o montador completo |
-| 🟡 Média | **Tutorial** | `/dashboard/tutorial` | `nav.js` ainda aponta pro legado |
+As lacunas de paridade web da Fase 0 já foram preenchidas:
 
-### Gap inverso (paridade no mobile)
+| Tela | Rota `/painel` | Status |
+|---|---|---|
+| Preservação/anti-ban | `preservacao/configuracoes` + `preservacao/monitoramento` | ✅ |
+| Envio manual (broadcast) | `envio` | ✅ |
+| **Agendamento de envios** | `agendados` | ✅ (criada na Fase 2) |
+| Retorno de pagamento | `pagamento/sucesso` | ✅ |
+| Conversor de links avulso | `converte-links` | ✅ |
+| Tutorial | `tutorial` | ✅ |
+| Checklist / primeiros passos | `checklist` | ✅ |
+| Espelhamento (painel dedicado) | `espelhamento` | ✅ |
 
-- 🟡 **Config de keywords bloqueadas / branding / welcome message**: `/m/config/preferences`
-  só salva delays. Existe em `/painel/configuracoes` e `/dashboard/configuracoes`.
+O `nav.js` e o `page.js` não têm mais referências a `/dashboard/*`. O `routeMap.js`
+foi atualizado para apontar essas telas (antes mandava o usuário web para o legado).
 
-### Referências ao legado a eliminar no `/painel` (acionáveis)
+### Pendências restantes
 
-Apenas duas (o resto são comentários de documentação):
-
-- `app/painel/nav.js:85` → Tutorial aponta `/dashboard/tutorial`
-- `app/painel/page.js:318` → "Ver tudo →" aponta `/dashboard/logs` (deve ir para `/painel/envios`)
+- ✅ **Gap inverso no mobile resolvido**: `/m/config/preferences` e
+  `/painel/configuracoes` agora têm **branding (CTA+link), palavras bloqueadas e
+  mensagem de boas-vindas**, além do delay.
+- ✅ **Legado aposentado**: `app/dashboard/*` foi **removido**. O `routeMap`
+  encaminha qualquer URL `/dashboard/*` remanescente (bookmark/return de
+  pagamento) para o `/painel/*` equivalente (web) ou `/m/*` (mobile). Redirects
+  de pagamento (`payments.js`) e links internos repontados para `/painel`.
 
 ---
 
-## Conclusão da Fase 0
+## Conclusão
 
-O `/painel` está mais maduro do que o comentário do `nav.js` sugeria: **10 telas
-completas, sem stubs**. Para fechar paridade web faltam **5 telas** (3 críticas),
-**1 ajuste** de paridade no mobile e **2 links** legados a repontar.
-Esse é o escopo concreto da Fase 2.
+Consolidação completa: **mobile → `/m`**, **web → `/painel`**, login e API únicos,
+override manual por `?view=`, e o `/dashboard` legado removido com encaminhamento
+automático. Paridade de features fechada nas duas fronts.

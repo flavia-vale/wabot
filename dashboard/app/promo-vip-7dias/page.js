@@ -30,7 +30,7 @@ export default function PromoVipPage() {
       })
       await api.registerPromoVip(name, email, password, contactPhone, COUPON_CODE)
       trackEvent(TRACKING_EVENTS.SIGNUP_SUCCESS, { origin: 'promo_vip_7dias', coupon: COUPON_CODE })
-      router.push('/dashboard/inicio')
+      router.push('/painel')
     } catch (err) {
       trackEvent(TRACKING_EVENTS.AUTH_ERROR, {
         origin: 'promo_vip_7dias',

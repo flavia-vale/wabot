@@ -30,6 +30,8 @@ export const TRACKING_EVENTS = {
 
 export const PROMPT_EXCLUDED_PATH_PREFIXES = [
   '/login',
+  '/painel',
+  '/m',
   '/dashboard',
   '/admin',
   '/termos',

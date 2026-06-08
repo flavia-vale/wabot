@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-const filePath = path.resolve(process.cwd(), 'app/dashboard/configuracoes/page.js')
+const filePath = path.resolve(process.cwd(), 'app/painel/configuracoes/page.js')
 const source = fs.readFileSync(filePath, 'utf8')
 
 function assert(condition, message) {

@@ -25,7 +25,11 @@ export function middleware(request) {
     response = NextResponse.next()
   }
 
-  if (normalizedQuery || !cookieValue) {
+  // O cookie só persiste quando a usuária ESCOLHE explicitamente a variante
+  // (via ?view=). A detecção por user-agent é recalculada a cada request e
+  // nunca é gravada — assim um device nunca fica "preso" numa variante por
+  // causa de uma detecção antiga; só uma escolha manual gruda (30 dias).
+  if (normalizedQuery) {
     response.cookies.set(UI_VARIANT_COOKIE, variant, {
       path: '/',
       sameSite: 'lax',

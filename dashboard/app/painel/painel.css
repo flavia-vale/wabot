@@ -216,6 +216,22 @@
   padding: 20px;
   box-shadow: var(--pnl-shadow-soft);
 }
+
+/* Base defensiva para conteúdo responsivo dentro do shell: cards, grids e
+ * itens flex não podem forçar largura mínima maior que a viewport mobile. */
+.pnl-card,
+.pnl-kpi,
+.pnl-subcard,
+.pnl-row,
+.pnl-toolbar,
+.pnl-card-head,
+.pnl-master,
+.pnl-field,
+.pnl-input,
+.pnl-btn { min-width: 0; }
+.pnl-card,
+.pnl-subcard { overflow-wrap: anywhere; }
+
 .pnl-card-title { font-size: 13px; font-weight: 600; }
 .pnl-card-note { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; }
 
@@ -663,6 +679,30 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
   .pnl-content { padding: 20px 18px 40px; }
   .pnl-funnel-row { grid-template-columns: 110px 1fr 50px; }
 }
+
+@media (max-width: 760px) {
+  .pnl-root { display: block; }
+  .pnl-header { align-items: flex-start; flex-wrap: wrap; gap: 10px 12px; }
+  .pnl-header > div:first-child { min-width: 0; flex: 1 1 190px; }
+  .pnl-header h1 { font-size: 17px; }
+  .pnl-header .pnl-sub { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pnl-header-right { min-width: 0; flex: 1 1 100%; justify-content: flex-start; flex-wrap: wrap; gap: 8px; }
+  .pnl-header-actions { flex-wrap: wrap; min-width: 0; }
+  .pnl-online { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pnl-card { padding: 16px; border-radius: 15px; }
+  .pnl-hero { padding: 20px; align-items: flex-start; }
+  .pnl-master { align-items: flex-start; flex-wrap: wrap; padding: 18px; }
+  .pnl-card-head,
+  .pnl-pager,
+  .pnl-field-row { flex-direction: column; align-items: stretch; }
+  .pnl-pager .pnl-toolbar { width: 100%; }
+  .pnl-pager-btns { flex-wrap: wrap; }
+  .pnl-btn { justify-content: center; }
+  .pnl-grid[style*="grid-template-columns"],
+  .pnl-kpis[style*="grid-template-columns"],
+  .pnl-presets[style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
+}
+
 @media (max-width: 720px) {
   .pnl-table-wrap { display: none; }
   .pnl-cards-mobile { display: flex; flex-direction: column; gap: 10px; }
@@ -670,4 +710,25 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 @media (max-width: 560px) {
   .pnl-kpis { grid-template-columns: 1fr; }
   .pnl-hero-num { font-size: 42px; }
+
+  .pnl-content { padding: 16px 12px 32px; }
+  .pnl-card { padding: 14px; }
+  .pnl-hero { padding: 18px 16px; }
+  .pnl-master-ico { width: 42px; height: 42px; }
+  .pnl-modal-overlay { padding: 12px; align-items: flex-end; }
+  .pnl-modal { padding: 18px; border-radius: 18px 18px 0 0; }
+  .pnl-modal-actions { flex-direction: column-reverse; }
+  .pnl-modal-actions .pnl-btn,
+  .pnl-modal-actions button { width: 100%; justify-content: center; }
+  .pnl-funnel-row { grid-template-columns: 1fr; gap: 6px; }
+  .pnl-funnel-pct { text-align: left; }
+  .pnl-seg,
+  .pnl-chips { width: 100%; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 2px; }
+  .pnl-chip,
+  .pnl-seg button { white-space: nowrap; }
+}
+
+@media (max-width: 420px) {
+  .pnl-bell { display: none; }
+  .pnl-header { padding: 10px 12px; }
 }

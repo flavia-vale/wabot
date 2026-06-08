@@ -4,6 +4,16 @@ export const mobileCredentialPlatforms = [
     label: 'Shopee',
     color: '#EE4D2D',
     instructions: 'Use App ID e Secret Key da API de Afiliados da Shopee.',
+    actionLinks: [
+      {
+        label: 'Solicite sua API Shopee',
+        href: 'https://help.shopee.com.br/portal/webform/bbce78695c364ba18c9cbceb74ec9091?entryPoint=1&lastArticleID=',
+      },
+      {
+        label: 'Pegue suas credenciais',
+        href: 'https://espelhagrupos.com.br/painel/tutorial#:~:text=Acesse%20o%20painel%20Shopee%20Open%20API',
+      },
+    ],
     fields: [
       { key: 'appId', label: 'App ID', required: true },
       { key: 'secretKey', label: 'Secret Key', required: true, sensitive: true },

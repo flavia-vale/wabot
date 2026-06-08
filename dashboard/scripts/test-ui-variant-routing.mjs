@@ -43,17 +43,28 @@ test('web em /m/* com tela portada vai para /painel', () => {
   assert.equal(resolveAppRedirect({ pathname: '/m/op/offer', variant: 'web' }), '/painel/criar-oferta')
   assert.equal(resolveAppRedirect({ pathname: '/m/config/groups', variant: 'web' }), '/painel/grupos')
   assert.equal(resolveAppRedirect({ pathname: '/m/op/logs', variant: 'web' }), '/painel/envios')
-})
-
-test('web em /m/* sem tela no painel cai no /dashboard legado', () => {
-  assert.equal(resolveAppRedirect({ pathname: '/m/config/preservacao', variant: 'web' }), '/dashboard/preservacao')
-  assert.equal(resolveAppRedirect({ pathname: '/m/op/broadcast', variant: 'web' }), '/dashboard/envio')
-  assert.equal(resolveAppRedirect({ pathname: '/m/op/converter', variant: 'web' }), '/dashboard/converte-links')
+  assert.equal(resolveAppRedirect({ pathname: '/m/config/preservacao', variant: 'web' }), '/painel/preservacao')
+  assert.equal(resolveAppRedirect({ pathname: '/m/op/broadcast', variant: 'web' }), '/painel/envio')
+  assert.equal(resolveAppRedirect({ pathname: '/m/op/scheduled', variant: 'web' }), '/painel/agendados')
+  assert.equal(resolveAppRedirect({ pathname: '/m/op/converter', variant: 'web' }), '/painel/converte-links')
+  assert.equal(resolveAppRedirect({ pathname: '/m/op/espelhar', variant: 'web' }), '/painel/espelhamento')
+  assert.equal(resolveAppRedirect({ pathname: '/m/tutorial', variant: 'web' }), '/painel/tutorial')
+  assert.equal(resolveAppRedirect({ pathname: '/m/checklistespelhamento', variant: 'web' }), '/painel/checklist')
 })
 
 test('web em /m/* sem equivalente nenhum cai na home /painel', () => {
-  assert.equal(resolveAppRedirect({ pathname: '/m/op/espelhar', variant: 'web' }), '/painel')
   assert.equal(resolveAppRedirect({ pathname: '/m/account/variations', variant: 'web' }), '/painel')
+  assert.equal(resolveAppRedirect({ pathname: '/m/account', variant: 'web' }), '/painel')
+})
+
+test('mobile em /painel/* das telas novas volta para o /m equivalente', () => {
+  assert.equal(resolveAppRedirect({ pathname: '/painel/envio', variant: 'mobile' }), '/m/op/broadcast')
+  assert.equal(resolveAppRedirect({ pathname: '/painel/agendados', variant: 'mobile' }), '/m/op/scheduled')
+  assert.equal(resolveAppRedirect({ pathname: '/painel/converte-links', variant: 'mobile' }), '/m/op/converter')
+  assert.equal(resolveAppRedirect({ pathname: '/painel/espelhamento', variant: 'mobile' }), '/m/op/espelhar')
+  assert.equal(resolveAppRedirect({ pathname: '/painel/tutorial', variant: 'mobile' }), '/m/tutorial')
+  assert.equal(resolveAppRedirect({ pathname: '/painel/preservacao/monitoramento', variant: 'mobile' }), '/m/config/preservacao')
+  assert.equal(resolveAppRedirect({ pathname: '/painel/preservacao/configuracoes', variant: 'mobile' }), '/m/config/preservacao')
 })
 
 test('web em /painel não redireciona', () => {
@@ -61,9 +72,19 @@ test('web em /painel não redireciona', () => {
   assert.equal(resolveAppRedirect({ pathname: '/painel/plano', variant: 'web' }), null)
 })
 
-test('web em /dashboard NÃO redireciona na Fase 1 (legado segue como fallback)', () => {
-  assert.equal(resolveAppRedirect({ pathname: '/dashboard/logs', variant: 'web' }), null)
-  assert.equal(resolveAppRedirect({ pathname: '/dashboard/preservacao', variant: 'web' }), null)
+test('web em /dashboard/* (legado aposentado) redireciona para /painel', () => {
+  assert.equal(resolveAppRedirect({ pathname: '/dashboard/logs', variant: 'web' }), '/painel/envios')
+  assert.equal(resolveAppRedirect({ pathname: '/dashboard/preservacao', variant: 'web' }), '/painel/preservacao')
+  assert.equal(resolveAppRedirect({ pathname: '/dashboard/envio', variant: 'web' }), '/painel/envio')
+  assert.equal(resolveAppRedirect({ pathname: '/dashboard/gerar-oferta', variant: 'web' }), '/painel/criar-oferta')
+  assert.equal(resolveAppRedirect({ pathname: '/dashboard', variant: 'web' }), '/painel/whatsapp')
+  assert.equal(resolveAppRedirect({ pathname: '/dashboard/pagamento/sucesso', variant: 'web' }), '/painel/pagamento/sucesso')
+})
+
+test('web em /dashboard/* sem mapeamento específico cai na home legada (whatsapp)', () => {
+  // /dashboard (bare) era o hub de conexão; serve de catch-all para sub-rotas
+  // legadas sem mapeamento próprio (ex.: /dashboard/planos, que redirecionava).
+  assert.equal(resolveAppRedirect({ pathname: '/dashboard/planos', variant: 'web' }), '/painel/whatsapp')
 })
 
 test('homes trocam corretamente entre fronts', () => {
@@ -78,7 +99,7 @@ test('sub-rotas casam pelo prefixo mais específico', () => {
   )
   assert.equal(
     resolveAppRedirect({ pathname: '/m/config/preservacao/algo', variant: 'web' }),
-    '/dashboard/preservacao',
+    '/painel/preservacao',
   )
 })
 
@@ -103,6 +124,8 @@ test('sem loop: aplicar o redirect duas vezes é estável', () => {
     { pathname: '/m/op/offer', variant: 'web' },
     { pathname: '/m/config/preservacao', variant: 'web' },
     { pathname: '/m/op/espelhar', variant: 'web' },
+    { pathname: '/dashboard/logs', variant: 'web' },
+    { pathname: '/dashboard/pagamento/sucesso', variant: 'web' },
   ]
   for (const c of cases) {
     const first = resolveAppRedirect(c)

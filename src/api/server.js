@@ -3,6 +3,7 @@ import Fastify from 'fastify'
 import fastifyJwt from '@fastify/jwt'
 import fastifyWebsocket from '@fastify/websocket'
 import fastifyCors from '@fastify/cors'
+import fastifyRateLimit from '@fastify/rate-limit'
 import { createCorsOriginChecker, getAllowedOrigins } from './cors.js'
 
 import { authRoutes } from './routes/auth.js'
@@ -191,6 +192,22 @@ await app.register(fastifyCors, {
   },
   methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true,
+})
+
+// API-1: rate limiting global por IP. Baseline anti-abuso (spam de /register,
+// brute-force de /payments/recover, scraping de endpoints caros). Limites
+// específicos mais apertados já existem in-route em /login e /link-conversion;
+// este é o teto geral. Probes de orquestração (health/ready/metrics) ficam fora.
+// trustProxy=true já resolve req.ip a partir de X-Forwarded-For do proxy local.
+const RATE_LIMIT_MAX = Math.max(1, Number(process.env.RATE_LIMIT_MAX || 300))
+const RATE_LIMIT_WINDOW = String(process.env.RATE_LIMIT_WINDOW || '1 minute')
+const RATE_LIMIT_ALLOWLIST = new Set(['/health', '/ready', '/metrics'])
+await app.register(fastifyRateLimit, {
+  global: true,
+  max: RATE_LIMIT_MAX,
+  timeWindow: RATE_LIMIT_WINDOW,
+  allowList: (req) => RATE_LIMIT_ALLOWLIST.has(req.url),
+  keyGenerator: (req) => req.ip,
 })
 
 app.addHook('onSend', async (req, reply) => {

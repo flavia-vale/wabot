@@ -2,8 +2,19 @@ export const BRAND_NAME = 'BOTinho'
 export const BRAND_SHORT_NAME = 'Espelha Grupos'
 export const BRAND_LEGAL_CITATION = 'BOTinho / Espelha Grupos'
 
+export const SUPPORT_WHATSAPP_NUMBER = '5532999844020'
+export const SUPPORT_WHATSAPP_URL = `https://wa.me/${SUPPORT_WHATSAPP_NUMBER}`
+// E-mail de suporte: configurável por env (NEXT_PUBLIC_SUPPORT_EMAIL) para
+// trocar num lugar só quando houver caixa/encaminhamento. Default usa o
+// domínio de produção já registrado (espelhagrupos.com.br) — sem nova compra.
+export const SUPPORT_EMAIL =
+  process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'contato@espelhagrupos.com.br'
+// Janela de atendimento exibida ao usuário (SLA informal da fase atual).
+export const SUPPORT_HOURS = 'Segunda a sexta, das 9h às 18h (horário de Brasília)'
+export const SUPPORT_RESPONSE_SLA = 'Respondemos em até 1 dia útil'
+
 export const BRAND_SAME_AS = [
-  'https://wa.me/5532999844020',
+  SUPPORT_WHATSAPP_URL,
 ]
 
 export const PRODUCT_DEFINITION = 'O BOTinho, do Espelha Grupos, é um software web para afiliados, curadores de ofertas e admins de grupos e canais que organiza grupos e/ou canais de origem e destino, converte links suportados e ajuda a distribuir mensagens de WhatsApp com revisão humana, cadência responsável e histórico de logs.'

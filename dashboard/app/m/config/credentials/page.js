@@ -9,6 +9,72 @@ import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileCredentialPlatforms, credentialSummary, isCredentialComplete } from '@/components/mobile/mobileCredentialPlatforms'
 import { api } from '@/lib/api'
 
+
+function CredentialActionLinks({ links }) {
+  if (!links?.length) return null
+
+  return (
+    <div style={{display:'grid', gridTemplateColumns:'1fr', gap: 8}}>
+      {links.map((link, index) => (
+        <a
+          key={link.href}
+          href={link.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{...cfgStyles.field, display:'flex', alignItems:'center', justifyContent:'center', textAlign:'center', textDecoration:'none', background: index === 0 ? 'var(--ink)' : 'white', color: index === 0 ? 'white' : 'var(--ink)', fontWeight: 700}}
+        >
+          {link.label}
+        </a>
+      ))}
+    </div>
+  )
+}
+
+function MlOAuthSection({ credentialData }) {
+  const [renderedAt] = useState(() => Date.now())
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const connected = credentialData.oauthAccessToken && renderedAt < (credentialData.oauthTokenExpiry || 0)
+
+  async function handleConnect() {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await api.getMlOAuthStartUrl()
+      window.location.href = data.url
+    } catch (err) {
+      setError(err.message || 'Não foi possível iniciar OAuth')
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--line)'}}>
+      <div style={{fontSize: 11, color: 'var(--ink-soft)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em'}}>OAuth (API de Itens)</div>
+      {connected
+        ? (
+          <span style={{display:'inline-flex', alignItems:'center', gap: 4, fontSize: 12, color: 'var(--success)', fontWeight: 600, background: 'color-mix(in srgb, var(--success) 10%, transparent)', padding: '4px 10px', borderRadius: 999}}>
+            OAuth conectado ✓
+          </span>
+        )
+        : (
+          <>
+            <button
+              type="button"
+              onClick={handleConnect}
+              disabled={loading}
+              style={{display:'inline-flex', alignItems:'center', gap: 4, fontSize: 12, color: 'white', fontWeight: 600, background: 'var(--ink)', padding: '8px 14px', borderRadius: 999, border: 'none', cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.65 : 1}}
+            >
+              {loading ? 'Aguarde...' : 'Conectar ML via OAuth'}
+            </button>
+            {error && <div style={{marginTop: 6, fontSize: 12, color: 'var(--danger)'}}>{error}</div>}
+          </>
+        )
+      }
+    </div>
+  )
+}
+
 function PlatformForm({ platform, credential, onSaved }) {
   const credentialData = credential.data || {}
   const [renderedAt] = useState(() => Date.now())
@@ -76,6 +142,7 @@ function PlatformForm({ platform, credential, onSaved }) {
       {open && (
         <div style={{marginTop: 14, display:'grid', gap: 10}}>
           <p style={{fontSize: 12, color:'var(--ink-soft)', lineHeight: 1.45}}>{platform.instructions}</p>
+          <CredentialActionLinks links={platform.actionLinks} />
           {platform.fields.map((field) => {
             const required = field.required !== false
             const isEmpty = !String(draft[field.key] || '').trim()
@@ -104,25 +171,7 @@ function PlatformForm({ platform, credential, onSaved }) {
       )}
 
       {platform.id === 'mercadolivre' && (
-        <div style={{marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--line)'}}>
-          <div style={{fontSize: 11, color: 'var(--ink-soft)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em'}}>OAuth (API de Itens)</div>
-          {credentialData.oauthAccessToken && renderedAt < (credentialData.oauthTokenExpiry || 0)
-            ? (
-              <span style={{display:'inline-flex', alignItems:'center', gap: 4, fontSize: 12, color: 'var(--success)', fontWeight: 600, background: 'color-mix(in srgb, var(--success) 10%, transparent)', padding: '4px 10px', borderRadius: 999}}>
-                OAuth conectado ✓
-              </span>
-            )
-            : (
-              <Link
-                href="/api/auth/ml-oauth/start"
-                prefetch={false}
-                style={{display:'inline-flex', alignItems:'center', gap: 4, fontSize: 12, color: 'white', fontWeight: 600, background: 'var(--ink)', padding: '8px 14px', borderRadius: 999, textDecoration: 'none'}}
-              >
-                Conectar ML via OAuth
-              </Link>
-            )
-          }
-        </div>
+        <MlOAuthSection credentialData={credentialData} />
       )}
     </div>
   )
