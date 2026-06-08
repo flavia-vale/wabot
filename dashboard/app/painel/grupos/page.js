@@ -455,10 +455,10 @@ export default function GruposPage() {
       </section>
 
       {/* Abas Monitorar / Publicar */}
-      <div className="pnl-seg" role="tablist" style={{ alignSelf: 'flex-start' }}>
+      <div className="pnl-seg pnl-groups-role-toggle" role="tablist" aria-label="Escolher entre monitorar e publicar">
         {[
-          { key: 'monitor', label: '👁 Monitorar', n: monitor.length },
-          { key: 'post', label: '⚡ Publicar', n: post.length },
+          { key: 'monitor', icon: '👁', label: 'Monitorar', n: monitor.length },
+          { key: 'post', icon: '⚡', label: 'Publicar', n: post.length },
         ].map((t) => (
           <button
             key={t.key}
@@ -468,7 +468,9 @@ export default function GruposPage() {
             className={tab === t.key ? 'is-active' : ''}
             onClick={() => { setTab(t.key); setExpandedConfigId(null) }}
           >
-            {t.label} <span style={{ opacity: 0.6 }}>({t.n})</span>
+            <span className="pnl-groups-role-icon" aria-hidden="true">{t.icon}</span>
+            <span className="pnl-groups-role-label">{t.label}</span>
+            <span className="pnl-groups-role-count" aria-label={`${t.n} cadastrados`}>{t.n}</span>
           </button>
         ))}
       </div>
