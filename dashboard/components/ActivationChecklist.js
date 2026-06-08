@@ -205,9 +205,12 @@ export function ActivationChecklist({ onActivated, persist = false, userId }) {
     if (!persist && typeof window !== 'undefined' && getOnboardingDone(userId)) return 'hidden'
     return 'list'
   })
+  // Páginas dedicadas (ex.: /painel/checklist) precisam continuar visíveis
+  // mesmo quando o onboarding da home já foi concluído e salvo no localStorage.
+  const visiblePhase = persist ? 'list' : phase
 
   useEffect(() => {
-    if (phase === 'hidden') {
+    if (visiblePhase === 'hidden') {
       onActivated?.()
       return
     }
@@ -219,7 +222,7 @@ export function ActivationChecklist({ onActivated, persist = false, userId }) {
     poll()
     const id = setInterval(poll, 10_000)
     return () => { cancelled = true; clearInterval(id) }
-  }, [phase, onActivated])
+  }, [visiblePhase, onActivated])
 
   const completedSet = new Set(STEPS.filter(s => status?.[s.key]).map(s => s.key))
   const count = completedSet.size
@@ -230,14 +233,14 @@ export function ActivationChecklist({ onActivated, persist = false, userId }) {
   const nextKey = STEPS.find(s => !completedSet.has(s.key))?.key
 
   useEffect(() => {
-    if (!persist && botActive && phase === 'list') {
+    if (!persist && botActive && visiblePhase === 'list') {
       const t = setTimeout(() => setPhase('celebrate'), 420)
       return () => clearTimeout(t)
     }
-  }, [persist, botActive, phase])
+  }, [persist, botActive, visiblePhase])
 
   useEffect(() => {
-    if (!persist && phase === 'celebrate') {
+    if (!persist && visiblePhase === 'celebrate') {
       const t = setTimeout(() => {
         setOnboardingDone(userId)
         setPhase('hidden')
@@ -245,10 +248,10 @@ export function ActivationChecklist({ onActivated, persist = false, userId }) {
       }, 2800)
       return () => clearTimeout(t)
     }
-  }, [persist, phase, onActivated])
+  }, [persist, visiblePhase, onActivated, userId])
 
-  if (phase === 'hidden') return null
-  if (phase === 'celebrate') return <CelebrationBanner />
+  if (visiblePhase === 'hidden') return null
+  if (visiblePhase === 'celebrate') return <CelebrationBanner />
 
   const timeLabel = count === 0
     ? '≈ 4 min para terminar'
