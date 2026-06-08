@@ -134,7 +134,7 @@ export default function PainelPage() {
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 1080, margin: '0 auto' }}>
-      <ActivationChecklist />
+      <ActivationChecklist userId={user?.id} />
       {/* Seletor de período */}
       <div className="pnl-chips">
         {PERIODS.map((p) => (
