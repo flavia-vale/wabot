@@ -2,6 +2,8 @@ import { MobileStateCard } from '@/components/mobile/MobileShell'
 
 export const metadata = {
   title: 'BOTinho Mobile',
+  alternates: { canonical: '/m' },
+  robots: { index: false, follow: false },
 }
 
 const isMobilePreviewEnabled = process.env.NEXT_PUBLIC_ENABLE_MOBILE_PREVIEW !== 'false'
