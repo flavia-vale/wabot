@@ -15,6 +15,21 @@ const formattedLastUpdated = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'long
 
 const blogPosts = [
   {
+    href: '/blog/comecar-afiliado-whatsapp-sem-grupo-grande',
+    title: 'Como começar como afiliado no WhatsApp sem ter grupo grande',
+    description: 'Primeiros passos para quem está começando: chip dedicado, conversão de link e cadência sem precisar de audiência grande.',
+  },
+  {
+    href: '/blog/como-ser-afiliado-shopee-whatsapp',
+    title: 'Como ser afiliado Shopee e divulgar ofertas no WhatsApp',
+    description: 'Entre no programa de afiliados, gere o link com seu código e divulgue com conversão automática.',
+  },
+  {
+    href: '/blog/como-divulgar-ofertas-amazon-whatsapp',
+    title: 'Como divulgar ofertas da Amazon no WhatsApp como afiliado',
+    description: 'Tag de associado, link convertido, preview com imagem e cadência que protege o número.',
+  },
+  {
     href: '/blog/grupo-ou-canal-whatsapp-achadinhos',
     title: 'Guia: grupo ou canal para achadinhos no WhatsApp',
     description: 'Compare grupos e canais para organizar achadinhos com menos ruído e mais preservação operacional.',

@@ -8,6 +8,16 @@ export const AFFILIATE_PLATFORMS = [
     id: 'shopee',
     label: 'Shopee',
     instructions: 'Onde obter: affiliate.shopee.com.br → Ferramentas → API de Afiliados → Gerar credenciais. Mantenha o Secret Key privado.',
+    actionLinks: [
+      {
+        label: 'Solicite sua API Shopee',
+        href: 'https://help.shopee.com.br/portal/webform/bbce78695c364ba18c9cbceb74ec9091?entryPoint=1&lastArticleID=',
+      },
+      {
+        label: 'Pegue suas credenciais',
+        href: 'https://espelhagrupos.com.br/painel/tutorial#:~:text=Acesse%20o%20painel%20Shopee%20Open%20API',
+      },
+    ],
     fields: [
       { key: 'appId', label: 'App ID', hint: 'Identificador do seu app na Shopee.' },
       { key: 'secretKey', label: 'Secret Key', hint: 'Chave secreta do app (não compartilhe).', sensitive: true },

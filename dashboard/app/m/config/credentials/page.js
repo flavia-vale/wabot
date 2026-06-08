@@ -9,6 +9,27 @@ import { useMobileRoutePerf } from '@/components/mobile/MobileObservability'
 import { mobileCredentialPlatforms, credentialSummary, isCredentialComplete } from '@/components/mobile/mobileCredentialPlatforms'
 import { api } from '@/lib/api'
 
+
+function CredentialActionLinks({ links }) {
+  if (!links?.length) return null
+
+  return (
+    <div style={{display:'grid', gridTemplateColumns:'1fr', gap: 8}}>
+      {links.map((link, index) => (
+        <a
+          key={link.href}
+          href={link.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{...cfgStyles.field, display:'flex', alignItems:'center', justifyContent:'center', textAlign:'center', textDecoration:'none', background: index === 0 ? 'var(--ink)' : 'white', color: index === 0 ? 'white' : 'var(--ink)', fontWeight: 700}}
+        >
+          {link.label}
+        </a>
+      ))}
+    </div>
+  )
+}
+
 function MlOAuthSection({ credentialData }) {
   const [renderedAt] = useState(() => Date.now())
   const [loading, setLoading] = useState(false)
@@ -121,6 +142,7 @@ function PlatformForm({ platform, credential, onSaved }) {
       {open && (
         <div style={{marginTop: 14, display:'grid', gap: 10}}>
           <p style={{fontSize: 12, color:'var(--ink-soft)', lineHeight: 1.45}}>{platform.instructions}</p>
+          <CredentialActionLinks links={platform.actionLinks} />
           {platform.fields.map((field) => {
             const required = field.required !== false
             const isEmpty = !String(draft[field.key] || '').trim()

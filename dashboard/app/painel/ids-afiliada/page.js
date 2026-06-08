@@ -5,6 +5,28 @@ import { api } from '@/lib/api'
 import { usePainelHeader } from '../PainelShell'
 import { AFFILIATE_PLATFORMS, CRED_STATUS, getPlatformStatus } from '@/lib/painel/affiliatePlatforms'
 
+
+function PlatformActionLinks({ links }) {
+  if (!links?.length) return null
+
+  return (
+    <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10, marginBottom: 14 }}>
+      {links.map((link, index) => (
+        <a
+          key={link.href}
+          className={`pnl-btn ${index === 0 ? 'is-primary' : ''}`}
+          href={link.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ justifyContent: 'center', textAlign: 'center' }}
+        >
+          {link.label}
+        </a>
+      ))}
+    </div>
+  )
+}
+
 function PlatformCard({ platform, initialData, onSave, disabled }) {
   const [draft, setDraft] = useState({})
   const [dirty, setDirty] = useState(false)
@@ -54,6 +76,7 @@ function PlatformCard({ platform, initialData, onSave, disabled }) {
         <span className={`pnl-tag ${status.cls}`}>{status.label}</span>
       </div>
       {platform.instructions && <p className="pnl-card-note" style={{ marginBottom: 12 }}>{platform.instructions}</p>}
+      <PlatformActionLinks links={platform.actionLinks} />
       {platform.platformWarning && <div className="pnl-note-box is-warn" style={{ marginBottom: 12 }}>{platform.platformWarning}</div>}
 
       <div className="pnl-grid" style={{ gap: 12 }}>

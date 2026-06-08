@@ -2,7 +2,7 @@ import "./globals.css";
 import { ToastProvider } from "@/components/ToastProvider";
 import { ConversionPrompt } from "@/components/marketing/ConversionPrompt";
 import { getSiteUrl } from '@/lib/site-url'
-import { BRAND_NAME, BRAND_SHORT_NAME, BRAND_SAME_AS, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION } from '@/lib/marketing-content'
+import { BRAND_NAME, BRAND_SHORT_NAME, BRAND_SAME_AS, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION, SUPPORT_EMAIL } from '@/lib/marketing-content'
 
 export const metadata = {
   metadataBase: new URL('https://espelhagrupos.com.br'),
@@ -33,7 +33,7 @@ function buildGlobalJsonLd() {
       alternateName: [BRAND_SHORT_NAME],
       url: siteUrl,
       logo: `${siteUrl}/botinho-logo.svg`,
-      contactPoint: [{ '@type': 'ContactPoint', contactType: 'customer support', url: `${siteUrl}/suporte` }],
+      contactPoint: [{ '@type': 'ContactPoint', contactType: 'customer support', email: SUPPORT_EMAIL, url: `${siteUrl}/suporte` }],
       sameAs: BRAND_SAME_AS,
     },
     {

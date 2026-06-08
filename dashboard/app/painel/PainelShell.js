@@ -6,6 +6,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { NAV_GROUPS } from './nav'
+import SidebarOnboarding from '@/components/SidebarOnboarding'
 
 /* Contexto compartilhado: dados de sessão/usuário buscados uma vez pelo shell
  * e reusados pelas páginas (sem refetch). Páginas também publicam o título do
@@ -41,6 +42,9 @@ const STAR_ICON = <path d="M12 2.5l2.9 6 6.6.6-5 4.4 1.5 6.5L12 16.9 5.5 20.5 7 
 const LOCK_ICON = <><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></>
 const CHEVRON_ICON = <path d="M9 18l6-6-6-6" />
 const BELL_ICON = <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></>
+const HELP_ICON = <><circle cx="12" cy="12" r="10" /><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4" /><path d="M12 17h.01" /></>
+const SETTINGS_ICON = <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></>
+const LOGOUT_ICON = <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>
 
 function planInfo(user) {
   const plan = user?.plan
@@ -100,6 +104,8 @@ export default function PainelShell({ children }) {
   const [phone, setPhone] = useState(null)
   const [groupCount, setGroupCount] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [openGroups, setOpenGroups] = useState({})
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [header, setHeader] = useState({ title: 'Painel', subtitle: '' })
   const [actionSlot, setActionSlot] = useState(null)
 
@@ -159,25 +165,51 @@ export default function PainelShell({ children }) {
             BOTinho <small>.app</small>
           </Link>
           <nav className="pnl-nav" aria-label="Navegação do painel">
-            {NAV_GROUPS.map((group) => (
-              <div key={group.title} className="pnl-nav-group">
-                <p className="pnl-nav-title">{group.title}</p>
-                {group.items.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    aria-current={isActive(item.href) ? 'page' : undefined}
-                    className={`pnl-nav-item${isActive(item.href) ? ' is-active' : ''}`}
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    <Icon path={item.icon} />
-                    <span>{item.label}</span>
-                    {item.pro && <span className="pnl-pro">PRO</span>}
-                    {item.free && <span className="pnl-free">GRÁTIS</span>}
-                  </Link>
-                ))}
-              </div>
-            ))}
+            <SidebarOnboarding userId={user?.id} onNavigate={() => setMenuOpen(false)} />
+            {NAV_GROUPS.map((group) => {
+              const hasActiveChild = group.items.some((item) => isActive(item.href))
+              const renderItem = (item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={isActive(item.href) ? 'page' : undefined}
+                  className={`pnl-nav-item${isActive(item.href) ? ' is-active' : ''}`}
+                  onClick={() => setMenuOpen(false)}
+                >
+                  <Icon path={item.icon} />
+                  <span>{item.label}</span>
+                  {item.pro && <span className="pnl-pro">PRO</span>}
+                  {item.free && <span className="pnl-free">GRÁTIS</span>}
+                </Link>
+              )
+
+              if (group.collapsible) {
+                const open = openGroups[group.title] ?? hasActiveChild
+                return (
+                  <div key={group.title} className="pnl-nav-group">
+                    <button
+                      type="button"
+                      className={`pnl-nav-toggle${open ? ' is-open' : ''}`}
+                      aria-expanded={open}
+                      onClick={() => setOpenGroups((s) => ({ ...s, [group.title]: !open }))}
+                    >
+                      <span>{group.title}</span>
+                      <svg className="pnl-nav-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M9 18l6-6-6-6" />
+                      </svg>
+                    </button>
+                    {open && group.items.map(renderItem)}
+                  </div>
+                )
+              }
+
+              return (
+                <div key={group.title} className="pnl-nav-group">
+                  <p className="pnl-nav-title">{group.title}</p>
+                  {group.items.map(renderItem)}
+                </div>
+              )
+            })}
           </nav>
 
           {(() => {
@@ -194,13 +226,41 @@ export default function PainelShell({ children }) {
             )
           })()}
 
-          <button type="button" className="pnl-user" onClick={logout} title="Sair da conta" style={{ background: 'none', border: 'none', borderTop: '1px solid var(--line)', textAlign: 'left', cursor: 'pointer', width: '100%' }}>
-            <span className="pnl-avatar" aria-hidden="true">{initialsOf(user?.name, user?.email)}</span>
-            <span style={{ minWidth: 0 }}>
-              <span className="pnl-user-name" style={{ display: 'block' }}>{user?.name || 'Minha conta'}</span>
-              <span className="pnl-user-mail" style={{ display: 'block' }}>{user?.email || 'Sair'}</span>
-            </span>
-          </button>
+          <div className="pnl-usermenu-wrap">
+            {userMenuOpen && (
+              <>
+                <button type="button" aria-label="Fechar menu da conta" className="pnl-usermenu-scrim" onClick={() => setUserMenuOpen(false)} />
+                <div className="pnl-usermenu" role="menu">
+                  <Link href="/painel/configuracoes" role="menuitem" className="pnl-usermenu-item" onClick={() => { setUserMenuOpen(false); setMenuOpen(false) }}>
+                    <Icon path={SETTINGS_ICON} />
+                    <span>Configurações da conta</span>
+                  </Link>
+                  <button type="button" role="menuitem" className="pnl-usermenu-item is-danger" onClick={logout}>
+                    <Icon path={LOGOUT_ICON} />
+                    <span>Sair</span>
+                  </button>
+                </div>
+              </>
+            )}
+            <button
+              type="button"
+              className={`pnl-user${userMenuOpen ? ' is-open' : ''}`}
+              onClick={() => setUserMenuOpen((v) => !v)}
+              aria-haspopup="menu"
+              aria-expanded={userMenuOpen}
+              title="Minha conta"
+              style={{ background: 'none', border: 'none', borderTop: '1px solid var(--line)', textAlign: 'left', cursor: 'pointer', width: '100%' }}
+            >
+              <span className="pnl-avatar" aria-hidden="true">{initialsOf(user?.name, user?.email)}</span>
+              <span style={{ minWidth: 0, flex: 1 }}>
+                <span className="pnl-user-name" style={{ display: 'block' }}>{user?.name || 'Minha conta'}</span>
+                <span className="pnl-user-mail" style={{ display: 'block' }}>{user?.email || 'Ver opções'}</span>
+              </span>
+              <svg className="pnl-user-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+          </div>
 
           {/* Alternância de variante: navegação dura (<a>) para o middleware
               gravar ?view=mobile no cookie e redirecionar para o /m equivalente. */}
@@ -234,6 +294,9 @@ export default function PainelShell({ children }) {
             </div>
             <div className="pnl-header-right">
               <OnlinePill online={online} groupCount={groupCount} />
+              <Link href="/painel/tutorial" className="pnl-bell" aria-label="Tutorial e ajuda" title="Tutorial e ajuda">
+                <Icon path={HELP_ICON} />
+              </Link>
               <button type="button" className="pnl-bell has-dot" aria-label="Notificações" title="Notificações">
                 <Icon path={BELL_ICON} />
               </button>

@@ -4,6 +4,7 @@ import db from '../../db.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { normalizeEmail } from '../auth-utils.js'
 import { DEFAULT_COPY_VARIATION_POOL_JSON } from '../../core/copyVariation.js'
+import { sendWelcomeEmail } from '../../email/welcomeEmail.js'
 
 // A-1 (anti brute-force): dois mapas de tentativas. `loginAttempts` é por
 // (email|ip) — pega o caso comum de força bruta de um IP. `loginAttemptsByEmail`
@@ -296,7 +297,8 @@ export async function authRoutes(app) {
       coupon_code: couponCode,
     } = req.body ?? {}
     const name = normalizeName(rawName)
-    const email = normalizeEmail(rawEmail) || generateFallbackEmail()
+    const providedEmail = normalizeEmail(rawEmail)
+    const email = providedEmail || generateFallbackEmail()
     const isPromoVipFlow = source === 'promo_vip_7dias' && couponCode === 'VIP7DIAS'
     const normalizedPhone = normalizeContactPhone(rawContactPhone)
     const contactPhone = normalizedPhone
@@ -374,6 +376,13 @@ export async function authRoutes(app) {
           conversion_prompt_variant: conversionPromptVariant || null,
         },
       })
+      // E-mail de boas-vindas: fire-and-forget, só para e-mails reais
+      // informados pelo usuário (não para o fallback user_*@sistema.com).
+      // No-op quando SMTP não está configurado; nunca derruba o signup.
+      if (providedEmail) {
+        sendWelcomeEmail({ to: providedEmail, name }).catch(() => {})
+      }
+
       const token = app.jwt.sign({ sub: user.id, email: user.email, jti: randomToken(12) }, { expiresIn: '7d' })
       setAuthCookie(reply, token, req)
       return { user: publicUser(user), token }
