@@ -146,16 +146,19 @@ export default function AffiliatePage() {
   const [copied, setCopied] = useState(false)
   const [showPixEdit, setShowPixEdit] = useState(false)
 
-  async function loadData() {
-    try {
-      const result = await api.affiliateMe()
-      setData(result)
-    } catch {
-      setData(null)
-    }
+  function loadData() {
+    api.affiliateMe()
+      .then(result => setData(result))
+      .catch(() => setData(null))
   }
 
-  useEffect(() => { loadData() }, [])
+  useEffect(() => {
+    let active = true
+    api.affiliateMe()
+      .then(result => { if (active) setData(result) })
+      .catch(() => { if (active) setData(null) })
+    return () => { active = false }
+  }, [])
 
   if (data === undefined) {
     return (

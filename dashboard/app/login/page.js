@@ -54,18 +54,21 @@ function LoginContent() {
     if (!isRegister) return
     const fromUrl = searchParams.get('aff')
     if (fromUrl) {
-      setAffCode(fromUrl)
-      api.affiliateConfig().then(cfg => {
-        const hours = cfg?.cookieDurationHours ?? 24
-        const expires = new Date(Date.now() + hours * 3600 * 1000).toUTCString()
-        document.cookie = `aff_code=${fromUrl}; expires=${expires}; path=/; SameSite=Lax`
-      }).catch(() => {
-        const expires = new Date(Date.now() + 24 * 3600 * 1000).toUTCString()
-        document.cookie = `aff_code=${fromUrl}; expires=${expires}; path=/; SameSite=Lax`
-      })
+      api.affiliateConfig()
+        .then(cfg => {
+          const hours = cfg?.cookieDurationHours ?? 24
+          const expires = new Date(Date.now() + hours * 3600 * 1000).toUTCString()
+          document.cookie = `aff_code=${fromUrl}; expires=${expires}; path=/; SameSite=Lax`
+          setAffCode(fromUrl)
+        })
+        .catch(() => {
+          const expires = new Date(Date.now() + 24 * 3600 * 1000).toUTCString()
+          document.cookie = `aff_code=${fromUrl}; expires=${expires}; path=/; SameSite=Lax`
+          setAffCode(fromUrl)
+        })
     } else {
       const match = document.cookie.match(/(?:^|;\s*)aff_code=([^;]+)/)
-      if (match) setAffCode(decodeURIComponent(match[1]))
+      if (match) Promise.resolve(decodeURIComponent(match[1])).then(code => setAffCode(code))
     }
   }, [isRegister, searchParams])
 
