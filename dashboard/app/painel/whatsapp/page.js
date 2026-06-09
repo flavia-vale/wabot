@@ -31,7 +31,7 @@ function NoteBox({ variant = 'is-warn', title, message }) {
 }
 
 export default function WhatsAppPage() {
-  usePainelHeader({ title: 'Conexão WhatsApp', subtitle: 'Status da sessão e conexão por QR Code ou código' })
+  usePainelHeader({ title: 'Conexão WhatsApp', subtitle: 'Status da sessão e conexão pelo número ou QR Code' })
 
   const [status, setStatus] = useState(null)
   const [statusLoading, setStatusLoading] = useState(true)
@@ -59,7 +59,7 @@ export default function WhatsAppPage() {
 
   const [pairingPhone, setPairingPhone] = useState('')
   const [pairingCode, setPairingCode] = useState('')
-  const [connectMethod, setConnectMethod] = useState('qr')
+  const [connectMethod, setConnectMethod] = useState('pairing')
   const [showForgetConfirm, setShowForgetConfirm] = useState(false)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
 
@@ -687,23 +687,23 @@ export default function WhatsAppPage() {
             <div role="tablist" aria-label="Método de conexão" style={{ display: 'flex', gap: 4, background: 'var(--bg-soft)', borderRadius: 'var(--pnl-radius-sm)', padding: 4, marginBottom: 16 }}>
               <button
                 role="tab"
-                aria-selected={connectMethod === 'qr'}
-                onClick={() => { setConnectMethod('qr'); setError('') }}
-                disabled={loading}
-                className="pnl-btn"
-                style={{ flex: 1, justifyContent: 'center', background: connectMethod === 'qr' ? 'var(--surface)' : 'transparent', border: 0, color: connectMethod === 'qr' ? 'var(--accent-strong)' : 'var(--ink-soft)', boxShadow: connectMethod === 'qr' ? 'var(--pnl-shadow)' : 'none' }}
-              >
-                📷 QR Code
-              </button>
-              <button
-                role="tab"
                 aria-selected={connectMethod === 'pairing'}
                 onClick={() => { setConnectMethod('pairing'); setError('') }}
                 disabled={loading}
                 className="pnl-btn"
-                style={{ flex: 1, justifyContent: 'center', background: connectMethod === 'pairing' ? 'var(--surface)' : 'transparent', border: 0, color: connectMethod === 'pairing' ? 'var(--ink)' : 'var(--ink-soft)', boxShadow: connectMethod === 'pairing' ? 'var(--pnl-shadow)' : 'none' }}
+                style={{ flex: 1, justifyContent: 'center', background: connectMethod === 'pairing' ? 'var(--surface)' : 'transparent', border: 0, color: connectMethod === 'pairing' ? 'var(--accent-strong)' : 'var(--ink-soft)', boxShadow: connectMethod === 'pairing' ? 'var(--pnl-shadow)' : 'none' }}
               >
                 📱 Número de celular
+              </button>
+              <button
+                role="tab"
+                aria-selected={connectMethod === 'qr'}
+                onClick={() => { setConnectMethod('qr'); setError('') }}
+                disabled={loading}
+                className="pnl-btn"
+                style={{ flex: 1, justifyContent: 'center', background: connectMethod === 'qr' ? 'var(--surface)' : 'transparent', border: 0, color: connectMethod === 'qr' ? 'var(--ink)' : 'var(--ink-soft)', boxShadow: connectMethod === 'qr' ? 'var(--pnl-shadow)' : 'none' }}
+              >
+                📷 QR Code
               </button>
             </div>
 
