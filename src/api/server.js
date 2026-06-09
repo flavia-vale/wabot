@@ -22,6 +22,7 @@ import { publicRoutes } from './routes/public.js'
 import { clickTrackerRoutes } from './routes/clickTracker.js'
 import { preservationRoutes } from './routes/preservation.js'
 import { offerAutomationRoutes } from './routes/offerAutomation.js'
+import { affiliateRoutes } from './routes/affiliate.js'
 import { startOfferAutomationCron } from '../offerAutomation/cron.js'
 import { registerApiMetricsHooks, renderPrometheusMetrics } from './metrics.js'
 import { getSupervisorOperationalCounters } from '../supervisor/operationalCounters.js'
@@ -279,6 +280,7 @@ app.register(publicRoutes, { prefix: '/api/public' })
 app.register(preservationRoutes, { prefix: '/api/preservation' })
 app.register(offerAutomationRoutes, { prefix: '/api/offer-automations' })
 app.register(clickTrackerRoutes) // sem prefix — /r/:hash precisa estar na raiz
+app.register(affiliateRoutes, { prefix: '/api' })
 
 // Liveness: processo está de pé
 app.get('/health', () => ({ ok: true }))

@@ -45,6 +45,12 @@ model User {
   affiliateLinks        AffiliateLink[]
   probeEvidences       ProbeEvidence[]
 
+  affiliateProfileId    String?  @unique
+  affiliateProfile      AffiliateProfile? @relation("UserAffiliate")
+  affiliateRef          AffiliateProfile? @relation("AffiliateUser", fields: [affiliateProfileId], references: [id])
+  referredCommissions   AffiliateCommission[] @relation("ReferredUserCommissions")
+  paidCommissions       AffiliateCommission[] @relation("PaidCommissions")
+
   @@index([status, plan, accessExpiresAt])
   @@index([lastActivityAt])
   @@index([supportStatus])
@@ -128,6 +134,8 @@ model Payment {
   gatewayEventId String?
   lastSyncedAt   DateTime?
   createdAt      DateTime  @default(now())
+
+  affiliateCommission AffiliateCommission?
 
   @@index([status, createdAt])
   @@index([gatewayEventId])
@@ -505,4 +513,51 @@ model OfferAutomationSentLog {
   sentAt       DateTime @default(now())
 
   @@index([userId, destGroupJid, sentAt])
+}
+
+model AffiliateSettings {
+  id                  Int @id @default(1)
+  cookieDurationHours Int @default(24)
+  commissionPercent   Int @default(30)
+}
+
+model AffiliateProfile {
+  id          String  @id @default(cuid())
+  userId      String  @unique
+  code        String  @unique
+  status      String  @default("pending")
+  pixKey      String
+  pixKeyType  String
+  appliedAt   DateTime @default(now())
+  approvedAt  DateTime?
+  rejectedAt  DateTime?
+  adminNotes  String?
+
+  user        User     @relation("UserAffiliate", fields: [userId], references: [id], onDelete: Cascade)
+  referredUser User?   @relation("AffiliateUser")
+  commissions AffiliateCommission[]
+
+  @@index([status])
+}
+
+model AffiliateCommission {
+  id                    String   @id @default(cuid())
+  affiliateId           String
+  paymentId             String   @unique
+  referredUserId        String
+  saleAmountCents       Int
+  commissionAmountCents Int
+  status                String   @default("pending")
+  cycleMonth            String
+  paidAt                DateTime?
+  paidByUserId          String?
+  createdAt             DateTime @default(now())
+
+  affiliate    AffiliateProfile @relation(fields: [affiliateId], references: [id])
+  payment      Payment          @relation(fields: [paymentId], references: [id])
+  referredUser User             @relation("ReferredUserCommissions", fields: [referredUserId], references: [id])
+  paidBy       User?            @relation("PaidCommissions", fields: [paidByUserId], references: [id])
+
+  @@index([affiliateId, cycleMonth, status])
+  @@index([referredUserId])
 }
