@@ -100,7 +100,6 @@ export async function affiliateRoutes(app) {
         include: {
           user: { select: { id: true, name: true, email: true } },
           commissions: { select: { commissionAmountCents: true, status: true } },
-          referredUser: { select: { _count: true } },
         },
       }),
       db.affiliateProfile.count({ where }),

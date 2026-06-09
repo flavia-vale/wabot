@@ -387,6 +387,8 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
                     saleAmountCents: Math.round(payment.amount * 100),
                     log,
                   }).catch(err => log?.error?.({ err }, 'affiliate commission error'))
+                } else {
+                  log?.warn?.({ mpPaymentId: String(summary.dataResourceId), userId }, 'affiliate_commission_skipped: payment not found after activation')
                 }
               }
             } catch (activationErr) {
@@ -622,6 +624,8 @@ export async function paymentsRoutes(app) {
             saleAmountCents: Math.round(payment.amount * 100),
             log: req.log,
           }).catch(err => req.log?.error?.({ err }, 'affiliate commission error'))
+        } else {
+          req.log?.warn?.({ mpPaymentId: String(mpPaymentId), userId }, 'affiliate_commission_skipped: payment not found after activation')
         }
       }
       return reply.redirect(`${dashboardUrl}/painel/pagamento/sucesso`)
@@ -796,6 +800,8 @@ export async function paymentsRoutes(app) {
           saleAmountCents: Math.round(recoveredPayment.amount * 100),
           log: req.log,
         }).catch(err => req.log?.error?.({ err }, 'affiliate commission error'))
+      } else {
+        req.log?.warn?.({ mpPaymentId: String(paymentId), userId }, 'affiliate_commission_skipped: payment not found after activation')
       }
       return { recovered: true, plan, accessExpiresAt: result.expiresAt }
     } catch (err) {

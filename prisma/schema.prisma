@@ -536,6 +536,8 @@ model AffiliateProfile {
   user        User     @relation("UserAffiliate", fields: [userId], references: [id], onDelete: Cascade)
   referredUser User?   @relation("AffiliateUser")
   commissions AffiliateCommission[]
+
+  @@index([status])
 }
 
 model AffiliateCommission {
