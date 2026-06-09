@@ -50,6 +50,7 @@ function resolveApiBase() {
 const BASE = resolveApiBase()
 const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou ou foi invalidada. Faça login novamente para continuar.'
 const AUTH_TOKEN_KEY = 'wb_auth_token'
+export const TERMS_VERSION = '2026-06-09-whatsapp-risk-acceptance'
 
 function getAuthToken() {
   if (typeof window === 'undefined') return ''
@@ -134,14 +135,14 @@ export const api = {
       : { ...(refOrAttribution && { ref: refOrAttribution }) }
     const data = await apiFetch('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ name, email, password, contactPhone, ...attribution }),
+      body: JSON.stringify({ name, email, password, contactPhone, ...attribution, termsAccepted: attribution.termsAccepted === true, termsVersion: attribution.termsVersion || TERMS_VERSION }),
     })
     setAuthToken(data?.token || '')
     return data
   },
 
-  registerPromoVip: async (name, email, password, contactPhone, couponCode) => {
-    const data = await apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, source: 'promo_vip_7dias', coupon_code: couponCode }) })
+  registerPromoVip: async (name, email, password, contactPhone, couponCode, options = {}) => {
+    const data = await apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, source: 'promo_vip_7dias', coupon_code: couponCode, termsAccepted: options.termsAccepted === true, termsVersion: options.termsVersion || TERMS_VERSION }) })
     setAuthToken(data?.token || '')
     return data
   },

@@ -14,6 +14,7 @@ const loginAttempts = new Map()
 const loginAttemptsByEmail = new Map()
 export const STANDARD_TRIAL_DAYS = 7
 export const PROMO_VIP_TRIAL_DAYS = 7
+export const TERMS_VERSION = '2026-06-09-whatsapp-risk-acceptance'
 
 function getLoginAttemptMaxEntries() {
   const value = Number(process.env.LOGIN_RATE_LIMIT_MAX_ENTRIES ?? 20000)
@@ -175,7 +176,7 @@ async function createUserWithSecureFields(data) {
     return await db.user.create({ data })
   } catch (err) {
     if (!isPrismaShapeMismatch(err)) throw err
-    const { contactPhone, contactPhoneOptInAt, status, lastLoginAt, lastActivityAt, supportStatus, name, ...legacyData } = data
+    const { contactPhone, contactPhoneOptInAt, status, lastLoginAt, lastActivityAt, supportStatus, name, termsAcceptedAt, termsVersion, termsAcceptedIp, termsAcceptedUserAgent, ...legacyData } = data
     return db.user.create({ data: legacyData })
   }
 }
@@ -296,6 +297,8 @@ export async function authRoutes(app) {
       conversion_prompt_variant: conversionPromptVariant,
       coupon_code: couponCode,
       aff_code: rawAffCode,
+      termsAccepted,
+      termsVersion: rawTermsVersion,
     } = req.body ?? {}
     const name = normalizeName(rawName)
     const providedEmail = normalizeEmail(rawEmail)
@@ -307,6 +310,7 @@ export async function authRoutes(app) {
     const password = hasPassword ? String(rawPassword) : ''
 
     if (!name || !contactPhone) return reply.code(400).send({ error: 'nome e celular obrigatórios' })
+    if (termsAccepted !== true) return reply.code(400).send({ error: 'Aceite os Termos de Uso e ciência de riscos para criar a conta' })
     if (rawEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply.code(400).send({ error: 'Formato de email inválido' })
     if (!hasPassword) return reply.code(400).send({ error: 'Senha obrigatória' })
     if (password.length < 8) return reply.code(400).send({ error: 'Senha deve ter no mínimo 8 caracteres' })
@@ -321,6 +325,7 @@ export async function authRoutes(app) {
     const now = new Date()
     const trialDays = isPromoVipFlow ? PROMO_VIP_TRIAL_DAYS : STANDARD_TRIAL_DAYS
     const accessExpiresAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000)
+    const acceptedTermsVersion = typeof rawTermsVersion === 'string' && rawTermsVersion.trim() ? rawTermsVersion.trim().slice(0, 120) : TERMS_VERSION
     const referralCode = randomBytes(4).toString('hex')
 
     let referrer = null
@@ -358,6 +363,10 @@ export async function authRoutes(app) {
         lastLoginAt: now,
         lastActivityAt: now,
         supportStatus: 'new',
+        termsAcceptedAt: now,
+        termsVersion: acceptedTermsVersion,
+        termsAcceptedIp: String(req.ip ?? '').slice(0, 80) || null,
+        termsAcceptedUserAgent: String(req.headers?.['user-agent'] ?? '').slice(0, 500) || null,
         ...(affiliateProfileId && { affiliateProfileId }),
       })
 
@@ -387,6 +396,7 @@ export async function authRoutes(app) {
           utm_term: utmTerm || null,
           conversion_prompt_id: conversionPromptId || null,
           conversion_prompt_variant: conversionPromptVariant || null,
+          terms_version: acceptedTermsVersion,
         },
       })
       // E-mail de boas-vindas: fire-and-forget, só para e-mails reais
