@@ -83,7 +83,7 @@ export async function tryCreateAffiliateCommission({ userId, paymentId, saleAmou
     const profile = await db.affiliateProfile.findUnique({ where: { id: user.affiliateProfileId } })
     if (!profile || profile.status !== 'approved') return { skipped: 'not_approved' }
 
-    const existingCommission = await db.affiliateCommission.findFirst({ where: { referredUserId: userId } })
+    const existingCommission = await db.affiliateCommission.findFirst({ where: { referredUserId: userId, affiliateId: profile.id } })
     const isRecurring = !!existingCommission
 
     const settings = await getAffiliateSettings()

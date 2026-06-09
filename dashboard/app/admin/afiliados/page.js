@@ -252,6 +252,7 @@ function ApprovedTab() {
                       type="number"
                       min="0"
                       max="100"
+                      step="1"
                       placeholder="padrão"
                       value={overrideEdits[p.id]?.pct ?? ''}
                       onChange={e => setOverrideEdits(prev => ({ ...prev, [p.id]: { ...prev[p.id], pct: e.target.value } }))}
@@ -264,6 +265,7 @@ function ApprovedTab() {
                       type="number"
                       min="0"
                       max="100"
+                      step="1"
                       placeholder="padrão"
                       value={overrideEdits[p.id]?.recurringPct ?? ''}
                       onChange={e => setOverrideEdits(prev => ({ ...prev, [p.id]: { ...prev[p.id], recurringPct: e.target.value } }))}
@@ -418,16 +420,19 @@ function SettingsTab() {
   const [recurringEnabled, setRecurringEnabled] = useState(true)
 
   useEffect(() => {
+    let active = true
     api.adminAffiliateSettings()
       .then(result => {
+        if (!active) return
         setSettings(result)
         setCookieHours(String(result.cookieDurationHours))
         setCommissionPct(String(result.commissionPercent))
         setRecurringCommissionPct(String(result.commissionRecurringPercent ?? 30))
         setRecurringEnabled(result.recurringCommissionEnabled ?? true)
       })
-      .catch(() => setSettings(null))
-      .finally(() => setLoading(false))
+      .catch(() => { if (active) setSettings(null) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
   }, [])
 
   async function handleSave(e) {
