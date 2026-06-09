@@ -60,19 +60,20 @@ function CandidaturesTab() {
   const [rejectTarget, setRejectTarget] = useState(null)
   const [actionMessage, setActionMessage] = useState('')
 
-  async function loadProfiles() {
+  function loadProfiles() {
     setLoading(true)
-    try {
-      const result = await api.adminAffiliates({ status: statusFilter })
-      setProfiles(result.profiles ?? [])
-    } catch {
-      setProfiles([])
-    } finally {
-      setLoading(false)
-    }
+    api.adminAffiliates({ status: statusFilter })
+      .then(result => { setProfiles(result.profiles ?? []); setLoading(false) })
+      .catch(() => { setProfiles([]); setLoading(false) })
   }
 
-  useEffect(() => { loadProfiles() }, [statusFilter])
+  useEffect(() => {
+    let active = true
+    api.adminAffiliates({ status: statusFilter })
+      .then(result => { if (active) { setProfiles(result.profiles ?? []); setLoading(false) } })
+      .catch(() => { if (active) { setProfiles([]); setLoading(false) } })
+    return () => { active = false }
+  }, [statusFilter])
 
   async function handleApprove(id) {
     setActionMessage('')
@@ -217,19 +218,20 @@ function CommissionsTab() {
   const [loading, setLoading] = useState(true)
   const [bulkMessage, setBulkMessage] = useState('')
 
-  async function loadCommissions() {
+  function loadCommissions() {
     setLoading(true)
-    try {
-      const result = await api.adminAffiliateCommissions({ month })
-      setCommissions(result.commissions ?? [])
-    } catch {
-      setCommissions([])
-    } finally {
-      setLoading(false)
-    }
+    api.adminAffiliateCommissions({ month })
+      .then(result => { setCommissions(result.commissions ?? []); setLoading(false) })
+      .catch(() => { setCommissions([]); setLoading(false) })
   }
 
-  useEffect(() => { loadCommissions() }, [month])
+  useEffect(() => {
+    let active = true
+    api.adminAffiliateCommissions({ month })
+      .then(result => { if (active) { setCommissions(result.commissions ?? []); setLoading(false) } })
+      .catch(() => { if (active) { setCommissions([]); setLoading(false) } })
+    return () => { active = false }
+  }, [month])
 
   async function handleMarkPaid(id) {
     try {
