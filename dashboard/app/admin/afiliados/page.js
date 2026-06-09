@@ -30,6 +30,11 @@ function CommissionStatusBadge({ status }) {
   return <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">Pendente</span>
 }
 
+function CommissionTypeBadge({ type }) {
+  if (type === 'recurring') return <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-bold text-blue-700">Recorrente</span>
+  return <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-bold text-gray-600">Inicial</span>
+}
+
 function RejectModal({ onConfirm, onCancel }) {
   const [notes, setNotes] = useState('')
 
@@ -170,20 +175,54 @@ function CandidaturesTab() {
 function ApprovedTab() {
   const [profiles, setProfiles] = useState([])
   const [loading, setLoading] = useState(true)
+  const [overrideEdits, setOverrideEdits] = useState({})
+  const [overrideSaving, setOverrideSaving] = useState({})
+  const [overrideMsg, setOverrideMsg] = useState({})
 
   useEffect(() => {
+    let active = true
     api.adminAffiliates({ status: 'approved', limit: '100' })
-      .then(result => setProfiles(result.profiles ?? []))
-      .catch(() => setProfiles([]))
-      .finally(() => setLoading(false))
+      .then(result => {
+        if (!active) return
+        const fetched = result.profiles ?? []
+        setProfiles(fetched)
+        const edits = {}
+        fetched.forEach(p => {
+          edits[p.id] = {
+            pct: p.commissionPercentOverride?.toString() ?? '',
+            recurringPct: p.commissionRecurringPercentOverride?.toString() ?? '',
+          }
+        })
+        setOverrideEdits(edits)
+        setLoading(false)
+      })
+      .catch(() => { if (active) { setProfiles([]); setLoading(false) } })
+    return () => { active = false }
   }, [])
+
+  async function handleOverrideSave(id) {
+    const edit = overrideEdits[id] ?? {}
+    setOverrideSaving(prev => ({ ...prev, [id]: true }))
+    setOverrideMsg(prev => ({ ...prev, [id]: '' }))
+    try {
+      await api.adminAffiliateUpdate(id, {
+        commissionPercentOverride: edit.pct === '' ? null : Number(edit.pct),
+        commissionRecurringPercentOverride: edit.recurringPct === '' ? null : Number(edit.recurringPct),
+      })
+      setOverrideMsg(prev => ({ ...prev, [id]: 'Salvo.' }))
+    } catch (err) {
+      setOverrideMsg(prev => ({ ...prev, [id]: err.message || 'Erro ao salvar.' }))
+    } finally {
+      setOverrideSaving(prev => ({ ...prev, [id]: false }))
+    }
+  }
 
   if (loading) return <p className="text-sm text-gray-500 py-4">Carregando...</p>
   if (profiles.length === 0) return <p className="text-sm text-gray-400 py-4">Nenhum afiliado aprovado.</p>
 
   return (
     <div className="rounded-xl border border-gray-100 overflow-x-auto">
-      <table className="w-full text-sm min-w-[500px]">
+      <table className="w-full text-sm min-w-[700px]">
         <thead className="bg-gray-50">
           <tr>
             <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Nome / Email</th>
@@ -191,9 +230,10 @@ function ApprovedTab() {
             <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Indicados</th>
             <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Comissões pagas</th>
             <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Pendente</th>
+            <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Override comissão (%)</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-50">
+        <tbody className="divide-y divide-gray-100">
           {profiles.map(p => (
             <tr key={p.id} className="bg-white">
               <td className="px-4 py-3">
@@ -204,6 +244,46 @@ function ApprovedTab() {
               <td className="px-4 py-3 text-right text-gray-700">{p.totalReferrals}</td>
               <td className="px-4 py-3 text-right text-gray-700">{formatCurrency(p.paidCommissions ?? 0)}</td>
               <td className="px-4 py-3 text-right font-semibold text-amber-700">{formatCurrency(p.pendingCommissions ?? 0)}</td>
+              <td className="px-4 py-3">
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-gray-400 w-20 shrink-0">Inicial:</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      placeholder="padrão"
+                      value={overrideEdits[p.id]?.pct ?? ''}
+                      onChange={e => setOverrideEdits(prev => ({ ...prev, [p.id]: { ...prev[p.id], pct: e.target.value } }))}
+                      className="border rounded px-2 py-1 text-xs w-20 outline-none focus:ring-1 focus:ring-emerald-400"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-gray-400 w-20 shrink-0">Recorrente:</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      placeholder="padrão"
+                      value={overrideEdits[p.id]?.recurringPct ?? ''}
+                      onChange={e => setOverrideEdits(prev => ({ ...prev, [p.id]: { ...prev[p.id], recurringPct: e.target.value } }))}
+                      className="border rounded px-2 py-1 text-xs w-20 outline-none focus:ring-1 focus:ring-emerald-400"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleOverrideSave(p.id)}
+                      disabled={overrideSaving[p.id]}
+                      className="text-xs font-semibold text-emerald-700 hover:underline disabled:opacity-50"
+                    >
+                      {overrideSaving[p.id] ? 'Salvando...' : 'Salvar'}
+                    </button>
+                    {overrideMsg[p.id] && (
+                      <span className="text-xs text-gray-500">{overrideMsg[p.id]}</span>
+                    )}
+                  </div>
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -281,12 +361,13 @@ function CommissionsTab() {
         <p className="text-sm text-gray-400 py-4">Nenhuma comissão neste mês.</p>
       ) : (
         <div className="rounded-xl border border-gray-100 overflow-x-auto">
-          <table className="w-full text-sm min-w-[700px]">
+          <table className="w-full text-sm min-w-[800px]">
             <thead className="bg-gray-50">
               <tr>
                 <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Afiliado</th>
                 <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Indicado</th>
                 <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Plano</th>
+                <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Tipo</th>
                 <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Venda</th>
                 <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Comissão</th>
                 <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Status</th>
@@ -306,6 +387,7 @@ function CommissionsTab() {
                     <p className="text-gray-400">{c.referredUser?.email ?? '—'}</p>
                   </td>
                   <td className="px-4 py-3 text-gray-500">{c.payment?.plan ?? '—'}</td>
+                  <td className="px-4 py-3"><CommissionTypeBadge type={c.commissionType} /></td>
                   <td className="px-4 py-3 text-right text-gray-700">{formatCurrency(c.saleAmountCents)}</td>
                   <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(c.commissionAmountCents)}</td>
                   <td className="px-4 py-3"><CommissionStatusBadge status={c.status} /></td>
@@ -332,6 +414,8 @@ function SettingsTab() {
   const [message, setMessage] = useState('')
   const [cookieHours, setCookieHours] = useState('')
   const [commissionPct, setCommissionPct] = useState('')
+  const [recurringCommissionPct, setRecurringCommissionPct] = useState('')
+  const [recurringEnabled, setRecurringEnabled] = useState(true)
 
   useEffect(() => {
     api.adminAffiliateSettings()
@@ -339,6 +423,8 @@ function SettingsTab() {
         setSettings(result)
         setCookieHours(String(result.cookieDurationHours))
         setCommissionPct(String(result.commissionPercent))
+        setRecurringCommissionPct(String(result.commissionRecurringPercent ?? 30))
+        setRecurringEnabled(result.recurringCommissionEnabled ?? true)
       })
       .catch(() => setSettings(null))
       .finally(() => setLoading(false))
@@ -352,6 +438,8 @@ function SettingsTab() {
       const result = await api.adminAffiliateSettingsUpdate({
         cookieDurationHours: Number(cookieHours),
         commissionPercent: Number(commissionPct),
+        commissionRecurringPercent: Number(recurringCommissionPct),
+        recurringCommissionEnabled: recurringEnabled,
       })
       setSettings(result)
       setMessage('Configurações salvas.')
@@ -377,7 +465,7 @@ function SettingsTab() {
         />
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Percentual de comissão (%)</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Percentual de comissão inicial (%)</label>
         <input
           type="number"
           min="0"
@@ -386,6 +474,27 @@ function SettingsTab() {
           onChange={e => setCommissionPct(e.target.value)}
           className="border rounded-lg px-3 py-2 text-sm w-full outline-none focus:ring-2 focus:ring-emerald-400"
         />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Comissão recorrente (%)</label>
+        <input
+          type="number"
+          min="0"
+          max="100"
+          value={recurringCommissionPct}
+          onChange={e => setRecurringCommissionPct(e.target.value)}
+          className="border rounded-lg px-3 py-2 text-sm w-full outline-none focus:ring-2 focus:ring-emerald-400"
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          id="recurringEnabled"
+          checked={recurringEnabled}
+          onChange={e => setRecurringEnabled(e.target.checked)}
+          className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-400"
+        />
+        <label htmlFor="recurringEnabled" className="text-sm font-medium text-gray-700">Habilitar comissão recorrente</label>
       </div>
       {message && <p className="text-sm text-gray-700">{message}</p>}
       <button

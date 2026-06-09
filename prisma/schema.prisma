@@ -516,42 +516,48 @@ model OfferAutomationSentLog {
 }
 
 model AffiliateSettings {
-  id                  Int @id @default(1)
-  cookieDurationHours Int @default(24)
-  commissionPercent   Int @default(30)
+  id                         Int     @id @default(1)
+  cookieDurationHours        Int     @default(24)
+  commissionPercent          Int     @default(30)
+  commissionRecurringPercent Int     @default(30)
+  recurringCommissionEnabled Boolean @default(true)
 }
 
 model AffiliateProfile {
-  id          String  @id @default(cuid())
-  userId      String  @unique
-  code        String  @unique
-  status      String  @default("pending")
-  pixKey      String
-  pixKeyType  String
-  appliedAt   DateTime @default(now())
-  approvedAt  DateTime?
-  rejectedAt  DateTime?
-  adminNotes  String?
+  id                                 String    @id @default(cuid())
+  userId                             String    @unique
+  code                               String    @unique
+  status                             String    @default("pending")
+  pixKey                             String
+  pixKeyType                         String
+  appliedAt                          DateTime  @default(now())
+  approvedAt                         DateTime?
+  rejectedAt                         DateTime?
+  adminNotes                         String?
+  commissionPercentOverride          Int?
+  commissionRecurringPercentOverride Int?
 
-  user        User     @relation("UserAffiliate", fields: [userId], references: [id], onDelete: Cascade)
-  referredUser User?   @relation("AffiliateUser")
-  commissions AffiliateCommission[]
+  user         User                  @relation("UserAffiliate", fields: [userId], references: [id], onDelete: Cascade)
+  referredUser User?                 @relation("AffiliateUser")
+  commissions  AffiliateCommission[]
 
   @@index([status])
 }
 
 model AffiliateCommission {
-  id                    String   @id @default(cuid())
+  id                    String    @id @default(cuid())
   affiliateId           String
-  paymentId             String   @unique
+  paymentId             String    @unique
   referredUserId        String
   saleAmountCents       Int
   commissionAmountCents Int
-  status                String   @default("pending")
+  commissionType        String    @default("initial")
+  commissionRatePct     Int       @default(30)
+  status                String    @default("pending")
   cycleMonth            String
   paidAt                DateTime?
   paidByUserId          String?
-  createdAt             DateTime @default(now())
+  createdAt             DateTime  @default(now())
 
   affiliate    AffiliateProfile @relation(fields: [affiliateId], references: [id])
   payment      Payment          @relation(fields: [paymentId], references: [id])

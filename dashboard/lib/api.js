@@ -378,6 +378,7 @@ export const api = {
   adminAffiliateCycleMarkAllPaid: (month) => apiFetch(`/api/admin/affiliates/cycle/${month}/mark-all-paid`, { method: 'POST' }),
   adminAffiliateSettings: () => apiFetch('/api/admin/affiliates/settings'),
   adminAffiliateSettingsUpdate: (data) => apiFetch('/api/admin/affiliates/settings', { method: 'PUT', body: JSON.stringify(data) }),
+  adminAffiliateUpdate: (id, data) => apiFetch(`/api/admin/affiliates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 }
 
 export function openQRSocket(token, handlers = {}) {

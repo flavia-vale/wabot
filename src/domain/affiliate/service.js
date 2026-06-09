@@ -1,7 +1,7 @@
 import { randomBytes } from 'crypto'
 import db from '../../db.js'
 
-const DEFAULT_SETTINGS = { cookieDurationHours: 24, commissionPercent: 30 }
+const DEFAULT_SETTINGS = { cookieDurationHours: 24, commissionPercent: 30, commissionRecurringPercent: 30, recurringCommissionEnabled: true }
 
 export async function getAffiliateSettings() {
   const settings = await db.affiliateSettings.findFirst({ where: { id: 1 } })
@@ -68,6 +68,13 @@ export async function getAffiliateMeData({ userId }) {
   }
 }
 
+function resolveRate(settings, profile, isRecurring) {
+  if (isRecurring) {
+    return profile.commissionRecurringPercentOverride ?? settings.commissionRecurringPercent
+  }
+  return profile.commissionPercentOverride ?? settings.commissionPercent
+}
+
 export async function tryCreateAffiliateCommission({ userId, paymentId, saleAmountCents, log }) {
   try {
     const user = await db.user.findUnique({ where: { id: userId }, select: { affiliateProfileId: true } })
@@ -76,11 +83,14 @@ export async function tryCreateAffiliateCommission({ userId, paymentId, saleAmou
     const profile = await db.affiliateProfile.findUnique({ where: { id: user.affiliateProfileId } })
     if (!profile || profile.status !== 'approved') return { skipped: 'not_approved' }
 
-    const alreadyHasCommission = await db.affiliateCommission.findFirst({ where: { referredUserId: userId } })
-    if (alreadyHasCommission) return { skipped: 'not_first_purchase' }
+    const existingCommission = await db.affiliateCommission.findFirst({ where: { referredUserId: userId } })
+    const isRecurring = !!existingCommission
 
     const settings = await getAffiliateSettings()
-    const commissionAmountCents = Math.round(saleAmountCents * settings.commissionPercent / 100)
+    if (isRecurring && !settings.recurringCommissionEnabled) return { skipped: 'recurring_disabled' }
+
+    const commissionRatePct = resolveRate(settings, profile, isRecurring)
+    const commissionAmountCents = Math.round(saleAmountCents * commissionRatePct / 100)
     const cycleMonth = new Date().toISOString().slice(0, 7)
 
     const commission = await db.affiliateCommission.create({
@@ -90,11 +100,13 @@ export async function tryCreateAffiliateCommission({ userId, paymentId, saleAmou
         referredUserId: userId,
         saleAmountCents,
         commissionAmountCents,
+        commissionType: isRecurring ? 'recurring' : 'initial',
+        commissionRatePct,
         status: 'pending',
         cycleMonth,
       },
     })
-    return { created: true, commissionId: commission.id }
+    return { created: true, commissionId: commission.id, commissionType: commission.commissionType }
   } catch (err) {
     if (err.code === 'P2002') return { skipped: 'duplicate_payment' }
     log?.error?.({ err }, 'tryCreateAffiliateCommission failed')
