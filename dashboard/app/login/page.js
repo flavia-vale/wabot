@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
-import { api } from '@/lib/api'
+import { TERMS_VERSION, api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { mapAuthError, trackEvent, TRACKING_EVENTS } from '@/lib/analytics'
 import { attributionForTracking, readAttributionFromSearchParams } from '@/lib/marketing-attribution'
@@ -49,6 +49,7 @@ function LoginContent() {
   const [showPassword, setShowPassword] = useState(false)
   const [formStarted, setFormStarted] = useState(false)
   const [affCode, setAffCode] = useState('')
+  const [termsAccepted, setTermsAccepted] = useState(false)
 
   useEffect(() => {
     if (!isRegister) return
@@ -108,6 +109,7 @@ function LoginContent() {
       if (!cleanPhone || cleanPhone.length < 10) return blockSubmit('contactPhone', 'Informe seu WhatsApp com DDD para suporte do teste.')
       if (!password) return blockSubmit('password', 'Crie uma senha para acessar o painel depois.')
       if (password.length < 8) return blockSubmit('password', 'Use pelo menos 8 caracteres na senha.')
+      if (!termsAccepted) return blockSubmit('termsAccepted', 'Você precisa aceitar os Termos de Uso e declarar ciência dos riscos de automação no WhatsApp para criar a conta.')
     } else {
       if (!cleanEmail) return blockSubmit('email', 'Informe seu email para entrar.')
       if (!isValidEmail(cleanEmail)) return blockSubmit('email', 'Confira o formato do email antes de continuar.')
@@ -123,7 +125,7 @@ function LoginContent() {
         ...(isRegister ? trackingAttribution : {}),
       })
       if (isRegister) {
-        await api.register(name, email, password, contactPhone, { ...signupAttribution, ...(ref && { ref }), ...(affCode && { aff_code: affCode }) })
+        await api.register(cleanName, cleanEmail, password, cleanPhone, { ...signupAttribution, ...(ref && { ref }), ...(affCode && { aff_code: affCode }), termsAccepted, termsVersion: TERMS_VERSION })
         trackEvent(TRACKING_EVENTS.SIGNUP_SUCCESS, { origin: 'login_page', has_ref: Boolean(ref), ...trackingAttribution })
       } else {
         await api.login(cleanEmail, password)
@@ -301,14 +303,37 @@ function LoginContent() {
           {success && <Alert type="success" title="Sucesso" message={success} />}
 
           {isRegister && (
-            <p className={`text-xs ${isRegister ? 'text-emerald-200' : 'text-gray-500'}`}>
-Depois do cadastro, você entra no painel para conectar o WhatsApp, escolher grupos e validar o primeiro teste. Sem cartão no trial.
-            </p>
+            <div className="space-y-3 rounded-2xl border border-amber-300/60 bg-amber-50 p-4 text-amber-950 shadow-sm">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-800">Ciência obrigatória antes do teste</p>
+              <p className="text-sm leading-6">
+                O BOTinho automatiza envios no WhatsApp Web e, como toda automação de mensagens para grupos, <strong>não utiliza a API oficial do WhatsApp/Meta</strong>.
+                Isso pode gerar bloqueios, limitações, banimento do número conectado e restrições ou banimento dos grupos/canais conforme volume, denúncias, regras da plataforma e comportamento da operação.
+              </p>
+              <p className="text-xs leading-5">
+                A ferramenta oferece recursos para reduzir risco operacional — pausas entre envios, pausa noturna, variações de texto, ajustes de imagem e configuração de cadência — mas a decisão de uso, conteúdo, consentimento dos destinatários e limites de envio é responsabilidade do usuário.
+              </p>
+              <label htmlFor="termsAccepted" className="flex cursor-pointer gap-3 rounded-xl border border-amber-300 bg-white/70 p-3 text-sm leading-5 text-amber-950">
+                <input
+                  id="termsAccepted"
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={e => setTermsAccepted(e.target.checked)}
+                  onFocus={() => markFormStarted('termsAccepted')}
+                  required
+                  className="mt-1 h-4 w-4 shrink-0 rounded border-amber-400 text-emerald-600 focus:ring-emerald-500"
+                />
+                <span>
+                  Li e aceito os <Link href="/termos" className="font-bold underline" target="_blank" rel="noreferrer">Termos de Uso</Link>, incluindo a ciência de risco de bloqueio/banimento do WhatsApp e dos grupos, e a <Link href="/privacidade" className="font-bold underline" target="_blank" rel="noreferrer">Política de Privacidade</Link>.
+                </span>
+              </label>
+            </div>
           )}
 
-          <p className={`text-xs leading-5 ${isRegister ? 'text-emerald-200' : 'text-gray-500'}`}>
-            Ao continuar, você concorda com os <Link href="/termos" className="font-semibold underline">Termos de Uso</Link> e a <Link href="/privacidade" className="font-semibold underline">Política de Privacidade</Link>.
-          </p>
+          {!isRegister && (
+            <p className="text-xs leading-5 text-gray-500">
+              Ao entrar, você continua sujeito aos <Link href="/termos" className="font-semibold underline">Termos de Uso</Link> e à <Link href="/privacidade" className="font-semibold underline">Política de Privacidade</Link>.
+            </p>
+          )}
 
           <button
             type="submit"
@@ -334,6 +359,7 @@ Depois do cadastro, você entra no painel para conectar o WhatsApp, escolher gru
             setError('')
             setSuccess('')
             setContactPhone('')
+            setTermsAccepted(false)
             setFormStarted(false)
           }}
           className={`mt-4 text-sm hover:underline w-full text-center ${isRegister ? 'text-emerald-200' : 'text-green-600'}`}

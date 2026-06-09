@@ -25,6 +25,10 @@ model User {
   lastActivityAt         DateTime?
   lastSupportContactAt   DateTime?
   supportStatus          String    @default("new")
+  termsAcceptedAt        DateTime?
+  termsVersion           String?
+  termsAcceptedIp        String?
+  termsAcceptedUserAgent String?
   createdAt              DateTime  @default(now())
 
   waSession             WaSession?
@@ -422,6 +426,17 @@ model TutorialContent {
   body      String
   images    String   @default("[]")
   updatedAt DateTime @updatedAt
+}
+
+model LegalDocument {
+  id              String   @id
+  title           String
+  summary         String
+  contentJson     String   @default("{}")
+  version         String
+  updatedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model AnalyticsEvent {

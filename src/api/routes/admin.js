@@ -8,6 +8,7 @@ import { getPublicAnalyticsQualitySnapshot } from './public.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { createAdminService } from '../../domain/admin/service.js'
 import { readBacklogPipeline, updateBacklogIssueStatus } from '../../backlogPipeline.js'
+import { TERMS_DOCUMENT_ID, getEffectiveTermsDocument, nextTermsVersion, normalizeTermsContent } from '../../legalTerms.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -1643,6 +1644,67 @@ export async function adminRoutes(app) {
     }
   })
 
+
+
+  app.get('/legal/terms', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:read'))) return
+    const terms = await getEffectiveTermsDocument(db)
+    await writeAdminAuditLog(req, { action: 'admin.legalTerms.view', resource: 'legalDocument', resourceId: TERMS_DOCUMENT_ID })
+    return { terms }
+  })
+
+  app.put('/legal/terms', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:write'))) return
+    if (!db.legalDocument || typeof db.legalDocument.upsert !== 'function') {
+      reply.code(503).send({ error: 'Termos editáveis indisponíveis no momento. Rode prisma generate/migrate no servidor.' })
+      return
+    }
+
+    const body = req.body ?? {}
+    const title = String(body.title ?? '').trim().slice(0, 180)
+    const summary = String(body.summary ?? '').trim().slice(0, 1000)
+    const content = normalizeTermsContent(body.content ?? {})
+    if (!title || !summary) {
+      reply.code(400).send({ error: 'Título e resumo dos termos são obrigatórios.' })
+      return
+    }
+    if (!content.sections.length) {
+      reply.code(400).send({ error: 'Inclua pelo menos uma seção nos termos.' })
+      return
+    }
+
+    const existing = await getEffectiveTermsDocument(db)
+    const version = nextTermsVersion()
+    const saved = await db.legalDocument.upsert({
+      where: { id: TERMS_DOCUMENT_ID },
+      create: {
+        id: TERMS_DOCUMENT_ID,
+        title,
+        summary,
+        contentJson: JSON.stringify(content),
+        version,
+        updatedByUserId: req.user?.sub ?? null,
+      },
+      update: {
+        title,
+        summary,
+        contentJson: JSON.stringify(content),
+        version,
+        updatedByUserId: req.user?.sub ?? null,
+      },
+    })
+    const terms = await getEffectiveTermsDocument(db)
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.legalTerms.update',
+      resource: 'legalDocument',
+      resourceId: saved.id,
+      before: { version: existing.version, title: existing.title },
+      after: { version: terms.version, title: terms.title },
+    })
+
+    return { terms }
+  })
 
   app.get('/lp-content', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'admin:read'))) return
