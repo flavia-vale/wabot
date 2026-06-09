@@ -121,6 +121,8 @@ export async function affiliateRoutes(app) {
         approvedAt: profile.approvedAt,
         rejectedAt: profile.rejectedAt,
         adminNotes: profile.adminNotes,
+        commissionPercentOverride: profile.commissionPercentOverride,
+        commissionRecurringPercentOverride: profile.commissionRecurringPercentOverride,
         user: profile.user,
         totalReferrals,
         totalCommissions,
@@ -240,12 +242,18 @@ export async function affiliateRoutes(app) {
     const access = await requireAdminAccess(req, reply, 'billing:write')
     if (!access) return
 
-    const { cookieDurationHours, commissionPercent } = req.body ?? {}
+    const { cookieDurationHours, commissionPercent, commissionRecurringPercent, recurringCommissionEnabled } = req.body ?? {}
     if (cookieDurationHours !== undefined && (typeof cookieDurationHours !== 'number' || cookieDurationHours < 1)) {
       return reply.code(400).send({ error: 'cookieDurationHours deve ser um número maior que 0' })
     }
     if (commissionPercent !== undefined && (typeof commissionPercent !== 'number' || commissionPercent < 0 || commissionPercent > 100)) {
       return reply.code(400).send({ error: 'commissionPercent deve ser um número entre 0 e 100' })
+    }
+    if (commissionRecurringPercent !== undefined && (typeof commissionRecurringPercent !== 'number' || commissionRecurringPercent < 0 || commissionRecurringPercent > 100)) {
+      return reply.code(400).send({ error: 'commissionRecurringPercent deve ser um número entre 0 e 100' })
+    }
+    if (recurringCommissionEnabled !== undefined && typeof recurringCommissionEnabled !== 'boolean') {
+      return reply.code(400).send({ error: 'recurringCommissionEnabled deve ser um booleano' })
     }
 
     const updated = await db.affiliateSettings.upsert({
@@ -254,12 +262,45 @@ export async function affiliateRoutes(app) {
         id: 1,
         cookieDurationHours: cookieDurationHours ?? 24,
         commissionPercent: commissionPercent ?? 30,
+        commissionRecurringPercent: commissionRecurringPercent ?? 30,
+        recurringCommissionEnabled: recurringCommissionEnabled ?? true,
       },
       update: {
         ...(cookieDurationHours !== undefined && { cookieDurationHours }),
         ...(commissionPercent !== undefined && { commissionPercent }),
+        ...(commissionRecurringPercent !== undefined && { commissionRecurringPercent }),
+        ...(recurringCommissionEnabled !== undefined && { recurringCommissionEnabled }),
       },
     })
     return updated
+  })
+
+  app.put('/admin/affiliates/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const access = await requireAdminAccess(req, reply, 'billing:write')
+    if (!access) return
+
+    const { id } = req.params
+    const { commissionPercentOverride, commissionRecurringPercentOverride } = req.body ?? {}
+
+    if (commissionPercentOverride !== undefined && commissionPercentOverride !== null) {
+      const n = Number(commissionPercentOverride)
+      if (!Number.isInteger(n) || n < 0 || n > 100) return reply.code(400).send({ error: 'commissionPercentOverride deve ser inteiro entre 0 e 100' })
+    }
+    if (commissionRecurringPercentOverride !== undefined && commissionRecurringPercentOverride !== null) {
+      const n = Number(commissionRecurringPercentOverride)
+      if (!Number.isInteger(n) || n < 0 || n > 100) return reply.code(400).send({ error: 'commissionRecurringPercentOverride deve ser inteiro entre 0 e 100' })
+    }
+
+    try {
+      const data = {}
+      if (commissionPercentOverride !== undefined) data.commissionPercentOverride = commissionPercentOverride === null ? null : Number(commissionPercentOverride)
+      if (commissionRecurringPercentOverride !== undefined) data.commissionRecurringPercentOverride = commissionRecurringPercentOverride === null ? null : Number(commissionRecurringPercentOverride)
+
+      const profile = await db.affiliateProfile.update({ where: { id }, data })
+      return { profile }
+    } catch (err) {
+      if (err.code === 'P2025') return reply.code(404).send({ error: 'Afiliado não encontrado' })
+      throw err
+    }
   })
 }
