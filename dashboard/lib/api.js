@@ -365,6 +365,19 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(typeof data === 'string' ? { copyVariationPoolJson: data } : data),
     }),
+
+  affiliateConfig: () => apiFetch('/api/affiliate/config'),
+  affiliateApply: (data) => apiFetch('/api/affiliate/apply', { method: 'POST', body: JSON.stringify(data) }),
+  affiliateMe: () => apiFetch('/api/affiliate/me'),
+  affiliateMeUpdate: (data) => apiFetch('/api/affiliate/me', { method: 'PUT', body: JSON.stringify(data) }),
+  adminAffiliates: (params) => apiFetch(`/api/admin/affiliates${params ? '?' + new URLSearchParams(params) : ''}`),
+  adminAffiliateApprove: (id) => apiFetch(`/api/admin/affiliates/${id}/approve`, { method: 'POST' }),
+  adminAffiliateReject: (id, notes) => apiFetch(`/api/admin/affiliates/${id}/reject`, { method: 'POST', body: JSON.stringify({ adminNotes: notes }) }),
+  adminAffiliateCommissions: (params) => apiFetch(`/api/admin/affiliates/commissions${params ? '?' + new URLSearchParams(params) : ''}`),
+  adminAffiliateCommissionMarkPaid: (id) => apiFetch(`/api/admin/affiliates/commissions/${id}/mark-paid`, { method: 'POST' }),
+  adminAffiliateCycleMarkAllPaid: (month) => apiFetch(`/api/admin/affiliates/cycle/${month}/mark-all-paid`, { method: 'POST' }),
+  adminAffiliateSettings: () => apiFetch('/api/admin/affiliates/settings'),
+  adminAffiliateSettingsUpdate: (data) => apiFetch('/api/admin/affiliates/settings', { method: 'PUT', body: JSON.stringify(data) }),
 }
 
 export function openQRSocket(token, handlers = {}) {
