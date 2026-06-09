@@ -295,6 +295,7 @@ export async function authRoutes(app) {
       conversion_prompt_id: conversionPromptId,
       conversion_prompt_variant: conversionPromptVariant,
       coupon_code: couponCode,
+      aff_code: rawAffCode,
     } = req.body ?? {}
     const name = normalizeName(rawName)
     const providedEmail = normalizeEmail(rawEmail)
@@ -331,6 +332,17 @@ export async function authRoutes(app) {
       }
     }
 
+    const aff_code = typeof rawAffCode === 'string' ? rawAffCode.trim().toUpperCase() : ''
+    let affiliateProfileId = undefined
+    if (aff_code) {
+      try {
+        const affProfile = await db.affiliateProfile.findUnique({ where: { code: aff_code } })
+        if (affProfile?.status === 'approved') {
+          affiliateProfileId = affProfile.id
+        }
+      } catch {}
+    }
+
     try {
       const user = await createUserWithSecureFields({
         name,
@@ -346,6 +358,7 @@ export async function authRoutes(app) {
         lastLoginAt: now,
         lastActivityAt: now,
         supportStatus: 'new',
+        ...(affiliateProfileId && { affiliateProfileId }),
       })
 
       await createDefaultBotConfigForUser(user.id)

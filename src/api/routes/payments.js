@@ -4,6 +4,7 @@ import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { resolvePlanForPayment, DEFAULT_PLANS } from '../../domain/payments/service.js'
 import { appContainer } from '../../app/container.js'
 import { writeWebhookEvent } from '../../events/store.js'
+import { tryCreateAffiliateCommission } from '../../domain/affiliate/service.js'
 export { resolvePlanForPayment }
 
 const MP_WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET
@@ -378,6 +379,15 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
               activation = { triggered: true, ...result }
               if (!result.alreadyActivated) {
                 trackAnalyticsEventSafe({ userId, event: 'payment_approved', metadata: { plan, source: 'webhook' } })
+                const payment = await db.payment.findUnique({ where: { mpPaymentId: String(summary.dataResourceId) }, select: { id: true, amount: true } }).catch(() => null)
+                if (payment) {
+                  tryCreateAffiliateCommission({
+                    userId,
+                    paymentId: payment.id,
+                    saleAmountCents: Math.round(payment.amount * 100),
+                    log,
+                  }).catch(err => log?.error?.({ err }, 'affiliate commission error'))
+                }
               }
             } catch (activationErr) {
               activation = { triggered: true, error: activationErr?.code ?? activationErr?.message }
@@ -599,10 +609,21 @@ export async function paymentsRoutes(app) {
     }
 
     try {
-      await db.$transaction(async (tx) =>
+      const result = await db.$transaction(async (tx) =>
         activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount: plans[plan].price })
       )
       trackAnalyticsEventSafe({ userId, event: 'payment_approved', metadata: { plan, source: 'callback' } })
+      if (!result.alreadyActivated) {
+        const payment = await db.payment.findUnique({ where: { mpPaymentId: String(mpPaymentId) }, select: { id: true, amount: true } }).catch(() => null)
+        if (payment) {
+          tryCreateAffiliateCommission({
+            userId,
+            paymentId: payment.id,
+            saleAmountCents: Math.round(payment.amount * 100),
+            log: req.log,
+          }).catch(err => req.log?.error?.({ err }, 'affiliate commission error'))
+        }
+      }
       return reply.redirect(`${dashboardUrl}/painel/pagamento/sucesso`)
     } catch (err) {
       if (err?.code === 'PAYMENT_ALREADY_USED') {
@@ -767,6 +788,15 @@ export async function paymentsRoutes(app) {
       }
 
       trackAnalyticsEventSafe({ userId, event: 'payment_recovered', metadata: { plan, paymentId: String(paymentId) } })
+      const recoveredPayment = await db.payment.findUnique({ where: { mpPaymentId: String(paymentId) }, select: { id: true, amount: true } }).catch(() => null)
+      if (recoveredPayment) {
+        tryCreateAffiliateCommission({
+          userId,
+          paymentId: recoveredPayment.id,
+          saleAmountCents: Math.round(recoveredPayment.amount * 100),
+          log: req.log,
+        }).catch(err => req.log?.error?.({ err }, 'affiliate commission error'))
+      }
       return { recovered: true, plan, accessExpiresAt: result.expiresAt }
     } catch (err) {
       if (err?.code === 'PAYMENT_ALREADY_USED') {

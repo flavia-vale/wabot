@@ -1,5 +1,5 @@
 'use client'
-import { useState, Suspense } from 'react'
+import { useState, Suspense, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSearchParams } from 'next/navigation'
 import Image from 'next/image'
@@ -48,6 +48,26 @@ function LoginContent() {
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [formStarted, setFormStarted] = useState(false)
+  const [affCode, setAffCode] = useState('')
+
+  useEffect(() => {
+    if (!isRegister) return
+    const fromUrl = searchParams.get('aff')
+    if (fromUrl) {
+      setAffCode(fromUrl)
+      api.affiliateConfig().then(cfg => {
+        const hours = cfg?.cookieDurationHours ?? 24
+        const expires = new Date(Date.now() + hours * 3600 * 1000).toUTCString()
+        document.cookie = `aff_code=${fromUrl}; expires=${expires}; path=/; SameSite=Lax`
+      }).catch(() => {
+        const expires = new Date(Date.now() + 24 * 3600 * 1000).toUTCString()
+        document.cookie = `aff_code=${fromUrl}; expires=${expires}; path=/; SameSite=Lax`
+      })
+    } else {
+      const match = document.cookie.match(/(?:^|;\s*)aff_code=([^;]+)/)
+      if (match) setAffCode(decodeURIComponent(match[1]))
+    }
+  }, [isRegister, searchParams])
 
   function markFormStarted(field) {
     if (formStarted) return
@@ -100,7 +120,7 @@ function LoginContent() {
         ...(isRegister ? trackingAttribution : {}),
       })
       if (isRegister) {
-        await api.register(name, email, password, contactPhone, { ...signupAttribution, ...(ref && { ref }) })
+        await api.register(name, email, password, contactPhone, { ...signupAttribution, ...(ref && { ref }), ...(affCode && { aff_code: affCode }) })
         trackEvent(TRACKING_EVENTS.SIGNUP_SUCCESS, { origin: 'login_page', has_ref: Boolean(ref), ...trackingAttribution })
       } else {
         await api.login(cleanEmail, password)
@@ -220,6 +240,18 @@ function LoginContent() {
               <p className="mt-1 text-[11px] leading-4 text-emerald-200">
                 Usaremos este contato para suporte proativo, como avisar se seu robô ficar parado por 2 dias ou se detectarmos dificuldade na configuração.
               </p>
+            </div>
+            <div>
+              <label htmlFor="affCode" className="block text-sm font-medium mb-1 text-emerald-100">Código de indicação <span className="text-emerald-300 font-normal">(opcional)</span></label>
+              <input
+                id="affCode"
+                type="text"
+                placeholder="Ex: ABCD1234"
+                value={affCode}
+                onChange={e => setAffCode(e.target.value.trim().toUpperCase())}
+                autoComplete="off"
+                className="border rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-400 w-full uppercase"
+              />
             </div>
           )}
 
