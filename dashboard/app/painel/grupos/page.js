@@ -334,7 +334,7 @@ export default function GruposPage() {
         </div>
         <div>
           <p className="pnl-label" style={{ marginBottom: 8 }}>Lojas que esse grupo aceita</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
             {ALL_PLATFORMS.map((platform) => {
               const selected = new Set((g.allowedPlatforms || '').split(',').filter(Boolean))
               const checked = g.allowedPlatforms ? selected.has(platform.id) : true
