@@ -29,7 +29,7 @@ export const ROUTE_MAP = [
   { feature: 'automations', m: '/m/op/automations',        painel: '/painel/ofertas-automaticas', dashboard: '/dashboard/ofertas-automaticas' },
   { feature: 'espelhar',    m: '/m/op/espelhar',           painel: '/painel/espelhamento',       dashboard: null },
   { feature: 'messages',    m: '/m/account/templates',     painel: '/painel/mensagens',          dashboard: '/dashboard/variacoes-de-texto' },
-  { feature: 'variations',  m: '/m/account/variations',    painel: null,                         dashboard: null },
+  { feature: 'variations',  m: '/m/account/variations',    painel: '/painel/mensagens',          dashboard: null },
   { feature: 'plan',        m: '/m/account/subscription',  painel: '/painel/plano',              dashboard: '/dashboard/assinaturas' },
   { feature: 'tutorial',    m: '/m/tutorial',              painel: '/painel/tutorial',           dashboard: '/dashboard/tutorial' },
   { feature: 'account',     m: '/m/account',               painel: null,                         dashboard: null },

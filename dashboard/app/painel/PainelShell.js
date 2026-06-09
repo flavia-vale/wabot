@@ -261,24 +261,6 @@ export default function PainelShell({ children }) {
               </svg>
             </button>
           </div>
-
-          {/* Alternância de variante: navegação dura (<a>) para o middleware
-              gravar ?view=mobile no cookie e redirecionar para o /m equivalente. */}
-          <a
-            href={`${pathname}?view=mobile`}
-            className="pnl-view-toggle"
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              padding: '10px 12px', fontSize: 12, color: 'var(--ink-soft, #667)',
-              textDecoration: 'none', borderTop: '1px solid var(--line)',
-            }}
-            title="Abrir a versão otimizada para celular"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <rect x="7" y="2" width="10" height="20" rx="2.5" /><line x1="12" y1="18" x2="12" y2="18" />
-            </svg>
-            Ver versão celular
-          </a>
         </aside>
 
         <div className="pnl-main">
