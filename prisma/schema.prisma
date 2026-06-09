@@ -25,6 +25,10 @@ model User {
   lastActivityAt         DateTime?
   lastSupportContactAt   DateTime?
   supportStatus          String    @default("new")
+  termsAcceptedAt        DateTime?
+  termsVersion           String?
+  termsAcceptedIp        String?
+  termsAcceptedUserAgent String?
   createdAt              DateTime  @default(now())
 
   waSession             WaSession?

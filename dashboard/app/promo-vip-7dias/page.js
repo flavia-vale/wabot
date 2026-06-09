@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { api } from '@/lib/api'
+import { TERMS_VERSION, api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { mapAuthError, trackEvent, TRACKING_EVENTS } from '@/lib/analytics'
 
@@ -17,10 +17,15 @@ export default function PromoVipPage() {
   const [contactPhone, setContactPhone] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [termsAccepted, setTermsAccepted] = useState(false)
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
+    if (!termsAccepted) {
+      setError('Você precisa aceitar os Termos de Uso e declarar ciência dos riscos de automação no WhatsApp para criar a conta.')
+      return
+    }
     setLoading(true)
     try {
       trackEvent(TRACKING_EVENTS.AUTH_SUBMIT_ATTEMPT, {
@@ -28,7 +33,7 @@ export default function PromoVipPage() {
         mode: 'register',
         coupon: COUPON_CODE,
       })
-      await api.registerPromoVip(name, email, password, contactPhone, COUPON_CODE)
+      await api.registerPromoVip(name, email, password, contactPhone, COUPON_CODE, { termsAccepted, termsVersion: TERMS_VERSION })
       trackEvent(TRACKING_EVENTS.SIGNUP_SUCCESS, { origin: 'promo_vip_7dias', coupon: COUPON_CODE })
       router.push('/painel')
     } catch (err) {
@@ -80,6 +85,17 @@ export default function PromoVipPage() {
           <div>
             <label htmlFor="password" className="block text-sm mb-1">Senha</label>
             <input id="password" type="password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full rounded-lg border border-emerald-300/40 bg-white px-3 py-2 text-gray-900" />
+          </div>
+
+          <div className="rounded-2xl border border-amber-300/50 bg-amber-50 p-4 text-amber-950">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-800">Aceite obrigatório</p>
+            <p className="mt-2 text-sm leading-6">
+              O BOTinho automatiza envios no WhatsApp Web e não utiliza a API oficial do WhatsApp/Meta para mensagens em grupos. Há risco de bloqueio, limitação ou banimento do número conectado e dos grupos/canais.
+            </p>
+            <label htmlFor="termsAccepted" className="mt-3 flex cursor-pointer gap-3 rounded-xl border border-amber-300 bg-white/80 p-3 text-sm leading-5">
+              <input id="termsAccepted" type="checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} required className="mt-1 h-4 w-4 shrink-0" />
+              <span>Li e aceito os <Link href="/termos" target="_blank" rel="noreferrer" className="font-bold underline">Termos de Uso</Link>, incluindo a ciência dos riscos e a responsabilidade do usuário pela cadência, conteúdo, consentimento e limites de envio.</span>
+            </label>
           </div>
 
           {error && <Alert type="error" title="Falha no cadastro" message={error} />}
