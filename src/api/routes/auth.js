@@ -5,6 +5,7 @@ import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { normalizeEmail } from '../auth-utils.js'
 import { DEFAULT_COPY_VARIATION_POOL_JSON } from '../../core/copyVariation.js'
 import { sendWelcomeEmail } from '../../email/welcomeEmail.js'
+import { DEFAULT_TERMS_VERSION, getEffectiveTermsVersion } from '../../legalTerms.js'
 
 // A-1 (anti brute-force): dois mapas de tentativas. `loginAttempts` é por
 // (email|ip) — pega o caso comum de força bruta de um IP. `loginAttemptsByEmail`
@@ -14,7 +15,7 @@ const loginAttempts = new Map()
 const loginAttemptsByEmail = new Map()
 export const STANDARD_TRIAL_DAYS = 7
 export const PROMO_VIP_TRIAL_DAYS = 7
-export const TERMS_VERSION = '2026-06-09-whatsapp-risk-acceptance'
+export const TERMS_VERSION = DEFAULT_TERMS_VERSION
 
 function getLoginAttemptMaxEntries() {
   const value = Number(process.env.LOGIN_RATE_LIMIT_MAX_ENTRIES ?? 20000)
@@ -325,7 +326,7 @@ export async function authRoutes(app) {
     const now = new Date()
     const trialDays = isPromoVipFlow ? PROMO_VIP_TRIAL_DAYS : STANDARD_TRIAL_DAYS
     const accessExpiresAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000)
-    const acceptedTermsVersion = typeof rawTermsVersion === 'string' && rawTermsVersion.trim() ? rawTermsVersion.trim().slice(0, 120) : TERMS_VERSION
+    const acceptedTermsVersion = await getEffectiveTermsVersion(db).catch(() => (typeof rawTermsVersion === 'string' && rawTermsVersion.trim() ? rawTermsVersion.trim().slice(0, 120) : TERMS_VERSION))
     const referralCode = randomBytes(4).toString('hex')
 
     let referrer = null

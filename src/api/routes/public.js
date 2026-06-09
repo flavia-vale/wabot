@@ -1,5 +1,6 @@
 import db from '../../db.js'
 import { PUBLIC_ANALYTICS_EVENTS, sanitizeAnalyticsMetadata, trackAnalyticsEvent, trackAnalyticsEventSafe } from '../../analytics.js'
+import { getEffectiveTermsDocument } from '../../legalTerms.js'
 
 
 const publicAnalyticsAttempts = new Map()
@@ -172,6 +173,16 @@ async function getTutorialContent() {
 }
 
 export async function publicRoutes(app) {
+  app.get('/legal/terms', async (_req, reply) => {
+    reply.header('Cache-Control', 'no-store, max-age=0')
+    return { terms: await getEffectiveTermsDocument(db) }
+  })
+
+  app.get('/v1/legal/terms', async (_req, reply) => {
+    reply.header('Cache-Control', 'no-store, max-age=0')
+    return { version: 'v1', terms: await getEffectiveTermsDocument(db) }
+  })
+
   app.get('/v1/faq', async (_req, reply) => {
     reply.header('Cache-Control', 'no-store, max-age=0')
     const items = await getActiveFaqItems()
