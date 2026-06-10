@@ -1,4 +1,4 @@
-import { applyAffiliate, getAffiliateMeData, getAffiliateSettings, tryCreateAffiliateCommission } from '../../domain/affiliate/service.js'
+import { applyAffiliate, buildReferrals, getAffiliateMeData, getAffiliateSettings, tryCreateAffiliateCommission } from '../../domain/affiliate/service.js'
 import { resolveAdminAccess } from './admin.js'
 import db from '../../db.js'
 
@@ -236,6 +236,29 @@ export async function affiliateRoutes(app) {
 
     const settings = await getAffiliateSettings()
     return settings
+  })
+
+  app.get('/admin/affiliates/:id/referrals', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const access = await requireAdminAccess(req, reply, 'billing:read')
+    if (!access) return
+
+    const { id } = req.params
+    const profile = await db.affiliateProfile.findUnique({ where: { id } })
+    if (!profile) return reply.code(404).send({ error: 'Afiliado não encontrado' })
+
+    const [referredUsers, commissions] = await Promise.all([
+      db.user.findMany({
+        where: { affiliateProfileId: id },
+        select: { id: true, name: true, email: true, plan: true, status: true, accessExpiresAt: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+      db.affiliateCommission.findMany({
+        where: { affiliateId: id },
+        select: { referredUserId: true, commissionAmountCents: true },
+      }),
+    ])
+
+    return { referrals: buildReferrals(referredUsers, commissions, true) }
   })
 
   app.put('/admin/affiliates/settings', { onRequest: [app.authenticate] }, async (req, reply) => {
