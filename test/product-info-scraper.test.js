@@ -56,6 +56,35 @@ test('fetchProductInfo (ML social share) usa o preço do produto destacado, não
   assert.equal(info.oldPrice, '3699,00')
 })
 
+// Regressão: Amazon serve intermitentemente uma página de CAPTCHA (~5KB,
+// opfcaptcha) no lugar da PDP. fetchProductInfo deve detectar e re-tentar até
+// pegar a página real.
+test('fetchProductInfo (Amazon) re-tenta quando cai na página de CAPTCHA', async (t) => {
+  const captchaHtml = `<!doctype html><html><head><title>Amazon.com.br</title>
+    <script>ue_sn = "opfcaptcha.amazon.com";</script></head>
+    <body><!-- To discuss automated access to Amazon data please contact api-services-support@amazon.com. -->
+    <form action="/errors/validateCaptcha"></form></body></html>`
+  const realHtml = `<!doctype html><html><head><title>Amazon.com.br</title></head><body>
+    <span id="productTitle">Granado Perfume Vintage Flora Magnífica 75 ml</span>
+    <span class="a-price"><span class="a-offscreen">R$&nbsp;224,25</span></span>
+    ${'<!-- padding -->'.repeat(4000)}
+  </body></html>`
+
+  let calls = 0
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => {
+    calls += 1
+    // 1ª e 2ª chamadas: captcha; 3ª em diante: página real.
+    return mockHtmlResponse(calls < 3 ? captchaHtml : realHtml, 'https://www.amazon.com.br/dp/B0G1TNVJPH')
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://www.amazon.com.br/dp/B0G1TNVJPH')
+  assert.ok(calls >= 3, `deveria ter re-tentado (chamadas=${calls})`)
+  assert.match(info.title, /Granado/)
+  assert.equal(info.newPrice, '224,25')
+})
+
 test('fetchProductInfo extrai título e preço de página Amazon mesmo sem json-ld útil', async (t) => {
   const html = `<!doctype html><html><head><title>Amazon.com.br</title></head><body>
     <span id="productTitle">Amai, Absorvente Externo Fluxo Regular, Algodão Sem Químicos, Hipoalergênico, Sem plástico comum, Com Abas - 14 unidades</span>
