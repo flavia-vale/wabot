@@ -175,6 +175,16 @@ export async function linkConversionRoutes(app, opts = {}) {
       })
     }
 
+    let imageUrl = null
+    const imageSourceUrl = offer.finalUrl || url
+    const platform = detectLinks(imageSourceUrl)[0]?.platform || detectLinks(url)[0]?.platform
+    if (platform) {
+      imageUrl = await fetchProductImage(platform, imageSourceUrl, credentialsMap).catch((err) => {
+        app.log.warn({ err: err?.message, platform }, 'Falha ao resolver imagem da oferta')
+        return null
+      })
+    }
+
     return {
       title: offer.title,
       oldPrice: offer.oldPrice,
