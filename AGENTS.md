@@ -756,12 +756,22 @@ na oferta final, via flag `keepOriginalLink`:
 
 | Consumidor              | `keepOriginalLink` | `displayUrl` (link na oferta) |
 |-------------------------|--------------------|-------------------------------|
-| Painel "Criar oferta"   | `false`            | link **convertido** (afiliado) |
+| Painel "Criar oferta"   | `true` (**temporário**, 2026-06) | link **original** colado pelo usuário |
 | Bot do Telegram         | `true`             | link **original** colado pelo usuário |
 
 O Telegram **converte para buscar dados** (ganha resolução de short link/`/up/`
 e cookie ML), mas **devolve ao usuário o link que ele colou** — nunca o
 convertido.
+
+**MODO TEMPORÁRIO (2026-06):** como a conversão só funcionava bem para links
+do próprio afiliado, o painel "Criar oferta" passou a se comportar **igual ao
+Telegram**: `keepOriginalLink: true`, a UI avisa que o link colado precisa ser
+o do próprio afiliado, e a rota `/scrape-offer` devolve `conversion: null` e
+`conversionWarning: null` (a UI não exibe mais status de conversão). A
+conversão ainda roda **internamente** só para buscar título/preço. Contrato
+histórico a restaurar quando a conversão voltar: painel com
+`keepOriginalLink: false` (link convertido na oferta) + metadados de conversão
+na resposta.
 
 **Credenciais do bot do Telegram:** ele não tem usuário logado (só chat IDs
 autorizados). As credenciais (cookie ML, tag de afiliado) vêm de um **usuário
@@ -775,8 +785,8 @@ Telegram, esse usuário precisa ter credenciais ML configuradas.
 - **Não duplicar** a lógica de converter/scrapar/fallback fora de
   `offerEngine.js`. Qualquer novo consumidor de oferta (ex.: outro bot) deve
   chamar `buildScrapedOffer()`.
-- O painel **não pode** passar a devolver link original, nem o Telegram o
-  convertido — isso inverteria o contrato `keepOriginalLink`.
+- O Telegram **não pode** passar a devolver o link convertido. (O painel
+  devolve o link original apenas enquanto durar o modo temporário acima.)
 - Exceção no scraper **não** vira erro pro usuário: o motor degrada para
   fallback mínimo (`inferTitleFromUrl` + `scrapeWarning`), igual nos dois.
 - Links de recomendação ML `/up/MLBU...` são reconhecidos como landing em
