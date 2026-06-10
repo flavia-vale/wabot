@@ -36,11 +36,19 @@ function FormattedText({ text }) {
   ))
 }
 
-export function WhatsAppBubble({ text, sender = SENDER_DEFAULT, time = '14:23', highlight = false, format = false }) {
+export function WhatsAppBubble({ text, sender = SENDER_DEFAULT, time = '14:23', highlight = false, format = false, imageUrl = '' }) {
   return (
     <div className="pnl-wa">
       <div className="pnl-wa-bubble">
         <div className="pnl-wa-sender">{sender} <span className="pnl-wa-badge">BOT</span></div>
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt=""
+            style={{ display: 'block', width: '100%', maxHeight: 220, objectFit: 'cover', borderRadius: 8, margin: '4px 0 8px' }}
+            onError={(e) => { e.currentTarget.style.display = 'none' }}
+          />
+        ) : null}
         {highlight ? <TokenText text={text} /> : format ? <FormattedText text={text} /> : (text || '—')}
         <div className="pnl-wa-meta">{time} ✓✓</div>
       </div>
