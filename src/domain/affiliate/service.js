@@ -38,12 +38,31 @@ export async function applyAffiliate({ userId, pixKey, pixKeyType }) {
   })
 }
 
+export function buildReferrals(users, commissions, includeEmail = false) {
+  const commissionsByUser = {}
+  for (const c of commissions) {
+    commissionsByUser[c.referredUserId] = (commissionsByUser[c.referredUserId] ?? 0) + c.commissionAmountCents
+  }
+  return users.map(u => ({
+    ...(includeEmail ? { id: u.id, email: u.email, createdAt: u.createdAt } : {}),
+    name: u.name,
+    plan: u.plan,
+    status: u.status,
+    accessExpiresAt: u.accessExpiresAt,
+    totalCommissionsCents: commissionsByUser[u.id] ?? 0,
+  }))
+}
+
 export async function getAffiliateMeData({ userId }) {
   const profile = await db.affiliateProfile.findUnique({ where: { userId } })
   if (!profile) return null
 
-  const [totalReferrals, commissions] = await Promise.all([
-    db.user.count({ where: { affiliateProfileId: profile.id } }),
+  const [referredUsers, commissions] = await Promise.all([
+    db.user.findMany({
+      where: { affiliateProfileId: profile.id },
+      select: { id: true, name: true, plan: true, status: true, accessExpiresAt: true },
+      orderBy: { createdAt: 'desc' },
+    }),
     db.affiliateCommission.findMany({
       where: { affiliateId: profile.id },
       orderBy: { cycleMonth: 'desc' },
@@ -52,6 +71,7 @@ export async function getAffiliateMeData({ userId }) {
 
   const totalEarnedCents = commissions.reduce((s, c) => s + c.commissionAmountCents, 0)
   const totalSales = commissions.length
+  const totalReferrals = referredUsers.length
 
   const byMonth = {}
   for (const c of commissions) {
@@ -65,6 +85,7 @@ export async function getAffiliateMeData({ userId }) {
     profile,
     stats: { totalReferrals, totalSales, totalEarnedCents },
     months: Object.values(byMonth).sort((a, b) => b.month.localeCompare(a.month)),
+    referrals: buildReferrals(referredUsers, commissions),
   }
 }
 
