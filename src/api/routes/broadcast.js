@@ -17,7 +17,7 @@ export async function broadcastRoutes(app, deps = {}) {
     const userId = req.user.sub
     const { text, jids, imageUrl, imageRefererUrl } = req.body ?? {}
     if (!text?.trim()) return reply.code(400).send({ error: 'text obrigatório' })
-    if (!isRunningImpl(userId)) return reply.code(400).send({ error: 'Bot não está conectado' })
+    if (!await isRunningImpl(userId)) return reply.code(400).send({ error: 'Bot não está conectado' })
 
     const targetJids = await resolveTargetJids({ db, userId, jids })
     const gateError = enforceChannelPlanGate(targetJids, await loadUserPlanSubject(db, userId))

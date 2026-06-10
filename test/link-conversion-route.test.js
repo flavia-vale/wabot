@@ -15,6 +15,9 @@ async function buildApp({ userId, converter, fetchProductInfo, fetchProductImage
     fetchProductInfo,
     fetchProductImage: async () => null,
     findCredentials: async () => credentials,
+    ...(!routeOptions.fetchProductImage && !routeOptions.loadImageScrapers
+      ? { fetchProductImage: async () => null }
+      : {}),
     ...routeOptions,
   })
   return { app, userId: effectiveUserId }
@@ -578,4 +581,48 @@ test('POST /scrape-offer marca CONVERSION_TIMEOUT quando conversor estoura tempo
   assert.equal(body.offerUrl, original)
   assert.equal(body.conversion.success, false)
   assert.equal(body.conversion.reasonCode, 'CONVERSION_TIMEOUT')
+})
+
+test('registro da rota não carrega imageScrapers/sharp no boot da API', async (t) => {
+  let imageModuleLoads = 0
+  const { app } = await buildApp({
+    routeOptions: {
+      loadImageScrapers: async () => {
+        imageModuleLoads += 1
+        throw new Error('sharp indisponível')
+      },
+    },
+  })
+  t.after(async () => { await app.close() })
+
+  app.get('/health-test', async () => ({ ok: true }))
+  const health = await app.inject({ method: 'GET', url: '/health-test' })
+
+  assert.equal(health.statusCode, 200)
+  assert.deepEqual(health.json(), { ok: true })
+  assert.equal(imageModuleLoads, 0, 'resolver nativo de imagem deve permanecer lazy até um scrape')
+})
+
+test('falha ao carregar imageScrapers/sharp omite foto sem quebrar scrape-offer', async (t) => {
+  let imageModuleLoads = 0
+  const original = 'https://www.amazon.com.br/dp/B09VQ39F41'
+  const { app } = await buildApp({
+    credentials: [credential()],
+    converter: async () => `${original}?tag=botinho-20`,
+    fetchProductInfo: async (url) => ({ title: 'Produto', oldPrice: '', newPrice: '99,90', finalUrl: url }),
+    routeOptions: {
+      loadImageScrapers: async () => {
+        imageModuleLoads += 1
+        throw new Error('sharp indisponível')
+      },
+    },
+  })
+  t.after(async () => { await app.close() })
+
+  const response = await app.inject({ method: 'POST', url: '/api/link-conversion/scrape-offer', payload: { url: original } })
+
+  assert.equal(response.statusCode, 200)
+  assert.equal(response.json().imageUrl, null)
+  assert.equal(response.json().imageRefererUrl, null)
+  assert.equal(imageModuleLoads, 1)
 })

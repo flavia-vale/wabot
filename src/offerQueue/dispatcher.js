@@ -8,7 +8,7 @@ export async function drainQueueOnce(queue, deps = {}) {
   const sendBroadcast = deps.sendBroadcast ?? sendBroadcastDefault
   const now = deps.now ? deps.now() : new Date()
   if (!queue.enabled) return { skipped: 'queue_disabled' }
-  if (!isRunning(queue.userId)) return { skipped: 'bot_offline' }
+  if (!await isRunning(queue.userId)) return { skipped: 'bot_offline' }
   if (queue.intervalEnabled && queue.lastSentAt && now - new Date(queue.lastSentAt) < queue.intervalMinutes * 60_000) return { skipped: 'interval_limit' }
   if (queue.hourlyCapEnabled) {
     const count = await db.offerQueueItem.count({ where: { queueId: queue.id, userId: queue.userId, status: 'sent', sentAt: { gte: new Date(now.getTime() - 3_600_000) } } })

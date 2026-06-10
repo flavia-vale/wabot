@@ -103,16 +103,6 @@ export default function CriarOfertaPage() {
     }).catch((err) => setError(err.message))
   }, [])
 
-  // Reconcilia a lista com o servidor (fonte de verdade:
-  // BotConfig.mobileTemplatesJson, editado em /painel/mensagens).
-  useEffect(() => {
-    let cancelled = false
-    loadTemplateStore().then((store) => {
-      if (!cancelled) setTemplates(composeTemplates(store))
-    }).catch(() => {})
-    return () => { cancelled = true }
-  }, [])
-
   const selectedTemplate = resolveSelectedTemplate(templates, templateKey)
   const store = detectStore(generated?.link || link)
   const dp = generated ? discountPct(generated.oldPrice, generated.newPrice) : null

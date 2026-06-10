@@ -33,7 +33,7 @@ test('drainQueueOnce envia um item FIFO com receita de imagem e marca sucesso', 
 
 test('drainQueueOnce respeita bot offline e intervalo sem fazer claim', async () => {
   const offline = setup()
-  offline.deps.isRunning = () => false
+  offline.deps.isRunning = async () => false
   assert.deepEqual(await drainQueueOnce(offline.queue, offline.deps), { skipped: 'bot_offline' })
   assert.equal(offline.calls.updates.length, 0)
 
