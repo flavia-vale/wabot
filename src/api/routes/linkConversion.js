@@ -4,6 +4,7 @@ import { convertLink as defaultConvertLink } from '../../converters/index.js'
 import { fetchProductInfo as defaultFetchProductInfo } from '../../converters/productInfoScraper.js'
 import { validateCredentialData } from '../../credentialHealth.js'
 import { assertPublicUrl } from '../../core/ssrfGuard.js'
+import { fetchProductImage as defaultFetchProductImage } from '../../converters/imageScrapers.js'
 import {
   buildScrapedOffer,
   buildCredentialsMap,
@@ -81,6 +82,7 @@ const SCRAPE_OFFER_URL_RE = /^https?:\/\/[^\s]+$/i
 export async function linkConversionRoutes(app, opts = {}) {
   const convertLink = opts.converter ? normalizeConverter(opts.converter) : defaultConvertLink
   const fetchProductInfo = opts.fetchProductInfo ?? defaultFetchProductInfo
+  const fetchProductImage = opts.fetchProductImage ?? defaultFetchProductImage
   const findCredentials = opts.findCredentials ?? ((userId) => db.credential.findMany({ where: { userId } }))
   const rateState = opts.rateState ?? new Map()
   const getNow = opts.now ?? (() => Date.now())
@@ -129,6 +131,16 @@ export async function linkConversionRoutes(app, opts = {}) {
       logger: app.log,
     })
 
+    let imageUrl = null
+    const imageSourceUrl = offer.finalUrl || url
+    const platform = detectLinks(imageSourceUrl)[0]?.platform || detectLinks(url)[0]?.platform
+    if (platform) {
+      imageUrl = await fetchProductImage(platform, imageSourceUrl, credentialsMap).catch((err) => {
+        app.log.warn({ err: err?.message, platform }, 'Falha ao resolver imagem da oferta')
+        return null
+      })
+    }
+
     return {
       title: offer.title,
       oldPrice: offer.oldPrice,
@@ -137,6 +149,8 @@ export async function linkConversionRoutes(app, opts = {}) {
       offerUrl: offer.offerUrl,
       conversionWarning: offer.conversionWarning,
       conversion: offer.conversion,
+      imageUrl,
+      imageRefererUrl: imageUrl ? imageSourceUrl : null,
       ...(offer.scrapeWarning ? { scrapeWarning: offer.scrapeWarning } : {}),
     }
   })

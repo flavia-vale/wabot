@@ -22,8 +22,10 @@ import { publicRoutes } from './routes/public.js'
 import { clickTrackerRoutes } from './routes/clickTracker.js'
 import { preservationRoutes } from './routes/preservation.js'
 import { offerAutomationRoutes } from './routes/offerAutomation.js'
+import { offerQueueRoutes } from './routes/offerQueue.js'
 import { affiliateRoutes } from './routes/affiliate.js'
 import { startOfferAutomationCron } from '../offerAutomation/cron.js'
+import { startOfferQueueCron } from '../offerQueue/cron.js'
 import { registerApiMetricsHooks, renderPrometheusMetrics } from './metrics.js'
 import { getSupervisorOperationalCounters } from '../supervisor/operationalCounters.js'
 import db from '../db.js'
@@ -279,6 +281,7 @@ app.register(adminRoutes, { prefix: '/api/admin' })
 app.register(publicRoutes, { prefix: '/api/public' })
 app.register(preservationRoutes, { prefix: '/api/preservation' })
 app.register(offerAutomationRoutes, { prefix: '/api/offer-automations' })
+app.register(offerQueueRoutes, { prefix: '/api/offer-queues' })
 app.register(clickTrackerRoutes) // sem prefix — /r/:hash precisa estar na raiz
 app.register(affiliateRoutes, { prefix: '/api' })
 
@@ -312,6 +315,7 @@ startLogRetentionJob()
 startActivityCacheCleanup()
 startProbeWatchdogJob()
 startOfferAutomationCron()
+startOfferQueueCron()
 await app.listen({ port, host: '0.0.0.0' })
 console.log(`API rodando em http://localhost:${port}`)
 const stopSessionHealthMonitor = startSessionHealthMonitor(db, app.log)

@@ -13,6 +13,7 @@ async function buildApp({ userId, converter, fetchProductInfo, credentials = [],
     prefix: '/api/link-conversion',
     converter,
     fetchProductInfo,
+    fetchProductImage: async () => null,
     findCredentials: async () => credentials,
     ...routeOptions,
   })
@@ -237,6 +238,13 @@ test('POST /scrape-offer tenta converter e usa link convertido para scrape quand
       scraperUrl = url
       return { title: 'Mixer Vertical Turbo Chef', oldPrice: '199,90', newPrice: '149,90', finalUrl: url }
     },
+    routeOptions: {
+      fetchProductImage: async (platform, url) => {
+        assert.equal(platform, 'amazon')
+        assert.equal(url, 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20')
+        return 'https://images.test/mixer.jpg'
+      },
+    },
   })
   t.after(async () => { await app.close() })
 
@@ -258,6 +266,8 @@ test('POST /scrape-offer tenta converter e usa link convertido para scrape quand
   assert.equal(body.conversion.success, true)
   assert.equal(body.conversion.usedOriginalUrl, false)
   assert.equal(body.conversion.reasonCode, null)
+  assert.equal(body.imageUrl, 'https://images.test/mixer.jpg')
+  assert.equal(body.imageRefererUrl, 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20')
 })
 
 test('POST /scrape-offer tenta original quando convertido não traz dados', async (t) => {
