@@ -196,15 +196,23 @@ export const api = {
   getConfig: () => apiFetch('/api/config'),
   saveConfig: (data) => apiFetch('/api/config', { method: 'PUT', body: JSON.stringify(data) }),
 
-  broadcastSend: (text, jids) =>
-    apiFetch('/api/broadcast/send', { method: 'POST', body: JSON.stringify({ text, jids }) }),
+  broadcastSend: (data, jids) => {
+    const payload = typeof data === 'string' ? { text: data, jids } : data
+    return apiFetch('/api/broadcast/send', { method: 'POST', body: JSON.stringify(payload) })
+  },
   scheduledList: () => apiFetch('/api/broadcast/scheduled'),
-  scheduledCreate: (text, scheduledAt, jids) =>
-    apiFetch('/api/broadcast/scheduled', {
-      method: 'POST',
-      body: JSON.stringify({ text, scheduledAt, ...(Array.isArray(jids) ? { jids } : {}) }),
-    }),
+  scheduledCreate: (data, scheduledAt, jids) => {
+    const payload = typeof data === 'string' ? { text: data, scheduledAt, ...(Array.isArray(jids) ? { jids } : {}) } : data
+    return apiFetch('/api/broadcast/scheduled', { method: 'POST', body: JSON.stringify(payload) })
+  },
   scheduledCancel: (id) => apiFetch(`/api/broadcast/scheduled/${id}`, { method: 'DELETE' }),
+  offerQueues: () => apiFetch('/api/offer-queues'),
+  offerQueueCreate: (data) => apiFetch('/api/offer-queues', { method: 'POST', body: JSON.stringify(data) }),
+  offerQueueUpdate: (id, data) => apiFetch(`/api/offer-queues/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  offerQueueDelete: (id) => apiFetch(`/api/offer-queues/${id}`, { method: 'DELETE' }),
+  offerQueueItems: (id) => apiFetch(`/api/offer-queues/${id}/items`),
+  offerQueueItemAdd: (id, data) => apiFetch(`/api/offer-queues/${id}/items`, { method: 'POST', body: JSON.stringify(data) }),
+  offerQueueItemDelete: (id, itemId) => apiFetch(`/api/offer-queues/${id}/items/${itemId}`, { method: 'DELETE' }),
 
   dashboardStatus: () => apiFetch('/api/dashboard/status'),
   publicFaq: () => apiFetch('/api/public/faq'),

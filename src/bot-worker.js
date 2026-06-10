@@ -441,6 +441,7 @@ async function checkScheduledMessages() {
           },
         })
 
+        const scheduledImageRecipe = buildBroadcastImageRecipe(msg.text, { imageUrl: msg.imageUrl, imageRefererUrl: msg.imageRefererUrl })
         const accepted = await enqueueSendJob({
           type: 'scheduled',
           logId: log.id,
@@ -449,7 +450,7 @@ async function checkScheduledMessages() {
           plan: 'scheduled',
           delayMs: buildSmartDelayMs((await getConfig()).botConfig),
           typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
-          payload: { text: msg.text },
+          ...(scheduledImageRecipe ? { payloadRecipe: scheduledImageRecipe } : { payload: { text: msg.text } }),
           onDone: async (result) => {
             state.remaining--
             if (!result.ok) state.hasError = true

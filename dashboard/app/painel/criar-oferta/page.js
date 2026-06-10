@@ -2,14 +2,12 @@
 
 /* Criar oferta — reskin Menta do corpo, layout fiel ao mockup App.html
  * (screen-criar): card de link no topo com loja detectada + ID de afiliada,
- * e grade 2 colunas (produto + composição | prévia no WhatsApp). Fluxo:
- * scrapeOffer → editar título/preços → escolher template → prévia → copiar.
- * A mensagem é composta pelo compositor canônico (buildMobileOfferText) com
- * os mesmos templates das ofertas automáticas (mobileTemplateStore), editáveis
- * em /painel/mensagens. A imagem vem do backend (imageUrl no scrape-offer) e
- * é só ilustrativa na prévia — o copiar segue copiando texto. */
+ * e grade 2 colunas (produto + composição | prévia no WhatsApp). A lógica é
+ * idêntica à do OfferBuilder standalone: scrapeOffer → editar título/preços →
+ * CTA de grupo opcional → template → prévia → copiar. Reusa os helpers de
+ * lib/offerBuilderUi. O bloco de despacho usa as APIs de broadcast, agendamento e filas. */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { usePainelHeader, PainelTopbarAction } from '../PainelShell'
@@ -87,6 +85,23 @@ export default function CriarOfertaPage() {
   const [error, setError] = useState('')
   const [conversionStatus, setConversionStatus] = useState(null)
   const [copyFeedback, setCopyFeedback] = useState('')
+  const [groups, setGroups] = useState([])
+  const [selectedJids, setSelectedJids] = useState([])
+  const [queues, setQueues] = useState([])
+  const [queueId, setQueueId] = useState('')
+  const [scheduleAt, setScheduleAt] = useState('')
+  const [dispatching, setDispatching] = useState('')
+  const [dispatchFeedback, setDispatchFeedback] = useState('')
+
+  useEffect(() => {
+    Promise.all([api.groups(), api.offerQueues()]).then(([allGroups, allQueues]) => {
+      const destinations = allGroups.filter((group) => group.role === 'post')
+      setGroups(destinations)
+      setSelectedJids(destinations.map((group) => group.waJid))
+      setQueues(allQueues)
+      setQueueId(allQueues[0]?.id || '')
+    }).catch((err) => setError(err.message))
+  }, [])
 
   // Reconcilia a lista com o servidor (fonte de verdade:
   // BotConfig.mobileTemplatesJson, editado em /painel/mensagens).
@@ -139,7 +154,8 @@ export default function CriarOfertaPage() {
         oldPrice: normalizeText(info?.oldPrice),
         newPrice,
         link: normalizeLink(info?.offerUrl, trimmed),
-        imageUrl: normalizeText(info?.imageUrl),
+        imageUrl: info?.imageUrl || null,
+        imageRefererUrl: info?.imageRefererUrl || null,
       })
       setConversionStatus(info?.conversion || null)
     } catch (err) {
@@ -157,6 +173,26 @@ export default function CriarOfertaPage() {
     } catch {
       setError('Não foi possível copiar automaticamente. Copie manualmente da prévia.')
     }
+  }
+
+  function dispatchPayload() {
+    return { text: offerMessage, jids: selectedJids, imageUrl: generated?.imageUrl, imageRefererUrl: generated?.imageRefererUrl }
+  }
+
+  async function dispatch(mode) {
+    if (!selectedJids.length) { setDispatchFeedback('Selecione pelo menos um grupo de destino.'); return }
+    if (mode === 'schedule' && (!scheduleAt || new Date(scheduleAt) <= new Date())) { setDispatchFeedback('Escolha uma data e hora futuras.'); return }
+    if (mode === 'queue' && !queueId) { setDispatchFeedback('Crie ou selecione uma fila.'); return }
+    setDispatching(mode)
+    setDispatchFeedback('')
+    try {
+      const payload = dispatchPayload()
+      if (mode === 'now') await api.broadcastSend(payload)
+      if (mode === 'schedule') await api.scheduledCreate({ ...payload, scheduledAt: new Date(scheduleAt).toISOString() })
+      if (mode === 'queue') await api.offerQueueItemAdd(queueId, payload)
+      setDispatchFeedback(mode === 'now' ? 'Oferta enviada para a fila de envio do WhatsApp.' : mode === 'schedule' ? 'Oferta agendada com sucesso. Veja em Agendados.' : 'Oferta inserida na fila com sucesso.')
+    } catch (err) { setDispatchFeedback(err.message) }
+    finally { setDispatching('') }
   }
 
   const conv = getConversionStatusPresentation(conversionStatus)
@@ -289,6 +325,26 @@ export default function CriarOfertaPage() {
             {copyFeedback && <div className="pnl-note-box is-success" style={{ marginTop: 10 }} role="status">{copyFeedback}</div>}
           </section>
         </div>
+      )}
+
+      {generated && (
+        <section className="pnl-card" aria-labelledby="dispatch-title">
+          <div className="pnl-card-title" id="dispatch-title">Despacho</div>
+          <p className="pnl-hint" style={{ marginTop: 4 }}>Escolha os destinos e envie agora, agende ou adicione a uma fila automática.</p>
+          <div style={{ marginTop: 16 }}>
+            <span className="pnl-label">Grupos de destino</span>
+            <div className="pnl-grid" style={{ marginTop: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
+              {groups.map((group) => <label className="pnl-check" key={group.id}><input type="checkbox" checked={selectedJids.includes(group.waJid)} onChange={() => setSelectedJids((current) => current.includes(group.waJid) ? current.filter((jid) => jid !== group.waJid) : [...current, group.waJid])} />{group.name}</label>)}
+            </div>
+            {!groups.length && <p className="pnl-note-box is-error" style={{ marginTop: 8 }}>Nenhum grupo de postagem configurado. <Link href="/painel/grupos">Adicionar grupos</Link></p>}
+          </div>
+          <div className="pnl-grid" style={{ marginTop: 18, gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', alignItems: 'end' }}>
+            <button type="button" className="pnl-btn is-primary" style={{ justifyContent: 'center' }} disabled={!!dispatching || !selectedJids.length} onClick={() => dispatch('now')}>{dispatching === 'now' ? 'Enviando…' : 'Enviar agora'}</button>
+            <div className="pnl-field"><label className="pnl-label" htmlFor="schedule-at">Dia e hora</label><input id="schedule-at" className="pnl-input" type="datetime-local" value={scheduleAt} onChange={(e) => setScheduleAt(e.target.value)} /><button type="button" className="pnl-btn" style={{ width: '100%', justifyContent: 'center', marginTop: 8 }} disabled={!!dispatching || !scheduleAt} onClick={() => dispatch('schedule')}>{dispatching === 'schedule' ? 'Agendando…' : 'Agendar'}</button></div>
+            <div className="pnl-field"><label className="pnl-label" htmlFor="queue-id">Fila automática</label>{queues.length ? <><select id="queue-id" className="pnl-input" value={queueId} onChange={(e) => setQueueId(e.target.value)}>{queues.map((queue) => <option value={queue.id} key={queue.id}>{queue.name}{queue.enabled ? '' : ' (pausada)'}</option>)}</select><button type="button" className="pnl-btn" style={{ width: '100%', justifyContent: 'center', marginTop: 8 }} disabled={!!dispatching || !queueId} onClick={() => dispatch('queue')}>{dispatching === 'queue' ? 'Inserindo…' : 'Inserir na fila'}</button></> : <Link className="pnl-btn" href="/painel/filas">Criar minha primeira fila</Link>}</div>
+          </div>
+          {dispatchFeedback && <div className={`pnl-note-box ${/sucesso|enviada|agendada|inserida/i.test(dispatchFeedback) ? 'is-success' : 'is-error'}`} style={{ marginTop: 14 }} role="status">{dispatchFeedback}{dispatchFeedback.includes('Agendados') && <> <Link href="/painel/agendados">Abrir agendados</Link></>}</div>}
+        </section>
       )}
     </div>
   )

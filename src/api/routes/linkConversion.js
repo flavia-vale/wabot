@@ -5,6 +5,7 @@ import { fetchProductInfo as defaultFetchProductInfo } from '../../converters/pr
 import { fetchProductImage as defaultFetchProductImage } from '../../converters/imageScrapers.js'
 import { validateCredentialData } from '../../credentialHealth.js'
 import { assertPublicUrl } from '../../core/ssrfGuard.js'
+import { fetchProductImage as defaultFetchProductImage } from '../../converters/imageScrapers.js'
 import {
   buildScrapedOffer,
   buildCredentialsMap,
@@ -147,6 +148,16 @@ export async function linkConversionRoutes(app, opts = {}) {
       imagePromise,
     ])
 
+    let imageUrl = null
+    const imageSourceUrl = offer.finalUrl || url
+    const platform = detectLinks(imageSourceUrl)[0]?.platform || detectLinks(url)[0]?.platform
+    if (platform) {
+      imageUrl = await fetchProductImage(platform, imageSourceUrl, credentialsMap).catch((err) => {
+        app.log.warn({ err: err?.message, platform }, 'Falha ao resolver imagem da oferta')
+        return null
+      })
+    }
+
     return {
       title: offer.title,
       oldPrice: offer.oldPrice,
@@ -156,6 +167,8 @@ export async function linkConversionRoutes(app, opts = {}) {
       imageUrl: typeof imageUrl === 'string' && imageUrl ? imageUrl : null,
       conversionWarning: offer.conversionWarning,
       conversion: offer.conversion,
+      imageUrl,
+      imageRefererUrl: imageUrl ? imageSourceUrl : null,
       ...(offer.scrapeWarning ? { scrapeWarning: offer.scrapeWarning } : {}),
     }
   })
