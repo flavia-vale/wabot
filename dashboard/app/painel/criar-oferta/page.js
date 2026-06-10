@@ -9,7 +9,7 @@
  * em /painel/mensagens. A imagem vem do backend (imageUrl no scrape-offer) e
  * é só ilustrativa na prévia — o copiar segue copiando texto. */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { usePainelHeader, PainelTopbarAction } from '../PainelShell'
@@ -79,18 +79,18 @@ export default function CriarOfertaPage() {
   const [link, setLink] = useState('')
   const [generated, setGenerated] = useState(null)
   const [imageFailed, setImageFailed] = useState(false)
-  const [templates, setTemplates] = useState([])
-  const [templateKey, setTemplateKey] = useState('')
+  // Lazy initializers: cache local síncrono no primeiro render (no SSR caem
+  // nos defaults — o select só aparece após interação, sem risco de mismatch).
+  const [templates, setTemplates] = useState(() => loadAllTemplates())
+  const [templateKey, setTemplateKey] = useState(() => readSavedTemplateKey())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [conversionStatus, setConversionStatus] = useState(null)
   const [copyFeedback, setCopyFeedback] = useState('')
 
-  // Render imediato com o cache local; em seguida reconcilia com o servidor
-  // (fonte de verdade: BotConfig.mobileTemplatesJson, editado em /painel/mensagens).
+  // Reconcilia a lista com o servidor (fonte de verdade:
+  // BotConfig.mobileTemplatesJson, editado em /painel/mensagens).
   useEffect(() => {
-    setTemplates(loadAllTemplates())
-    setTemplateKey(readSavedTemplateKey())
     let cancelled = false
     loadTemplateStore().then((store) => {
       if (!cancelled) setTemplates(composeTemplates(store))
@@ -102,7 +102,9 @@ export default function CriarOfertaPage() {
   const store = detectStore(generated?.link || link)
   const dp = generated ? discountPct(generated.oldPrice, generated.newPrice) : null
 
-  const offerMessage = useMemo(() => buildMobileOfferText({
+  // Sem useMemo manual: o React Compiler memoiza sozinho (a regra
+  // preserve-manual-memoization rejeita deps mais específicas que as inferidas).
+  const offerMessage = buildMobileOfferText({
     product: {
       title: generated?.title || '',
       price: generated?.newPrice ? formatOfferPrice(generated.newPrice) : '',
@@ -113,7 +115,7 @@ export default function CriarOfertaPage() {
     link: generated?.link || link,
     template: selectedTemplate?.key,
     templateBody: selectedTemplate?.body,
-  }), [generated?.title, generated?.newPrice, generated?.oldPrice, generated?.link, link, dp, store?.name, selectedTemplate?.key, selectedTemplate?.body])
+  })
 
   function selectTemplate(key) {
     setTemplateKey(key)
