@@ -60,7 +60,7 @@ export async function getAffiliateMeData({ userId }) {
   const [referredUsers, commissions] = await Promise.all([
     db.user.findMany({
       where: { affiliateProfileId: profile.id },
-      select: { id: true, name: true, plan: true, status: true, accessExpiresAt: true },
+      select: { id: true, name: true, plan: true, status: true, accessExpiresAt: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
     }),
     db.affiliateCommission.findMany({
