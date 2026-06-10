@@ -2,6 +2,7 @@ import db from '../../db.js'
 import { detectLinks } from '../../detector.js'
 import { convertLink as defaultConvertLink } from '../../converters/index.js'
 import { fetchProductInfo as defaultFetchProductInfo } from '../../converters/productInfoScraper.js'
+import { fetchProductImage as defaultFetchProductImage } from '../../converters/imageScrapers.js'
 import { validateCredentialData } from '../../credentialHealth.js'
 import { assertPublicUrl } from '../../core/ssrfGuard.js'
 import { fetchProductImage as defaultFetchProductImage } from '../../converters/imageScrapers.js'
@@ -121,15 +122,31 @@ export async function linkConversionRoutes(app, opts = {}) {
     // isso keepOriginalLink=false. A busca de título/preço (conversão ->
     // resolução -> scrape com credenciais -> fallback) vive no motor único
     // compartilhado com o bot do Telegram (offerEngine.js).
-    const offer = await buildScrapedOffer({
-      url,
-      credentialsMap,
-      keepOriginalLink: false,
-      convertLink,
-      fetchProductInfo,
-      conversionTimeoutMs: operational.conversionTimeoutMs,
-      logger: app.log,
-    })
+    //
+    // A imagem roda em paralelo (mesmo padrão de buildTelegramOffer) e é
+    // best-effort: falha vira null, nunca derruba a request. Só a URL original
+    // (já validada pelo assertPublicUrl) é passada ao resolver; as credenciais
+    // são as da Shopee (resolveShopeeImage exige appId/secretKey; demais lojas
+    // ignoram o argumento).
+    const platform = detectLinks(url)[0]?.platform || null
+    const imagePromise = platform
+      ? Promise.resolve()
+          .then(() => fetchProductImage(platform, url, credentialsMap.shopee || {}))
+          .catch(() => null)
+      : Promise.resolve(null)
+
+    const [offer, imageUrl] = await Promise.all([
+      buildScrapedOffer({
+        url,
+        credentialsMap,
+        keepOriginalLink: false,
+        convertLink,
+        fetchProductInfo,
+        conversionTimeoutMs: operational.conversionTimeoutMs,
+        logger: app.log,
+      }),
+      imagePromise,
+    ])
 
     let imageUrl = null
     const imageSourceUrl = offer.finalUrl || url
@@ -147,6 +164,7 @@ export async function linkConversionRoutes(app, opts = {}) {
       newPrice: offer.newPrice,
       finalUrl: offer.finalUrl,
       offerUrl: offer.offerUrl,
+      imageUrl: typeof imageUrl === 'string' && imageUrl ? imageUrl : null,
       conversionWarning: offer.conversionWarning,
       conversion: offer.conversion,
       imageUrl,
