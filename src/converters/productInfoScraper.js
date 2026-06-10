@@ -598,6 +598,49 @@ function isMercadoLivreLandingUrl(url) {
   }
 }
 
+// Expande um short link do ML (meli.la, mluvem.com) seguindo o(s) redirect(s)
+// manualmente para PRESERVAR a query string — em especial o parâmetro `ref` das
+// shares /social/, que é o que identifica QUAL produto a share representa. Um
+// fetch com redirect:follow anônimo descartaria o produto destacado e cairia na
+// vitrine genérica /social/<tag>/lists. Retorna a URL expandida ou a original.
+async function expandMlShortLink(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS } = {}) {
+  let current = String(url || '')
+  for (let i = 0; i < 5; i++) {
+    let host
+    try { host = new URL(current).hostname } catch { break }
+    if (!/(?:^|\.)(?:meli\.la|mluvem\.com)$/i.test(host)) break
+    try {
+      const res = await fetch(current, {
+        headers: { 'User-Agent': BROWSER_UA },
+        redirect: 'manual',
+        signal: AbortSignal.timeout(timeoutMs),
+      })
+      const loc = res.headers.get('location')
+      if (!loc) {
+        // Sem redirect: usa a URL final que o fetch reportar (se houver).
+        return res.url || current
+      }
+      current = loc.startsWith('http') ? loc : new URL(loc, current).href
+    } catch {
+      break
+    }
+  }
+  return current
+}
+
+// Uma URL /social/ do ML com ?ref= é uma share de UM produto destacado (o `ref`
+// identifica o produto dentro da vitrine do afiliado). Raspada autenticada (com
+// cookie ssid) o ML serve a visão do produto compartilhado, de onde og:title e o
+// primeiro bloco de preço (previous_price/current_price) são o produto certo.
+function isMercadoLivreSocialShare(url) {
+  try {
+    const u = new URL(String(url || ''))
+    return /mercadoli(?:vre|bre)/i.test(u.hostname) && /^\/social\//i.test(u.pathname)
+  } catch {
+    return false
+  }
+}
+
 export async function fetchProductInfo(url, opts = {}) {
   // Para URLs do ML, usa a sessão autenticada do usuário (cookie ssid) e o UA
   // mobile: sem isso o ML responde com a página anti-bot /gz/account-verification
@@ -606,13 +649,23 @@ export async function fetchProductInfo(url, opts = {}) {
   const shopeeCreds = opts.shopeeCreds || opts.shopeeCredentials || null
   const fetchOpts = { ...opts }
 
-  // Pré-resolve landings sociais do ML (/social/, meli.la, mluvem.com) para a
-  // URL canônica do produto ANTES de aplicar cookie/UA, senão a landing pega o
-  // preço de uma recomendação (ex.: 1,00 em vez do preço real do produto).
+  // Resolução de landing do ML. Dois caminhos:
+  //   (1) Share /social/?ref= COM cookie → NÃO canonicalizar. O `ref` identifica
+  //       o produto destacado; raspamos a própria URL /social/ autenticada e os
+  //       extratores (og:title + previous/current_price) pegam o produto certo.
+  //       Canonicalizar aqui jogava fora o `ref` e resolveToCleanProductUrl caía
+  //       no anti-bot (IP datacenter) extraindo um MLB aleatório/errado.
+  //   (2) Demais landings (/up/, meli.la → /p/MLB, sem cookie) → mantém o
+  //       resolveToCleanProductUrl histórico (best-effort).
   let resolvedUrl = url
   if (isMercadoLivreLandingUrl(url)) {
-    const canonical = await resolveToCleanProductUrl(url).catch(() => null)
-    if (canonical) resolvedUrl = canonical
+    const expanded = await expandMlShortLink(url).catch(() => url)
+    if (mlCookieHeader && isMercadoLivreSocialShare(expanded)) {
+      resolvedUrl = expanded
+    } else {
+      const canonical = await resolveToCleanProductUrl(url).catch(() => null)
+      if (canonical) resolvedUrl = canonical
+    }
   }
 
   // Cookie/UA mobile são checados sobre a URL JÁ resolvida: meli.la/mluvem.com
@@ -684,7 +737,17 @@ export async function fetchProductInfo(url, opts = {}) {
   const rawFallbackTitle = extractTitleFallback(html)
   const fallbackTitle = isBogusScrapeTitle(rawFallbackTitle) ? null : rawFallbackTitle
   const title = jsonLd?.title || mlHtml?.title || amazonFallback?.title || shopeeApiFallback?.title || mercadoLivreApiFallback?.title || mlItemApiFallback?.title || titleFromUrl || fallbackTitle
-  const newPrice = jsonLd?.newPrice || mlHtml?.newPrice || mlLanding?.newPrice || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || shopeeJsonRange?.newPrice || shopeeHtmlRange?.newPrice || mercadoLivreApiFallback?.newPrice || mlItemApiFallback?.newPrice || extractMetaPrice(html) || extractShopeePriceFromHtml(html)
-  const oldPrice = jsonLd?.oldPrice || mlHtml?.oldPrice || mlLanding?.oldPrice || shopeeApiFallback?.oldPrice || shopeeJsonRange?.oldPrice || shopeeHtmlRange?.oldPrice || mercadoLivreApiFallback?.oldPrice || mlItemApiFallback?.oldPrice || ''
+
+  // Numa share /social/ a página tem VÁRIOS produtos; extractMercadoLivreFromHtml
+  // pode casar o `"price":{"value":..}` de um produto vizinho (errado). O bloco
+  // previous_price/current_price extraído por extractFromMercadoLivreLanding é o
+  // do produto destacado pelo `ref` — então para social share ele tem prioridade
+  // sobre mlHtml no preço.
+  const socialShare = isMercadoLivreSocialShare(finalUrl) || isMercadoLivreSocialShare(resolvedUrl)
+  const mlPrimaryNew = socialShare ? (mlLanding?.newPrice || mlHtml?.newPrice) : (mlHtml?.newPrice || mlLanding?.newPrice)
+  const mlPrimaryOld = socialShare ? (mlLanding?.oldPrice || mlHtml?.oldPrice) : (mlHtml?.oldPrice || mlLanding?.oldPrice)
+
+  const newPrice = jsonLd?.newPrice || mlPrimaryNew || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || shopeeJsonRange?.newPrice || shopeeHtmlRange?.newPrice || mercadoLivreApiFallback?.newPrice || mlItemApiFallback?.newPrice || extractMetaPrice(html) || extractShopeePriceFromHtml(html)
+  const oldPrice = jsonLd?.oldPrice || mlPrimaryOld || shopeeApiFallback?.oldPrice || shopeeJsonRange?.oldPrice || shopeeHtmlRange?.oldPrice || mercadoLivreApiFallback?.oldPrice || mlItemApiFallback?.oldPrice || ''
   return { title, oldPrice, newPrice, finalUrl }
 }
