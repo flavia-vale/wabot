@@ -13,11 +13,14 @@ async function buildApp({ userId, converter, fetchProductInfo, fetchProductImage
     prefix: '/api/link-conversion',
     converter,
     fetchProductInfo,
-    fetchProductImage: async () => null,
     findCredentials: async () => credentials,
-    ...(!routeOptions.fetchProductImage && !routeOptions.loadImageScrapers
-      ? { fetchProductImage: async () => null }
-      : {}),
+    // Stub default mantém os testes sem sharp/rede; só quando o teste injeta
+    // fetchProductImage ou loadImageScrapers o caminho real de imagem roda.
+    ...(fetchProductImage
+      ? { fetchProductImage }
+      : (!routeOptions.fetchProductImage && !routeOptions.loadImageScrapers
+        ? { fetchProductImage: async () => null }
+        : {})),
     ...routeOptions,
   })
   return { app, userId: effectiveUserId }
@@ -375,10 +378,11 @@ test('POST /scrape-offer devolve imageUrl quando o resolver de imagem encontra a
   // demais campos seguem intactos
   assert.equal(body.title, 'Mixer Vertical Turbo Chef')
   assert.equal(body.newPrice, '149,90')
-  // o resolver recebe plataforma + URL ORIGINAL (a que passou pelo guard SSRF)
+  // o resolver recebe plataforma + finalUrl (link convertido, conforme plano
+  // — mesma URL que o pipeline de espelhamento usa para resolver imagem)
   assert.equal(imageCalls.length, 1)
   assert.equal(imageCalls[0].platform, 'amazon')
-  assert.equal(imageCalls[0].url, 'https://www.amazon.com.br/dp/B09VQ39F41')
+  assert.equal(imageCalls[0].url, 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20')
 })
 
 test('POST /scrape-offer passa credenciais da Shopee ao resolver de imagem', async (t) => {
@@ -400,8 +404,10 @@ test('POST /scrape-offer passa credenciais da Shopee ao resolver de imagem', asy
   const body = JSON.parse(res.body)
   assert.equal(body.imageUrl, 'https://down-br.img.susercontent.com/file/abc')
   assert.equal(imageCalls[0].platform, 'shopee')
-  assert.equal(imageCalls[0].creds.appId, '123456')
-  assert.equal(imageCalls[0].creds.secretKey, 'secret-key-very-long')
+  // o resolver recebe o credentialsMap inteiro (resolveShopeeImage lê
+  // creds.shopee.appId/secretKey — mesmo contrato dos demais consumidores)
+  assert.equal(imageCalls[0].creds.shopee.appId, '123456')
+  assert.equal(imageCalls[0].creds.shopee.secretKey, 'secret-key-very-long')
 })
 
 test('POST /scrape-offer devolve imageUrl null quando o resolver de imagem falha (best-effort)', async (t) => {
