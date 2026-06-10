@@ -371,6 +371,7 @@ export const api = {
   affiliateMe: () => apiFetch('/api/affiliate/me'),
   affiliateMeUpdate: (data) => apiFetch('/api/affiliate/me', { method: 'PUT', body: JSON.stringify(data) }),
   adminAffiliates: (params) => apiFetch(`/api/admin/affiliates${params ? '?' + new URLSearchParams(params) : ''}`),
+  adminAffiliateReferrals: (id) => apiFetch(`/api/admin/affiliates/${id}/referrals`),
   adminAffiliateApprove: (id) => apiFetch(`/api/admin/affiliates/${id}/approve`, { method: 'POST' }),
   adminAffiliateReject: (id, notes) => apiFetch(`/api/admin/affiliates/${id}/reject`, { method: 'POST', body: JSON.stringify({ adminNotes: notes }) }),
   adminAffiliateCommissions: (params) => apiFetch(`/api/admin/affiliates/commissions${params ? '?' + new URLSearchParams(params) : ''}`),
