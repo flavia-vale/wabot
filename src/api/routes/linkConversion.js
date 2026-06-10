@@ -81,6 +81,14 @@ const SCRAPE_OFFER_URL_RE = /^https?:\/\/[^\s]+$/i
 export async function linkConversionRoutes(app, opts = {}) {
   const convertLink = opts.converter ? normalizeConverter(opts.converter) : defaultConvertLink
   const fetchProductInfo = opts.fetchProductInfo ?? defaultFetchProductInfo
+  // imageScrapers carrega `sharp` (binário nativo). O resolver precisa ser
+  // lazy para que uma instalação incompatível/ausente de sharp nunca derrube
+  // toda a API no boot; nesse cenário apenas a foto opcional é omitida.
+  const loadImageScrapers = opts.loadImageScrapers ?? (() => import('../../converters/imageScrapers.js'))
+  const fetchProductImage = opts.fetchProductImage ?? (async (...args) => {
+    const imageScrapers = await loadImageScrapers()
+    return imageScrapers.fetchProductImage(...args)
+  })
   const findCredentials = opts.findCredentials ?? ((userId) => db.credential.findMany({ where: { userId } }))
   const rateState = opts.rateState ?? new Map()
   const getNow = opts.now ?? (() => Date.now())
@@ -129,6 +137,16 @@ export async function linkConversionRoutes(app, opts = {}) {
       logger: app.log,
     })
 
+    let imageUrl = null
+    const imageSourceUrl = offer.finalUrl || url
+    const platform = detectLinks(imageSourceUrl)[0]?.platform || detectLinks(url)[0]?.platform
+    if (platform) {
+      imageUrl = await fetchProductImage(platform, imageSourceUrl, credentialsMap).catch((err) => {
+        app.log.warn({ err: err?.message, platform }, 'Falha ao resolver imagem da oferta')
+        return null
+      })
+    }
+
     return {
       title: offer.title,
       oldPrice: offer.oldPrice,
@@ -137,6 +155,8 @@ export async function linkConversionRoutes(app, opts = {}) {
       offerUrl: offer.offerUrl,
       conversionWarning: offer.conversionWarning,
       conversion: offer.conversion,
+      imageUrl,
+      imageRefererUrl: imageUrl ? imageSourceUrl : null,
       ...(offer.scrapeWarning ? { scrapeWarning: offer.scrapeWarning } : {}),
     }
   })

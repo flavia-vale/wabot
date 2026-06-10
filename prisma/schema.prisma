@@ -46,6 +46,8 @@ model User {
   customerContactActors CustomerContactLog[] @relation("CustomerContactActor")
   followLogs            FollowLog[]
   offerAutomations      OfferAutomation[]
+  offerQueues           OfferQueue[]
+  offerQueueItems       OfferQueueItem[]
   affiliateLinks        AffiliateLink[]
   probeEvidences       ProbeEvidence[]
 
@@ -303,9 +305,50 @@ model ScheduledMessage {
   scheduledAt DateTime
   sentAt      DateTime?
   status      String    @default("pending")
+  imageUrl    String?
+  imageRefererUrl String?
   createdAt   DateTime  @default(now())
 
   @@index([userId, status, scheduledAt])
+}
+
+model OfferQueue {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name             String
+  enabled          Boolean  @default(true)
+  intervalEnabled  Boolean  @default(false)
+  intervalMinutes  Int      @default(30)
+  hourlyCapEnabled Boolean  @default(false)
+  hourlyCap        Int      @default(10)
+  dailyCapEnabled  Boolean  @default(false)
+  dailyCap         Int      @default(50)
+  lastSentAt       DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  items            OfferQueueItem[]
+
+  @@index([userId, enabled])
+}
+
+model OfferQueueItem {
+  id              String     @id @default(cuid())
+  queueId         String
+  queue           OfferQueue @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text            String
+  imageUrl        String?
+  imageRefererUrl String?
+  targetJids      String
+  status          String     @default("pending")
+  position        Int
+  sentAt          DateTime?
+  createdAt       DateTime   @default(now())
+
+  @@index([queueId, status, position])
+  @@index([userId, status])
 }
 
 model MessageLog {

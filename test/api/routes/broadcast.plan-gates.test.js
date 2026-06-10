@@ -6,7 +6,7 @@ import { broadcastRoutes } from '../../../src/api/routes/broadcast.js'
 
 let userCounter = 0
 
-async function buildApp({ plan = 'basic', accessExpiresAt = null } = {}) {
+async function buildApp({ plan = 'basic', accessExpiresAt = null, isRunning = () => true, sendBroadcast = async (_uid, _text, targetJids) => ({ ok: true, targetJids }) } = {}) {
   const n = ++userCounter
   const userId = `broadcast-user-${n}-${Date.now()}-${Math.random().toString(16).slice(2)}`
   await db.user.create({
@@ -24,8 +24,8 @@ async function buildApp({ plan = 'basic', accessExpiresAt = null } = {}) {
   app.decorate('authenticate', async (req) => { req.user = { sub: userId } })
   await app.register(broadcastRoutes, {
     prefix: '/api/broadcast',
-    isRunning: () => true,
-    sendBroadcast: async (_uid, _text, targetJids) => ({ ok: true, targetJids }),
+    isRunning,
+    sendBroadcast,
   })
 
   app.addHook('onClose', async () => {
@@ -79,5 +79,26 @@ test('POST /scheduled aceita canal para Pro', async () => {
   assert.equal(res.statusCode, 200)
   const body = JSON.parse(res.body)
   assert.equal(JSON.parse(body.targetJids)[0], 'canal-pro@newsletter')
+  await app.close()
+})
+
+
+test('POST /send aguarda status assíncrono do supervisor remoto', async () => {
+  let sends = 0
+  const { app } = await buildApp({
+    plan: 'pro',
+    isRunning: async () => false,
+    sendBroadcast: async () => { sends += 1 },
+  })
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/broadcast/send',
+    payload: { text: 'Teste remoto', jids: ['grupo@g.us'] },
+  })
+
+  assert.equal(res.statusCode, 400)
+  assert.equal(res.json().error, 'Bot não está conectado')
+  assert.equal(sends, 0)
   await app.close()
 })

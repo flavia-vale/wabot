@@ -14,6 +14,9 @@ async function buildApp({ userId, converter, fetchProductInfo, credentials = [],
     converter,
     fetchProductInfo,
     findCredentials: async () => credentials,
+    ...(!routeOptions.fetchProductImage && !routeOptions.loadImageScrapers
+      ? { fetchProductImage: async () => null }
+      : {}),
     ...routeOptions,
   })
   return { app, userId: effectiveUserId }
@@ -237,6 +240,13 @@ test('POST /scrape-offer tenta converter e usa link convertido para scrape quand
       scraperUrl = url
       return { title: 'Mixer Vertical Turbo Chef', oldPrice: '199,90', newPrice: '149,90', finalUrl: url }
     },
+    routeOptions: {
+      fetchProductImage: async (platform, url) => {
+        assert.equal(platform, 'amazon')
+        assert.equal(url, 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20')
+        return 'https://images.test/mixer.jpg'
+      },
+    },
   })
   t.after(async () => { await app.close() })
 
@@ -258,6 +268,8 @@ test('POST /scrape-offer tenta converter e usa link convertido para scrape quand
   assert.equal(body.conversion.success, true)
   assert.equal(body.conversion.usedOriginalUrl, false)
   assert.equal(body.conversion.reasonCode, null)
+  assert.equal(body.imageUrl, 'https://images.test/mixer.jpg')
+  assert.equal(body.imageRefererUrl, 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20')
 })
 
 test('POST /scrape-offer tenta original quando convertido não traz dados', async (t) => {
@@ -491,4 +503,48 @@ test('POST /scrape-offer marca CONVERSION_TIMEOUT quando conversor estoura tempo
   assert.equal(body.offerUrl, original)
   assert.equal(body.conversion.success, false)
   assert.equal(body.conversion.reasonCode, 'CONVERSION_TIMEOUT')
+})
+
+test('registro da rota não carrega imageScrapers/sharp no boot da API', async (t) => {
+  let imageModuleLoads = 0
+  const { app } = await buildApp({
+    routeOptions: {
+      loadImageScrapers: async () => {
+        imageModuleLoads += 1
+        throw new Error('sharp indisponível')
+      },
+    },
+  })
+  t.after(async () => { await app.close() })
+
+  app.get('/health-test', async () => ({ ok: true }))
+  const health = await app.inject({ method: 'GET', url: '/health-test' })
+
+  assert.equal(health.statusCode, 200)
+  assert.deepEqual(health.json(), { ok: true })
+  assert.equal(imageModuleLoads, 0, 'resolver nativo de imagem deve permanecer lazy até um scrape')
+})
+
+test('falha ao carregar imageScrapers/sharp omite foto sem quebrar scrape-offer', async (t) => {
+  let imageModuleLoads = 0
+  const original = 'https://www.amazon.com.br/dp/B09VQ39F41'
+  const { app } = await buildApp({
+    credentials: [credential()],
+    converter: async () => `${original}?tag=botinho-20`,
+    fetchProductInfo: async (url) => ({ title: 'Produto', oldPrice: '', newPrice: '99,90', finalUrl: url }),
+    routeOptions: {
+      loadImageScrapers: async () => {
+        imageModuleLoads += 1
+        throw new Error('sharp indisponível')
+      },
+    },
+  })
+  t.after(async () => { await app.close() })
+
+  const response = await app.inject({ method: 'POST', url: '/api/link-conversion/scrape-offer', payload: { url: original } })
+
+  assert.equal(response.statusCode, 200)
+  assert.equal(response.json().imageUrl, null)
+  assert.equal(response.json().imageRefererUrl, null)
+  assert.equal(imageModuleLoads, 1)
 })
