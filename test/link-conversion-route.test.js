@@ -5,7 +5,7 @@ import { linkConversionRoutes } from '../src/api/routes/linkConversion.js'
 
 let counter = 0
 
-async function buildApp({ userId, converter, fetchProductInfo, credentials = [], routeOptions = {} } = {}) {
+async function buildApp({ userId, converter, fetchProductInfo, fetchProductImage, credentials = [], routeOptions = {} } = {}) {
   const app = Fastify({ logger: false })
   const effectiveUserId = userId || `link-conversion-user-${++counter}`
   app.decorate('authenticate', async (req) => { req.user = { sub: effectiveUserId } })
@@ -13,7 +13,11 @@ async function buildApp({ userId, converter, fetchProductInfo, credentials = [],
     prefix: '/api/link-conversion',
     converter,
     fetchProductInfo,
+    fetchProductImage: async () => null,
     findCredentials: async () => credentials,
+    ...(!routeOptions.fetchProductImage && !routeOptions.loadImageScrapers
+      ? { fetchProductImage: async () => null }
+      : {}),
     ...routeOptions,
   })
   return { app, userId: effectiveUserId }
@@ -237,6 +241,13 @@ test('POST /scrape-offer tenta converter e usa link convertido para scrape quand
       scraperUrl = url
       return { title: 'Mixer Vertical Turbo Chef', oldPrice: '199,90', newPrice: '149,90', finalUrl: url }
     },
+    routeOptions: {
+      fetchProductImage: async (platform, url) => {
+        assert.equal(platform, 'amazon')
+        assert.equal(url, 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20')
+        return 'https://images.test/mixer.jpg'
+      },
+    },
   })
   t.after(async () => { await app.close() })
 
@@ -258,6 +269,8 @@ test('POST /scrape-offer tenta converter e usa link convertido para scrape quand
   assert.equal(body.conversion.success, true)
   assert.equal(body.conversion.usedOriginalUrl, false)
   assert.equal(body.conversion.reasonCode, null)
+  assert.equal(body.imageUrl, 'https://images.test/mixer.jpg')
+  assert.equal(body.imageRefererUrl, 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20')
 })
 
 test('POST /scrape-offer tenta original quando convertido não traz dados', async (t) => {
@@ -334,6 +347,83 @@ test('POST /scrape-offer propaga conversionWarning do conversor (Fix E)', async 
   assert.equal(res.statusCode, 200)
   const body = JSON.parse(res.body)
   assert.equal(body.conversionWarning, 'ml_ssid_expired')
+  assert.equal(body.conversion.success, true)
+})
+
+test('POST /scrape-offer devolve imageUrl quando o resolver de imagem encontra a foto', async (t) => {
+  const imageCalls = []
+  const { app } = await buildApp({
+    credentials: [credential()],
+    converter: async () => 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20',
+    fetchProductInfo: async (url) => ({ title: 'Mixer Vertical Turbo Chef', oldPrice: '199,90', newPrice: '149,90', finalUrl: url }),
+    fetchProductImage: async (platform, url, creds) => {
+      imageCalls.push({ platform, url, creds })
+      return 'https://m.media-amazon.com/images/I/abc123._AC_SL1500_.jpg'
+    },
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/link-conversion/scrape-offer',
+    payload: { url: 'https://www.amazon.com.br/dp/B09VQ39F41' },
+  })
+
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.imageUrl, 'https://m.media-amazon.com/images/I/abc123._AC_SL1500_.jpg')
+  // demais campos seguem intactos
+  assert.equal(body.title, 'Mixer Vertical Turbo Chef')
+  assert.equal(body.newPrice, '149,90')
+  // o resolver recebe plataforma + URL ORIGINAL (a que passou pelo guard SSRF)
+  assert.equal(imageCalls.length, 1)
+  assert.equal(imageCalls[0].platform, 'amazon')
+  assert.equal(imageCalls[0].url, 'https://www.amazon.com.br/dp/B09VQ39F41')
+})
+
+test('POST /scrape-offer passa credenciais da Shopee ao resolver de imagem', async (t) => {
+  const imageCalls = []
+  const original = 'https://shopee.com.br/KIT-TERERE-BLACK-i.1750300958.23499408546'
+  const { app } = await buildApp({
+    credentials: [credential('shopee', { appId: '123456', secretKey: 'secret-key-very-long' })],
+    converter: async () => 'https://s.shopee.com.br/abc123',
+    fetchProductInfo: async (url) => ({ title: 'Kit Tereré', oldPrice: '', newPrice: '245,67', finalUrl: url }),
+    fetchProductImage: async (platform, url, creds) => {
+      imageCalls.push({ platform, creds })
+      return 'https://down-br.img.susercontent.com/file/abc'
+    },
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({ method: 'POST', url: '/api/link-conversion/scrape-offer', payload: { url: original } })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.imageUrl, 'https://down-br.img.susercontent.com/file/abc')
+  assert.equal(imageCalls[0].platform, 'shopee')
+  assert.equal(imageCalls[0].creds.appId, '123456')
+  assert.equal(imageCalls[0].creds.secretKey, 'secret-key-very-long')
+})
+
+test('POST /scrape-offer devolve imageUrl null quando o resolver de imagem falha (best-effort)', async (t) => {
+  const { app } = await buildApp({
+    credentials: [credential()],
+    converter: async () => 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20',
+    fetchProductInfo: async (url) => ({ title: 'Mixer Vertical Turbo Chef', oldPrice: '199,90', newPrice: '149,90', finalUrl: url }),
+    fetchProductImage: async () => { throw new Error('CDN fora do ar') },
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/link-conversion/scrape-offer',
+    payload: { url: 'https://www.amazon.com.br/dp/B09VQ39F41' },
+  })
+
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.imageUrl, null)
+  assert.equal(body.title, 'Mixer Vertical Turbo Chef')
+  assert.equal(body.newPrice, '149,90')
   assert.equal(body.conversion.success, true)
 })
 
@@ -491,4 +581,48 @@ test('POST /scrape-offer marca CONVERSION_TIMEOUT quando conversor estoura tempo
   assert.equal(body.offerUrl, original)
   assert.equal(body.conversion.success, false)
   assert.equal(body.conversion.reasonCode, 'CONVERSION_TIMEOUT')
+})
+
+test('registro da rota não carrega imageScrapers/sharp no boot da API', async (t) => {
+  let imageModuleLoads = 0
+  const { app } = await buildApp({
+    routeOptions: {
+      loadImageScrapers: async () => {
+        imageModuleLoads += 1
+        throw new Error('sharp indisponível')
+      },
+    },
+  })
+  t.after(async () => { await app.close() })
+
+  app.get('/health-test', async () => ({ ok: true }))
+  const health = await app.inject({ method: 'GET', url: '/health-test' })
+
+  assert.equal(health.statusCode, 200)
+  assert.deepEqual(health.json(), { ok: true })
+  assert.equal(imageModuleLoads, 0, 'resolver nativo de imagem deve permanecer lazy até um scrape')
+})
+
+test('falha ao carregar imageScrapers/sharp omite foto sem quebrar scrape-offer', async (t) => {
+  let imageModuleLoads = 0
+  const original = 'https://www.amazon.com.br/dp/B09VQ39F41'
+  const { app } = await buildApp({
+    credentials: [credential()],
+    converter: async () => `${original}?tag=botinho-20`,
+    fetchProductInfo: async (url) => ({ title: 'Produto', oldPrice: '', newPrice: '99,90', finalUrl: url }),
+    routeOptions: {
+      loadImageScrapers: async () => {
+        imageModuleLoads += 1
+        throw new Error('sharp indisponível')
+      },
+    },
+  })
+  t.after(async () => { await app.close() })
+
+  const response = await app.inject({ method: 'POST', url: '/api/link-conversion/scrape-offer', payload: { url: original } })
+
+  assert.equal(response.statusCode, 200)
+  assert.equal(response.json().imageUrl, null)
+  assert.equal(response.json().imageRefererUrl, null)
+  assert.equal(imageModuleLoads, 1)
 })

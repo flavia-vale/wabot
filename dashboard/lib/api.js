@@ -50,6 +50,7 @@ function resolveApiBase() {
 const BASE = resolveApiBase()
 const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou ou foi invalidada. Faça login novamente para continuar.'
 const AUTH_TOKEN_KEY = 'wb_auth_token'
+export const TERMS_VERSION = '2026-06-09-whatsapp-risk-acceptance'
 
 function getAuthToken() {
   if (typeof window === 'undefined') return ''
@@ -134,14 +135,14 @@ export const api = {
       : { ...(refOrAttribution && { ref: refOrAttribution }) }
     const data = await apiFetch('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ name, email, password, contactPhone, ...attribution }),
+      body: JSON.stringify({ name, email, password, contactPhone, ...attribution, termsAccepted: attribution.termsAccepted === true, termsVersion: attribution.termsVersion || TERMS_VERSION }),
     })
     setAuthToken(data?.token || '')
     return data
   },
 
-  registerPromoVip: async (name, email, password, contactPhone, couponCode) => {
-    const data = await apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, source: 'promo_vip_7dias', coupon_code: couponCode }) })
+  registerPromoVip: async (name, email, password, contactPhone, couponCode, options = {}) => {
+    const data = await apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, contactPhone, source: 'promo_vip_7dias', coupon_code: couponCode, termsAccepted: options.termsAccepted === true, termsVersion: options.termsVersion || TERMS_VERSION }) })
     setAuthToken(data?.token || '')
     return data
   },
@@ -178,6 +179,7 @@ export const api = {
   credentials: () => apiFetch('/api/credentials'),
   saveCredential: (platform, data) =>
     apiFetch(`/api/credentials/${platform}`, { method: 'PUT', body: JSON.stringify(data) }),
+  mercadolivreSession: () => apiFetch('/api/credentials/mercadolivre/session'),
 
   convertLinks: (text) =>
     apiFetch('/api/link-conversion/convert', { method: 'POST', body: JSON.stringify({ text }) }),
@@ -194,15 +196,23 @@ export const api = {
   getConfig: () => apiFetch('/api/config'),
   saveConfig: (data) => apiFetch('/api/config', { method: 'PUT', body: JSON.stringify(data) }),
 
-  broadcastSend: (text, jids) =>
-    apiFetch('/api/broadcast/send', { method: 'POST', body: JSON.stringify({ text, jids }) }),
+  broadcastSend: (data, jids) => {
+    const payload = typeof data === 'string' ? { text: data, jids } : data
+    return apiFetch('/api/broadcast/send', { method: 'POST', body: JSON.stringify(payload) })
+  },
   scheduledList: () => apiFetch('/api/broadcast/scheduled'),
-  scheduledCreate: (text, scheduledAt, jids) =>
-    apiFetch('/api/broadcast/scheduled', {
-      method: 'POST',
-      body: JSON.stringify({ text, scheduledAt, ...(Array.isArray(jids) ? { jids } : {}) }),
-    }),
+  scheduledCreate: (data, scheduledAt, jids) => {
+    const payload = typeof data === 'string' ? { text: data, scheduledAt, ...(Array.isArray(jids) ? { jids } : {}) } : data
+    return apiFetch('/api/broadcast/scheduled', { method: 'POST', body: JSON.stringify(payload) })
+  },
   scheduledCancel: (id) => apiFetch(`/api/broadcast/scheduled/${id}`, { method: 'DELETE' }),
+  offerQueues: () => apiFetch('/api/offer-queues'),
+  offerQueueCreate: (data) => apiFetch('/api/offer-queues', { method: 'POST', body: JSON.stringify(data) }),
+  offerQueueUpdate: (id, data) => apiFetch(`/api/offer-queues/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  offerQueueDelete: (id) => apiFetch(`/api/offer-queues/${id}`, { method: 'DELETE' }),
+  offerQueueItems: (id) => apiFetch(`/api/offer-queues/${id}/items`),
+  offerQueueItemAdd: (id, data) => apiFetch(`/api/offer-queues/${id}/items`, { method: 'POST', body: JSON.stringify(data) }),
+  offerQueueItemDelete: (id, itemId) => apiFetch(`/api/offer-queues/${id}/items/${itemId}`, { method: 'DELETE' }),
 
   dashboardStatus: () => apiFetch('/api/dashboard/status'),
   publicFaq: () => apiFetch('/api/public/faq'),
@@ -214,6 +224,8 @@ export const api = {
   adminLpContent: () => apiFetch('/api/admin/lp-content'),
   adminUpdateLpPlan: (id, data) => apiFetch(`/api/admin/lp-content/plans/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   adminUpdateTutorialContent: (data) => apiFetch('/api/admin/lp-content/tutorial', { method: 'PUT', body: JSON.stringify(data) }),
+  adminLegalTerms: () => apiFetch('/api/admin/legal/terms'),
+  adminUpdateLegalTerms: (data) => apiFetch('/api/admin/legal/terms', { method: 'PUT', body: JSON.stringify(data) }),
   adminFaq: () => apiFetch('/api/admin/faq'),
   adminCreateFaq: (data) => apiFetch('/api/admin/faq', { method: 'POST', body: JSON.stringify(data) }),
   adminUpdateFaq: (id, data) => apiFetch(`/api/admin/faq/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -378,6 +390,7 @@ export const api = {
   adminAffiliateCycleMarkAllPaid: (month) => apiFetch(`/api/admin/affiliates/cycle/${month}/mark-all-paid`, { method: 'POST' }),
   adminAffiliateSettings: () => apiFetch('/api/admin/affiliates/settings'),
   adminAffiliateSettingsUpdate: (data) => apiFetch('/api/admin/affiliates/settings', { method: 'PUT', body: JSON.stringify(data) }),
+  adminAffiliateUpdate: (id, data) => apiFetch(`/api/admin/affiliates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 }
 
 export function openQRSocket(token, handlers = {}) {

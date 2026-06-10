@@ -1,7 +1,27 @@
 # Front mobile (`/m`) × Front web (`/painel`) — plano e matriz de paridade
 
-> **Objetivo:** consolidar duas fronts de UI especializadas por device sobre uma
-> única autenticação e uma única API:
+> ⚠️ **ATUALIZAÇÃO (pivô para rota única responsiva)**
+>
+> A estratégia original (duas fronts especializadas por device, com redirect por
+> user-agent) foi **abandonada** em favor de **uma rota única responsiva**:
+> `/painel/*` atende **todos os devices** (mobile e desktop) via CSS responsivo
+> do `PainelShell` (sidebar vira drawer, grids/tabelas colapsam).
+>
+> - **Fase 1 (feito):** tornar `/painel` responsivo + ajustes pontuais (PR #870).
+> - **Fase 2 (feito):** middleware serve `/painel` para todas as variantes;
+>   `/m/*` e `/dashboard/*` redirecionam para o equivalente em `/painel`. Removido
+>   o toggle "ver versão celular/web" — não há mais variante mobile.
+> - **Fase 3 (pendente):** remover a árvore `app/m/*` e os componentes
+>   `components/mobile/MobileShell*` (preservar os `lib/mobile*` que o `/painel`
+>   importa: `mobileTemplateStore`, `mobileOfferComposer`, `offerTemplatePreview`).
+>
+> A detecção por device (`lib/ui-variant/device.js`) e o override `?view=`
+> deixam de ser usados pelo middleware; o `routeMap.js` segue como dicionário de
+> redirect `/m` → `/painel`. A matriz abaixo é mantida como **registro histórico**
+> da auditoria de paridade que viabilizou a consolidação.
+
+> **Objetivo (histórico — superado pelo pivô acima):** consolidar duas fronts de
+> UI especializadas por device sobre uma única autenticação e uma única API:
 > - `/m/*` → acessos **mobile** (MobileShell, bottom-nav, layout 480px)
 > - `/painel/*` → acessos **web/desktop** (PainelShell, sidebar, visual "Menta")
 >
