@@ -19,6 +19,10 @@ function copyToClipboard(text, onCopied) {
   navigator.clipboard.writeText(text).then(onCopied).catch(() => {})
 }
 
+function isReferralActive(r) {
+  return r.status === 'active' && (!r.accessExpiresAt || new Date(r.accessExpiresAt) > new Date())
+}
+
 function StatCard({ label, value }) {
   return (
     <div className="rounded-xl bg-white border border-gray-100 p-4 shadow-sm">
@@ -217,7 +221,7 @@ export default function AffiliatePage() {
   }
 
   const affiliateLink = `https://espelhagrupos.com.br/cadastro?aff=${profile.code}`
-  const { stats = {}, months = [] } = data
+  const { stats = {}, months = [], referrals = [] } = data
 
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-6">
@@ -243,6 +247,10 @@ export default function AffiliatePage() {
         <StatCard label="Total de indicados" value={stats.totalReferrals ?? 0} />
         <StatCard label="Vendas confirmadas" value={stats.totalSales ?? 0} />
         <StatCard label="Total ganho" value={formatCurrency(stats.totalEarnedCents ?? 0)} />
+      </div>
+
+      <div className="rounded-xl bg-blue-50 border border-blue-100 p-4 text-sm text-blue-800">
+        Você recebe comissão em cada renovação ativa dos seus indicados. Quando um cliente expira ou não renova, as comissões desse cliente encerram automaticamente.
       </div>
 
       {months.length > 0 && (
@@ -277,6 +285,41 @@ export default function AffiliatePage() {
           </div>
         </div>
       )}
+
+      <div>
+        <h2 className="text-base font-bold text-gray-800 mb-2">Meus indicados</h2>
+        {referrals.length === 0 ? (
+          <p className="text-sm text-gray-400">Nenhum cliente indicado ainda.</p>
+        ) : (
+          <div className="rounded-xl border border-gray-100 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Nome</th>
+                  <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Plano</th>
+                  <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Status</th>
+                  <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Total gerado para você</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {referrals.map((r, i) => (
+                  <tr key={i} className="bg-white">
+                    <td className="px-4 py-3 font-semibold text-gray-900">{r.name ?? '—'}</td>
+                    <td className="px-4 py-3 text-gray-600">{r.plan}</td>
+                    <td className="px-4 py-3">
+                      {isReferralActive(r)
+                        ? <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-700">Ativo</span>
+                        : <span className="rounded-full bg-red-100 px-2 py-1 text-xs font-bold text-red-700">Expirado</span>
+                      }
+                    </td>
+                    <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(r.totalCommissionsCents)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       <div>
         <button
