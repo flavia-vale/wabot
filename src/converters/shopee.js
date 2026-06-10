@@ -133,14 +133,23 @@ export async function fetchShopeeImage(url, creds) {
   }
 }
 
-function shopeePriceToString(value) {
+// A API de afiliado (productOfferV2) devolve os preços como string decimal em
+// reais (ex.: "59.9"), NÃO em micro-unidades. Por isso aqui é só normalizar o
+// decimal para o formato pt-BR "59,90" — diferente do payload da API v4 pública
+// (item/get) que vem em centavos*100000 e é tratado em productInfoScraper.js.
+export function shopeeDecimalPriceToString(value) {
   const num = Number(value)
   if (!Number.isFinite(num) || num <= 0) return ''
-  return (num / 100000).toFixed(2).replace('.', ',')
+  return num.toFixed(2).replace('.', ',')
 }
 
 // Consulta a API de afiliado (GraphQL) para obter título e preço do produto.
 // Retorna { title, newPrice, oldPrice } ou null em caso de falha/sem creds.
+//
+// Campos confirmados do schema productOfferV2 (2026-06): price, priceMin,
+// priceMax, priceDiscountRate, productName, imageUrl. NÃO existe `originPrice`
+// (pedir esse campo derruba a query inteira com erro 10010). O preço "de" é
+// derivado do preço atual + a taxa de desconto inteira (`priceDiscountRate`).
 export async function fetchShopeeProductInfo(url, creds) {
   if (!creds?.appId || !creds?.secretKey) return null
   try {
@@ -151,7 +160,7 @@ export async function fetchShopeeProductInfo(url, creds) {
     const body = {
       query: `{
         productOfferV2(itemId: ${ids.itemId}, shopId: ${ids.shopId}, listType: 0, sortType: 2, page: 1, limit: 1) {
-          nodes { imageUrl productName price priceMin priceMax priceDiscountRate originPrice }
+          nodes { imageUrl productName price priceMin priceMax priceDiscountRate }
         }
       }`,
     }
@@ -167,9 +176,16 @@ export async function fetchShopeeProductInfo(url, creds) {
 
     const title = typeof node.productName === 'string' ? node.productName.trim() : ''
     const currentRaw = node.priceMin ?? node.price ?? null
-    const originalRaw = node.originPrice ?? null
-    const newPrice = shopeePriceToString(currentRaw)
-    const oldPrice = shopeePriceToString(originalRaw)
+    const newPrice = shopeeDecimalPriceToString(currentRaw)
+
+    // Preço "de": reconstruído a partir do desconto. priceDiscountRate é a % de
+    // desconto inteira (ex.: 54 = 54% off), então original = atual / (1 - rate/100).
+    let oldPrice = ''
+    const rate = Number(node.priceDiscountRate)
+    const current = Number(currentRaw)
+    if (Number.isFinite(rate) && rate > 0 && rate < 100 && Number.isFinite(current) && current > 0) {
+      oldPrice = shopeeDecimalPriceToString(current / (1 - rate / 100))
+    }
 
     if (!title && !newPrice) return null
     return { title, newPrice, oldPrice }

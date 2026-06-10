@@ -12,6 +12,79 @@ function mockHtmlResponse(html, url = 'https://www.amazon.com.br/dp/B0CXGBT3Z9')
   }
 }
 
+function mockRedirectResponse(location, url) {
+  return {
+    ok: false,
+    status: 301,
+    url,
+    headers: { get: (name) => (name.toLowerCase() === 'location' ? location : null) },
+    text: async () => '',
+  }
+}
+
+// Regressão: link de afiliado ML (meli.la) que expande para uma share /social/?ref=.
+// A página tem o produto destacado (previous/current_price) seguido de outros
+// produtos vizinhos com `"price":{"value":..}`. Sem a precedência de social share,
+// extractMercadoLivreFromHtml casava o preço do vizinho (errado). Deve sair o
+// preço do produto destacado pelo ref.
+test('fetchProductInfo (ML social share) usa o preço do produto destacado, não o de produtos vizinhos', async (t) => {
+  const expanded = 'https://www.mercadolivre.com.br/social/475630078?matt_word=475630078&ref=ENCRYPTEDREF'
+  const socialHtml = `<!doctype html><html><head>
+    <meta property="og:title" content="Lava E Seca Samsung Wd11m Com Digital Inverter Inox 11kg" />
+    <title>Mercado Libre</title></head><body class="ui-pdp">
+    <script>window.__PRELOADED_STATE__={"items":[
+      {"id":"MLB19055866","price":{"previous_price":{"value":3699,"currency":"BRL"},"current_price":{"value":3344,"currency":"BRL"}}},
+      {"id":"MLB777","price":{"value":195.61,"currency":"BRL"}},
+      {"id":"MLB888","price":{"value":30,"currency":"BRL"}}
+    ]}</script>
+  </body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const target = String(input)
+    if (/meli\.la/.test(target)) {
+      assert.equal(init?.redirect, 'manual')
+      return mockRedirectResponse(expanded, target)
+    }
+    return mockHtmlResponse(socialHtml, expanded)
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://meli.la/2jBSikD', { mlCredentials: { ssid: 'x'.repeat(20) } })
+  assert.match(info.title, /Lava E Seca Samsung/)
+  assert.equal(info.newPrice, '3344,00')
+  assert.equal(info.oldPrice, '3699,00')
+})
+
+// Regressão: Amazon serve intermitentemente uma página de CAPTCHA (~5KB,
+// opfcaptcha) no lugar da PDP. fetchProductInfo deve detectar e re-tentar até
+// pegar a página real.
+test('fetchProductInfo (Amazon) re-tenta quando cai na página de CAPTCHA', async (t) => {
+  const captchaHtml = `<!doctype html><html><head><title>Amazon.com.br</title>
+    <script>ue_sn = "opfcaptcha.amazon.com";</script></head>
+    <body><!-- To discuss automated access to Amazon data please contact api-services-support@amazon.com. -->
+    <form action="/errors/validateCaptcha"></form></body></html>`
+  const realHtml = `<!doctype html><html><head><title>Amazon.com.br</title></head><body>
+    <span id="productTitle">Granado Perfume Vintage Flora Magnífica 75 ml</span>
+    <span class="a-price"><span class="a-offscreen">R$&nbsp;224,25</span></span>
+    ${'<!-- padding -->'.repeat(4000)}
+  </body></html>`
+
+  let calls = 0
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => {
+    calls += 1
+    // 1ª e 2ª chamadas: captcha; 3ª em diante: página real.
+    return mockHtmlResponse(calls < 3 ? captchaHtml : realHtml, 'https://www.amazon.com.br/dp/B0G1TNVJPH')
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://www.amazon.com.br/dp/B0G1TNVJPH')
+  assert.ok(calls >= 3, `deveria ter re-tentado (chamadas=${calls})`)
+  assert.match(info.title, /Granado/)
+  assert.equal(info.newPrice, '224,25')
+})
+
 test('fetchProductInfo extrai título e preço de página Amazon mesmo sem json-ld útil', async (t) => {
   const html = `<!doctype html><html><head><title>Amazon.com.br</title></head><body>
     <span id="productTitle">Amai, Absorvente Externo Fluxo Regular, Algodão Sem Químicos, Hipoalergênico, Sem plástico comum, Com Abas - 14 unidades</span>
