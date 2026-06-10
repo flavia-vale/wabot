@@ -2,23 +2,26 @@
 
 /* Criar oferta — reskin Menta do corpo, layout fiel ao mockup App.html
  * (screen-criar): card de link no topo com loja detectada + ID de afiliada,
- * e grade 2 colunas (produto + composição | prévia no WhatsApp). A lógica é
- * idêntica à do OfferBuilder standalone: scrapeOffer → editar título/preços →
- * CTA de grupo opcional → template → prévia → copiar. Reusa os helpers de
- * lib/offerBuilderUi. Nenhuma mudança no back end. */
+ * e grade 2 colunas (produto + composição | prévia no WhatsApp). Fluxo:
+ * scrapeOffer → editar título/preços → escolher template → prévia → copiar.
+ * A mensagem é composta pelo compositor canônico (buildMobileOfferText) com
+ * os mesmos templates das ofertas automáticas (mobileTemplateStore), editáveis
+ * em /painel/mensagens. A imagem vem do backend (imageUrl no scrape-offer) e
+ * é só ilustrativa na prévia — o copiar segue copiando texto. */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { api } from '@/lib/api'
 import { usePainelHeader, PainelTopbarAction } from '../PainelShell'
 import { WhatsAppBubble } from '../WhatsAppBubble'
+import { getConversionStatusPresentation } from '@/lib/offerBuilderUi'
+import { buildMobileOfferText } from '@/lib/mobileOfferComposer'
+import { composeTemplates, loadAllTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import {
-  buildOfferPriceBlocks,
-  getConversionStatusPresentation,
-  OFFER_BUILDER_TEMPLATE_VISIBLE_DEFAULT,
-  toggleTemplateVisibility,
-} from '@/lib/offerBuilderUi'
-
-const DEFAULT_TEMPLATE = `🛍️ {{title}}{{oldPriceBlock}}{{newPriceBlock}}\n\n🛒 Compre aqui 👉 {{link}}`
+  readSavedTemplateKey,
+  resolveSelectedTemplate,
+  saveTemplateKey,
+} from '@/lib/offerTemplateSelection'
 
 const STORES = [
   { test: /shopee/i, name: 'Shopee', bg: '#EE4D2D', fg: '#fff', mark: 'S' },
@@ -62,15 +65,12 @@ function normalizeLink(raw, fallback = '') {
   return typeof fallback === 'string' ? fallback : ''
 }
 
-function applyTemplate(template, values) {
-  return String(template || '')
-    .replaceAll('{{title}}', values.title || '')
-    .replaceAll('{{oldPriceBlock}}', values.oldPriceBlock || '')
-    .replaceAll('{{newPriceBlock}}', values.newPriceBlock || '')
-    .replaceAll('{{link}}', values.link || '')
-    .replaceAll('{{groupCtaBlock}}', values.groupCtaBlock || '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
+function ProductImagePlaceholder() {
+  return (
+    <span className="pnl-prod-img" aria-hidden="true">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41 13.42 20.6a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><circle cx="7" cy="7" r="1.2" /></svg>
+    </span>
+  )
 }
 
 export default function CriarOfertaPage() {
@@ -78,24 +78,49 @@ export default function CriarOfertaPage() {
 
   const [link, setLink] = useState('')
   const [generated, setGenerated] = useState(null)
-  const [includeGroupCta, setIncludeGroupCta] = useState(false)
-  const [groupCtaText, setGroupCtaText] = useState('Participe do grupo: xxxxxx')
-  const [template, setTemplate] = useState(DEFAULT_TEMPLATE)
-  const [showTemplate, setShowTemplate] = useState(OFFER_BUILDER_TEMPLATE_VISIBLE_DEFAULT)
+  const [imageFailed, setImageFailed] = useState(false)
+  // Lazy initializers: cache local síncrono no primeiro render (no SSR caem
+  // nos defaults — o select só aparece após interação, sem risco de mismatch).
+  const [templates, setTemplates] = useState(() => loadAllTemplates())
+  const [templateKey, setTemplateKey] = useState(() => readSavedTemplateKey())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [conversionStatus, setConversionStatus] = useState(null)
   const [copyFeedback, setCopyFeedback] = useState('')
 
-  const priceBlocks = buildOfferPriceBlocks({ oldPrice: generated?.oldPrice, newPrice: generated?.newPrice, formatPrice: formatOfferPrice })
+  // Reconcilia a lista com o servidor (fonte de verdade:
+  // BotConfig.mobileTemplatesJson, editado em /painel/mensagens).
+  useEffect(() => {
+    let cancelled = false
+    loadTemplateStore().then((store) => {
+      if (!cancelled) setTemplates(composeTemplates(store))
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
-  const offerMessage = useMemo(() => applyTemplate(template, {
-    title: generated?.title || '',
-    oldPriceBlock: priceBlocks.oldPriceBlock,
-    newPriceBlock: priceBlocks.newPriceBlock,
+  const selectedTemplate = resolveSelectedTemplate(templates, templateKey)
+  const store = detectStore(generated?.link || link)
+  const dp = generated ? discountPct(generated.oldPrice, generated.newPrice) : null
+
+  // Sem useMemo manual: o React Compiler memoiza sozinho (a regra
+  // preserve-manual-memoization rejeita deps mais específicas que as inferidas).
+  const offerMessage = buildMobileOfferText({
+    product: {
+      title: generated?.title || '',
+      price: generated?.newPrice ? formatOfferPrice(generated.newPrice) : '',
+      oldPrice: generated?.oldPrice ? formatOfferPrice(generated.oldPrice) : '',
+      discount: dp != null ? `-${dp}% OFF` : '',
+      storeName: store?.name || '',
+    },
     link: generated?.link || link,
-    groupCtaBlock: includeGroupCta && groupCtaText.trim() ? `\n${groupCtaText.trim()}` : '',
-  }), [template, generated?.title, generated?.link, priceBlocks.oldPriceBlock, priceBlocks.newPriceBlock, link, includeGroupCta, groupCtaText])
+    template: selectedTemplate?.key,
+    templateBody: selectedTemplate?.body,
+  })
+
+  function selectTemplate(key) {
+    setTemplateKey(key)
+    saveTemplateKey(key)
+  }
 
   async function runScrape() {
     setError('')
@@ -108,11 +133,13 @@ export default function CriarOfertaPage() {
       const title = normalizeText(info?.title)
       const newPrice = normalizeText(info?.newPrice)
       if (!title && !newPrice) setError('Não conseguimos ler título e preço desse link. Preencha os campos manualmente abaixo.')
+      setImageFailed(false)
       setGenerated({
         title,
         oldPrice: normalizeText(info?.oldPrice),
         newPrice,
         link: normalizeLink(info?.offerUrl, trimmed),
+        imageUrl: normalizeText(info?.imageUrl),
       })
       setConversionStatus(info?.conversion || null)
     } catch (err) {
@@ -134,9 +161,8 @@ export default function CriarOfertaPage() {
 
   const conv = getConversionStatusPresentation(conversionStatus)
   const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-  const store = detectStore(generated?.link || link)
-  const dp = generated ? discountPct(generated.oldPrice, generated.newPrice) : null
   const affiliateApplied = conv?.tone === 'success'
+  const productImageUrl = !imageFailed && generated?.imageUrl ? generated.imageUrl : ''
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 1040, margin: '0 auto' }}>
@@ -188,71 +214,77 @@ export default function CriarOfertaPage() {
       {/* Grade 2 colunas */}
       {generated && (
         <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', alignItems: 'start' }}>
-          {/* Esquerda: produto + composição */}
-          <div className="pnl-grid">
-            <section className="pnl-card">
-              <div className="pnl-card-title" style={{ marginBottom: 14 }}>Produto encontrado</div>
-              <div style={{ display: 'flex', gap: 14 }}>
-                <span className="pnl-prod-img" aria-hidden="true">
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41 13.42 20.6a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><circle cx="7" cy="7" r="1.2" /></svg>
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.3, color: 'var(--ink)' }}>{generated.title || 'Sem título detectado'}</div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                    {generated.newPrice ? <span className="pnl-price-now">{formatOfferPrice(generated.newPrice)}</span> : <span className="pnl-card-note">preço não detectado</span>}
-                    {generated.oldPrice && <span className="pnl-price-old">{formatOfferPrice(generated.oldPrice)}</span>}
-                    {dp != null && <span className="pnl-disc">-{dp}%</span>}
-                  </div>
+          {/* Esquerda: produto */}
+          <section className="pnl-card">
+            <div className="pnl-card-title" style={{ marginBottom: 14 }}>Produto encontrado</div>
+            <div style={{ display: 'flex', gap: 14 }}>
+              {productImageUrl ? (
+                <img
+                  src={productImageUrl}
+                  alt=""
+                  className="pnl-prod-img"
+                  style={{ objectFit: 'cover' }}
+                  onError={() => setImageFailed(true)}
+                />
+              ) : (
+                <ProductImagePlaceholder />
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.3, color: 'var(--ink)' }}>{generated.title || 'Sem título detectado'}</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                  {generated.newPrice ? <span className="pnl-price-now">{formatOfferPrice(generated.newPrice)}</span> : <span className="pnl-card-note">preço não detectado</span>}
+                  {generated.oldPrice && <span className="pnl-price-old">{formatOfferPrice(generated.oldPrice)}</span>}
+                  {dp != null && <span className="pnl-disc">-{dp}%</span>}
                 </div>
               </div>
+            </div>
 
-              {/* Campos editáveis */}
-              <div style={{ marginTop: 16 }}>
-                <label className="pnl-label" htmlFor="of-title">Título</label>
-                <input id="of-title" className="pnl-input" value={generated.title} onChange={(e) => setGenerated((g) => ({ ...g, title: e.target.value }))} />
+            {/* Campos editáveis */}
+            <div style={{ marginTop: 16 }}>
+              <label className="pnl-label" htmlFor="of-title">Título</label>
+              <input id="of-title" className="pnl-input" value={generated.title} onChange={(e) => setGenerated((g) => ({ ...g, title: e.target.value }))} />
+            </div>
+            <div className="pnl-price-grid" style={{ marginTop: 12 }}>
+              <div className="pnl-field">
+                <label className="pnl-label" htmlFor="of-old">Preço antigo (de)</label>
+                <input id="of-old" className="pnl-input" value={generated.oldPrice} onChange={(e) => setGenerated((g) => ({ ...g, oldPrice: e.target.value }))} placeholder="Ex: 199,90" />
               </div>
-              <div className="pnl-price-grid" style={{ marginTop: 12 }}>
-                <div className="pnl-field">
-                  <label className="pnl-label" htmlFor="of-old">Preço antigo (de)</label>
-                  <input id="of-old" className="pnl-input" value={generated.oldPrice} onChange={(e) => setGenerated((g) => ({ ...g, oldPrice: e.target.value }))} placeholder="Ex: 199,90" />
-                </div>
-                <div className="pnl-field">
-                  <label className="pnl-label" htmlFor="of-new">Preço atual (por)</label>
-                  <input id="of-new" className="pnl-input" value={generated.newPrice} onChange={(e) => setGenerated((g) => ({ ...g, newPrice: e.target.value }))} placeholder="Ex: 149,90" />
-                </div>
+              <div className="pnl-field">
+                <label className="pnl-label" htmlFor="of-new">Preço atual (por)</label>
+                <input id="of-new" className="pnl-input" value={generated.newPrice} onChange={(e) => setGenerated((g) => ({ ...g, newPrice: e.target.value }))} placeholder="Ex: 149,90" />
               </div>
-            </section>
+            </div>
+          </section>
 
-            <section className="pnl-card">
-              <div className="pnl-card-title" style={{ marginBottom: 12 }}>Configurar envio</div>
-              <label className="pnl-check">
-                <input type="checkbox" checked={includeGroupCta} onChange={(e) => setIncludeGroupCta(e.target.checked)} />
-                Incluir CTA de grupo
-              </label>
-              {includeGroupCta && <input className="pnl-input" style={{ marginTop: 8 }} value={groupCtaText} onChange={(e) => setGroupCtaText(e.target.value)} />}
-
-              <div style={{ marginTop: 14 }}>
-                <button type="button" className="pnl-detail-btn" onClick={() => setShowTemplate((v) => toggleTemplateVisibility(v))} aria-expanded={showTemplate}>
-                  {showTemplate ? 'Ocultar template' : 'Editar template'}
-                </button>
-                {showTemplate && (
-                  <div style={{ marginTop: 8 }}>
-                    <p className="pnl-hint">Variáveis: {'{{title}}'}, {'{{oldPriceBlock}}'}, {'{{newPriceBlock}}'}, {'{{link}}'}, {'{{groupCtaBlock}}'}</p>
-                    <textarea className="pnl-input" style={{ marginTop: 6 }} rows={8} aria-label="Template da oferta" value={template} onChange={(e) => setTemplate(e.target.value)} />
-                  </div>
-                )}
-              </div>
-              {generated.link && <p className="pnl-hint" style={{ marginTop: 12, wordBreak: 'break-all' }}>Link da oferta: {generated.link}</p>}
-            </section>
-          </div>
-
-          {/* Direita: prévia WhatsApp */}
+          {/* Direita: template + prévia WhatsApp */}
           <section className="pnl-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <div className="pnl-card-title">Prévia no WhatsApp</div>
               <span className="pnl-card-note">como vai chegar no grupo</span>
             </div>
-            <WhatsAppBubble text={offerMessage} time={now} />
+
+            <div style={{ marginBottom: 12 }}>
+              <label className="pnl-label" htmlFor="of-template">Template</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <select
+                  id="of-template"
+                  className="pnl-input"
+                  style={{ flex: 1, minWidth: 160 }}
+                  value={selectedTemplate?.key || ''}
+                  onChange={(e) => selectTemplate(e.target.value)}
+                >
+                  {templates.map((t) => (
+                    <option key={t.key} value={t.key}>{t.name}{t.isCustom ? ' (personalizado)' : ''}</option>
+                  ))}
+                </select>
+                <Link href="/painel/mensagens" className="pnl-detail-btn" style={{ whiteSpace: 'nowrap' }}>Gerenciar templates</Link>
+              </div>
+            </div>
+
+            <WhatsAppBubble text={offerMessage} time={now} imageUrl={productImageUrl} format />
+            {productImageUrl && (
+              <p className="pnl-hint" style={{ marginTop: 8 }}>A imagem é ilustrativa — copie o texto e anexe a foto no WhatsApp.</p>
+            )}
             <button type="button" className="pnl-btn is-primary" style={{ marginTop: 14, width: '100%', justifyContent: 'center' }} onClick={copyMessage}>Copiar oferta</button>
             {copyFeedback && <div className="pnl-note-box is-success" style={{ marginTop: 10 }} role="status">{copyFeedback}</div>}
           </section>
