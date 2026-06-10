@@ -55,37 +55,26 @@ export default async function TermsPage() {
   const sections = Array.isArray(content.sections) && content.sections.length ? content.sections : FALLBACK_TERMS.content.sections
 
   return (
-    <PublicPage
-      eyebrow="Legal"
-      title={terms.title || FALLBACK_TERMS.title}
-      description={terms.summary || FALLBACK_TERMS.summary}
-    >
-      <div className="space-y-8 text-sm leading-7 text-gray-700">
-        <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-amber-950">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-700">Aceite obrigatório no cadastro</p>
-          <p className="mt-3 text-base font-bold">Última atualização: {content.lastUpdatedLabel || FALLBACK_TERMS.content.lastUpdatedLabel}</p>
-          <p className="mt-3">{content.intro || FALLBACK_TERMS.content.intro}</p>
-          {terms.version && <p className="mt-3 text-xs font-semibold text-amber-700">Versão: {terms.version}</p>}
-        </div>
+    <PublicPage title={terms.title || FALLBACK_TERMS.title}>
+      <div className="space-y-8 text-lg leading-8 text-gray-800">
+        <p>Última atualização: {content.lastUpdatedLabel || FALLBACK_TERMS.content.lastUpdatedLabel}</p>
 
         {sections.map((section, index) => (
-          <section key={`${section.title}-${index}`} className={section.warning ? 'rounded-3xl border border-red-100 bg-red-50 p-5' : undefined}>
-            <h2 className={`text-xl font-black ${section.warning ? 'text-red-950' : 'text-gray-950'}`}>{section.title}</h2>
-            <div className="mt-3 space-y-3">
-              {(Array.isArray(section.body) ? section.body : []).map((paragraph, paragraphIndex) => (
-                <p key={`${index}-${paragraphIndex}`}>{paragraph}</p>
-              ))}
-            </div>
+          <section key={`${section.title}-${index}`} className="space-y-3">
+            <h2 className="text-lg font-normal text-inherit">{section.title}</h2>
+            {(Array.isArray(section.body) ? section.body : []).map((paragraph, paragraphIndex) => (
+              <p key={`${index}-${paragraphIndex}`}>{paragraph}</p>
+            ))}
           </section>
         ))}
 
-        <section className="rounded-3xl bg-gray-950 p-5 text-white">
-          <h2 className="text-xl font-black">Declaração final de ciência</h2>
-          <p className="mt-3 text-gray-100">{content.finalDeclaration || FALLBACK_TERMS.content.finalDeclaration}</p>
+        <section className="space-y-3">
+          <h2 className="text-lg font-normal text-inherit">Declaração final de ciência</h2>
+          <p>{content.finalDeclaration || FALLBACK_TERMS.content.finalDeclaration}</p>
         </section>
 
         <p>
-          Dúvidas sobre estes termos podem ser enviadas pela página de <Link href="/suporte" className="font-semibold text-green-700 hover:underline">suporte</Link>.
+          Dúvidas sobre estes termos podem ser enviadas pela página de <Link href="/suporte" className="text-inherit underline hover:no-underline">suporte</Link>.
         </p>
       </div>
     </PublicPage>

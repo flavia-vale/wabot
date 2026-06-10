@@ -303,30 +303,20 @@ function LoginContent() {
           {success && <Alert type="success" title="Sucesso" message={success} />}
 
           {isRegister && (
-            <div className="space-y-3 rounded-2xl border border-amber-300/60 bg-amber-50 p-4 text-amber-950 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-800">Ciência obrigatória antes do teste</p>
-              <p className="text-sm leading-6">
-                O BOTinho automatiza envios no WhatsApp Web e, como toda automação de mensagens para grupos, <strong>não utiliza a API oficial do WhatsApp/Meta</strong>.
-                Isso pode gerar bloqueios, limitações, banimento do número conectado e restrições ou banimento dos grupos/canais conforme volume, denúncias, regras da plataforma e comportamento da operação.
-              </p>
-              <p className="text-xs leading-5">
-                A ferramenta oferece recursos para reduzir risco operacional — pausas entre envios, pausa noturna, variações de texto, ajustes de imagem e configuração de cadência — mas a decisão de uso, conteúdo, consentimento dos destinatários e limites de envio é responsabilidade do usuário.
-              </p>
-              <label htmlFor="termsAccepted" className="flex cursor-pointer gap-3 rounded-xl border border-amber-300 bg-white/70 p-3 text-sm leading-5 text-amber-950">
-                <input
-                  id="termsAccepted"
-                  type="checkbox"
-                  checked={termsAccepted}
-                  onChange={e => setTermsAccepted(e.target.checked)}
-                  onFocus={() => markFormStarted('termsAccepted')}
-                  required
-                  className="mt-1 h-4 w-4 shrink-0 rounded border-amber-400 text-emerald-600 focus:ring-emerald-500"
-                />
-                <span>
-                  Li e aceito os <Link href="/termos" className="font-bold underline" target="_blank" rel="noreferrer">Termos de Uso</Link>, incluindo a ciência de risco de bloqueio/banimento do WhatsApp e dos grupos, e a <Link href="/privacidade" className="font-bold underline" target="_blank" rel="noreferrer">Política de Privacidade</Link>.
-                </span>
-              </label>
-            </div>
+            <label htmlFor="termsAccepted" className="flex cursor-pointer gap-3 text-sm leading-5 text-emerald-100">
+              <input
+                id="termsAccepted"
+                type="checkbox"
+                checked={termsAccepted}
+                onChange={e => setTermsAccepted(e.target.checked)}
+                onFocus={() => markFormStarted('termsAccepted')}
+                required
+                className="mt-1 h-4 w-4 shrink-0 rounded border-white/60 text-emerald-600 focus:ring-emerald-400"
+              />
+              <span>
+                Li e aceito os <Link href="/termos" className="font-bold underline" target="_blank" rel="noreferrer">Termos de Uso</Link>, incluindo a ciência de risco de bloqueio/banimento do WhatsApp e dos grupos, e a <Link href="/privacidade" className="font-bold underline" target="_blank" rel="noreferrer">Política de Privacidade</Link>.
+              </span>
+            </label>
           )}
 
           {!isRegister && (
