@@ -9,11 +9,13 @@
 // AGENTS.md / histórico). Aqui a lógica de "converter -> resolver -> scrapar
 // com credenciais -> fallback" vive em um só lugar.
 //
-// A ÚNICA diferença permitida entre os dois consumidores é qual link aparece
-// na oferta final, controlada por `keepOriginalLink`:
-//   - painel: usa o link convertido (afiliado) -> keepOriginalLink = false
+// Qual link aparece na oferta final é controlado por `keepOriginalLink`:
 //   - Telegram: converte só para buscar dados, mas devolve o link colado pelo
 //     usuário -> keepOriginalLink = true
+//   - painel: TEMPORARIAMENTE (2026-06) também usa keepOriginalLink = true —
+//     o usuário cola o próprio link de afiliado e a oferta sai com ele.
+//     Contrato histórico (a restaurar): painel com keepOriginalLink = false
+//     (link convertido).
 
 import { detectLinks } from '../detector.js'
 import { convertLink as defaultConvertLink } from './index.js'
@@ -109,8 +111,9 @@ export function normalizeConverter(converter) {
 // scrapa título/preço com as credenciais disponíveis e aplica os fallbacks.
 //
 // `keepOriginalLink`:
-//   false (painel) -> `displayUrl` = link convertido (afiliado)
-//   true  (Telegram) -> `displayUrl` = link original colado pelo usuário
+//   false -> `displayUrl` = link convertido (afiliado)
+//   true  (Telegram e, temporariamente, o painel) -> `displayUrl` = link
+//          original colado pelo usuário
 //
 // Retorno: { title, oldPrice, newPrice, finalUrl, offerUrl, displayUrl,
 //            conversionWarning, conversion, scrapeWarning? }

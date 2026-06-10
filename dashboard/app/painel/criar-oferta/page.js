@@ -72,7 +72,7 @@ function ProductImagePlaceholder() {
 }
 
 export default function CriarOfertaPage() {
-  usePainelHeader({ title: 'Criar oferta', subtitle: 'Cole um link de produto — o bot monta a oferta pronta' })
+  usePainelHeader({ title: 'Criar oferta', subtitle: 'Cole o seu link de afiliado — o bot monta a oferta pronta' })
 
   const [link, setLink] = useState('')
   const [generated, setGenerated] = useState(null)
@@ -187,7 +187,6 @@ export default function CriarOfertaPage() {
 
   const conv = getConversionStatusPresentation(conversionStatus)
   const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-  const affiliateApplied = conv?.tone === 'success'
   const productImageUrl = !imageFailed && generated?.imageUrl ? generated.imageUrl : ''
 
   return (
@@ -195,6 +194,12 @@ export default function CriarOfertaPage() {
       <PainelTopbarAction>
         <span className="pnl-tag is-success" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>✓ GRÁTIS</span>
       </PainelTopbarAction>
+
+      {/* TEMPORÁRIO: sem conversão de link — o usuário precisa colar o próprio
+          link de afiliado, e a oferta sai exatamente com o link colado. */}
+      <div className="pnl-note-box is-warn" role="note">
+        <strong style={{ fontWeight: 600 }}>⚠️ Atenção:</strong> cole o <strong style={{ fontWeight: 600 }}>seu próprio link de afiliado</strong>. Por enquanto o link não é convertido — a oferta é gerada exatamente com o link que você colar.
+      </div>
 
       {/* Link — card no topo */}
       <section className="pnl-card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -226,8 +231,8 @@ export default function CriarOfertaPage() {
           {generated && (
             <>
               <span aria-hidden="true">·</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: affiliateApplied ? 'var(--success)' : 'var(--ink-soft)' }}>
-                {affiliateApplied ? '✓ link de afiliado aplicado' : 'usando o link original (sem conversão)'}
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                oferta gerada com o link colado (sem conversão)
               </span>
             </>
           )}

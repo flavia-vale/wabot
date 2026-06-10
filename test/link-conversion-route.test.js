@@ -226,7 +226,7 @@ test('POST /convert aplica timeout por item para evitar request preso', async (t
   assert.match(body.results[0].error, /Tempo limite de conversão excedido/i)
 })
 
-test('POST /scrape-offer tenta converter e usa link convertido para scrape quando sucesso', async (t) => {
+test('POST /scrape-offer converte só para scrape e devolve o link colado (modo temporário)', async (t) => {
   let converterCalls = 0
   let scraperUrl = ''
   const { app } = await buildApp({
@@ -262,13 +262,13 @@ test('POST /scrape-offer tenta converter e usa link convertido para scrape quand
   assert.equal(body.title, 'Mixer Vertical Turbo Chef')
   assert.equal(body.oldPrice, '199,90')
   assert.equal(body.newPrice, '149,90')
-  assert.equal(body.offerUrl, 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20')
+  // TEMPORÁRIO: a oferta devolve o link COLADO pelo usuário; a conversão roda
+  // só internamente para buscar dados e não é exposta na resposta.
+  assert.equal(body.offerUrl, 'https://www.amazon.com.br/dp/B09VQ39F41')
   assert.equal(scraperUrl, 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20')
   assert.equal(converterCalls, 1)
-  assert.equal(body.conversion.attempted, true)
-  assert.equal(body.conversion.success, true)
-  assert.equal(body.conversion.usedOriginalUrl, false)
-  assert.equal(body.conversion.reasonCode, null)
+  assert.equal(body.conversion, null)
+  assert.equal(body.conversionWarning, null)
   assert.equal(body.imageUrl, 'https://images.test/mixer.jpg')
   assert.equal(body.imageRefererUrl, 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20')
 })
@@ -296,7 +296,7 @@ test('POST /scrape-offer tenta original quando convertido não traz dados', asyn
   const res = await app.inject({ method: 'POST', url: '/api/link-conversion/scrape-offer', payload: { url: original } })
   assert.equal(res.statusCode, 200)
   const body = JSON.parse(res.body)
-  assert.equal(body.offerUrl, converted)
+  assert.equal(body.offerUrl, original)
   assert.equal(body.title, 'KIT TERERÉ BLACK ERVA SABOR CEREJA ICE – GARRAFA TÉRMICA + COPO INOX + BOMBA + ERVA 500G')
   assert.equal(body.newPrice, '245,67')
   assert.deepEqual(calls, [converted, original])
@@ -328,10 +328,10 @@ test('POST /scrape-offer busca preço no original quando convertido traz título
   assert.equal(body.title, 'Mixer Vertical Turbo Chef')
   assert.equal(body.newPrice, '149,90')
   assert.equal(body.oldPrice, '199,90')
-  assert.equal(body.offerUrl, converted)
+  assert.equal(body.offerUrl, original)
 })
 
-test('POST /scrape-offer propaga conversionWarning do conversor (Fix E)', async (t) => {
+test('POST /scrape-offer não expõe conversionWarning nem metadados de conversão (modo temporário)', async (t) => {
   const { app } = await buildApp({
     credentials: [credential('mercadolivre', { tag: 'botinho', ssid: 'ssid-value', csrf: 'csrf-value' })],
     converter: async () => ({ url: 'https://produto.mercadolivre.com.br/MLB123-x-_JM?partner_id=botinho', warning: 'ml_ssid_expired' }),
@@ -346,8 +346,9 @@ test('POST /scrape-offer propaga conversionWarning do conversor (Fix E)', async 
   })
   assert.equal(res.statusCode, 200)
   const body = JSON.parse(res.body)
-  assert.equal(body.conversionWarning, 'ml_ssid_expired')
-  assert.equal(body.conversion.success, true)
+  assert.equal(body.conversionWarning, null)
+  assert.equal(body.conversion, null)
+  assert.equal(body.offerUrl, 'https://www.mercadolivre.com.br/p/MLB123')
 })
 
 test('POST /scrape-offer devolve imageUrl quando o resolver de imagem encontra a foto', async (t) => {
@@ -424,7 +425,7 @@ test('POST /scrape-offer devolve imageUrl null quando o resolver de imagem falha
   assert.equal(body.imageUrl, null)
   assert.equal(body.title, 'Mixer Vertical Turbo Chef')
   assert.equal(body.newPrice, '149,90')
-  assert.equal(body.conversion.success, true)
+  assert.equal(body.conversion, null)
 })
 
 test('POST /scrape-offer rejeita url inválida', async (t) => {
@@ -467,7 +468,7 @@ test('POST /scrape-offer trata erros do scraper com fallback 200 e aviso', async
 })
 
 
-test('POST /scrape-offer reprocessa link curto de afiliado e mantém conversão', async (t) => {
+test('POST /scrape-offer reprocessa link curto de afiliado e devolve o link colado', async (t) => {
   let converterCalls = 0
   const { app } = await buildApp({
     credentials: [credential()],
@@ -488,7 +489,8 @@ test('POST /scrape-offer reprocessa link curto de afiliado e mantém conversão'
   assert.equal(res.statusCode, 200)
   const body = JSON.parse(res.body)
   assert.equal(converterCalls, 1)
-  assert.equal(body.conversion.success, true)
+  assert.equal(body.offerUrl, 'https://amzn.to/abc123')
+  assert.equal(body.conversion, null)
 })
 
 test('POST /scrape-offer usa link original quando credencial faltar', async (t) => {
@@ -509,9 +511,7 @@ test('POST /scrape-offer usa link original quando credencial faltar', async (t) 
   const body = JSON.parse(res.body)
   assert.equal(body.offerUrl, original)
   assert.equal(scraperUrl, original)
-  assert.equal(body.conversion.success, false)
-  assert.equal(body.conversion.usedOriginalUrl, true)
-  assert.equal(body.conversion.reasonCode, 'MISSING_CREDENTIALS')
+  assert.equal(body.conversion, null)
 })
 
 test('POST /scrape-offer usa link original quando loja não é suportada para conversão', async (t) => {
@@ -526,8 +526,7 @@ test('POST /scrape-offer usa link original quando loja não é suportada para co
   assert.equal(res.statusCode, 200)
   const body = JSON.parse(res.body)
   assert.equal(body.offerUrl, original)
-  assert.equal(body.conversion.success, false)
-  assert.equal(body.conversion.reasonCode, 'UNSUPPORTED_PLATFORM')
+  assert.equal(body.conversion, null)
 })
 
 test('POST /scrape-offer usa link original quando conversão falha', async (t) => {
@@ -543,11 +542,10 @@ test('POST /scrape-offer usa link original quando conversão falha', async (t) =
   assert.equal(res.statusCode, 200)
   const body = JSON.parse(res.body)
   assert.equal(body.offerUrl, original)
-  assert.equal(body.conversion.success, false)
-  assert.equal(body.conversion.reasonCode, 'CONVERSION_FAILED')
+  assert.equal(body.conversion, null)
 })
 
-test('POST /scrape-offer sinaliza renovação de credencial ML quando API de afiliado rejeita auth', async (t) => {
+test('POST /scrape-offer segue com o link colado quando API de afiliado ML rejeita auth', async (t) => {
   const original = 'https://www.mercadolivre.com.br/secador-de-roupas-600w-eletrico-portatil-suspenso-cortina-compacto-econmico-seca-rapido-110v/p/MLB70009242'
   const { app } = await buildApp({
     credentials: [credential('mercadolivre', { tag: '475630078', ssid: 'ssid-expirado-123456' })],
@@ -559,13 +557,13 @@ test('POST /scrape-offer sinaliza renovação de credencial ML quando API de afi
   const res = await app.inject({ method: 'POST', url: '/api/link-conversion/scrape-offer', payload: { url: original } })
   assert.equal(res.statusCode, 200)
   const body = JSON.parse(res.body)
-  assert.equal(body.conversion.success, false)
-  assert.equal(body.conversion.reasonCode, 'CONVERSION_FAILED')
-  assert.match(body.conversion.reasonMessage || '', /renove o ssid|cookie/i)
+  assert.equal(body.offerUrl, original)
+  assert.equal(body.conversion, null)
+  assert.equal(body.newPrice, '189,90')
 })
 
 
-test('POST /scrape-offer marca CONVERSION_TIMEOUT quando conversor estoura tempo', async (t) => {
+test('POST /scrape-offer segue com o link colado quando conversor estoura tempo', async (t) => {
   const original = 'https://www.magazineluiza.com.br/produto/p/abc123'
   const { app } = await buildApp({
     credentials: [credential('magazineluiza', { tag: 'parceira' })],
@@ -579,8 +577,7 @@ test('POST /scrape-offer marca CONVERSION_TIMEOUT quando conversor estoura tempo
   assert.equal(res.statusCode, 200)
   const body = JSON.parse(res.body)
   assert.equal(body.offerUrl, original)
-  assert.equal(body.conversion.success, false)
-  assert.equal(body.conversion.reasonCode, 'CONVERSION_TIMEOUT')
+  assert.equal(body.conversion, null)
 })
 
 test('registro da rota não carrega imageScrapers/sharp no boot da API', async (t) => {

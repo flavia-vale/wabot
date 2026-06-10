@@ -138,7 +138,12 @@ export function OfferBuilder({ mode = 'standalone', initialLink = '', onCopy, co
     <div className="space-y-4">
       {mode === 'standalone' && (
         <>
-          <label className="text-sm font-bold text-gray-900">Seu link</label>
+          {/* TEMPORÁRIO: sem conversão de link — o usuário precisa colar o
+              próprio link de afiliado, e a oferta sai com o link colado. */}
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="note">
+            <span className="font-semibold">⚠️ Atenção:</span> cole o <span className="font-semibold">seu próprio link de afiliado</span>. Por enquanto o link não é convertido — a oferta é gerada exatamente com o link que você colar.
+          </div>
+          <label className="text-sm font-bold text-gray-900">Seu link de afiliado</label>
           <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
             <input
               value={link}
