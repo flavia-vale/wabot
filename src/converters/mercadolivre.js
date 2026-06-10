@@ -302,6 +302,37 @@ async function callCreateLinkApi(mlUrl, tag, { cookieHeader, csrf }) {
   return res
 }
 
+// URL neutra (home do ML) usada só para checar a validade da sessão de afiliado.
+// O endpoint createLink responde 401 (Unauthorized -> login) quando o ssid
+// expirou e 200 quando a sessão está viva; com uma URL não-produto ele NÃO cria
+// nenhum link de afiliado (created=undefined), então o probe é sem efeito
+// colateral.
+const SESSION_PROBE_URL = 'https://www.mercadolivre.com.br/'
+
+// Checa se a sessão de afiliado do Mercado Livre (cookie ssid) ainda está
+// válida, com UM request autenticado. Usado pelo painel para avisar a usuária
+// quando o SSID expira (a raspagem/conversão do ML quebra silenciosamente sem
+// renovar o cookie). Retorno: { configured, alive, reason }:
+//   - configured=false -> sem ssid/cookie cadastrado (nada a checar)
+//   - alive=true        -> sessão válida
+//   - alive=false       -> expirada (401) -> painel pede renovação do SSID
+//   - alive=null        -> indeterminado (erro de rede/status atípico): não alarmar
+export async function checkMercadoLivreSession(creds = {}) {
+  const { ssid, csrf, cookie, id, tag } = creds || {}
+  const cookieHeader = buildCookieHeader({ ssid, csrf, cookie, id })
+  if (!cookieHeader) return { configured: false, alive: null, reason: 'no_cookie' }
+  try {
+    const res = await callCreateLinkApi(SESSION_PROBE_URL, tag || '', { cookieHeader, csrf })
+    // 401 é o ÚNICO sinal de auth: cookie expirado/inválido -> redireciona ao
+    // login. Qualquer outro status (200, ou 400 por URL/tag neutra) significa
+    // que a requisição passou pela autenticação -> sessão viva.
+    if (res.status === 401) return { configured: true, alive: false, reason: 'expired' }
+    return { configured: true, alive: true, reason: 'ok' }
+  } catch {
+    return { configured: true, alive: null, reason: 'network_error' }
+  }
+}
+
 async function createAffiliateLink(mlUrl, tag, creds) {
   const { ssid, csrf, cookie, id } = creds
 

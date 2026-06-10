@@ -27,7 +27,17 @@ function PlatformActionLinks({ links }) {
   )
 }
 
-function PlatformCard({ platform, initialData, onSave, disabled }) {
+function SessionWarning({ sessionStatus }) {
+  if (!sessionStatus || sessionStatus.alive !== false) return null
+  return (
+    <div className="pnl-note-box is-error" style={{ marginBottom: 12 }} role="alert">
+      <strong>Sessão expirada.</strong> O cookie SSID do Mercado Livre não está mais válido — a geração de ofertas do ML está pausada.
+      Cole um SSID novo da sua sessão ativa e salve para voltar a funcionar.
+    </div>
+  )
+}
+
+function PlatformCard({ platform, initialData, onSave, disabled, sessionStatus }) {
   const [draft, setDraft] = useState({})
   const [dirty, setDirty] = useState(false)
   const [visible, setVisible] = useState({})
@@ -76,6 +86,7 @@ function PlatformCard({ platform, initialData, onSave, disabled }) {
         <span className={`pnl-tag ${status.cls}`}>{status.label}</span>
       </div>
       {platform.instructions && <p className="pnl-card-note" style={{ marginBottom: 12 }}>{platform.instructions}</p>}
+      <SessionWarning sessionStatus={sessionStatus} />
       <PlatformActionLinks links={platform.actionLinks} />
       {platform.platformWarning && <div className="pnl-note-box is-warn" style={{ marginBottom: 12 }}>{platform.platformWarning}</div>}
 
@@ -144,6 +155,16 @@ export default function IdsAfiliadaPage() {
 
   const [credMap, setCredMap] = useState(null)
   const [loadError, setLoadError] = useState('')
+  const [mlSession, setMlSession] = useState(null)
+
+  // Checa a validade do SSID do ML (sessão de afiliado). Só roda quando há
+  // cookie cadastrado — o endpoint faz um request autenticado ao ML.
+  function refreshMlSession(data) {
+    if (!(data?.ssid || data?.cookie)) { setMlSession(null); return }
+    api.mercadolivreSession()
+      .then((status) => setMlSession(status))
+      .catch(() => setMlSession(null))
+  }
 
   useEffect(() => {
     let active = true
@@ -153,6 +174,7 @@ export default function IdsAfiliadaPage() {
         const map = {}
         for (const c of list) map[c.platform] = c.data
         setCredMap(map)
+        refreshMlSession(map.mercadolivre)
       })
       .catch((err) => { if (active) setLoadError(err?.message || 'Falha ao carregar credenciais.') })
     return () => { active = false }
@@ -160,7 +182,10 @@ export default function IdsAfiliadaPage() {
 
   async function handleSave(platform, data) {
     const result = await api.saveCredential(platform, data)
-    setCredMap((m) => ({ ...(m || {}), [platform]: result?.data ?? data }))
+    const savedData = result?.data ?? data
+    setCredMap((m) => ({ ...(m || {}), [platform]: savedData }))
+    // Ao salvar um SSID novo, re-checa a sessão para limpar/atualizar o aviso.
+    if (platform === 'mercadolivre') refreshMlSession(savedData)
     return result
   }
 
@@ -188,6 +213,7 @@ export default function IdsAfiliadaPage() {
               initialData={credMap?.[p.id]}
               onSave={handleSave}
               disabled={!!loadError}
+              sessionStatus={p.id === 'mercadolivre' ? mlSession : null}
             />
           ))}
     </div>
