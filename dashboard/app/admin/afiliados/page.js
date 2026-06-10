@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, Fragment, useState } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 
@@ -33,6 +33,10 @@ function CommissionStatusBadge({ status }) {
 function CommissionTypeBadge({ type }) {
   if (type === 'recurring') return <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-bold text-blue-700">Recorrente</span>
   return <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-bold text-gray-600">Inicial</span>
+}
+
+function isReferralActive(r) {
+  return r.status === 'active' && (!r.accessExpiresAt || new Date(r.accessExpiresAt) > new Date())
 }
 
 function RejectModal({ onConfirm, onCancel }) {
@@ -178,6 +182,9 @@ function ApprovedTab() {
   const [overrideEdits, setOverrideEdits] = useState({})
   const [overrideSaving, setOverrideSaving] = useState({})
   const [overrideMsg, setOverrideMsg] = useState({})
+  const [expandedId, setExpandedId] = useState(null)
+  const [referralsCache, setReferralsCache] = useState({})
+  const [referralsLoading, setReferralsLoading] = useState({})
 
   useEffect(() => {
     let active = true
@@ -217,6 +224,22 @@ function ApprovedTab() {
     }
   }
 
+  function toggleExpand(id) {
+    if (expandedId === id) { setExpandedId(null); return }
+    setExpandedId(id)
+    if (referralsCache[id] !== undefined) return
+    setReferralsLoading(prev => ({ ...prev, [id]: true }))
+    api.adminAffiliateReferrals(id)
+      .then(result => {
+        setReferralsCache(prev => ({ ...prev, [id]: result.referrals ?? [] }))
+        setReferralsLoading(prev => ({ ...prev, [id]: false }))
+      })
+      .catch(() => {
+        setReferralsCache(prev => ({ ...prev, [id]: [] }))
+        setReferralsLoading(prev => ({ ...prev, [id]: false }))
+      })
+  }
+
   if (loading) return <p className="text-sm text-gray-500 py-4">Carregando...</p>
   if (profiles.length === 0) return <p className="text-sm text-gray-400 py-4">Nenhum afiliado aprovado.</p>
 
@@ -235,58 +258,109 @@ function ApprovedTab() {
         </thead>
         <tbody className="divide-y divide-gray-100">
           {profiles.map(p => (
-            <tr key={p.id} className="bg-white">
-              <td className="px-4 py-3">
-                <p className="font-semibold text-gray-900">{p.user?.name ?? '—'}</p>
-                <p className="text-xs text-gray-500">{p.user?.email ?? '—'}</p>
-              </td>
-              <td className="px-4 py-3 font-mono text-sm text-gray-700">{p.code}</td>
-              <td className="px-4 py-3 text-right text-gray-700">{p.totalReferrals}</td>
-              <td className="px-4 py-3 text-right text-gray-700">{formatCurrency(p.paidCommissions ?? 0)}</td>
-              <td className="px-4 py-3 text-right font-semibold text-amber-700">{formatCurrency(p.pendingCommissions ?? 0)}</td>
-              <td className="px-4 py-3">
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs text-gray-400 w-20 shrink-0">Inicial:</span>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="1"
-                      placeholder="padrão"
-                      value={overrideEdits[p.id]?.pct ?? ''}
-                      onChange={e => setOverrideEdits(prev => ({ ...prev, [p.id]: { ...prev[p.id], pct: e.target.value } }))}
-                      className="border rounded px-2 py-1 text-xs w-20 outline-none focus:ring-1 focus:ring-emerald-400"
-                    />
+            <Fragment key={p.id}>
+              <tr className="bg-white">
+                <td className="px-4 py-3">
+                  <p className="font-semibold text-gray-900">{p.user?.name ?? '—'}</p>
+                  <p className="text-xs text-gray-500">{p.user?.email ?? '—'}</p>
+                </td>
+                <td className="px-4 py-3 font-mono text-sm text-gray-700">{p.code}</td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    onClick={() => toggleExpand(p.id)}
+                    className="text-emerald-700 hover:underline font-semibold text-sm"
+                  >
+                    {p.totalReferrals} indicado{p.totalReferrals !== 1 ? 's' : ''} {expandedId === p.id ? '▴' : '▾'}
+                  </button>
+                </td>
+                <td className="px-4 py-3 text-right text-gray-700">{formatCurrency(p.paidCommissions ?? 0)}</td>
+                <td className="px-4 py-3 text-right font-semibold text-amber-700">{formatCurrency(p.pendingCommissions ?? 0)}</td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-gray-400 w-20 shrink-0">Inicial:</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        placeholder="padrão"
+                        value={overrideEdits[p.id]?.pct ?? ''}
+                        onChange={e => setOverrideEdits(prev => ({ ...prev, [p.id]: { ...prev[p.id], pct: e.target.value } }))}
+                        className="border rounded px-2 py-1 text-xs w-20 outline-none focus:ring-1 focus:ring-emerald-400"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-gray-400 w-20 shrink-0">Recorrente:</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        placeholder="padrão"
+                        value={overrideEdits[p.id]?.recurringPct ?? ''}
+                        onChange={e => setOverrideEdits(prev => ({ ...prev, [p.id]: { ...prev[p.id], recurringPct: e.target.value } }))}
+                        className="border rounded px-2 py-1 text-xs w-20 outline-none focus:ring-1 focus:ring-emerald-400"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleOverrideSave(p.id)}
+                        disabled={overrideSaving[p.id]}
+                        className="text-xs font-semibold text-emerald-700 hover:underline disabled:opacity-50"
+                      >
+                        {overrideSaving[p.id] ? 'Salvando...' : 'Salvar'}
+                      </button>
+                      {overrideMsg[p.id] && (
+                        <span className="text-xs text-gray-500">{overrideMsg[p.id]}</span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs text-gray-400 w-20 shrink-0">Recorrente:</span>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="1"
-                      placeholder="padrão"
-                      value={overrideEdits[p.id]?.recurringPct ?? ''}
-                      onChange={e => setOverrideEdits(prev => ({ ...prev, [p.id]: { ...prev[p.id], recurringPct: e.target.value } }))}
-                      className="border rounded px-2 py-1 text-xs w-20 outline-none focus:ring-1 focus:ring-emerald-400"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleOverrideSave(p.id)}
-                      disabled={overrideSaving[p.id]}
-                      className="text-xs font-semibold text-emerald-700 hover:underline disabled:opacity-50"
-                    >
-                      {overrideSaving[p.id] ? 'Salvando...' : 'Salvar'}
-                    </button>
-                    {overrideMsg[p.id] && (
-                      <span className="text-xs text-gray-500">{overrideMsg[p.id]}</span>
+                </td>
+              </tr>
+              {expandedId === p.id && (
+                <tr>
+                  <td colSpan={6} className="px-6 py-4 bg-gray-50 border-t border-gray-100">
+                    {referralsLoading[p.id] ? (
+                      <p className="text-xs text-gray-500">Carregando indicados...</p>
+                    ) : (referralsCache[p.id] ?? []).length === 0 ? (
+                      <p className="text-xs text-gray-400">Nenhum indicado ainda.</p>
+                    ) : (
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-gray-200">
+                            <th className="text-left pb-2 pr-4 text-gray-500 font-semibold uppercase tracking-wide">Nome / E-mail</th>
+                            <th className="text-left pb-2 pr-4 text-gray-500 font-semibold uppercase tracking-wide">Cadastro</th>
+                            <th className="text-left pb-2 pr-4 text-gray-500 font-semibold uppercase tracking-wide">Plano</th>
+                            <th className="text-left pb-2 pr-4 text-gray-500 font-semibold uppercase tracking-wide">Status</th>
+                            <th className="text-right pb-2 text-gray-500 font-semibold uppercase tracking-wide">Comissões geradas</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {(referralsCache[p.id] ?? []).map(r => (
+                            <tr key={r.id}>
+                              <td className="py-2 pr-4">
+                                <p className="font-semibold text-gray-800">{r.name ?? '—'}</p>
+                                <p className="text-gray-400">{r.email}</p>
+                              </td>
+                              <td className="py-2 pr-4 text-gray-600">{formatDate(r.createdAt)}</td>
+                              <td className="py-2 pr-4 text-gray-600">{r.plan}</td>
+                              <td className="py-2 pr-4">
+                                {isReferralActive(r)
+                                  ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-bold text-emerald-700">Ativo</span>
+                                  : <span className="rounded-full bg-red-100 px-2 py-0.5 font-bold text-red-700">Expirado</span>
+                                }
+                              </td>
+                              <td className="py-2 text-right font-semibold text-gray-800">{formatCurrency(r.totalCommissionsCents)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     )}
-                  </div>
-                </div>
-              </td>
-            </tr>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
           ))}
         </tbody>
       </table>
