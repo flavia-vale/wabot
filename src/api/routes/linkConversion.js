@@ -2,6 +2,7 @@ import db from '../../db.js'
 import { detectLinks } from '../../detector.js'
 import { convertLink as defaultConvertLink } from '../../converters/index.js'
 import { fetchProductInfo as defaultFetchProductInfo } from '../../converters/productInfoScraper.js'
+import { fetchProductImage as defaultFetchProductImage } from '../../converters/imageScrapers.js'
 import { validateCredentialData } from '../../credentialHealth.js'
 import { assertPublicUrl } from '../../core/ssrfGuard.js'
 import {
@@ -81,6 +82,7 @@ const SCRAPE_OFFER_URL_RE = /^https?:\/\/[^\s]+$/i
 export async function linkConversionRoutes(app, opts = {}) {
   const convertLink = opts.converter ? normalizeConverter(opts.converter) : defaultConvertLink
   const fetchProductInfo = opts.fetchProductInfo ?? defaultFetchProductInfo
+  const fetchProductImage = opts.fetchProductImage ?? defaultFetchProductImage
   const findCredentials = opts.findCredentials ?? ((userId) => db.credential.findMany({ where: { userId } }))
   const rateState = opts.rateState ?? new Map()
   const getNow = opts.now ?? (() => Date.now())
@@ -119,15 +121,31 @@ export async function linkConversionRoutes(app, opts = {}) {
     // isso keepOriginalLink=false. A busca de título/preço (conversão ->
     // resolução -> scrape com credenciais -> fallback) vive no motor único
     // compartilhado com o bot do Telegram (offerEngine.js).
-    const offer = await buildScrapedOffer({
-      url,
-      credentialsMap,
-      keepOriginalLink: false,
-      convertLink,
-      fetchProductInfo,
-      conversionTimeoutMs: operational.conversionTimeoutMs,
-      logger: app.log,
-    })
+    //
+    // A imagem roda em paralelo (mesmo padrão de buildTelegramOffer) e é
+    // best-effort: falha vira null, nunca derruba a request. Só a URL original
+    // (já validada pelo assertPublicUrl) é passada ao resolver; as credenciais
+    // são as da Shopee (resolveShopeeImage exige appId/secretKey; demais lojas
+    // ignoram o argumento).
+    const platform = detectLinks(url)[0]?.platform || null
+    const imagePromise = platform
+      ? Promise.resolve()
+          .then(() => fetchProductImage(platform, url, credentialsMap.shopee || {}))
+          .catch(() => null)
+      : Promise.resolve(null)
+
+    const [offer, imageUrl] = await Promise.all([
+      buildScrapedOffer({
+        url,
+        credentialsMap,
+        keepOriginalLink: false,
+        convertLink,
+        fetchProductInfo,
+        conversionTimeoutMs: operational.conversionTimeoutMs,
+        logger: app.log,
+      }),
+      imagePromise,
+    ])
 
     return {
       title: offer.title,
@@ -135,6 +153,7 @@ export async function linkConversionRoutes(app, opts = {}) {
       newPrice: offer.newPrice,
       finalUrl: offer.finalUrl,
       offerUrl: offer.offerUrl,
+      imageUrl: typeof imageUrl === 'string' && imageUrl ? imageUrl : null,
       conversionWarning: offer.conversionWarning,
       conversion: offer.conversion,
       ...(offer.scrapeWarning ? { scrapeWarning: offer.scrapeWarning } : {}),
