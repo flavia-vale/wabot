@@ -179,6 +179,7 @@ export const api = {
   credentials: () => apiFetch('/api/credentials'),
   saveCredential: (platform, data) =>
     apiFetch(`/api/credentials/${platform}`, { method: 'PUT', body: JSON.stringify(data) }),
+  mercadolivreSession: () => apiFetch('/api/credentials/mercadolivre/session'),
 
   convertLinks: (text) =>
     apiFetch('/api/link-conversion/convert', { method: 'POST', body: JSON.stringify({ text }) }),
