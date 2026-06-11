@@ -9,21 +9,17 @@ import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState, ErrorState } from '@/components/States'
-import { PreservationMasterToggle } from '@/components/preservacao/PreservationMasterToggle'
 import { ThrottleForm } from '@/components/preservacao/ThrottleForm'
 import { FollowGuardForm } from '@/components/preservacao/FollowGuardForm'
 import { QuietHoursForm } from '@/components/preservacao/QuietHoursForm'
 import { CopyVariationPoolEditor } from '@/components/preservacao/CopyVariationPoolEditor'
 import { ImageMutationToggle } from '@/components/preservacao/ImageMutationToggle'
-import { ProbeToggle } from '@/components/preservacao/ProbeToggle'
-import { ClickTrackerStatus } from '@/components/preservacao/ClickTrackerStatus'
 import { usePainelHeader } from '../../PainelShell'
 
 export default function ConfiguracoesAvancadasPage() {
   usePainelHeader({ title: 'Configurações avançadas', subtitle: 'Ajustes finos das defesas — os defaults já são seguros para a maioria dos casos' })
 
   const [config, setConfig] = useState(null)
-  const [flags, setFlags] = useState(null)
   const [draft, setDraft] = useState({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -35,7 +31,6 @@ export default function ConfiguracoesAvancadasPage() {
       setError('')
       const data = await api.preservationConfig()
       setConfig(data.config)
-      setFlags(data.flags)
       setDraft({ ...data.config, channelBurstWindowSec: 3600 })
     } catch (e) { setError(e.message) }
   }
@@ -70,14 +65,11 @@ export default function ConfiguracoesAvancadasPage() {
       {savedAt && <div className="mb-4"><Alert type="success" message={`Configurações salvas às ${savedAt.toLocaleTimeString('pt-BR')}.`} /></div>}
 
       <div className="flex flex-col gap-4">
-        <PreservationMasterToggle value={draft} onChange={update} disabled={saving} />
         <ThrottleForm value={draft} onChange={update} disabled={saving} />
         <QuietHoursForm value={draft} onChange={update} disabled={saving} />
         <FollowGuardForm value={draft} onChange={update} disabled={saving} />
         <CopyVariationPoolEditor value={draft} onChange={update} disabled={saving} />
         <ImageMutationToggle value={draft} onChange={update} disabled={saving} />
-        <ProbeToggle value={draft} onChange={update} disabled={saving} probeAccountSessionId={draft.probeAccountSessionId} />
-        <ClickTrackerStatus flags={flags} />
       </div>
 
       <div className="mt-6 flex gap-3">
