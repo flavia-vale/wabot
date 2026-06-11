@@ -1,6 +1,6 @@
 import db from '../../db.js'
 import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
-import { parseOfferQueueSourceId } from '../../offerQueue/sourceTag.js'
+import { buildOfferQueueSource, parseOfferQueueSourceId } from '../../offerQueue/sourceTag.js'
 
 // Cache leve do /summary — métricas não precisam ser real-time-real-time.
 // Chave: `${userId}:${period}`. TTL curto para não pesar no banco em refresh
@@ -72,8 +72,9 @@ export async function logsRoutes(app) {
       : []
 
     const matchingQueueSources = query
-      ? (await db.offerQueue.findMany({ where: { userId, name: { contains: query } }, select: { id: true } }))
-          .map((queue) => `offerQueue:${queue.id}`)
+      ? (await db.offerQueue.findMany({ where: { userId }, select: { id: true, name: true } }))
+          .filter((queue) => queue.name.toLowerCase().includes(normalizedQuery))
+          .map((queue) => buildOfferQueueSource(queue.id))
       : []
 
     const searchWhere = query
