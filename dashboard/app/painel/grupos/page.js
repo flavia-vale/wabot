@@ -15,7 +15,7 @@ import { HelpLink } from '@/components/HelpLink'
 import { AddChannelModal } from '@/components/AddChannelModal'
 import { TypeBadge, FollowBadge, AdminBadge, HealthBadge } from '@/components/ChannelStatusBadges'
 import { ChannelHealthPanel } from '@/components/ChannelHealthPanel'
-import { usePainelHeader, PainelTopbarAction } from '../PainelShell'
+import { usePainelHeader, PainelContentActions } from '../PainelShell'
 
 const roleLabels = {
   monitor: 'Monitorar (origem)',
@@ -402,11 +402,11 @@ export default function GruposPage() {
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 820, margin: '0 auto' }}>
-      <PainelTopbarAction>
+      <PainelContentActions>
         <div className="pnl-toolbar">
           <HelpLink topic="como-cadastrar-grupos">Ajuda</HelpLink>
         </div>
-      </PainelTopbarAction>
+      </PainelContentActions>
 
       <div style={{ display: 'grid', gap: 4, color: 'var(--ink)', fontSize: 14, lineHeight: 1.55 }}>
         <p><strong>Monitorar:</strong> Grupos de promoção que você participa. O bot só lê os links.</p>

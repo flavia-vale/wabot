@@ -1,6 +1,7 @@
 'use client'
 import { useMemo } from 'react'
 import { PresetButtons } from './PresetButtons'
+import { FeatureToggle } from './FeatureToggle'
 
 const MAX_PER_GROUP = 20
 
@@ -53,6 +54,7 @@ function parsePool(json) {
 }
 
 export function CopyVariationPoolEditor({ value, onChange, disabled, showPresets = true }) {
+  const controlsDisabled = disabled || !value.copyVariationEnabled
   const pool = useMemo(() => parsePool(value.copyVariationPoolJson), [value.copyVariationPoolJson])
 
   const writePool = (next) => onChange({ copyVariationPoolJson: JSON.stringify(next) })
@@ -76,8 +78,9 @@ export function CopyVariationPoolEditor({ value, onChange, disabled, showPresets
       <p className="text-xs text-gray-500 mb-3">
         Pedacinhos de texto que o bot intercala em cada envio, pra mensagens nunca saírem 100% iguais. Quanto mais variações, mais natural — deixe uma caixinha vazia em cada grupo pra que às vezes o texto saia sem o complemento.
       </p>
-
-      {showPresets && <PresetButtons presets={PRESETS} onApply={writePool} disabled={disabled} hint="aplica o conjunto inteiro" />}
+      <FeatureToggle checked={!!value.copyVariationEnabled} onChange={checked => onChange({ copyVariationEnabled: checked })} disabled={disabled} label="Alternar variações de texto" />
+      <div className={value.copyVariationEnabled ? '' : 'pointer-events-none opacity-50'} aria-disabled={!value.copyVariationEnabled}>
+      {showPresets && <PresetButtons presets={PRESETS} onApply={writePool} disabled={controlsDisabled} hint="aplica o conjunto inteiro" />}
 
       <div className="space-y-4">
         {GROUPS.map(g => (
@@ -92,7 +95,7 @@ export function CopyVariationPoolEditor({ value, onChange, disabled, showPresets
                   max={MAX_PER_GROUP}
                   value={pool[g.key].length}
                   onChange={e => setCount(g.key, e.target.value)}
-                  disabled={disabled}
+                  disabled={controlsDisabled}
                   className="w-16 border rounded-lg px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
                 />
               </label>
@@ -107,7 +110,7 @@ export function CopyVariationPoolEditor({ value, onChange, disabled, showPresets
                   type="text"
                   value={text}
                   onChange={e => setItem(g.key, idx, e.target.value)}
-                  disabled={disabled}
+                  disabled={controlsDisabled}
                   placeholder={text === '' ? g.emptyLabel : g.placeholder}
                   className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
                 />
@@ -120,6 +123,7 @@ export function CopyVariationPoolEditor({ value, onChange, disabled, showPresets
       <p className="text-[11px] text-gray-500 mt-3">
         Máximo de {MAX_PER_GROUP} variações por grupo. Deixar uma caixa em branco é proposital — significa &quot;às vezes não adiciona nada&quot;.
       </p>
+      </div>
     </fieldset>
   )
 }

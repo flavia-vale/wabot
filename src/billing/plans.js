@@ -1,3 +1,4 @@
+import { PRESERVATION_FEATURE } from '../core/preservationFeatures.js'
 export const PLAN_IDS = Object.freeze({
   TRIAL: 'trial',
   BASIC: 'basic',
@@ -96,21 +97,17 @@ export async function getAdvancedPreservationAccess(userId, opts = {}) {
 }
 
 /**
- * Preservação EFETIVA = o plano permite (Pro ou Trial ativo) **E** o usuário
- * ligou o flag mestre `BotConfig.preservationEnabled`.
- *
- * O flag é opt-in (default false): mesmo um usuário Pro não tem o pipeline de
- * preservação (throttle, stagger, mutação de imagem, snapshots, follow-guard)
- * ativo enquanto não ligar explicitamente. O gate das rotas continua sendo só
- * por plano (`getAdvancedPreservationAccess`), para que o Pro consiga religar.
- *
- * @param {boolean|{ active?: boolean }} planAccess  resultado de getAdvancedPreservationAccess ou booleano
- * @param {{ preservationEnabled?: boolean }|null} botConfig
- * @returns {boolean}
+ * A preservação fica disponível quando o plano permite e ao menos uma defesa
+ * foi ligada. Cada defesa é opt-in e pode operar de forma independente.
  */
+export const PRESERVATION_FEATURE_SELECT = Object.freeze(
+  Object.fromEntries(Object.values(PRESERVATION_FEATURE).map(key => [key, true])),
+)
+
 export function isPreservationActive(planAccess, botConfig) {
   const planAllows = typeof planAccess === 'boolean' ? planAccess : Boolean(planAccess?.active)
-  return planAllows && botConfig?.preservationEnabled === true
+  if (!planAllows) return false
+  return Object.keys(PRESERVATION_FEATURE_SELECT).some(key => botConfig?.[key] === true)
 }
 
 export function buildFeatureGateError(feature = FEATURE_CODES.CHANNELS) {

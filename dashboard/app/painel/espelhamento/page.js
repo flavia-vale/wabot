@@ -15,7 +15,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
-import { usePainel, usePainelHeader, PainelTopbarAction } from '../PainelShell'
+import { usePainel, usePainelHeader, PainelContentActions } from '../PainelShell'
 
 const GRADIENTS = [
   'linear-gradient(135deg,#94A3B8,#475569)',
@@ -121,11 +121,11 @@ export default function EspelhamentoPage() {
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 1120, margin: '0 auto' }}>
-      <PainelTopbarAction>
+      <PainelContentActions>
         <div className="pnl-toolbar">
           <Link href="/painel/grupos" className="pnl-btn is-primary">+ Novo espelho</Link>
         </div>
-      </PainelTopbarAction>
+      </PainelContentActions>
 
       {loadError && (
         <div className="pnl-note-box is-error" role="alert">

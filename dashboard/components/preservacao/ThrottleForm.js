@@ -1,5 +1,6 @@
 'use client'
 import { PresetButtons } from './PresetButtons'
+import { FeatureToggle } from './FeatureToggle'
 
 const FIELDS = [
   { key: 'channelMinIntervalSec', label: 'Intervalo mínimo entre envios (segundos)', hint: 'Tempo mínimo antes de enviar 2 mensagens seguidas no MESMO canal.', min: 1, max: 86400 },
@@ -48,13 +49,16 @@ const PRESETS = [
 ]
 
 export function ThrottleForm({ value, onChange, disabled }) {
+  const controlsDisabled = disabled || !value.channelThrottleEnabled
   return (
     <fieldset className="bg-white rounded-2xl shadow p-5">
       <legend className="text-base font-semibold text-gray-800">⏱️ Espaçamento entre canais</legend>
       <p className="text-xs text-gray-500 mb-3">
         Controla a velocidade com que o bot dispara mensagens. Defaults seguros vêm pré-preenchidos.
       </p>
-      <PresetButtons presets={PRESETS} onApply={onChange} disabled={disabled} hint="clique pra aplicar um perfil" />
+      <FeatureToggle checked={!!value.channelThrottleEnabled} onChange={checked => onChange({ channelThrottleEnabled: checked })} disabled={disabled} label="Alternar espaçamento entre canais" />
+      <div className={value.channelThrottleEnabled ? '' : 'pointer-events-none opacity-50'} aria-disabled={!value.channelThrottleEnabled}>
+      <PresetButtons presets={PRESETS} onApply={onChange} disabled={controlsDisabled} hint="clique pra aplicar um perfil" />
       <div className="grid gap-3 sm:grid-cols-2">
         {FIELDS.map(f => {
           const raw = value[f.key]
@@ -71,13 +75,14 @@ export function ThrottleForm({ value, onChange, disabled }) {
                   const n = Number(e.target.value)
                   onChange({ [f.key]: f.scale ? Math.round(n * f.scale) : n })
                 }}
-                disabled={disabled}
+                disabled={controlsDisabled}
                 className="mt-1 w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
               />
               <span className="text-[11px] text-gray-500 mt-1 block">{f.hint}</span>
             </label>
           )
         })}
+      </div>
       </div>
     </fieldset>
   )

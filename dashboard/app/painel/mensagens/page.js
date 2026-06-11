@@ -23,7 +23,7 @@ import {
 } from '@/lib/mobileTemplateStore'
 import { OFFER_TEMPLATE_VARIABLE_GROUPS } from '@/lib/mobileOfferComposer'
 import { buildRenderedOfferTemplatePreview, summarizeAutomationTemplateUsage } from '@/lib/offerTemplatePreview'
-import { usePainelHeader, PainelTopbarAction } from '../PainelShell'
+import { usePainelHeader, PainelContentActions } from '../PainelShell'
 import { WhatsAppBubble, TokenText } from '../WhatsAppBubble'
 import { copyTextToClipboard } from '@/lib/clipboard'
 
@@ -279,9 +279,9 @@ export default function MensagensPage() {
   return (
     <div className="pnl-grid" style={{ maxWidth: 860, margin: '0 auto' }}>
       {templateMode === 'list' && (
-        <PainelTopbarAction>
+        <PainelContentActions>
           <button type="button" className="pnl-btn is-primary" onClick={startCreateTemplate}>+ Novo modelo</button>
-        </PainelTopbarAction>
+        </PainelContentActions>
       )}
 
       {error && <div className="pnl-note-box is-error" role="alert">{error}</div>}
