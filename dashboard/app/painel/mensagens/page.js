@@ -5,7 +5,7 @@
  * api.offerAutomations para carregar; api.variationsUpdate para salvar. As
  * variações vivem em copyVariationPoolJson { greetings, ctas, trailers } — os
  * mesmos campos do CopyVariationPoolEditor, aqui reescritos como acordeões.
- * As variáveis e os modelos usam os helpers/tokens reais
+ * As variáveis e os templates usam os helpers/tokens reais
  * (mobileOfferComposer / mobileTemplateStore / offerTemplatePreview).
  * Sem mudança no back end. */
 
@@ -23,7 +23,7 @@ import {
 } from '@/lib/mobileTemplateStore'
 import { OFFER_TEMPLATE_VARIABLE_GROUPS } from '@/lib/mobileOfferComposer'
 import { buildRenderedOfferTemplatePreview, summarizeAutomationTemplateUsage } from '@/lib/offerTemplatePreview'
-import { usePainelHeader, PainelContentActions } from '../PainelShell'
+import { usePainelHeader } from '../PainelShell'
 import { WhatsAppBubble, TokenText } from '../WhatsAppBubble'
 import { copyTextToClipboard } from '@/lib/clipboard'
 
@@ -58,7 +58,7 @@ function Chevron({ open }) {
 }
 
 export default function MensagensPage() {
-  usePainelHeader({ title: 'Templates, ganchos e CTA', subtitle: 'Templates, ganchos, CTAs e variáveis das suas ofertas' })
+  usePainelHeader({ title: 'Templates de mensagens', subtitle: 'Crie templates e personalize os textos das suas ofertas' })
 
   const [value, setValue] = useState({ copyVariationPoolJson: '{}', brandingGroupLink: '', couponLink: '' })
   const [templateStore, setTemplateStore] = useState(() => readLocalTemplateStore())
@@ -216,11 +216,11 @@ export default function MensagensPage() {
 
   const [dadosGroup, blocosGroup] = OFFER_TEMPLATE_VARIABLE_GROUPS
 
-  // Editor de modelo reutilizado (create + edit dentro do acordeão)
+  // Editor de template reutilizado (create + edit dentro do acordeão)
   const renderEditor = () => (
     <div className="pnl-grid">
       <div>
-        <label className="pnl-label">Nome do modelo</label>
+        <label className="pnl-label">Nome do template</label>
         <input
           className="pnl-input"
           value={editTemplateName}
@@ -264,10 +264,10 @@ export default function MensagensPage() {
         ))}
       </div>
       <div className="pnl-toolbar" style={{ flexWrap: 'wrap' }}>
-        <button type="button" className="pnl-btn is-primary" onClick={saveTemplateDraft} disabled={!editTemplateBody.trim() || (templateMode === 'create' && !editTemplateName.trim())}>Salvar modelo</button>
+        <button type="button" className="pnl-btn is-primary" onClick={saveTemplateDraft} disabled={!editTemplateBody.trim() || (templateMode === 'create' && !editTemplateName.trim())}>Concluir edição</button>
         <button type="button" className="pnl-btn" onClick={cancelEdit}>Cancelar</button>
         {templateMode === 'edit' && editingTemplate?.isCustom && (
-          <button type="button" className="pnl-btn is-danger" onClick={deleteCustomTemplate}>Excluir modelo</button>
+          <button type="button" className="pnl-btn is-danger" onClick={deleteCustomTemplate}>Excluir template</button>
         )}
         {templateMode === 'edit' && !editingTemplate?.isCustom && editingTemplate?.isOverridden && (
           <button type="button" className="pnl-btn" onClick={resetPresetTemplate}>Restaurar padrão</button>
@@ -278,31 +278,111 @@ export default function MensagensPage() {
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 860, margin: '0 auto' }}>
-      {templateMode === 'list' && (
-        <PainelContentActions>
-          <button type="button" className="pnl-btn is-primary" onClick={startCreateTemplate}>+ Novo modelo</button>
-        </PainelContentActions>
-      )}
-
       {error && <div className="pnl-note-box is-error" role="alert">{error}</div>}
 
+      {/* 4 · Templates de mensagens */}
+      <section>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 4 }}>
+          <div className="pnl-card-title" style={{ fontSize: 15 }}>Templates de mensagens</div>
+          {templateMode === 'list' && (
+            <button type="button" className="pnl-btn is-primary" onClick={startCreateTemplate}>Criar template</button>
+          )}
+        </div>
+        <p className="pnl-card-note" style={{ marginBottom: 12 }}>Use os mesmos templates no Criar oferta e nas ofertas automáticas.</p>
+
+        {templateMode === 'create' && (
+          <div className="pnl-card" style={{ borderColor: 'var(--accent-strong)', marginBottom: 14 }}>
+            <div className="pnl-card-title" style={{ marginBottom: 12 }}>Novo template</div>
+            {renderEditor()}
+          </div>
+        )}
+
+        <div className="pnl-grid">
+          {templates.map((template) => {
+            const usage = templateUsage.get(template.key)
+            const isInUse = !!usage?.enabled
+            const isPausedOnly = !isInUse && !!usage?.paused
+            const open = openModelo === template.key
+            const isEditing = templateMode === 'edit' && editingTemplateKey === template.key
+            const renderedPreview = buildRenderedOfferTemplatePreview({
+              template,
+              copyVariationPoolJson: value.copyVariationPoolJson,
+              groupInviteLink: value.brandingGroupLink,
+              couponLink: value.couponLink,
+            })
+            return (
+              <div key={template.key} className="pnl-card" style={{ padding: 0, overflow: 'hidden', borderColor: open ? 'var(--accent-strong)' : 'var(--line)' }}>
+                <button type="button" onClick={() => { if (isEditing) return; setOpenModelo((o) => (o === template.key ? null : template.key)) }} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', width: '100%', background: 'none', border: 0, cursor: 'pointer', textAlign: 'left' }}>
+                  <span style={{ width: 38, height: 38, borderRadius: 11, background: isInUse ? 'color-mix(in oklab, var(--accent) 20%, var(--surface))' : 'var(--bg-soft)', color: 'var(--accent-strong)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--ink)' }}>{template.name}</span>
+                      {isInUse && <span className="pnl-tag is-success">● ativo</span>}
+                      {isPausedOnly && <span className="pnl-tag is-flight">automação pausada</span>}
+                      {template.key === 'automatico_classico' && <span className="pnl-tag is-skip">padrão</span>}
+                      {template.isOverridden && <span className="pnl-tag is-skip">editado</span>}
+                      {template.isCustom && <span className="pnl-tag is-skip">personalizado</span>}
+                    </span>
+                    <span className="pnl-card-note" style={{ display: 'block', marginTop: 3 }}>
+                      {usage?.enabled ? `Em uso em ${usage.enabled} automação${usage.enabled === 1 ? '' : 'ões'} ativa${usage.enabled === 1 ? '' : 's'}` : 'Nenhuma automação ativa usando este template'}
+                      {usage?.paused ? ` · ${usage.paused} pausada${usage.paused === 1 ? '' : 's'}` : ''}
+                    </span>
+                  </span>
+                  {!isEditing && <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent-strong)' }}>{open ? 'Fechar' : 'Abrir'}</span>}
+                  {!isEditing && <Chevron open={open} />}
+                </button>
+
+                {open && (
+                  <div style={{ padding: '0 18px 18px' }}>
+                    {isEditing ? (
+                      renderEditor()
+                    ) : (
+                      <>
+                        <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+                          <div className="pnl-subcard">
+                            <p className="pnl-eyebrow">Corpo salvo do template</p>
+                            <pre className="pnl-pre"><TokenText text={template.body || ''} /></pre>
+                          </div>
+                          <div className="pnl-subcard" style={{ borderColor: 'var(--accent-strong)' }}>
+                            <p className="pnl-eyebrow" style={{ color: 'var(--accent-strong)' }}>Prévia real enviada pelo bot</p>
+                            <p className="pnl-card-note" style={{ marginTop: 2, marginBottom: 8 }}>com gancho, CTA e convite do grupo já sorteados</p>
+                            <WhatsAppBubble text={renderedPreview} format />
+                          </div>
+                        </div>
+                        <button type="button" className="pnl-btn is-primary" style={{ marginTop: 12 }} onClick={() => startEditTemplate(template)}>Editar template</button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      {/* Ajuda — como o bot monta a mensagem */}
       {/* Anatomia — como o bot monta a mensagem */}
-      <section className="pnl-card" style={{ background: 'color-mix(in oklab, var(--accent) 11%, var(--surface))', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+      <details className="pnl-card" style={{ background: 'color-mix(in oklab, var(--accent) 11%, var(--surface))' }}>
+        <summary>Como funcionam os templates</summary>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
         <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', marginRight: 4 }}>Como o bot monta cada envio:</span>
-        {['Gancho', 'Corpo do modelo', 'CTA + grupo', 'Fechamento'].map((t, i, a) => (
+        {['Gancho', 'Corpo do template', 'CTA', 'Convite do grupo'].map((t, i, a) => (
           <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 12.5, fontWeight: 600, padding: '5px 11px', borderRadius: 999, background: 'var(--surface)', border: '1px solid var(--line)', color: i === 1 ? 'var(--ink)' : 'var(--accent-strong)' }}>{t}</span>
             {i < a.length - 1 && <span style={{ color: 'var(--ink-faint)' }}>→</span>}
           </span>
         ))}
         <span style={{ fontSize: 12, color: 'var(--ink-soft)', flexBasis: '100%', marginTop: 2 }}>
-          O modelo é o esqueleto; as variações entram nos blocos <b style={{ fontWeight: 600 }}>{'{{gancho}}'}</b>, <b style={{ fontWeight: 600 }}>{'{{cta}}'}</b> e <b style={{ fontWeight: 600 }}>{'{{convitegrupo}}'}</b> — sorteadas a cada envio pra nunca repetir.
+          O template é o esqueleto; as variações entram nos blocos <b style={{ fontWeight: 600 }}>{'{{gancho}}'}</b>, <b style={{ fontWeight: 600 }}>{'{{cta}}'}</b> e <b style={{ fontWeight: 600 }}>{'{{convitegrupo}}'}</b> — escolhidas a cada envio para diversificar as mensagens.
         </span>
-      </section>
+              </div>
+      </details>
 
-      {/* 1 · Variações de texto */}
+      {/* Textos dinâmicos */}
       <section>
-        <div className="pnl-card-title" style={{ fontSize: 15 }}>🎲 Variações de texto</div>
+        <div className="pnl-card-title" style={{ fontSize: 15 }}>Textos dinâmicos</div>
         <p className="pnl-card-note" style={{ marginBottom: 12 }}>Pedacinhos que o bot intercala em cada envio, pra nenhuma mensagem sair 100% igual. Quanto mais variações, mais natural.</p>
         <div className="pnl-grid">
           {VARIATION_GROUPS.map((g) => {
@@ -367,10 +447,12 @@ export default function MensagensPage() {
         </div>
       </section>
 
+      {/* Referência de variáveis */}
       {/* 3 · Variáveis */}
-      <section className="pnl-card">
-        <div className="pnl-card-title">Variáveis dos modelos</div>
-        <p className="pnl-card-note" style={{ marginBottom: 14 }}>Clique para copiar e cole no corpo do modelo. O bot substitui no envio automático e no Criar oferta.</p>
+      <details className="pnl-card">
+        <summary>Referência de variáveis</summary>
+        <div style={{ marginTop: 14 }}>
+        <p className="pnl-card-note" style={{ marginBottom: 14 }}>Clique para copiar e cole no corpo do template. O bot substitui no envio automático e no Criar oferta.</p>
         <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
           {[
             { group: dadosGroup, dot: 'var(--accent-strong)', note: 'preenchidas com o produto' },
@@ -395,89 +477,13 @@ export default function MensagensPage() {
             </div>
           ))}
         </div>
-      </section>
-
-      {/* 4 · Modelos de oferta */}
-      <section>
-        <div className="pnl-card-title" style={{ fontSize: 15 }}>Modelos de oferta</div>
-        <p className="pnl-card-note" style={{ marginBottom: 12 }}>Os mesmos modelos do Criar oferta e das ofertas automáticas.</p>
-
-        {templateMode === 'create' && (
-          <div className="pnl-card" style={{ borderColor: 'var(--accent-strong)', marginBottom: 14 }}>
-            <div className="pnl-card-title" style={{ marginBottom: 12 }}>Novo modelo</div>
-            {renderEditor()}
-          </div>
-        )}
-
-        <div className="pnl-grid">
-          {templates.map((template) => {
-            const usage = templateUsage.get(template.key)
-            const isInUse = !!usage?.enabled
-            const isPausedOnly = !isInUse && !!usage?.paused
-            const open = openModelo === template.key
-            const isEditing = templateMode === 'edit' && editingTemplateKey === template.key
-            const renderedPreview = buildRenderedOfferTemplatePreview({
-              template,
-              copyVariationPoolJson: value.copyVariationPoolJson,
-              groupInviteLink: value.brandingGroupLink,
-              couponLink: value.couponLink,
-            })
-            return (
-              <div key={template.key} className="pnl-card" style={{ padding: 0, overflow: 'hidden', borderColor: open ? 'var(--accent-strong)' : 'var(--line)' }}>
-                <button type="button" onClick={() => { if (isEditing) return; setOpenModelo((o) => (o === template.key ? null : template.key)) }} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', width: '100%', background: 'none', border: 0, cursor: 'pointer', textAlign: 'left' }}>
-                  <span style={{ width: 38, height: 38, borderRadius: 11, background: isInUse ? 'color-mix(in oklab, var(--accent) 20%, var(--surface))' : 'var(--bg-soft)', color: 'var(--accent-strong)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} aria-hidden="true">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
-                  </span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--ink)' }}>{template.name}</span>
-                      {isInUse && <span className="pnl-tag is-success">● ativo</span>}
-                      {isPausedOnly && <span className="pnl-tag is-flight">automação pausada</span>}
-                      {template.key === 'automatico_classico' && <span className="pnl-tag is-skip">padrão</span>}
-                      {template.isOverridden && <span className="pnl-tag is-skip">editado</span>}
-                      {template.isCustom && <span className="pnl-tag is-skip">personalizado</span>}
-                    </span>
-                    <span className="pnl-card-note" style={{ display: 'block', marginTop: 3 }}>
-                      {usage?.enabled ? `Em uso em ${usage.enabled} automação${usage.enabled === 1 ? '' : 'ões'} ativa${usage.enabled === 1 ? '' : 's'}` : 'Nenhuma automação ativa usando este modelo'}
-                      {usage?.paused ? ` · ${usage.paused} pausada${usage.paused === 1 ? '' : 's'}` : ''}
-                    </span>
-                  </span>
-                  {!isEditing && <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent-strong)' }}>{open ? 'Fechar' : 'Abrir'}</span>}
-                  {!isEditing && <Chevron open={open} />}
-                </button>
-
-                {open && (
-                  <div style={{ padding: '0 18px 18px' }}>
-                    {isEditing ? (
-                      renderEditor()
-                    ) : (
-                      <>
-                        <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
-                          <div className="pnl-subcard">
-                            <p className="pnl-eyebrow">Corpo salvo do modelo</p>
-                            <pre className="pnl-pre"><TokenText text={template.body || ''} /></pre>
-                          </div>
-                          <div className="pnl-subcard" style={{ borderColor: 'var(--accent-strong)' }}>
-                            <p className="pnl-eyebrow" style={{ color: 'var(--accent-strong)' }}>Prévia real enviada pelo bot</p>
-                            <p className="pnl-card-note" style={{ marginTop: 2, marginBottom: 8 }}>com gancho, CTA e convite do grupo já sorteados</p>
-                            <WhatsAppBubble text={renderedPreview} format />
-                          </div>
-                        </div>
-                        <button type="button" className="pnl-btn is-primary" style={{ marginTop: 12 }} onClick={() => startEditTemplate(template)}>Editar modelo</button>
-                      </>
-                    )}
-                  </div>
-                )}
               </div>
-            )
-          })}
-        </div>
-      </section>
+      </details>
 
       {/* Salvar */}
       <div className="pnl-toolbar">
         <button type="button" className="pnl-btn is-primary" onClick={handleSave} disabled={saving}>
-          {saving ? 'Salvando…' : 'Salvar variações e modelos'}
+          {saving ? 'Salvando…' : 'Salvar templates, textos e links'}
         </button>
         {saved && <span className="pnl-tag is-success">✓ Salvo!</span>}
       </div>
