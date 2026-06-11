@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { classifyTree, resolveAppRedirect, ROUTE_MAP } from '../lib/ui-variant/routeMap.js'
 
 test('classifyTree identifica cada árvore de app', () => {
@@ -52,8 +53,14 @@ test('web em /m/* com tela portada vai para /painel', () => {
   assert.equal(resolveAppRedirect({ pathname: '/m/checklistespelhamento', variant: 'web' }), '/painel/checklist')
 })
 
-test('web em /m/* sem equivalente nenhum cai na home /painel', () => {
-  assert.equal(resolveAppRedirect({ pathname: '/m/account/variations', variant: 'web' }), '/painel')
+test('agendados mantém ponte de compatibilidade até a aba consolidada', () => {
+  assert.equal(resolveAppRedirect({ pathname: '/m/op/scheduled', variant: 'web' }), '/painel/agendados')
+  const legacyPage = readFileSync(new URL('../app/painel/agendados/page.js', import.meta.url), 'utf8')
+  assert.match(legacyPage, /redirect\('\/painel\/envios\?view=scheduled'\)/)
+})
+
+test('web em /m/* usa destino consolidado ou cai na home /painel', () => {
+  assert.equal(resolveAppRedirect({ pathname: '/m/account/variations', variant: 'web' }), '/painel/mensagens')
   assert.equal(resolveAppRedirect({ pathname: '/m/account', variant: 'web' }), '/painel')
 })
 
@@ -135,9 +142,20 @@ test('sem loop: aplicar o redirect duas vezes é estável', () => {
   }
 })
 
-test('caminhos não-nulos são únicos por árvore (sem ambiguidade de origem)', () => {
-  for (const tree of ['m', 'painel', 'dashboard']) {
+test('rotas de origem são únicas e painel só compartilha o destino intencional de mensagens', () => {
+  for (const tree of ['m', 'dashboard']) {
     const paths = ROUTE_MAP.map((e) => e[tree]).filter(Boolean)
     assert.equal(new Set(paths).size, paths.length, `colisão de caminhos na árvore ${tree}`)
   }
+
+  const painelFeaturesByPath = new Map()
+  for (const entry of ROUTE_MAP) {
+    if (!entry.painel) continue
+    const features = painelFeaturesByPath.get(entry.painel) ?? []
+    features.push(entry.feature)
+    painelFeaturesByPath.set(entry.painel, features)
+  }
+
+  const sharedPainelPaths = [...painelFeaturesByPath.entries()].filter(([, features]) => features.length > 1)
+  assert.deepEqual(sharedPainelPaths, [['/painel/mensagens', ['messages', 'variations']]])
 })
