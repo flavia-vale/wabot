@@ -40,6 +40,7 @@ function optionalUrl(value) {
 export async function offerQueueRoutes(app, opts = {}) {
   const db = opts.db ?? dbDefault
   const now = opts.now ?? (() => new Date())
+  const drainQueueOnce = opts.drainQueueOnce ?? (async (...args) => (await import('../../offerQueue/dispatcher.js')).drainQueueOnce(...args))
 
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
     const userId = req.user.sub
@@ -66,8 +67,21 @@ export async function offerQueueRoutes(app, opts = {}) {
     const data = queueData(req.body, true)
     const error = validateQueue(data, current)
     if (error) return reply.code(400).send({ error })
-    await db.offerQueue.updateMany({ where: { id: current.id, userId }, data })
-    return presentQueue(await db.offerQueue.findFirst({ where: { id: current.id, userId } }))
+    let reactivating = current.enabled === false && data.enabled === true
+    if (reactivating) {
+      data.lastSentAt = null
+      const activationClaim = await db.offerQueue.updateMany({ where: { id: current.id, userId, enabled: false }, data })
+      reactivating = activationClaim.count === 1
+    } else {
+      await db.offerQueue.updateMany({ where: { id: current.id, userId }, data })
+    }
+    const updated = await db.offerQueue.findFirst({ where: { id: current.id, userId } })
+    let activation = null
+    if (reactivating) {
+      try { activation = await drainQueueOnce(updated, { db, now }) }
+      catch (error) { activation = { failed: 'activation_error', error: error.message } }
+    }
+    return { ...presentQueue(updated), ...(activation ? { activation } : {}) }
   })
 
   app.delete('/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
