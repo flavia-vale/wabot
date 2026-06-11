@@ -49,7 +49,7 @@ couponLink  String  @default("")
 
 **`src/core/copyVariation.js` — `applyVariation(text, opts)`:**
 
-Novos opts: `groupInviteLink` e `couponLink`. Após resolver `{{greeting}}`, `{{cta}}`, `{{trailer}}`, aplica um segundo pass:
+Novos opts: `groupInviteLink` e `couponLink`. Após resolver `{{gancho}}`, `{{cta}}`, `{{convitegrupo}}`, aplica um segundo pass:
 
 ```js
 text = text

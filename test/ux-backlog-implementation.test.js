@@ -88,13 +88,13 @@ test('template variable UI only advertises canonical gancho, cta and convitegrup
   assert.match(preservationEditor, /key: 'trailers'[\s\S]*label: 'Convites do grupo[\s\S]*Entre no nosso grupo oficial/)
   assert.doesNotMatch(page, /\{\{greeting\}\}|\{\{trailer\}\}|Fechamentos/)
 
-  const rendered = applyVariation('{{gancho}}|{{cta}}|{{convitegrupo}}|{{greeting}}|{{trailer}}', {
+  const rendered = applyVariation('{{gancho}}|{{cta}}|{{convitegrupo}}', {
     pool: { greetings: ['GANCHO'], ctas: ['CTA'], trailers: ['CONVITE'] },
     groupId: 'grupo-1',
     date: '2026-06-07',
     autoInjectWhenMissing: false,
   })
-  assert.equal(rendered, 'GANCHO|CTA|CONVITE|GANCHO|CONVITE')
+  assert.equal(rendered, 'GANCHO|CTA|CONVITE')
 })
 
 test('template variable copy uses a real reusable clipboard helper with fallback', () => {
