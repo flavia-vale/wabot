@@ -45,6 +45,10 @@ const nextConfig = {
         headers: noIndexHeaders,
       },
       {
+        source: '/cadastro',
+        headers: noIndexHeaders,
+      },
+      {
         source: '/promo-vip-7dias',
         headers: noIndexHeaders,
       },
