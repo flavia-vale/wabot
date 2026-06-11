@@ -405,13 +405,6 @@ export default function GruposPage() {
       <PainelTopbarAction>
         <div className="pnl-toolbar">
           <HelpLink topic="como-cadastrar-grupos">Ajuda</HelpLink>
-          <button
-            type="button"
-            className={`pnl-btn ${canUseChannels ? 'is-primary' : ''}`}
-            onClick={() => canUseChannels ? setShowChannelModal(true) : setActionError('Canais estão disponíveis no Trial ativo e no plano Pro.')}
-          >
-            + Adicionar canal {!canUseChannels && '(Pro)'}
-          </button>
         </div>
       </PainelTopbarAction>
 
@@ -541,6 +534,23 @@ export default function GruposPage() {
             })}
           </ul>
         )}
+      </section>
+
+      {/* Adicionar canal existente */}
+      <section className="pnl-card">
+        <div className="pnl-card-head">
+          <div>
+            <div className="pnl-card-title">Adicionar canal existente</div>
+            <p className="pnl-card-note">Cadastre um canal por link ou escolha um canal que você já segue no WhatsApp.</p>
+          </div>
+          <button
+            type="button"
+            className={`pnl-btn ${canUseChannels ? 'is-primary' : ''}`}
+            onClick={() => canUseChannels ? setShowChannelModal(true) : setActionError('Canais estão disponíveis no Trial ativo e no plano Pro.')}
+          >
+            + Adicionar canal {!canUseChannels && '(Pro)'}
+          </button>
+        </div>
       </section>
 
       {/* Editor de alvos */}
