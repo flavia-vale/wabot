@@ -267,7 +267,7 @@ export function ActivationChecklist({ onActivated, persist = false, userId }) {
       marginBottom: 22,
     }}>
       {/* Header */}
-      <div style={{
+      <div className="act-checklist-hd" style={{
         display: 'flex', alignItems: 'flex-start', gap: 24, flexWrap: 'wrap',
         padding: '24px 28px 22px',
         borderBottom: '1px solid var(--line)',
@@ -288,7 +288,7 @@ export function ActivationChecklist({ onActivated, persist = false, userId }) {
             Conclua os passos abaixo. Cada um se marca sozinho assim que detectamos a ação — você só precisa fazer.
           </p>
         </div>
-        <div style={{ flex: '0 0 190px', minWidth: 170 }}>
+        <div className="act-checklist-prog" style={{ flex: '0 0 190px', minWidth: 170 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
             <span style={{ fontSize: 13, fontWeight: 600 }}>
               <span style={{ color: 'var(--accent-strong)', fontSize: 17 }}>{displayCount}</span>
@@ -318,7 +318,7 @@ export function ActivationChecklist({ onActivated, persist = false, userId }) {
         const isActive = !isDone && s.key === nextKey
         const state = isDone ? 'done' : isActive ? 'active' : 'pending'
         return (
-          <div key={s.key} style={{
+          <div key={s.key} className="act-step-row" style={{
             display: 'grid', gridTemplateColumns: 'auto 1fr auto',
             alignItems: 'center', gap: 16,
             padding: '17px 28px',
@@ -342,7 +342,7 @@ export function ActivationChecklist({ onActivated, persist = false, userId }) {
                   : s.desc}
               </p>
             </div>
-            <div style={{ justifySelf: 'end' }}>
+            <div className="act-step-cta" style={{ justifySelf: 'end' }}>
               {isDone ? <DoneChip /> : <StepCta href={s.href} label={s.cta} isActive={isActive} />}
             </div>
           </div>
@@ -355,7 +355,7 @@ export function ActivationChecklist({ onActivated, persist = false, userId }) {
         const isActive = !isDone && count === STEPS.length
         const state = isDone ? 'done' : isActive ? 'active' : 'pending'
         return (
-          <div style={{
+          <div className="act-step-row" style={{
             display: 'grid', gridTemplateColumns: 'auto 1fr auto',
             alignItems: 'center', gap: 16,
             padding: '17px 28px',
@@ -378,7 +378,7 @@ export function ActivationChecklist({ onActivated, persist = false, userId }) {
                   : 'Com tudo pronto, o motor liga sozinho e começa a postar.'}
               </p>
             </div>
-            <div style={{ justifySelf: 'end' }}>
+            <div className="act-step-cta" style={{ justifySelf: 'end' }}>
               {isDone ? (
                 <DoneChip />
               ) : (
