@@ -432,6 +432,7 @@ test('POST /:id/follow-now retorna 429 quando guard nega (warmup cap atingido)',
   // Conta nova (createdAt = now) → warmup cap = 1. Pré-gravar 1 follow OK
   // consome o cap; próxima tentativa deve bater no daily_cap.
   await db.followLog.create({ data: { userId, channelJid: 'x@newsletter', status: 'ok' } })
+  await db.botConfig.create({ data: { userId, followGuardEnabled: true } })
 
   t.after(async () => {
     await db.followLog.deleteMany({ where: { userId } })
@@ -448,6 +449,31 @@ test('POST /:id/follow-now retorna 429 quando guard nega (warmup cap atingido)',
   assert.equal(body.dailyCap, 1)
   assert.ok(res.headers['retry-after'])
 })
+
+
+test('POST /:id/follow-now ignora limite quando follow-guard está desligado', async (t) => {
+  let invoked = 0
+  const { app, userId } = await buildApp({
+    followChannelImmediate: async () => { invoked++; return { followed: 'new' } },
+  }, { withUser: true })
+  const group = await db.group.create({
+    data: { userId, waJid: 'guard-off@newsletter', name: 'Canal sem guard', role: 'monitor', kind: 'channel', forwardMode: 'LINK_ONLY' },
+  })
+  await db.followLog.create({ data: { userId, channelJid: 'x@newsletter', status: 'ok' } })
+  await db.botConfig.create({ data: { userId, followGuardEnabled: false } })
+
+  t.after(async () => {
+    await db.followLog.deleteMany({ where: { userId } })
+    await db.group.deleteMany({ where: { userId } })
+    await db.user.deleteMany({ where: { id: userId } })
+    await app.close()
+  })
+
+  const res = await app.inject({ method: 'POST', url: `/api/groups/${group.id}/follow-now` })
+  assert.equal(res.statusCode, 200)
+  assert.equal(invoked, 1, 'follow real deve ocorrer quando a defesa está desligada')
+})
+
 
 // ---------- POST /:id/refresh-admin ----------
 

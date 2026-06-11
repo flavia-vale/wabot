@@ -77,13 +77,13 @@ function toMs(v) {
  * }} input
  */
 export function decide({ now, throttle, isPaused, botConfig }) {
-  if (isPaused) {
+  if (botConfig.channelThrottleEnabled !== false && isPaused) {
     return { allow: false, reason: DEFER_REASON.HEALTH_PAUSED, deferUntil: now + HOUR }
   }
 
   const quiet = parseQuietHours(botConfig.channelQuietHoursJson)
   const q = quietHoursState(now, quiet)
-  if (q.inQuiet) {
+  if (botConfig.quietHoursEnabled !== false && q.inQuiet) {
     return { allow: false, reason: DEFER_REASON.QUIET_HOURS, deferUntil: now + q.deferMs }
   }
 
@@ -91,13 +91,13 @@ export function decide({ now, throttle, isPaused, botConfig }) {
   const sameDay = throttle?.dayBucket === today
   const postsToday = sameDay ? (throttle?.postsToday ?? 0) : 0
 
-  if (botConfig.channelDailyCap != null && postsToday >= botConfig.channelDailyCap) {
+  if (botConfig.channelThrottleEnabled !== false && botConfig.channelDailyCap != null && postsToday >= botConfig.channelDailyCap) {
     return { allow: false, reason: DEFER_REASON.DAILY_CAP, deferUntil: now + DAY }
   }
 
   const minIntervalMs = (botConfig.channelMinIntervalSec ?? 30) * SEC
   const lastPostMs = toMs(throttle?.lastPostAt)
-  if (lastPostMs && now - lastPostMs < minIntervalMs) {
+  if (botConfig.channelThrottleEnabled !== false && lastPostMs && now - lastPostMs < minIntervalMs) {
     return {
       allow: false,
       reason: DEFER_REASON.MIN_INTERVAL,
@@ -110,7 +110,7 @@ export function decide({ now, throttle, isPaused, botConfig }) {
   const winStartMs = toMs(throttle?.burstWindowStart)
   const windowActive = winStartMs && now - winStartMs < burstWindowMs
   const postsInWindow = windowActive ? (throttle?.postsInBurstWindow ?? 0) : 0
-  if (windowActive && postsInWindow >= burstCap) {
+  if (botConfig.channelThrottleEnabled !== false && windowActive && postsInWindow >= burstCap) {
     return {
       allow: false,
       reason: DEFER_REASON.BURST_CAP,
@@ -147,7 +147,9 @@ export async function checkAndReserve(groupId, botConfig, opts = {}) {
   })
   if (!decision.allow) return decision
 
-  await reserve(db, groupId, throttle, now, botConfig)
+  if (botConfig.channelThrottleEnabled !== false) {
+    await reserve(db, groupId, throttle, now, botConfig)
+  }
   return decision
 }
 

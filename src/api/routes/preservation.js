@@ -20,15 +20,19 @@ const PRESERVATION_CONFIG_KEYS = [
   'channelQuietHoursJson',
   'maxDailyFollows',
   'copyVariationPoolJson',
-  'imageMutationEnabled',
+  'channelThrottleEnabled',
+  'quietHoursEnabled',
+  'followGuardEnabled',
+  'copyVariationEnabled',
+  'imageMutationActive',
   'probeEnabled',
-  'preservationEnabled',
 ]
 
 function pickConfig(botConfig) {
   const out = {}
   for (const k of PRESERVATION_CONFIG_KEYS) {
-    out[k] = k === 'copyVariationPoolJson'
+    const publicKey = k === 'imageMutationActive' ? 'imageMutationEnabled' : k
+    out[publicKey] = k === 'copyVariationPoolJson'
       ? resolveCopyVariationPoolJson(botConfig?.[k])
       : (botConfig?.[k] ?? null)
   }
@@ -69,9 +73,12 @@ function validatePartialUpdate(body = {}) {
   int('maxDailyFollows', { min: 1, max: 50 })
   json('channelQuietHoursJson')
   json('copyVariationPoolJson')
+  bool('channelThrottleEnabled')
+  bool('quietHoursEnabled')
+  bool('followGuardEnabled')
+  bool('copyVariationEnabled')
   bool('imageMutationEnabled')
   bool('probeEnabled')
-  bool('preservationEnabled')
 
   return { updates, errors }
 }
@@ -109,6 +116,10 @@ export async function preservationRoutes(app) {
     const { updates, errors } = validatePartialUpdate(req.body)
     if (errors.length) return reply.code(400).send({ error: errors.join('; '), errors })
     const data = { ...updates }
+    if ('imageMutationEnabled' in data) {
+      data.imageMutationActive = data.imageMutationEnabled
+      delete data.imageMutationEnabled
+    }
     if ('copyVariationPoolJson' in data) data.copyVariationPoolJson = resolveCopyVariationPoolJson(data.copyVariationPoolJson)
     const updated = await db.botConfig.upsert({
       where: { userId: req.user.sub },
