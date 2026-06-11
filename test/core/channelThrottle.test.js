@@ -388,7 +388,7 @@ test('decide: janela silenciosa pode bloquear com throttle desligado', () => {
   assert.equal(result.reason, DEFER_REASON.QUIET_HOURS)
 })
 
-test('decide: pausa de saúde não vaza quando apenas janela silenciosa está ligada', () => {
+test('decide: pausa de saúde bloqueia mesmo com throttle desligado', () => {
   const now = Date.UTC(2026, 0, 15, 12, 0, 0)
   const result = decide({
     now,
@@ -400,7 +400,8 @@ test('decide: pausa de saúde não vaza quando apenas janela silenciosa está li
       channelQuietHoursJson: JSON.stringify({ startHour: 0, endHour: 6, tz: 'UTC' }),
     },
   })
-  assert.equal(result.allow, true)
+  assert.equal(result.allow, false)
+  assert.equal(result.reason, DEFER_REASON.HEALTH_PAUSED)
 })
 
 test('checkAndReserve não grava contadores quando throttle está desligado', async () => {

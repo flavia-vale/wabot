@@ -222,23 +222,20 @@ export async function groupsRoutes(app, opts = {}) {
     if (!(await ensureChannelFeatureAllowed(req.user.sub, reply))) return
     if (!isRunning(req.user.sub)) return reply.code(503).send({ error: 'WhatsApp não está conectado.' })
 
-    const preservationConfig = await db.botConfig.findUnique({
-      where: { userId: req.user.sub },
-      select: { followGuardEnabled: true },
-    })
-    if (preservationConfig?.followGuardEnabled) {
-      const guard = await canFollowNow(req.user.sub)
-      if (!guard.ok) {
-        const retryAfterSec = Math.max(1, Math.ceil((guard.retryAfterMs ?? 60_000) / 1000))
-        reply.header('Retry-After', String(retryAfterSec))
-        return reply.code(429).send({
-          error: 'Limite anti-ban atingido',
-          reason: guard.reason,
-          retryAfterMs: guard.retryAfterMs,
-          dailyUsed: guard.dailyUsed,
-          dailyCap: guard.dailyCap,
-        })
-      }
+    // O guard anti-ban roda SEMPRE (warmup + cooldown + intervalo mínimo).
+    // O toggle followGuardEnabled controla apenas se o limite diário
+    // personalizado vale; desligado, vale o teto conservador padrão.
+    const guard = await canFollowNow(req.user.sub)
+    if (!guard.ok) {
+      const retryAfterSec = Math.max(1, Math.ceil((guard.retryAfterMs ?? 60_000) / 1000))
+      reply.header('Retry-After', String(retryAfterSec))
+      return reply.code(429).send({
+        error: 'Limite anti-ban atingido',
+        reason: guard.reason,
+        retryAfterMs: guard.retryAfterMs,
+        dailyUsed: guard.dailyUsed,
+        dailyCap: guard.dailyCap,
+      })
     }
 
     try {

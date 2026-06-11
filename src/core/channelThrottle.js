@@ -77,7 +77,9 @@ function toMs(v) {
  * }} input
  */
 export function decide({ now, throttle, isPaused, botConfig }) {
-  if (botConfig.channelThrottleEnabled !== false && isPaused) {
+  // Pausa por saúde (403/throttle do WhatsApp) é defesa do canal, não
+  // preferência de cadência: vale independente do toggle de throttle.
+  if (isPaused) {
     return { allow: false, reason: DEFER_REASON.HEALTH_PAUSED, deferUntil: now + HOUR }
   }
 
