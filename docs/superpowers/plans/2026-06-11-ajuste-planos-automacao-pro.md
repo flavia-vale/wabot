@@ -99,7 +99,7 @@ Proibido na copy: warmup, OAuth ML, rastreamento de cliques, post para status, f
 
 ### Fase G — Deploy
 
-- [ ] **G1.** PR contra `develop` (nunca `main`). Autodeploy de staging aplica a migration de copy e a de dados.
+- [x] **G1.** PR contra `develop` (nunca `main`): https://github.com/flavia-vale/wabot/pull/913. Autodeploy de staging aplica a migration de copy e a de dados.
 - [ ] **G2.** Validação manual em staging (`http://178.105.54.0:3006`): landing mostra a nova copy; conta Basic vê paywalls e recebe 403 nas rotas; conta Pro/Trial opera normal; cron não executa automação de Basic.
 - [ ] **G3.** Só depois: PR `develop → main`. Rodar `scripts/backup_prod.sh` antes do deploy de prod (há migration de dados).
 
