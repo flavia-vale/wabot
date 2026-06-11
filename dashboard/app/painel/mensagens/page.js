@@ -32,8 +32,8 @@ const MAX_VARIATIONS = 20
 // Acordeões de variação → mapeiam direto para as chaves reais do pool.
 const VARIATION_GROUPS = [
   { key: 'greetings', emoji: '🎯', nome: 'Ganchos', pos: 'vão antes da mensagem', desc: 'A primeira linha que chama atenção. Variável canônica: {{gancho}}.', placeholder: 'Ex: 🚨 COOOOOORRE QUE TÁ ACABANDO!' },
-  { key: 'ctas', emoji: '📣', nome: 'CTAs', pos: 'convidam pro grupo', desc: 'A chamada para ação que aparece junto da oferta. Variável canônica: {{cta}}.', placeholder: 'Ex: 📲 Entre no nosso grupo oficial:' },
-  { key: 'trailers', emoji: '🔗', nome: 'Convite do grupo', pos: 'vai depois da mensagem', desc: 'O convite ou aviso final usado pela variável canônica {{convitegrupo}}.', placeholder: 'Ex: ⚠️ Preços e estoque podem mudar.' },
+  { key: 'ctas', emoji: '📣', nome: 'CTAs', pos: 'complementam a oferta', desc: 'O texto de CTA que aparece junto da oferta. Variável canônica: {{cta}}.', placeholder: 'Ex: ⚠️ Preços e estoque podem mudar.' },
+  { key: 'trailers', emoji: '🔗', nome: 'Convite do grupo', pos: 'vai depois da mensagem', desc: 'O convite do grupo usado pela variável canônica {{convitegrupo}}.', placeholder: 'Ex: 📲 Entre no nosso grupo oficial:' },
 ]
 
 function parsePool(json) {
