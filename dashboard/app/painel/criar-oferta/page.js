@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
-import { usePainelHeader, PainelTopbarAction } from '../PainelShell'
+import { usePainelHeader } from '../PainelShell'
 import { WhatsAppBubble } from '../WhatsAppBubble'
 import { getConversionStatusPresentation } from '@/lib/offerBuilderUi'
 import { buildMobileOfferText } from '@/lib/mobileOfferComposer'
@@ -185,10 +185,6 @@ export default function CriarOfertaPage() {
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 1040, margin: '0 auto' }}>
-      <PainelTopbarAction>
-        <span className="pnl-tag is-success" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>✓ GRÁTIS</span>
-      </PainelTopbarAction>
-
       {/* TEMPORÁRIO: sem conversão de link — o usuário precisa colar o próprio
           link de afiliado, e a oferta sai exatamente com o link colado. */}
       <div className="pnl-note-box is-warn" role="note">

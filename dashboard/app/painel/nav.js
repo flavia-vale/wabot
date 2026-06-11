@@ -33,7 +33,6 @@ export const NAV_GROUPS = [
       {
         label: 'Criar oferta',
         href: '/painel/criar-oferta',
-        free: true,
         icon: i(<><path d="M12 5v14" /><path d="M5 12h14" /><path d="M4 4h16v16H4z" /></>),
       },
       {
