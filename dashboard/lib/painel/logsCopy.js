@@ -38,7 +38,7 @@ export const STATUS_TAG = {
   success: { cls: 'is-success', label: 'enviado' },
   error: { cls: 'is-error', label: 'falhou' },
   skipped: { cls: 'is-skip', label: 'ignorado' },
-  queued: { cls: 'is-flight', label: 'na fila' },
+  queued: { cls: 'is-flight', label: 'em processamento' },
   sending: { cls: 'is-flight', label: 'enviando' },
 }
 
@@ -47,7 +47,7 @@ export const STATUS_TABS = [
   ['success', 'Enviados'],
   ['skipped', 'Ignorados'],
   ['error', 'Falhas'],
-  ['queued', 'Na fila'],
+  ['queued', 'Em processamento'],
   ['sending', 'Enviando'],
 ]
 

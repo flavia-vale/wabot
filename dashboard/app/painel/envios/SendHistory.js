@@ -23,6 +23,7 @@ function shortText(text) {
 
 function logOriginLabel(log) {
   if (log?.sourceGroup === 'offerAutomation') return 'Oferta automática'
+  if (typeof log?.sourceGroup === 'string' && log.sourceGroup.startsWith('offerQueue:')) return log.sourceGroupName || 'Fila'
   if (log?.sourceGroup === 'manual') return 'Manual'
   if (log?.sourceGroup === 'scheduled') return 'Agendamento'
   return log?.sourceGroupName || log?.sourceGroup || '—'
@@ -164,7 +165,7 @@ export default function SendHistory() {
             </div>
           ))}
         </div>
-        {inFlight > 0 && <p className="pnl-card-note" style={{ marginTop: 12 }}>{inFlight} {inFlight === 1 ? 'mensagem' : 'mensagens'} em vôo (na fila/enviando).</p>}
+        {inFlight > 0 && <p className="pnl-card-note" style={{ marginTop: 12 }}>{inFlight} {inFlight === 1 ? 'mensagem' : 'mensagens'} em vôo (em processamento/enviando).</p>}
       </section>
 
       {/* Filtros */}

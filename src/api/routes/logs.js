@@ -57,6 +57,7 @@ export async function logsRoutes(app) {
       erro: 'error',
       falha: 'error',
       fila: 'queued',
+      processamento: 'queued',
       enviando: 'sending',
     }
     const statusMatches = Object.entries(statusSearchMap)
