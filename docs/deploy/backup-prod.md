@@ -17,10 +17,46 @@ wabot-prod-YYYYMMDD-HHMMSS.tar.gz
     └── dashboard.env.local  # .env do dashboard
 ```
 
-> ⚠️ O archive contém segredos (JWT_SECRET, etc). `chmod 600` é aplicado
-> automaticamente. Se replicar para nuvem via `rclone`, garanta que o
-> bucket/remote seja privado. Para excluir os .env do backup (DR parcial
-> apenas), exporte `INCLUDE_ENV_FILES=0` antes de rodar.
+> ⚠️ O archive contém segredos (JWT_SECRET, CREDENTIAL_ENCRYPTION_KEY) e o
+> `auth_info` (controle das sessões WhatsApp de todos os clientes). `chmod 600`
+> é aplicado automaticamente, mas isso só protege permissões locais. **Em
+> produção, cifre o backup** (seção abaixo) antes de qualquer upload. Para
+> excluir os .env do backup (DR parcial apenas), exporte `INCLUDE_ENV_FILES=0`.
+
+## Criptografia em repouso (obrigatória em produção)
+
+O backup é cifrado com [age](https://github.com/FiloSottile/age) quando
+`BACKUP_AGE_RECIPIENT` (chave pública `age1...`) está configurada. O arquivo
+vira `wabot-prod-*.tar.gz.age` e o plaintext é removido. **A chave privada
+NÃO deve morar no VPS** — guarde-a em um gerenciador de senhas/cofre e em um
+segundo local offline. Sem ela o backup é irrecuperável; com ela em mãos
+errada, o backup entrega o sistema inteiro.
+
+```bash
+# 1) Gerar o par de chaves FORA do VPS (na sua máquina)
+age-keygen -o wabot-backup-key.txt
+# anote a "public key: age1..." e guarde wabot-backup-key.txt em local seguro
+
+# 2) No VPS: instalar age e configurar só a chave PÚBLICA no cron
+sudo apt-get install -y age
+```
+
+Variáveis no cron de produção (recomendado):
+
+```
+BACKUP_AGE_RECIPIENT=age1...          # chave pública
+BACKUP_REQUIRE_ENCRYPTION=1           # backup sem cifra = falha (não silencioso)
+BACKUP_RCLONE_REMOTE=b2-wabot:wabot-backups
+BACKUP_REQUIRE_CLOUD=1                # backup sem cópia externa = falha
+```
+
+- `verify_backup.sh` valida idade/header de backups `.age` sem a chave; a
+  verificação completa do conteúdo roda no **restore drill** (host separado,
+  com `AGE_IDENTITY_FILE` apontando para a chave privada).
+- `restore_from_backup.sh <arquivo.tar.gz.age> --confirm` exige
+  `AGE_IDENTITY_FILE`.
+- Cada execução bem-sucedida grava `last_success.txt` no `BACKUP_DIR` —
+  monitore o mtime desse arquivo (alerta se >26h).
 
 ## Instalação no VPS de produção
 
