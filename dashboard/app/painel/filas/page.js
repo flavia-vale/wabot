@@ -135,7 +135,18 @@ export default function FilasPage() {
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}><span className="pnl-tag">{queue.pendingCount} pendente(s)</span><span className="pnl-tag">{queue.sentTodayCount} enviada(s) hoje</span></div>
       <p className="pnl-hint" style={{ marginTop: 10 }}>Destinos: {destinationsLabel(queue)}</p>
-      <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}><button className="pnl-btn" onClick={() => openEdit(queue)}>Editar</button><button className="pnl-btn" onClick={() => toggleItems(queue.id)}>{items[queue.id] ? 'Ocultar itens' : 'Ver itens'}</button><button className="pnl-btn" onClick={() => remove(queue)}>Excluir</button></div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+        <Link
+          className="pnl-btn is-primary"
+          href={{ pathname: '/painel/criar-oferta', query: { fila: queue.id } }}
+          aria-label={`Adicionar itens à fila ${queue.name}`}
+        >
+          Adicionar itens
+        </Link>
+        <button className="pnl-btn" onClick={() => openEdit(queue)}>Editar</button>
+        <button className="pnl-btn" onClick={() => toggleItems(queue.id)}>{items[queue.id] ? 'Ocultar itens' : 'Ver itens'}</button>
+        <button className="pnl-btn" onClick={() => remove(queue)}>Excluir</button>
+      </div>
       {items[queue.id] && <div className="pnl-grid" style={{ marginTop: 14 }}>{!items[queue.id].length ? <p className="pnl-hint">Fila vazia.</p> : items[queue.id].map((item) => <div key={item.id} style={{ borderTop: '1px solid var(--line)', paddingTop: 12, display: 'flex', justifyContent: 'space-between', gap: 12 }}><div style={{ minWidth: 0 }}><p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 72, overflow: 'hidden' }}>{item.text}</p><span className="pnl-hint">{item.status} · posição {item.position} · {new Date(item.createdAt).toLocaleString('pt-BR')}</span></div>{item.status === 'pending' && <button className="pnl-btn" onClick={() => cancelItem(queue.id, item.id)}>Remover</button>}</div>)}</div>}
     </section>)}
   </div>

@@ -91,10 +91,15 @@ export default function CriarOfertaPage() {
   useEffect(() => {
     Promise.all([api.groups(), api.offerQueues()]).then(([allGroups, allQueues]) => {
       const destinations = allGroups.filter((group) => group.role === 'post')
+      const requestedQueueId = new URLSearchParams(window.location.search).get('fila')
+      const initialQueueId = allQueues.some((queue) => queue.id === requestedQueueId)
+        ? requestedQueueId
+        : allQueues[0]?.id || ''
       setGroups(destinations)
       setSelectedJids(destinations.map((group) => group.waJid))
       setQueues(allQueues)
-      setQueueId(allQueues[0]?.id || '')
+      setQueueId(initialQueueId)
+      if (requestedQueueId === initialQueueId) setSendMode('queue')
     }).catch((err) => setError(err.message))
   }, [])
 
