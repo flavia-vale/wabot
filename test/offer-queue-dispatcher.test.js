@@ -14,7 +14,14 @@ function setup(overrides = {}) {
       findFirst: async () => item,
       updateMany: async (args) => { calls.updates.push(args); return { count: 1 } },
     },
-    offerQueue: { updateMany: (args) => ({ model: 'queue', args }) },
+    offerQueue: {
+      findFirst: async ({ where, select }) => {
+        if (where.enabled === true && queue.enabled !== true) return null
+        const found = { ...queue }
+        return select ? Object.fromEntries(Object.keys(select).map((key) => [key, found[key]])) : found
+      },
+      updateMany: (args) => ({ model: 'queue', args }),
+    },
     $transaction: async (ops) => { calls.transaction = ops },
   }
   const deps = { db, now: () => now, isRunning: () => true, sendBroadcast: async (...args) => { calls.sent.push(args) } }
@@ -29,6 +36,38 @@ test('drainQueueOnce envia um item FIFO com receita de imagem e marca sucesso', 
   assert.deepEqual(calls.sent[0][2], ['grupo@g.us'])
   assert.equal(calls.sent[0][3].imageUrl, 'https://img.test/item.jpg')
   assert.equal(calls.transaction.length, 2)
+})
+
+test('drainQueueOnce não envia filas pausadas e devolve o item se a pausa ocorrer após o claim', async () => {
+  const paused = setup({ enabled: false })
+  assert.deepEqual(await drainQueueOnce(paused.queue, paused.deps), { skipped: 'queue_disabled' })
+  assert.equal(paused.calls.sent.length, 0)
+  assert.equal(paused.calls.updates.length, 0)
+
+  const pausedAfterClaim = setup()
+  let checks = 0
+  pausedAfterClaim.deps.db.offerQueue.findFirst = async () => (++checks === 1 ? pausedAfterClaim.queue : null)
+  assert.deepEqual(await drainQueueOnce(pausedAfterClaim.queue, pausedAfterClaim.deps), { skipped: 'queue_disabled' })
+  assert.equal(pausedAfterClaim.calls.sent.length, 0)
+  assert.equal(pausedAfterClaim.calls.updates.at(-1).data.status, 'pending')
+})
+
+test('drainQueueOnce serializa execuções concorrentes da mesma fila', async () => {
+  const first = setup()
+  let releaseSend
+  const sendStarted = new Promise((resolve) => {
+    first.deps.sendBroadcast = async () => {
+      resolve()
+      await new Promise((release) => { releaseSend = release })
+    }
+  })
+
+  const running = drainQueueOnce(first.queue, first.deps)
+  await sendStarted
+  assert.deepEqual(await drainQueueOnce(first.queue, first.deps), { skipped: 'queue_busy' })
+  releaseSend()
+  assert.deepEqual(await running, { sent: 'i1' })
+  assert.equal(first.calls.updates.filter((call) => call.data.status === 'queued').length, 1)
 })
 
 test('drainQueueOnce respeita bot offline e intervalo sem fazer claim', async () => {

@@ -21,6 +21,8 @@ export default function FilasPage() {
   const [showForm, setShowForm] = useState(false)
   const [items, setItems] = useState({})
   const [message, setMessage] = useState('')
+  const [notice, setNotice] = useState('')
+  const [toggling, setToggling] = useState(null)
   const [loading, setLoading] = useState(true)
 
   async function load() {
@@ -36,8 +38,8 @@ export default function FilasPage() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); loadGroups() }, [])
 
-  function openCreate() { setEditing(null); setForm(EMPTY); setShowForm(true); setMessage('') }
-  function openEdit(queue) { setEditing(queue.id); setForm({ ...EMPTY, ...queue }); setShowForm(true); setMessage('') }
+  function openCreate() { setEditing(null); setForm(EMPTY); setShowForm(true); setMessage(''); setNotice('') }
+  function openEdit(queue) { setEditing(queue.id); setForm({ ...EMPTY, ...queue }); setShowForm(true); setMessage(''); setNotice('') }
   async function save(event) {
     event.preventDefault(); setMessage('')
     if (!form.targetJids.length) { setMessage('Selecione pelo menos um grupo de destino para a fila.'); return }
@@ -50,6 +52,28 @@ export default function FilasPage() {
   async function remove(queue) {
     if (!window.confirm(`Excluir a fila “${queue.name}” e todos os seus itens?`)) return
     try { await api.offerQueueDelete(queue.id); await load() } catch (error) { setMessage(error.message) }
+  }
+  async function toggleQueue(queue) {
+    const enabled = !queue.enabled
+    setToggling(queue.id)
+    setMessage('')
+    setNotice('')
+    try {
+      const updated = await api.offerQueueUpdate(queue.id, { enabled })
+      setQueues((current) => current.map((candidate) => candidate.id === queue.id ? { ...candidate, ...updated } : candidate))
+      if (!enabled) setNotice(`Fila “${queue.name}” pausada. Nenhuma nova oferta será enviada até a reativação.`)
+      else if (updated.activation?.sent) setNotice(`Fila “${queue.name}” ativada e a primeira oferta já foi enviada.`)
+      else if (updated.activation?.skipped === 'empty') setNotice(`Fila “${queue.name}” ativada. Ela está vazia no momento.`)
+      else if (updated.activation?.skipped === 'bot_offline') setNotice(`Fila “${queue.name}” ativada. A primeira oferta será enviada assim que o WhatsApp estiver conectado.`)
+      else if (updated.activation?.skipped) setNotice(`Fila “${queue.name}” ativada. O envio seguirá assim que os limites configurados permitirem.`)
+      else if (updated.activation?.failed) setNotice(`Fila “${queue.name}” ativada. A primeira oferta será tentada novamente automaticamente.`)
+      else setNotice(`Fila “${queue.name}” ativada.`)
+      await load()
+    } catch (error) {
+      setMessage(error.message)
+    } finally {
+      setToggling(null)
+    }
   }
   async function toggleItems(queueId) {
     if (items[queueId]) { setItems((current) => ({ ...current, [queueId]: null })); return }
@@ -75,6 +99,7 @@ export default function FilasPage() {
   return <div className="pnl-grid" style={{ maxWidth: 980, margin: '0 auto' }}>
     <PainelTopbarAction><button type="button" className="pnl-btn is-primary" onClick={openCreate}>+ Nova fila</button></PainelTopbarAction>
     {message && <div className="pnl-note-box is-error" role="alert">{message}</div>}
+    {notice && <div className="pnl-note-box" role="status">{notice}</div>}
     {showForm && <form className="pnl-card" onSubmit={save}>
       <div className="pnl-card-title">{editing ? 'Editar fila' : 'Nova fila'}</div>
       <div className="pnl-field" style={{ marginTop: 14 }}><label className="pnl-label" htmlFor="queue-name">Nome</label><input id="queue-name" className="pnl-input" value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))} required maxLength={100} /></div>
@@ -90,8 +115,24 @@ export default function FilasPage() {
       <div className="pnl-grid" style={{ marginTop: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>{LIMITS.map(([toggle, value, label, unit]) => <div className="pnl-card" key={toggle} style={{ boxShadow: 'none' }}><label className="pnl-check"><input type="checkbox" checked={form[toggle]} onChange={(e) => setForm((current) => ({ ...current, [toggle]: e.target.checked }))} />{label}</label>{form[toggle] && <div className="pnl-field" style={{ marginTop: 12 }}><label className="pnl-label" htmlFor={value}>Valor ({unit})</label><input id={value} className="pnl-input" type="number" min="1" step="1" value={form[value]} onChange={(e) => setForm((current) => ({ ...current, [value]: Number(e.target.value) }))} required /></div>}</div>)}</div>
       <div style={{ display: 'flex', gap: 8, marginTop: 16 }}><button className="pnl-btn is-primary" type="submit">Salvar fila</button><button className="pnl-btn" type="button" onClick={() => setShowForm(false)}>Cancelar</button></div>
     </form>}
-    {loading ? <div className="pnl-card">Carregando filas…</div> : !queues.length ? <div className="pnl-card"><div className="pnl-card-title">Nenhuma fila criada</div><p className="pnl-hint" style={{ marginTop: 6 }}>Crie uma fila para distribuir ofertas automaticamente ao longo do dia.</p><button className="pnl-btn is-primary" style={{ marginTop: 14 }} onClick={openCreate}>Criar primeira fila</button></div> : queues.map((queue) => <section className="pnl-card" key={queue.id}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}><div><div className="pnl-card-title">{queue.name}</div><p className="pnl-hint" style={{ marginTop: 4 }}>{summary(queue)}</p></div><span className={`pnl-tag ${queue.enabled ? 'is-success' : ''}`}>{queue.enabled ? 'Ativa' : 'Pausada'}</span></div>
+    {loading ? <div className="pnl-card">Carregando filas…</div> : !queues.length ? <div className="pnl-card"><div className="pnl-card-title">Nenhuma fila criada</div><p className="pnl-hint" style={{ marginTop: 6 }}>Crie uma fila para distribuir ofertas automaticamente ao longo do dia.</p><button className="pnl-btn is-primary" style={{ marginTop: 14 }} onClick={openCreate}>Criar primeira fila</button></div> : queues.map((queue) => <section className="pnl-card" key={queue.id} style={{ opacity: queue.enabled ? 1 : 0.76 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, minWidth: 0 }}>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={queue.enabled}
+            aria-label={`${queue.enabled ? 'Desativar' : 'Ativar'} fila ${queue.name}`}
+            className={`pnl-switch${queue.enabled ? ' is-on' : ''}`}
+            onClick={() => toggleQueue(queue)}
+            disabled={toggling === queue.id}
+            title={queue.enabled ? 'Pausar fila' : 'Ativar fila e enviar a primeira oferta agora'}
+            style={{ marginTop: 1, opacity: toggling === queue.id ? 0.55 : 1 }}
+          ><span /></button>
+          <div style={{ minWidth: 0 }}><div className="pnl-card-title">{queue.name}</div><p className="pnl-hint" style={{ marginTop: 4 }}>{queue.enabled ? summary(queue) : 'Envios pausados — os itens permanecem na fila'}</p></div>
+        </div>
+        <span className={`pnl-tag ${queue.enabled ? 'is-success' : 'is-skip'}`}>{toggling === queue.id ? 'Atualizando…' : queue.enabled ? 'Ativa' : 'Pausada'}</span>
+      </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}><span className="pnl-tag">{queue.pendingCount} pendente(s)</span><span className="pnl-tag">{queue.sentTodayCount} enviada(s) hoje</span></div>
       <p className="pnl-hint" style={{ marginTop: 10 }}>Destinos: {destinationsLabel(queue)}</p>
       <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}><button className="pnl-btn" onClick={() => openEdit(queue)}>Editar</button><button className="pnl-btn" onClick={() => toggleItems(queue.id)}>{items[queue.id] ? 'Ocultar itens' : 'Ver itens'}</button><button className="pnl-btn" onClick={() => remove(queue)}>Excluir</button></div>

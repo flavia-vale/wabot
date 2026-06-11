@@ -32,10 +32,10 @@ function fakeDb() {
   }
 }
 
-async function appFor(userId, db) {
+async function appFor(userId, db, options = {}) {
   const app = Fastify({ logger: false })
   app.decorate('authenticate', async (req) => { req.user = { sub: userId } })
-  await app.register(offerQueueRoutes, { prefix: '/api/offer-queues', db, now: () => new Date('2026-06-10T15:00:00Z') })
+  await app.register(offerQueueRoutes, { prefix: '/api/offer-queues', db, now: () => new Date('2026-06-10T15:00:00Z'), drainQueueOnce: options.drainQueueOnce })
   return app
 }
 
@@ -98,4 +98,31 @@ test('item sem jids herda os grupos configurados na fila', async (t) => {
 
   const explicit = await app.inject({ method: 'POST', url: `/api/offer-queues/${queue.id}/items`, payload: { text: 'Oferta avulsa', jids: ['333@g.us'] } })
   assert.deepEqual(JSON.parse(explicit.json().targetJids), ['333@g.us'])
+})
+
+test('reativar fila limpa o intervalo anterior e tenta enviar a primeira oferta imediatamente', async (t) => {
+  const db = fakeDb()
+  const drains = []
+  const app = await appFor('user-a', db, {
+    drainQueueOnce: async (queue) => {
+      drains.push(queue)
+      return { sent: 'i1' }
+    },
+  })
+  t.after(async () => { await app.close() })
+
+  const queue = (await app.inject({ method: 'POST', url: '/api/offer-queues', payload: { name: 'Retomada', enabled: false, intervalEnabled: true, intervalMinutes: 60 } })).json()
+  db.queues[0].lastSentAt = new Date('2026-06-10T14:55:00Z')
+
+  const paused = await app.inject({ method: 'PUT', url: `/api/offer-queues/${queue.id}`, payload: { enabled: false } })
+  assert.equal(paused.statusCode, 200)
+  assert.equal(drains.length, 0)
+
+  const resumed = await app.inject({ method: 'PUT', url: `/api/offer-queues/${queue.id}`, payload: { enabled: true } })
+  assert.equal(resumed.statusCode, 200)
+  assert.equal(resumed.json().enabled, true)
+  assert.equal(resumed.json().lastSentAt, null)
+  assert.deepEqual(resumed.json().activation, { sent: 'i1' })
+  assert.equal(drains.length, 1)
+  assert.equal(drains[0].lastSentAt, null)
 })
