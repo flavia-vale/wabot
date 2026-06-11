@@ -4,7 +4,7 @@ import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { resolvePlanForPayment, DEFAULT_PLANS } from '../../domain/payments/service.js'
 import { appContainer } from '../../app/container.js'
 import { writeWebhookEvent } from '../../events/store.js'
-import { tryCreateAffiliateCommission } from '../../domain/affiliate/service.js'
+import { tryCreateAffiliateCommission, reconcileAffiliateCommissions } from '../../domain/affiliate/service.js'
 export { resolvePlanForPayment }
 
 const MP_WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET
@@ -468,6 +468,17 @@ function startWebhookProcessor(app) {
         if (result.checked > 0) app.log.info({ result }, 'payment_reconciliation_cycle_completed')
       } catch (err) {
         app.log.error({ err: err?.message }, 'payment_reconciliation_cycle_failed')
+      }
+      // Rede de segurança das comissões de afiliado: a criação no webhook é
+      // fire-and-forget e pode falhar (SQLITE_BUSY, restart) sem retry; este
+      // passo recria comissões faltantes de pagamentos já aprovados.
+      try {
+        const result = await reconcileAffiliateCommissions({ log: app.log })
+        if (result.created > 0 || result.failed > 0) {
+          app.log.info({ result }, 'affiliate_commission_reconciliation_cycle_completed')
+        }
+      } catch (err) {
+        app.log.error({ err: err?.message }, 'affiliate_commission_reconciliation_cycle_failed')
       }
     }, PAYMENT_RECONCILIATION_INTERVAL_MS)
     reconciliationTimer.unref?.()

@@ -1,5 +1,5 @@
 import { applyAffiliate, getAffiliateMeData, getAffiliateSettings, tryCreateAffiliateCommission } from '../../domain/affiliate/service.js'
-import { resolveAdminAccess } from './admin.js'
+import { resolveAdminAccess, writeAdminAuditLog } from './admin.js'
 import db from '../../db.js'
 
 async function loadAdminUser(userId) {
@@ -213,6 +213,14 @@ export async function affiliateRoutes(app) {
       where: { id },
       data: { status: 'paid', paidAt: new Date(), paidByUserId: req.user.sub },
     })
+    await writeAdminAuditLog(req, {
+      action: 'admin.affiliate.commission.mark_paid',
+      resource: 'affiliateCommission',
+      resourceId: id,
+      targetUserId: commission.referredUserId,
+      before: { status: commission.status, commissionAmountCents: commission.commissionAmountCents, cycleMonth: commission.cycleMonth },
+      after: { status: 'paid', paidByUserId: req.user.sub },
+    })
     return { commission: updated }
   })
 
@@ -226,6 +234,12 @@ export async function affiliateRoutes(app) {
     const result = await db.affiliateCommission.updateMany({
       where: { cycleMonth: month, status: 'pending' },
       data: { status: 'paid', paidAt: new Date(), paidByUserId: req.user.sub },
+    })
+    await writeAdminAuditLog(req, {
+      action: 'admin.affiliate.cycle.mark_all_paid',
+      resource: 'affiliateCommission',
+      resourceId: month,
+      after: { updated: result.count, paidByUserId: req.user.sub },
     })
     return { updated: result.count, month }
   })
