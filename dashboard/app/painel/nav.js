@@ -83,7 +83,7 @@ export const NAV_GROUPS = [
         icon: i(<><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" /><circle cx="2" cy="6" r=".5" /><circle cx="2" cy="12" r=".5" /><circle cx="2" cy="18" r=".5" /></>),
       },
       {
-        label: 'Templates, ganchos e CTA',
+        label: 'Templates de mensagens',
         href: '/painel/mensagens',
         icon: i(<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />),
       },

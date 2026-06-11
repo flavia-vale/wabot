@@ -7,8 +7,8 @@ const MAX_PER_GROUP = 20
 
 const GROUPS = [
   { key: 'greetings', label: 'Ganchos (vão antes da mensagem)', placeholder: 'Ex: 🚨 COOOOOORRE QUE TÁ ACABANDO!', emptyLabel: '(vazio — sem prefixo)' },
-  { key: 'ctas',      label: 'Chamadas pra ação',                  placeholder: 'Ex: Pega já:',  emptyLabel: '(vazio — sem CTA)' },
-  { key: 'trailers',  label: 'Fechamentos (vão depois da mensagem)', placeholder: 'Ex:  👀', emptyLabel: '(vazio — sem sufixo)' },
+  { key: 'ctas',      label: 'CTAs',                                  placeholder: 'Ex: ⚠️ Preços e estoque podem mudar.', emptyLabel: '(vazio — sem CTA)' },
+  { key: 'trailers',  label: 'Convites do grupo (vão depois da mensagem)', placeholder: 'Ex: 📲 Entre no nosso grupo oficial:', emptyLabel: '(vazio — sem convite)' },
 ]
 
 const PRESETS = [
@@ -24,8 +24,8 @@ const PRESETS = [
     description: '3 variações por grupo — bom equilíbrio entre naturalidade e previsibilidade.',
     values: {
       greetings: ['', '🔥 ', '💥 '],
-      ctas: ['Confira:', 'Pega já:', 'Olha essa:'],
-      trailers: ['', ' 👀', ' 💸'],
+      ctas: ['', '⚠️ Preços e estoque podem mudar.', '⏳ Oferta por tempo limitado.'],
+      trailers: ['', '📲 Entre no nosso grupo oficial:', '👥 Vem pro grupo economizar com a gente:'],
     },
   },
   {
@@ -34,8 +34,8 @@ const PRESETS = [
     description: '5 variações por grupo — máxima naturalidade, mais trabalho pra revisar.',
     values: {
       greetings: ['', '🔥 ', '💥 ', '⚡ ', '🚨 '],
-      ctas: ['Confira:', 'Pega já:', 'Olha essa:', 'Não perde:', 'Aproveita:'],
-      trailers: ['', ' 👀', ' 💸', ' 🎯', ' 🛒'],
+      ctas: ['', '⚠️ Preços e estoque podem mudar.', '⏳ Oferta por tempo limitado.', '📝 Produto sujeito a esgotar.', '💥 Aproveite enquanto durar o estoque.'],
+      trailers: ['', '📲 Entre no nosso grupo oficial:', '👥 Vem pro grupo economizar com a gente:', '🚀 Receba os melhores achadinhos no grupo:', '🔔 Entre no grupo para ver as promoções primeiro:'],
     },
   },
 ]

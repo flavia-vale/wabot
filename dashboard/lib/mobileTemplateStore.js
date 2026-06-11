@@ -1,5 +1,6 @@
 import { TEMPLATE_OPTIONS } from './mobileOfferComposer.js'
 import { api } from './api.js'
+import { canonicalizeTemplateBody, canonicalizeTemplateStore } from '../../src/core/templateVariables.js'
 
 // Cache local (offline-first). A fonte de verdade agora é o backend
 // (BotConfig.mobileTemplatesJson); o localStorage só acelera o primeiro
@@ -35,8 +36,9 @@ export const PRESET_TEMPLATE_BODIES = {
 const EMPTY_STORE = { overrides: {}, custom: [] }
 
 function normalizeStore(raw) {
-  const overrides = raw && typeof raw.overrides === 'object' && raw.overrides ? raw.overrides : {}
-  const custom = Array.isArray(raw?.custom) ? raw.custom.filter((t) => t && t.key) : []
+  const canonical = canonicalizeTemplateStore(raw)
+  const overrides = canonical && typeof canonical.overrides === 'object' && canonical.overrides ? canonical.overrides : {}
+  const custom = Array.isArray(canonical?.custom) ? canonical.custom.filter((t) => t && t.key) : []
   return { overrides: { ...overrides }, custom: custom.map((t) => ({ key: t.key, name: t.name, body: t.body })) }
 }
 
@@ -123,7 +125,7 @@ export async function persistTemplateStore(store) {
 // Mutadores puros — recebem o store atual e devolvem o próximo.
 export function withPresetBody(store, key, body) {
   const s = normalizeStore(store)
-  return { ...s, overrides: { ...s.overrides, [key]: body } }
+  return { ...s, overrides: { ...s.overrides, [key]: canonicalizeTemplateBody(body) } }
 }
 
 export function withoutPresetBody(store, key) {
@@ -136,12 +138,12 @@ export function withoutPresetBody(store, key) {
 export function withNewCustomTemplate(store, { name, body }) {
   const s = normalizeStore(store)
   const key = `tpl_${Date.now()}`
-  return { store: { ...s, custom: [...s.custom, { key, name, body }] }, key }
+  return { store: { ...s, custom: [...s.custom, { key, name, body: canonicalizeTemplateBody(body) }] }, key }
 }
 
 export function withUpdatedCustomTemplate(store, key, { name, body }) {
   const s = normalizeStore(store)
-  return { ...s, custom: s.custom.map((t) => (t.key === key ? { ...t, name, body } : t)) }
+  return { ...s, custom: s.custom.map((t) => (t.key === key ? { ...t, name, body: canonicalizeTemplateBody(body) } : t)) }
 }
 
 export function withoutCustomTemplate(store, key) {

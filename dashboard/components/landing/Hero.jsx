@@ -77,7 +77,6 @@ function Nav() {
 
 export function Hero({ tone, primaryCtaLabel = 'Conectar meu WhatsApp', eyebrowLabel = 'Experimente grátis!', headlineOverride, subOverride, heroStyle }) {
   const heroPrimaryHref = buildRegisterHref({ source: 'landing', campaign: 'home-hero', content: 'hero-primary' })
-  const heroChecklistHref = buildRegisterHref({ source: 'landing', campaign: 'home-hero', content: 'hero-checklist' })
   const headline = headlineOverride ?? (tone === 'direto'
     ? <><span>Ofertas conferidas,</span><br /><span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>rotina organizada.</span></>
     : tone === 'animado'
@@ -111,7 +110,6 @@ export function Hero({ tone, primaryCtaLabel = 'Conectar meu WhatsApp', eyebrowL
               {primaryCtaLabel} <Icon name="arrow" size={16} />
             </Link>
             <a className="btn btn-ghost" href="#como" data-seo-cta="hero-secondary-como">Ver como funciona</a>
-            <Link className="btn btn-ghost" href={heroChecklistHref} data-seo-cta="hero-secondary-checklist">Receber checklist</Link>
           </div>
           <div style={s.trust} className="landing-trust">
             <div style={s.trustItem} className="landing-trust-item"><Icon name="check" size={16} /> Sem cartão para testar</div>

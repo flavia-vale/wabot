@@ -14,18 +14,6 @@ export const DEFAULT_COPY_VARIATION_POOL = {
     '🤑 SÓ QUEM FOR RÁPIDO VAI PEGAR!',
   ],
   ctas: [
-    '📲 Entre no nosso grupo oficial:',
-    '👥 Vem pro grupo economizar com a gente:',
-    '👇 Clique aqui e faça parte do nosso grupo VIP:',
-    '🤫 Acesse nosso grupo secreto de ofertas:',
-    '🚀 Receba os melhores achadinhos direto no grupo:',
-    '🔔 Quer ver as promoções primeiro? Entre no grupo:',
-    '💥 Não perca nenhum bug! Faça parte do grupo:',
-    '🛒 Garanta os melhores descontos entrando no grupo:',
-    '🤝 Junte-se à nossa comunidade de achadinhos:',
-    '👀 Para não perder nadinha, vem pro grupo:',
-  ],
-  trailers: [
     '⚠️ Atenção: Preços e estoque podem mudar a qualquer momento!',
     '🚨 O valor promocional e a disponibilidade dependem do estoque da loja.',
     '⏳ Corra! Oferta por tempo limitado ou até durarem os estoques.',
@@ -36,6 +24,18 @@ export const DEFAULT_COPY_VARIATION_POOL = {
     '📉 Desconto válido por tempo limitado, sujeito a alteração e fim de estoque.',
     'ℹ️ Os preços e a disponibilidade do produto são de responsabilidade total da loja.',
     '💥 Aproveite rápido: Estoques limitados e valores sujeitos a alteração.',
+  ],
+  trailers: [
+    '📲 Entre no nosso grupo oficial:',
+    '👥 Vem pro grupo economizar com a gente:',
+    '👇 Clique aqui e faça parte do nosso grupo VIP:',
+    '🤫 Acesse nosso grupo secreto de ofertas:',
+    '🚀 Receba os melhores achadinhos direto no grupo:',
+    '🔔 Quer ver as promoções primeiro? Entre no grupo:',
+    '💥 Não perca nenhum bug! Faça parte do grupo:',
+    '🛒 Garanta os melhores descontos entrando no grupo:',
+    '🤝 Junte-se à nossa comunidade de achadinhos:',
+    '👀 Para não perder nadinha, vem pro grupo:',
   ],
 }
 
@@ -85,7 +85,7 @@ export function pickVariant(bucket, groupId, date, random = false) {
   return bucket[idx]
 }
 
-const PLACEHOLDER_RE = /\{\{(gancho|greeting|cta|convitegrupo|trailer)\}\}/g
+const PLACEHOLDER_RE = /\{\{(gancho|cta|convitegrupo)\}\}/g
 const LINK_RE_GRUPO = /\{\{grupoLink\}\}/g
 const LINK_RE_CUPOM = /\{\{cupomLink\}\}/g
 
@@ -113,9 +113,9 @@ export function applyVariation(text, opts = {}) {
   if (PLACEHOLDER_RE.test(result)) {
     PLACEHOLDER_RE.lastIndex = 0
     return result.replace(PLACEHOLDER_RE, (_, key) => {
-      if (key === 'gancho' || key === 'greeting') return greeting
+      if (key === 'gancho') return greeting
       if (key === 'cta') return cta
-      if (key === 'convitegrupo' || key === 'trailer') return trailer
+      if (key === 'convitegrupo') return trailer
       return ''
     })
   }

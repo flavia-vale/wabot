@@ -3,6 +3,7 @@ import { reloadConfig } from '../../manager.js'
 import { DEFAULT_BRANDING_CTA_TEXT, MAX_BRANDING_CTA_CHARS, normalizeBrandingCtaText, normalizeBrandingLink } from '../../messageProcessor.js'
 import { buildFeatureGateError, canUseAdvancedPreservation, FEATURE_CODES } from '../../billing/plans.js'
 import { DEFAULT_COPY_VARIATION_POOL_JSON, resolveCopyVariationPoolJson } from '../../core/copyVariation.js'
+import { canonicalizeTemplateStoreJson } from '../../core/templateVariables.js'
 export { DEFAULT_COPY_VARIATION_POOL_JSON } from '../../core/copyVariation.js'
 
 const DEFAULTS = {
@@ -46,7 +47,7 @@ export async function configRoutes(app, opts = {}) {
     return {
       ...cfg,
       copyVariationPoolJson: resolveCopyVariationPoolJson(cfg.copyVariationPoolJson),
-      mobileTemplatesJson: cfg.mobileTemplatesJson ?? '{}',
+      mobileTemplatesJson: canonicalizeTemplateStoreJson(cfg.mobileTemplatesJson ?? '{}'),
       mobileCouponLinksJson: cfg.mobileCouponLinksJson ?? '{}',
     }
   })
@@ -131,7 +132,7 @@ export async function configRoutes(app, opts = {}) {
         copyVariationPoolJson: copyVariationPoolJson === undefined
           ? DEFAULTS.copyVariationPoolJson
           : resolveCopyVariationPoolJson(copyVariationPoolJson),
-        ...(mobileTemplatesJson !== undefined && { mobileTemplatesJson }),
+        ...(mobileTemplatesJson !== undefined && { mobileTemplatesJson: canonicalizeTemplateStoreJson(mobileTemplatesJson) }),
         ...(mobileCouponLinksJson !== undefined && { mobileCouponLinksJson }),
       },
       update: {
@@ -146,7 +147,7 @@ export async function configRoutes(app, opts = {}) {
         ...(brandingCtaText !== undefined && { brandingCtaText: normalizedBrandingCtaText }),
         ...(couponLink !== undefined && { couponLink: normalizedCouponLink }),
         ...(copyVariationPoolJson !== undefined && { copyVariationPoolJson: resolveCopyVariationPoolJson(copyVariationPoolJson) }),
-        ...(mobileTemplatesJson !== undefined && { mobileTemplatesJson }),
+        ...(mobileTemplatesJson !== undefined && { mobileTemplatesJson: canonicalizeTemplateStoreJson(mobileTemplatesJson) }),
         ...(mobileCouponLinksJson !== undefined && { mobileCouponLinksJson }),
       },
     })
