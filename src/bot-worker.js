@@ -36,6 +36,7 @@ import {
 } from './core/channelHealth.js'
 import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
+import { PRESERVATION_FEATURE, isPreservationFeatureEnabled, shouldRunChannelScheduler } from './core/preservationFeatures.js'
 import { mutate as mutateChannelImage } from './core/imageMutation.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
@@ -905,7 +906,7 @@ async function processSendJob(job) {
           const cfgFull = await getConfig().catch(() => null)
           const cfg = cfgFull?.botConfig ?? {}
           let gate = await throttleCheckAndReserve(channelGroupId, cfg, {
-            preservationActive: cfgFull?.preservationActive ?? false,
+            preservationActive: shouldRunChannelScheduler(cfgFull?.preservationActive, cfg),
           })
           let throttleCycles = 0
           while (!gate.allow && !shuttingDown) {
@@ -914,7 +915,7 @@ async function processSendJob(job) {
             logger.info({ destJid: job.destJid, reason: gate.reason, waitMs, throttleCycles }, 'Velocity scheduler: aguardando janela de throttle do canal')
             await sleep(waitMs)
             gate = await throttleCheckAndReserve(channelGroupId, cfg, {
-              preservationActive: cfgFull?.preservationActive ?? false,
+              preservationActive: shouldRunChannelScheduler(cfgFull?.preservationActive, cfg),
             })
           }
           if (shuttingDown) throw new Error('Worker encerrando durante espera de throttle do canal')
@@ -1781,13 +1782,13 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // de "mesma mensagem em N", então mantém texto original.
         const isChannelDest = isChannelDestination(destJid)
         const variantText = isChannelDest
-          ? (cfg.preservationActive
+          ? (isPreservationFeatureEnabled(cfg.preservationActive, cfg.botConfig, PRESERVATION_FEATURE.COPY_VARIATION)
               ? applyVariation(finalText, { groupId: destJid, poolJson: resolveCopyVariationPoolJson(cfg.botConfig.copyVariationPoolJson) })
               : finalText)
           : finalText
 
         // Stagger: 1º destino sai sem atraso adicional; demais recebem jitter.
-        const staggerMs = (destIndex > 0 && isChannelDest && cfg.preservationActive && staggerJitterMs > 0)
+        const staggerMs = (destIndex > 0 && isChannelDest && isPreservationFeatureEnabled(cfg.preservationActive, cfg.botConfig, PRESERVATION_FEATURE.CHANNEL_THROTTLE) && staggerJitterMs > 0)
           ? Math.floor(Math.random() * staggerJitterMs)
           : 0
 
@@ -1819,7 +1820,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             if (imageMode === 'original' && !image) {
               useLinkPreview = true
             }
-            if (image && isChannelDest && cfg.preservationActive && cfg.botConfig.imageMutationEnabled) {
+            if (image && isChannelDest && isPreservationFeatureEnabled(cfg.preservationActive, cfg.botConfig, PRESERVATION_FEATURE.IMAGE_MUTATION)) {
               const mutated = await mutateChannelImage(image.buffer, image.mimetype, {
                 groupId: destJid,
                 enabled: true,
