@@ -24,13 +24,14 @@ function buildOfferApp(dbMock) {
   return app
 }
 
-// configRoutes não aceita injeção de db — testa lógica de validação estática
-// (PUT validation) usando um app real com decorate de authenticate.
-// Testes de GET que precisam de DB são feitos via análise estática da implementação.
-function buildConfigApp() {
+function buildConfigApp(dbMock) {
   const app = Fastify({ logger: false })
   app.decorate('authenticate', async (req) => { req.user = { sub: 'user-1' } })
-  app.register(configRoutes, { prefix: '/api/config' })
+  const db = dbMock ?? {
+    botConfig: { findUnique: async () => null },
+    user: { findUnique: async () => ({ plan: 'basic', accessExpiresAt: null }) },
+  }
+  app.register(configRoutes, { prefix: '/api/config', db })
   return app
 }
 

@@ -5,31 +5,33 @@ import { test } from 'node:test'
 const navSource = readFileSync(new URL('../dashboard/app/painel/nav.js', import.meta.url), 'utf8')
 const shellSource = readFileSync(new URL('../dashboard/app/painel/PainelShell.js', import.meta.url), 'utf8')
 
-function operationBlock() {
-  const start = navSource.indexOf("title: 'Operação'")
-  const end = navSource.indexOf("title: 'Configuração'", start)
-  assert.notEqual(start, -1, 'grupo Operação deve existir')
-  assert.notEqual(end, -1, 'grupo Configuração deve vir após Operação')
+function groupBlock(title, nextTitle) {
+  const start = navSource.indexOf(`title: '${title}'`)
+  const end = navSource.indexOf(`title: '${nextTitle}'`, start)
+  assert.notEqual(start, -1, `grupo ${title} deve existir`)
+  assert.notEqual(end, -1, `grupo ${nextTitle} deve vir após ${title}`)
   return navSource.slice(start, end)
 }
 
-test('sidebar keeps Criar oferta inside Operação after Painel and before Espelhamento', () => {
-  const block = operationBlock()
-  const painel = block.indexOf("label: 'Painel'")
+test('sidebar keeps Criar oferta inside Criar & enviar before Espelhar grupos', () => {
+  const block = groupBlock('Criar & enviar', 'Acompanhar')
   const criarOferta = block.indexOf("label: 'Criar oferta'")
-  const espelhamento = block.indexOf("label: 'Espelhamento'")
+  const espelharGrupos = block.indexOf("label: 'Espelhar grupos'")
 
-  assert.notEqual(criarOferta, -1, 'Criar oferta deve ser um item do grupo Operação')
-  assert.ok(painel < criarOferta, 'Criar oferta deve vir depois de Painel')
-  assert.ok(criarOferta < espelhamento, 'Criar oferta deve vir antes de Espelhamento')
+  assert.notEqual(criarOferta, -1, 'Criar oferta deve ser um item do grupo Criar & enviar')
+  assert.notEqual(espelharGrupos, -1, 'Espelhar grupos deve ser um item do grupo Criar & enviar')
+  assert.ok(criarOferta < espelharGrupos, 'Criar oferta deve vir antes de Espelhar grupos')
 })
 
-test('sidebar marks Criar oferta with a GRÁTIS badge instead of top CTA highlight', () => {
-  const block = operationBlock()
-  const criarOfertaItem = block.slice(block.indexOf("label: 'Criar oferta'"), block.indexOf("label: 'Espelhamento'"))
+test('sidebar points Criar oferta to its route and gates pro features instead of top CTA highlight', () => {
+  const block = groupBlock('Criar & enviar', 'Acompanhar')
+  const criarOfertaItem = block.slice(block.indexOf("label: 'Criar oferta'"), block.indexOf("label: 'Espelhar grupos'"))
 
   assert.match(criarOfertaItem, /href:\s*'\/painel\/criar-oferta'/, 'Criar oferta deve apontar para a rota atual')
-  assert.match(criarOfertaItem, /free:\s*true/, 'Criar oferta deve declarar badge grátis')
-  assert.doesNotMatch(shellSource, /<Link href=\{TOP_CTA\.href\}/, 'Criar oferta não deve aparecer como CTA destacado no topo')
-  assert.match(shellSource, /item\.free\s*&&\s*<span className="pnl-free">GRÁTIS<\/span>/, 'shell deve renderizar badge GRÁTIS para item grátis')
+  assert.doesNotMatch(criarOfertaItem, /pro:\s*true/, 'Criar oferta deve permanecer acessível sem plano pro')
+
+  const espelharItem = block.slice(block.indexOf("label: 'Espelhar grupos'"), block.indexOf("label: 'Ofertas automáticas'"))
+  assert.match(espelharItem, /pro:\s*true/, 'Espelhar grupos deve declarar gate pro')
+
+  assert.doesNotMatch(shellSource, /<Link href=\{TOP_CTA\.href\}/, 'não deve haver CTA destacado no topo da sidebar')
 })

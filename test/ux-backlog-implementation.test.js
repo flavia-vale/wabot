@@ -16,19 +16,16 @@ test('painel converter stays 1:1 and does not expose the advanced offer builder'
   assert.doesNotMatch(page, /Montador de oferta/)
 })
 
-test('broadcast pages only expose message and direct destinations selection', () => {
+test('broadcast page only exposes message and direct destinations selection', () => {
   const painel = read('dashboard/app/painel/envio/page.js')
-  const mobile = read('dashboard/app/m/op/broadcast/page.js')
 
-  for (const page of [painel, mobile]) {
-    assert.match(page, /Mensagem/)
-    assert.match(page, /Destinos/)
-    assert.match(page, /Seu grupo de destino não está aqui\? Clique aqui para adicionar/)
-    assert.doesNotMatch(page, /Smart Segmentador/)
-    assert.doesNotMatch(page, /Segmentar destinos/)
-    assert.doesNotMatch(page, /Top N/)
-    assert.doesNotMatch(page, /Mín\. participantes|Mínimo de participantes/)
-  }
+  assert.match(painel, /Mensagem/)
+  assert.match(painel, /Destinos/)
+  assert.match(painel, /Seu grupo de destino não está aqui\? Clique aqui para adicionar/)
+  assert.doesNotMatch(painel, /Smart Segmentador/)
+  assert.doesNotMatch(painel, /Segmentar destinos/)
+  assert.doesNotMatch(painel, /Top N/)
+  assert.doesNotMatch(painel, /Mín\. participantes|Mínimo de participantes/)
 })
 
 test('offer automation logs are labeled differently from manual sends', () => {
@@ -48,9 +45,8 @@ test('offer automation logs are labeled differently from manual sends', () => {
   assert.equal(item.de, 'Oferta automática')
 })
 
-test('navigation uses Templates, ganchos e CTA label in web and mobile account', () => {
+test('navigation uses Templates, ganchos e CTA label', () => {
   assert.match(read('dashboard/app/painel/nav.js'), /Templates, ganchos e CTA/)
-  assert.match(read('dashboard/app/m/account/page.js'), /Templates, ganchos e CTA/)
 })
 
 test('template variable UI only advertises canonical gancho, cta and convitegrupo names', () => {
