@@ -1,5 +1,5 @@
 import dbDefault from '../../db.js'
-import { enforceChannelPlanGate, loadUserPlanSubject, resolveTargetJids } from './broadcastTargets.js'
+import { enforceChannelPlanGate, loadUserPlanSubject, normalizeTargetJids, resolveTargetJids } from './broadcastTargets.js'
 import { startOfSaoPauloDayUtc } from '../../offerQueue/time.js'
 
 const DEFAULTS = { intervalMinutes: 30, hourlyCap: 10, dailyCap: 50 }
@@ -8,7 +8,8 @@ function queueData(body = {}, partial = false) {
   const data = {}
   const fields = ['name', 'enabled', 'intervalEnabled', 'intervalMinutes', 'hourlyCapEnabled', 'hourlyCap', 'dailyCapEnabled', 'dailyCap']
   for (const field of fields) if (body[field] !== undefined) data[field] = body[field]
-  if (!partial) Object.assign(data, { enabled: body.enabled ?? true, intervalEnabled: body.intervalEnabled ?? false, intervalMinutes: body.intervalMinutes ?? DEFAULTS.intervalMinutes, hourlyCapEnabled: body.hourlyCapEnabled ?? false, hourlyCap: body.hourlyCap ?? DEFAULTS.hourlyCap, dailyCapEnabled: body.dailyCapEnabled ?? false, dailyCap: body.dailyCap ?? DEFAULTS.dailyCap })
+  if (body.targetJids !== undefined) data.targetJids = JSON.stringify(normalizeTargetJids(body.targetJids))
+  if (!partial) Object.assign(data, { enabled: body.enabled ?? true, intervalEnabled: body.intervalEnabled ?? false, intervalMinutes: body.intervalMinutes ?? DEFAULTS.intervalMinutes, hourlyCapEnabled: body.hourlyCapEnabled ?? false, hourlyCap: body.hourlyCap ?? DEFAULTS.hourlyCap, dailyCapEnabled: body.dailyCapEnabled ?? false, dailyCap: body.dailyCap ?? DEFAULTS.dailyCap, targetJids: data.targetJids ?? '[]' })
   if ('name' in data) data.name = typeof data.name === 'string' ? data.name.trim() : ''
   for (const field of ['intervalMinutes', 'hourlyCap', 'dailyCap']) if (field in data) data[field] = Number(data[field])
   return data
@@ -21,6 +22,14 @@ function validateQueue(data, current = {}) {
     if (merged[toggle] && (!Number.isInteger(merged[value]) || merged[value] < 1)) return `${label} deve ser um número inteiro maior ou igual a 1`
   }
   return null
+}
+
+function parseQueueTargetJids(queue) {
+  try { const parsed = JSON.parse(queue?.targetJids ?? '[]'); return Array.isArray(parsed) ? parsed : [] } catch { return [] }
+}
+
+function presentQueue(queue) {
+  return { ...queue, targetJids: parseQueueTargetJids(queue) }
 }
 
 function optionalUrl(value) {
@@ -37,7 +46,7 @@ export async function offerQueueRoutes(app, opts = {}) {
     const queues = await db.offerQueue.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } })
     const dayStart = startOfSaoPauloDayUtc(now())
     return Promise.all(queues.map(async (queue) => ({
-      ...queue,
+      ...presentQueue(queue),
       pendingCount: await db.offerQueueItem.count({ where: { userId, queueId: queue.id, status: 'pending' } }),
       sentTodayCount: await db.offerQueueItem.count({ where: { userId, queueId: queue.id, status: 'sent', sentAt: { gte: dayStart } } }),
     })))
@@ -47,7 +56,7 @@ export async function offerQueueRoutes(app, opts = {}) {
     const data = queueData(req.body)
     const error = validateQueue(data)
     if (error) return reply.code(400).send({ error })
-    return db.offerQueue.create({ data: { ...data, userId: req.user.sub } })
+    return presentQueue(await db.offerQueue.create({ data: { ...data, userId: req.user.sub } }))
   })
 
   app.put('/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
@@ -58,7 +67,7 @@ export async function offerQueueRoutes(app, opts = {}) {
     const error = validateQueue(data, current)
     if (error) return reply.code(400).send({ error })
     await db.offerQueue.updateMany({ where: { id: current.id, userId }, data })
-    return db.offerQueue.findFirst({ where: { id: current.id, userId } })
+    return presentQueue(await db.offerQueue.findFirst({ where: { id: current.id, userId } }))
   })
 
   app.delete('/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
@@ -77,11 +86,14 @@ export async function offerQueueRoutes(app, opts = {}) {
 
   app.post('/:id/items', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
-    const queue = await db.offerQueue.findFirst({ where: { id: req.params.id, userId }, select: { id: true } })
+    const queue = await db.offerQueue.findFirst({ where: { id: req.params.id, userId }, select: { id: true, targetJids: true } })
     if (!queue) return reply.code(404).send({ error: 'Fila não encontrada' })
     const { text, jids, imageUrl, imageRefererUrl } = req.body ?? {}
     if (!text?.trim()) return reply.code(400).send({ error: 'text obrigatório' })
-    const targetJids = await resolveTargetJids({ db, userId, jids })
+    // Sem jids explícitos, o item herda os grupos configurados na própria
+    // fila; fila legada sem grupos cai no fallback de todos os 'post'.
+    const requestedJids = Array.isArray(jids) && jids.length ? jids : parseQueueTargetJids(queue)
+    const targetJids = await resolveTargetJids({ db, userId, jids: requestedJids })
     const gateError = enforceChannelPlanGate(targetJids, await loadUserPlanSubject(db, userId))
     if (gateError) return reply.code(403).send(gateError)
     if (!targetJids.length) return reply.code(400).send({ error: 'Nenhum grupo/canal de destino configurado' })
