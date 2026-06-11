@@ -46,8 +46,8 @@ Complementam (não substituem) as decisões de 2026-05-18 em
 
 ### Fase B — Gate no runtime (crons)
 
-- [ ] **B1.** `src/offerAutomation/dispatcher.js` (ou no ponto do `cron.js` que seleciona automações a rodar): antes de executar cada automação, checar `getPlanAccess(userId)`; se `canUseOfferAutomations` for falso (Basic OU acesso expirado), pular silenciosamente com log de aviso. Usa o cache de A2 — sem N+1 no tick do cron.
-- [ ] **B2.** `src/offerQueue/dispatcher.js`: idem para drenagem de filas (`canUseOfferQueues`).
+- [x] **B1.** `src/offerAutomation/dispatcher.js` (ou no ponto do `cron.js` que seleciona automações a rodar): antes de executar cada automação, checar `getPlanAccess(userId)`; se `canUseOfferAutomations` for falso (Basic OU acesso expirado), pular silenciosamente com log de aviso. Usa o cache de A2 — sem N+1 no tick do cron.
+- [x] **B2.** `src/offerQueue/dispatcher.js`: idem para drenagem de filas (`canUseOfferQueues`).
 
 ### Fase C — Migração de dados (sem grandfathering)
 
@@ -94,7 +94,7 @@ Proibido na copy: warmup, OAuth ML, rastreamento de cliques, post para status, f
 - [x] **F1.** Estender `test/billing-plans.test.js`: novos entitlements por plano/trial ativo/expirado; `buildFeatureGateError` para os dois feature codes novos.
 - [x] **F2.** Novo `test/api/routes/offer-automation.plan-gates.test.js` (espelhar o padrão de `test/api/routes/broadcast.plan-gates.test.js`): Basic recebe 403 em create/update/run/preview; Pro e Trial ativo passam; lista continua acessível.
 - [x] **F3.** Novo `test/api/routes/offer-queue.plan-gates.test.js`: idem para filas.
-- [ ] **F4.** Teste de dispatcher: automação/fila de dono Basic (ou com acesso expirado) é pulada sem erro.
+- [x] **F4.** Teste de dispatcher: automação/fila de dono Basic (ou com acesso expirado) é pulada sem erro.
 - [ ] **F5.** Rodar a suíte completa (`node --test`) e o guard do dashboard (`npm run guard:config-page`).
 
 ### Fase G — Deploy
