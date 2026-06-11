@@ -78,8 +78,8 @@ test('template variable copy uses a real reusable clipboard helper with fallback
   assert.match(read('dashboard/lib/clipboard.js'), /execCommand\('copy'\)/)
 })
 
-test('painel configuracoes no longer exposes non-functional branding settings', () => {
+test('painel configuracoes exposes only the delivery cadence card', () => {
   const page = read('dashboard/app/painel/configuracoes/page.js')
-  assert.doesNotMatch(page, /Branding das mensagens|Mensagem antes do link|Link do seu grupo \(opcional\)|Prévia do rodapé|Salvar branding/)
   assert.match(page, /Cadência entre envios/)
+  assert.doesNotMatch(page, /Marca nas mensagens|Filtros e boas-vindas/)
 })
