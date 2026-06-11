@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
+import { statusTag } from '@/lib/painel/logsCopy'
 import { usePainel, usePainelHeader } from './PainelShell'
 import { ActivationChecklist } from '@/components/ActivationChecklist'
 
@@ -37,16 +38,8 @@ function shortTitle(text) {
   return clean.length > 64 ? `${clean.slice(0, 63)}…` : clean
 }
 
-const STATUS_TAG = {
-  success: { cls: 'is-success', label: 'enviado' },
-  error: { cls: 'is-error', label: 'falhou' },
-  skipped: { cls: 'is-skip', label: 'ignorado' },
-  queued: { cls: 'is-flight', label: 'na fila' },
-  sending: { cls: 'is-flight', label: 'enviando' },
-}
-
 function StatusTag({ status }) {
-  const t = STATUS_TAG[status] || { cls: 'is-skip', label: status || '—' }
+  const t = statusTag(status)
   return <span className={`pnl-tag ${t.cls}`}>{t.label}</span>
 }
 
