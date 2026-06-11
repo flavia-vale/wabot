@@ -256,6 +256,8 @@
   display: flex; align-items: center; justify-content: center;
   background: var(--ink); color: #fff;
 }
+.pnl-plan-ico .pnl-ico { width: 15px; height: 15px; display: block; }
+.pnl-plan > .pnl-ico { width: 15px; height: 15px; margin-left: auto; flex-shrink: 0; color: var(--ink-faint); }
 .pnl-plan.is-expired .pnl-plan-ico { background: color-mix(in oklab, var(--accent-3) 70%, var(--surface)); color: var(--ink); }
 .pnl-plan-title { font-size: 12.5px; font-weight: 600; color: var(--ink); }
 .pnl-plan-sub { font-size: 11px; color: var(--ink-soft); margin-top: 1px; }
