@@ -1,5 +1,6 @@
 import db from '../../db.js'
 import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
+import { parseOfferQueueSourceId } from '../../offerQueue/sourceTag.js'
 
 // Cache leve do /summary — métricas não precisam ser real-time-real-time.
 // Chave: `${userId}:${period}`. TTL curto para não pesar no banco em refresh
@@ -70,6 +71,11 @@ export async function logsRoutes(app) {
         .map(g => g.waJid)
       : []
 
+    const matchingQueueSources = query
+      ? (await db.offerQueue.findMany({ where: { userId, name: { contains: query } }, select: { id: true } }))
+          .map((queue) => `offerQueue:${queue.id}`)
+      : []
+
     const searchWhere = query
       ? {
           OR: [
@@ -86,6 +92,7 @@ export async function logsRoutes(app) {
               { sourceGroup: { in: matchingGroupJids } },
               { destGroup: { in: matchingGroupJids } },
             ] : []),
+            ...(matchingQueueSources.length ? [{ sourceGroup: { in: matchingQueueSources } }] : []),
           ],
         }
       : {}
@@ -128,6 +135,21 @@ export async function logsRoutes(app) {
       statusCountsTotal += n
     }
 
+    const queueIds = [...new Set(logs.map((log) => parseOfferQueueSourceId(log.sourceGroup)).filter(Boolean))]
+    const queueNameMap = queueIds.length
+      ? Object.fromEntries(
+          (await db.offerQueue.findMany({ where: { userId, id: { in: queueIds } }, select: { id: true, name: true } }))
+            .map((queue) => [queue.id, queue.name]),
+        )
+      : {}
+
+    const sourceGroupNameFor = (sourceGroup) => {
+      if (sourceGroup === 'offerAutomation') return 'Oferta automática'
+      const queueId = parseOfferQueueSourceId(sourceGroup)
+      if (queueId) return `Fila · ${queueNameMap[queueId] || 'removida'}`
+      return groupMap[sourceGroup] || sourceGroup
+    }
+
     return {
       total,
       page: pageNum,
@@ -136,7 +158,7 @@ export async function logsRoutes(app) {
       statusCountsTotal,
       logs: logs.map(log => ({
         ...log,
-        sourceGroupName: log.sourceGroup === 'offerAutomation' ? 'Oferta automática' : (groupMap[log.sourceGroup] || log.sourceGroup),
+        sourceGroupName: sourceGroupNameFor(log.sourceGroup),
         destGroupName: groupMap[log.destGroup] || log.destGroup,
       })),
     }
@@ -240,10 +262,22 @@ export async function logsRoutes(app) {
       ? counts.success / deliveryDenominator
       : null
 
-    // Resolve nomes amigáveis dos grupos para os top lists.
+    // Resolve nomes amigáveis dos grupos e filas para os top lists.
     const groups = await db.group.findMany({ where: { userId } })
     const groupMap = Object.fromEntries(groups.map(g => [g.waJid, g.name]))
-    const nameFor = (jid) => groupMap[jid] || jid
+    const summaryQueueIds = [...new Set(Array.from(sourceAgg.keys()).map((key) => parseOfferQueueSourceId(key)).filter(Boolean))]
+    const summaryQueueNames = summaryQueueIds.length
+      ? Object.fromEntries(
+          (await db.offerQueue.findMany({ where: { userId, id: { in: summaryQueueIds } }, select: { id: true, name: true } }))
+            .map((queue) => [queue.id, queue.name]),
+        )
+      : {}
+    const nameFor = (jid) => {
+      if (jid === 'offerAutomation') return 'Oferta automática'
+      const queueId = parseOfferQueueSourceId(jid)
+      if (queueId) return `Fila · ${summaryQueueNames[queueId] || 'removida'}`
+      return groupMap[jid] || jid
+    }
 
     const topSources = Array.from(sourceAgg.entries())
       .map(([jid, v]) => ({ jid, name: nameFor(jid), sent: v.sent, blocked: v.blocked }))
