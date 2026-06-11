@@ -37,12 +37,12 @@ Complementam (não substituem) as decisões de 2026-05-18 em
 
 ### Fase A — Entitlements e gates de API
 
-- [ ] **A1.** `src/billing/plans.js`: adicionar `FEATURE_CODES.OFFER_AUTOMATIONS` e `FEATURE_CODES.OFFER_QUEUES`; expor `canUseOfferAutomations()` e `canUseOfferQueues()` (= `hasProLikeAccess`) e incluí-los em `getPlanEntitlements()`. Estender `buildFeatureGateError()` com mensagens orientadas a benefício:
+- [x] **A1.** `src/billing/plans.js`: adicionar `FEATURE_CODES.OFFER_AUTOMATIONS` e `FEATURE_CODES.OFFER_QUEUES`; expor `canUseOfferAutomations()` e `canUseOfferQueues()` (= `hasProLikeAccess`) e incluí-los em `getPlanEntitlements()`. Estender `buildFeatureGateError()` com mensagens orientadas a benefício:
   - automações: `"As ofertas automáticas estão disponíveis no Trial ativo e no plano Pro."`
   - filas: `"As filas de ofertas estão disponíveis no Trial ativo e no plano Pro."`
-- [ ] **A2.** Generalizar o cache de `getAdvancedPreservationAccess` para um helper `getPlanAccess(userId, { db })` (TTL 60s, mesmo Map) que devolve os entitlements completos — evita um segundo cache paralelo. Manter `getAdvancedPreservationAccess` como wrapper para não tocar nos call sites existentes.
-- [ ] **A3.** `src/api/routes/offerAutomation.js`: bloquear `POST /`, `PUT /:id`, `POST /:id/run` e `GET /:id/preview` para quem não tem `canUseOfferAutomations` → 403 com `buildFeatureGateError(FEATURE_CODES.OFFER_AUTOMATIONS)`. `GET /` (lista) e `DELETE /:id` continuam liberados (UI precisa listar o que existe e o usuário pode limpar).
-- [ ] **A4.** `src/api/routes/offerQueue.js`: mesmo padrão — bloquear `POST /`, `PUT /:id`, `POST /:id/items`, `PUT /:id/items/:itemId` para não-entitled; `GET`s e `DELETE`s liberados.
+- [x] **A2.** Generalizar o cache de `getAdvancedPreservationAccess` para um helper `getPlanAccess(userId, { db })` (TTL 60s, mesmo Map) que devolve os entitlements completos — evita um segundo cache paralelo. Manter `getAdvancedPreservationAccess` como wrapper para não tocar nos call sites existentes.
+- [x] **A3.** `src/api/routes/offerAutomation.js`: bloquear `POST /`, `PUT /:id`, `POST /:id/run` e `GET /:id/preview` para quem não tem `canUseOfferAutomations` → 403 com `buildFeatureGateError(FEATURE_CODES.OFFER_AUTOMATIONS)`. `GET /` (lista) e `DELETE /:id` continuam liberados (UI precisa listar o que existe e o usuário pode limpar).
+- [x] **A4.** `src/api/routes/offerQueue.js`: mesmo padrão — bloquear `POST /`, `PUT /:id`, `POST /:id/items`, `PUT /:id/items/:itemId` para não-entitled; `GET`s e `DELETE`s liberados.
 
 ### Fase B — Gate no runtime (crons)
 
@@ -91,9 +91,9 @@ Proibido na copy: warmup, OAuth ML, rastreamento de cliques, post para status, f
 
 ### Fase F — Testes
 
-- [ ] **F1.** Estender `test/billing-plans.test.js`: novos entitlements por plano/trial ativo/expirado; `buildFeatureGateError` para os dois feature codes novos.
-- [ ] **F2.** Novo `test/api/routes/offer-automation.plan-gates.test.js` (espelhar o padrão de `test/api/routes/broadcast.plan-gates.test.js`): Basic recebe 403 em create/update/run/preview; Pro e Trial ativo passam; lista continua acessível.
-- [ ] **F3.** Novo `test/api/routes/offer-queue.plan-gates.test.js`: idem para filas.
+- [x] **F1.** Estender `test/billing-plans.test.js`: novos entitlements por plano/trial ativo/expirado; `buildFeatureGateError` para os dois feature codes novos.
+- [x] **F2.** Novo `test/api/routes/offer-automation.plan-gates.test.js` (espelhar o padrão de `test/api/routes/broadcast.plan-gates.test.js`): Basic recebe 403 em create/update/run/preview; Pro e Trial ativo passam; lista continua acessível.
+- [x] **F3.** Novo `test/api/routes/offer-queue.plan-gates.test.js`: idem para filas.
 - [ ] **F4.** Teste de dispatcher: automação/fila de dono Basic (ou com acesso expirado) é pulada sem erro.
 - [ ] **F5.** Rodar a suíte completa (`node --test`) e o guard do dashboard (`npm run guard:config-page`).
 
