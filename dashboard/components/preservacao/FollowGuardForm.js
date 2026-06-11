@@ -15,8 +15,9 @@ export function FollowGuardForm({ value, onChange, disabled }) {
       <legend className="text-base font-semibold text-gray-800">👣 Limite de seguidas por dia</legend>
       <p className="text-xs text-gray-500 mb-3">
         Quantos canais novos o bot pode começar a seguir em um único dia. Vai começando devagar pra contas novas — esse limite é o teto.
+        A proteção anti-ban (aquecimento, intervalo mínimo e pausa após rate limit) fica sempre ativa; este card só define o teto diário personalizado. Desligado, vale o teto conservador padrão (3/dia).
       </p>
-      <FeatureToggle checked={!!value.followGuardEnabled} onChange={checked => onChange({ followGuardEnabled: checked })} disabled={disabled} label="Alternar limite de seguidas" />
+      <FeatureToggle checked={!!value.followGuardEnabled} onChange={checked => onChange({ followGuardEnabled: checked })} disabled={disabled} label="Alternar limite de seguidas personalizado" />
       <div className={value.followGuardEnabled ? '' : 'pointer-events-none opacity-50'} aria-disabled={!value.followGuardEnabled}>
       <PresetButtons presets={PRESETS} onApply={onChange} disabled={controlsDisabled} />
       <label className="block">
