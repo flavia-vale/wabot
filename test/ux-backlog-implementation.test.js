@@ -45,8 +45,31 @@ test('offer automation logs are labeled differently from manual sends', () => {
   assert.equal(item.de, 'Oferta automática')
 })
 
-test('navigation uses Templates, ganchos e CTA label', () => {
-  assert.match(read('dashboard/app/painel/nav.js'), /Templates, ganchos e CTA/)
+test('message templates page prioritizes templates and progressively discloses supporting content', () => {
+  const nav = read('dashboard/app/painel/nav.js')
+  const page = read('dashboard/app/painel/mensagens/page.js')
+
+  assert.match(nav, /label: 'Templates de mensagens'/)
+  assert.match(page, /usePainelHeader\(\{ title: 'Templates de mensagens'/)
+  assert.doesNotMatch(page, /PainelContentActions/)
+
+  const templatesSection = page.indexOf('>Templates de mensagens</div>')
+  const educationalSection = page.indexOf('<summary>Como funcionam os templates</summary>')
+  const dynamicTextsSection = page.indexOf('Textos dinâmicos')
+  const linksSection = page.indexOf('>Links<')
+  const referenceSection = page.indexOf('<summary>Referência de variáveis</summary>')
+
+  assert.ok(templatesSection !== -1)
+  assert.ok(templatesSection < educationalSection)
+  assert.ok(educationalSection < dynamicTextsSection)
+  assert.ok(dynamicTextsSection < linksSection)
+  assert.ok(linksSection < referenceSection)
+  assert.match(page, /templateMode === 'list'[\s\S]*Criar template/)
+  assert.match(page, />Concluir edição</)
+  assert.match(page, /Salvar templates, textos e links/)
+  assert.doesNotMatch(page, /<details[^>]*\sopen(?:=|\s|>)/)
+  assert.doesNotMatch(page, /pra nunca repetir|>Fechamento</)
+  assert.doesNotMatch(page, />[^<{]*(?:modelo|modelos)[^<{]*</i)
 })
 
 test('template variable UI only advertises canonical gancho, cta and convitegrupo names', () => {
