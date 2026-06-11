@@ -10,7 +10,7 @@ import Link from 'next/link'
 import { api } from '@/lib/api'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
-import { usePainelHeader, PainelTopbarAction } from '../PainelShell'
+import { usePainelHeader, PainelContentActions } from '../PainelShell'
 
 const DAILY_INTERVAL_MINUTES = 1440
 const DEFAULT_DAILY_RUN_TIME = '09:00'
@@ -230,9 +230,9 @@ export default function OfertasAutomaticasPage() {
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 720, margin: '0 auto' }}>
-      <PainelTopbarAction>
+      <PainelContentActions>
         <button type="button" className="pnl-btn is-primary" onClick={openCreate}>+ Nova automação</button>
-      </PainelTopbarAction>
+      </PainelContentActions>
 
       {automations.length > 0 && (
         <>

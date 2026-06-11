@@ -1,7 +1,6 @@
 'use client'
 
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { api } from '@/lib/api'
@@ -29,13 +28,10 @@ export function usePainelHeader(header) {
   }, [title, subtitle, setHeader])
 }
 
-/* Slot de ação na topbar. A página renderiza <PainelTopbarAction>…</> e o
- * conteúdo aparece à direita do header (como no mockup App.html), via portal —
- * sem precisar furar o layout do shell nem disputar estado por effect. */
-export function PainelTopbarAction({ children }) {
-  const { actionSlot } = usePainel()
-  if (!actionSlot) return null
-  return createPortal(children, actionSlot)
+/* Ações contextuais da página ficam no topo do próprio conteúdo. O nome do
+ * componente é mantido para preservar a API das telas que já o utilizam. */
+export function PainelContentActions({ children }) {
+  return <div className="pnl-content-actions">{children}</div>
 }
 
 const STAR_ICON = <path d="M12 2.5l2.9 6 6.6.6-5 4.4 1.5 6.5L12 16.9 5.5 20.5 7 14 2 9.6l6.6-.6z" />
@@ -107,7 +103,6 @@ export default function PainelShell({ children }) {
   const [openGroups, setOpenGroups] = useState({})
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [header, setHeader] = useState({ title: 'Painel', subtitle: '' })
-  const [actionSlot, setActionSlot] = useState(null)
 
   // Autenticação — mesmo contrato do dashboard atual (api.me → /login no erro).
   useEffect(() => {
@@ -141,8 +136,8 @@ export default function PainelShell({ children }) {
   }
 
   const ctxValue = useMemo(
-    () => ({ user, online, phone, groupCount, setHeader, actionSlot }),
-    [user, online, phone, groupCount, actionSlot],
+    () => ({ user, online, phone, groupCount, setHeader }),
+    [user, online, phone, groupCount],
   )
 
   if (checking) {
@@ -282,7 +277,6 @@ export default function PainelShell({ children }) {
               <button type="button" className="pnl-bell has-dot" aria-label="Notificações" title="Notificações">
                 <Icon path={BELL_ICON} />
               </button>
-              <div className="pnl-header-actions" ref={setActionSlot} />
             </div>
           </header>
 

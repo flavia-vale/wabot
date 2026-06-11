@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
-import { PainelTopbarAction, usePainelHeader } from '../PainelShell'
+import { PainelContentActions, usePainelHeader } from '../PainelShell'
 
 const EMPTY = { name: '', enabled: true, intervalEnabled: false, intervalMinutes: 30, hourlyCapEnabled: false, hourlyCap: 10, dailyCapEnabled: false, dailyCap: 50, targetJids: [] }
 const LIMITS = [
@@ -97,7 +97,7 @@ export default function FilasPage() {
   }
 
   return <div className="pnl-grid" style={{ maxWidth: 980, margin: '0 auto' }}>
-    <PainelTopbarAction><button type="button" className="pnl-btn is-primary" onClick={openCreate}>+ Nova fila</button></PainelTopbarAction>
+    <PainelContentActions><button type="button" className="pnl-btn is-primary" onClick={openCreate}>+ Nova fila</button></PainelContentActions>
     {message && <div className="pnl-note-box is-error" role="alert">{message}</div>}
     {notice && <div className="pnl-note-box" role="status">{notice}</div>}
     {showForm && <form className="pnl-card" onSubmit={save}>
