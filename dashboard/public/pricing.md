@@ -1,23 +1,23 @@
 # Pricing — BOTinho
 
-Last updated: 2026-05-15
+Last updated: 2026-06-11
 Currency: BRL
 Billing unit: 30-day access period
 Preferred citation: BOTinho pricing or Espelha Grupos pricing
 
-BOTinho, from Espelha Grupos, uses a 7-day free trial for validation and a simple 30-day access model for paid WhatsApp offer workflows. Prices below reflect the public defaults used by the application and may be updated only after staging validation.
+BOTinho, from Espelha Grupos, uses a 7-day free trial for validation and a simple 30-day access model for paid WhatsApp offer workflows. Basic covers manual offer operation in groups; Pro adds channels, automatic Shopee offers, send queues and the Advanced Preservation Module. Prices below reflect the public defaults used by the application and may be updated only after staging validation.
 
 ## Teste grátis
 
 - Plan ID: `trial`
 - Price: R$0 / 7-day validation period
-- Best for: validating the core workflow before choosing a paid plan
+- Best for: validating the full Pro workflow before choosing a paid plan
 - Includes:
-  - Supported link conversion workflow
-  - Source group monitoring
-  - Destination group sending
-  - Log history
-  - Ads in the experience
+  - Everything in Pro for 7 days
+  - Group and channel mirroring
+  - Automatic Shopee offers and send queues
+  - Advanced Preservation Module
+  - Full send reports
 - Limits and notes:
   - Human review is required before distributing offers
   - No revenue, commission, sales, or deliverability guarantee
@@ -26,15 +26,16 @@ BOTinho, from Espelha Grupos, uses a 7-day free trial for validation and a simpl
 
 - Plan ID: `basic`
 - Price: R$39 / 30 days
-- Best for: using the core workflow with ads in the experience
+- Best for: manual offer operation in WhatsApp groups
 - Includes:
-  - Supported link conversion workflow
-  - Source group monitoring
-  - Destination group sending
-  - Log history
-  - Ads in the experience
+  - Group mirroring (monitor → destination groups)
+  - Affiliate link conversion: Mercado Livre, Amazon, Shopee and Magalu
+  - Offer creation from a pasted link (title, price and image)
+  - Immediate and scheduled sending
+  - Customizable message templates
+  - Send reports with full history
 - Limits and notes:
-  - Same core technical resources as Pro
+  - Channels, automatic offers, send queues and the Advanced Preservation Module are Pro features
   - Human review is required before distributing offers
   - Operators must respect WhatsApp, group, marketplace, and affiliate-program rules
 
@@ -42,15 +43,14 @@ BOTinho, from Espelha Grupos, uses a 7-day free trial for validation and a simpl
 
 - Plan ID: `pro`
 - Price: R$69 / 30 days
-- Best for: using the same core workflow without ads in the experience
+- Best for: scaling with automation, channels and pacing controls
 - Includes:
-  - Supported link conversion workflow
-  - Source group monitoring
-  - Destination group sending
-  - Log history
-  - No ads in the experience
+  - Everything in Basic
+  - Channel monitoring and sending
+  - Automatic Shopee offers (keyword, filters and smart dedup)
+  - Send queues with hourly and daily caps
+  - Advanced Preservation Module (pacing, quiet hours, copy variation and limits)
 - Limits and notes:
-  - Same core technical resources as Basic
   - Human review is required before distributing offers
   - Operators must respect WhatsApp, group, marketplace, and affiliate-program rules
 

@@ -6,6 +6,8 @@ import {
   buildFeatureGateError,
   canUseAdvancedPreservation,
   canUseChannels,
+  canUseOfferAutomations,
+  canUseOfferQueues,
   getPlanEntitlements,
   isPreservationActive,
   normalizePlan,
@@ -25,6 +27,28 @@ test('basic can use groups but cannot use channels or advanced preservation', ()
   assert.equal(entitlements.canUseAdvancedPreservation, false)
   assert.equal(canUseChannels({ plan: 'basic' }), false)
   assert.equal(canUseAdvancedPreservation({ plan: 'basic' }), false)
+})
+
+test('basic cannot use offer automations or offer queues', () => {
+  const entitlements = getPlanEntitlements({ plan: 'basic' })
+  assert.equal(entitlements.canUseOfferAutomations, false)
+  assert.equal(entitlements.canUseOfferQueues, false)
+  assert.equal(canUseOfferAutomations({ plan: 'basic' }), false)
+  assert.equal(canUseOfferQueues({ plan: 'basic' }), false)
+})
+
+test('pro and active trial can use offer automations and offer queues', () => {
+  assert.equal(canUseOfferAutomations({ plan: 'pro' }), true)
+  assert.equal(canUseOfferQueues({ plan: 'pro' }), true)
+  const accessExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
+  assert.equal(canUseOfferAutomations({ plan: 'trial', accessExpiresAt }), true)
+  assert.equal(canUseOfferQueues({ plan: 'trial', accessExpiresAt }), true)
+})
+
+test('expired trial loses offer automations and offer queues', () => {
+  const accessExpiresAt = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  assert.equal(canUseOfferAutomations({ plan: 'trial', accessExpiresAt }), false)
+  assert.equal(canUseOfferQueues({ plan: 'trial', accessExpiresAt }), false)
 })
 
 test('active trial has temporary Pro-like channel and preservation access', () => {
@@ -87,6 +111,21 @@ test('buildFeatureGateError returns stable upgrade payload', () => {
     error: 'Canais estão disponíveis no Trial ativo e no plano Pro.',
     code: 'FEATURE_REQUIRES_PRO',
     feature: 'channels',
+    requiredPlan: 'pro',
+  })
+})
+
+test('buildFeatureGateError covers offer automations and offer queues', () => {
+  assert.deepEqual(buildFeatureGateError(FEATURE_CODES.OFFER_AUTOMATIONS), {
+    error: 'As ofertas automáticas estão disponíveis no Trial ativo e no plano Pro.',
+    code: 'FEATURE_REQUIRES_PRO',
+    feature: 'offer_automations',
+    requiredPlan: 'pro',
+  })
+  assert.deepEqual(buildFeatureGateError(FEATURE_CODES.OFFER_QUEUES), {
+    error: 'As filas de ofertas estão disponíveis no Trial ativo e no plano Pro.',
+    code: 'FEATURE_REQUIRES_PRO',
+    feature: 'offer_queues',
     requiredPlan: 'pro',
   })
 })

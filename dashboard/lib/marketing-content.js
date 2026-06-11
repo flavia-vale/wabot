@@ -25,6 +25,8 @@ export const PRODUCT_LIMITATIONS = [
   'Preço, cupom, estoque, tag de afiliado e regras de cada plataforma devem ser revisados pela operação antes da divulgação.',
 ]
 
+// Fallback dos planos públicos. A fonte dinâmica é a tabela LpPlan (editável
+// pelo admin, atualizada por migration aditiva) — manter os DOIS em sincronia.
 export const DEFAULT_LANDING_PLANS = [
   {
     id: 'trial',
@@ -32,9 +34,9 @@ export const DEFAULT_LANDING_PLANS = [
     price: 'R$0',
     priceValue: 0,
     period: '7 dias de validação inicial',
-    desc: 'Teste por 7 dias os recursos completos do Pro: grupos, canais e Módulo de Preservação Avançada.',
+    desc: 'Experimente por 7 dias tudo do Pro: grupos, canais, ofertas automáticas, filas e o Módulo de Preservação Avançada.',
     cta: 'Começar teste grátis',
-    features: ['Conversão de links suportados', 'Monitoramento de grupos e canais', 'Envio para grupos e canais', 'Módulo de Preservação Avançada', 'Histórico de logs'],
+    features: ['Tudo do plano Pro por 7 dias', 'Espelhamento em grupos e canais', 'Ofertas automáticas e filas de envio', 'Módulo de Preservação Avançada', 'Relatórios de envio completos'],
   },
   {
     id: 'basic',
@@ -42,9 +44,9 @@ export const DEFAULT_LANDING_PLANS = [
     price: 'R$39',
     priceValue: 39,
     period: '30 dias',
-    desc: 'Plano focado em grupos, com canais disponíveis no Pro: operação essencial com cadência e filtros básicos.',
+    desc: 'Para operar ofertas manualmente em grupos: espelhamento, conversão de links, criação de ofertas e agendamento.',
     cta: 'Assinar Basic',
-    features: ['Conversão de links suportados', 'Monitoramento e envio em grupos', 'Canais disponíveis no Pro', 'Delay e filtros básicos', 'Histórico de logs'],
+    features: ['Espelhamento de grupos (monitor → destinos)', 'Conversão de links: Mercado Livre, Amazon, Shopee e Magalu', 'Criar oferta a partir de link (título, preço e imagem)', 'Envio imediato e agendado', 'Templates de mensagem personalizáveis', 'Relatórios de envio com histórico completo'],
   },
   {
     id: 'pro',
@@ -52,10 +54,10 @@ export const DEFAULT_LANDING_PLANS = [
     price: 'R$69',
     priceValue: 69,
     period: '30 dias',
-    desc: 'Tudo do Basic + canais + Módulo de Preservação Avançada para operar com mais controle.',
+    desc: 'Piloto automático e escala: tudo do Basic + canais, ofertas automáticas, filas de envio e Módulo de Preservação Avançada.',
     cta: 'Assinar Pro',
     highlight: true,
-    features: ['Tudo do Basic', 'Monitoramento e envio em canais', 'Módulo de Preservação Avançada', 'Warmup, limites e cadência avançada', 'Histórico de logs'],
+    features: ['Tudo do Basic', 'Monitoramento e envio em canais', 'Ofertas automáticas da Shopee (palavra-chave, filtros e dedup inteligente)', 'Filas de ofertas com limites por hora e por dia', 'Módulo de Preservação Avançada (cadência, horários de descanso, variação de copy e limites)'],
   },
 ]
 
