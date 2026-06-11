@@ -281,7 +281,6 @@
 .pnl-header h1 { font-size: 19px; font-weight: 600; letter-spacing: -0.015em; }
 .pnl-header .pnl-sub { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
 .pnl-header-right { display: flex; align-items: center; gap: 12px; }
-.pnl-header-actions { display: flex; align-items: center; gap: 8px; }
 .pnl-bell {
   width: 38px; height: 38px; border-radius: 11px; position: relative; flex-shrink: 0;
   background: var(--bg-soft); border: 1px solid var(--line); color: var(--ink);
@@ -311,6 +310,13 @@
 .pnl-dot.is-idle { background: var(--warn); box-shadow: 0 0 0 3px color-mix(in oklab, var(--warn) 22%, transparent); }
 
 .pnl-content { flex: 1; padding: 28px 32px 48px; overflow: auto; }
+.pnl-content-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+.pnl-content-actions > * { min-width: 0; }
 
 /* ── Cards / grid ────────────────────────────────────────────────────── */
 .pnl-grid { display: grid; gap: 16px; }
@@ -850,7 +856,6 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
   .pnl-header h1 { font-size: 17px; }
   .pnl-header .pnl-sub { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pnl-header-right { min-width: 0; flex: 1 1 100%; justify-content: flex-start; flex-wrap: wrap; gap: 8px; }
-  .pnl-header-actions { flex-wrap: wrap; min-width: 0; }
   .pnl-online { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pnl-card { padding: 16px; border-radius: 15px; }
   .pnl-hero { padding: 20px; align-items: flex-start; }
@@ -875,6 +880,8 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
   .pnl-hero-num { font-size: 42px; }
 
   .pnl-content { padding: 16px 12px 32px; }
+  .pnl-content-actions { justify-content: flex-start; }
+  .pnl-content-actions .pnl-toolbar { width: 100%; }
   .pnl-card { padding: 14px; }
   .pnl-hero { padding: 18px 16px; }
   .pnl-master-ico { width: 42px; height: 42px; }

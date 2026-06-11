@@ -10,7 +10,7 @@ import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { usePainelHeader, PainelTopbarAction } from '../PainelShell'
+import { usePainelHeader, PainelContentActions } from '../PainelShell'
 
 const STATUS_STYLES = {
   sent: { label: 'Enviado', cls: 'bg-green-100 text-green-700' },
@@ -80,7 +80,7 @@ export default function AgendadosPage() {
 
   return (
     <div className="max-w-2xl">
-      <PainelTopbarAction>
+      <PainelContentActions>
         <button
           type="button"
           onClick={load}
@@ -89,7 +89,7 @@ export default function AgendadosPage() {
         >
           {loading ? 'Atualizando…' : 'Atualizar'}
         </button>
-      </PainelTopbarAction>
+      </PainelContentActions>
 
       {error && (
         <div className="mb-4">
