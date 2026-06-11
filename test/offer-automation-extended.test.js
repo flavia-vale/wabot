@@ -562,8 +562,8 @@ test('resolveCopyVariationPoolJson: usa defaults oficiais quando pool salvo est�
   assert.equal(resolveCopyVariationPoolJson('{}'), DEFAULT_COPY_VARIATION_POOL_JSON)
   const parsed = JSON.parse(resolveCopyVariationPoolJson('{}'))
   assert.equal(parsed.greetings[0], '🚨 COOOOOORRE QUE TÁ ACABANDO!')
-  assert.equal(parsed.ctas[0], '📲 Entre no nosso grupo oficial:')
-  assert.equal(parsed.trailers[0], '⚠️ Atenção: Preços e estoque podem mudar a qualquer momento!')
+  assert.equal(parsed.ctas[0], '⚠️ Atenção: Preços e estoque podem mudar a qualquer momento!')
+  assert.equal(parsed.trailers[0], '📲 Entre no nosso grupo oficial:')
 })
 
 test('resolveCopyVariationPoolJson: usa defaults quando editor salvou apenas buckets em branco', () => {
