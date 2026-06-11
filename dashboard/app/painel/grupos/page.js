@@ -71,10 +71,6 @@ export default function GruposPage() {
   const [waGroups, setWaGroups] = useState(null)
   const [loadingWA, setLoadingWA] = useState(false)
   const [waError, setWaError] = useState('')
-  const [showManual, setShowManual] = useState(false)
-  const [manualForm, setManualForm] = useState({ waJid: '', name: '', role: 'monitor' })
-  const [manualLoading, setManualLoading] = useState(false)
-  const [manualError, setManualError] = useState('')
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [addingKey, setAddingKey] = useState('')
   const [savingGroupId, setSavingGroupId] = useState(null)
@@ -286,27 +282,6 @@ export default function GruposPage() {
     }
   }
 
-  async function handleManualAdd(e) {
-    e.preventDefault()
-    setManualError('')
-    setActionError('')
-    const jid = manualForm.waJid.trim()
-    if (!jid.endsWith('@g.us')) {
-      setManualError('Informe um JID de grupo válido terminado em @g.us, por exemplo 120363421377996844@g.us.')
-      return
-    }
-    setManualLoading(true)
-    try {
-      await api.addGroup(jid, manualForm.name.trim(), manualForm.role)
-      setManualForm({ waJid: '', name: '', role: 'monitor' })
-      await load()
-    } catch (err) {
-      setManualError(err.message)
-    } finally {
-      setManualLoading(false)
-    }
-  }
-
   const monitor = groups.filter((g) => g.role === 'monitor')
   const post = groups.filter((g) => g.role === 'post')
   const current = tab === 'monitor' ? monitor : post
@@ -440,19 +415,10 @@ export default function GruposPage() {
         </div>
       </PainelTopbarAction>
 
-      {/* Banner explicativo origem × destino */}
-      <section className="pnl-card" style={{ padding: 0, overflow: 'hidden', background: 'color-mix(in oklab, var(--accent) 12%, var(--surface))' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
-          <div style={{ padding: 18, borderRight: '1px solid var(--line)' }}>
-            <div className="pnl-eyebrow">👁 Origem · monitora</div>
-            <p style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--ink)', marginTop: 6 }}>Grupos de promoção que você participa. O bot só lê os links.</p>
-          </div>
-          <div style={{ padding: 18 }}>
-            <div className="pnl-eyebrow" style={{ color: 'var(--accent-strong)' }}>⚡ Destino · publica</div>
-            <p style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--ink)', marginTop: 6 }}>Seus grupos de clientes. O bot posta o link já com o seu código.</p>
-          </div>
-        </div>
-      </section>
+      <div style={{ display: 'grid', gap: 4, color: 'var(--ink)', fontSize: 14, lineHeight: 1.55 }}>
+        <p><strong>Monitorar:</strong> Grupos de promoção que você participa. O bot só lê os links.</p>
+        <p><strong>Publicar:</strong> Seus grupos de clientes. O bot posta o link já com o seu código.</p>
+      </div>
 
       {/* Abas Monitorar / Publicar */}
       <div className="pnl-seg pnl-groups-role-toggle" role="tablist" aria-label="Escolher entre monitorar e publicar">
@@ -574,41 +540,6 @@ export default function GruposPage() {
               )
             })}
           </ul>
-        )}
-      </section>
-
-      {/* Modo avançado (JID manual) */}
-      <section className="pnl-card">
-        <button type="button" className="pnl-link-btn" style={{ color: 'var(--ink-soft)', textDecoration: 'underline' }} onClick={() => setShowManual((v) => !v)}>
-          {showManual ? 'Ocultar modo avançado' : 'Mostrar modo avançado (JID manual)'}
-        </button>
-
-        {showManual && (
-          <>
-            <p className="pnl-hint" style={{ color: '#b5742a', marginTop: 12, marginBottom: 8 }}>
-              Prefira carregar os grupos pelo WhatsApp. Use o JID manual apenas para casos de suporte ou migração quando você já tiver o identificador técnico do grupo.
-            </p>
-            <form onSubmit={handleManualAdd} className="pnl-grid">
-              <div>
-                <label htmlFor="manual-name" className="pnl-label">Nome do grupo</label>
-                <input id="manual-name" className="pnl-input" placeholder="Ex: Grupo Ofertas" value={manualForm.name} onChange={(e) => setManualForm((f) => ({ ...f, name: e.target.value }))} required />
-              </div>
-              <div>
-                <label htmlFor="manual-jid" className="pnl-label">JID do grupo</label>
-                <input id="manual-jid" className="pnl-input" placeholder="Ex: 120363421377996844@g.us" value={manualForm.waJid} onChange={(e) => setManualForm((f) => ({ ...f, waJid: e.target.value }))} required aria-describedby="manual-jid-help" />
-                <p id="manual-jid-help" className="pnl-hint" style={{ marginTop: 4 }}>O JID de grupo normalmente termina em @g.us.</p>
-              </div>
-              <div>
-                <label htmlFor="manual-role" className="pnl-label">Papel do grupo</label>
-                <select id="manual-role" className="pnl-input" value={manualForm.role} onChange={(e) => setManualForm((f) => ({ ...f, role: e.target.value }))}>
-                  <option value="monitor">Monitorar (origem)</option>
-                  <option value="post">Postar (destino)</option>
-                </select>
-              </div>
-              {manualError && <div className="pnl-note-box is-error" role="alert"><strong style={{ fontWeight: 600 }}>Não foi possível adicionar manualmente</strong><p style={{ marginTop: 4 }}>{manualError}</p></div>}
-              <button type="submit" className="pnl-btn is-primary" disabled={manualLoading}>{manualLoading ? 'Salvando…' : 'Adicionar manualmente'}</button>
-            </form>
-          </>
         )}
       </section>
 
