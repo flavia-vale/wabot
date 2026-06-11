@@ -51,22 +51,22 @@ Complementam (não substituem) as decisões de 2026-05-18 em
 
 ### Fase C — Migração de dados (sem grandfathering)
 
-- [ ] **C1.** Migration aditiva (ou script idempotente em `scripts/`) que, para usuários com `plan='basic'`: desativa automações (`enabled/active = false` conforme o campo real do schema) e pausa filas (`enabled = false`). **Não apaga nada** — ao virar Pro, o usuário reativa manualmente. Antes de rodar em prod, conferir quantas linhas serão afetadas (esperado: zero ou quase, só 2 contas existem).
+- [x] **C1.** Migration aditiva (ou script idempotente em `scripts/`) que, para usuários com `plan='basic'`: desativa automações (`enabled/active = false` conforme o campo real do schema) e pausa filas (`enabled = false`). **Não apaga nada** — ao virar Pro, o usuário reativa manualmente. Antes de rodar em prod, conferir quantas linhas serão afetadas (esperado: zero ou quase, só 2 contas existem).
 - [ ] **C2.** Validar em staging conforme pegadinha #8 do AGENTS.md se a migration tiver DDL (não deve ter — é só UPDATE/DML, convive com WAL).
 
 ### Fase D — Dashboard (paywalls)
 
-- [ ] **D1.** Componente reutilizável de paywall (padrão da skill de paywalls): ícone de cadeado + nome da feature + 2–3 bullets de benefício + preço + CTA "Liberar com o Pro" (link para `/painel/plano`) + escape "Continuar sem". Tratar resposta 403 `FEATURE_REQUIRES_PRO` do client (`dashboard/lib/api.js`) de forma uniforme.
-- [ ] **D2.** `/painel/ofertas-automaticas`: para Basic, renderizar a página em modo bloqueado (preview da feature + paywall), em vez de esconder do menu.
-- [ ] **D3.** `/painel/filas`: idem.
-- [ ] **D4.** `/painel/criar-oferta`: para Basic, a opção de envio "fila" aparece com badge "Pro" desabilitada (envio imediato e agendado seguem livres).
-- [ ] **D5.** Copy do CTA com mental accounting: "R$69/mês — menos de R$2,30/dia" (opcional, um lugar só: card do Pro em `/painel/plano`).
+- [x] **D1.** Componente reutilizável de paywall (padrão da skill de paywalls): ícone de cadeado + nome da feature + 2–3 bullets de benefício + preço + CTA "Liberar com o Pro" (link para `/painel/plano`) + escape "Continuar sem". Tratar resposta 403 `FEATURE_REQUIRES_PRO` do client (`dashboard/lib/api.js`) de forma uniforme.
+- [x] **D2.** `/painel/ofertas-automaticas`: para Basic, renderizar a página em modo bloqueado (preview da feature + paywall), em vez de esconder do menu.
+- [x] **D3.** `/painel/filas`: idem.
+- [x] **D4.** `/painel/criar-oferta`: para Basic, a opção de envio "fila" aparece com badge "Pro" desabilitada (envio imediato e agendado seguem livres).
+- [x] **D5.** Copy do CTA com mental accounting: "R$69/mês — menos de R$2,30/dia" (opcional, um lugar só: card do Pro em `/painel/plano`).
 
 ### Fase E — Copy pública dos planos
 
-- [ ] **E1.** Migration aditiva `update_lp_plan_automation_pro` com o novo conteúdo (abaixo).
-- [ ] **E2.** Atualizar `DEFAULT_LANDING_PLANS` em `dashboard/lib/marketing-content.js` com o MESMO conteúdo (fallback precisa espelhar o banco).
-- [ ] **E3.** Atualizar `dashboard/public/pricing.md` e revisar `dashboard/components/landing/Pricing.jsx` (badge do Pro: trocar "Canais + Preservação Avançada" por "Canais + Automação + Preservação").
+- [x] **E1.** Migration aditiva `update_lp_plan_automation_pro` com o novo conteúdo (abaixo).
+- [x] **E2.** Atualizar `DEFAULT_LANDING_PLANS` em `dashboard/lib/marketing-content.js` com o MESMO conteúdo (fallback precisa espelhar o banco).
+- [x] **E3.** Atualizar `dashboard/public/pricing.md` e revisar `dashboard/components/landing/Pricing.jsx` (badge do Pro: trocar "Canais + Preservação Avançada" por "Canais + Automação + Preservação").
 
 **Conteúdo canônico dos planos:**
 
@@ -95,7 +95,7 @@ Proibido na copy: warmup, OAuth ML, rastreamento de cliques, post para status, f
 - [x] **F2.** Novo `test/api/routes/offer-automation.plan-gates.test.js` (espelhar o padrão de `test/api/routes/broadcast.plan-gates.test.js`): Basic recebe 403 em create/update/run/preview; Pro e Trial ativo passam; lista continua acessível.
 - [x] **F3.** Novo `test/api/routes/offer-queue.plan-gates.test.js`: idem para filas.
 - [x] **F4.** Teste de dispatcher: automação/fila de dono Basic (ou com acesso expirado) é pulada sem erro.
-- [ ] **F5.** Rodar a suíte completa (`node --test`) e o guard do dashboard (`npm run guard:config-page`).
+- [x] **F5.** Rodar a suíte completa (`node --test`) e o guard do dashboard (`npm run guard:config-page`).
 
 ### Fase G — Deploy
 
