@@ -324,6 +324,9 @@ model OfferQueue {
   hourlyCap        Int      @default(10)
   dailyCapEnabled  Boolean  @default(false)
   dailyCap         Int      @default(50)
+  // JSON array de JIDs de destino da fila. "[]" = fallback para todos os
+  // grupos com role 'post' (comportamento legado, pré-seleção por fila).
+  targetJids       String   @default("[]")
   lastSentAt       DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
