@@ -1,24 +1,25 @@
 'use client'
 
-/* Criar oferta — reskin Menta do corpo, layout fiel ao mockup App.html
- * (screen-criar): card de link no topo com loja detectada + ID de afiliada,
- * e grade 2 colunas (produto + composição | prévia no WhatsApp). A lógica é
- * idêntica à do OfferBuilder standalone: scrapeOffer → editar título/preços →
- * CTA de grupo opcional → template → prévia → copiar. Reusa os helpers de
- * lib/offerBuilderUi. Nenhuma mudança no back end. */
+/* Criar oferta — card de link no topo com loja detectada, prévia editável do
+ * WhatsApp (o texto composto pelo template pode ser ajustado direto na
+ * mensagem, dispensando o antigo card "Produto encontrado") e card de Envio
+ * com três modos exclusivos: enviar agora (grupos), agendar (data + grupos) e
+ * inserir na fila (a fila já carrega os próprios grupos de destino). Reusa os
+ * helpers de lib/offerBuilderUi e as APIs de broadcast, agendamento e filas. */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { api } from '@/lib/api'
-import { usePainelHeader, PainelTopbarAction } from '../PainelShell'
+import { usePainelHeader } from '../PainelShell'
 import { WhatsAppBubble } from '../WhatsAppBubble'
+import { getConversionStatusPresentation } from '@/lib/offerBuilderUi'
+import { buildMobileOfferText } from '@/lib/mobileOfferComposer'
+import { composeTemplates, loadAllTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import {
-  buildOfferPriceBlocks,
-  getConversionStatusPresentation,
-  OFFER_BUILDER_TEMPLATE_VISIBLE_DEFAULT,
-  toggleTemplateVisibility,
-} from '@/lib/offerBuilderUi'
-
-const DEFAULT_TEMPLATE = `🛍️ {{title}}{{oldPriceBlock}}{{newPriceBlock}}\n\n🛒 Compre aqui 👉 {{link}}`
+  readSavedTemplateKey,
+  resolveSelectedTemplate,
+  saveTemplateKey,
+} from '@/lib/offerTemplateSelection'
 
 const STORES = [
   { test: /shopee/i, name: 'Shopee', bg: '#EE4D2D', fg: '#fff', mark: 'S' },
@@ -62,40 +63,71 @@ function normalizeLink(raw, fallback = '') {
   return typeof fallback === 'string' ? fallback : ''
 }
 
-function applyTemplate(template, values) {
-  return String(template || '')
-    .replaceAll('{{title}}', values.title || '')
-    .replaceAll('{{oldPriceBlock}}', values.oldPriceBlock || '')
-    .replaceAll('{{newPriceBlock}}', values.newPriceBlock || '')
-    .replaceAll('{{link}}', values.link || '')
-    .replaceAll('{{groupCtaBlock}}', values.groupCtaBlock || '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
-
 export default function CriarOfertaPage() {
-  usePainelHeader({ title: 'Criar oferta', subtitle: 'Cole um link de produto — o bot monta a oferta pronta' })
+  usePainelHeader({ title: 'Criar oferta', subtitle: 'Cole o seu link de afiliado — o bot monta a oferta pronta' })
 
   const [link, setLink] = useState('')
   const [generated, setGenerated] = useState(null)
-  const [includeGroupCta, setIncludeGroupCta] = useState(false)
-  const [groupCtaText, setGroupCtaText] = useState('Participe do grupo: xxxxxx')
-  const [template, setTemplate] = useState(DEFAULT_TEMPLATE)
-  const [showTemplate, setShowTemplate] = useState(OFFER_BUILDER_TEMPLATE_VISIBLE_DEFAULT)
+  // Lazy initializers: cache local síncrono no primeiro render (no SSR caem
+  // nos defaults — o select só aparece após interação, sem risco de mismatch).
+  const [templates, setTemplates] = useState(() => loadAllTemplates())
+  const [templateKey, setTemplateKey] = useState(() => readSavedTemplateKey())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [conversionStatus, setConversionStatus] = useState(null)
   const [copyFeedback, setCopyFeedback] = useState('')
+  const [groups, setGroups] = useState([])
+  const [selectedJids, setSelectedJids] = useState([])
+  const [queues, setQueues] = useState([])
+  const [queueId, setQueueId] = useState('')
+  const [scheduleAt, setScheduleAt] = useState('')
+  const [sendMode, setSendMode] = useState('')
+  const [dispatching, setDispatching] = useState('')
+  const [dispatchFeedback, setDispatchFeedback] = useState('')
+  // Texto da prévia editado à mão. null = segue o template; qualquer edição
+  // manual passa a valer até trocar de template ou gerar nova oferta.
+  const [customText, setCustomText] = useState(null)
 
-  const priceBlocks = buildOfferPriceBlocks({ oldPrice: generated?.oldPrice, newPrice: generated?.newPrice, formatPrice: formatOfferPrice })
+  useEffect(() => {
+    Promise.all([api.groups(), api.offerQueues()]).then(([allGroups, allQueues]) => {
+      const destinations = allGroups.filter((group) => group.role === 'post')
+      const requestedQueueId = new URLSearchParams(window.location.search).get('fila')
+      const initialQueueId = allQueues.some((queue) => queue.id === requestedQueueId)
+        ? requestedQueueId
+        : allQueues[0]?.id || ''
+      setGroups(destinations)
+      setSelectedJids(destinations.map((group) => group.waJid))
+      setQueues(allQueues)
+      setQueueId(initialQueueId)
+      if (requestedQueueId === initialQueueId) setSendMode('queue')
+    }).catch((err) => setError(err.message))
+  }, [])
 
-  const offerMessage = useMemo(() => applyTemplate(template, {
-    title: generated?.title || '',
-    oldPriceBlock: priceBlocks.oldPriceBlock,
-    newPriceBlock: priceBlocks.newPriceBlock,
+  const selectedTemplate = resolveSelectedTemplate(templates, templateKey)
+  const store = detectStore(generated?.link || link)
+  const dp = generated ? discountPct(generated.oldPrice, generated.newPrice) : null
+
+  // Sem useMemo manual: o React Compiler memoiza sozinho (a regra
+  // preserve-manual-memoization rejeita deps mais específicas que as inferidas).
+  const templateMessage = buildMobileOfferText({
+    product: {
+      title: generated?.title || '',
+      price: generated?.newPrice ? formatOfferPrice(generated.newPrice) : '',
+      oldPrice: generated?.oldPrice ? formatOfferPrice(generated.oldPrice) : '',
+      discount: dp != null ? `-${dp}% OFF` : '',
+      storeName: store?.name || '',
+    },
     link: generated?.link || link,
-    groupCtaBlock: includeGroupCta && groupCtaText.trim() ? `\n${groupCtaText.trim()}` : '',
-  }), [template, generated?.title, generated?.link, priceBlocks.oldPriceBlock, priceBlocks.newPriceBlock, link, includeGroupCta, groupCtaText])
+    template: selectedTemplate?.key,
+    templateBody: selectedTemplate?.body,
+  })
+  const offerMessage = customText ?? templateMessage
+
+  function selectTemplate(key) {
+    setTemplateKey(key)
+    saveTemplateKey(key)
+    setCustomText(null)
+  }
 
   async function runScrape() {
     setError('')
@@ -107,12 +139,15 @@ export default function CriarOfertaPage() {
       const info = await api.scrapeOffer(trimmed)
       const title = normalizeText(info?.title)
       const newPrice = normalizeText(info?.newPrice)
-      if (!title && !newPrice) setError('Não conseguimos ler título e preço desse link. Preencha os campos manualmente abaixo.')
+      if (!title && !newPrice) setError('Não conseguimos ler título e preço desse link. Edite a mensagem direto na prévia abaixo.')
+      setCustomText(null)
       setGenerated({
         title,
         oldPrice: normalizeText(info?.oldPrice),
         newPrice,
         link: normalizeLink(info?.offerUrl, trimmed),
+        imageUrl: info?.imageUrl || null,
+        imageRefererUrl: info?.imageRefererUrl || null,
       })
       setConversionStatus(info?.conversion || null)
     } catch (err) {
@@ -132,17 +167,34 @@ export default function CriarOfertaPage() {
     }
   }
 
+  async function dispatch(mode) {
+    if (mode !== 'queue' && !selectedJids.length) { setDispatchFeedback('Selecione pelo menos um grupo de destino.'); return }
+    if (mode === 'schedule' && (!scheduleAt || new Date(scheduleAt) <= new Date())) { setDispatchFeedback('Escolha uma data e hora futuras.'); return }
+    if (mode === 'queue' && !queueId) { setDispatchFeedback('Crie ou selecione uma fila.'); return }
+    setDispatching(mode)
+    setDispatchFeedback('')
+    try {
+      const payload = { text: offerMessage, imageUrl: generated?.imageUrl, imageRefererUrl: generated?.imageRefererUrl }
+      if (mode === 'now') await api.broadcastSend({ ...payload, jids: selectedJids })
+      if (mode === 'schedule') await api.scheduledCreate({ ...payload, jids: selectedJids, scheduledAt: new Date(scheduleAt).toISOString() })
+      // Na fila não enviamos jids: o item herda os grupos configurados na fila.
+      if (mode === 'queue') await api.offerQueueItemAdd(queueId, payload)
+      setDispatchFeedback(mode === 'now' ? 'Oferta enviada para a fila de envio do WhatsApp.' : mode === 'schedule' ? 'Oferta agendada com sucesso. Veja em Agendados.' : 'Oferta inserida na fila com sucesso.')
+    } catch (err) { setDispatchFeedback(err.message) }
+    finally { setDispatching('') }
+  }
+
   const conv = getConversionStatusPresentation(conversionStatus)
   const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-  const store = detectStore(generated?.link || link)
-  const dp = generated ? discountPct(generated.oldPrice, generated.newPrice) : null
-  const affiliateApplied = conv?.tone === 'success'
+  const productImageUrl = generated?.imageUrl || ''
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 1040, margin: '0 auto' }}>
-      <PainelTopbarAction>
-        <span className="pnl-tag is-success" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>✓ GRÁTIS</span>
-      </PainelTopbarAction>
+      {/* TEMPORÁRIO: sem conversão de link — o usuário precisa colar o próprio
+          link de afiliado, e a oferta sai exatamente com o link colado. */}
+      <div className="pnl-note-box is-warn" role="note">
+        <strong style={{ fontWeight: 600 }}>⚠️ Atenção:</strong> cole o <strong style={{ fontWeight: 600 }}>seu próprio link de afiliado</strong>. Por enquanto o link não é convertido — a oferta é gerada exatamente com o link que você colar.
+      </div>
 
       {/* Link — card no topo */}
       <section className="pnl-card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -174,8 +226,8 @@ export default function CriarOfertaPage() {
           {generated && (
             <>
               <span aria-hidden="true">·</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: affiliateApplied ? 'var(--success)' : 'var(--ink-soft)' }}>
-                {affiliateApplied ? '✓ link de afiliado aplicado' : 'usando o link original (sem conversão)'}
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                oferta gerada com o link colado (sem conversão)
               </span>
             </>
           )}
@@ -185,78 +237,120 @@ export default function CriarOfertaPage() {
       {conv && <div className={`pnl-note-box ${conv.tone === 'success' ? 'is-success' : 'is-error'}`} role="status"><strong style={{ fontWeight: 600 }}>{conv.title}</strong>{conv.hint && <p style={{ marginTop: 4 }}>{conv.hint}</p>}</div>}
       {error && <div className="pnl-note-box is-error" role="alert">{error}</div>}
 
-      {/* Grade 2 colunas */}
+      {/* Prévia editável: substitui o antigo card "Produto encontrado" — o
+          usuário ajusta título/preços direto no texto da mensagem. */}
       {generated && (
-        <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', alignItems: 'start' }}>
-          {/* Esquerda: produto + composição */}
-          <div className="pnl-grid">
-            <section className="pnl-card">
-              <div className="pnl-card-title" style={{ marginBottom: 14 }}>Produto encontrado</div>
-              <div style={{ display: 'flex', gap: 14 }}>
-                <span className="pnl-prod-img" aria-hidden="true">
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41 13.42 20.6a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><circle cx="7" cy="7" r="1.2" /></svg>
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.3, color: 'var(--ink)' }}>{generated.title || 'Sem título detectado'}</div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                    {generated.newPrice ? <span className="pnl-price-now">{formatOfferPrice(generated.newPrice)}</span> : <span className="pnl-card-note">preço não detectado</span>}
-                    {generated.oldPrice && <span className="pnl-price-old">{formatOfferPrice(generated.oldPrice)}</span>}
-                    {dp != null && <span className="pnl-disc">-{dp}%</span>}
-                  </div>
-                </div>
-              </div>
-
-              {/* Campos editáveis */}
-              <div style={{ marginTop: 16 }}>
-                <label className="pnl-label" htmlFor="of-title">Título</label>
-                <input id="of-title" className="pnl-input" value={generated.title} onChange={(e) => setGenerated((g) => ({ ...g, title: e.target.value }))} />
-              </div>
-              <div className="pnl-price-grid" style={{ marginTop: 12 }}>
-                <div className="pnl-field">
-                  <label className="pnl-label" htmlFor="of-old">Preço antigo (de)</label>
-                  <input id="of-old" className="pnl-input" value={generated.oldPrice} onChange={(e) => setGenerated((g) => ({ ...g, oldPrice: e.target.value }))} placeholder="Ex: 199,90" />
-                </div>
-                <div className="pnl-field">
-                  <label className="pnl-label" htmlFor="of-new">Preço atual (por)</label>
-                  <input id="of-new" className="pnl-input" value={generated.newPrice} onChange={(e) => setGenerated((g) => ({ ...g, newPrice: e.target.value }))} placeholder="Ex: 149,90" />
-                </div>
-              </div>
-            </section>
-
-            <section className="pnl-card">
-              <div className="pnl-card-title" style={{ marginBottom: 12 }}>Configurar envio</div>
-              <label className="pnl-check">
-                <input type="checkbox" checked={includeGroupCta} onChange={(e) => setIncludeGroupCta(e.target.checked)} />
-                Incluir CTA de grupo
-              </label>
-              {includeGroupCta && <input className="pnl-input" style={{ marginTop: 8 }} value={groupCtaText} onChange={(e) => setGroupCtaText(e.target.value)} />}
-
-              <div style={{ marginTop: 14 }}>
-                <button type="button" className="pnl-detail-btn" onClick={() => setShowTemplate((v) => toggleTemplateVisibility(v))} aria-expanded={showTemplate}>
-                  {showTemplate ? 'Ocultar template' : 'Editar template'}
-                </button>
-                {showTemplate && (
-                  <div style={{ marginTop: 8 }}>
-                    <p className="pnl-hint">Variáveis: {'{{title}}'}, {'{{oldPriceBlock}}'}, {'{{newPriceBlock}}'}, {'{{link}}'}, {'{{groupCtaBlock}}'}</p>
-                    <textarea className="pnl-input" style={{ marginTop: 6 }} rows={8} aria-label="Template da oferta" value={template} onChange={(e) => setTemplate(e.target.value)} />
-                  </div>
-                )}
-              </div>
-              {generated.link && <p className="pnl-hint" style={{ marginTop: 12, wordBreak: 'break-all' }}>Link da oferta: {generated.link}</p>}
-            </section>
+        <section className="pnl-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <div className="pnl-card-title">Prévia no WhatsApp</div>
+            <span className="pnl-card-note">edite o texto como quiser — é assim que vai chegar no grupo</span>
           </div>
 
-          {/* Direita: prévia WhatsApp */}
-          <section className="pnl-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <div className="pnl-card-title">Prévia no WhatsApp</div>
-              <span className="pnl-card-note">como vai chegar no grupo</span>
+          <div style={{ marginBottom: 12 }}>
+            <label className="pnl-label" htmlFor="of-template">Template</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <select
+                id="of-template"
+                className="pnl-input"
+                style={{ flex: 1, minWidth: 160 }}
+                value={selectedTemplate?.key || ''}
+                onChange={(e) => selectTemplate(e.target.value)}
+              >
+                {templates.map((t) => (
+                  <option key={t.key} value={t.key}>{t.name}{t.isCustom ? ' (personalizado)' : ''}</option>
+                ))}
+              </select>
+              <Link href="/painel/mensagens" className="pnl-detail-btn" style={{ whiteSpace: 'nowrap' }}>Gerenciar templates</Link>
             </div>
-            <WhatsAppBubble text={offerMessage} time={now} />
-            <button type="button" className="pnl-btn is-primary" style={{ marginTop: 14, width: '100%', justifyContent: 'center' }} onClick={copyMessage}>Copiar oferta</button>
-            {copyFeedback && <div className="pnl-note-box is-success" style={{ marginTop: 10 }} role="status">{copyFeedback}</div>}
-          </section>
-        </div>
+          </div>
+
+          <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', alignItems: 'start' }}>
+            <div className="pnl-field">
+              <label className="pnl-label" htmlFor="of-message">Mensagem da oferta</label>
+              <textarea
+                id="of-message"
+                className="pnl-input"
+                rows={10}
+                style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: 14, lineHeight: 1.5 }}
+                value={offerMessage}
+                onChange={(e) => setCustomText(e.target.value)}
+              />
+              {customText != null && (
+                <button type="button" className="pnl-detail-btn" style={{ marginTop: 8 }} onClick={() => setCustomText(null)}>Restaurar texto do template</button>
+              )}
+            </div>
+            <div>
+              <WhatsAppBubble text={offerMessage} time={now} imageUrl={productImageUrl} format />
+              {productImageUrl && (
+                <p className="pnl-hint" style={{ marginTop: 8 }}>A imagem é ilustrativa — copie o texto e anexe a foto no WhatsApp.</p>
+              )}
+            </div>
+          </div>
+
+          <button type="button" className="pnl-btn is-primary" style={{ marginTop: 14, width: '100%', justifyContent: 'center' }} onClick={copyMessage}>Copiar oferta</button>
+          {copyFeedback && <div className="pnl-note-box is-success" style={{ marginTop: 10 }} role="status">{copyFeedback}</div>}
+        </section>
+      )}
+
+      {generated && (
+        <section className="pnl-card" aria-labelledby="dispatch-title">
+          <div className="pnl-card-title" id="dispatch-title">Envio</div>
+          <p className="pnl-hint" style={{ marginTop: 4 }}>Como você quer enviar esta oferta?</p>
+
+          {/* Seletor de modo: cada modo revela só os campos pertinentes. */}
+          <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }} role="group" aria-label="Modo de envio">
+            {[['now', 'Enviar agora'], ['schedule', 'Agendar'], ['queue', 'Inserir na fila']].map(([mode, label]) => (
+              <button key={mode} type="button" className={`pnl-btn${sendMode === mode ? ' is-primary' : ''}`} aria-pressed={sendMode === mode} onClick={() => { setSendMode(mode); setDispatchFeedback('') }}>{label}</button>
+            ))}
+          </div>
+
+          {sendMode === 'schedule' && (
+            <div className="pnl-field" style={{ marginTop: 16, maxWidth: 280 }}>
+              <label className="pnl-label" htmlFor="schedule-at">Dia e hora</label>
+              <input id="schedule-at" className="pnl-input" type="datetime-local" value={scheduleAt} onChange={(e) => setScheduleAt(e.target.value)} />
+            </div>
+          )}
+
+          {(sendMode === 'now' || sendMode === 'schedule') && (
+            <div style={{ marginTop: 16 }}>
+              <span className="pnl-label">Grupos de destino</span>
+              <div className="pnl-grid" style={{ marginTop: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
+                {groups.map((group) => <label className="pnl-check" key={group.id}><input type="checkbox" checked={selectedJids.includes(group.waJid)} onChange={() => setSelectedJids((current) => current.includes(group.waJid) ? current.filter((jid) => jid !== group.waJid) : [...current, group.waJid])} />{group.name}</label>)}
+              </div>
+              {!groups.length && <p className="pnl-note-box is-error" style={{ marginTop: 8 }}>Nenhum grupo de postagem configurado. <Link href="/painel/grupos">Adicionar grupos</Link></p>}
+            </div>
+          )}
+
+          {sendMode === 'queue' && (
+            <div className="pnl-field" style={{ marginTop: 16, maxWidth: 380 }}>
+              <label className="pnl-label" htmlFor="queue-id">Fila automática</label>
+              {queues.length ? (
+                <>
+                  <select id="queue-id" className="pnl-input" value={queueId} onChange={(e) => setQueueId(e.target.value)}>
+                    {queues.map((queue) => <option value={queue.id} key={queue.id}>{queue.name}{queue.enabled ? '' : ' (pausada)'}</option>)}
+                  </select>
+                  <p className="pnl-hint" style={{ marginTop: 6 }}>A oferta será enviada para os grupos configurados na fila.</p>
+                </>
+              ) : (
+                <Link className="pnl-btn" href="/painel/filas">Criar minha primeira fila</Link>
+              )}
+            </div>
+          )}
+
+          {sendMode && (
+            <button
+              type="button"
+              className="pnl-btn is-primary"
+              style={{ marginTop: 18, justifyContent: 'center' }}
+              disabled={!!dispatching || (sendMode !== 'queue' && !selectedJids.length) || (sendMode === 'schedule' && !scheduleAt) || (sendMode === 'queue' && !queueId)}
+              onClick={() => dispatch(sendMode)}
+            >
+              {dispatching ? (sendMode === 'now' ? 'Enviando…' : sendMode === 'schedule' ? 'Agendando…' : 'Inserindo…') : (sendMode === 'now' ? 'Enviar agora' : sendMode === 'schedule' ? 'Agendar' : 'Inserir na fila')}
+            </button>
+          )}
+
+          {dispatchFeedback && <div className={`pnl-note-box ${/sucesso|enviada|agendada|inserida/i.test(dispatchFeedback) ? 'is-success' : 'is-error'}`} style={{ marginTop: 14 }} role="status">{dispatchFeedback}{dispatchFeedback.includes('Agendados') && <> <Link href="/painel/agendados">Abrir agendados</Link></>}</div>}
+        </section>
       )}
     </div>
   )

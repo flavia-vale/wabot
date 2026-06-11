@@ -7,7 +7,6 @@ import { Alert } from '@/components/Alert'
 const TABS = [
   { id: 'link', label: 'Colar link' },
   { id: 'followed', label: 'Canais que sigo' },
-  { id: 'jid', label: 'JID manual' },
 ]
 
 // Wrapper que remonta o conteúdo via `key` quando abre — substitui o effect
@@ -21,7 +20,6 @@ export function AddChannelModal({ open, onClose, onCreated }) {
 function AddChannelModalContent({ onClose, onCreated }) {
   const [tab, setTab] = useState('link')
   const [url, setUrl] = useState('')
-  const [jid, setJid] = useState('')
   const [preview, setPreview] = useState(null)
   const [nameDraft, setNameDraft] = useState('')
   const [role, setRole] = useState('monitor')
@@ -57,15 +55,6 @@ function AddChannelModalContent({ onClose, onCreated }) {
     setBusy(true); setError(''); applyPreview(null)
     try {
       const data = await api.resolveChannelInvite(url.trim())
-      applyPreview(data)
-    } catch (err) { setError(err.message) } finally { setBusy(false) }
-  }
-
-  async function resolveJid() {
-    if (!jid.trim().endsWith('@newsletter')) { setError('JID deve terminar com @newsletter'); return }
-    setBusy(true); setError(''); applyPreview(null)
-    try {
-      const data = await api.resolveChannelJid(jid.trim())
       applyPreview(data)
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
@@ -157,7 +146,7 @@ function AddChannelModalContent({ onClose, onCreated }) {
                   : 'Atualizar lista'}
             </button>
             {followedList !== null && followedList.length === 0 && !loadingFollowed && (
-              <p className="text-sm text-slate-500">Nenhum canal encontrado na sua conta. Tente &ldquo;Colar link&rdquo; ou &ldquo;JID manual&rdquo;.</p>
+              <p className="text-sm text-slate-500">Nenhum canal encontrado na sua conta. Tente &ldquo;Colar link&rdquo;.</p>
             )}
             <ul className="space-y-1 max-h-64 overflow-y-auto">
               {followedList?.map(c => (
@@ -167,30 +156,12 @@ function AddChannelModalContent({ onClose, onCreated }) {
                     onClick={() => setPreview(c)}
                     className={`w-full text-left px-3 py-2 rounded border ${preview?.jid === c.jid ? 'border-sky-500 bg-sky-50' : 'border-slate-200 hover:bg-slate-50'}`}
                   >
-                    <div className="font-medium text-sm">{c.name}</div>
-                    <div className="text-xs text-slate-500">{c.jid}</div>
+                    <div className="font-medium text-sm">{c.name || 'Canal sem nome'}</div>
                     {c.isViewerOwner && <span className="text-xs text-emerald-700">Você é dono</span>}
                   </button>
                 </li>
               ))}
             </ul>
-          </div>
-        )}
-
-        {tab === 'jid' && (
-          <div className="space-y-2">
-            <label className="block text-sm">JID do canal</label>
-            <input
-              type="text"
-              value={jid}
-              onChange={(e) => setJid(e.target.value)}
-              placeholder="xxxxxxxxxxxx@newsletter"
-              className="w-full border rounded px-3 py-2 font-mono text-sm"
-            />
-            <button type="button" onClick={resolveJid} disabled={busy || !jid.trim()}
-              className="px-3 py-1.5 bg-sky-600 text-white rounded text-sm disabled:opacity-50">
-              {busy ? 'Buscando…' : 'Buscar canal'}
-            </button>
           </div>
         )}
 

@@ -25,6 +25,10 @@ model User {
   lastActivityAt         DateTime?
   lastSupportContactAt   DateTime?
   supportStatus          String    @default("new")
+  termsAcceptedAt        DateTime?
+  termsVersion           String?
+  termsAcceptedIp        String?
+  termsAcceptedUserAgent String?
   createdAt              DateTime  @default(now())
 
   waSession             WaSession?
@@ -42,6 +46,8 @@ model User {
   customerContactActors CustomerContactLog[] @relation("CustomerContactActor")
   followLogs            FollowLog[]
   offerAutomations      OfferAutomation[]
+  offerQueues           OfferQueue[]
+  offerQueueItems       OfferQueueItem[]
   affiliateLinks        AffiliateLink[]
   probeEvidences       ProbeEvidence[]
 
@@ -299,9 +305,53 @@ model ScheduledMessage {
   scheduledAt DateTime
   sentAt      DateTime?
   status      String    @default("pending")
+  imageUrl    String?
+  imageRefererUrl String?
   createdAt   DateTime  @default(now())
 
   @@index([userId, status, scheduledAt])
+}
+
+model OfferQueue {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name             String
+  enabled          Boolean  @default(true)
+  intervalEnabled  Boolean  @default(false)
+  intervalMinutes  Int      @default(30)
+  hourlyCapEnabled Boolean  @default(false)
+  hourlyCap        Int      @default(10)
+  dailyCapEnabled  Boolean  @default(false)
+  dailyCap         Int      @default(50)
+  // JSON array de JIDs de destino da fila. "[]" = fallback para todos os
+  // grupos com role 'post' (comportamento legado, pré-seleção por fila).
+  targetJids       String   @default("[]")
+  lastSentAt       DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  items            OfferQueueItem[]
+
+  @@index([userId, enabled])
+}
+
+model OfferQueueItem {
+  id              String     @id @default(cuid())
+  queueId         String
+  queue           OfferQueue @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text            String
+  imageUrl        String?
+  imageRefererUrl String?
+  targetJids      String
+  status          String     @default("pending")
+  position        Int
+  sentAt          DateTime?
+  createdAt       DateTime   @default(now())
+
+  @@index([queueId, status, position])
+  @@index([userId, status])
 }
 
 model MessageLog {
@@ -424,6 +474,17 @@ model TutorialContent {
   updatedAt DateTime @updatedAt
 }
 
+model LegalDocument {
+  id              String   @id
+  title           String
+  summary         String
+  contentJson     String   @default("{}")
+  version         String
+  updatedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
 model AnalyticsEvent {
   id        String   @id
   userId    String?
@@ -516,42 +577,48 @@ model OfferAutomationSentLog {
 }
 
 model AffiliateSettings {
-  id                  Int @id @default(1)
-  cookieDurationHours Int @default(24)
-  commissionPercent   Int @default(30)
+  id                         Int     @id @default(1)
+  cookieDurationHours        Int     @default(24)
+  commissionPercent          Int     @default(30)
+  commissionRecurringPercent Int     @default(30)
+  recurringCommissionEnabled Boolean @default(true)
 }
 
 model AffiliateProfile {
-  id          String  @id @default(cuid())
-  userId      String  @unique
-  code        String  @unique
-  status      String  @default("pending")
-  pixKey      String
-  pixKeyType  String
-  appliedAt   DateTime @default(now())
-  approvedAt  DateTime?
-  rejectedAt  DateTime?
-  adminNotes  String?
+  id                                 String    @id @default(cuid())
+  userId                             String    @unique
+  code                               String    @unique
+  status                             String    @default("pending")
+  pixKey                             String
+  pixKeyType                         String
+  appliedAt                          DateTime  @default(now())
+  approvedAt                         DateTime?
+  rejectedAt                         DateTime?
+  adminNotes                         String?
+  commissionPercentOverride          Int?
+  commissionRecurringPercentOverride Int?
 
-  user        User     @relation("UserAffiliate", fields: [userId], references: [id], onDelete: Cascade)
-  referredUser User?   @relation("AffiliateUser")
-  commissions AffiliateCommission[]
+  user         User                  @relation("UserAffiliate", fields: [userId], references: [id], onDelete: Cascade)
+  referredUser User?                 @relation("AffiliateUser")
+  commissions  AffiliateCommission[]
 
   @@index([status])
 }
 
 model AffiliateCommission {
-  id                    String   @id @default(cuid())
+  id                    String    @id @default(cuid())
   affiliateId           String
-  paymentId             String   @unique
+  paymentId             String    @unique
   referredUserId        String
   saleAmountCents       Int
   commissionAmountCents Int
-  status                String   @default("pending")
+  commissionType        String    @default("initial")
+  commissionRatePct     Int       @default(30)
+  status                String    @default("pending")
   cycleMonth            String
   paidAt                DateTime?
   paidByUserId          String?
-  createdAt             DateTime @default(now())
+  createdAt             DateTime  @default(now())
 
   affiliate    AffiliateProfile @relation(fields: [affiliateId], references: [id])
   payment      Payment          @relation(fields: [paymentId], references: [id])

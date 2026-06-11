@@ -81,6 +81,14 @@ const SCRAPE_OFFER_URL_RE = /^https?:\/\/[^\s]+$/i
 export async function linkConversionRoutes(app, opts = {}) {
   const convertLink = opts.converter ? normalizeConverter(opts.converter) : defaultConvertLink
   const fetchProductInfo = opts.fetchProductInfo ?? defaultFetchProductInfo
+  // imageScrapers carrega `sharp` (binário nativo). O resolver precisa ser
+  // lazy para que uma instalação incompatível/ausente de sharp nunca derrube
+  // toda a API no boot; nesse cenário apenas a foto opcional é omitida.
+  const loadImageScrapers = opts.loadImageScrapers ?? (() => import('../../converters/imageScrapers.js'))
+  const fetchProductImage = opts.fetchProductImage ?? (async (...args) => {
+    const imageScrapers = await loadImageScrapers()
+    return imageScrapers.fetchProductImage(...args)
+  })
   const findCredentials = opts.findCredentials ?? ((userId) => db.credential.findMany({ where: { userId } }))
   const rateState = opts.rateState ?? new Map()
   const getNow = opts.now ?? (() => Date.now())
@@ -115,28 +123,45 @@ export async function linkConversionRoutes(app, opts = {}) {
     const credentials = await findCredentials(userId)
     const credentialsMap = buildCredentialsMap(credentials)
 
-    // Painel "Criar oferta": o link mostrado é o CONVERTIDO (afiliado), por
-    // isso keepOriginalLink=false. A busca de título/preço (conversão ->
-    // resolução -> scrape com credenciais -> fallback) vive no motor único
-    // compartilhado com o bot do Telegram (offerEngine.js).
+    // TEMPORÁRIO (2026-06): o painel "Criar oferta" exige que o usuário cole o
+    // PRÓPRIO link de afiliado e NÃO devolve mais link convertido — mesmo
+    // contrato do bot do Telegram (keepOriginalLink=true). A conversão ainda
+    // roda internamente só para BUSCAR título/preço (resolve short link,
+    // cookie ML), mas a oferta sai sempre com o link colado. A busca de
+    // título/preço vive no motor único compartilhado (offerEngine.js).
     const offer = await buildScrapedOffer({
       url,
       credentialsMap,
-      keepOriginalLink: false,
+      keepOriginalLink: true,
       convertLink,
       fetchProductInfo,
       conversionTimeoutMs: operational.conversionTimeoutMs,
       logger: app.log,
     })
 
+    let imageUrl = null
+    const imageSourceUrl = offer.finalUrl || url
+    const platform = detectLinks(imageSourceUrl)[0]?.platform || detectLinks(url)[0]?.platform
+    if (platform) {
+      imageUrl = await fetchProductImage(platform, imageSourceUrl, credentialsMap).catch((err) => {
+        app.log.warn({ err: err?.message, platform }, 'Falha ao resolver imagem da oferta')
+        return null
+      })
+    }
+
     return {
       title: offer.title,
       oldPrice: offer.oldPrice,
       newPrice: offer.newPrice,
       finalUrl: offer.finalUrl,
-      offerUrl: offer.offerUrl,
-      conversionWarning: offer.conversionWarning,
-      conversion: offer.conversion,
+      // TEMPORÁRIO: offerUrl = link colado pelo usuário (displayUrl com
+      // keepOriginalLink=true). Sem metadados de conversão na resposta para o
+      // painel não exibir status de "link convertido" enquanto o modo durar.
+      offerUrl: offer.displayUrl || url,
+      conversionWarning: null,
+      conversion: null,
+      imageUrl,
+      imageRefererUrl: imageUrl ? imageSourceUrl : null,
       ...(offer.scrapeWarning ? { scrapeWarning: offer.scrapeWarning } : {}),
     }
   })

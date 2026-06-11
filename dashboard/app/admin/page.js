@@ -462,6 +462,149 @@ function TutorialEditor({ tutorial, onSave }) {
   )
 }
 
+
+function TermsEditor({ terms, onSave }) {
+  const [form, setForm] = useState(() => ({
+    title: terms?.title ?? '',
+    summary: terms?.summary ?? '',
+    lastUpdatedLabel: terms?.content?.lastUpdatedLabel ?? '',
+    intro: terms?.content?.intro ?? '',
+    finalDeclaration: terms?.content?.finalDeclaration ?? '',
+    sections: terms?.content?.sections ?? [],
+  }))
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
+
+
+  function updateSection(index, patch) {
+    setForm(current => ({
+      ...current,
+      sections: current.sections.map((section, idx) => idx === index ? { ...section, ...patch } : section),
+    }))
+  }
+
+  function addSection() {
+    setForm(current => ({
+      ...current,
+      sections: [...current.sections, { title: `${current.sections.length + 1}. Nova seção`, body: ['Texto da nova seção.'], warning: false }],
+    }))
+  }
+
+  function removeSection(index) {
+    if (!window.confirm('Remover esta seção dos Termos?')) return
+    setForm(current => ({ ...current, sections: current.sections.filter((_, idx) => idx !== index) }))
+  }
+
+  async function submit(e) {
+    e.preventDefault()
+    setSaving(true)
+    setMessage('')
+    try {
+      const payload = {
+        title: form.title,
+        summary: form.summary,
+        content: {
+          lastUpdatedLabel: form.lastUpdatedLabel,
+          intro: form.intro,
+          finalDeclaration: form.finalDeclaration,
+          sections: form.sections.map(section => ({
+            title: section.title,
+            warning: Boolean(section.warning),
+            body: Array.isArray(section.body) ? section.body : String(section.body ?? '').split(/\n\s*\n/g),
+          })),
+        },
+      }
+      await onSave(payload)
+      setMessage('Termos salvos. A página /termos e novos aceites passam a usar a nova versão imediatamente.')
+    } catch (err) {
+      setMessage(err?.message || 'Falha ao salvar termos.')
+      throw err
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section id="admin-legal-terms" className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+      <div className="mb-4 flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Legal · Termos editáveis</p>
+          <h2 className="text-lg font-black text-gray-900">Termos de Uso e Ciência de Riscos</h2>
+          <p className="text-sm text-gray-500">Edite aqui o texto exibido em /termos. Cada salvamento gera uma nova versão para os próximos aceites de cadastro.</p>
+        </div>
+        <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+          Versão atual: {terms?.version || 'fallback'}
+        </div>
+      </div>
+
+      <form onSubmit={submit} className="space-y-4">
+        <div className="grid gap-3 lg:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-600">Título público</span>
+            <input value={form.title} onChange={event => setForm({ ...form, title: event.target.value })} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" required />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-600">Última atualização exibida</span>
+            <input value={form.lastUpdatedLabel} onChange={event => setForm({ ...form, lastUpdatedLabel: event.target.value })} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" placeholder="09 de junho de 2026" />
+          </label>
+        </div>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-600">Resumo SEO/descrição</span>
+          <textarea value={form.summary} onChange={event => setForm({ ...form, summary: event.target.value })} className="min-h-20 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" required />
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-600">Resumo destacado no topo</span>
+          <textarea value={form.intro} onChange={event => setForm({ ...form, intro: event.target.value })} className="min-h-24 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
+        </label>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-base font-black text-gray-900">Seções dos termos</h3>
+            <button type="button" onClick={addSection} className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100">Adicionar seção</button>
+          </div>
+          {form.sections.map((section, index) => (
+            <div key={`${index}-${section.title}`} className={`rounded-2xl border p-4 ${section.warning ? 'border-red-200 bg-red-50' : 'border-gray-100 bg-gray-50'}`}>
+              <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                <input value={section.title} onChange={event => updateSection(index, { title: event.target.value })} className="flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-400" required />
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 text-xs font-bold text-red-700">
+                    <input type="checkbox" checked={Boolean(section.warning)} onChange={event => updateSection(index, { warning: event.target.checked })} />
+                    Destaque de risco
+                  </label>
+                  <button type="button" onClick={() => removeSection(index)} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-red-700 ring-1 ring-red-100 hover:bg-red-50">Remover</button>
+                </div>
+              </div>
+              <textarea
+                value={(section.body ?? []).join('\n\n')}
+                onChange={event => updateSection(index, { body: event.target.value.split(/\n\s*\n/g) })}
+                className="min-h-32 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm leading-6 outline-none focus:ring-2 focus:ring-emerald-400"
+                placeholder="Escreva os parágrafos desta seção. Separe parágrafos com uma linha em branco."
+                required
+              />
+            </div>
+          ))}
+        </div>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-600">Declaração final de aceite</span>
+          <textarea value={form.finalDeclaration} onChange={event => setForm({ ...form, finalDeclaration: event.target.value })} className="min-h-24 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
+        </label>
+
+        {message && <p className={`rounded-xl px-3 py-2 text-sm font-semibold ${message.startsWith('Termos salvos') ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>{message}</p>}
+
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="submit" disabled={saving} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
+            {saving ? 'Salvando termos...' : 'Salvar termos e publicar'}
+          </button>
+          <Link href="/termos" target="_blank" rel="noreferrer" className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50">Ver página pública</Link>
+        </div>
+      </form>
+    </section>
+  )
+}
+
 function LandingPageContentAccordion({ plans, faq, tutorial, onSavePlan, onSaveFaq, onDeleteFaq, onSaveTutorial }) {
   const [open, setOpen] = useState(false)
 
@@ -523,6 +666,7 @@ export default function AdminPage() {
   const [faq, setFaq] = useState(null)
   const [plans, setPlans] = useState([])
   const [tutorial, setTutorial] = useState(null)
+  const [terms, setTerms] = useState(null)
   const [selectedUser, setSelectedUser] = useState(null)
   const [risk, setRisk] = useState('')
   const [search, setSearch] = useState('')
@@ -533,7 +677,7 @@ export default function AdminPage() {
   async function loadAdminData(nextRisk = risk, nextSearch = search) {
     if (accessDenied) return
     setError('')
-    const [adminData, overviewData, usersData, sessionsData, sessionTelemetryData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, lpContentData] = await Promise.all([
+    const [adminData, overviewData, usersData, sessionsData, sessionTelemetryData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, lpContentData, termsData] = await Promise.all([
       api.adminMe(),
       api.adminOverview(),
       api.adminUsers({ risk: nextRisk, search: nextSearch, limit: 20 }),
@@ -549,6 +693,7 @@ export default function AdminPage() {
       api.adminSystemMetrics().catch(() => null),
       api.adminSystemObservability().catch(() => null),
       api.adminLpContent().catch(() => null),
+      api.adminLegalTerms().catch(() => null),
     ])
     setAdmin(adminData)
     setOverview(overviewData)
@@ -567,6 +712,7 @@ export default function AdminPage() {
     setFaq(lpContentData?.faq ?? null)
     setPlans(lpContentData?.plans ?? [])
     setTutorial(lpContentData?.tutorial ?? null)
+    setTerms(termsData?.terms ?? null)
   }
 
   useEffect(() => {
@@ -592,11 +738,12 @@ export default function AdminPage() {
           api.adminSystemMetrics().catch(() => null),
           api.adminSystemObservability().catch(() => null),
           api.adminLpContent().catch(() => null),
+          api.adminLegalTerms().catch(() => null),
         ])
       })
       .then((result) => {
         if (!active || !result) return
-        const [adminData, overviewData, usersData, sessionsData, sessionTelemetryData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, lpContentData] = result
+        const [adminData, overviewData, usersData, sessionsData, sessionTelemetryData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, lpContentData, termsData] = result
         setAdmin(adminData)
         setOverview(overviewData)
         setUsers(usersData)
@@ -614,6 +761,7 @@ export default function AdminPage() {
         setFaq(lpContentData?.faq ?? null)
         setPlans(lpContentData?.plans ?? [])
         setTutorial(lpContentData?.tutorial ?? null)
+        setTerms(termsData?.terms ?? null)
       })
       .catch((err) => {
         if (!active) return
@@ -722,6 +870,17 @@ export default function AdminPage() {
       await refreshLpContent()
     } catch (err) {
       setError(err.message || 'Falha ao excluir pergunta do FAQ.')
+    }
+  }
+
+  async function saveLegalTerms(form) {
+    setError('')
+    try {
+      const data = await api.adminUpdateLegalTerms(form)
+      setTerms(data?.terms ?? null)
+    } catch (err) {
+      setError(err.message || 'Falha ao salvar termos legais.')
+      throw err
     }
   }
 
@@ -1095,6 +1254,7 @@ export default function AdminPage() {
           </section>
         </div>
 
+        <TermsEditor key={`terms-${terms?.version ?? 'fallback'}`} terms={terms} onSave={saveLegalTerms} />
         <LandingPageContentAccordion plans={plans} faq={faq} tutorial={tutorial} onSavePlan={saveLpPlan} onSaveFaq={saveFaqItem} onDeleteFaq={deleteFaqItem} onSaveTutorial={saveTutorialContent} />
         <AdminTutorialAccordion tutorial={tutorial} onSaveTutorial={saveTutorialContent} TutorialEditor={TutorialEditor} />
       </div>

@@ -248,8 +248,8 @@ export default function AffiliatePage() {
       {months.length > 0 && (
         <div>
           <h2 className="text-base font-bold text-gray-800 mb-2">Histórico por mês</h2>
-          <div className="rounded-xl border border-gray-100 overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="rounded-xl border border-gray-100 overflow-x-auto">
+            <table className="w-full text-sm min-w-[440px]">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Mês</th>
