@@ -1,4 +1,4 @@
-import db from '../../db.js'
+import dbDefault from '../../db.js'
 import { reloadConfig } from '../../manager.js'
 import { DEFAULT_BRANDING_CTA_TEXT, MAX_BRANDING_CTA_CHARS, normalizeBrandingCtaText, normalizeBrandingLink } from '../../messageProcessor.js'
 import { buildFeatureGateError, canUseAdvancedPreservation, FEATURE_CODES } from '../../billing/plans.js'
@@ -22,12 +22,12 @@ const DEFAULTS = {
 }
 
 
-async function getPlanSubject(userId) {
+async function getPlanSubject(db, userId) {
   return db.user.findUnique({ where: { id: userId }, select: { plan: true, accessExpiresAt: true } })
 }
 
-async function ensureAdvancedPreservationAllowed(userId, reply) {
-  const user = await getPlanSubject(userId)
+async function ensureAdvancedPreservationAllowed(db, userId, reply) {
+  const user = await getPlanSubject(db, userId)
   if (canUseAdvancedPreservation(user ?? { plan: 'basic' })) return true
   reply.code(403).send(buildFeatureGateError(FEATURE_CODES.ADVANCED_PRESERVATION))
   return false
@@ -37,7 +37,9 @@ function isIntegerInRange(value) {
   return Number.isInteger(value) && value >= 0 && value <= 300
 }
 
-export async function configRoutes(app) {
+export async function configRoutes(app, opts = {}) {
+  const db = opts.db ?? dbDefault
+
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
     const cfg = await db.botConfig.findUnique({ where: { userId: req.user.sub } })
     if (!cfg) return { ...DEFAULTS, userId: req.user.sub }
@@ -89,7 +91,7 @@ export async function configRoutes(app) {
     }
 
     const requestsAdvancedPreservation = feedGlobal === true || postToStatus === true
-    if (requestsAdvancedPreservation && !(await ensureAdvancedPreservationAllowed(userId, reply))) return
+    if (requestsAdvancedPreservation && !(await ensureAdvancedPreservationAllowed(db, userId, reply))) return
     const rawBrandingGroupLink = String(brandingGroupLink ?? '').trim()
     const normalizedBrandingGroupLink = normalizeBrandingLink(rawBrandingGroupLink)
     if (brandingGroupLink !== undefined && rawBrandingGroupLink && !normalizedBrandingGroupLink) {

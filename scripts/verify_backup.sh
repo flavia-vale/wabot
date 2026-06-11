@@ -15,6 +15,11 @@
 #                           — staging pode não ter sessão ativa; em prod, suba para 1)
 #   REQUIRE_ENV_FILES       1 = exige env/root.env presente (default: 1)
 #   MAX_AGE_HOURS           backup mais recente até X horas (default: 26 — cobre diário)
+#   AGE_IDENTITY_FILE       chave privada age para decifrar backups .tar.gz.age.
+#                           Sem ela, backups cifrados só passam pelos checks de
+#                           idade/tamanho/header (conteúdo não é inspecionado —
+#                           a chave privada não deve morar no VPS de prod; a
+#                           verificação completa roda no host de restore drill).
 #
 # Saída: 0 = ok, !=0 = falha (com log explicativo).
 
@@ -25,6 +30,7 @@ MIN_USER_COUNT="${MIN_USER_COUNT:-1}"
 MIN_AUTH_FILES="${MIN_AUTH_FILES:-0}"
 REQUIRE_ENV_FILES="${REQUIRE_ENV_FILES:-1}"
 MAX_AGE_HOURS="${MAX_AGE_HOURS:-26}"
+AGE_IDENTITY_FILE="${AGE_IDENTITY_FILE:-}"
 
 log() { echo "[verify_backup $(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"; }
 fail() { log "FALHA: $*"; exit 1; }
@@ -37,8 +43,8 @@ if [[ $# -ge 1 ]]; then
   archive="$1"
 else
   [[ -d "$BACKUP_DIR" ]] || fail "BACKUP_DIR não existe: $BACKUP_DIR"
-  archive="$(ls -t "$BACKUP_DIR"/wabot-prod-*.tar.gz 2>/dev/null | head -n 1 || true)"
-  [[ -n "$archive" ]] || fail "Nenhum wabot-prod-*.tar.gz encontrado em $BACKUP_DIR"
+  archive="$(ls -t "$BACKUP_DIR"/wabot-prod-*.tar.gz "$BACKUP_DIR"/wabot-prod-*.tar.gz.age 2>/dev/null | head -n 1 || true)"
+  [[ -n "$archive" ]] || fail "Nenhum wabot-prod-*.tar.gz(.age) encontrado em $BACKUP_DIR"
 fi
 [[ -f "$archive" ]] || fail "Arquivo não existe: $archive"
 
@@ -58,8 +64,25 @@ fi
 tmp_dir="$(mktemp -d -t wabot-verify-XXXXXXXX)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
-tar -xzf "$archive" -C "$tmp_dir" \
-  || fail "tar -xzf falhou — arquivo corrompido"
+if [[ "$archive" == *.age ]]; then
+  # Backup cifrado: valida o header age sempre; conteúdo só com a identity.
+  head -c 32 "$archive" | grep -q "age-encryption.org" \
+    || fail "arquivo .age sem header age válido — corrompido?"
+  size_bytes="$(stat -c%s "$archive")"
+  (( size_bytes > 1024 )) || fail "arquivo .age suspeito de truncado ($size_bytes bytes)"
+  if [[ -z "$AGE_IDENTITY_FILE" ]]; then
+    log "OK — backup cifrado presente e recente: $archive"
+    log "Conteúdo NÃO inspecionado (AGE_IDENTITY_FILE ausente — esperado no VPS; verificação completa roda no restore drill)"
+    exit 0
+  fi
+  command -v age >/dev/null 2>&1 || fail "age não instalado para decifrar"
+  [[ -f "$AGE_IDENTITY_FILE" ]] || fail "AGE_IDENTITY_FILE não existe: $AGE_IDENTITY_FILE"
+  age -d -i "$AGE_IDENTITY_FILE" "$archive" | tar -xzf - -C "$tmp_dir" \
+    || fail "decifragem/extração falhou — chave errada ou arquivo corrompido"
+else
+  tar -xzf "$archive" -C "$tmp_dir" \
+    || fail "tar -xzf falhou — arquivo corrompido"
+fi
 
 # 1) manifest.json deve existir (backup_prod.sh com .env-aware grava ele)
 if [[ ! -f "$tmp_dir/manifest.json" ]]; then

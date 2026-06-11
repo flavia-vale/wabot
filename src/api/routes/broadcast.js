@@ -1,6 +1,6 @@
 import dbDefault from '../../db.js'
 import { sendBroadcast, isRunning } from '../../manager.js'
-import { enforceChannelPlanGate, loadUserPlanSubject, resolveTargetJids } from './broadcastTargets.js'
+import { enforceChannelPlanGate, loadUserPlanSubject, resolveTargetJids, validateBroadcastText } from './broadcastTargets.js'
 
 function optionalUrl(value) {
   const normalized = typeof value === 'string' ? value.trim() : ''
@@ -17,6 +17,7 @@ export async function broadcastRoutes(app, deps = {}) {
     const userId = req.user.sub
     const { text, jids, imageUrl, imageRefererUrl } = req.body ?? {}
     if (!text?.trim()) return reply.code(400).send({ error: 'text obrigatório' })
+    validateBroadcastText(text)
     if (!await isRunningImpl(userId)) return reply.code(400).send({ error: 'Bot não está conectado' })
 
     const targetJids = await resolveTargetJids({ db, userId, jids })
@@ -32,7 +33,7 @@ export async function broadcastRoutes(app, deps = {}) {
 
   app.get('/scheduled', { onRequest: [app.authenticate] }, async (req) => {
     const msgs = await db.scheduledMessage.findMany({
-      where: { userId: req.user.sub, status: { not: 'cancelled' } },
+      where: { userId: req.user.sub, status: { in: ['pending', 'queued'] } },
       orderBy: { scheduledAt: 'asc' },
     })
     return msgs.map((message) => ({ ...message, targetJids: JSON.parse(message.targetJids) }))
@@ -42,6 +43,7 @@ export async function broadcastRoutes(app, deps = {}) {
     const userId = req.user.sub
     const { text, scheduledAt, jids, imageUrl, imageRefererUrl } = req.body ?? {}
     if (!text?.trim() || !scheduledAt) return reply.code(400).send({ error: 'text e scheduledAt obrigatórios' })
+    validateBroadcastText(text)
 
     const schedDate = new Date(scheduledAt)
     if (Number.isNaN(schedDate.getTime()) || schedDate <= now()) {
@@ -66,14 +68,21 @@ export async function broadcastRoutes(app, deps = {}) {
   })
 
   app.delete('/scheduled/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const msg = await db.scheduledMessage.findFirst({
-      where: { id: req.params.id, userId: req.user.sub },
-      select: { id: true, status: true },
+    const cancelled = await db.scheduledMessage.updateMany({
+      where: { id: req.params.id, userId: req.user.sub, status: 'pending' },
+      data: { status: 'cancelled' },
     })
-    if (!msg) return reply.code(404).send({ error: 'Mensagem não encontrada' })
-    if (msg.status === 'cancelled') return { ok: true, alreadyCancelled: true }
+    if (cancelled.count === 1) return { ok: true }
 
-    await db.scheduledMessage.update({ where: { id: msg.id }, data: { status: 'cancelled' } })
-    return { ok: true, alreadyCancelled: false }
+    const existing = await db.scheduledMessage.findFirst({
+      where: { id: req.params.id, userId: req.user.sub },
+      select: { status: true },
+    })
+    if (!existing) return reply.code(404).send({ error: 'Mensagem agendada não encontrada' })
+
+    return reply.code(409).send({
+      error: 'Somente agendamentos pendentes podem ser cancelados',
+      status: existing.status,
+    })
   })
 }

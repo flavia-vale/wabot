@@ -14,7 +14,7 @@
 import db from '../src/db.js'
 import { captureAllForUser } from '../src/jobs/channelSnapshot.js'
 import { isRunning } from '../src/manager.js'
-import { getAdvancedPreservationAccess, isPreservationActive } from '../src/billing/plans.js'
+import { PRESERVATION_FEATURE_SELECT, getAdvancedPreservationAccess, isPreservationActive } from '../src/billing/plans.js'
 
 async function main() {
   const started = Date.now()
@@ -35,7 +35,7 @@ async function main() {
       const access = await getAdvancedPreservationAccess(u.id, { db })
       const cfg = await db.botConfig.findUnique({
         where: { userId: u.id },
-        select: { preservationEnabled: true },
+        select: PRESERVATION_FEATURE_SELECT,
       })
       const preservationActive = isPreservationActive(access, cfg)
       const r = await captureAllForUser(u.id, { preservationActive })

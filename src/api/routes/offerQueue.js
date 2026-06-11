@@ -1,5 +1,5 @@
 import dbDefault from '../../db.js'
-import { enforceChannelPlanGate, loadUserPlanSubject, normalizeTargetJids, resolveTargetJids } from './broadcastTargets.js'
+import { enforceChannelPlanGate, loadUserPlanSubject, normalizeTargetJids, resolveTargetJids, validateBroadcastText } from './broadcastTargets.js'
 import { startOfSaoPauloDayUtc } from '../../offerQueue/time.js'
 
 const DEFAULTS = { intervalMinutes: 30, hourlyCap: 10, dailyCap: 50 }
@@ -104,6 +104,7 @@ export async function offerQueueRoutes(app, opts = {}) {
     if (!queue) return reply.code(404).send({ error: 'Fila não encontrada' })
     const { text, jids, imageUrl, imageRefererUrl } = req.body ?? {}
     if (!text?.trim()) return reply.code(400).send({ error: 'text obrigatório' })
+    validateBroadcastText(text)
     // Sem jids explícitos, o item herda os grupos configurados na própria
     // fila; fila legada sem grupos cai no fallback de todos os 'post'.
     const requestedJids = Array.isArray(jids) && jids.length ? jids : parseQueueTargetJids(queue)

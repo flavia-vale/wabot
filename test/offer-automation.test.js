@@ -212,6 +212,8 @@ import { offerAutomationRoutes } from '../src/api/routes/offerAutomation.js'
 function buildApp(dbMock) {
   const app = Fastify()
   app.decorate('authenticate', async (req) => { req.user = { sub: 'user-1' } })
+  // destGroupJid agora é validado contra os grupos de destino do tenant
+  if (!dbMock.group) dbMock.group = { findMany: async () => [{ waJid: '123@g.us' }, { waJid: 'grupo@g.us' }] }
   app.register(offerAutomationRoutes, { prefix: '/api/offer-automations', db: dbMock })
   return app
 }

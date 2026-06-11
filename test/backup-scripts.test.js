@@ -15,6 +15,10 @@ function hasSqlite3() {
   try { execSync('sqlite3 --version', { stdio: 'ignore' }); return true } catch { return false }
 }
 
+function hasAge() {
+  try { execSync('age --version', { stdio: 'ignore' }); return true } catch { return false }
+}
+
 /**
  * Constrói um "ambiente prod" fake num tmp dir:
  *   <root>/wabot/prisma/prod.db        (SQLite com User, WaSession, AdminAuditLog)
@@ -176,7 +180,7 @@ test('verify_backup.sh REJEITA archive com integrity_check quebrado', async (t) 
   })
 
   // Corrompe o tar.gz reescrevendo bytes no meio
-  const archive = join(env.backupDir, readdirSync(env.backupDir)[0])
+  const archive = join(env.backupDir, readdirSync(env.backupDir).find(f => f.startsWith("wabot-prod-")))
   const buf = Buffer.from(readFileSync(archive))
   // Corrompe um trecho perto do meio (evita stomp em header gzip nos primeiros 10 bytes)
   for (let i = 256; i < 320 && i < buf.length; i++) buf[i] = 0xFF
@@ -195,7 +199,7 @@ test('verify_backup.sh respeita MAX_AGE_HOURS', async (t) => {
     AUTH_INFO_DIR: env.authInfoDir, BACKUP_DIR: env.backupDir,
   })
   // Envelhece o arquivo artificialmente (48h atrás)
-  const archive = join(env.backupDir, readdirSync(env.backupDir)[0])
+  const archive = join(env.backupDir, readdirSync(env.backupDir).find(f => f.startsWith("wabot-prod-")))
   const oldTime = (Date.now() - 48 * 3600 * 1000) / 1000
   execSync(`touch -d "@${Math.floor(oldTime)}" "${archive}"`)
 
@@ -214,7 +218,7 @@ test('restore_from_backup.sh sem --confirm falha com exit 2', async (t) => {
     PROD_DIR: env.prodDir, PROD_DB: env.dbFile,
     AUTH_INFO_DIR: env.authInfoDir, BACKUP_DIR: env.backupDir,
   })
-  const archive = join(env.backupDir, readdirSync(env.backupDir)[0])
+  const archive = join(env.backupDir, readdirSync(env.backupDir).find(f => f.startsWith("wabot-prod-")))
 
   const result = runScript(RESTORE_SCRIPT, [archive], {}, { ignoreFail: true })
   assert.equal(result.failed, true)
@@ -259,6 +263,119 @@ test('restore_from_backup.sh round-trip: backup → mexe no estado → restore r
   assert.ok(existsSync(env.authInfoDir), 'auth_info restaurado')
   assert.ok(existsSync(join(env.authInfoDir, 'creds.json')), 'arquivos de auth_info presentes')
 })
+
+// ---------- criptografia (age) ----------
+
+test('backup_prod.sh com BACKUP_REQUIRE_ENCRYPTION=1 e sem chave falha sem deixar plaintext', async (t) => {
+  const env = setupFakeProd()
+  t.after(env.cleanup)
+
+  const result = runScript(BACKUP_SCRIPT, [], {
+    PROD_DIR: env.prodDir, PROD_DB: env.dbFile,
+    AUTH_INFO_DIR: env.authInfoDir, BACKUP_DIR: env.backupDir,
+    BACKUP_REQUIRE_ENCRYPTION: '1',
+  }, { ignoreFail: true })
+  assert.equal(result.failed, true)
+  assert.match(result.stdout + result.stderr, /BACKUP_REQUIRE_ENCRYPTION/)
+  const leftovers = readdirSync(env.backupDir).filter(f => f.startsWith('wabot-prod-'))
+  assert.equal(leftovers.length, 0, 'nenhum tarball em texto puro deve sobrar')
+})
+
+test('backup_prod.sh com BACKUP_REQUIRE_CLOUD=1 e sem remote falha', async (t) => {
+  const env = setupFakeProd()
+  t.after(env.cleanup)
+
+  const result = runScript(BACKUP_SCRIPT, [], {
+    PROD_DIR: env.prodDir, PROD_DB: env.dbFile,
+    AUTH_INFO_DIR: env.authInfoDir, BACKUP_DIR: env.backupDir,
+    BACKUP_REQUIRE_CLOUD: '1',
+  }, { ignoreFail: true })
+  assert.equal(result.failed, true)
+  assert.match(result.stdout + result.stderr, /BACKUP_REQUIRE_CLOUD/)
+})
+
+test('backup_prod.sh grava last_success.txt ao final', async (t) => {
+  const env = setupFakeProd()
+  t.after(env.cleanup)
+
+  runScript(BACKUP_SCRIPT, [], {
+    PROD_DIR: env.prodDir, PROD_DB: env.dbFile,
+    AUTH_INFO_DIR: env.authInfoDir, BACKUP_DIR: env.backupDir,
+  })
+  const marker = join(env.backupDir, 'last_success.txt')
+  assert.ok(existsSync(marker), 'marcador de sucesso deve existir')
+  assert.match(readFileSync(marker, 'utf8'), /wabot-prod-/)
+})
+
+if (hasAge()) {
+  test('round-trip cifrado: backup .age → verify com identity → restore decifra e restaura', async (t) => {
+    const env = setupFakeProd()
+    t.after(env.cleanup)
+
+    // Gera par de chaves age efêmero
+    const keyFile = join(env.root, 'backup-key.txt')
+    execSync(`age-keygen -o "${keyFile}" 2>/dev/null`)
+    const recipient = readFileSync(keyFile, 'utf8').match(/public key: (age1\S+)/)[1]
+
+    // 1) Backup cifrado
+    runScript(BACKUP_SCRIPT, [], {
+      PROD_DIR: env.prodDir, PROD_DB: env.dbFile,
+      AUTH_INFO_DIR: env.authInfoDir, BACKUP_DIR: env.backupDir,
+      ROOT_ENV_FILE: join(env.prodDir, '.env'),
+      DASHBOARD_ENV_FILE: join(env.dashboardDir, '.env.local'),
+      BACKUP_AGE_RECIPIENT: recipient,
+      BACKUP_REQUIRE_ENCRYPTION: '1',
+    })
+    const files = readdirSync(env.backupDir).filter(f => f.startsWith('wabot-prod-'))
+    assert.equal(files.length, 1)
+    assert.ok(files[0].endsWith('.tar.gz.age'), 'arquivo deve ser .tar.gz.age')
+    assert.ok(!files.some(f => f.endsWith('.tar.gz')), 'plaintext não deve sobrar no disco')
+    const archive = join(env.backupDir, files[0])
+    assert.equal((statSync(archive).mode & 0o777), 0o600)
+
+    // 2) verify sem identity: aprova só presença/header
+    const outNoKey = runScript(VERIFY_SCRIPT, [], { BACKUP_DIR: env.backupDir, MAX_AGE_HOURS: '0' })
+    assert.match(outNoKey, /cifrado/)
+
+    // 3) verify com identity: inspeciona conteúdo completo
+    const outWithKey = runScript(VERIFY_SCRIPT, [], {
+      BACKUP_DIR: env.backupDir, MAX_AGE_HOURS: '0',
+      MIN_USER_COUNT: '1', AGE_IDENTITY_FILE: keyFile,
+    })
+    assert.match(outWithKey, /integrity_check OK/)
+    assert.match(outWithKey, /backup íntegro/)
+
+    // 4) restore: mexe no estado e restaura a partir do .age
+    execSync(`sqlite3 "${env.dbFile}" "INSERT INTO User VALUES ('u4','d@x.com',4);"`)
+    runScript(RESTORE_SCRIPT, [archive, '--confirm'], {
+      PROD_DIR: env.prodDir, PROD_DB: env.dbFile,
+      AUTH_INFO_DIR: env.authInfoDir,
+      ROOT_ENV_FILE: join(env.prodDir, '.env'),
+      SKIP_PM2: '1', AGE_IDENTITY_FILE: keyFile,
+    })
+    const userCount = execSync(`sqlite3 "${env.dbFile}" "SELECT COUNT(*) FROM User;"`).toString().trim()
+    assert.equal(userCount, '3', 'restore do .age volta ao estado do backup')
+  })
+
+  test('restore de .age sem AGE_IDENTITY_FILE falha com mensagem clara', async (t) => {
+    const env = setupFakeProd()
+    t.after(env.cleanup)
+
+    const keyFile = join(env.root, 'backup-key.txt')
+    execSync(`age-keygen -o "${keyFile}" 2>/dev/null`)
+    const recipient = readFileSync(keyFile, 'utf8').match(/public key: (age1\S+)/)[1]
+    runScript(BACKUP_SCRIPT, [], {
+      PROD_DIR: env.prodDir, PROD_DB: env.dbFile,
+      AUTH_INFO_DIR: env.authInfoDir, BACKUP_DIR: env.backupDir,
+      BACKUP_AGE_RECIPIENT: recipient,
+    })
+    const archive = join(env.backupDir, readdirSync(env.backupDir).find(f => f.endsWith('.age')))
+
+    const result = runScript(RESTORE_SCRIPT, [archive, '--confirm'], { SKIP_PM2: '1' }, { ignoreFail: true })
+    assert.equal(result.failed, true)
+    assert.match(result.stdout + result.stderr, /AGE_IDENTITY_FILE/)
+  })
+}
 
 test('restore preserva pre-backup do estado anterior em /tmp', async (t) => {
   const env = setupFakeProd()

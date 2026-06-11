@@ -570,3 +570,64 @@ test('PUT /config persiste e GET retorna valor atualizado', async () => {
   assert.equal(body.config.probeEnabled, true)
   await app.close()
 })
+
+test('PUT /config persiste toggles independentes de preservação', async () => {
+  const { app, userId } = await buildApp({ plan: 'pro' })
+  const payload = {
+    channelThrottleEnabled: true,
+    quietHoursEnabled: false,
+    followGuardEnabled: true,
+    copyVariationEnabled: false,
+    imageMutationEnabled: true,
+  }
+  const res = await app.inject({
+    method: 'PUT',
+    url: '/api/preservation/config',
+    payload,
+  })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.deepEqual(
+    Object.fromEntries(Object.keys(payload).map(key => [key, body.config[key]])),
+    payload,
+  )
+  assert.equal('preservationEnabled' in body.config, false, 'API não deve expor o toggle mestre removido')
+  assert.equal('imageMutationActive' in body.config, false, 'nome interno não deve vazar para a UI')
+
+  const stored = await db.botConfig.findUnique({ where: { userId } })
+  assert.equal(stored.imageMutationActive, true)
+  assert.equal(stored.imageMutationEnabled, true, 'preferência legada permanece intacta')
+  await app.close()
+})
+
+test('toggle mestre legado é ignorado e não reativa nenhuma defesa', async () => {
+  const { app, userId } = await buildApp({ plan: 'pro' })
+  const res = await app.inject({
+    method: 'PUT',
+    url: '/api/preservation/config',
+    payload: { preservationEnabled: true },
+  })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal('preservationEnabled' in body.config, false)
+  for (const key of ['channelThrottleEnabled', 'quietHoursEnabled', 'followGuardEnabled', 'copyVariationEnabled', 'imageMutationEnabled']) {
+    assert.equal(body.config[key], false, `${key} deve permanecer desligado`)
+  }
+  const stored = await db.botConfig.findUnique({ where: { userId } })
+  assert.equal(stored.preservationEnabled, false)
+  await app.close()
+})
+
+test('API rejeita tipo inválido em cada toggle independente', async () => {
+  const { app } = await buildApp({ plan: 'pro' })
+  for (const key of ['channelThrottleEnabled', 'quietHoursEnabled', 'followGuardEnabled', 'copyVariationEnabled', 'imageMutationEnabled']) {
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/preservation/config',
+      payload: { [key]: 'true' },
+    })
+    assert.equal(res.statusCode, 400, key)
+    assert.match(JSON.parse(res.body).error, new RegExp(`${key} deve ser boolean`))
+  }
+  await app.close()
+})

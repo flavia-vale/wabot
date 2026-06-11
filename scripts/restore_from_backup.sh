@@ -11,6 +11,7 @@
 #
 # Uso:
 #   restore_from_backup.sh <archive.tar.gz> --confirm
+#   restore_from_backup.sh <archive.tar.gz.age> --confirm   # exige AGE_IDENTITY_FILE
 #
 # Variáveis:
 #   PROD_DIR              default: /home/deploy/wabot
@@ -20,6 +21,7 @@
 #                         (default: 1 — em DR full é o que você quer)
 #   SKIP_PM2              1 = não tenta parar/iniciar PM2 (default: 0)
 #   PM2_APPS              apps a parar/reiniciar (default: "api bot-supervisor")
+#   AGE_IDENTITY_FILE     chave privada age — obrigatória para archives .age
 
 set -euo pipefail
 
@@ -44,6 +46,7 @@ DASHBOARD_ENV_FILE="${DASHBOARD_ENV_FILE:-$PROD_DIR/dashboard/.env.local}"
 RESTORE_ENV="${RESTORE_ENV:-1}"
 SKIP_PM2="${SKIP_PM2:-0}"
 PM2_APPS="${PM2_APPS:-api bot-supervisor}"
+AGE_IDENTITY_FILE="${AGE_IDENTITY_FILE:-}"
 
 log() { echo "[restore $(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"; }
 fail() { log "FALHA: $*"; exit 1; }
@@ -57,7 +60,15 @@ command -v tar >/dev/null 2>&1 || fail "tar não disponível"
 tmp_extract="$(mktemp -d -t wabot-restore-XXXXXXXX)"
 trap 'rm -rf "$tmp_extract"' EXIT
 log "Extraindo para $tmp_extract"
-tar -xzf "$ARCHIVE" -C "$tmp_extract" || fail "tar extract falhou"
+if [[ "$ARCHIVE" == *.age ]]; then
+  command -v age >/dev/null 2>&1 || fail "archive cifrado mas 'age' não está instalado"
+  [[ -n "$AGE_IDENTITY_FILE" && -f "$AGE_IDENTITY_FILE" ]] \
+    || fail "archive .age exige AGE_IDENTITY_FILE apontando para a chave privada"
+  age -d -i "$AGE_IDENTITY_FILE" "$ARCHIVE" | tar -xzf - -C "$tmp_extract" \
+    || fail "decifragem/extração falhou — chave errada ou arquivo corrompido"
+else
+  tar -xzf "$ARCHIVE" -C "$tmp_extract" || fail "tar extract falhou"
+fi
 
 [[ -f "$tmp_extract/prod.db" ]] || fail "prod.db ausente no archive"
 integrity="$(sqlite3 "$tmp_extract/prod.db" "PRAGMA integrity_check;" | head -n 1)"

@@ -222,6 +222,9 @@ export async function groupsRoutes(app, opts = {}) {
     if (!(await ensureChannelFeatureAllowed(req.user.sub, reply))) return
     if (!isRunning(req.user.sub)) return reply.code(503).send({ error: 'WhatsApp não está conectado.' })
 
+    // O guard anti-ban roda SEMPRE (warmup + cooldown + intervalo mínimo).
+    // O toggle followGuardEnabled controla apenas se o limite diário
+    // personalizado vale; desligado, vale o teto conservador padrão.
     const guard = await canFollowNow(req.user.sub)
     if (!guard.ok) {
       const retryAfterSec = Math.max(1, Math.ceil((guard.retryAfterMs ?? 60_000) / 1000))

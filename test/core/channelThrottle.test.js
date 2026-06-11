@@ -346,3 +346,81 @@ test('decide: preservationActive=true (default) NÃO curto-circuita — segue re
   })
   assert.equal(result.allow, true)
 })
+
+test('decide: throttle desligado ignora limites, mas mantém janela silenciosa independente', () => {
+  const now = Date.UTC(2026, 0, 15, 12, 0, 0)
+  const result = decide({
+    now,
+    throttle: {
+      postsToday: 999,
+      dayBucket: tzDayBucket(now, 'UTC'),
+      lastPostAt: new Date(now - 1_000),
+      burstWindowStart: new Date(now - 60_000),
+      postsInBurstWindow: 999,
+    },
+    isPaused: false,
+    botConfig: {
+      channelThrottleEnabled: false,
+      quietHoursEnabled: false,
+      channelQuietHoursJson: JSON.stringify({ startHour: 0, endHour: 23, tz: 'UTC' }),
+      channelDailyCap: 1,
+      channelMinIntervalSec: 3600,
+      channelBurstWindowSec: 3600,
+      channelBurstCap: 1,
+    },
+  })
+  assert.equal(result.allow, true)
+})
+
+test('decide: janela silenciosa pode bloquear com throttle desligado', () => {
+  const now = Date.UTC(2026, 0, 15, 12, 0, 0)
+  const result = decide({
+    now,
+    throttle: null,
+    isPaused: false,
+    botConfig: {
+      channelThrottleEnabled: false,
+      quietHoursEnabled: true,
+      channelQuietHoursJson: JSON.stringify({ startHour: 10, endHour: 14, tz: 'UTC' }),
+    },
+  })
+  assert.equal(result.allow, false)
+  assert.equal(result.reason, DEFER_REASON.QUIET_HOURS)
+})
+
+test('decide: pausa de saúde bloqueia mesmo com throttle desligado', () => {
+  const now = Date.UTC(2026, 0, 15, 12, 0, 0)
+  const result = decide({
+    now,
+    throttle: null,
+    isPaused: true,
+    botConfig: {
+      channelThrottleEnabled: false,
+      quietHoursEnabled: true,
+      channelQuietHoursJson: JSON.stringify({ startHour: 0, endHour: 6, tz: 'UTC' }),
+    },
+  })
+  assert.equal(result.allow, false)
+  assert.equal(result.reason, DEFER_REASON.HEALTH_PAUSED)
+})
+
+test('checkAndReserve não grava contadores quando throttle está desligado', async () => {
+  let writes = 0
+  const db = {
+    channelThrottle: {
+      findUnique: async () => null,
+      upsert: async () => { writes++ },
+    },
+  }
+  const result = await checkAndReserve('g-quiet-only', {
+    channelThrottleEnabled: false,
+    quietHoursEnabled: true,
+    channelQuietHoursJson: JSON.stringify({ startHour: 0, endHour: 0, tz: 'UTC' }),
+  }, {
+    db,
+    now: Date.UTC(2026, 0, 15, 12, 0, 0),
+    getHealth: async () => ({ pausedUntil: null }),
+  })
+  assert.equal(result.allow, true)
+  assert.equal(writes, 0)
+})
