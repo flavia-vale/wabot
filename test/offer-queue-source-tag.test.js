@@ -12,6 +12,10 @@ test('buildOfferQueueSource e parseOfferQueueSourceId são inversos', () => {
   assert.equal(source, 'offerQueue:q123')
   assert.equal(source.startsWith(OFFER_QUEUE_SOURCE_PREFIX), true)
   assert.equal(parseOfferQueueSourceId(source), 'q123')
+
+  const colonId = buildOfferQueueSource('abc:def')
+  assert.equal(colonId, 'offerQueue:abc:def')
+  assert.equal(parseOfferQueueSourceId(colonId), 'abc:def')
 })
 
 test('parseOfferQueueSourceId rejeita valores que não são de fila', () => {
