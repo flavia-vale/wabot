@@ -11,13 +11,8 @@ function assert(condition, message) {
   }
 }
 
-function count(pattern) {
-  return (source.match(pattern) || []).length
-}
+assert(source.includes('Cadência entre envios'), 'O card de cadência deve continuar disponível.')
+assert(!source.includes('Marca nas mensagens'), 'O card de marca não deve aparecer em configurações.')
+assert(!source.includes('Filtros e boas-vindas'), 'O card de filtros e boas-vindas não deve aparecer em configurações.')
 
-assert(!source.includes('URL_PROTOCOL_RE'), 'URL_PROTOCOL_RE não deve existir; use hasHttpProtocol().')
-assert(count(/\bconst\s+DEFAULT_BRANDING_CTA_TEXT\b/g) === 1, 'DEFAULT_BRANDING_CTA_TEXT deve ser declarado apenas uma vez.')
-assert(count(/\bconst\s+MAX_BRANDING_CTA_CHARS\b/g) === 1, 'MAX_BRANDING_CTA_CHARS deve ser declarado apenas uma vez.')
-assert(count(/\bfunction\s+hasHttpProtocol\b/g) === 1, 'hasHttpProtocol deve existir exatamente uma vez.')
-
-console.log('Guardrail OK: configurações sem regressão de constantes/protocolo.')
+console.log('Guardrail OK: configurações exibe apenas o card de cadência.')
