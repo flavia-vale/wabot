@@ -43,8 +43,8 @@ export const OFFER_TEMPLATE_VARIABLE_GROUPS = [
     helper: 'Substituídas nas ofertas automáticas usando as variações e links configurados nesta página.',
     variables: [
       { token: '{{gancho}}', label: 'Gancho aleatório', example: '🚨 COOOOOORRE QUE TÁ ACABANDO!' },
-      { token: '{{cta}}', label: 'CTA aleatório', example: '📲 Entre no nosso grupo oficial:' },
-      { token: '{{convitegrupo}}', label: 'Convite/fechamento aleatório', example: '⚠️ Preço sujeito a alteração.' },
+      { token: '{{cta}}', label: 'CTA aleatório', example: '⚠️ Preços e estoque podem mudar.' },
+      { token: '{{convitegrupo}}', label: 'Convite do grupo aleatório', example: '📲 Entre no nosso grupo oficial:' },
       { token: '{{grupoLink}}', label: 'Link de convite do grupo', example: 'https://chat.whatsapp.com/...' },
       { token: '{{cupomLink}}', label: 'Link de cupom global', example: 'https://...' },
     ],

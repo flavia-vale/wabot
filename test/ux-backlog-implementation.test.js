@@ -45,8 +45,31 @@ test('offer automation logs are labeled differently from manual sends', () => {
   assert.equal(item.de, 'Oferta automática')
 })
 
-test('navigation uses Templates, ganchos e CTA label', () => {
-  assert.match(read('dashboard/app/painel/nav.js'), /Templates, ganchos e CTA/)
+test('message templates page prioritizes templates and progressively discloses supporting content', () => {
+  const nav = read('dashboard/app/painel/nav.js')
+  const page = read('dashboard/app/painel/mensagens/page.js')
+
+  assert.match(nav, /label: 'Templates de mensagens'/)
+  assert.match(page, /usePainelHeader\(\{ title: 'Templates de mensagens'/)
+  assert.doesNotMatch(page, /PainelContentActions/)
+
+  const templatesSection = page.indexOf('>Templates de mensagens</div>')
+  const educationalSection = page.indexOf('<summary>Como funcionam os templates</summary>')
+  const dynamicTextsSection = page.indexOf('Textos dinâmicos')
+  const linksSection = page.indexOf('>Links<')
+  const referenceSection = page.indexOf('<summary>Referência de variáveis</summary>')
+
+  assert.ok(templatesSection !== -1)
+  assert.ok(templatesSection < educationalSection)
+  assert.ok(educationalSection < dynamicTextsSection)
+  assert.ok(dynamicTextsSection < linksSection)
+  assert.ok(linksSection < referenceSection)
+  assert.match(page, /templateMode === 'list'[\s\S]*Criar template/)
+  assert.match(page, />Concluir edição</)
+  assert.match(page, /Salvar templates, textos e links/)
+  assert.doesNotMatch(page, /<details[^>]*\sopen(?:=|\s|>)/)
+  assert.doesNotMatch(page, /pra nunca repetir|>Fechamento</)
+  assert.doesNotMatch(page, />[^<{]*(?:modelo|modelos)[^<{]*</i)
 })
 
 test('template variable UI only advertises canonical gancho, cta and convitegrupo names', () => {
@@ -57,15 +80,21 @@ test('template variable UI only advertises canonical gancho, cta and convitegrup
     .map((variable) => variable.token)
 
   assert.deepEqual(automationTokens.filter((token) => /^\{\{/.test(token)), ['{{gancho}}', '{{cta}}', '{{convitegrupo}}', '{{grupoLink}}', '{{cupomLink}}'])
+  const automationGroup = OFFER_TEMPLATE_VARIABLE_GROUPS.find((group) => group.key === 'automation')
+  assert.equal(automationGroup.variables.find((variable) => variable.token === '{{cta}}').example, '⚠️ Preços e estoque podem mudar.')
+  assert.equal(automationGroup.variables.find((variable) => variable.token === '{{convitegrupo}}').example, '📲 Entre no nosso grupo oficial:')
+  const preservationEditor = read('dashboard/components/preservacao/CopyVariationPoolEditor.js')
+  assert.match(preservationEditor, /key: 'ctas'[\s\S]*label: 'CTAs'[\s\S]*Preços e estoque podem mudar/)
+  assert.match(preservationEditor, /key: 'trailers'[\s\S]*label: 'Convites do grupo[\s\S]*Entre no nosso grupo oficial/)
   assert.doesNotMatch(page, /\{\{greeting\}\}|\{\{trailer\}\}|Fechamentos/)
 
-  const rendered = applyVariation('{{gancho}}|{{cta}}|{{convitegrupo}}|{{greeting}}|{{trailer}}', {
+  const rendered = applyVariation('{{gancho}}|{{cta}}|{{convitegrupo}}', {
     pool: { greetings: ['GANCHO'], ctas: ['CTA'], trailers: ['CONVITE'] },
     groupId: 'grupo-1',
     date: '2026-06-07',
     autoInjectWhenMissing: false,
   })
-  assert.equal(rendered, 'GANCHO|CTA|CONVITE|GANCHO|CONVITE')
+  assert.equal(rendered, 'GANCHO|CTA|CONVITE')
 })
 
 test('template variable copy uses a real reusable clipboard helper with fallback', () => {
