@@ -1,6 +1,6 @@
 import dbDefault from '../../db.js'
 import { sendBroadcast, isRunning } from '../../manager.js'
-import { enforceChannelPlanGate, loadUserPlanSubject, resolveTargetJids } from './broadcastTargets.js'
+import { enforceChannelPlanGate, loadUserPlanSubject, resolveTargetJids, validateBroadcastText } from './broadcastTargets.js'
 
 function optionalUrl(value) {
   const normalized = typeof value === 'string' ? value.trim() : ''
@@ -17,6 +17,7 @@ export async function broadcastRoutes(app, deps = {}) {
     const userId = req.user.sub
     const { text, jids, imageUrl, imageRefererUrl } = req.body ?? {}
     if (!text?.trim()) return reply.code(400).send({ error: 'text obrigatório' })
+    validateBroadcastText(text)
     if (!await isRunningImpl(userId)) return reply.code(400).send({ error: 'Bot não está conectado' })
 
     const targetJids = await resolveTargetJids({ db, userId, jids })
@@ -42,6 +43,7 @@ export async function broadcastRoutes(app, deps = {}) {
     const userId = req.user.sub
     const { text, scheduledAt, jids, imageUrl, imageRefererUrl } = req.body ?? {}
     if (!text?.trim() || !scheduledAt) return reply.code(400).send({ error: 'text e scheduledAt obrigatórios' })
+    validateBroadcastText(text)
 
     const schedDate = new Date(scheduledAt)
     if (Number.isNaN(schedDate.getTime()) || schedDate <= now()) {

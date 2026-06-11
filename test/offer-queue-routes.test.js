@@ -88,6 +88,8 @@ test('inserção normaliza destinos, usa fallback post e cancelamento exige owne
 
 test('item sem jids herda os grupos configurados na fila', async (t) => {
   const db = fakeDb()
+  // JIDs explícitos/herdados precisam estar cadastrados como grupos do tenant
+  db.group.findMany = async () => [{ waJid: '111@g.us' }, { waJid: '222@g.us' }, { waJid: '333@g.us' }]
   const app = await appFor('user-a', db)
   t.after(async () => { await app.close() })
   const queue = (await app.inject({ method: 'POST', url: '/api/offer-queues', payload: { name: 'Com grupos', targetJids: ['111@g.us', '222@g.us'] } })).json()

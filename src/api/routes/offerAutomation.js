@@ -1,4 +1,5 @@
 import dbDefault from '../../db.js'
+import { validateOwnedTargetJids } from './broadcastTargets.js'
 import { runAutomation, searchOffersPreview } from '../../offerAutomation/dispatcher.js'
 import { normalizeDailyRunTime } from '../../offerAutomation/schedule.js'
 import { parseCredentialData } from '../../credentialHealth.js'
@@ -20,6 +21,15 @@ function normalizeTemplateKey(value) {
   return key
 }
 
+// destGroupJid precisa ser um grupo de destino cadastrado do próprio tenant —
+// sem isso a automação dispara para qualquer JID arbitrário pela sessão do
+// usuário. Devolve o JID normalizado ou null (validateOwnedTargetJids lança
+// 400 com mensagem amigável quando o grupo não pertence ao tenant).
+async function resolveOwnedDestGroupJid(db, userId, destGroupJid) {
+  const [normalized] = await validateOwnedTargetJids({ db, userId, jids: [destGroupJid] })
+  return normalized ?? null
+}
+
 export async function offerAutomationRoutes(app, opts = {}) {
   const db = opts.db ?? dbDefault
 
@@ -35,6 +45,8 @@ export async function offerAutomationRoutes(app, opts = {}) {
 
     if (!keyword?.trim()) return reply.code(400).send({ error: 'Palavra-chave obrigatória' })
     if (!destGroupJid) return reply.code(400).send({ error: 'Grupo de destino obrigatório' })
+    const ownedDestJid = await resolveOwnedDestGroupJid(db, req.user.sub, destGroupJid)
+    if (!ownedDestJid) return reply.code(400).send({ error: 'Grupo de destino inválido' })
     if (!VALID_INTERVALS.includes(Number(intervalMinutes))) {
       return reply.code(400).send({ error: `Intervalo inválido. Valores aceitos: ${VALID_INTERVALS.join(', ')} minutos` })
     }
@@ -61,7 +73,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
     return db.offerAutomation.create({
       data: {
         userId: req.user.sub,
-        destGroupJid,
+        destGroupJid: ownedDestJid,
         destGroupName: destGroupName ?? destGroupJid,
         keyword: keyword.trim(),
         templateKey: parsedTemplateKey,
@@ -91,7 +103,12 @@ export async function offerAutomationRoutes(app, opts = {}) {
       if (!k) return reply.code(400).send({ error: 'Palavra-chave não pode ficar vazia' })
       updates.keyword = k
     }
-    if (destGroupJid !== undefined) updates.destGroupJid = destGroupJid
+    if (destGroupJid !== undefined) {
+      if (!destGroupJid) return reply.code(400).send({ error: 'Grupo de destino obrigatório' })
+      const ownedDestJid = await resolveOwnedDestGroupJid(db, req.user.sub, destGroupJid)
+      if (!ownedDestJid) return reply.code(400).send({ error: 'Grupo de destino inválido' })
+      updates.destGroupJid = ownedDestJid
+    }
     if (destGroupName !== undefined) updates.destGroupName = destGroupName
     if (intervalMinutes !== undefined) {
       if (!VALID_INTERVALS.includes(Number(intervalMinutes))) {

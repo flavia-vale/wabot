@@ -1,11 +1,12 @@
 import defaultDb from '../db.js'
 import { parseEnumEnv, logModeSummary } from '../core/envModes.js'
 
-const EVENT_STORE_MODE = parseEnumEnv('EVENT_STORE_MODE', process.env.EVENT_STORE_MODE || 'oltp', ['oltp', 'dual'], 'oltp')
-logModeSummary('event-store', { eventStoreMode: EVENT_STORE_MODE })
+logModeSummary('event-store', { eventStoreMode: parseEnumEnv('EVENT_STORE_MODE', process.env.EVENT_STORE_MODE || 'oltp', ['oltp', 'dual'], 'oltp') })
 
+// Lido a cada escrita (não cacheado no load) para permitir alternar oltp/dual
+// sem reiniciar e manter o modo testável.
 function eventStoreMode() {
-  return EVENT_STORE_MODE
+  return parseEnumEnv('EVENT_STORE_MODE', process.env.EVENT_STORE_MODE || 'oltp', ['oltp', 'dual'], 'oltp')
 }
 
 function eventStoreDb() {

@@ -15,6 +15,17 @@
 #   RETENTION_DAYS       Dias para guardar (default: 30)
 #   BACKUP_RCLONE_REMOTE Nome:caminho do remote rclone (ex.: b2-wabot:wabot-backups).
 #                        Se vazio ou rclone ausente, pula a etapa de nuvem.
+#   BACKUP_AGE_RECIPIENT Chave pública age (age1...) para cifrar o backup.
+#                        O tarball contém .env, banco e auth_info — em texto
+#                        puro ele entrega JWT_SECRET, CREDENTIAL_ENCRYPTION_KEY
+#                        e controle das sessões WhatsApp de todos os clientes.
+#                        A chave PRIVADA correspondente deve ficar FORA do VPS.
+#   BACKUP_AGE_RECIPIENTS_FILE  Alternativa: arquivo com uma chave por linha.
+#   BACKUP_REQUIRE_ENCRYPTION   1 = falha se não conseguir cifrar (recomendado
+#                        em prod). Default 0 para não quebrar crons existentes
+#                        antes da chave ser provisionada.
+#   BACKUP_REQUIRE_CLOUD 1 = falha se o upload externo não acontecer
+#                        (recomendado em prod). Default 0.
 
 set -euo pipefail
 
@@ -24,6 +35,10 @@ AUTH_INFO_DIR="${AUTH_INFO_DIR:-/home/deploy/BOTinho-shared/auth_info}"
 BACKUP_DIR="${BACKUP_DIR:-/home/deploy/wabot-backups}"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
 BACKUP_RCLONE_REMOTE="${BACKUP_RCLONE_REMOTE:-}"
+BACKUP_AGE_RECIPIENT="${BACKUP_AGE_RECIPIENT:-}"
+BACKUP_AGE_RECIPIENTS_FILE="${BACKUP_AGE_RECIPIENTS_FILE:-}"
+BACKUP_REQUIRE_ENCRYPTION="${BACKUP_REQUIRE_ENCRYPTION:-0}"
+BACKUP_REQUIRE_CLOUD="${BACKUP_REQUIRE_CLOUD:-0}"
 # .env do root e do dashboard. Backup ATÔMICO precisa incluir esses
 # arquivos: sem JWT_SECRET, DATABASE_URL, etc., restaurar DB+auth_info
 # em um VPS novo não traz a aplicação de volta.
@@ -108,23 +123,57 @@ chmod 600 "$archive"
 archive_bytes="$(stat -c%s "$archive")"
 log "Arquivo gerado: $archive ($archive_bytes bytes)"
 
-# 6) Rotação local — apaga arquivos com mais de $RETENTION_DAYS dias
-deleted="$(find "$BACKUP_DIR" -maxdepth 1 -name 'wabot-prod-*.tar.gz' -type f -mtime "+$RETENTION_DAYS" -print -delete | wc -l)"
+# 6) Criptografia em repouso. Sem fallback silencioso: se a cifragem foi
+# pedida e falhar em qualquer ponto, o plaintext é removido e o script aborta
+# — backup ausente dispara alerta; backup em texto puro vaza segredos sem
+# ninguém perceber.
+if [[ -n "$BACKUP_AGE_RECIPIENT" || -n "$BACKUP_AGE_RECIPIENTS_FILE" ]]; then
+  command -v age >/dev/null 2>&1 \
+    || { rm -f "$archive"; fail "BACKUP_AGE_RECIPIENT definido mas 'age' não está instalado (sudo apt-get install -y age)"; }
+  age_args=()
+  [[ -n "$BACKUP_AGE_RECIPIENT" ]] && age_args+=(-r "$BACKUP_AGE_RECIPIENT")
+  [[ -n "$BACKUP_AGE_RECIPIENTS_FILE" ]] && age_args+=(-R "$BACKUP_AGE_RECIPIENTS_FILE")
+  encrypted="$archive.age"
+  if ! age "${age_args[@]}" -o "$encrypted" "$archive"; then
+    rm -f "$archive" "$encrypted"
+    fail "cifragem com age falhou — backup abortado (plaintext removido)"
+  fi
+  rm -f "$archive"
+  archive="$encrypted"
+  chmod 600 "$archive"
+  archive_bytes="$(stat -c%s "$archive")"
+  log "Backup cifrado: $archive ($archive_bytes bytes)"
+elif [[ "$BACKUP_REQUIRE_ENCRYPTION" == "1" ]]; then
+  rm -f "$archive"
+  fail "BACKUP_REQUIRE_ENCRYPTION=1 mas nenhuma chave configurada (BACKUP_AGE_RECIPIENT/BACKUP_AGE_RECIPIENTS_FILE)"
+else
+  log "ATENÇÃO: backup SEM criptografia — o tarball contém .env (JWT_SECRET, CREDENTIAL_ENCRYPTION_KEY) e auth_info. Configure BACKUP_AGE_RECIPIENT."
+fi
+
+# 7) Rotação local — apaga arquivos com mais de $RETENTION_DAYS dias
+deleted="$(find "$BACKUP_DIR" -maxdepth 1 -name 'wabot-prod-*.tar.gz*' -type f -mtime "+$RETENTION_DAYS" -print -delete | wc -l)"
 log "Rotação local concluída: $deleted arquivo(s) com mais de ${RETENTION_DAYS}d removido(s)"
 
-# 7) Upload para nuvem (opcional — só se rclone + BACKUP_RCLONE_REMOTE estiverem configurados)
+# 8) Upload para nuvem. Com BACKUP_REQUIRE_CLOUD=1 (recomendado em prod),
+# remote ausente/rclone faltando/upload falhando abortam o script — um VPS
+# perdido sem cópia externa é perda total de banco + sessões + ledger.
 if [[ -n "$BACKUP_RCLONE_REMOTE" ]]; then
-  if command -v rclone >/dev/null 2>&1; then
-    log "Subindo para nuvem: $BACKUP_RCLONE_REMOTE"
-    rclone copy "$archive" "$BACKUP_RCLONE_REMOTE" --no-traverse --quiet
-    # Rotação na nuvem com mesmo critério
-    rclone delete "$BACKUP_RCLONE_REMOTE" --min-age "${RETENTION_DAYS}d" --include 'wabot-prod-*.tar.gz' --quiet || true
-    log "Upload concluído"
-  else
-    log "Aviso: BACKUP_RCLONE_REMOTE definido mas rclone não está instalado. Pulando nuvem."
-  fi
+  command -v rclone >/dev/null 2>&1 \
+    || fail "BACKUP_RCLONE_REMOTE definido mas rclone não está instalado."
+  log "Subindo para nuvem: $BACKUP_RCLONE_REMOTE"
+  rclone copy "$archive" "$BACKUP_RCLONE_REMOTE" --no-traverse --quiet \
+    || fail "upload rclone falhou — backup local existe mas NÃO há cópia externa"
+  # Rotação na nuvem com mesmo critério
+  rclone delete "$BACKUP_RCLONE_REMOTE" --min-age "${RETENTION_DAYS}d" --include 'wabot-prod-*.tar.gz*' --quiet || true
+  log "Upload concluído"
+elif [[ "$BACKUP_REQUIRE_CLOUD" == "1" ]]; then
+  fail "BACKUP_REQUIRE_CLOUD=1 mas BACKUP_RCLONE_REMOTE não está configurado"
 else
-  log "Cloud upload desabilitado (BACKUP_RCLONE_REMOTE vazio)"
+  log "ATENÇÃO: upload externo desabilitado (BACKUP_RCLONE_REMOTE vazio) — perda do VPS = perda do backup."
 fi
+
+# 9) Marcador de sucesso para monitoramento (alerta de "backup ausente >26h"
+# pode checar o mtime deste arquivo em vez de parsear logs).
+printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$archive" > "$BACKUP_DIR/last_success.txt"
 
 log "Backup finalizado com sucesso."
