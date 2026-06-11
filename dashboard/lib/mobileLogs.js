@@ -43,6 +43,10 @@ export function isOfferAutomationLog(log = {}) {
   return log?.sourceGroup === 'offerAutomation' || log?.source === 'offerAutomation'
 }
 
+export function isOfferQueueLog(log = {}) {
+  return typeof log?.sourceGroup === 'string' && log.sourceGroup.startsWith('offerQueue:')
+}
+
 export function isRealMobileLogGroup(jid) {
   return typeof jid === 'string' && jid.includes('@') && jid !== 'skipped' && jid !== 'conversion' && jid !== 'offerAutomation'
 }
@@ -99,7 +103,7 @@ export function toMobileLogItem(log = {}, now = new Date()) {
   const sentAt = new Date(log.sentAt)
   const firstLine = String(log.messageText || '').split('\n').find((line) => line.trim()) || ''
   const produto = (firstLine || log.convertedUrl || log.originalUrl || '(sem texto)').slice(0, 80)
-  const source = isOfferAutomationLog(log) ? 'offerAutomation' : (isRealMobileLogGroup(log.sourceGroup) ? 'auto' : 'manual')
+  const source = isOfferAutomationLog(log) ? 'offerAutomation' : isOfferQueueLog(log) ? 'offerQueue' : (isRealMobileLogGroup(log.sourceGroup) ? 'auto' : 'manual')
   return {
     id: log.id,
     status,
@@ -108,7 +112,7 @@ export function toMobileLogItem(log = {}, now = new Date()) {
     day: mobileLogDayBucket(log.sentAt, now),
     loja: MOBILE_LOG_PLATFORM_LABEL[String(log.platform || '').toLowerCase()] || log.platform || '—',
     produto,
-    de: source === 'offerAutomation' ? 'Oferta automática' : (source === 'auto' ? (log.sourceGroupName || log.sourceGroup) : 'Você criou'),
+    de: source === 'offerAutomation' ? 'Oferta automática' : source === 'offerQueue' ? (log.sourceGroupName || 'Fila') : (source === 'auto' ? (log.sourceGroupName || log.sourceGroup) : 'Você criou'),
     para: isRealMobileLogGroup(log.destGroup) ? (log.destGroupName || log.destGroup) : null,
     link: log.originalUrl || null,
     conv: status === 'ok' && log.convertedUrl ? log.convertedUrl : null,
