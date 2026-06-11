@@ -11,6 +11,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
 
 export const MIN_INTERVAL_MS = 30_000
 export const RATE_LIMIT_COOLDOWN_MS = 60 * 60 * 1000 // 1h
+export const DEFAULT_MAX_DAILY_FOLLOWS = 3 // espelha o default do schema
 
 /**
  * @param {number} sessionAgeMs
@@ -103,10 +104,15 @@ export async function canFollowNow(userId, opts = {}) {
     return { ok: false, reason: 'no_user' }
   }
 
+  // O guard em si nunca desliga. followGuardEnabled controla só se o limite
+  // diário personalizado do usuário vale; desligado, fica o default seguro.
   const botConfig = await db.botConfig.findUnique({
     where: { userId },
-    select: { maxDailyFollows: true },
-  }) ?? { maxDailyFollows: 3 }
+    select: { maxDailyFollows: true, followGuardEnabled: true },
+  })
+  const maxDailyFollows = botConfig?.followGuardEnabled === true
+    ? (botConfig.maxDailyFollows ?? DEFAULT_MAX_DAILY_FOLLOWS)
+    : DEFAULT_MAX_DAILY_FOLLOWS
 
   const since24h = new Date(now - DAY_MS)
   const dailyOkCount = await db.followLog.count({
@@ -129,7 +135,7 @@ export async function canFollowNow(userId, opts = {}) {
     now,
     sessionAgeMs: now - new Date(user.createdAt).getTime(),
     dailyOkCount,
-    maxDailyFollows: botConfig.maxDailyFollows,
+    maxDailyFollows,
     lastFollowOkAt: lastOk?.followedAt ?? null,
     lastRateLimitedAt: lastRateLimited?.followedAt ?? null,
   })

@@ -1,5 +1,6 @@
 'use client'
 import { PresetButtons } from './PresetButtons'
+import { FeatureToggle } from './FeatureToggle'
 
 const TZ_OPTIONS = [
   'America/Sao_Paulo',
@@ -21,6 +22,7 @@ const PRESETS = [
 ]
 
 export function QuietHoursForm({ value, onChange, disabled }) {
+  const controlsDisabled = disabled || !value.quietHoursEnabled
   const q = parseQuiet(value.channelQuietHoursJson)
   const update = (patch) => onChange({ channelQuietHoursJson: JSON.stringify({ ...q, ...patch }) })
   const applyPreset = (presetValues) => onChange({ channelQuietHoursJson: JSON.stringify(presetValues) })
@@ -31,10 +33,12 @@ export function QuietHoursForm({ value, onChange, disabled }) {
       <p className="text-xs text-gray-500 mb-3">
         Faixa de horas em que o bot PAUSA envios pra canais. Ideal pra simular um humano que dorme. Ex: 0h a 6h da manhã.
       </p>
+      <FeatureToggle checked={!!value.quietHoursEnabled} onChange={checked => onChange({ quietHoursEnabled: checked })} disabled={disabled} label="Alternar janela silenciosa" />
+      <div className={value.quietHoursEnabled ? '' : 'pointer-events-none opacity-50'} aria-disabled={!value.quietHoursEnabled}>
       <PresetButtons
         presets={PRESETS.map(p => ({ ...p, values: p.build(q) }))}
         onApply={applyPreset}
-        disabled={disabled}
+        disabled={controlsDisabled}
       />
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="block">
@@ -42,7 +46,7 @@ export function QuietHoursForm({ value, onChange, disabled }) {
           <input type="number" min={0} max={23}
             value={q.startHour}
             onChange={e => update({ startHour: Number(e.target.value) })}
-            disabled={disabled}
+            disabled={controlsDisabled}
             className="mt-1 w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50" />
         </label>
         <label className="block">
@@ -50,14 +54,14 @@ export function QuietHoursForm({ value, onChange, disabled }) {
           <input type="number" min={0} max={23}
             value={q.endHour}
             onChange={e => update({ endHour: Number(e.target.value) })}
-            disabled={disabled}
+            disabled={controlsDisabled}
             className="mt-1 w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50" />
         </label>
         <label className="block">
           <span className="text-xs font-medium text-gray-700">Fuso horário</span>
           <select value={q.tz}
             onChange={e => update({ tz: e.target.value })}
-            disabled={disabled}
+            disabled={controlsDisabled}
             className="mt-1 w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50">
             {TZ_OPTIONS.map(tz => <option key={tz} value={tz}>{tz}</option>)}
           </select>
@@ -66,6 +70,7 @@ export function QuietHoursForm({ value, onChange, disabled }) {
       <p className="text-[11px] text-gray-500 mt-2">
         Use 0 = meia-noite, 6 = 6h da manhã. O bot retoma envios automaticamente ao final da janela.
       </p>
+      </div>
     </fieldset>
   )
 }
