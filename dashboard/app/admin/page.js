@@ -915,9 +915,10 @@ export default function AdminPage() {
             <h1 className="text-3xl font-black text-gray-900">Admin BOTinho</h1>
             <p className="mt-1 text-sm text-gray-500">Cockpit executivo, clientes em risco, sessões, logs e drill-down operacional.</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button onClick={() => applyFilters()} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Atualizar</button>
             {canAccessCustomerSuccess && <Link href="/admin/sucesso-cliente" className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Aba CS</Link>}
+            <Link href="/admin/afiliados" className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600">Afiliados</Link>
             <Link href="/admin/marketing-growth" className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700">Marketing & Growth</Link>
             <Link href="/admin/telegram" className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700">Telegram</Link>
             <Link href="/admin/pipeline" className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">Pipeline técnico</Link>
