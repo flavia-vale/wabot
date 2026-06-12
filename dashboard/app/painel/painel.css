@@ -815,7 +815,7 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 .pnl-btn.is-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
 .pnl-btn.is-danger:hover { background: #c75f3f; }
 
-/* Wrapper para telas reusadas (corpo do /dashboard embutido no shell Menta).
+/* Wrapper para telas reutilizadas dentro do shell Menta responsivo.
  * O conteúdo embutido traz o próprio estilo; aqui só garantimos a cor de tinta. */
 .pnl-embed { color: var(--ink); }
 

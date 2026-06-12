@@ -1,6 +1,6 @@
 'use client'
 
-/* Grupos — reskin Menta inspirado na tela mobile canônica (app/m/config/groups):
+/* Grupos — interface responsiva Menta para configuração de grupos:
  * abas 👁 Monitorar / ⚡ Publicar com contagem + config por grupo recolhível
  * (em vez de duas seções longas sempre expandidas). Mesma lógica/back end de
  * sempre: api.groups / addGroup / updateGroup / deleteGroup / groupTargets /

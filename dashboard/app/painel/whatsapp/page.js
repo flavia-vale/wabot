@@ -2,7 +2,7 @@
 
 /* Conexão WhatsApp — reskin Menta do corpo. TODA a lógica crítica
  * (QR/pareamento/polling/WS/telemetria) é idêntica à tela original
- * app/dashboard/page.js — apenas a apresentação (JSX/classes) muda para o
+ * fluxo canônico de sessão — a apresentação (JSX/classes) usa o
  * visual Menta. Nenhuma mudança em handlers, refs, efeitos ou chamadas de API.
  * Reusa QRCode, ConfirmDialog, HelpLink e o ToastProvider existentes. */
 

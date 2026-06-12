@@ -1,9 +1,7 @@
 /* Navegação do novo painel.
  *
- * Todas as telas de app já têm versão "Menta" em /painel/* — a migração que
- * aposenta o /dashboard legado foi concluída (ver docs/frontend/parity-matrix.md).
- * Novos itens devem apontar sempre para /painel/*; o /dashboard só permanece
- * como redirect de transição.
+ * Todas as telas do app vivem na árvore responsiva canônica /painel/*.
+ * Novos itens devem apontar sempre para /painel/*; as árvores legadas foram removidas.
  *
  * Organização (reestruturada): os grupos seguem a jornada do usuário em vez de
  * categorias genéricas — Início → Criar & enviar (ação diária) → Acompanhar

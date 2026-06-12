@@ -1,7 +1,7 @@
 'use client'
 
 /* Monitoramento da Preservação avançada — versão Menta do painel. Reusa os
- * mesmos cards de /dashboard/preservacao/monitoramento; o título vai para a
+ * cards canônicos de monitoramento; o título vai para a
  * topbar via usePainelHeader. */
 
 import { HealthOverview } from '@/components/preservacao/HealthOverview'

@@ -1,7 +1,7 @@
 'use client'
 
 /* Gate Pro do módulo de Preservação avançada — versão Menta do painel.
- * Espelha /dashboard/preservacao/layout.js: libera as telas para plano Pro/Trial,
+ * Libera as telas para plano Pro/Trial,
  * caso contrário mostra o upsell. Reusa os componentes compartilhados; o CTA do
  * upsell aponta para /painel/plano. */
 

@@ -294,7 +294,7 @@ echo "[8/9] PM2 status"
 pm2 status
 
 echo "[9/9] Smoke tests (hard gate com retry)"
-for path in /login /admin /dashboard; do
+for path in /login /admin /painel; do
   check_http_with_retry "$path" 8 2
 done
 

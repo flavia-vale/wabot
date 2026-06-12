@@ -1,7 +1,7 @@
 'use client'
 
 /* Tutorial de credenciais — versão Menta do painel. Conteúdo estático idêntico
- * ao de /dashboard/tutorial; o título vai para a topbar via usePainelHeader. */
+ * ao conteúdo configurado no admin; o título vai para a topbar via usePainelHeader. */
 
 import { usePainelHeader } from '../PainelShell'
 

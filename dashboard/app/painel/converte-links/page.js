@@ -2,7 +2,7 @@
 
 /* Conversor de links avulso — versão Menta do painel. A lógica (validação,
  * detecção de links, chamada api.convertLinks, montador inline) é idêntica à
- * de /dashboard/converte-links; aqui o título da tela vai para a topbar do
+ * do conversor canônico; aqui o título da tela vai para a topbar do
  * PainelShell via usePainelHeader e o restante reusa os mesmos componentes. */
 
 import { useMemo, useState } from 'react'
