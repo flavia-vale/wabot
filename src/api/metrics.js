@@ -140,6 +140,7 @@ export function renderPrometheusMetrics(extra = {}) {
 
   const sessionOwnerMismatchTotal = Number(extra.sessionOwnerMismatchTotal ?? 0)
   const sessionCircuitBreakerAlertTotal = Number(extra.sessionCircuitBreakerAlertTotal ?? 0)
+  const sessionQuarantineTotal = Number(extra.sessionQuarantineTotal ?? 0)
 
   lines.push(
     '# HELP wabot_api_http_4xx_total Total 4xx responses',
@@ -160,6 +161,9 @@ export function renderPrometheusMetrics(extra = {}) {
     '# HELP wabot_supervisor_session_circuit_breaker_alert_total Total session circuit-breaker alerts across supervisor shards',
     '# TYPE wabot_supervisor_session_circuit_breaker_alert_total gauge',
     `wabot_supervisor_session_circuit_breaker_alert_total ${Number.isFinite(sessionCircuitBreakerAlertTotal) ? sessionCircuitBreakerAlertTotal : 0}`,
+    '# HELP wabot_supervisor_session_quarantine_total Total sessions quarantined by restart budget across supervisor shards',
+    '# TYPE wabot_supervisor_session_quarantine_total gauge',
+    `wabot_supervisor_session_quarantine_total ${Number.isFinite(sessionQuarantineTotal) ? sessionQuarantineTotal : 0}`,
   )
 
   return `${lines.join('\n')}\n`

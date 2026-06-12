@@ -20,6 +20,7 @@ import db from '../db.js'
 import logger from '../logger.js'
 import * as sessionCore from '../core/sessionCore.js'
 import { buildShardTag, normalizeShardCount, shouldHandleUserOnShard } from './sharding.js'
+import { createRestartBudget, RESTART_BUDGET_MAX, RESTART_BUDGET_WINDOW_MS, RESTART_QUARANTINE_MS } from './restartBudget.js'
 import { parseEnumEnv, logModeSummary } from '../core/envModes.js'
 import {
   COMMAND,
@@ -66,6 +67,11 @@ let sessionOwnerMismatchTotal = 0
 const MAX_SESSIONS_PER_PROCESS = Math.max(1, Number(process.env.MAX_SESSIONS_PER_PROCESS || 200))
 const SESSION_CIRCUIT_BREAKER_MODE = parseEnumEnv('SESSION_CIRCUIT_BREAKER_MODE', process.env.SESSION_CIRCUIT_BREAKER_MODE || 'closed', ['closed', 'open'], 'closed')
 const SESSION_CIRCUIT_BREAKER_ALERT_KEY = `supervisor:session_circuit_breaker_alert:${SHARD_TAG}`
+const SESSION_QUARANTINE_KEY = `supervisor:session_quarantine_total:${SHARD_TAG}`
+
+// Orçamento de restarts automáticos por sessão (health monitor). Start manual
+// via comando START_BOT limpa a quarentena.
+const restartBudget = createRestartBudget()
 
 logModeSummary('bot-supervisor', {
   shardCount: SHARD_COUNT,
@@ -73,6 +79,9 @@ logModeSummary('bot-supervisor', {
   shardTag: SHARD_TAG,
   maxSessionsPerProcess: MAX_SESSIONS_PER_PROCESS,
   sessionCircuitBreakerMode: SESSION_CIRCUIT_BREAKER_MODE,
+  restartBudgetMax: RESTART_BUDGET_MAX,
+  restartBudgetWindowMs: RESTART_BUDGET_WINDOW_MS,
+  restartQuarantineMs: RESTART_QUARANTINE_MS,
 })
 
 async function checkSessionCircuitBreaker(userId) {
@@ -166,7 +175,12 @@ function stopBotWithBridge(userId) {
 // ---- Consumidor BullMQ ----
 
 const COMMAND_HANDLERS = {
-  [COMMAND.START_BOT]: ({ userId }) => startBotWithBridge(userId),
+  // Start explícito (usuário/admin) limpa a quarentena do restart budget —
+  // intervenção manual é o caminho documentado para religar antes do prazo.
+  [COMMAND.START_BOT]: ({ userId }) => {
+    restartBudget.clear(userId)
+    return startBotWithBridge(userId)
+  },
   [COMMAND.STOP_BOT]: ({ userId }) => stopBotWithBridge(userId),
   [COMMAND.IS_RUNNING]: ({ userId }) => belongsToThisShard(userId) ? sessionCore.isRunning(userId) : false,
   [COMMAND.LIST_RUNNING_BOTS]: () => sessionCore.listRunningBots(),
@@ -297,6 +311,24 @@ async function healthMonitorTick() {
     for (const s of persisted) {
       if (!belongsToThisShard(s.userId)) continue
       if (sessionCore.isRunning(s.userId)) continue
+      // Restart budget: sessão que morre repetidamente (auth_info corrompido,
+      // falha permanente) entra em quarentena em vez de churn infinito de
+      // kill/ressuscita — cada ciclo gera reconexão no WhatsApp (risco de ban)
+      // e consome o host inteiro.
+      if (restartBudget.isQuarantined(s.userId)) continue
+      const verdict = restartBudget.registerRestart(s.userId)
+      if (!verdict.allowed) {
+        if (verdict.justQuarantined) {
+          logger.error(
+            { userId: s.userId, shard: SHARD_TAG, restarts: verdict.count, windowMs: RESTART_BUDGET_WINDOW_MS, quarantineMs: RESTART_QUARANTINE_MS },
+            'Sessão em quarentena: orçamento de restarts esgotado — investigar auth_info/credenciais; start manual religa antes do prazo',
+          )
+          try { await publisher.incr(SESSION_QUARANTINE_KEY) } catch (err) {
+            logger.warn({ err: err?.message }, 'Falha ao incrementar session_quarantine_total')
+          }
+        }
+        continue
+      }
       try {
         await startBotWithBridge(s.userId)
       } catch (err) {
