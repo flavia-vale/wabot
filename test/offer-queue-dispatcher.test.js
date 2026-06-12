@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { drainQueueOnce } from '../src/offerQueue/dispatcher.js'
+import { drainQueueOnce, recoverStuckQueueItems, OFFER_QUEUE_MAX_ATTEMPTS } from '../src/offerQueue/dispatcher.js'
 import { startOfSaoPauloDayUtc } from '../src/offerQueue/time.js'
 
 function setup(overrides = {}) {
@@ -95,17 +95,74 @@ test('drainQueueOnce aplica caps horário e diário somente quando habilitados',
   assert.equal(disabled.calls.counts.length, 0)
 })
 
-test('drainQueueOnce perde claim atomicamente e marca falha sem travar fila', async () => {
+test('drainQueueOnce perde claim atomicamente e reagenda falha transitória com backoff', async () => {
   const claimLost = setup()
   claimLost.deps.db.offerQueueItem.updateMany = async () => ({ count: 0 })
   assert.deepEqual(await drainQueueOnce(claimLost.queue, claimLost.deps), { skipped: 'claim_lost' })
   assert.equal(claimLost.calls.sent.length, 0)
 
-  const failed = setup()
-  failed.deps.sendBroadcast = async () => { throw new Error('falhou') }
-  const result = await drainQueueOnce(failed.queue, failed.deps)
+  // 1ª falha: volta para 'pending' com nextAttemptAt futuro e lastError
+  const retrying = setup()
+  retrying.deps.sendBroadcast = async () => { throw new Error('falhou') }
+  const retryResult = await drainQueueOnce(retrying.queue, retrying.deps)
+  assert.equal(retryResult.retrying, 'i1')
+  assert.equal(retryResult.attemptCount, 1)
+  const retryUpdate = retrying.calls.updates.at(-1).data
+  assert.equal(retryUpdate.status, 'pending')
+  assert.ok(retryUpdate.nextAttemptAt > retrying.now, 'nextAttemptAt deve ser futuro')
+  assert.match(retryUpdate.lastError, /falhou/)
+})
+
+test('drainQueueOnce marca failed terminal quando as tentativas se esgotam', async () => {
+  const exhausted = setup()
+  exhausted.item.attemptCount = OFFER_QUEUE_MAX_ATTEMPTS - 1
+  exhausted.deps.sendBroadcast = async () => { throw new Error('falhou de vez') }
+  const result = await drainQueueOnce(exhausted.queue, exhausted.deps)
   assert.equal(result.failed, 'i1')
-  assert.equal(failed.calls.updates.at(-1).data.status, 'failed')
+  const finalUpdate = exhausted.calls.updates.at(-1).data
+  assert.equal(finalUpdate.status, 'failed')
+  assert.match(finalUpdate.lastError, /falhou de vez/)
+})
+
+test('drainQueueOnce registra claim com lease (claimedAt) e incrementa attemptCount', async () => {
+  const { queue, calls, deps, now } = setup()
+  await drainQueueOnce(queue, deps)
+  const claimUpdate = calls.updates.find((u) => u.data.status === 'queued')
+  assert.ok(claimUpdate, 'claim deve marcar status queued')
+  assert.equal(claimUpdate.data.claimedAt, now)
+  assert.deepEqual(claimUpdate.data.attemptCount, { increment: 1 })
+})
+
+test('drainQueueOnce ignora item pendente com nextAttemptAt no futuro (filtro na query)', async () => {
+  const { queue, calls, deps } = setup()
+  let capturedWhere = null
+  deps.db.offerQueueItem.findFirst = async ({ where }) => { capturedWhere = where; return null }
+  const result = await drainQueueOnce(queue, deps)
+  assert.deepEqual(result, { skipped: 'empty' })
+  assert.ok(Array.isArray(capturedWhere.OR), 'query deve filtrar por nextAttemptAt')
+  assert.equal(calls.sent.length, 0)
+})
+
+test('recoverStuckQueueItems devolve queued com lease expirada e mata os esgotados', async () => {
+  const now = new Date('2026-06-10T15:00:00.000Z')
+  const updates = []
+  const db = {
+    offerQueueItem: {
+      updateMany: async (args) => { updates.push(args); return { count: updates.length === 1 ? 2 : 3 } },
+    },
+  }
+  const result = await recoverStuckQueueItems({ db, now: () => now })
+  assert.deepEqual(result, { requeued: 3, exhausted: 2 })
+
+  const [exhaustedCall, requeueCall] = updates
+  assert.equal(exhaustedCall.where.status, 'queued')
+  assert.deepEqual(exhaustedCall.where.attemptCount, { gte: OFFER_QUEUE_MAX_ATTEMPTS })
+  assert.equal(exhaustedCall.data.status, 'failed')
+  // cobre linhas legadas presas de antes da migration (claimedAt null)
+  assert.deepEqual(exhaustedCall.where.OR[0], { claimedAt: null })
+  assert.ok(exhaustedCall.where.OR[1].claimedAt.lt < now, 'cutoff deve respeitar o lease')
+  assert.equal(requeueCall.data.status, 'pending')
+  assert.equal(requeueCall.data.claimedAt, null)
 })
 
 test('startOfSaoPauloDayUtc preserva a fronteira BRT', () => {
