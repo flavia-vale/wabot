@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { fetchProductInfo } from '../src/converters/productInfoScraper.js'
 
 function mockHtmlResponse(html, url = 'https://www.amazon.com.br/dp/B0CXGBT3Z9') {
@@ -647,4 +648,30 @@ test('fetchProductInfo (Shopee sem creds) usa título do slug quando crawler UA 
   assert.match(info.title, /Kit Maquiagem Com Pinceis/i)
   // sem preço quando tudo falha
   assert.equal(info.newPrice, '')
+})
+
+test('fetchProductInfo (Shopee sem creds) detecta o shell SPA REAL de produção e dispara o retry com crawler UA', async (t) => {
+  const realShellHtml = readFileSync(new URL('./fixtures/shopee-spa-shell.html', import.meta.url), 'utf8')
+  const ssrHtml = `<!doctype html><html><head>
+    <meta property="og:title" content="Kit Maquiagem Completo Com Pincéis Profissionais" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Kit Maquiagem Completo Com Pincéis Profissionais","offers":{"@type":"Offer","price":"33.18","priceCurrency":"BRL"}}</script>
+  </head><body>produto</body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const url = String(input)
+    const ua = (init?.headers?.['User-Agent'] || init?.headers?.['user-agent'] || '')
+    if (url.includes('/api/v4/item/get?')) {
+      return { ok: false, headers: { get: () => 'application/json' }, json: async () => ({ error: 90309999 }) }
+    }
+    if (/facebookexternalhit|WhatsApp|Googlebot/i.test(ua)) {
+      return mockHtmlResponse(ssrHtml, 'https://shopee.com.br/Kit-Maquiagem-i.358101010.21697493290')
+    }
+    return mockHtmlResponse(realShellHtml, 'https://shopee.com.br/Kit-Maquiagem-i.358101010.21697493290')
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://shopee.com.br/Kit-Maquiagem-i.358101010.21697493290')
+  assert.match(info.title, /Kit Maquiagem Completo Com Pincéis Profissionais/i)
+  assert.equal(info.newPrice, '33,18')
 })
