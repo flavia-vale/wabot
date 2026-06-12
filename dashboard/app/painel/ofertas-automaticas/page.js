@@ -9,6 +9,8 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { ProFeaturePaywall } from '@/components/ProFeaturePaywall'
+import { hasProLikeAccess } from '@/lib/planEntitlements'
 import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import { usePainelHeader, PainelContentActions } from '../PainelShell'
 
@@ -106,19 +108,22 @@ export default function OfertasAutomaticasPage() {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [triggering, setTriggering] = useState(null)
   const [triggerResult, setTriggerResult] = useState({})
+  const [planSubject, setPlanSubject] = useState({ plan: 'pro', accessExpiresAt: null })
 
   async function load() {
     setLoading(true)
     setError('')
     try {
-      const [list, groups, templateStore] = await Promise.all([
+      const [list, groups, templateStore, me] = await Promise.all([
         api.offerAutomations(),
         api.groups().then((gs) => gs.filter((g) => g.role === 'post')),
         loadTemplateStore(),
+        api.me().catch(() => null),
       ])
       setAutomations(list)
       setWaGroups(groups)
       setTemplates(composeTemplates(templateStore))
+      if (me) setPlanSubject({ plan: me.plan ?? 'trial', accessExpiresAt: me.accessExpiresAt ?? null })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -207,6 +212,50 @@ export default function OfertasAutomaticasPage() {
 
   if (loading) {
     return <div className="pnl-card" style={{ maxWidth: 720, margin: '0 auto', textAlign: 'center', color: 'var(--ink-soft)' }}>Carregando…</div>
+  }
+
+  // Feature Pro: sem o plano, a página vira paywall (badge + benefícios +
+  // CTA), mantendo só a listagem/remoção do que já existe.
+  if (!hasProLikeAccess(planSubject)) {
+    return (
+      <div className="pnl-grid" style={{ maxWidth: 720, margin: '0 auto' }}>
+        <ProFeaturePaywall
+          title="Ofertas automáticas"
+          bullets={[
+            'O bot garimpa promoções na Shopee pela sua palavra-chave e posta sozinho nos seus grupos.',
+            'Filtros de desconto mínimo, ordenação por vendas/comissão e até 5 produtos por envio.',
+            'Dedup inteligente: o mesmo produto não repete no mesmo grupo em 24h.',
+          ]}
+        />
+        {error && <div className="pnl-note-box is-error" role="alert">{error}</div>}
+        {automations.length > 0 && (
+          <section className="pnl-card">
+            <div className="pnl-card-title">Suas automações (desativadas)</div>
+            <p className="pnl-hint" style={{ marginTop: 6 }}>Elas ficam guardadas e voltam a funcionar assim que o plano permitir.</p>
+            {automations.map((a) => (
+              <div key={a.id} style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 12, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+                <div style={{ minWidth: 0 }}>
+                  <strong>{a.keyword}</strong>
+                  <p className="pnl-hint" style={{ marginTop: 2 }}>{a.destGroupName}</p>
+                </div>
+                <button className="pnl-btn" onClick={() => setDeleteTarget(a)}>Excluir</button>
+              </div>
+            ))}
+          </section>
+        )}
+        {deleteTarget && (
+          <ConfirmDialog
+            open
+            title="Remover automação"
+            message={`Tem certeza que deseja remover a automação para "${deleteTarget.keyword}"?`}
+            confirmLabel="Remover"
+            danger
+            onConfirm={() => handleDelete(deleteTarget)}
+            onCancel={() => setDeleteTarget(null)}
+          />
+        )}
+      </div>
+    )
   }
 
   const selectedTemplatePreview = templatePreview(templates, form.templateKey)

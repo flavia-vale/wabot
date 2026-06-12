@@ -13,6 +13,7 @@ import { api } from '@/lib/api'
 import { usePainelHeader } from '../PainelShell'
 import { WhatsAppBubble } from '../WhatsAppBubble'
 import { getConversionStatusPresentation } from '@/lib/offerBuilderUi'
+import { hasProLikeAccess } from '@/lib/planEntitlements'
 import { buildMobileOfferText } from '@/lib/mobileOfferComposer'
 import { composeTemplates, loadAllTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import {
@@ -82,6 +83,7 @@ export default function CriarOfertaPage() {
   const [queueId, setQueueId] = useState('')
   const [scheduleAt, setScheduleAt] = useState('')
   const [sendMode, setSendMode] = useState('')
+  const [canUseQueues, setCanUseQueues] = useState(true)
   const [dispatching, setDispatching] = useState('')
   const [dispatchFeedback, setDispatchFeedback] = useState('')
   // Texto da prévia editado à mão. null = segue o template; qualquer edição
@@ -89,8 +91,9 @@ export default function CriarOfertaPage() {
   const [customText, setCustomText] = useState(null)
 
   useEffect(() => {
-    Promise.all([api.groups(), api.offerQueues()]).then(([allGroups, allQueues]) => {
+    Promise.all([api.groups(), api.offerQueues(), api.me().catch(() => null)]).then(([allGroups, allQueues, me]) => {
       const destinations = allGroups.filter((group) => group.role === 'post')
+      const queuesAllowed = me ? hasProLikeAccess({ plan: me.plan ?? 'trial', accessExpiresAt: me.accessExpiresAt ?? null }) : true
       const requestedQueueId = new URLSearchParams(window.location.search).get('fila')
       const initialQueueId = allQueues.some((queue) => queue.id === requestedQueueId)
         ? requestedQueueId
@@ -99,7 +102,8 @@ export default function CriarOfertaPage() {
       setSelectedJids(destinations.map((group) => group.waJid))
       setQueues(allQueues)
       setQueueId(initialQueueId)
-      if (requestedQueueId === initialQueueId) setSendMode('queue')
+      setCanUseQueues(queuesAllowed)
+      if (queuesAllowed && requestedQueueId === initialQueueId) setSendMode('queue')
     }).catch((err) => setError(err.message))
   }, [])
 
@@ -299,9 +303,22 @@ export default function CriarOfertaPage() {
 
           {/* Seletor de modo: cada modo revela só os campos pertinentes. */}
           <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }} role="group" aria-label="Modo de envio">
-            {[['now', 'Enviar agora'], ['schedule', 'Agendar'], ['queue', 'Inserir na fila']].map(([mode, label]) => (
-              <button key={mode} type="button" className={`pnl-btn${sendMode === mode ? ' is-primary' : ''}`} aria-pressed={sendMode === mode} onClick={() => { setSendMode(mode); setDispatchFeedback('') }}>{label}</button>
-            ))}
+            {[['now', 'Enviar agora'], ['schedule', 'Agendar'], ['queue', 'Inserir na fila']].map(([mode, label]) => {
+              const lockedQueueMode = mode === 'queue' && !canUseQueues
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  className={`pnl-btn${sendMode === mode ? ' is-primary' : ''}`}
+                  aria-pressed={sendMode === mode}
+                  disabled={lockedQueueMode}
+                  title={lockedQueueMode ? 'As filas de ofertas estão disponíveis no Trial ativo e no plano Pro.' : undefined}
+                  onClick={() => { setSendMode(mode); setDispatchFeedback('') }}
+                >
+                  {label}{lockedQueueMode && <span className="pnl-tag" style={{ marginLeft: 6 }}>Pro</span>}
+                </button>
+              )
+            })}
           </div>
 
           {sendMode === 'schedule' && (

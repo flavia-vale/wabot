@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
+import { ProFeaturePaywall } from '@/components/ProFeaturePaywall'
+import { hasProLikeAccess } from '@/lib/planEntitlements'
 import { PainelContentActions, usePainelHeader } from '../PainelShell'
 
 const EMPTY = { name: '', enabled: true, intervalEnabled: false, intervalMinutes: 30, hourlyCapEnabled: false, hourlyCap: 10, dailyCapEnabled: false, dailyCap: 50, targetJids: [] }
@@ -24,10 +26,15 @@ export default function FilasPage() {
   const [notice, setNotice] = useState('')
   const [toggling, setToggling] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [planSubject, setPlanSubject] = useState({ plan: 'pro', accessExpiresAt: null })
 
   async function load() {
     setLoading(true)
-    try { setQueues(await api.offerQueues()) }
+    try {
+      const [allQueues, me] = await Promise.all([api.offerQueues(), api.me().catch(() => null)])
+      setQueues(allQueues)
+      if (me) setPlanSubject({ plan: me.plan ?? 'trial', accessExpiresAt: me.accessExpiresAt ?? null })
+    }
     catch (error) { setMessage(error.message) }
     finally { setLoading(false) }
   }
@@ -94,6 +101,33 @@ export default function FilasPage() {
     if (!jids.length) return 'Todos os grupos de postagem'
     const names = jids.map((jid) => groups.find((group) => group.waJid === jid)?.name || jid)
     return names.join(' · ')
+  }
+
+  // Feature Pro: sem o plano, a página vira paywall mantendo só a
+  // listagem/exclusão do que já existe.
+  if (!loading && !hasProLikeAccess(planSubject)) {
+    return <div className="pnl-grid" style={{ maxWidth: 980, margin: '0 auto' }}>
+      <ProFeaturePaywall
+        title="Filas de ofertas"
+        bullets={[
+          'Cadastre as ofertas de uma vez e o bot distribui ao longo do dia, sem rajadas.',
+          'Limites por intervalo, por hora e por dia — você controla o ritmo de cada fila.',
+          'Pause e retome quando quiser; os itens pendentes ficam guardados.',
+        ]}
+      />
+      {message && <div className="pnl-note-box is-error" role="alert">{message}</div>}
+      {queues.length > 0 && <section className="pnl-card">
+        <div className="pnl-card-title">Suas filas (pausadas)</div>
+        <p className="pnl-hint" style={{ marginTop: 6 }}>Elas ficam guardadas e voltam a drenar assim que o plano permitir.</p>
+        {queues.map((queue) => <div key={queue.id} style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 12, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+          <div style={{ minWidth: 0 }}>
+            <strong>{queue.name}</strong>
+            <p className="pnl-hint" style={{ marginTop: 2 }}>{queue.pendingCount} pendente(s)</p>
+          </div>
+          <button className="pnl-btn" onClick={() => remove(queue)}>Excluir</button>
+        </div>)}
+      </section>}
+    </div>
   }
 
   return <div className="pnl-grid" style={{ maxWidth: 980, margin: '0 auto' }}>

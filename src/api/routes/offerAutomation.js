@@ -1,5 +1,6 @@
 import dbDefault from '../../db.js'
-import { validateOwnedTargetJids } from './broadcastTargets.js'
+import { loadUserPlanSubject, validateOwnedTargetJids } from './broadcastTargets.js'
+import { buildFeatureGateError, canUseOfferAutomations, FEATURE_CODES } from '../../billing/plans.js'
 import { runAutomation, searchOffersPreview } from '../../offerAutomation/dispatcher.js'
 import { normalizeDailyRunTime } from '../../offerAutomation/schedule.js'
 import { parseCredentialData } from '../../credentialHealth.js'
@@ -33,6 +34,16 @@ async function resolveOwnedDestGroupJid(db, userId, destGroupJid) {
 export async function offerAutomationRoutes(app, opts = {}) {
   const db = opts.db ?? dbDefault
 
+  // Ofertas automáticas são feature Pro (ou Trial ativo). Listar e deletar
+  // seguem liberados: a UI precisa mostrar o que existe e o usuário pode
+  // limpar automações antigas mesmo sem o plano.
+  async function ensureOfferAutomationAllowed(req, reply) {
+    const subject = await loadUserPlanSubject(db, req.user.sub)
+    if (canUseOfferAutomations(subject)) return true
+    reply.code(403).send(buildFeatureGateError(FEATURE_CODES.OFFER_AUTOMATIONS))
+    return false
+  }
+
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
     return db.offerAutomation.findMany({
       where: { userId: req.user.sub },
@@ -41,6 +52,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
   })
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!(await ensureOfferAutomationAllowed(req, reply))) return reply
     const { destGroupJid, destGroupName, keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, sortType, listType, prioritizeAMS, isKeySeller, templateKey } = req.body ?? {}
 
     if (!keyword?.trim()) return reply.code(400).send({ error: 'Palavra-chave obrigatória' })
@@ -90,6 +102,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
   })
 
   app.put('/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!(await ensureOfferAutomationAllowed(req, reply))) return reply
     const existing = await db.offerAutomation.findFirst({
       where: { id: req.params.id, userId: req.user.sub },
     })
@@ -169,6 +182,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
   })
 
   app.post('/:id/trigger', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!(await ensureOfferAutomationAllowed(req, reply))) return reply
     const automation = await db.offerAutomation.findFirst({
       where: { id: req.params.id, userId: req.user.sub },
     })
@@ -185,6 +199,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
   // enviar nada e SEM precisar de automação salva. Devolve o JSON do que a
   // busca traria para o usuário visualizar antes de criar/disparar.
   app.post('/search-preview', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!(await ensureOfferAutomationAllowed(req, reply))) return reply
     const { keyword, offersPerSend, minDiscountPct, sortType, listType, prioritizeAMS, isKeySeller, page } = req.body ?? {}
 
     if (!keyword?.trim()) return reply.code(400).send({ error: 'Palavra-chave obrigatória' })

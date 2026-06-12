@@ -35,6 +35,8 @@ test('drainQueueOnce envia um item FIFO com receita de imagem e marca sucesso', 
   assert.equal(calls.sent.length, 1)
   assert.deepEqual(calls.sent[0][2], ['grupo@g.us'])
   assert.equal(calls.sent[0][3].imageUrl, 'https://img.test/item.jpg')
+  assert.equal(calls.sent[0][3].source, 'offerQueue')
+  assert.equal(calls.sent[0][3].queueId, 'q1')
   assert.equal(calls.transaction.length, 2)
 })
 
