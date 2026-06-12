@@ -59,48 +59,197 @@ export async function convert(url, creds) {
 // porque o programa não reetiqueta link de outro afiliado. Solução: extrair
 // (shopId, itemId) do path e reescrever para `/product/{shopId}/{itemId}` sem
 // query string — formato canônico aceito.
-const SHOPEE_PRODUCT_PATH_RE = /\/(?:opaanlp|product|universal-link\/product)\/(\d+)\/(\d+)(?:\/|$)/
-const SHOPEE_DASH_I_RE = /-i\.(\d+)\.(\d+)(?:\/|$)/
+const SHOPEE_PRODUCT_PATH_RE = /\/(?:opaanlp|product|universal-link\/product)\/(\d+)\/(\d+)(?=[/?#&%]|$)/
+const SHOPEE_DASH_I_RE = /-i\.(\d+)\.(\d+)(?=[/?#&%]|$)/
+const SHOPEE_SHORT_HOST_RE = /^(shope\.ee|s\.shopee\.com\.br)$/
+const SHOPEE_BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+const SHORT_LINK_MAX_HOPS = 6
+const SHORT_LINK_BODY_MAX_BYTES = 512 * 1024
+
+export function isShopeeShortLink(url) {
+  try {
+    return SHOPEE_SHORT_HOST_RE.test(new URL(String(url || '')).hostname)
+  } catch {
+    return false
+  }
+}
+
+// Extrai (shopId, itemId) de qualquer string que contenha uma URL de produto
+// Shopee — inclusive quando a URL do produto está URL-encoded dentro de um
+// query param (ex.: página anti-bot `verify/traffic?next=https%3A%2F%2F...`).
+// É a ÚNICA fonte de verdade de parsing de IDs; productInfoScraper e
+// imageScrapers delegam para cá.
+export function extractShopeeIds(value) {
+  let text = String(value || '')
+  for (let round = 0; round < 3; round++) {
+    const m = text.match(SHOPEE_DASH_I_RE) || text.match(SHOPEE_PRODUCT_PATH_RE)
+    if (m) return { shopId: m[1], itemId: m[2] }
+    let decoded
+    try { decoded = decodeURIComponent(text) } catch { break }
+    if (decoded === text) break
+    text = decoded
+  }
+  return null
+}
 
 export function normalizeShopeeUrl(rawUrl) {
   try {
     const u = new URL(rawUrl)
     if (!/(^|\.)shopee\.com\.br$/.test(u.hostname)) return rawUrl
-    const dashI = u.pathname.match(SHOPEE_DASH_I_RE)
-    if (dashI) {
-      return `https://shopee.com.br/product/${dashI[1]}/${dashI[2]}`
-    }
-    const prod = u.pathname.match(SHOPEE_PRODUCT_PATH_RE)
-    if (prod) {
-      return `https://shopee.com.br/product/${prod[1]}/${prod[2]}`
-    }
+    const ids = extractShopeeIds(rawUrl)
+    if (ids) return `https://shopee.com.br/product/${ids.shopId}/${ids.itemId}`
     return rawUrl
   } catch { return rawUrl }
 }
 
+function collectSetCookies(res, jar) {
+  const headers = res?.headers
+  let lines = []
+  if (typeof headers?.getSetCookie === 'function') {
+    lines = headers.getSetCookie() || []
+  } else {
+    const single = headers?.get?.('set-cookie')
+    if (single) lines = [single]
+  }
+  for (const line of lines) {
+    const pair = String(line).split(';')[0]
+    const eq = pair.indexOf('=')
+    if (eq > 0) jar.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim())
+  }
+}
+
+function decodeHtmlUrl(raw) {
+  return String(raw || '').replace(/\\\//g, '/').replace(/&amp;/g, '&').trim()
+}
+
+// Quando o short link responde 200 (interstitial de tracking) em vez de
+// redirect HTTP, o destino real fica no corpo: meta refresh, redirect JS
+// (`location.replace(...)`), og:url/canonical ou uma URL de produto embutida.
+function extractRedirectTargetFromHtml(html, baseUrl) {
+  if (!html) return null
+  const candidates = []
+  const metaRefresh = html.match(/http-equiv=["']?refresh["']?[^>]*content=["'][^"']*url\s*=\s*([^"'>\s]+)/i)
+  if (metaRefresh?.[1]) candidates.push(metaRefresh[1])
+  const jsRedirect = html.match(/location\.(?:replace|assign)\(\s*["']([^"']+)["']/i)
+    || html.match(/location(?:\.href)?\s*=\s*["']([^"']+)["']/i)
+  if (jsRedirect?.[1]) candidates.push(jsRedirect[1])
+  for (const re of [
+    /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i,
+    /<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:url["']/i,
+  ]) {
+    const m = html.match(re)
+    if (m?.[1]) candidates.push(m[1])
+  }
+  const embedded = html.match(/https?:(?:\\\/\\\/|\/\/)[^"'<>\s]*?(?:-i\.\d+\.\d+|(?:\\\/|\/)(?:product|opaanlp)(?:\\\/|\/)\d+(?:\\\/|\/)\d+)[^"'<>\s]*/i)
+  if (embedded?.[0]) candidates.push(embedded[0])
+
+  let fallback = null
+  for (const raw of candidates) {
+    let abs
+    try { abs = new URL(decodeHtmlUrl(raw), baseUrl).href } catch { continue }
+    if (extractShopeeIds(abs)) return abs
+    if (!fallback) fallback = abs
+  }
+  return fallback
+}
+
+async function readBodyLimited(res) {
+  try {
+    if (!res?.body?.getReader) {
+      const text = await res?.text?.()
+      return typeof text === 'string' ? text.slice(0, SHORT_LINK_BODY_MAX_BYTES) : null
+    }
+    const reader = res.body.getReader()
+    const chunks = []
+    let received = 0
+    while (received < SHORT_LINK_BODY_MAX_BYTES) {
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(value)
+      received += value.byteLength
+    }
+    await reader.cancel().catch(() => {})
+    const body = new Uint8Array(received)
+    let offset = 0
+    for (const chunk of chunks) {
+      body.set(chunk, offset)
+      offset += chunk.byteLength
+    }
+    return new TextDecoder().decode(body)
+  } catch {
+    return null
+  }
+}
+
+// Resolvedor canônico de short link da Shopee. NÃO usar fetch(redirect:'follow')
+// direto: a Shopee intercala hops de anti-bot (verify/traffic) no FIM da cadeia
+// e serve interstitials 200 com redirect via JS — nos dois casos o `res.url`
+// final perde a URL do produto e TODAS as fontes de título/preço/imagem morrem
+// juntas (afiliado GraphQL, API v4 e título via slug dependem dos IDs).
+// Estratégia: seguir os redirects manualmente carregando cookies da cadeia e
+// parar no PRIMEIRO hop cuja URL já contenha (shopId, itemId) — inclusive
+// URL-encoded em query param. Sem redirect HTTP, extrai o alvo do corpo.
+export async function resolveShopeeShortLink(url, { timeoutMs = 8000, fetchImpl = globalThis.fetch } = {}) {
+  let current = String(url || '')
+  if (!isShopeeShortLink(current)) return current
+
+  const jar = new Map()
+  for (let hop = 0; hop < SHORT_LINK_MAX_HOPS; hop++) {
+    if (extractShopeeIds(current)) return current
+
+    let res
+    try {
+      const cookieHeader = [...jar.entries()].map(([name, value]) => `${name}=${value}`).join('; ')
+      res = await fetchImpl(current, {
+        headers: {
+          'User-Agent': SHOPEE_BROWSER_UA,
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+          ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+        },
+        redirect: 'manual',
+        signal: AbortSignal.timeout(timeoutMs),
+      })
+    } catch {
+      return current
+    }
+
+    collectSetCookies(res, jar)
+
+    const location = res?.headers?.get?.('location')
+    if (location) {
+      try { current = new URL(location, current).href } catch { return current }
+      continue
+    }
+
+    // Implementações de fetch que seguem redirects sozinhas reportam a URL
+    // final em res.url mesmo com redirect:'manual' (e.g. proxies/stubs).
+    if (res?.url && res.url !== current) {
+      current = res.url
+      continue
+    }
+
+    const html = await readBodyLimited(res)
+    const target = extractRedirectTargetFromHtml(html, current)
+    if (target && target !== current) {
+      current = target
+      continue
+    }
+    return current
+  }
+  return current
+}
+
 async function resolveCanonical(url) {
   try {
-    const u = new URL(url)
-    const isShort = /^(shope\.ee|s\.shopee\.com\.br)$/.test(u.hostname)
-    const resolved = isShort
-      ? (await fetch(url, {
-          redirect: 'follow',
-          signal: AbortSignal.timeout(5000),
-          headers: { 'User-Agent': 'Mozilla/5.0' },
-        })).url || url
-      : url
+    const resolved = await resolveShopeeShortLink(url, { timeoutMs: 5000 })
     return normalizeShopeeUrl(resolved)
   } catch { return url }
 }
 
 function parseIds(url) {
-  try {
-    const u = new URL(url)
-    const m = u.pathname.match(SHOPEE_DASH_I_RE)
-      || u.pathname.match(SHOPEE_PRODUCT_PATH_RE)
-    if (!m) return null
-    return { shopId: m[1], itemId: m[2] }
-  } catch { return null }
+  return extractShopeeIds(url)
 }
 
 // Consulta a API de afiliado (GraphQL) para obter a imagem oficial do produto.

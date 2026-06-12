@@ -291,6 +291,67 @@ test('fetchProductInfo usa título do slug da URL quando Shopee API falhar', asy
   assert.match(info.title, /Kit Maquiagem Completo Com Pincéis Empreendedora Sucesso/i)
 })
 
+// Regressão (produção, 2026-06): short link s.shopee.com.br cuja cadeia de
+// redirect termina numa página anti-bot (verify/traffic) — o fetch follow
+// antigo perdia a URL do produto que passou no hop intermediário e a oferta
+// saía sem título E sem preço ("Não conseguimos ler título e preço desse
+// link"). O resolvedor manual deve capturar os IDs do hop intermediário e a
+// API v4 deve ser consultada com eles.
+test('fetchProductInfo (regressão) lê título/preço de short link Shopee mesmo com hop anti-bot no fim da cadeia', async (t) => {
+  const shellHtml = '<!doctype html><html><head><title>Shopee Brasil</title></head><body>app shell</body></html>'
+  const shortUrl = 'https://s.shopee.com.br/4AxVbYMHaA'
+  const verifyUrl = 'https://shopee.com.br/verify/traffic?next=https%3A%2F%2Fshopee.com.br%2FCafeteira-El%C3%A9trica-30-Xicaras-i.358101010.21697493290'
+  let v4Query = null
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const url = String(input)
+    if (url === shortUrl) {
+      assert.equal(init?.redirect, 'manual')
+      return mockRedirectResponse(verifyUrl, url)
+    }
+    if (url.includes('/api/v4/item/get?')) {
+      v4Query = url
+      return {
+        ok: true,
+        headers: { get: () => 'application/json; charset=utf-8' },
+        json: async () => ({ data: { item: { name: 'Cafeteira Elétrica 30 Xícaras Inox', price_before_discount: 19900000, price_min: 14990000 } } }),
+      }
+    }
+    return mockHtmlResponse(shellHtml, url)
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo(shortUrl)
+  assert.match(String(v4Query), /itemid=21697493290&shopid=358101010/)
+  assert.equal(info.title, 'Cafeteira Elétrica 30 Xícaras Inox')
+  assert.equal(info.oldPrice, '199,00')
+  assert.equal(info.newPrice, '149,90')
+})
+
+// Regressão complementar: short link servido como interstitial 200 com
+// redirect via JS (sem redirect HTTP). Mesmo com a API v4 fora do ar, o
+// título deve sair do slug da URL do produto extraída do corpo.
+test('fetchProductInfo (regressão) resolve short link Shopee servido como interstitial JS e usa título do slug', async (t) => {
+  const shortUrl = 'https://s.shopee.com.br/4AxVbYMHaA'
+  const interstitial = '<!doctype html><html><body><script>location.replace("https:\\/\\/shopee.com.br\\/Caneca-Ceramica-Premium-i.111.222?utm_source=an_x")</script></body></html>'
+  const shellHtml = '<!doctype html><html><head><title>Shopee Brasil</title></head><body>app shell</body></html>'
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url === shortUrl) return mockHtmlResponse(interstitial, shortUrl)
+    if (url.includes('/api/v4/item/get?')) {
+      return { ok: false, headers: { get: () => 'application/json' } }
+    }
+    return mockHtmlResponse(shellHtml, url)
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo(shortUrl)
+  assert.match(info.title, /Caneca Ceramica Premium/i)
+})
+
 test('fetchProductInfo extrai título e preços do HTML da PDP do Mercado Livre (sem API)', async (t) => {
   const html = `<!doctype html><html><head>
     <meta property="og:title" content="02 Forma Silicone Retangular Reutilizável Air Fryer"/>

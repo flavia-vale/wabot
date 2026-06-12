@@ -1,4 +1,5 @@
 import sharp from 'sharp'
+import { extractShopeeIds, resolveShopeeShortLink as resolveShopeeShortLinkShared } from './shopee.js'
 
 const OG_IMAGE_RE = [
   /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
@@ -313,33 +314,22 @@ function isShopeeImageUrl(rawUrl) {
 }
 
 
-// Extrai (shopid, itemid) de URLs Shopee no formato:
-//   https://shopee.com.br/produto-i.{shopid}.{itemid}
-//   https://shopee.com.br/product/{shopid}/{itemid}
+// Extrai (shopid, itemid) de URLs Shopee — parsing delegado a shopee.js
+// (extractShopeeIds), que também cobre IDs URL-encoded em query param.
 function parseShopeeIds(url) {
   try {
     const u = new URL(url)
     if (!/shopee\.com\.br$/.test(u.hostname)) return null
-    const m1 = u.pathname.match(/-i\.(\d+)\.(\d+)(?:\/|$)/)
-    if (m1) return { shopid: m1[1], itemid: m1[2] }
-    const m2 = u.pathname.match(/^\/product\/(\d+)\/(\d+)(?:\/|$)/)
-    if (m2) return { shopid: m2[1], itemid: m2[2] }
-    return null
   } catch { return null }
+  const ids = extractShopeeIds(url)
+  return ids ? { shopid: ids.shopId, itemid: ids.itemId } : null
 }
 
-// Resolve short links da Shopee (shope.ee, s.shopee.com.br) para a URL canônica.
+// Resolve short links da Shopee (shope.ee, s.shopee.com.br) para a URL
+// canônica — resolvedor compartilhado em shopee.js (segue redirects
+// manualmente, carrega cookies da cadeia e tolera interstitials JS/anti-bot).
 async function resolveShopeeShortLink(url) {
-  try {
-    const u = new URL(url)
-    if (!/^(shope\.ee|s\.shopee\.com\.br)$/.test(u.hostname)) return url
-    const res = await fetch(url, {
-      headers: { 'User-Agent': BROWSER_UA },
-      signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS),
-      redirect: 'follow',
-    })
-    return res.url || url
-  } catch { return url }
+  return resolveShopeeShortLinkShared(url, { timeoutMs: IMAGE_HTML_FETCH_TIMEOUT_MS })
 }
 
 function shopeeImageUrl(hash) {
