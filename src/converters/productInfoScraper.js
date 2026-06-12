@@ -101,6 +101,43 @@ async function readLimitedText(res) {
 // que devolve a página /gz/account-verification em requests anônimos.
 const ML_MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
 
+// UAs de crawler que a Shopee atende com SSR (HTML com og:title e JSON-LD com
+// preço). Para UAs comuns de browser o SPA devolve shell vazio. Mesma lista
+// comprovada em produção para imagens (imageScrapers.js).
+const SHOPEE_CRAWLER_UAS = [
+  'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+  'WhatsApp/2.24.10.85 A',
+  'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+]
+
+// Heurística: o shell SPA da Shopee (~13KB) não tem dados de produto.
+// NOTA: verificamos presença de dados de produto ANTES do tamanho — uma
+// resposta SSR de crawler pode ser um HTML mínimo mas com JSON-LD/og:title
+// válidos, e isso NÃO é shell.
+function isShopeeSpaShell(html) {
+  if (!html) return true
+  // Se há JSON-LD de produto ou og:title não-genérico, é SSR real.
+  if (extractFromJsonLd(html)) return false
+  const ogTitle = OG_TITLE_RE.map(re => re.exec(html)).find(m => m)?.[1]?.trim() || ''
+  if (ogTitle && !/^shopee/i.test(ogTitle)) return false
+  // Shell SPA da Shopee: pequeno OU sem dados de produto.
+  if (html.length < 5_000) return true
+  if (/<title>\s*shopee/i.test(html) && !html.includes('"price_min"')) return true
+  return false
+}
+
+async function fetchShopeeSSRHtml(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS } = {}) {
+  for (const ua of SHOPEE_CRAWLER_UAS) {
+    try {
+      const result = await fetchHtml(url, { ua, timeoutMs })
+      if (result?.html && !isShopeeSpaShell(result.html)) return result
+    } catch {
+      // próximo UA
+    }
+  }
+  return null
+}
+
 function isMercadoLivreUrl(url) {
   try {
     return /(^|\.)mercado(livre|libre)\.com(\.br)?$/i.test(new URL(String(url)).hostname)
@@ -720,6 +757,18 @@ export async function fetchProductInfo(url, opts = {}) {
       } catch {
         // mantém o html anterior; próxima iteração tenta de novo
       }
+    }
+  }
+
+  // Shopee sem creds: o shell SPA não tem título/preço e a API v4 anônima é
+  // instável. Tenta UAs de crawler (whitelisted pela Shopee para preview de
+  // link) que recebem HTML SSR com og:title e JSON-LD de preço. NÃO dispara
+  // quando há credenciais de afiliado — esse caminho já é coberto pela API.
+  if (!shopeeCreds && extractShopeeIds(resolvedUrl || url) && isShopeeSpaShell(html)) {
+    const ssrResult = await fetchShopeeSSRHtml(resolvedUrl || url, { timeoutMs: HTML_FETCH_TIMEOUT_MS })
+    if (ssrResult?.html) {
+      html = ssrResult.html
+      finalUrl = ssrResult.finalUrl || finalUrl
     }
   }
 

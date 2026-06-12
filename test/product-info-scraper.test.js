@@ -600,3 +600,51 @@ test('fetchProductInfo mantém fallback de API do Mercado Livre mesmo quando fet
   assert.match(info.title, /Secador de roupas 600w elétrico portátil/i)
   assert.equal(info.newPrice, '189,90')
 })
+
+// ── Shopee SSR sem creds ────────────────────────────────────────────────────
+
+test('fetchProductInfo (Shopee sem creds) extrai título e preço do SSR retornado por crawler UA', async (t) => {
+  // Simula: BROWSER_UA retorna SPA shell; facebookexternalhit retorna SSR com produto.
+  const shellHtml = '<!doctype html><html><head><title>Shopee Brasil</title></head><body></body></html>'
+  const ssrHtml = `<!doctype html><html><head>
+    <meta property="og:title" content="Kit Maquiagem Completo Com Pincéis Profissionais" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Kit Maquiagem Completo Com Pincéis Profissionais","offers":{"@type":"Offer","price":"33.18","priceCurrency":"BRL"}}</script>
+  </head><body>produto</body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const url = String(input)
+    const ua = (init?.headers?.['User-Agent'] || init?.headers?.['user-agent'] || '')
+    if (url.includes('/api/v4/item/get?')) {
+      return { ok: false, headers: { get: () => 'application/json' }, json: async () => ({ error: 90309999 }) }
+    }
+    if (/facebookexternalhit|WhatsApp|Googlebot/i.test(ua)) {
+      return mockHtmlResponse(ssrHtml, 'https://shopee.com.br/Kit-Maquiagem-i.358101010.21697493290')
+    }
+    return mockHtmlResponse(shellHtml, 'https://shopee.com.br/Kit-Maquiagem-i.358101010.21697493290')
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://shopee.com.br/Kit-Maquiagem-i.358101010.21697493290')
+  assert.match(info.title, /Kit Maquiagem Completo Com Pincéis Profissionais/i)
+  assert.equal(info.newPrice, '33,18')
+})
+
+test('fetchProductInfo (Shopee sem creds) usa título do slug quando crawler UA também falha', async (t) => {
+  const shellHtml = '<!doctype html><html><head><title>Shopee Brasil</title></head><body></body></html>'
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('/api/v4/item/get?')) {
+      return { ok: false, headers: { get: () => 'application/json' }, json: async () => ({}) }
+    }
+    // todos os UAs retornam o shell
+    return mockHtmlResponse(shellHtml, url)
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://shopee.com.br/Kit-Maquiagem-Com-Pinceis-i.358101010.21697493290')
+  assert.match(info.title, /Kit Maquiagem Com Pinceis/i)
+  // sem preço quando tudo falha
+  assert.equal(info.newPrice, '')
+})
