@@ -1,6 +1,7 @@
 import dbDefault from '../../db.js'
 import { sendBroadcast, isRunning } from '../../manager.js'
 import { enforceChannelPlanGate, loadUserPlanSubject, resolveTargetJids, validateBroadcastText } from './broadcastTargets.js'
+import { ensureBroadcastRate, ensureCountQuota } from '../quotas.js'
 
 function optionalUrl(value) {
   const normalized = typeof value === 'string' ? value.trim() : ''
@@ -18,6 +19,7 @@ export async function broadcastRoutes(app, deps = {}) {
     const { text, jids, imageUrl, imageRefererUrl } = req.body ?? {}
     if (!text?.trim()) return reply.code(400).send({ error: 'text obrigatório' })
     validateBroadcastText(text)
+    if (!ensureBroadcastRate(reply, userId)) return
     if (!await isRunningImpl(userId)) return reply.code(400).send({ error: 'Bot não está conectado' })
 
     const targetJids = await resolveTargetJids({ db, userId, jids })
@@ -44,6 +46,12 @@ export async function broadcastRoutes(app, deps = {}) {
     const { text, scheduledAt, jids, imageUrl, imageRefererUrl } = req.body ?? {}
     if (!text?.trim() || !scheduledAt) return reply.code(400).send({ error: 'text e scheduledAt obrigatórios' })
     validateBroadcastText(text)
+    if (!(await ensureCountQuota(reply, {
+      userId,
+      quota: 'pendingScheduledPerUser',
+      count: () => db.scheduledMessage.count({ where: { userId, status: 'pending' } }),
+      label: 'mensagens agendadas pendentes',
+    }))) return
 
     const schedDate = new Date(scheduledAt)
     if (Number.isNaN(schedDate.getTime()) || schedDate <= now()) {

@@ -16,6 +16,7 @@ function fakeDb() {
     user: { findUnique: async () => ({ plan: 'pro', accessExpiresAt: null }) },
     group: { findMany: async ({ where }) => [{ waJid: `${where.userId}-post@g.us` }] },
     offerQueue: {
+      count: async ({ where }) => queues.filter((row) => matches(row, where)).length,
       findMany: async ({ where }) => queues.filter((row) => matches(row, where)),
       findFirst: async ({ where, select }) => { const row = queues.find((candidate) => matches(candidate, where)); return row && select ? Object.fromEntries(Object.keys(select).map((key) => [key, row[key]])) : row },
       create: async ({ data }) => { const row = { id: `q${++id}`, createdAt: new Date(), updatedAt: new Date(), ...data }; queues.push(row); return row },
