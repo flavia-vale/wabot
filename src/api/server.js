@@ -26,7 +26,7 @@ import { offerQueueRoutes } from './routes/offerQueue.js'
 import { affiliateRoutes } from './routes/affiliate.js'
 import { startOfferAutomationCron } from '../offerAutomation/cron.js'
 import { startOfferQueueCron } from '../offerQueue/cron.js'
-import { registerApiMetricsHooks, renderPrometheusMetrics } from './metrics.js'
+import { registerApiMetricsHooks, renderPrometheusMetrics, isPrivateAddress } from './metrics.js'
 import { getSupervisorOperationalCounters } from '../supervisor/operationalCounters.js'
 import db from '../db.js'
 import { revokeTokenJtiGlobal, isTokenRevokedGlobal } from '../core/tokenRevocationStore.js'
@@ -288,8 +288,18 @@ app.register(affiliateRoutes, { prefix: '/api' })
 // Liveness: processo está de pé
 app.get('/health', () => ({ ok: true }))
 
-// Prometheus scrape endpoint
-app.get('/metrics', async (_req, reply) => {
+// Prometheus scrape endpoint. Fora do rate limit global (allowlist), então
+// precisa de proteção própria: METRICS_TOKEN exige Authorization: Bearer;
+// sem token configurado, só loopback/rede privada pode ler (o scraper local
+// continua funcionando, mas a internet não enxerga contadores operacionais).
+const METRICS_TOKEN = String(process.env.METRICS_TOKEN ?? '').trim()
+app.get('/metrics', async (req, reply) => {
+  if (METRICS_TOKEN) {
+    const provided = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '').trim()
+    if (provided !== METRICS_TOKEN) return reply.code(401).send('unauthorized\n')
+  } else if (!isPrivateAddress(req.ip)) {
+    return reply.code(403).send('forbidden\n')
+  }
   reply
     .code(200)
     .header('content-type', 'text/plain; version=0.0.4; charset=utf-8')
@@ -309,6 +319,15 @@ app.get('/ready', async (req, reply) => {
 const port = Number(process.env.API_PORT) || 3001
 const databaseReadyAtBoot = await ensureDatabaseReady()
 if (!databaseReadyAtBoot) {
+  // Em produção, subir sem banco = processo "online" no PM2 mas quebrado para
+  // todo request (instância única, sem LB respeitando /ready). Falhar o boot
+  // torna a quebra visível no deploy/PM2. ALLOW_DEGRADED_BOOT=1 é o escape
+  // explícito para cenários de recuperação manual.
+  const isProductionEnv = (process.env.APP_ENV || process.env.NODE_ENV) === 'production'
+  if (isProductionEnv && process.env.ALLOW_DEGRADED_BOOT !== '1') {
+    app.log.error('Banco indisponível em produção — abortando boot. Rode "npx prisma migrate deploy" (ou ALLOW_DEGRADED_BOOT=1 para subir degradado de propósito).')
+    process.exit(1)
+  }
   app.log.warn('API iniciada em modo degradado: execute "npx prisma migrate deploy" e reinicie quando o banco estiver pronto')
 }
 startLogRetentionJob()

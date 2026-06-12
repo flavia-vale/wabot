@@ -121,6 +121,15 @@ function escLabel(value) {
     .replace(/\n/g, '\\n')
 }
 
+// Usado pelo gate do /metrics: sem METRICS_TOKEN configurado, só
+// loopback/rede privada pode ler o endpoint (que fica fora do rate limit).
+export function isPrivateAddress(ip = '') {
+  const addr = String(ip).replace(/^::ffff:/, '')
+  return addr === '127.0.0.1' || addr === '::1'
+    || /^10\./.test(addr) || /^192\.168\./.test(addr)
+    || /^172\.(1[6-9]|2\d|3[01])\./.test(addr)
+}
+
 export function renderPrometheusMetrics(extra = {}) {
   const routes = [...routeMetrics.values()]
   const totalRequests = routes.reduce((sum, route) => sum + route.count, 0)
