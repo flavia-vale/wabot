@@ -2,7 +2,7 @@
 // A ferramenta "Gerar oferta" recebe um link que JÁ é de afiliado — não deve
 // re-converter. Aqui buscamos título e preços para preencher o template.
 
-import { fetchShopeeProductInfo } from './shopee.js'
+import { fetchShopeeProductInfo, extractShopeeIds, isShopeeShortLink, resolveShopeeShortLink } from './shopee.js'
 import { resolveToCleanProductUrl } from './mercadolivre.js'
 
 const HTML_FETCH_TIMEOUT_MS = Number(process.env.PRODUCT_INFO_TIMEOUT_MS) || 8_000
@@ -379,27 +379,16 @@ function extractAmazonTitleAndPrice(html) {
 }
 
 
+// Parsing de IDs e resolução de short link delegados ao módulo shopee.js —
+// extractShopeeIds cobre IDs no path E URL-encoded em query param (anti-bot
+// verify/traffic?next=...); resolveShopeeShortLink segue redirects manualmente
+// com cookies e para no primeiro hop que já contém os IDs.
 function parseShopeeIdsFromUrl(url) {
-  const raw = String(url || '')
-  const m = raw.match(/-i\.(\d+)\.(\d+)(?:[/?#]|$)/)
-    || raw.match(/\/(?:product|opaanlp)\/(\d+)\/(\d+)(?:[/?#]|$)/)
-  if (!m) return null
-  return { shopId: m[1], itemId: m[2] }
+  return extractShopeeIds(url)
 }
 
 async function resolveShopeeUrl(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS } = {}) {
-  try {
-    const u = new URL(String(url || ''))
-    if (!/^(shope\.ee|s\.shopee\.com\.br)$/.test(u.hostname)) return String(url || '')
-    const res = await fetch(String(url), {
-      headers: { 'User-Agent': BROWSER_UA },
-      signal: AbortSignal.timeout(timeoutMs),
-      redirect: 'follow',
-    })
-    return String(res?.url || url)
-  } catch {
-    return String(url || '')
-  }
+  return resolveShopeeShortLink(String(url || ''), { timeoutMs })
 }
 
 function shopeePriceIntToString(value) {
@@ -688,6 +677,12 @@ export async function fetchProductInfo(url, opts = {}) {
       const canonical = await resolveToCleanProductUrl(url).catch(() => null)
       if (canonical) resolvedUrl = canonical
     }
+  } else if (isShopeeShortLink(url)) {
+    // Pré-resolve o short link da Shopee ANTES do fetch de HTML: assim o
+    // título via slug (extractTitleFromUrl) e as APIs (afiliado/v4) recebem a
+    // URL do produto mesmo quando o fetch follow do short link terminaria numa
+    // página anti-bot sem os IDs.
+    resolvedUrl = await resolveShopeeShortLink(url, { timeoutMs: HTML_FETCH_TIMEOUT_MS })
   }
 
   // Cookie/UA mobile são checados sobre a URL JÁ resolvida: meli.la/mluvem.com
@@ -757,7 +752,11 @@ export async function fetchProductInfo(url, opts = {}) {
   const mlHtml = html ? extractMercadoLivreFromHtml(html) : null
   const mlLanding = html ? extractFromMercadoLivreLanding(html) : null
   const amazonFallback = html ? extractAmazonTitleAndPrice(html) : null
-  const shopeeApiFallback = await fetchShopeeItemInfo(finalUrl || url, { ...opts, shopeeCreds })
+  // Para a API da Shopee, prioriza a URL que de fato contém (shopId, itemId):
+  // o fetch de HTML pode ter redirecionado para uma página anti-bot (finalUrl
+  // sem IDs) enquanto resolvedUrl preserva a URL do produto.
+  const shopeeApiSourceUrl = [finalUrl, resolvedUrl, url].find((candidate) => extractShopeeIds(candidate)) || finalUrl || url
+  const shopeeApiFallback = await fetchShopeeItemInfo(shopeeApiSourceUrl, { ...opts, shopeeCreds })
   const shopeeHtmlRange = extractShopeePriceRangeFromHtml(html)
   const shopeeJsonRange = extractShopeePriceRangeFromJsonInHtml(html)
 
