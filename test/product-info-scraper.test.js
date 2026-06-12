@@ -675,3 +675,108 @@ test('fetchProductInfo (Shopee sem creds) detecta o shell SPA REAL de produção
   assert.match(info.title, /Kit Maquiagem Completo Com Pincéis Profissionais/i)
   assert.equal(info.newPrice, '33,18')
 })
+
+// ── Mercado Livre SSR sem creds ─────────────────────────────────────────────
+
+test('fetchProductInfo (ML sem creds) tenta facebookexternalhit quando HTML é anti-bot e extrai título+preço', async (t) => {
+  const antibotHtml = '<!doctype html><html><head><title>Mercado Libre</title></head><body><div id="gz-verify">Verificação de segurança</div></body></html>'
+  const ssrHtml = `<!doctype html><html><head>
+    <meta property="og:title" content="Liquidificador Arno Faciclic Plus 550W" />
+  </head><body class="ui-pdp">
+    <h1 class="ui-pdp-title">Liquidificador Arno Faciclic Plus 550W</h1>
+    <div class="ui-pdp-price__second-line">
+      <span class="andes-money-amount__fraction">149</span>
+      <span class="andes-money-amount__cents">90</span>
+    </div>
+  </body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const url = String(input)
+    const ua = init?.headers?.['User-Agent'] || init?.headers?.['user-agent'] || ''
+    if (url.includes('api.mercadolibre.com')) return { ok: false, headers: { get: () => null } }
+    if (/facebookexternalhit|WhatsApp/i.test(ua)) {
+      return mockHtmlResponse(ssrHtml, url)
+    }
+    return mockHtmlResponse(antibotHtml, url)
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://www.mercadolivre.com.br/liquidificador-arno/MLB123456')
+  assert.match(info.title, /Liquidificador Arno Faciclic Plus/i)
+  assert.equal(info.newPrice, '149,90')
+})
+
+// ── Amazon crawler UA fallback ───────────────────────────────────────────────
+
+test('fetchProductInfo (Amazon) usa facebookexternalhit quando todos os retries de CAPTCHA falham', async (t) => {
+  const captchaHtml = `<!doctype html><html><head><title>Amazon.com.br</title></head>
+    <body><p>Type the characters you see in this image:</p>
+    <img src="https://images-na.ssl-images-amazon.com/captcha/abc.jpg"/></body></html>`
+  const productHtml = `<!doctype html><html><head><title>Fritadeira Air Fryer Mondial - Amazon.com.br</title></head>
+    <body>
+      <span id="productTitle"> Fritadeira Air Fryer Mondial 4L Preta </span>
+      <span class="a-price a-text-price a-size-medium apexPriceToPay">
+        <span class="a-offscreen">R$319,90</span>
+      </span>
+    </body></html>`
+
+  const originalFetch = globalThis.fetch
+  let normalCallCount = 0
+  globalThis.fetch = async (input, init) => {
+    const ua = init?.headers?.['User-Agent'] || ''
+    if (/facebookexternalhit/i.test(ua)) {
+      return mockHtmlResponse(productHtml, String(input))
+    }
+    normalCallCount++
+    return mockHtmlResponse(captchaHtml, String(input))
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://www.amazon.com.br/dp/B09VQ39F41')
+  assert.match(info.title, /Fritadeira Air Fryer Mondial/i)
+  assert.equal(info.newPrice, '319,90')
+  assert.ok(normalCallCount >= 2, 'deve tentar os retries normais antes do crawler UA')
+})
+
+// ── Regressões: caminho COM creds não deve chamar crawler UA ─────────────────
+
+test('fetchProductInfo (Shopee COM creds) não chama crawler UA — usa API de afiliado', async (t) => {
+  let crawlerUaCalled = false
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const ua = init?.headers?.['User-Agent'] || init?.headers?.['user-agent'] || ''
+    if (/facebookexternalhit|WhatsApp|Googlebot/i.test(ua)) {
+      crawlerUaCalled = true
+    }
+    if (String(input).includes('open-api.affiliate.shopee')) {
+      return { ok: false, headers: { get: () => 'application/json' }, json: async () => ({}) }
+    }
+    return mockHtmlResponse('<!doctype html><html><head><title>Shopee Brasil</title></head><body></body></html>', String(input))
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  await fetchProductInfo('https://shopee.com.br/Produto-i.111.222', { shopeeCredentials: { appId: '123', secretKey: 'abc' } })
+  assert.equal(crawlerUaCalled, false, 'crawler UA não deve ser chamado quando shopeeCreds está presente')
+})
+
+test('fetchProductInfo (ML COM creds) não chama facebookexternalhit — usa cookie+UA mobile existente', async (t) => {
+  let crawlerUaCalled = false
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const ua = init?.headers?.['User-Agent'] || init?.headers?.['user-agent'] || ''
+    if (/facebookexternalhit/i.test(ua)) crawlerUaCalled = true
+    return mockHtmlResponse(`<!doctype html><html><head>
+        <meta property="og:title" content="Produto ML"/>
+        </head><body class="ui-pdp">
+        <span class="andes-money-amount__fraction">199</span>
+        <span class="andes-money-amount__cents">90</span>
+        </body></html>`, String(input))
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  await fetchProductInfo('https://produto.mercadolivre.com.br/MLB123', {
+    mlCredentials: { ssid: 'x'.repeat(20) },
+  })
+  assert.equal(crawlerUaCalled, false, 'crawler UA não deve ser chamado quando mlCredentials está presente')
+})
