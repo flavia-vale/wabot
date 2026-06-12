@@ -47,6 +47,58 @@ check_http_with_retry() {
   return 1
 }
 
+assert_dashboard_security_headers() {
+  local url="${VISUAL_BASE_URL%/}/login"
+  local headers_file
+  local normalized_headers_file
+
+  headers_file=$(mktemp /tmp/wabot_staging_security_headers.XXXXXX)
+  normalized_headers_file=$(mktemp /tmp/wabot_staging_security_headers_normalized.XXXXXX)
+
+  if ! curl -fsSI --max-time 10 "$url" -o "$headers_file"; then
+    echo "ERRO: não foi possível obter headers de segurança de ${url}."
+    rm -f "$headers_file" "$normalized_headers_file"
+    exit 1
+  fi
+
+  tr -d '\r' < "$headers_file" > "$normalized_headers_file"
+  rm -f "$headers_file"
+
+  local required_exact_headers=(
+    'X-Content-Type-Options:[[:space:]]*nosniff[[:space:]]*$'
+    'X-Frame-Options:[[:space:]]*SAMEORIGIN[[:space:]]*$'
+    'Referrer-Policy:[[:space:]]*strict-origin-when-cross-origin[[:space:]]*$'
+  )
+
+  for expected_header in "${required_exact_headers[@]}"; do
+    if ! grep -Eqi "^${expected_header}" "$normalized_headers_file"; then
+      echo "ERRO: header de segurança ausente ou inválido em ${url}: ${expected_header}"
+      cat "$normalized_headers_file"
+      rm -f "$normalized_headers_file"
+      exit 1
+    fi
+  done
+
+  for required_header in 'Permissions-Policy' 'Content-Security-Policy-Report-Only'; do
+    if ! grep -Eqi "^${required_header}:[[:space:]]*.+" "$normalized_headers_file"; then
+      echo "ERRO: header de segurança ausente ou vazio em ${url}: ${required_header}"
+      cat "$normalized_headers_file"
+      rm -f "$normalized_headers_file"
+      exit 1
+    fi
+  done
+
+  if grep -Eqi '^Strict-Transport-Security:' "$normalized_headers_file"; then
+    echo "ERRO: staging HTTP não deve enviar Strict-Transport-Security em ${url}. Headers:"
+    cat "$normalized_headers_file"
+    rm -f "$normalized_headers_file"
+    exit 1
+  fi
+
+  rm -f "$normalized_headers_file"
+  echo "  Headers de segurança do dashboard validados em ${url}"
+}
+
 assert_login_api_not_next_404() {
   local url="${VISUAL_BASE_URL%/}/api/auth/login"
   local headers_file="/tmp/wabot_staging_login_headers.txt"
@@ -357,6 +409,7 @@ pm2 status
 
 echo "[9/9] Smoke tests staging"
 check_http_with_retry "visual /login" "${VISUAL_BASE_URL%/}/login" 8 2
+assert_dashboard_security_headers
 echo "  Validando abertura mobile do site (/ e /login)"
 "$ROOT_DIR/scripts/smoke_mobile_dashboard.sh" "$VISUAL_BASE_URL" / /login
 check_http_with_retry "api /health" "${API_BASE_URL%/}/health" 8 2

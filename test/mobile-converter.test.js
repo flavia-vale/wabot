@@ -46,11 +46,11 @@ test('resumo mobile usa contagem real dos itens normalizados', () => {
 test('handoff para oferta usa convertedUrl apenas quando o item converteu', () => {
   assert.equal(
     buildMobileOfferUrlFromConversion({ ok: true, convertedUrl: ' https://afiliado.test/produto?x=1&y=2 ' }),
-    '/m/op/offer?url=https%3A%2F%2Fafiliado.test%2Fproduto%3Fx%3D1%26y%3D2',
+    '/painel/criar-oferta?url=https%3A%2F%2Fafiliado.test%2Fproduto%3Fx%3D1%26y%3D2',
   )
   assert.equal(
     buildMobileOfferUrlFromConversion({ ok: false, convertedUrl: 'https://nao-deve-ir.test', originalUrl: 'https://original.test' }),
-    '/m/op/offer',
+    '/painel/criar-oferta',
   )
 })
 

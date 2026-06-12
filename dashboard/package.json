@@ -17,12 +17,7 @@
     "validate:seo-p0": "npm run guard:seo-registry && npm run lint:seo-metadata",
     "validate:editorial-freshness": "node scripts/validate-editorial-freshness.mjs",
     "monitor:cwv-budget": "node scripts/monitor-cwv-budget.mjs",
-    "validate:seo-p2": "npm run validate:editorial-freshness && npm run monitor:cwv-budget",
-    "smoke:mobile-routes": "node scripts/smoke-mobile-routes.mjs",
-    "smoke:mobile-p1": "node scripts/smoke-mobile-p1.mjs",
-    "smoke:mobile-p2": "node scripts/smoke-mobile-p2.mjs",
-    "smoke:mobile-p3": "node scripts/smoke-mobile-p3.mjs",
-    "test:routing": "node --test scripts/test-ui-variant-routing.mjs"
+    "validate:seo-p2": "npm run validate:editorial-freshness && npm run monitor:cwv-budget"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4",

@@ -1,5 +1,5 @@
 /* Config das plataformas de afiliado para a tela "IDs de afiliada" do novo
- * painel. Espelha PLATFORMS de app/dashboard/credenciais/page.js — é config de
+ * painel. Centraliza a configuração das plataformas exibidas nas credenciais — é config de
  * UI (rótulos, campos, instruções), sem regra de negócio. O salvamento usa os
  * mesmos endpoints (api.credentials / api.saveCredential). */
 

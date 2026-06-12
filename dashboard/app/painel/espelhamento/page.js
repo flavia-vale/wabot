@@ -1,7 +1,7 @@
 'use client'
 
 /* Espelhamento — versão Menta desktop do recurso PRO. Mesma lógica e fontes de
- * dados da tela mobile canônica (app/m/op/espelhar/page.js):
+ * dados do fluxo canônico de espelhamento:
  *   - api.groups()       → origem (role:'monitor') e destino (role:'post')
  *   - api.logsSummary('today') → métricas factuais do dia
  *   - api.getConfig()    → cadência de envio (delayMin/delayMax)

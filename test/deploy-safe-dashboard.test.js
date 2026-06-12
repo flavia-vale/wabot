@@ -17,7 +17,7 @@ test('deploy_safe_dashboard.sh keeps required hard gates', () => {
   assert.match(script, /pm2\s+restart\s+dashboard\s+--update-env/, 'dashboard restart is required')
   assert.match(script, /pm2\s+restart\s+api\s+--update-env/, 'api restart is required')
   assert.match(script, /node\s+scripts\/verify-dashboard-api-proxy\.mjs/, 'dashboard API proxy build verification is required')
-  assert.match(script, /for\s+path\s+in\s+\/login\s+\/admin\s+\/dashboard/, 'smoke-test routes must include /login /admin /dashboard')
+  assert.match(script, /for\s+path\s+in\s+\/login\s+\/admin\s+\/painel/, 'smoke-test routes must include /login /admin /painel')
   assert.match(script, /POST \/api\/auth\/login/, 'login API smoke test is required')
   assert.match(script, /x-nextjs-prerender/, 'login API smoke test must reject Next.js prerender 404 responses')
   assert.match(script, /curl\s+-s\s+-o\s+\/dev\/null\s+-w\s+"%\{http_code\}"/, 'smoke tests must assert http status code')

@@ -4,20 +4,51 @@ import { fileURLToPath } from 'node:url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+const contentSecurityPolicyReportOnly = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'self'",
+  "form-action 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com data:",
+  "img-src 'self' data: blob: https:",
+  "connect-src 'self' ws: wss:",
+  "frame-src 'none'",
+  "manifest-src 'self'",
+  "worker-src 'self' blob:",
+  'upgrade-insecure-requests',
+].join('; ')
+
+const securityHeaders = [
+  {
+    key: 'X-Content-Type-Options',
+    value: 'nosniff',
+  },
+  {
+    key: 'X-Frame-Options',
+    value: 'SAMEORIGIN',
+  },
+  {
+    key: 'Referrer-Policy',
+    value: 'strict-origin-when-cross-origin',
+  },
+  {
+    key: 'Permissions-Policy',
+    value: 'camera=(), microphone=(), geolocation=(), browsing-topics=(), payment=(), usb=(), serial=(), bluetooth=()',
+  },
+  {
+    key: 'Content-Security-Policy-Report-Only',
+    value: contentSecurityPolicyReportOnly,
+  },
+]
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   outputFileTracingRoot: __dirname,
   turbopack: {
     root: __dirname,
-  },
-  async redirects() {
-    return [
-      {
-        source: '/dashboard/',
-        destination: '/dashboard/inicio',
-        permanent: false,
-      },
-    ]
   },
   async headers() {
     const noIndexHeaders = [
@@ -29,8 +60,8 @@ const nextConfig = {
 
     return [
       {
-        source: '/dashboard/:path*',
-        headers: noIndexHeaders,
+        source: '/:path*',
+        headers: securityHeaders,
       },
       {
         source: '/admin/:path*',

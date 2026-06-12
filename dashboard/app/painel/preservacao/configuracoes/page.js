@@ -2,7 +2,7 @@
 
 /* Configurações avançadas da Preservação — versão Menta do painel. A lógica de
  * carregar/editar/salvar (api.preservationConfig / updatePreservationConfig) e os
- * forms são os mesmos de /dashboard/preservacao/configuracoes; o título vai para
+ * forms usam os contratos canônicos de preservação; o título vai para
  * a topbar via usePainelHeader. */
 
 import { useEffect, useState } from 'react'
