@@ -122,7 +122,7 @@ function isShopeeSpaShell(html) {
   if (ogTitle && !/^shopee/i.test(ogTitle)) return false
   // Shell SPA da Shopee: pequeno OU sem dados de produto.
   if (html.length < 5_000) return true
-  if (/<title>\s*shopee/i.test(html) && !html.includes('"price_min"')) return true
+  if (/<title[^>]*>\s*shopee/i.test(html) && !html.includes('"price_min"')) return true
   return false
 }
 
