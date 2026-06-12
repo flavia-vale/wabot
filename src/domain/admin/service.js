@@ -47,6 +47,14 @@ export function createAdminService({
         skip,
         select: {
           id: true, name: true, email: true, contactPhone: true, status: true, plan: true, accessExpiresAt: true,
+          affiliateProfileId: true,
+          affiliateRef: {
+            select: {
+              code: true,
+              status: true,
+              user: { select: { id: true, name: true, email: true } },
+            },
+          },
           lastLoginAt: true, lastActivityAt: true, lastSupportContactAt: true, supportStatus: true, createdAt: true,
           waSession: { select: { status: true, phone: true, updatedAt: true } },
           groups: { select: { role: true } },
