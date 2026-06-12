@@ -387,10 +387,11 @@ export async function authRoutes(app) {
         userId: user.id,
         event: 'signup_created',
         metadata: {
-          source: source || utmSource || 'direct',
+          source: source || utmSource || (affiliateProfileId ? 'affiliate' : 'direct'),
           ref: ref || null,
+          aff_code: affiliateProfileId ? aff_code : null,
           promo: isPromoVipFlow ? 'vip7dias' : 'none',
-          utm_source: utmSource || source || 'direct',
+          utm_source: utmSource || source || (affiliateProfileId ? 'affiliate' : 'direct'),
           utm_medium: utmMedium || null,
           utm_campaign: utmCampaign || null,
           utm_content: utmContent || null,

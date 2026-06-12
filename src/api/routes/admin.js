@@ -1136,11 +1136,12 @@ export async function adminRoutes(app) {
     if (!(await requireAdmin(req, reply, 'admin:read'))) return
     const { from, to } = parseDateRange(req.query, 30)
 
-    const [signups, checkouts, approved, firstSuccess] = await Promise.all([
+    const [signups, checkouts, approved, firstSuccess, affiliateReferrals] = await Promise.all([
       db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event = 'signup_created' AND createdAt >= ${from} AND createdAt <= ${to}`,
       db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event = 'checkout_started' AND createdAt >= ${from} AND createdAt <= ${to}`,
       db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event = 'payment_approved' AND createdAt >= ${from} AND createdAt <= ${to}`,
       db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event = 'first_send_success' AND createdAt >= ${from} AND createdAt <= ${to}`,
+      db.user.count({ where: { affiliateProfileId: { not: null }, createdAt: { gte: from, lte: to } } }),
     ])
 
     await writeAdminAuditLog(req, { action: 'admin.marketing.overview.read', resource: 'marketingOverview' })
@@ -1149,6 +1150,7 @@ export async function adminRoutes(app) {
       checkouts: Number(checkouts?.[0]?.total || 0),
       approvedPayments: Number(approved?.[0]?.total || 0),
       firstValueActions: Number(firstSuccess?.[0]?.total || 0),
+      affiliateReferrals: Number(affiliateReferrals || 0),
       from,
       to,
     }
@@ -1183,13 +1185,13 @@ export async function adminRoutes(app) {
     const rows = await db.$queryRaw`
       SELECT
         COALESCE(json_extract(metadata, '$.source'), 'unknown') as source,
-        COALESCE(json_extract(metadata, '$.ref'), 'none') as campaign,
+        COALESCE(json_extract(metadata, '$.utm_campaign'), json_extract(metadata, '$.aff_code'), json_extract(metadata, '$.ref'), 'none') as campaign,
         COUNT(*) as signups
       FROM AnalyticsEvent
       WHERE event = 'signup_created'
         AND createdAt >= ${from}
         AND createdAt <= ${to}
-      GROUP BY COALESCE(json_extract(metadata, '$.source'), 'unknown'), COALESCE(json_extract(metadata, '$.ref'), 'none')
+      GROUP BY COALESCE(json_extract(metadata, '$.source'), 'unknown'), COALESCE(json_extract(metadata, '$.utm_campaign'), json_extract(metadata, '$.aff_code'), json_extract(metadata, '$.ref'), 'none')
       ORDER BY signups DESC
       LIMIT 50
     `
@@ -1277,7 +1279,7 @@ export async function adminRoutes(app) {
     const [totalSignups, withSource, withRef, events24h] = await Promise.all([
       db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event = 'signup_created' AND createdAt >= ${from} AND createdAt <= ${to}`,
       db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event = 'signup_created' AND createdAt >= ${from} AND createdAt <= ${to} AND COALESCE(json_extract(metadata, '$.source'), '') <> ''`,
-      db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event = 'signup_created' AND createdAt >= ${from} AND createdAt <= ${to} AND COALESCE(json_extract(metadata, '$.ref'), '') <> ''`,
+      db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE event = 'signup_created' AND createdAt >= ${from} AND createdAt <= ${to} AND COALESCE(json_extract(metadata, '$.utm_campaign'), json_extract(metadata, '$.aff_code'), json_extract(metadata, '$.ref'), '') <> ''`,
       db.$queryRaw`SELECT COUNT(*) as total FROM AnalyticsEvent WHERE createdAt >= ${new Date(Date.now()-24*60*60*1000)} AND createdAt <= ${new Date()}`,
     ])
     const total = Number(totalSignups?.[0]?.total || 0)

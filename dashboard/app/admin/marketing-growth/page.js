@@ -183,7 +183,7 @@ export default function MarketingGrowthAdminPage() {
     const paid = Number(overview?.paidActiveUsers || 0)
     const pendingPayments = Number(overview?.pendingPayments || 0)
     return {
-      visitors, leads, signups, activations, paid, pendingPayments,
+      visitors, leads, signups, activations, paid, pendingPayments, affiliateReferrals: Number(marketingOverview?.affiliateReferrals || 0),
       activationRate: pct(activations, signups), paidRate: pct(paid, signups), leadRate: pct(leads, visitors),
       revenue30d: Number(overview?.revenue30d || 0), activeMrr: Number(finance?.activeMrr || 0), successRate24h: Number(overview?.successRate24h || 0),
     }
@@ -448,6 +448,13 @@ export default function MarketingGrowthAdminPage() {
         plan: user.plan || '-',
         accessStatus: user.accessStatus || '-',
         botRunning: user.botRunning ? 'Sim' : 'Não',
+        acquisition: user.affiliateRef
+          ? {
+              type: 'affiliate',
+              code: user.affiliateRef.code || '-',
+              affiliateName: user.affiliateRef.user?.name || user.affiliateRef.user?.email || 'Afiliado',
+            }
+          : { type: 'direct' },
       }))
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       .slice(0, 80)
@@ -499,6 +506,7 @@ export default function MarketingGrowthAdminPage() {
         {error && <Alert type="warning" title="Falha ao carregar parte das métricas" message={error} />}
 
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Card label="Indicados por afiliados" value={metrics.affiliateReferrals} hint={`Cadastros atribuídos no período ${period}`} tone={metrics.affiliateReferrals > 0 ? 'good' : 'neutral'} trust={trustTag({ source: 'measured', confidence: 'high', note: 'vínculo persistido no cadastro' })} updatedAt={updatedAt.kpis} />
           <Card label="Leads totais" value={metrics.leads} hint={`Período: ${period}`} tone="good" trust={metricTrust.leads} updatedAt={updatedAt.kpis} />
           <Card label="Taxa lead/visita" value={`${metrics.leadRate}%`} hint={`${metrics.leads} / ${metrics.visitors}`} trust={metricTrust.leadRate} updatedAt={updatedAt.kpis} />
           <Card label="Taxa ativação" value={`${metrics.activationRate}%`} hint={`${metrics.activations} contas com bot rodando`} tone={metrics.activationRate < 60 ? 'risk' : 'good'} trust={metricTrust.activationRate} updatedAt={updatedAt.kpis} />
@@ -650,6 +658,7 @@ export default function MarketingGrowthAdminPage() {
                   <th className="px-3 py-2">Nome</th>
                   <th className="px-3 py-2">Email</th>
                   <th className="px-3 py-2">Telefone</th>
+                  <th className="px-3 py-2">Origem</th>
                   <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2">Plano</th>
                   <th className="px-3 py-2">Acesso</th>
@@ -663,6 +672,15 @@ export default function MarketingGrowthAdminPage() {
                     <td className="px-3 py-3 font-semibold text-gray-900">{row.name}</td>
                     <td className="px-3 py-3">{row.email}</td>
                     <td className="px-3 py-3">{row.phone}</td>
+                    <td className="px-3 py-3">
+                      {row.acquisition.type === 'affiliate' ? (
+                        <div className="flex min-w-44 flex-col gap-1">
+                          <span className="w-fit rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-black uppercase tracking-wide text-emerald-700">Indicação de afiliado</span>
+                          <span className="text-xs font-semibold text-gray-700">{row.acquisition.affiliateName}</span>
+                          <span className="font-mono text-[11px] text-gray-500">Código {row.acquisition.code}</span>
+                        </div>
+                      ) : <span className="text-xs text-gray-400">Sem indicação</span>}
+                    </td>
                     <td className="px-3 py-3">{row.status}</td>
                     <td className="px-3 py-3">{row.plan}</td>
                     <td className="px-3 py-3">{row.accessStatus}</td>
@@ -670,7 +688,7 @@ export default function MarketingGrowthAdminPage() {
                   </tr>
                 )) : (
                   <tr>
-                    <td className="px-3 py-4 text-sm text-gray-500" colSpan={8}>Nenhum lead encontrado no período selecionado.</td>
+                    <td className="px-3 py-4 text-sm text-gray-500" colSpan={9}>Nenhum lead encontrado no período selecionado.</td>
                   </tr>
                 )}
               </tbody>
