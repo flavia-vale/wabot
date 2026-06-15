@@ -735,6 +735,35 @@ amzn.to short     → 1500x300 jpeg
 
 `node --test test/image-scrapers.test.js` → 12/12 pass.
 
+## Resolução de short link da Shopee (canônico — não regredir)
+
+TODAS as fontes de título/preço/imagem da Shopee (API de afiliado GraphQL,
+API pública v4 e título via slug) dependem de extrair `(shopId, itemId)` da
+URL. Para `s.shopee.com.br`/`shope.ee` isso exige resolver o short link — e
+**não pode** ser feito com `fetch(redirect:'follow')` lendo `res.url`:
+
+- A Shopee intercala hop anti-bot no **fim** da cadeia (`verify/traffic`),
+  então o `res.url` final perde a URL do produto que passou num hop
+  intermediário.
+- O short link pode responder 200 com interstitial de redirect via
+  JS/meta-refresh em vez de redirect HTTP.
+- A cadeia pode exigir cookies setados em hops anteriores (o fetch do Node
+  não propaga `Set-Cookie` entre redirects).
+
+Quando a resolução falhava, tudo morria junto e o painel mostrava "Não
+conseguimos ler título e preço desse link" (regressão de produção, 2026-06).
+
+Fonte única de verdade em `src/converters/shopee.js`:
+- `resolveShopeeShortLink()` — segue redirects **manualmente** com cookie jar,
+  para no primeiro hop cuja URL já contém os IDs e extrai o alvo do corpo
+  HTML quando não há redirect HTTP. Consumido por `productInfoScraper.js` e
+  `imageScrapers.js` — **não** reimplementar resolução local nesses arquivos.
+- `extractShopeeIds()` — parsing único de `(shopId, itemId)`, inclusive
+  URL-encoded em query param (`verify/traffic?next=...`).
+
+Testes: `test/shopee-shortlink-resolve.test.js` + regressões em
+`test/product-info-scraper.test.js`.
+
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 
 Existem dois pontos que montam uma oferta (título + preço + link) a partir de

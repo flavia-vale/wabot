@@ -10,7 +10,13 @@ import {
   getMobileOfferSingleLinkWarning,
   normalizeMobileOfferProduct,
 } from '../dashboard/lib/mobileOfferComposer.js'
-import { PRESET_TEMPLATE_BODIES } from '../dashboard/lib/mobileTemplateStore.js'
+import {
+  PRESET_TEMPLATE_BODIES,
+  composeTemplates,
+  withNewCustomTemplate,
+  withPresetBody,
+  withUpdatedCustomTemplate,
+} from '../dashboard/lib/mobileTemplateStore.js'
 
 test('normaliza preço raspado quando a API retorna newPrice em vez de price', () => {
   const product = normalizeMobileOfferProduct({ title: 'Tênis leve', newPrice: 'R$ 129,90', oldPrice: 'R$ 199,90' })
@@ -57,7 +63,7 @@ test('templates com campos globais não vazam placeholders no Gerar oferta manua
     templateBody: PRESET_TEMPLATE_BODIES.simples,
   })
 
-  assert.doesNotMatch(text, /\{\{gancho\}\}|\{\{greeting\}\}|\{\{cta\}\}|\{\{convitegrupo\}\}|\{\{trailer\}\}/)
+  assert.doesNotMatch(text, /\{\{gancho\}\}|\{\{cta\}\}|\{\{convitegrupo\}\}/)
   assert.match(text, /Produto manual/)
   assert.match(text, /https:\/\/afiliado\.test\/manual/)
 })
@@ -177,7 +183,29 @@ test('detecta loja da oferta por dados do scrape, conversão ou hostname', () =>
   assert.equal(detectMobileOfferStoreKey({ product: {}, link: 'https://www.magazineluiza.com.br/produto' }), 'magazineluiza')
 })
 
-test('preset Automático clássico mostra onde gancho, CTA e fechamento entram na copy', () => {
+
+
+test('store de templates canonicaliza variáveis históricas ao carregar e editar', () => {
+  const legacyBody = '{{' + 'greeting}} oferta {{' + 'trailer}}'
+  const canonicalBody = '{{gancho}} oferta {{convitegrupo}}'
+  const loaded = composeTemplates({
+    overrides: { simples: legacyBody },
+    custom: [{ key: 'tpl_1', name: 'Legado', body: legacyBody }],
+  })
+
+  assert.equal(loaded.find((template) => template.key === 'simples').body, canonicalBody)
+  assert.equal(loaded.find((template) => template.key === 'tpl_1').body, canonicalBody)
+  assert.equal(withPresetBody({}, 'simples', legacyBody).overrides.simples, canonicalBody)
+
+  const created = withNewCustomTemplate({}, { name: 'Novo', body: legacyBody })
+  assert.equal(created.store.custom[0].body, canonicalBody)
+  assert.equal(
+    withUpdatedCustomTemplate(created.store, created.key, { name: 'Editado', body: legacyBody }).custom[0].body,
+    canonicalBody,
+  )
+})
+
+test('preset Automático clássico mostra onde gancho, CTA e convite do grupo entram na copy', () => {
   assert.equal(PRESET_TEMPLATE_BODIES.automatico_classico, [
     '{{gancho}}',
     '',

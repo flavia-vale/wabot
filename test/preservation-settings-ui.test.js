@@ -12,12 +12,14 @@ const FORMS = [
   ['CopyVariationPoolEditor.js', 'copyVariationEnabled'],
 ]
 
-test('página renderiza todas as defesas sem o toggle mestre legado', () => {
+test('página renderiza somente as cinco funcionalidades disponíveis', () => {
   const source = read(PAGE)
-  for (const component of ['ThrottleForm', 'QuietHoursForm', 'FollowGuardForm', 'CopyVariationPoolEditor', 'ImageMutationToggle', 'ProbeToggle', 'ClickTrackerStatus']) {
+  for (const component of ['ThrottleForm', 'QuietHoursForm', 'FollowGuardForm', 'CopyVariationPoolEditor', 'ImageMutationToggle']) {
     assert.match(source, new RegExp(`<${component}\\b`), `${component} deve continuar visível`)
   }
-  assert.doesNotMatch(source, /PreservationMasterToggle/, 'toggle mestre legado não pode voltar à página')
+  for (const hidden of ['PreservationMasterToggle', 'ProbeToggle', 'ClickTrackerStatus']) {
+    assert.doesNotMatch(source, new RegExp(hidden), `${hidden} não pode aparecer na página`)
+  }
 })
 
 test('componente legado do toggle mestre foi removido do código', () => {

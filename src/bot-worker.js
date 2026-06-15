@@ -48,6 +48,7 @@ import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
 import { classifyError } from './errorTaxonomy.js'
 import { detectMessageKind, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
+import { broadcastSourceGroup } from './offerQueue/sourceTag.js'
 import Redis from 'ioredis'
 import { parseEnumEnv, logModeSummary } from './core/envModes.js'
 
@@ -2135,7 +2136,7 @@ process.on('message', async msg => {
         data: {
           userId,
           platform: 'broadcast',
-          sourceGroup: msg.options?.source === 'offerAutomation' ? 'offerAutomation' : 'manual',
+          sourceGroup: broadcastSourceGroup(msg.options),
           destGroup: jid,
           originalUrl: '',
           convertedUrl: '',

@@ -216,6 +216,8 @@ function buildApp(dbMock) {
   if (!dbMock.group) dbMock.group = { findMany: async () => [{ waJid: '123@g.us' }, { waJid: 'grupo@g.us' }] }
   // quota de automa√ß√µes por tenant
   if (dbMock.offerAutomation && !dbMock.offerAutomation.count) dbMock.offerAutomation.count = async () => 0
+  // rotas de escrita exigem plano com canUseOfferAutomations (Pro/Trial ativo)
+  if (!dbMock.user) dbMock.user = { findUnique: async () => ({ plan: 'pro', accessExpiresAt: null }) }
   app.register(offerAutomationRoutes, { prefix: '/api/offer-automations', db: dbMock })
   return app
 }
@@ -643,7 +645,7 @@ test('runAutomation: template pode usar ganchos, CTAs e links globais como vari√
     credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'app', secretKey: 'secret' }) }) },
     botConfig: { findUnique: async () => ({
       mobileTemplatesJson: JSON.stringify({ overrides: {}, custom: [{ key: 'tpl_vars', name: 'Com vari√°veis', body: '{{gancho}}\n{produto}\n{{cta}}\n{{grupoLink}}\n{{cupomLink}}\n{{convitegrupo}}\n{link}' }] }),
-      copyVariationPoolJson: JSON.stringify({ greetings: ['GANCHO'], ctas: ['CTA'], trailers: ['FECHAMENTO'] }),
+      copyVariationPoolJson: JSON.stringify({ greetings: ['GANCHO'], ctas: ['CTA'], trailers: ['CONVITE'] }),
       brandingGroupLink: 'https://chat.whatsapp.com/grupo',
       couponLink: 'https://cupom.test/oferta',
     }) },
@@ -662,8 +664,8 @@ test('runAutomation: template pode usar ganchos, CTAs e links globais como vari√
 
   assert.match(sent[0], /GANCHO/)
   assert.match(sent[0], /CTA/)
-  assert.match(sent[0], /FECHAMENTO/)
+  assert.match(sent[0], /CONVITE/)
   assert.match(sent[0], /https:\/\/chat\.whatsapp\.com\/grupo/)
   assert.match(sent[0], /https:\/\/cupom\.test\/oferta/)
-  assert.doesNotMatch(sent[0], /\{\{gancho\}\}|\{\{greeting\}\}|\{\{cta\}\}|\{\{convitegrupo\}\}|\{\{trailer\}\}|\{\{grupoLink\}\}|\{\{cupomLink\}\}/)
+  assert.doesNotMatch(sent[0], /\{\{gancho\}\}|\{\{cta\}\}|\{\{convitegrupo\}\}|\{\{grupoLink\}\}|\{\{cupomLink\}\}/)
 })

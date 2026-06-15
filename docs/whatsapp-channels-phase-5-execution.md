@@ -265,8 +265,8 @@ JID e mantém targets.
 }
 ```
 
-`applyVariation` substitui placeholders `{{greeting}}` `{{cta}}`
-`{{trailer}}` ou apenas concatena com índice baseado em
+`applyVariation` substitui placeholders `{{gancho}}`, `{{cta}}` e
+`{{convitegrupo}}` ou apenas concatena com índice baseado em
 `hash(groupId + date)`.
 
 **Image mutation regras invioláveis:**

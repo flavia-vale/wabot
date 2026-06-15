@@ -33,7 +33,9 @@ test('sanitizeAttributionValue keeps attribution short and URL-safe', () => {
 
 test('shouldSuppressConversionPrompt blocks critical flows only', () => {
   assert.equal(shouldSuppressConversionPrompt('/login'), true)
-  assert.equal(shouldSuppressConversionPrompt('/dashboard/inicio'), true)
+  assert.equal(shouldSuppressConversionPrompt('/painel/inicio'), true)
+  assert.equal(shouldSuppressConversionPrompt('/dashboard/inicio'), false)
+  assert.equal(shouldSuppressConversionPrompt('/m/op/offer'), false)
   assert.equal(shouldSuppressConversionPrompt('/admin/marketing-growth'), true)
   assert.equal(shouldSuppressConversionPrompt('/privacidade'), true)
   assert.equal(shouldSuppressConversionPrompt('/blog/conferir-converter-link-afiliado-whatsapp'), false)

@@ -41,8 +41,8 @@ function applyTemplate(template, values) {
 }
 
 // OfferBuilder centraliza o comportamento de "Gerar oferta" usado pela página
-// /dashboard/gerar-oferta e pelo card "Montador de oferta" dentro de
-// /dashboard/converte-links. Qualquer mudança aqui propaga para os dois lugares.
+// /painel/criar-oferta e pelo card "Montador de oferta" dentro de
+// /painel/converte-links. Qualquer mudança aqui propaga para os dois lugares.
 //
 // mode='standalone': mostra input de link + botão "Gerar oferta" (página dedicada).
 // mode='inline': link vem pronto (já-afiliado da conversão) e a busca de preços

@@ -85,6 +85,8 @@ test('POST /api/offer-automations respeita teto de automações por tenant', asy
   app.decorate('authenticate', async (req) => { req.user = { sub: 'u1' } })
   const db = {
     group: { findMany: async () => [{ waJid: 'meu@g.us' }] },
+    // feature-gate de ofertas automáticas (plano Pro/Trial ativo)
+    user: { findUnique: async () => ({ plan: 'pro', accessExpiresAt: null }) },
     offerAutomation: {
       count: async () => QUOTAS.automationsPerUser,
       create: async () => { throw new Error('não deve criar acima da quota') },

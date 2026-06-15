@@ -1,6 +1,7 @@
 import dbDefault from '../../db.js'
 import { enforceChannelPlanGate, loadUserPlanSubject, normalizeTargetJids, resolveTargetJids, validateBroadcastText } from './broadcastTargets.js'
 import { ensureCountQuota } from '../quotas.js'
+import { buildFeatureGateError, canUseOfferQueues, FEATURE_CODES } from '../../billing/plans.js'
 import { startOfSaoPauloDayUtc } from '../../offerQueue/time.js'
 
 const DEFAULTS = { intervalMinutes: 30, hourlyCap: 10, dailyCap: 50 }
@@ -43,6 +44,16 @@ export async function offerQueueRoutes(app, opts = {}) {
   const now = opts.now ?? (() => new Date())
   const drainQueueOnce = opts.drainQueueOnce ?? (async (...args) => (await import('../../offerQueue/dispatcher.js')).drainQueueOnce(...args))
 
+  // Filas de ofertas são feature Pro (ou Trial ativo). Listar e deletar
+  // seguem liberados: a UI precisa mostrar o que existe e o usuário pode
+  // limpar filas antigas mesmo sem o plano.
+  async function ensureOfferQueueAllowed(req, reply) {
+    const subject = await loadUserPlanSubject(db, req.user.sub)
+    if (canUseOfferQueues(subject)) return true
+    reply.code(403).send(buildFeatureGateError(FEATURE_CODES.OFFER_QUEUES))
+    return false
+  }
+
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
     const userId = req.user.sub
     const queues = await db.offerQueue.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } })
@@ -55,6 +66,7 @@ export async function offerQueueRoutes(app, opts = {}) {
   })
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!(await ensureOfferQueueAllowed(req, reply))) return reply
     const data = queueData(req.body)
     const error = validateQueue(data)
     if (error) return reply.code(400).send({ error })
@@ -68,6 +80,7 @@ export async function offerQueueRoutes(app, opts = {}) {
   })
 
   app.put('/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!(await ensureOfferQueueAllowed(req, reply))) return reply
     const userId = req.user.sub
     const current = await db.offerQueue.findFirst({ where: { id: req.params.id, userId } })
     if (!current) return reply.code(404).send({ error: 'Fila não encontrada' })
@@ -106,6 +119,7 @@ export async function offerQueueRoutes(app, opts = {}) {
   })
 
   app.post('/:id/items', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!(await ensureOfferQueueAllowed(req, reply))) return reply
     const userId = req.user.sub
     const queue = await db.offerQueue.findFirst({ where: { id: req.params.id, userId }, select: { id: true, targetJids: true } })
     if (!queue) return reply.code(404).send({ error: 'Fila não encontrada' })

@@ -24,6 +24,8 @@ function buildOfferApp(dbMock) {
   if (!dbMock.group) dbMock.group = { findMany: async () => [{ waJid: '123@g.us' }, { waJid: 'grupo@g.us' }] }
   // quota de automações por tenant
   if (dbMock.offerAutomation && !dbMock.offerAutomation.count) dbMock.offerAutomation.count = async () => 0
+  // rotas de escrita exigem plano com canUseOfferAutomations (Pro/Trial ativo)
+  if (!dbMock.user) dbMock.user = { findUnique: async () => ({ plan: 'pro', accessExpiresAt: null }) }
   app.register(offerAutomationRoutes, { prefix: '/api/offer-automations', db: dbMock })
   return app
 }
@@ -529,7 +531,7 @@ test('applyVariation: modo random aplica variações aos placeholders', () => {
   )
 })
 
-test('applyVariation: modo random sem placeholders concatena greeting + text + trailer', () => {
+test('applyVariation: modo random sem placeholders concatena gancho + texto + convite do grupo', () => {
   const pool = {
     greetings: ['Oi! '],
     ctas: ['Veja:'],
@@ -564,8 +566,8 @@ test('resolveCopyVariationPoolJson: usa defaults oficiais quando pool salvo est�
   assert.equal(resolveCopyVariationPoolJson('{}'), DEFAULT_COPY_VARIATION_POOL_JSON)
   const parsed = JSON.parse(resolveCopyVariationPoolJson('{}'))
   assert.equal(parsed.greetings[0], '🚨 COOOOOORRE QUE TÁ ACABANDO!')
-  assert.equal(parsed.ctas[0], '📲 Entre no nosso grupo oficial:')
-  assert.equal(parsed.trailers[0], '⚠️ Atenção: Preços e estoque podem mudar a qualquer momento!')
+  assert.equal(parsed.ctas[0], '⚠️ Atenção: Preços e estoque podem mudar a qualquer momento!')
+  assert.equal(parsed.trailers[0], '📲 Entre no nosso grupo oficial:')
 })
 
 test('resolveCopyVariationPoolJson: usa defaults quando editor salvou apenas buckets em branco', () => {
@@ -602,6 +604,54 @@ test('GET /api/config: contrato comportamental — campo copyVariationPoolJson s
     'pool padrão deve ter ctas')
   assert.ok(Array.isArray(parsedDefault.trailers) && parsedDefault.trailers.length > 0,
     'pool padrão deve ter trailers')
+})
+
+test('GET /api/config: canonicaliza variáveis históricas nos templates persistidos', async () => {
+  const app = buildConfigApp({
+    botConfig: {
+      findUnique: async () => ({
+        userId: 'user-1',
+        mobileTemplatesJson: JSON.stringify({
+          overrides: { simples: '{{greeting}} oferta {{trailer}}' },
+          custom: [],
+        }),
+      }),
+    },
+    user: { findUnique: async () => ({ plan: 'basic', accessExpiresAt: null }) },
+  })
+
+  const response = await app.inject({ method: 'GET', url: '/api/config' })
+  const store = JSON.parse(JSON.parse(response.body).mobileTemplatesJson)
+  assert.equal(store.overrides.simples, '{{gancho}} oferta {{convitegrupo}}')
+})
+
+test('PUT /api/config: salva templates novos apenas com variáveis canônicas', async () => {
+  let upsertArgs
+  const app = buildConfigApp({
+    botConfig: {
+      findUnique: async () => null,
+      upsert: async (args) => {
+        upsertArgs = args
+        return args.create
+      },
+    },
+    user: { findUnique: async () => ({ plan: 'basic', accessExpiresAt: null }) },
+  })
+
+  const response = await app.inject({
+    method: 'PUT',
+    url: '/api/config',
+    payload: {
+      mobileTemplatesJson: JSON.stringify({
+        overrides: {},
+        custom: [{ key: 'tpl_1', name: 'Novo', body: '{{greeting}} oferta {{trailer}}' }],
+      }),
+    },
+  })
+
+  assert.equal(response.statusCode, 200)
+  const store = JSON.parse(upsertArgs.create.mobileTemplatesJson)
+  assert.equal(store.custom[0].body, '{{gancho}} oferta {{convitegrupo}}')
 })
 
 // ═══════════════════════════════════════════════
