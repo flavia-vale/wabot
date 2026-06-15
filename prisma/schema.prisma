@@ -353,6 +353,13 @@ model OfferQueueItem {
   status          String     @default("pending")
   position        Int
   sentAt          DateTime?
+  // Recuperação de itens presos: claim com lease + retry com backoff.
+  // Sem isso, um restart entre o claim (pending->queued) e o envio deixava o
+  // item em 'queued' para sempre (o cron só seleciona 'pending').
+  claimedAt       DateTime?
+  attemptCount    Int        @default(0)
+  nextAttemptAt   DateTime?
+  lastError       String?
   createdAt       DateTime   @default(now())
 
   @@index([queueId, status, position])
