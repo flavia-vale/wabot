@@ -64,7 +64,11 @@ const SHARD_TAG = `shard-${SHARD_INDEX + 1}-of-${SHARD_COUNT}`
 const SESSION_OWNER_MISMATCH_KEY = `supervisor:session_owner_mismatch_total:${SHARD_TAG}`
 let sessionOwnerMismatchTotal = 0
 
-const MAX_SESSIONS_PER_PROCESS = Math.max(1, Number(process.env.MAX_SESSIONS_PER_PROCESS || 200))
+// Teto conservador até haver medição real de RSS por worker em soak. Cada
+// bot-worker é um fork() independente que o max_memory_restart do PM2 (no
+// supervisor) NÃO cobre — 50 filhos podem somar vários GB e disparar o OOM
+// killer do host antes de qualquer proteção. Subir só com evidência de soak.
+const MAX_SESSIONS_PER_PROCESS = Math.max(1, Number(process.env.MAX_SESSIONS_PER_PROCESS || 20))
 const SESSION_CIRCUIT_BREAKER_MODE = parseEnumEnv('SESSION_CIRCUIT_BREAKER_MODE', process.env.SESSION_CIRCUIT_BREAKER_MODE || 'closed', ['closed', 'open'], 'closed')
 const SESSION_CIRCUIT_BREAKER_ALERT_KEY = `supervisor:session_circuit_breaker_alert:${SHARD_TAG}`
 const SESSION_QUARANTINE_KEY = `supervisor:session_quarantine_total:${SHARD_TAG}`

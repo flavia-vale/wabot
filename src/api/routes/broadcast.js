@@ -2,6 +2,7 @@ import dbDefault from '../../db.js'
 import { sendBroadcast, isRunning } from '../../manager.js'
 import { enforceChannelPlanGate, loadUserPlanSubject, resolveTargetJids, validateBroadcastText } from './broadcastTargets.js'
 import { ensureBroadcastRate, ensureCountQuota } from '../quotas.js'
+import { beginIdempotent, extractIdempotencyKey } from '../idempotency.js'
 
 function optionalUrl(value) {
   const normalized = typeof value === 'string' ? value.trim() : ''
@@ -19,18 +20,40 @@ export async function broadcastRoutes(app, deps = {}) {
     const { text, jids, imageUrl, imageRefererUrl } = req.body ?? {}
     if (!text?.trim()) return reply.code(400).send({ error: 'text obrigatório' })
     validateBroadcastText(text)
-    if (!ensureBroadcastRate(reply, userId)) return
-    if (!await isRunningImpl(userId)) return reply.code(400).send({ error: 'Bot não está conectado' })
 
-    const targetJids = await resolveTargetJids({ db, userId, jids })
+    // Idempotency opcional: um retry de rede com a mesma chave devolve a
+    // resposta anterior em vez de reexecutar o fan-out. Aplicado antes do
+    // rate limit para que o replay não consuma o orçamento de envios.
+    const idemKey = extractIdempotencyKey(req)
+    const idem = beginIdempotent(userId, idemKey)
+    if (idem.replay) return idem.result
+    if (idem.inFlight) return reply.code(409).send({ error: 'Requisição com a mesma Idempotency-Key ainda em processamento' })
+
+    if (!ensureBroadcastRate(reply, userId)) { idem.release(); return }
+    if (!await isRunningImpl(userId)) { idem.release(); return reply.code(400).send({ error: 'Bot não está conectado' }) }
+
+    let targetJids
+    try {
+      targetJids = await resolveTargetJids({ db, userId, jids })
+    } catch (err) {
+      idem.release()
+      throw err
+    }
     const gateError = enforceChannelPlanGate(targetJids, await loadUserPlanSubject(db, userId))
-    if (gateError) return reply.code(403).send(gateError)
-    if (!targetJids.length) return reply.code(400).send({ error: 'Nenhum grupo/canal de destino configurado' })
+    if (gateError) { idem.release(); return reply.code(403).send(gateError) }
+    if (!targetJids.length) { idem.release(); return reply.code(400).send({ error: 'Nenhum grupo/canal de destino configurado' }) }
 
-    return sendBroadcastImpl(userId, text.trim(), targetJids, {
-      imageUrl: optionalUrl(imageUrl) ?? undefined,
-      imageRefererUrl: optionalUrl(imageRefererUrl) ?? undefined,
-    })
+    try {
+      const result = await sendBroadcastImpl(userId, text.trim(), targetJids, {
+        imageUrl: optionalUrl(imageUrl) ?? undefined,
+        imageRefererUrl: optionalUrl(imageRefererUrl) ?? undefined,
+      })
+      idem.commit(result)
+      return result
+    } catch (err) {
+      idem.release()
+      throw err
+    }
   })
 
   app.get('/scheduled', { onRequest: [app.authenticate] }, async (req) => {
