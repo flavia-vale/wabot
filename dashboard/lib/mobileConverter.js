@@ -48,7 +48,7 @@ export function validateMobileConverterInput(value = '') {
   return ''
 }
 
-export function buildMobileOfferUrlFromConversion(item, basePath = '/m/op/offer') {
+export function buildMobileOfferUrlFromConversion(item, basePath = '/painel/criar-oferta') {
   if (!item?.ok || !String(item?.convertedUrl || '').trim()) return basePath
   const params = new URLSearchParams({ url: String(item.convertedUrl).trim() })
   return `${basePath}?${params.toString()}`

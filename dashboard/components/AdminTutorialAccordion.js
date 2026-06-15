@@ -15,7 +15,7 @@ export default function AdminTutorialAccordion({ tutorial, onSaveTutorial, Tutor
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Conteúdo do Dashboard · último bloco</p>
           <h2 className="text-lg font-black text-gray-900">Tutorial (Dashboard)</h2>
-          <p className="text-sm text-gray-500">Edite aqui o texto e os prints exibidos em /dashboard/tutorial.</p>
+          <p className="text-sm text-gray-500">Edite aqui o texto e os prints exibidos em /painel/tutorial.</p>
         </div>
         <span className="inline-flex items-center justify-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">{open ? 'Recolher' : 'Expandir'}</span>
       </button>

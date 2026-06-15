@@ -1,7 +1,7 @@
 'use client'
 
 /* Retorno do checkout do Mercado Pago — versão Menta do painel. É a return URL
- * do pagamento aprovado, então não pode 404. Espelha /dashboard/pagamento/sucesso
+ * do pagamento aprovado, então não pode 404. Usa o fluxo canônico de sucesso
  * apontando o CTA para /painel. */
 
 import Link from 'next/link'

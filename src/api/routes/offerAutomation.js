@@ -1,4 +1,5 @@
 import dbDefault from '../../db.js'
+import { ensureCountQuota } from '../quotas.js'
 import { loadUserPlanSubject, validateOwnedTargetJids } from './broadcastTargets.js'
 import { buildFeatureGateError, canUseOfferAutomations, FEATURE_CODES } from '../../billing/plans.js'
 import { runAutomation, searchOffersPreview } from '../../offerAutomation/dispatcher.js'
@@ -81,6 +82,12 @@ export async function offerAutomationRoutes(app, opts = {}) {
     }
     const parsedTemplateKey = normalizeTemplateKey(templateKey)
     if (!parsedTemplateKey) return reply.code(400).send({ error: 'templateKey inválido' })
+    if (!(await ensureCountQuota(reply, {
+      userId: req.user.sub,
+      quota: 'automationsPerUser',
+      count: () => db.offerAutomation.count({ where: { userId: req.user.sub } }),
+      label: 'automações de oferta',
+    }))) return
 
     return db.offerAutomation.create({
       data: {

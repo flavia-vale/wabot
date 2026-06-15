@@ -3,7 +3,7 @@ import path from 'node:path'
 import { getIndexableSeoRoutes } from '../lib/seo-registry.mjs'
 
 const appDir = path.resolve(process.cwd(), 'app')
-const privatePrefixes = ['/dashboard', '/admin', '/login', '/api', '/promo-vip-7dias']
+const privatePrefixes = ['/painel', '/admin', '/login', '/api', '/promo-vip-7dias']
 const nonPageFiles = new Set(['layout.js', 'loading.js', 'error.js', 'not-found.js', 'template.js', 'route.js', 'default.js'])
 const allowedUnregistered = new Set(['/sitemap.xml', '/robots.txt'])
 

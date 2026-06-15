@@ -121,6 +121,15 @@ function escLabel(value) {
     .replace(/\n/g, '\\n')
 }
 
+// Usado pelo gate do /metrics: sem METRICS_TOKEN configurado, só
+// loopback/rede privada pode ler o endpoint (que fica fora do rate limit).
+export function isPrivateAddress(ip = '') {
+  const addr = String(ip).replace(/^::ffff:/, '')
+  return addr === '127.0.0.1' || addr === '::1'
+    || /^10\./.test(addr) || /^192\.168\./.test(addr)
+    || /^172\.(1[6-9]|2\d|3[01])\./.test(addr)
+}
+
 export function renderPrometheusMetrics(extra = {}) {
   const routes = [...routeMetrics.values()]
   const totalRequests = routes.reduce((sum, route) => sum + route.count, 0)
@@ -140,6 +149,7 @@ export function renderPrometheusMetrics(extra = {}) {
 
   const sessionOwnerMismatchTotal = Number(extra.sessionOwnerMismatchTotal ?? 0)
   const sessionCircuitBreakerAlertTotal = Number(extra.sessionCircuitBreakerAlertTotal ?? 0)
+  const sessionQuarantineTotal = Number(extra.sessionQuarantineTotal ?? 0)
 
   lines.push(
     '# HELP wabot_api_http_4xx_total Total 4xx responses',
@@ -160,6 +170,9 @@ export function renderPrometheusMetrics(extra = {}) {
     '# HELP wabot_supervisor_session_circuit_breaker_alert_total Total session circuit-breaker alerts across supervisor shards',
     '# TYPE wabot_supervisor_session_circuit_breaker_alert_total gauge',
     `wabot_supervisor_session_circuit_breaker_alert_total ${Number.isFinite(sessionCircuitBreakerAlertTotal) ? sessionCircuitBreakerAlertTotal : 0}`,
+    '# HELP wabot_supervisor_session_quarantine_total Total sessions quarantined by restart budget across supervisor shards',
+    '# TYPE wabot_supervisor_session_quarantine_total gauge',
+    `wabot_supervisor_session_quarantine_total ${Number.isFinite(sessionQuarantineTotal) ? sessionQuarantineTotal : 0}`,
   )
 
   return `${lines.join('\n')}\n`

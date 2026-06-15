@@ -1,7 +1,7 @@
 'use client'
 
 /* Plano e cobrança — reskin Menta do corpo. Mesma lógica de
- * app/dashboard/assinaturas: api.me + api.publicPlans + api.paymentsOverview
+ * Usa os contratos canônicos: api.me + api.publicPlans + api.paymentsOverview
  * para mostrar a assinatura atual e os planos; api.paymentsCheckout para o
  * Mercado Pago; PIX manual + comprovante no WhatsApp. Sem mudança no back end.
  * Reusa apenas classes Menta já existentes (não toca em painel.css). */

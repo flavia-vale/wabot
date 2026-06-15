@@ -1,5 +1,6 @@
 import db from '../../db.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
+import { ensureCountQuota } from '../quotas.js'
 import {
   reloadConfig as _reloadConfig,
   channelMetadata as _channelMetadata,
@@ -70,6 +71,12 @@ export async function groupsRoutes(app, opts = {}) {
     if (!['monitor', 'post'].includes(role)) return reply.code(400).send({ error: 'role deve ser monitor ou post' })
     if (detectKind(waJid) !== kind) return reply.code(400).send({ error: `waJid não bate com kind=${kind}` })
     if (kind === JID_KIND.CHANNEL && !(await ensureChannelFeatureAllowed(req.user.sub, reply))) return
+    if (!(await ensureCountQuota(reply, {
+      userId: req.user.sub,
+      quota: 'groupsPerUser',
+      count: () => db.group.count({ where: { userId: req.user.sub } }),
+      label: 'grupos/canais cadastrados',
+    }))) return
 
     try {
       const group = await db.group.create({

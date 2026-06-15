@@ -6,9 +6,6 @@ Allow: /termos
 Allow: /privacidade
 Allow: /quem-somos
 Allow: /suporte
-Disallow: /dashboard
-Disallow: /dashboard/
-Disallow: /dashboard/*
 Disallow: /api/*
 Disallow: /promo-vip-7dias
 

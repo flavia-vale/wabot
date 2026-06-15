@@ -1,6 +1,6 @@
 /* Tradução dos prefixos canônicos de MessageLog.errorMsg para linguagem de
  * cliente, no novo painel. Mantém-se sincronizado com src/errorTaxonomy.js e
- * com o tradutor equivalente em app/dashboard/logs/page.js (mesma taxonomia).
+ * com a taxonomia canônica de erros exibida no painel de envios.
  * É copy de UI — não muda nenhuma regra de negócio. */
 
 export function explainErrorMsg(errorMsg) {
