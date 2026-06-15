@@ -101,6 +101,58 @@ async function readLimitedText(res) {
 // que devolve a página /gz/account-verification em requests anônimos.
 const ML_MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
 
+// UAs de crawler que a Shopee atende com SSR (HTML com og:title e JSON-LD com
+// preço). Para UAs comuns de browser o SPA devolve shell vazio. Mesma lista
+// comprovada em produção para imagens (imageScrapers.js).
+const SHOPEE_CRAWLER_UAS = [
+  'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+  'WhatsApp/2.24.10.85 A',
+  'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+]
+
+// Heurística: o shell SPA da Shopee (~13KB) não tem dados de produto.
+// NOTA: verificamos presença de dados de produto ANTES do tamanho — uma
+// resposta SSR de crawler pode ser um HTML mínimo mas com JSON-LD/og:title
+// válidos, e isso NÃO é shell.
+function isShopeeSpaShell(html) {
+  if (!html) return true
+  // Se há JSON-LD de produto ou og:title não-genérico, é SSR real.
+  if (extractFromJsonLd(html)) return false
+  const ogTitle = OG_TITLE_RE.map(re => re.exec(html)).find(m => m)?.[1]?.trim() || ''
+  if (ogTitle && !/^shopee/i.test(ogTitle)) return false
+  // Shell SPA da Shopee: pequeno OU sem dados de produto.
+  if (html.length < 5_000) return true
+  if (/<title[^>]*>\s*shopee/i.test(html) && !html.includes('"price_min"')) return true
+  return false
+}
+
+async function fetchShopeeSSRHtml(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS } = {}) {
+  for (const ua of SHOPEE_CRAWLER_UAS) {
+    try {
+      const result = await fetchHtml(url, { ua, timeoutMs })
+      if (result?.html && !isShopeeSpaShell(result.html)) return result
+    } catch {
+      // próximo UA
+    }
+  }
+  return null
+}
+
+const ML_CRAWLER_UA = 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)'
+
+// Heurística: o HTML anti-bot do ML (/gz/account-verification) não tem
+// marcadores de produto. Uma página de produto real sempre tem ui-pdp ou
+// andes-money-amount. A presença desses marcadores tem prioridade sobre o
+// tamanho — HTML curto com ui-pdp é produto válido (ex.: mocks de teste).
+function isMercadoLivreAntiBotHtml(html) {
+  if (!html) return true
+  // Presença de marcadores de produto → não é anti-bot
+  if (html.includes('ui-pdp') || html.includes('andes-money-amount')) return false
+  // Sem marcadores de produto: HTML pequeno ou com sinais anti-bot explícitos
+  if (html.length < 20_000) return true
+  return /<title[^>]*>\s*Mercado Lib/i.test(html) || html.includes('gz-verify') || html.includes('account-verification')
+}
+
 function isMercadoLivreUrl(url) {
   try {
     return /(^|\.)mercado(livre|libre)\.com(\.br)?$/i.test(new URL(String(url)).hostname)
@@ -723,6 +775,37 @@ export async function fetchProductInfo(url, opts = {}) {
     }
   }
 
+  // Amazon CAPTCHA esgotado: um último retry com facebookexternalhit. A Amazon
+  // às vezes serve HTML diferente para UAs de crawler conhecidos — se retornar
+  // HTML de produto real, usa. Só dispara se todos os retries normais ainda
+  // devolveram CAPTCHA.
+  if ((isAmazonUrl(resolvedUrl) || isAmazonUrl(finalUrl)) && isAmazonBlockedHtml(html)) {
+    try {
+      const crawlerResult = await fetchHtml(finalUrl || resolvedUrl, {
+        ua: ML_CRAWLER_UA,
+        timeoutMs: HTML_FETCH_TIMEOUT_MS,
+      })
+      if (crawlerResult?.html && !isAmazonBlockedHtml(crawlerResult.html)) {
+        html = crawlerResult.html
+        finalUrl = crawlerResult.finalUrl || finalUrl
+      }
+    } catch {
+      // mantém html anterior
+    }
+  }
+
+  // Shopee sem creds: o shell SPA não tem título/preço e a API v4 anônima é
+  // instável. Tenta UAs de crawler (whitelisted pela Shopee para preview de
+  // link) que recebem HTML SSR com og:title e JSON-LD de preço. NÃO dispara
+  // quando há credenciais de afiliado — esse caminho já é coberto pela API.
+  if (!shopeeCreds && extractShopeeIds(resolvedUrl || url) && isShopeeSpaShell(html)) {
+    const ssrResult = await fetchShopeeSSRHtml(resolvedUrl || url, { timeoutMs: HTML_FETCH_TIMEOUT_MS })
+    if (ssrResult?.html) {
+      html = ssrResult.html
+      finalUrl = ssrResult.finalUrl || finalUrl
+    }
+  }
+
   // Bug: links curtos do ML (meli.la, mluvem.com) redirecionam para
   // mercadolivre.com.br, mas o fetch() descarta o cabeçalho Cookie em
   // redirects cross-domain (undici/browser — segurança contra CSRF). Dois
@@ -745,6 +828,22 @@ export async function fetchProductInfo(url, opts = {}) {
           finalUrl = retried.finalUrl || finalUrl
         }
       } catch {}
+    }
+  }
+
+  // ML sem creds: quando o HTML parece anti-bot e não há cookie ssid, tenta
+  // uma vez com UA de crawler — ML o whitelist para preview de links e pode
+  // servir HTML com og:title e preços. Só dispara sem credenciais (com creds
+  // o bloco needsMlCookieRetry acima já cobre).
+  if (!mlCookieHeader && isMercadoLivreUrl(finalUrl) && isMercadoLivreAntiBotHtml(html)) {
+    try {
+      const crawlerResult = await fetchHtml(finalUrl, { ua: ML_CRAWLER_UA, timeoutMs: HTML_FETCH_TIMEOUT_MS })
+      if (crawlerResult?.html && !isMercadoLivreAntiBotHtml(crawlerResult.html)) {
+        html = crawlerResult.html
+        finalUrl = crawlerResult.finalUrl || finalUrl
+      }
+    } catch {
+      // mantém html anterior
     }
   }
 
