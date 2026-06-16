@@ -10,7 +10,7 @@ const s = {
     minHeight: 380, display: 'flex', flexDirection: 'column',
   },
   num: {
-    fontFamily: "'Instrument Serif', serif", fontStyle: 'italic',
+    fontFamily: "var(--font-instrument-serif), serif", fontStyle: 'italic',
     fontSize: 64, lineHeight: 1, color: 'var(--accent-strong)', marginBottom: 24,
   },
   stepTitle: { fontSize: 22, fontWeight: 600, marginBottom: 10, letterSpacing: '-0.01em' },
@@ -18,7 +18,7 @@ const s = {
   visual: {
     background: 'var(--bg-soft)', borderRadius: 16, padding: 16,
     border: '1px dashed var(--line)', fontSize: 12,
-    fontFamily: "'JetBrains Mono', monospace", color: 'var(--ink-soft)',
+    fontFamily: "var(--font-jetbrains-mono), monospace", color: 'var(--ink-soft)',
   },
 };
 

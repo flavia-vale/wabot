@@ -10,7 +10,7 @@ const s = {
     display: 'flex', flexDirection: 'column', minHeight: 240,
   },
   stars: { display: 'flex', gap: 2, color: 'var(--accent-strong)', marginBottom: 14 },
-  quote: { fontSize: 16, lineHeight: 1.55, color: 'var(--ink)', marginBottom: 24, fontFamily: "'Instrument Serif', serif", fontStyle: 'italic' },
+  quote: { fontSize: 16, lineHeight: 1.55, color: 'var(--ink)', marginBottom: 24, fontFamily: "var(--font-instrument-serif), serif", fontStyle: 'italic' },
   who: { display: 'flex', alignItems: 'center', gap: 12, marginTop: 'auto' },
   ava: (gradient) => ({ width: 40, height: 40, borderRadius: '50%', background: gradient, flexShrink: 0 }),
   name: { fontSize: 14, fontWeight: 600, color: 'var(--ink)' },
@@ -22,7 +22,7 @@ const s = {
     border: '1px solid var(--line)',
   },
   numItem: { textAlign: 'center', borderRight: '1px solid var(--line)', padding: '8px 16px' },
-  numBig: { fontFamily: "'Instrument Serif', serif", fontStyle: 'italic', fontSize: 48, lineHeight: 1, color: 'var(--ink)' },
+  numBig: { fontFamily: "var(--font-instrument-serif), serif", fontStyle: 'italic', fontSize: 48, lineHeight: 1, color: 'var(--ink)' },
   numLabel: { fontSize: 12.5, color: 'var(--ink-soft)', marginTop: 8 },
 };
 

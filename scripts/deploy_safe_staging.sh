@@ -14,6 +14,12 @@ API_APP="${API_APP:-api-staging}"
 VISUAL_BASE_URL="${VISUAL_BASE_URL:-http://178.105.54.0:3006}"
 API_BASE_URL="${API_BASE_URL:-http://127.0.0.1:3004}"
 
+# APP_ENV precisa existir no ambiente do BUILD do Next (headers() é avaliado em
+# `npm run build` e gravado no routes-manifest). Staging é HTTP, então força
+# 'staging' para manter CSP em report-only e NÃO emitir HSTS — o smoke abaixo
+# rejeita HSTS sobre HTTP.
+export APP_ENV="${APP_ENV:-staging}"
+
 if [[ ! -d "$ROOT_DIR/.git" ]]; then
   echo "ERRO: ROOT_DIR inválido ($ROOT_DIR). Defina ROOT_DIR apontando para ~/wabot-staging."
   exit 1

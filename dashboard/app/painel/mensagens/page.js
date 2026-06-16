@@ -237,7 +237,7 @@ export default function MensagensPage() {
         <textarea
           ref={templateBodyRef}
           className="pnl-input"
-          style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: 12, lineHeight: 1.5 }}
+          style={{ fontFamily: "var(--font-jetbrains-mono), ui-monospace, monospace", fontSize: 12, lineHeight: 1.5 }}
           value={editTemplateBody}
           onChange={(e) => setEditTemplateBody(e.target.value)}
           rows={9}

@@ -1,8 +1,31 @@
 import "./globals.css";
+import { Inter, Instrument_Serif, JetBrains_Mono } from "next/font/google";
 import { ToastProvider } from "@/components/ToastProvider";
 import { ConversionPrompt } from "@/components/marketing/ConversionPrompt";
 import { getSiteUrl } from '@/lib/site-url'
 import { BRAND_NAME, BRAND_SHORT_NAME, BRAND_SAME_AS, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION, SUPPORT_EMAIL } from '@/lib/marketing-content'
+
+// Fontes auto-hospedadas via next/font: elimina o @import render-blocking do
+// Google Fonts (round-trip encadeado CSS->CSS->arquivo) que atrasava o primeiro
+// paint para visitantes com cache frio. Os arquivos são servidos do próprio
+// domínio (zero requisição à Google) e expostos via CSS vars consumidas pelo CSS.
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter",
+});
+const instrumentSerif = Instrument_Serif({
+  subsets: ["latin"],
+  weight: "400",
+  style: ["normal", "italic"],
+  display: "swap",
+  variable: "--font-instrument-serif",
+});
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-jetbrains-mono",
+});
 
 export const metadata = {
   metadataBase: new URL('https://espelhagrupos.com.br'),
@@ -61,7 +84,7 @@ function buildGlobalJsonLd() {
 export default function RootLayout({ children }) {
   const jsonLd = buildGlobalJsonLd();
   return (
-    <html lang="pt-br">
+    <html lang="pt-br" className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable}`}>
       <body style={{ background: '#EEF6F2' }}>
         {jsonLd.map((schema) => (
           <script
