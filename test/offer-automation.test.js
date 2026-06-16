@@ -197,6 +197,21 @@ test('runAutomation: distingue all_offers_filtered de no_offers_found', async ()
   assert.deepEqual(empty, { skipped: 'no_offers_found' })
 })
 
+test('runAutomation: curto-circuita quando isRunning é assíncrono (modo remote) e devolve false', async () => {
+  // Regressão: no modo remote isRunning devolve Promise. Sem await, `!Promise`
+  // era sempre false e o guard era ignorado — seguia pro sendBroadcast e
+  // falhava com "Bot não está rodando" a cada tick do cron (flood de log/CPU).
+  let sent = false
+  const result = await runAutomation(baseAutomation(), {
+    dbOverride: credOk,
+    isRunningFn: async () => false,
+    sendBroadcastFn: async () => { sent = true },
+    fetchOffersFn: async () => { throw new Error('não deveria buscar ofertas com bot parado') },
+  })
+  assert.deepEqual(result, { skipped: 'bot_not_running' })
+  assert.equal(sent, false, 'não pode tentar enviar com o bot parado')
+})
+
 test('runAutomation: surfa erro real da API Shopee em vez de mascarar', async () => {
   const result = await runAutomation(baseAutomation(), {
     dbOverride: credOk,
