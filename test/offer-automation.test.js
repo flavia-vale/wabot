@@ -178,7 +178,7 @@ const credOk = {
   credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'a', secretKey: 's' }) }) },
   botConfig: { findUnique: async () => ({ copyVariationPoolJson: '{}' }) },
   offerAutomation: { update: async () => ({}) },
-  offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
+  offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), createMany: async () => ({}), deleteMany: async () => ({}) },
 }
 
 test('runAutomation: distingue all_offers_filtered de no_offers_found', async () => {
@@ -331,7 +331,7 @@ test('runAutomation: envia imagem do anúncio junto com a oferta automática', a
     offerAutomation: {
       update: async ({ data }) => { updates.push(data); return { ...automation, ...data } },
     },
-    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
+    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), createMany: async () => ({}), deleteMany: async () => ({}) },
   }
 
   const result = await runAutomation(automation, {
@@ -371,7 +371,7 @@ test('runAutomation: não envia o mesmo produto duas vezes quando a Shopee repet
     credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'a', secretKey: 's' }) }) },
     botConfig: { findUnique: async () => ({ copyVariationPoolJson: '{}' }) },
     offerAutomation: { update: async ({ data }) => { updates.push(data); return {} } },
-    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
+    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), createMany: async () => ({}), deleteMany: async () => ({}) },
   }
 
   const result = await runAutomation(automation, {
@@ -402,6 +402,7 @@ test('runAutomation: dedup cruzada por grupo — mesmo produto a preço NOVO pas
       // Outra automação já enviou "Fritadeira Air Fryer" a 199,90 (19990 cents) ao mesmo grupo hoje.
       findMany: async () => [{ productKey: 'fritadeira air fryer', priceCents: 19990 }],
       create: async ({ data }) => { created.push(data) },
+      createMany: async ({ data }) => { created.push(...data) },
       deleteMany: async () => ({}),
     },
   }
@@ -433,6 +434,7 @@ test('runAutomation: dedup cruzada — mesmo produto/preço já enviado ao grupo
     offerAutomationSentLog: {
       findMany: async () => [{ productKey: 'kit churrasco', priceCents: 9990 }],
       create: async () => ({}),
+      createMany: async () => ({}),
       deleteMany: async () => ({}),
     },
   }
@@ -455,7 +457,7 @@ describe('runAutomation — prioritizeAMS', () => {
       credential: { findUnique: async () => ({ data: JSON.stringify(baseCreds) }) },
       offerAutomation: { update: async () => {} },
       botConfig: { findUnique: async () => null },
-      offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
+      offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), createMany: async () => ({}), deleteMany: async () => ({}) },
     }
   }
 
@@ -541,7 +543,7 @@ test('runAutomation: usa templateKey selecionado em mobileTemplatesJson', async 
       couponLink: '',
     }) },
     offerAutomation: { update: async () => ({}) },
-    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
+    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), createMany: async () => ({}), deleteMany: async () => ({}) },
   }
 
   const result = await runAutomation(automation, {
@@ -579,7 +581,7 @@ test('runAutomation: sem templateKey cai no Automático clássico', async () => 
       couponLink: '',
     }) },
     offerAutomation: { update: async () => ({}) },
-    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
+    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), createMany: async () => ({}), deleteMany: async () => ({}) },
   }
 
   await runAutomation(automation, {
@@ -665,7 +667,7 @@ test('runAutomation: template pode usar ganchos, CTAs e links globais como vari�
       couponLink: 'https://cupom.test/oferta',
     }) },
     offerAutomation: { update: async () => ({}) },
-    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
+    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), createMany: async () => ({}), deleteMany: async () => ({}) },
   }
 
   await runAutomation(automation, {
