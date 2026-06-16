@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const contentSecurityPolicyReportOnly = [
+const contentSecurityPolicy = [
   "default-src 'self'",
   "base-uri 'self'",
   "object-src 'none'",
@@ -21,28 +21,50 @@ const contentSecurityPolicyReportOnly = [
   'upgrade-insecure-requests',
 ].join('; ')
 
-const securityHeaders = [
-  {
-    key: 'X-Content-Type-Options',
-    value: 'nosniff',
-  },
-  {
-    key: 'X-Frame-Options',
-    value: 'SAMEORIGIN',
-  },
-  {
-    key: 'Referrer-Policy',
-    value: 'strict-origin-when-cross-origin',
-  },
-  {
-    key: 'Permissions-Policy',
-    value: 'camera=(), microphone=(), geolocation=(), browsing-topics=(), payment=(), usb=(), serial=(), bluetooth=()',
-  },
-  {
-    key: 'Content-Security-Policy-Report-Only',
-    value: contentSecurityPolicyReportOnly,
-  },
-]
+// Strict-Transport-Security só pode ser emitido na borda HTTPS. Produção
+// (espelhagrupos.com.br) é HTTPS via Nginx/Let's Encrypt; staging é servido
+// por HTTP (http://178.105.54.0:3006) e o smoke de deploy rejeita HSTS lá.
+// Por isso os headers sensíveis ao protocolo dependem de APP_ENV: NODE_ENV é
+// 'production' nos DOIS ambientes, então não serve como discriminador.
+const HSTS_VALUE = 'max-age=31536000; includeSubDomains'
+
+function buildSecurityHeaders() {
+  const isProduction = process.env.APP_ENV === 'production'
+
+  const headers = [
+    {
+      key: 'X-Content-Type-Options',
+      value: 'nosniff',
+    },
+    {
+      key: 'X-Frame-Options',
+      value: 'SAMEORIGIN',
+    },
+    {
+      key: 'Referrer-Policy',
+      value: 'strict-origin-when-cross-origin',
+    },
+    {
+      key: 'Permissions-Policy',
+      value: 'camera=(), microphone=(), geolocation=(), browsing-topics=(), payment=(), usb=(), serial=(), bluetooth=()',
+    },
+    {
+      // Em produção a CSP é enforced; em staging/dev permanece em observação
+      // (report-only) para não bloquear recursos antes de validar a política.
+      key: isProduction ? 'Content-Security-Policy' : 'Content-Security-Policy-Report-Only',
+      value: contentSecurityPolicy,
+    },
+  ]
+
+  if (isProduction) {
+    headers.push({
+      key: 'Strict-Transport-Security',
+      value: HSTS_VALUE,
+    })
+  }
+
+  return headers
+}
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -61,7 +83,7 @@ const nextConfig = {
     return [
       {
         source: '/:path*',
-        headers: securityHeaders,
+        headers: buildSecurityHeaders(),
       },
       {
         source: '/admin/:path*',

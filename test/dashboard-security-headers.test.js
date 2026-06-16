@@ -3,6 +3,27 @@ import assert from 'node:assert/strict'
 
 import nextConfig from '../dashboard/next.config.mjs'
 
+async function globalHeadersFor(appEnv) {
+  const previous = process.env.APP_ENV
+  if (appEnv === undefined) {
+    delete process.env.APP_ENV
+  } else {
+    process.env.APP_ENV = appEnv
+  }
+  try {
+    const rules = await nextConfig.headers()
+    const globalRule = rules.find(({ source }) => source === '/:path*')
+    assert.ok(globalRule, 'a global header rule must cover every dashboard path')
+    return headersByKey(globalRule)
+  } finally {
+    if (previous === undefined) {
+      delete process.env.APP_ENV
+    } else {
+      process.env.APP_ENV = previous
+    }
+  }
+}
+
 const expectedSecurityHeaders = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'SAMEORIGIN',
@@ -31,26 +52,44 @@ function headersByKey(rule) {
   return new Map(rule.headers.map(({ key, value }) => [key, value]))
 }
 
-test('dashboard applies global security headers with CSP in report-only mode', async () => {
-  const rules = await nextConfig.headers()
-  const globalRule = rules.find(({ source }) => source === '/:path*')
+function assertCspDirectives(csp) {
+  assert.doesNotMatch(csp, /'unsafe-eval'/, 'CSP must not allow unsafe-eval')
+  for (const directive of requiredCspDirectives) {
+    assert.ok(csp.split('; ').includes(directive), `CSP must include: ${directive}`)
+  }
+}
 
-  assert.ok(globalRule, 'a global header rule must cover every dashboard path')
+test('dashboard keeps CSP report-only and no HSTS outside production (staging is HTTP)', async () => {
+  for (const appEnv of ['staging', undefined]) {
+    const headers = await globalHeadersFor(appEnv)
+    for (const [key, value] of Object.entries(expectedSecurityHeaders)) {
+      assert.equal(headers.get(key), value, `${key} must use the approved value`)
+    }
 
-  const headers = headersByKey(globalRule)
+    const csp = headers.get('Content-Security-Policy-Report-Only')
+    assert.ok(csp, `CSP must be report-only for APP_ENV=${appEnv}`)
+    assert.equal(headers.has('Content-Security-Policy'), false, 'CSP must not be enforced outside production')
+    assert.equal(headers.has('Strict-Transport-Security'), false, 'HSTS must not be sent over HTTP staging')
+    assertCspDirectives(csp)
+  }
+})
+
+test('dashboard enforces CSP and emits HSTS in production', async () => {
+  const headers = await globalHeadersFor('production')
   for (const [key, value] of Object.entries(expectedSecurityHeaders)) {
     assert.equal(headers.get(key), value, `${key} must use the approved value`)
   }
 
-  const csp = headers.get('Content-Security-Policy-Report-Only')
-  assert.ok(csp, 'CSP must initially be report-only')
-  assert.equal(headers.has('Content-Security-Policy'), false, 'CSP must not be enforced in PR1')
-  assert.equal(headers.has('Strict-Transport-Security'), false, 'HSTS belongs at the HTTPS edge, not the dashboard')
-  assert.doesNotMatch(csp, /'unsafe-eval'/, 'production CSP must not allow unsafe-eval')
+  const csp = headers.get('Content-Security-Policy')
+  assert.ok(csp, 'CSP must be enforced in production')
+  assert.equal(headers.has('Content-Security-Policy-Report-Only'), false, 'production must not also send report-only CSP')
+  assertCspDirectives(csp)
 
-  for (const directive of requiredCspDirectives) {
-    assert.ok(csp.split('; ').includes(directive), `CSP must include: ${directive}`)
-  }
+  assert.equal(
+    headers.get('Strict-Transport-Security'),
+    'max-age=31536000; includeSubDomains',
+    'production must emit the approved HSTS value at the HTTPS edge',
+  )
 })
 
 test('dashboard preserves noindex headers for private and authentication routes', async () => {

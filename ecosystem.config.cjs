@@ -38,6 +38,10 @@ module.exports = {
       instances: 1,
       env: {
         NODE_ENV: 'production',
+        // APP_ENV discrimina prod (HTTPS) de staging (HTTP) para o Next
+        // emitir CSP enforced + HSTS só em produção (next.config.mjs). NODE_ENV
+        // é 'production' nos dois ambientes, então não serve como sinal.
+        APP_ENV: 'production',
         PORT: '3000',
       },
       max_memory_restart: '768M',
@@ -187,6 +191,9 @@ module.exports = {
       instances: 1,
       env: {
         NODE_ENV: 'production',
+        // Staging é HTTP: APP_ENV=staging mantém CSP em report-only e NÃO
+        // emite HSTS (o smoke de deploy rejeita HSTS sobre HTTP).
+        APP_ENV: 'staging',
         PORT: '3006',
       },
       max_memory_restart: '768M',
