@@ -70,6 +70,122 @@ export async function getAffiliateMeData({ userId }) {
   }
 }
 
+// Mesma classificação canônica usada no admin (src/api/routes/admin.js:getAccessStatus)
+// — replicada aqui para manter o service db-free e sem dependência circular com as rotas.
+export function resolveAccessStatus(user, now = new Date()) {
+  if (user.status === 'banned' || user.status === 'suspended') return user.status
+  if (user.accessExpiresAt && new Date(user.accessExpiresAt) < now) return 'expired'
+  if (user.plan === 'trial') return 'trial'
+  return 'active'
+}
+
+// "Maria Silva Souza" -> "Maria S." — preserva o primeiro nome e a inicial do
+// segundo para a visão anônima do próprio afiliado (sem expor o nome completo).
+function maskName(name) {
+  if (!name) return 'Cliente'
+  const parts = String(name).trim().split(/\s+/)
+  if (parts.length === 1) return parts[0]
+  return `${parts[0]} ${parts[1][0].toUpperCase()}.`
+}
+
+// Lista os clientes indicados por um afiliado, enriquecidos com situação de
+// acesso, agregados de pagamento e comissão gerada. Os agregados são montados em
+// memória a partir de dois findMany (pagamentos + comissões dos usuários da
+// página) para evitar N+1 — o volume por afiliado/página é limitado por `limit`.
+export async function getAffiliateReferrals({ affiliateProfileId, page = 1, limit = 25, anonymized = false, db: dbi = db, now = new Date() }) {
+  const skip = (page - 1) * limit
+
+  const [total, users] = await Promise.all([
+    dbi.user.count({ where: { affiliateProfileId } }),
+    dbi.user.findMany({
+      where: { affiliateProfileId },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+      select: {
+        id: true, name: true, email: true, contactPhone: true,
+        status: true, plan: true, accessExpiresAt: true,
+        createdAt: true, lastActivityAt: true,
+      },
+    }),
+  ])
+
+  const userIds = users.map(u => u.id)
+  const [payments, commissions] = userIds.length
+    ? await Promise.all([
+      dbi.payment.findMany({
+        where: { userId: { in: userIds }, status: 'approved' },
+        select: { userId: true, amount: true, createdAt: true },
+      }),
+      dbi.affiliateCommission.findMany({
+        where: { affiliateId: affiliateProfileId, referredUserId: { in: userIds } },
+        select: { referredUserId: true, commissionType: true, commissionAmountCents: true },
+      }),
+    ])
+    : [[], []]
+
+  const payAgg = new Map()
+  for (const p of payments) {
+    const cur = payAgg.get(p.userId) ?? { count: 0, totalCents: 0, lastPaymentAt: null }
+    cur.count += 1
+    cur.totalCents += Math.round(p.amount * 100)
+    if (!cur.lastPaymentAt || new Date(p.createdAt) > new Date(cur.lastPaymentAt)) cur.lastPaymentAt = p.createdAt
+    payAgg.set(p.userId, cur)
+  }
+
+  const commAgg = new Map()
+  for (const c of commissions) {
+    const cur = commAgg.get(c.referredUserId) ?? { initialCents: 0, recurringCents: 0, totalCents: 0 }
+    if (c.commissionType === 'recurring') cur.recurringCents += c.commissionAmountCents
+    else cur.initialCents += c.commissionAmountCents
+    cur.totalCents += c.commissionAmountCents
+    commAgg.set(c.referredUserId, cur)
+  }
+
+  const referrals = users.map(u => {
+    const pay = payAgg.get(u.id) ?? { count: 0, totalCents: 0, lastPaymentAt: null }
+    const comm = commAgg.get(u.id) ?? { initialCents: 0, recurringCents: 0, totalCents: 0 }
+    const accessStatus = resolveAccessStatus(u, now)
+    const isActive = accessStatus === 'active' || accessStatus === 'trial'
+
+    if (anonymized) {
+      // Visão do próprio afiliado: sem e-mail/telefone e sem valores de
+      // pagamento do cliente. Mantém nº de pagamentos e a comissão (ganho do
+      // próprio afiliado) e mascara o nome.
+      return {
+        name: maskName(u.name),
+        createdAt: u.createdAt,
+        accessStatus,
+        isActive,
+        paymentCount: pay.count,
+        commissionTotalCents: comm.totalCents,
+      }
+    }
+
+    return {
+      userId: u.id,
+      name: u.name,
+      email: u.email,
+      contactPhone: u.contactPhone,
+      status: u.status,
+      plan: u.plan,
+      accessExpiresAt: u.accessExpiresAt,
+      createdAt: u.createdAt,
+      lastActivityAt: u.lastActivityAt,
+      accessStatus,
+      isActive,
+      paymentCount: pay.count,
+      totalPaidCents: pay.totalCents,
+      lastPaymentAt: pay.lastPaymentAt,
+      commissionInitialCents: comm.initialCents,
+      commissionRecurringCents: comm.recurringCents,
+      commissionTotalCents: comm.totalCents,
+    }
+  })
+
+  return { referrals, total, page, limit }
+}
+
 function resolveRate(settings, profile, isRecurring) {
   if (isRecurring) {
     return profile.commissionRecurringPercentOverride ?? settings.commissionRecurringPercent

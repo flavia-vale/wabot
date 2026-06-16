@@ -1,4 +1,4 @@
-import { applyAffiliate, getAffiliateMeData, getAffiliateSettings, tryCreateAffiliateCommission } from '../../domain/affiliate/service.js'
+import { applyAffiliate, getAffiliateMeData, getAffiliateReferrals, getAffiliateSettings, tryCreateAffiliateCommission } from '../../domain/affiliate/service.js'
 import { resolveAdminAccess, writeAdminAuditLog } from './admin.js'
 import db from '../../db.js'
 
@@ -80,6 +80,17 @@ export async function affiliateRoutes(app) {
     return { profile: updated }
   })
 
+  // Visão anônima do próprio afiliado: quem se cadastrou com o código dele,
+  // sem expor contato nem valores de pagamento do cliente.
+  app.get('/affiliate/me/referrals', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const profile = await db.affiliateProfile.findUnique({ where: { userId: req.user.sub } })
+    if (!profile || profile.status !== 'approved') return { referrals: [], total: 0, page: 1, limit: 25 }
+
+    const page = Math.max(1, parseInt(req.query?.page ?? '1') || 1)
+    const limit = Math.min(100, Math.max(1, parseInt(req.query?.limit ?? '25') || 25))
+    return getAffiliateReferrals({ affiliateProfileId: profile.id, page, limit, anonymized: true })
+  })
+
   app.get('/admin/affiliates', { onRequest: [app.authenticate] }, async (req, reply) => {
     const access = await requireAdminAccess(req, reply, 'billing:read')
     if (!access) return
@@ -132,6 +143,25 @@ export async function affiliateRoutes(app) {
     }))
 
     return { profiles: enriched, total, page, limit }
+  })
+
+  // Drill-down: lista os clientes indicados por um afiliado, com situação de
+  // acesso, agregados de pagamento e comissão gerada por cliente.
+  app.get('/admin/affiliates/:id/referrals', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const access = await requireAdminAccess(req, reply, 'billing:read')
+    if (!access) return
+
+    const { id } = req.params
+    const profile = await db.affiliateProfile.findUnique({
+      where: { id },
+      select: { id: true, code: true, status: true, user: { select: { id: true, name: true, email: true } } },
+    })
+    if (!profile) return reply.code(404).send({ error: 'Afiliado não encontrado' })
+
+    const page = Math.max(1, parseInt(req.query?.page ?? '1') || 1)
+    const limit = Math.min(100, Math.max(1, parseInt(req.query?.limit ?? '25') || 25))
+    const result = await getAffiliateReferrals({ affiliateProfileId: id, page, limit })
+    return { profile, ...result }
   })
 
   app.post('/admin/affiliates/:id/approve', { onRequest: [app.authenticate] }, async (req, reply) => {
@@ -190,7 +220,7 @@ export async function affiliateRoutes(app) {
           affiliate: {
             include: { user: { select: { name: true, email: true } } },
           },
-          referredUser: { select: { name: true, email: true } },
+          referredUser: { select: { name: true, email: true, status: true, plan: true, accessExpiresAt: true } },
           payment: { select: { plan: true, amount: true } },
         },
       }),
