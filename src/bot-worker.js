@@ -58,6 +58,14 @@ const userId = process.env.BOT_USER_ID
 const GLOBAL_RATE_LIMIT_MODE = parseEnumEnv('GLOBAL_RATE_LIMIT_MODE', process.env.GLOBAL_RATE_LIMIT_MODE || 'auto', ['auto', 'on', 'off'], 'auto')
 const GLOBAL_DEDUP_MODE = parseEnumEnv('GLOBAL_DEDUP_MODE', process.env.GLOBAL_DEDUP_MODE || 'auto', ['auto', 'on', 'off'], 'auto')
 const REDIS_FAIL_MODE = parseEnumEnv('REDIS_FAIL_MODE', process.env.REDIS_FAIL_MODE || 'open', ['open', 'closed'], 'open')
+// Fail-mode específico da dedup de envio, desacoplado do rate-limit. Quando o
+// Redis pisca, a escolha aqui é deliberadamente diferente do rate-limit:
+//  - 'open'   → na falha, deixa passar (pode DUPLICAR um envio → risco de ban).
+//  - 'closed' → na falha, derruba o envio daquela mensagem (oferta perdida,
+//    recuperável; NÃO trava a fila serial, pois o throw é por-mensagem no
+//    pipeline de incoming). Recomendado em prod por ser anti-ban.
+// Default herda REDIS_FAIL_MODE para não mudar comportamento sem opt-in.
+const REDIS_DEDUP_FAIL_MODE = parseEnumEnv('REDIS_DEDUP_FAIL_MODE', process.env.REDIS_DEDUP_FAIL_MODE || REDIS_FAIL_MODE, ['open', 'closed'], REDIS_FAIL_MODE)
 let runtimeRedis = null
 
 
@@ -66,6 +74,7 @@ logModeSummary('bot-worker', {
   globalRateLimitMode: GLOBAL_RATE_LIMIT_MODE,
   globalDedupMode: GLOBAL_DEDUP_MODE,
   redisFailMode: REDIS_FAIL_MODE,
+  redisDedupFailMode: REDIS_DEDUP_FAIL_MODE,
   hasRedisUrl: Boolean(process.env.REDIS_URL),
 })
 
@@ -108,7 +117,7 @@ async function globalDedupCheckAndSet(key, ttlMs) {
     const ok = await r.set(`dedup:${userId}:${key}`, '1', 'PX', ttlMs, 'NX')
     return { duplicate: ok !== 'OK' }
   } catch (err) {
-    if (REDIS_FAIL_MODE === 'closed') throw new Error(`Global dedup unavailable: ${err.message}`)
+    if (REDIS_DEDUP_FAIL_MODE === 'closed') throw new Error(`Global dedup unavailable: ${err.message}`)
     logger.warn({ err: err?.message }, 'Global dedup falhou (fail-open)')
     return { duplicate: false }
   }
@@ -617,7 +626,11 @@ const MONITOR_SILENCE_THRESHOLD_MS = Math.max(5 * 60_000, envNumber('MONITOR_SIL
 const MONITOR_REFRESH_COOLDOWN_MS = Math.max(60_000, envNumber('MONITOR_REFRESH_COOLDOWN_MS', 60 * 60_000))
 
 const monitorSilenceTimer = setInterval(
-  () => { monitorSilenceWatchdog().catch(err => logger.error({ err: err?.message }, 'monitorSilenceWatchdog falhou')) },
+  () => {
+    pruneTimestampMap(lastSendByDest)
+    pruneTimestampMap(lastIncomingByMonitorJid)
+    monitorSilenceWatchdog().catch(err => logger.error({ err: err?.message }, 'monitorSilenceWatchdog falhou'))
+  },
   MONITOR_SILENCE_CHECK_INTERVAL_MS,
 )
 monitorSilenceTimer.unref?.()
@@ -647,8 +660,27 @@ const incomingQueue = createMessageQueue({
   maxSize: MSG_QUEUE_MAX_SIZE,
 })
 
+// Ambos os Maps são limitados pelo número de grupos distintos que o usuário
+// usa (destinos de envio / monitores), mas só fazem `.set()` — nunca encolhem.
+// Para um worker de vida longa (semanas), a poda periódica abaixo garante que
+// não acumulem entradas obsoletas indefinidamente. TTL generoso: nenhuma das
+// duas leituras usa janela maior que minutos, então 6h é folgado e seguro.
+const TIMESTAMP_MAP_TTL_MS = Math.max(60_000, envNumber('TIMESTAMP_MAP_TTL_MS', 6 * 60 * 60_000))
+const TIMESTAMP_MAP_MAX_ENTRIES = Math.max(100, envNumber('TIMESTAMP_MAP_MAX_ENTRIES', 5_000))
 const lastSendByDest = new Map()
 const lastIncomingByMonitorJid = new Map()
+
+function pruneTimestampMap(map, now = Date.now()) {
+  for (const [key, ts] of map) {
+    if (now - ts > TIMESTAMP_MAP_TTL_MS) map.delete(key)
+  }
+  // Hard cap defensivo: se ainda exceder, descarta as entradas mais antigas.
+  if (map.size > TIMESTAMP_MAP_MAX_ENTRIES) {
+    const excess = [...map.entries()].sort((a, b) => a[1] - b[1]).slice(0, map.size - TIMESTAMP_MAP_MAX_ENTRIES)
+    for (const [key] of excess) map.delete(key)
+  }
+}
+
 const workerStartedAt = Date.now()
 let lastWaGroupsRefreshAt = 0
 let waGroupsRefreshInFlight = false

@@ -216,6 +216,10 @@ export async function runAutomation(automation, {
   const templateBody = resolveAutomationTemplateBody(botConfig, automation.templateKey)
 
   const sentIds = []
+  // Envios seguem sequenciais (stagger anti-ban); só os logs de dedup cruzada
+  // são acumulados para gravar de uma vez (createMany) após o loop, evitando
+  // N writes serializados no SQLite.
+  const sentLogRows = []
   for (const offer of toSend) {
     const base = formatOfferMessage(offer, automation.keyword, templateBody)
     const text = applyVariation(base, {
@@ -234,15 +238,16 @@ export async function runAutomation(automation, {
     sentIds.push(offer.itemId)
     // Registra no log cruzado por grupo (com preço) pra próxima automação que
     // mire o mesmo grupo não reenviar este produto no mesmo dia.
-    await dbInstance.offerAutomationSentLog.create({
-      data: {
-        userId: automation.userId,
-        destGroupJid: automation.destGroupJid,
-        productKey: productDedupKey(offer),
-        priceCents: offerPriceCents(offer),
-        itemId: offer.itemId != null ? String(offer.itemId) : null,
-      },
-    }).catch(() => {})
+    sentLogRows.push({
+      userId: automation.userId,
+      destGroupJid: automation.destGroupJid,
+      productKey: productDedupKey(offer),
+      priceCents: offerPriceCents(offer),
+      itemId: offer.itemId != null ? String(offer.itemId) : null,
+    })
+  }
+  if (sentLogRows.length) {
+    await dbInstance.offerAutomationSentLog.createMany({ data: sentLogRows }).catch(() => {})
   }
 
   // Poda registros fora da janela pra tabela não crescer indefinidamente.
