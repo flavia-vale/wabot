@@ -221,3 +221,48 @@ Remover da página `/painel/configuracoes` a seção de branding que não é mai
 <!-- END_ISSUE: WABOT-009 -->
 
 ---
+
+<!-- START_ISSUE: WABOT-010 -->
+### [CHORE] Definir gatilho mensurável de cutover SQLite -> Postgres (destravar P2)
+- **ID:** WABOT-010
+- **Tipo:** Chore                  # [Bug | Feature | Refactor | Security | Chore]
+- **Prioridade:** High            # [Low | Medium | High | Critical]
+- **Status:** Backlog             # [Backlog | Ready | In Progress | Review | QA | Done]
+- **Epic:** Infra                 # [WhatsApp | Faturamento | UX | Infra]
+- **Criado em:** 2026-06-16
+
+#### Descrição Técnica
+Origem: auditoria de engenharia (achado C2). O SQLite é hoje o teto estrutural
+de escala: `api`, `bot-supervisor`, workers, `snapshot-cron` e o bot do Telegram
+escrevem no MESMO arquivo, e o WAL resolve leitura concorrente mas a escrita
+segue serial (um writer por vez). O `AGENTS.md` já é uma crônica de combate a
+isso (pegadinha #8: `prisma migrate deploy` quebrando com `SQLITE_BUSY`; WAL +
+`busy_timeout` aplicados em todo boot).
+
+A migração para Postgres NÃO é uma decisão em aberto — já existe o épico **P2**
+scaffoldado (`docs/p2-p3-technical-plan.md`, `prisma/schema.postgres.prisma`,
+`scripts/p2_1..p2_4_*`). O problema é que P2.1/P2.2/P2.4 estão parados em
+"parcial/planejado" sem **critério objetivo** que dispare a execução. Esta issue
+NÃO reimplementa o P2: ela define o gatilho e a evidência que promovem o P2 de
+"parcial" para "executado em staging -> prod", evitando que o cutover seja
+decidido por um incidente em produção em vez de por um limiar planejado.
+
+#### Critérios de Aceite
+- [ ] Definir 3-4 gatilhos mensuráveis e instrumentados (ex.: ocorrências de
+      `SQLITE_BUSY`/semana fora de janela de deploy > 0; nº de sessões WhatsApp
+      simultâneas acima de um teto; latência p99 de escrita em `MessageLog`).
+- [ ] Adicionar coleta/alerta desses sinais (reusar `AnalyticsEvent`/healthcheck
+      existentes) para que o gatilho seja observável, não subjetivo.
+- [ ] Executar `scripts/p2_2_staging_data_consistency_check.sh` em staging com
+      `STRICT=1` e anexar evidência (`CONSISTENCY=OK`) ao P2.2.
+- [ ] Documentar e testar o runbook de rollback de cutover ANTES de qualquer
+      promoção (gate obrigatório do P2.4 / `p2_4_prod_cutover_guard.sh`).
+- [ ] Decisão registrada com a usuária: confirmar o teto de cada gatilho e a
+      ordem feature -> develop -> main para o cutover.
+
+#### Status de Implementação
+- Pendente: somente registro de demanda (triagem). Nenhuma mudança de código
+  ou infra executada nesta issue.
+<!-- END_ISSUE: WABOT-010 -->
+
+---
