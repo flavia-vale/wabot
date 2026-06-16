@@ -16,6 +16,7 @@ test('deploy_safe_staging.sh rebuilds dashboard and blocks Next prerender login 
   assert.match(script, /npm ci/, 'dependencies must be installed without changing lockfiles')
   assert.match(script, /npx prisma migrate deploy/, 'staging migrations must run before restart')
   assert.match(script, /rm -rf \.next/, 'dashboard build must start from a clean .next')
+  assert.match(script, /export APP_ENV="\$\{APP_ENV:-staging\}"/, 'staging build must set APP_ENV so next.config bakes report-only CSP, not enforced')
   assert.match(script, /npm run build/, 'dashboard build is required before next start')
   assert.match(script, /node scripts\/verify-dashboard-api-proxy\.mjs/, 'proxy route artifact must be verified')
   assert.match(script, /ensure_pm2_app_running "\$API_APP"/, 'api-staging restart is required')
