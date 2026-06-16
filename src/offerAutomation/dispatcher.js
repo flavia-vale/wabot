@@ -147,7 +147,11 @@ export async function runAutomation(automation, {
 } = {}) {
   const dbInstance = dbOverride ?? db
 
-  if (!isRunningFn(automation.userId)) return { skipped: 'bot_not_running' }
+  // `await`: no modo inline isRunning é boolean; no modo remote devolve uma
+  // Promise. Sem await, `!Promise` é sempre false e o guard era ignorado em
+  // remote — o dispatcher seguia pro sendBroadcast e falhava com "Bot não está
+  // rodando" a cada tick do cron, floodando log e gastando CPU/IO à toa.
+  if (!(await isRunningFn(automation.userId))) return { skipped: 'bot_not_running' }
 
   const credRow = await dbInstance.credential.findUnique({
     where: { userId_platform: { userId: automation.userId, platform: 'shopee' } },

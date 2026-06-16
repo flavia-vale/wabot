@@ -22,6 +22,9 @@ function buildAutomationDeps({ plan, accessExpiresAt = null, userId }) {
   const deps = {
     db,
     runAutomationFn: async (automation) => { calls.ran.push(automation.id) },
+    // O cron pula automações de usuários sem bot rodando; estes testes cobrem
+    // gating de PLANO, então o bot do dono está ativo.
+    listRunningBotsFn: async () => [userId],
   }
   return { deps, calls }
 }
