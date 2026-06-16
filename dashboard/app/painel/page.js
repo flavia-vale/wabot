@@ -224,8 +224,8 @@ export default function PainelPage() {
               {topDest.map((d) => (
                 <div key={d.jid} className="pnl-bar-row">
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
-                  <span className="pnl-bar-val">{num(d.sent)}</span>
                   <span className="pnl-bar-track"><span className="pnl-bar-fill" style={{ width: `${Math.round((num(d.sent) / maxDest) * 100)}%` }} /></span>
+                  <span className="pnl-bar-val">{num(d.sent)}</span>
                 </div>
               ))}
             </div>
@@ -274,8 +274,8 @@ export default function PainelPage() {
                 return (
                   <div key={d.jid} className="pnl-bar-row">
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
-                    <span className="pnl-bar-val">{total}</span>
                     <span className="pnl-bar-track"><span className="pnl-bar-fill" style={{ width: `${Math.round((total / maxSrc) * 100)}%` }} /></span>
+                    <span className="pnl-bar-val">{total}</span>
                   </div>
                 )
               })}
