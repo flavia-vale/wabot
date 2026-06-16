@@ -408,8 +408,8 @@
 
 /* Top grupos / barras simples */
 .pnl-bars { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
-.pnl-bar-row { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; align-items: center; font-size: 12.5px; }
-.pnl-bar-track { grid-column: 1 / -1; height: 8px; border-radius: 999px; background: var(--bg-soft); overflow: hidden; }
+.pnl-bar-row { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; font-size: 12.5px; }
+.pnl-bar-track { height: 8px; border-radius: 999px; background: var(--bg-soft); overflow: hidden; }
 .pnl-bar-fill { height: 100%; border-radius: 999px; background: var(--accent-strong); }
 .pnl-bar-val { font-weight: 600; font-variant-numeric: tabular-nums; }
 
