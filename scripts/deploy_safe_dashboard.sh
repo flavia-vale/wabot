@@ -8,6 +8,13 @@ DASHBOARD_DIR="$ROOT_DIR/dashboard"
 BRANCH="${BRANCH:-main}"
 FORCE_RESET_ON_SYNC="${FORCE_RESET_ON_SYNC:-0}"
 
+# APP_ENV precisa existir no ambiente do BUILD, não só no runtime do PM2.
+# O Next.js avalia next.config headers() em tempo de `npm run build` e grava
+# o resultado em .next/routes-manifest.json; `next start` só serve o manifest.
+# Sem isto, o build de produção gera CSP em report-only e sem HSTS (o fallback
+# de quando APP_ENV não é 'production'), independentemente do env do PM2.
+export APP_ENV="${APP_ENV:-production}"
+
 if [[ ! -d "$ROOT_DIR/.git" ]]; then
   echo "ERRO: ROOT_DIR inválido ($ROOT_DIR). Defina ROOT_DIR apontando para a raiz do repositório wabot."
   exit 1
