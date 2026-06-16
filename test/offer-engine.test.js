@@ -128,3 +128,46 @@ test('buildScrapedOffer: propaga conversionWarning do conversor', async () => {
   assert.equal(offer.conversionWarning, 'ml_ssid_expired')
   assert.equal(offer.conversion.success, true)
 })
+
+test('buildScrapedOffer: keepOriginalLink substitui partner_id de terceiro pelo tag do usuário', async () => {
+  const url = 'https://www.mercadolivre.com.br/social/xetdaspromocoes?partner_id=475630078'
+  const converted = 'https://produto.mercadolivre.com.br/MLB123-x-_JM?partner_id=botinho'
+
+  const offer = await buildScrapedOffer({
+    url,
+    credentialsMap: mlCreds,
+    keepOriginalLink: true,
+    convertLink: async () => ({ url: converted }),
+    fetchProductInfo: async (u) => ({ title: 'Top Selene', newPrice: '35', finalUrl: u }),
+  })
+
+  assert.equal(offer.displayUrl, 'https://www.mercadolivre.com.br/social/xetdaspromocoes?partner_id=botinho')
+  assert.notEqual(offer.displayUrl, url, 'partner_id de terceiro não deve aparecer na oferta')
+})
+
+test('buildScrapedOffer: keepOriginalLink mantém link sem partner_id intacto', async () => {
+  const url = 'https://www.mercadolivre.com.br/social/xetdaspromocoes'
+
+  const offer = await buildScrapedOffer({
+    url,
+    credentialsMap: mlCreds,
+    keepOriginalLink: true,
+    convertLink: async () => ({ url: 'https://produto.mercadolivre.com.br/MLB123-x-_JM?partner_id=botinho' }),
+    fetchProductInfo: async (u) => ({ title: 'Top Selene', newPrice: '35', finalUrl: u }),
+  })
+
+  assert.equal(offer.displayUrl, url)
+})
+
+test('buildScrapedOffer: keepOriginalLink sem credenciais mantém link original intacto', async () => {
+  const url = 'https://www.mercadolivre.com.br/social/xetdaspromocoes?partner_id=475630078'
+
+  const offer = await buildScrapedOffer({
+    url,
+    credentialsMap: {},
+    keepOriginalLink: true,
+    fetchProductInfo: async (u) => ({ title: 'Top Selene', newPrice: '35', finalUrl: u }),
+  })
+
+  assert.equal(offer.displayUrl, url)
+})
