@@ -10,6 +10,12 @@ import { PRESET_TEMPLATE_BODIES } from '../../dashboard/lib/mobileTemplateStore.
 const HTTP_URL_RE = /https?:\/\/[^\s<>()]+/gi
 const DEFAULT_POLL_TIMEOUT_SECONDS = 25
 const DEFAULT_POLL_INTERVAL_MS = 1000
+// Backoff exponencial em erros consecutivos de polling. Sem isso, um egress
+// quebrado para api.telegram.org (Bad Gateway / fetch failed) fazia o loop
+// re-tentar a cada 1s indefinidamente — fetch/DNS/TLS em rajada disputando CPU
+// e rede na caixa de 2 cores. O backoff dobra o intervalo a cada falha até o
+// teto e zera assim que um poll volta a ter sucesso.
+const DEFAULT_POLL_MAX_BACKOFF_MS = 30_000
 const MAX_TELEGRAM_MESSAGE_LENGTH = 4096
 const MAX_TELEGRAM_CAPTION_LENGTH = 1024
 const MAX_INCOMING_TEXT_LENGTH = 4000
@@ -292,6 +298,7 @@ export function createTelegramOfferBot({
   logger = console,
   pollTimeoutSeconds = DEFAULT_POLL_TIMEOUT_SECONDS,
   pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
+  pollMaxBackoffMs = DEFAULT_POLL_MAX_BACKOFF_MS,
   recordOfferLog = () => {},
 } = {}) {
   if (!token && !telegramClient) {
@@ -431,16 +438,19 @@ export function createTelegramOfferBot({
 
   async function start() {
     logger.info?.('Telegram offer bot iniciado')
+    let backoffMs = pollIntervalMs
     while (!stopped) {
       try {
         await pollOnce()
+        backoffMs = pollIntervalMs
       } catch (err) {
         if (err?.statusCode === 409) {
           logger.error?.({ err: err.message }, 'Telegram getUpdates retornou 409 Conflict: outra instância está fazendo polling com o MESMO token (ou há um webhook setado). Garanta apenas 1 processo rodando e tokens distintos entre prod e staging.')
         } else {
-          logger.error?.({ err: err.message }, 'Erro no polling do Telegram offer bot')
+          logger.error?.({ err: err.message, retryInMs: backoffMs }, 'Erro no polling do Telegram offer bot')
         }
-        await sleep(pollIntervalMs)
+        await sleep(backoffMs)
+        backoffMs = Math.min(backoffMs * 2, pollMaxBackoffMs)
       }
     }
   }
