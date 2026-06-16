@@ -6,7 +6,7 @@ const waStyles = {
     border: '1px solid var(--line)',
     boxShadow: 'var(--shadow)',
     overflow: 'hidden',
-    fontFamily: "'Inter', system-ui, sans-serif",
+    fontFamily: "var(--font-inter), system-ui, sans-serif",
     flexShrink: 0,
   },
   header: {
