@@ -19,6 +19,64 @@ function copyToClipboard(text, onCopied) {
   navigator.clipboard.writeText(text).then(onCopied).catch(() => {})
 }
 
+function formatDate(value) {
+  if (!value) return '—'
+  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(new Date(value))
+}
+
+function ReferralStatusBadge({ active }) {
+  return active
+    ? <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-700">Ativo</span>
+    : <span className="rounded-full bg-gray-200 px-2 py-1 text-xs font-bold text-gray-600">Inativo</span>
+}
+
+function MyReferrals() {
+  const [data, setData] = useState(undefined)
+
+  useEffect(() => {
+    let active = true
+    api.affiliateMeReferrals({ limit: '100' })
+      .then(result => { if (active) setData(result) })
+      .catch(() => { if (active) setData(null) })
+    return () => { active = false }
+  }, [])
+
+  if (data === undefined) return null
+  const referrals = data?.referrals ?? []
+  if (referrals.length === 0) return null
+
+  return (
+    <div>
+      <h2 className="text-base font-bold text-gray-800 mb-2">Meus indicados</h2>
+      <p className="text-xs text-gray-500 mb-2">Por privacidade, mostramos apenas o nome parcial dos clientes.</p>
+      <div className="rounded-xl border border-gray-100 overflow-x-auto">
+        <table className="w-full text-sm min-w-[460px]">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Cliente</th>
+              <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Cadastro</th>
+              <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Situação</th>
+              <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Pagamentos</th>
+              <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Comissão gerada</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {referrals.map((r, i) => (
+              <tr key={i} className="bg-white">
+                <td className="px-4 py-3 text-gray-800">{r.name}</td>
+                <td className="px-4 py-3 text-xs text-gray-500">{formatDate(r.createdAt)}</td>
+                <td className="px-4 py-3"><ReferralStatusBadge active={r.isActive} /></td>
+                <td className="px-4 py-3 text-right text-gray-700">{r.paymentCount}</td>
+                <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(r.commissionTotalCents ?? 0)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 function StatCard({ label, value }) {
   return (
     <div className="rounded-xl bg-white border border-gray-100 p-4 shadow-sm">
@@ -244,6 +302,8 @@ export default function AffiliatePage() {
         <StatCard label="Vendas confirmadas" value={stats.totalSales ?? 0} />
         <StatCard label="Total ganho" value={formatCurrency(stats.totalEarnedCents ?? 0)} />
       </div>
+
+      <MyReferrals />
 
       {months.length > 0 && (
         <div>

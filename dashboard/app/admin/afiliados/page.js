@@ -35,6 +35,96 @@ function CommissionTypeBadge({ type }) {
   return <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-bold text-gray-600">Inicial</span>
 }
 
+const ACCESS_STATUS_BADGES = {
+  active: { label: 'Ativo', cls: 'bg-emerald-100 text-emerald-700' },
+  trial: { label: 'Trial', cls: 'bg-sky-100 text-sky-700' },
+  expired: { label: 'Expirado', cls: 'bg-gray-200 text-gray-600' },
+  banned: { label: 'Banido', cls: 'bg-red-100 text-red-700' },
+  suspended: { label: 'Suspenso', cls: 'bg-orange-100 text-orange-700' },
+}
+
+// Deriva a situação a partir dos campos crus (usado na aba Comissões, que não
+// recebe accessStatus pronto do backend). Espelha resolveAccessStatus do service.
+function deriveAccessStatus(user) {
+  if (!user) return 'expired'
+  if (user.status === 'banned' || user.status === 'suspended') return user.status
+  if (user.accessExpiresAt && new Date(user.accessExpiresAt) < new Date()) return 'expired'
+  if (user.plan === 'trial') return 'trial'
+  return 'active'
+}
+
+function AccessStatusBadge({ status }) {
+  const cfg = ACCESS_STATUS_BADGES[status] ?? ACCESS_STATUS_BADGES.expired
+  return <span className={`rounded-full px-2 py-1 text-xs font-bold ${cfg.cls}`}>{cfg.label}</span>
+}
+
+function ReferralsModal({ affiliate, onClose }) {
+  const [data, setData] = useState(undefined)
+
+  useEffect(() => {
+    let active = true
+    api.adminAffiliateReferrals(affiliate.id, { limit: '100' })
+      .then(result => { if (active) setData(result) })
+      .catch(() => { if (active) setData(null) })
+    return () => { active = false }
+  }, [affiliate.id])
+
+  const referrals = data?.referrals ?? []
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">Indicados de {affiliate.user?.name ?? affiliate.code}</h2>
+            <p className="text-xs text-gray-500">Código <span className="font-mono">{affiliate.code}</span> · {affiliate.user?.email ?? ''}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+        </div>
+
+        <div className="overflow-auto p-4">
+          {data === undefined ? (
+            <p className="text-sm text-gray-500 py-4">Carregando...</p>
+          ) : referrals.length === 0 ? (
+            <p className="text-sm text-gray-400 py-4">Nenhum cliente se cadastrou com este código ainda.</p>
+          ) : (
+            <table className="w-full text-sm min-w-[760px]">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left px-3 py-2 text-xs font-bold text-gray-500 uppercase">Cliente</th>
+                  <th className="text-left px-3 py-2 text-xs font-bold text-gray-500 uppercase">Cadastro</th>
+                  <th className="text-left px-3 py-2 text-xs font-bold text-gray-500 uppercase">Situação</th>
+                  <th className="text-right px-3 py-2 text-xs font-bold text-gray-500 uppercase">Pagamentos</th>
+                  <th className="text-right px-3 py-2 text-xs font-bold text-gray-500 uppercase">Total pago</th>
+                  <th className="text-left px-3 py-2 text-xs font-bold text-gray-500 uppercase">Último pgto</th>
+                  <th className="text-right px-3 py-2 text-xs font-bold text-gray-500 uppercase">Comissão gerada</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {referrals.map(r => (
+                  <tr key={r.userId} className="bg-white">
+                    <td className="px-3 py-3">
+                      <p className="font-semibold text-gray-900">{r.name ?? '—'}</p>
+                      <p className="text-xs text-gray-500">{r.email ?? '—'}</p>
+                      {r.contactPhone && <p className="text-xs text-gray-400">{r.contactPhone}</p>}
+                    </td>
+                    <td className="px-3 py-3 text-xs text-gray-500">{formatDate(r.createdAt)}</td>
+                    <td className="px-3 py-3"><AccessStatusBadge status={r.accessStatus} /></td>
+                    <td className="px-3 py-3 text-right text-gray-700">{r.paymentCount}</td>
+                    <td className="px-3 py-3 text-right text-gray-700">{formatCurrency(r.totalPaidCents ?? 0)}</td>
+                    <td className="px-3 py-3 text-xs text-gray-500">{r.lastPaymentAt ? formatDate(r.lastPaymentAt) : '—'}</td>
+                    <td className="px-3 py-3 text-right font-semibold text-gray-900">{formatCurrency(r.commissionTotalCents ?? 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function RejectModal({ onConfirm, onCancel }) {
   const [notes, setNotes] = useState('')
 
@@ -178,6 +268,7 @@ function ApprovedTab() {
   const [overrideEdits, setOverrideEdits] = useState({})
   const [overrideSaving, setOverrideSaving] = useState({})
   const [overrideMsg, setOverrideMsg] = useState({})
+  const [referralsTarget, setReferralsTarget] = useState(null)
 
   useEffect(() => {
     let active = true
@@ -221,6 +312,8 @@ function ApprovedTab() {
   if (profiles.length === 0) return <p className="text-sm text-gray-400 py-4">Nenhum afiliado aprovado.</p>
 
   return (
+    <>
+    <p className="mb-3 text-xs text-gray-500">Clique no número de indicados para ver quem se cadastrou com o código do afiliado.</p>
     <div className="rounded-xl border border-gray-100 overflow-x-auto">
       <table className="w-full text-sm min-w-[700px]">
         <thead className="bg-gray-50">
@@ -241,7 +334,15 @@ function ApprovedTab() {
                 <p className="text-xs text-gray-500">{p.user?.email ?? '—'}</p>
               </td>
               <td className="px-4 py-3 font-mono text-sm text-gray-700">{p.code}</td>
-              <td className="px-4 py-3 text-right text-gray-700">{p.totalReferrals}</td>
+              <td className="px-4 py-3 text-right">
+                <button
+                  onClick={() => setReferralsTarget(p)}
+                  disabled={!p.totalReferrals}
+                  className="font-semibold text-emerald-700 hover:underline disabled:text-gray-400 disabled:no-underline disabled:cursor-default"
+                >
+                  {p.totalReferrals}
+                </button>
+              </td>
               <td className="px-4 py-3 text-right text-gray-700">{formatCurrency(p.paidCommissions ?? 0)}</td>
               <td className="px-4 py-3 text-right font-semibold text-amber-700">{formatCurrency(p.pendingCommissions ?? 0)}</td>
               <td className="px-4 py-3">
@@ -291,6 +392,8 @@ function ApprovedTab() {
         </tbody>
       </table>
     </div>
+    {referralsTarget && <ReferralsModal affiliate={referralsTarget} onClose={() => setReferralsTarget(null)} />}
+    </>
   )
 }
 
@@ -387,6 +490,7 @@ function CommissionsTab() {
                   <td className="px-4 py-3 text-gray-700 text-xs">
                     <p>{c.referredUser?.name ?? '—'}</p>
                     <p className="text-gray-400">{c.referredUser?.email ?? '—'}</p>
+                    <span className="inline-block mt-1"><AccessStatusBadge status={deriveAccessStatus(c.referredUser)} /></span>
                   </td>
                   <td className="px-4 py-3 text-gray-500">{c.payment?.plan ?? '—'}</td>
                   <td className="px-4 py-3"><CommissionTypeBadge type={c.commissionType} /></td>
