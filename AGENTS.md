@@ -543,6 +543,29 @@ para a DLQ (`<queueName>-dlq`) com `removeOnComplete: false` —
 Helpers programáticos: `src/jobs/sendDlq.js`. Todas as ações destrutivas
 gravam `AdminAuditLog`.
 
+### Fail-mode da dedup global vs. rate-limit (`REDIS_DEDUP_FAIL_MODE`)
+
+O `bot-worker.js` tem duas camadas que dependem do Redis quando em modo
+`remote`/global: o **rate-limit por destino** e a **dedup global de envio**
+(cross-instância). Quando o Redis pisca, o comportamento desejado nas duas é
+**diferente**, por isso o fail-mode foi desacoplado:
+
+| Env                     | Default                  | Governa     | Na falha de Redis                                              |
+|-------------------------|--------------------------|-------------|---------------------------------------------------------------|
+| `REDIS_FAIL_MODE`       | `open`                   | rate-limit (e fallback da dedup) | `open` deixa passar; `closed` lança e estanca o envio. |
+| `REDIS_DEDUP_FAIL_MODE` | herda `REDIS_FAIL_MODE`  | só a dedup global | `open` pode **DUPLICAR** um envio (risco de ban); `closed` derruba só aquela mensagem (oferta perdida, recuperável). |
+
+Por que separar: fazer o rate-limit `closed` trava a fila serial inteira num
+blip de Redis (ruim). Já a dedup `closed` só aborta a mensagem corrente no
+pipeline de incoming (o `throw` é por-mensagem, **não** trava a fila de envio).
+Como o pior cenário do produto é **ban por envio duplicado**, em prod o
+recomendado é `REDIS_DEDUP_FAIL_MODE=closed` — mas, por ser mudança de
+semântica fail-open/closed, **validar em staging primeiro** (vide
+`docs/sprint-0-baseline-and-dod.md`). Default herda `REDIS_FAIL_MODE`, então
+sem setar nada o comportamento é idêntico ao histórico. A camada local de
+dedup (em disco, por worker) continua sendo a primeira linha e independe do
+Redis.
+
 ## Pegadinhas conhecidas (lições aprendidas — leia antes de mexer)
 
 ### 1. PM2 cacheia env vars no momento do `pm2 start`

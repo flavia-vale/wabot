@@ -107,6 +107,22 @@ export function normalizeConverter(converter) {
   }
 }
 
+// Quando `keepOriginalLink=true`, substitui `partner_id` no link original pela
+// tag do próprio usuário — evita que links colados com ID de outra pessoa
+// vazem comissão para terceiros, mantendo a URL intacta (sem converter produto).
+function injectOwnerTagInUrl(originalUrl, platform, credentialsMap) {
+  const tag = credentialsMap?.[platform]?.tag
+  if (!tag) return originalUrl
+  try {
+    const u = new URL(originalUrl)
+    if (!u.searchParams.has('partner_id')) return originalUrl
+    u.searchParams.set('partner_id', tag)
+    return u.toString()
+  } catch {
+    return originalUrl
+  }
+}
+
 // Motor compartilhado. Converte (quando há credenciais para a plataforma),
 // scrapa título/preço com as credenciais disponíveis e aplica os fallbacks.
 //
@@ -184,7 +200,10 @@ export async function buildScrapedOffer({
 
   // Link exibido ao usuário: Telegram quer SEMPRE o original colado; o painel
   // quer o convertido (offerUrl).
-  const displayUrlFor = (finalUrl) => keepOriginalLink ? url : (finalUrl || offerUrl)
+  // Exceção: se o link original já tiver `partner_id` de outra pessoa, troca
+  // pela tag do próprio usuário (mantém a URL original, só substitui o ID).
+  const displayUrl = injectOwnerTagInUrl(url, platform, credentialsMap)
+  const displayUrlFor = (finalUrl) => keepOriginalLink ? displayUrl : (finalUrl || offerUrl)
 
   try {
     let info = await fetchProductInfo(offerUrl, { mlCredentials, shopeeCredentials })

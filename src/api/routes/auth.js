@@ -7,6 +7,12 @@ import { DEFAULT_COPY_VARIATION_POOL_JSON } from '../../core/copyVariation.js'
 import { sendWelcomeEmail } from '../../email/welcomeEmail.js'
 import { DEFAULT_TERMS_VERSION, getEffectiveTermsVersion } from '../../legalTerms.js'
 
+// Hash descartável usado só para igualar o custo de tempo do bcrypt.compare
+// no caminho "usuário não existe". Sem ele, login com e-mail inexistente
+// retorna ~instantâneo enquanto e-mail válido + senha errada paga o custo do
+// bcrypt — diferença de timing que permite enumerar e-mails cadastrados.
+const TIMING_SAFE_DUMMY_HASH = bcrypt.hashSync('timing-safe-placeholder', 10)
+
 // A-1 (anti brute-force): dois mapas de tentativas. `loginAttempts` é por
 // (email|ip) — pega o caso comum de força bruta de um IP. `loginAttemptsByEmail`
 // é só por email — pega ataque DISTRIBUÍDO (mesma conta atacada de vários IPs),
@@ -113,7 +119,7 @@ export function consumeLoginAttempt({ email, ip }) {
   pruneLoginAttempts(now)
   const windowMs = Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MS ?? 15 * 60 * 1000)
   const maxAttempts = Number(process.env.LOGIN_RATE_LIMIT_MAX_ATTEMPTS ?? 8)
-  const emailMaxAttempts = Number(process.env.LOGIN_RATE_LIMIT_EMAIL_MAX_ATTEMPTS ?? 20)
+  const emailMaxAttempts = Number(process.env.LOGIN_RATE_LIMIT_EMAIL_MAX_ATTEMPTS ?? 8)
 
   const ipItem = bumpAttempt(loginAttempts, ipKey, windowMs, now)
   const emailItem = bumpAttempt(loginAttemptsByEmail, email, windowMs, now)
@@ -436,6 +442,9 @@ export async function authRoutes(app) {
 
     const user = await findUserByNormalizedEmail(email)
     if (!user) {
+      // Paga o mesmo custo de tempo do bcrypt.compare do caminho feliz para não
+      // vazar, via timing, se o e-mail existe (anti-enumeration).
+      await bcrypt.compare(password, TIMING_SAFE_DUMMY_HASH)
       trackAnalyticsEventSafe({ event: 'login_failed', metadata: { acct: accountAuditId(email), ip: req.ip, reason: 'no_user', attempts: attempt.attempts } })
       return reply.code(401).send({ error: 'Credenciais inválidas' })
     }

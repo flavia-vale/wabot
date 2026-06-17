@@ -178,7 +178,7 @@ const credOk = {
   credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'a', secretKey: 's' }) }) },
   botConfig: { findUnique: async () => ({ copyVariationPoolJson: '{}' }) },
   offerAutomation: { update: async () => ({}) },
-  offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
+  offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), createMany: async () => ({}), deleteMany: async () => ({}) },
 }
 
 test('runAutomation: distingue all_offers_filtered de no_offers_found', async () => {
@@ -195,6 +195,21 @@ test('runAutomation: distingue all_offers_filtered de no_offers_found', async ()
     fetchOffersFn: async () => ({ rawCount: 0, offers: [] }),
   })
   assert.deepEqual(empty, { skipped: 'no_offers_found' })
+})
+
+test('runAutomation: curto-circuita quando isRunning é assíncrono (modo remote) e devolve false', async () => {
+  // Regressão: no modo remote isRunning devolve Promise. Sem await, `!Promise`
+  // era sempre false e o guard era ignorado — seguia pro sendBroadcast e
+  // falhava com "Bot não está rodando" a cada tick do cron (flood de log/CPU).
+  let sent = false
+  const result = await runAutomation(baseAutomation(), {
+    dbOverride: credOk,
+    isRunningFn: async () => false,
+    sendBroadcastFn: async () => { sent = true },
+    fetchOffersFn: async () => { throw new Error('não deveria buscar ofertas com bot parado') },
+  })
+  assert.deepEqual(result, { skipped: 'bot_not_running' })
+  assert.equal(sent, false, 'não pode tentar enviar com o bot parado')
 })
 
 test('runAutomation: surfa erro real da API Shopee em vez de mascarar', async () => {
@@ -316,7 +331,7 @@ test('runAutomation: envia imagem do anúncio junto com a oferta automática', a
     offerAutomation: {
       update: async ({ data }) => { updates.push(data); return { ...automation, ...data } },
     },
-    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
+    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), createMany: async () => ({}), deleteMany: async () => ({}) },
   }
 
   const result = await runAutomation(automation, {
@@ -356,7 +371,7 @@ test('runAutomation: não envia o mesmo produto duas vezes quando a Shopee repet
     credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'a', secretKey: 's' }) }) },
     botConfig: { findUnique: async () => ({ copyVariationPoolJson: '{}' }) },
     offerAutomation: { update: async ({ data }) => { updates.push(data); return {} } },
-    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
+    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), createMany: async () => ({}), deleteMany: async () => ({}) },
   }
 
   const result = await runAutomation(automation, {
@@ -387,6 +402,7 @@ test('runAutomation: dedup cruzada por grupo — mesmo produto a preço NOVO pas
       // Outra automação já enviou "Fritadeira Air Fryer" a 199,90 (19990 cents) ao mesmo grupo hoje.
       findMany: async () => [{ productKey: 'fritadeira air fryer', priceCents: 19990 }],
       create: async ({ data }) => { created.push(data) },
+      createMany: async ({ data }) => { created.push(...data) },
       deleteMany: async () => ({}),
     },
   }
@@ -418,6 +434,7 @@ test('runAutomation: dedup cruzada — mesmo produto/preço já enviado ao grupo
     offerAutomationSentLog: {
       findMany: async () => [{ productKey: 'kit churrasco', priceCents: 9990 }],
       create: async () => ({}),
+      createMany: async () => ({}),
       deleteMany: async () => ({}),
     },
   }
@@ -440,7 +457,7 @@ describe('runAutomation — prioritizeAMS', () => {
       credential: { findUnique: async () => ({ data: JSON.stringify(baseCreds) }) },
       offerAutomation: { update: async () => {} },
       botConfig: { findUnique: async () => null },
-      offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
+      offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), createMany: async () => ({}), deleteMany: async () => ({}) },
     }
   }
 
@@ -526,7 +543,7 @@ test('runAutomation: usa templateKey selecionado em mobileTemplatesJson', async 
       couponLink: '',
     }) },
     offerAutomation: { update: async () => ({}) },
-    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
+    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), createMany: async () => ({}), deleteMany: async () => ({}) },
   }
 
   const result = await runAutomation(automation, {
@@ -564,7 +581,7 @@ test('runAutomation: sem templateKey cai no Automático clássico', async () => 
       couponLink: '',
     }) },
     offerAutomation: { update: async () => ({}) },
-    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
+    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), createMany: async () => ({}), deleteMany: async () => ({}) },
   }
 
   await runAutomation(automation, {
@@ -650,7 +667,7 @@ test('runAutomation: template pode usar ganchos, CTAs e links globais como vari�
       couponLink: 'https://cupom.test/oferta',
     }) },
     offerAutomation: { update: async () => ({}) },
-    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), deleteMany: async () => ({}) },
+    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), createMany: async () => ({}), deleteMany: async () => ({}) },
   }
 
   await runAutomation(automation, {
