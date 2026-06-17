@@ -1401,6 +1401,15 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       logger.info({ jid, monitorGroups: cfg.groups.monitor, feedGlobal: cfg.botConfig.feedGlobal }, 'mensagem recebida')
       const monitorGroup = cfg.groups.monitor.find(m => normalizeJidForMatch(m.waJid) === normalizedJid)
       const shouldTrackSkipped = Boolean(monitorGroup) || (cfg.botConfig.feedGlobal && isMirrorableJid(jid))
+      if (process.env.DEBUG_INCOMING_UPSERT) {
+        logger.info({
+          jid, normalizedJid,
+          isMonitored: Boolean(monitorGroup),
+          feedGlobal: Boolean(cfg.botConfig.feedGlobal),
+          mirrorable: isMirrorableJid(jid),
+          monitorJids: cfg.groups.monitor.map(m => m.waJid),
+        }, 'DEBUG_PROCESS entrada')
+      }
       async function recordSkippedMessage({ reason, platform = 'unknown', originalUrl = '', convertedUrl = '' }) {
         if (!shouldTrackSkipped) return
         const messageText =
@@ -1476,12 +1485,14 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       }
 
       if (!cfg.botConfig.feedGlobal && !monitorGroup) {
+        if (process.env.DEBUG_INCOMING_UPSERT) logger.info({ jid, reason: 'not_monitored_no_feedglobal' }, 'DEBUG_PROCESS return')
         return
       }
       // feedGlobal aceita mensagens de qualquer JID espelhável (grupo ou canal).
       // O pipeline downstream é agnóstico ao tipo; o tratamento específico
       // de envio para canal-destino vem na Fase 3.
       if (cfg.botConfig.feedGlobal && !isMirrorableJid(jid)) {
+        if (process.env.DEBUG_INCOMING_UPSERT) logger.info({ jid, reason: 'feedglobal_not_mirrorable' }, 'DEBUG_PROCESS return')
         return
       }
 
@@ -1492,6 +1503,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       // `nolink`. Fallback para o raw cobre conteúdo não-embrulhado.
       const innerMessage = extractMessageContent(msg.message)
       const text = extractIncomingText(innerMessage) || extractIncomingText(msg.message)
+      if (process.env.DEBUG_INCOMING_UPSERT) {
+        logger.info({ jid, msgId: msg.key.id, textLen: text.length, textPreview: text.slice(0, 140), innerKeys: Object.keys(innerMessage || {}) }, 'DEBUG_PROCESS texto')
+      }
 
       if (text && text.length > MAX_INCOMING_MESSAGE_CHARS) {
         logger.warn({ msgId: msg.key.id, chars: text.length, limit: MAX_INCOMING_MESSAGE_CHARS }, 'Mensagem grande demais — processamento ignorado para preservar latência')
@@ -1511,7 +1525,10 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       }
 
       const sanitizedText = text ? sanitizeInviteLinks(text) : ''
-      if (text && !sanitizedText) return
+      if (text && !sanitizedText) {
+        if (process.env.DEBUG_INCOMING_UPSERT) logger.info({ jid, reason: 'text_sanitized_empty' }, 'DEBUG_PROCESS return')
+        return
+      }
 
       const links = detectLinks(sanitizedText)
       const messageKind = detectMessageKind(innerMessage, sanitizedText)
@@ -1521,6 +1538,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         messageKind,
         policy,
       })
+      if (process.env.DEBUG_INCOMING_UPSERT) {
+        logger.info({ jid, messageKind, links: links.length, canForward: canForwardCurrentMessage, forwardMode: policy.forwardMode, noLinkScope: policy.noLinkScope }, 'DEBUG_PROCESS policy')
+      }
       if (!canForwardCurrentMessage) {
         const hasGenericUrl = /https?:\/\//i.test(sanitizedText)
         const unsupportedStoreSuffix = links.length === 0 && hasGenericUrl ? ':unsupported_store' : ''
