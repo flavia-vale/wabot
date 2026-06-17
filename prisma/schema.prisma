@@ -234,6 +234,8 @@ model BotConfig {
   mobileTemplatesJson     String  @default("{}")
   mobileCouponLinksJson   String  @default("{}")
   preservationEnabled     Boolean @default(false)
+  channelForwardJid       String?
+  channelForwardName      String?
   updatedAt       DateTime @updatedAt
 }
 
