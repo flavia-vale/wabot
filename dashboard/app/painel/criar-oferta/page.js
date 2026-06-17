@@ -269,7 +269,7 @@ export default function CriarOfertaPage() {
             placeholder="https://..."
             onKeyDown={(e) => { if (e.key === 'Enter') runScrape() }}
           />
-          <button type="button" className="pnl-btn" onClick={pasteFromClipboard} disabled={pasting || loading} style={{ justifyContent: 'center' }}>
+          <button type="button" className="pnl-btn is-primary" onClick={pasteFromClipboard} disabled={pasting || loading} style={{ justifyContent: 'center' }}>
             {pasting ? 'Colando…' : 'Colar'}
           </button>
           <button type="button" className="pnl-btn is-primary" onClick={runScrape} disabled={loading} style={{ justifyContent: 'center' }}>
@@ -421,7 +421,7 @@ export default function CriarOfertaPage() {
               <div style={{ display: 'flex', gap: 10, marginTop: 18, flexWrap: 'wrap' }}>
                 <button
                   type="button"
-                  className="pnl-btn"
+                  className="pnl-btn is-primary"
                   style={{ justifyContent: 'center' }}
                   disabled={disabled}
                   onClick={() => dispatch(sendMode, { createNew: true })}
