@@ -7,7 +7,7 @@
  * inserir na fila (a fila já carrega os próprios grupos de destino). Reusa os
  * helpers de lib/offerBuilderUi e as APIs de broadcast, agendamento e filas. */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { usePainelHeader } from '../PainelShell'
@@ -64,6 +64,12 @@ function normalizeLink(raw, fallback = '') {
   return typeof fallback === 'string' ? fallback : ''
 }
 
+function extractFirstUrl(raw) {
+  const text = String(raw || '').trim()
+  const match = text.match(/https?:\/\/[^\s<>()"']+/i)
+  return match ? match[0].replace(/[.,;:!?]+$/, '') : text
+}
+
 export default function CriarOfertaPage() {
   usePainelHeader({ title: 'Criar oferta', subtitle: 'Cole o seu link de afiliado — o bot monta a oferta pronta' })
 
@@ -74,9 +80,11 @@ export default function CriarOfertaPage() {
   const [templates, setTemplates] = useState(() => loadAllTemplates())
   const [templateKey, setTemplateKey] = useState(() => readSavedTemplateKey())
   const [loading, setLoading] = useState(false)
+  const [pasting, setPasting] = useState(false)
   const [error, setError] = useState('')
   const [conversionStatus, setConversionStatus] = useState(null)
   const [copyFeedback, setCopyFeedback] = useState('')
+  const [pasteFeedback, setPasteFeedback] = useState('')
   const [groups, setGroups] = useState([])
   const [selectedJids, setSelectedJids] = useState([])
   const [queues, setQueues] = useState([])
@@ -133,8 +141,41 @@ export default function CriarOfertaPage() {
     setCustomText(null)
   }
 
+  async function pasteFromClipboard() {
+    setError('')
+    setPasteFeedback('')
+
+    if (!navigator?.clipboard?.readText) {
+      setError('Seu navegador não permite colar automaticamente. Use Ctrl+V no campo do link.')
+      return
+    }
+
+    setPasting(true)
+    try {
+      const clipboardText = await navigator.clipboard.readText()
+      const nextLink = extractFirstUrl(clipboardText)
+      if (!nextLink) {
+        setError('Sua área de transferência está vazia.')
+        return
+      }
+
+      setLink(nextLink)
+      setGenerated(null)
+      setConversionStatus(null)
+      setCustomText(null)
+      setCopyFeedback('')
+      setDispatchFeedback('')
+      setPasteFeedback('Link colado. Agora clique em Gerar.')
+    } catch {
+      setError('Não foi possível acessar sua área de transferência. Use Ctrl+V no campo do link.')
+    } finally {
+      setPasting(false)
+    }
+  }
+
   async function runScrape() {
     setError('')
+    setPasteFeedback('')
     setConversionStatus(null)
     const trimmed = link.trim()
     if (!trimmed) { setError('Cole seu link para gerar a oferta.'); return }
@@ -171,11 +212,22 @@ export default function CriarOfertaPage() {
     }
   }
 
-  async function dispatch(mode) {
+  function resetOfferForm() {
+    setLink('')
+    setGenerated(null)
+    setConversionStatus(null)
+    setCopyFeedback('')
+    setPasteFeedback('')
+    setScheduleAt('')
+    setCustomText(null)
+  }
+
+  async function dispatch(mode, { createNew = false } = {}) {
     if (mode !== 'queue' && !selectedJids.length) { setDispatchFeedback('Selecione pelo menos um grupo de destino.'); return }
     if (mode === 'schedule' && (!scheduleAt || new Date(scheduleAt) <= new Date())) { setDispatchFeedback('Escolha uma data e hora futuras.'); return }
     if (mode === 'queue' && !queueId) { setDispatchFeedback('Crie ou selecione uma fila.'); return }
-    setDispatching(mode)
+    const actionKey = createNew ? `${mode}-new` : mode
+    setDispatching(actionKey)
     setDispatchFeedback('')
     try {
       const payload = { text: offerMessage, imageUrl: generated?.imageUrl, imageRefererUrl: generated?.imageRefererUrl }
@@ -183,7 +235,10 @@ export default function CriarOfertaPage() {
       if (mode === 'schedule') await api.scheduledCreate({ ...payload, jids: selectedJids, scheduledAt: new Date(scheduleAt).toISOString() })
       // Na fila não enviamos jids: o item herda os grupos configurados na fila.
       if (mode === 'queue') await api.offerQueueItemAdd(queueId, payload)
-      setDispatchFeedback(mode === 'now' ? 'Oferta enviada para a fila de envio do WhatsApp.' : mode === 'schedule' ? 'Oferta agendada com sucesso. Veja em Agendados.' : 'Oferta inserida na fila com sucesso.')
+      setDispatchFeedback(createNew
+        ? (mode === 'now' ? 'Oferta enviada para a fila de envio do WhatsApp. Nova oferta pronta para criação.' : mode === 'schedule' ? 'Oferta agendada com sucesso. Nova oferta pronta para criação.' : 'Oferta inserida na fila com sucesso. Nova oferta pronta para criação.')
+        : (mode === 'now' ? 'Oferta enviada para a fila de envio do WhatsApp.' : mode === 'schedule' ? 'Oferta agendada com sucesso. Veja em Agendados.' : 'Oferta inserida na fila com sucesso.'))
+      if (createNew) resetOfferForm()
     } catch (err) { setDispatchFeedback(err.message) }
     finally { setDispatching('') }
   }
@@ -210,12 +265,15 @@ export default function CriarOfertaPage() {
             className="pnl-input"
             style={{ flex: 1, minWidth: 180, fontFamily: "var(--font-jetbrains-mono), ui-monospace, monospace", fontSize: 13 }}
             value={link}
-            onChange={(e) => setLink(e.target.value)}
+            onChange={(e) => { setLink(e.target.value); setPasteFeedback('') }}
             placeholder="https://..."
             onKeyDown={(e) => { if (e.key === 'Enter') runScrape() }}
           />
+          <button type="button" className="pnl-btn" onClick={pasteFromClipboard} disabled={pasting || loading} style={{ justifyContent: 'center' }}>
+            {pasting ? 'Colando…' : 'Colar'}
+          </button>
           <button type="button" className="pnl-btn is-primary" onClick={runScrape} disabled={loading} style={{ justifyContent: 'center' }}>
-            {loading ? 'Gerando…' : 'Gerar oferta'}
+            {loading ? 'Gerando…' : 'Gerar'}
           </button>
         </div>
         <div style={{ padding: '11px 20px', display: 'flex', alignItems: 'center', gap: 14, fontSize: 12.5, color: 'var(--ink-soft)', flexWrap: 'wrap' }}>
@@ -240,6 +298,7 @@ export default function CriarOfertaPage() {
 
       {conv && <div className={`pnl-note-box ${conv.tone === 'success' ? 'is-success' : 'is-error'}`} role="status"><strong style={{ fontWeight: 600 }}>{conv.title}</strong>{conv.hint && <p style={{ marginTop: 4 }}>{conv.hint}</p>}</div>}
       {error && <div className="pnl-note-box is-error" role="alert">{error}</div>}
+      {pasteFeedback && <div className="pnl-note-box is-success" role="status">{pasteFeedback}</div>}
 
       {/* Prévia editável: substitui o antigo card "Produto encontrado" — o
           usuário ajusta título/preços direto no texto da mensagem. */}
@@ -354,17 +413,33 @@ export default function CriarOfertaPage() {
             </div>
           )}
 
-          {sendMode && (
-            <button
-              type="button"
-              className="pnl-btn is-primary"
-              style={{ marginTop: 18, justifyContent: 'center' }}
-              disabled={!!dispatching || (sendMode !== 'queue' && !selectedJids.length) || (sendMode === 'schedule' && !scheduleAt) || (sendMode === 'queue' && !queueId)}
-              onClick={() => dispatch(sendMode)}
-            >
-              {dispatching ? (sendMode === 'now' ? 'Enviando…' : sendMode === 'schedule' ? 'Agendando…' : 'Inserindo…') : (sendMode === 'now' ? 'Enviar agora' : sendMode === 'schedule' ? 'Agendar' : 'Inserir na fila')}
-            </button>
-          )}
+          {sendMode && (() => {
+            const disabled = !!dispatching || (sendMode !== 'queue' && !selectedJids.length) || (sendMode === 'schedule' && !scheduleAt) || (sendMode === 'queue' && !queueId)
+            const baseLabel = sendMode === 'now' ? 'Enviar agora' : sendMode === 'schedule' ? 'Agendar' : 'Inserir na fila'
+            const loadingLabel = sendMode === 'now' ? 'Enviando…' : sendMode === 'schedule' ? 'Agendando…' : 'Inserindo…'
+            return (
+              <div style={{ display: 'flex', gap: 10, marginTop: 18, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="pnl-btn"
+                  style={{ justifyContent: 'center' }}
+                  disabled={disabled}
+                  onClick={() => dispatch(sendMode, { createNew: true })}
+                >
+                  {dispatching === `${sendMode}-new` ? loadingLabel : `${baseLabel} e criar nova oferta`}
+                </button>
+                <button
+                  type="button"
+                  className="pnl-btn is-primary"
+                  style={{ justifyContent: 'center' }}
+                  disabled={disabled}
+                  onClick={() => dispatch(sendMode)}
+                >
+                  {dispatching === sendMode ? loadingLabel : baseLabel}
+                </button>
+              </div>
+            )
+          })()}
 
           {dispatchFeedback && <div className={`pnl-note-box ${/sucesso|enviada|agendada|inserida/i.test(dispatchFeedback) ? 'is-success' : 'is-error'}`} style={{ marginTop: 14 }} role="status">{dispatchFeedback}{dispatchFeedback.includes('Agendados') && <> <Link href="/painel/agendados">Abrir agendados</Link></>}</div>}
         </section>
