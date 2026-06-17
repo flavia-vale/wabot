@@ -70,6 +70,8 @@ export default function PlanoPage() {
   const [selectedPlanId, setSelectedPlanId] = useState('pro')
   const [checkoutPlan, setCheckoutPlan] = useState('')
   const [checkoutError, setCheckoutError] = useState('')
+  const [subscribePlan, setSubscribePlan] = useState('')
+  const [subscribeError, setSubscribeError] = useState('')
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState('')
 
@@ -105,6 +107,20 @@ export default function PlanoPage() {
     }
   }
 
+  async function handleSubscribe(planId) {
+    if (subscribePlan || checkoutPlan) return
+    setSubscribeError('')
+    setSubscribePlan(planId)
+    try {
+      const data = await api.paymentsCreateSubscription(planId)
+      if (!data?.init_point) throw new Error('Assinatura indisponível no momento. Use o pagamento avulso ou o PIX manual.')
+      window.location.assign(data.init_point)
+    } catch (err) {
+      setSubscribeError(err?.message || 'Não foi possível iniciar a assinatura. Use o pagamento avulso ou o PIX manual.')
+      setSubscribePlan('')
+    }
+  }
+
   async function handleCopyPix() {
     setCopyError('')
     try {
@@ -118,6 +134,7 @@ export default function PlanoPage() {
 
   const currentPlanLabel = overview?.plan ? (PLAN_LABELS[overview.plan] ?? overview.plan) : null
   const expiresAtLabel = formatDate(overview?.accessExpiresAt)
+  const nextChargeLabel = formatDate(overview?.nextChargeAt)
   const lastAmount = overview?.lastApprovedPayment?.amount != null ? formatCurrency(overview.lastApprovedPayment.amount) : null
   const lastDate = formatDate(overview?.lastApprovedPayment?.createdAt)
 
@@ -133,9 +150,9 @@ export default function PlanoPage() {
             </div>
             {overview.expiresInDays != null && expiresAtLabel && (
               <div style={{ textAlign: 'right' }}>
-                <div className="pnl-hero-sub">Renova manualmente em</div>
+                <div className="pnl-hero-sub">{overview.autoRenew ? 'Renovação automática em' : 'Renova manualmente em'}</div>
                 <div className="pnl-serif" style={{ fontSize: 22 }}>{overview.expiresInDays} {overview.expiresInDays === 1 ? 'dia' : 'dias'}</div>
-                <div className="pnl-hero-sub">até {expiresAtLabel}</div>
+                <div className="pnl-hero-sub">{overview.autoRenew && nextChargeLabel ? `próxima cobrança em ${nextChargeLabel}` : `até ${expiresAtLabel}`}</div>
               </div>
             )}
           </div>
@@ -172,6 +189,19 @@ export default function PlanoPage() {
           })}
         </div>
 
+        {subscribeError && (
+          <div className="pnl-note-box is-warn" style={{ marginTop: 14 }} role="alert">
+            <strong style={{ fontWeight: 600 }}>Assinatura não iniciada</strong>
+            <p style={{ marginTop: 4 }}>{subscribeError}</p>
+            <p style={{ marginTop: 4 }}>Você ainda pode usar o pagamento avulso ou o PIX manual abaixo.</p>
+          </div>
+        )}
+
+        <button type="button" className="pnl-btn is-primary" style={{ marginTop: 16, width: '100%', justifyContent: 'center' }} onClick={() => handleSubscribe(selectedPlanId)} disabled={!!subscribePlan || !!checkoutPlan}>
+          {subscribePlan === selectedPlanId ? 'Aguarde…' : `Assinar ${selectedPlan.name} com renovação automática`}
+        </button>
+        <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 8 }}>Cobrança mensal automática no Mercado Pago. Cancele quando quiser.</p>
+
         {checkoutError && (
           <div className="pnl-note-box is-warn" style={{ marginTop: 14 }} role="alert">
             <strong style={{ fontWeight: 600 }}>Checkout não iniciado</strong>
@@ -180,10 +210,10 @@ export default function PlanoPage() {
           </div>
         )}
 
-        <button type="button" className="pnl-btn is-primary" style={{ marginTop: 16, width: '100%', justifyContent: 'center' }} onClick={() => handleCheckout(selectedPlanId)} disabled={!!checkoutPlan}>
-          {checkoutPlan === selectedPlanId ? 'Aguarde…' : `Assinar ${selectedPlan.name} com Mercado Pago`}
+        <button type="button" className="pnl-btn is-ghost" style={{ marginTop: 12, width: '100%', justifyContent: 'center' }} onClick={() => handleCheckout(selectedPlanId)} disabled={!!checkoutPlan || !!subscribePlan}>
+          {checkoutPlan === selectedPlanId ? 'Aguarde…' : `Pagar 30 dias avulso (sem renovação)`}
         </button>
-        <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 8 }}>Você será redirecionado para o Mercado Pago para concluir o pagamento.</p>
+        <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 8 }}>Pagamento único de 30 dias. Você renova manualmente ao expirar.</p>
       </section>
 
       {/* PIX manual */}
