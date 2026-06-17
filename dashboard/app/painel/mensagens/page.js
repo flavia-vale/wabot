@@ -11,7 +11,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
-import { SelectChannelModal } from '@/components/SelectChannelModal'
 import {
   composeTemplates,
   readLocalTemplateStore,
@@ -61,8 +60,7 @@ function Chevron({ open }) {
 export default function MensagensPage() {
   usePainelHeader({ title: 'Templates de mensagens', subtitle: 'Crie templates e personalize os textos das suas ofertas' })
 
-  const [value, setValue] = useState({ copyVariationPoolJson: '{}', brandingGroupLink: '', couponLink: '', channelForwardJid: '', channelForwardName: '' })
-  const [showChannelModal, setShowChannelModal] = useState(false)
+  const [value, setValue] = useState({ copyVariationPoolJson: '{}', brandingGroupLink: '', couponLink: '' })
   const [templateStore, setTemplateStore] = useState(() => readLocalTemplateStore())
   const [automations, setAutomations] = useState([])
   const [templateMode, setTemplateMode] = useState('list')
@@ -93,8 +91,6 @@ export default function MensagensPage() {
           copyVariationPoolJson: cfg.copyVariationPoolJson ?? '{}',
           brandingGroupLink: cfg.brandingGroupLink ?? '',
           couponLink: cfg.couponLink ?? '',
-          channelForwardJid: cfg.channelForwardJid ?? '',
-          channelForwardName: cfg.channelForwardName ?? '',
         })
         setTemplateStore(store)
         setAutomations(Array.isArray(automationList) ? automationList : [])
@@ -129,8 +125,6 @@ export default function MensagensPage() {
         brandingGroupLink: value.brandingGroupLink,
         couponLink: value.couponLink,
         mobileTemplatesJson: JSON.stringify(templateStore),
-        channelForwardJid: value.channelForwardJid,
-        channelForwardName: value.channelForwardName,
       })
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
@@ -486,31 +480,6 @@ export default function MensagensPage() {
               </div>
       </details>
 
-      {/* Seu canal do WhatsApp (botão "Ver canal" das mensagens espelhadas) */}
-      <section className="pnl-card">
-        <div className="pnl-card-title">Seu canal do WhatsApp</div>
-        <p className="pnl-card-note" style={{ marginBottom: 14 }}>
-          Quando definido, as ofertas espelhadas para grupos exibem o botão <b>“Ver canal”</b> apontando para o seu canal — no lugar do canal de quem postou a oferta original. Deixe vazio para apenas remover o botão de terceiros.
-        </p>
-
-        {value.channelForwardJid ? (
-          <div className="pnl-grid" style={{ gap: 10 }}>
-            <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--pnl-radius-sm)', padding: 12 }}>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{value.channelForwardName || 'Canal sem nome'}</div>
-              <div className="pnl-hint" style={{ fontFamily: 'monospace', marginTop: 2 }}>{value.channelForwardJid}</div>
-            </div>
-            <div className="pnl-toolbar">
-              <button type="button" className="pnl-btn" onClick={() => setShowChannelModal(true)} disabled={saving}>Trocar canal</button>
-              <button type="button" className="pnl-btn" onClick={() => setValue((v) => ({ ...v, channelForwardJid: '', channelForwardName: '' }))} disabled={saving}>Remover</button>
-            </div>
-          </div>
-        ) : (
-          <button type="button" className="pnl-btn is-primary" onClick={() => setShowChannelModal(true)} disabled={saving}>
-            Escolher meu canal
-          </button>
-        )}
-      </section>
-
       {/* Salvar */}
       <div className="pnl-toolbar">
         <button type="button" className="pnl-btn is-primary" onClick={handleSave} disabled={saving}>
@@ -518,12 +487,6 @@ export default function MensagensPage() {
         </button>
         {saved && <span className="pnl-tag is-success">✓ Salvo!</span>}
       </div>
-
-      <SelectChannelModal
-        open={showChannelModal}
-        onClose={() => setShowChannelModal(false)}
-        onSelect={({ jid, name }) => setValue((v) => ({ ...v, channelForwardJid: jid, channelForwardName: name }))}
-      />
     </div>
   )
 }
