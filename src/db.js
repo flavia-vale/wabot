@@ -1,6 +1,24 @@
 import { PrismaClient } from '@prisma/client'
+import { recordOperationalSignal } from './observability/operationalSignals.js'
 
 const prisma = new PrismaClient()
+
+// Instrumenta SQLITE_BUSY ("database is locked") de forma central: é o gatilho
+// nº 1 de escala da auditoria (WABOT-010). O WAL + busy_timeout reduzem a
+// ocorrência, mas quando ela acontece queremos CONTAR (não só logar), para o
+// gatilho de cutover Postgres ser objetivo. Apenas observa e re-lança — não
+// altera o comportamento de erro de nenhuma query.
+prisma.$use(async (params, next) => {
+  try {
+    return await next(params)
+  } catch (err) {
+    const message = String(err?.message ?? '')
+    if (/SQLITE_BUSY|database is locked/i.test(message)) {
+      recordOperationalSignal('sqlite_busy', { model: params?.model ?? 'raw', action: params?.action ?? 'unknown' })
+    }
+    throw err
+  }
+})
 
 /**
  * PRAGMAs aplicados em todo boot. SQLite + Prisma defaultam para rollback
