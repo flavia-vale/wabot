@@ -7,7 +7,7 @@
  * inserir na fila (a fila já carrega os próprios grupos de destino). Reusa os
  * helpers de lib/offerBuilderUi e as APIs de broadcast, agendamento e filas. */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { usePainelHeader } from '../PainelShell'
@@ -171,11 +171,21 @@ export default function CriarOfertaPage() {
     }
   }
 
-  async function dispatch(mode) {
+  function resetOfferForm() {
+    setLink('')
+    setGenerated(null)
+    setConversionStatus(null)
+    setCopyFeedback('')
+    setScheduleAt('')
+    setCustomText(null)
+  }
+
+  async function dispatch(mode, { createNew = false } = {}) {
     if (mode !== 'queue' && !selectedJids.length) { setDispatchFeedback('Selecione pelo menos um grupo de destino.'); return }
     if (mode === 'schedule' && (!scheduleAt || new Date(scheduleAt) <= new Date())) { setDispatchFeedback('Escolha uma data e hora futuras.'); return }
     if (mode === 'queue' && !queueId) { setDispatchFeedback('Crie ou selecione uma fila.'); return }
-    setDispatching(mode)
+    const actionKey = createNew ? `${mode}-new` : mode
+    setDispatching(actionKey)
     setDispatchFeedback('')
     try {
       const payload = { text: offerMessage, imageUrl: generated?.imageUrl, imageRefererUrl: generated?.imageRefererUrl }
@@ -183,7 +193,10 @@ export default function CriarOfertaPage() {
       if (mode === 'schedule') await api.scheduledCreate({ ...payload, jids: selectedJids, scheduledAt: new Date(scheduleAt).toISOString() })
       // Na fila não enviamos jids: o item herda os grupos configurados na fila.
       if (mode === 'queue') await api.offerQueueItemAdd(queueId, payload)
-      setDispatchFeedback(mode === 'now' ? 'Oferta enviada para a fila de envio do WhatsApp.' : mode === 'schedule' ? 'Oferta agendada com sucesso. Veja em Agendados.' : 'Oferta inserida na fila com sucesso.')
+      setDispatchFeedback(createNew
+        ? (mode === 'now' ? 'Oferta enviada para a fila de envio do WhatsApp. Nova oferta pronta para criação.' : mode === 'schedule' ? 'Oferta agendada com sucesso. Nova oferta pronta para criação.' : 'Oferta inserida na fila com sucesso. Nova oferta pronta para criação.')
+        : (mode === 'now' ? 'Oferta enviada para a fila de envio do WhatsApp.' : mode === 'schedule' ? 'Oferta agendada com sucesso. Veja em Agendados.' : 'Oferta inserida na fila com sucesso.'))
+      if (createNew) resetOfferForm()
     } catch (err) { setDispatchFeedback(err.message) }
     finally { setDispatching('') }
   }
@@ -354,17 +367,33 @@ export default function CriarOfertaPage() {
             </div>
           )}
 
-          {sendMode && (
-            <button
-              type="button"
-              className="pnl-btn is-primary"
-              style={{ marginTop: 18, justifyContent: 'center' }}
-              disabled={!!dispatching || (sendMode !== 'queue' && !selectedJids.length) || (sendMode === 'schedule' && !scheduleAt) || (sendMode === 'queue' && !queueId)}
-              onClick={() => dispatch(sendMode)}
-            >
-              {dispatching ? (sendMode === 'now' ? 'Enviando…' : sendMode === 'schedule' ? 'Agendando…' : 'Inserindo…') : (sendMode === 'now' ? 'Enviar agora' : sendMode === 'schedule' ? 'Agendar' : 'Inserir na fila')}
-            </button>
-          )}
+          {sendMode && (() => {
+            const disabled = !!dispatching || (sendMode !== 'queue' && !selectedJids.length) || (sendMode === 'schedule' && !scheduleAt) || (sendMode === 'queue' && !queueId)
+            const baseLabel = sendMode === 'now' ? 'Enviar agora' : sendMode === 'schedule' ? 'Agendar' : 'Inserir na fila'
+            const loadingLabel = sendMode === 'now' ? 'Enviando…' : sendMode === 'schedule' ? 'Agendando…' : 'Inserindo…'
+            return (
+              <div style={{ display: 'flex', gap: 10, marginTop: 18, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="pnl-btn"
+                  style={{ justifyContent: 'center' }}
+                  disabled={disabled}
+                  onClick={() => dispatch(sendMode, { createNew: true })}
+                >
+                  {dispatching === `${sendMode}-new` ? loadingLabel : `${baseLabel} e criar nova oferta`}
+                </button>
+                <button
+                  type="button"
+                  className="pnl-btn is-primary"
+                  style={{ justifyContent: 'center' }}
+                  disabled={disabled}
+                  onClick={() => dispatch(sendMode)}
+                >
+                  {dispatching === sendMode ? loadingLabel : baseLabel}
+                </button>
+              </div>
+            )
+          })()}
 
           {dispatchFeedback && <div className={`pnl-note-box ${/sucesso|enviada|agendada|inserida/i.test(dispatchFeedback) ? 'is-success' : 'is-error'}`} style={{ marginTop: 14 }} role="status">{dispatchFeedback}{dispatchFeedback.includes('Agendados') && <> <Link href="/painel/agendados">Abrir agendados</Link></>}</div>}
         </section>
