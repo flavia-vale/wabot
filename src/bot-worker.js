@@ -164,6 +164,32 @@ let sessionRecoveryLastAt = 0
 let sessionRecoveryInFlight = false
 
 let heartbeatTimer = null
+let lastHeartbeatPersistAt = 0
+
+async function persistWorkerHeartbeat(state) {
+  // Heartbeat IPC tells the manager process that the worker process is alive,
+  // but the dashboard reads WaSession from the DB. Persist a lightweight,
+  // throttled heartbeat so the panel cannot keep showing "connected" when
+  // the worker is alive but Baileys has no active socket.
+  const now = Date.now()
+  const intervalMs = Math.max(Number(process.env.WA_HEARTBEAT_DB_INTERVAL_MS || 60000), 15000)
+  if (now - lastHeartbeatPersistAt < intervalMs) return
+  lastHeartbeatPersistAt = now
+
+  const patch = { lastHeartbeatAt: new Date(), ownerInstance: OWNER_INSTANCE }
+  if (state === 'idle') {
+    patch.status = 'disconnected'
+    patch.lifecycle = 'disconnected'
+  } else if (state === 'connecting') {
+    patch.status = 'connecting'
+    patch.lifecycle = 'connecting'
+  }
+
+  await persistSessionPatch(patch).catch(err => {
+    logger.warn({ err: String(err?.message ?? err), state }, 'Falha ao persistir heartbeat da sessão WA')
+  })
+}
+
 async function persistSessionPatch(data = {}) {
   const fallbackData = {
     ...(data.status ? { status: data.status } : {}),
@@ -199,7 +225,9 @@ function startHeartbeatIpc() {
   if (heartbeatTimer) return
   const intervalMs = Math.max(Number(process.env.WA_HEARTBEAT_INTERVAL_MS || 15000), 5000)
   heartbeatTimer = setInterval(() => {
-    if (process.send) process.send({ type: 'heartbeat', ts: Date.now(), state: activeSock ? 'connected' : (pendingSock ? 'connecting' : 'idle') })
+    const state = activeSock ? 'connected' : (pendingSock ? 'connecting' : 'idle')
+    if (process.send) process.send({ type: 'heartbeat', ts: Date.now(), state })
+    void persistWorkerHeartbeat(state)
   }, intervalMs)
   heartbeatTimer.unref?.()
 }
