@@ -21,6 +21,7 @@ import { resolveMonitoredImage } from './monitoredImageResolver.js'
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
+import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { decryptCredential } from './credentialCrypto.js'
 import { createMessageQueue } from './messageQueue.js'
@@ -39,7 +40,7 @@ import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariati
 import { PRESERVATION_FEATURE, isPreservationFeatureEnabled, shouldRunChannelScheduler } from './core/preservationFeatures.js'
 import { mutate as mutateChannelImage } from './core/imageMutation.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
-import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
+import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
@@ -47,7 +48,7 @@ import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindo
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
 import { classifyError } from './errorTaxonomy.js'
-import { detectMessageKind, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
+import { detectMessageKind, extractIncomingText, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
 import { broadcastSourceGroup } from './offerQueue/sourceTag.js'
 import Redis from 'ioredis'
 import { parseEnumEnv, logModeSummary } from './core/envModes.js'
@@ -118,6 +119,10 @@ async function globalDedupCheckAndSet(key, ttlMs) {
     return { duplicate: ok !== 'OK' }
   } catch (err) {
     if (REDIS_DEDUP_FAIL_MODE === 'closed') throw new Error(`Global dedup unavailable: ${err.message}`)
+    // Gatilho de escala observável (WABOT-010): em fail-open a dedup global
+    // pode deixar passar um envio duplicado (risco de ban). Contar as
+    // ocorrências torna mensurável a decisão de REDIS_DEDUP_FAIL_MODE=closed.
+    recordOperationalSignal('dedup_fail_open', { userId })
     logger.warn({ err: err?.message }, 'Global dedup falhou (fail-open)')
     return { duplicate: false }
   }
@@ -159,6 +164,32 @@ let sessionRecoveryLastAt = 0
 let sessionRecoveryInFlight = false
 
 let heartbeatTimer = null
+let lastHeartbeatPersistAt = 0
+
+async function persistWorkerHeartbeat(state) {
+  // Heartbeat IPC tells the manager process that the worker process is alive,
+  // but the dashboard reads WaSession from the DB. Persist a lightweight,
+  // throttled heartbeat so the panel cannot keep showing "connected" when
+  // the worker is alive but Baileys has no active socket.
+  const now = Date.now()
+  const intervalMs = Math.max(Number(process.env.WA_HEARTBEAT_DB_INTERVAL_MS || 60000), 15000)
+  if (now - lastHeartbeatPersistAt < intervalMs) return
+  lastHeartbeatPersistAt = now
+
+  const patch = { lastHeartbeatAt: new Date(), ownerInstance: OWNER_INSTANCE }
+  if (state === 'idle') {
+    patch.status = 'disconnected'
+    patch.lifecycle = 'disconnected'
+  } else if (state === 'connecting') {
+    patch.status = 'connecting'
+    patch.lifecycle = 'connecting'
+  }
+
+  await persistSessionPatch(patch).catch(err => {
+    logger.warn({ err: String(err?.message ?? err), state }, 'Falha ao persistir heartbeat da sessão WA')
+  })
+}
+
 async function persistSessionPatch(data = {}) {
   const fallbackData = {
     ...(data.status ? { status: data.status } : {}),
@@ -194,7 +225,9 @@ function startHeartbeatIpc() {
   if (heartbeatTimer) return
   const intervalMs = Math.max(Number(process.env.WA_HEARTBEAT_INTERVAL_MS || 15000), 5000)
   heartbeatTimer = setInterval(() => {
-    if (process.send) process.send({ type: 'heartbeat', ts: Date.now(), state: activeSock ? 'connected' : (pendingSock ? 'connecting' : 'idle') })
+    const state = activeSock ? 'connected' : (pendingSock ? 'connecting' : 'idle')
+    if (process.send) process.send({ type: 'heartbeat', ts: Date.now(), state })
+    void persistWorkerHeartbeat(state)
   }, intervalMs)
   heartbeatTimer.unref?.()
 }
@@ -852,6 +885,23 @@ async function buildPayloadFromRecipe(recipe) {
   })
 }
 
+// Fase 0 (spike) — validação em staging do botão nativo "Ver canal" do canal do
+// PRÓPRIO usuário. Lê a config do canal a injetar a partir de env vars; quando
+// CHANNEL_FORWARD_SPIKE_JID está ausente, retorna null e o relay segue o
+// comportamento histórico (no-op em produção). Removido/substituído pela feature
+// definitiva (BotConfig.channelForward*) após a validação. Ver
+// docs/whatsapp-channels-ver-canal-spike.md.
+function getChannelForwardSpikeConfig() {
+  const newsletterJid = String(process.env.CHANNEL_FORWARD_SPIKE_JID ?? '').trim()
+  if (!newsletterJid) return null
+  const rawServerMsgId = String(process.env.CHANNEL_FORWARD_SPIKE_SERVER_MSG_ID ?? '').trim()
+  return {
+    newsletterJid,
+    newsletterName: String(process.env.CHANNEL_FORWARD_SPIKE_NAME ?? '').trim(),
+    serverMessageId: rawServerMsgId ? Number(rawServerMsgId) : null,
+  }
+}
+
 async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
   if (payload && payload._route === 'relay' && payload.relay?.type && payload.relay?.proto) {
     await withSendTimeout(
@@ -1435,11 +1485,13 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         return
       }
 
-      const text =
-        msg.message?.conversation ||
-        msg.message?.extendedTextMessage?.text ||
-        msg.message?.imageMessage?.caption ||
-        msg.message?.videoMessage?.caption || ''
+      // Desembrulha wrappers (ephemeralMessage/viewOnceMessage/etc.) ANTES de
+      // ler a legenda. Sem isso, imagem com legenda em grupo com mensagens
+      // temporárias chega com `msg.message.imageMessage` undefined, o texto vem
+      // vazio, nenhum link é detectado e a política LINK_ONLY ignora como
+      // `nolink`. Fallback para o raw cobre conteúdo não-embrulhado.
+      const innerMessage = extractMessageContent(msg.message)
+      const text = extractIncomingText(innerMessage) || extractIncomingText(msg.message)
 
       if (text && text.length > MAX_INCOMING_MESSAGE_CHARS) {
         logger.warn({ msgId: msg.key.id, chars: text.length, limit: MAX_INCOMING_MESSAGE_CHARS }, 'Mensagem grande demais — processamento ignorado para preservar latência')
@@ -1462,7 +1514,6 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       if (text && !sanitizedText) return
 
       const links = detectLinks(sanitizedText)
-      const innerMessage = extractMessageContent(msg.message)
       const messageKind = detectMessageKind(innerMessage, sanitizedText)
       const policy = normalizeForwardingPolicy(monitorGroup)
       const canForwardCurrentMessage = shouldForwardMessage({
@@ -1830,10 +1881,19 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // passar pelo Redis. Ver enqueueSendJob() para a explicação completa.
         const buildPayload = async () => {
           if (shouldUseRelayPath({ destJid, hasOriginal: !!original })) {
-            const replayProto = { ...original.proto }
-            if (original.type === 'imageMessage' || original.type === 'videoMessage') {
-              replayProto.caption = variantText
-            }
+            const hasCaption = original.type === 'imageMessage' || original.type === 'videoMessage'
+            // Fase 1 (sempre): higieniza o contextInfo herdado da ORIGEM —
+            // remove o forwardedNewsletterMessageInfo (botão "Ver canal" de
+            // terceiros) e externalAdReply. Antes a cópia rasa repassava esses
+            // campos e o WhatsApp renderizava o botão apontando pro canal de
+            // quem postou. Fase 3 (spike/config): quando
+            // CHANNEL_FORWARD_SPIKE_JID está setada, injeta o canal do PRÓPRIO
+            // usuário no lugar. forwardNewsletter=null → apenas limpa.
+            const spike = getChannelForwardSpikeConfig()
+            const replayProto = buildRelayProto(original.proto, {
+              caption: hasCaption ? variantText : undefined,
+              forwardNewsletter: spike,
+            })
             return {
               _route: 'relay',
               relay: {
@@ -1907,6 +1967,46 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 
     for (const msg of messages) {
       rememberChannelJid(msg?.key?.remoteJid)
+      // DEBUG temporário (gated por DEBUG_INCOMING_UPSERT) — investigação do
+      // sumiço de mensagens com botão "Ver canal" (forwardedNewsletterMessageInfo)
+      // que não viram linha no painel. Loga, ANTES de qualquer continue, qual
+      // filtro descartaria a mensagem e se ela carrega info de newsletter.
+      if (process.env.DEBUG_INCOMING_UPSERT) {
+        try {
+          const dbgTsRaw = Number(msg.messageTimestamp ?? 0)
+          const dbgTs = Number.isFinite(dbgTsRaw) && dbgTsRaw > 0 ? dbgTsRaw * 1000 : null
+          const ageMs = dbgTs ? Date.now() - dbgTs : null
+          const inner = extractMessageContent(msg.message) || msg.message || {}
+          const hasNewsletter = (() => {
+            const scan = (v, d = 0) => {
+              if (!v || typeof v !== 'object' || d > 6) return false
+              if (v.forwardedNewsletterMessageInfo) return true
+              for (const child of Object.values(v)) {
+                if (child && typeof child === 'object' && scan(child, d + 1)) return true
+              }
+              return false
+            }
+            return scan(msg.message)
+          })()
+          let wouldDrop = null
+          if (msg.key.fromMe) wouldDrop = 'fromMe'
+          else if (dbgTs && dbgTs < cutoff) wouldDrop = `cutoff_5min(age=${ageMs}ms)`
+          logger.info({
+            jid: msg.key.remoteJid,
+            msgId: msg.key.id,
+            fromMe: Boolean(msg.key.fromMe),
+            msgTsRaw: dbgTsRaw,
+            ageMs,
+            cutoffWindowMs: 5 * 60_000,
+            topKeys: Object.keys(msg.message || {}),
+            innerKeys: Object.keys(inner || {}),
+            hasNewsletter,
+            wouldDrop,
+          }, 'DEBUG_INCOMING_UPSERT')
+        } catch (dbgErr) {
+          logger.warn({ err: dbgErr?.message }, 'DEBUG_INCOMING_UPSERT falhou')
+        }
+      }
       if (msg.key.fromMe) continue
       // Marca atividade do JID — usado pelo monitorSilenceWatchdog pra
       // diferenciar "monitor parado por falha de decrypt" de "monitor

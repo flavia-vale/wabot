@@ -5,6 +5,7 @@ import {
   stripChannelUnsafeFields,
   isChannelDestination,
   isChannelForbiddenError,
+  buildRelayProto,
 } from '../../src/core/channelSend.js'
 
 test('isChannelDestination', async (t) => {
@@ -84,6 +85,106 @@ test('stripChannelUnsafeFields', async (t) => {
     const input = { text: 'oi', quoted: { x: 1 } }
     stripChannelUnsafeFields(input)
     assert.deepEqual(input.quoted, { x: 1 }, 'input original não deve ser mutado')
+  })
+})
+
+test('buildRelayProto', async (t) => {
+  await t.test('null/undefined passa adiante', () => {
+    assert.equal(buildRelayProto(null), null)
+    assert.equal(buildRelayProto(undefined), undefined)
+  })
+
+  await t.test('troca o caption e não muta o proto original', () => {
+    const proto = { url: 'https://x', mediaKey: Buffer.from('k'), caption: 'antigo' }
+    const result = buildRelayProto(proto, { caption: 'novo' })
+    assert.equal(result.caption, 'novo')
+    assert.equal(result.url, 'https://x')
+    assert.ok(Buffer.isBuffer(result.mediaKey))
+    assert.equal(proto.caption, 'antigo', 'input não deve ser mutado')
+    assert.notEqual(result, proto)
+  })
+
+  await t.test('caption ausente preserva o caption original', () => {
+    const proto = { caption: 'mantém' }
+    const result = buildRelayProto(proto, {})
+    assert.equal(result.caption, 'mantém')
+  })
+
+  await t.test('remove o botão "Ver canal" de terceiros (forwardedNewsletterMessageInfo)', () => {
+    const proto = {
+      url: 'https://x',
+      contextInfo: {
+        forwardedNewsletterMessageInfo: { newsletterJid: 'origem@newsletter', serverMessageId: 99 },
+      },
+    }
+    const result = buildRelayProto(proto, { caption: 'oferta' })
+    assert.equal(result.contextInfo, undefined, 'contextInfo só tinha newsletter → some inteiro')
+  })
+
+  await t.test('preserva o marcador genérico isForwarded ao remover só o botão de canal', () => {
+    const proto = {
+      contextInfo: {
+        forwardedNewsletterMessageInfo: { newsletterJid: 'origem@newsletter' },
+        isForwarded: true,
+      },
+    }
+    const result = buildRelayProto(proto, {})
+    assert.deepEqual(result.contextInfo, { isForwarded: true })
+  })
+
+  await t.test('remove externalAdReply herdado (drop silencioso no WhatsApp)', () => {
+    const proto = { contextInfo: { externalAdReply: { title: 'spam' } } }
+    const result = buildRelayProto(proto, {})
+    assert.equal(result.contextInfo, undefined)
+  })
+
+  await t.test('preserva outros campos de contextInfo ao limpar o newsletter', () => {
+    const proto = {
+      contextInfo: {
+        forwardedNewsletterMessageInfo: { newsletterJid: 'origem@newsletter' },
+        mentionedJid: ['abc@s.whatsapp.net'],
+      },
+    }
+    const result = buildRelayProto(proto, {})
+    assert.deepEqual(result.contextInfo, { mentionedJid: ['abc@s.whatsapp.net'] })
+  })
+
+  await t.test('injeta o canal do próprio usuário substituindo o de terceiros', () => {
+    const proto = {
+      contextInfo: {
+        forwardedNewsletterMessageInfo: { newsletterJid: 'origem@newsletter', serverMessageId: 5 },
+      },
+    }
+    const result = buildRelayProto(proto, {
+      caption: 'oferta',
+      forwardNewsletter: { newsletterJid: 'meu@newsletter', newsletterName: 'Meu Canal', serverMessageId: 42 },
+    })
+    assert.deepEqual(result.contextInfo.forwardedNewsletterMessageInfo, {
+      newsletterJid: 'meu@newsletter',
+      newsletterName: 'Meu Canal',
+      serverMessageId: 42,
+    })
+    assert.equal(result.contextInfo.isForwarded, true)
+  })
+
+  await t.test('injeção sem serverMessageId omite o campo', () => {
+    const result = buildRelayProto({}, {
+      forwardNewsletter: { newsletterJid: 'meu@newsletter', newsletterName: 'Meu Canal' },
+    })
+    assert.equal(result.contextInfo.forwardedNewsletterMessageInfo.serverMessageId, undefined)
+    assert.equal(result.contextInfo.forwardedNewsletterMessageInfo.newsletterJid, 'meu@newsletter')
+  })
+
+  await t.test('forwardNewsletter sem newsletterJid não injeta (apenas limpa)', () => {
+    const proto = { contextInfo: { forwardedNewsletterMessageInfo: { newsletterJid: 'origem@newsletter' } } }
+    const result = buildRelayProto(proto, { forwardNewsletter: { newsletterName: 'sem jid' } })
+    assert.equal(result.contextInfo, undefined)
+  })
+
+  await t.test('não muta o contextInfo do input', () => {
+    const proto = { contextInfo: { forwardedNewsletterMessageInfo: { newsletterJid: 'origem@newsletter' } } }
+    buildRelayProto(proto, {})
+    assert.deepEqual(proto.contextInfo, { forwardedNewsletterMessageInfo: { newsletterJid: 'origem@newsletter' } }, 'input intacto')
   })
 })
 

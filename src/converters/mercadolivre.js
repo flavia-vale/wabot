@@ -495,7 +495,10 @@ export async function resolveToCleanProductUrl(url) {
         const u = new URL(target)
         if (/^\/social\//i.test(u.pathname) || /(?:^|\/)up\//i.test(u.pathname) || /^\/$/.test(u.pathname)) {
           const extracted = await tryExtractProductFromLanding(preCanonical)
+          // Se não conseguimos extrair um produto real de uma landing /social/ ou /up/,
+          // retornar null é melhor que encaminhar o link da vitrine de terceiro.
           if (extracted) target = extracted
+          else return null
         }
       }
     }

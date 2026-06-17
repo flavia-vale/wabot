@@ -53,6 +53,9 @@ export const ANALYTICS_EVENTS = new Set([
   'cs_retained_30d',
   'login_failed',
   'login_blocked',
+  // Sinais operacionais (auditoria/WABOT-010): gatilhos de escala observáveis.
+  'ops_sqlite_busy',
+  'ops_dedup_fail_open',
 ])
 
 const SENSITIVE_KEY_PATTERN = /(token|secret|password|cookie|credential|csrf|ssid|key|message|text|url|phone|email)/i

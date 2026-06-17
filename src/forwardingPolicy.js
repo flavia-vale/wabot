@@ -45,6 +45,25 @@ export function shouldForwardMessage({ hasLinks, messageKind, policy }) {
   return false
 }
 
+// Extrai o texto/legenda da mensagem JÁ DESEMBRULHADA (via extractMessageContent
+// do Baileys). Crítico: ler a legenda direto de `msg.message` falha quando a
+// mensagem chega embrulhada (ephemeralMessage/viewOnceMessage/etc., comuns em
+// grupos com mensagens temporárias) — `imageMessage.caption` fica inacessível,
+// o texto vem vazio, nenhum link é detectado e a política LINK_ONLY ignora a
+// oferta como `nolink`. Por isso recebe o conteúdo já desembrulhado.
+export function extractIncomingText(innerMessage) {
+  if (!innerMessage || typeof innerMessage !== 'object') return ''
+  return (
+    innerMessage.conversation ||
+    innerMessage.extendedTextMessage?.text ||
+    innerMessage.imageMessage?.caption ||
+    innerMessage.videoMessage?.caption ||
+    innerMessage.documentMessage?.caption ||
+    innerMessage.documentWithCaptionMessage?.message?.documentMessage?.caption ||
+    ''
+  )
+}
+
 export function detectMessageKind(innerMessage, text) {
   if (innerMessage?.extendedTextMessage?.text?.trim()) return 'text'
   if (innerMessage?.editedMessage?.message?.extendedTextMessage?.text?.trim()) return 'text'

@@ -1,3 +1,5 @@
+import { getOperationalSignalsSnapshot } from '../observability/operationalSignals.js'
+
 const startedAt = new Date()
 const MAX_RECENT_ERRORS = 50
 const MAX_ROUTE_METRICS = Math.max(50, Number(process.env.MAX_ROUTE_METRICS || 1000))
@@ -110,6 +112,7 @@ export function getApiMetricsSnapshot() {
     p95RouteAvgMs: percentile(avgValues, 95),
     routes: routes.sort((a, b) => b.count - a.count).slice(0, 30),
     recentErrors: recentErrors.slice(0, 20),
+    operationalSignals: getOperationalSignalsSnapshot(),
   }
 }
 
@@ -174,6 +177,28 @@ export function renderPrometheusMetrics(extra = {}) {
     '# TYPE wabot_supervisor_session_quarantine_total gauge',
     `wabot_supervisor_session_quarantine_total ${Number.isFinite(sessionQuarantineTotal) ? sessionQuarantineTotal : 0}`,
   )
+
+  // Sinais operacionais dos gatilhos de escala (auditoria/WABOT-010). Contadores
+  // in-process: SQLITE_BUSY é por-processo da API; dedup fail-open vem do worker
+  // e some aqui — para histórico cross-processo, ver os AnalyticsEvent
+  // `ops_sqlite_busy` / `ops_dedup_fail_open`.
+  const opsSignals = Object.entries(getOperationalSignalsSnapshot())
+  if (opsSignals.length) {
+    lines.push(
+      '# HELP wabot_ops_signal_total Total operational-signal occurrences since boot',
+      '# TYPE wabot_ops_signal_total counter',
+    )
+    for (const [name, stats] of opsSignals) {
+      lines.push(`wabot_ops_signal_total{signal="${escLabel(name)}"} ${Number(stats.total) || 0}`)
+    }
+    lines.push(
+      '# HELP wabot_ops_signal_24h Operational-signal occurrences in the last 24h',
+      '# TYPE wabot_ops_signal_24h gauge',
+    )
+    for (const [name, stats] of opsSignals) {
+      lines.push(`wabot_ops_signal_24h{signal="${escLabel(name)}"} ${Number(stats.last24h) || 0}`)
+    }
+  }
 
   return `${lines.join('\n')}\n`
 }

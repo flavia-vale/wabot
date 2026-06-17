@@ -56,6 +56,7 @@ model User {
   affiliateRef          AffiliateProfile? @relation("AffiliateUser", fields: [affiliateProfileId], references: [id])
   referredCommissions   AffiliateCommission[] @relation("ReferredUserCommissions")
   paidCommissions       AffiliateCommission[] @relation("PaidCommissions")
+  subscriptions         Subscription[]
 
   @@index([status, plan, accessExpiresAt])
   @@index([lastActivityAt])
@@ -147,6 +148,21 @@ model Payment {
   @@index([gatewayEventId])
 }
 
+
+model Subscription {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mpSubscriptionId String?   @unique
+  plan             String
+  status           String    @default("pending")
+  nextChargeAt     DateTime?
+  cancelledAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([userId, status])
+}
 
 model PaymentWebhookDlq {
   id             String   @id @default(cuid())

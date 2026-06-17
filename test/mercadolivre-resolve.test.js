@@ -41,6 +41,32 @@ test('convert mantém short_url quando validação é inconclusiva (muro anti-bo
   assert.equal(result, 'https://mercadolivre.com/sec/2Abcd')
 })
 
+test('resolveToCleanProductUrl retorna null para /social/ sem produto extraível (sem ?ref=)', async (t) => {
+  // Sem ?ref= a página é o perfil genérico do afiliado — sem produto identificável.
+  // O mock simula resposta HTML vazia (sem recommended_items, wid, canonical MLB).
+  t.mock.method(axios, 'get', async () => ({ data: '<html><body>Perfil do vendedor</body></html>' }))
+  const url = 'https://www.mercadolivre.com.br/social/xetdaspromocoes?partner_id=475630078'
+  const clean = await resolveToCleanProductUrl(url)
+  assert.equal(clean, null)
+})
+
+test('convert retorna null para /social/ sem produto extraível (não encaminha loja de terceiro)', async (t) => {
+  t.mock.method(axios, 'get', async () => ({ data: '<html><body>Perfil do vendedor</body></html>' }))
+  const url = 'https://www.mercadolivre.com.br/social/xetdaspromocoes?partner_id=475630078'
+  const result = await convert(url, { tag: 'meutag', ssid: 'ssid-valido' })
+  assert.equal(result, null)
+})
+
+test('resolveToCleanProductUrl extrai produto de /social/?ref= quando o HTML tem recommended_items', async (t) => {
+  const html = `<html><body>
+    {"recommended_items":[{"id":"MLB1234567","product_id":"MLB9876543"}]}
+  </body></html>`
+  t.mock.method(axios, 'get', async () => ({ data: html }))
+  const url = 'https://www.mercadolivre.com.br/social/xetdaspromocoes?partner_id=475630078&ref=abc123'
+  const clean = await resolveToCleanProductUrl(url)
+  assert.equal(clean, 'https://www.mercadolivre.com.br/p/MLB9876543')
+})
+
 test('convert descarta short_url quando validação comprova MLB diferente', async (t) => {
   t.mock.method(axios, 'post', async () => ({
     status: 200,
