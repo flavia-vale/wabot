@@ -1976,10 +1976,29 @@ app.get('/sessions', async (req, reply) => {
   // (REDIS_URL configurada). Em backend memory a DLQ é sempre vazia.
   // Auditoria registra todas as ações destrutivas (retry/discard/purge).
 
+  // Valida o :userId das rotas de DLQ antes de derivar nomes de fila Redis
+  // (`wabot-send-${userId}-dlq`) a partir dele. Mesmo sendo rota admin, o
+  // valor não pode ser usado cru: rejeita vazio/malformado (400) e confirma
+  // que o usuário existe (404), evitando construir chaves Redis arbitrárias.
+  async function resolveDlqUserId(req, reply) {
+    const userId = String(req.params.userId ?? '').trim()
+    if (!userId || userId.length > 128 || /[\s:]/.test(userId)) {
+      reply.code(400).send({ error: 'userId inválido' })
+      return null
+    }
+    const user = await db.user.findUnique({ where: { id: userId }, select: { id: true } })
+    if (!user) {
+      reply.code(404).send({ error: 'Usuário não encontrado' })
+      return null
+    }
+    return userId
+  }
+
   app.get('/send-dlq/:userId', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'admin:read'))) return
+    const userId = await resolveDlqUserId(req, reply)
+    if (!userId) return
     const { listDlq } = await import('../../jobs/sendDlq.js')
-    const userId = String(req.params.userId)
     const limit = Math.min(500, Math.max(1, Number(req.query?.limit) || 100))
     try {
       const result = await listDlq({ redisUrl: process.env.REDIS_URL, userId, limit })
@@ -1992,8 +2011,9 @@ app.get('/sessions', async (req, reply) => {
 
   app.post('/send-dlq/:userId/retry/:jobId', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'admin:write'))) return
+    const userId = await resolveDlqUserId(req, reply)
+    if (!userId) return
     const { retryDlqJob } = await import('../../jobs/sendDlq.js')
-    const userId = String(req.params.userId)
     const jobId = String(req.params.jobId)
     try {
       const result = await retryDlqJob({ redisUrl: process.env.REDIS_URL, userId, dlqJobId: jobId })
@@ -2006,8 +2026,9 @@ app.get('/sessions', async (req, reply) => {
 
   app.delete('/send-dlq/:userId/job/:jobId', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'admin:write'))) return
+    const userId = await resolveDlqUserId(req, reply)
+    if (!userId) return
     const { discardDlqJob } = await import('../../jobs/sendDlq.js')
-    const userId = String(req.params.userId)
     const jobId = String(req.params.jobId)
     try {
       const result = await discardDlqJob({ redisUrl: process.env.REDIS_URL, userId, dlqJobId: jobId })
@@ -2020,8 +2041,9 @@ app.get('/sessions', async (req, reply) => {
 
   app.post('/send-dlq/:userId/purge', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'admin:write'))) return
+    const userId = await resolveDlqUserId(req, reply)
+    if (!userId) return
     const { purgeDlq } = await import('../../jobs/sendDlq.js')
-    const userId = String(req.params.userId)
     try {
       const result = await purgeDlq({ redisUrl: process.env.REDIS_URL, userId })
       await writeAdminAuditLog(req, { action: 'admin.sendDlq.purge', resource: 'sendDlq', resourceId: userId, after: { removed: result.removed } })
