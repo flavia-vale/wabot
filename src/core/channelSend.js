@@ -32,6 +32,17 @@ export function stripChannelUnsafeFields(payload) {
   return rest
 }
 
+// Normaliza/valida o JID do canal do próprio usuário (botão "Ver canal").
+// Aceita o formato `<digitos>@newsletter`. Retorna:
+//   ''   → vazio (campo limpo, sem botão injetado)
+//   jid  → JID válido
+//   null → formato inválido (a rota deve responder 400)
+export function normalizeChannelForwardJid(value) {
+  const raw = String(value ?? '').trim()
+  if (!raw) return ''
+  return /^\d+@newsletter$/.test(raw) ? raw : null
+}
+
 // Reconstrói o proto de mídia usado em relayMessage (grupo→grupo) trocando o
 // caption e HIGIENIZANDO o contextInfo de newsletter herdado da ORIGEM — é ele
 // que renderiza o botão "Ver canal" apontando para o canal de outra pessoa.

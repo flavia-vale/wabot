@@ -6,6 +6,7 @@ import {
   isChannelDestination,
   isChannelForbiddenError,
   buildRelayProto,
+  normalizeChannelForwardJid,
 } from '../../src/core/channelSend.js'
 
 test('isChannelDestination', async (t) => {
@@ -185,6 +186,25 @@ test('buildRelayProto', async (t) => {
     const proto = { contextInfo: { forwardedNewsletterMessageInfo: { newsletterJid: 'origem@newsletter' } } }
     buildRelayProto(proto, {})
     assert.deepEqual(proto.contextInfo, { forwardedNewsletterMessageInfo: { newsletterJid: 'origem@newsletter' } }, 'input intacto')
+  })
+})
+
+test('normalizeChannelForwardJid', async (t) => {
+  await t.test('vazio/whitespace → string vazia (limpa o campo)', () => {
+    assert.equal(normalizeChannelForwardJid(''), '')
+    assert.equal(normalizeChannelForwardJid('   '), '')
+    assert.equal(normalizeChannelForwardJid(null), '')
+    assert.equal(normalizeChannelForwardJid(undefined), '')
+  })
+  await t.test('JID de newsletter válido passa', () => {
+    assert.equal(normalizeChannelForwardJid('120363425953507343@newsletter'), '120363425953507343@newsletter')
+    assert.equal(normalizeChannelForwardJid('  120363425953507343@newsletter  '), '120363425953507343@newsletter')
+  })
+  await t.test('formato inválido → null (rota deve 400)', () => {
+    assert.equal(normalizeChannelForwardJid('abc@newsletter'), null)
+    assert.equal(normalizeChannelForwardJid('120363425953507343@g.us'), null)
+    assert.equal(normalizeChannelForwardJid('120363425953507343'), null)
+    assert.equal(normalizeChannelForwardJid('https://wa.me/canal'), null)
   })
 })
 

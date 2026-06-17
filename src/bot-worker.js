@@ -40,7 +40,7 @@ import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariati
 import { PRESERVATION_FEATURE, isPreservationFeatureEnabled, shouldRunChannelScheduler } from './core/preservationFeatures.js'
 import { mutate as mutateChannelImage } from './core/imageMutation.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
-import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto } from './core/channelSend.js'
+import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, normalizeChannelForwardJid } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
@@ -420,10 +420,15 @@ async function loadConfig() {
     postToStatus: false,
     brandingGroupLink: '',
     brandingCtaText: DEFAULT_BRANDING_CTA_TEXT,
+    channelForwardJid: null,
+    channelForwardName: null,
     ...(user.botConfig ?? {}),
   }
   botConfig.brandingGroupLink = normalizeBrandingLink(botConfig.brandingGroupLink)
   botConfig.brandingCtaText = normalizeBrandingCtaText(botConfig.brandingCtaText)
+  // Só aceita JID de canal válido; formato inválido vira null (sem injeção).
+  botConfig.channelForwardJid = normalizeChannelForwardJid(botConfig.channelForwardJid) || null
+  botConfig.channelForwardName = String(botConfig.channelForwardName ?? '').trim() || null
 
   const preservation = await getAdvancedPreservationAccess(userId, { db })
   // Efetivo = plano permite (Pro/Trial) E o usuário ligou o flag mestre opt-in.
@@ -900,6 +905,18 @@ function getChannelForwardSpikeConfig() {
     newsletterName: String(process.env.CHANNEL_FORWARD_SPIKE_NAME ?? '').trim(),
     serverMessageId: rawServerMsgId ? Number(rawServerMsgId) : null,
   }
+}
+
+// Resolve qual canal injetar no botão "Ver canal" das mensagens espelhadas
+// (Fase 3): primeiro a config do usuário (BotConfig.channelForward*), depois a
+// env de spike (CHANNEL_FORWARD_SPIKE_*) como fallback de teste. null = não
+// injeta (o relay só limpa o botão de terceiros).
+function resolveChannelForward(botConfig) {
+  const jid = normalizeChannelForwardJid(botConfig?.channelForwardJid)
+  if (jid) {
+    return { newsletterJid: jid, newsletterName: String(botConfig?.channelForwardName ?? '').trim(), serverMessageId: null }
+  }
+  return getChannelForwardSpikeConfig()
 }
 
 async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
@@ -1882,23 +1899,19 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const buildPayload = async () => {
           if (shouldUseRelayPath({ destJid, hasOriginal: !!original })) {
             const hasCaption = original.type === 'imageMessage' || original.type === 'videoMessage'
-            // Fase 0 (spike): quando a env CHANNEL_FORWARD_SPIKE_JID está setada,
-            // higieniza o contextInfo herdado da origem (remove o botão "Ver
-            // canal" de terceiros) e injeta o canal do próprio usuário. Sem a
-            // env, mantém o caminho histórico byte-a-byte (shallow copy + caption).
-            const spike = getChannelForwardSpikeConfig()
-            let replayProto
-            if (spike) {
-              replayProto = buildRelayProto(original.proto, {
-                caption: hasCaption ? variantText : undefined,
-                forwardNewsletter: spike,
-              })
-            } else {
-              replayProto = { ...original.proto }
-              if (hasCaption) {
-                replayProto.caption = variantText
-              }
-            }
+            // Fase 1 (sempre): higieniza o contextInfo herdado da ORIGEM —
+            // remove o forwardedNewsletterMessageInfo (botão "Ver canal" de
+            // terceiros) e externalAdReply. Antes a cópia rasa repassava esses
+            // campos e o WhatsApp renderizava o botão apontando pro canal de
+            // quem postou. Fase 3 (spike/config): quando
+            // a config do usuário (BotConfig.channelForward*) ou a env de spike
+            // estão setadas, injeta o canal do PRÓPRIO usuário no lugar.
+            // forwardNewsletter=null → apenas limpa.
+            const forwardNewsletter = resolveChannelForward(cfg.botConfig)
+            const replayProto = buildRelayProto(original.proto, {
+              caption: hasCaption ? variantText : undefined,
+              forwardNewsletter,
+            })
             return {
               _route: 'relay',
               relay: {
