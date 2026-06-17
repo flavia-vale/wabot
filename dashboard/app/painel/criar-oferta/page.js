@@ -64,6 +64,12 @@ function normalizeLink(raw, fallback = '') {
   return typeof fallback === 'string' ? fallback : ''
 }
 
+function extractFirstUrl(raw) {
+  const text = String(raw || '').trim()
+  const match = text.match(/https?:\/\/[^\s<>()"']+/i)
+  return match ? match[0].replace(/[.,;:!?]+$/, '') : text
+}
+
 export default function CriarOfertaPage() {
   usePainelHeader({ title: 'Criar oferta', subtitle: 'Cole o seu link de afiliado — o bot monta a oferta pronta' })
 
@@ -74,9 +80,11 @@ export default function CriarOfertaPage() {
   const [templates, setTemplates] = useState(() => loadAllTemplates())
   const [templateKey, setTemplateKey] = useState(() => readSavedTemplateKey())
   const [loading, setLoading] = useState(false)
+  const [pasting, setPasting] = useState(false)
   const [error, setError] = useState('')
   const [conversionStatus, setConversionStatus] = useState(null)
   const [copyFeedback, setCopyFeedback] = useState('')
+  const [pasteFeedback, setPasteFeedback] = useState('')
   const [groups, setGroups] = useState([])
   const [selectedJids, setSelectedJids] = useState([])
   const [queues, setQueues] = useState([])
@@ -133,8 +141,41 @@ export default function CriarOfertaPage() {
     setCustomText(null)
   }
 
+  async function pasteFromClipboard() {
+    setError('')
+    setPasteFeedback('')
+
+    if (!navigator?.clipboard?.readText) {
+      setError('Seu navegador não permite colar automaticamente. Use Ctrl+V no campo do link.')
+      return
+    }
+
+    setPasting(true)
+    try {
+      const clipboardText = await navigator.clipboard.readText()
+      const nextLink = extractFirstUrl(clipboardText)
+      if (!nextLink) {
+        setError('Sua área de transferência está vazia.')
+        return
+      }
+
+      setLink(nextLink)
+      setGenerated(null)
+      setConversionStatus(null)
+      setCustomText(null)
+      setCopyFeedback('')
+      setDispatchFeedback('')
+      setPasteFeedback('Link colado. Agora clique em Gerar.')
+    } catch {
+      setError('Não foi possível acessar sua área de transferência. Use Ctrl+V no campo do link.')
+    } finally {
+      setPasting(false)
+    }
+  }
+
   async function runScrape() {
     setError('')
+    setPasteFeedback('')
     setConversionStatus(null)
     const trimmed = link.trim()
     if (!trimmed) { setError('Cole seu link para gerar a oferta.'); return }
@@ -176,6 +217,7 @@ export default function CriarOfertaPage() {
     setGenerated(null)
     setConversionStatus(null)
     setCopyFeedback('')
+    setPasteFeedback('')
     setScheduleAt('')
     setCustomText(null)
   }
@@ -223,12 +265,15 @@ export default function CriarOfertaPage() {
             className="pnl-input"
             style={{ flex: 1, minWidth: 180, fontFamily: "var(--font-jetbrains-mono), ui-monospace, monospace", fontSize: 13 }}
             value={link}
-            onChange={(e) => setLink(e.target.value)}
+            onChange={(e) => { setLink(e.target.value); setPasteFeedback('') }}
             placeholder="https://..."
             onKeyDown={(e) => { if (e.key === 'Enter') runScrape() }}
           />
+          <button type="button" className="pnl-btn" onClick={pasteFromClipboard} disabled={pasting || loading} style={{ justifyContent: 'center' }}>
+            {pasting ? 'Colando…' : 'Colar'}
+          </button>
           <button type="button" className="pnl-btn is-primary" onClick={runScrape} disabled={loading} style={{ justifyContent: 'center' }}>
-            {loading ? 'Gerando…' : 'Gerar oferta'}
+            {loading ? 'Gerando…' : 'Gerar'}
           </button>
         </div>
         <div style={{ padding: '11px 20px', display: 'flex', alignItems: 'center', gap: 14, fontSize: 12.5, color: 'var(--ink-soft)', flexWrap: 'wrap' }}>
@@ -253,6 +298,7 @@ export default function CriarOfertaPage() {
 
       {conv && <div className={`pnl-note-box ${conv.tone === 'success' ? 'is-success' : 'is-error'}`} role="status"><strong style={{ fontWeight: 600 }}>{conv.title}</strong>{conv.hint && <p style={{ marginTop: 4 }}>{conv.hint}</p>}</div>}
       {error && <div className="pnl-note-box is-error" role="alert">{error}</div>}
+      {pasteFeedback && <div className="pnl-note-box is-success" role="status">{pasteFeedback}</div>}
 
       {/* Prévia editável: substitui o antigo card "Produto encontrado" — o
           usuário ajusta título/preços direto no texto da mensagem. */}
