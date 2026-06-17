@@ -43,8 +43,6 @@ export default function ConfiguracoesPage() {
           postToStatus: cfg.postToStatus ?? false,
           brandingGroupLink: cfg.brandingGroupLink ?? '',
           brandingCtaText: cfg.brandingCtaText ?? DEFAULT_BRANDING_CTA_TEXT,
-          channelForwardJid: cfg.channelForwardJid ?? '',
-          channelForwardName: cfg.channelForwardName ?? '',
         })
       })
       .catch((err) => { if (active) setLoadError(err?.message || 'Não foi possível carregar as configurações.') })
@@ -71,11 +69,6 @@ export default function ConfiguracoesPage() {
 
     const brandingGroupLink = String(form.brandingGroupLink).trim()
     const brandingCtaText = String(form.brandingCtaText).trim() || DEFAULT_BRANDING_CTA_TEXT
-    const channelForwardJid = String(form.channelForwardJid).trim()
-    if (channelForwardJid && !/^\d+@newsletter$/.test(channelForwardJid)) {
-      return setFeedback({ type: 'error', message: 'JID do canal inválido. Use o formato 1203...@newsletter.' })
-    }
-    const channelForwardName = String(form.channelForwardName).trim()
 
     setSaving(true)
     try {
@@ -89,8 +82,6 @@ export default function ConfiguracoesPage() {
         postToStatus: form.postToStatus,
         brandingGroupLink,
         brandingCtaText,
-        channelForwardJid,
-        channelForwardName,
       })
       setFeedback({ type: 'success', message: 'Configurações salvas com sucesso.' })
     } catch (err) {
@@ -148,42 +139,6 @@ export default function ConfiguracoesPage() {
 
         <button type="button" className="pnl-btn is-primary" style={{ marginTop: 16, width: '100%', justifyContent: 'center' }} onClick={save} disabled={saving}>
           {saving ? 'Salvando…' : 'Salvar cadência'}
-        </button>
-      </section>
-
-      {/* Seu canal do WhatsApp (botão "Ver canal" nas mensagens espelhadas) */}
-      <section className="pnl-card">
-        <div className="pnl-card-title">Seu canal do WhatsApp</div>
-        <p className="pnl-card-note" style={{ marginBottom: 14 }}>
-          Quando preenchido, as ofertas espelhadas para grupos exibem o botão <b>“Ver canal”</b> apontando para o seu canal — no lugar do canal de quem postou a oferta original. Deixe em branco para apenas remover o botão de terceiros.
-        </p>
-
-        <div className="pnl-field">
-          <label className="pnl-label" htmlFor="channelForwardJid">JID do canal</label>
-          <input
-            id="channelForwardJid"
-            className="pnl-input"
-            type="text"
-            placeholder="1203...@newsletter"
-            value={form.channelForwardJid}
-            onChange={(e) => patch({ channelForwardJid: e.target.value })}
-          />
-        </div>
-
-        <div className="pnl-field" style={{ marginTop: 12 }}>
-          <label className="pnl-label" htmlFor="channelForwardName">Nome exibido no botão</label>
-          <input
-            id="channelForwardName"
-            className="pnl-input"
-            type="text"
-            placeholder="Ex.: Meu Canal de Ofertas"
-            value={form.channelForwardName}
-            onChange={(e) => patch({ channelForwardName: e.target.value })}
-          />
-        </div>
-
-        <button type="button" className="pnl-btn is-primary" style={{ marginTop: 16, width: '100%', justifyContent: 'center' }} onClick={save} disabled={saving}>
-          {saving ? 'Salvando…' : 'Salvar canal'}
         </button>
       </section>
 
