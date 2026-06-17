@@ -566,6 +566,30 @@ sem setar nada o comportamento é idêntico ao histórico. A camada local de
 dedup (em disco, por worker) continua sendo a primeira linha e independe do
 Redis.
 
+## Sinais operacionais dos gatilhos de escala (`src/observability/operationalSignals.js`)
+
+Para que as decisões de escala (cutover SQLite->Postgres, `WABOT-010`; e ligar
+`REDIS_DEDUP_FAIL_MODE=closed`) sejam **objetivas e não subjetivas**, dois
+gatilhos são instrumentados como sinais operacionais:
+
+| Sinal             | Onde é registrado                                  | AnalyticsEvent durável  |
+|-------------------|----------------------------------------------------|-------------------------|
+| `sqlite_busy`     | middleware central em `src/db.js` (`prisma.$use`) ao pegar `SQLITE_BUSY`/`database is locked` | `ops_sqlite_busy`      |
+| `dedup_fail_open` | `bot-worker.js`, no caminho fail-open da dedup global | `ops_dedup_fail_open`   |
+
+- `operationalSignals.js` é um **módulo leaf** (não importa `db.js`/`analytics.js`
+  no topo) para `db.js` poder consumi-lo sem ciclo de import. A linha durável em
+  `AnalyticsEvent` sai via dynamic import lazy e **best-effort** (o contador
+  in-memory é a fonte confiável; em `SQLITE_BUSY`, a própria escrita do evento
+  pode falhar — e tudo bem).
+- Leitura: contadores in-process (total / últimas 1h / 24h) aparecem em
+  `getApiMetricsSnapshot()` (campo `operationalSignals`) e no `/metrics`
+  Prometheus (`wabot_ops_signal_total{signal=...}` e `wabot_ops_signal_24h{...}`).
+  Como `sqlite_busy` é por-processo da API e `dedup_fail_open` vem do worker
+  (some do snapshot da API), o **histórico cross-processo** vem dos
+  `AnalyticsEvent` no banco — base para o critério "SQLITE_BUSY/semana > 0" do
+  `WABOT-010`. Teste: `test/observability-operational-signals.test.js`.
+
 ## Pegadinhas conhecidas (lições aprendidas — leia antes de mexer)
 
 ### 1. PM2 cacheia env vars no momento do `pm2 start`

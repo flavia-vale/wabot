@@ -21,6 +21,7 @@ import { resolveMonitoredImage } from './monitoredImageResolver.js'
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
+import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { decryptCredential } from './credentialCrypto.js'
 import { createMessageQueue } from './messageQueue.js'
@@ -118,6 +119,10 @@ async function globalDedupCheckAndSet(key, ttlMs) {
     return { duplicate: ok !== 'OK' }
   } catch (err) {
     if (REDIS_DEDUP_FAIL_MODE === 'closed') throw new Error(`Global dedup unavailable: ${err.message}`)
+    // Gatilho de escala observável (WABOT-010): em fail-open a dedup global
+    // pode deixar passar um envio duplicado (risco de ban). Contar as
+    // ocorrências torna mensurável a decisão de REDIS_DEDUP_FAIL_MODE=closed.
+    recordOperationalSignal('dedup_fail_open', { userId })
     logger.warn({ err: err?.message }, 'Global dedup falhou (fail-open)')
     return { duplicate: false }
   }
