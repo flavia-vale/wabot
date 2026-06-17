@@ -1882,23 +1882,18 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const buildPayload = async () => {
           if (shouldUseRelayPath({ destJid, hasOriginal: !!original })) {
             const hasCaption = original.type === 'imageMessage' || original.type === 'videoMessage'
-            // Fase 0 (spike): quando a env CHANNEL_FORWARD_SPIKE_JID está setada,
-            // higieniza o contextInfo herdado da origem (remove o botão "Ver
-            // canal" de terceiros) e injeta o canal do próprio usuário. Sem a
-            // env, mantém o caminho histórico byte-a-byte (shallow copy + caption).
+            // Fase 1 (sempre): higieniza o contextInfo herdado da ORIGEM —
+            // remove o forwardedNewsletterMessageInfo (botão "Ver canal" de
+            // terceiros) e externalAdReply. Antes a cópia rasa repassava esses
+            // campos e o WhatsApp renderizava o botão apontando pro canal de
+            // quem postou. Fase 3 (spike/config): quando
+            // CHANNEL_FORWARD_SPIKE_JID está setada, injeta o canal do PRÓPRIO
+            // usuário no lugar. forwardNewsletter=null → apenas limpa.
             const spike = getChannelForwardSpikeConfig()
-            let replayProto
-            if (spike) {
-              replayProto = buildRelayProto(original.proto, {
-                caption: hasCaption ? variantText : undefined,
-                forwardNewsletter: spike,
-              })
-            } else {
-              replayProto = { ...original.proto }
-              if (hasCaption) {
-                replayProto.caption = variantText
-              }
-            }
+            const replayProto = buildRelayProto(original.proto, {
+              caption: hasCaption ? variantText : undefined,
+              forwardNewsletter: spike,
+            })
             return {
               _route: 'relay',
               relay: {
