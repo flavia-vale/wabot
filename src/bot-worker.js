@@ -1972,6 +1972,46 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 
     for (const msg of messages) {
       rememberChannelJid(msg?.key?.remoteJid)
+      // DEBUG temporário (gated por DEBUG_INCOMING_UPSERT) — investigação do
+      // sumiço de mensagens com botão "Ver canal" (forwardedNewsletterMessageInfo)
+      // que não viram linha no painel. Loga, ANTES de qualquer continue, qual
+      // filtro descartaria a mensagem e se ela carrega info de newsletter.
+      if (process.env.DEBUG_INCOMING_UPSERT) {
+        try {
+          const dbgTsRaw = Number(msg.messageTimestamp ?? 0)
+          const dbgTs = Number.isFinite(dbgTsRaw) && dbgTsRaw > 0 ? dbgTsRaw * 1000 : null
+          const ageMs = dbgTs ? Date.now() - dbgTs : null
+          const inner = extractMessageContent(msg.message) || msg.message || {}
+          const hasNewsletter = (() => {
+            const scan = (v, d = 0) => {
+              if (!v || typeof v !== 'object' || d > 6) return false
+              if (v.forwardedNewsletterMessageInfo) return true
+              for (const child of Object.values(v)) {
+                if (child && typeof child === 'object' && scan(child, d + 1)) return true
+              }
+              return false
+            }
+            return scan(msg.message)
+          })()
+          let wouldDrop = null
+          if (msg.key.fromMe) wouldDrop = 'fromMe'
+          else if (dbgTs && dbgTs < cutoff) wouldDrop = `cutoff_5min(age=${ageMs}ms)`
+          logger.info({
+            jid: msg.key.remoteJid,
+            msgId: msg.key.id,
+            fromMe: Boolean(msg.key.fromMe),
+            msgTsRaw: dbgTsRaw,
+            ageMs,
+            cutoffWindowMs: 5 * 60_000,
+            topKeys: Object.keys(msg.message || {}),
+            innerKeys: Object.keys(inner || {}),
+            hasNewsletter,
+            wouldDrop,
+          }, 'DEBUG_INCOMING_UPSERT')
+        } catch (dbgErr) {
+          logger.warn({ err: dbgErr?.message }, 'DEBUG_INCOMING_UPSERT falhou')
+        }
+      }
       if (msg.key.fromMe) continue
       // Marca atividade do JID — usado pelo monitorSilenceWatchdog pra
       // diferenciar "monitor parado por falha de decrypt" de "monitor
