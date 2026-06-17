@@ -73,7 +73,44 @@ export function createPaymentsService({ db, now = () => new Date() } = {}) {
     return { alreadyActivated: false, expiresAt }
   }
 
-  return { getBillingPlans, activatePaymentAccess, DEFAULT_PLANS }
+  async function activateSubscriptionAccess(tx, { userId, plan, mpPaymentId, amount }) {
+    return activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount })
+  }
+
+  async function upsertSubscription(tx, { userId, mpSubscriptionId, plan, status, nextChargeAt }) {
+    const nowDate = now()
+    const cancelledAt = status === 'cancelled' ? nowDate : undefined
+
+    const existing = await tx.subscription.findUnique({ where: { mpSubscriptionId: String(mpSubscriptionId) } })
+    if (existing) {
+      return tx.subscription.update({
+        where: { id: existing.id },
+        data: {
+          status,
+          plan,
+          nextChargeAt: nextChargeAt ?? null,
+          ...(cancelledAt !== undefined && { cancelledAt }),
+          updatedAt: nowDate,
+        },
+      })
+    }
+    return tx.subscription.create({
+      data: {
+        userId: String(userId),
+        mpSubscriptionId: String(mpSubscriptionId),
+        plan,
+        status,
+        nextChargeAt: nextChargeAt ?? null,
+        ...(cancelledAt !== undefined && { cancelledAt }),
+      },
+    })
+  }
+
+  async function findSubscriptionByMpId(mpSubscriptionId) {
+    return db.subscription.findUnique({ where: { mpSubscriptionId: String(mpSubscriptionId) } })
+  }
+
+  return { getBillingPlans, activatePaymentAccess, activateSubscriptionAccess, upsertSubscription, findSubscriptionByMpId, DEFAULT_PLANS }
 }
 
 export { DEFAULT_PLANS }

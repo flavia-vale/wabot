@@ -89,6 +89,14 @@ const { db } = appContainer
 const paymentsService = appContainer.services.payments
 const { getBillingPlans } = paymentsService
 
+export function shouldHandleSubscriptionPreapproval(summary = {}) {
+  return summary.type === 'subscription_preapproval' && Boolean(summary.dataResourceId)
+}
+
+export function shouldHandleSubscriptionAuthorizedPayment(summary = {}) {
+  return summary.type === 'subscription_authorized_payment' && Boolean(summary.dataResourceId)
+}
+
 export function shouldEnforceWebhookSignature({ isProduction = IS_PRODUCTION, secret = MP_WEBHOOK_SECRET } = {}) {
   return Boolean(secret) || isProduction
 }
@@ -214,8 +222,123 @@ async function fetchMercadoPagoPaymentSnapshot(paymentId) {
   }
 }
 
-// Creates a Mercado Pago Preference (supports PIX + card, one-time payment).
-// Returns the init_point URL to redirect the user to.
+async function fetchMercadoPagoSubscriptionSnapshot(preapprovalId) {
+  const accessToken = getMpAccessToken()
+  if (!accessToken) return { ok: false, reason: 'missing_access_token' }
+
+  try {
+    const response = await axios.get(`https://api.mercadopago.com/preapproval/${preapprovalId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      timeout: 8000,
+    })
+    return {
+      ok: true,
+      status: response.data?.status ?? null,
+      externalReference: response.data?.external_reference ?? null,
+      payerEmail: response.data?.payer_email ?? null,
+      nextChargeAt: response.data?.next_payment_date ?? response.data?.auto_recurring?.next_payment_date ?? null,
+      transactionAmount: response.data?.auto_recurring?.transaction_amount ?? null,
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      reason: 'provider_fetch_error',
+      httpStatus: err?.response?.status ?? null,
+      message: String(err?.message ?? 'unknown_error').slice(0, 500),
+    }
+  }
+}
+
+async function fetchMercadoPagoAuthorizedPaymentSnapshot(authorizedPaymentId) {
+  const accessToken = getMpAccessToken()
+  if (!accessToken) return { ok: false, reason: 'missing_access_token' }
+
+  try {
+    const response = await axios.get(`https://api.mercadopago.com/authorized_payments/${authorizedPaymentId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      timeout: 8000,
+    })
+    return {
+      ok: true,
+      status: response.data?.status ?? null,
+      preapprovalId: response.data?.preapproval_id ?? null,
+      transactionAmount: response.data?.transaction_amount ?? response.data?.payment?.transaction_amount ?? null,
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      reason: 'provider_fetch_error',
+      httpStatus: err?.response?.status ?? null,
+      message: String(err?.message ?? 'unknown_error').slice(0, 500),
+    }
+  }
+}
+
+async function createMercadoPagoSubscription({ userId, plan, payerEmail }) {
+  if (!payerEmail) {
+    const err = new Error('payer_email obrigatório para criar assinatura')
+    err.code = 'MISSING_PAYER_EMAIL'
+    throw err
+  }
+
+  const accessToken = getMpAccessToken()
+  if (!accessToken) {
+    const err = new Error('MP_ACCESS_TOKEN não configurado')
+    err.code = 'PAYMENT_PROVIDER_NOT_CONFIGURED'
+    throw err
+  }
+
+  const plans = await getBillingPlans()
+  const planInfo = plans[plan]
+  const normalizedPlan = {
+    title: String(planInfo?.title ?? '').trim() || DEFAULT_PLANS[plan]?.title,
+    price: Number(planInfo?.price),
+  }
+  if (!normalizedPlan.title || !Number.isFinite(normalizedPlan.price) || normalizedPlan.price <= 0) {
+    const err = new Error('Configuração de plano inválida para assinatura')
+    err.code = 'INVALID_PLAN_CONFIG'
+    throw err
+  }
+
+  const { dashboardUrl } = getCheckoutPublicOrigins()
+
+  try {
+    const response = await axios.post(
+      'https://api.mercadopago.com/preapproval',
+      {
+        reason: normalizedPlan.title,
+        external_reference: userId,
+        payer_email: payerEmail,
+        auto_recurring: {
+          frequency: 1,
+          frequency_type: 'months',
+          transaction_amount: normalizedPlan.price,
+          currency_id: 'BRL',
+        },
+        back_url: `${dashboardUrl}/painel/pagamento/sucesso`,
+        status: 'pending',
+      },
+      { headers: { Authorization: `Bearer ${accessToken}` }, timeout: 10000 }
+    )
+
+    return {
+      initPoint: response.data.init_point,
+      mpSubscriptionId: response.data.id,
+    }
+  } catch (err) {
+    const providerCause = err?.response?.data?.cause?.[0]?.description
+      || err?.response?.data?.message
+      || err?.response?.data?.error
+      || err?.message
+      || 'provider_error'
+    const wrapped = new Error(String(providerCause))
+    wrapped.code = 'SUBSCRIPTION_PROVIDER_ERROR'
+    wrapped.providerStatus = err?.response?.status
+    wrapped.providerPayload = err?.response?.data || null
+    throw wrapped
+  }
+}
+
 async function createMercadoPagoPreference({ userId, plan }) {
   const accessToken = getMpAccessToken()
   if (!accessToken) {
@@ -360,11 +483,10 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
       if (shouldReconcilePayment(summary)) {
         reconciliation = await fetchMercadoPagoPaymentSnapshot(summary.dataResourceId)
 
-        // Auto-activate access when the payment is approved and has a user reference
         if (reconciliation.ok && reconciliation.providerStatus === 'approved' && reconciliation.externalReference) {
           const userId = reconciliation.externalReference
-      const plans = await getBillingPlans()
-      const plan = resolvePlanForPayment({ preferredPlan: reconciliation.preferredPlan, amount: reconciliation.transactionAmount, plans })
+          const plans = await getBillingPlans()
+          const plan = resolvePlanForPayment({ preferredPlan: reconciliation.preferredPlan, amount: reconciliation.transactionAmount, plans })
 
           if (plan) {
             try {
@@ -397,6 +519,80 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
             }
           } else {
             activation = { triggered: false, reason: 'unrecognized_amount', amount: reconciliation.transactionAmount }
+          }
+        }
+      } else if (shouldHandleSubscriptionPreapproval(summary)) {
+        const snapshot = await fetchMercadoPagoSubscriptionSnapshot(summary.dataResourceId)
+        reconciliation = { ok: snapshot.ok, status: snapshot.status, transactionAmount: snapshot.transactionAmount }
+
+        if (snapshot.ok) {
+          const plans = await getBillingPlans()
+          const plan = resolvePlanForPayment({ amount: snapshot.transactionAmount, plans })
+
+          if (snapshot.externalReference) {
+            try {
+              await db.$transaction(async (tx) =>
+                paymentsService.upsertSubscription(tx, {
+                  userId: String(snapshot.externalReference),
+                  mpSubscriptionId: String(summary.dataResourceId),
+                  plan: plan ?? 'basic',
+                  status: snapshot.status,
+                  nextChargeAt: snapshot.nextChargeAt ?? null,
+                })
+              )
+              activation = { triggered: false, reason: 'subscription_upserted', status: snapshot.status }
+            } catch (upsertErr) {
+              activation = { triggered: false, error: upsertErr?.message }
+              log?.warn?.({ err: upsertErr?.message, mpSubscriptionId: summary.dataResourceId }, 'Falha ao upsert subscription no webhook')
+            }
+          } else {
+            activation = { triggered: false, reason: 'missing_external_reference' }
+            log?.warn?.({ mpSubscriptionId: summary.dataResourceId }, 'subscription_preapproval sem external_reference — ignorado')
+          }
+        }
+      } else if (shouldHandleSubscriptionAuthorizedPayment(summary)) {
+        const authorizedSnapshot = await fetchMercadoPagoAuthorizedPaymentSnapshot(summary.dataResourceId)
+        reconciliation = { ok: authorizedSnapshot.ok, status: authorizedSnapshot.status, transactionAmount: authorizedSnapshot.transactionAmount }
+
+        if (authorizedSnapshot.ok && (authorizedSnapshot.status === 'approved' || authorizedSnapshot.status === 'processed') && authorizedSnapshot.preapprovalId) {
+          const subscription = await paymentsService.findSubscriptionByMpId(String(authorizedSnapshot.preapprovalId))
+
+          if (subscription?.userId) {
+            const plans = await getBillingPlans()
+            const plan = resolvePlanForPayment({ preferredPlan: subscription.plan, amount: authorizedSnapshot.transactionAmount, plans }) ?? subscription.plan
+            const subscriptionMpPaymentId = `sub_${String(summary.dataResourceId)}`
+
+            try {
+              const result = await db.$transaction(async (tx) => {
+                const activationResult = await paymentsService.activateSubscriptionAccess(tx, {
+                  userId: subscription.userId,
+                  plan,
+                  mpPaymentId: subscriptionMpPaymentId,
+                  amount: authorizedSnapshot.transactionAmount ?? plans[plan]?.price ?? 0,
+                })
+                return activationResult
+              })
+              activation = { triggered: true, ...result }
+
+              if (!result.alreadyActivated) {
+                trackAnalyticsEventSafe({ userId: subscription.userId, event: 'subscription_payment_approved', metadata: { plan, mpSubscriptionId: authorizedSnapshot.preapprovalId, source: 'webhook' } })
+                const payment = await db.payment.findUnique({ where: { mpPaymentId: subscriptionMpPaymentId }, select: { id: true, amount: true } }).catch(() => null)
+                if (payment) {
+                  tryCreateAffiliateCommission({
+                    userId: subscription.userId,
+                    paymentId: payment.id,
+                    saleAmountCents: Math.round(payment.amount * 100),
+                    log,
+                  }).catch(err => log?.error?.({ err }, 'affiliate commission error on subscription'))
+                }
+              }
+            } catch (activationErr) {
+              activation = { triggered: true, error: activationErr?.code ?? activationErr?.message }
+              log?.warn?.({ err: activationErr?.message, userId: subscription.userId }, 'Subscription webhook activation failed')
+            }
+          } else {
+            activation = { triggered: false, reason: 'subscription_not_found', preapprovalId: authorizedSnapshot.preapprovalId }
+            log?.warn?.({ preapprovalId: authorizedSnapshot.preapprovalId }, 'authorized_payment sem subscription encontrada — ignorado')
           }
         }
       }
@@ -517,6 +713,42 @@ export async function paymentsRoutes(app) {
       }
       req.log.error({ err: err?.message, plan, userId }, 'Falha ao criar preferência MP')
       return sendError(reply, 502, 'CHECKOUT_CREATION_FAILED', 'Não foi possível iniciar o checkout. Tente novamente.')
+    }
+  })
+
+  app.post('/create-subscription', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const { plan } = req.body ?? {}
+    const plans = await getBillingPlans()
+    if (!plans[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic ou pro.')
+
+    const userId = req.user.sub
+    const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } })
+    const payerEmail = user?.email ?? null
+
+    if (!payerEmail) return sendError(reply, 400, 'MISSING_PAYER_EMAIL', 'E-mail do usuário não encontrado.')
+
+    trackAnalyticsEventSafe({ userId, event: 'subscription_started', metadata: { plan } })
+
+    try {
+      const { initPoint, mpSubscriptionId } = await createMercadoPagoSubscription({ userId, plan, payerEmail })
+      await db.subscription.upsert({
+        where: { mpSubscriptionId },
+        update: { plan, status: 'pending', updatedAt: new Date() },
+        create: { userId, mpSubscriptionId, plan, status: 'pending' },
+      })
+      return { init_point: initPoint }
+    } catch (err) {
+      if (err?.code === 'INVALID_PLAN_CONFIG') {
+        return sendError(reply, 400, 'INVALID_PLAN_CONFIG', 'Configuração do plano inválida no Admin. Revise título e preço do plano.')
+      }
+      if (err?.code === 'PAYMENT_PROVIDER_NOT_CONFIGURED') {
+        return sendError(reply, 500, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'Pagamentos temporariamente indisponíveis.')
+      }
+      if (err?.code === 'MISSING_PAYER_EMAIL') {
+        return sendError(reply, 400, 'MISSING_PAYER_EMAIL', 'E-mail do pagador obrigatório para criar assinatura.')
+      }
+      req.log.error({ err: err?.message, code: err?.code, plan, userId }, 'Falha ao criar assinatura MP')
+      return sendError(reply, 502, 'SUBSCRIPTION_CREATION_FAILED', 'Não foi possível iniciar a assinatura. Tente novamente.')
     }
   })
 
@@ -712,9 +944,10 @@ export async function paymentsRoutes(app) {
   app.get('/overview', { onRequest: [app.authenticate] }, async (req) => {
     const userId = req.user.sub
     const now = new Date()
-    const [user, lastApprovedPayment] = await Promise.all([
+    const [user, lastApprovedPayment, activeSubscription] = await Promise.all([
       db.user.findUnique({ where: { id: userId }, select: { plan: true, accessExpiresAt: true } }),
       db.payment.findFirst({ where: { userId, status: 'approved' }, orderBy: { createdAt: 'desc' } }),
+      db.subscription.findFirst({ where: { userId, status: 'authorized' }, orderBy: { createdAt: 'desc' } }),
     ])
 
     const accessExpiresAt = user?.accessExpiresAt ?? null
@@ -725,13 +958,19 @@ export async function paymentsRoutes(app) {
       ? null
       : 'Seu acesso está expirado. Escolha um plano abaixo para renovar.'
 
+    const billingModel = activeSubscription
+      ? 'Assinatura recorrente mensal'
+      : 'Renovação manual a cada 30 dias'
+    const autoRenew = Boolean(activeSubscription)
+    const nextChargeAt = activeSubscription?.nextChargeAt ?? null
+
     return {
-      billingModel: 'Renovação manual a cada 30 dias',
-      autoRenew: false,
+      billingModel,
+      autoRenew,
       paymentMethod: 'PIX ou Cartão de Crédito',
       plan: user?.plan ?? 'trial',
       accessExpiresAt,
-      nextChargeAt: null,
+      nextChargeAt,
       isActive,
       expiresInDays,
       actionRequired,

@@ -9,6 +9,8 @@ import {
   resolveWebhookEventId,
   resolveWebhookProcessorConfig,
   shouldReconcilePayment,
+  shouldHandleSubscriptionPreapproval,
+  shouldHandleSubscriptionAuthorizedPayment,
   summarizeWebhookEvent,
   shouldEnforceWebhookSignature,
   hasStepUpMfa,
@@ -104,6 +106,18 @@ test('shouldReconcilePayment only for payment events with data id', () => {
   assert.equal(shouldReconcilePayment({ type: 'payment', dataResourceId: '123' }), true)
   assert.equal(shouldReconcilePayment({ type: 'payment', dataResourceId: '' }), false)
   assert.equal(shouldReconcilePayment({ type: 'merchant_order', dataResourceId: '123' }), false)
+})
+
+test('shouldHandleSubscriptionPreapproval handles subscription_preapproval type with id', () => {
+  assert.equal(shouldHandleSubscriptionPreapproval({ type: 'subscription_preapproval', dataResourceId: 'preap-1' }), true)
+  assert.equal(shouldHandleSubscriptionPreapproval({ type: 'subscription_preapproval', dataResourceId: '' }), false)
+  assert.equal(shouldHandleSubscriptionPreapproval({ type: 'payment', dataResourceId: 'preap-1' }), false)
+})
+
+test('shouldHandleSubscriptionAuthorizedPayment handles subscription_authorized_payment type with id', () => {
+  assert.equal(shouldHandleSubscriptionAuthorizedPayment({ type: 'subscription_authorized_payment', dataResourceId: 'ap-1' }), true)
+  assert.equal(shouldHandleSubscriptionAuthorizedPayment({ type: 'subscription_authorized_payment', dataResourceId: '' }), false)
+  assert.equal(shouldHandleSubscriptionAuthorizedPayment({ type: 'payment', dataResourceId: 'ap-1' }), false)
 })
 
 test('activatePaymentAccess extends from active expiry by 30 days', async () => {
