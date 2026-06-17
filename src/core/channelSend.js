@@ -32,6 +32,49 @@ export function stripChannelUnsafeFields(payload) {
   return rest
 }
 
+// Reconstrói o proto de mídia usado em relayMessage (grupo→grupo) trocando o
+// caption e HIGIENIZANDO o contextInfo de newsletter herdado da ORIGEM — é ele
+// que renderiza o botão "Ver canal" apontando para o canal de outra pessoa.
+//
+// Cópia rasa de propósito: só toca em `caption` e em `contextInfo`. Os campos
+// de mídia (mediaKey, url, fileSha256, mediaKeyTimestamp — alguns são Buffer ou
+// Long do protobuf) ficam por referência, exatamente como o `{ ...proto }`
+// histórico, para não corromper a mídia já hospedada no WhatsApp.
+//
+// `forwardNewsletter` (opcional, { newsletterJid, newsletterName,
+// serverMessageId }): quando presente, injeta um forwardedNewsletterMessageInfo
+// apontando para o canal do PRÓPRIO usuário. Usado pelo spike de validação
+// (Fase 0) e, depois de validado, pela feature definitiva. Quando ausente, o
+// proto sai apenas limpo (remove o botão de terceiros).
+export function buildRelayProto(proto, { caption, forwardNewsletter = null } = {}) {
+  if (proto == null) return proto
+  const next = { ...proto }
+  if (caption !== undefined) next.caption = caption
+
+  const ctx = { ...(proto.contextInfo || {}) }
+  delete ctx.forwardedNewsletterMessageInfo
+  delete ctx.externalAdReply
+
+  if (forwardNewsletter && forwardNewsletter.newsletterJid) {
+    const info = {
+      newsletterJid: String(forwardNewsletter.newsletterJid),
+      newsletterName: String(forwardNewsletter.newsletterName ?? ''),
+    }
+    if (forwardNewsletter.serverMessageId != null) {
+      info.serverMessageId = Number(forwardNewsletter.serverMessageId)
+    }
+    ctx.forwardedNewsletterMessageInfo = info
+    ctx.isForwarded = true
+  }
+
+  if (Object.keys(ctx).length === 0) {
+    delete next.contextInfo
+  } else {
+    next.contextInfo = ctx
+  }
+  return next
+}
+
 // Detecta se um erro de sendMessage indica que a conta NÃO pode postar
 // no canal (não é admin/owner) — diferente de erro transitório de rede.
 // Para erro "forbidden", o retry loop deve abortar imediatamente em vez

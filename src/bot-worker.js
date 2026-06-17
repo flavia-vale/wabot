@@ -40,7 +40,7 @@ import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariati
 import { PRESERVATION_FEATURE, isPreservationFeatureEnabled, shouldRunChannelScheduler } from './core/preservationFeatures.js'
 import { mutate as mutateChannelImage } from './core/imageMutation.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
-import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
+import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
@@ -855,6 +855,23 @@ async function buildPayloadFromRecipe(recipe) {
     image,
     useLinkPreview: !image,
   })
+}
+
+// Fase 0 (spike) — validação em staging do botão nativo "Ver canal" do canal do
+// PRÓPRIO usuário. Lê a config do canal a injetar a partir de env vars; quando
+// CHANNEL_FORWARD_SPIKE_JID está ausente, retorna null e o relay segue o
+// comportamento histórico (no-op em produção). Removido/substituído pela feature
+// definitiva (BotConfig.channelForward*) após a validação. Ver
+// docs/whatsapp-channels-ver-canal-spike.md.
+function getChannelForwardSpikeConfig() {
+  const newsletterJid = String(process.env.CHANNEL_FORWARD_SPIKE_JID ?? '').trim()
+  if (!newsletterJid) return null
+  const rawServerMsgId = String(process.env.CHANNEL_FORWARD_SPIKE_SERVER_MSG_ID ?? '').trim()
+  return {
+    newsletterJid,
+    newsletterName: String(process.env.CHANNEL_FORWARD_SPIKE_NAME ?? '').trim(),
+    serverMessageId: rawServerMsgId ? Number(rawServerMsgId) : null,
+  }
 }
 
 async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
@@ -1835,9 +1852,23 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // passar pelo Redis. Ver enqueueSendJob() para a explicação completa.
         const buildPayload = async () => {
           if (shouldUseRelayPath({ destJid, hasOriginal: !!original })) {
-            const replayProto = { ...original.proto }
-            if (original.type === 'imageMessage' || original.type === 'videoMessage') {
-              replayProto.caption = variantText
+            const hasCaption = original.type === 'imageMessage' || original.type === 'videoMessage'
+            // Fase 0 (spike): quando a env CHANNEL_FORWARD_SPIKE_JID está setada,
+            // higieniza o contextInfo herdado da origem (remove o botão "Ver
+            // canal" de terceiros) e injeta o canal do próprio usuário. Sem a
+            // env, mantém o caminho histórico byte-a-byte (shallow copy + caption).
+            const spike = getChannelForwardSpikeConfig()
+            let replayProto
+            if (spike) {
+              replayProto = buildRelayProto(original.proto, {
+                caption: hasCaption ? variantText : undefined,
+                forwardNewsletter: spike,
+              })
+            } else {
+              replayProto = { ...original.proto }
+              if (hasCaption) {
+                replayProto.caption = variantText
+              }
             }
             return {
               _route: 'relay',
