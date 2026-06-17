@@ -1729,6 +1729,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }
       }))
       const conversions = linkResults.filter(Boolean)
+      if (process.env.DEBUG_INCOMING_UPSERT) {
+        logger.info({ jid, msgId: msg.key.id, linksDetected: links.length, conversions: conversions.length, convertedUrls: conversions.map(c => c.converted) }, 'DEBUG_PROCESS conversions')
+      }
 
       const warningKinds = new Set(conversions.map(c => c.warning).filter(Boolean))
       for (const kind of warningKinds) {
@@ -1766,6 +1769,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             errorMsg: 'skip:no_valid_conversions',
           },
         }).catch(() => {})
+        if (process.env.DEBUG_INCOMING_UPSERT) logger.info({ jid, msgId: msg.key.id, reason: 'no_valid_conversions' }, 'DEBUG_PROCESS return')
         return
       }
         finalText = applyConversionsAndBranding(sanitizedText, conversions, cfg.botConfig.brandingGroupLink, cfg.botConfig.brandingCtaText)
@@ -1800,6 +1804,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             scrapedTitle,
             captionPreview: sanitizeMessageForLog(sanitizedText).slice(0, 200),
           }, 'skip:title_mismatch — caption não bate com o título raspado do produto destino')
+          if (process.env.DEBUG_INCOMING_UPSERT) logger.info({ jid, msgId: msg.key.id, scrapedTitle, reason: 'title_mismatch' }, 'DEBUG_PROCESS return')
           await recordSkippedMessage({
             reason: 'skip:title_mismatch',
             platform: primary.platform,
@@ -1812,6 +1817,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 
       const baseDestinations = monitorGroup?.targetPostJids?.length ? monitorGroup.targetPostJids : cfg.groups.post
       const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
+      if (process.env.DEBUG_INCOMING_UPSERT) {
+        logger.info({ jid, msgId: msg.key.id, destinations, primaryUrl: primary.url, primaryConverted: primary.converted }, 'DEBUG_PROCESS destinations')
+      }
       // PR-5.B.2: stagger entre destinos para quebrar simultaneidade exata.
       // Primeiro destino sem atraso; demais com jitter aleatório limitado.
       const staggerJitterMs = Math.max(0, Number(cfg.botConfig.channelStaggerJitterMs ?? 0))
@@ -1829,6 +1837,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             convertedUrl: primary.converted,
             messageText: finalText,
           })
+          if (process.env.DEBUG_INCOMING_UPSERT) logger.info({ jid, destJid, key, reason: 'dedup_local' }, 'DEBUG_PROCESS dedup')
           logger.info({ destJid }, 'Duplicata ignorada'); continue
         }
         if (GLOBAL_DEDUP_MODE !== 'off') {
@@ -1846,6 +1855,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
               convertedUrl: primary.converted,
               messageText: finalText,
             })
+            if (process.env.DEBUG_INCOMING_UPSERT) logger.info({ jid, destJid, key, reason: 'dedup_global' }, 'DEBUG_PROCESS dedup')
             logger.info({ destJid }, 'Duplicata global ignorada')
             continue
           }
@@ -1879,6 +1889,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const log = await db.messageLog.create({
           data: { ...logData, status: 'queued' },
         })
+        if (process.env.DEBUG_INCOMING_UPSERT) logger.info({ jid, destJid, logId: log.id, reason: 'queued' }, 'DEBUG_PROCESS queued')
         let sentVia = 'text'
 
         // PR-5.B.2: variação de copy por canal-destino (determinística por
