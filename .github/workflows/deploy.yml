@@ -140,3 +140,38 @@ jobs:
               chmod +x ./scripts/deploy_safe_staging.sh
               ROOT_DIR=~/wabot-staging BRANCH=develop SYNC_GIT=1 AUTO_STASH_ON_DIRTY=1 FORCE_RESET_ON_SYNC=1 ./scripts/deploy_safe_staging.sh
             fi
+
+      # Purga o cache da Cloudflare APÓS um deploy de PRODUÇÃO bem-sucedido.
+      # Necessário para poder cachear o HTML das páginas públicas na borda com
+      # TTL longo sem risco: a cada deploy o HTML antigo (que aponta para chunks
+      # JS com hash que já foram removidos do .next) é invalidado, evitando
+      # servir página quebrada. Só roda em main — prod está atrás da Cloudflare;
+      # staging é acessada por IP, fora da CF. No-op silencioso se os secrets
+      # CLOUDFLARE_API_TOKEN / CLOUDFLARE_ZONE_ID não estiverem configurados.
+      - name: Purgar cache da Cloudflare (produção)
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          if [ -z "${CF_API_TOKEN}" ] || [ -z "${CF_ZONE_ID}" ]; then
+            echo "⚠️  CLOUDFLARE_API_TOKEN/CLOUDFLARE_ZONE_ID não configurados — pulando purge (sem erro)."
+            exit 0
+          fi
+          echo "🧹 Limpando cache da Cloudflare (purge_everything)..."
+          for attempt in 1 2 3; do
+            resp="$(curl -sS -X POST \
+              "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache" \
+              -H "Authorization: Bearer ${CF_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data '{"purge_everything":true}')"
+            if printf '%s' "$resp" | grep -q '"success":true'; then
+              echo "✅ Cache da Cloudflare limpo."
+              exit 0
+            fi
+            echo "Tentativa ${attempt} falhou: ${resp}"
+            sleep $((attempt * 3))
+          done
+          echo "❌ Falha ao limpar o cache da Cloudflare após 3 tentativas. O DEPLOY foi concluído; refaça o purge manualmente no painel da Cloudflare (Caching → Purge Everything)."
+          exit 1
+
