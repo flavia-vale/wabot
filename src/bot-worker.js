@@ -48,7 +48,7 @@ import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindo
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
 import { classifyError } from './errorTaxonomy.js'
-import { detectMessageKind, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
+import { detectMessageKind, extractIncomingText, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
 import { broadcastSourceGroup } from './offerQueue/sourceTag.js'
 import Redis from 'ioredis'
 import { parseEnumEnv, logModeSummary } from './core/envModes.js'
@@ -1457,11 +1457,13 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         return
       }
 
-      const text =
-        msg.message?.conversation ||
-        msg.message?.extendedTextMessage?.text ||
-        msg.message?.imageMessage?.caption ||
-        msg.message?.videoMessage?.caption || ''
+      // Desembrulha wrappers (ephemeralMessage/viewOnceMessage/etc.) ANTES de
+      // ler a legenda. Sem isso, imagem com legenda em grupo com mensagens
+      // temporárias chega com `msg.message.imageMessage` undefined, o texto vem
+      // vazio, nenhum link é detectado e a política LINK_ONLY ignora como
+      // `nolink`. Fallback para o raw cobre conteúdo não-embrulhado.
+      const innerMessage = extractMessageContent(msg.message)
+      const text = extractIncomingText(innerMessage) || extractIncomingText(msg.message)
 
       if (text && text.length > MAX_INCOMING_MESSAGE_CHARS) {
         logger.warn({ msgId: msg.key.id, chars: text.length, limit: MAX_INCOMING_MESSAGE_CHARS }, 'Mensagem grande demais — processamento ignorado para preservar latência')
@@ -1484,7 +1486,6 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       if (text && !sanitizedText) return
 
       const links = detectLinks(sanitizedText)
-      const innerMessage = extractMessageContent(msg.message)
       const messageKind = detectMessageKind(innerMessage, sanitizedText)
       const policy = normalizeForwardingPolicy(monitorGroup)
       const canForwardCurrentMessage = shouldForwardMessage({
