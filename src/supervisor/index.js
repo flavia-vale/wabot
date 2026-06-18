@@ -20,6 +20,7 @@ import db from '../db.js'
 import logger from '../logger.js'
 import * as sessionCore from '../core/sessionCore.js'
 import { buildShardTag, normalizeShardCount, shouldHandleUserOnShard } from './sharding.js'
+import { checkSupervisorEnvConsistency } from './envGuard.js'
 import { createRestartBudget, RESTART_BUDGET_MAX, RESTART_BUDGET_WINDOW_MS, RESTART_QUARANTINE_MS } from './restartBudget.js'
 import { parseEnumEnv, logModeSummary } from '../core/envModes.js'
 import {
@@ -38,6 +39,23 @@ import {
 const REDIS_URL = resolveRedisUrl()
 if (!REDIS_URL) {
   logger.fatal('SUPERVISOR_REDIS_URL/REDIS_URL ausente — supervisor não pode iniciar')
+  process.exit(1)
+}
+
+// Fail-fast contra "supervisor rodando do diretório/ambiente errado" (incidente
+// 2026-06): se APP_ENV não bater com o cwd ou com a Redis DB, o supervisor
+// consumiria a fila de comandos do ambiente errado e subiria "saudável" sem
+// drenar nada. Melhor abortar no boot do que estourar timeout em toda rota.
+const envCheck = checkSupervisorEnvConsistency({
+  appEnv: process.env.APP_ENV,
+  cwd: process.cwd(),
+  redisUrl: REDIS_URL,
+})
+if (!envCheck.ok) {
+  logger.fatal(
+    { reason: envCheck.reason, appEnv: process.env.APP_ENV ?? null, cwd: process.cwd() },
+    'bot-supervisor: ambiente inconsistente — abortando para não consumir a fila errada',
+  )
   process.exit(1)
 }
 

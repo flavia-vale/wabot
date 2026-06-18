@@ -8,8 +8,10 @@
  * (o que saiu/vai sair) → Configuração (mexe uma vez). Recursos avançados de
  * nicho ficam numa subseção recolhível (`collapsible: true`) para não competir
  * com o uso do dia a dia. Onboarding ("Primeiros passos") virou um card no topo
- * da sidebar (ver SidebarOnboarding), que some quando concluído. Conta (plano,
- * configurações, sair) vive no rodapé e no menu do avatar — não na lista de nav.
+ * da sidebar (ver SidebarOnboarding), que some quando concluído. O grupo "Conta"
+ * expõe o item Plano na própria lista de nav (o card de plano no rodapé é
+ * status/upsell, não substitui a navegação); configurações e sair seguem no
+ * menu do avatar no rodapé.
  */
 
 const i = (paths) => paths // SVG children prontos para <svg>
@@ -100,6 +102,7 @@ export const NAV_GROUPS = [
   {
     title: 'Preservação avançada',
     collapsible: true,
+    defaultOpen: true,
     items: [
       {
         label: 'Monitoramento',
@@ -112,6 +115,16 @@ export const NAV_GROUPS = [
         href: '/painel/preservacao/configuracoes',
         pro: true,
         icon: i(<><path d="M12 2 4 5v6c0 5 3.5 8 8 11 4.5-3 8-6 8-11V5l-8-3z" /><path d="m9 12 2 2 4-4" /></>),
+      },
+    ],
+  },
+  {
+    title: 'Conta',
+    items: [
+      {
+        label: 'Plano',
+        href: '/painel/plano',
+        icon: i(<path d="M12 2.5l2.9 6 6.6.6-5 4.4 1.5 6.5L12 16.9 5.5 20.5 7 14 2 9.6l6.6-.6z" />),
       },
     ],
   },

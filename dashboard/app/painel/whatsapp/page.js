@@ -52,6 +52,8 @@ export default function WhatsAppPage() {
   const [qrRetrying, setQrRetrying] = useState(false)
   const wsRef = useRef(null)
   const openWSRef = useRef(null)
+  const refreshSessionRef = useRef(refreshSession)
+  useEffect(() => { refreshSessionRef.current = refreshSession }, [refreshSession])
   const wsReconnectAttemptsRef = useRef(0)
   const wsQrTimeoutRef = useRef(null)
   const qrPollingRef = useRef(null)
@@ -157,6 +159,7 @@ export default function WhatsAppPage() {
             setPairingCode('')
             wsRef.current?.close()
             fetchStatus()
+            refreshSessionRef.current?.()
           }
         }
       },
@@ -406,6 +409,7 @@ export default function WhatsAppPage() {
       setPairingCode('')
       wsRef.current?.close()
       await fetchStatus()
+      refreshSessionRef.current?.()
       setFeedback('Bot desligado. Para voltar, gere um novo QR Code ou código de pareamento.')
     } catch (err) {
       setError(err.message)
