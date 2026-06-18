@@ -724,6 +724,49 @@ api-staging bot-supervisor-staging telegram-offer-bot-staging --update-env`.
 Em produção, investigar também `telegram-offer-bot`, `snapshot-cron` e
 eventuais `bot-worker.js` órfãos antes de repetir o migrate.
 
+### 9. Supervisor iniciado do diretório errado consome a Redis DB errada (fila nunca drena)
+
+O `ecosystem.config.cjs` tem os apps de **prod e staging no mesmo arquivo**, e
+os `script` são **caminhos relativos** (`src/supervisor/index.js`). O PM2
+resolve o script E o `.env` (via dotenv) a partir do **`cwd` de onde o `pm2
+start` foi chamado**. Logo, iniciar o `bot-supervisor-staging` de dentro de
+`~/wabot` (prod) — direto, ou porque um `pm2 restart`/`pm2 save` antigo
+perpetuou um registro com `exec cwd=/home/deploy/wabot` — faz o supervisor
+carregar o `.env` de **produção** (`REDIS_URL=.../0`) e consumir a fila de
+comandos na **Redis DB errada**.
+
+Sintoma (incidente 2026-06, staging): processo `online`/`0%`/saudável, mas
+`api-staging` estoura **todo** comando com `Comando isRunning falhou: Job wait
+isRunning timed out ... no finish notification arrived after 5000ms`. No Redis:
+`redis-cli -n 1 llen bull:supervisor-commands:active` = 0 e `:wait` só cresce —
+ninguém drena. O dashboard mostra "Falha ao carregar status" e o QR fica
+carregando pra sempre. **Não** é CPU/carga (load fica baixo) nem o loop de QR
+das sessões (isso é ruído secundário).
+
+Diagnóstico decisivo: `pm2 describe bot-supervisor-staging | grep -iE 'script
+path|cwd'`. Se apontar pra `/home/deploy/wabot` (sem `-staging`), está errado.
+
+Correção (delete + start do diretório certo — `restart` NÃO reconfigura, ver
+pegadinha #1):
+```bash
+pm2 delete bot-supervisor-staging
+cd ~/wabot-staging && pm2 start ecosystem.config.cjs --only bot-supervisor-staging
+pm2 save
+```
+
+**Nunca** rodar `redis-cli del bull:supervisor-commands:wait` pra "limpar" o
+backlog: o BullMQ usa marcadores internos junto da lista `wait` e o `del`
+dessincroniza o Worker (ele para de receber o sinal de job novo). Pra limpar
+de verdade, use `queue.obliterate()` via um script Node curto com o próprio
+BullMQ, ou simplesmente reinicie o processo.
+
+Blindagem em código (não regredir): `src/supervisor/envGuard.js`
+(`checkSupervisorEnvConsistency`) roda no boot de `src/supervisor/index.js` e
+**aborta com `process.exit(1)`** se `APP_ENV` não bater com o cwd (staging ↔
+`-staging`) ou com a Redis DB canônica (staging→`/1`, prod→`/0`). Assim o
+supervisor no diretório errado falha no boot em vez de subir surdo pra fila.
+Teste: `test/supervisor-env-guard.test.js`.
+
 ## Image scrapers — configuração canônica (PR #422, não regredir)
 
 `src/converters/imageScrapers.js` entrega imagem hi-res para link preview
