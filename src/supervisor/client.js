@@ -17,6 +17,7 @@ import {
   SUPERVISOR_HEARTBEAT_KEY,
   commandTimeoutMs,
   decodeEvent,
+  lastEventKey,
   resolveRedisUrl,
 } from './protocol.js'
 
@@ -123,6 +124,23 @@ export function createSupervisorClient({
     }
   }
 
+  // Lê o último valor cacheado de um evento (QR/STATUS) gravado pelo supervisor
+  // em cacheLastEvent. Usado para re-hidratar um assinante que chegou depois da
+  // última publicação (fecha a janela fire-and-forget do pub/sub). Best-effort:
+  // null quando não há cache, Redis indisponível ou payload corrompido.
+  async function getLastEvent(type, userId) {
+    if (!publisherCheck) {
+      try { await init() } catch { return null }
+    }
+    try {
+      const raw = await publisherCheck.get(lastEventKey(userId, type))
+      if (raw == null) return null
+      try { return JSON.parse(raw) } catch { return null }
+    } catch {
+      return null
+    }
+  }
+
   async function isSupervisorAlive() {
     if (!publisherCheck) {
       try { await init() } catch { return false }
@@ -156,12 +174,21 @@ export function createSupervisorClient({
   // Subscriptions — antes vinham via process IPC do worker filho. Agora
   // chegam via pub/sub. Mantém a mesma assinatura (callback + unsubscribe).
   function subscribeUserEvent(type, userId, fn) {
-    // Garante init em background; primeiros eventos podem ser perdidos se
-    // chamado antes da subscription Redis estar pronta. Aceitável: dashboard
-    // pede QR ativamente após assinar.
-    init().catch(() => {})
     const handler = (data, evt) => fn(data, evt)
     events.on(`${type}:${userId}`, handler)
+    // Re-hidrata SÓ este assinante com o último valor cacheado (QR/STATUS), em
+    // vez de depender de uma nova publicação. Fecha a janela em que um evento
+    // publicado antes da subscription estar pronta (ou durante restart da API)
+    // se perdia, deixando o painel "carregando" pra sempre. Best-effort e
+    // assíncrono: garante init e entrega o cache só para `handler` (não
+    // re-emite globalmente, pra não duplicar em assinantes já existentes).
+    getLastEvent(type, userId)
+      .then(cached => {
+        if (cached !== null && cached !== undefined) {
+          handler(cached, { v: 1, userId, type, data: cached, cached: true })
+        }
+      })
+      .catch(() => {})
     return () => events.off(`${type}:${userId}`, handler)
   }
   // onQR: callback recebe a string do QR code (mesma semântica de sessionCore.js).
@@ -206,6 +233,6 @@ export function createSupervisorClient({
     onQR, onStatus, getLastQR,
     resumePersistedBots, startSessionHealthMonitor, stopAllBots,
     // extras
-    isSupervisorAlive, close, _events: events,
+    isSupervisorAlive, getLastEvent, close, _events: events,
   })
 }

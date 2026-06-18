@@ -8,6 +8,7 @@ import {
   EVENT,
   EVENTS_CHANNEL,
   encodeEvent,
+  lastEventKey,
 } from '../src/supervisor/protocol.js'
 
 // Mock mínimo de ioredis: simula o que o cliente usa (subscribe, on('message'),
@@ -124,6 +125,50 @@ test('onQR recebe eventos publicados no canal', async () => {
   off()
   client._events.emit(`${EVENT.QR}:user-42`, 'outro-qr')
   assert.equal(received, 'qr-string-abc') // off() funcionou
+  await client.close()
+})
+
+// Mock com store COMPARTILHADO entre instâncias — necessário para testar a
+// re-hidratação, já que o client lê com publisherCheck (uma instância) a chave
+// que o supervisor escreveria com outra conexão.
+function createSharedStoreMockRedis() {
+  const store = new Map()
+  class FakeRedis extends EventEmitter {
+    constructor() { super(); this.subscriptions = new Set(); this.store = store }
+    async subscribe(ch) { this.subscriptions.add(ch); return 1 }
+    async unsubscribe(ch) { this.subscriptions.delete(ch); return 0 }
+    async get(key) { return store.get(key) ?? null }
+    async set(key, val) { store.set(key, val); return 'OK' }
+    async quit() { this.emit('end'); return 'OK' }
+  }
+  return { module: { default: FakeRedis }, store }
+}
+
+test('onQR re-hidrata o assinante com o último valor cacheado (P1-4)', async () => {
+  const { module, store } = createSharedStoreMockRedis()
+  // Simula o que o supervisor gravou na última publicação de QR.
+  store.set(lastEventKey('user-99', EVENT.QR), JSON.stringify('qr-cacheado'))
+  const client = createSupervisorClient({
+    redisUrl: 'redis://fake',
+    ioredisModule: module,
+    bullmqModule: createMockBullmq(),
+  })
+  let received = null
+  client.onQR('user-99', qr => { received = qr })
+  // A hidratação é assíncrona (init + get). Aguarda o microtask/timer.
+  await new Promise(r => setTimeout(r, 20))
+  assert.equal(received, 'qr-cacheado', 'assinante tardio deve receber o QR cacheado sem nova publicação')
+  await client.close()
+})
+
+test('getLastEvent retorna null quando não há cache', async () => {
+  const { module } = createSharedStoreMockRedis()
+  const client = createSupervisorClient({
+    redisUrl: 'redis://fake',
+    ioredisModule: module,
+    bullmqModule: createMockBullmq(),
+  })
+  assert.equal(await client.getLastEvent(EVENT.STATUS, 'sem-cache'), null)
   await client.close()
 })
 
