@@ -204,7 +204,7 @@ export default function PainelShell({ children }) {
               )
 
               if (group.collapsible) {
-                const open = openGroups[group.title] ?? hasActiveChild
+                const open = openGroups[group.title] ?? (group.defaultOpen || hasActiveChild)
                 return (
                   <div key={group.title} className="pnl-nav-group">
                     <button
