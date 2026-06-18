@@ -32,9 +32,8 @@ function NoteBox({ variant = 'is-warn', title, message }) {
 
 export default function WhatsAppPage() {
   usePainelHeader({ title: 'Conexão WhatsApp', subtitle: 'Status da sessão e conexão pelo número ou QR Code' })
-  // Mantém o status compartilhado do shell (tag do header + espelhamento) em
-  // sincronia com o status ao vivo desta página, sem esperar o polling do shell.
-  const { refreshSession } = usePainel()
+  const { sessionHealth } = usePainel()
+  const reconnectHandledRef = useRef(false)
 
   const [status, setStatus] = useState(null)
   const [statusLoading, setStatusLoading] = useState(true)
@@ -534,6 +533,19 @@ export default function WhatsAppPage() {
     return () => document.removeEventListener('visibilitychange', onHidden)
   }, [status?.running, status?.status, qr, qrWaitElapsed, trackTelemetry])
 
+  // O banner global "Reconectar agora" navega para cá com ?reconnect=1.
+  // Dispara uma reconexão (stop+start → novo QR) uma única vez e limpa o
+  // parâmetro para que um refresh não re-execute a ação.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (reconnectHandledRef.current || statusLoading) return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('reconnect') !== '1') return
+    reconnectHandledRef.current = true
+    window.history.replaceState({}, '', '/painel/whatsapp')
+    handleRestart()
+  }, [statusLoading])
+
   const isConnected = status?.status === 'connected'
   const isConnecting = status?.status === 'connecting'
   const isRunning = status?.running
@@ -566,6 +578,19 @@ export default function WhatsAppPage() {
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 560, margin: '0 auto' }}>
+      {sessionHealth?.degraded && (
+        <div className="pnl-note-box is-error" role="alert">
+          <strong style={{ fontWeight: 600, display: 'block' }}>⚠️ Conexão instável — mensagens não estão sendo lidas</strong>
+          <p style={{ marginTop: 4 }}>
+            O WhatsApp está conectado, mas falhando ao descriptografar as mensagens dos seus grupos
+            (sessão dessincronizada). Suas ofertas podem não estar sendo espelhadas. Reconecte gerando
+            um novo QR Code para normalizar.
+          </p>
+          <button type="button" className="pnl-btn is-primary" style={{ marginTop: 12 }} onClick={handleRestart} disabled={loading}>
+            {actionLoading === 'restart' ? 'Reconectando…' : 'Reconectar agora'}
+          </button>
+        </div>
+      )}
       <div className="pnl-toolbar" style={{ justifyContent: 'flex-end' }}>
         <HelpLink topic="como-conectar-whatsapp-qr-code">Ajuda para conectar</HelpLink>
       </div>

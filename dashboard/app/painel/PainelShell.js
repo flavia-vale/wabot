@@ -101,6 +101,7 @@ export default function PainelShell({ children }) {
   const [online, setOnline] = useState(null)
   const [phone, setPhone] = useState(null)
   const [groupCount, setGroupCount] = useState(null)
+  const [sessionHealth, setSessionHealth] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [openGroups, setOpenGroups] = useState({})
   const [userMenuOpen, setUserMenuOpen] = useState(false)
@@ -155,14 +156,32 @@ export default function PainelShell({ children }) {
     }
   }, [checking])
 
+  // Saúde da conexão: só sondamos a versão completa do status (com métricas do
+  // worker) quando o bot está online. Se a sessão estiver conectada mas sem
+  // conseguir ler mensagens (decrypt dessincronizado), o worker devolve
+  // sessionHealth.degraded e mostramos o banner global de reconexão.
+  useEffect(() => {
+    if (!online) { setSessionHealth(null); return undefined }
+    let active = true
+    let timer = null
+    const poll = async () => {
+      const s = await api.sessionStatus().catch(() => null)
+      if (!active) return
+      if (s) setSessionHealth(s.sessionHealth ?? s.metrics?.sessionHealth ?? null)
+      timer = setTimeout(poll, 45000)
+    }
+    poll()
+    return () => { active = false; if (timer) clearTimeout(timer) }
+  }, [online])
+
   async function logout() {
     await api.logout().catch(() => {})
     router.push('/login')
   }
 
   const ctxValue = useMemo(
-    () => ({ user, online, phone, groupCount, setHeader, refreshSession }),
-    [user, online, phone, groupCount, refreshSession],
+    () => ({ user, online, phone, groupCount, sessionHealth, setHeader }),
+    [user, online, phone, groupCount, sessionHealth],
   )
 
   if (checking) {
@@ -305,7 +324,32 @@ export default function PainelShell({ children }) {
             </div>
           </header>
 
-          <div className="pnl-content">{children}</div>
+          <div className="pnl-content">
+            {sessionHealth?.degraded && !pathname.startsWith('/painel/whatsapp') && (
+              <div
+                className="pnl-note-box is-error"
+                role="alert"
+                style={{ marginBottom: 16, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, justifyContent: 'space-between' }}
+              >
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <strong style={{ fontWeight: 600, display: 'block' }}>⚠️ Sua conexão do WhatsApp está instável</strong>
+                  <span>
+                    O WhatsApp aparece conectado, mas não está conseguindo ler as mensagens dos seus grupos —
+                    suas ofertas podem não estar sendo espelhadas. Reconecte para normalizar.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="pnl-btn is-primary"
+                  style={{ flexShrink: 0 }}
+                  onClick={() => router.push('/painel/whatsapp?reconnect=1')}
+                >
+                  Reconectar agora
+                </button>
+              </div>
+            )}
+            {children}
+          </div>
         </div>
       </div>
     </PainelContext.Provider>

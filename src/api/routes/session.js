@@ -117,6 +117,9 @@ export async function sessionRoutes(app) {
       status: session?.status ?? 'disconnected',
       phone: session?.phone ?? null,
       metrics,
+      // Atalho de topo para o painel decidir o banner "reconecte" sem ter que
+      // cavar dentro de metrics. Só presente quando métricas foram coletadas.
+      sessionHealth: metrics?.sessionHealth ?? null,
     }
   })
 

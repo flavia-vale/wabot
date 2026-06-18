@@ -132,6 +132,14 @@ const OWNER_INSTANCE = process.env.NODE_APP_INSTANCE ?? '0'
 const SESSION_ERROR_WINDOW_MS = Math.max(30_000, Number(process.env.WA_SESSION_ERROR_WINDOW_MS || 120_000))
 const SESSION_ERROR_THRESHOLD = Math.max(5, Number(process.env.WA_SESSION_ERROR_THRESHOLD || 30))
 const SESSION_RECOVERY_COOLDOWN_MS = Math.max(60_000, Number(process.env.WA_SESSION_RECOVERY_COOLDOWN_MS || 300_000))
+// Saúde de cripto exposta ao painel (banner global "reconecte"). Detectamos o
+// sintoma observável de sessão dessincronizada: o Baileys manda "sent retry
+// receipt" a cada mensagem que NÃO conseguiu descriptografar (Bad MAC /
+// MessageCounterError). Janela e limiar menores que os de auto-recovery porque
+// o objetivo aqui é AVISAR a usuária antes que ela fique cega — não derrubar a
+// sessão. Só sinaliza 'degraded' com a sessão já conectada (READY).
+const WA_SESSION_DEGRADED_WINDOW_MS = Math.max(60_000, Number(process.env.WA_SESSION_DEGRADED_WINDOW_MS || 10 * 60_000))
+const WA_SESSION_DEGRADED_THRESHOLD = Math.max(2, Number(process.env.WA_SESSION_DEGRADED_THRESHOLD || 5))
 const ALLOW_TEXT_WITHOUT_LINKS = String(process.env.WA_ALLOW_TEXT_WITHOUT_LINKS || '0') === '1'
 
 // Plataformas com og:title/JSON-LD confiável o suficiente para o guard de
@@ -162,6 +170,10 @@ const pairingState = createPairingState({ windowMs: PAIRING_WINDOW_MS_DEFAULT })
 let sessionErrorTimestamps = []
 let sessionRecoveryLastAt = 0
 let sessionRecoveryInFlight = false
+
+// Sinais de falha de decrypt para o indicador de saúde da sessão no painel.
+let cryptoErrorTimestamps = []
+let lastCryptoErrorAt = null
 
 let heartbeatTimer = null
 let lastHeartbeatPersistAt = 0
@@ -768,6 +780,81 @@ function getSendQueueMetrics() {
   }
 }
 
+// Padrões que indicam que a sessão recebeu mensagem mas não conseguiu
+// descriptografar (sender_key/contador dessincronizados). "sent retry receipt"
+// é o mais confiável: o Baileys o loga uma vez por mensagem indecifrável.
+const SESSION_HEALTH_SIGNAL_RE = /sent retry receipt|failed to decrypt|Bad MAC|MessageCounterError|Key used already or never filled/i
+
+function recordCryptoError() {
+  const now = Date.now()
+  lastCryptoErrorAt = now
+  cryptoErrorTimestamps.push(now)
+  const cutoff = now - WA_SESSION_DEGRADED_WINDOW_MS
+  // Poda barata: só varre quando o array cresce ou a cabeça já saiu da janela.
+  if (cryptoErrorTimestamps.length > 1_000 || cryptoErrorTimestamps[0] < cutoff) {
+    cryptoErrorTimestamps = cryptoErrorTimestamps.filter(ts => ts >= cutoff)
+  }
+}
+
+// Snapshot consumido pelo /api/session/status (via metrics IPC) para o painel
+// decidir se mostra o banner "reconecte". 'degraded' exige sessão conectada —
+// se ela caiu, o status normal de "desconectado" já cobre o aviso.
+function getSessionHealth() {
+  const now = Date.now()
+  const cutoff = now - WA_SESSION_DEGRADED_WINDOW_MS
+  cryptoErrorTimestamps = cryptoErrorTimestamps.filter(ts => ts >= cutoff)
+  const cryptoErrors = cryptoErrorTimestamps.length
+  const degraded =
+    lifecycleState === WA_LIFECYCLE.READY &&
+    cryptoErrors >= WA_SESSION_DEGRADED_THRESHOLD &&
+    lastCryptoErrorAt != null &&
+    now - lastCryptoErrorAt <= WA_SESSION_DEGRADED_WINDOW_MS
+  return {
+    degraded,
+    cryptoErrors,
+    windowMs: WA_SESSION_DEGRADED_WINDOW_MS,
+    threshold: WA_SESSION_DEGRADED_THRESHOLD,
+    lastCryptoErrorAt,
+  }
+}
+
+// Envelopa o logger pino do Baileys (e seus filhos) para incrementar o contador
+// de saúde sempre que uma linha casar com SESSION_HEALTH_SIGNAL_RE. Usa
+// defineProperty (própria, gravável) para não esbarrar em métodos não-graváveis
+// herdados do protótipo em modo estrito. É o ponto único e confiável de
+// detecção: não depende de roteamento de stdout/stderr nem de evento público.
+function instrumentBaileysLoggerForHealth(baileysLogger) {
+  if (!baileysLogger || baileysLogger.__healthInstrumented) return baileysLogger
+  const wrapLevel = (target, level) => {
+    const orig = target?.[level]
+    if (typeof orig !== 'function') return
+    const bound = orig.bind(target)
+    Object.defineProperty(target, level, {
+      value: (...args) => {
+        try {
+          for (const arg of args) {
+            if (typeof arg === 'string' && SESSION_HEALTH_SIGNAL_RE.test(arg)) { recordCryptoError(); break }
+          }
+        } catch {}
+        return bound(...args)
+      },
+      writable: true,
+      configurable: true,
+    })
+  }
+  for (const level of ['info', 'warn', 'error']) wrapLevel(baileysLogger, level)
+  const origChild = typeof baileysLogger.child === 'function' ? baileysLogger.child.bind(baileysLogger) : null
+  if (origChild) {
+    Object.defineProperty(baileysLogger, 'child', {
+      value: (...args) => instrumentBaileysLoggerForHealth(origChild(...args)),
+      writable: true,
+      configurable: true,
+    })
+  }
+  Object.defineProperty(baileysLogger, '__healthInstrumented', { value: true, configurable: true })
+  return baileysLogger
+}
+
 function canAcceptSendJob() {
   return !shuttingDown
 }
@@ -1234,7 +1321,7 @@ async function startBotInner() {
     version,
     auth: state,
     printQRInTerminal: false,
-    logger: logger.child({ name: 'baileys' }),
+    logger: instrumentBaileysLoggerForHealth(logger.child({ name: 'baileys' })),
   })
 
   pendingSock = sock
@@ -2264,7 +2351,7 @@ process.on('message', async msg => {
   }
 
   if (msg?.type === 'metrics') {
-    process.send({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats() } })
+    process.send({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats(), sessionHealth: getSessionHealth() } })
   }
 
   if (msg?.type === 'broadcast') {
