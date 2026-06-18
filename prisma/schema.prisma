@@ -94,6 +94,8 @@ model Group {
   blockedKeywords   String?
   allowedPlatforms  String?
   welcomeMsg        String?
+  channelButtonJid  String?
+  channelButtonName String?
   monitorTargets   GroupTarget[] @relation("MonitorTargets")
   postTargets      GroupTarget[] @relation("PostTargets")
   channelHealth    ChannelHealth?

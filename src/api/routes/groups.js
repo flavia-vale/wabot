@@ -9,6 +9,7 @@ import {
   isRunning as _isRunning,
 } from '../../manager.js'
 import { ensureJid, detectKind, parseChannelInviteUrl, JID_KIND } from '../../core/jid.js'
+import { normalizeChannelForwardJid } from '../../core/channelSend.js'
 import { canFollowNow, logFollow } from '../../core/followGuard.js'
 import { getHealth as getChannelHealth } from '../../core/channelHealth.js'
 import { captureSnapshot } from '../../jobs/channelSnapshot.js'
@@ -131,7 +132,7 @@ export async function groupsRoutes(app, opts = {}) {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo não encontrado' })
 
-    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope } = req.body ?? {}
+    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope, channelButtonJid, channelButtonName } = req.body ?? {}
     if (allowedPlatforms !== undefined) {
       const platforms = String(allowedPlatforms).split(',').filter(Boolean)
       const invalid = platforms.find(p => !['shopee', 'amazon', 'mercadolivre', 'magazineluiza'].includes(p))
@@ -155,6 +156,19 @@ export async function groupsRoutes(app, opts = {}) {
       return reply.code(400).send({ error: 'noLinkScope só pode ser usado com forwardMode=ALLOW_NO_LINK' })
     }
 
+    // Botão "Ver canal" por grupo de destino: '' limpa (sem botão), JID válido
+    // salva, formato inválido → 400. Só faz sentido em grupo de destino (post).
+    const normalizedChannelButtonJid = channelButtonJid !== undefined ? normalizeChannelForwardJid(channelButtonJid) : undefined
+    if (channelButtonJid !== undefined && normalizedChannelButtonJid === null) {
+      return reply.code(400).send({ error: 'JID do canal inválido. Use o formato 1203...@newsletter.' })
+    }
+    if (channelButtonJid !== undefined && group.role !== 'post') {
+      return reply.code(400).send({ error: 'Botão de canal só pode ser definido em grupos de destino (post).' })
+    }
+    const normalizedChannelButtonName = channelButtonName !== undefined
+      ? String(channelButtonName ?? '').trim().slice(0, 80)
+      : undefined
+
     const currentPolicy = normalizeForwardingPolicy(group)
     const requestedForwardMode = forwardMode ?? currentPolicy.forwardMode
     const requestedNoLinkScope = requestedForwardMode === FORWARD_MODE.ALLOW_NO_LINK
@@ -175,6 +189,8 @@ export async function groupsRoutes(app, opts = {}) {
         ...(fallbackToOriginal !== undefined ? { fallbackToOriginal: parseBoolean(fallbackToOriginal) } : {}),
         ...(forwardMode !== undefined ? { forwardMode: requestedForwardMode } : {}),
         ...((noLinkScope !== undefined || forwardMode !== undefined) ? { noLinkScope: requestedNoLinkScope } : {}),
+        ...(normalizedChannelButtonJid !== undefined ? { channelButtonJid: normalizedChannelButtonJid || null } : {}),
+        ...(normalizedChannelButtonName !== undefined ? { channelButtonName: normalizedChannelButtonName || null } : {}),
       },
     })
     const configReloaded = reloadConfig(req.user.sub)

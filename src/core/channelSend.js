@@ -86,6 +86,51 @@ export function buildRelayProto(proto, { caption, forwardNewsletter = null } = {
   return next
 }
 
+// Injeta o botão nativo "Ver canal" (forwardedNewsletterMessageInfo) num payload
+// já pronto para sock.sendMessage — cobre os caminhos que NÃO passam por
+// buildRelayProto: texto puro, imagem montada (buildMonitoredMessagePayload) e
+// broadcast/oferta automática. É o irmão de buildRelayProto para o caminho
+// sendMessage (não-relay).
+//
+// `payload` aceita dois formatos:
+//   - { primary, fallbacks } (buildMonitoredMessagePayload) → injeta no primary
+//     e em cada fallback;
+//   - corpo cru de sendMessage ({ text } / { image, caption }) → injeta direto.
+// `forwardNewsletter` ausente/sem newsletterJid → retorna o payload INTACTO
+// (no-op). Cópia rasa: não muta o input.
+//
+// ATENÇÃO: não usar em destino canal (@newsletter) — lá o contextInfo é removido
+// por stripChannelUnsafeFields. O chamador deve checar isChannelDestination antes.
+export function injectChannelForwardIntoPayload(payload, forwardNewsletter) {
+  if (payload == null) return payload
+  if (!forwardNewsletter || !forwardNewsletter.newsletterJid) return payload
+
+  const info = {
+    newsletterJid: String(forwardNewsletter.newsletterJid),
+    newsletterName: String(forwardNewsletter.newsletterName ?? ''),
+  }
+  if (forwardNewsletter.serverMessageId != null) {
+    info.serverMessageId = Number(forwardNewsletter.serverMessageId)
+  }
+
+  const withButton = (body) => {
+    if (body == null || typeof body !== 'object') return body
+    const ctx = { ...(body.contextInfo || {}) }
+    ctx.forwardedNewsletterMessageInfo = info
+    ctx.isForwarded = true
+    return { ...body, contextInfo: ctx }
+  }
+
+  if (payload.primary) {
+    return {
+      ...payload,
+      primary: withButton(payload.primary),
+      fallbacks: Array.isArray(payload.fallbacks) ? payload.fallbacks.map(withButton) : payload.fallbacks,
+    }
+  }
+  return withButton(payload)
+}
+
 // Detecta se um erro de sendMessage indica que a conta NÃO pode postar
 // no canal (não é admin/owner) — diferente de erro transitório de rede.
 // Para erro "forbidden", o retry loop deve abortar imediatamente em vez
