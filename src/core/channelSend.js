@@ -88,14 +88,21 @@ export function buildRelayProto(proto, { caption, forwardNewsletter = null } = {
 
 // Injeta o botão nativo "Ver canal" (forwardedNewsletterMessageInfo) num payload
 // já pronto para sock.sendMessage — cobre os caminhos que NÃO passam por
-// buildRelayProto: texto puro, imagem montada (buildMonitoredMessagePayload) e
-// broadcast/oferta automática. É o irmão de buildRelayProto para o caminho
-// sendMessage (não-relay).
+// buildRelayProto: imagem montada (buildMonitoredMessagePayload) e
+// broadcast/oferta automática com imagem. É o irmão de buildRelayProto para o
+// caminho sendMessage (não-relay).
+//
+// MÍDIA-ONLY (decisão pós-regressão): o botão só é injetado em corpos de MÍDIA
+// (image/video). Mensagens de TEXTO PURO recebem o payload INTACTO — o WhatsApp
+// derruba/rejeita texto carregando forwardedNewsletterMessageInfo (espelhamento
+// de texto parava de sair). O botão nativo "Ver canal" só é confiável quando
+// acompanha mídia encaminhada, que é como o WhatsApp o renderiza.
 //
 // `payload` aceita dois formatos:
-//   - { primary, fallbacks } (buildMonitoredMessagePayload) → injeta no primary
-//     e em cada fallback;
-//   - corpo cru de sendMessage ({ text } / { image, caption }) → injeta direto.
+//   - { primary, fallbacks } (buildMonitoredMessagePayload) → injeta em cada
+//     corpo de mídia (o fallback de texto fica intacto);
+//   - corpo cru de sendMessage ({ text } / { image, caption }) → injeta só se
+//     for mídia.
 // `forwardNewsletter` ausente/sem newsletterJid → retorna o payload INTACTO
 // (no-op). Cópia rasa: não muta o input.
 //
@@ -113,8 +120,11 @@ export function injectChannelForwardIntoPayload(payload, forwardNewsletter) {
     info.serverMessageId = Number(forwardNewsletter.serverMessageId)
   }
 
+  // Só mídia leva o botão; texto puro sai sem contextInfo (evita drop no WhatsApp).
+  const isMediaBody = (body) => body != null && typeof body === 'object' && (body.image != null || body.video != null)
+
   const withButton = (body) => {
-    if (body == null || typeof body !== 'object') return body
+    if (!isMediaBody(body)) return body
     const ctx = { ...(body.contextInfo || {}) }
     ctx.forwardedNewsletterMessageInfo = info
     ctx.isForwarded = true
