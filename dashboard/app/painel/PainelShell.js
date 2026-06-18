@@ -161,7 +161,7 @@ export default function PainelShell({ children }) {
   // conseguir ler mensagens (decrypt dessincronizado), o worker devolve
   // sessionHealth.degraded e mostramos o banner global de reconexão.
   useEffect(() => {
-    if (!online) { setSessionHealth(null); return undefined }
+    if (!online) return undefined
     let active = true
     let timer = null
     const poll = async () => {
@@ -180,8 +180,8 @@ export default function PainelShell({ children }) {
   }
 
   const ctxValue = useMemo(
-    () => ({ user, online, phone, groupCount, sessionHealth, setHeader }),
-    [user, online, phone, groupCount, sessionHealth],
+    () => ({ user, online, phone, groupCount, sessionHealth, refreshSession, setHeader }),
+    [user, online, phone, groupCount, sessionHealth, refreshSession],
   )
 
   if (checking) {
@@ -325,7 +325,7 @@ export default function PainelShell({ children }) {
           </header>
 
           <div className="pnl-content">
-            {sessionHealth?.degraded && !pathname.startsWith('/painel/whatsapp') && (
+            {online && sessionHealth?.degraded && !pathname.startsWith('/painel/whatsapp') && (
               <div
                 className="pnl-note-box is-error"
                 role="alert"

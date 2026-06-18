@@ -32,7 +32,7 @@ function NoteBox({ variant = 'is-warn', title, message }) {
 
 export default function WhatsAppPage() {
   usePainelHeader({ title: 'Conexão WhatsApp', subtitle: 'Status da sessão e conexão pelo número ou QR Code' })
-  const { sessionHealth } = usePainel()
+  const { sessionHealth, refreshSession } = usePainel()
   const reconnectHandledRef = useRef(false)
 
   const [status, setStatus] = useState(null)
@@ -543,7 +543,13 @@ export default function WhatsAppPage() {
     if (params.get('reconnect') !== '1') return
     reconnectHandledRef.current = true
     window.history.replaceState({}, '', '/painel/whatsapp')
-    handleRestart()
+    // Defere para fora do corpo síncrono do efeito (handleRestart altera
+    // estado) — evita cascading renders e satisfaz react-hooks/set-state-in-effect.
+    const t = setTimeout(() => { handleRestart() }, 0)
+    return () => clearTimeout(t)
+    // Só deve disparar quando o status terminar de carregar; handleRestart é
+    // estável o bastante para este uso único guardado por ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusLoading])
 
   const isConnected = status?.status === 'connected'
@@ -578,7 +584,7 @@ export default function WhatsAppPage() {
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 560, margin: '0 auto' }}>
-      {sessionHealth?.degraded && (
+      {sessionHealth?.degraded && isConnected && (
         <div className="pnl-note-box is-error" role="alert">
           <strong style={{ fontWeight: 600, display: 'block' }}>⚠️ Conexão instável — mensagens não estão sendo lidas</strong>
           <p style={{ marginTop: 4 }}>
