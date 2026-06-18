@@ -191,3 +191,34 @@ test('listFollowedChannels com followedSet vazio retorna []', async () => {
   const result = await listFollowedChannels({ sock, followedSet: new Set() })
   assert.deepEqual(result, [])
 })
+
+test('listFollowedChannels: canal travado é pulado pelo timeout por canal', async () => {
+  const sock = {
+    user: { id: 'me@s.whatsapp.net' },
+    newsletterMetadata: async (type, key) => {
+      if (key === 'slow@newsletter') return new Promise(() => {}) // nunca resolve
+      return { id: key, name: 'X', owner: 'me@s.whatsapp.net' }
+    },
+  }
+  const followedSet = new Set(['fast@newsletter', 'slow@newsletter'])
+  const start = Date.now()
+  const result = await listFollowedChannels({ sock, followedSet, concurrency: 2, perCallTimeoutMs: 50, budgetMs: 5000 })
+  assert.ok(Date.now() - start < 2000, 'não espera o canal travado')
+  assert.deepEqual(result.map(r => r.jid), ['fast@newsletter'])
+})
+
+test('listFollowedChannels: deadline global retorna resultado parcial', async () => {
+  const sock = {
+    user: { id: 'me@s.whatsapp.net' },
+    newsletterMetadata: async (type, key) => {
+      await new Promise((r) => setTimeout(r, 40))
+      return { id: key, name: 'X', owner: 'me@s.whatsapp.net' }
+    },
+  }
+  const followedSet = new Set(Array.from({ length: 50 }, (_, i) => `c${i}@newsletter`))
+  const start = Date.now()
+  const result = await listFollowedChannels({ sock, followedSet, concurrency: 1, budgetMs: 120, perCallTimeoutMs: 1000 })
+  const elapsed = Date.now() - start
+  assert.ok(elapsed < 600, `retorna perto do budget (elapsed=${elapsed})`)
+  assert.ok(result.length >= 1 && result.length < 50, `parcial (${result.length})`)
+})
