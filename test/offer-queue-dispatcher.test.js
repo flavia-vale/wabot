@@ -171,3 +171,34 @@ test('startOfSaoPauloDayUtc preserva a fronteira BRT', () => {
   assert.equal(startOfSaoPauloDayUtc(new Date('2026-06-10T02:59:59Z')).toISOString(), '2026-06-09T03:00:00.000Z')
   assert.equal(startOfSaoPauloDayUtc(new Date('2026-06-10T03:00:00Z')).toISOString(), '2026-06-10T03:00:00.000Z')
 })
+
+test('horário de funcionamento da fila: fora da janela não envia (override)', async () => {
+  // now = 2026-06-10T15:00:00Z = 12:00 BRT, fora de 13:00-22:00
+  const { queue, calls, deps } = setup({ operatingHoursEnabled: true, operatingHoursStart: '13:00', operatingHoursEnd: '22:00' })
+  assert.deepEqual(await drainQueueOnce(queue, deps), { skipped: 'outside_operating_hours' })
+  assert.equal(calls.sent.length, 0)
+})
+
+test('horário de funcionamento da fila: dentro da janela ignora a janela silenciosa global', async () => {
+  // 12:00 BRT dentro de 07:00-22:00; botConfig com quiet ligado cobrindo o dia
+  // inteiro NÃO deve barrar, porque a fila tem horário próprio (override).
+  const { queue, calls, deps } = setup({ operatingHoursEnabled: true, operatingHoursStart: '07:00', operatingHoursEnd: '22:00' })
+  deps.db.botConfig = { findFirst: async () => ({ quietHoursEnabled: true, channelQuietHoursJson: '{"startHour":0,"endHour":23,"tz":"America/Sao_Paulo"}' }) }
+  assert.deepEqual(await drainQueueOnce(queue, deps), { sent: 'i1' })
+  assert.equal(calls.sent.length, 1)
+})
+
+test('sem horário próprio: segue a janela silenciosa global quando habilitada', async () => {
+  // 12:00 BRT dentro de quiet 07-22 com quietHoursEnabled => bloqueia.
+  const { queue, calls, deps } = setup()
+  deps.db.botConfig = { findFirst: async () => ({ quietHoursEnabled: true, channelQuietHoursJson: '{"startHour":7,"endHour":22,"tz":"America/Sao_Paulo"}' }) }
+  assert.deepEqual(await drainQueueOnce(queue, deps), { skipped: 'quiet_hours' })
+  assert.equal(calls.sent.length, 0)
+})
+
+test('sem horário próprio: janela silenciosa global desligada não bloqueia', async () => {
+  const { queue, calls, deps } = setup()
+  deps.db.botConfig = { findFirst: async () => ({ quietHoursEnabled: false, channelQuietHoursJson: '{"startHour":7,"endHour":22,"tz":"America/Sao_Paulo"}' }) }
+  assert.deepEqual(await drainQueueOnce(queue, deps), { sent: 'i1' })
+  assert.equal(calls.sent.length, 1)
+})
