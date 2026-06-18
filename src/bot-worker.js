@@ -174,6 +174,11 @@ let sessionRecoveryInFlight = false
 // Sinais de falha de decrypt para o indicador de saúde da sessão no painel.
 let cryptoErrorTimestamps = []
 let lastCryptoErrorAt = null
+// Recebimentos decifrados com sucesso — prova de que a sessão CONSEGUE ler.
+// Usado para NÃO acusar degradado quando há tráfego entrando normalmente
+// (retry receipt é rotineiro; só é sintoma real se nada está decifrando).
+let incomingSuccessTimestamps = []
+let lastSuccessfulIncomingAt = null
 
 let heartbeatTimer = null
 let lastHeartbeatPersistAt = 0
@@ -785,36 +790,56 @@ function getSendQueueMetrics() {
 // é o mais confiável: o Baileys o loga uma vez por mensagem indecifrável.
 const SESSION_HEALTH_SIGNAL_RE = /sent retry receipt|failed to decrypt|Bad MAC|MessageCounterError|Key used already or never filled/i
 
+function pushWindowed(arr, now) {
+  arr.push(now)
+  const cutoff = now - WA_SESSION_DEGRADED_WINDOW_MS
+  // Poda barata: só varre quando o array cresce ou a cabeça já saiu da janela.
+  if (arr.length > 1_000 || arr[0] < cutoff) return arr.filter(ts => ts >= cutoff)
+  return arr
+}
+
 function recordCryptoError() {
   const now = Date.now()
   lastCryptoErrorAt = now
-  cryptoErrorTimestamps.push(now)
-  const cutoff = now - WA_SESSION_DEGRADED_WINDOW_MS
-  // Poda barata: só varre quando o array cresce ou a cabeça já saiu da janela.
-  if (cryptoErrorTimestamps.length > 1_000 || cryptoErrorTimestamps[0] < cutoff) {
-    cryptoErrorTimestamps = cryptoErrorTimestamps.filter(ts => ts >= cutoff)
-  }
+  cryptoErrorTimestamps = pushWindowed(cryptoErrorTimestamps, now)
+}
+
+// Marca uma mensagem recebida E decifrada com sucesso (prova de que a sessão
+// está lendo). Chamado no messages.upsert para mensagens com conteúdo real.
+function recordSuccessfulIncoming() {
+  const now = Date.now()
+  lastSuccessfulIncomingAt = now
+  incomingSuccessTimestamps = pushWindowed(incomingSuccessTimestamps, now)
 }
 
 // Snapshot consumido pelo /api/session/status (via metrics IPC) para o painel
-// decidir se mostra o banner "reconecte". 'degraded' exige sessão conectada —
-// se ela caiu, o status normal de "desconectado" já cobre o aviso.
+// decidir se mostra o banner "reconecte". 'degraded' exige TRÊS coisas juntas:
+// sessão conectada (READY), surto recente de falhas de decrypt E **nenhuma**
+// mensagem decifrada com sucesso na janela. O gate de "zero sucessos" é o que
+// evita falso positivo: numa sessão saudável e movimentada sempre entram
+// mensagens decifradas, então retry receipts esporádicos não disparam o aviso.
+// Só sinaliza quando a sessão inteira parou de ler (caso real do incidente).
 function getSessionHealth() {
   const now = Date.now()
   const cutoff = now - WA_SESSION_DEGRADED_WINDOW_MS
   cryptoErrorTimestamps = cryptoErrorTimestamps.filter(ts => ts >= cutoff)
+  incomingSuccessTimestamps = incomingSuccessTimestamps.filter(ts => ts >= cutoff)
   const cryptoErrors = cryptoErrorTimestamps.length
+  const decryptedOk = incomingSuccessTimestamps.length
   const degraded =
     lifecycleState === WA_LIFECYCLE.READY &&
     cryptoErrors >= WA_SESSION_DEGRADED_THRESHOLD &&
+    decryptedOk === 0 &&
     lastCryptoErrorAt != null &&
     now - lastCryptoErrorAt <= WA_SESSION_DEGRADED_WINDOW_MS
   return {
     degraded,
     cryptoErrors,
+    decryptedOk,
     windowMs: WA_SESSION_DEGRADED_WINDOW_MS,
     threshold: WA_SESSION_DEGRADED_THRESHOLD,
     lastCryptoErrorAt,
+    lastSuccessfulIncomingAt,
   }
 }
 
@@ -2106,6 +2131,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }
       }
       if (msg.key.fromMe) continue
+      // Mensagem com conteúdo real = decifrada com sucesso. Alimenta o gate de
+      // "zero sucessos" da saúde da sessão (evita falso positivo do banner).
+      if (msg.message) recordSuccessfulIncoming()
       // Marca atividade do JID — usado pelo monitorSilenceWatchdog pra
       // diferenciar "monitor parado por falha de decrypt" de "monitor
       // inativo organicamente". Atualiza independente de filtros downstream.
