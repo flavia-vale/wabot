@@ -1889,17 +1889,20 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // worker. Mantém image.buffer (Buffer) em memória do processo, sem
         // passar pelo Redis. Ver enqueueSendJob() para a explicação completa.
         const buildPayload = async () => {
-          if (shouldUseRelayPath({ destJid, hasOriginal: !!original })) {
+          // Quando o destino tem botão de canal (channelForward), pulamos o relay
+          // de propósito: o relay reaproveita o proto de mídia da ORIGEM e injetar
+          // o NOSSO canal nele faz o WhatsApp derrubar o envio. Em vez disso caímos
+          // no caminho sendMessage com a imagem rebaixada (getImage) — o MESMO
+          // caminho comprovado das ofertas automáticas — e a injeção central
+          // (mídia-only) adiciona o botão. Sem botão, mantemos o relay (fidelidade
+          // máxima de mídia, inclui vídeo).
+          if (shouldUseRelayPath({ destJid, hasOriginal: !!original }) && !channelForward) {
             const hasCaption = original.type === 'imageMessage' || original.type === 'videoMessage'
-            // Sempre higieniza o contextInfo herdado da ORIGEM — remove o
-            // forwardedNewsletterMessageInfo (botão "Ver canal" de terceiros) e
-            // externalAdReply. Quando o GRUPO DE DESTINO tem canal configurado
-            // (channelForward != null), injeta o canal do PRÓPRIO usuário no
-            // lugar. forwardNewsletter=null → apenas limpa (sem botão).
-            const forwardNewsletter = channelForward
+            // Higieniza o contextInfo herdado da ORIGEM (remove botão de terceiros
+            // e externalAdReply). forwardNewsletter=null: relay nunca injeta canal.
             const replayProto = buildRelayProto(original.proto, {
               caption: hasCaption ? variantText : undefined,
-              forwardNewsletter,
+              forwardNewsletter: null,
             })
             return {
               _route: 'relay',
