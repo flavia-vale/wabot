@@ -1,16 +1,18 @@
 'use client'
 
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { NAV_GROUPS } from './nav'
 import SidebarOnboarding from '@/components/SidebarOnboarding'
 
-/* Contexto compartilhado: dados de sessão/usuário buscados uma vez pelo shell
- * e reusados pelas páginas (sem refetch). Páginas também publicam o título do
- * header aqui via usePainelHeader(). Nada disso toca o back end além das rotas
- * já existentes em @/lib/api. */
+/* Contexto compartilhado: dados de sessão/usuário reusados pelas páginas. O
+ * status de sessão (`online`/`phone`) é re-buscado periodicamente e ao focar a
+ * aba para não ficar obsoleto (ver refreshSession). Páginas também publicam o
+ * título do header aqui via usePainelHeader() e podem forçar uma atualização
+ * imediata do status via refreshSession(). Nada disso toca o back end além das
+ * rotas já existentes em @/lib/api. */
 const PainelContext = createContext(null)
 
 export function usePainel() {
@@ -113,21 +115,44 @@ export default function PainelShell({ children }) {
     return () => { active = false }
   }, [router])
 
-  // Status de sessão + contagem de grupos (compartilhado com as páginas).
+  // Status de sessão + contagem de grupos (compartilhado com a tag do header
+  // e a página de espelhamento, que leem `online` deste contexto). Precisa ser
+  // re-buscado periodicamente: a página /painel/whatsapp acompanha o status ao
+  // vivo (WS+polling), mas o shell não — se ele buscasse só uma vez no mount,
+  // ficaria preso em "desconectado" mesmo depois da sessão conectar, gerando a
+  // inconsistência entre /painel/whatsapp (conectado) e o resto do painel.
+  const refreshSession = useCallback(async () => {
+    const [s, g] = await Promise.allSettled([api.sessionStatusFast(), api.groups()])
+    if (s.status === 'fulfilled') {
+      setOnline(s.value?.status === 'connected')
+      setPhone(s.value?.phone ?? null)
+    } else {
+      setOnline(false)
+    }
+    if (g.status === 'fulfilled' && Array.isArray(g.value)) setGroupCount(g.value.length)
+  }, [])
+
+  const refreshSessionRef = useRef(refreshSession)
+  useEffect(() => { refreshSessionRef.current = refreshSession }, [refreshSession])
+
   useEffect(() => {
     if (checking) return undefined
-    let active = true
-    Promise.allSettled([api.sessionStatusFast(), api.groups()]).then(([s, g]) => {
-      if (!active) return
-      if (s.status === 'fulfilled') {
-        setOnline(s.value?.status === 'connected')
-        setPhone(s.value?.phone ?? null)
-      } else {
-        setOnline(false)
-      }
-      if (g.status === 'fulfilled' && Array.isArray(g.value)) setGroupCount(g.value.length)
-    })
-    return () => { active = false }
+    let cancelled = false
+    const tick = () => { if (!cancelled) refreshSessionRef.current?.() }
+    tick()
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      tick()
+    }, 20000)
+    const onVisible = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') tick()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [checking])
 
   async function logout() {
@@ -136,8 +161,8 @@ export default function PainelShell({ children }) {
   }
 
   const ctxValue = useMemo(
-    () => ({ user, online, phone, groupCount, setHeader }),
-    [user, online, phone, groupCount],
+    () => ({ user, online, phone, groupCount, setHeader, refreshSession }),
+    [user, online, phone, groupCount, refreshSession],
   )
 
   if (checking) {

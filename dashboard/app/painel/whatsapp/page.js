@@ -12,7 +12,7 @@ import { QRCodeCanvas as QRCode } from 'qrcode.react'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { HelpLink } from '@/components/HelpLink'
 import { useToast } from '@/components/ToastProvider'
-import { usePainelHeader } from '../PainelShell'
+import { usePainelHeader, usePainel } from '../PainelShell'
 
 const QR_TIMEOUT_SECONDS = 20
 const QR_EXPIRY_SECONDS = 60
@@ -32,6 +32,9 @@ function NoteBox({ variant = 'is-warn', title, message }) {
 
 export default function WhatsAppPage() {
   usePainelHeader({ title: 'Conexão WhatsApp', subtitle: 'Status da sessão e conexão pelo número ou QR Code' })
+  // Mantém o status compartilhado do shell (tag do header + espelhamento) em
+  // sincronia com o status ao vivo desta página, sem esperar o polling do shell.
+  const { refreshSession } = usePainel()
 
   const [status, setStatus] = useState(null)
   const [statusLoading, setStatusLoading] = useState(true)
@@ -50,6 +53,8 @@ export default function WhatsAppPage() {
   const [qrRetrying, setQrRetrying] = useState(false)
   const wsRef = useRef(null)
   const openWSRef = useRef(null)
+  const refreshSessionRef = useRef(refreshSession)
+  useEffect(() => { refreshSessionRef.current = refreshSession }, [refreshSession])
   const wsReconnectAttemptsRef = useRef(0)
   const wsQrTimeoutRef = useRef(null)
   const qrPollingRef = useRef(null)
@@ -155,6 +160,7 @@ export default function WhatsAppPage() {
             setPairingCode('')
             wsRef.current?.close()
             fetchStatus()
+            refreshSessionRef.current?.()
           }
         }
       },
@@ -404,6 +410,7 @@ export default function WhatsAppPage() {
       setPairingCode('')
       wsRef.current?.close()
       await fetchStatus()
+      refreshSessionRef.current?.()
       setFeedback('Bot desligado. Para voltar, gere um novo QR Code ou código de pareamento.')
     } catch (err) {
       setError(err.message)
