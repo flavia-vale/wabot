@@ -35,6 +35,8 @@ import {
   encodeEvent,
   isCommandStale,
   isKnownCommand,
+  lastEventCacheTtlSeconds,
+  lastEventKey,
   resolveRedisUrl,
 } from './protocol.js'
 
@@ -169,6 +171,21 @@ function publishEvent(userId, type, data) {
     publisher.publish(EVENTS_CHANNEL, encodeEvent({ userId, type, data }))
   } catch (err) {
     logger.warn({ err: err.message, userId, type }, 'Falha ao publicar evento')
+  }
+  cacheLastEvent(userId, type, data)
+}
+
+// Grava o último valor de QR/STATUS numa chave Redis com TTL para que um
+// assinante tardio (API reiniciada, subscriber reconectado) possa re-hidratar
+// em vez de ficar cego até a próxima publicação. Best-effort: falha aqui não
+// pode derrubar a publicação do evento ao vivo.
+function cacheLastEvent(userId, type, data) {
+  const ttl = lastEventCacheTtlSeconds(type)
+  if (!ttl) return
+  try {
+    void publisher.set(lastEventKey(userId, type), JSON.stringify(data ?? null), 'EX', ttl)
+  } catch (err) {
+    logger.warn({ err: err.message, userId, type }, 'Falha ao cachear last-event')
   }
 }
 

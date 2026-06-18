@@ -79,6 +79,16 @@ logModeSummary('bot-worker', {
   hasRedisUrl: Boolean(process.env.REDIS_URL),
 })
 
+// Nudge anti-ban (P1-3): em produção, com dedup global ativa, fail-open deixa
+// passar um envio duplicado quando o Redis pisca — exatamente o cenário que
+// gera ban. O recomendado é REDIS_DEDUP_FAIL_MODE=closed (derruba só a mensagem
+// corrente, recuperável). Avisamos no boot em vez de mudar o default
+// silenciosamente, porque a virada fail-open→closed é mudança de semântica que
+// deve ser validada em staging antes (ver docs/redis-bullmq-resilience-audit.md).
+if (String(process.env.APP_ENV) === 'production' && Boolean(process.env.REDIS_URL) && GLOBAL_DEDUP_MODE !== 'off' && REDIS_DEDUP_FAIL_MODE === 'open') {
+  logger.warn('REDIS_DEDUP_FAIL_MODE=open em produção: num blip de Redis a dedup global pode DUPLICAR um envio (risco de ban). Recomendado setar REDIS_DEDUP_FAIL_MODE=closed no .env (validar em staging antes).')
+}
+
 function useGlobalRedis() {
   if (!process.env.REDIS_URL) return false
   if (GLOBAL_RATE_LIMIT_MODE === 'off' && GLOBAL_DEDUP_MODE === 'off') return false

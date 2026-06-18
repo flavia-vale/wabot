@@ -7,6 +7,18 @@
 
 Versões: `bullmq ^5.76.10`, `ioredis ^5.10.1`.
 
+## Status de implementação (PR #969)
+
+| Item | Status |
+|------|--------|
+| P0-1 (TTL/freshness de comando + drenagem implícita no boot) | ✅ Feito |
+| P0-2 (lockDuration + descarte de stalled não-idempotente) | ✅ Feito |
+| P1-1 (comentário enganoso `bot-worker.js`) | ✅ Feito |
+| P1-3 (nudge no boot p/ `REDIS_DEDUP_FAIL_MODE=closed`) | ✅ Feito (código) — falta setar `.env` no VPS (staging→prod) |
+| P1-4 (last-value de QR/status no Redis + re-hidratação) | ✅ Feito |
+| P1-2 (payload lazy → BullMQ persistente) | ⏸️ Pendente — refactor arquitetural (ver nota em P1-2) |
+| P2-* | ⏳ Backlog |
+
 ## 1. Inventário (onde Redis/BullMQ são usados)
 
 | # | Arquivo | Papel | Conexão | TTL / retenção | Fail-mode |
