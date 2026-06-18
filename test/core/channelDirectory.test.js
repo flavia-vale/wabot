@@ -48,6 +48,30 @@ test('getChannelMetadata normaliza owner com :device suffix do user atual', asyn
   assert.equal(result.isViewerOwner, true)
 })
 
+test('getChannelMetadata extrai nome quando name é objeto { text }', async () => {
+  const sock = makeSock({
+    newsletterMetadata: async () => ({ id: 'a@newsletter', name: { id: '1', text: 'Canal Objeto' }, owner: 'x@s.whatsapp.net' }),
+  })
+  const result = await getChannelMetadata({ sock, jid: 'a@newsletter' })
+  assert.equal(result.name, 'Canal Objeto')
+})
+
+test('getChannelMetadata extrai nome de thread_metadata.name.text', async () => {
+  const sock = makeSock({
+    newsletterMetadata: async () => ({ id: 'a@newsletter', thread_metadata: { name: { text: 'Canal Aninhado' } }, owner: 'x@s.whatsapp.net' }),
+  })
+  const result = await getChannelMetadata({ sock, jid: 'a@newsletter' })
+  assert.equal(result.name, 'Canal Aninhado')
+})
+
+test('getChannelMetadata sem nome em lugar nenhum vira string vazia', async () => {
+  const sock = makeSock({
+    newsletterMetadata: async () => ({ id: 'a@newsletter', owner: 'x@s.whatsapp.net' }),
+  })
+  const result = await getChannelMetadata({ sock, jid: 'a@newsletter' })
+  assert.equal(result.name, '')
+})
+
 test('getChannelMetadata retorna null quando newsletterMetadata retorna null', async () => {
   const sock = makeSock({ newsletterMetadata: async () => null })
   const result = await getChannelMetadata({ sock, jid: 'a@newsletter' })

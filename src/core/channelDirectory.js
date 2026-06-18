@@ -3,6 +3,24 @@ function normalizeJid(jid) {
   return jid.replace(/:\d+(?=@)/, '')
 }
 
+// O nome do canal vem em formatos diferentes conforme a versão do Baileys e a
+// origem (jid vs invite): pode ser string direta (`name`), objeto `{ text }`,
+// ou aninhado em `thread_metadata.name.text`. Lê tolerante a todos. Sem isso a
+// lista de "Canais que sigo" aparece toda como "Canal sem nome".
+function pickChannelName(meta) {
+  const fromField = (v) => {
+    if (typeof v === 'string') return v.trim()
+    if (v && typeof v === 'object' && typeof v.text === 'string') return v.text.trim()
+    return ''
+  }
+  return (
+    fromField(meta?.name) ||
+    fromField(meta?.thread_metadata?.name) ||
+    fromField(meta?.threadMetadata?.name) ||
+    ''
+  )
+}
+
 export async function getChannelMetadata({ sock, jid, inviteCode }) {
   if (!jid && !inviteCode) throw new Error('getChannelMetadata: jid ou inviteCode obrigatório')
   if (!sock?.newsletterMetadata) throw new Error('getChannelMetadata: sock.newsletterMetadata indisponível')
@@ -20,7 +38,7 @@ export async function getChannelMetadata({ sock, jid, inviteCode }) {
 
   return {
     jid: meta.id,
-    name: meta.name ?? '',
+    name: pickChannelName(meta),
     owner,
     isViewerOwner,
     picture: meta.picture?.url ?? null,
