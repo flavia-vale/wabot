@@ -26,12 +26,14 @@ import { parseEnumEnv, logModeSummary } from '../core/envModes.js'
 import {
   COMMAND,
   COMMAND_QUEUE,
+  COMMAND_TIMEOUTS_MS,
   EVENT,
   EVENTS_CHANNEL,
   SUPERVISOR_HEARTBEAT_KEY,
   SUPERVISOR_HEARTBEAT_RENEW_INTERVAL_MS,
   SUPERVISOR_HEARTBEAT_TTL_SECONDS,
   encodeEvent,
+  isCommandStale,
   isKnownCommand,
   resolveRedisUrl,
 } from './protocol.js'
@@ -266,23 +268,48 @@ const COMMAND_HANDLERS = {
   [COMMAND.GET_LAST_QR]: ({ userId }) => belongsToThisShard(userId) ? sessionCore.getLastQR(userId) : null,
 }
 
+// lockDuration > maior timeout de comando (+ folga) para que handlers
+// legitimamente longos (REQUEST_PAIRING_CODE 45s, SEND_BROADCAST 30s) NÃO
+// sejam marcados como stalled e reprocessados no meio da execução — um
+// reprocesso de SEND_BROADCAST seria envio duplicado. O guard isCommandStale
+// é a segunda linha: mesmo que um stall escape, o job reentregue já estará
+// velho demais e é descartado em vez de reexecutado.
+const COMMAND_LOCK_DURATION_MS = Math.max(60_000, Math.max(...Object.values(COMMAND_TIMEOUTS_MS)) + 15_000)
+
 const worker = new Worker(
   COMMAND_QUEUE,
   async job => {
     const name = job.name
     if (!isKnownCommand(name)) throw new Error(`Comando desconhecido: ${name}`)
+    const data = job.data ?? {}
+    // Drenagem de jobs velhos / TTL de comando: se a API já desistiu de
+    // esperar, descartar em vez de executar (evita SEND_BROADCAST duplicado).
+    // Retornamos resultado (job 'completed') em vez de throw: a decisão de
+    // descartar foi bem-sucedida; ninguém está aguardando o valor.
+    if (isCommandStale(name, data._enqueuedAt)) {
+      const ageMs = Date.now() - Number(data._enqueuedAt)
+      logger.warn({ jobId: job.id, name, userId: data.userId ?? null, ageMs }, 'Comando obsoleto descartado (API já desistiu) — não executado')
+      return { _stale: true, discarded: true, ageMs }
+    }
     const handler = COMMAND_HANDLERS[name]
     if (!handler) throw new Error(`Handler ausente para ${name}`)
-    return await handler(job.data ?? {})
+    return await handler(data)
   },
   {
     connection: { url: REDIS_URL, maxRetriesPerRequest: null },
     concurrency: 8,
+    lockDuration: COMMAND_LOCK_DURATION_MS,
   },
 )
 
 worker.on('failed', (job, err) => {
   logger.warn({ jobId: job?.id, name: job?.name, err: err?.message }, 'Comando supervisor falhou')
+})
+
+worker.on('stalled', jobId => {
+  // Reprocesso por stall é tolerado: isCommandStale descarta o reentregue se já
+  // passou do timeout. Logamos para visibilidade do sinal (morte abrupta).
+  logger.warn({ jobId }, 'Comando supervisor stalled (lock expirou) — guard de staleness evita efeito duplicado no reprocesso')
 })
 
 // ---- Heartbeat ----

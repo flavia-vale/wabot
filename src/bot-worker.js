@@ -645,10 +645,12 @@ const SMART_DELAY_TYPING_ENABLED = String(process.env.SMART_DELAY_TYPING_ENABLED
 const SMART_DELAY_TYPING_MIN_MS = Math.max(0, envNumber('SMART_DELAY_TYPING_MIN_MS', 1_200))
 const SMART_DELAY_TYPING_MAX_MS = Math.max(SMART_DELAY_TYPING_MIN_MS, envNumber('SMART_DELAY_TYPING_MAX_MS', 7_000))
 const SMART_DELAY_TYPING_CHARS_PER_SECOND = Math.max(1, envNumber('SMART_DELAY_TYPING_CHARS_PER_SECOND', 18))
-// QUEUE_BACKEND aceita 'memory', 'bullmq' ou vazio (auto). Quando vazio
-// e REDIS_URL está setado, default vira 'bullmq' — assim deploy em produção
-// ganha persistência automaticamente. Comportamento controlado em
-// resolveBackendMode() para manter a regra em um lugar só.
+// QUEUE_BACKEND aceita 'memory', 'bullmq' ou vazio. O DEFAULT é 'memory' —
+// inclusive quando REDIS_URL está setado. BullMQ é OPT-IN explícito
+// (QUEUE_BACKEND=bullmq) porque o payload de envio carrega Buffer de imagem
+// que o JSON.stringify do BullMQ corrompe (oferta sai sem foto). NÃO mudar
+// para auto-bullmq sem antes mover a montagem da mídia para pós-dequeue.
+// Regra centralizada em resolveBackendMode() (src/sendQueueBackend.js).
 const SEND_QUEUE_BACKEND_ENV = String(process.env.QUEUE_BACKEND || '').toLowerCase()
 const REDIS_URL = process.env.REDIS_URL || ''
 const BULLMQ_QUEUE_NAME = process.env.BULLMQ_QUEUE_NAME || `wabot-send-${userId}`

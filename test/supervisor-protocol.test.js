@@ -11,6 +11,7 @@ import {
   commandTimeoutMs,
   decodeEvent,
   encodeEvent,
+  isCommandStale,
   isKnownCommand,
   resolveRedisUrl,
 } from '../src/supervisor/protocol.js'
@@ -42,6 +43,35 @@ test('todo comando tem timeout configurado', () => {
 test('commandTimeoutMs cai no default para comando desconhecido', () => {
   assert.equal(commandTimeoutMs(COMMAND.LIST_GROUPS), 10_000)
   assert.equal(commandTimeoutMs('desconhecido'), 10_000)
+})
+
+test('isCommandStale: job dentro do timeout NÃO é obsoleto', () => {
+  const now = 1_000_000
+  // SEND_BROADCAST timeout = 30s; enfileirado há 10s => ainda válido
+  assert.equal(isCommandStale(COMMAND.SEND_BROADCAST, now - 10_000, now), false)
+})
+
+test('isCommandStale: job mais velho que o timeout é obsoleto', () => {
+  const now = 1_000_000
+  // START_BOT timeout = 5s; enfileirado há 6s => API já desistiu => descartar
+  assert.equal(isCommandStale(COMMAND.START_BOT, now - 6_000, now), true)
+  // SEND_BROADCAST 30s; enfileirado há 31s => descartar (evita envio duplicado)
+  assert.equal(isCommandStale(COMMAND.SEND_BROADCAST, now - 31_000, now), true)
+})
+
+test('isCommandStale: enqueuedAt ausente/ inválido é fail-safe (não obsoleto)', () => {
+  const now = 1_000_000
+  assert.equal(isCommandStale(COMMAND.SEND_BROADCAST, undefined, now), false)
+  assert.equal(isCommandStale(COMMAND.SEND_BROADCAST, null, now), false)
+  assert.equal(isCommandStale(COMMAND.SEND_BROADCAST, 'abc', now), false)
+  assert.equal(isCommandStale(COMMAND.SEND_BROADCAST, 0, now), false)
+})
+
+test('isCommandStale: graceMs estende a janela antes do descarte', () => {
+  const now = 1_000_000
+  // START_BOT 5s + grace 2s = 7s; aos 6s ainda válido, aos 8s obsoleto
+  assert.equal(isCommandStale(COMMAND.START_BOT, now - 6_000, now, 2_000), false)
+  assert.equal(isCommandStale(COMMAND.START_BOT, now - 8_000, now, 2_000), true)
 })
 
 test('encodeEvent gera JSON canônico com versão', () => {
