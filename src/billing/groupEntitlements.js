@@ -22,7 +22,13 @@ function toMonitorGroup(group, targetPostJids = []) {
 }
 
 function toPostDetail(group) {
-  return { waJid: group.waJid, kind: group.kind, welcomeMsg: group.welcomeMsg }
+  return {
+    waJid: group.waJid,
+    kind: group.kind,
+    welcomeMsg: group.welcomeMsg,
+    channelButtonJid: group.channelButtonJid ?? null,
+    channelButtonName: group.channelButtonName ?? null,
+  }
 }
 
 export function buildEntitledGroupConfig({ groups = [], groupTargets = [], planSubject = {}, logger = null } = {}) {

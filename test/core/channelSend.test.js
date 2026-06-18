@@ -6,6 +6,7 @@ import {
   isChannelDestination,
   isChannelForbiddenError,
   buildRelayProto,
+  injectChannelForwardIntoPayload,
   normalizeChannelForwardJid,
 } from '../../src/core/channelSend.js'
 
@@ -186,6 +187,53 @@ test('buildRelayProto', async (t) => {
     const proto = { contextInfo: { forwardedNewsletterMessageInfo: { newsletterJid: 'origem@newsletter' } } }
     buildRelayProto(proto, {})
     assert.deepEqual(proto.contextInfo, { forwardedNewsletterMessageInfo: { newsletterJid: 'origem@newsletter' } }, 'input intacto')
+  })
+})
+
+test('injectChannelForwardIntoPayload', async (t) => {
+  const channel = { newsletterJid: '120363000000000000@newsletter', newsletterName: 'Meu Canal' }
+
+  await t.test('null/sem canal → no-op (payload intacto)', () => {
+    const payload = { primary: { text: 'oi' }, fallbacks: [] }
+    assert.equal(injectChannelForwardIntoPayload(payload, null), payload)
+    assert.equal(injectChannelForwardIntoPayload(payload, {}), payload)
+    assert.equal(injectChannelForwardIntoPayload(payload, { newsletterName: 'sem jid' }), payload)
+    assert.equal(injectChannelForwardIntoPayload(null, channel), null)
+  })
+
+  await t.test('injeta o botão em corpo cru de texto', () => {
+    const result = injectChannelForwardIntoPayload({ text: 'oferta' }, channel)
+    assert.equal(result.text, 'oferta')
+    assert.deepEqual(result.contextInfo.forwardedNewsletterMessageInfo, {
+      newsletterJid: '120363000000000000@newsletter',
+      newsletterName: 'Meu Canal',
+    })
+    assert.equal(result.contextInfo.isForwarded, true)
+  })
+
+  await t.test('injeta no primary e em cada fallback (formato buildMonitoredMessagePayload)', () => {
+    const payload = {
+      _route: 'image',
+      primary: { image: Buffer.from('x'), caption: 'c' },
+      fallbacks: [{ text: 'fb' }],
+    }
+    const result = injectChannelForwardIntoPayload(payload, channel)
+    assert.equal(result.primary.contextInfo.forwardedNewsletterMessageInfo.newsletterJid, channel.newsletterJid)
+    assert.equal(result.fallbacks[0].contextInfo.forwardedNewsletterMessageInfo.newsletterJid, channel.newsletterJid)
+    // primary mantém a mídia original
+    assert.equal(result.primary.image, payload.primary.image)
+  })
+
+  await t.test('preserva contextInfo já existente e não muta o input', () => {
+    const payload = { text: 'oi', contextInfo: { mentionedJid: ['a@x'] } }
+    const result = injectChannelForwardIntoPayload(payload, channel)
+    assert.deepEqual(result.contextInfo.mentionedJid, ['a@x'])
+    assert.equal(payload.contextInfo.forwardedNewsletterMessageInfo, undefined, 'input intacto')
+  })
+
+  await t.test('serverMessageId é incluído quando presente', () => {
+    const result = injectChannelForwardIntoPayload({ text: 'oi' }, { ...channel, serverMessageId: 42 })
+    assert.equal(result.contextInfo.forwardedNewsletterMessageInfo.serverMessageId, 42)
   })
 })
 
