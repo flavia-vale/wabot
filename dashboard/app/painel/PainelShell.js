@@ -180,8 +180,8 @@ export default function PainelShell({ children }) {
   }
 
   const ctxValue = useMemo(
-    () => ({ user, online, phone, groupCount, sessionHealth, setHeader }),
-    [user, online, phone, groupCount, sessionHealth],
+    () => ({ user, online, phone, groupCount, sessionHealth, refreshSession, setHeader }),
+    [user, online, phone, groupCount, sessionHealth, refreshSession],
   )
 
   if (checking) {

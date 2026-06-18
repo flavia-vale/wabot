@@ -32,7 +32,7 @@ function NoteBox({ variant = 'is-warn', title, message }) {
 
 export default function WhatsAppPage() {
   usePainelHeader({ title: 'Conexão WhatsApp', subtitle: 'Status da sessão e conexão pelo número ou QR Code' })
-  const { sessionHealth } = usePainel()
+  const { sessionHealth, refreshSession } = usePainel()
   const reconnectHandledRef = useRef(false)
 
   const [status, setStatus] = useState(null)
