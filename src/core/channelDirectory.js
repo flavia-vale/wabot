@@ -45,27 +45,42 @@ export async function getChannelMetadata({ sock, jid, inviteCode }) {
   }
 }
 
-async function mapParallel(items, concurrency, fn) {
-  const result = new Array(items.length)
+export async function listFollowedChannels({
+  sock,
+  followedSet,
+  concurrency = 8,
+  // Deadline global folgado abaixo dos 20s do timeout do comando do supervisor
+  // (channel:listFollowed). Se houver muitos canais ou o newsletterMetadata
+  // estiver lento, retornamos resultado PARCIAL em vez de estourar o comando.
+  budgetMs = 12_000,
+  // Timeout por canal: um newsletterMetadata travado não pode prender o worker.
+  perCallTimeoutMs = 3_000,
+} = {}) {
+  if (!followedSet || followedSet.size === 0) return []
+  const jids = [...followedSet]
+  const deadline = Date.now() + budgetMs
+  const result = []
   let next = 0
   async function worker() {
-    while (true) {
-      const i = next++
-      if (i >= items.length) return
-      try { result[i] = await fn(items[i]) } catch { result[i] = null }
+    while (next < jids.length && Date.now() < deadline) {
+      const jid = jids[next++]
+      const meta = await withTimeout(
+        getChannelMetadata({ sock, jid }).catch(() => null),
+        perCallTimeoutMs,
+      )
+      if (meta) result.push(meta)
     }
   }
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker))
+  await Promise.all(Array.from({ length: Math.min(concurrency, jids.length) }, worker))
   return result
 }
 
-export async function listFollowedChannels({ sock, followedSet, concurrency = 5 }) {
-  if (!followedSet || followedSet.size === 0) return []
-  const jids = [...followedSet]
-  const items = await mapParallel(jids, concurrency, async (jid) => {
-    return getChannelMetadata({ sock, jid })
-  })
-  return items.filter(Boolean)
+// Resolve `null` se a promise não terminar em `ms` — usado para não deixar um
+// newsletterMetadata travado prender a listagem inteira.
+function withTimeout(promise, ms) {
+  let timer
+  const timeout = new Promise((resolve) => { timer = setTimeout(() => resolve(null), ms) })
+  return Promise.race([promise.finally(() => clearTimeout(timer)), timeout])
 }
 
 // Follow imediato idempotente. Reusa contratos de followedSet/inFlight da Fase 2.
