@@ -20,7 +20,7 @@ const DAY = 24 * HOUR
 
 const DEFAULT_QUIET = { startHour: 0, endHour: 6, tz: 'America/Sao_Paulo' }
 
-function parseQuietHours(raw) {
+export function parseQuietHours(raw) {
   if (!raw) return DEFAULT_QUIET
   try {
     const v = typeof raw === 'string' ? JSON.parse(raw) : raw
