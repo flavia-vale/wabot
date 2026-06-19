@@ -98,6 +98,33 @@ export function commandTimeoutMs(name) {
   return COMMAND_TIMEOUTS_MS[name] ?? 10_000
 }
 
+// Margem extra (ms) antes de considerar um comando obsoleto. Default 0: um job
+// mais velho que o próprio timeout significa que a API já desistiu de esperar
+// (o waitUntilFinished do client estourou), então executá-lo só produziria
+// efeito colateral órfão — em SEND_BROADCAST, um envio DUPLICADO tardio (risco
+// de ban). Tunável via env para quem quiser uma folga contra jitter de relógio.
+export const COMMAND_STALE_GRACE_MS = Math.max(0, Number(process.env.SUPERVISOR_COMMAND_STALE_GRACE_MS ?? 0))
+
+/**
+ * Decide se um comando enfileirado está obsoleto — i.e., a API que o enviou já
+ * desistiu de esperar a resposta. Usado pelo Worker do supervisor para
+ * descartar, ANTES de rodar o handler, dois tipos de job velho:
+ *   1. os que ficaram parados em `wait`/`active` enquanto o supervisor estava
+ *      fora do ar (restart, deploy, incidente da pegadinha #9) e seriam
+ *      processados tardiamente ao voltar;
+ *   2. os reentregues por stall (lock expirado) após uma morte abrupta.
+ * Sem esse corte, um SEND_BROADCAST reaparecido vira envio duplicado.
+ *
+ * `enqueuedAt` ausente/inválido => NÃO obsoleto (fail-safe: na dúvida,
+ * processa — mantém compat com jobs antigos sem `_enqueuedAt`).
+ */
+export function isCommandStale(name, enqueuedAt, now = Date.now(), graceMs = COMMAND_STALE_GRACE_MS) {
+  const ts = Number(enqueuedAt)
+  if (!Number.isFinite(ts) || ts <= 0) return false
+  const maxAgeMs = commandTimeoutMs(name) + Math.max(0, Number(graceMs) || 0)
+  return now - ts > maxAgeMs
+}
+
 /**
  * Empacota um evento no formato canônico antes de publicar em EVENTS_CHANNEL.
  * Mantém versionamento explícito (v) para permitir evoluir o formato sem

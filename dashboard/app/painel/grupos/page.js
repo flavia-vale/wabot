@@ -13,6 +13,7 @@ import { api } from '@/lib/api'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { HelpLink } from '@/components/HelpLink'
 import { AddChannelModal } from '@/components/AddChannelModal'
+import { SelectChannelModal } from '@/components/SelectChannelModal'
 import { TypeBadge, FollowBadge, AdminBadge, HealthBadge } from '@/components/ChannelStatusBadges'
 import { ChannelHealthPanel } from '@/components/ChannelHealthPanel'
 import { usePainelHeader, PainelContentActions } from '../PainelShell'
@@ -81,6 +82,7 @@ export default function GruposPage() {
   const [targetLoading, setTargetLoading] = useState(false)
   const autoFixingImageModeRef = useRef(new Set())
   const [showChannelModal, setShowChannelModal] = useState(false)
+  const [channelButtonGroupId, setChannelButtonGroupId] = useState(null)
   const [tab, setTab] = useState('monitor')
   const [expandedConfigId, setExpandedConfigId] = useState(null)
   const [followStatus, setFollowStatus] = useState({})
@@ -382,6 +384,30 @@ export default function GruposPage() {
             placeholder="Mensagem enviada quando alguém entra no grupo (opcional)"
           />
         </div>
+        {g.kind !== 'channel' && (
+          <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+            <p className="pnl-label" style={{ marginBottom: 6 }}>Botão “Ver canal” ao final das mensagens</p>
+            <p className="pnl-hint" style={{ marginTop: 0, marginBottom: 8 }}>
+              Toda mensagem enviada para este grupo (espelhada, oferta automática ou agendada) sai com um botão “Ver canal” apontando para o canal escolhido. Deixe sem canal para não inserir botão.
+            </p>
+            {g.channelButtonJid ? (
+              <div style={{ display: 'grid', gap: 8 }}>
+                <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--pnl-radius-sm)', padding: 10 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{g.channelButtonName || 'Canal sem nome'}</div>
+                  <div className="pnl-hint" style={{ fontFamily: 'monospace', marginTop: 2 }}>{g.channelButtonJid}</div>
+                </div>
+                <div className="pnl-toolbar">
+                  <button type="button" className="pnl-btn" onClick={() => setChannelButtonGroupId(g.id)}>Trocar canal</button>
+                  <button type="button" className="pnl-btn" onClick={() => handleUpdateGroup(g.id, { channelButtonJid: '', channelButtonName: '' })}>Remover botão</button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" className="pnl-btn is-primary" onClick={() => setChannelButtonGroupId(g.id)}>
+                Escolher canal do botão
+              </button>
+            )}
+          </div>
+        )}
         {g.kind === 'channel' && (
           <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
@@ -590,6 +616,14 @@ export default function GruposPage() {
       />
 
       <AddChannelModal open={showChannelModal} onClose={() => setShowChannelModal(false)} onCreated={handleChannelCreated} />
+
+      <SelectChannelModal
+        open={channelButtonGroupId !== null}
+        onClose={() => setChannelButtonGroupId(null)}
+        onSelect={({ jid, name }) => {
+          if (channelButtonGroupId) handleUpdateGroup(channelButtonGroupId, { channelButtonJid: jid, channelButtonName: name })
+        }}
+      />
     </div>
   )
 }

@@ -6,14 +6,19 @@ import { startOfSaoPauloDayUtc } from '../../offerQueue/time.js'
 
 const DEFAULTS = { intervalMinutes: 30, hourlyCap: 10, dailyCap: 50 }
 
+const HHMM_RE = /^\d{2}:\d{2}$/
+
 function queueData(body = {}, partial = false) {
   const data = {}
-  const fields = ['name', 'enabled', 'intervalEnabled', 'intervalMinutes', 'hourlyCapEnabled', 'hourlyCap', 'dailyCapEnabled', 'dailyCap']
+  const fields = ['name', 'enabled', 'intervalEnabled', 'intervalMinutes', 'hourlyCapEnabled', 'hourlyCap', 'dailyCapEnabled', 'dailyCap', 'operatingHoursEnabled', 'operatingHoursStart', 'operatingHoursEnd']
   for (const field of fields) if (body[field] !== undefined) data[field] = body[field]
   if (body.targetJids !== undefined) data.targetJids = JSON.stringify(normalizeTargetJids(body.targetJids))
-  if (!partial) Object.assign(data, { enabled: body.enabled ?? true, intervalEnabled: body.intervalEnabled ?? false, intervalMinutes: body.intervalMinutes ?? DEFAULTS.intervalMinutes, hourlyCapEnabled: body.hourlyCapEnabled ?? false, hourlyCap: body.hourlyCap ?? DEFAULTS.hourlyCap, dailyCapEnabled: body.dailyCapEnabled ?? false, dailyCap: body.dailyCap ?? DEFAULTS.dailyCap, targetJids: data.targetJids ?? '[]' })
+  if (!partial) Object.assign(data, { enabled: body.enabled ?? true, intervalEnabled: body.intervalEnabled ?? false, intervalMinutes: body.intervalMinutes ?? DEFAULTS.intervalMinutes, hourlyCapEnabled: body.hourlyCapEnabled ?? false, hourlyCap: body.hourlyCap ?? DEFAULTS.hourlyCap, dailyCapEnabled: body.dailyCapEnabled ?? false, dailyCap: body.dailyCap ?? DEFAULTS.dailyCap, operatingHoursEnabled: body.operatingHoursEnabled ?? false, targetJids: data.targetJids ?? '[]' })
   if ('name' in data) data.name = typeof data.name === 'string' ? data.name.trim() : ''
   for (const field of ['intervalMinutes', 'hourlyCap', 'dailyCap']) if (field in data) data[field] = Number(data[field])
+  // Sem horário de funcionamento, os campos de hora são zerados para não deixar
+  // resíduo de uma configuração anterior.
+  if (data.operatingHoursEnabled === false) Object.assign(data, { operatingHoursStart: null, operatingHoursEnd: null })
   return data
 }
 
@@ -22,6 +27,9 @@ function validateQueue(data, current = {}) {
   if (!merged.name) return 'Nome da fila é obrigatório'
   for (const [toggle, value, label] of [['intervalEnabled', 'intervalMinutes', 'Intervalo'], ['hourlyCapEnabled', 'hourlyCap', 'Limite por hora'], ['dailyCapEnabled', 'dailyCap', 'Limite por dia']]) {
     if (merged[toggle] && (!Number.isInteger(merged[value]) || merged[value] < 1)) return `${label} deve ser um número inteiro maior ou igual a 1`
+  }
+  if (merged.operatingHoursEnabled) {
+    if (!HHMM_RE.test(merged.operatingHoursStart ?? '') || !HHMM_RE.test(merged.operatingHoursEnd ?? '')) return 'Horário de funcionamento exige início e fim no formato HH:mm'
   }
   return null
 }

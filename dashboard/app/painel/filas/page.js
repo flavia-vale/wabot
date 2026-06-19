@@ -7,7 +7,7 @@ import { ProFeaturePaywall } from '@/components/ProFeaturePaywall'
 import { hasProLikeAccess } from '@/lib/planEntitlements'
 import { PainelContentActions, usePainelHeader } from '../PainelShell'
 
-const EMPTY = { name: '', enabled: true, intervalEnabled: false, intervalMinutes: 30, hourlyCapEnabled: false, hourlyCap: 10, dailyCapEnabled: false, dailyCap: 50, targetJids: [] }
+const EMPTY = { name: '', enabled: true, intervalEnabled: false, intervalMinutes: 30, hourlyCapEnabled: false, hourlyCap: 10, dailyCapEnabled: false, dailyCap: 50, operatingHoursEnabled: false, operatingHoursStart: '08:00', operatingHoursEnd: '22:00', targetJids: [] }
 const LIMITS = [
   ['intervalEnabled', 'intervalMinutes', 'Intervalo mínimo entre ofertas', 'minutos'],
   ['hourlyCapEnabled', 'hourlyCap', 'Máximo de ofertas por hora', 'ofertas'],
@@ -46,7 +46,7 @@ export default function FilasPage() {
   useEffect(() => { load(); loadGroups() }, [])
 
   function openCreate() { setEditing(null); setForm(EMPTY); setShowForm(true); setMessage(''); setNotice('') }
-  function openEdit(queue) { setEditing(queue.id); setForm({ ...EMPTY, ...queue }); setShowForm(true); setMessage(''); setNotice('') }
+  function openEdit(queue) { setEditing(queue.id); setForm({ ...EMPTY, ...queue, operatingHoursStart: queue.operatingHoursStart || EMPTY.operatingHoursStart, operatingHoursEnd: queue.operatingHoursEnd || EMPTY.operatingHoursEnd }); setShowForm(true); setMessage(''); setNotice('') }
   async function save(event) {
     event.preventDefault(); setMessage('')
     if (!form.targetJids.length) { setMessage('Selecione pelo menos um grupo de destino para a fila.'); return }
@@ -94,6 +94,7 @@ export default function FilasPage() {
     if (queue.intervalEnabled) active.push(`${queue.intervalMinutes} min entre ofertas`)
     if (queue.hourlyCapEnabled) active.push(`${queue.hourlyCap}/hora`)
     if (queue.dailyCapEnabled) active.push(`${queue.dailyCap}/dia`)
+    if (queue.operatingHoursEnabled && queue.operatingHoursStart && queue.operatingHoursEnd) active.push(`funciona ${queue.operatingHoursStart}–${queue.operatingHoursEnd}`)
     return active.length ? active.join(' · ') : 'Sem limites adicionais'
   }
   const destinationsLabel = (queue) => {
@@ -147,6 +148,14 @@ export default function FilasPage() {
         {!groups.length && <p className="pnl-note-box is-error" style={{ marginTop: 8 }}>Nenhum grupo de postagem configurado. <Link href="/painel/grupos">Adicionar grupos</Link></p>}
       </div>
       <div className="pnl-grid" style={{ marginTop: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>{LIMITS.map(([toggle, value, label, unit]) => <div className="pnl-card" key={toggle} style={{ boxShadow: 'none' }}><label className="pnl-check"><input type="checkbox" checked={form[toggle]} onChange={(e) => setForm((current) => ({ ...current, [toggle]: e.target.checked }))} />{label}</label>{form[toggle] && <div className="pnl-field" style={{ marginTop: 12 }}><label className="pnl-label" htmlFor={value}>Valor ({unit})</label><input id={value} className="pnl-input" type="number" min="1" step="1" value={form[value]} onChange={(e) => setForm((current) => ({ ...current, [value]: Number(e.target.value) }))} required /></div>}</div>)}</div>
+      <div className="pnl-card" style={{ marginTop: 16, boxShadow: 'none' }}>
+        <label className="pnl-check"><input type="checkbox" checked={form.operatingHoursEnabled} onChange={(e) => setForm((current) => ({ ...current, operatingHoursEnabled: e.target.checked }))} />Selecionar horário de funcionamento SÓ dessa fila?</label>
+        <p className="pnl-hint" style={{ marginTop: 6 }}>Se marcado, esta fila obedece somente ao horário definido aqui e ignora a janela silenciosa global das configurações. Se desmarcado, a fila segue a janela silenciosa global.</p>
+        {form.operatingHoursEnabled && <div className="pnl-grid" style={{ marginTop: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
+          <div className="pnl-field"><label className="pnl-label" htmlFor="operatingHoursStart">Início</label><input id="operatingHoursStart" className="pnl-input" type="time" value={form.operatingHoursStart} onChange={(e) => setForm((current) => ({ ...current, operatingHoursStart: e.target.value }))} required /></div>
+          <div className="pnl-field"><label className="pnl-label" htmlFor="operatingHoursEnd">Fim</label><input id="operatingHoursEnd" className="pnl-input" type="time" value={form.operatingHoursEnd} onChange={(e) => setForm((current) => ({ ...current, operatingHoursEnd: e.target.value }))} required /></div>
+        </div>}
+      </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 16 }}><button className="pnl-btn is-primary" type="submit">Salvar fila</button><button className="pnl-btn" type="button" onClick={() => setShowForm(false)}>Cancelar</button></div>
     </form>}
     {loading ? <div className="pnl-card">Carregando filas…</div> : !queues.length ? <div className="pnl-card"><div className="pnl-card-title">Nenhuma fila criada</div><p className="pnl-hint" style={{ marginTop: 6 }}>Crie uma fila para distribuir ofertas automaticamente ao longo do dia.</p><button className="pnl-btn is-primary" style={{ marginTop: 14 }} onClick={openCreate}>Criar primeira fila</button></div> : queues.map((queue) => <section className="pnl-card" key={queue.id} style={{ opacity: queue.enabled ? 1 : 0.76 }}>

@@ -12,7 +12,7 @@ import { QRCodeCanvas as QRCode } from 'qrcode.react'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { HelpLink } from '@/components/HelpLink'
 import { useToast } from '@/components/ToastProvider'
-import { usePainelHeader } from '../PainelShell'
+import { usePainelHeader, usePainel } from '../PainelShell'
 
 const QR_TIMEOUT_SECONDS = 20
 const QR_EXPIRY_SECONDS = 60
@@ -32,6 +32,8 @@ function NoteBox({ variant = 'is-warn', title, message }) {
 
 export default function WhatsAppPage() {
   usePainelHeader({ title: 'Conexão WhatsApp', subtitle: 'Status da sessão e conexão pelo número ou QR Code' })
+  const { sessionHealth, refreshSession } = usePainel()
+  const reconnectHandledRef = useRef(false)
 
   const [status, setStatus] = useState(null)
   const [statusLoading, setStatusLoading] = useState(true)
@@ -50,6 +52,8 @@ export default function WhatsAppPage() {
   const [qrRetrying, setQrRetrying] = useState(false)
   const wsRef = useRef(null)
   const openWSRef = useRef(null)
+  const refreshSessionRef = useRef(refreshSession)
+  useEffect(() => { refreshSessionRef.current = refreshSession }, [refreshSession])
   const wsReconnectAttemptsRef = useRef(0)
   const wsQrTimeoutRef = useRef(null)
   const qrPollingRef = useRef(null)
@@ -155,6 +159,7 @@ export default function WhatsAppPage() {
             setPairingCode('')
             wsRef.current?.close()
             fetchStatus()
+            refreshSessionRef.current?.()
           }
         }
       },
@@ -404,6 +409,7 @@ export default function WhatsAppPage() {
       setPairingCode('')
       wsRef.current?.close()
       await fetchStatus()
+      refreshSessionRef.current?.()
       setFeedback('Bot desligado. Para voltar, gere um novo QR Code ou código de pareamento.')
     } catch (err) {
       setError(err.message)
@@ -527,6 +533,25 @@ export default function WhatsAppPage() {
     return () => document.removeEventListener('visibilitychange', onHidden)
   }, [status?.running, status?.status, qr, qrWaitElapsed, trackTelemetry])
 
+  // O banner global "Reconectar agora" navega para cá com ?reconnect=1.
+  // Dispara uma reconexão (stop+start → novo QR) uma única vez e limpa o
+  // parâmetro para que um refresh não re-execute a ação.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (reconnectHandledRef.current || statusLoading) return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('reconnect') !== '1') return
+    reconnectHandledRef.current = true
+    window.history.replaceState({}, '', '/painel/whatsapp')
+    // Defere para fora do corpo síncrono do efeito (handleRestart altera
+    // estado) — evita cascading renders e satisfaz react-hooks/set-state-in-effect.
+    const t = setTimeout(() => { handleRestart() }, 0)
+    return () => clearTimeout(t)
+    // Só deve disparar quando o status terminar de carregar; handleRestart é
+    // estável o bastante para este uso único guardado por ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusLoading])
+
   const isConnected = status?.status === 'connected'
   const isConnecting = status?.status === 'connecting'
   const isRunning = status?.running
@@ -559,6 +584,19 @@ export default function WhatsAppPage() {
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 560, margin: '0 auto' }}>
+      {sessionHealth?.degraded && isConnected && (
+        <div className="pnl-note-box is-error" role="alert">
+          <strong style={{ fontWeight: 600, display: 'block' }}>⚠️ Conexão instável — mensagens não estão sendo lidas</strong>
+          <p style={{ marginTop: 4 }}>
+            O WhatsApp está conectado, mas falhando ao descriptografar as mensagens dos seus grupos
+            (sessão dessincronizada). Suas ofertas podem não estar sendo espelhadas. Reconecte gerando
+            um novo QR Code para normalizar.
+          </p>
+          <button type="button" className="pnl-btn is-primary" style={{ marginTop: 12 }} onClick={handleRestart} disabled={loading}>
+            {actionLoading === 'restart' ? 'Reconectando…' : 'Reconectar agora'}
+          </button>
+        </div>
+      )}
       <div className="pnl-toolbar" style={{ justifyContent: 'flex-end' }}>
         <HelpLink topic="como-conectar-whatsapp-qr-code">Ajuda para conectar</HelpLink>
       </div>

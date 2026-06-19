@@ -24,7 +24,7 @@ test('buildEntitledGroupConfig removes all channel monitors, posts and targets f
   assert.deepEqual(result.groups.monitor[0].targetPostJids, ['post@g.us'])
   assert.deepEqual(result.groups.monitorJids, ['monitor@g.us'])
   assert.deepEqual(result.groups.post, ['post@g.us'])
-  assert.deepEqual(result.groups.postDetails, [{ waJid: 'post@g.us', kind: 'group', welcomeMsg: 'oi' }])
+  assert.deepEqual(result.groups.postDetails, [{ waJid: 'post@g.us', kind: 'group', welcomeMsg: 'oi', channelButtonJid: null, channelButtonName: null }])
 })
 
 test('buildEntitledGroupConfig keeps channels for active trial and Pro', () => {

@@ -129,3 +129,28 @@ test('reativar fila limpa o intervalo anterior e tenta enviar a primeira oferta 
   assert.equal(drains.length, 1)
   assert.equal(drains[0].lastSentAt, null)
 })
+
+test('horário de funcionamento: valida formato e persiste/zera os campos', async (t) => {
+  const db = fakeDb()
+  const app = await appFor('user-h', db)
+  t.after(async () => { await app.close() })
+
+  // Toggle ligado sem horários válidos => 400
+  const invalid = await app.inject({ method: 'POST', url: '/api/offer-queues', payload: { name: 'Comercial', targetJids: ['g@g.us'], operatingHoursEnabled: true, operatingHoursStart: '7h', operatingHoursEnd: '22:00' } })
+  assert.equal(invalid.statusCode, 400)
+
+  // Toggle ligado com HH:mm válido => persiste
+  const created = await app.inject({ method: 'POST', url: '/api/offer-queues', payload: { name: 'Comercial', targetJids: ['g@g.us'], operatingHoursEnabled: true, operatingHoursStart: '07:00', operatingHoursEnd: '22:00' } })
+  assert.equal(created.statusCode, 200)
+  const queue = created.json()
+  assert.equal(queue.operatingHoursEnabled, true)
+  assert.equal(queue.operatingHoursStart, '07:00')
+  assert.equal(queue.operatingHoursEnd, '22:00')
+
+  // Desligar o toggle zera os horários
+  const updated = await app.inject({ method: 'PUT', url: `/api/offer-queues/${queue.id}`, payload: { operatingHoursEnabled: false } })
+  assert.equal(updated.statusCode, 200)
+  assert.equal(updated.json().operatingHoursEnabled, false)
+  assert.equal(updated.json().operatingHoursStart, null)
+  assert.equal(updated.json().operatingHoursEnd, null)
+})

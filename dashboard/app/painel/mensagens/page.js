@@ -11,7 +11,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
-import { SelectChannelModal } from '@/components/SelectChannelModal'
 import {
   composeTemplates,
   readLocalTemplateStore,
@@ -61,8 +60,7 @@ function Chevron({ open }) {
 export default function MensagensPage() {
   usePainelHeader({ title: 'Templates de mensagens', subtitle: 'Crie templates e personalize os textos das suas ofertas' })
 
-  const [value, setValue] = useState({ copyVariationPoolJson: '{}', brandingGroupLink: '', couponLink: '', channelForwardJid: '', channelForwardName: '' })
-  const [showChannelModal, setShowChannelModal] = useState(false)
+  const [value, setValue] = useState({ copyVariationPoolJson: '{}', brandingGroupLink: '', couponLink: '' })
   const [templateStore, setTemplateStore] = useState(() => readLocalTemplateStore())
   const [automations, setAutomations] = useState([])
   const [templateMode, setTemplateMode] = useState('list')
@@ -93,8 +91,6 @@ export default function MensagensPage() {
           copyVariationPoolJson: cfg.copyVariationPoolJson ?? '{}',
           brandingGroupLink: cfg.brandingGroupLink ?? '',
           couponLink: cfg.couponLink ?? '',
-          channelForwardJid: cfg.channelForwardJid ?? '',
-          channelForwardName: cfg.channelForwardName ?? '',
         })
         setTemplateStore(store)
         setAutomations(Array.isArray(automationList) ? automationList : [])
@@ -129,8 +125,6 @@ export default function MensagensPage() {
         brandingGroupLink: value.brandingGroupLink,
         couponLink: value.couponLink,
         mobileTemplatesJson: JSON.stringify(templateStore),
-        channelForwardJid: value.channelForwardJid,
-        channelForwardName: value.channelForwardName,
       })
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
@@ -222,6 +216,13 @@ export default function MensagensPage() {
 
   const [dadosGroup, blocosGroup] = OFFER_TEMPLATE_VARIABLE_GROUPS
 
+  const saveButtonLabel = saving ? 'Salvando…' : saved ? '✓ Salvo' : 'Salvar'
+  const renderSaveButton = (label = saveButtonLabel) => (
+    <button type="button" className="pnl-btn is-primary" onClick={handleSave} disabled={saving}>
+      {saving ? 'Salvando…' : label}
+    </button>
+  )
+
   // Editor de template reutilizado (create + edit dentro do acordeão)
   const renderEditor = () => (
     <div className="pnl-grid">
@@ -290,9 +291,12 @@ export default function MensagensPage() {
       <section>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 4 }}>
           <div className="pnl-card-title" style={{ fontSize: 15 }}>Templates de mensagens</div>
-          {templateMode === 'list' && (
-            <button type="button" className="pnl-btn is-primary" onClick={startCreateTemplate}>Criar template</button>
-          )}
+          <div className="pnl-toolbar" style={{ gap: 8 }}>
+            {templateMode === 'list' && (
+              <button type="button" className="pnl-btn" onClick={startCreateTemplate}>Criar template</button>
+            )}
+            {renderSaveButton()}
+          </div>
         </div>
         <p className="pnl-card-note" style={{ marginBottom: 12 }}>Use os mesmos templates no Criar oferta e nas ofertas automáticas.</p>
 
@@ -357,7 +361,10 @@ export default function MensagensPage() {
                             <WhatsAppBubble text={renderedPreview} format />
                           </div>
                         </div>
-                        <button type="button" className="pnl-btn is-primary" style={{ marginTop: 12 }} onClick={() => startEditTemplate(template)}>Editar template</button>
+                        <div className="pnl-toolbar" style={{ marginTop: 12, gap: 8 }}>
+                          <button type="button" className="pnl-btn" onClick={() => startEditTemplate(template)}>Editar template</button>
+                          {renderSaveButton()}
+                        </div>
                       </>
                     )}
                   </div>
@@ -388,7 +395,10 @@ export default function MensagensPage() {
 
       {/* Textos dinâmicos */}
       <section>
-        <div className="pnl-card-title" style={{ fontSize: 15 }}>Textos dinâmicos</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div className="pnl-card-title" style={{ fontSize: 15 }}>Textos dinâmicos</div>
+          {renderSaveButton()}
+        </div>
         <p className="pnl-card-note" style={{ marginBottom: 12 }}>Pedacinhos que o bot intercala em cada envio, pra nenhuma mensagem sair 100% igual. Quanto mais variações, mais natural.</p>
         <div className="pnl-grid">
           {VARIATION_GROUPS.map((g) => {
@@ -423,9 +433,12 @@ export default function MensagensPage() {
                         </div>
                       ))}
                     </div>
-                    <button type="button" className="pnl-btn" style={{ marginTop: 12, borderStyle: 'dashed', color: 'var(--accent-strong)' }} onClick={() => addItem(g.key)} disabled={items.length >= MAX_VARIATIONS}>
-                      + Adicionar variação
-                    </button>
+                    <div className="pnl-toolbar" style={{ marginTop: 12, gap: 8 }}>
+                      <button type="button" className="pnl-btn" style={{ borderStyle: 'dashed', color: 'var(--accent-strong)' }} onClick={() => addItem(g.key)} disabled={items.length >= MAX_VARIATIONS}>
+                        + Adicionar variação
+                      </button>
+                      {renderSaveButton()}
+                    </div>
                   </div>
                 )}
               </div>
@@ -436,7 +449,10 @@ export default function MensagensPage() {
 
       {/* 2 · Links */}
       <section className="pnl-card">
-        <div className="pnl-card-title">Links</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div className="pnl-card-title">Links</div>
+          {renderSaveButton()}
+        </div>
         <p className="pnl-card-note" style={{ marginBottom: 12 }}>
           Use <code className="pnl-token" style={{ cursor: 'default' }}>{'{{grupoLink}}'}</code> e{' '}
           <code className="pnl-token" style={{ cursor: 'default' }}>{'{{cupomLink}}'}</code> nos seus ganchos e CTAs.
@@ -486,31 +502,6 @@ export default function MensagensPage() {
               </div>
       </details>
 
-      {/* Seu canal do WhatsApp (botão "Ver canal" das mensagens espelhadas) */}
-      <section className="pnl-card">
-        <div className="pnl-card-title">Seu canal do WhatsApp</div>
-        <p className="pnl-card-note" style={{ marginBottom: 14 }}>
-          Quando definido, as ofertas espelhadas para grupos exibem o botão <b>“Ver canal”</b> apontando para o seu canal — no lugar do canal de quem postou a oferta original. Deixe vazio para apenas remover o botão de terceiros.
-        </p>
-
-        {value.channelForwardJid ? (
-          <div className="pnl-grid" style={{ gap: 10 }}>
-            <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--pnl-radius-sm)', padding: 12 }}>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{value.channelForwardName || 'Canal sem nome'}</div>
-              <div className="pnl-hint" style={{ fontFamily: 'monospace', marginTop: 2 }}>{value.channelForwardJid}</div>
-            </div>
-            <div className="pnl-toolbar">
-              <button type="button" className="pnl-btn" onClick={() => setShowChannelModal(true)} disabled={saving}>Trocar canal</button>
-              <button type="button" className="pnl-btn" onClick={() => setValue((v) => ({ ...v, channelForwardJid: '', channelForwardName: '' }))} disabled={saving}>Remover</button>
-            </div>
-          </div>
-        ) : (
-          <button type="button" className="pnl-btn is-primary" onClick={() => setShowChannelModal(true)} disabled={saving}>
-            Escolher meu canal
-          </button>
-        )}
-      </section>
-
       {/* Salvar */}
       <div className="pnl-toolbar">
         <button type="button" className="pnl-btn is-primary" onClick={handleSave} disabled={saving}>
@@ -518,12 +509,6 @@ export default function MensagensPage() {
         </button>
         {saved && <span className="pnl-tag is-success">✓ Salvo!</span>}
       </div>
-
-      <SelectChannelModal
-        open={showChannelModal}
-        onClose={() => setShowChannelModal(false)}
-        onSelect={({ jid, name }) => setValue((v) => ({ ...v, channelForwardJid: jid, channelForwardName: name }))}
-      />
     </div>
   )
 }

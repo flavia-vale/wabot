@@ -48,6 +48,30 @@ test('getChannelMetadata normaliza owner com :device suffix do user atual', asyn
   assert.equal(result.isViewerOwner, true)
 })
 
+test('getChannelMetadata extrai nome quando name é objeto { text }', async () => {
+  const sock = makeSock({
+    newsletterMetadata: async () => ({ id: 'a@newsletter', name: { id: '1', text: 'Canal Objeto' }, owner: 'x@s.whatsapp.net' }),
+  })
+  const result = await getChannelMetadata({ sock, jid: 'a@newsletter' })
+  assert.equal(result.name, 'Canal Objeto')
+})
+
+test('getChannelMetadata extrai nome de thread_metadata.name.text', async () => {
+  const sock = makeSock({
+    newsletterMetadata: async () => ({ id: 'a@newsletter', thread_metadata: { name: { text: 'Canal Aninhado' } }, owner: 'x@s.whatsapp.net' }),
+  })
+  const result = await getChannelMetadata({ sock, jid: 'a@newsletter' })
+  assert.equal(result.name, 'Canal Aninhado')
+})
+
+test('getChannelMetadata sem nome em lugar nenhum vira string vazia', async () => {
+  const sock = makeSock({
+    newsletterMetadata: async () => ({ id: 'a@newsletter', owner: 'x@s.whatsapp.net' }),
+  })
+  const result = await getChannelMetadata({ sock, jid: 'a@newsletter' })
+  assert.equal(result.name, '')
+})
+
 test('getChannelMetadata retorna null quando newsletterMetadata retorna null', async () => {
   const sock = makeSock({ newsletterMetadata: async () => null })
   const result = await getChannelMetadata({ sock, jid: 'a@newsletter' })
@@ -166,4 +190,35 @@ test('listFollowedChannels com followedSet vazio retorna []', async () => {
   const sock = { newsletterMetadata: async () => { throw new Error('should-not-call') } }
   const result = await listFollowedChannels({ sock, followedSet: new Set() })
   assert.deepEqual(result, [])
+})
+
+test('listFollowedChannels: canal travado é pulado pelo timeout por canal', async () => {
+  const sock = {
+    user: { id: 'me@s.whatsapp.net' },
+    newsletterMetadata: async (type, key) => {
+      if (key === 'slow@newsletter') return new Promise(() => {}) // nunca resolve
+      return { id: key, name: 'X', owner: 'me@s.whatsapp.net' }
+    },
+  }
+  const followedSet = new Set(['fast@newsletter', 'slow@newsletter'])
+  const start = Date.now()
+  const result = await listFollowedChannels({ sock, followedSet, concurrency: 2, perCallTimeoutMs: 50, budgetMs: 5000 })
+  assert.ok(Date.now() - start < 2000, 'não espera o canal travado')
+  assert.deepEqual(result.map(r => r.jid), ['fast@newsletter'])
+})
+
+test('listFollowedChannels: deadline global retorna resultado parcial', async () => {
+  const sock = {
+    user: { id: 'me@s.whatsapp.net' },
+    newsletterMetadata: async (type, key) => {
+      await new Promise((r) => setTimeout(r, 40))
+      return { id: key, name: 'X', owner: 'me@s.whatsapp.net' }
+    },
+  }
+  const followedSet = new Set(Array.from({ length: 50 }, (_, i) => `c${i}@newsletter`))
+  const start = Date.now()
+  const result = await listFollowedChannels({ sock, followedSet, concurrency: 1, budgetMs: 120, perCallTimeoutMs: 1000 })
+  const elapsed = Date.now() - start
+  assert.ok(elapsed < 600, `retorna perto do budget (elapsed=${elapsed})`)
+  assert.ok(result.length >= 1 && result.length < 50, `parcial (${result.length})`)
 })

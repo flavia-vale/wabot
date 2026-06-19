@@ -4,7 +4,6 @@ import { DEFAULT_BRANDING_CTA_TEXT, MAX_BRANDING_CTA_CHARS, normalizeBrandingCta
 import { buildFeatureGateError, canUseAdvancedPreservation, FEATURE_CODES } from '../../billing/plans.js'
 import { DEFAULT_COPY_VARIATION_POOL_JSON, resolveCopyVariationPoolJson } from '../../core/copyVariation.js'
 import { canonicalizeTemplateStoreJson } from '../../core/templateVariables.js'
-import { normalizeChannelForwardJid } from '../../core/channelSend.js'
 export { DEFAULT_COPY_VARIATION_POOL_JSON } from '../../core/copyVariation.js'
 
 const DEFAULTS = {
@@ -21,11 +20,7 @@ const DEFAULTS = {
   copyVariationPoolJson: DEFAULT_COPY_VARIATION_POOL_JSON,
   mobileTemplatesJson: '{}',
   mobileCouponLinksJson: '{}',
-  channelForwardJid: '',
-  channelForwardName: '',
 }
-
-const MAX_CHANNEL_FORWARD_NAME_CHARS = 80
 
 
 async function getPlanSubject(db, userId) {
@@ -59,7 +54,7 @@ export async function configRoutes(app, opts = {}) {
 
   app.put('/', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
-    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg, feedGlobal, postToStatus, brandingGroupLink, brandingCtaText, couponLink, copyVariationPoolJson, mobileTemplatesJson, mobileCouponLinksJson, channelForwardJid, channelForwardName } = req.body ?? {}
+    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg, feedGlobal, postToStatus, brandingGroupLink, brandingCtaText, couponLink, copyVariationPoolJson, mobileTemplatesJson, mobileCouponLinksJson } = req.body ?? {}
 
     if (delayMin !== undefined && !isIntegerInRange(delayMin)) {
       return reply.code(400).send({ error: 'delayMin deve ser um número inteiro entre 0 e 300' })
@@ -112,11 +107,6 @@ export async function configRoutes(app, opts = {}) {
     if (brandingCtaText !== undefined && String(brandingCtaText ?? '').trim().length > MAX_BRANDING_CTA_CHARS) {
       return reply.code(400).send({ error: `Texto do CTA deve ter no máximo ${MAX_BRANDING_CTA_CHARS} caracteres` })
     }
-    const normalizedChannelForwardJid = normalizeChannelForwardJid(channelForwardJid)
-    if (channelForwardJid !== undefined && normalizedChannelForwardJid === null) {
-      return reply.code(400).send({ error: 'JID do canal inválido. Use o formato 1203...@newsletter.' })
-    }
-    const normalizedChannelForwardName = String(channelForwardName ?? '').trim().slice(0, MAX_CHANNEL_FORWARD_NAME_CHARS)
 
     const existing = await db.botConfig.findUnique({ where: { userId } })
     const nextDelayMin = delayMin ?? existing?.delayMin ?? DEFAULTS.delayMin
@@ -144,8 +134,6 @@ export async function configRoutes(app, opts = {}) {
           : resolveCopyVariationPoolJson(copyVariationPoolJson),
         ...(mobileTemplatesJson !== undefined && { mobileTemplatesJson: canonicalizeTemplateStoreJson(mobileTemplatesJson) }),
         ...(mobileCouponLinksJson !== undefined && { mobileCouponLinksJson }),
-        ...(channelForwardJid !== undefined && { channelForwardJid: normalizedChannelForwardJid || null }),
-        ...(channelForwardName !== undefined && { channelForwardName: normalizedChannelForwardName || null }),
       },
       update: {
         ...(delayMin !== undefined && { delayMin }),
@@ -161,8 +149,6 @@ export async function configRoutes(app, opts = {}) {
         ...(copyVariationPoolJson !== undefined && { copyVariationPoolJson: resolveCopyVariationPoolJson(copyVariationPoolJson) }),
         ...(mobileTemplatesJson !== undefined && { mobileTemplatesJson: canonicalizeTemplateStoreJson(mobileTemplatesJson) }),
         ...(mobileCouponLinksJson !== undefined && { mobileCouponLinksJson }),
-        ...(channelForwardJid !== undefined && { channelForwardJid: normalizedChannelForwardJid || null }),
-        ...(channelForwardName !== undefined && { channelForwardName: normalizedChannelForwardName || null }),
       },
     })
     reloadConfig(userId)

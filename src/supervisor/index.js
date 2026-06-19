@@ -20,17 +20,20 @@ import db from '../db.js'
 import logger from '../logger.js'
 import * as sessionCore from '../core/sessionCore.js'
 import { buildShardTag, normalizeShardCount, shouldHandleUserOnShard } from './sharding.js'
+import { checkSupervisorEnvConsistency } from './envGuard.js'
 import { createRestartBudget, RESTART_BUDGET_MAX, RESTART_BUDGET_WINDOW_MS, RESTART_QUARANTINE_MS } from './restartBudget.js'
 import { parseEnumEnv, logModeSummary } from '../core/envModes.js'
 import {
   COMMAND,
   COMMAND_QUEUE,
+  COMMAND_TIMEOUTS_MS,
   EVENT,
   EVENTS_CHANNEL,
   SUPERVISOR_HEARTBEAT_KEY,
   SUPERVISOR_HEARTBEAT_RENEW_INTERVAL_MS,
   SUPERVISOR_HEARTBEAT_TTL_SECONDS,
   encodeEvent,
+  isCommandStale,
   isKnownCommand,
   resolveRedisUrl,
 } from './protocol.js'
@@ -38,6 +41,23 @@ import {
 const REDIS_URL = resolveRedisUrl()
 if (!REDIS_URL) {
   logger.fatal('SUPERVISOR_REDIS_URL/REDIS_URL ausente — supervisor não pode iniciar')
+  process.exit(1)
+}
+
+// Fail-fast contra "supervisor rodando do diretório/ambiente errado" (incidente
+// 2026-06): se APP_ENV não bater com o cwd ou com a Redis DB, o supervisor
+// consumiria a fila de comandos do ambiente errado e subiria "saudável" sem
+// drenar nada. Melhor abortar no boot do que estourar timeout em toda rota.
+const envCheck = checkSupervisorEnvConsistency({
+  appEnv: process.env.APP_ENV,
+  cwd: process.cwd(),
+  redisUrl: REDIS_URL,
+})
+if (!envCheck.ok) {
+  logger.fatal(
+    { reason: envCheck.reason, appEnv: process.env.APP_ENV ?? null, cwd: process.cwd() },
+    'bot-supervisor: ambiente inconsistente — abortando para não consumir a fila errada',
+  )
   process.exit(1)
 }
 
@@ -248,23 +268,48 @@ const COMMAND_HANDLERS = {
   [COMMAND.GET_LAST_QR]: ({ userId }) => belongsToThisShard(userId) ? sessionCore.getLastQR(userId) : null,
 }
 
+// lockDuration > maior timeout de comando (+ folga) para que handlers
+// legitimamente longos (REQUEST_PAIRING_CODE 45s, SEND_BROADCAST 30s) NÃO
+// sejam marcados como stalled e reprocessados no meio da execução — um
+// reprocesso de SEND_BROADCAST seria envio duplicado. O guard isCommandStale
+// é a segunda linha: mesmo que um stall escape, o job reentregue já estará
+// velho demais e é descartado em vez de reexecutado.
+const COMMAND_LOCK_DURATION_MS = Math.max(60_000, Math.max(...Object.values(COMMAND_TIMEOUTS_MS)) + 15_000)
+
 const worker = new Worker(
   COMMAND_QUEUE,
   async job => {
     const name = job.name
     if (!isKnownCommand(name)) throw new Error(`Comando desconhecido: ${name}`)
+    const data = job.data ?? {}
+    // Drenagem de jobs velhos / TTL de comando: se a API já desistiu de
+    // esperar, descartar em vez de executar (evita SEND_BROADCAST duplicado).
+    // Retornamos resultado (job 'completed') em vez de throw: a decisão de
+    // descartar foi bem-sucedida; ninguém está aguardando o valor.
+    if (isCommandStale(name, data._enqueuedAt)) {
+      const ageMs = Date.now() - Number(data._enqueuedAt)
+      logger.warn({ jobId: job.id, name, userId: data.userId ?? null, ageMs }, 'Comando obsoleto descartado (API já desistiu) — não executado')
+      return { _stale: true, discarded: true, ageMs }
+    }
     const handler = COMMAND_HANDLERS[name]
     if (!handler) throw new Error(`Handler ausente para ${name}`)
-    return await handler(job.data ?? {})
+    return await handler(data)
   },
   {
     connection: { url: REDIS_URL, maxRetriesPerRequest: null },
     concurrency: 8,
+    lockDuration: COMMAND_LOCK_DURATION_MS,
   },
 )
 
 worker.on('failed', (job, err) => {
   logger.warn({ jobId: job?.id, name: job?.name, err: err?.message }, 'Comando supervisor falhou')
+})
+
+worker.on('stalled', jobId => {
+  // Reprocesso por stall é tolerado: isCommandStale descarta o reentregue se já
+  // passou do timeout. Logamos para visibilidade do sinal (morte abrupta).
+  logger.warn({ jobId }, 'Comando supervisor stalled (lock expirou) — guard de staleness evita efeito duplicado no reprocesso')
 })
 
 // ---- Heartbeat ----

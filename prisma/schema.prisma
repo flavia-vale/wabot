@@ -94,6 +94,8 @@ model Group {
   blockedKeywords   String?
   allowedPlatforms  String?
   welcomeMsg        String?
+  channelButtonJid  String?
+  channelButtonName String?
   monitorTargets   GroupTarget[] @relation("MonitorTargets")
   postTargets      GroupTarget[] @relation("PostTargets")
   channelHealth    ChannelHealth?
@@ -347,6 +349,13 @@ model OfferQueue {
   hourlyCap        Int      @default(10)
   dailyCapEnabled  Boolean  @default(false)
   dailyCap         Int      @default(50)
+  // Horário de funcionamento POR FILA (override da janela silenciosa global).
+  // Quando operatingHoursEnabled=true, a fila obedece SÓ este horário e ignora
+  // a janela silenciosa global (BotConfig). Quando false, segue o global.
+  // Horas em "HH:mm", interpretadas em America/Sao_Paulo.
+  operatingHoursEnabled Boolean @default(false)
+  operatingHoursStart   String?
+  operatingHoursEnd     String?
   // JSON array de JIDs de destino da fila. "[]" = fallback para todos os
   // grupos com role 'post' (comportamento legado, pré-seleção por fila).
   targetJids       String   @default("[]")

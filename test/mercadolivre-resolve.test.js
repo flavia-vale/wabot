@@ -67,6 +67,40 @@ test('resolveToCleanProductUrl extrai produto de /social/?ref= quando o HTML tem
   assert.equal(clean, 'https://www.mercadolivre.com.br/p/MLB9876543')
 })
 
+test('short link /sec/ de terceiro é resolvido para o produto real (não encaminha o código alheio)', async (t) => {
+  // mercadolivre.com/sec/<código> é um short link de AFILIADO do ML. O código
+  // pertence a quem o gerou — pendurar ?partner_id= nele não transfere comissão.
+  // Precisa ser resolvido até o produto real, como meli.la/mluvem.com.
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/p/MLB12345678' }))
+  const url = 'https://mercadolivre.com/sec/2bw3uP4?partner_id=999999999'
+  const clean = await resolveToCleanProductUrl(url)
+  assert.equal(clean, 'https://www.mercadolivre.com.br/p/MLB12345678')
+})
+
+test('/sec/ que resolve para landing sem MLB sai com partner_id na URL REAL (não no código de terceiro)', async (t) => {
+  // Resolve o /sec/ para uma página real de cupom (sem MLB único). O fallback
+  // injeta o partner_id da usuária na URL real resolvida — o código de afiliado
+  // de terceiro (2bw3uP4) desaparece, então a comissão não vaza.
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/cupom/MANDAGOL' }))
+  const url = 'https://mercadolivre.com/sec/3cupomXy?partner_id=999999999'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  assert.equal(typeof result, 'string')
+  assert.match(result, /partner_id=475630078/)
+  assert.doesNotMatch(result, /\/sec\//)
+  assert.doesNotMatch(result, /999999999/)
+})
+
+test('/sec/ não-resolvível (muro anti-bot) não é encaminhado com partner_id cosmético', async (t) => {
+  // Quando não conseguimos escapar do short link de terceiro (resolve falha e a
+  // landing não dá produto), retornar null é melhor que vazar comissão pendurando
+  // um partner_id cosmético no /sec/ alheio.
+  t.mock.method(global, 'fetch', async () => { throw new Error('network') })
+  t.mock.method(axios, 'get', async () => ({ data: '<html><body>redirecionando...</body></html>' }))
+  const url = 'https://mercadolivre.com/sec/9wallZz?partner_id=999999999'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  assert.equal(result, null)
+})
+
 test('convert descarta short_url quando validação comprova MLB diferente', async (t) => {
   t.mock.method(axios, 'post', async () => ({
     status: 200,
