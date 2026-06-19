@@ -43,9 +43,15 @@ export function startSessionHealthMonitor(db, log = console) {
       if (!entry?.proc || entry.proc.killed) continue
       const hbAge = now - (entry.lastHeartbeatAt || 0)
       if (hbAge <= staleMs) continue
+      if (entry.stopping) continue
       log.warn?.({ userId, hbAge }, 'Worker com heartbeat estagnado — reiniciando sessão silenciosamente')
+      // Apenas dispara o teardown. O re-fork NÃO é agendado aqui: o slot do
+      // `bots` só é liberado quando o processo antigo realmente sai (proc.on
+      // 'exit'), e o resume de persistidas abaixo o recria num tick futuro
+      // já com o slot livre. Isso evita dois workers vivos para o mesmo userId
+      // (sobreposição de sockets Baileys → conflito 'replaced'/440 → flapping;
+      // incidente 2026-06: api inline forkou 3 workers para a mesma sessão).
       stopBot(userId)
-      setTimeout(() => startBot(userId), 1000).unref?.()
     }
     const persisted = await db.waSession.findMany({ where: { status: { in: ['connected', 'connecting'] } }, select: { userId: true } })
     for (const s of persisted) if (!bots.has(s.userId)) startBot(s.userId)
@@ -77,14 +83,23 @@ export function startBot(userId) {
       pendingRequests.delete(msg.requestId)
     }
   }))
-  proc.on('exit', () => bots.delete(userId))
+  // Só libera o slot quando ESTE processo sai (e se ainda for a entry corrente).
+  // Manter o slot ocupado durante o teardown garante que startBot/resume não
+  // forkem um substituto enquanto o worker antigo ainda vive — invariante de
+  // "um worker vivo por userId".
+  proc.on('exit', () => { if (bots.get(userId) === entry) bots.delete(userId) })
   return true
 }
 
 export function stopBot(userId) {
   const entry = bots.get(userId)
   if (!entry) return false
-  bots.delete(userId)
+  if (entry.stopping) return true
+  // NÃO remove do mapa aqui: o slot só é liberado no proc.on('exit'). Isso
+  // mantém isRunning(userId) verdadeiro enquanto o worker drena e sai, impedindo
+  // que outro worker para o mesmo userId seja forkado durante a janela de
+  // shutdown (worker antigo + novo = dois sockets na mesma credencial → 440).
+  entry.stopping = true
   try { entry.proc.send({ type: 'stop' }) } catch {}
   const forceKillMs = Math.max(Number(process.env.WA_FORCE_KILL_MS || 10000), 2000)
   setTimeout(() => { if (!entry.proc.killed) try { entry.proc.kill('SIGKILL') } catch {} }, forceKillMs).unref?.()
