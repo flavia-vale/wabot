@@ -85,3 +85,39 @@ export function checkSupervisorEnvConsistency({ appEnv, cwd, redisUrl } = {}) {
 
   return { ok: true }
 }
+
+/**
+ * Verifica se o bot-supervisor deve mesmo estar gerenciando sessões, dado o
+ * `BOT_SUPERVISOR_MODE`.
+ *
+ * Por que existe (incidente real 2026-06, staging): o supervisor faz `fork()`
+ * dos workers no boot (`resumePersistedBots`) e no health monitor —
+ * INDEPENDENTE do modo. Mas só o modo `remote` delega o ciclo de vida ao
+ * supervisor; em `inline` (default e estado canônico do staging) é a própria
+ * API que faz `fork()`. Com o supervisor de pé em modo `inline`, DOIS
+ * processos abrem socket Baileys para a MESMA sessão (mesmo `AUTH_INFO_DIR`):
+ * WhatsApp aceita só um → `Stream Errored (conflict)`, a conexão cai a cada
+ * envio (`error:baileys:428` / Connection Closed) e o duplo avanço do ratchet
+ * Signal gera `Bad MAC`, corrompendo o `auth_info` (risco de repareamento e de
+ * ban). Logo: rodar o supervisor fora do modo `remote` é SEMPRE nocivo.
+ *
+ * Função pura para ser testável — quem chama decide o que fazer com
+ * `{ ok:false }` (no boot: log fatal + process.exit).
+ *
+ * @param {{ supervisorMode?: string }} input
+ * @returns {{ ok: boolean, reason?: string }}
+ */
+export function checkSupervisorModeEnabled({ supervisorMode } = {}) {
+  const mode = String(supervisorMode ?? 'inline').toLowerCase()
+  if (mode === 'remote') return { ok: true }
+  return {
+    ok: false,
+    reason:
+      `BOT_SUPERVISOR_MODE='${mode}' (esperado 'remote'). Em modo inline a API ` +
+      `faz fork() dos workers; subir o bot-supervisor causaria DOIS processos ` +
+      `com a MESMA sessão WhatsApp (Stream conflict / Bad MAC / error:baileys:428, ` +
+      `corrompe auth_info e arrisca ban). Em staging/produção inline o supervisor ` +
+      `NÃO deve estar no PM2: pare-o com 'pm2 stop bot-supervisor[-staging] && pm2 save'. ` +
+      `Só ligue o supervisor durante uma janela de cutover com BOT_SUPERVISOR_MODE=remote.`,
+  }
+}

@@ -21,7 +21,7 @@ import logger from '../logger.js'
 import * as sessionCore from '../core/sessionCore.js'
 import { buildRedisOptions } from '../core/redisFactory.js'
 import { buildShardTag, normalizeShardCount, shouldHandleUserOnShard } from './sharding.js'
-import { checkSupervisorEnvConsistency } from './envGuard.js'
+import { checkSupervisorEnvConsistency, checkSupervisorModeEnabled } from './envGuard.js'
 import { createRestartBudget, RESTART_BUDGET_MAX, RESTART_BUDGET_WINDOW_MS, RESTART_QUARANTINE_MS } from './restartBudget.js'
 import { parseEnumEnv, logModeSummary } from '../core/envModes.js'
 import {
@@ -60,6 +60,20 @@ if (!envCheck.ok) {
   logger.fatal(
     { reason: envCheck.reason, appEnv: process.env.APP_ENV ?? null, cwd: process.cwd() },
     'bot-supervisor: ambiente inconsistente — abortando para não consumir a fila errada',
+  )
+  process.exit(1)
+}
+
+// Fail-fast contra double-fork da MESMA sessão WhatsApp (incidente 2026-06,
+// staging): o supervisor só pode gerenciar workers em modo `remote`. Em `inline`
+// é a API que faz fork(); subir o supervisor junto abre dois sockets Baileys na
+// mesma sessão → Stream conflict / Bad MAC / error:baileys:428. Abortar no boot
+// é melhor do que corromper o auth_info silenciosamente.
+const modeCheck = checkSupervisorModeEnabled({ supervisorMode: process.env.BOT_SUPERVISOR_MODE })
+if (!modeCheck.ok) {
+  logger.fatal(
+    { reason: modeCheck.reason, supervisorMode: process.env.BOT_SUPERVISOR_MODE ?? null },
+    'bot-supervisor: modo incompatível — abortando para não conflitar com o worker inline da API',
   )
   process.exit(1)
 }

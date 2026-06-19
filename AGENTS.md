@@ -811,6 +811,36 @@ Blindagem em código (não regredir): `src/supervisor/envGuard.js`
 supervisor no diretório errado falha no boot em vez de subir surdo pra fila.
 Teste: `test/supervisor-env-guard.test.js`.
 
+### 10. Supervisor de pé em modo `inline` = double-fork da MESMA sessão WhatsApp
+
+O `bot-supervisor` faz `fork()` dos workers no boot (`resumePersistedBots`) e no
+health monitor. Só o modo `remote` delega o ciclo de vida ao supervisor; em
+`inline` (default e **estado canônico do staging**) é a própria API que faz
+`fork()`. Se o `bot-supervisor[-staging]` ficar de pé enquanto a API está em
+`inline`, **dois processos abrem socket Baileys para a MESMA sessão** (mesmo
+`AUTH_INFO_DIR`). WhatsApp aceita só um socket por dispositivo, então:
+
+- `Stream Errored (conflict)` nos dois processos;
+- a conexão cai a cada envio → `error:baileys:428` ("Precondition Required" /
+  Connection Closed) → **todos os envios falham** no painel;
+- o duplo avanço do ratchet do Signal gera `Bad MAC` em massa, **corrompendo o
+  `auth_info`** (pode exigir reparear o QR e arrisca ban).
+
+Incidente real (2026-06, staging): `api-staging` E `bot-supervisor-staging`
+online ao mesmo tempo com `.env` em `BOT_SUPERVISOR_MODE=inline`; o painel
+mostrava só os envios Shopee/ML "falhou" com `error:baileys:428`. Diagnóstico:
+`pm2 logs <app> | grep -iE "conflict|Bad MAC"` aparece nos **dois** apps.
+
+Correção imediata: `pm2 stop bot-supervisor-staging && pm2 save` (em prod, idem
+`bot-supervisor`). Em modo inline o supervisor **não deve** estar no PM2 —
+**não** faça `pm2 restart` nele "pra tentar consertar" (recria o conflito).
+
+Blindagem em código (não regredir): `checkSupervisorModeEnabled` em
+`src/supervisor/envGuard.js` roda no boot de `src/supervisor/index.js` e
+**aborta com `process.exit(1)`** se `BOT_SUPERVISOR_MODE` != `remote`. Assim o
+supervisor recusa subir em ambiente inline em vez de brigar pela sessão.
+Teste: `test/supervisor-env-guard.test.js`.
+
 ## Image scrapers — configuração canônica (PR #422, não regredir)
 
 `src/converters/imageScrapers.js` entrega imagem hi-res para link preview

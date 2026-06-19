@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { checkSupervisorEnvConsistency } from '../src/supervisor/envGuard.js'
+import { checkSupervisorEnvConsistency, checkSupervisorModeEnabled } from '../src/supervisor/envGuard.js'
 
 test('staging no diretório de staging com Redis /1 é consistente', () => {
   const r = checkSupervisorEnvConsistency({
@@ -93,4 +93,26 @@ test('REDIS_URL com DB não-canônica não dispara falso positivo', () => {
     redisUrl: 'redis://127.0.0.1:6379/2',
   })
   assert.equal(r.ok, true)
+})
+
+test('modo remote habilita o supervisor', () => {
+  assert.equal(checkSupervisorModeEnabled({ supervisorMode: 'remote' }).ok, true)
+  assert.equal(checkSupervisorModeEnabled({ supervisorMode: 'REMOTE' }).ok, true)
+})
+
+test('modo inline bloqueia o supervisor (o incidente do double-fork)', () => {
+  const r = checkSupervisorModeEnabled({ supervisorMode: 'inline' })
+  assert.equal(r.ok, false)
+  assert.match(r.reason, /remote/i)
+  assert.match(r.reason, /pm2 stop/i)
+})
+
+test('modo ausente assume inline e bloqueia (default seguro)', () => {
+  const r = checkSupervisorModeEnabled({})
+  assert.equal(r.ok, false)
+  assert.match(r.reason, /inline/i)
+})
+
+test('valor lixo de modo é tratado como não-remote e bloqueia', () => {
+  assert.equal(checkSupervisorModeEnabled({ supervisorMode: 'sim' }).ok, false)
 })
