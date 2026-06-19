@@ -85,8 +85,14 @@ export async function sessionRoutes(app) {
       if (!isOrphan) return reply.code(409).send({ error: 'Bot já está rodando' })
       req.log.warn({ userId, dbStatus: session?.status }, 'Worker órfão detectado em /start — reiniciando sessão')
       try { await stopBot(userId) } catch (err) { req.log.warn({ err: err.message }, 'Falha ao parar worker órfão') }
-      // Pequeno gap para o supervisor liberar o slot antes do start novo.
-      await new Promise(r => setTimeout(r, 250))
+      // Espera o worker antigo realmente sair antes do start novo. O slot só é
+      // liberado no exit do processo (ver sessionCore.stopBot), então um gap fixo
+      // poderia fazer o startBot abaixo virar no-op (bots.has ainda true) — ou,
+      // no contrato antigo, abrir janela de dois workers no mesmo userId.
+      const orphanFreeDeadline = Date.now() + Math.max(Number(process.env.WA_ORPHAN_STOP_WAIT_MS || 12000), 1000)
+      while (Boolean(await isRunning(userId)) && Date.now() < orphanFreeDeadline) {
+        await new Promise(r => setTimeout(r, 250))
+      }
     }
 
     await startBot(userId)
