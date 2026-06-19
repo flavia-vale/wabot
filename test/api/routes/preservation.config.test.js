@@ -160,15 +160,20 @@ test('PUT /config aceita channelQuietHoursJson com JSON válido', async () => {
   await app.close()
 })
 
-// 9. PUT /config rejeita copyVariationPoolJson não-string
-test('PUT /config retorna 400 para copyVariationPoolJson não-string', async () => {
-  const { app } = await buildApp({ plan: 'pro' })
+// 9. PUT /config ignora copyVariationPoolJson (variações migraram para /api/config)
+test('PUT /config ignora copyVariationPoolJson (campo migrou para Templates)', async () => {
+  const { app, userId } = await buildApp({ plan: 'pro' })
   const res = await app.inject({
     method: 'PUT',
     url: '/api/preservation/config',
-    payload: { copyVariationPoolJson: { not: 'a string' } },
+    payload: { copyVariationPoolJson: JSON.stringify({ greetings: ['x'] }), channelMinIntervalSec: 30 },
   })
-  assert.equal(res.statusCode, 400)
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal('copyVariationPoolJson' in body.config, false, 'pool não deve mais ser exposto pela preservação')
+  assert.equal(body.config.channelMinIntervalSec, 30)
+  const stored = await db.botConfig.findUnique({ where: { userId } })
+  assert.notEqual(stored.copyVariationPoolJson, JSON.stringify({ greetings: ['x'] }), 'preservação não pode escrever o pool')
   await app.close()
 })
 
@@ -483,7 +488,6 @@ test('PUT /config aceita payload completo com todos os campos válidos', async (
       channelStaggerJitterMs: 1500,
       channelQuietHoursJson: JSON.stringify({ startHour: 22, endHour: 7, tz: 'America/Sao_Paulo' }),
       maxDailyFollows: 10,
-      copyVariationPoolJson: JSON.stringify([{ pattern: 'oi', alternatives: ['olá', 'hey'] }]),
       imageMutationEnabled: true,
       probeEnabled: false,
     },
@@ -494,17 +498,6 @@ test('PUT /config aceita payload completo com todos os campos válidos', async (
   assert.equal(body.config.maxDailyFollows, 10)
   assert.equal(body.config.imageMutationEnabled, true)
   assert.equal(body.config.probeEnabled, false)
-  await app.close()
-})
-
-// 36. copyVariationPoolJson aceita JSON com array vazio
-test('PUT /config aceita copyVariationPoolJson com array vazio', async () => {
-  const { app } = await buildApp({ plan: 'pro' })
-  const res = await app.inject({
-    method: 'PUT', url: '/api/preservation/config',
-    payload: { copyVariationPoolJson: '[]' },
-  })
-  assert.equal(res.statusCode, 200)
   await app.close()
 })
 
@@ -525,7 +518,7 @@ test('GET /config retorna estrutura com nulls quando não há BotConfig', async 
   const res = await app.inject({ method: 'GET', url: '/api/preservation/config' })
   assert.equal(res.statusCode, 200)
   const body = JSON.parse(res.body)
-  for (const k of ['channelMinIntervalSec', 'channelBurstCap', 'channelStaggerJitterMs', 'maxDailyFollows', 'imageMutationEnabled', 'probeEnabled', 'channelQuietHoursJson', 'copyVariationPoolJson', 'probeAccountSessionId']) {
+  for (const k of ['channelMinIntervalSec', 'channelBurstCap', 'channelStaggerJitterMs', 'maxDailyFollows', 'imageMutationEnabled', 'probeEnabled', 'channelQuietHoursJson', 'probeAccountSessionId']) {
     assert.ok(k in body.config, `config deve ter campo ${k}`)
   }
   assert.ok('clickTrackerSaltConfigured' in body.flags)
@@ -577,7 +570,6 @@ test('PUT /config persiste toggles independentes de preservação', async () => 
     channelThrottleEnabled: true,
     quietHoursEnabled: false,
     followGuardEnabled: true,
-    copyVariationEnabled: false,
     imageMutationEnabled: true,
   }
   const res = await app.inject({
@@ -610,7 +602,7 @@ test('toggle mestre legado é ignorado e não reativa nenhuma defesa', async () 
   assert.equal(res.statusCode, 200)
   const body = JSON.parse(res.body)
   assert.equal('preservationEnabled' in body.config, false)
-  for (const key of ['channelThrottleEnabled', 'quietHoursEnabled', 'followGuardEnabled', 'copyVariationEnabled', 'imageMutationEnabled']) {
+  for (const key of ['channelThrottleEnabled', 'quietHoursEnabled', 'followGuardEnabled', 'imageMutationEnabled']) {
     assert.equal(body.config[key], false, `${key} deve permanecer desligado`)
   }
   const stored = await db.botConfig.findUnique({ where: { userId } })
@@ -620,7 +612,7 @@ test('toggle mestre legado é ignorado e não reativa nenhuma defesa', async () 
 
 test('API rejeita tipo inválido em cada toggle independente', async () => {
   const { app } = await buildApp({ plan: 'pro' })
-  for (const key of ['channelThrottleEnabled', 'quietHoursEnabled', 'followGuardEnabled', 'copyVariationEnabled', 'imageMutationEnabled']) {
+  for (const key of ['channelThrottleEnabled', 'quietHoursEnabled', 'followGuardEnabled', 'imageMutationEnabled']) {
     const res = await app.inject({
       method: 'PUT',
       url: '/api/preservation/config',

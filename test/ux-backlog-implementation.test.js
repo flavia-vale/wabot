@@ -83,9 +83,9 @@ test('template variable UI only advertises canonical gancho, cta and convitegrup
   const automationGroup = OFFER_TEMPLATE_VARIABLE_GROUPS.find((group) => group.key === 'automation')
   assert.equal(automationGroup.variables.find((variable) => variable.token === '{{cta}}').example, '⚠️ Preços e estoque podem mudar.')
   assert.equal(automationGroup.variables.find((variable) => variable.token === '{{convitegrupo}}').example, '📲 Entre no nosso grupo oficial:')
-  const preservationEditor = read('dashboard/components/preservacao/CopyVariationPoolEditor.js')
-  assert.match(preservationEditor, /key: 'ctas'[\s\S]*label: 'CTAs'[\s\S]*Preços e estoque podem mudar/)
-  assert.match(preservationEditor, /key: 'trailers'[\s\S]*label: 'Convites do grupo[\s\S]*Entre no nosso grupo oficial/)
+  // As variações vivem só na página de Templates ("Textos dinâmicos").
+  assert.match(page, /key: 'ctas'[\s\S]*nome: 'CTAs'[\s\S]*Preços e estoque podem mudar/)
+  assert.match(page, /key: 'trailers'[\s\S]*nome: 'Convite do grupo'[\s\S]*Entre no nosso grupo oficial/)
   assert.doesNotMatch(page, /\{\{greeting\}\}|\{\{trailer\}\}|Fechamentos/)
 
   const rendered = applyVariation('{{gancho}}|{{cta}}|{{convitegrupo}}', {
