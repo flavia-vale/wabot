@@ -32,7 +32,7 @@ function NoteBox({ variant = 'is-warn', title, message }) {
 
 export default function WhatsAppPage() {
   usePainelHeader({ title: 'Conexão WhatsApp', subtitle: 'Status da sessão e conexão pelo número ou QR Code' })
-  const { sessionHealth, refreshSession } = usePainel()
+  const { refreshSession } = usePainel()
   const reconnectHandledRef = useRef(false)
 
   const [status, setStatus] = useState(null)
@@ -584,19 +584,11 @@ export default function WhatsAppPage() {
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 560, margin: '0 auto' }}>
-      {sessionHealth?.degraded && isConnected && (
-        <div className="pnl-note-box is-error" role="alert">
-          <strong style={{ fontWeight: 600, display: 'block' }}>⚠️ Conexão instável — mensagens não estão sendo lidas</strong>
-          <p style={{ marginTop: 4 }}>
-            O WhatsApp está conectado, mas falhando ao descriptografar as mensagens dos seus grupos
-            (sessão dessincronizada). Suas ofertas podem não estar sendo espelhadas. Reconecte gerando
-            um novo QR Code para normalizar.
-          </p>
-          <button type="button" className="pnl-btn is-primary" style={{ marginTop: 12 }} onClick={handleRestart} disabled={loading}>
-            {actionLoading === 'restart' ? 'Reconectando…' : 'Reconectar agora'}
-          </button>
-        </div>
-      )}
+      {/* Banner de "conexão instável" (sessionHealth.degraded) removido (2026-06):
+          a ação que ele sugeria — reconectar gerando QR novo — PIORA o estado,
+          porque logo após reconectar há uma rajada esperada de Bad MAC enquanto
+          as sender keys dos grupos re-sincronizam, e re-escanear reinicia esse
+          ciclo. Decrypt dessincronizado costuma normalizar sozinho. */}
       <div className="pnl-toolbar" style={{ justifyContent: 'flex-end' }}>
         <HelpLink topic="como-conectar-whatsapp-qr-code">Ajuda para conectar</HelpLink>
       </div>
