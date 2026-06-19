@@ -640,6 +640,8 @@ const SEND_QUEUE_MAX_SIZE = envNumber('SEND_QUEUE_MAX_SIZE', 1_000)
 const SEND_MAX_ATTEMPTS = Math.max(1, envNumber('SEND_MAX_ATTEMPTS', 3))
 const SEND_RETRY_BASE_MS = Math.max(0, envNumber('SEND_RETRY_BASE_MS', 2_000))
 const SEND_RETRY_MAX_MS = Math.max(SEND_RETRY_BASE_MS, envNumber('SEND_RETRY_MAX_MS', 30_000))
+const RECONNECT_BASE_MS = Math.max(1_000, envNumber('RECONNECT_BASE_MS', 5_000))
+const RECONNECT_MAX_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_MAX_MS', 5 * 60_000))
 const SHUTDOWN_DRAIN_TIMEOUT_MS = Math.max(0, envNumber('SHUTDOWN_DRAIN_TIMEOUT_MS', 15_000))
 // Timeout duro em volta de cada sock.sendMessage/relayMessage. Sem isso, um
 // socket Baileys silenciosamente morto trava o await indefinidamente, e como
@@ -1307,6 +1309,14 @@ async function createSendBackend() {
 }
 
 let startBotInFlight = false
+let reconnectAttempts = 0
+
+function calcReconnectDelayMs() {
+  const base = Math.min(RECONNECT_BASE_MS * Math.pow(2, reconnectAttempts), RECONNECT_MAX_MS)
+  const jitter = base * 0.2 * (Math.random() * 2 - 1)
+  return Math.round(base + jitter)
+}
+
 async function startBot() {
   // Guard contra startBots concorrentes (boot inicial + IPC pairing + restart
   // timer podem todos chamar isto). Concorrência causa dois sockets fechando
@@ -1463,6 +1473,7 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
 
     if (connection === 'open') {
       setLifecycleState(WA_LIFECYCLE.READY, { reason: 'connection_open' })
+      reconnectAttempts = 0
       activeSock = sock
       pendingSock = null
       pairingState.clear()
@@ -1501,8 +1512,10 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // falhar em colar o código a tempo, a UI chamará novamente o endpoint.
         logger.warn({ code }, 'WA close durante pairing (não-515) — não reiniciando automaticamente')
       } else {
-        logger.warn({ code }, 'WA conexão fechada, agendando restart automático em 5s')
-        setTimeout(startBot, 5_000)
+        const delayMs = calcReconnectDelayMs()
+        reconnectAttempts++
+        logger.warn({ code, attempt: reconnectAttempts, delayMs }, 'WA conexão fechada, agendando restart automático')
+        setTimeout(startBot, delayMs)
       }
     }
   })
