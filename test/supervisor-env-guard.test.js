@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { checkSupervisorEnvConsistency } from '../src/supervisor/envGuard.js'
+import { checkSupervisorEnvConsistency, supervisorManagesSessions } from '../src/supervisor/envGuard.js'
 
 test('staging no diretório de staging com Redis /1 é consistente', () => {
   const r = checkSupervisorEnvConsistency({
@@ -82,6 +82,22 @@ test('sem REDIS_URL com índice de DB, valida só pelo cwd', () => {
   assert.equal(ok.ok, true)
   const bad = checkSupervisorEnvConsistency({ appEnv: 'staging', cwd: '/home/deploy/wabot' })
   assert.equal(bad.ok, false)
+})
+
+test('supervisorManagesSessions: só "remote" ativa o gerenciamento de sessões', () => {
+  // O incidente "wpp caindo toda hora": em qualquer modo != remote o supervisor
+  // precisa ficar em standby para não dar fork() das mesmas sessões que a API
+  // (inline) já gerencia — dois sockets na mesma credencial = WhatsApp em loop
+  // de conflito.
+  assert.equal(supervisorManagesSessions('remote'), true)
+  assert.equal(supervisorManagesSessions('REMOTE'), true)
+  assert.equal(supervisorManagesSessions('  remote  '), true)
+  assert.equal(supervisorManagesSessions('inline'), false)
+  assert.equal(supervisorManagesSessions('INLINE'), false)
+  assert.equal(supervisorManagesSessions(''), false)
+  assert.equal(supervisorManagesSessions(undefined), false)
+  assert.equal(supervisorManagesSessions(null), false)
+  assert.equal(supervisorManagesSessions('garbage'), false)
 })
 
 test('REDIS_URL com DB não-canônica não dispara falso positivo', () => {
