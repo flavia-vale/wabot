@@ -1959,13 +1959,16 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         })
         let sentVia = 'text'
 
-        // PR-5.B.2: variação de copy por canal-destino (determinística por
-        // destJid+data). Aplica só em canal — em grupo não há fingerprint
-        // de "mesma mensagem em N", então mantém texto original.
+        // PR-5.B.2: variação de copy por canal-destino. Aplica só em canal —
+        // em grupo não há fingerprint de "mesma mensagem em N", então mantém
+        // texto original. Usa random:true (igual ao dispatcher de ofertas
+        // automáticas) para a variação realmente alternar a cada envio; antes
+        // era determinística por destJid+data, o que mandava sempre a mesma
+        // variação no mesmo canal/dia e enfraquecia o anti-fingerprint.
         const isChannelDest = isChannelDestination(destJid)
         const variantText = isChannelDest
           ? (isPreservationFeatureEnabled(cfg.preservationActive, cfg.botConfig, PRESERVATION_FEATURE.COPY_VARIATION)
-              ? applyVariation(finalText, { groupId: destJid, poolJson: resolveCopyVariationPoolJson(cfg.botConfig.copyVariationPoolJson) })
+              ? applyVariation(finalText, { groupId: destJid, poolJson: resolveCopyVariationPoolJson(cfg.botConfig.copyVariationPoolJson), random: true })
               : finalText)
           : finalText
 
