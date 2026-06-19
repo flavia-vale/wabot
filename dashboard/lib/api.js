@@ -201,6 +201,7 @@ export const api = {
     return apiFetch('/api/broadcast/send', { method: 'POST', body: JSON.stringify(payload) })
   },
   scheduledList: () => apiFetch('/api/broadcast/scheduled'),
+  upcomingList: () => apiFetch('/api/broadcast/upcoming'),
   scheduledCreate: (data, scheduledAt, jids) => {
     const payload = typeof data === 'string' ? { text: data, scheduledAt, ...(Array.isArray(jids) ? { jids } : {}) } : data
     return apiFetch('/api/broadcast/scheduled', { method: 'POST', body: JSON.stringify(payload) })

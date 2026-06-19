@@ -13,6 +13,18 @@ const LIMITS = [
   ['hourlyCapEnabled', 'hourlyCap', 'Máximo de ofertas por hora', 'ofertas'],
   ['dailyCapEnabled', 'dailyCap', 'Máximo de ofertas por dia', 'ofertas'],
 ]
+const ITEM_STATUS = {
+  pending: { label: 'Aguardando', cls: 'is-flight' },
+  queued: { label: 'Na fila de envio', cls: 'is-flight' },
+  sent: { label: 'Enviada', cls: 'is-success' },
+  cancelled: { label: 'Cancelada', cls: 'is-skip' },
+}
+
+function formatItemDate(value) {
+  if (!value) return '—'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
 
 export default function FilasPage() {
   usePainelHeader({ title: 'Filas', subtitle: 'Organize ofertas e preserve o ritmo de envio automaticamente' })
@@ -103,6 +115,12 @@ export default function FilasPage() {
     const names = jids.map((jid) => groups.find((group) => group.waJid === jid)?.name || jid)
     return names.join(' · ')
   }
+  const itemDestinations = (jids) => {
+    const list = Array.isArray(jids) ? jids : []
+    if (!list.length) return 'Grupos da fila'
+    const names = list.map((jid) => groups.find((group) => group.waJid === jid)?.name || jid)
+    return names.length <= 2 ? names.join(' · ') : `${names.slice(0, 2).join(' · ')} +${names.length - 2}`
+  }
 
   // Feature Pro: sem o plano, a página vira paywall mantendo só a
   // listagem/exclusão do que já existe.
@@ -190,7 +208,26 @@ export default function FilasPage() {
         <button className="pnl-btn" onClick={() => toggleItems(queue.id)}>{items[queue.id] ? 'Ocultar itens' : 'Ver itens'}</button>
         <button className="pnl-btn" onClick={() => remove(queue)}>Excluir</button>
       </div>
-      {items[queue.id] && <div className="pnl-grid" style={{ marginTop: 14 }}>{!items[queue.id].length ? <p className="pnl-hint">Fila vazia.</p> : items[queue.id].map((item) => <div key={item.id} style={{ borderTop: '1px solid var(--line)', paddingTop: 12, display: 'flex', justifyContent: 'space-between', gap: 12 }}><div style={{ minWidth: 0 }}><p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 72, overflow: 'hidden' }}>{item.text}</p><span className="pnl-hint">{item.status} · posição {item.position} · {new Date(item.createdAt).toLocaleString('pt-BR')}</span></div>{item.status === 'pending' && <button className="pnl-btn" onClick={() => cancelItem(queue.id, item.id)}>Remover</button>}</div>)}</div>}
+      {items[queue.id] && <div className="pnl-grid" style={{ marginTop: 14, gap: 10 }}>{!items[queue.id].length ? <p className="pnl-hint">Fila vazia — nenhum item cadastrado ainda.</p> : items[queue.id].map((item) => {
+        const status = ITEM_STATUS[item.status] || { label: item.status, cls: '' }
+        return <div key={item.id} className="pnl-card" style={{ boxShadow: 'none', padding: 14, display: 'flex', gap: 12, alignItems: 'flex-start', opacity: item.status === 'cancelled' ? 0.6 : 1 }}>
+          {item.imageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={item.imageUrl} alt="" width={52} height={52} style={{ width: 52, height: 52, borderRadius: 8, objectFit: 'cover', flex: '0 0 auto', border: '1px solid var(--line)' }} />
+          )}
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+              <span className={`pnl-tag ${status.cls}`}>{status.label}</span>
+              <span className="pnl-hint">#{item.position}</span>
+              <span className="pnl-hint">{formatItemDate(item.createdAt)}</span>
+            </div>
+            <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 80, overflow: 'hidden', margin: 0, fontSize: 13.5, lineHeight: 1.5 }}>{item.text}</p>
+            <p className="pnl-hint" style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}><span aria-hidden="true">📨</span><span>{itemDestinations(item.targetJids)}</span></p>
+            {item.lastError && <p className="pnl-hint" style={{ marginTop: 6, color: 'var(--danger, #b91c1c)' }}>Última tentativa falhou — será reenviada automaticamente.</p>}
+          </div>
+          {item.status === 'pending' && <button className="pnl-btn is-danger" onClick={() => cancelItem(queue.id, item.id)}>Remover</button>}
+        </div>
+      })}</div>}
     </section>)}
   </div>
 }
