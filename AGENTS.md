@@ -76,6 +76,24 @@ A API decide quem gerencia os bots via env var `BOT_SUPERVISOR_MODE`:
   `bot-supervisor` faz `fork()` dos workers. Deploy da API **não** toca
   nas sessões.
 
+**O supervisor agora respeita a MESMA flag (auto-standby).** Desde o fix do
+incidente "WhatsApp caindo toda hora", `src/supervisor/index.js` lê
+`BOT_SUPERVISOR_MODE` no boot (via `supervisorManagesSessions` em
+`src/supervisor/envGuard.js`) e **só assume as sessões quando o modo é
+`remote`**. Em `inline` (ou qualquer outro valor) o supervisor entra em
+**standby**: continua vivo (PM2 não fica em churn de restart), mas **não** faz
+`fork()`/resume/health-monitor nem consome comandos. Antes, o supervisor subia
+e gerenciava sessões **independente do modo** — então com staging em `inline`
+(canônico) e `bot-supervisor-staging` de pé, **tanto a `api-staging` quanto o
+supervisor davam `fork()` do MESMO worker sobre o MESMO `AUTH_INFO_DIR`**: dois
+sockets Baileys com a mesma credencial, o WhatsApp só aceita um device por
+registro → conflito/stream-error → reconexão em loop ("caindo toda hora", risco
+de ban). Como `api-staging` e `bot-supervisor-staging` carregam o **mesmo
+`.env`**, a flag agora governa as duas pontas de forma consistente e a dupla
+posse de sessão é impossível por construção. Procure por `STANDBY` no log do
+supervisor para confirmar que ele NÃO está disputando sessões com a API inline.
+Teste: `test/supervisor-env-guard.test.js`.
+
 **Estado canônico do staging = `inline`.** O staging existe para validar
 features no dia a dia, e `inline` é o modo mais simples e estável (a própria
 `api-staging` faz `fork()` dos workers, sem depender do `bot-supervisor-staging`
