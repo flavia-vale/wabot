@@ -589,6 +589,10 @@ model OfferAutomation {
   enabled         Boolean   @default(true)
   lastSentAt      DateTime?
   sentItemIds     String    @default("[]")
+  // Página atual da busca Shopee. Rotaciona a cada execução para que cada
+  // disparo traga candidatos novos em vez de rebater sempre a página 1 (o que
+  // causava all_offers_filtered em nichos pequenos já enviados no dia).
+  page            Int       @default(1)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
