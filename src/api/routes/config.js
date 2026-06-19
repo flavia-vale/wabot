@@ -18,6 +18,7 @@ const DEFAULTS = {
   couponLink: '',
   brandingCtaText: DEFAULT_BRANDING_CTA_TEXT,
   copyVariationPoolJson: DEFAULT_COPY_VARIATION_POOL_JSON,
+  copyVariationEnabled: false,
   mobileTemplatesJson: '{}',
   mobileCouponLinksJson: '{}',
 }
@@ -54,7 +55,7 @@ export async function configRoutes(app, opts = {}) {
 
   app.put('/', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
-    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg, feedGlobal, postToStatus, brandingGroupLink, brandingCtaText, couponLink, copyVariationPoolJson, mobileTemplatesJson, mobileCouponLinksJson } = req.body ?? {}
+    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg, feedGlobal, postToStatus, brandingGroupLink, brandingCtaText, couponLink, copyVariationPoolJson, copyVariationEnabled, mobileTemplatesJson, mobileCouponLinksJson } = req.body ?? {}
 
     if (delayMin !== undefined && !isIntegerInRange(delayMin)) {
       return reply.code(400).send({ error: 'delayMin deve ser um número inteiro entre 0 e 300' })
@@ -67,6 +68,9 @@ export async function configRoutes(app, opts = {}) {
     }
     if (postToStatus !== undefined && typeof postToStatus !== 'boolean') {
       return reply.code(400).send({ error: 'postToStatus deve ser boolean' })
+    }
+    if (copyVariationEnabled !== undefined && typeof copyVariationEnabled !== 'boolean') {
+      return reply.code(400).send({ error: 'copyVariationEnabled deve ser boolean' })
     }
 
     if (copyVariationPoolJson !== undefined) {
@@ -132,6 +136,7 @@ export async function configRoutes(app, opts = {}) {
         copyVariationPoolJson: copyVariationPoolJson === undefined
           ? DEFAULTS.copyVariationPoolJson
           : resolveCopyVariationPoolJson(copyVariationPoolJson),
+        copyVariationEnabled: copyVariationEnabled ?? DEFAULTS.copyVariationEnabled,
         ...(mobileTemplatesJson !== undefined && { mobileTemplatesJson: canonicalizeTemplateStoreJson(mobileTemplatesJson) }),
         ...(mobileCouponLinksJson !== undefined && { mobileCouponLinksJson }),
       },
@@ -147,6 +152,7 @@ export async function configRoutes(app, opts = {}) {
         ...(brandingCtaText !== undefined && { brandingCtaText: normalizedBrandingCtaText }),
         ...(couponLink !== undefined && { couponLink: normalizedCouponLink }),
         ...(copyVariationPoolJson !== undefined && { copyVariationPoolJson: resolveCopyVariationPoolJson(copyVariationPoolJson) }),
+        ...(copyVariationEnabled !== undefined && { copyVariationEnabled }),
         ...(mobileTemplatesJson !== undefined && { mobileTemplatesJson: canonicalizeTemplateStoreJson(mobileTemplatesJson) }),
         ...(mobileCouponLinksJson !== undefined && { mobileCouponLinksJson }),
       },

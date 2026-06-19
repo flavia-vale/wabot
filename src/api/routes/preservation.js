@@ -8,9 +8,11 @@ import { getHealth as getChannelHealth } from '../../core/channelHealth.js'
 import { recomputeScore as recomputeReportRiskScore } from '../../core/reportRiskScore.js'
 import { getClickStats } from '../../core/clickTracker.js'
 import { getProbeMonitoringSummary } from '../../core/probeEvidence.js'
-import { DEFAULT_COPY_VARIATION_POOL_JSON, resolveCopyVariationPoolJson } from '../../core/copyVariation.js'
 import { getProbeSessionSnapshot, isProbeSessionSelectable, setProbeSession } from '../../core/probeSessions.js'
 
+// Nota: as variações de texto (gancho/CTA/convite) — pool e liga/desliga —
+// NÃO vivem mais aqui. São editadas exclusivamente em "Templates de mensagens"
+// (rota /api/config). Esta rota cuida só das defesas de preservação.
 const PRESERVATION_CONFIG_KEYS = [
   'channelMinIntervalSec',
   'channelBurstCap',
@@ -19,11 +21,9 @@ const PRESERVATION_CONFIG_KEYS = [
   'channelStaggerJitterMs',
   'channelQuietHoursJson',
   'maxDailyFollows',
-  'copyVariationPoolJson',
   'channelThrottleEnabled',
   'quietHoursEnabled',
   'followGuardEnabled',
-  'copyVariationEnabled',
   'imageMutationActive',
   'probeEnabled',
 ]
@@ -32,9 +32,7 @@ function pickConfig(botConfig) {
   const out = {}
   for (const k of PRESERVATION_CONFIG_KEYS) {
     const publicKey = k === 'imageMutationActive' ? 'imageMutationEnabled' : k
-    out[publicKey] = k === 'copyVariationPoolJson'
-      ? resolveCopyVariationPoolJson(botConfig?.[k])
-      : (botConfig?.[k] ?? null)
+    out[publicKey] = botConfig?.[k] ?? null
   }
   out.probeAccountSessionId = botConfig?.probeAccountSessionId ?? null
   return out
@@ -72,11 +70,9 @@ function validatePartialUpdate(body = {}) {
   int('channelStaggerJitterMs', { min: 0, max: 600000 })
   int('maxDailyFollows', { min: 1, max: 50 })
   json('channelQuietHoursJson')
-  json('copyVariationPoolJson')
   bool('channelThrottleEnabled')
   bool('quietHoursEnabled')
   bool('followGuardEnabled')
-  bool('copyVariationEnabled')
   bool('imageMutationEnabled')
   bool('probeEnabled')
 
@@ -120,13 +116,11 @@ export async function preservationRoutes(app) {
       data.imageMutationActive = data.imageMutationEnabled
       delete data.imageMutationEnabled
     }
-    if ('copyVariationPoolJson' in data) data.copyVariationPoolJson = resolveCopyVariationPoolJson(data.copyVariationPoolJson)
     const updated = await db.botConfig.upsert({
       where: { userId: req.user.sub },
       update: data,
       create: {
         userId: req.user.sub,
-        copyVariationPoolJson: DEFAULT_COPY_VARIATION_POOL_JSON,
         ...data,
       },
     })
