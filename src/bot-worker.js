@@ -154,6 +154,9 @@ const OWNER_INSTANCE = process.env.NODE_APP_INSTANCE ?? '0'
 const SESSION_ERROR_WINDOW_MS = Math.max(30_000, Number(process.env.WA_SESSION_ERROR_WINDOW_MS || 120_000))
 const SESSION_ERROR_THRESHOLD = Math.max(5, Number(process.env.WA_SESSION_ERROR_THRESHOLD || 30))
 const SESSION_RECOVERY_COOLDOWN_MS = Math.max(60_000, Number(process.env.WA_SESSION_RECOVERY_COOLDOWN_MS || 300_000))
+
+let cachedBaileysVersion = null
+
 // Saúde de cripto exposta ao painel (banner global "reconecte"). Detectamos o
 // sintoma observável de sessão dessincronizada: o Baileys manda "sent retry
 // receipt" a cada mensagem que NÃO conseguiu descriptografar (Bad MAC /
@@ -642,6 +645,7 @@ const SEND_RETRY_BASE_MS = Math.max(0, envNumber('SEND_RETRY_BASE_MS', 2_000))
 const SEND_RETRY_MAX_MS = Math.max(SEND_RETRY_BASE_MS, envNumber('SEND_RETRY_MAX_MS', 30_000))
 const RECONNECT_BASE_MS = Math.max(1_000, envNumber('RECONNECT_BASE_MS', 5_000))
 const RECONNECT_MAX_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_MAX_MS', 5 * 60_000))
+const FETCH_WA_VERSION_TIMEOUT_MS = Math.max(5_000, envNumber('FETCH_WA_VERSION_TIMEOUT_MS', 10_000))
 const SHUTDOWN_DRAIN_TIMEOUT_MS = Math.max(0, envNumber('SHUTDOWN_DRAIN_TIMEOUT_MS', 15_000))
 // Timeout duro em volta de cada sock.sendMessage/relayMessage. Sem isso, um
 // socket Baileys silenciosamente morto trava o await indefinidamente, e como
@@ -1317,6 +1321,23 @@ function calcReconnectDelayMs() {
   return Math.round(base + jitter)
 }
 
+async function fetchVersionCached() {
+  try {
+    const timeoutSignal = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('fetchLatestBaileysVersion timeout')), FETCH_WA_VERSION_TIMEOUT_MS).unref()
+    )
+    const { version } = await Promise.race([fetchLatestBaileysVersion(), timeoutSignal])
+    cachedBaileysVersion = version
+    return version
+  } catch (err) {
+    if (cachedBaileysVersion) {
+      logger.warn({ err: err?.message }, 'fetchLatestBaileysVersion falhou; usando versão cacheada')
+      return cachedBaileysVersion
+    }
+    throw err
+  }
+}
+
 async function startBot() {
   // Guard contra startBots concorrentes (boot inicial + IPC pairing + restart
   // timer podem todos chamar isto). Concorrência causa dois sockets fechando
@@ -1328,6 +1349,16 @@ async function startBot() {
   startBotInFlight = true
   try {
     await startBotInner()
+  } catch (err) {
+    // Se startBotInner lançou ANTES de criar o socket (ex: fetchVersionCached
+    // falhou sem cache), o connection.update nunca dispara e ninguém reagenda
+    // a próxima tentativa. Fazemos isso aqui, mas só se não há socket vivo.
+    if (!pendingSock && !activeSock && !shuttingDown) {
+      const delayMs = calcReconnectDelayMs()
+      reconnectAttempts++
+      logger.error({ err: err?.message, attempt: reconnectAttempts, delayMs }, 'startBotInner falhou antes de criar socket; reagendando reconexão')
+      setTimeout(startBot, delayMs)
+    }
   } finally {
     startBotInFlight = false
   }
@@ -1364,7 +1395,7 @@ async function startBotInner() {
   startHeartbeatIpc()
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR)
-  const { version } = await fetchLatestBaileysVersion()
+  const version = await fetchVersionCached()
 
   const sock = makeWASocket({
     version,
