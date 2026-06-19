@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
+import { isBotActive, resolveOnboardingView } from '@/lib/onboardingProgress'
 
 const ONBOARDING_DONE_KEY = 'wb_onboarding_done'
 
@@ -201,19 +202,16 @@ function CelebrationBanner() {
 
 export function ActivationChecklist({ onActivated, persist = false, userId }) {
   const [status, setStatus] = useState(null)
-  const [phase, setPhase] = useState(() => {
-    if (!persist && typeof window !== 'undefined' && getOnboardingDone(userId)) return 'hidden'
-    return 'list'
-  })
-  // Páginas dedicadas (ex.: /painel/checklist) precisam continuar visíveis
-  // mesmo quando o onboarding da home já foi concluído e salvo no localStorage.
-  const visiblePhase = persist ? 'list' : phase
+  // Onboarding já concluído numa sessão anterior (flag no localStorage). Hoje
+  // isso NÃO esconde a checklist para sempre: ela reaparece em modo "recovery"
+  // se um pré-requisito regredir (ex.: WhatsApp desconectou). O flag só impede
+  // repetir a celebração. `phase` controla apenas o fluxo fresco de celebração.
+  const doneBefore = !persist && typeof window !== 'undefined' && getOnboardingDone(userId)
+  const [phase, setPhase] = useState('list')
 
+  // Sonda o status sempre (mesmo em quem já concluiu) — é a única forma de
+  // detectar regressão e religar a orientação.
   useEffect(() => {
-    if (visiblePhase === 'hidden') {
-      onActivated?.()
-      return
-    }
     let cancelled = false
     const poll = () =>
       api.dashboardStatus()
@@ -222,25 +220,28 @@ export function ActivationChecklist({ onActivated, persist = false, userId }) {
     poll()
     const id = setInterval(poll, 10_000)
     return () => { cancelled = true; clearInterval(id) }
-  }, [visiblePhase, onActivated])
+  }, [])
 
   const completedSet = new Set(STEPS.filter(s => status?.[s.key]).map(s => s.key))
   const count = completedSet.size
-  const prereqsDone = count === STEPS.length
-  const botActive = prereqsDone && status !== null
+  const botActive = isBotActive(status)
   const displayCount = botActive ? TOTAL_STEPS : count
   const pct = Math.round((displayCount / TOTAL_STEPS) * 100)
   const nextKey = STEPS.find(s => !completedSet.has(s.key))?.key
 
+  const view = resolveOnboardingView({ status, doneBefore, persist, phase })
+  const recovery = view === 'recovery'
+
+  // Celebração só no fluxo fresco (nunca quando o bot reconecta em recovery).
   useEffect(() => {
-    if (!persist && botActive && visiblePhase === 'list') {
+    if (!persist && !doneBefore && botActive && phase === 'list') {
       const t = setTimeout(() => setPhase('celebrate'), 420)
       return () => clearTimeout(t)
     }
-  }, [persist, botActive, visiblePhase])
+  }, [persist, doneBefore, botActive, phase])
 
   useEffect(() => {
-    if (!persist && visiblePhase === 'celebrate') {
+    if (!persist && !doneBefore && phase === 'celebrate') {
       const t = setTimeout(() => {
         setOnboardingDone(userId)
         setPhase('hidden')
@@ -248,10 +249,14 @@ export function ActivationChecklist({ onActivated, persist = false, userId }) {
       }, 2800)
       return () => clearTimeout(t)
     }
-  }, [persist, visiblePhase, onActivated, userId])
+  }, [persist, doneBefore, phase, onActivated, userId])
 
-  if (visiblePhase === 'hidden') return null
-  if (visiblePhase === 'celebrate') return <CelebrationBanner />
+  useEffect(() => {
+    if (view === 'hidden') onActivated?.()
+  }, [view, onActivated])
+
+  if (view === 'hidden') return null
+  if (view === 'celebrate') return <CelebrationBanner />
 
   const timeLabel = count === 0
     ? '≈ 4 min para terminar'
@@ -277,15 +282,17 @@ export function ActivationChecklist({ onActivated, persist = false, userId }) {
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 7, marginBottom: 11,
             fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase',
-            color: 'var(--accent-strong)',
+            color: recovery ? 'var(--danger)' : 'var(--accent-strong)',
           }}>
-            <Icon name="sparkles" size={13} /> Primeiros passos
+            <Icon name={recovery ? 'bolt' : 'sparkles'} size={13} /> {recovery ? 'Bot offline' : 'Primeiros passos'}
           </div>
           <h2 style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.2, margin: 0 }}>
-            Vamos colocar seu bot no ar
+            {recovery ? 'Vamos religar seu bot' : 'Vamos colocar seu bot no ar'}
           </h2>
           <p style={{ fontSize: 13.5, color: 'var(--ink-soft)', marginTop: 7, lineHeight: 1.5, maxWidth: 440 }}>
-            Conclua os passos abaixo. Cada um se marca sozinho assim que detectamos a ação — você só precisa fazer.
+            {recovery
+              ? 'Algo que estava pronto saiu do ar — geralmente o WhatsApp desconectou. Resolva o passo destacado abaixo para o bot voltar a postar.'
+              : 'Conclua os passos abaixo. Cada um se marca sozinho assim que detectamos a ação — você só precisa fazer.'}
           </p>
         </div>
         <div className="act-checklist-prog" style={{ flex: '0 0 190px', minWidth: 170 }}>
