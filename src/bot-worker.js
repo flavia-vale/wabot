@@ -139,7 +139,12 @@ const SESSION_RECOVERY_COOLDOWN_MS = Math.max(60_000, Number(process.env.WA_SESS
 // o objetivo aqui é AVISAR a usuária antes que ela fique cega — não derrubar a
 // sessão. Só sinaliza 'degraded' com a sessão já conectada (READY).
 const WA_SESSION_DEGRADED_WINDOW_MS = Math.max(60_000, Number(process.env.WA_SESSION_DEGRADED_WINDOW_MS || 10 * 60_000))
-const WA_SESSION_DEGRADED_THRESHOLD = Math.max(2, Number(process.env.WA_SESSION_DEGRADED_THRESHOLD || 5))
+const WA_SESSION_DEGRADED_THRESHOLD = Math.max(2, Number(process.env.WA_SESSION_DEGRADED_THRESHOLD || 10))
+// Aquecimento após conectar: ao abrir a sessão o WhatsApp faz catch-up de
+// mensagens offline e dispara uma rajada de "retry receipt" que NÃO é
+// instabilidade. Não contamos falhas nem avaliamos 'degraded' nos primeiros
+// minutos depois de virar READY (e zeramos os contadores a cada conexão).
+const WA_SESSION_DEGRADED_WARMUP_MS = Math.max(60_000, Number(process.env.WA_SESSION_DEGRADED_WARMUP_MS || 5 * 60_000))
 const ALLOW_TEXT_WITHOUT_LINKS = String(process.env.WA_ALLOW_TEXT_WITHOUT_LINKS || '0') === '1'
 
 // Plataformas com og:title/JSON-LD confiável o suficiente para o guard de
@@ -179,6 +184,8 @@ let lastCryptoErrorAt = null
 // (retry receipt é rotineiro; só é sintoma real se nada está decifrando).
 let incomingSuccessTimestamps = []
 let lastSuccessfulIncomingAt = null
+// Quando a sessão virou READY pela última vez — base do aquecimento.
+let lastReadyAt = null
 
 let heartbeatTimer = null
 let lastHeartbeatPersistAt = 0
@@ -701,6 +708,14 @@ function setLifecycleState(next, meta = {}) {
   if (lifecycleState === next) return
   const prev = lifecycleState
   lifecycleState = next
+  // Ao (re)conectar, zera a saúde de cripto e reinicia o aquecimento: a rajada
+  // de retry receipts do catch-up de offline não deve contar como instabilidade.
+  if (next === WA_LIFECYCLE.READY) {
+    lastReadyAt = Date.now()
+    cryptoErrorTimestamps = []
+    incomingSuccessTimestamps = []
+    lastCryptoErrorAt = null
+  }
   logger.info({ prev, next, ...meta }, 'WA lifecycle transition')
   if (process.send) process.send({ type: 'lifecycle', data: next, prev, meta })
 }
@@ -799,7 +814,11 @@ function pushWindowed(arr, now) {
 }
 
 function recordCryptoError() {
+  // Só conta falhas com a sessão conectada e fora do aquecimento — exclui a
+  // rajada de catch-up de offline logo após conectar (não é instabilidade).
+  if (lifecycleState !== WA_LIFECYCLE.READY) return
   const now = Date.now()
+  if (lastReadyAt && now - lastReadyAt < WA_SESSION_DEGRADED_WARMUP_MS) return
   lastCryptoErrorAt = now
   cryptoErrorTimestamps = pushWindowed(cryptoErrorTimestamps, now)
 }
@@ -826,8 +845,10 @@ function getSessionHealth() {
   incomingSuccessTimestamps = incomingSuccessTimestamps.filter(ts => ts >= cutoff)
   const cryptoErrors = cryptoErrorTimestamps.length
   const decryptedOk = incomingSuccessTimestamps.length
+  const warmedUp = lastReadyAt != null && now - lastReadyAt >= WA_SESSION_DEGRADED_WARMUP_MS
   const degraded =
     lifecycleState === WA_LIFECYCLE.READY &&
+    warmedUp &&
     cryptoErrors >= WA_SESSION_DEGRADED_THRESHOLD &&
     decryptedOk === 0 &&
     lastCryptoErrorAt != null &&
@@ -838,6 +859,7 @@ function getSessionHealth() {
     decryptedOk,
     windowMs: WA_SESSION_DEGRADED_WINDOW_MS,
     threshold: WA_SESSION_DEGRADED_THRESHOLD,
+    warmupMs: WA_SESSION_DEGRADED_WARMUP_MS,
     lastCryptoErrorAt,
     lastSuccessfulIncomingAt,
   }
