@@ -9,17 +9,39 @@
 
 import { EventEmitter } from 'events'
 import logger from '../logger.js'
+import { buildRedisOptions } from '../core/redisFactory.js'
 import {
   COMMAND,
   COMMAND_QUEUE,
   EVENT,
   EVENTS_CHANNEL,
+  PROTOCOL_VERSION,
   SUPERVISOR_HEARTBEAT_KEY,
   commandTimeoutMs,
   decodeEvent,
   lastEventKey,
   resolveRedisUrl,
 } from './protocol.js'
+
+// P2-2: pub/sub é versionado (decodeEvent rejeita versão incompatível). Antes
+// isso era um descarte SILENCIOSO — num rolling deploy com PROTOCOL_VERSION
+// diferente entre supervisor e API, eventos de QR/status sumiam sem rastro.
+// Logamos o mismatch de forma THROTTLED (1/min) pra dar visibilidade sem
+// inundar o log se a divergência persistir.
+let lastProtocolMismatchWarnAt = 0
+function warnOnProtocolMismatch(raw) {
+  let parsed
+  try { parsed = JSON.parse(raw) } catch { return }
+  if (!parsed || typeof parsed !== 'object') return
+  if (parsed.v === PROTOCOL_VERSION) return
+  const now = Date.now()
+  if (now - lastProtocolMismatchWarnAt < 60_000) return
+  lastProtocolMismatchWarnAt = now
+  logger.warn(
+    { gotVersion: parsed.v, expectedVersion: PROTOCOL_VERSION },
+    'Evento do supervisor descartado por PROTOCOL_VERSION incompatível — supervisor e API em versões divergentes? (verifique a ordem de deploy)',
+  )
+}
 
 /**
  * @typedef {Object} SupervisorClient
@@ -86,13 +108,13 @@ export function createSupervisorClient({
       queueEvents = new QueueEvents(COMMAND_QUEUE, { connection: { url: redisUrl, ...connectionOpts } })
       await queueEvents.waitUntilReady()
 
-      subscriber = new Redis(redisUrl, { lazyConnect: false })
-      publisherCheck = new Redis(redisUrl, { lazyConnect: false })
+      subscriber = new Redis(redisUrl, buildRedisOptions('supervisor-client-sub', { lazyConnect: false }))
+      publisherCheck = new Redis(redisUrl, buildRedisOptions('supervisor-client-check', { lazyConnect: false }))
 
       subscriber.on('message', (channel, message) => {
         if (channel !== EVENTS_CHANNEL) return
         const evt = decodeEvent(message)
-        if (!evt) return
+        if (!evt) { warnOnProtocolMismatch(message); return }
         events.emit(`${evt.type}:${evt.userId}`, evt.data, evt)
         events.emit(evt.type, evt)
       })
