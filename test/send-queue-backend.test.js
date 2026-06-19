@@ -98,3 +98,36 @@ test('findUnserializableField: payload serializável passa', () => {
   const job = { logId: 1, payload: { text: 'hello', n: 42, arr: [1, 2, { a: 'b' }] } }
   assert.equal(findUnserializableField(job), null)
 })
+
+// P1-2: contrato de roteamento do backend híbrido. O wrapper em bot-worker
+// (createSendBackend) usa findUnserializableField para decidir BullMQ
+// (persistente) vs memória (memory-only). Estes testes travam quais formas de
+// job vão para cada lado, para a regra não regredir.
+test('P1-2 roteamento: job com payloadRecipe é serializável → BullMQ', () => {
+  const job = {
+    logId: 10, type: 'broadcast', destJid: 'g@g.us',
+    delayMs: 0, typingDelayMs: 0,
+    payloadRecipe: { type: 'imageUrl', imageUrl: 'https://x/y.jpg', text: 'oferta', refererUrl: 'https://x' },
+  }
+  assert.equal(findUnserializableField(job), null, 'recipe-based deve ir para BullMQ')
+})
+
+test('P1-2 roteamento: job monitorado com buildPayload (closure) → memória', () => {
+  const job = {
+    logId: 11, type: 'converted', destJid: 'g@g.us',
+    channelForward: null,
+    buildPayload: async () => ({ primary: {} }),
+  }
+  const found = findUnserializableField(job)
+  assert.equal(found?.kind, 'function', 'closure buildPayload não é serializável')
+  assert.equal(found?.path, '$.buildPayload')
+})
+
+test('P1-2 roteamento: payload relay com proto Buffer eager → memória', () => {
+  const job = {
+    logId: 12, type: 'converted', destJid: 'g@g.us',
+    payload: { _route: 'relay', relay: { type: 'imageMessage', proto: Buffer.from('media') } },
+  }
+  const found = findUnserializableField(job)
+  assert.equal(found?.kind, 'Buffer', 'proto de relay carrega Buffer → memory-only')
+})
