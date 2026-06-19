@@ -19,6 +19,7 @@ import Redis from 'ioredis'
 import db from '../db.js'
 import logger from '../logger.js'
 import * as sessionCore from '../core/sessionCore.js'
+import { buildRedisOptions } from '../core/redisFactory.js'
 import { buildShardTag, normalizeShardCount, shouldHandleUserOnShard } from './sharding.js'
 import { checkSupervisorEnvConsistency } from './envGuard.js'
 import { createRestartBudget, RESTART_BUDGET_MAX, RESTART_BUDGET_WINDOW_MS, RESTART_QUARANTINE_MS } from './restartBudget.js'
@@ -63,7 +64,7 @@ if (!envCheck.ok) {
   process.exit(1)
 }
 
-const publisher = new Redis(REDIS_URL, { lazyConnect: false, maxRetriesPerRequest: null })
+const publisher = new Redis(REDIS_URL, buildRedisOptions('supervisor-publisher', { lazyConnect: false, maxRetriesPerRequest: null }))
 publisher.on('error', err => logger.warn({ err: err.message }, 'Publisher Redis error'))
 const SHARD_COUNT = normalizeShardCount(process.env.SHARD_COUNT || 1, 1)
 // Fail-fast: SHARD_INDEX precisa ser inteiro finito em [0, SHARD_COUNT). Qualquer

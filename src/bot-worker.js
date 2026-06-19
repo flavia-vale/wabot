@@ -52,6 +52,7 @@ import { detectMessageKind, extractIncomingText, normalizeForwardingPolicy, shou
 import { broadcastSourceGroup } from './offerQueue/sourceTag.js'
 import Redis from 'ioredis'
 import { parseEnumEnv, logModeSummary } from './core/envModes.js'
+import { buildRedisOptions } from './core/redisFactory.js'
 
 const userId = process.env.BOT_USER_ID
 
@@ -98,7 +99,7 @@ function useGlobalRedis() {
 function ensureRuntimeRedis() {
   if (!useGlobalRedis()) return null
   if (runtimeRedis) return runtimeRedis
-  runtimeRedis = new Redis(process.env.REDIS_URL, { lazyConnect: false, maxRetriesPerRequest: null })
+  runtimeRedis = new Redis(process.env.REDIS_URL, buildRedisOptions('bot-worker-runtime', { lazyConnect: false, maxRetriesPerRequest: null }))
   runtimeRedis.on('error', (err) => logger.warn({ err: err?.message }, 'runtimeRedis error'))
   return runtimeRedis
 }
