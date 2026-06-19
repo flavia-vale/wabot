@@ -16,7 +16,7 @@ Versões: `bullmq ^5.76.10`, `ioredis ^5.10.1`.
 | P1-1 (comentário enganoso `bot-worker.js`) | ✅ Feito |
 | P1-3 (nudge no boot p/ `REDIS_DEDUP_FAIL_MODE=closed`) | ✅ Feito (código) — falta setar `.env` no VPS (staging→prod) |
 | P1-4 (last-value de QR/status no Redis + re-hidratação) | ✅ Feito |
-| P1-2 (payload lazy → BullMQ persistente) | ⏸️ Pendente — refactor arquitetural (ver nota em P1-2) |
+| P1-2 (backend híbrido: recipe→BullMQ, relay/original→memória) | ✅ Feito — `QUEUE_BACKEND=bullmq` agora é seguro de ligar (sem oferta-sem-foto); validar em staging antes de tornar default |
 | P2-* | ⏳ Backlog |
 
 ## 1. Inventário (onde Redis/BullMQ são usados)

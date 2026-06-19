@@ -519,16 +519,29 @@ uma DLQ correspondente (`wabot-send-<userId>-dlq`). Configuração via env:
 
 **Default é `memory` — BullMQ é opt-in explícito.** Já tentamos
 auto-ligar BullMQ quando `REDIS_URL` está presente e isso quebrou o
-envio de imagem em staging: o payload do job carrega `image.buffer`
-(Buffer real); BullMQ persiste via `JSON.stringify`, e Buffer vira
-`{type:'Buffer', data:[...]}` na deserialização. O Baileys não
-reconhece como mídia e a oferta sai **sem foto**. Para reabilitar
-BullMQ como default sem regressão, antes mover a construção da payload
-(fetch + normalize de imagem + `buildMonitoredMessagePayload`) para
-dentro do worker pós-dequeue, persistindo só a "receita" (URL, flags,
-texto) na fila. Até lá: para forçar persistência, setar
-`QUEUE_BACKEND=bullmq` explicitamente — ciente de que ofertas com
-imagem podem sair só como texto.
+envio de imagem em staging: o payload do job pode carregar `image.buffer`
+(Buffer real) ou o proto de relay; BullMQ persiste via `JSON.stringify`,
+e Buffer vira `{type:'Buffer', data:[...]}` na deserialização — o Baileys
+não reconhece como mídia e a oferta sairia **sem foto**.
+
+**Backend híbrido (P1-2, roteamento por serializabilidade):** o wrapper em
+`createSendBackend` (bot-worker.js) hoje roteia **por job**, não desligando
+mais BullMQ inteiro:
+- Job com `payloadRecipe`/`payload` puro (broadcast, oferta automática,
+  agendado) → **BullMQ**: persiste e sobrevive a restart do worker. No
+  dequeue, `processSendJob` reconstrói a mídia via `buildPayloadFromRecipe`
+  (fetch por URL) e atualiza o `MessageLog` sozinho.
+- Job com closure `buildPayload`, proto de relay ou `image.buffer`
+  (envio monitorado de mídia "original") → **fila em memória**
+  (memory-only): não é serializável sem corromper a mídia. Sai **com foto**
+  normalmente; só não persiste em restart (aceitável: está atrelado a estado
+  efêmero da mensagem ao vivo). A decisão usa `findUnserializableField`.
+
+Logo, ligar `QUEUE_BACKEND=bullmq` **não** faz mais oferta com imagem sair
+como texto — no pior caso ela vai pela fila em memória. Limitação conhecida:
+um job recipe-based que sobrevive a restart perde o callback `onDone`
+(analytics best-effort), mas o envio e a atualização de status do log
+acontecem mesmo assim. Validar em staging antes de tornar default.
 
 **DLQ:** quando `processSendJob` lança após esgotar `SEND_MAX_ATTEMPTS`,
 o BullMQ marca o job como `failed`. Um listener no Worker copia o payload

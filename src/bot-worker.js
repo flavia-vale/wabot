@@ -25,7 +25,7 @@ import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { decryptCredential } from './credentialCrypto.js'
 import { createMessageQueue } from './messageQueue.js'
-import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode } from './sendQueueBackend.js'
+import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode, findUnserializableField } from './sendQueueBackend.js'
 import { withSendTimeout as withSendTimeoutImpl } from './sendMessageTimeout.js'
 import { isMirrorableJid, detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
@@ -1260,6 +1260,21 @@ async function createSendBackend() {
     return {
       ...bullBackend,
       enqueue(job) {
+        // P1-2: roteamento por serializabilidade (backend híbrido).
+        //  - Job com recipe/payload puro (broadcast, oferta automática,
+        //    agendado) → BullMQ: PERSISTE e sobrevive a restart do worker
+        //    (no dequeue, processSendJob reconstrói via payloadRecipe e
+        //    atualiza o MessageLog sozinho).
+        //  - Job com relay proto, buffer de mídia "original" ou closure
+        //    buildPayload → fila em MEMÓRIA: não dá para serializar sem
+        //    corromper a mídia (Buffer vira {type:'Buffer'} e a oferta sai
+        //    sem foto). Decisão consciente ("relay memory-only"), não erro.
+        //    Ver AGENTS.md seção "Fila de envio (BullMQ + DLQ)".
+        const offender = findUnserializableField(job)
+        if (offender) {
+          logger.debug({ logId: job?.logId, path: offender.path, kind: offender.kind }, 'Job de envio não-serializável — roteado para fila em memória (relay/original-media)')
+          return Promise.resolve(memoryFallback.enqueue(job))
+        }
         return bullBackend.enqueue(job).then(ok => {
           if (ok) return true
           logger.warn({ logId: job?.logId }, 'BullMQ indisponível no enqueue; fallback imediato para fila em memória')
