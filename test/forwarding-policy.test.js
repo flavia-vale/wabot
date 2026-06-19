@@ -93,3 +93,21 @@ test('regressão: imagem-com-legenda desembrulhada vira image_with_caption (não
   assert.ok(text.includes('s.shopee.com.br'), 'legenda com link deve ser extraída')
   assert.equal(detectMessageKind(unwrapped, text), 'image_with_caption')
 })
+
+// Regressão (2026-06): mensagens de "plumbing" (protocolo, senderKey
+// distribution, mensagens vazias) chegam sem texto, sem mídia reconhecida e sem
+// link → kind 'other'. O bot-worker usa exatamente (kind === 'other' && sem
+// link) para IGNORAR EM SILÊNCIO em vez de criar linha "ignorado/nolink" no
+// painel. Sem isso, um reconnect (rajada de senderKeyDistribution) poluía o log
+// com dezenas de "ignorado" mesmo o grupo não tendo recebido mensagem real.
+test('detectMessageKind: mensagens de plumbing (sem conteúdo) são kind other', () => {
+  assert.equal(detectMessageKind({ senderKeyDistributionMessage: { groupId: '120@g.us' } }, ''), 'other')
+  assert.equal(detectMessageKind({ protocolMessage: { type: 0 } }, ''), 'other')
+  assert.equal(detectMessageKind({}, ''), 'other')
+  assert.equal(detectMessageKind(null, ''), 'other')
+})
+
+test('detectMessageKind: conteúdo real NÃO é other (não deve ser silenciado)', () => {
+  assert.equal(detectMessageKind({ imageMessage: {} }, ''), 'image')
+  assert.equal(detectMessageKind({ extendedTextMessage: { text: 'oi' } }, 'oi'), 'text')
+})

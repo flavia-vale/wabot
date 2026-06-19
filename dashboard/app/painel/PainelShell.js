@@ -157,9 +157,10 @@ export default function PainelShell({ children }) {
   }, [checking])
 
   // Saúde da conexão: só sondamos a versão completa do status (com métricas do
-  // worker) quando o bot está online. Se a sessão estiver conectada mas sem
-  // conseguir ler mensagens (decrypt dessincronizado), o worker devolve
-  // sessionHealth.degraded e mostramos o banner global de reconexão.
+  // worker) quando o bot está online. O worker devolve sessionHealth.degraded
+  // quando a sessão está conectada mas com decrypt dessincronizado; mantemos o
+  // dado no contexto para observabilidade, mas NÃO exibimos mais banner global
+  // (a ação que ele sugeria — reconectar — pioraria o re-sync; ver pnl-content).
   useEffect(() => {
     if (!online) return undefined
     let active = true
@@ -325,29 +326,13 @@ export default function PainelShell({ children }) {
           </header>
 
           <div className="pnl-content">
-            {online && sessionHealth?.degraded && !pathname.startsWith('/painel/whatsapp') && (
-              <div
-                className="pnl-note-box is-error"
-                role="alert"
-                style={{ marginBottom: 16, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, justifyContent: 'space-between' }}
-              >
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <strong style={{ fontWeight: 600, display: 'block' }}>⚠️ Sua conexão do WhatsApp está instável</strong>
-                  <span>
-                    O WhatsApp aparece conectado, mas não está conseguindo ler as mensagens dos seus grupos —
-                    suas ofertas podem não estar sendo espelhadas. Reconecte para normalizar.
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className="pnl-btn is-primary"
-                  style={{ flexShrink: 0 }}
-                  onClick={() => router.push('/painel/whatsapp?reconnect=1')}
-                >
-                  Reconectar agora
-                </button>
-              </div>
-            )}
+            {/* Banner global de "conexão instável" removido (2026-06): a única ação
+                que ele oferecia era reconectar (QR novo), o que PIORA o estado —
+                logo após reconectar há uma rajada esperada de Bad MAC enquanto as
+                sender keys dos grupos re-sincronizam, e re-escanear reinicia esse
+                ciclo. Como a ação correta não é reconectar, o banner não aparece
+                mais. sessionHealth segue exposto no contexto/metrics para
+                observabilidade, sem alarmar o usuário com uma ação enganosa. */}
             {children}
           </div>
         </div>

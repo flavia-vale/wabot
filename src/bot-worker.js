@@ -1656,6 +1656,14 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       })
       if (!canForwardCurrentMessage) {
         const hasGenericUrl = /https?:\/\//i.test(sanitizedText)
+        // Mensagens sem conteúdo de usuário (protocolMessage, senderKey
+        // distribution, reações, poll updates, etc.) chegam como kind 'other'
+        // sem texto e sem link — NÃO são ofertas que o usuário esperava espelhar
+        // e não devem virar linha "ignorado" no painel. Ignorar em silêncio.
+        // Sem isso, um reconnect (que dispara rajada de senderKeyDistribution)
+        // polui o log com dezenas de 'nolink' mesmo o grupo não tendo recebido
+        // nenhuma mensagem real (incidente 2026-06).
+        if (messageKind === 'other' && links.length === 0 && !hasGenericUrl) return
         const unsupportedStoreSuffix = links.length === 0 && hasGenericUrl ? ':unsupported_store' : ''
         await db.messageLog.create({
           data: {
