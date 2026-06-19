@@ -53,8 +53,19 @@ import { broadcastSourceGroup } from './offerQueue/sourceTag.js'
 import Redis from 'ioredis'
 import { parseEnumEnv, logModeSummary } from './core/envModes.js'
 import { buildRedisOptions } from './core/redisFactory.js'
+import { installWorkerCrashGuards } from './core/workerCrashGuard.js'
 
 const userId = process.env.BOT_USER_ID
+
+// Guardas de processo: um throw assíncrono benigno do Baileys num socket já
+// fechado (ex.: 428 "Connection Closed" disparado por sendRetryRequest após um
+// conflito/replaced 440) não pode matar o worker — senão a reconexão automática
+// agendada no connection.update nunca roda e a sessão fica offline até religar
+// manual. Ver src/core/workerCrashGuard.js.
+installWorkerCrashGuards({
+  logger,
+  onFatal: () => { setTimeout(() => process.exit(1), 50).unref?.() },
+})
 
 
 const GLOBAL_RATE_LIMIT_MODE = parseEnumEnv('GLOBAL_RATE_LIMIT_MODE', process.env.GLOBAL_RATE_LIMIT_MODE || 'auto', ['auto', 'on', 'off'], 'auto')
