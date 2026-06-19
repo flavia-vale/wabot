@@ -76,6 +76,19 @@ A API decide quem gerencia os bots via env var `BOT_SUPERVISOR_MODE`:
   `bot-supervisor` faz `fork()` dos workers. Deploy da API **não** toca
   nas sessões.
 
+**Estado canônico do staging = `inline`.** O staging existe para validar
+features no dia a dia, e `inline` é o modo mais simples e estável (a própria
+`api-staging` faz `fork()` dos workers, sem depender do `bot-supervisor-staging`
+estar de pé e no diretório certo — vide pegadinha #9). O modo `remote` em
+staging só deve ser ligado **durante a janela de teste de um cutover** (espelhar
+prod) e revertido para `inline` ao terminar. Se o staging ficou "preso" em
+`remote` (QR não aparece, status "Falha ao carregar status", comandos estourando
+`isRunning timed out`), quase sempre é porque o `.env` ficou com
+`BOT_SUPERVISOR_MODE=remote` de uma janela antiga — reverta para `inline`
+(rollback abaixo). Lembre que **deploy não mexe nisso**: o `.env` é gitignored e
+o workflow só faz `git pull` + `prisma migrate`, então o modo só muda quando
+alguém edita o `.env` no VPS.
+
 Cutover seguro (validar staging primeiro):
 
 1. Subir Redis local no VPS (`redis-server`, bind 127.0.0.1, AOF on).
@@ -91,8 +104,11 @@ Cutover seguro (validar staging primeiro):
    conectada — sessão **deve continuar conectada** (esse é o ponto).
 6. Repetir para produção (`bot-supervisor` + ajustar `.env` + delete/start `api`).
 
-Rollback: setar `BOT_SUPERVISOR_MODE=inline` + `pm2 restart api/api-staging`.
-Janela ≤ 2min.
+Rollback: setar `BOT_SUPERVISOR_MODE=inline` no `.env` + **delete + start**
+da API (`pm2 delete api-staging && pm2 start ecosystem.config.cjs --only
+api-staging && pm2 save`; idem `api` em prod). `pm2 restart --update-env` NÃO
+basta (pegadinha #1: PM2 cacheia a env). Confirme no log que **não** aparece
+`Manager em modo REMOTE`. Janela ≤ 2min.
 
 **Pré-requisito do modo `remote`:** Redis local em `REDIS_URL`
 (`redis://127.0.0.1:6379/0` prod, `/1` staging). No modo `inline` o
