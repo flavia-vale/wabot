@@ -1,4 +1,5 @@
 import { resolveRedisUrl, EVENTS_CHANNEL, encodeEvent } from '../supervisor/protocol.js'
+import { buildRedisOptions } from './redisFactory.js'
 import logger from '../logger.js'
 
 const PROBE_SESSION_STATES = new Set(['disconnected', 'connecting', 'qr_pending', 'connected', 'error'])
@@ -13,8 +14,8 @@ async function getRedisClients() {
   if (redisPub && redisGet) return { redisPub, redisGet }
   const mod = await import('ioredis')
   const Redis = mod.default ?? mod.Redis ?? mod
-  redisPub = redisPub ?? new Redis(redisUrl, { lazyConnect: false })
-  redisGet = redisGet ?? new Redis(redisUrl, { lazyConnect: false })
+  redisPub = redisPub ?? new Redis(redisUrl, buildRedisOptions('probe-pub', { lazyConnect: false }))
+  redisGet = redisGet ?? new Redis(redisUrl, buildRedisOptions('probe-get', { lazyConnect: false }))
   redisPub.on('error', err => logger.warn({ err: err?.message }, 'probeSessions redisPub error'))
   redisGet.on('error', err => logger.warn({ err: err?.message }, 'probeSessions redisGet error'))
   return { redisPub, redisGet }

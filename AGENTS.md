@@ -102,7 +102,12 @@ Redis é opcional.
 
 - `src/supervisor/protocol.js` — contrato (nomes de filas, eventos,
   timeouts). [PROTECTED_CORE]. Mudança breaking exige bumping de
-  `PROTOCOL_VERSION`.
+  `PROTOCOL_VERSION`. **Ordem de deploy (P2-2):** o pub/sub é versionado e
+  `decodeEvent` descarta evento de versão diferente — o `client.js` loga isso
+  (WARN throttled) em vez de sumir em silêncio. Ainda assim, ao bumpar
+  `PROTOCOL_VERSION`, faça deploy de **supervisor e API juntos**; não deixe as
+  duas pontas em versões divergentes em regime permanente (QR/status seriam
+  descartados e comandos novos viram `Comando desconhecido`).
 - `src/supervisor/client.js` — usado pela API quando em modo `remote`.
   Mantém a mesma superfície de `src/core/sessionCore.js` para que rotas
   não mudem ao alternar de modo.
@@ -545,8 +550,9 @@ acontecem mesmo assim. Validar em staging antes de tornar default.
 
 **DLQ:** quando `processSendJob` lança após esgotar `SEND_MAX_ATTEMPTS`,
 o BullMQ marca o job como `failed`. Um listener no Worker copia o payload
-para a DLQ (`<queueName>-dlq`) com `removeOnComplete: false` —
-**jobs ficam indefinidamente** até ação manual. Inspeção via:
+para a DLQ (`<queueName>-dlq`) com `removeOnComplete: false`. A DLQ **não
+tem worker**, então os jobs ficam em `waiting` até ação manual ou poda.
+Inspeção via:
 
 - `GET  /api/admin/send-dlq/:userId?limit=100` — lista jobs
 - `POST /api/admin/send-dlq/:userId/retry/:jobId` — reenfileira na principal
@@ -555,6 +561,15 @@ para a DLQ (`<queueName>-dlq`) com `removeOnComplete: false` —
 
 Helpers programáticos: `src/jobs/sendDlq.js`. Todas as ações destrutivas
 gravam `AdminAuditLog`.
+
+**Retenção (P2-1):** como a DLQ nunca processa jobs, `removeOnComplete/Fail`
+não os limpa (nunca completam). A poda é por idade: `pruneDlqOlderThan()`
+remove entradas mais velhas que `SEND_DLQ_RETENTION_MS` (default 30 dias) via
+`failedAt`. Pensado para rodar no cron de manutenção. Sem isso a DLQ cresce
+indefinidamente. **Retry seguro (P2-3):** `retryDlqJob` reenfileira com um
+`jobId` único (`dlq-retry:<logId>:<dlqJobId>`), nunca reusando o `logId` cru —
+senão um `add` com jobId já presente no histórico (`removeOnComplete:500`)
+seria descartado em silêncio e o retry se perderia.
 
 ### Fail-mode da dedup global vs. rate-limit (`REDIS_DEDUP_FAIL_MODE`)
 

@@ -1,5 +1,6 @@
 import logger from '../logger.js'
 import { parseEnumEnv, logModeSummary } from './envModes.js'
+import { buildRedisOptions } from './redisFactory.js'
 
 const MEM = new Map()
 let redisClient = null
@@ -28,11 +29,11 @@ async function getRedis() {
     try {
       const ioredis = await import('ioredis')
       const Redis = ioredis.default ?? ioredis.Redis ?? ioredis
-      const client = new Redis(process.env.REDIS_URL, {
+      const client = new Redis(process.env.REDIS_URL, buildRedisOptions('token-revocation', {
         lazyConnect: false,
         maxRetriesPerRequest: null,
         enableReadyCheck: true,
-      })
+      }))
       client.on('ready', () => { redisHealthy = true })
       client.on('error', (err) => {
         redisHealthy = false
