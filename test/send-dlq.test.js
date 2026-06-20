@@ -74,6 +74,8 @@ test('pruneDlqOlderThan remove só jobs além da janela de retenção (P2-1)', a
   const res = await pruneDlqOlderThan({ redisUrl: 'redis://fake', userId: 'u3', now, bullmqModule: mock })
   assert.equal(res.ok, true)
   assert.equal(res.removed, 1)
+  // remaining alimenta o gauge de /metrics sem round-trip extra
+  assert.equal(res.remaining, 1)
   const dlq = mock._queues.get('wabot-send-u3-dlq')
   assert.equal(dlq.jobs.find(j => j.id === 'old').removed, true)
   assert.equal(dlq.jobs.find(j => j.id === 'fresh').removed, false)
