@@ -145,7 +145,7 @@ export const DLQ_RETENTION_MS = Math.max(0, Number(process.env.SEND_DLQ_RETENTIO
  * Mantém a DLQ útil para inspeção sem deixá-la crescer indefinidamente.
  */
 export async function pruneDlqOlderThan({ redisUrl, userId, olderThanMs = DLQ_RETENTION_MS, now = Date.now(), queueNameOverride, bullmqModule = null } = {}) {
-  if (!Number.isFinite(olderThanMs) || olderThanMs <= 0) return { ok: true, removed: 0, skipped: 'retention_disabled' }
+  if (!Number.isFinite(olderThanMs) || olderThanMs <= 0) return { ok: true, removed: 0, remaining: 0, skipped: 'retention_disabled' }
   return withDlq({ redisUrl, userId, queueNameOverride, bullmqModule }, async (dlq, name) => {
     const jobs = await dlq.getJobs(['waiting', 'delayed', 'completed', 'failed'], 0, -1, false)
     const cutoff = now - olderThanMs
@@ -160,6 +160,8 @@ export async function pruneDlqOlderThan({ redisUrl, userId, olderThanMs = DLQ_RE
       }
     }
     if (removed > 0) logger.info({ queue: name, removed, olderThanMs }, 'DLQ podada por retenção')
-    return { ok: true, removed }
+    // `remaining` é grátis (já temos a lista completa) e alimenta o gauge de
+    // /metrics sem um round-trip extra de COUNT.
+    return { ok: true, removed, remaining: Math.max(0, jobs.length - removed) }
   })
 }

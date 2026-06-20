@@ -28,10 +28,11 @@ import { startOfferAutomationCron } from '../offerAutomation/cron.js'
 import { startOfferQueueCron } from '../offerQueue/cron.js'
 import { registerApiMetricsHooks, renderPrometheusMetrics, isPrivateAddress } from './metrics.js'
 import { getSupervisorOperationalCounters } from '../supervisor/operationalCounters.js'
+import { startDlqMaintenanceJob, getDlqMaintenanceSnapshot } from '../jobs/dlqMaintenance.js'
 import db from '../db.js'
 import { revokeTokenJtiGlobal, isTokenRevokedGlobal } from '../core/tokenRevocationStore.js'
 import { validateEncryptionKey } from '../credentialCrypto.js'
-import { resumePersistedBots, startSessionHealthMonitor, stopAllBots } from '../manager.js'
+import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, SUPERVISOR_MODE } from '../manager.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
 registerApiMetricsHooks(app)
@@ -303,7 +304,12 @@ app.get('/metrics', async (req, reply) => {
   reply
     .code(200)
     .header('content-type', 'text/plain; version=0.0.4; charset=utf-8')
-    .send(renderPrometheusMetrics(await getSupervisorOperationalCounters()))
+    .send(renderPrometheusMetrics({
+      ...(await getSupervisorOperationalCounters()),
+      dlqTotal: getDlqMaintenanceSnapshot().lastKnownDlqTotal,
+      supervisorMode: SUPERVISOR_MODE,
+      supervisorAlive: await isSupervisorAlive(),
+    }))
 })
 
 // Readiness: dependências estão prontas para receber tráfego
@@ -335,6 +341,7 @@ startActivityCacheCleanup()
 startProbeWatchdogJob()
 startOfferAutomationCron()
 startOfferQueueCron()
+const stopDlqMaintenance = startDlqMaintenanceJob({ db })
 await app.listen({ port, host: '0.0.0.0' })
 console.log(`API rodando em http://localhost:${port}`)
 const stopSessionHealthMonitor = startSessionHealthMonitor(db, app.log)
@@ -345,6 +352,7 @@ await resumePersistedBots(db, app.log).catch(err => {
 async function shutdown(signal) {
   app.log.info({ signal }, 'Encerrando API com parada graciosa')
   stopSessionHealthMonitor()
+  stopDlqMaintenance()
   stopAllBots()
   if (activityCacheCleanupTimer) clearInterval(activityCacheCleanupTimer)
   await app.close()

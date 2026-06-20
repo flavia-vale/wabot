@@ -113,3 +113,17 @@ export function checkSupervisorEnvConsistency({ appEnv, cwd, redisUrl } = {}) {
 export function supervisorManagesSessions(mode) {
   return String(mode ?? '').trim().toLowerCase() === 'remote'
 }
+
+/**
+ * Espelha `shouldAutoStartPersistedBots` do sessionCore: `AUTO_START_WHATSAPP_
+ * SESSIONS=false` desliga o auto-resume/ressurreição de sessões persistidas.
+ * Antes o supervisor ignorava essa flag (fazia query própria e ressuscitava
+ * sempre), divergindo do comportamento inline. Comandos manuais (START_BOT) e
+ * o kill de zumbis seguem ativos — só o auto-resume é governado por aqui.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {boolean}
+ */
+export function supervisorShouldAutoResume(env = process.env) {
+  return env.AUTO_START_WHATSAPP_SESSIONS !== 'false'
+}
