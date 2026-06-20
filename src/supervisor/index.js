@@ -21,7 +21,7 @@ import logger from '../logger.js'
 import * as sessionCore from '../core/sessionCore.js'
 import { buildRedisOptions } from '../core/redisFactory.js'
 import { buildShardTag, normalizeShardCount, shouldHandleUserOnShard } from './sharding.js'
-import { checkSupervisorEnvConsistency, supervisorManagesSessions } from './envGuard.js'
+import { checkSupervisorEnvConsistency, supervisorManagesSessions, supervisorShouldAutoResume } from './envGuard.js'
 import { createRestartBudget, RESTART_BUDGET_MAX, RESTART_BUDGET_WINDOW_MS, RESTART_QUARANTINE_MS } from './restartBudget.js'
 import { parseEnumEnv, logModeSummary } from '../core/envModes.js'
 import {
@@ -133,6 +133,11 @@ const SESSION_QUARANTINE_KEY = `supervisor:session_quarantine_total:${SHARD_TAG}
 // Orçamento de restarts automáticos por sessão (health monitor). Start manual
 // via comando START_BOT limpa a quarentena.
 const restartBudget = createRestartBudget()
+
+// Espelha o sessionCore: AUTO_START_WHATSAPP_SESSIONS=false desliga o
+// auto-resume/ressurreição. Comandos manuais (START_BOT) e kill de zumbis
+// seguem ativos. Antes o supervisor ignorava a flag e divergia do inline.
+const AUTO_RESUME = supervisorShouldAutoResume(process.env)
 
 logModeSummary('bot-supervisor', {
   shardCount: SHARD_COUNT,
@@ -403,7 +408,9 @@ async function healthMonitorTick() {
 
   // (2) Ressuscita sessões persistidas que pertencem ao shard mas não estão
   // rodando localmente — cobre tanto o exit de worker (OOM/exceção) quanto
-  // o restart pós-stopBot acima no próximo tick.
+  // o restart pós-stopBot acima no próximo tick. Pulado quando o auto-resume
+  // está desligado (AUTO_START_WHATSAPP_SESSIONS=false).
+  if (!AUTO_RESUME) return
   try {
     const persisted = await db.waSession.findMany({
       where: { status: { in: ['connected', 'connecting'] } },
@@ -459,10 +466,14 @@ async function boot() {
   // Resume de sessões persistidas — guardado por try/catch por sessão. Antes
   // o loop era unguarded: uma única sessão com auth_info corrompido derrubava
   // o boot inteiro, PM2 reiniciava, mesma falha → loop de DoS auto-infligido.
+  // Pulado quando AUTO_START_WHATSAPP_SESSIONS=false (paridade com inline).
   let started = 0
   let attempted = 0
   try {
-    const persisted = await db.waSession.findMany({ where: { status: { in: ['connected', 'connecting'] } }, select: { userId: true } })
+    const persisted = AUTO_RESUME
+      ? await db.waSession.findMany({ where: { status: { in: ['connected', 'connecting'] } }, select: { userId: true } })
+      : []
+    if (!AUTO_RESUME) logger.info({ shard: SHARD_TAG }, 'AUTO_START_WHATSAPP_SESSIONS=false — supervisor não faz auto-resume (só comandos manuais)')
     attempted = persisted.length
     for (const s of persisted) {
       if (!belongsToThisShard(s.userId)) continue

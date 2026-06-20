@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { checkSupervisorEnvConsistency, supervisorManagesSessions } from '../src/supervisor/envGuard.js'
+import { checkSupervisorEnvConsistency, supervisorManagesSessions, supervisorShouldAutoResume } from '../src/supervisor/envGuard.js'
 
 test('staging no diretório de staging com Redis /1 é consistente', () => {
   const r = checkSupervisorEnvConsistency({
@@ -98,6 +98,13 @@ test('supervisorManagesSessions: só "remote" ativa o gerenciamento de sessões'
   assert.equal(supervisorManagesSessions(undefined), false)
   assert.equal(supervisorManagesSessions(null), false)
   assert.equal(supervisorManagesSessions('garbage'), false)
+})
+
+test('supervisorShouldAutoResume: só AUTO_START_WHATSAPP_SESSIONS=false desliga', () => {
+  assert.equal(supervisorShouldAutoResume({}), true)
+  assert.equal(supervisorShouldAutoResume({ AUTO_START_WHATSAPP_SESSIONS: 'true' }), true)
+  assert.equal(supervisorShouldAutoResume({ AUTO_START_WHATSAPP_SESSIONS: '' }), true)
+  assert.equal(supervisorShouldAutoResume({ AUTO_START_WHATSAPP_SESSIONS: 'false' }), false)
 })
 
 test('REDIS_URL com DB não-canônica não dispara falso positivo', () => {

@@ -54,3 +54,18 @@ export const startSessionHealthMonitor = (...args) => impl.startSessionHealthMon
 export const resumePersistedBots = (...args) => impl.resumePersistedBots(...args)
 
 export const SUPERVISOR_MODE = MODE
+
+/**
+ * Liveness do bot-supervisor (só faz sentido em modo `remote`). Lê o heartbeat
+ * que o supervisor renova no Redis. Em `inline` não há supervisor: retorna
+ * `null` (N/A) para o chamador distinguir "morto" de "não se aplica".
+ * Best-effort: nunca lança.
+ */
+export async function isSupervisorAlive() {
+  if (MODE !== 'remote' || !remoteClient?.isSupervisorAlive) return null
+  try {
+    return await remoteClient.isSupervisorAlive()
+  } catch {
+    return false
+  }
+}
