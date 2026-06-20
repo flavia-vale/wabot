@@ -55,6 +55,24 @@ export const EVENT = Object.freeze({
   HEARTBEAT: 'heartbeat',
 })
 
+// Cache de last-value para eventos. O pub/sub Redis é fire-and-forget: se a API
+// reinicia ou o subscriber reconecta, o QR/status publicado nesse meio-tempo se
+// perde e o painel fica "carregando" pra sempre. O supervisor grava o último
+// valor numa chave com TTL; o client re-hidrata um assinante tardio lendo essa
+// chave ao assinar. Só QR e STATUS são cacheados — QR rotaciona rápido (TTL
+// curto), STATUS é estável (TTL maior). lifecycle/heartbeat não são cacheados.
+export const LAST_EVENT_KEY_PREFIX = 'bots:lastevent'
+export const LAST_EVENT_CACHE_TTL_SECONDS = Object.freeze({
+  [EVENT.QR]: 120,
+  [EVENT.STATUS]: 600,
+})
+export function lastEventKey(userId, type) {
+  return `${LAST_EVENT_KEY_PREFIX}:${type}:${userId}`
+}
+export function lastEventCacheTtlSeconds(type) {
+  return LAST_EVENT_CACHE_TTL_SECONDS[type] ?? 0
+}
+
 // Timeouts default por comando (ms). Mantém os mesmos valores já usados em
 // src/core/sessionCore.js para não mudar semântica visível à rota.
 export const COMMAND_TIMEOUTS_MS = Object.freeze({

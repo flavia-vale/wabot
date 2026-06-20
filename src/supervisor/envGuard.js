@@ -85,3 +85,31 @@ export function checkSupervisorEnvConsistency({ appEnv, cwd, redisUrl } = {}) {
 
   return { ok: true }
 }
+
+/**
+ * Decide se o supervisor deve, de fato, assumir o ciclo de vida das sessões
+ * (fork/resume/health-monitor/consumo de comandos) com base em
+ * `BOT_SUPERVISOR_MODE`.
+ *
+ * Por que existe (incidente real, staging "caindo toda hora"): só a API
+ * (via src/manager.js) respeitava `BOT_SUPERVISOR_MODE`. O supervisor subia e
+ * SEMPRE fazia fork()/resume das sessões, independente do modo. Em staging o
+ * modo canônico é `inline` (a própria api-staging faz fork() dos workers) E o
+ * `bot-supervisor-staging` fica de pé como app PM2. Resultado: api-staging e
+ * bot-supervisor-staging davam fork() do MESMO worker, compartilhando o MESMO
+ * AUTH_INFO_DIR → dois sockets Baileys com a mesma credencial → o WhatsApp só
+ * aceita um device por registro → conflito/stream-error → flapping eterno
+ * (sessão "caindo toda hora", risco de ban).
+ *
+ * Acoplando o supervisor à MESMA flag que a API já respeita, a dupla posse de
+ * sessão vira impossível: como api-staging e bot-supervisor-staging carregam o
+ * MESMO `.env`, a flag governa as duas pontas de forma consistente. Só em
+ * `remote` o supervisor é dono das sessões; em qualquer outro valor ele fica em
+ * standby (vivo, mas sem tocar em nenhuma sessão).
+ *
+ * @param {string|undefined} mode valor cru de BOT_SUPERVISOR_MODE
+ * @returns {boolean} true só quando o modo é exatamente `remote`.
+ */
+export function supervisorManagesSessions(mode) {
+  return String(mode ?? '').trim().toLowerCase() === 'remote'
+}

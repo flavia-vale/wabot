@@ -16,6 +16,20 @@ const CROSS_GROUP_DEDUP_WINDOW_MS = Math.max(
   Number(process.env.OFFER_AUTOMATION_DEDUP_WINDOW_MS) || 24 * 60 * 60_000,
 )
 
+// Teto de páginas para a rotação da busca Shopee. Ao passar do teto (ou quando
+// a página atual volta vazia) a rotação volta para a página 1. Override via env
+// OFFER_AUTOMATION_MAX_PAGE.
+const MAX_OFFER_PAGE = Math.max(1, Number(process.env.OFFER_AUTOMATION_MAX_PAGE) || 20)
+
+// Próxima página da rotação: avança enquanto a página atual trouxe resultados e
+// não passou do teto; volta para 1 quando a página esgotou (rawCount 0) ou
+// atingiu o teto. Assim cada execução vê candidatos novos em vez de rebater
+// sempre a página 1.
+function nextOfferPage(currentPage, rawCount) {
+  if (rawCount > 0 && currentPage < MAX_OFFER_PAGE) return currentPage + 1
+  return 1
+}
+
 function offerPriceCents(offer) {
   return Math.round((Number(offer?.priceMin ?? offer?.price) || 0) * 100)
 }
@@ -168,12 +182,23 @@ export async function runAutomation(automation, {
     sentItemIds = []
   }
 
+  // Página atual da rotação (default 1). Cada execução avança a página para
+  // trazer candidatos novos; ao esgotar volta para 1 (ver nextOfferPage).
+  const currentPage = Number(automation.page) > 0 ? Number(automation.page) : 1
+
   let offers, rawCount
   try {
-    ;({ offers, rawCount } = await resolveOffers({ automation, sentItemIds, creds, fetchOffersFn }))
+    ;({ offers, rawCount } = await resolveOffers({
+      automation: { ...automation, page: currentPage },
+      sentItemIds,
+      creds,
+      fetchOffersFn,
+    }))
   } catch (err) {
     return { error: err.message }
   }
+
+  const advancedPage = nextOfferPage(currentPage, rawCount)
 
   // A Shopee devolve o mesmo produto sob itemIds diferentes (mesmo nome, preço
   // ligeiramente distinto). Sem colapsar por nome, ofertas idênticas saíam em
@@ -204,6 +229,12 @@ export async function runAutomation(automation, {
     // rawCount > 0 significa que a Shopee retornou produtos, mas o filtro de
     // desconto mínimo / a dedup (itens já enviados ou já enviados ao grupo no
     // dia) removeu todos — diferente de a busca não ter trazido nada.
+    // Mesmo sem enviar, avançamos a página para que o próximo disparo busque
+    // candidatos diferentes (senão ficaríamos presos na mesma página filtrada).
+    await dbInstance.offerAutomation.update({
+      where: { id: automation.id },
+      data: { page: advancedPage },
+    }).catch(() => {})
     return { skipped: rawCount > 0 ? 'all_offers_filtered' : 'no_offers_found' }
   }
 
@@ -258,7 +289,7 @@ export async function runAutomation(automation, {
   const newSentIds = addSentIds(sentItemIds, sentIds)
   await dbInstance.offerAutomation.update({
     where: { id: automation.id },
-    data: { lastSentAt: new Date(), sentItemIds: JSON.stringify(newSentIds) },
+    data: { lastSentAt: new Date(), sentItemIds: JSON.stringify(newSentIds), page: advancedPage },
   })
 
   return { sent: sentIds.length }

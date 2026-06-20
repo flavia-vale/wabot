@@ -76,6 +76,37 @@ A API decide quem gerencia os bots via env var `BOT_SUPERVISOR_MODE`:
   `bot-supervisor` faz `fork()` dos workers. Deploy da API **não** toca
   nas sessões.
 
+**O supervisor agora respeita a MESMA flag (auto-standby).** Desde o fix do
+incidente "WhatsApp caindo toda hora", `src/supervisor/index.js` lê
+`BOT_SUPERVISOR_MODE` no boot (via `supervisorManagesSessions` em
+`src/supervisor/envGuard.js`) e **só assume as sessões quando o modo é
+`remote`**. Em `inline` (ou qualquer outro valor) o supervisor entra em
+**standby**: continua vivo (PM2 não fica em churn de restart), mas **não** faz
+`fork()`/resume/health-monitor nem consome comandos. Antes, o supervisor subia
+e gerenciava sessões **independente do modo** — então com staging em `inline`
+(canônico) e `bot-supervisor-staging` de pé, **tanto a `api-staging` quanto o
+supervisor davam `fork()` do MESMO worker sobre o MESMO `AUTH_INFO_DIR`**: dois
+sockets Baileys com a mesma credencial, o WhatsApp só aceita um device por
+registro → conflito/stream-error → reconexão em loop ("caindo toda hora", risco
+de ban). Como `api-staging` e `bot-supervisor-staging` carregam o **mesmo
+`.env`**, a flag agora governa as duas pontas de forma consistente e a dupla
+posse de sessão é impossível por construção. Procure por `STANDBY` no log do
+supervisor para confirmar que ele NÃO está disputando sessões com a API inline.
+Teste: `test/supervisor-env-guard.test.js`.
+
+**Estado canônico do staging = `inline`.** O staging existe para validar
+features no dia a dia, e `inline` é o modo mais simples e estável (a própria
+`api-staging` faz `fork()` dos workers, sem depender do `bot-supervisor-staging`
+estar de pé e no diretório certo — vide pegadinha #9). O modo `remote` em
+staging só deve ser ligado **durante a janela de teste de um cutover** (espelhar
+prod) e revertido para `inline` ao terminar. Se o staging ficou "preso" em
+`remote` (QR não aparece, status "Falha ao carregar status", comandos estourando
+`isRunning timed out`), quase sempre é porque o `.env` ficou com
+`BOT_SUPERVISOR_MODE=remote` de uma janela antiga — reverta para `inline`
+(rollback abaixo). Lembre que **deploy não mexe nisso**: o `.env` é gitignored e
+o workflow só faz `git pull` + `prisma migrate`, então o modo só muda quando
+alguém edita o `.env` no VPS.
+
 Cutover seguro (validar staging primeiro):
 
 1. Subir Redis local no VPS (`redis-server`, bind 127.0.0.1, AOF on).
@@ -91,8 +122,11 @@ Cutover seguro (validar staging primeiro):
    conectada — sessão **deve continuar conectada** (esse é o ponto).
 6. Repetir para produção (`bot-supervisor` + ajustar `.env` + delete/start `api`).
 
-Rollback: setar `BOT_SUPERVISOR_MODE=inline` + `pm2 restart api/api-staging`.
-Janela ≤ 2min.
+Rollback: setar `BOT_SUPERVISOR_MODE=inline` no `.env` + **delete + start**
+da API (`pm2 delete api-staging && pm2 start ecosystem.config.cjs --only
+api-staging && pm2 save`; idem `api` em prod). `pm2 restart --update-env` NÃO
+basta (pegadinha #1: PM2 cacheia a env). Confirme no log que **não** aparece
+`Manager em modo REMOTE`. Janela ≤ 2min.
 
 **Pré-requisito do modo `remote`:** Redis local em `REDIS_URL`
 (`redis://127.0.0.1:6379/0` prod, `/1` staging). No modo `inline` o
@@ -102,7 +136,12 @@ Redis é opcional.
 
 - `src/supervisor/protocol.js` — contrato (nomes de filas, eventos,
   timeouts). [PROTECTED_CORE]. Mudança breaking exige bumping de
-  `PROTOCOL_VERSION`.
+  `PROTOCOL_VERSION`. **Ordem de deploy (P2-2):** o pub/sub é versionado e
+  `decodeEvent` descarta evento de versão diferente — o `client.js` loga isso
+  (WARN throttled) em vez de sumir em silêncio. Ainda assim, ao bumpar
+  `PROTOCOL_VERSION`, faça deploy de **supervisor e API juntos**; não deixe as
+  duas pontas em versões divergentes em regime permanente (QR/status seriam
+  descartados e comandos novos viram `Comando desconhecido`).
 - `src/supervisor/client.js` — usado pela API quando em modo `remote`.
   Mantém a mesma superfície de `src/core/sessionCore.js` para que rotas
   não mudem ao alternar de modo.
@@ -519,21 +558,35 @@ uma DLQ correspondente (`wabot-send-<userId>-dlq`). Configuração via env:
 
 **Default é `memory` — BullMQ é opt-in explícito.** Já tentamos
 auto-ligar BullMQ quando `REDIS_URL` está presente e isso quebrou o
-envio de imagem em staging: o payload do job carrega `image.buffer`
-(Buffer real); BullMQ persiste via `JSON.stringify`, e Buffer vira
-`{type:'Buffer', data:[...]}` na deserialização. O Baileys não
-reconhece como mídia e a oferta sai **sem foto**. Para reabilitar
-BullMQ como default sem regressão, antes mover a construção da payload
-(fetch + normalize de imagem + `buildMonitoredMessagePayload`) para
-dentro do worker pós-dequeue, persistindo só a "receita" (URL, flags,
-texto) na fila. Até lá: para forçar persistência, setar
-`QUEUE_BACKEND=bullmq` explicitamente — ciente de que ofertas com
-imagem podem sair só como texto.
+envio de imagem em staging: o payload do job pode carregar `image.buffer`
+(Buffer real) ou o proto de relay; BullMQ persiste via `JSON.stringify`,
+e Buffer vira `{type:'Buffer', data:[...]}` na deserialização — o Baileys
+não reconhece como mídia e a oferta sairia **sem foto**.
+
+**Backend híbrido (P1-2, roteamento por serializabilidade):** o wrapper em
+`createSendBackend` (bot-worker.js) hoje roteia **por job**, não desligando
+mais BullMQ inteiro:
+- Job com `payloadRecipe`/`payload` puro (broadcast, oferta automática,
+  agendado) → **BullMQ**: persiste e sobrevive a restart do worker. No
+  dequeue, `processSendJob` reconstrói a mídia via `buildPayloadFromRecipe`
+  (fetch por URL) e atualiza o `MessageLog` sozinho.
+- Job com closure `buildPayload`, proto de relay ou `image.buffer`
+  (envio monitorado de mídia "original") → **fila em memória**
+  (memory-only): não é serializável sem corromper a mídia. Sai **com foto**
+  normalmente; só não persiste em restart (aceitável: está atrelado a estado
+  efêmero da mensagem ao vivo). A decisão usa `findUnserializableField`.
+
+Logo, ligar `QUEUE_BACKEND=bullmq` **não** faz mais oferta com imagem sair
+como texto — no pior caso ela vai pela fila em memória. Limitação conhecida:
+um job recipe-based que sobrevive a restart perde o callback `onDone`
+(analytics best-effort), mas o envio e a atualização de status do log
+acontecem mesmo assim. Validar em staging antes de tornar default.
 
 **DLQ:** quando `processSendJob` lança após esgotar `SEND_MAX_ATTEMPTS`,
 o BullMQ marca o job como `failed`. Um listener no Worker copia o payload
-para a DLQ (`<queueName>-dlq`) com `removeOnComplete: false` —
-**jobs ficam indefinidamente** até ação manual. Inspeção via:
+para a DLQ (`<queueName>-dlq`) com `removeOnComplete: false`. A DLQ **não
+tem worker**, então os jobs ficam em `waiting` até ação manual ou poda.
+Inspeção via:
 
 - `GET  /api/admin/send-dlq/:userId?limit=100` — lista jobs
 - `POST /api/admin/send-dlq/:userId/retry/:jobId` — reenfileira na principal
@@ -542,6 +595,15 @@ para a DLQ (`<queueName>-dlq`) com `removeOnComplete: false` —
 
 Helpers programáticos: `src/jobs/sendDlq.js`. Todas as ações destrutivas
 gravam `AdminAuditLog`.
+
+**Retenção (P2-1):** como a DLQ nunca processa jobs, `removeOnComplete/Fail`
+não os limpa (nunca completam). A poda é por idade: `pruneDlqOlderThan()`
+remove entradas mais velhas que `SEND_DLQ_RETENTION_MS` (default 30 dias) via
+`failedAt`. Pensado para rodar no cron de manutenção. Sem isso a DLQ cresce
+indefinidamente. **Retry seguro (P2-3):** `retryDlqJob` reenfileira com um
+`jobId` único (`dlq-retry:<logId>:<dlqJobId>`), nunca reusando o `logId` cru —
+senão um `add` com jobId já presente no histórico (`removeOnComplete:500`)
+seria descartado em silêncio e o retry se perderia.
 
 ### Fail-mode da dedup global vs. rate-limit (`REDIS_DEDUP_FAIL_MODE`)
 

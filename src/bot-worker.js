@@ -25,7 +25,7 @@ import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { decryptCredential } from './credentialCrypto.js'
 import { createMessageQueue } from './messageQueue.js'
-import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode } from './sendQueueBackend.js'
+import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode, findUnserializableField } from './sendQueueBackend.js'
 import { withSendTimeout as withSendTimeoutImpl } from './sendMessageTimeout.js'
 import { isMirrorableJid, detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
@@ -52,8 +52,20 @@ import { detectMessageKind, extractIncomingText, normalizeForwardingPolicy, shou
 import { broadcastSourceGroup } from './offerQueue/sourceTag.js'
 import Redis from 'ioredis'
 import { parseEnumEnv, logModeSummary } from './core/envModes.js'
+import { buildRedisOptions } from './core/redisFactory.js'
+import { installWorkerCrashGuards } from './core/workerCrashGuard.js'
 
 const userId = process.env.BOT_USER_ID
+
+// Guardas de processo: um throw assíncrono benigno do Baileys num socket já
+// fechado (ex.: 428 "Connection Closed" disparado por sendRetryRequest após um
+// conflito/replaced 440) não pode matar o worker — senão a reconexão automática
+// agendada no connection.update nunca roda e a sessão fica offline até religar
+// manual. Ver src/core/workerCrashGuard.js.
+installWorkerCrashGuards({
+  logger,
+  onFatal: () => { setTimeout(() => process.exit(1), 50).unref?.() },
+})
 
 
 const GLOBAL_RATE_LIMIT_MODE = parseEnumEnv('GLOBAL_RATE_LIMIT_MODE', process.env.GLOBAL_RATE_LIMIT_MODE || 'auto', ['auto', 'on', 'off'], 'auto')
@@ -79,6 +91,16 @@ logModeSummary('bot-worker', {
   hasRedisUrl: Boolean(process.env.REDIS_URL),
 })
 
+// Nudge anti-ban (P1-3): em produção, com dedup global ativa, fail-open deixa
+// passar um envio duplicado quando o Redis pisca — exatamente o cenário que
+// gera ban. O recomendado é REDIS_DEDUP_FAIL_MODE=closed (derruba só a mensagem
+// corrente, recuperável). Avisamos no boot em vez de mudar o default
+// silenciosamente, porque a virada fail-open→closed é mudança de semântica que
+// deve ser validada em staging antes (ver docs/redis-bullmq-resilience-audit.md).
+if (String(process.env.APP_ENV) === 'production' && Boolean(process.env.REDIS_URL) && GLOBAL_DEDUP_MODE !== 'off' && REDIS_DEDUP_FAIL_MODE === 'open') {
+  logger.warn('REDIS_DEDUP_FAIL_MODE=open em produção: num blip de Redis a dedup global pode DUPLICAR um envio (risco de ban). Recomendado setar REDIS_DEDUP_FAIL_MODE=closed no .env (validar em staging antes).')
+}
+
 function useGlobalRedis() {
   if (!process.env.REDIS_URL) return false
   if (GLOBAL_RATE_LIMIT_MODE === 'off' && GLOBAL_DEDUP_MODE === 'off') return false
@@ -88,7 +110,7 @@ function useGlobalRedis() {
 function ensureRuntimeRedis() {
   if (!useGlobalRedis()) return null
   if (runtimeRedis) return runtimeRedis
-  runtimeRedis = new Redis(process.env.REDIS_URL, { lazyConnect: false, maxRetriesPerRequest: null })
+  runtimeRedis = new Redis(process.env.REDIS_URL, buildRedisOptions('bot-worker-runtime', { lazyConnect: false, maxRetriesPerRequest: null }))
   runtimeRedis.on('error', (err) => logger.warn({ err: err?.message }, 'runtimeRedis error'))
   return runtimeRedis
 }
@@ -132,6 +154,9 @@ const OWNER_INSTANCE = process.env.NODE_APP_INSTANCE ?? '0'
 const SESSION_ERROR_WINDOW_MS = Math.max(30_000, Number(process.env.WA_SESSION_ERROR_WINDOW_MS || 120_000))
 const SESSION_ERROR_THRESHOLD = Math.max(5, Number(process.env.WA_SESSION_ERROR_THRESHOLD || 30))
 const SESSION_RECOVERY_COOLDOWN_MS = Math.max(60_000, Number(process.env.WA_SESSION_RECOVERY_COOLDOWN_MS || 300_000))
+
+let cachedBaileysVersion = null
+
 // Saúde de cripto exposta ao painel (banner global "reconecte"). Detectamos o
 // sintoma observável de sessão dessincronizada: o Baileys manda "sent retry
 // receipt" a cada mensagem que NÃO conseguiu descriptografar (Bad MAC /
@@ -620,6 +645,7 @@ const SEND_RETRY_BASE_MS = Math.max(0, envNumber('SEND_RETRY_BASE_MS', 2_000))
 const SEND_RETRY_MAX_MS = Math.max(SEND_RETRY_BASE_MS, envNumber('SEND_RETRY_MAX_MS', 30_000))
 const RECONNECT_BASE_MS = Math.max(1_000, envNumber('RECONNECT_BASE_MS', 5_000))
 const RECONNECT_MAX_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_MAX_MS', 5 * 60_000))
+const FETCH_WA_VERSION_TIMEOUT_MS = Math.max(5_000, envNumber('FETCH_WA_VERSION_TIMEOUT_MS', 10_000))
 const SHUTDOWN_DRAIN_TIMEOUT_MS = Math.max(0, envNumber('SHUTDOWN_DRAIN_TIMEOUT_MS', 15_000))
 // Timeout duro em volta de cada sock.sendMessage/relayMessage. Sem isso, um
 // socket Baileys silenciosamente morto trava o await indefinidamente, e como
@@ -1252,6 +1278,21 @@ async function createSendBackend() {
     return {
       ...bullBackend,
       enqueue(job) {
+        // P1-2: roteamento por serializabilidade (backend híbrido).
+        //  - Job com recipe/payload puro (broadcast, oferta automática,
+        //    agendado) → BullMQ: PERSISTE e sobrevive a restart do worker
+        //    (no dequeue, processSendJob reconstrói via payloadRecipe e
+        //    atualiza o MessageLog sozinho).
+        //  - Job com relay proto, buffer de mídia "original" ou closure
+        //    buildPayload → fila em MEMÓRIA: não dá para serializar sem
+        //    corromper a mídia (Buffer vira {type:'Buffer'} e a oferta sai
+        //    sem foto). Decisão consciente ("relay memory-only"), não erro.
+        //    Ver AGENTS.md seção "Fila de envio (BullMQ + DLQ)".
+        const offender = findUnserializableField(job)
+        if (offender) {
+          logger.debug({ logId: job?.logId, path: offender.path, kind: offender.kind }, 'Job de envio não-serializável — roteado para fila em memória (relay/original-media)')
+          return Promise.resolve(memoryFallback.enqueue(job))
+        }
         return bullBackend.enqueue(job).then(ok => {
           if (ok) return true
           logger.warn({ logId: job?.logId }, 'BullMQ indisponível no enqueue; fallback imediato para fila em memória')
@@ -1280,6 +1321,23 @@ function calcReconnectDelayMs() {
   return Math.round(base + jitter)
 }
 
+async function fetchVersionCached() {
+  try {
+    const timeoutSignal = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('fetchLatestBaileysVersion timeout')), FETCH_WA_VERSION_TIMEOUT_MS).unref()
+    )
+    const { version } = await Promise.race([fetchLatestBaileysVersion(), timeoutSignal])
+    cachedBaileysVersion = version
+    return version
+  } catch (err) {
+    if (cachedBaileysVersion) {
+      logger.warn({ err: err?.message }, 'fetchLatestBaileysVersion falhou; usando versão cacheada')
+      return cachedBaileysVersion
+    }
+    throw err
+  }
+}
+
 async function startBot() {
   // Guard contra startBots concorrentes (boot inicial + IPC pairing + restart
   // timer podem todos chamar isto). Concorrência causa dois sockets fechando
@@ -1291,6 +1349,16 @@ async function startBot() {
   startBotInFlight = true
   try {
     await startBotInner()
+  } catch (err) {
+    // Se startBotInner lançou ANTES de criar o socket (ex: fetchVersionCached
+    // falhou sem cache), o connection.update nunca dispara e ninguém reagenda
+    // a próxima tentativa. Fazemos isso aqui, mas só se não há socket vivo.
+    if (!pendingSock && !activeSock && !shuttingDown) {
+      const delayMs = calcReconnectDelayMs()
+      reconnectAttempts++
+      logger.error({ err: err?.message, attempt: reconnectAttempts, delayMs }, 'startBotInner falhou antes de criar socket; reagendando reconexão')
+      setTimeout(startBot, delayMs)
+    }
   } finally {
     startBotInFlight = false
   }
@@ -1327,7 +1395,7 @@ async function startBotInner() {
   startHeartbeatIpc()
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR)
-  const { version } = await fetchLatestBaileysVersion()
+  const version = await fetchVersionCached()
 
   const sock = makeWASocket({
     version,
@@ -1632,6 +1700,14 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       })
       if (!canForwardCurrentMessage) {
         const hasGenericUrl = /https?:\/\//i.test(sanitizedText)
+        // Mensagens sem conteúdo de usuário (protocolMessage, senderKey
+        // distribution, reações, poll updates, etc.) chegam como kind 'other'
+        // sem texto e sem link — NÃO são ofertas que o usuário esperava espelhar
+        // e não devem virar linha "ignorado" no painel. Ignorar em silêncio.
+        // Sem isso, um reconnect (que dispara rajada de senderKeyDistribution)
+        // polui o log com dezenas de 'nolink' mesmo o grupo não tendo recebido
+        // nenhuma mensagem real (incidente 2026-06).
+        if (messageKind === 'other' && links.length === 0 && !hasGenericUrl) return
         const unsupportedStoreSuffix = links.length === 0 && hasGenericUrl ? ':unsupported_store' : ''
         await db.messageLog.create({
           data: {

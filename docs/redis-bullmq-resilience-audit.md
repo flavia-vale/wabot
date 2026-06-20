@@ -7,6 +7,22 @@
 
 Versões: `bullmq ^5.76.10`, `ioredis ^5.10.1`.
 
+## Status de implementação (PR #969)
+
+| Item | Status |
+|------|--------|
+| P0-1 (TTL/freshness de comando + drenagem implícita no boot) | ✅ Feito |
+| P0-2 (lockDuration + descarte de stalled não-idempotente) | ✅ Feito |
+| P1-1 (comentário enganoso `bot-worker.js`) | ✅ Feito |
+| P1-3 (nudge no boot p/ `REDIS_DEDUP_FAIL_MODE=closed`) | ✅ Feito (código) — falta setar `.env` no VPS (staging→prod) |
+| P1-4 (last-value de QR/status no Redis + re-hidratação) | ✅ Feito |
+| P1-2 (backend híbrido: recipe→BullMQ, relay/original→memória) | ✅ Feito — `QUEUE_BACKEND=bullmq` agora é seguro de ligar (sem oferta-sem-foto); validar em staging antes de tornar default |
+| P2-1 (retenção da DLQ: `pruneDlqOlderThan` + `SEND_DLQ_RETENTION_MS`) | ✅ Feito (código) — falta agendar a poda no cron + expor `getDlqSize` no `/metrics` |
+| P2-2 (log de mismatch `PROTOCOL_VERSION` + ordem de deploy) | ✅ Feito |
+| P2-3 (`retryDlqJob` com jobId único, sem colisão) | ✅ Feito |
+| P2-4 (factory canônico de conexões ioredis) | ✅ Feito |
+| P2-5 (`operationalCounters` via MGET, sem N+1) | ✅ Feito |
+
 ## 1. Inventário (onde Redis/BullMQ são usados)
 
 | # | Arquivo | Papel | Conexão | TTL / retenção | Fail-mode |
@@ -84,25 +100,27 @@ pelo hash TTL do probe — mas status geral não tem last-value.
 **Ação:** cachear último QR/status em key Redis com TTL (padrão do probe) e
 reidratar no `subscribe`, em vez de depender só de pull ativo.
 
-### P2 — Médio / higiene
+### P2 — Médio / higiene  ✅ Feito (PR P2)
 
-- **P2-1. DLQ sem limite/expiração** (`removeOnComplete/Fail:false`): cresce
-  indefinidamente. Expor `getDlqSize()` no `/metrics` + alerta por threshold +
-  retenção configurável.
-- **P2-2. `PROTOCOL_VERSION` mismatch silencioso:** em rolling deploy, eventos de
-  versão diferente são descartados **sem log**, e comando novo vira throw
-  "Comando desconhecido". Logar o mismatch (WARN) e documentar ordem de deploy
-  (supervisor + API juntos; nunca versões divergentes em regime permanente).
-- **P2-3. `retryDlqJob` com colisão de `jobId`:** reusa `logId` como `jobId`; se a
-  linha ainda está no histórico da principal (`removeOnComplete:500`), o `add` é
-  **silenciosamente ignorado** e o retry se perde. Usar `jobId` único no retry.
-- **P2-4. Proliferação/heterogeneidade de conexões ioredis:** cada módulo abre as
-  suas, com opções divergentes (probe sem `maxRetriesPerRequest`, sem
-  `retryStrategy` padronizado). Centralizar num factory com opções canônicas
-  (`maxRetriesPerRequest`, `retryStrategy`, `connectTimeout`, nome p/ logs).
-- **P2-5. `operationalCounters` SCAN + GET por chave (N+1):** cacheado 15s e
-  `/metrics` sem auth — aceitável hoje; trocar por `pipeline`/`MGET` antes de
-  escalar shards.
+- **P2-1. DLQ sem limite/expiração** (`removeOnComplete/Fail:false`): crescia
+  indefinidamente. **Feito:** `pruneDlqOlderThan()` poda por idade via `failedAt`
+  (`SEND_DLQ_RETENTION_MS`, default 30d), para rodar no cron de manutenção.
+  *(Pendente operacional: agendar a poda no `snapshot-cron` e expor `getDlqSize`
+  no `/metrics` cross-processo — segue como follow-up.)*
+- **P2-2. `PROTOCOL_VERSION` mismatch silencioso:** **Feito:** `client.js` loga
+  WARN throttled (1/min) quando `decodeEvent` rejeita por versão; AGENTS.md
+  documenta a ordem de deploy (supervisor + API juntos).
+- **P2-3. `retryDlqJob` com colisão de `jobId`:** **Feito:** retry usa `jobId`
+  único (`dlq-retry:<logId>:<dlqJobId>`), nunca o `logId` cru; `logId` real fica
+  no `data` para o `processSendJob` atualizar o `MessageLog` certo.
+- **P2-4. Proliferação/heterogeneidade de conexões ioredis:** **Feito:**
+  `src/core/redisFactory.js` (`buildRedisOptions`) com `retryStrategy` (backoff
+  limitado), `connectTimeout` e `connectionName`. Adotado nos clients "planos"
+  (bot-worker runtime, probe, token-revocation, ops-counters, supervisor
+  publisher + client sub/check), preservando overrides específicos. BullMQ
+  mantém sua própria conexão.
+- **P2-5. `operationalCounters` SCAN + GET por chave (N+1):** **Feito:** SCAN
+  coleta as chaves e um único `MGET` por prefixo lê todos os valores.
 
 ## 4. Ordem de execução recomendada
 

@@ -19,8 +19,9 @@ import Redis from 'ioredis'
 import db from '../db.js'
 import logger from '../logger.js'
 import * as sessionCore from '../core/sessionCore.js'
+import { buildRedisOptions } from '../core/redisFactory.js'
 import { buildShardTag, normalizeShardCount, shouldHandleUserOnShard } from './sharding.js'
-import { checkSupervisorEnvConsistency } from './envGuard.js'
+import { checkSupervisorEnvConsistency, supervisorManagesSessions } from './envGuard.js'
 import { createRestartBudget, RESTART_BUDGET_MAX, RESTART_BUDGET_WINDOW_MS, RESTART_QUARANTINE_MS } from './restartBudget.js'
 import { parseEnumEnv, logModeSummary } from '../core/envModes.js'
 import {
@@ -35,6 +36,8 @@ import {
   encodeEvent,
   isCommandStale,
   isKnownCommand,
+  lastEventCacheTtlSeconds,
+  lastEventKey,
   resolveRedisUrl,
 } from './protocol.js'
 
@@ -61,8 +64,9 @@ if (!envCheck.ok) {
   process.exit(1)
 }
 
-const publisher = new Redis(REDIS_URL, { lazyConnect: false, maxRetriesPerRequest: null })
-publisher.on('error', err => logger.warn({ err: err.message }, 'Publisher Redis error'))
+// Config de sharding é validada no topo (antes do gate de modo) porque é pura
+// checagem de configuração, sem side-effect de Redis — um SHARD_INDEX inválido
+// é um erro de deploy que deve falhar rápido independente do modo.
 const SHARD_COUNT = normalizeShardCount(process.env.SHARD_COUNT || 1, 1)
 // Fail-fast: SHARD_INDEX precisa ser inteiro finito em [0, SHARD_COUNT). Qualquer
 // outra coisa (typo "abc", negativo, fora da faixa) faria a aritmética devolver
@@ -82,6 +86,39 @@ if (!Number.isInteger(SHARD_INDEX_PARSED) || SHARD_INDEX_PARSED < 0 || SHARD_IND
 const SHARD_INDEX = SHARD_INDEX_PARSED
 const SHARD_TAG = `shard-${SHARD_INDEX + 1}-of-${SHARD_COUNT}`
 const SESSION_OWNER_MISMATCH_KEY = `supervisor:session_owner_mismatch_total:${SHARD_TAG}`
+
+// Acopla o supervisor à MESMA flag que a API (src/manager.js) já respeita. Só
+// em `remote` o supervisor é dono das sessões; em `inline` (ou qualquer outro
+// valor) ele entra em standby logo abaixo — sem isso, api + supervisor davam
+// fork() do MESMO worker sobre o MESMO AUTH_INFO_DIR e o WhatsApp caía em loop
+// de conflito (incidente "wpp caindo toda hora" em staging). Ver envGuard.js.
+const SUPERVISOR_MODE = parseEnumEnv('BOT_SUPERVISOR_MODE', process.env.BOT_SUPERVISOR_MODE || 'inline', ['inline', 'remote'], 'inline')
+if (!supervisorManagesSessions(SUPERVISOR_MODE)) {
+  logger.warn(
+    { supervisorMode: SUPERVISOR_MODE, appEnv: process.env.APP_ENV ?? null, cwd: process.cwd() },
+    'bot-supervisor em STANDBY: BOT_SUPERVISOR_MODE != "remote" — a API gerencia as sessões inline. ' +
+      'O supervisor NÃO fará fork/resume/health/consumo de comandos para evitar dupla posse da sessão ' +
+      '(dois sockets Baileys na mesma credencial = WhatsApp caindo em loop de conflito). ' +
+      'Para ativá-lo, defina BOT_SUPERVISOR_MODE=remote no .env e reinicie API e supervisor juntos.',
+  )
+  logModeSummary('bot-supervisor', { supervisorMode: SUPERVISOR_MODE, standby: true })
+  // Mantém o processo vivo (PM2 não fica em churn de restart) sem tocar em
+  // nenhuma sessão. Sai limpo em SIGTERM/SIGINT.
+  const keepAlive = setInterval(() => {}, 60_000)
+  const standbyShutdown = signal => {
+    logger.info({ signal }, 'bot-supervisor (standby) encerrando')
+    clearInterval(keepAlive)
+    process.exit(0)
+  }
+  process.once('SIGTERM', () => standbyShutdown('SIGTERM'))
+  process.once('SIGINT', () => standbyShutdown('SIGINT'))
+} else {
+  startRemoteSupervisor()
+}
+
+function startRemoteSupervisor() {
+const publisher = new Redis(REDIS_URL, buildRedisOptions('supervisor-publisher', { lazyConnect: false, maxRetriesPerRequest: null }))
+publisher.on('error', err => logger.warn({ err: err.message }, 'Publisher Redis error'))
 let sessionOwnerMismatchTotal = 0
 
 // Teto conservador até haver medição real de RSS por worker em soak. Cada
@@ -169,6 +206,21 @@ function publishEvent(userId, type, data) {
     publisher.publish(EVENTS_CHANNEL, encodeEvent({ userId, type, data }))
   } catch (err) {
     logger.warn({ err: err.message, userId, type }, 'Falha ao publicar evento')
+  }
+  cacheLastEvent(userId, type, data)
+}
+
+// Grava o último valor de QR/STATUS numa chave Redis com TTL para que um
+// assinante tardio (API reiniciada, subscriber reconectado) possa re-hidratar
+// em vez de ficar cego até a próxima publicação. Best-effort: falha aqui não
+// pode derrubar a publicação do evento ao vivo.
+function cacheLastEvent(userId, type, data) {
+  const ttl = lastEventCacheTtlSeconds(type)
+  if (!ttl) return
+  try {
+    void publisher.set(lastEventKey(userId, type), JSON.stringify(data ?? null), 'EX', ttl)
+  } catch (err) {
+    logger.warn({ err: err.message, userId, type }, 'Falha ao cachear last-event')
   }
 }
 
@@ -472,3 +524,4 @@ boot().catch(err => {
   logger.fatal({ err: err.message }, 'Falha ao iniciar bot-supervisor')
   process.exit(1)
 })
+}
