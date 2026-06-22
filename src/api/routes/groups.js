@@ -31,6 +31,25 @@ function normalizeGroupJid(rawJid) {
   return ensureJid(rawJid, JID_KIND.GROUP)
 }
 
+// Valida o JSON da janela silenciosa por grupo. Mesmo formato do global
+// (BotConfig.channelQuietHoursJson): { startHour, endHour, tz }. Devolve a
+// string JSON normalizada ou lança Error com mensagem amigável.
+function normalizeQuietHoursJson(raw) {
+  let parsed
+  try {
+    parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+  } catch {
+    throw new Error('quietHoursJson contém JSON inválido')
+  }
+  if (!parsed || typeof parsed !== 'object') throw new Error('quietHoursJson deve ser um objeto')
+  const { startHour, endHour, tz } = parsed
+  for (const [k, v] of [['startHour', startHour], ['endHour', endHour]]) {
+    if (!Number.isInteger(v) || v < 0 || v > 23) throw new Error(`${k} deve ser inteiro entre 0 e 23`)
+  }
+  if (tz !== undefined && typeof tz !== 'string') throw new Error('tz deve ser string')
+  return JSON.stringify({ startHour, endHour, tz: tz || 'America/Sao_Paulo' })
+}
+
 async function getPlanSubject(userId) {
   return db.user.findUnique({
     where: { id: userId },
@@ -132,7 +151,7 @@ export async function groupsRoutes(app, opts = {}) {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo não encontrado' })
 
-    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope, channelButtonJid, channelButtonName } = req.body ?? {}
+    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope, channelButtonJid, channelButtonName, quietHoursEnabled, quietHoursJson } = req.body ?? {}
     if (allowedPlatforms !== undefined) {
       const platforms = String(allowedPlatforms).split(',').filter(Boolean)
       const invalid = platforms.find(p => !['shopee', 'amazon', 'mercadolivre', 'magazineluiza'].includes(p))
@@ -169,6 +188,20 @@ export async function groupsRoutes(app, opts = {}) {
       ? String(channelButtonName ?? '').trim().slice(0, 80)
       : undefined
 
+    // Janela silenciosa por grupo (destino). Sobrepõe a global do BotConfig
+    // para este destino quando habilitada. Só faz sentido em grupo de destino.
+    if ((quietHoursEnabled !== undefined || quietHoursJson !== undefined) && group.role !== 'post') {
+      return reply.code(400).send({ error: 'Janela silenciosa por grupo só pode ser definida em grupos de destino (post).' })
+    }
+    let normalizedQuietHoursJson
+    if (quietHoursJson !== undefined && quietHoursJson !== null) {
+      try {
+        normalizedQuietHoursJson = normalizeQuietHoursJson(quietHoursJson)
+      } catch (err) {
+        return reply.code(400).send({ error: err.message })
+      }
+    }
+
     const currentPolicy = normalizeForwardingPolicy(group)
     const requestedForwardMode = forwardMode ?? currentPolicy.forwardMode
     const requestedNoLinkScope = requestedForwardMode === FORWARD_MODE.ALLOW_NO_LINK
@@ -191,6 +224,8 @@ export async function groupsRoutes(app, opts = {}) {
         ...((noLinkScope !== undefined || forwardMode !== undefined) ? { noLinkScope: requestedNoLinkScope } : {}),
         ...(normalizedChannelButtonJid !== undefined ? { channelButtonJid: normalizedChannelButtonJid || null } : {}),
         ...(normalizedChannelButtonName !== undefined ? { channelButtonName: normalizedChannelButtonName || null } : {}),
+        ...(quietHoursEnabled !== undefined ? { quietHoursEnabled: parseBoolean(quietHoursEnabled) } : {}),
+        ...(normalizedQuietHoursJson !== undefined ? { quietHoursJson: normalizedQuietHoursJson } : {}),
       },
     })
     const configReloaded = reloadConfig(req.user.sub)
