@@ -7,6 +7,7 @@ import {
   countCompletedPrereqs,
   isBotActive,
   resolveOnboardingView,
+  resolvePostAuthRedirect,
 } from '../dashboard/lib/onboardingProgress.js'
 
 const allDone = {
@@ -67,4 +68,14 @@ test('recovery cede para celebrate/hidden se a máquina de fases já avançou', 
   const regressed = { ...allDone, waConnected: false }
   assert.equal(resolveOnboardingView({ status: regressed, doneBefore: true, persist: false, phase: 'celebrate' }), 'celebrate')
   assert.equal(resolveOnboardingView({ status: regressed, doneBefore: true, persist: false, phase: 'hidden' }), 'hidden')
+})
+
+test('login de cliente já ativo nasce no painel, não no checklist', () => {
+  assert.equal(resolvePostAuthRedirect({ status: allDone, isRegister: false }), '/painel')
+})
+
+test('cadastro e login incompleto continuam indo para checklist', () => {
+  assert.equal(resolvePostAuthRedirect({ status: allDone, isRegister: true }), '/painel/checklist')
+  assert.equal(resolvePostAuthRedirect({ status: { ...allDone, hasCredentials: false }, isRegister: false }), '/painel/checklist')
+  assert.equal(resolvePostAuthRedirect({ status: null, isRegister: false }), '/painel/checklist')
 })
