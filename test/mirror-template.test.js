@@ -13,7 +13,7 @@ test('resolveMirrorOfferFromLink busca dados pelo motor de oferta usando o link 
       calls.push(args)
       const converted = await args.convertLink('amazon', 'https://loja.test/produto', args.credentialsMap)
       assert.equal(converted.url, 'https://loja.test/produto?tag=afiliado')
-      return { title: 'Título do scraper', oldPrice: 'R$ 199,90', newPrice: 'R$ 99,90', displayUrl: converted.url }
+      return { title: 'Título do scraper', oldPrice: 'R$ 199,90', newPrice: 'R$ 99,90', displayUrl: 'https://loja.test/produto-canonico' }
     },
   })
 
@@ -25,7 +25,7 @@ test('resolveMirrorOfferFromLink busca dados pelo motor de oferta usando o link 
     oldPrice: 'R$ 199,90',
     price: 'R$ 99,90',
     link: 'https://loja.test/produto?tag=afiliado',
-    storeName: 'amazon',
+    storeName: 'Amazon',
   })
 })
 
@@ -69,4 +69,21 @@ test('applyMirrorTemplate não vaza placeholders vazios e mantém branding do gr
   assert.match(text, /https:\/\/ex\.com\/a\?tag=ok/)
   assert.match(text, /Entre no grupo VIP:/)
   assert.match(text, /https:\/\/chat\.whatsapp\.com\/grupo/)
+})
+
+
+test('applyMirrorTemplate preserva texto original quando o scraper lança erro inesperado', async () => {
+  const warnings = []
+  const original = 'Oferta original https://ex.com/a?tag=ok'
+  const text = await applyMirrorTemplate(original, {
+    templateKey: 'tpl_mirror',
+    originalUrl: 'https://ex.com/a',
+    convertedUrl: 'https://ex.com/a?tag=ok',
+    platform: 'amazon',
+    botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_mirror', name: 'Mirror', body: '{produto}\n{link}' }] }) },
+    buildOffer: async () => { throw new Error('scraper indisponível') },
+    logger: { warn: (payload, message) => warnings.push({ payload, message }) },
+  })
+  assert.equal(text, original)
+  assert.equal(warnings.length, 1)
 })

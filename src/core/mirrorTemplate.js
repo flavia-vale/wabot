@@ -3,6 +3,12 @@ import { composeTemplates } from '../../dashboard/lib/mobileTemplateStore.js'
 import { buildScrapedOffer as defaultBuildScrapedOffer } from '../converters/offerEngine.js'
 
 const UNRESOLVED_OFFER_PLACEHOLDER_RE = /\{(?:produto|preço|preço_de|desconto|rating|vendas|link|loja)\}/g
+const PLATFORM_LABELS = {
+  amazon: 'Amazon',
+  mercadolivre: 'Mercado Livre',
+  shopee: 'Shopee',
+  magazineluiza: 'Magazine Luiza',
+}
 
 function parseTemplateStore(json) {
   try {
@@ -65,8 +71,10 @@ export async function resolveMirrorOfferFromLink({
     title: offer?.title || '',
     oldPrice: offer?.oldPrice || '',
     price: offer?.newPrice || '',
-    link: offer?.displayUrl || displayUrl,
-    storeName: platform || '',
+    // O scraper pode devolver finalUrl/displayUrl canônico sem tag. No espelhamento,
+    // o link que deve sair no template é sempre o convertido já aprovado pelo pipeline.
+    link: displayUrl,
+    storeName: PLATFORM_LABELS[platform] || platform || '',
   }
 }
 
@@ -82,7 +90,13 @@ export async function applyMirrorTemplate(text, {
 } = {}) {
   const body = resolveMirrorTemplateBody(botConfig, templateKey)
   if (!body) return text
-  const fields = await resolveMirrorOfferFromLink({ originalUrl, convertedUrl, platform, credentialsMap, buildOffer, logger })
+  let fields
+  try {
+    fields = await resolveMirrorOfferFromLink({ originalUrl, convertedUrl, platform, credentialsMap, buildOffer, logger })
+  } catch (err) {
+    logger?.warn?.({ err: err?.message, originalUrl, convertedUrl, platform }, 'Template de espelhamento: falha ao buscar dados pelo link; mantendo texto original')
+    return text
+  }
   if (!fields?.link) return text
   const rendered = buildMobileOfferText({
     product: fields,
