@@ -91,6 +91,7 @@ model Group {
   fallbackToOriginal Boolean @default(false)
   forwardMode       String   @default("LINK_ONLY")
   noLinkScope       String?
+  templateKey       String?
   blockedKeywords   String?
   allowedPlatforms  String?
   welcomeMsg        String?

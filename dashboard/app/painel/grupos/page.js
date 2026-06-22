@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
+import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { HelpLink } from '@/components/HelpLink'
 import { AddChannelModal } from '@/components/AddChannelModal'
@@ -98,6 +99,7 @@ export default function GruposPage() {
   const [healthByGroup, setHealthByGroup] = useState({})
   const [expandedHealthId, setExpandedHealthId] = useState(null)
   const [planSubject, setPlanSubject] = useState({ plan: 'trial', accessExpiresAt: null })
+  const [templates, setTemplates] = useState([])
 
   async function load() {
     setLoadingGroups(true)
@@ -116,8 +118,9 @@ export default function GruposPage() {
   useEffect(() => {
     let active = true
     setLoadingGroups(true)
-    Promise.all([api.groups(), api.me()])
-      .then(async ([data, me]) => {
+    Promise.all([api.groups(), api.me(), loadTemplateStore().catch(() => ({}))])
+      .then(async ([data, me, templateStore]) => {
+        setTemplates(composeTemplates(templateStore))
         setPlanSubject({ plan: me?.plan ?? 'trial', accessExpiresAt: me?.accessExpiresAt ?? null })
         if (!active) return
         setGroups(data)
@@ -367,6 +370,18 @@ export default function GruposPage() {
             </select>
           )}
           <p className="pnl-hint" style={{ marginTop: 6, color: '#b5742a' }}>Ativar pode aumentar o volume de mensagens encaminhadas.</p>
+        </div>
+        <div>
+          <p className="pnl-label" style={{ marginBottom: 6 }}>Template das mensagens espelhadas</p>
+          <select
+            className="pnl-input"
+            value={g.templateKey ?? ''}
+            onChange={(e) => handleUpdateGroup(g.id, { templateKey: e.target.value })}
+          >
+            <option value="">Manter texto original convertido</option>
+            {templates.map((template) => <option key={template.key} value={template.key}>{template.name}</option>)}
+          </select>
+          <p className="pnl-hint" style={{ marginTop: 6 }}>Opcional: aplica um template do Gerar oferta depois de converter o link. Templates sem preço deixam placeholders quando o preço não aparece no texto original.</p>
         </div>
         <div>
           <p className="pnl-label" style={{ marginBottom: 6 }}>Para onde esse grupo envia</p>
