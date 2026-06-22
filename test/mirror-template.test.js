@@ -87,3 +87,33 @@ test('applyMirrorTemplate preserva texto original quando o scraper lança erro i
   assert.equal(text, original)
   assert.equal(warnings.length, 1)
 })
+
+test('applyMirrorTemplate cai no relay quando o scrape não traz título nem preço', async () => {
+  const original = 'Promo boa demais\nhttps://ex.com/a'
+  const text = await applyMirrorTemplate(original, {
+    templateKey: 'tpl_mirror',
+    originalUrl: 'https://ex.com/a',
+    convertedUrl: 'https://ex.com/a?tag=ok',
+    platform: 'amazon',
+    botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_mirror', name: 'Mirror', body: '🔥 {produto}\n💰 {preço}\n👉 {link}' }] }) },
+    buildOffer: async () => ({ title: '', oldPrice: '', newPrice: '', displayUrl: 'https://ex.com/a?tag=ok' }),
+  })
+  assert.equal(text, original)
+})
+
+test('applyMirrorTemplate cai no relay quando o scrape estoura o orçamento de tempo', async () => {
+  const warnings = []
+  const original = 'Oferta original https://ex.com/a?tag=ok'
+  const text = await applyMirrorTemplate(original, {
+    templateKey: 'tpl_mirror',
+    originalUrl: 'https://ex.com/a',
+    convertedUrl: 'https://ex.com/a?tag=ok',
+    platform: 'amazon',
+    scrapeBudgetMs: 20,
+    botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_mirror', name: 'Mirror', body: '{produto}\n{link}' }] }) },
+    buildOffer: () => new Promise(() => {}), // nunca resolve — simula loja lenta
+    logger: { warn: (payload, message) => warnings.push({ payload, message }) },
+  })
+  assert.equal(text, original)
+  assert.equal(warnings.length, 1)
+})

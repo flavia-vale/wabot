@@ -1998,8 +1998,15 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         finalText = applyConversionsAndBranding(sanitizedText, conversions, cfg.botConfig.brandingGroupLink, cfg.botConfig.brandingCtaText)
       }
       const primary = conversions[0] ?? { platform: 'nolink', url: '', converted: '' }
+      // `templateApplied` indica que o caption foi REMONTADO a partir do título/
+      // preço raspados (não é mais a caption do upstream). Nesse caso o guard de
+      // mismatch abaixo é (a) redundante — já raspamos a página aqui — e (b)
+      // sem sentido: ele compara a caption original do upstream, que não é mais
+      // o que vai sair. Quando o template cai no relay (texto inalterado), o
+      // guard volta a valer normalmente.
+      let templateApplied = false
       if (monitorGroup?.templateKey) {
-        finalText = await applyMirrorTemplate(finalText, {
+        const templatedText = await applyMirrorTemplate(finalText, {
           botConfig: cfg.botConfig,
           templateKey: monitorGroup.templateKey,
           originalUrl: primary.url || links[0]?.url || '',
@@ -2008,6 +2015,10 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           credentialsMap: cfg.credentials,
           logger,
         })
+        if (templatedText !== finalText) {
+          finalText = templatedText
+          templateApplied = true
+        }
       }
       const originalMedia = getOriginalMediaMessage()
       if (!finalText && !originalMedia) {
@@ -2024,6 +2035,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       // falha — não queremos derrubar oferta legítima por timeout.
       if (
         !TITLE_MISMATCH_GUARD_DISABLED &&
+        !templateApplied &&
         primary.url &&
         TITLE_MISMATCH_GUARD_PLATFORMS.has(primary.platform)
       ) {
