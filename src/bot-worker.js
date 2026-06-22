@@ -1128,6 +1128,11 @@ async function processSendJob(job) {
         const gateOpts = {
           group: g,
           preservationActive: shouldRunChannelScheduler(cfgFull?.preservationActive, cfg),
+          // Fila com horário de funcionamento próprio sobrepõe a janela
+          // silenciosa GLOBAL no worker (a fila já checou seu horário antes de
+          // despachar). Setado por origem 'offerQueue' via options. Demais
+          // proteções anti-ban continuam valendo.
+          ignoreGlobalQuietHours: job.ignoreGlobalQuietHours === true,
         }
         let gate = await throttleCheckAndReserve(destGroupId, cfg, gateOpts)
         let throttleCycles = 0
@@ -2542,6 +2547,10 @@ process.on('message', async msg => {
         delayMs: buildSmartDelayMs((await getConfig()).botConfig),
         typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
         channelForward: broadcastChannelForward,
+        // Fila de ofertas com horário próprio pede para ignorar a janela
+        // silenciosa global neste envio (origem 'offerQueue'). Propagado ao
+        // gate em processSendJob. Sem o flag = comportamento histórico.
+        ignoreGlobalQuietHours: msg.options?.ignoreGlobalQuietHours === true,
         ...(imageRecipe ? { payloadRecipe: imageRecipe } : { payload: { text: msg.text } }),
       })
       if (accepted) {

@@ -461,6 +461,82 @@ test('decide: grupo sem override cai na global', () => {
   assert.equal(result.reason, DEFER_REASON.QUIET_HOURS)
 })
 
+// ============================================================================
+// ignoreGlobalQuietHours: fila com horário próprio sobrepõe a janela GLOBAL
+// (Item 2 do plano "fila serial: horário da fila ignora a global no worker")
+// ============================================================================
+
+test('decide: ignoreGlobalQuietHours libera dentro da janela silenciosa GLOBAL', () => {
+  const result = decide({
+    now: EARLY_BRT_MS, // 02:30 BRT, dentro do quiet global 0-6
+    throttle: null,
+    isPaused: false,
+    botConfig: {
+      quietHoursEnabled: true,
+      channelQuietHoursJson: JSON.stringify({ startHour: 0, endHour: 6, tz: 'America/Sao_Paulo' }),
+    },
+    ignoreGlobalQuietHours: true,
+  })
+  assert.equal(result.allow, true)
+})
+
+test('decide: ignoreGlobalQuietHours NÃO afeta a janela explícita POR GRUPO', () => {
+  const now = Date.UTC(2026, 0, 15, 14, 0, 0) // 11:00 BRT
+  const result = decide({
+    now,
+    throttle: null,
+    isPaused: false,
+    botConfig: {
+      quietHoursEnabled: true,
+      channelQuietHoursJson: JSON.stringify({ startHour: 0, endHour: 6, tz: 'America/Sao_Paulo' }),
+    },
+    // grupo silencia 10-14 → escolha por destino, deve continuar bloqueando
+    group: { quietHoursEnabled: true, quietHoursJson: JSON.stringify({ startHour: 10, endHour: 14, tz: 'America/Sao_Paulo' }) },
+    ignoreGlobalQuietHours: true,
+  })
+  assert.equal(result.allow, false)
+  assert.equal(result.reason, DEFER_REASON.QUIET_HOURS)
+})
+
+test('decide: ignoreGlobalQuietHours mantém anti-ban (burst cap continua bloqueando)', () => {
+  const now = NOON_BRT_MS
+  const windowStart = now - 5 * MIN
+  const result = decide({
+    now,
+    throttle: {
+      postsToday: 6,
+      dayBucket: tzDayBucket(now, 'America/Sao_Paulo'),
+      lastPostAt: new Date(now - 60 * SEC),
+      burstWindowStart: new Date(windowStart),
+      postsInBurstWindow: 6,
+    },
+    isPaused: false,
+    botConfig: { ...DEFAULT_CONFIG, quietHoursEnabled: true, channelBurstWindowSec: 600 },
+    ignoreGlobalQuietHours: true,
+  })
+  assert.equal(result.allow, false)
+  assert.equal(result.reason, DEFER_REASON.BURST_CAP)
+})
+
+test('checkAndReserve propaga ignoreGlobalQuietHours para decide', async () => {
+  const db = makeFakeDb()
+  // 02:30 BRT dentro do quiet global 0-6, mas a fila tem horário próprio
+  const res = await checkAndReserve('g-1', {
+    quietHoursEnabled: true,
+    channelQuietHoursJson: JSON.stringify({ startHour: 0, endHour: 6, tz: 'America/Sao_Paulo' }),
+    channelMinIntervalSec: 30,
+    channelBurstCap: 6,
+    channelBurstWindowSec: 600,
+  }, {
+    db,
+    now: EARLY_BRT_MS,
+    ignoreGlobalQuietHours: true,
+    getHealth: async () => ({ status: 'green', pausedUntil: null }),
+  })
+  assert.equal(res.allow, true)
+  assert.equal(db._records.get('g-1').postsToday, 1)
+})
+
 test('checkAndReserve: janela do grupo vale mesmo com preservationActive=false', async () => {
   const db = {
     channelThrottle: {
