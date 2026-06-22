@@ -51,6 +51,7 @@ export async function offerQueueRoutes(app, opts = {}) {
   const db = opts.db ?? dbDefault
   const now = opts.now ?? (() => new Date())
   const drainQueueOnce = opts.drainQueueOnce ?? (async (...args) => (await import('../../offerQueue/dispatcher.js')).drainQueueOnce(...args))
+  const evaluateQueueGate = opts.evaluateQueueGate ?? (async (...args) => (await import('../../offerQueue/dispatcher.js')).evaluateQueueGate(...args))
 
   // Filas de ofertas são feature Pro (ou Trial ativo). Listar e deletar
   // seguem liberados: a UI precisa mostrar o que existe e o usuário pode
@@ -66,11 +67,25 @@ export async function offerQueueRoutes(app, opts = {}) {
     const userId = req.user.sub
     const queues = await db.offerQueue.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } })
     const dayStart = startOfSaoPauloDayUtc(now())
-    return Promise.all(queues.map(async (queue) => ({
-      ...presentQueue(queue),
-      pendingCount: await db.offerQueueItem.count({ where: { userId, queueId: queue.id, status: 'pending' } }),
-      sentTodayCount: await db.offerQueueItem.count({ where: { userId, queueId: queue.id, status: 'sent', sentAt: { gte: dayStart } } }),
-    })))
+    // Plano avaliado uma vez por requisição (o gate de plano vale para todas as
+    // filas do usuário): fila com itens pendentes e plano sem acesso fica
+    // parada no cron — a UI precisa mostrar isso em vez de "pendente" mudo.
+    const planActive = canUseOfferQueues(await loadUserPlanSubject(db, userId))
+    return Promise.all(queues.map(async (queue) => {
+      const pendingCount = await db.offerQueueItem.count({ where: { userId, queueId: queue.id, status: 'pending' } })
+      const sentTodayCount = await db.offerQueueItem.count({ where: { userId, queueId: queue.id, status: 'sent', sentAt: { gte: dayStart } } })
+      // blockReason: por que itens pendentes não estão saindo AGORA. Só faz
+      // sentido quando há pendência; best-effort (nunca derruba a listagem).
+      let blockReason = null
+      if (pendingCount > 0) {
+        if (!planActive) blockReason = 'plan_inactive'
+        else {
+          try { blockReason = await evaluateQueueGate(queue, { db, now }) }
+          catch { blockReason = null }
+        }
+      }
+      return { ...presentQueue(queue), pendingCount, sentTodayCount, blockReason }
+    }))
   })
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {

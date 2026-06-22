@@ -18,6 +18,20 @@ const ITEM_STATUS = {
   queued: { label: 'Na fila de envio', cls: 'is-flight' },
   sent: { label: 'Enviada', cls: 'is-success' },
   cancelled: { label: 'Cancelada', cls: 'is-skip' },
+  failed: { label: 'Falhou', cls: 'is-error' },
+}
+
+// Por que uma fila com itens pendentes não está enviando agora. Mantém os
+// códigos alinhados com evaluateQueueGate/QUEUE_BLOCK_REASONS no backend.
+// Sem isso, "pendente" sozinho não diz se é bot offline, horário, limite etc.
+const BLOCK_REASON_COPY = {
+  plan_inactive: 'Plano sem acesso às filas — os itens ficam guardados e voltam a sair quando o plano for reativado.',
+  bot_offline: 'WhatsApp desconectado — reconecte o bot e os itens pendentes saem automaticamente.',
+  outside_operating_hours: 'Fora do horário de funcionamento desta fila — os envios retomam dentro da janela configurada.',
+  quiet_hours: 'Dentro da janela silenciosa global — os envios retomam quando a janela terminar.',
+  interval_limit: 'Aguardando o intervalo mínimo entre ofertas — a próxima sai assim que o tempo passar.',
+  hourly_limit: 'Limite de ofertas por hora atingido — os envios retomam na próxima hora.',
+  daily_limit: 'Limite de ofertas por dia atingido — os envios retomam amanhã.',
 }
 
 function formatItemDate(value) {
@@ -195,6 +209,9 @@ export default function FilasPage() {
         <span className={`pnl-tag ${queue.enabled ? 'is-success' : 'is-skip'}`}>{toggling === queue.id ? 'Atualizando…' : queue.enabled ? 'Ativa' : 'Pausada'}</span>
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}><span className="pnl-tag">{queue.pendingCount} pendente(s)</span><span className="pnl-tag">{queue.sentTodayCount} enviada(s) hoje</span></div>
+      {queue.enabled && queue.pendingCount > 0 && queue.blockReason && BLOCK_REASON_COPY[queue.blockReason] && <div className="pnl-note-box is-warn" role="status" style={{ marginTop: 12 }}>
+        <strong>Itens pendentes não estão saindo.</strong> {BLOCK_REASON_COPY[queue.blockReason]}
+      </div>}
       <p className="pnl-hint" style={{ marginTop: 10 }}>Destinos: {destinationsLabel(queue)}</p>
       <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
         <Link
