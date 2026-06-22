@@ -746,6 +746,13 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 .pnl-note-box.is-warn { background: color-mix(in oklab, var(--warn) 18%, transparent); color: #8a5a1e; }
 .pnl-note-box.is-success { background: color-mix(in oklab, var(--success) 16%, transparent); color: var(--accent-strong); }
 .pnl-note-box.is-error { background: color-mix(in oklab, var(--danger) 14%, transparent); color: var(--danger); }
+.pnl-expired-plan-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
+}
 
 .pnl-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
 
@@ -884,6 +891,7 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
   .pnl-content { padding: 16px 12px 32px; }
   .pnl-content-actions { justify-content: flex-start; }
   .pnl-content-actions .pnl-toolbar { width: 100%; }
+  .pnl-expired-plan-banner { flex-direction: column; }
   .pnl-card { padding: 14px; }
   .pnl-hero { padding: 18px 16px; }
   .pnl-master-ico { width: 42px; height: 42px; }

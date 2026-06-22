@@ -44,6 +44,40 @@ const HELP_ICON = <><circle cx="12" cy="12" r="10" /><path d="M9.1 9a3 3 0 0 1 5
 const SETTINGS_ICON = <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></>
 const LOGOUT_ICON = <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>
 
+function formatPlanDate(value, options = { day: '2-digit', month: 'short' }) {
+  if (!value) return null
+  const d = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleDateString('pt-BR', options)
+}
+
+function expiredPlanCopy(user) {
+  if (!user?.accessExpiresAt) return ''
+  const expiresAt = new Date(user.accessExpiresAt)
+  if (Number.isNaN(expiresAt.getTime()) || expiresAt >= new Date()) return ''
+  const dateLabel = formatPlanDate(expiresAt, { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const planLabel = user.plan === 'basic' ? 'Basic' : user.plan === 'pro' ? 'Pro' : user.plan === 'trial' ? 'Trial' : (user.plan || 'plano')
+  return user.plan === 'trial'
+    ? `Seu trial venceu em ${dateLabel}. O bot fica pausado e não envia novas mensagens até a renovação.`
+    : `Seu plano ${planLabel} venceu em ${dateLabel}. O bot fica pausado e não envia novas mensagens até a renovação.`
+}
+
+function ExpiredPlanBanner({ user }) {
+  const copy = expiredPlanCopy(user)
+  if (!copy) return null
+
+  return (
+    <div className="pnl-note-box is-error pnl-expired-plan-banner" role="alert">
+      <div>
+        <strong style={{ fontWeight: 600 }}>Plano vencido: seus envios automáticos estão pausados</strong>
+        <p style={{ marginTop: 6 }}>{copy}</p>
+        <p style={{ marginTop: 6, fontWeight: 600 }}>Escolha um plano e finalize o checkout para reativar sua conta.</p>
+      </div>
+      <Link href="/painel/plano" className="pnl-btn is-primary" style={{ flexShrink: 0 }}>Reativar plano</Link>
+    </div>
+  )
+}
+
 function planInfo(user) {
   const plan = user?.plan
   const exp = user?.accessExpiresAt ? new Date(user.accessExpiresAt) : null
@@ -55,7 +89,7 @@ function planInfo(user) {
       : plan === 'basic' ? 'Plano Basic'
         : plan === 'trial' ? 'Trial'
           : 'Plano e cobrança'
-  const dateLabel = validExp ? exp.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : null
+  const dateLabel = validExp ? formatPlanDate(exp) : null
   const sub = expired
     ? 'reative para automatizar'
     : dateLabel ? `renova em ${dateLabel}` : 'gerencie sua assinatura'
@@ -333,6 +367,7 @@ export default function PainelShell({ children }) {
                 ciclo. Como a ação correta não é reconectar, o banner não aparece
                 mais. sessionHealth segue exposto no contexto/metrics para
                 observabilidade, sem alarmar o usuário com uma ação enganosa. */}
+            <ExpiredPlanBanner user={user} />
             {children}
           </div>
         </div>
