@@ -28,16 +28,17 @@ function withSafeOnDone(onDone, job, result) {
 
 export function createMemorySendBackend({ maxSize, onRejected, onDequeued }) {
   const queue = []
+  // Timers de jobs agendados (notBefore no futuro). Mantidos fora da fila
+  // serial: um defer longo NÃO pode congelar o consumidor — ele reentra na
+  // fila só quando a janela vence. Rastreados para o shutdown poder limpá-los.
+  const scheduled = new Set()
   let processing = false
+  let closed = false
 
-  return /** @type {SendBackend} */ ({
-    backend: 'memory',
-    getQueueSize: () => queue.length,
-    getDlqSize: async () => 0,
-    async close() {},
-    async process() {
-      if (processing) return
-      processing = true
+  function process() {
+    if (processing) return Promise.resolve()
+    processing = true
+    return (async () => {
       try {
         while (queue.length) {
           const job = queue.shift()
@@ -45,16 +46,47 @@ export function createMemorySendBackend({ maxSize, onRejected, onDequeued }) {
         }
       } finally {
         processing = false
-        if (queue.length) this.process().catch(() => {})
+        if (queue.length) process().catch(() => {})
       }
+    })()
+  }
+
+  function pushAndProcess(job) {
+    queue.push(job)
+    process().catch(err => logger.error({ err: err.message }, 'Erro na fila memory de envios'))
+  }
+
+  return /** @type {SendBackend} */ ({
+    backend: 'memory',
+    getQueueSize: () => queue.length,
+    getScheduledSize: () => scheduled.size,
+    getDlqSize: async () => 0,
+    async close() {
+      closed = true
+      for (const timer of scheduled) clearTimeout(timer)
+      scheduled.clear()
     },
+    process,
     enqueue(job) {
+      const delayMs = job?.notBefore != null ? Math.max(0, Number(job.notBefore) - Date.now()) : 0
+      if (delayMs > 0) {
+        // Job agendado (re-enfileiramento por defer longo). Não conta para o
+        // maxSize: é trabalho já aceito sendo adiado, não pode ser descartado.
+        // Reentra na fila quando a janela abre — sem busy-loop.
+        const timer = setTimeout(() => {
+          scheduled.delete(timer)
+          if (closed) return
+          pushAndProcess(job)
+        }, delayMs)
+        timer.unref?.()
+        scheduled.add(timer)
+        return true
+      }
       if (queue.length >= maxSize) {
         onRejected?.()
         return false
       }
-      queue.push(job)
-      this.process().catch(err => logger.error({ err: err.message }, 'Erro na fila memory de envios'))
+      pushAndProcess(job)
       return true
     },
     getProcessing: () => processing,
@@ -152,13 +184,23 @@ export async function createBullmqSendBackend({
         onRejected?.()
         return Promise.resolve(false).then(() => { throw err })
       }
+      // Defer longo re-enfileira com notBefore: o BullMQ adia nativamente via
+      // opts.delay (job entra em `delayed` e só vira `waiting` quando vence),
+      // sem segurar o worker serial.
+      const delay = job?.notBefore != null ? Math.max(0, Number(job.notBefore) - Date.now()) : 0
+      // jobId distinto no re-enfileiramento por defer: o job original já
+      // completou (e fica no set `completed` por removeOnComplete:500), então
+      // re-adicionar com o mesmo `logId` cru seria descartado em silêncio
+      // (mesma pegadinha do retry de DLQ, P2-3).
+      const jobId = delay > 0 ? `defer:${job.logId}:${job.notBefore}` : String(job.logId)
       return queue
         .add('send', job, {
           removeOnComplete: 500,
           // Mantemos só os últimos 500 failed no histórico da fila principal;
           // a DLQ guarda cópia explícita das falhas para inspeção.
           removeOnFail: 500,
-          jobId: String(job.logId),
+          jobId,
+          ...(delay > 0 ? { delay } : {}),
         })
         .then(() => true)
         .catch(err => {

@@ -77,6 +77,73 @@ test('memory backend rejeita quando atinge maxSize', () => {
   assert.equal(rejected, 1)
 })
 
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+
+// Item 1 do plano "fila serial: defer não pode congelar": um job adiado por
+// defer LONGO é re-enfileirado com `notBefore`. O backend agenda via setTimeout
+// (fora da fila serial), então um destino diferido NÃO bloqueia os demais.
+test('notBefore no futuro: job agendado não bloqueia jobs prontos', async () => {
+  const order = []
+  const backend = createMemorySendBackend({
+    maxSize: 10,
+    onRejected: () => {},
+    onDequeued: async job => { order.push(job.id) },
+  })
+  backend.enqueue({ id: 'deferred', notBefore: Date.now() + 120 })
+  backend.enqueue({ id: 'ready' })
+  await sleep(30)
+  // O job pronto saiu na hora; o adiado segue esperando (não travou a fila).
+  assert.deepEqual(order, ['ready'])
+  assert.equal(backend.getScheduledSize(), 1)
+  await sleep(150)
+  // Quando a janela venceu, o adiado entrou e foi processado uma única vez.
+  assert.deepEqual(order, ['ready', 'deferred'])
+  assert.equal(backend.getScheduledSize(), 0)
+  await backend.close()
+})
+
+test('notBefore no passado/ausente: processa imediatamente', async () => {
+  const processed = []
+  const backend = createMemorySendBackend({
+    maxSize: 10,
+    onRejected: () => {},
+    onDequeued: async job => { processed.push(job.id) },
+  })
+  backend.enqueue({ id: 1, notBefore: Date.now() - 1_000 })
+  backend.enqueue({ id: 2 })
+  await sleep(20)
+  assert.deepEqual(processed, [1, 2])
+  await backend.close()
+})
+
+test('job agendado (re-enfileirado) ignora maxSize', () => {
+  const backend = createMemorySendBackend({
+    maxSize: 0,
+    onRejected: () => {},
+    onDequeued: () => new Promise(() => {}),
+  })
+  // maxSize 0: qualquer job pronto é rejeitado...
+  assert.equal(backend.enqueue({ id: 'ready' }), false)
+  // ...mas o re-enfileiramento de defer (trabalho já aceito) sempre entra.
+  assert.equal(backend.enqueue({ id: 'deferred', notBefore: Date.now() + 1_000 }), true)
+  assert.equal(backend.getScheduledSize(), 1)
+})
+
+test('close() limpa timers agendados (shutdown não processa adiados)', async () => {
+  const processed = []
+  const backend = createMemorySendBackend({
+    maxSize: 10,
+    onRejected: () => {},
+    onDequeued: async job => { processed.push(job.id) },
+  })
+  backend.enqueue({ id: 'x', notBefore: Date.now() + 80 })
+  assert.equal(backend.getScheduledSize(), 1)
+  await backend.close()
+  await sleep(150)
+  assert.deepEqual(processed, [])
+  assert.equal(backend.getScheduledSize(), 0)
+})
+
 test('findUnserializableField: detecta Buffer em payload aninhado', () => {
   const job = {
     logId: 1,
