@@ -17,11 +17,21 @@ Versões: `bullmq ^5.76.10`, `ioredis ^5.10.1`.
 | P1-3 (nudge no boot p/ `REDIS_DEDUP_FAIL_MODE=closed`) | ✅ Feito (código) — falta setar `.env` no VPS (staging→prod) |
 | P1-4 (last-value de QR/status no Redis + re-hidratação) | ✅ Feito |
 | P1-2 (backend híbrido: recipe→BullMQ, relay/original→memória) | ✅ Feito — `QUEUE_BACKEND=bullmq` agora é seguro de ligar (sem oferta-sem-foto); validar em staging antes de tornar default |
-| P2-1 (retenção da DLQ: `pruneDlqOlderThan` + `SEND_DLQ_RETENTION_MS`) | ✅ Feito (código) — falta agendar a poda no cron + expor `getDlqSize` no `/metrics` |
+| P2-1 (retenção da DLQ: `pruneDlqOlderThan` + `SEND_DLQ_RETENTION_MS`) | ✅ Feito — poda agendada (`src/jobs/dlqMaintenance.js` via `startDlqMaintenanceJob` no boot da API) + gauge `wabot_send_dlq_total` no `/metrics` |
 | P2-2 (log de mismatch `PROTOCOL_VERSION` + ordem de deploy) | ✅ Feito |
 | P2-3 (`retryDlqJob` com jobId único, sem colisão) | ✅ Feito |
 | P2-4 (factory canônico de conexões ioredis) | ✅ Feito |
 | P2-5 (`operationalCounters` via MGET, sem N+1) | ✅ Feito |
+
+## Status de implementação (revisão de follow-up, PR atual)
+
+| Item | Status |
+|------|--------|
+| **R-0. Supervisor ignorava `BOT_SUPERVISOR_MODE`** (causa raiz do "WhatsApp caindo toda hora" em staging: api inline + supervisor davam fork() da mesma sessão sobre o mesmo `AUTH_INFO_DIR`) | ✅ Feito — `supervisorManagesSessions` + standby; supervisor só assume sessões em `remote`. Teste em `supervisor-env-guard.test.js`. |
+| R-1. Poda da DLQ nunca agendada (P2-1 operacional) | ✅ Feito — `src/jobs/dlqMaintenance.js` + gauge `wabot_send_dlq_total`. |
+| R-2. `isSupervisorAlive` era código morto | ✅ Feito — exposto via `manager.isSupervisorAlive()` no gauge `wabot_supervisor_alive` (só em `remote`). |
+| R-3. `probeSessions` sem `maxRetriesPerRequest` (latência presa em blip de Redis) | ✅ Feito — `maxRetriesPerRequest:1` (fail-fast). |
+| R-4. Supervisor ignorava `AUTO_START_WHATSAPP_SESSIONS=false` | ✅ Feito — `supervisorShouldAutoResume`; auto-resume/ressurreição respeitam a flag (paridade com inline). |
 
 ## 1. Inventário (onde Redis/BullMQ são usados)
 
