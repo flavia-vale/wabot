@@ -24,6 +24,13 @@ export function isBotActive(status) {
   return countCompletedPrereqs(status) === PREREQ_KEYS.length
 }
 
+// Decide a landing pós-autenticação: cadastro ainda nasce no guia; login de
+// cliente já ativo volta direto ao painel operacional.
+export function resolvePostAuthRedirect({ status, isRegister = false } = {}) {
+  if (isRegister) return '/painel/checklist'
+  return isBotActive(status) ? '/painel' : '/painel/checklist'
+}
+
 // Decide o que renderizar. Retorna uma das views:
 // - 'list'      → fluxo normal de onboarding (ainda configurando)
 // - 'recovery'  → já concluiu antes, mas algo regrediu (ex.: WhatsApp caiu)
