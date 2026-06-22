@@ -1070,6 +1070,10 @@ async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
 async function processSendJob(job) {
   const startedAt = Date.now()
   let payload = null
+  // Escopo de função (não do try): o catch abaixo também lê este id para
+  // registrar ChannelHealth no fracasso. `let` dentro do try não enxergaria
+  // no catch (blocos separados) e dispararia ReferenceError no caminho de erro.
+  let destGroupId = null
 
   try {
     await db.messageLog.update({
@@ -1089,39 +1093,43 @@ async function processSendJob(job) {
       await sleep(totalDelayMs)
     }
 
-    // PR-5.C.1 + 5.B.1: lookup do groupId do canal-destino (uma vez por job)
+    // PR-5.C.1 + 5.B.1: lookup do groupId do destino-post (uma vez por job)
     // para alimentar ChannelHealth e passar pelo velocity scheduler.
-    let channelGroupId = null
-    if (isChannelDestination(job.destJid)) {
-      try {
-        const g = await db.group.findFirst({
-          where: { userId, waJid: job.destJid, role: 'post', kind: 'channel' },
-          select: { id: true },
+    //
+    // O gate vale para QUALQUER destino-post — canal (@newsletter) E grupo
+    // espelhado (@g.us). Historicamente o lookup filtrava `kind: 'channel'`,
+    // então grupos espelhados NUNCA passavam pela janela silenciosa nem pelo
+    // intervalo mínimo configurados em /painel/preservacao/configuracoes —
+    // por isso enviavam de madrugada e sem respeitar o espaçamento. A decisão
+    // (checkAndReserve/decide) já é agnóstica de kind; só o call site limitava.
+    try {
+      const g = await db.group.findFirst({
+        where: { userId, waJid: job.destJid, role: 'post' },
+        select: { id: true },
+      })
+      destGroupId = g?.id ?? null
+      if (destGroupId) {
+        // checkAndReserve já cobre: pausa por health, quiet hours, daily cap,
+        // intervalo mínimo, burst cap. Reserva o slot quando libera.
+        const cfgFull = await getConfig().catch(() => null)
+        const cfg = cfgFull?.botConfig ?? {}
+        let gate = await throttleCheckAndReserve(destGroupId, cfg, {
+          preservationActive: shouldRunChannelScheduler(cfgFull?.preservationActive, cfg),
         })
-        channelGroupId = g?.id ?? null
-        if (channelGroupId) {
-          // checkAndReserve já cobre: pausa por health, quiet hours, daily cap,
-          // intervalo mínimo, burst cap. Reserva o slot quando libera.
-          const cfgFull = await getConfig().catch(() => null)
-          const cfg = cfgFull?.botConfig ?? {}
-          let gate = await throttleCheckAndReserve(channelGroupId, cfg, {
+        let throttleCycles = 0
+        while (!gate.allow && !shuttingDown) {
+          throttleCycles++
+          const waitMs = Math.max(0, (gate.deferUntil ?? Date.now()) - Date.now())
+          logger.info({ destJid: job.destJid, reason: gate.reason, waitMs, throttleCycles }, 'Velocity scheduler: aguardando janela de throttle do destino')
+          await sleep(waitMs)
+          gate = await throttleCheckAndReserve(destGroupId, cfg, {
             preservationActive: shouldRunChannelScheduler(cfgFull?.preservationActive, cfg),
           })
-          let throttleCycles = 0
-          while (!gate.allow && !shuttingDown) {
-            throttleCycles++
-            const waitMs = Math.max(0, (gate.deferUntil ?? Date.now()) - Date.now())
-            logger.info({ destJid: job.destJid, reason: gate.reason, waitMs, throttleCycles }, 'Velocity scheduler: aguardando janela de throttle do canal')
-            await sleep(waitMs)
-            gate = await throttleCheckAndReserve(channelGroupId, cfg, {
-              preservationActive: shouldRunChannelScheduler(cfgFull?.preservationActive, cfg),
-            })
-          }
-          if (shuttingDown) throw new Error('Worker encerrando durante espera de throttle do canal')
         }
-      } catch (err) {
-        logger.warn({ err: err?.message, destJid: job.destJid }, 'channelHealth/throttle lookup falhou; seguindo sem pausa')
+        if (shuttingDown) throw new Error('Worker encerrando durante espera de throttle do destino')
       }
+    } catch (err) {
+      logger.warn({ err: err?.message, destJid: job.destJid }, 'channelHealth/throttle lookup falhou; seguindo sem pausa')
     }
 
     for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt++) {
@@ -1157,8 +1165,8 @@ async function processSendJob(job) {
         lastSendByDest.set(job.destJid, finishedAt)
         logger.info({ destJid: job.destJid, platforms: job.platforms, attempt, type: job.type }, 'Mensagem enviada')
 
-        if (channelGroupId) {
-          recordChannelSendResult(channelGroupId, { ok: true, latencyMs: finishedAt - startedAt }, { now: finishedAt })
+        if (destGroupId) {
+          recordChannelSendResult(destGroupId, { ok: true, latencyMs: finishedAt - startedAt }, { now: finishedAt })
             .catch(err => logger.warn({ err: err?.message }, 'recordChannelSendResult(ok) falhou'))
         }
 
@@ -1221,11 +1229,11 @@ async function processSendJob(job) {
     sendMetrics.errorTotal++
     sendMetrics.lastErrorAt = new Date().toISOString()
     sendMetrics.lastError = err.message
-    if (channelGroupId) {
+    if (destGroupId) {
       const errorCode = isChannelForbiddenError(err)
         ? '403'
         : (err?.output?.statusCode ? String(err.output.statusCode) : (err?.code ?? null))
-      recordChannelSendResult(channelGroupId, { ok: false, errorCode, errorMsg: err.message })
+      recordChannelSendResult(destGroupId, { ok: false, errorCode, errorMsg: err.message })
         .catch(e => logger.warn({ err: e?.message }, 'recordChannelSendResult(fail) falhou'))
     }
     await finishSendJob(job, { ok: false, error: err.message })
