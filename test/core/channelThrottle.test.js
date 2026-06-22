@@ -5,6 +5,8 @@ import {
   checkAndReserve,
   recordPost,
   decide,
+  decideDestination,
+  operatingHoursState,
   quietHoursState,
   tzDayBucket,
   DEFER_REASON,
@@ -515,4 +517,182 @@ test('checkAndReserve não grava contadores quando throttle está desligado', as
   })
   assert.equal(result.allow, true)
   assert.equal(writes, 0)
+})
+
+// ============================================================================
+// Plano B — horário de funcionamento + decisão por DESTINO (Fase 1b)
+// ============================================================================
+
+const DEST_DEFAULT = {
+  operatingHoursEnabled: false,
+  operatingHoursJson: '{"startHour":8,"endHour":22,"tz":"America/Sao_Paulo"}',
+  throttleEnabled: true,
+  minIntervalSec: 30,
+  burstCap: 6,
+  burstWindowSec: 600,
+  dailyCap: null,
+}
+
+test('operatingHoursState: dentro da janela funciona (deferMs 0)', () => {
+  // 11:00 BRT, funcionamento 8-22
+  const s = operatingHoursState(NOON_BRT_MS, { startHour: 8, endHour: 22, tz: 'America/Sao_Paulo' })
+  assert.equal(s.inOperating, true)
+  assert.equal(s.deferMs, 0)
+})
+
+test('operatingHoursState: fora da janela difere até a abertura', () => {
+  // 02:30 BRT, funcionamento 8-22 → abre 08:00 = +5h30
+  const s = operatingHoursState(EARLY_BRT_MS, { startHour: 8, endHour: 22, tz: 'America/Sao_Paulo' })
+  assert.equal(s.inOperating, false)
+  assert.equal(s.deferMs, 5.5 * HOUR)
+})
+
+test('operatingHoursState: janela que cruza meia-noite (envia 22-8)', () => {
+  // 02:30 BRT, funcionamento 22-8 → está dentro
+  const s = operatingHoursState(EARLY_BRT_MS, { startHour: 22, endHour: 8, tz: 'America/Sao_Paulo' })
+  assert.equal(s.inOperating, true)
+})
+
+test('operatingHoursState: start==end = 24h sempre aberto', () => {
+  const s = operatingHoursState(EARLY_BRT_MS, { startHour: 0, endHour: 0, tz: 'UTC' })
+  assert.equal(s.inOperating, true)
+  assert.equal(s.deferMs, 0)
+})
+
+test('decideDestination: fora do horário de funcionamento difere', () => {
+  const res = decideDestination({
+    now: EARLY_BRT_MS, // 02:30 BRT
+    throttle: null,
+    isPaused: false,
+    dest: { ...DEST_DEFAULT, operatingHoursEnabled: true },
+  })
+  assert.equal(res.allow, false)
+  assert.equal(res.reason, DEFER_REASON.OUTSIDE_OPERATING_HOURS)
+  assert.equal(res.deferUntil, EARLY_BRT_MS + 5.5 * HOUR)
+})
+
+test('decideDestination: dentro do horário permite', () => {
+  const res = decideDestination({
+    now: NOON_BRT_MS,
+    throttle: null,
+    isPaused: false,
+    dest: { ...DEST_DEFAULT, operatingHoursEnabled: true },
+  })
+  assert.equal(res.allow, true)
+})
+
+test('decideDestination: horário desabilitado nunca bloqueia por horário', () => {
+  const res = decideDestination({
+    now: EARLY_BRT_MS,
+    throttle: null,
+    isPaused: false,
+    dest: { ...DEST_DEFAULT, operatingHoursEnabled: false },
+  })
+  assert.equal(res.allow, true)
+})
+
+test('decideDestination: ignoreOperatingHours pula o horário mas mantém anti-ban', () => {
+  const now = NOON_BRT_MS
+  const windowStart = now - 5 * MIN
+  const res = decideDestination({
+    now,
+    throttle: { postsToday: 6, dayBucket: tzDayBucket(now, 'America/Sao_Paulo'), lastPostAt: new Date(now - 60 * SEC), burstWindowStart: new Date(windowStart), postsInBurstWindow: 6 },
+    isPaused: false,
+    dest: { ...DEST_DEFAULT, operatingHoursEnabled: true, burstCap: 6, burstWindowSec: 600 },
+    ignoreOperatingHours: true,
+  })
+  assert.equal(res.allow, false)
+  assert.equal(res.reason, DEFER_REASON.BURST_CAP)
+})
+
+test('decideDestination: limites anti-ban vêm do destino (minInterval do dest)', () => {
+  const now = NOON_BRT_MS
+  const lastPostMs = now - 40 * SEC
+  const res = decideDestination({
+    now,
+    throttle: { postsToday: 1, dayBucket: tzDayBucket(now, 'America/Sao_Paulo'), lastPostAt: new Date(lastPostMs), burstWindowStart: new Date(lastPostMs), postsInBurstWindow: 1 },
+    isPaused: false,
+    dest: { ...DEST_DEFAULT, minIntervalSec: 60 }, // 40s < 60s → bloqueia
+  })
+  assert.equal(res.allow, false)
+  assert.equal(res.reason, DEFER_REASON.MIN_INTERVAL)
+  assert.equal(res.deferUntil, lastPostMs + 60 * SEC)
+})
+
+test('decideDestination: throttleEnabled=false ignora caps mas horário ainda vale', () => {
+  const now = EARLY_BRT_MS
+  const res = decideDestination({
+    now,
+    throttle: { postsToday: 999, dayBucket: tzDayBucket(now, 'America/Sao_Paulo'), lastPostAt: new Date(now - 1), burstWindowStart: new Date(now - 1), postsInBurstWindow: 999 },
+    isPaused: false,
+    dest: { ...DEST_DEFAULT, throttleEnabled: false, operatingHoursEnabled: true, dailyCap: 1, minIntervalSec: 3600 },
+  })
+  // fora do horário (02:30, funcionamento 8-22) → bloqueia por horário
+  assert.equal(res.allow, false)
+  assert.equal(res.reason, DEFER_REASON.OUTSIDE_OPERATING_HOURS)
+})
+
+test('decideDestination: pausa de saúde bloqueia primeiro', () => {
+  const res = decideDestination({
+    now: NOON_BRT_MS,
+    throttle: null,
+    isPaused: true,
+    dest: { ...DEST_DEFAULT, operatingHoursEnabled: true },
+  })
+  assert.equal(res.allow, false)
+  assert.equal(res.reason, DEFER_REASON.HEALTH_PAUSED)
+})
+
+test('checkAndReserve: destPreservation usa horário de funcionamento e reserva slot', async () => {
+  const db = makeFakeDb()
+  const res = await checkAndReserve('g-dest', {}, {
+    db,
+    now: NOON_BRT_MS,
+    destPreservation: { ...DEST_DEFAULT, operatingHoursEnabled: true },
+    getHealth: async () => ({ status: 'green', pausedUntil: null }),
+  })
+  assert.equal(res.allow, true)
+  assert.equal(db._records.get('g-dest').postsToday, 1)
+})
+
+test('checkAndReserve: destPreservation fora do horário não reserva', async () => {
+  const db = makeFakeDb()
+  const res = await checkAndReserve('g-dest', {}, {
+    db,
+    now: EARLY_BRT_MS,
+    destPreservation: { ...DEST_DEFAULT, operatingHoursEnabled: true },
+    getHealth: async () => ({ status: 'green', pausedUntil: null }),
+  })
+  assert.equal(res.allow, false)
+  assert.equal(res.reason, DEFER_REASON.OUTSIDE_OPERATING_HOURS)
+  assert.equal(db._records.size, 0)
+})
+
+test('checkAndReserve: destPreservation com throttleEnabled=false permite sem reservar', async () => {
+  const db = makeFakeDb()
+  const res = await checkAndReserve('g-dest', {}, {
+    db,
+    now: NOON_BRT_MS,
+    destPreservation: { ...DEST_DEFAULT, throttleEnabled: false },
+    getHealth: async () => ({ status: 'green', pausedUntil: null }),
+  })
+  assert.equal(res.allow, true)
+  assert.equal(db._records.size, 0)
+})
+
+test('checkAndReserve: preservationActive=false com dest fora do horário ainda bloqueia', async () => {
+  const db = {
+    channelThrottle: {
+      findUnique: async () => { throw new Error('não deveria consultar throttle') },
+      upsert: async () => { throw new Error('não deveria reservar') },
+    },
+  }
+  const res = await checkAndReserve('g-dest', {}, {
+    db,
+    preservationActive: false,
+    now: EARLY_BRT_MS,
+    destPreservation: { ...DEST_DEFAULT, operatingHoursEnabled: true },
+  })
+  assert.equal(res.allow, false)
+  assert.equal(res.reason, DEFER_REASON.OUTSIDE_OPERATING_HOURS)
 })
