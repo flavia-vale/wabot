@@ -74,18 +74,24 @@ function toMs(v) {
  *               burstWindowStart: Date|null, postsInBurstWindow: number } | null,
  *   isPaused: boolean,
  *   botConfig: object,
+ *   group?: { quietHoursEnabled?: boolean, quietHoursJson?: string|null } | null,
  * }} input
  */
-export function decide({ now, throttle, isPaused, botConfig }) {
+export function decide({ now, throttle, isPaused, botConfig, group }) {
   // Pausa por saúde (403/throttle do WhatsApp) é defesa do canal, não
   // preferência de cadência: vale independente do toggle de throttle.
   if (isPaused) {
     return { allow: false, reason: DEFER_REASON.HEALTH_PAUSED, deferUntil: now + HOUR }
   }
 
-  const quiet = parseQuietHours(botConfig.channelQuietHoursJson)
+  // Janela silenciosa por grupo espelhado (destino) SOBREPÕE a global, igual ao
+  // horário de funcionamento por fila. Se o grupo ativa a própria janela, a
+  // global é ignorada para ESTE destino; senão, cai na global do BotConfig.
+  const groupQuietActive = group?.quietHoursEnabled === true
+  const quiet = parseQuietHours(groupQuietActive ? group.quietHoursJson : botConfig.channelQuietHoursJson)
   const q = quietHoursState(now, quiet)
-  if (botConfig.quietHoursEnabled !== false && q.inQuiet) {
+  const quietGateOn = groupQuietActive || botConfig.quietHoursEnabled !== false
+  if (quietGateOn && q.inQuiet) {
     return { allow: false, reason: DEFER_REASON.QUIET_HOURS, deferUntil: now + q.deferMs }
   }
 
@@ -130,11 +136,18 @@ export function decide({ now, throttle, isPaused, botConfig }) {
  * @param {{ db?: any, now?: number, getHealth?: function }} [opts]
  */
 export async function checkAndReserve(groupId, botConfig, opts = {}) {
+  const now = opts.now ?? Date.now()
   if (opts.preservationActive === false) {
+    // Master de preservação off: throttle/health não se aplicam. Mas a janela
+    // silenciosa POR GRUPO é uma escolha explícita por destino e continua
+    // valendo (não depende do master global nem da global do BotConfig).
+    if (opts.group?.quietHoursEnabled === true) {
+      const q = quietHoursState(now, parseQuietHours(opts.group.quietHoursJson))
+      if (q.inQuiet) return { allow: false, reason: DEFER_REASON.QUIET_HOURS, deferUntil: now + q.deferMs }
+    }
     return { allow: true, reason: 'gating_off' }
   }
   const db = opts.db ?? defaultDb
-  const now = opts.now ?? Date.now()
   const fetchHealth = opts.getHealth ?? ((id) => getHealth(id, { db }))
 
   const [health, throttle] = await Promise.all([
@@ -146,6 +159,7 @@ export async function checkAndReserve(groupId, botConfig, opts = {}) {
     throttle,
     isPaused: isChannelPaused(health, now),
     botConfig,
+    group: opts.group ?? null,
   })
   if (!decision.allow) return decision
 

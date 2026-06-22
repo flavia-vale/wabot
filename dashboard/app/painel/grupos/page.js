@@ -36,6 +36,13 @@ const NO_LINK_SCOPE_OPTIONS = [
   { id: 'TEXT_IMAGE_WITH_CAPTION', label: 'Texto + imagem com legenda' },
 ]
 
+const QUIET_TZ_OPTIONS = ['America/Sao_Paulo', 'America/Manaus', 'America/Belem', 'America/Recife', 'UTC']
+
+function parseGroupQuiet(json) {
+  try { return { startHour: 0, endHour: 6, tz: 'America/Sao_Paulo', ...JSON.parse(json || '{}') } }
+  catch { return { startHour: 0, endHour: 6, tz: 'America/Sao_Paulo' } }
+}
+
 const GRADIENTS = [
   'linear-gradient(135deg,#94A3B8,#475569)',
   'linear-gradient(135deg,#F4D9E0,#E8A488)',
@@ -370,6 +377,54 @@ export default function GruposPage() {
     )
   }
 
+  function renderGroupQuietHours(g) {
+    const enabled = g.quietHoursEnabled === true
+    const q = parseGroupQuiet(g.quietHoursJson)
+    const updateQuiet = (patch) => handleUpdateGroup(g.id, { quietHoursJson: JSON.stringify({ ...q, ...patch }) })
+    return (
+      <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={enabled}
+            className={`pnl-switch${enabled ? ' is-on' : ''}`}
+            onClick={() => handleUpdateGroup(g.id, {
+              quietHoursEnabled: !enabled,
+              ...(!enabled ? { quietHoursJson: JSON.stringify(q) } : {}),
+            })}
+          >
+            <span />
+          </button>
+          <span style={{ fontSize: 13, color: 'var(--ink)' }}>🌙 Janela silenciosa só deste grupo</span>
+        </div>
+        <p className="pnl-hint" style={{ marginTop: 6 }}>
+          Faixa de horas em que o bot pausa os envios para este grupo. Quando ativa, <strong>ignora a janela silenciosa global</strong> só para este destino.
+        </p>
+        {enabled && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8, marginTop: 8 }}>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span className="pnl-hint">Início (hora)</span>
+              <input className="pnl-input" type="number" min={0} max={23} value={q.startHour}
+                onChange={(e) => updateQuiet({ startHour: Number(e.target.value) })} />
+            </label>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span className="pnl-hint">Fim (hora)</span>
+              <input className="pnl-input" type="number" min={0} max={23} value={q.endHour}
+                onChange={(e) => updateQuiet({ endHour: Number(e.target.value) })} />
+            </label>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span className="pnl-hint">Fuso horário</span>
+              <select className="pnl-input" value={q.tz} onChange={(e) => updateQuiet({ tz: e.target.value })}>
+                {QUIET_TZ_OPTIONS.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
+              </select>
+            </label>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   function renderPostConfig(g) {
     return (
       <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 14, display: 'grid', gap: 14 }}>
@@ -384,6 +439,7 @@ export default function GruposPage() {
             placeholder="Mensagem enviada quando alguém entra no grupo (opcional)"
           />
         </div>
+        {renderGroupQuietHours(g)}
         {g.kind !== 'channel' && (
           <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12 }}>
             <p className="pnl-label" style={{ marginBottom: 6 }}>Botão “Ver canal” ao final das mensagens</p>

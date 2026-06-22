@@ -404,6 +404,98 @@ test('decide: pausa de saúde bloqueia mesmo com throttle desligado', () => {
   assert.equal(result.reason, DEFER_REASON.HEALTH_PAUSED)
 })
 
+// ============================================================================
+// Janela silenciosa POR GRUPO (override da global)
+// ============================================================================
+
+test('decide: janela do grupo sobrepõe a global (bloqueia quando global liberaria)', () => {
+  const now = Date.UTC(2026, 0, 15, 14, 0, 0) // 11:00 BRT
+  const result = decide({
+    now,
+    throttle: null,
+    isPaused: false,
+    botConfig: {
+      quietHoursEnabled: true,
+      // global silenciaria 0-6: às 11h NÃO bloquearia
+      channelQuietHoursJson: JSON.stringify({ startHour: 0, endHour: 6, tz: 'America/Sao_Paulo' }),
+    },
+    group: {
+      quietHoursEnabled: true,
+      // grupo silencia 10-14: às 11h BLOQUEIA
+      quietHoursJson: JSON.stringify({ startHour: 10, endHour: 14, tz: 'America/Sao_Paulo' }),
+    },
+  })
+  assert.equal(result.allow, false)
+  assert.equal(result.reason, DEFER_REASON.QUIET_HOURS)
+})
+
+test('decide: janela do grupo sobrepõe a global (libera quando global bloquearia)', () => {
+  const now = EARLY_BRT_MS // 02:30 BRT
+  const result = decide({
+    now,
+    throttle: null,
+    isPaused: false,
+    botConfig: {
+      quietHoursEnabled: true,
+      // global silencia 0-6: às 02:30 bloquearia
+      channelQuietHoursJson: JSON.stringify({ startHour: 0, endHour: 6, tz: 'America/Sao_Paulo' }),
+    },
+    group: {
+      quietHoursEnabled: true,
+      // grupo silencia 10-14: às 02:30 NÃO bloqueia → override libera
+      quietHoursJson: JSON.stringify({ startHour: 10, endHour: 14, tz: 'America/Sao_Paulo' }),
+    },
+  })
+  assert.equal(result.allow, true)
+})
+
+test('decide: grupo sem override cai na global', () => {
+  const result = decide({
+    now: EARLY_BRT_MS,
+    throttle: null,
+    isPaused: false,
+    botConfig: DEFAULT_CONFIG,
+    group: { quietHoursEnabled: false, quietHoursJson: null },
+  })
+  assert.equal(result.allow, false)
+  assert.equal(result.reason, DEFER_REASON.QUIET_HOURS)
+})
+
+test('checkAndReserve: janela do grupo vale mesmo com preservationActive=false', async () => {
+  const db = {
+    channelThrottle: {
+      findUnique: async () => { throw new Error('não deveria consultar throttle') },
+      upsert: async () => { throw new Error('não deveria reservar') },
+    },
+  }
+  // 11:00 BRT, grupo silencia 10-14 → bloqueia apesar do master off
+  const result = await checkAndReserve('g-1', {}, {
+    db,
+    preservationActive: false,
+    now: Date.UTC(2026, 0, 15, 14, 0, 0),
+    group: { quietHoursEnabled: true, quietHoursJson: JSON.stringify({ startHour: 10, endHour: 14, tz: 'America/Sao_Paulo' }) },
+  })
+  assert.equal(result.allow, false)
+  assert.equal(result.reason, DEFER_REASON.QUIET_HOURS)
+})
+
+test('checkAndReserve: preservationActive=false e grupo fora da janela libera (gating_off)', async () => {
+  const db = {
+    channelThrottle: {
+      findUnique: async () => { throw new Error('não deveria consultar throttle') },
+      upsert: async () => { throw new Error('não deveria reservar') },
+    },
+  }
+  const result = await checkAndReserve('g-1', {}, {
+    db,
+    preservationActive: false,
+    now: Date.UTC(2026, 0, 15, 14, 0, 0), // 11:00 BRT, fora de 0-6
+    group: { quietHoursEnabled: true, quietHoursJson: JSON.stringify({ startHour: 0, endHour: 6, tz: 'America/Sao_Paulo' }) },
+  })
+  assert.equal(result.allow, true)
+  assert.equal(result.reason, 'gating_off')
+})
+
 test('checkAndReserve não grava contadores quando throttle está desligado', async () => {
   let writes = 0
   const db = {

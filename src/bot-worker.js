@@ -643,6 +643,10 @@ function envNumber(name, fallback) {
 const SEND_QUEUE_MAX_SIZE = envNumber('SEND_QUEUE_MAX_SIZE', 1_000)
 const SEND_MAX_ATTEMPTS = Math.max(1, envNumber('SEND_MAX_ATTEMPTS', 3))
 const SEND_RETRY_BASE_MS = Math.max(0, envNumber('SEND_RETRY_BASE_MS', 2_000))
+// Defer de throttle ≤ este teto é esperado inline (barato, ex.: min_interval).
+// Acima dele (quiet_hours/burst_cap/daily_cap/health_paused), o job é
+// re-enfileirado com notBefore para NÃO congelar a fila serial do usuário.
+const THROTTLE_INLINE_WAIT_MAX_MS = Math.max(0, envNumber('THROTTLE_INLINE_WAIT_MAX_MS', 90_000))
 const SEND_RETRY_MAX_MS = Math.max(SEND_RETRY_BASE_MS, envNumber('SEND_RETRY_MAX_MS', 30_000))
 const RECONNECT_BASE_MS = Math.max(1_000, envNumber('RECONNECT_BASE_MS', 5_000))
 const RECONNECT_MAX_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_MAX_MS', 5 * 60_000))
@@ -784,6 +788,7 @@ const sendMetrics = {
   errorTotal: 0,
   retryTotal: 0,
   rejectedTotal: 0,
+  deferredTotal: 0,
   broadcastQueuedTotal: 0,
   scheduledQueuedTotal: 0,
   convertedQueuedTotal: 0,
@@ -1077,6 +1082,35 @@ async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
   )
 }
 
+/**
+ * Re-enfileira um job adiado por defer LONGO (janela silenciosa, burst/daily
+ * cap, pausa de saúde) sem congelar a fila serial. Reverte o MessageLog para
+ * `queued`, agenda o reenvio com `notBefore = gate.deferUntil` e devolve o
+ * controle ao consumidor — os próximos jobs (de outros destinos/fontes) saem
+ * normalmente. O callback onDone (doneCallbacks por logId) é preservado: só
+ * finalizamos o job se ele NÃO couber na fila.
+ */
+async function deferSendJob(job, gate) {
+  const deferUntil = gate?.deferUntil ?? Date.now()
+  sendMetrics.deferredTotal++
+  await db.messageLog.update({
+    where: { id: job.logId },
+    data: { status: 'queued', errorMsg: `aguardando janela de envio do destino (${gate?.reason ?? 'throttle'})` },
+  }).catch(() => {})
+  logger.info(
+    { destJid: job.destJid, reason: gate?.reason, deferUntil, logId: job.logId },
+    'Defer longo: re-enfileirando job com notBefore (não congela a fila serial)',
+  )
+  const accepted = await sendBackend.enqueue({ ...job, notBefore: deferUntil })
+  if (!accepted) {
+    await db.messageLog.update({
+      where: { id: job.logId },
+      data: { status: 'error', errorMsg: classifyError(null, { kind: 'queue_full' }), sentAt: new Date() },
+    }).catch(() => {})
+    await finishSendJob(job, { ok: false, error: 'queue_full_on_defer' })
+  }
+}
+
 async function processSendJob(job) {
   const startedAt = Date.now()
   let payload = null
@@ -1115,26 +1149,38 @@ async function processSendJob(job) {
     try {
       const g = await db.group.findFirst({
         where: { userId, waJid: job.destJid, role: 'post' },
-        select: { id: true },
+        select: { id: true, quietHoursEnabled: true, quietHoursJson: true },
       })
       destGroupId = g?.id ?? null
       if (destGroupId) {
         // checkAndReserve já cobre: pausa por health, quiet hours, daily cap,
-        // intervalo mínimo, burst cap. Reserva o slot quando libera.
+        // intervalo mínimo, burst cap. Reserva o slot quando libera. A janela
+        // silenciosa POR GRUPO (g.quietHours*) sobrepõe a global do BotConfig
+        // para este destino quando habilitada.
         const cfgFull = await getConfig().catch(() => null)
         const cfg = cfgFull?.botConfig ?? {}
-        let gate = await throttleCheckAndReserve(destGroupId, cfg, {
+        const gateOpts = {
+          group: g,
           preservationActive: shouldRunChannelScheduler(cfgFull?.preservationActive, cfg),
-        })
+        }
+        let gate = await throttleCheckAndReserve(destGroupId, cfg, gateOpts)
         let throttleCycles = 0
         while (!gate.allow && !shuttingDown) {
-          throttleCycles++
           const waitMs = Math.max(0, (gate.deferUntil ?? Date.now()) - Date.now())
-          logger.info({ destJid: job.destJid, reason: gate.reason, waitMs, throttleCycles }, 'Velocity scheduler: aguardando janela de throttle do destino')
+          // Defer LONGO (quiet_hours/burst_cap/daily_cap/health_paused) não pode
+          // segurar o consumidor serial: ele congelaria TODOS os envios do
+          // usuário — inclusive para destinos liberados e outras fontes. Em vez
+          // de `await sleep`, re-enfileira o job com notBefore e retorna,
+          // liberando a fila para os próximos jobs. Defer CURTO (min_interval)
+          // continua sendo esperado inline (barato e preserva ordem).
+          if (waitMs > THROTTLE_INLINE_WAIT_MAX_MS) {
+            await deferSendJob(job, gate)
+            return
+          }
+          throttleCycles++
+          logger.info({ destJid: job.destJid, reason: gate.reason, waitMs, throttleCycles }, 'Velocity scheduler: aguardando janela curta de throttle do destino')
           await sleep(waitMs)
-          gate = await throttleCheckAndReserve(destGroupId, cfg, {
-            preservationActive: shouldRunChannelScheduler(cfgFull?.preservationActive, cfg),
-          })
+          gate = await throttleCheckAndReserve(destGroupId, cfg, gateOpts)
         }
         if (shuttingDown) throw new Error('Worker encerrando durante espera de throttle do destino')
       }

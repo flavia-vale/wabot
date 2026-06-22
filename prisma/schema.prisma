@@ -96,6 +96,8 @@ model Group {
   welcomeMsg        String?
   channelButtonJid  String?
   channelButtonName String?
+  quietHoursEnabled Boolean @default(false)
+  quietHoursJson    String?
   monitorTargets   GroupTarget[] @relation("MonitorTargets")
   postTargets      GroupTarget[] @relation("PostTargets")
   channelHealth    ChannelHealth?
