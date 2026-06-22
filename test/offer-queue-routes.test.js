@@ -130,6 +130,41 @@ test('reativar fila limpa o intervalo anterior e tenta enviar a primeira oferta 
   assert.equal(drains[0].lastSentAt, null)
 })
 
+test('GET / expõe blockReason quando há itens pendentes parados', async (t) => {
+  const db = fakeDb()
+  const app = await appFor('user-b', db, { evaluateQueueGate: async () => 'bot_offline' })
+  t.after(async () => { await app.close() })
+
+  const queue = (await app.inject({ method: 'POST', url: '/api/offer-queues', payload: { name: 'Com pendentes', targetJids: ['g@g.us'] } })).json()
+  db.items.push({ id: 'i1', queueId: queue.id, userId: 'user-b', status: 'pending', position: 1 })
+
+  const list = (await app.inject({ method: 'GET', url: '/api/offer-queues' })).json()
+  assert.equal(list[0].pendingCount, 1)
+  assert.equal(list[0].blockReason, 'bot_offline')
+
+  // Sem itens pendentes, não há motivo de bloqueio a reportar.
+  db.items[0].status = 'sent'
+  const listSent = (await app.inject({ method: 'GET', url: '/api/offer-queues' })).json()
+  assert.equal(listSent[0].pendingCount, 0)
+  assert.equal(listSent[0].blockReason, null)
+})
+
+test('GET / reporta plan_inactive em fila pendente quando o plano não permite', async (t) => {
+  const db = fakeDb()
+  // evaluateQueueGate nem deve ser consultado: o gate de plano vem primeiro.
+  const app = await appFor('user-b', db, { evaluateQueueGate: async () => { throw new Error('não deveria chamar') } })
+  t.after(async () => { await app.close() })
+
+  // Cria a fila ainda com plano Pro (a criação é gated em Pro).
+  const queue = (await app.inject({ method: 'POST', url: '/api/offer-queues', payload: { name: 'Plano caiu', targetJids: ['g@g.us'] } })).json()
+  db.items.push({ id: 'i1', queueId: queue.id, userId: 'user-b', status: 'pending', position: 1 })
+  // Depois o plano cai para basic — a fila fica guardada e a UI precisa dizer por quê.
+  db.user.findUnique = async () => ({ plan: 'basic', accessExpiresAt: null })
+
+  const list = (await app.inject({ method: 'GET', url: '/api/offer-queues' })).json()
+  assert.equal(list[0].blockReason, 'plan_inactive')
+})
+
 test('horário de funcionamento: valida formato e persiste/zera os campos', async (t) => {
   const db = fakeDb()
   const app = await appFor('user-h', db)
