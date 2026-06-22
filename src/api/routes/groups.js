@@ -151,7 +151,7 @@ export async function groupsRoutes(app, opts = {}) {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo não encontrado' })
 
-    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope, channelButtonJid, channelButtonName, quietHoursEnabled, quietHoursJson } = req.body ?? {}
+    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope, templateKey, channelButtonJid, channelButtonName, quietHoursEnabled, quietHoursJson } = req.body ?? {}
     if (allowedPlatforms !== undefined) {
       const platforms = String(allowedPlatforms).split(',').filter(Boolean)
       const invalid = platforms.find(p => !['shopee', 'amazon', 'mercadolivre', 'magazineluiza'].includes(p))
@@ -171,6 +171,10 @@ export async function groupsRoutes(app, opts = {}) {
     if (noLinkScope !== undefined && !Object.values(NO_LINK_SCOPE).includes(noLinkScope)) {
       return reply.code(400).send({ error: 'noLinkScope inválido' })
     }
+    if (templateKey !== undefined && templateKey !== null && String(templateKey).trim() && !/^[A-Za-z0-9_-]{1,80}$/.test(String(templateKey).trim())) {
+      return reply.code(400).send({ error: 'templateKey inválido' })
+    }
+
     if (forwardMode === FORWARD_MODE.LINK_ONLY && noLinkScope !== undefined && noLinkScope !== null) {
       return reply.code(400).send({ error: 'noLinkScope só pode ser usado com forwardMode=ALLOW_NO_LINK' })
     }
@@ -221,6 +225,7 @@ export async function groupsRoutes(app, opts = {}) {
         ...(imageLinkTarget !== undefined ? { imageLinkTarget } : {}),
         ...(fallbackToOriginal !== undefined ? { fallbackToOriginal: parseBoolean(fallbackToOriginal) } : {}),
         ...(forwardMode !== undefined ? { forwardMode: requestedForwardMode } : {}),
+        ...(templateKey !== undefined ? { templateKey: String(templateKey ?? '').trim() || null } : {}),
         ...((noLinkScope !== undefined || forwardMode !== undefined) ? { noLinkScope: requestedNoLinkScope } : {}),
         ...(normalizedChannelButtonJid !== undefined ? { channelButtonJid: normalizedChannelButtonJid || null } : {}),
         ...(normalizedChannelButtonName !== undefined ? { channelButtonName: normalizedChannelButtonName || null } : {}),

@@ -17,6 +17,7 @@ function toMonitorGroup(group, targetPostJids = []) {
     allowedPlatforms: group.allowedPlatforms,
     forwardMode: group.forwardMode,
     noLinkScope: group.noLinkScope,
+    templateKey: group.templateKey ?? null,
     targetPostJids,
   }
 }

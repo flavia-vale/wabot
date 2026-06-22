@@ -47,6 +47,7 @@ import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
+import { applyMirrorTemplate } from './core/mirrorTemplate.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
 import { classifyError } from './errorTaxonomy.js'
 import { detectMessageKind, extractIncomingText, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
@@ -1996,13 +1997,23 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       }
         finalText = applyConversionsAndBranding(sanitizedText, conversions, cfg.botConfig.brandingGroupLink, cfg.botConfig.brandingCtaText)
       }
+      const primary = conversions[0] ?? { platform: 'nolink', url: '', converted: '' }
+      if (monitorGroup?.templateKey) {
+        finalText = await applyMirrorTemplate(finalText, {
+          botConfig: cfg.botConfig,
+          templateKey: monitorGroup.templateKey,
+          originalUrl: primary.url || links[0]?.url || '',
+          convertedUrl: primary.converted || primary.url || links[0]?.url || '',
+          platform: primary.platform,
+          credentialsMap: cfg.credentials,
+          logger,
+        })
+      }
       const originalMedia = getOriginalMediaMessage()
       if (!finalText && !originalMedia) {
         logger.warn({ msgId: msg.key.id }, 'Mensagem vazia após processamento — envio ignorado')
         return
       }
-
-      const primary = conversions[0] ?? { platform: 'nolink', url: '', converted: '' }
 
       // Guard anti-mismatch: já apareceu em produção mensagem com caption
       // de "toalhas", link de "mochila" e foto de "jaqueta" (upstream

@@ -642,3 +642,18 @@ test('PUT /:id rejeita quietHoursJson com hora inválida', async (t) => {
 
   assert.equal(res.statusCode, 400)
 })
+
+test('PUT /:id persiste templateKey para espelhamento e rejeita chave inválida', async (t) => {
+  const { app, userId } = await buildApp({}, { plan: 'pro' })
+  const group = await db.group.create({
+    data: { userId, waJid: 'tpl@g.us', name: 'Grupo Template', role: 'monitor', kind: 'group', forwardMode: 'LINK_ONLY' },
+  })
+  t.after(async () => { await db.group.deleteMany({ where: { userId } }); await db.user.deleteMany({ where: { id: userId } }); await app.close() })
+
+  const ok = await app.inject({ method: 'PUT', url: `/api/groups/${group.id}`, payload: { templateKey: 'tpl_custom-1' } })
+  assert.equal(ok.statusCode, 200)
+  assert.equal(JSON.parse(ok.body).templateKey, 'tpl_custom-1')
+
+  const bad = await app.inject({ method: 'PUT', url: `/api/groups/${group.id}`, payload: { templateKey: '../bad' } })
+  assert.equal(bad.statusCode, 400)
+})
