@@ -49,6 +49,7 @@ import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindo
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
 import { classifyError } from './errorTaxonomy.js'
+import { recoverStuckSendLogs, STUCK_SEND_LOG_CUTOFF_MS } from './jobs/stuckSendLogs.js'
 import { detectMessageKind, extractIncomingText, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
 import { broadcastSourceGroup } from './offerQueue/sourceTag.js'
 import Redis from 'ioredis'
@@ -574,6 +575,18 @@ async function checkScheduledMessages() {
 
 setInterval(checkScheduledMessages, 30_000)
 
+// Watchdog de MessageLog preso em 'sending' (safety net): roda a cada 5min e
+// reclassifica como erro recuperável as linhas paradas em 'sending' há mais que
+// o cutoff. unref() para não segurar o processo. Ver src/jobs/stuckSendLogs.js.
+const STUCK_SEND_LOG_SWEEP_MS = Math.max(60_000, Number(process.env.STUCK_SEND_LOG_SWEEP_MS || 5 * 60_000))
+setInterval(() => {
+  recoverStuckSendLogs({ userId })
+    .then(({ recovered }) => {
+      if (recovered > 0) logger.warn({ recovered, cutoffMs: STUCK_SEND_LOG_CUTOFF_MS }, 'Watchdog: MessageLog preso em sending reclassificado como erro')
+    })
+    .catch(err => logger.error({ err: err.message }, 'Watchdog de envios presos falhou'))
+}, STUCK_SEND_LOG_SWEEP_MS).unref()
+
 // Força re-emissão de sender_keys do WhatsApp via groupFetchAllParticipating().
 // Compartilhado entre o watchdog e o endpoint manual /refresh-wa-state.
 async function triggerWaGroupsRefresh(reason = 'manual') {
@@ -1088,7 +1101,10 @@ async function processSendJob(job) {
   try {
     await db.messageLog.update({
       where: { id: job.logId },
-      data: { status: 'sending', errorMsg: null },
+      // sentAt estampado ao ENTRAR em 'sending' para o watchdog de envios presos
+      // (recoverStuckSendLogs) medir tempo-em-sending, não tempo desde a criação
+      // (a linha pode ter sido criada/adiada horas antes).
+      data: { status: 'sending', errorMsg: null, sentAt: new Date() },
     })
     sendMetrics.sendingTotal++
 
