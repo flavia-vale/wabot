@@ -151,7 +151,7 @@ export async function groupsRoutes(app, opts = {}) {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo não encontrado' })
 
-    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope, templateKey, channelButtonJid, channelButtonName, quietHoursEnabled, quietHoursJson } = req.body ?? {}
+    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope, templateKey, primaryLinkTarget, channelButtonJid, channelButtonName, quietHoursEnabled, quietHoursJson } = req.body ?? {}
     if (allowedPlatforms !== undefined) {
       const platforms = String(allowedPlatforms).split(',').filter(Boolean)
       const invalid = platforms.find(p => !['shopee', 'amazon', 'mercadolivre', 'magazineluiza'].includes(p))
@@ -170,6 +170,9 @@ export async function groupsRoutes(app, opts = {}) {
     }
     if (noLinkScope !== undefined && !Object.values(NO_LINK_SCOPE).includes(noLinkScope)) {
       return reply.code(400).send({ error: 'noLinkScope inválido' })
+    }
+    if (primaryLinkTarget !== undefined && primaryLinkTarget !== null && primaryLinkTarget !== '' && !['first', 'last'].includes(primaryLinkTarget)) {
+      return reply.code(400).send({ error: 'primaryLinkTarget inválido' })
     }
     if (templateKey !== undefined && templateKey !== null && String(templateKey).trim() && !/^[A-Za-z0-9_-]{1,80}$/.test(String(templateKey).trim())) {
       return reply.code(400).send({ error: 'templateKey inválido' })
@@ -225,7 +228,10 @@ export async function groupsRoutes(app, opts = {}) {
         ...(imageLinkTarget !== undefined ? { imageLinkTarget } : {}),
         ...(fallbackToOriginal !== undefined ? { fallbackToOriginal: parseBoolean(fallbackToOriginal) } : {}),
         ...(forwardMode !== undefined ? { forwardMode: requestedForwardMode } : {}),
-        ...(templateKey !== undefined ? { templateKey: String(templateKey ?? '').trim() || null } : {}),
+        // Três estados: null = herda o template padrão global; '' = relay explícito
+        // (não aplica template mesmo havendo padrão global); 'chave' = template fixo.
+        ...(templateKey !== undefined ? { templateKey: templateKey === null ? null : String(templateKey).trim() } : {}),
+        ...(primaryLinkTarget !== undefined ? { primaryLinkTarget: primaryLinkTarget || null } : {}),
         ...((noLinkScope !== undefined || forwardMode !== undefined) ? { noLinkScope: requestedNoLinkScope } : {}),
         ...(normalizedChannelButtonJid !== undefined ? { channelButtonJid: normalizedChannelButtonJid || null } : {}),
         ...(normalizedChannelButtonName !== undefined ? { channelButtonName: normalizedChannelButtonName || null } : {}),

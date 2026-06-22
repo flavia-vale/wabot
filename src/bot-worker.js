@@ -1997,7 +1997,26 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       }
         finalText = applyConversionsAndBranding(sanitizedText, conversions, cfg.botConfig.brandingGroupLink, cfg.botConfig.brandingCtaText)
       }
-      const primary = conversions[0] ?? { platform: 'nolink', url: '', converted: '' }
+      // Eleição do link primário (oferta/dedup/log) entre as conversões válidas.
+      // Decisão de produto 3.4: o grupo escolhe primeiro/último link; sem override
+      // por grupo, herda o default global do BotConfig (default 'first' = histórico).
+      const effectiveLinkTarget = monitorGroup?.primaryLinkTarget
+        || cfg.botConfig?.primaryLinkTargetDefault
+        || 'first'
+      const orderedConversions = conversions.filter(c => c && c.platform !== 'nolink')
+      const primary = (orderedConversions.length
+        ? (effectiveLinkTarget === 'last' ? orderedConversions[orderedConversions.length - 1] : orderedConversions[0])
+        : conversions[0]) ?? { platform: 'nolink', url: '', converted: '' }
+
+      // Template efetivo (decisão 3.2: por grupo, com default global). Três estados
+      // de monitorGroup.templateKey: null/undefined = herda o default global;
+      // '' = relay explícito (não aplica template mesmo havendo default); 'chave'
+      // = template fixo do grupo.
+      const groupTemplateKey = monitorGroup?.templateKey
+      const effectiveTemplateKey = (groupTemplateKey === null || groupTemplateKey === undefined)
+        ? (cfg.botConfig?.mirrorTemplateKeyDefault || '')
+        : groupTemplateKey
+
       // `templateApplied` indica que o caption foi REMONTADO a partir do título/
       // preço raspados (não é mais a caption do upstream). Nesse caso o guard de
       // mismatch abaixo é (a) redundante — já raspamos a página aqui — e (b)
@@ -2005,10 +2024,10 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       // o que vai sair. Quando o template cai no relay (texto inalterado), o
       // guard volta a valer normalmente.
       let templateApplied = false
-      if (monitorGroup?.templateKey) {
+      if (effectiveTemplateKey) {
         const templatedText = await applyMirrorTemplate(finalText, {
           botConfig: cfg.botConfig,
-          templateKey: monitorGroup.templateKey,
+          templateKey: effectiveTemplateKey,
           originalUrl: primary.url || links[0]?.url || '',
           convertedUrl: primary.converted || primary.url || links[0]?.url || '',
           platform: primary.platform,

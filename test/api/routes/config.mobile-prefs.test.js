@@ -77,3 +77,24 @@ test('PUT / não toca templates/cupons quando o campo não é enviado', async (t
   assert.equal(body.mobileTemplatesJson, templates)
   assert.equal(body.delayMin, 7)
 })
+
+test('PUT / persiste defaults globais de espelhamento (template + first/last) e valida', async (t) => {
+  const { app } = await buildApp()
+  t.after(() => app.close())
+
+  const put = await app.inject({ method: 'PUT', url: '/api/config', payload: { mirrorTemplateKeyDefault: 'tpl_global-1', primaryLinkTargetDefault: 'last' } })
+  assert.equal(put.statusCode, 200)
+  const body = JSON.parse(put.body)
+  assert.equal(body.mirrorTemplateKeyDefault, 'tpl_global-1')
+  assert.equal(body.primaryLinkTargetDefault, 'last')
+
+  // String vazia limpa o default (volta a relay global).
+  const clear = await app.inject({ method: 'PUT', url: '/api/config', payload: { mirrorTemplateKeyDefault: '' } })
+  assert.equal(clear.statusCode, 200)
+  assert.equal(JSON.parse(clear.body).mirrorTemplateKeyDefault, null)
+
+  const badKey = await app.inject({ method: 'PUT', url: '/api/config', payload: { mirrorTemplateKeyDefault: '../bad' } })
+  assert.equal(badKey.statusCode, 400)
+  const badTarget = await app.inject({ method: 'PUT', url: '/api/config', payload: { primaryLinkTargetDefault: 'middle' } })
+  assert.equal(badTarget.statusCode, 400)
+})

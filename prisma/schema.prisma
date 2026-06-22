@@ -92,6 +92,7 @@ model Group {
   forwardMode       String   @default("LINK_ONLY")
   noLinkScope       String?
   templateKey       String?
+  primaryLinkTarget String?
   blockedKeywords   String?
   allowedPlatforms  String?
   welcomeMsg        String?
@@ -238,6 +239,8 @@ model BotConfig {
   probeEnabled            Boolean @default(false)
   mobileTemplatesJson     String  @default("{}")
   mobileCouponLinksJson   String  @default("{}")
+  mirrorTemplateKeyDefault String?
+  primaryLinkTargetDefault String  @default("first")
   preservationEnabled     Boolean @default(false)
   channelForwardJid       String?
   channelForwardName      String?
