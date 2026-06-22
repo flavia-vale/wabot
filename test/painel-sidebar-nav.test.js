@@ -49,3 +49,15 @@ test('sidebar consolida acompanhamento em um único item Envios', () => {
   assert.doesNotMatch(block, /label:\s*'Histórico de envios'/)
   assert.doesNotMatch(block, /href:\s*'\/painel\/agendados'/)
 })
+
+test('sidebar mantém Filas dentro de Criar & enviar', () => {
+  const block = journeyBlock()
+  const enviarAgora = block.indexOf("label: 'Enviar agora'")
+  const filas = block.indexOf("label: 'Filas'")
+  const configuracaoStart = navSource.indexOf("title: 'Configuração'")
+  const configBlock = navSource.slice(configuracaoStart)
+
+  assert.notEqual(filas, -1, 'Filas deve ficar no grupo Criar & enviar')
+  assert.ok(enviarAgora < filas, 'Filas deve aparecer depois de Enviar agora')
+  assert.doesNotMatch(configBlock, /label:\s*'Filas'/, 'Filas não deve permanecer em Configuração')
+})
