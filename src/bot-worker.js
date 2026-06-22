@@ -1115,26 +1115,28 @@ async function processSendJob(job) {
     try {
       const g = await db.group.findFirst({
         where: { userId, waJid: job.destJid, role: 'post' },
-        select: { id: true },
+        select: { id: true, quietHoursEnabled: true, quietHoursJson: true },
       })
       destGroupId = g?.id ?? null
       if (destGroupId) {
         // checkAndReserve já cobre: pausa por health, quiet hours, daily cap,
-        // intervalo mínimo, burst cap. Reserva o slot quando libera.
+        // intervalo mínimo, burst cap. Reserva o slot quando libera. A janela
+        // silenciosa POR GRUPO (g.quietHours*) sobrepõe a global do BotConfig
+        // para este destino quando habilitada.
         const cfgFull = await getConfig().catch(() => null)
         const cfg = cfgFull?.botConfig ?? {}
-        let gate = await throttleCheckAndReserve(destGroupId, cfg, {
+        const gateOpts = {
+          group: g,
           preservationActive: shouldRunChannelScheduler(cfgFull?.preservationActive, cfg),
-        })
+        }
+        let gate = await throttleCheckAndReserve(destGroupId, cfg, gateOpts)
         let throttleCycles = 0
         while (!gate.allow && !shuttingDown) {
           throttleCycles++
           const waitMs = Math.max(0, (gate.deferUntil ?? Date.now()) - Date.now())
           logger.info({ destJid: job.destJid, reason: gate.reason, waitMs, throttleCycles }, 'Velocity scheduler: aguardando janela de throttle do destino')
           await sleep(waitMs)
-          gate = await throttleCheckAndReserve(destGroupId, cfg, {
-            preservationActive: shouldRunChannelScheduler(cfgFull?.preservationActive, cfg),
-          })
+          gate = await throttleCheckAndReserve(destGroupId, cfg, gateOpts)
         }
         if (shuttingDown) throw new Error('Worker encerrando durante espera de throttle do destino')
       }
