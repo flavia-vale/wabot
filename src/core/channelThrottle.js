@@ -8,6 +8,9 @@ import { getHealth, isChannelPaused } from './channelHealth.js'
 export const DEFER_REASON = Object.freeze({
   HEALTH_PAUSED: 'health_paused',
   QUIET_HOURS: 'quiet_hours',
+  // Plano B: defer por estar FORA do horário de funcionamento do destino
+  // (semântica nova: envia DENTRO da janela, silêncio FORA).
+  OUTSIDE_OPERATING_HOURS: 'outside_operating_hours',
   DAILY_CAP: 'daily_cap',
   MIN_INTERVAL: 'min_interval',
   BURST_CAP: 'burst_cap',
@@ -59,6 +62,22 @@ export function quietHoursState(nowMs, { startHour, endHour, tz }) {
   let endMins = endHour * 60
   if (endMins <= currentMins) endMins += 24 * 60
   return { inQuiet: true, deferMs: (endMins - currentMins) * MIN }
+}
+
+// Plano B: horário de FUNCIONAMENTO (envia DENTRO, silêncio FORA). É o
+// complemento da janela silenciosa. Devolve deferMs = tempo até a próxima
+// abertura quando está fora. Janela start==end = 24h (sempre aberto).
+export function operatingHoursState(nowMs, { startHour, endHour, tz }) {
+  if (startHour === endHour) return { inOperating: true, deferMs: 0 }
+  const { hour, minute } = tzHourMin(nowMs, tz)
+  const inOperating = startHour <= endHour
+    ? hour >= startHour && hour < endHour
+    : hour >= startHour || hour < endHour
+  if (inOperating) return { inOperating: true, deferMs: 0 }
+  const currentMins = hour * 60 + minute
+  let startMins = startHour * 60
+  if (startMins <= currentMins) startMins += 24 * 60
+  return { inOperating: false, deferMs: (startMins - currentMins) * MIN }
 }
 
 function toMs(v) {
@@ -130,17 +149,79 @@ export function decide({ now, throttle, isPaused, botConfig, group }) {
 }
 
 /**
+ * Plano B — decisão pura por DESTINO (config direcionada). Mesma ordem de
+ * cheques do decide() legado, mas com:
+ *  - HORÁRIO DE FUNCIONAMENTO (bloqueia FORA da janela), não janela silenciosa;
+ *  - limites anti-ban vindos do destino resolvido (dest.*), não do botConfig.
+ * `ignoreOperatingHours` (fonte com horário próprio, ex.: fila) pula só o gate
+ * de horário, mantendo o anti-ban.
+ * @param {{ now:number, throttle:object|null, isPaused:boolean,
+ *   dest:object, ignoreOperatingHours?:boolean }} input
+ */
+export function decideDestination({ now, throttle, isPaused, dest, ignoreOperatingHours }) {
+  if (isPaused) {
+    return { allow: false, reason: DEFER_REASON.HEALTH_PAUSED, deferUntil: now + HOUR }
+  }
+  const hours = parseQuietHours(dest.operatingHoursJson)
+  if (dest.operatingHoursEnabled === true && ignoreOperatingHours !== true) {
+    const s = operatingHoursState(now, hours)
+    if (!s.inOperating) {
+      return { allow: false, reason: DEFER_REASON.OUTSIDE_OPERATING_HOURS, deferUntil: now + s.deferMs }
+    }
+  }
+
+  const throttleOn = dest.throttleEnabled !== false
+  const today = tzDayBucket(now, hours.tz)
+  const sameDay = throttle?.dayBucket === today
+  const postsToday = sameDay ? (throttle?.postsToday ?? 0) : 0
+
+  if (throttleOn && dest.dailyCap != null && postsToday >= dest.dailyCap) {
+    return { allow: false, reason: DEFER_REASON.DAILY_CAP, deferUntil: now + DAY }
+  }
+
+  const minIntervalMs = (dest.minIntervalSec ?? 30) * SEC
+  const lastPostMs = toMs(throttle?.lastPostAt)
+  if (throttleOn && lastPostMs && now - lastPostMs < minIntervalMs) {
+    return { allow: false, reason: DEFER_REASON.MIN_INTERVAL, deferUntil: lastPostMs + minIntervalMs }
+  }
+
+  const burstWindowMs = (dest.burstWindowSec ?? 3600) * SEC
+  const burstCap = dest.burstCap ?? 6
+  const winStartMs = toMs(throttle?.burstWindowStart)
+  const windowActive = winStartMs && now - winStartMs < burstWindowMs
+  const postsInWindow = windowActive ? (throttle?.postsInBurstWindow ?? 0) : 0
+  if (throttleOn && windowActive && postsInWindow >= burstCap) {
+    return { allow: false, reason: DEFER_REASON.BURST_CAP, deferUntil: winStartMs + burstWindowMs }
+  }
+
+  return { allow: true }
+}
+
+/**
  * Decide e (se allow) reserva o slot atomicamente via upsert.
+ *
+ * Plano B: quando `opts.destPreservation` é fornecido (config resolvida por
+ * destino), usa decideDestination + horário de funcionamento. Sem ele, cai no
+ * caminho legado (botConfig + janela silenciosa) — fallback durante a migração.
  * @param {string} groupId
  * @param {object} botConfig
- * @param {{ db?: any, now?: number, getHealth?: function }} [opts]
+ * @param {{ db?: any, now?: number, getHealth?: function, group?: object,
+ *   destPreservation?: object, ignoreGlobalQuietHours?: boolean }} [opts]
  */
 export async function checkAndReserve(groupId, botConfig, opts = {}) {
   const now = opts.now ?? Date.now()
+  const dest = opts.destPreservation ?? null
+
   if (opts.preservationActive === false) {
-    // Master de preservação off: throttle/health não se aplicam. Mas a janela
-    // silenciosa POR GRUPO é uma escolha explícita por destino e continua
-    // valendo (não depende do master global nem da global do BotConfig).
+    // Master de preservação off: throttle/health não se aplicam. Mas o horário
+    // (escolha explícita por destino) continua valendo.
+    if (dest) {
+      if (dest.operatingHoursEnabled === true && opts.ignoreGlobalQuietHours !== true) {
+        const s = operatingHoursState(now, parseQuietHours(dest.operatingHoursJson))
+        if (!s.inOperating) return { allow: false, reason: DEFER_REASON.OUTSIDE_OPERATING_HOURS, deferUntil: now + s.deferMs }
+      }
+      return { allow: true, reason: 'gating_off' }
+    }
     if (opts.group?.quietHoursEnabled === true) {
       const q = quietHoursState(now, parseQuietHours(opts.group.quietHoursJson))
       if (q.inQuiet) return { allow: false, reason: DEFER_REASON.QUIET_HOURS, deferUntil: now + q.deferMs }
@@ -154,25 +235,44 @@ export async function checkAndReserve(groupId, botConfig, opts = {}) {
     fetchHealth(groupId),
     db.channelThrottle.findUnique({ where: { groupId } }),
   ])
-  const decision = decide({
-    now,
-    throttle,
-    isPaused: isChannelPaused(health, now),
-    botConfig,
-    group: opts.group ?? null,
-  })
+
+  let decision
+  let effective
+  if (dest) {
+    decision = decideDestination({
+      now,
+      throttle,
+      isPaused: isChannelPaused(health, now),
+      dest,
+      ignoreOperatingHours: opts.ignoreGlobalQuietHours === true,
+    })
+    effective = { throttleOn: dest.throttleEnabled !== false, burstWindowSec: dest.burstWindowSec, tz: parseQuietHours(dest.operatingHoursJson).tz }
+  } else {
+    decision = decide({
+      now,
+      throttle,
+      isPaused: isChannelPaused(health, now),
+      botConfig,
+      group: opts.group ?? null,
+    })
+    effective = { throttleOn: botConfig.channelThrottleEnabled !== false, burstWindowSec: botConfig.channelBurstWindowSec, tz: parseQuietHours(botConfig.channelQuietHoursJson).tz }
+  }
   if (!decision.allow) return decision
 
-  if (botConfig.channelThrottleEnabled !== false) {
-    await reserve(db, groupId, throttle, now, botConfig)
+  if (effective.throttleOn) {
+    await reserve(db, groupId, throttle, now, effective)
   }
   return decision
 }
 
-async function reserve(db, groupId, throttle, now, botConfig) {
-  const quiet = parseQuietHours(botConfig.channelQuietHoursJson)
-  const today = tzDayBucket(now, quiet.tz)
-  const burstWindowMs = (botConfig.channelBurstWindowSec ?? 3600) * SEC
+// `effective` = { burstWindowSec, tz }. Aceita também o formato legado do
+// botConfig (channelBurstWindowSec/channelQuietHoursJson) para retrocompat dos
+// chamadores antigos (ex.: recordPost).
+async function reserve(db, groupId, throttle, now, effective = {}) {
+  const tz = effective.tz ?? parseQuietHours(effective.channelQuietHoursJson).tz
+  const burstWindowSec = effective.burstWindowSec ?? effective.channelBurstWindowSec
+  const today = tzDayBucket(now, tz)
+  const burstWindowMs = (burstWindowSec ?? 3600) * SEC
   const winStartMs = toMs(throttle?.burstWindowStart)
   const windowActive = winStartMs && now - winStartMs < burstWindowMs
 
