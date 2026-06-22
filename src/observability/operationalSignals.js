@@ -19,6 +19,7 @@ const signals = new Map() // name -> { total, timestamps: number[] (ascendente) 
 const ANALYTICS_EVENT_BY_SIGNAL = {
   sqlite_busy: 'ops_sqlite_busy',
   dedup_fail_open: 'ops_dedup_fail_open',
+  wa_connection_replaced: 'ops_wa_connection_replaced',
 }
 
 let cachedTrackFn = null

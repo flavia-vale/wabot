@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { drainQueueOnce, recoverStuckQueueItems, OFFER_QUEUE_MAX_ATTEMPTS } from '../src/offerQueue/dispatcher.js'
+import { drainQueueOnce, evaluateQueueGate, recoverStuckQueueItems, OFFER_QUEUE_MAX_ATTEMPTS } from '../src/offerQueue/dispatcher.js'
 import { startOfSaoPauloDayUtc } from '../src/offerQueue/time.js'
 
 function setup(overrides = {}) {
@@ -70,6 +70,27 @@ test('drainQueueOnce serializa execuções concorrentes da mesma fila', async ()
   releaseSend()
   assert.deepEqual(await running, { sent: 'i1' })
   assert.equal(first.calls.updates.filter((call) => call.data.status === 'queued').length, 1)
+})
+
+test('evaluateQueueGate devolve o motivo do bloqueio (read-only) ou null quando liberada', async () => {
+  const ready = setup()
+  assert.equal(await evaluateQueueGate(ready.queue, ready.deps), null)
+
+  const offline = setup()
+  offline.deps.isRunning = async () => false
+  assert.equal(await evaluateQueueGate(offline.queue, offline.deps), 'bot_offline')
+  // diagnóstico é read-only: nunca toca nos itens
+  assert.equal(offline.calls.updates.length, 0)
+  assert.equal(offline.calls.sent.length, 0)
+
+  const paused = setup({ enabled: false })
+  assert.equal(await evaluateQueueGate(paused.queue, paused.deps), 'queue_disabled')
+
+  const interval = setup({ intervalEnabled: true, intervalMinutes: 30, lastSentAt: new Date('2026-06-10T14:45:00Z') })
+  assert.equal(await evaluateQueueGate(interval.queue, interval.deps), 'interval_limit')
+
+  const daily = setup({ dailyCapEnabled: true, dailyCap: 5, count: 5 })
+  assert.equal(await evaluateQueueGate(daily.queue, daily.deps), 'daily_limit')
 })
 
 test('drainQueueOnce respeita bot offline e intervalo sem fazer claim', async () => {

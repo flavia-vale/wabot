@@ -56,6 +56,10 @@ export const ANALYTICS_EVENTS = new Set([
   // Sinais operacionais (auditoria/WABOT-010): gatilhos de escala observáveis.
   'ops_sqlite_busy',
   'ops_dedup_fail_open',
+  // Sessão WA substituída por outro socket na mesma credencial (worker
+  // duplicado / double-possession) — fonte raiz do spam de notificação de
+  // "sincronização concluída". Durável p/ diagnóstico cross-processo em prod.
+  'ops_wa_connection_replaced',
 ])
 
 const SENSITIVE_KEY_PATTERN = /(token|secret|password|cookie|credential|csrf|ssid|key|message|text|url|phone|email)/i

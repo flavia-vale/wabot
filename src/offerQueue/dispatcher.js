@@ -6,6 +6,20 @@ import { isOutsideOperatingHours } from './operatingHours.js'
 
 const drainingQueues = new Set()
 
+// Códigos de bloqueio expostos pela UI (motivo de uma fila com itens pendentes
+// não estar drenando). Mensagens em PT-BR ficam no dashboard; aqui vive a fonte
+// única dos códigos para manter API e UI alinhadas.
+export const QUEUE_BLOCK_REASONS = Object.freeze([
+  'queue_disabled',
+  'plan_inactive',
+  'bot_offline',
+  'outside_operating_hours',
+  'quiet_hours',
+  'interval_limit',
+  'hourly_limit',
+  'daily_limit',
+])
+
 // Lease do claim: se o processo cair entre pending->queued e o desfecho do
 // envio, o watchdog devolve o item para 'pending' depois deste prazo.
 export const OFFER_QUEUE_LEASE_MS = Math.max(60_000, Number(process.env.OFFER_QUEUE_LEASE_MS || 5 * 60_000))
@@ -52,34 +66,48 @@ export async function drainQueueOnce(queue, deps = {}) {
   finally { drainingQueues.delete(lockKey) }
 }
 
-async function drainQueueUnlocked(queue, deps = {}) {
+// Avalia, em modo SOMENTE-LEITURA, se a fila pode drenar agora. Devolve o
+// código do motivo do bloqueio (ver QUEUE_BLOCK_REASONS) ou `null` quando está
+// liberada. Extraído do dispatcher para ser reutilizado pela rota (GET /) que
+// expõe o motivo na UI — assim "fila travada com itens pendentes" deixa de ser
+// um mistério silencioso e o usuário vê POR QUE nada está saindo (bot offline,
+// fora do horário, limite atingido etc.). NÃO faz claim nem envio.
+export async function evaluateQueueGate(queue, deps = {}) {
   const db = deps.db ?? dbDefault
   const isRunning = deps.isRunning ?? isRunningDefault
+  const now = deps.now ? deps.now() : new Date()
+  if (!queue.enabled) return 'queue_disabled'
+  if (!await isRunning(queue.userId)) return 'bot_offline'
+  // Horário por fila (override) vs. janela silenciosa global.
+  if (queue.operatingHoursEnabled) {
+    if (isOutsideOperatingHours(now, queue.operatingHoursStart, queue.operatingHoursEnd)) return 'outside_operating_hours'
+  } else {
+    const botConfig = await db.botConfig?.findFirst?.({ where: { userId: queue.userId } })
+    if (botConfig?.quietHoursEnabled === true && quietHoursState(now.getTime(), parseQuietHours(botConfig.channelQuietHoursJson)).inQuiet) return 'quiet_hours'
+  }
+  if (queue.intervalEnabled && queue.lastSentAt && now - new Date(queue.lastSentAt) < queue.intervalMinutes * 60_000) return 'interval_limit'
+  if (queue.hourlyCapEnabled) {
+    const count = await db.offerQueueItem.count({ where: { queueId: queue.id, userId: queue.userId, status: 'sent', sentAt: { gte: new Date(now.getTime() - 3_600_000) } } })
+    if (count >= queue.hourlyCap) return 'hourly_limit'
+  }
+  if (queue.dailyCapEnabled) {
+    const count = await db.offerQueueItem.count({ where: { queueId: queue.id, userId: queue.userId, status: 'sent', sentAt: { gte: startOfSaoPauloDayUtc(now) } } })
+    if (count >= queue.dailyCap) return 'daily_limit'
+  }
+  return null
+}
+
+async function drainQueueUnlocked(queue, deps = {}) {
+  const db = deps.db ?? dbDefault
   const sendBroadcast = deps.sendBroadcast ?? sendBroadcastDefault
   const now = deps.now ? deps.now() : new Date()
   if (!queue.enabled) return { skipped: 'queue_disabled' }
   const currentQueue = await db.offerQueue.findFirst({ where: { id: queue.id, userId: queue.userId, enabled: true } })
   if (!currentQueue) return { skipped: 'queue_disabled' }
   queue = currentQueue
-  if (!await isRunning(queue.userId)) return { skipped: 'bot_offline' }
-  // Horário por fila (override) vs. janela silenciosa global. Centralizado aqui
-  // porque é o único ponto que conhece o objeto `queue` e pode carregar o
-  // BotConfig do usuário antes de o envio sair pelo caminho IPC.
-  if (queue.operatingHoursEnabled) {
-    if (isOutsideOperatingHours(now, queue.operatingHoursStart, queue.operatingHoursEnd)) return { skipped: 'outside_operating_hours' }
-  } else {
-    const botConfig = await db.botConfig?.findFirst?.({ where: { userId: queue.userId } })
-    if (botConfig?.quietHoursEnabled === true && quietHoursState(now.getTime(), parseQuietHours(botConfig.channelQuietHoursJson)).inQuiet) return { skipped: 'quiet_hours' }
-  }
-  if (queue.intervalEnabled && queue.lastSentAt && now - new Date(queue.lastSentAt) < queue.intervalMinutes * 60_000) return { skipped: 'interval_limit' }
-  if (queue.hourlyCapEnabled) {
-    const count = await db.offerQueueItem.count({ where: { queueId: queue.id, userId: queue.userId, status: 'sent', sentAt: { gte: new Date(now.getTime() - 3_600_000) } } })
-    if (count >= queue.hourlyCap) return { skipped: 'hourly_limit' }
-  }
-  if (queue.dailyCapEnabled) {
-    const count = await db.offerQueueItem.count({ where: { queueId: queue.id, userId: queue.userId, status: 'sent', sentAt: { gte: startOfSaoPauloDayUtc(now) } } })
-    if (count >= queue.dailyCap) return { skipped: 'daily_limit' }
-  }
+  // Gate centralizado (mesma lógica usada pelo diagnóstico read-only da rota).
+  const gate = await evaluateQueueGate(queue, deps)
+  if (gate) return { skipped: gate }
   const item = await db.offerQueueItem.findFirst({
     where: {
       queueId: queue.id,

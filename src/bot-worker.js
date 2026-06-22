@@ -42,6 +42,7 @@ import { mutate as mutateChannelImage } from './core/imageMutation.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
+import { calcBackoffDelayMs, registerReplacedAndDecide } from './core/reconnectPolicy.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
@@ -646,6 +647,15 @@ const SEND_RETRY_MAX_MS = Math.max(SEND_RETRY_BASE_MS, envNumber('SEND_RETRY_MAX
 const RECONNECT_BASE_MS = Math.max(1_000, envNumber('RECONNECT_BASE_MS', 5_000))
 const RECONNECT_MAX_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_MAX_MS', 5 * 60_000))
 const FETCH_WA_VERSION_TIMEOUT_MS = Math.max(5_000, envNumber('FETCH_WA_VERSION_TIMEOUT_MS', 10_000))
+// connectionReplaced (440): outro socket assumiu a MESMA credencial. Reconectar
+// rápido só perpetua o ping-pong (e o spam de notificação de sincronização).
+// Cooldown longo + detecção de surto na janela abaixo. Ver core/reconnectPolicy.js.
+const RECONNECT_REPLACED_DELAY_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_REPLACED_DELAY_MS', RECONNECT_MAX_MS))
+const RECONNECT_REPLACED_WINDOW_MS = Math.max(10_000, envNumber('RECONNECT_REPLACED_WINDOW_MS', 5 * 60_000))
+const RECONNECT_REPLACED_GIVEUP_THRESHOLD = Math.max(2, envNumber('RECONNECT_REPLACED_GIVEUP_THRESHOLD', 3))
+// Keep-alive do socket: sem ping periódico, um socket morto silenciosamente só
+// é detectado tarde, causando reconexão (e nova notificação). 25s é conservador.
+const WA_KEEPALIVE_INTERVAL_MS = Math.max(10_000, envNumber('WA_KEEPALIVE_INTERVAL_MS', 25_000))
 const SHUTDOWN_DRAIN_TIMEOUT_MS = Math.max(0, envNumber('SHUTDOWN_DRAIN_TIMEOUT_MS', 15_000))
 // Timeout duro em volta de cada sock.sendMessage/relayMessage. Sem isso, um
 // socket Baileys silenciosamente morto trava o await indefinidamente, e como
@@ -1322,11 +1332,12 @@ async function createSendBackend() {
 
 let startBotInFlight = false
 let reconnectAttempts = 0
+// Timestamps de eventos connectionReplaced (440) na janela deslizante. NÃO é
+// zerado num `open` curto — é justamente quando o ping-pong reabre a cada ciclo.
+let replacedTimestamps = []
 
 function calcReconnectDelayMs() {
-  const base = Math.min(RECONNECT_BASE_MS * Math.pow(2, reconnectAttempts), RECONNECT_MAX_MS)
-  const jitter = base * 0.2 * (Math.random() * 2 - 1)
-  return Math.round(base + jitter)
+  return calcBackoffDelayMs(reconnectAttempts, { baseMs: RECONNECT_BASE_MS, maxMs: RECONNECT_MAX_MS })
 }
 
 async function fetchVersionCached() {
@@ -1409,6 +1420,18 @@ async function startBotInner() {
     version,
     auth: state,
     printQRInTerminal: false,
+    // Não anunciar presença "online" a cada conexão: é um bot de
+    // encaminhamento, não precisa aparecer online, e isso reduz churn de
+    // sinal com o celular (e a chance de re-sync visível). Recebimento/envio
+    // de mensagens independem de presença.
+    markOnlineOnConnect: false,
+    // Explicitamente sem sync de histórico completo (já é o default): mantém o
+    // companion leve. O `messaging-history.set` de chats recentes continua
+    // chegando — é o que alimenta "Canais que sigo".
+    syncFullHistory: false,
+    // Ping periódico para detectar socket morto cedo, em vez de descobrir tarde
+    // e reconectar (cada reconexão = nova notificação de sincronização no app).
+    keepAliveIntervalMs: WA_KEEPALIVE_INTERVAL_MS,
     logger: instrumentBaileysLoggerForHealth(logger.child({ name: 'baileys' })),
   })
 
@@ -1528,6 +1551,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       const code = new Boom(lastDisconnect?.error)?.output?.statusCode
       const isLoggedOut = code === DisconnectReason.loggedOut
       const isRestartRequired = code === DisconnectReason.restartRequired
+      const isConnectionReplaced = code === DisconnectReason.connectionReplaced
       const wasPairing = pairingState.suppressAutoRestart()
       activeSock = null
       pendingSock = null
@@ -1550,6 +1574,33 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // não-515 durante pairing: NÃO auto-reiniciar agora. Se o usuário
         // falhar em colar o código a tempo, a UI chamará novamente o endpoint.
         logger.warn({ code }, 'WA close durante pairing (não-515) — não reiniciando automaticamente')
+      } else if (isConnectionReplaced) {
+        // Outro socket assumiu a MESMA credencial (worker duplicado /
+        // double-possession — vide AGENTS.md "WhatsApp caindo toda hora").
+        // Reconectar em 5s só nos faz substituir o outro socket de volta: cada
+        // ciclo dispara um `open` novo e a notificação "sincronização concluída"
+        // no celular — spam a cada poucos segundos. Em vez disso usamos um
+        // cooldown LONGO (não some, mas recupera sozinho se o duplicado morrer)
+        // e, em surto, escalamos o log + sinal operacional para diagnóstico.
+        const now = Date.now()
+        const r = registerReplacedAndDecide(replacedTimestamps, now, {
+          windowMs: RECONNECT_REPLACED_WINDOW_MS,
+          giveUpThreshold: RECONNECT_REPLACED_GIVEUP_THRESHOLD,
+        })
+        replacedTimestamps = r.timestamps
+        // `open` curto não zera reconnectAttempts a nosso favor aqui; usamos um
+        // delay fixo longo, independente do backoff de closes genéricos.
+        const delayMs = RECONNECT_REPLACED_DELAY_MS
+        if (r.escalate) {
+          logger.error(
+            { code, replacedCount: r.count, windowMs: RECONNECT_REPLACED_WINDOW_MS, delayMs },
+            'Sessão WA substituída repetidamente por outro socket na mesma credencial — provável worker duplicado/double-possession. Verifique BOT_SUPERVISOR_MODE e workers órfãos. Reconectando com cooldown longo.'
+          )
+          try { recordOperationalSignal('wa_connection_replaced', { userId, replacedCount: r.count }) } catch {}
+        } else {
+          logger.warn({ code, replacedCount: r.count, delayMs }, 'WA conexão substituída (replaced/440) — cooldown longo para evitar ping-pong')
+        }
+        setTimeout(startBot, delayMs)
       } else {
         const delayMs = calcReconnectDelayMs()
         reconnectAttempts++
