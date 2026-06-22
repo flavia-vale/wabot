@@ -7,12 +7,24 @@ import { ProFeaturePaywall } from '@/components/ProFeaturePaywall'
 import { hasProLikeAccess } from '@/lib/planEntitlements'
 import { PainelContentActions, usePainelHeader } from '../PainelShell'
 
-const EMPTY = { name: '', enabled: true, intervalEnabled: false, intervalMinutes: 30, hourlyCapEnabled: false, hourlyCap: 10, dailyCapEnabled: false, dailyCap: 50, targetJids: [] }
+const EMPTY = { name: '', enabled: true, intervalEnabled: false, intervalMinutes: 30, hourlyCapEnabled: false, hourlyCap: 10, dailyCapEnabled: false, dailyCap: 50, operatingHoursEnabled: false, operatingHoursStart: '08:00', operatingHoursEnd: '22:00', targetJids: [] }
 const LIMITS = [
   ['intervalEnabled', 'intervalMinutes', 'Intervalo mínimo entre ofertas', 'minutos'],
   ['hourlyCapEnabled', 'hourlyCap', 'Máximo de ofertas por hora', 'ofertas'],
   ['dailyCapEnabled', 'dailyCap', 'Máximo de ofertas por dia', 'ofertas'],
 ]
+const ITEM_STATUS = {
+  pending: { label: 'Aguardando', cls: 'is-flight' },
+  queued: { label: 'Na fila de envio', cls: 'is-flight' },
+  sent: { label: 'Enviada', cls: 'is-success' },
+  cancelled: { label: 'Cancelada', cls: 'is-skip' },
+}
+
+function formatItemDate(value) {
+  if (!value) return '—'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
 
 export default function FilasPage() {
   usePainelHeader({ title: 'Filas', subtitle: 'Organize ofertas e preserve o ritmo de envio automaticamente' })
@@ -46,7 +58,7 @@ export default function FilasPage() {
   useEffect(() => { load(); loadGroups() }, [])
 
   function openCreate() { setEditing(null); setForm(EMPTY); setShowForm(true); setMessage(''); setNotice('') }
-  function openEdit(queue) { setEditing(queue.id); setForm({ ...EMPTY, ...queue }); setShowForm(true); setMessage(''); setNotice('') }
+  function openEdit(queue) { setEditing(queue.id); setForm({ ...EMPTY, ...queue, operatingHoursStart: queue.operatingHoursStart || EMPTY.operatingHoursStart, operatingHoursEnd: queue.operatingHoursEnd || EMPTY.operatingHoursEnd }); setShowForm(true); setMessage(''); setNotice('') }
   async function save(event) {
     event.preventDefault(); setMessage('')
     if (!form.targetJids.length) { setMessage('Selecione pelo menos um grupo de destino para a fila.'); return }
@@ -94,6 +106,7 @@ export default function FilasPage() {
     if (queue.intervalEnabled) active.push(`${queue.intervalMinutes} min entre ofertas`)
     if (queue.hourlyCapEnabled) active.push(`${queue.hourlyCap}/hora`)
     if (queue.dailyCapEnabled) active.push(`${queue.dailyCap}/dia`)
+    if (queue.operatingHoursEnabled && queue.operatingHoursStart && queue.operatingHoursEnd) active.push(`funciona ${queue.operatingHoursStart}–${queue.operatingHoursEnd}`)
     return active.length ? active.join(' · ') : 'Sem limites adicionais'
   }
   const destinationsLabel = (queue) => {
@@ -101,6 +114,12 @@ export default function FilasPage() {
     if (!jids.length) return 'Todos os grupos de postagem'
     const names = jids.map((jid) => groups.find((group) => group.waJid === jid)?.name || jid)
     return names.join(' · ')
+  }
+  const itemDestinations = (jids) => {
+    const list = Array.isArray(jids) ? jids : []
+    if (!list.length) return 'Grupos da fila'
+    const names = list.map((jid) => groups.find((group) => group.waJid === jid)?.name || jid)
+    return names.length <= 2 ? names.join(' · ') : `${names.slice(0, 2).join(' · ')} +${names.length - 2}`
   }
 
   // Feature Pro: sem o plano, a página vira paywall mantendo só a
@@ -147,6 +166,14 @@ export default function FilasPage() {
         {!groups.length && <p className="pnl-note-box is-error" style={{ marginTop: 8 }}>Nenhum grupo de postagem configurado. <Link href="/painel/grupos">Adicionar grupos</Link></p>}
       </div>
       <div className="pnl-grid" style={{ marginTop: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>{LIMITS.map(([toggle, value, label, unit]) => <div className="pnl-card" key={toggle} style={{ boxShadow: 'none' }}><label className="pnl-check"><input type="checkbox" checked={form[toggle]} onChange={(e) => setForm((current) => ({ ...current, [toggle]: e.target.checked }))} />{label}</label>{form[toggle] && <div className="pnl-field" style={{ marginTop: 12 }}><label className="pnl-label" htmlFor={value}>Valor ({unit})</label><input id={value} className="pnl-input" type="number" min="1" step="1" value={form[value]} onChange={(e) => setForm((current) => ({ ...current, [value]: Number(e.target.value) }))} required /></div>}</div>)}</div>
+      <div className="pnl-card" style={{ marginTop: 16, boxShadow: 'none' }}>
+        <label className="pnl-check"><input type="checkbox" checked={form.operatingHoursEnabled} onChange={(e) => setForm((current) => ({ ...current, operatingHoursEnabled: e.target.checked }))} />Selecionar horário de funcionamento SÓ dessa fila?</label>
+        <p className="pnl-hint" style={{ marginTop: 6 }}>Se marcado, esta fila obedece somente ao horário definido aqui e ignora a janela silenciosa global das configurações. Se desmarcado, a fila segue a janela silenciosa global.</p>
+        {form.operatingHoursEnabled && <div className="pnl-grid" style={{ marginTop: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
+          <div className="pnl-field"><label className="pnl-label" htmlFor="operatingHoursStart">Início</label><input id="operatingHoursStart" className="pnl-input" type="time" value={form.operatingHoursStart} onChange={(e) => setForm((current) => ({ ...current, operatingHoursStart: e.target.value }))} required /></div>
+          <div className="pnl-field"><label className="pnl-label" htmlFor="operatingHoursEnd">Fim</label><input id="operatingHoursEnd" className="pnl-input" type="time" value={form.operatingHoursEnd} onChange={(e) => setForm((current) => ({ ...current, operatingHoursEnd: e.target.value }))} required /></div>
+        </div>}
+      </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 16 }}><button className="pnl-btn is-primary" type="submit">Salvar fila</button><button className="pnl-btn" type="button" onClick={() => setShowForm(false)}>Cancelar</button></div>
     </form>}
     {loading ? <div className="pnl-card">Carregando filas…</div> : !queues.length ? <div className="pnl-card"><div className="pnl-card-title">Nenhuma fila criada</div><p className="pnl-hint" style={{ marginTop: 6 }}>Crie uma fila para distribuir ofertas automaticamente ao longo do dia.</p><button className="pnl-btn is-primary" style={{ marginTop: 14 }} onClick={openCreate}>Criar primeira fila</button></div> : queues.map((queue) => <section className="pnl-card" key={queue.id} style={{ opacity: queue.enabled ? 1 : 0.76 }}>
@@ -181,7 +208,26 @@ export default function FilasPage() {
         <button className="pnl-btn" onClick={() => toggleItems(queue.id)}>{items[queue.id] ? 'Ocultar itens' : 'Ver itens'}</button>
         <button className="pnl-btn" onClick={() => remove(queue)}>Excluir</button>
       </div>
-      {items[queue.id] && <div className="pnl-grid" style={{ marginTop: 14 }}>{!items[queue.id].length ? <p className="pnl-hint">Fila vazia.</p> : items[queue.id].map((item) => <div key={item.id} style={{ borderTop: '1px solid var(--line)', paddingTop: 12, display: 'flex', justifyContent: 'space-between', gap: 12 }}><div style={{ minWidth: 0 }}><p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 72, overflow: 'hidden' }}>{item.text}</p><span className="pnl-hint">{item.status} · posição {item.position} · {new Date(item.createdAt).toLocaleString('pt-BR')}</span></div>{item.status === 'pending' && <button className="pnl-btn" onClick={() => cancelItem(queue.id, item.id)}>Remover</button>}</div>)}</div>}
+      {items[queue.id] && <div className="pnl-grid" style={{ marginTop: 14, gap: 10 }}>{!items[queue.id].length ? <p className="pnl-hint">Fila vazia — nenhum item cadastrado ainda.</p> : items[queue.id].map((item) => {
+        const status = ITEM_STATUS[item.status] || { label: item.status, cls: '' }
+        return <div key={item.id} className="pnl-card" style={{ boxShadow: 'none', padding: 14, display: 'flex', gap: 12, alignItems: 'flex-start', opacity: item.status === 'cancelled' ? 0.6 : 1 }}>
+          {item.imageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={item.imageUrl} alt="" width={52} height={52} style={{ width: 52, height: 52, borderRadius: 8, objectFit: 'cover', flex: '0 0 auto', border: '1px solid var(--line)' }} />
+          )}
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+              <span className={`pnl-tag ${status.cls}`}>{status.label}</span>
+              <span className="pnl-hint">#{item.position}</span>
+              <span className="pnl-hint">{formatItemDate(item.createdAt)}</span>
+            </div>
+            <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 80, overflow: 'hidden', margin: 0, fontSize: 13.5, lineHeight: 1.5 }}>{item.text}</p>
+            <p className="pnl-hint" style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}><span aria-hidden="true">📨</span><span>{itemDestinations(item.targetJids)}</span></p>
+            {item.lastError && <p className="pnl-hint" style={{ marginTop: 6, color: 'var(--danger, #b91c1c)' }}>Última tentativa falhou — será reenviada automaticamente.</p>}
+          </div>
+          {item.status === 'pending' && <button className="pnl-btn is-danger" onClick={() => cancelItem(queue.id, item.id)}>Remover</button>}
+        </div>
+      })}</div>}
     </section>)}
   </div>
 }

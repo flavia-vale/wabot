@@ -5,6 +5,9 @@ import {
   stripChannelUnsafeFields,
   isChannelDestination,
   isChannelForbiddenError,
+  buildRelayProto,
+  injectChannelForwardIntoPayload,
+  normalizeChannelForwardJid,
 } from '../../src/core/channelSend.js'
 
 test('isChannelDestination', async (t) => {
@@ -84,6 +87,184 @@ test('stripChannelUnsafeFields', async (t) => {
     const input = { text: 'oi', quoted: { x: 1 } }
     stripChannelUnsafeFields(input)
     assert.deepEqual(input.quoted, { x: 1 }, 'input original não deve ser mutado')
+  })
+})
+
+test('buildRelayProto', async (t) => {
+  await t.test('null/undefined passa adiante', () => {
+    assert.equal(buildRelayProto(null), null)
+    assert.equal(buildRelayProto(undefined), undefined)
+  })
+
+  await t.test('troca o caption e não muta o proto original', () => {
+    const proto = { url: 'https://x', mediaKey: Buffer.from('k'), caption: 'antigo' }
+    const result = buildRelayProto(proto, { caption: 'novo' })
+    assert.equal(result.caption, 'novo')
+    assert.equal(result.url, 'https://x')
+    assert.ok(Buffer.isBuffer(result.mediaKey))
+    assert.equal(proto.caption, 'antigo', 'input não deve ser mutado')
+    assert.notEqual(result, proto)
+  })
+
+  await t.test('caption ausente preserva o caption original', () => {
+    const proto = { caption: 'mantém' }
+    const result = buildRelayProto(proto, {})
+    assert.equal(result.caption, 'mantém')
+  })
+
+  await t.test('remove o botão "Ver canal" de terceiros (forwardedNewsletterMessageInfo)', () => {
+    const proto = {
+      url: 'https://x',
+      contextInfo: {
+        forwardedNewsletterMessageInfo: { newsletterJid: 'origem@newsletter', serverMessageId: 99 },
+      },
+    }
+    const result = buildRelayProto(proto, { caption: 'oferta' })
+    assert.equal(result.contextInfo, undefined, 'contextInfo só tinha newsletter → some inteiro')
+  })
+
+  await t.test('preserva o marcador genérico isForwarded ao remover só o botão de canal', () => {
+    const proto = {
+      contextInfo: {
+        forwardedNewsletterMessageInfo: { newsletterJid: 'origem@newsletter' },
+        isForwarded: true,
+      },
+    }
+    const result = buildRelayProto(proto, {})
+    assert.deepEqual(result.contextInfo, { isForwarded: true })
+  })
+
+  await t.test('remove externalAdReply herdado (drop silencioso no WhatsApp)', () => {
+    const proto = { contextInfo: { externalAdReply: { title: 'spam' } } }
+    const result = buildRelayProto(proto, {})
+    assert.equal(result.contextInfo, undefined)
+  })
+
+  await t.test('preserva outros campos de contextInfo ao limpar o newsletter', () => {
+    const proto = {
+      contextInfo: {
+        forwardedNewsletterMessageInfo: { newsletterJid: 'origem@newsletter' },
+        mentionedJid: ['abc@s.whatsapp.net'],
+      },
+    }
+    const result = buildRelayProto(proto, {})
+    assert.deepEqual(result.contextInfo, { mentionedJid: ['abc@s.whatsapp.net'] })
+  })
+
+  await t.test('injeta o canal do próprio usuário substituindo o de terceiros', () => {
+    const proto = {
+      contextInfo: {
+        forwardedNewsletterMessageInfo: { newsletterJid: 'origem@newsletter', serverMessageId: 5 },
+      },
+    }
+    const result = buildRelayProto(proto, {
+      caption: 'oferta',
+      forwardNewsletter: { newsletterJid: 'meu@newsletter', newsletterName: 'Meu Canal', serverMessageId: 42 },
+    })
+    assert.deepEqual(result.contextInfo.forwardedNewsletterMessageInfo, {
+      newsletterJid: 'meu@newsletter',
+      newsletterName: 'Meu Canal',
+      serverMessageId: 42,
+    })
+    assert.equal(result.contextInfo.isForwarded, true)
+  })
+
+  await t.test('injeção sem serverMessageId omite o campo', () => {
+    const result = buildRelayProto({}, {
+      forwardNewsletter: { newsletterJid: 'meu@newsletter', newsletterName: 'Meu Canal' },
+    })
+    assert.equal(result.contextInfo.forwardedNewsletterMessageInfo.serverMessageId, undefined)
+    assert.equal(result.contextInfo.forwardedNewsletterMessageInfo.newsletterJid, 'meu@newsletter')
+  })
+
+  await t.test('forwardNewsletter sem newsletterJid não injeta (apenas limpa)', () => {
+    const proto = { contextInfo: { forwardedNewsletterMessageInfo: { newsletterJid: 'origem@newsletter' } } }
+    const result = buildRelayProto(proto, { forwardNewsletter: { newsletterName: 'sem jid' } })
+    assert.equal(result.contextInfo, undefined)
+  })
+
+  await t.test('não muta o contextInfo do input', () => {
+    const proto = { contextInfo: { forwardedNewsletterMessageInfo: { newsletterJid: 'origem@newsletter' } } }
+    buildRelayProto(proto, {})
+    assert.deepEqual(proto.contextInfo, { forwardedNewsletterMessageInfo: { newsletterJid: 'origem@newsletter' } }, 'input intacto')
+  })
+})
+
+test('injectChannelForwardIntoPayload', async (t) => {
+  const channel = { newsletterJid: '120363000000000000@newsletter', newsletterName: 'Meu Canal' }
+
+  await t.test('null/sem canal → no-op (payload intacto)', () => {
+    const payload = { primary: { image: Buffer.from('x') }, fallbacks: [] }
+    assert.equal(injectChannelForwardIntoPayload(payload, null), payload)
+    assert.equal(injectChannelForwardIntoPayload(payload, {}), payload)
+    assert.equal(injectChannelForwardIntoPayload(payload, { newsletterName: 'sem jid' }), payload)
+    assert.equal(injectChannelForwardIntoPayload(null, channel), null)
+  })
+
+  await t.test('NÃO injeta em corpo cru de texto (mídia-only; evita drop no WhatsApp)', () => {
+    const result = injectChannelForwardIntoPayload({ text: 'oferta' }, channel)
+    assert.equal(result.contextInfo, undefined)
+    assert.equal(result.text, 'oferta')
+  })
+
+  await t.test('injeta o botão em corpo cru de imagem', () => {
+    const result = injectChannelForwardIntoPayload({ image: Buffer.from('x'), caption: 'oferta' }, channel)
+    assert.equal(result.caption, 'oferta')
+    assert.deepEqual(result.contextInfo.forwardedNewsletterMessageInfo, {
+      newsletterJid: '120363000000000000@newsletter',
+      newsletterName: 'Meu Canal',
+    })
+    assert.equal(result.contextInfo.isForwarded, true)
+  })
+
+  await t.test('injeta no primary de imagem mas NÃO no fallback de texto', () => {
+    const payload = {
+      _route: 'image',
+      primary: { image: Buffer.from('x'), caption: 'c' },
+      fallbacks: [{ text: 'fb' }],
+    }
+    const result = injectChannelForwardIntoPayload(payload, channel)
+    assert.equal(result.primary.contextInfo.forwardedNewsletterMessageInfo.newsletterJid, channel.newsletterJid)
+    assert.equal(result.fallbacks[0].contextInfo, undefined, 'fallback de texto não leva botão')
+    // primary mantém a mídia original
+    assert.equal(result.primary.image, payload.primary.image)
+  })
+
+  await t.test('payload só-texto (formato { primary }) sai intacto', () => {
+    const payload = { _route: 'text', primary: { text: 'oi' }, fallbacks: [] }
+    const result = injectChannelForwardIntoPayload(payload, channel)
+    assert.equal(result.primary.contextInfo, undefined)
+  })
+
+  await t.test('preserva contextInfo já existente e não muta o input (corpo de imagem)', () => {
+    const payload = { image: Buffer.from('x'), contextInfo: { mentionedJid: ['a@x'] } }
+    const result = injectChannelForwardIntoPayload(payload, channel)
+    assert.deepEqual(result.contextInfo.mentionedJid, ['a@x'])
+    assert.equal(payload.contextInfo.forwardedNewsletterMessageInfo, undefined, 'input intacto')
+  })
+
+  await t.test('serverMessageId é incluído quando presente (corpo de imagem)', () => {
+    const result = injectChannelForwardIntoPayload({ image: Buffer.from('x') }, { ...channel, serverMessageId: 42 })
+    assert.equal(result.contextInfo.forwardedNewsletterMessageInfo.serverMessageId, 42)
+  })
+})
+
+test('normalizeChannelForwardJid', async (t) => {
+  await t.test('vazio/whitespace → string vazia (limpa o campo)', () => {
+    assert.equal(normalizeChannelForwardJid(''), '')
+    assert.equal(normalizeChannelForwardJid('   '), '')
+    assert.equal(normalizeChannelForwardJid(null), '')
+    assert.equal(normalizeChannelForwardJid(undefined), '')
+  })
+  await t.test('JID de newsletter válido passa', () => {
+    assert.equal(normalizeChannelForwardJid('120363425953507343@newsletter'), '120363425953507343@newsletter')
+    assert.equal(normalizeChannelForwardJid('  120363425953507343@newsletter  '), '120363425953507343@newsletter')
+  })
+  await t.test('formato inválido → null (rota deve 400)', () => {
+    assert.equal(normalizeChannelForwardJid('abc@newsletter'), null)
+    assert.equal(normalizeChannelForwardJid('120363425953507343@g.us'), null)
+    assert.equal(normalizeChannelForwardJid('120363425953507343'), null)
+    assert.equal(normalizeChannelForwardJid('https://wa.me/canal'), null)
   })
 })
 

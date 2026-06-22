@@ -197,6 +197,65 @@ test('runAutomation: distingue all_offers_filtered de no_offers_found', async ()
   assert.deepEqual(empty, { skipped: 'no_offers_found' })
 })
 
+test('runAutomation: rotaciona a página — usa a página salva e avança no envio bem-sucedido', async () => {
+  const updates = []
+  let fetchedPage
+  const dbOverride = {
+    credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'a', secretKey: 's' }) }) },
+    botConfig: { findUnique: async () => ({ copyVariationPoolJson: '{}' }) },
+    offerAutomation: { update: async ({ data }) => { updates.push(data); return {} } },
+    offerAutomationSentLog: { findMany: async () => [], createMany: async () => ({}), deleteMany: async () => ({}) },
+  }
+  const result = await runAutomation(baseAutomation({ page: 3, minDiscountPct: 0 }), {
+    dbOverride,
+    isRunningFn: () => true,
+    fetchOffersFn: async ({ page }) => {
+      fetchedPage = page
+      return { rawCount: 1, offers: [{ itemId: '1', productName: 'Flor', priceMin: 10, priceDiscountRate: 20, offerLink: 'https://s.pe/1' }] }
+    },
+    sendBroadcastFn: async () => ({ queued: 1 }),
+  })
+  assert.deepEqual(result, { sent: 1 })
+  assert.equal(fetchedPage, 3, 'busca deve usar a página salva')
+  assert.equal(updates[0].page, 4, 'envio bem-sucedido avança a página')
+})
+
+test('runAutomation: avança a página mesmo quando tudo é filtrado (não fica preso na mesma página)', async () => {
+  const updates = []
+  let fetchedPage
+  const dbOverride = {
+    credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'a', secretKey: 's' }) }) },
+    botConfig: { findUnique: async () => ({ copyVariationPoolJson: '{}' }) },
+    offerAutomation: { update: async ({ data }) => { updates.push(data); return {} } },
+    offerAutomationSentLog: { findMany: async () => [], createMany: async () => ({}), deleteMany: async () => ({}) },
+  }
+  const result = await runAutomation(baseAutomation({ page: 2 }), {
+    dbOverride,
+    isRunningFn: () => true,
+    fetchOffersFn: async ({ page }) => { fetchedPage = page; return { rawCount: 8, offers: [] } },
+  })
+  assert.deepEqual(result, { skipped: 'all_offers_filtered' })
+  assert.equal(fetchedPage, 2)
+  assert.equal(updates[0].page, 3, 'mesmo sem enviar, avança a página para o próximo disparo')
+})
+
+test('runAutomation: volta para a página 1 quando a página atual esgota (rawCount 0)', async () => {
+  const updates = []
+  const dbOverride = {
+    credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'a', secretKey: 's' }) }) },
+    botConfig: { findUnique: async () => ({ copyVariationPoolJson: '{}' }) },
+    offerAutomation: { update: async ({ data }) => { updates.push(data); return {} } },
+    offerAutomationSentLog: { findMany: async () => [], createMany: async () => ({}), deleteMany: async () => ({}) },
+  }
+  const result = await runAutomation(baseAutomation({ page: 7 }), {
+    dbOverride,
+    isRunningFn: () => true,
+    fetchOffersFn: async () => ({ rawCount: 0, offers: [] }),
+  })
+  assert.deepEqual(result, { skipped: 'no_offers_found' })
+  assert.equal(updates[0].page, 1, 'página vazia faz a rotação voltar para 1')
+})
+
 test('runAutomation: curto-circuita quando isRunning é assíncrono (modo remote) e devolve false', async () => {
   // Regressão: no modo remote isRunning devolve Promise. Sem await, `!Promise`
   // era sempre false e o guard era ignorado — seguia pro sendBroadcast e

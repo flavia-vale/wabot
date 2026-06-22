@@ -467,12 +467,26 @@ async function validateAffiliateRedirect(affiliateUrl, expectedMlbId) {
 
 const ML_HOST = /mercadolivre|mercadolibre|meli\.la|mluvem\.com/
 
+// `mercadolivre.com/sec/<código>` é o formato NOVO de short link de afiliado do
+// ML (o mesmo que a API createLink devolve). O código pertence a quem o gerou —
+// pendurar `?partner_id=` nele NÃO transfere a comissão (o ML credita o dono do
+// short link). Por isso tratamos como meli.la/mluvem.com: resolver até a URL real
+// antes de reconverter com a tag da usuária.
+function isMlAffiliateShortLink(rawUrl) {
+  try {
+    const u = new URL(rawUrl)
+    return ML_HOST.test(u.hostname) && /^\/sec\//i.test(u.pathname)
+  } catch {
+    return false
+  }
+}
+
 export async function resolveToCleanProductUrl(url) {
   try {
     if (!ML_HOST.test(new URL(url).hostname)) return null
 
     let target = url
-    if (/meli\.la|mluvem\.com/.test(url)) {
+    if (/meli\.la|mluvem\.com/.test(url) || isMlAffiliateShortLink(url)) {
       target = await resolve(url)
     }
 
@@ -493,9 +507,22 @@ export async function resolveToCleanProductUrl(url) {
         target = `https://produto.mercadolivre.com.br/${widMlb}-x-_JM`
       } else {
         const u = new URL(target)
-        if (/^\/social\//i.test(u.pathname) || /(?:^|\/)up\//i.test(u.pathname) || /^\/$/.test(u.pathname)) {
+        // `/sec/` ainda presente aqui = não conseguimos resolver o short link de
+        // afiliado de terceiro (resolve falhou / muro anti-bot). Encaminhá-lo com
+        // um partner_id cosmético vazaria comissão pro dono do código, então o
+        // tratamos como as landings /social/ e /up/: tenta extrair produto; sem
+        // produto, retorna null (não encaminha).
+        if (
+          /^\/social\//i.test(u.pathname) ||
+          /(?:^|\/)up\//i.test(u.pathname) ||
+          /^\/sec\//i.test(u.pathname) ||
+          /^\/$/.test(u.pathname)
+        ) {
           const extracted = await tryExtractProductFromLanding(preCanonical)
+          // Se não conseguimos extrair um produto real de uma landing /social/,
+          // /up/ ou /sec/, retornar null é melhor que encaminhar o link de terceiro.
           if (extracted) target = extracted
+          else return null
         }
       }
     }

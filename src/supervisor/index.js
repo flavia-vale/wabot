@@ -19,19 +19,25 @@ import Redis from 'ioredis'
 import db from '../db.js'
 import logger from '../logger.js'
 import * as sessionCore from '../core/sessionCore.js'
+import { buildRedisOptions } from '../core/redisFactory.js'
 import { buildShardTag, normalizeShardCount, shouldHandleUserOnShard } from './sharding.js'
+import { checkSupervisorEnvConsistency, supervisorManagesSessions, supervisorShouldAutoResume } from './envGuard.js'
 import { createRestartBudget, RESTART_BUDGET_MAX, RESTART_BUDGET_WINDOW_MS, RESTART_QUARANTINE_MS } from './restartBudget.js'
 import { parseEnumEnv, logModeSummary } from '../core/envModes.js'
 import {
   COMMAND,
   COMMAND_QUEUE,
+  COMMAND_TIMEOUTS_MS,
   EVENT,
   EVENTS_CHANNEL,
   SUPERVISOR_HEARTBEAT_KEY,
   SUPERVISOR_HEARTBEAT_RENEW_INTERVAL_MS,
   SUPERVISOR_HEARTBEAT_TTL_SECONDS,
   encodeEvent,
+  isCommandStale,
   isKnownCommand,
+  lastEventCacheTtlSeconds,
+  lastEventKey,
   resolveRedisUrl,
 } from './protocol.js'
 
@@ -41,8 +47,26 @@ if (!REDIS_URL) {
   process.exit(1)
 }
 
-const publisher = new Redis(REDIS_URL, { lazyConnect: false, maxRetriesPerRequest: null })
-publisher.on('error', err => logger.warn({ err: err.message }, 'Publisher Redis error'))
+// Fail-fast contra "supervisor rodando do diretório/ambiente errado" (incidente
+// 2026-06): se APP_ENV não bater com o cwd ou com a Redis DB, o supervisor
+// consumiria a fila de comandos do ambiente errado e subiria "saudável" sem
+// drenar nada. Melhor abortar no boot do que estourar timeout em toda rota.
+const envCheck = checkSupervisorEnvConsistency({
+  appEnv: process.env.APP_ENV,
+  cwd: process.cwd(),
+  redisUrl: REDIS_URL,
+})
+if (!envCheck.ok) {
+  logger.fatal(
+    { reason: envCheck.reason, appEnv: process.env.APP_ENV ?? null, cwd: process.cwd() },
+    'bot-supervisor: ambiente inconsistente — abortando para não consumir a fila errada',
+  )
+  process.exit(1)
+}
+
+// Config de sharding é validada no topo (antes do gate de modo) porque é pura
+// checagem de configuração, sem side-effect de Redis — um SHARD_INDEX inválido
+// é um erro de deploy que deve falhar rápido independente do modo.
 const SHARD_COUNT = normalizeShardCount(process.env.SHARD_COUNT || 1, 1)
 // Fail-fast: SHARD_INDEX precisa ser inteiro finito em [0, SHARD_COUNT). Qualquer
 // outra coisa (typo "abc", negativo, fora da faixa) faria a aritmética devolver
@@ -62,6 +86,39 @@ if (!Number.isInteger(SHARD_INDEX_PARSED) || SHARD_INDEX_PARSED < 0 || SHARD_IND
 const SHARD_INDEX = SHARD_INDEX_PARSED
 const SHARD_TAG = `shard-${SHARD_INDEX + 1}-of-${SHARD_COUNT}`
 const SESSION_OWNER_MISMATCH_KEY = `supervisor:session_owner_mismatch_total:${SHARD_TAG}`
+
+// Acopla o supervisor à MESMA flag que a API (src/manager.js) já respeita. Só
+// em `remote` o supervisor é dono das sessões; em `inline` (ou qualquer outro
+// valor) ele entra em standby logo abaixo — sem isso, api + supervisor davam
+// fork() do MESMO worker sobre o MESMO AUTH_INFO_DIR e o WhatsApp caía em loop
+// de conflito (incidente "wpp caindo toda hora" em staging). Ver envGuard.js.
+const SUPERVISOR_MODE = parseEnumEnv('BOT_SUPERVISOR_MODE', process.env.BOT_SUPERVISOR_MODE || 'inline', ['inline', 'remote'], 'inline')
+if (!supervisorManagesSessions(SUPERVISOR_MODE)) {
+  logger.warn(
+    { supervisorMode: SUPERVISOR_MODE, appEnv: process.env.APP_ENV ?? null, cwd: process.cwd() },
+    'bot-supervisor em STANDBY: BOT_SUPERVISOR_MODE != "remote" — a API gerencia as sessões inline. ' +
+      'O supervisor NÃO fará fork/resume/health/consumo de comandos para evitar dupla posse da sessão ' +
+      '(dois sockets Baileys na mesma credencial = WhatsApp caindo em loop de conflito). ' +
+      'Para ativá-lo, defina BOT_SUPERVISOR_MODE=remote no .env e reinicie API e supervisor juntos.',
+  )
+  logModeSummary('bot-supervisor', { supervisorMode: SUPERVISOR_MODE, standby: true })
+  // Mantém o processo vivo (PM2 não fica em churn de restart) sem tocar em
+  // nenhuma sessão. Sai limpo em SIGTERM/SIGINT.
+  const keepAlive = setInterval(() => {}, 60_000)
+  const standbyShutdown = signal => {
+    logger.info({ signal }, 'bot-supervisor (standby) encerrando')
+    clearInterval(keepAlive)
+    process.exit(0)
+  }
+  process.once('SIGTERM', () => standbyShutdown('SIGTERM'))
+  process.once('SIGINT', () => standbyShutdown('SIGINT'))
+} else {
+  startRemoteSupervisor()
+}
+
+function startRemoteSupervisor() {
+const publisher = new Redis(REDIS_URL, buildRedisOptions('supervisor-publisher', { lazyConnect: false, maxRetriesPerRequest: null }))
+publisher.on('error', err => logger.warn({ err: err.message }, 'Publisher Redis error'))
 let sessionOwnerMismatchTotal = 0
 
 // Teto conservador até haver medição real de RSS por worker em soak. Cada
@@ -76,6 +133,11 @@ const SESSION_QUARANTINE_KEY = `supervisor:session_quarantine_total:${SHARD_TAG}
 // Orçamento de restarts automáticos por sessão (health monitor). Start manual
 // via comando START_BOT limpa a quarentena.
 const restartBudget = createRestartBudget()
+
+// Espelha o sessionCore: AUTO_START_WHATSAPP_SESSIONS=false desliga o
+// auto-resume/ressurreição. Comandos manuais (START_BOT) e kill de zumbis
+// seguem ativos. Antes o supervisor ignorava a flag e divergia do inline.
+const AUTO_RESUME = supervisorShouldAutoResume(process.env)
 
 logModeSummary('bot-supervisor', {
   shardCount: SHARD_COUNT,
@@ -149,6 +211,21 @@ function publishEvent(userId, type, data) {
     publisher.publish(EVENTS_CHANNEL, encodeEvent({ userId, type, data }))
   } catch (err) {
     logger.warn({ err: err.message, userId, type }, 'Falha ao publicar evento')
+  }
+  cacheLastEvent(userId, type, data)
+}
+
+// Grava o último valor de QR/STATUS numa chave Redis com TTL para que um
+// assinante tardio (API reiniciada, subscriber reconectado) possa re-hidratar
+// em vez de ficar cego até a próxima publicação. Best-effort: falha aqui não
+// pode derrubar a publicação do evento ao vivo.
+function cacheLastEvent(userId, type, data) {
+  const ttl = lastEventCacheTtlSeconds(type)
+  if (!ttl) return
+  try {
+    void publisher.set(lastEventKey(userId, type), JSON.stringify(data ?? null), 'EX', ttl)
+  } catch (err) {
+    logger.warn({ err: err.message, userId, type }, 'Falha ao cachear last-event')
   }
 }
 
@@ -248,23 +325,48 @@ const COMMAND_HANDLERS = {
   [COMMAND.GET_LAST_QR]: ({ userId }) => belongsToThisShard(userId) ? sessionCore.getLastQR(userId) : null,
 }
 
+// lockDuration > maior timeout de comando (+ folga) para que handlers
+// legitimamente longos (REQUEST_PAIRING_CODE 45s, SEND_BROADCAST 30s) NÃO
+// sejam marcados como stalled e reprocessados no meio da execução — um
+// reprocesso de SEND_BROADCAST seria envio duplicado. O guard isCommandStale
+// é a segunda linha: mesmo que um stall escape, o job reentregue já estará
+// velho demais e é descartado em vez de reexecutado.
+const COMMAND_LOCK_DURATION_MS = Math.max(60_000, Math.max(...Object.values(COMMAND_TIMEOUTS_MS)) + 15_000)
+
 const worker = new Worker(
   COMMAND_QUEUE,
   async job => {
     const name = job.name
     if (!isKnownCommand(name)) throw new Error(`Comando desconhecido: ${name}`)
+    const data = job.data ?? {}
+    // Drenagem de jobs velhos / TTL de comando: se a API já desistiu de
+    // esperar, descartar em vez de executar (evita SEND_BROADCAST duplicado).
+    // Retornamos resultado (job 'completed') em vez de throw: a decisão de
+    // descartar foi bem-sucedida; ninguém está aguardando o valor.
+    if (isCommandStale(name, data._enqueuedAt)) {
+      const ageMs = Date.now() - Number(data._enqueuedAt)
+      logger.warn({ jobId: job.id, name, userId: data.userId ?? null, ageMs }, 'Comando obsoleto descartado (API já desistiu) — não executado')
+      return { _stale: true, discarded: true, ageMs }
+    }
     const handler = COMMAND_HANDLERS[name]
     if (!handler) throw new Error(`Handler ausente para ${name}`)
-    return await handler(job.data ?? {})
+    return await handler(data)
   },
   {
     connection: { url: REDIS_URL, maxRetriesPerRequest: null },
     concurrency: 8,
+    lockDuration: COMMAND_LOCK_DURATION_MS,
   },
 )
 
 worker.on('failed', (job, err) => {
   logger.warn({ jobId: job?.id, name: job?.name, err: err?.message }, 'Comando supervisor falhou')
+})
+
+worker.on('stalled', jobId => {
+  // Reprocesso por stall é tolerado: isCommandStale descarta o reentregue se já
+  // passou do timeout. Logamos para visibilidade do sinal (morte abrupta).
+  logger.warn({ jobId }, 'Comando supervisor stalled (lock expirou) — guard de staleness evita efeito duplicado no reprocesso')
 })
 
 // ---- Heartbeat ----
@@ -306,7 +408,9 @@ async function healthMonitorTick() {
 
   // (2) Ressuscita sessões persistidas que pertencem ao shard mas não estão
   // rodando localmente — cobre tanto o exit de worker (OOM/exceção) quanto
-  // o restart pós-stopBot acima no próximo tick.
+  // o restart pós-stopBot acima no próximo tick. Pulado quando o auto-resume
+  // está desligado (AUTO_START_WHATSAPP_SESSIONS=false).
+  if (!AUTO_RESUME) return
   try {
     const persisted = await db.waSession.findMany({
       where: { status: { in: ['connected', 'connecting'] } },
@@ -362,10 +466,14 @@ async function boot() {
   // Resume de sessões persistidas — guardado por try/catch por sessão. Antes
   // o loop era unguarded: uma única sessão com auth_info corrompido derrubava
   // o boot inteiro, PM2 reiniciava, mesma falha → loop de DoS auto-infligido.
+  // Pulado quando AUTO_START_WHATSAPP_SESSIONS=false (paridade com inline).
   let started = 0
   let attempted = 0
   try {
-    const persisted = await db.waSession.findMany({ where: { status: { in: ['connected', 'connecting'] } }, select: { userId: true } })
+    const persisted = AUTO_RESUME
+      ? await db.waSession.findMany({ where: { status: { in: ['connected', 'connecting'] } }, select: { userId: true } })
+      : []
+    if (!AUTO_RESUME) logger.info({ shard: SHARD_TAG }, 'AUTO_START_WHATSAPP_SESSIONS=false — supervisor não faz auto-resume (só comandos manuais)')
     attempted = persisted.length
     for (const s of persisted) {
       if (!belongsToThisShard(s.userId)) continue
@@ -427,3 +535,4 @@ boot().catch(err => {
   logger.fatal({ err: err.message }, 'Falha ao iniciar bot-supervisor')
   process.exit(1)
 })
+}

@@ -41,6 +41,66 @@ test('convert mantém short_url quando validação é inconclusiva (muro anti-bo
   assert.equal(result, 'https://mercadolivre.com/sec/2Abcd')
 })
 
+test('resolveToCleanProductUrl retorna null para /social/ sem produto extraível (sem ?ref=)', async (t) => {
+  // Sem ?ref= a página é o perfil genérico do afiliado — sem produto identificável.
+  // O mock simula resposta HTML vazia (sem recommended_items, wid, canonical MLB).
+  t.mock.method(axios, 'get', async () => ({ data: '<html><body>Perfil do vendedor</body></html>' }))
+  const url = 'https://www.mercadolivre.com.br/social/xetdaspromocoes?partner_id=475630078'
+  const clean = await resolveToCleanProductUrl(url)
+  assert.equal(clean, null)
+})
+
+test('convert retorna null para /social/ sem produto extraível (não encaminha loja de terceiro)', async (t) => {
+  t.mock.method(axios, 'get', async () => ({ data: '<html><body>Perfil do vendedor</body></html>' }))
+  const url = 'https://www.mercadolivre.com.br/social/xetdaspromocoes?partner_id=475630078'
+  const result = await convert(url, { tag: 'meutag', ssid: 'ssid-valido' })
+  assert.equal(result, null)
+})
+
+test('resolveToCleanProductUrl extrai produto de /social/?ref= quando o HTML tem recommended_items', async (t) => {
+  const html = `<html><body>
+    {"recommended_items":[{"id":"MLB1234567","product_id":"MLB9876543"}]}
+  </body></html>`
+  t.mock.method(axios, 'get', async () => ({ data: html }))
+  const url = 'https://www.mercadolivre.com.br/social/xetdaspromocoes?partner_id=475630078&ref=abc123'
+  const clean = await resolveToCleanProductUrl(url)
+  assert.equal(clean, 'https://www.mercadolivre.com.br/p/MLB9876543')
+})
+
+test('short link /sec/ de terceiro é resolvido para o produto real (não encaminha o código alheio)', async (t) => {
+  // mercadolivre.com/sec/<código> é um short link de AFILIADO do ML. O código
+  // pertence a quem o gerou — pendurar ?partner_id= nele não transfere comissão.
+  // Precisa ser resolvido até o produto real, como meli.la/mluvem.com.
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/p/MLB12345678' }))
+  const url = 'https://mercadolivre.com/sec/2bw3uP4?partner_id=999999999'
+  const clean = await resolveToCleanProductUrl(url)
+  assert.equal(clean, 'https://www.mercadolivre.com.br/p/MLB12345678')
+})
+
+test('/sec/ que resolve para landing sem MLB sai com partner_id na URL REAL (não no código de terceiro)', async (t) => {
+  // Resolve o /sec/ para uma página real de cupom (sem MLB único). O fallback
+  // injeta o partner_id da usuária na URL real resolvida — o código de afiliado
+  // de terceiro (2bw3uP4) desaparece, então a comissão não vaza.
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/cupom/MANDAGOL' }))
+  const url = 'https://mercadolivre.com/sec/3cupomXy?partner_id=999999999'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  assert.equal(typeof result, 'string')
+  assert.match(result, /partner_id=475630078/)
+  assert.doesNotMatch(result, /\/sec\//)
+  assert.doesNotMatch(result, /999999999/)
+})
+
+test('/sec/ não-resolvível (muro anti-bot) não é encaminhado com partner_id cosmético', async (t) => {
+  // Quando não conseguimos escapar do short link de terceiro (resolve falha e a
+  // landing não dá produto), retornar null é melhor que vazar comissão pendurando
+  // um partner_id cosmético no /sec/ alheio.
+  t.mock.method(global, 'fetch', async () => { throw new Error('network') })
+  t.mock.method(axios, 'get', async () => ({ data: '<html><body>redirecionando...</body></html>' }))
+  const url = 'https://mercadolivre.com/sec/9wallZz?partner_id=999999999'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  assert.equal(result, null)
+})
+
 test('convert descarta short_url quando validação comprova MLB diferente', async (t) => {
   t.mock.method(axios, 'post', async () => ({
     status: 200,

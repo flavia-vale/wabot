@@ -12,7 +12,6 @@ import { LoadingState, ErrorState } from '@/components/States'
 import { ThrottleForm } from '@/components/preservacao/ThrottleForm'
 import { FollowGuardForm } from '@/components/preservacao/FollowGuardForm'
 import { QuietHoursForm } from '@/components/preservacao/QuietHoursForm'
-import { CopyVariationPoolEditor } from '@/components/preservacao/CopyVariationPoolEditor'
 import { ImageMutationToggle } from '@/components/preservacao/ImageMutationToggle'
 import { usePainelHeader } from '../../PainelShell'
 
@@ -68,7 +67,6 @@ export default function ConfiguracoesAvancadasPage() {
         <ThrottleForm value={draft} onChange={update} disabled={saving} />
         <QuietHoursForm value={draft} onChange={update} disabled={saving} />
         <FollowGuardForm value={draft} onChange={update} disabled={saving} />
-        <CopyVariationPoolEditor value={draft} onChange={update} disabled={saving} />
         <ImageMutationToggle value={draft} onChange={update} disabled={saving} />
       </div>
 

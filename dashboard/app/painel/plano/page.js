@@ -49,24 +49,12 @@ function mergePlanCards(dynamicPlans = []) {
   })
 }
 
-function getExpiredCopy(user) {
-  if (!user?.accessExpiresAt) return ''
-  const expiresAt = new Date(user.accessExpiresAt)
-  if (Number.isNaN(expiresAt.getTime()) || expiresAt >= new Date()) return ''
-  const dateLabel = formatDate(expiresAt)
-  const planLabel = PLAN_LABELS[user.plan] ?? user.plan ?? 'plano'
-  return user.plan === 'trial'
-    ? `Seu trial venceu em ${dateLabel}. O bot fica pausado e não envia novas mensagens até a renovação.`
-    : `Seu plano ${planLabel} venceu em ${dateLabel}. O bot fica pausado e não envia novas mensagens até a renovação.`
-}
-
 export default function PlanoPage() {
   usePainelHeader({ title: 'Plano e cobrança', subtitle: 'Sua assinatura, uso e forma de pagamento' })
 
   const [plans, setPlans] = useState(FALLBACK_PLAN_CARDS)
   const [overview, setOverview] = useState(null)
   const [email, setEmail] = useState('')
-  const [expiredCopy, setExpiredCopy] = useState('')
   const [selectedPlanId, setSelectedPlanId] = useState('pro')
   const [checkoutPlan, setCheckoutPlan] = useState('')
   const [checkoutError, setCheckoutError] = useState('')
@@ -79,7 +67,7 @@ export default function PlanoPage() {
     let active = true
     Promise.allSettled([api.me(), api.publicPlans(), api.paymentsOverview()]).then(([u, p, o]) => {
       if (!active) return
-      if (u.status === 'fulfilled') { setEmail(u.value?.email || ''); setExpiredCopy(getExpiredCopy(u.value)) }
+      if (u.status === 'fulfilled') setEmail(u.value?.email || '')
       if (p.status === 'fulfilled') setPlans(mergePlanCards(Array.isArray(p.value?.plans) ? p.value.plans : []))
       if (o.status === 'fulfilled') setOverview(o.value || null)
     })
@@ -160,15 +148,6 @@ export default function PlanoPage() {
           {lastAmount && lastDate && <p className="pnl-hero-sub">Último pagamento: {lastAmount} em {lastDate}</p>}
         </section>
       )}
-
-      {expiredCopy && (
-        <div className="pnl-note-box is-error" role="alert">
-          <strong style={{ fontWeight: 600 }}>Plano vencido: seus envios automáticos estão pausados</strong>
-          <p style={{ marginTop: 6 }}>{expiredCopy}</p>
-          <p style={{ marginTop: 6, fontWeight: 600 }}>Escolha um plano e finalize o checkout para reativar sua conta.</p>
-        </div>
-      )}
-
       {/* Planos */}
       <section className="pnl-card">
         <div className="pnl-card-title" style={{ marginBottom: 4 }}>{overview?.isActive ? 'Renovar ou trocar de plano' : 'Escolha seu plano'}</div>

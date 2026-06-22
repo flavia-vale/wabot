@@ -1,4 +1,5 @@
 import { resolveRedisUrl, EVENTS_CHANNEL, encodeEvent } from '../supervisor/protocol.js'
+import { buildRedisOptions } from './redisFactory.js'
 import logger from '../logger.js'
 
 const PROBE_SESSION_STATES = new Set(['disconnected', 'connecting', 'qr_pending', 'connected', 'error'])
@@ -13,8 +14,12 @@ async function getRedisClients() {
   if (redisPub && redisGet) return { redisPub, redisGet }
   const mod = await import('ioredis')
   const Redis = mod.default ?? mod.Redis ?? mod
-  redisPub = redisPub ?? new Redis(redisUrl, { lazyConnect: false })
-  redisGet = redisGet ?? new Redis(redisUrl, { lazyConnect: false })
+  // maxRetriesPerRequest:1 = fail-fast quando o Redis pisca. Conexões de comando
+  // (hset/hgetall/publish), não subscriber — sem isso, com Redis fora do ar os
+  // comandos ficavam presos no retry default do ioredis (20×) e empilhavam
+  // latência nas rotas de probe. Alinha ao padrão dos demais clients "planos".
+  redisPub = redisPub ?? new Redis(redisUrl, buildRedisOptions('probe-pub', { lazyConnect: false, maxRetriesPerRequest: 1 }))
+  redisGet = redisGet ?? new Redis(redisUrl, buildRedisOptions('probe-get', { lazyConnect: false, maxRetriesPerRequest: 1 }))
   redisPub.on('error', err => logger.warn({ err: err?.message }, 'probeSessions redisPub error'))
   redisGet.on('error', err => logger.warn({ err: err?.message }, 'probeSessions redisGet error'))
   return { redisPub, redisGet }

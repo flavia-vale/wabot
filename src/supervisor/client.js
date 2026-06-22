@@ -9,16 +9,39 @@
 
 import { EventEmitter } from 'events'
 import logger from '../logger.js'
+import { buildRedisOptions } from '../core/redisFactory.js'
 import {
   COMMAND,
   COMMAND_QUEUE,
   EVENT,
   EVENTS_CHANNEL,
+  PROTOCOL_VERSION,
   SUPERVISOR_HEARTBEAT_KEY,
   commandTimeoutMs,
   decodeEvent,
+  lastEventKey,
   resolveRedisUrl,
 } from './protocol.js'
+
+// P2-2: pub/sub é versionado (decodeEvent rejeita versão incompatível). Antes
+// isso era um descarte SILENCIOSO — num rolling deploy com PROTOCOL_VERSION
+// diferente entre supervisor e API, eventos de QR/status sumiam sem rastro.
+// Logamos o mismatch de forma THROTTLED (1/min) pra dar visibilidade sem
+// inundar o log se a divergência persistir.
+let lastProtocolMismatchWarnAt = 0
+function warnOnProtocolMismatch(raw) {
+  let parsed
+  try { parsed = JSON.parse(raw) } catch { return }
+  if (!parsed || typeof parsed !== 'object') return
+  if (parsed.v === PROTOCOL_VERSION) return
+  const now = Date.now()
+  if (now - lastProtocolMismatchWarnAt < 60_000) return
+  lastProtocolMismatchWarnAt = now
+  logger.warn(
+    { gotVersion: parsed.v, expectedVersion: PROTOCOL_VERSION },
+    'Evento do supervisor descartado por PROTOCOL_VERSION incompatível — supervisor e API em versões divergentes? (verifique a ordem de deploy)',
+  )
+}
 
 /**
  * @typedef {Object} SupervisorClient
@@ -85,13 +108,13 @@ export function createSupervisorClient({
       queueEvents = new QueueEvents(COMMAND_QUEUE, { connection: { url: redisUrl, ...connectionOpts } })
       await queueEvents.waitUntilReady()
 
-      subscriber = new Redis(redisUrl, { lazyConnect: false })
-      publisherCheck = new Redis(redisUrl, { lazyConnect: false })
+      subscriber = new Redis(redisUrl, buildRedisOptions('supervisor-client-sub', { lazyConnect: false }))
+      publisherCheck = new Redis(redisUrl, buildRedisOptions('supervisor-client-check', { lazyConnect: false }))
 
       subscriber.on('message', (channel, message) => {
         if (channel !== EVENTS_CHANNEL) return
         const evt = decodeEvent(message)
-        if (!evt) return
+        if (!evt) { warnOnProtocolMismatch(message); return }
         events.emit(`${evt.type}:${evt.userId}`, evt.data, evt)
         events.emit(evt.type, evt)
       })
@@ -120,6 +143,23 @@ export function createSupervisorClient({
       // BullMQ lança Error("Job ... has failed with reason: ...") quando o
       // supervisor reporta erro. Propaga com mensagem útil.
       throw new Error(`Comando ${name} falhou: ${err.message}`)
+    }
+  }
+
+  // Lê o último valor cacheado de um evento (QR/STATUS) gravado pelo supervisor
+  // em cacheLastEvent. Usado para re-hidratar um assinante que chegou depois da
+  // última publicação (fecha a janela fire-and-forget do pub/sub). Best-effort:
+  // null quando não há cache, Redis indisponível ou payload corrompido.
+  async function getLastEvent(type, userId) {
+    if (!publisherCheck) {
+      try { await init() } catch { return null }
+    }
+    try {
+      const raw = await publisherCheck.get(lastEventKey(userId, type))
+      if (raw == null) return null
+      try { return JSON.parse(raw) } catch { return null }
+    } catch {
+      return null
     }
   }
 
@@ -156,12 +196,21 @@ export function createSupervisorClient({
   // Subscriptions — antes vinham via process IPC do worker filho. Agora
   // chegam via pub/sub. Mantém a mesma assinatura (callback + unsubscribe).
   function subscribeUserEvent(type, userId, fn) {
-    // Garante init em background; primeiros eventos podem ser perdidos se
-    // chamado antes da subscription Redis estar pronta. Aceitável: dashboard
-    // pede QR ativamente após assinar.
-    init().catch(() => {})
     const handler = (data, evt) => fn(data, evt)
     events.on(`${type}:${userId}`, handler)
+    // Re-hidrata SÓ este assinante com o último valor cacheado (QR/STATUS), em
+    // vez de depender de uma nova publicação. Fecha a janela em que um evento
+    // publicado antes da subscription estar pronta (ou durante restart da API)
+    // se perdia, deixando o painel "carregando" pra sempre. Best-effort e
+    // assíncrono: garante init e entrega o cache só para `handler` (não
+    // re-emite globalmente, pra não duplicar em assinantes já existentes).
+    getLastEvent(type, userId)
+      .then(cached => {
+        if (cached !== null && cached !== undefined) {
+          handler(cached, { v: 1, userId, type, data: cached, cached: true })
+        }
+      })
+      .catch(() => {})
     return () => events.off(`${type}:${userId}`, handler)
   }
   // onQR: callback recebe a string do QR code (mesma semântica de sessionCore.js).
@@ -206,6 +255,6 @@ export function createSupervisorClient({
     onQR, onStatus, getLastQR,
     resumePersistedBots, startSessionHealthMonitor, stopAllBots,
     // extras
-    isSupervisorAlive, close, _events: events,
+    isSupervisorAlive, getLastEvent, close, _events: events,
   })
 }

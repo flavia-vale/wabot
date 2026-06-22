@@ -1,6 +1,8 @@
 import dbDefault from '../db.js'
 import { isRunning as isRunningDefault, sendBroadcast as sendBroadcastDefault } from '../manager.js'
+import { parseQuietHours, quietHoursState } from '../core/channelThrottle.js'
 import { startOfSaoPauloDayUtc } from './time.js'
+import { isOutsideOperatingHours } from './operatingHours.js'
 
 const drainingQueues = new Set()
 
@@ -60,6 +62,15 @@ async function drainQueueUnlocked(queue, deps = {}) {
   if (!currentQueue) return { skipped: 'queue_disabled' }
   queue = currentQueue
   if (!await isRunning(queue.userId)) return { skipped: 'bot_offline' }
+  // Horário por fila (override) vs. janela silenciosa global. Centralizado aqui
+  // porque é o único ponto que conhece o objeto `queue` e pode carregar o
+  // BotConfig do usuário antes de o envio sair pelo caminho IPC.
+  if (queue.operatingHoursEnabled) {
+    if (isOutsideOperatingHours(now, queue.operatingHoursStart, queue.operatingHoursEnd)) return { skipped: 'outside_operating_hours' }
+  } else {
+    const botConfig = await db.botConfig?.findFirst?.({ where: { userId: queue.userId } })
+    if (botConfig?.quietHoursEnabled === true && quietHoursState(now.getTime(), parseQuietHours(botConfig.channelQuietHoursJson)).inQuiet) return { skipped: 'quiet_hours' }
+  }
   if (queue.intervalEnabled && queue.lastSentAt && now - new Date(queue.lastSentAt) < queue.intervalMinutes * 60_000) return { skipped: 'interval_limit' }
   if (queue.hourlyCapEnabled) {
     const count = await db.offerQueueItem.count({ where: { queueId: queue.id, userId: queue.userId, status: 'sent', sentAt: { gte: new Date(now.getTime() - 3_600_000) } } })

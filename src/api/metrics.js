@@ -178,6 +178,25 @@ export function renderPrometheusMetrics(extra = {}) {
     `wabot_supervisor_session_quarantine_total ${Number.isFinite(sessionQuarantineTotal) ? sessionQuarantineTotal : 0}`,
   )
 
+  // Total restante na DLQ de envio (last-known, atualizado pela poda periódica
+  // em src/jobs/dlqMaintenance.js). 0 quando o backend não é BullMQ.
+  const dlqTotal = Number(extra.dlqTotal ?? 0)
+  lines.push(
+    '# HELP wabot_send_dlq_total Last-known number of jobs sitting in the send DLQ',
+    '# TYPE wabot_send_dlq_total gauge',
+    `wabot_send_dlq_total ${Number.isFinite(dlqTotal) ? dlqTotal : 0}`,
+  )
+
+  // Liveness do bot-supervisor (só em modo remote; null/N-A em inline). 1 vivo,
+  // 0 morto. Em inline o gauge é omitido — não há supervisor para medir.
+  if (extra.supervisorMode === 'remote' && extra.supervisorAlive !== null && extra.supervisorAlive !== undefined) {
+    lines.push(
+      '# HELP wabot_supervisor_alive Whether the bot-supervisor heartbeat is present (remote mode only)',
+      '# TYPE wabot_supervisor_alive gauge',
+      `wabot_supervisor_alive ${extra.supervisorAlive ? 1 : 0}`,
+    )
+  }
+
   // Sinais operacionais dos gatilhos de escala (auditoria/WABOT-010). Contadores
   // in-process: SQLITE_BUSY é por-processo da API; dedup fail-open vem do worker
   // e some aqui — para histórico cross-processo, ver os AnalyticsEvent

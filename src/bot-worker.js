@@ -25,7 +25,7 @@ import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { decryptCredential } from './credentialCrypto.js'
 import { createMessageQueue } from './messageQueue.js'
-import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode } from './sendQueueBackend.js'
+import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode, findUnserializableField } from './sendQueueBackend.js'
 import { withSendTimeout as withSendTimeoutImpl } from './sendMessageTimeout.js'
 import { isMirrorableJid, detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
@@ -40,7 +40,7 @@ import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariati
 import { PRESERVATION_FEATURE, isPreservationFeatureEnabled, shouldRunChannelScheduler } from './core/preservationFeatures.js'
 import { mutate as mutateChannelImage } from './core/imageMutation.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
-import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError } from './core/channelSend.js'
+import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
@@ -48,12 +48,24 @@ import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindo
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
 import { classifyError } from './errorTaxonomy.js'
-import { detectMessageKind, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
+import { detectMessageKind, extractIncomingText, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
 import { broadcastSourceGroup } from './offerQueue/sourceTag.js'
 import Redis from 'ioredis'
 import { parseEnumEnv, logModeSummary } from './core/envModes.js'
+import { buildRedisOptions } from './core/redisFactory.js'
+import { installWorkerCrashGuards } from './core/workerCrashGuard.js'
 
 const userId = process.env.BOT_USER_ID
+
+// Guardas de processo: um throw assíncrono benigno do Baileys num socket já
+// fechado (ex.: 428 "Connection Closed" disparado por sendRetryRequest após um
+// conflito/replaced 440) não pode matar o worker — senão a reconexão automática
+// agendada no connection.update nunca roda e a sessão fica offline até religar
+// manual. Ver src/core/workerCrashGuard.js.
+installWorkerCrashGuards({
+  logger,
+  onFatal: () => { setTimeout(() => process.exit(1), 50).unref?.() },
+})
 
 
 const GLOBAL_RATE_LIMIT_MODE = parseEnumEnv('GLOBAL_RATE_LIMIT_MODE', process.env.GLOBAL_RATE_LIMIT_MODE || 'auto', ['auto', 'on', 'off'], 'auto')
@@ -79,6 +91,16 @@ logModeSummary('bot-worker', {
   hasRedisUrl: Boolean(process.env.REDIS_URL),
 })
 
+// Nudge anti-ban (P1-3): em produção, com dedup global ativa, fail-open deixa
+// passar um envio duplicado quando o Redis pisca — exatamente o cenário que
+// gera ban. O recomendado é REDIS_DEDUP_FAIL_MODE=closed (derruba só a mensagem
+// corrente, recuperável). Avisamos no boot em vez de mudar o default
+// silenciosamente, porque a virada fail-open→closed é mudança de semântica que
+// deve ser validada em staging antes (ver docs/redis-bullmq-resilience-audit.md).
+if (String(process.env.APP_ENV) === 'production' && Boolean(process.env.REDIS_URL) && GLOBAL_DEDUP_MODE !== 'off' && REDIS_DEDUP_FAIL_MODE === 'open') {
+  logger.warn('REDIS_DEDUP_FAIL_MODE=open em produção: num blip de Redis a dedup global pode DUPLICAR um envio (risco de ban). Recomendado setar REDIS_DEDUP_FAIL_MODE=closed no .env (validar em staging antes).')
+}
+
 function useGlobalRedis() {
   if (!process.env.REDIS_URL) return false
   if (GLOBAL_RATE_LIMIT_MODE === 'off' && GLOBAL_DEDUP_MODE === 'off') return false
@@ -88,7 +110,7 @@ function useGlobalRedis() {
 function ensureRuntimeRedis() {
   if (!useGlobalRedis()) return null
   if (runtimeRedis) return runtimeRedis
-  runtimeRedis = new Redis(process.env.REDIS_URL, { lazyConnect: false, maxRetriesPerRequest: null })
+  runtimeRedis = new Redis(process.env.REDIS_URL, buildRedisOptions('bot-worker-runtime', { lazyConnect: false, maxRetriesPerRequest: null }))
   runtimeRedis.on('error', (err) => logger.warn({ err: err?.message }, 'runtimeRedis error'))
   return runtimeRedis
 }
@@ -132,6 +154,17 @@ const OWNER_INSTANCE = process.env.NODE_APP_INSTANCE ?? '0'
 const SESSION_ERROR_WINDOW_MS = Math.max(30_000, Number(process.env.WA_SESSION_ERROR_WINDOW_MS || 120_000))
 const SESSION_ERROR_THRESHOLD = Math.max(5, Number(process.env.WA_SESSION_ERROR_THRESHOLD || 30))
 const SESSION_RECOVERY_COOLDOWN_MS = Math.max(60_000, Number(process.env.WA_SESSION_RECOVERY_COOLDOWN_MS || 300_000))
+
+let cachedBaileysVersion = null
+
+// Saúde de cripto exposta ao painel (banner global "reconecte"). Detectamos o
+// sintoma observável de sessão dessincronizada: o Baileys manda "sent retry
+// receipt" a cada mensagem que NÃO conseguiu descriptografar (Bad MAC /
+// MessageCounterError). Janela e limiar menores que os de auto-recovery porque
+// o objetivo aqui é AVISAR a usuária antes que ela fique cega — não derrubar a
+// sessão. Só sinaliza 'degraded' com a sessão já conectada (READY).
+const WA_SESSION_DEGRADED_WINDOW_MS = Math.max(60_000, Number(process.env.WA_SESSION_DEGRADED_WINDOW_MS || 10 * 60_000))
+const WA_SESSION_DEGRADED_THRESHOLD = Math.max(2, Number(process.env.WA_SESSION_DEGRADED_THRESHOLD || 5))
 const ALLOW_TEXT_WITHOUT_LINKS = String(process.env.WA_ALLOW_TEXT_WITHOUT_LINKS || '0') === '1'
 
 // Plataformas com og:title/JSON-LD confiável o suficiente para o guard de
@@ -163,7 +196,37 @@ let sessionErrorTimestamps = []
 let sessionRecoveryLastAt = 0
 let sessionRecoveryInFlight = false
 
+// Sinais de falha de decrypt para o indicador de saúde da sessão no painel.
+let cryptoErrorTimestamps = []
+let lastCryptoErrorAt = null
+
 let heartbeatTimer = null
+let lastHeartbeatPersistAt = 0
+
+async function persistWorkerHeartbeat(state) {
+  // Heartbeat IPC tells the manager process that the worker process is alive,
+  // but the dashboard reads WaSession from the DB. Persist a lightweight,
+  // throttled heartbeat so the panel cannot keep showing "connected" when
+  // the worker is alive but Baileys has no active socket.
+  const now = Date.now()
+  const intervalMs = Math.max(Number(process.env.WA_HEARTBEAT_DB_INTERVAL_MS || 60000), 15000)
+  if (now - lastHeartbeatPersistAt < intervalMs) return
+  lastHeartbeatPersistAt = now
+
+  const patch = { lastHeartbeatAt: new Date(), ownerInstance: OWNER_INSTANCE }
+  if (state === 'idle') {
+    patch.status = 'disconnected'
+    patch.lifecycle = 'disconnected'
+  } else if (state === 'connecting') {
+    patch.status = 'connecting'
+    patch.lifecycle = 'connecting'
+  }
+
+  await persistSessionPatch(patch).catch(err => {
+    logger.warn({ err: String(err?.message ?? err), state }, 'Falha ao persistir heartbeat da sessão WA')
+  })
+}
+
 async function persistSessionPatch(data = {}) {
   const fallbackData = {
     ...(data.status ? { status: data.status } : {}),
@@ -199,7 +262,9 @@ function startHeartbeatIpc() {
   if (heartbeatTimer) return
   const intervalMs = Math.max(Number(process.env.WA_HEARTBEAT_INTERVAL_MS || 15000), 5000)
   heartbeatTimer = setInterval(() => {
-    if (process.send) process.send({ type: 'heartbeat', ts: Date.now(), state: activeSock ? 'connected' : (pendingSock ? 'connecting' : 'idle') })
+    const state = activeSock ? 'connected' : (pendingSock ? 'connecting' : 'idle')
+    if (process.send) process.send({ type: 'heartbeat', ts: Date.now(), state })
+    void persistWorkerHeartbeat(state)
   }, intervalMs)
   heartbeatTimer.unref?.()
 }
@@ -458,6 +523,8 @@ async function checkScheduledMessages() {
         })
 
         const scheduledImageRecipe = buildBroadcastImageRecipe(msg.text, { imageUrl: msg.imageUrl, imageRefererUrl: msg.imageRefererUrl })
+        // Botão "Ver canal" herdado do grupo de destino (mensagem agendada).
+        const scheduledChannelForward = resolveChannelForward((await getConfig()).groups.postDetails.find(g => g.waJid === jid))
         const accepted = await enqueueSendJob({
           type: 'scheduled',
           logId: log.id,
@@ -466,6 +533,7 @@ async function checkScheduledMessages() {
           plan: 'scheduled',
           delayMs: buildSmartDelayMs((await getConfig()).botConfig),
           typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
+          channelForward: scheduledChannelForward,
           ...(scheduledImageRecipe ? { payloadRecipe: scheduledImageRecipe } : { payload: { text: msg.text } }),
           onDone: async (result) => {
             state.remaining--
@@ -575,6 +643,9 @@ const SEND_QUEUE_MAX_SIZE = envNumber('SEND_QUEUE_MAX_SIZE', 1_000)
 const SEND_MAX_ATTEMPTS = Math.max(1, envNumber('SEND_MAX_ATTEMPTS', 3))
 const SEND_RETRY_BASE_MS = Math.max(0, envNumber('SEND_RETRY_BASE_MS', 2_000))
 const SEND_RETRY_MAX_MS = Math.max(SEND_RETRY_BASE_MS, envNumber('SEND_RETRY_MAX_MS', 30_000))
+const RECONNECT_BASE_MS = Math.max(1_000, envNumber('RECONNECT_BASE_MS', 5_000))
+const RECONNECT_MAX_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_MAX_MS', 5 * 60_000))
+const FETCH_WA_VERSION_TIMEOUT_MS = Math.max(5_000, envNumber('FETCH_WA_VERSION_TIMEOUT_MS', 10_000))
 const SHUTDOWN_DRAIN_TIMEOUT_MS = Math.max(0, envNumber('SHUTDOWN_DRAIN_TIMEOUT_MS', 15_000))
 // Timeout duro em volta de cada sock.sendMessage/relayMessage. Sem isso, um
 // socket Baileys silenciosamente morto trava o await indefinidamente, e como
@@ -602,10 +673,12 @@ const SMART_DELAY_TYPING_ENABLED = String(process.env.SMART_DELAY_TYPING_ENABLED
 const SMART_DELAY_TYPING_MIN_MS = Math.max(0, envNumber('SMART_DELAY_TYPING_MIN_MS', 1_200))
 const SMART_DELAY_TYPING_MAX_MS = Math.max(SMART_DELAY_TYPING_MIN_MS, envNumber('SMART_DELAY_TYPING_MAX_MS', 7_000))
 const SMART_DELAY_TYPING_CHARS_PER_SECOND = Math.max(1, envNumber('SMART_DELAY_TYPING_CHARS_PER_SECOND', 18))
-// QUEUE_BACKEND aceita 'memory', 'bullmq' ou vazio (auto). Quando vazio
-// e REDIS_URL está setado, default vira 'bullmq' — assim deploy em produção
-// ganha persistência automaticamente. Comportamento controlado em
-// resolveBackendMode() para manter a regra em um lugar só.
+// QUEUE_BACKEND aceita 'memory', 'bullmq' ou vazio. O DEFAULT é 'memory' —
+// inclusive quando REDIS_URL está setado. BullMQ é OPT-IN explícito
+// (QUEUE_BACKEND=bullmq) porque o payload de envio carrega Buffer de imagem
+// que o JSON.stringify do BullMQ corrompe (oferta sai sem foto). NÃO mudar
+// para auto-bullmq sem antes mover a montagem da mídia para pós-dequeue.
+// Regra centralizada em resolveBackendMode() (src/sendQueueBackend.js).
 const SEND_QUEUE_BACKEND_ENV = String(process.env.QUEUE_BACKEND || '').toLowerCase()
 const REDIS_URL = process.env.REDIS_URL || ''
 const BULLMQ_QUEUE_NAME = process.env.BULLMQ_QUEUE_NAME || `wabot-send-${userId}`
@@ -737,6 +810,81 @@ function getSendQueueMetrics() {
   }
 }
 
+// Padrões que indicam que a sessão recebeu mensagem mas não conseguiu
+// descriptografar (sender_key/contador dessincronizados). "sent retry receipt"
+// é o mais confiável: o Baileys o loga uma vez por mensagem indecifrável.
+const SESSION_HEALTH_SIGNAL_RE = /sent retry receipt|failed to decrypt|Bad MAC|MessageCounterError|Key used already or never filled/i
+
+function recordCryptoError() {
+  const now = Date.now()
+  lastCryptoErrorAt = now
+  cryptoErrorTimestamps.push(now)
+  const cutoff = now - WA_SESSION_DEGRADED_WINDOW_MS
+  // Poda barata: só varre quando o array cresce ou a cabeça já saiu da janela.
+  if (cryptoErrorTimestamps.length > 1_000 || cryptoErrorTimestamps[0] < cutoff) {
+    cryptoErrorTimestamps = cryptoErrorTimestamps.filter(ts => ts >= cutoff)
+  }
+}
+
+// Snapshot consumido pelo /api/session/status (via metrics IPC) para o painel
+// decidir se mostra o banner "reconecte". 'degraded' exige sessão conectada —
+// se ela caiu, o status normal de "desconectado" já cobre o aviso.
+function getSessionHealth() {
+  const now = Date.now()
+  const cutoff = now - WA_SESSION_DEGRADED_WINDOW_MS
+  cryptoErrorTimestamps = cryptoErrorTimestamps.filter(ts => ts >= cutoff)
+  const cryptoErrors = cryptoErrorTimestamps.length
+  const degraded =
+    lifecycleState === WA_LIFECYCLE.READY &&
+    cryptoErrors >= WA_SESSION_DEGRADED_THRESHOLD &&
+    lastCryptoErrorAt != null &&
+    now - lastCryptoErrorAt <= WA_SESSION_DEGRADED_WINDOW_MS
+  return {
+    degraded,
+    cryptoErrors,
+    windowMs: WA_SESSION_DEGRADED_WINDOW_MS,
+    threshold: WA_SESSION_DEGRADED_THRESHOLD,
+    lastCryptoErrorAt,
+  }
+}
+
+// Envelopa o logger pino do Baileys (e seus filhos) para incrementar o contador
+// de saúde sempre que uma linha casar com SESSION_HEALTH_SIGNAL_RE. Usa
+// defineProperty (própria, gravável) para não esbarrar em métodos não-graváveis
+// herdados do protótipo em modo estrito. É o ponto único e confiável de
+// detecção: não depende de roteamento de stdout/stderr nem de evento público.
+function instrumentBaileysLoggerForHealth(baileysLogger) {
+  if (!baileysLogger || baileysLogger.__healthInstrumented) return baileysLogger
+  const wrapLevel = (target, level) => {
+    const orig = target?.[level]
+    if (typeof orig !== 'function') return
+    const bound = orig.bind(target)
+    Object.defineProperty(target, level, {
+      value: (...args) => {
+        try {
+          for (const arg of args) {
+            if (typeof arg === 'string' && SESSION_HEALTH_SIGNAL_RE.test(arg)) { recordCryptoError(); break }
+          }
+        } catch {}
+        return bound(...args)
+      },
+      writable: true,
+      configurable: true,
+    })
+  }
+  for (const level of ['info', 'warn', 'error']) wrapLevel(baileysLogger, level)
+  const origChild = typeof baileysLogger.child === 'function' ? baileysLogger.child.bind(baileysLogger) : null
+  if (origChild) {
+    Object.defineProperty(baileysLogger, 'child', {
+      value: (...args) => instrumentBaileysLoggerForHealth(origChild(...args)),
+      writable: true,
+      configurable: true,
+    })
+  }
+  Object.defineProperty(baileysLogger, '__healthInstrumented', { value: true, configurable: true })
+  return baileysLogger
+}
+
 function canAcceptSendJob() {
   return !shuttingDown
 }
@@ -857,6 +1005,19 @@ async function buildPayloadFromRecipe(recipe) {
   })
 }
 
+// Resolve qual canal injetar no botão "Ver canal" a partir do GRUPO DE DESTINO
+// (postDetail.channelButtonJid/Name). Cada grupo de destino define seu próprio
+// canal (ou nenhum) — não existe mais canal global nem fallback. Sem canal
+// válido no destino → null (mensagem sai sem botão). O `postDetail` vem de
+// cfg.groups.postDetails (toPostDetail em groupEntitlements.js).
+function resolveChannelForward(postDetail) {
+  const jid = normalizeChannelForwardJid(postDetail?.channelButtonJid)
+  if (jid) {
+    return { newsletterJid: jid, newsletterName: String(postDetail?.channelButtonName ?? '').trim(), serverMessageId: null }
+  }
+  return null
+}
+
 async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
   if (payload && payload._route === 'relay' && payload.relay?.type && payload.relay?.proto) {
     await withSendTimeout(
@@ -909,6 +1070,10 @@ async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
 async function processSendJob(job) {
   const startedAt = Date.now()
   let payload = null
+  // Escopo de função (não do try): o catch abaixo também lê este id para
+  // registrar ChannelHealth no fracasso. `let` dentro do try não enxergaria
+  // no catch (blocos separados) e dispararia ReferenceError no caminho de erro.
+  let destGroupId = null
 
   try {
     await db.messageLog.update({
@@ -928,39 +1093,43 @@ async function processSendJob(job) {
       await sleep(totalDelayMs)
     }
 
-    // PR-5.C.1 + 5.B.1: lookup do groupId do canal-destino (uma vez por job)
+    // PR-5.C.1 + 5.B.1: lookup do groupId do destino-post (uma vez por job)
     // para alimentar ChannelHealth e passar pelo velocity scheduler.
-    let channelGroupId = null
-    if (isChannelDestination(job.destJid)) {
-      try {
-        const g = await db.group.findFirst({
-          where: { userId, waJid: job.destJid, role: 'post', kind: 'channel' },
-          select: { id: true },
+    //
+    // O gate vale para QUALQUER destino-post — canal (@newsletter) E grupo
+    // espelhado (@g.us). Historicamente o lookup filtrava `kind: 'channel'`,
+    // então grupos espelhados NUNCA passavam pela janela silenciosa nem pelo
+    // intervalo mínimo configurados em /painel/preservacao/configuracoes —
+    // por isso enviavam de madrugada e sem respeitar o espaçamento. A decisão
+    // (checkAndReserve/decide) já é agnóstica de kind; só o call site limitava.
+    try {
+      const g = await db.group.findFirst({
+        where: { userId, waJid: job.destJid, role: 'post' },
+        select: { id: true },
+      })
+      destGroupId = g?.id ?? null
+      if (destGroupId) {
+        // checkAndReserve já cobre: pausa por health, quiet hours, daily cap,
+        // intervalo mínimo, burst cap. Reserva o slot quando libera.
+        const cfgFull = await getConfig().catch(() => null)
+        const cfg = cfgFull?.botConfig ?? {}
+        let gate = await throttleCheckAndReserve(destGroupId, cfg, {
+          preservationActive: shouldRunChannelScheduler(cfgFull?.preservationActive, cfg),
         })
-        channelGroupId = g?.id ?? null
-        if (channelGroupId) {
-          // checkAndReserve já cobre: pausa por health, quiet hours, daily cap,
-          // intervalo mínimo, burst cap. Reserva o slot quando libera.
-          const cfgFull = await getConfig().catch(() => null)
-          const cfg = cfgFull?.botConfig ?? {}
-          let gate = await throttleCheckAndReserve(channelGroupId, cfg, {
+        let throttleCycles = 0
+        while (!gate.allow && !shuttingDown) {
+          throttleCycles++
+          const waitMs = Math.max(0, (gate.deferUntil ?? Date.now()) - Date.now())
+          logger.info({ destJid: job.destJid, reason: gate.reason, waitMs, throttleCycles }, 'Velocity scheduler: aguardando janela de throttle do destino')
+          await sleep(waitMs)
+          gate = await throttleCheckAndReserve(destGroupId, cfg, {
             preservationActive: shouldRunChannelScheduler(cfgFull?.preservationActive, cfg),
           })
-          let throttleCycles = 0
-          while (!gate.allow && !shuttingDown) {
-            throttleCycles++
-            const waitMs = Math.max(0, (gate.deferUntil ?? Date.now()) - Date.now())
-            logger.info({ destJid: job.destJid, reason: gate.reason, waitMs, throttleCycles }, 'Velocity scheduler: aguardando janela de throttle do canal')
-            await sleep(waitMs)
-            gate = await throttleCheckAndReserve(channelGroupId, cfg, {
-              preservationActive: shouldRunChannelScheduler(cfgFull?.preservationActive, cfg),
-            })
-          }
-          if (shuttingDown) throw new Error('Worker encerrando durante espera de throttle do canal')
         }
-      } catch (err) {
-        logger.warn({ err: err?.message, destJid: job.destJid }, 'channelHealth/throttle lookup falhou; seguindo sem pausa')
+        if (shuttingDown) throw new Error('Worker encerrando durante espera de throttle do destino')
       }
+    } catch (err) {
+      logger.warn({ err: err?.message, destJid: job.destJid }, 'channelHealth/throttle lookup falhou; seguindo sem pausa')
     }
 
     for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt++) {
@@ -973,6 +1142,14 @@ async function processSendJob(job) {
           else payload = job.payload
         }
         if (payload === undefined) throw new Error('Invalid send job: payload/buildPayload ausente')
+        // Botão "Ver canal" do grupo de destino, injetado de forma central para
+        // cobrir TODOS os caminhos não-relay (texto puro, imagem montada,
+        // broadcast/oferta automática, agendado). O caminho relay (mídia
+        // grupo→grupo) já injeta via buildRelayProto, então é pulado aqui.
+        // Destino canal (@newsletter) não leva contextInfo (stripChannelUnsafeFields).
+        if (job.channelForward && payload && payload._route !== 'relay' && !isChannelDestination(job.destJid)) {
+          payload = injectChannelForwardIntoPayload(payload, job.channelForward)
+        }
         await waitDestinationRateLimit(job.destJid)
         if (SMART_DELAY_TYPING_ENABLED && job.typingDelayMs > 0 && !job.skipTyping) {
           try {
@@ -988,8 +1165,8 @@ async function processSendJob(job) {
         lastSendByDest.set(job.destJid, finishedAt)
         logger.info({ destJid: job.destJid, platforms: job.platforms, attempt, type: job.type }, 'Mensagem enviada')
 
-        if (channelGroupId) {
-          recordChannelSendResult(channelGroupId, { ok: true, latencyMs: finishedAt - startedAt }, { now: finishedAt })
+        if (destGroupId) {
+          recordChannelSendResult(destGroupId, { ok: true, latencyMs: finishedAt - startedAt }, { now: finishedAt })
             .catch(err => logger.warn({ err: err?.message }, 'recordChannelSendResult(ok) falhou'))
         }
 
@@ -1052,11 +1229,11 @@ async function processSendJob(job) {
     sendMetrics.errorTotal++
     sendMetrics.lastErrorAt = new Date().toISOString()
     sendMetrics.lastError = err.message
-    if (channelGroupId) {
+    if (destGroupId) {
       const errorCode = isChannelForbiddenError(err)
         ? '403'
         : (err?.output?.statusCode ? String(err.output.statusCode) : (err?.code ?? null))
-      recordChannelSendResult(channelGroupId, { ok: false, errorCode, errorMsg: err.message })
+      recordChannelSendResult(destGroupId, { ok: false, errorCode, errorMsg: err.message })
         .catch(e => logger.warn({ err: e?.message }, 'recordChannelSendResult(fail) falhou'))
     }
     await finishSendJob(job, { ok: false, error: err.message })
@@ -1109,6 +1286,21 @@ async function createSendBackend() {
     return {
       ...bullBackend,
       enqueue(job) {
+        // P1-2: roteamento por serializabilidade (backend híbrido).
+        //  - Job com recipe/payload puro (broadcast, oferta automática,
+        //    agendado) → BullMQ: PERSISTE e sobrevive a restart do worker
+        //    (no dequeue, processSendJob reconstrói via payloadRecipe e
+        //    atualiza o MessageLog sozinho).
+        //  - Job com relay proto, buffer de mídia "original" ou closure
+        //    buildPayload → fila em MEMÓRIA: não dá para serializar sem
+        //    corromper a mídia (Buffer vira {type:'Buffer'} e a oferta sai
+        //    sem foto). Decisão consciente ("relay memory-only"), não erro.
+        //    Ver AGENTS.md seção "Fila de envio (BullMQ + DLQ)".
+        const offender = findUnserializableField(job)
+        if (offender) {
+          logger.debug({ logId: job?.logId, path: offender.path, kind: offender.kind }, 'Job de envio não-serializável — roteado para fila em memória (relay/original-media)')
+          return Promise.resolve(memoryFallback.enqueue(job))
+        }
         return bullBackend.enqueue(job).then(ok => {
           if (ok) return true
           logger.warn({ logId: job?.logId }, 'BullMQ indisponível no enqueue; fallback imediato para fila em memória')
@@ -1129,6 +1321,31 @@ async function createSendBackend() {
 }
 
 let startBotInFlight = false
+let reconnectAttempts = 0
+
+function calcReconnectDelayMs() {
+  const base = Math.min(RECONNECT_BASE_MS * Math.pow(2, reconnectAttempts), RECONNECT_MAX_MS)
+  const jitter = base * 0.2 * (Math.random() * 2 - 1)
+  return Math.round(base + jitter)
+}
+
+async function fetchVersionCached() {
+  try {
+    const timeoutSignal = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('fetchLatestBaileysVersion timeout')), FETCH_WA_VERSION_TIMEOUT_MS).unref()
+    )
+    const { version } = await Promise.race([fetchLatestBaileysVersion(), timeoutSignal])
+    cachedBaileysVersion = version
+    return version
+  } catch (err) {
+    if (cachedBaileysVersion) {
+      logger.warn({ err: err?.message }, 'fetchLatestBaileysVersion falhou; usando versão cacheada')
+      return cachedBaileysVersion
+    }
+    throw err
+  }
+}
+
 async function startBot() {
   // Guard contra startBots concorrentes (boot inicial + IPC pairing + restart
   // timer podem todos chamar isto). Concorrência causa dois sockets fechando
@@ -1140,6 +1357,16 @@ async function startBot() {
   startBotInFlight = true
   try {
     await startBotInner()
+  } catch (err) {
+    // Se startBotInner lançou ANTES de criar o socket (ex: fetchVersionCached
+    // falhou sem cache), o connection.update nunca dispara e ninguém reagenda
+    // a próxima tentativa. Fazemos isso aqui, mas só se não há socket vivo.
+    if (!pendingSock && !activeSock && !shuttingDown) {
+      const delayMs = calcReconnectDelayMs()
+      reconnectAttempts++
+      logger.error({ err: err?.message, attempt: reconnectAttempts, delayMs }, 'startBotInner falhou antes de criar socket; reagendando reconexão')
+      setTimeout(startBot, delayMs)
+    }
   } finally {
     startBotInFlight = false
   }
@@ -1176,13 +1403,13 @@ async function startBotInner() {
   startHeartbeatIpc()
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR)
-  const { version } = await fetchLatestBaileysVersion()
+  const version = await fetchVersionCached()
 
   const sock = makeWASocket({
     version,
     auth: state,
     printQRInTerminal: false,
-    logger: logger.child({ name: 'baileys' }),
+    logger: instrumentBaileysLoggerForHealth(logger.child({ name: 'baileys' })),
   })
 
   pendingSock = sock
@@ -1285,6 +1512,7 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
 
     if (connection === 'open') {
       setLifecycleState(WA_LIFECYCLE.READY, { reason: 'connection_open' })
+      reconnectAttempts = 0
       activeSock = sock
       pendingSock = null
       pairingState.clear()
@@ -1323,8 +1551,10 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // falhar em colar o código a tempo, a UI chamará novamente o endpoint.
         logger.warn({ code }, 'WA close durante pairing (não-515) — não reiniciando automaticamente')
       } else {
-        logger.warn({ code }, 'WA conexão fechada, agendando restart automático em 5s')
-        setTimeout(startBot, 5_000)
+        const delayMs = calcReconnectDelayMs()
+        reconnectAttempts++
+        logger.warn({ code, attempt: reconnectAttempts, delayMs }, 'WA conexão fechada, agendando restart automático')
+        setTimeout(startBot, delayMs)
       }
     }
   })
@@ -1440,11 +1670,13 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         return
       }
 
-      const text =
-        msg.message?.conversation ||
-        msg.message?.extendedTextMessage?.text ||
-        msg.message?.imageMessage?.caption ||
-        msg.message?.videoMessage?.caption || ''
+      // Desembrulha wrappers (ephemeralMessage/viewOnceMessage/etc.) ANTES de
+      // ler a legenda. Sem isso, imagem com legenda em grupo com mensagens
+      // temporárias chega com `msg.message.imageMessage` undefined, o texto vem
+      // vazio, nenhum link é detectado e a política LINK_ONLY ignora como
+      // `nolink`. Fallback para o raw cobre conteúdo não-embrulhado.
+      const innerMessage = extractMessageContent(msg.message)
+      const text = extractIncomingText(innerMessage) || extractIncomingText(msg.message)
 
       if (text && text.length > MAX_INCOMING_MESSAGE_CHARS) {
         logger.warn({ msgId: msg.key.id, chars: text.length, limit: MAX_INCOMING_MESSAGE_CHARS }, 'Mensagem grande demais — processamento ignorado para preservar latência')
@@ -1467,7 +1699,6 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       if (text && !sanitizedText) return
 
       const links = detectLinks(sanitizedText)
-      const innerMessage = extractMessageContent(msg.message)
       const messageKind = detectMessageKind(innerMessage, sanitizedText)
       const policy = normalizeForwardingPolicy(monitorGroup)
       const canForwardCurrentMessage = shouldForwardMessage({
@@ -1477,6 +1708,14 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       })
       if (!canForwardCurrentMessage) {
         const hasGenericUrl = /https?:\/\//i.test(sanitizedText)
+        // Mensagens sem conteúdo de usuário (protocolMessage, senderKey
+        // distribution, reações, poll updates, etc.) chegam como kind 'other'
+        // sem texto e sem link — NÃO são ofertas que o usuário esperava espelhar
+        // e não devem virar linha "ignorado" no painel. Ignorar em silêncio.
+        // Sem isso, um reconnect (que dispara rajada de senderKeyDistribution)
+        // polui o log com dezenas de 'nolink' mesmo o grupo não tendo recebido
+        // nenhuma mensagem real (incidente 2026-06).
+        if (messageKind === 'other' && links.length === 0 && !hasGenericUrl) return
         const unsupportedStoreSuffix = links.length === 0 && hasGenericUrl ? ':unsupported_store' : ''
         await db.messageLog.create({
           data: {
@@ -1752,6 +1991,8 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       let destIndex = -1
       for (const destJid of destinations) {
         destIndex++
+        // Botão "Ver canal" definido pelo GRUPO DE DESTINO (ou null = sem botão).
+        const channelForward = resolveChannelForward(cfg.groups.postDetails.find(g => g.waJid === destJid))
         const dedupSubject = primary.url || `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
         const key = `${destJid}:${dedupSubject}`
         if (dedup.links[key] && Date.now() - dedup.links[key] < linkDedupWindowMs) {
@@ -1815,13 +2056,16 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         })
         let sentVia = 'text'
 
-        // PR-5.B.2: variação de copy por canal-destino (determinística por
-        // destJid+data). Aplica só em canal — em grupo não há fingerprint
-        // de "mesma mensagem em N", então mantém texto original.
+        // PR-5.B.2: variação de copy por canal-destino. Aplica só em canal —
+        // em grupo não há fingerprint de "mesma mensagem em N", então mantém
+        // texto original. Usa random:true (igual ao dispatcher de ofertas
+        // automáticas) para a variação realmente alternar a cada envio; antes
+        // era determinística por destJid+data, o que mandava sempre a mesma
+        // variação no mesmo canal/dia e enfraquecia o anti-fingerprint.
         const isChannelDest = isChannelDestination(destJid)
         const variantText = isChannelDest
           ? (isPreservationFeatureEnabled(cfg.preservationActive, cfg.botConfig, PRESERVATION_FEATURE.COPY_VARIATION)
-              ? applyVariation(finalText, { groupId: destJid, poolJson: resolveCopyVariationPoolJson(cfg.botConfig.copyVariationPoolJson) })
+              ? applyVariation(finalText, { groupId: destJid, poolJson: resolveCopyVariationPoolJson(cfg.botConfig.copyVariationPoolJson), random: true })
               : finalText)
           : finalText
 
@@ -1834,11 +2078,21 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // worker. Mantém image.buffer (Buffer) em memória do processo, sem
         // passar pelo Redis. Ver enqueueSendJob() para a explicação completa.
         const buildPayload = async () => {
-          if (shouldUseRelayPath({ destJid, hasOriginal: !!original })) {
-            const replayProto = { ...original.proto }
-            if (original.type === 'imageMessage' || original.type === 'videoMessage') {
-              replayProto.caption = variantText
-            }
+          // Quando o destino tem botão de canal (channelForward), pulamos o relay
+          // de propósito: o relay reaproveita o proto de mídia da ORIGEM e injetar
+          // o NOSSO canal nele faz o WhatsApp derrubar o envio. Em vez disso caímos
+          // no caminho sendMessage com a imagem rebaixada (getImage) — o MESMO
+          // caminho comprovado das ofertas automáticas — e a injeção central
+          // (mídia-only) adiciona o botão. Sem botão, mantemos o relay (fidelidade
+          // máxima de mídia, inclui vídeo).
+          if (shouldUseRelayPath({ destJid, hasOriginal: !!original }) && !channelForward) {
+            const hasCaption = original.type === 'imageMessage' || original.type === 'videoMessage'
+            // Higieniza o contextInfo herdado da ORIGEM (remove botão de terceiros
+            // e externalAdReply). forwardNewsletter=null: relay nunca injeta canal.
+            const replayProto = buildRelayProto(original.proto, {
+              caption: hasCaption ? variantText : undefined,
+              forwardNewsletter: null,
+            })
             return {
               _route: 'relay',
               relay: {
@@ -1884,6 +2138,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           plan: cfg.plan,
           delayMs: buildSmartDelayMs(cfg.botConfig) + staggerMs,
           typingDelayMs: calculateTypingDelayMs({ text: variantText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
+          channelForward,
           buildPayload,
           onDone: async (result) => {
             if (result.ok) {
@@ -1912,6 +2167,46 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 
     for (const msg of messages) {
       rememberChannelJid(msg?.key?.remoteJid)
+      // DEBUG temporário (gated por DEBUG_INCOMING_UPSERT) — investigação do
+      // sumiço de mensagens com botão "Ver canal" (forwardedNewsletterMessageInfo)
+      // que não viram linha no painel. Loga, ANTES de qualquer continue, qual
+      // filtro descartaria a mensagem e se ela carrega info de newsletter.
+      if (process.env.DEBUG_INCOMING_UPSERT) {
+        try {
+          const dbgTsRaw = Number(msg.messageTimestamp ?? 0)
+          const dbgTs = Number.isFinite(dbgTsRaw) && dbgTsRaw > 0 ? dbgTsRaw * 1000 : null
+          const ageMs = dbgTs ? Date.now() - dbgTs : null
+          const inner = extractMessageContent(msg.message) || msg.message || {}
+          const hasNewsletter = (() => {
+            const scan = (v, d = 0) => {
+              if (!v || typeof v !== 'object' || d > 6) return false
+              if (v.forwardedNewsletterMessageInfo) return true
+              for (const child of Object.values(v)) {
+                if (child && typeof child === 'object' && scan(child, d + 1)) return true
+              }
+              return false
+            }
+            return scan(msg.message)
+          })()
+          let wouldDrop = null
+          if (msg.key.fromMe) wouldDrop = 'fromMe'
+          else if (dbgTs && dbgTs < cutoff) wouldDrop = `cutoff_5min(age=${ageMs}ms)`
+          logger.info({
+            jid: msg.key.remoteJid,
+            msgId: msg.key.id,
+            fromMe: Boolean(msg.key.fromMe),
+            msgTsRaw: dbgTsRaw,
+            ageMs,
+            cutoffWindowMs: 5 * 60_000,
+            topKeys: Object.keys(msg.message || {}),
+            innerKeys: Object.keys(inner || {}),
+            hasNewsletter,
+            wouldDrop,
+          }, 'DEBUG_INCOMING_UPSERT')
+        } catch (dbgErr) {
+          logger.warn({ err: dbgErr?.message }, 'DEBUG_INCOMING_UPSERT falhou')
+        }
+      }
       if (msg.key.fromMe) continue
       // Marca atividade do JID — usado pelo monitorSilenceWatchdog pra
       // diferenciar "monitor parado por falha de decrypt" de "monitor
@@ -2158,7 +2453,7 @@ process.on('message', async msg => {
   }
 
   if (msg?.type === 'metrics') {
-    process.send({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats() } })
+    process.send({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats(), sessionHealth: getSessionHealth() } })
   }
 
   if (msg?.type === 'broadcast') {
@@ -2182,6 +2477,9 @@ process.on('message', async msg => {
         },
       })
       const imageRecipe = buildBroadcastImageRecipe(msg.text, msg.options)
+      // Botão "Ver canal" herdado do grupo de destino (oferta automática,
+      // broadcast manual). null = sem botão. A injeção acontece em processSendJob.
+      const broadcastChannelForward = resolveChannelForward((await getConfig()).groups.postDetails.find(g => g.waJid === jid))
       const accepted = await enqueueSendJob({
         type: 'broadcast',
         logId: log.id,
@@ -2190,6 +2488,7 @@ process.on('message', async msg => {
         plan: 'broadcast',
         delayMs: buildSmartDelayMs((await getConfig()).botConfig),
         typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
+        channelForward: broadcastChannelForward,
         ...(imageRecipe ? { payloadRecipe: imageRecipe } : { payload: { text: msg.text } }),
       })
       if (accepted) {

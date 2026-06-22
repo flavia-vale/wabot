@@ -31,7 +31,7 @@ export function QuietHoursForm({ value, onChange, disabled }) {
     <fieldset className="bg-white rounded-2xl shadow p-5">
       <legend className="text-base font-semibold text-gray-800">🌙 Janela silenciosa</legend>
       <p className="text-xs text-gray-500 mb-3">
-        Faixa de horas em que o bot PAUSA envios pra canais. Ideal pra simular um humano que dorme. Ex: 0h a 6h da manhã.
+        Faixa de horas em que o bot PAUSA envios pros destinos espelhados (grupos e canais). Ideal pra simular um humano que dorme. Ex: 0h a 6h da manhã.
       </p>
       <FeatureToggle checked={!!value.quietHoursEnabled} onChange={checked => onChange({ quietHoursEnabled: checked })} disabled={disabled} label="Alternar janela silenciosa" />
       <div className={value.quietHoursEnabled ? '' : 'pointer-events-none opacity-50'} aria-disabled={!value.quietHoursEnabled}>
@@ -68,7 +68,7 @@ export function QuietHoursForm({ value, onChange, disabled }) {
         </label>
       </div>
       <p className="text-[11px] text-gray-500 mt-2">
-        Use 0 = meia-noite, 6 = 6h da manhã. O bot retoma envios automaticamente ao final da janela.
+        Use 0 = meia-noite, 6 = 6h da manhã. O bot retoma envios automaticamente ao final da janela. Vale para grupos espelhados e canais.
       </p>
       </div>
     </fieldset>

@@ -3,7 +3,7 @@ import { PresetButtons } from './PresetButtons'
 import { FeatureToggle } from './FeatureToggle'
 
 const FIELDS = [
-  { key: 'channelMinIntervalSec', label: 'Intervalo mínimo entre envios (segundos)', hint: 'Tempo mínimo antes de enviar 2 mensagens seguidas no MESMO canal.', min: 1, max: 86400 },
+  { key: 'channelMinIntervalSec', label: 'Intervalo mínimo entre envios (segundos)', hint: 'Tempo mínimo antes de enviar 2 mensagens seguidas no MESMO destino (grupo ou canal).', min: 1, max: 86400 },
   { key: 'channelBurstCap',        label: 'Máximo de envios durante 1h',              hint: 'Quantos envios o bot pode disparar dentro de uma janela fixa de 1 hora (anti-flood).', min: 1, max: 1000 },
   { key: 'channelDailyCap',        label: 'Limite diário (envios/dia)',               hint: 'Máximo de envios em um dia inteiro para um canal. Deixe vazio para sem limite.', min: 1, max: 10000, nullable: true },
   { key: 'channelStaggerJitterMs', label: 'Atraso aleatório entre canais (segundos)', hint: 'Pequena espera aleatória entre canais diferentes pra parecer humano. Ex: 90 = até 90 segundos.', min: 0, max: 600, scale: 1000 },

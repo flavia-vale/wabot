@@ -9,6 +9,113 @@ function optionalUrl(value) {
   return /^https?:\/\//i.test(normalized) ? normalized : null
 }
 
+function safeParseJids(value) {
+  try {
+    const parsed = JSON.parse(value ?? '[]')
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+// Rótulo amigável da origem de uma linha in-flight do MessageLog (espelho de
+// grupo, envio manual, agendamento ou oferta automática). Mantém o mesmo
+// vocabulário do histórico para o usuário não ver dois nomes pra mesma coisa.
+function inflightSourceLabel(sourceGroup) {
+  switch (sourceGroup) {
+    case 'manual': return 'Envio manual'
+    case 'scheduled': return 'Agendamento'
+    case 'offerAutomation': return 'Oferta automática'
+    default: return 'Espelhado'
+  }
+}
+
+// Agrega as TRÊS fontes do "futuro" de um envio num formato único para o
+// painel: agendamentos (ScheduledMessage), itens de fila (OfferQueueItem) e
+// mensagens já no pipeline de envio (MessageLog status queued/sending — inclui
+// espelhos de grupo jogados pra frente com delay). Cada item carrega `source`
+// e o suficiente para a UI cancelar na rota certa.
+async function loadUpcoming(db, userId) {
+  const [scheduled, queueItems, inflight] = await Promise.all([
+    db.scheduledMessage.findMany({
+      where: { userId, status: { in: ['pending', 'queued'] } },
+      orderBy: { scheduledAt: 'asc' },
+      take: 200,
+    }),
+    db.offerQueueItem.findMany({
+      where: { userId, status: { in: ['pending', 'queued'] } },
+      orderBy: [{ status: 'asc' }, { position: 'asc' }],
+      take: 300,
+      include: { queue: { select: { name: true, enabled: true } } },
+    }),
+    db.messageLog.findMany({
+      where: { userId, status: { in: ['queued', 'sending'] } },
+      orderBy: { sentAt: 'desc' },
+      take: 100,
+    }),
+  ])
+
+  const inflightItems = inflight.map((row) => ({
+    id: `log:${row.id}`,
+    source: 'inflight',
+    sourceLabel: inflightSourceLabel(row.sourceGroup),
+    status: row.status,
+    text: row.messageText || '',
+    imageUrl: null,
+    targetJids: row.destGroup ? [row.destGroup] : [],
+    scheduledAt: null,
+    position: null,
+    lastError: null,
+    paused: false,
+    createdAt: row.sentAt,
+    cancellable: false,
+  }))
+
+  const scheduledItems = scheduled.map((row) => ({
+    id: `sched:${row.id}`,
+    source: 'scheduled',
+    sourceLabel: 'Agendada',
+    status: row.status,
+    text: row.text || '',
+    imageUrl: row.imageUrl || null,
+    targetJids: safeParseJids(row.targetJids),
+    scheduledAt: row.scheduledAt,
+    position: null,
+    lastError: null,
+    paused: false,
+    createdAt: row.createdAt,
+    cancellable: row.status === 'pending',
+    cancel: { kind: 'scheduled', id: row.id },
+  }))
+
+  const queueItemRows = queueItems.map((row) => ({
+    id: `queue:${row.id}`,
+    source: 'queue',
+    sourceLabel: row.queue?.name ? `Fila: ${row.queue.name}` : 'Fila',
+    status: row.status,
+    text: row.text || '',
+    imageUrl: row.imageUrl || null,
+    targetJids: safeParseJids(row.targetJids),
+    scheduledAt: null,
+    position: row.position,
+    lastError: row.lastError || null,
+    paused: row.queue ? row.queue.enabled === false : false,
+    createdAt: row.createdAt,
+    cancellable: row.status === 'pending',
+    cancel: { kind: 'queueItem', queueId: row.queueId, id: row.id },
+  }))
+
+  // Ordem: o que está saindo agora (in-flight) primeiro, depois agendamentos
+  // por horário, e por fim os itens de fila na ordem de posição.
+  return [...inflightItems, ...scheduledItems, ...queueItemRows]
+}
+
+function countBySource(items) {
+  const counts = { inflight: 0, scheduled: 0, queue: 0 }
+  for (const item of items) if (item.source in counts) counts[item.source] += 1
+  return counts
+}
+
 export async function broadcastRoutes(app, deps = {}) {
   const db = deps.db ?? dbDefault
   const sendBroadcastImpl = deps.sendBroadcast ?? sendBroadcast
@@ -62,6 +169,13 @@ export async function broadcastRoutes(app, deps = {}) {
       orderBy: { scheduledAt: 'asc' },
     })
     return msgs.map((message) => ({ ...message, targetJids: JSON.parse(message.targetJids) }))
+  })
+
+  // Visão unificada do "futuro": agendamentos + itens de fila + mensagens
+  // ainda no pipeline de envio, num só lugar (painel "Próximos envios").
+  app.get('/upcoming', { onRequest: [app.authenticate] }, async (req) => {
+    const items = await loadUpcoming(db, req.user.sub)
+    return { items, counts: countBySource(items) }
   })
 
   app.post('/scheduled', { onRequest: [app.authenticate] }, async (req, reply) => {

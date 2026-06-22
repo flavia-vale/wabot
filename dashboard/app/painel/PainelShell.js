@@ -1,16 +1,18 @@
 'use client'
 
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { NAV_GROUPS } from './nav'
 import SidebarOnboarding from '@/components/SidebarOnboarding'
 
-/* Contexto compartilhado: dados de sessão/usuário buscados uma vez pelo shell
- * e reusados pelas páginas (sem refetch). Páginas também publicam o título do
- * header aqui via usePainelHeader(). Nada disso toca o back end além das rotas
- * já existentes em @/lib/api. */
+/* Contexto compartilhado: dados de sessão/usuário reusados pelas páginas. O
+ * status de sessão (`online`/`phone`) é re-buscado periodicamente e ao focar a
+ * aba para não ficar obsoleto (ver refreshSession). Páginas também publicam o
+ * título do header aqui via usePainelHeader() e podem forçar uma atualização
+ * imediata do status via refreshSession(). Nada disso toca o back end além das
+ * rotas já existentes em @/lib/api. */
 const PainelContext = createContext(null)
 
 export function usePainel() {
@@ -42,6 +44,40 @@ const HELP_ICON = <><circle cx="12" cy="12" r="10" /><path d="M9.1 9a3 3 0 0 1 5
 const SETTINGS_ICON = <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></>
 const LOGOUT_ICON = <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>
 
+function formatPlanDate(value, options = { day: '2-digit', month: 'short' }) {
+  if (!value) return null
+  const d = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleDateString('pt-BR', options)
+}
+
+function expiredPlanCopy(user) {
+  if (!user?.accessExpiresAt) return ''
+  const expiresAt = new Date(user.accessExpiresAt)
+  if (Number.isNaN(expiresAt.getTime()) || expiresAt >= new Date()) return ''
+  const dateLabel = formatPlanDate(expiresAt, { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const planLabel = user.plan === 'basic' ? 'Basic' : user.plan === 'pro' ? 'Pro' : user.plan === 'trial' ? 'Trial' : (user.plan || 'plano')
+  return user.plan === 'trial'
+    ? `Seu trial venceu em ${dateLabel}. O bot fica pausado e não envia novas mensagens até a renovação.`
+    : `Seu plano ${planLabel} venceu em ${dateLabel}. O bot fica pausado e não envia novas mensagens até a renovação.`
+}
+
+function ExpiredPlanBanner({ user }) {
+  const copy = expiredPlanCopy(user)
+  if (!copy) return null
+
+  return (
+    <div className="pnl-note-box is-error pnl-expired-plan-banner" role="alert">
+      <div>
+        <strong style={{ fontWeight: 600 }}>Plano vencido: seus envios automáticos estão pausados</strong>
+        <p style={{ marginTop: 6 }}>{copy}</p>
+        <p style={{ marginTop: 6, fontWeight: 600 }}>Escolha um plano e finalize o checkout para reativar sua conta.</p>
+      </div>
+      <Link href="/painel/plano" className="pnl-btn is-primary" style={{ flexShrink: 0 }}>Reativar plano</Link>
+    </div>
+  )
+}
+
 function planInfo(user) {
   const plan = user?.plan
   const exp = user?.accessExpiresAt ? new Date(user.accessExpiresAt) : null
@@ -53,7 +89,7 @@ function planInfo(user) {
       : plan === 'basic' ? 'Plano Basic'
         : plan === 'trial' ? 'Trial'
           : 'Plano e cobrança'
-  const dateLabel = validExp ? exp.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : null
+  const dateLabel = validExp ? formatPlanDate(exp) : null
   const sub = expired
     ? 'reative para automatizar'
     : dateLabel ? `renova em ${dateLabel}` : 'gerencie sua assinatura'
@@ -99,6 +135,7 @@ export default function PainelShell({ children }) {
   const [online, setOnline] = useState(null)
   const [phone, setPhone] = useState(null)
   const [groupCount, setGroupCount] = useState(null)
+  const [sessionHealth, setSessionHealth] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [openGroups, setOpenGroups] = useState({})
   const [userMenuOpen, setUserMenuOpen] = useState(false)
@@ -113,22 +150,64 @@ export default function PainelShell({ children }) {
     return () => { active = false }
   }, [router])
 
-  // Status de sessão + contagem de grupos (compartilhado com as páginas).
+  // Status de sessão + contagem de grupos (compartilhado com a tag do header
+  // e a página de espelhamento, que leem `online` deste contexto). Precisa ser
+  // re-buscado periodicamente: a página /painel/whatsapp acompanha o status ao
+  // vivo (WS+polling), mas o shell não — se ele buscasse só uma vez no mount,
+  // ficaria preso em "desconectado" mesmo depois da sessão conectar, gerando a
+  // inconsistência entre /painel/whatsapp (conectado) e o resto do painel.
+  const refreshSession = useCallback(async () => {
+    const [s, g] = await Promise.allSettled([api.sessionStatusFast(), api.groups()])
+    if (s.status === 'fulfilled') {
+      setOnline(s.value?.status === 'connected')
+      setPhone(s.value?.phone ?? null)
+    } else {
+      setOnline(false)
+    }
+    if (g.status === 'fulfilled' && Array.isArray(g.value)) setGroupCount(g.value.length)
+  }, [])
+
+  const refreshSessionRef = useRef(refreshSession)
+  useEffect(() => { refreshSessionRef.current = refreshSession }, [refreshSession])
+
   useEffect(() => {
     if (checking) return undefined
-    let active = true
-    Promise.allSettled([api.sessionStatusFast(), api.groups()]).then(([s, g]) => {
-      if (!active) return
-      if (s.status === 'fulfilled') {
-        setOnline(s.value?.status === 'connected')
-        setPhone(s.value?.phone ?? null)
-      } else {
-        setOnline(false)
-      }
-      if (g.status === 'fulfilled' && Array.isArray(g.value)) setGroupCount(g.value.length)
-    })
-    return () => { active = false }
+    let cancelled = false
+    const tick = () => { if (!cancelled) refreshSessionRef.current?.() }
+    tick()
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      tick()
+    }, 20000)
+    const onVisible = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') tick()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [checking])
+
+  // Saúde da conexão: só sondamos a versão completa do status (com métricas do
+  // worker) quando o bot está online. O worker devolve sessionHealth.degraded
+  // quando a sessão está conectada mas com decrypt dessincronizado; mantemos o
+  // dado no contexto para observabilidade, mas NÃO exibimos mais banner global
+  // (a ação que ele sugeria — reconectar — pioraria o re-sync; ver pnl-content).
+  useEffect(() => {
+    if (!online) return undefined
+    let active = true
+    let timer = null
+    const poll = async () => {
+      const s = await api.sessionStatus().catch(() => null)
+      if (!active) return
+      if (s) setSessionHealth(s.sessionHealth ?? s.metrics?.sessionHealth ?? null)
+      timer = setTimeout(poll, 45000)
+    }
+    poll()
+    return () => { active = false; if (timer) clearTimeout(timer) }
+  }, [online])
 
   async function logout() {
     await api.logout().catch(() => {})
@@ -136,8 +215,8 @@ export default function PainelShell({ children }) {
   }
 
   const ctxValue = useMemo(
-    () => ({ user, online, phone, groupCount, setHeader }),
-    [user, online, phone, groupCount],
+    () => ({ user, online, phone, groupCount, sessionHealth, refreshSession, setHeader }),
+    [user, online, phone, groupCount, sessionHealth, refreshSession],
   )
 
   if (checking) {
@@ -179,7 +258,7 @@ export default function PainelShell({ children }) {
               )
 
               if (group.collapsible) {
-                const open = openGroups[group.title] ?? hasActiveChild
+                const open = openGroups[group.title] ?? (group.defaultOpen || hasActiveChild)
                 return (
                   <div key={group.title} className="pnl-nav-group">
                     <button
@@ -280,7 +359,17 @@ export default function PainelShell({ children }) {
             </div>
           </header>
 
-          <div className="pnl-content">{children}</div>
+          <div className="pnl-content">
+            {/* Banner global de "conexão instável" removido (2026-06): a única ação
+                que ele oferecia era reconectar (QR novo), o que PIORA o estado —
+                logo após reconectar há uma rajada esperada de Bad MAC enquanto as
+                sender keys dos grupos re-sincronizam, e re-escanear reinicia esse
+                ciclo. Como a ação correta não é reconectar, o banner não aparece
+                mais. sessionHealth segue exposto no contexto/metrics para
+                observabilidade, sem alarmar o usuário com uma ação enganosa. */}
+            <ExpiredPlanBanner user={user} />
+            {children}
+          </div>
         </div>
       </div>
     </PainelContext.Provider>

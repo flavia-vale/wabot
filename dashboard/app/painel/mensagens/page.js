@@ -60,7 +60,7 @@ function Chevron({ open }) {
 export default function MensagensPage() {
   usePainelHeader({ title: 'Templates de mensagens', subtitle: 'Crie templates e personalize os textos das suas ofertas' })
 
-  const [value, setValue] = useState({ copyVariationPoolJson: '{}', brandingGroupLink: '', couponLink: '' })
+  const [value, setValue] = useState({ copyVariationPoolJson: '{}', copyVariationEnabled: false, brandingGroupLink: '', couponLink: '' })
   const [templateStore, setTemplateStore] = useState(() => readLocalTemplateStore())
   const [automations, setAutomations] = useState([])
   const [templateMode, setTemplateMode] = useState('list')
@@ -89,6 +89,7 @@ export default function MensagensPage() {
         if (!active) return
         setValue({
           copyVariationPoolJson: cfg.copyVariationPoolJson ?? '{}',
+          copyVariationEnabled: cfg.copyVariationEnabled ?? false,
           brandingGroupLink: cfg.brandingGroupLink ?? '',
           couponLink: cfg.couponLink ?? '',
         })
@@ -122,6 +123,7 @@ export default function MensagensPage() {
     try {
       await api.variationsUpdate({
         copyVariationPoolJson: value.copyVariationPoolJson,
+        copyVariationEnabled: value.copyVariationEnabled,
         brandingGroupLink: value.brandingGroupLink,
         couponLink: value.couponLink,
         mobileTemplatesJson: JSON.stringify(templateStore),
@@ -216,6 +218,13 @@ export default function MensagensPage() {
 
   const [dadosGroup, blocosGroup] = OFFER_TEMPLATE_VARIABLE_GROUPS
 
+  const saveButtonLabel = saving ? 'Salvando…' : saved ? '✓ Salvo' : 'Salvar'
+  const renderSaveButton = (label = saveButtonLabel) => (
+    <button type="button" className="pnl-btn is-primary" onClick={handleSave} disabled={saving}>
+      {saving ? 'Salvando…' : label}
+    </button>
+  )
+
   // Editor de template reutilizado (create + edit dentro do acordeão)
   const renderEditor = () => (
     <div className="pnl-grid">
@@ -284,9 +293,12 @@ export default function MensagensPage() {
       <section>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 4 }}>
           <div className="pnl-card-title" style={{ fontSize: 15 }}>Templates de mensagens</div>
-          {templateMode === 'list' && (
-            <button type="button" className="pnl-btn is-primary" onClick={startCreateTemplate}>Criar template</button>
-          )}
+          <div className="pnl-toolbar" style={{ gap: 8 }}>
+            {templateMode === 'list' && (
+              <button type="button" className="pnl-btn" onClick={startCreateTemplate}>Criar template</button>
+            )}
+            {renderSaveButton()}
+          </div>
         </div>
         <p className="pnl-card-note" style={{ marginBottom: 12 }}>Use os mesmos templates no Criar oferta e nas ofertas automáticas.</p>
 
@@ -351,7 +363,10 @@ export default function MensagensPage() {
                             <WhatsAppBubble text={renderedPreview} format />
                           </div>
                         </div>
-                        <button type="button" className="pnl-btn is-primary" style={{ marginTop: 12 }} onClick={() => startEditTemplate(template)}>Editar template</button>
+                        <div className="pnl-toolbar" style={{ marginTop: 12, gap: 8 }}>
+                          <button type="button" className="pnl-btn" onClick={() => startEditTemplate(template)}>Editar template</button>
+                          {renderSaveButton()}
+                        </div>
                       </>
                     )}
                   </div>
@@ -382,8 +397,33 @@ export default function MensagensPage() {
 
       {/* Textos dinâmicos */}
       <section>
-        <div className="pnl-card-title" style={{ fontSize: 15 }}>Textos dinâmicos</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div className="pnl-card-title" style={{ fontSize: 15 }}>Textos dinâmicos</div>
+          {renderSaveButton()}
+        </div>
         <p className="pnl-card-note" style={{ marginBottom: 12 }}>Pedacinhos que o bot intercala em cada envio, pra nenhuma mensagem sair 100% igual. Quanto mais variações, mais natural.</p>
+        <label className="pnl-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 16px', marginBottom: 12, cursor: 'pointer' }}>
+          <span>
+            <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>Variar texto nos canais monitorados</span>
+            <span className="pnl-card-note" style={{ display: 'block', marginTop: 2 }}>Liga a intercalação de variações no encaminhamento de canais monitorados (anti-repetição). As ofertas automáticas já usam as variações sempre.</span>
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={!!value.copyVariationEnabled}
+            aria-label="Variar texto nos canais monitorados"
+            disabled={saving}
+            onClick={() => setValue((v) => ({ ...v, copyVariationEnabled: !v.copyVariationEnabled }))}
+            style={{
+              position: 'relative', flexShrink: 0, width: 46, height: 26, borderRadius: 999,
+              border: '1px solid ' + (value.copyVariationEnabled ? 'var(--accent-strong)' : 'var(--line)'),
+              background: value.copyVariationEnabled ? 'var(--accent-strong)' : 'var(--bg-soft)',
+              transition: 'background .15s', cursor: saving ? 'not-allowed' : 'pointer',
+            }}
+          >
+            <span aria-hidden="true" style={{ position: 'absolute', top: 2, left: value.copyVariationEnabled ? 22 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.2)', transition: 'left .15s' }} />
+          </button>
+        </label>
         <div className="pnl-grid">
           {VARIATION_GROUPS.map((g) => {
             const items = pool[g.key]
@@ -417,9 +457,12 @@ export default function MensagensPage() {
                         </div>
                       ))}
                     </div>
-                    <button type="button" className="pnl-btn" style={{ marginTop: 12, borderStyle: 'dashed', color: 'var(--accent-strong)' }} onClick={() => addItem(g.key)} disabled={items.length >= MAX_VARIATIONS}>
-                      + Adicionar variação
-                    </button>
+                    <div className="pnl-toolbar" style={{ marginTop: 12, gap: 8 }}>
+                      <button type="button" className="pnl-btn" style={{ borderStyle: 'dashed', color: 'var(--accent-strong)' }} onClick={() => addItem(g.key)} disabled={items.length >= MAX_VARIATIONS}>
+                        + Adicionar variação
+                      </button>
+                      {renderSaveButton()}
+                    </div>
                   </div>
                 )}
               </div>
@@ -430,7 +473,10 @@ export default function MensagensPage() {
 
       {/* 2 · Links */}
       <section className="pnl-card">
-        <div className="pnl-card-title">Links</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div className="pnl-card-title">Links</div>
+          {renderSaveButton()}
+        </div>
         <p className="pnl-card-note" style={{ marginBottom: 12 }}>
           Use <code className="pnl-token" style={{ cursor: 'default' }}>{'{{grupoLink}}'}</code> e{' '}
           <code className="pnl-token" style={{ cursor: 'default' }}>{'{{cupomLink}}'}</code> nos seus ganchos e CTAs.

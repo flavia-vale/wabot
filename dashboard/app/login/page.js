@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import { TERMS_VERSION, api } from '@/lib/api'
+import { resolvePostAuthRedirect } from '@/lib/onboardingProgress'
 import { Alert } from '@/components/Alert'
 import { mapAuthError, trackEvent, TRACKING_EVENTS } from '@/lib/analytics'
 import { attributionForTracking, readAttributionFromSearchParams } from '@/lib/marketing-attribution'
@@ -131,8 +132,21 @@ function LoginContent() {
         await api.login(cleanEmail, password)
         trackEvent(TRACKING_EVENTS.LOGIN_SUCCESS, { origin: 'login_page' })
       }
-      setSuccess(isRegister ? 'Conta criada. Agora vamos conectar seu WhatsApp e validar o primeiro teste guiado.' : 'Login realizado. Redirecionando para o checklist...')
-      setTimeout(() => router.push('/painel/checklist'), 300)
+      let redirectTo = '/painel/checklist'
+      if (!isRegister) {
+        try {
+          const status = await api.dashboardStatus()
+          redirectTo = resolvePostAuthRedirect({ status, isRegister: false })
+        } catch {
+          redirectTo = resolvePostAuthRedirect({ status: null, isRegister: false })
+        }
+      }
+      setSuccess(isRegister
+        ? 'Conta criada. Agora vamos conectar seu WhatsApp e validar o primeiro teste guiado.'
+        : redirectTo === '/painel'
+          ? 'Login realizado. Redirecionando para o painel...'
+          : 'Login realizado. Redirecionando para o checklist...')
+      setTimeout(() => router.push(redirectTo), 300)
     } catch (err) {
       trackEvent(TRACKING_EVENTS.AUTH_ERROR, {
         origin: 'login_page',

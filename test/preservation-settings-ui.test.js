@@ -9,15 +9,16 @@ const FORMS = [
   ['ThrottleForm.js', 'channelThrottleEnabled'],
   ['QuietHoursForm.js', 'quietHoursEnabled'],
   ['FollowGuardForm.js', 'followGuardEnabled'],
-  ['CopyVariationPoolEditor.js', 'copyVariationEnabled'],
 ]
 
-test('página renderiza somente as cinco funcionalidades disponíveis', () => {
+test('página renderiza somente as funcionalidades de defesa disponíveis', () => {
   const source = read(PAGE)
-  for (const component of ['ThrottleForm', 'QuietHoursForm', 'FollowGuardForm', 'CopyVariationPoolEditor', 'ImageMutationToggle']) {
+  for (const component of ['ThrottleForm', 'QuietHoursForm', 'FollowGuardForm', 'ImageMutationToggle']) {
     assert.match(source, new RegExp(`<${component}\\b`), `${component} deve continuar visível`)
   }
-  for (const hidden of ['PreservationMasterToggle', 'ProbeToggle', 'ClickTrackerStatus']) {
+  // As variações de texto foram consolidadas em "Templates de mensagens"; o
+  // editor não pode mais aparecer (nem ser importado) na preservação.
+  for (const hidden of ['PreservationMasterToggle', 'ProbeToggle', 'ClickTrackerStatus', 'CopyVariationPoolEditor']) {
     assert.doesNotMatch(source, new RegExp(hidden), `${hidden} não pode aparecer na página`)
   }
 })
