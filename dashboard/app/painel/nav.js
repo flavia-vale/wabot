@@ -52,6 +52,11 @@ export const NAV_GROUPS = [
         href: '/painel/envio',
         icon: i(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>),
       },
+      {
+        label: 'Filas',
+        href: '/painel/filas',
+        icon: i(<><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" /><circle cx="2" cy="6" r=".5" /><circle cx="2" cy="12" r=".5" /><circle cx="2" cy="18" r=".5" /></>),
+      },
     ],
   },
   {
@@ -76,11 +81,6 @@ export const NAV_GROUPS = [
         label: 'Grupos',
         href: '/painel/grupos',
         icon: i(<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>),
-      },
-      {
-        label: 'Filas',
-        href: '/painel/filas',
-        icon: i(<><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" /><circle cx="2" cy="6" r=".5" /><circle cx="2" cy="12" r=".5" /><circle cx="2" cy="18" r=".5" /></>),
       },
       {
         label: 'Templates de mensagens',
