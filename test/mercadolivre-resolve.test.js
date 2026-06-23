@@ -125,6 +125,40 @@ test('convert mantém short_url quando validação é inconclusiva (muro anti-bo
   assert.equal(result, 'https://mercadolivre.com/sec/2Abcd')
 })
 
+
+test('convert persiste patch de cookies rotacionados quando createLink retorna Set-Cookie', async (t) => {
+  clearMercadoLivreAffiliateCooldownsForTest()
+  let patchArgs = null
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: { urls: [{ short_url: 'https://mercadolivre.com/sec/2Abcd' }] },
+    headers: {
+      'set-cookie': [
+        'ssid=ssid-novo; Path=/; HttpOnly',
+        '_csrf=csrf-novo; Path=/',
+        '_mldataSessionId=session-nova; Path=/',
+      ],
+    },
+  }))
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/p/MLB70009242' }))
+
+  const result = await convert('https://www.mercadolivre.com.br/secador/p/MLB70009242', {
+    tag: '475630078',
+    ssid: 'ssid-antigo',
+    csrf: 'csrf-antigo',
+    __onCredentialPatch: async (...args) => { patchArgs = args },
+  })
+
+  assert.equal(result, 'https://mercadolivre.com/sec/2Abcd')
+  assert.deepEqual(patchArgs?.[0], 'mercadolivre')
+  assert.equal(patchArgs?.[1]?.ssid, 'ssid-novo')
+  assert.equal(patchArgs?.[1]?.csrf, 'csrf-novo')
+  assert.match(patchArgs?.[1]?.cookie, /ssid=ssid-novo/)
+  assert.match(patchArgs?.[1]?.cookie, /_csrf=csrf-novo/)
+  assert.match(patchArgs?.[1]?.cookie, /_mldataSessionId=session-nova/)
+})
+
+
 test('resolveToCleanProductUrl retorna null para /social/ sem produto extraível (sem ?ref=)', async (t) => {
   // Sem ?ref= a página é o perfil genérico do afiliado — sem produto identificável.
   // O mock simula resposta HTML vazia (sem recommended_items, wid, canonical MLB).

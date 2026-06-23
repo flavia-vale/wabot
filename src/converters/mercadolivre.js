@@ -356,6 +356,68 @@ function buildCookieHeader({ ssid, csrf, cookie, id }) {
   return pairs.join('; ')
 }
 
+function parseCookieHeader(cookieHeader = '') {
+  const jar = new Map()
+  for (const part of String(cookieHeader || '').split(';')) {
+    const trimmed = part.trim()
+    if (!trimmed) continue
+    const eq = trimmed.indexOf('=')
+    if (eq <= 0) continue
+    jar.set(trimmed.slice(0, eq), trimmed.slice(eq + 1))
+  }
+  return jar
+}
+
+function getSetCookieLines(headers = {}) {
+  const value = headers?.['set-cookie'] ?? headers?.['Set-Cookie']
+  if (!value) return []
+  return Array.isArray(value) ? value.filter(Boolean) : [value]
+}
+
+function mergeSetCookieIntoJar(cookieHeader, setCookieLines) {
+  const jar = parseCookieHeader(cookieHeader)
+  for (const line of setCookieLines) {
+    const first = String(line || '').split(';')[0]?.trim()
+    if (!first) continue
+    const eq = first.indexOf('=')
+    if (eq <= 0) continue
+    jar.set(first.slice(0, eq), first.slice(eq + 1))
+  }
+  return jar
+}
+
+function serializeCookieJar(jar) {
+  return [...jar.entries()].map(([name, value]) => `${name}=${value}`).join('; ')
+}
+
+function buildCredentialPatchFromSetCookie(creds = {}, cookieHeader = '', headers = {}) {
+  const lines = getSetCookieLines(headers)
+  if (!lines.length) return null
+  const before = parseCookieHeader(cookieHeader)
+  const after = mergeSetCookieIntoJar(cookieHeader, lines)
+  const changedNames = [...after.keys()].filter(name => before.get(name) !== after.get(name))
+  if (!changedNames.length) return null
+
+  const patch = { cookie: serializeCookieJar(after) }
+  if (after.has('ssid')) patch.ssid = after.get('ssid')
+  if (after.has('_csrf')) patch.csrf = after.get('_csrf')
+  if (after.has('id')) patch.id = after.get('id')
+
+  // Quando a credencial foi cadastrada em campos separados, mantenha os campos
+  // conhecidos mesmo que o ML só tenha rotacionado cookies companheiros no jar.
+  if (!patch.ssid && creds.ssid) patch.ssid = creds.ssid
+  if (!patch.csrf && creds.csrf) patch.csrf = creds.csrf
+  if (!patch.id && creds.id) patch.id = creds.id
+  return patch
+}
+
+async function notifyCredentialPatch(creds = {}, patch) {
+  if (!patch) return
+  if (typeof creds.__onCredentialPatch === 'function') {
+    await creds.__onCredentialPatch('mercadolivre', patch)
+  }
+}
+
 async function callCreateLinkApi(mlUrl, tag, { cookieHeader, csrf }) {
   const res = await axios.post(
     'https://www.mercadolivre.com.br/affiliate-program/api/v2/affiliates/createLink',
@@ -427,13 +489,14 @@ export async function checkMercadoLivreSession(creds = {}) {
   if (!cookieHeader) return { configured: false, alive: null, reason: 'no_cookie' }
   try {
     const res = await callCreateLinkApi(SESSION_PROBE_URL, tag || '', { cookieHeader, csrf })
+    const credentialPatch = buildCredentialPatchFromSetCookie(creds, cookieHeader, res.headers)
     // 401 é sinal de auth: cookie expirado/inválido -> redireciona ao login.
     // 403/429 não provam expiração do SSID; são bloqueio/rate-limit e ficam
     // indeterminados para não alarmar a usuária com falso "SSID expirou".
-    if (res.status === 401) return { configured: true, alive: false, reason: 'expired' }
-    if (res.status === 403) return { configured: true, alive: null, reason: 'forbidden' }
-    if (res.status === 429) return { configured: true, alive: null, reason: 'rate_limited' }
-    return { configured: true, alive: true, reason: 'ok' }
+    if (res.status === 401) return { configured: true, alive: false, reason: 'expired', ...(credentialPatch ? { credentialPatch } : {}) }
+    if (res.status === 403) return { configured: true, alive: null, reason: 'forbidden', ...(credentialPatch ? { credentialPatch } : {}) }
+    if (res.status === 429) return { configured: true, alive: null, reason: 'rate_limited', ...(credentialPatch ? { credentialPatch } : {}) }
+    return { configured: true, alive: true, reason: 'ok', ...(credentialPatch ? { credentialPatch } : {}) }
   } catch {
     return { configured: true, alive: null, reason: 'network_error' }
   }
@@ -456,6 +519,7 @@ async function createAffiliateLink(mlUrl, tag, creds) {
 
   let lastError = null
   let terminalFailure = null
+  let terminalCredentialPatch = null
   const RETRYABLE_STATUS = new Set([408, 409, 425, 500, 502, 503, 504])
   const retryBackoffMs = [400, 1200, 2800]
   for (const attempt of attempts) {
@@ -463,16 +527,20 @@ async function createAffiliateLink(mlUrl, tag, creds) {
       try {
         logger.info({ attempt: attempt.label, retry: i, mlUrl, hasSsid: !!ssid, hasCsrf: !!csrf }, 'ML createLink: tentando chamada API')
         const res = await callCreateLinkApi(mlUrl, tag, attempt)
+        const credentialPatch = buildCredentialPatchFromSetCookie(creds, attempt.cookieHeader, res.headers)
         const result = res.data?.urls?.[0]
         if (result?.short_url) {
-          logger.info({ attempt: attempt.label, retry: i, mlUrl }, 'ML createLink: short_url gerado')
-          return result.short_url
+          logger.info({ attempt: attempt.label, retry: i, mlUrl, rotatedCookie: !!credentialPatch }, 'ML createLink: short_url gerado')
+          return { shortUrl: result.short_url, credentialPatch }
         }
 
         const status = Number(res.status) || 0
         const apiError = String(result?.error || result?.message || res.data?.error || res.data?.message || '')
         const affiliateFailure = classifyMlAffiliateFailure(status, apiError)
-        if (affiliateFailure) terminalFailure = affiliateFailure
+        if (affiliateFailure) {
+          terminalFailure = affiliateFailure
+          terminalCredentialPatch = credentialPatch
+        }
 
         lastError = {
           status,
@@ -502,7 +570,10 @@ async function createAffiliateLink(mlUrl, tag, creds) {
         const status = Number(err.response?.status) || 0
         const apiError = String(err.response?.data?.error || err.response?.data?.message || err.message || '')
         const affiliateFailure = classifyMlAffiliateFailure(status, apiError)
-        if (affiliateFailure) terminalFailure = affiliateFailure
+        if (affiliateFailure) {
+          terminalFailure = affiliateFailure
+          terminalCredentialPatch = buildCredentialPatchFromSetCookie(creds, attempt.cookieHeader, err.response?.headers)
+        }
         lastError = { attempt: attempt.label, retry: i, err: err.message, status, apiError }
 
         if (affiliateFailure) {
@@ -525,7 +596,9 @@ async function createAffiliateLink(mlUrl, tag, creds) {
   }
 
   if (terminalFailure) {
-    throw buildMlAffiliateError(terminalFailure)
+    const err = buildMlAffiliateError(terminalFailure)
+    err.credentialPatch = terminalCredentialPatch
+    throw err
   }
 
   return null
@@ -690,8 +763,10 @@ export async function convert(url, creds) {
       const tries = cooldown ? [] : selectCreateLinkCandidates(target, candidates, anchorMlbId)
       for (const candidate of tries) {
         try {
-          const affiliateUrl = await createAffiliateLink(candidate, tag, creds)
+          const affiliateResult = await createAffiliateLink(candidate, tag, creds)
+          const affiliateUrl = typeof affiliateResult === 'string' ? affiliateResult : affiliateResult?.shortUrl
           if (!affiliateUrl) continue
+          await notifyCredentialPatch(creds, affiliateResult?.credentialPatch)
           if (anchorMlbId) {
             const verdict = await validateAffiliateRedirect(affiliateUrl, anchorMlbId)
             // Só descartamos com mismatch comprovado. 'inconclusive' (muro
@@ -708,6 +783,7 @@ export async function convert(url, creds) {
           // Falhas terminais repetiriam em todos os candidates: marca e para
           // de tentar (poupa chamadas) — cai no fallback com aviso específico.
           if (err.mlWarning || /credencial|inv[aá]lida|expirad|recusou|limitou/i.test(err.message)) {
+            await notifyCredentialPatch(creds, err.credentialPatch)
             affiliateWarning = err.mlWarning || 'ml_ssid_expired'
             if (err.mlFailureType === 'forbidden' || err.mlFailureType === 'rate_limited') {
               setAffiliateCooldown(creds, err.mlFailureType)
