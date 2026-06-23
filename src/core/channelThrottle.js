@@ -248,6 +248,11 @@ export async function checkAndReserve(groupId, botConfig, opts = {}) {
     })
     effective = { throttleOn: dest.throttleEnabled !== false, burstWindowSec: dest.burstWindowSec, tz: parseQuietHours(dest.operatingHoursJson).tz }
   } else {
+    // DEPRECATED (Plano B / Fase 3): caminho legado da global. O worker já passa
+    // sempre `destPreservation`, então este ramo virou efetivamente código morto
+    // em produção. Mantido só por retrocompat de chamadores/testes antigos até a
+    // remoção física das colunas do BotConfig (ver checklist de teardown no doc
+    // 2026-06-22-plano-b-config-direcionada-design.md / seção "Fase 3").
     decision = decide({
       now,
       throttle,

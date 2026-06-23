@@ -1145,22 +1145,16 @@ async function processSendJob(job) {
         // intervalo mínimo, burst cap. Reserva o slot quando libera.
         const cfgFull = await getConfig().catch(() => null)
         const cfg = cfgFull?.botConfig ?? {}
-        // Plano B: quando há config direcionada (preset atribuído, default da
-        // conta semeado, ou override no grupo), o gate usa a config POR DESTINO
-        // (horário de funcionamento + anti-ban do destino). Sem ela, cai no
-        // caminho legado (global do BotConfig + janela silenciosa).
+        // Plano B / Fase 3: a config POR DESTINO é a ÚNICA fonte de verdade do
+        // gate. resolveDestinationPreservation cai no preset default da conta e,
+        // na ausência dele, no HARD_DEFAULT — então NUNCA fica sem proteção
+        // anti-ban. O fallback para a global do BotConfig foi aposentado aqui.
         const defaultPreset = await getDefaultPreservationPreset()
-        const hasDestConfig = !!(g.preservationPreset || defaultPreset ||
-          g.operatingHoursEnabled != null || g.throttleEnabled != null ||
-          g.minIntervalSec != null || g.burstCap != null || g.burstWindowSec != null ||
-          g.dailyCap != null || g.operatingHoursJson != null)
-        const destPreservation = hasDestConfig
-          ? resolveDestinationPreservation(g, { preset: g.preservationPreset, defaultPreset })
-          : undefined
+        const destPreservation = resolveDestinationPreservation(g, { preset: g.preservationPreset, defaultPreset })
         const gateOpts = {
           group: g,
           preservationActive: shouldRunChannelScheduler(cfgFull?.preservationActive, cfg),
-          ...(destPreservation ? { destPreservation } : {}),
+          destPreservation,
         }
         let gate = await throttleCheckAndReserve(destGroupId, cfg, gateOpts)
         let throttleCycles = 0
