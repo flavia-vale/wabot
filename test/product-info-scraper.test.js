@@ -801,3 +801,22 @@ test('fetchProductInfo (ML) não vaza "Mercado Libre" da página anti-bot como t
   })
   assert.equal(info.title, '', 'rótulo genérico de loja não pode virar título de produto')
 })
+
+// Regressão (incidente 2026-06-23): a página anti-bot da Shopee serve og:title
+// "Oops! Seu navegador não é mais aceito!" — uma FRASE, não um rótulo de loja.
+// Antes ela vazava como TÍTULO da oferta espelhada. isBogusScrapeTitle agora
+// casa a frase por padrão; o título final deve vir vazio (→ o espelhamento cai
+// no relay do texto original em vez de emitir o interstício).
+test('fetchProductInfo (Shopee) não vaza o interstício anti-bot "Oops! Seu navegador..." como título', async (t) => {
+  const antiBotHtml = `<!doctype html><html><head>
+    <meta property="og:title" content="Oops! Seu navegador não é mais aceito!"/>
+    <title>Oops! Seu navegador não é mais aceito!</title></head>
+    <body>browser blocked</body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => mockHtmlResponse(antiBotHtml, String(input))
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://s.shopee.com.br/5VTC0c5D8e')
+  assert.equal(info.title, '', 'interstício anti-bot não pode virar título de produto')
+})
