@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
+import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { HelpLink } from '@/components/HelpLink'
 import { AddChannelModal } from '@/components/AddChannelModal'
@@ -98,6 +99,7 @@ export default function GruposPage() {
   const [healthByGroup, setHealthByGroup] = useState({})
   const [expandedHealthId, setExpandedHealthId] = useState(null)
   const [planSubject, setPlanSubject] = useState({ plan: 'trial', accessExpiresAt: null })
+  const [templates, setTemplates] = useState([])
 
   async function load() {
     setLoadingGroups(true)
@@ -116,8 +118,9 @@ export default function GruposPage() {
   useEffect(() => {
     let active = true
     setLoadingGroups(true)
-    Promise.all([api.groups(), api.me()])
-      .then(async ([data, me]) => {
+    Promise.all([api.groups(), api.me(), loadTemplateStore().catch(() => ({}))])
+      .then(async ([data, me, templateStore]) => {
+        setTemplates(composeTemplates(templateStore))
         setPlanSubject({ plan: me?.plan ?? 'trial', accessExpiresAt: me?.accessExpiresAt ?? null })
         if (!active) return
         setGroups(data)
@@ -367,6 +370,36 @@ export default function GruposPage() {
             </select>
           )}
           <p className="pnl-hint" style={{ marginTop: 6, color: '#b5742a' }}>Ativar pode aumentar o volume de mensagens encaminhadas.</p>
+        </div>
+        <div>
+          <p className="pnl-label" style={{ marginBottom: 6 }}>Template das mensagens espelhadas</p>
+          <select
+            className="pnl-input"
+            value={g.templateKey == null ? '__inherit__' : (g.templateKey === '' ? '__relay__' : g.templateKey)}
+            onChange={(e) => {
+              const v = e.target.value
+              const templateKey = v === '__inherit__' ? null : v === '__relay__' ? '' : v
+              handleUpdateGroup(g.id, { templateKey })
+            }}
+          >
+            <option value="__inherit__">Usar padrão global (Configurações)</option>
+            <option value="__relay__">Manter texto original convertido</option>
+            {templates.map((template) => <option key={template.key} value={template.key}>{template.name}</option>)}
+          </select>
+          <p className="pnl-hint" style={{ marginTop: 6 }}>Ideal para mensagens de um produto. Aplica um template do Gerar oferta depois de converter o link. Com vários produtos, só o link escolhido abaixo vira oferta. Templates sem preço deixam placeholders quando o preço não aparece no texto original.</p>
+        </div>
+        <div>
+          <p className="pnl-label" style={{ marginBottom: 6 }}>Link a converter quando há vários</p>
+          <select
+            className="pnl-input"
+            value={g.primaryLinkTarget ?? ''}
+            onChange={(e) => handleUpdateGroup(g.id, { primaryLinkTarget: e.target.value })}
+          >
+            <option value="">Usar padrão global (Configurações)</option>
+            <option value="first">Primeiro link da mensagem</option>
+            <option value="last">Último link da mensagem</option>
+          </select>
+          <p className="pnl-hint" style={{ marginTop: 6 }}>Quando a mensagem espelhada tem mais de um link de loja, escolhe qual deles é convertido e usado na oferta.</p>
         </div>
         <div>
           <p className="pnl-label" style={{ marginBottom: 6 }}>Para onde esse grupo envia</p>

@@ -40,6 +40,22 @@ test('drainQueueOnce envia um item FIFO com receita de imagem e marca sucesso', 
   assert.equal(calls.transaction.length, 2)
 })
 
+test('drainQueueOnce passa ignoreGlobalQuietHours=true quando a fila tem horário próprio', async () => {
+  // 12:00 BRT, dentro do horário 07:00-22:00 → despacha e pede para o worker
+  // ignorar a janela silenciosa global.
+  const { queue, calls, deps } = setup({ operatingHoursEnabled: true, operatingHoursStart: '07:00', operatingHoursEnd: '22:00' })
+  await drainQueueOnce(queue, deps)
+  assert.equal(calls.sent.length, 1)
+  assert.equal(calls.sent[0][3].ignoreGlobalQuietHours, true)
+})
+
+test('drainQueueOnce passa ignoreGlobalQuietHours=false quando a fila não tem horário próprio', async () => {
+  const { queue, calls, deps } = setup()
+  await drainQueueOnce(queue, deps)
+  assert.equal(calls.sent.length, 1)
+  assert.equal(calls.sent[0][3].ignoreGlobalQuietHours, false)
+})
+
 test('drainQueueOnce não envia filas pausadas e devolve o item se a pausa ocorrer após o claim', async () => {
   const paused = setup({ enabled: false })
   assert.deepEqual(await drainQueueOnce(paused.queue, paused.deps), { skipped: 'queue_disabled' })

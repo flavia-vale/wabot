@@ -780,3 +780,43 @@ test('fetchProductInfo (ML COM creds) não chama facebookexternalhit — usa coo
   })
   assert.equal(crawlerUaCalled, false, 'crawler UA não deve ser chamado quando mlCredentials está presente')
 })
+
+// Regressão: a página anti-bot/verificação do ML tem og:title "Mercado Libre"
+// (grafia espanhola) e nenhum marcador de produto. Antes esse rótulo de loja
+// vazava como TÍTULO de produto (na oferta espelhada saía "Mercado Libre" +
+// preço errado). isBogusScrapeTitle agora cobre a grafia espanhola e o título
+// final é filtrado — deve vir vazio em vez do rótulo genérico.
+test('fetchProductInfo (ML) não vaza "Mercado Libre" da página anti-bot como título', async (t) => {
+  const antiBotHtml = `<!doctype html><html><head>
+    <meta property="og:title" content="Mercado Libre"/>
+    <title>Mercado Libre</title></head>
+    <body><div id="gz-verify">account-verification</div></body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => mockHtmlResponse(antiBotHtml, String(input))
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://produto.mercadolivre.com.br/MLB123', {
+    mlCredentials: { ssid: 'x'.repeat(20) },
+  })
+  assert.equal(info.title, '', 'rótulo genérico de loja não pode virar título de produto')
+})
+
+// Regressão (incidente 2026-06-23): a página anti-bot da Shopee serve og:title
+// "Oops! Seu navegador não é mais aceito!" — uma FRASE, não um rótulo de loja.
+// Antes ela vazava como TÍTULO da oferta espelhada. isBogusScrapeTitle agora
+// casa a frase por padrão; o título final deve vir vazio (→ o espelhamento cai
+// no relay do texto original em vez de emitir o interstício).
+test('fetchProductInfo (Shopee) não vaza o interstício anti-bot "Oops! Seu navegador..." como título', async (t) => {
+  const antiBotHtml = `<!doctype html><html><head>
+    <meta property="og:title" content="Oops! Seu navegador não é mais aceito!"/>
+    <title>Oops! Seu navegador não é mais aceito!</title></head>
+    <body>browser blocked</body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => mockHtmlResponse(antiBotHtml, String(input))
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://s.shopee.com.br/5VTC0c5D8e')
+  assert.equal(info.title, '', 'interstício anti-bot não pode virar título de produto')
+})

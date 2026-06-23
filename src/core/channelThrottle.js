@@ -94,9 +94,10 @@ function toMs(v) {
  *   isPaused: boolean,
  *   botConfig: object,
  *   group?: { quietHoursEnabled?: boolean, quietHoursJson?: string|null } | null,
+ *   ignoreGlobalQuietHours?: boolean,
  * }} input
  */
-export function decide({ now, throttle, isPaused, botConfig, group }) {
+export function decide({ now, throttle, isPaused, botConfig, group, ignoreGlobalQuietHours }) {
   // Pausa por saúde (403/throttle do WhatsApp) é defesa do canal, não
   // preferência de cadência: vale independente do toggle de throttle.
   if (isPaused) {
@@ -110,7 +111,13 @@ export function decide({ now, throttle, isPaused, botConfig, group }) {
   const quiet = parseQuietHours(groupQuietActive ? group.quietHoursJson : botConfig.channelQuietHoursJson)
   const q = quietHoursState(now, quiet)
   const quietGateOn = groupQuietActive || botConfig.quietHoursEnabled !== false
-  if (quietGateOn && q.inQuiet) {
+  // Fonte com horário de funcionamento PRÓPRIO (ex.: fila de ofertas) ignora a
+  // janela silenciosa GLOBAL para este envio — a fila já decidiu que está dentro
+  // do seu horário. A janela explícita POR GRUPO (escolha por destino) continua
+  // valendo; e todas as proteções anti-ban (health/daily/min_interval/burst)
+  // permanecem. Sem o flag = comportamento histórico.
+  const skipGlobalQuiet = ignoreGlobalQuietHours === true && !groupQuietActive
+  if (quietGateOn && q.inQuiet && !skipGlobalQuiet) {
     return { allow: false, reason: DEFER_REASON.QUIET_HOURS, deferUntil: now + q.deferMs }
   }
 
@@ -235,7 +242,6 @@ export async function checkAndReserve(groupId, botConfig, opts = {}) {
     fetchHealth(groupId),
     db.channelThrottle.findUnique({ where: { groupId } }),
   ])
-
   let decision
   let effective
   if (dest) {
@@ -253,12 +259,15 @@ export async function checkAndReserve(groupId, botConfig, opts = {}) {
     // em produção. Mantido só por retrocompat de chamadores/testes antigos até a
     // remoção física das colunas do BotConfig (ver checklist de teardown no doc
     // 2026-06-22-plano-b-config-direcionada-design.md / seção "Fase 3").
+    // Enquanto vivo, ainda honra o A-2: `ignoreGlobalQuietHours` (override de
+    // horário da fila) pula só a janela silenciosa global no `decide()` abaixo.
     decision = decide({
       now,
       throttle,
       isPaused: isChannelPaused(health, now),
       botConfig,
       group: opts.group ?? null,
+      ignoreGlobalQuietHours: opts.ignoreGlobalQuietHours === true,
     })
     effective = { throttleOn: botConfig.channelThrottleEnabled !== false, burstWindowSec: botConfig.channelBurstWindowSec, tz: parseQuietHours(botConfig.channelQuietHoursJson).tz }
   }

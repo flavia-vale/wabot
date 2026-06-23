@@ -24,6 +24,7 @@ import { trackAnalyticsEventSafe } from './analytics.js'
 import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { decryptCredential } from './credentialCrypto.js'
+import { persistCredentialPatch } from './credentialPatch.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode, findUnserializableField } from './sendQueueBackend.js'
 import { withSendTimeout as withSendTimeoutImpl } from './sendMessageTimeout.js'
@@ -48,8 +49,10 @@ import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
+import { applyMirrorTemplate } from './core/mirrorTemplate.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
 import { classifyError } from './errorTaxonomy.js'
+import { recoverStuckSendLogs, STUCK_SEND_LOG_CUTOFF_MS } from './jobs/stuckSendLogs.js'
 import { detectMessageKind, extractIncomingText, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
 import { broadcastSourceGroup } from './offerQueue/sourceTag.js'
 import Redis from 'ioredis'
@@ -442,6 +445,20 @@ async function loadConfig() {
     }
   }
 
+  Object.defineProperty(credentials, '__onCredentialPatch', {
+    enumerable: false,
+    value: async (platform, patch) => {
+      try {
+        const updated = await persistCredentialPatch({ userId, platform, patch })
+        if (updated && credentials[platform]) {
+          credentials[platform] = { ...credentials[platform], ...patch }
+        }
+      } catch (err) {
+        logger.warn({ platform, err: err?.message }, 'Falha ao persistir cookies rotacionados da credencial')
+      }
+    },
+  })
+
   const { groups } = buildEntitledGroupConfig({
     groups: user.groups,
     groupTargets: user.groupTargets,
@@ -575,6 +592,18 @@ async function checkScheduledMessages() {
 
 setInterval(checkScheduledMessages, 30_000)
 
+// Watchdog de MessageLog preso em 'sending' (safety net): roda a cada 5min e
+// reclassifica como erro recuperável as linhas paradas em 'sending' há mais que
+// o cutoff. unref() para não segurar o processo. Ver src/jobs/stuckSendLogs.js.
+const STUCK_SEND_LOG_SWEEP_MS = Math.max(60_000, Number(process.env.STUCK_SEND_LOG_SWEEP_MS || 5 * 60_000))
+setInterval(() => {
+  recoverStuckSendLogs({ userId })
+    .then(({ recovered }) => {
+      if (recovered > 0) logger.warn({ recovered, cutoffMs: STUCK_SEND_LOG_CUTOFF_MS }, 'Watchdog: MessageLog preso em sending reclassificado como erro')
+    })
+    .catch(err => logger.error({ err: err.message }, 'Watchdog de envios presos falhou'))
+}, STUCK_SEND_LOG_SWEEP_MS).unref()
+
 // Força re-emissão de sender_keys do WhatsApp via groupFetchAllParticipating().
 // Compartilhado entre o watchdog e o endpoint manual /refresh-wa-state.
 async function triggerWaGroupsRefresh(reason = 'manual') {
@@ -644,6 +673,10 @@ function envNumber(name, fallback) {
 const SEND_QUEUE_MAX_SIZE = envNumber('SEND_QUEUE_MAX_SIZE', 1_000)
 const SEND_MAX_ATTEMPTS = Math.max(1, envNumber('SEND_MAX_ATTEMPTS', 3))
 const SEND_RETRY_BASE_MS = Math.max(0, envNumber('SEND_RETRY_BASE_MS', 2_000))
+// Defer de throttle ≤ este teto é esperado inline (barato, ex.: min_interval).
+// Acima dele (quiet_hours/burst_cap/daily_cap/health_paused), o job é
+// re-enfileirado com notBefore para NÃO congelar a fila serial do usuário.
+const THROTTLE_INLINE_WAIT_MAX_MS = Math.max(0, envNumber('THROTTLE_INLINE_WAIT_MAX_MS', 90_000))
 const SEND_RETRY_MAX_MS = Math.max(SEND_RETRY_BASE_MS, envNumber('SEND_RETRY_MAX_MS', 30_000))
 const RECONNECT_BASE_MS = Math.max(1_000, envNumber('RECONNECT_BASE_MS', 5_000))
 const RECONNECT_MAX_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_MAX_MS', 5 * 60_000))
@@ -785,6 +818,7 @@ const sendMetrics = {
   errorTotal: 0,
   retryTotal: 0,
   rejectedTotal: 0,
+  deferredTotal: 0,
   broadcastQueuedTotal: 0,
   scheduledQueuedTotal: 0,
   convertedQueuedTotal: 0,
@@ -1078,6 +1112,35 @@ async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
   )
 }
 
+/**
+ * Re-enfileira um job adiado por defer LONGO (janela silenciosa, burst/daily
+ * cap, pausa de saúde) sem congelar a fila serial. Reverte o MessageLog para
+ * `queued`, agenda o reenvio com `notBefore = gate.deferUntil` e devolve o
+ * controle ao consumidor — os próximos jobs (de outros destinos/fontes) saem
+ * normalmente. O callback onDone (doneCallbacks por logId) é preservado: só
+ * finalizamos o job se ele NÃO couber na fila.
+ */
+async function deferSendJob(job, gate) {
+  const deferUntil = gate?.deferUntil ?? Date.now()
+  sendMetrics.deferredTotal++
+  await db.messageLog.update({
+    where: { id: job.logId },
+    data: { status: 'queued', errorMsg: `aguardando janela de envio do destino (${gate?.reason ?? 'throttle'})` },
+  }).catch(() => {})
+  logger.info(
+    { destJid: job.destJid, reason: gate?.reason, deferUntil, logId: job.logId },
+    'Defer longo: re-enfileirando job com notBefore (não congela a fila serial)',
+  )
+  const accepted = await sendBackend.enqueue({ ...job, notBefore: deferUntil })
+  if (!accepted) {
+    await db.messageLog.update({
+      where: { id: job.logId },
+      data: { status: 'error', errorMsg: classifyError(null, { kind: 'queue_full' }), sentAt: new Date() },
+    }).catch(() => {})
+    await finishSendJob(job, { ok: false, error: 'queue_full_on_defer' })
+  }
+}
+
 // Plano B: preset default de preservação da conta (fallback para destinos sem
 // preset/override). Cache curto para não consultar o banco a cada envio. value
 // undefined = ainda não carregado; null = carregado e não existe.
@@ -1104,7 +1167,10 @@ async function processSendJob(job) {
   try {
     await db.messageLog.update({
       where: { id: job.logId },
-      data: { status: 'sending', errorMsg: null },
+      // sentAt estampado ao ENTRAR em 'sending' para o watchdog de envios presos
+      // (recoverStuckSendLogs) medir tempo-em-sending, não tempo desde a criação
+      // (a linha pode ter sido criada/adiada horas antes).
+      data: { status: 'sending', errorMsg: null, sentAt: new Date() },
     })
     sendMetrics.sendingTotal++
 
@@ -1154,14 +1220,31 @@ async function processSendJob(job) {
         const gateOpts = {
           group: g,
           preservationActive: shouldRunChannelScheduler(cfgFull?.preservationActive, cfg),
+          // A-2: fila com horário próprio sobrepõe a janela GLOBAL no worker (a
+          // fila já checou seu horário antes de despachar). No caminho por
+          // destino (Plano B), isso vira ignoreOperatingHours em decideDestination.
+          ignoreGlobalQuietHours: job.ignoreGlobalQuietHours === true,
+          // Plano B / Fase 3: destPreservation é sempre definido
+          // (resolveDestinationPreservation cai no preset default / HARD_DEFAULT),
+          // então vira a ÚNICA fonte de verdade do gate.
           destPreservation,
         }
         let gate = await throttleCheckAndReserve(destGroupId, cfg, gateOpts)
         let throttleCycles = 0
         while (!gate.allow && !shuttingDown) {
-          throttleCycles++
           const waitMs = Math.max(0, (gate.deferUntil ?? Date.now()) - Date.now())
-          logger.info({ destJid: job.destJid, reason: gate.reason, waitMs, throttleCycles }, 'Velocity scheduler: aguardando janela de throttle do destino')
+          // Defer LONGO (quiet_hours/burst_cap/daily_cap/health_paused) não pode
+          // segurar o consumidor serial: ele congelaria TODOS os envios do
+          // usuário — inclusive para destinos liberados e outras fontes. Em vez
+          // de `await sleep`, re-enfileira o job com notBefore e retorna,
+          // liberando a fila para os próximos jobs. Defer CURTO (min_interval)
+          // continua sendo esperado inline (barato e preserva ordem).
+          if (waitMs > THROTTLE_INLINE_WAIT_MAX_MS) {
+            await deferSendJob(job, gate)
+            return
+          }
+          throttleCycles++
+          logger.info({ destJid: job.destJid, reason: gate.reason, waitMs, throttleCycles }, 'Velocity scheduler: aguardando janela curta de throttle do destino')
           await sleep(waitMs)
           gate = await throttleCheckAndReserve(destGroupId, cfg, gateOpts)
         }
@@ -2023,13 +2106,62 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       }
         finalText = applyConversionsAndBranding(sanitizedText, conversions, cfg.botConfig.brandingGroupLink, cfg.botConfig.brandingCtaText)
       }
+      // Eleição do link primário (oferta/dedup/log) entre as conversões válidas.
+      // Decisão de produto 3.4: o grupo escolhe primeiro/último link; sem override
+      // por grupo, herda o default global do BotConfig (default 'first' = histórico).
+      const effectiveLinkTarget = monitorGroup?.primaryLinkTarget
+        || cfg.botConfig?.primaryLinkTargetDefault
+        || 'first'
+      const orderedConversions = conversions.filter(c => c && c.platform !== 'nolink')
+      const primary = (orderedConversions.length
+        ? (effectiveLinkTarget === 'last' ? orderedConversions[orderedConversions.length - 1] : orderedConversions[0])
+        : conversions[0]) ?? { platform: 'nolink', url: '', converted: '' }
+
+      // Template efetivo (decisão 3.2: por grupo, com default global). Três estados
+      // de monitorGroup.templateKey: null/undefined = herda o default global;
+      // '' = relay explícito (não aplica template mesmo havendo default); 'chave'
+      // = template fixo do grupo.
+      const groupTemplateKey = monitorGroup?.templateKey
+      const effectiveTemplateKey = (groupTemplateKey === null || groupTemplateKey === undefined)
+        ? (cfg.botConfig?.mirrorTemplateKeyDefault || '')
+        : groupTemplateKey
+
+      // `templateApplied` indica que o caption foi REMONTADO a partir do título/
+      // preço raspados (não é mais a caption do upstream). Nesse caso o guard de
+      // mismatch abaixo é (a) redundante — já raspamos a página aqui — e (b)
+      // sem sentido: ele compara a caption original do upstream, que não é mais
+      // o que vai sair. Quando o template cai no relay (texto inalterado), o
+      // guard volta a valer normalmente.
+      let templateApplied = false
+      // Só montamos o template quando há um link CONVERTIDO do nosso cliente.
+      // No espelhamento os links de entrada são de OUTROS afiliados; a oferta
+      // precisa sair com o link do nosso cliente (primary.converted) ou não
+      // sair como oferta (cai no relay). NUNCA emitir primary.url (link do
+      // terceiro) — isso daria comissão ao concorrente.
+      if (effectiveTemplateKey && primary.converted) {
+        const templatedText = await applyMirrorTemplate(finalText, {
+          botConfig: cfg.botConfig,
+          templateKey: effectiveTemplateKey,
+          // originalUrl = link do upstream (terceiro): usado só como alvo de
+          // leitura de título/preço (é a mesma página de produto).
+          originalUrl: primary.url || links[0]?.url || '',
+          // convertedUrl = link de afiliado do NOSSO cliente: o único que pode
+          // ser emitido na oferta. Sem fallback para o link do terceiro.
+          convertedUrl: primary.converted,
+          platform: primary.platform,
+          credentialsMap: cfg.credentials,
+          logger,
+        })
+        if (templatedText !== finalText) {
+          finalText = templatedText
+          templateApplied = true
+        }
+      }
       const originalMedia = getOriginalMediaMessage()
       if (!finalText && !originalMedia) {
         logger.warn({ msgId: msg.key.id }, 'Mensagem vazia após processamento — envio ignorado')
         return
       }
-
-      const primary = conversions[0] ?? { platform: 'nolink', url: '', converted: '' }
 
       // Guard anti-mismatch: já apareceu em produção mensagem com caption
       // de "toalhas", link de "mochila" e foto de "jaqueta" (upstream
@@ -2040,6 +2172,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       // falha — não queremos derrubar oferta legítima por timeout.
       if (
         !TITLE_MISMATCH_GUARD_DISABLED &&
+        !templateApplied &&
         primary.url &&
         TITLE_MISMATCH_GUARD_PLATFORMS.has(primary.platform)
       ) {
@@ -2569,6 +2702,10 @@ process.on('message', async msg => {
         delayMs: buildSmartDelayMs((await getConfig()).botConfig),
         typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
         channelForward: broadcastChannelForward,
+        // Fila de ofertas com horário próprio pede para ignorar a janela
+        // silenciosa global neste envio (origem 'offerQueue'). Propagado ao
+        // gate em processSendJob. Sem o flag = comportamento histórico.
+        ignoreGlobalQuietHours: msg.options?.ignoreGlobalQuietHours === true,
         ...(imageRecipe ? { payloadRecipe: imageRecipe } : { payload: { text: msg.text } }),
       })
       if (accepted) {

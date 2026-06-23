@@ -642,3 +642,45 @@ test('PUT /:id rejeita quietHoursJson com hora inválida', async (t) => {
 
   assert.equal(res.statusCode, 400)
 })
+
+test('PUT /:id persiste templateKey para espelhamento e rejeita chave inválida', async (t) => {
+  const { app, userId } = await buildApp({}, { plan: 'pro' })
+  const group = await db.group.create({
+    data: { userId, waJid: 'tpl@g.us', name: 'Grupo Template', role: 'monitor', kind: 'group', forwardMode: 'LINK_ONLY' },
+  })
+  t.after(async () => { await db.group.deleteMany({ where: { userId } }); await db.user.deleteMany({ where: { id: userId } }); await app.close() })
+
+  const ok = await app.inject({ method: 'PUT', url: `/api/groups/${group.id}`, payload: { templateKey: 'tpl_custom-1' } })
+  assert.equal(ok.statusCode, 200)
+  assert.equal(JSON.parse(ok.body).templateKey, 'tpl_custom-1')
+
+  const bad = await app.inject({ method: 'PUT', url: `/api/groups/${group.id}`, payload: { templateKey: '../bad' } })
+  assert.equal(bad.statusCode, 400)
+
+  // Três estados do templateKey: '' = relay explícito (distinto de null = herda default global).
+  const relay = await app.inject({ method: 'PUT', url: `/api/groups/${group.id}`, payload: { templateKey: '' } })
+  assert.equal(relay.statusCode, 200)
+  assert.equal(JSON.parse(relay.body).templateKey, '')
+  const inherit = await app.inject({ method: 'PUT', url: `/api/groups/${group.id}`, payload: { templateKey: null } })
+  assert.equal(inherit.statusCode, 200)
+  assert.equal(JSON.parse(inherit.body).templateKey, null)
+})
+
+test('PUT /:id persiste primaryLinkTarget e rejeita valor inválido', async (t) => {
+  const { app, userId } = await buildApp({}, { plan: 'pro' })
+  const group = await db.group.create({
+    data: { userId, waJid: 'plt@g.us', name: 'Grupo Link', role: 'monitor', kind: 'group', forwardMode: 'LINK_ONLY' },
+  })
+  t.after(async () => { await db.group.deleteMany({ where: { userId } }); await db.user.deleteMany({ where: { id: userId } }); await app.close() })
+
+  const ok = await app.inject({ method: 'PUT', url: `/api/groups/${group.id}`, payload: { primaryLinkTarget: 'last' } })
+  assert.equal(ok.statusCode, 200)
+  assert.equal(JSON.parse(ok.body).primaryLinkTarget, 'last')
+
+  const inherit = await app.inject({ method: 'PUT', url: `/api/groups/${group.id}`, payload: { primaryLinkTarget: '' } })
+  assert.equal(inherit.statusCode, 200)
+  assert.equal(JSON.parse(inherit.body).primaryLinkTarget, null)
+
+  const bad = await app.inject({ method: 'PUT', url: `/api/groups/${group.id}`, payload: { primaryLinkTarget: 'middle' } })
+  assert.equal(bad.statusCode, 400)
+})
