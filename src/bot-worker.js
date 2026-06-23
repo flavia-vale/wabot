@@ -24,6 +24,7 @@ import { trackAnalyticsEventSafe } from './analytics.js'
 import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { decryptCredential } from './credentialCrypto.js'
+import { persistCredentialPatch } from './credentialPatch.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode, findUnserializableField } from './sendQueueBackend.js'
 import { withSendTimeout as withSendTimeoutImpl } from './sendMessageTimeout.js'
@@ -36,6 +37,7 @@ import {
   recordStreamError as recordChannelStreamError,
 } from './core/channelHealth.js'
 import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
+import { resolveDestinationPreservation } from './core/preservationConfig.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
 import { PRESERVATION_FEATURE, isPreservationFeatureEnabled, shouldRunChannelScheduler } from './core/preservationFeatures.js'
 import { mutate as mutateChannelImage } from './core/imageMutation.js'
@@ -47,8 +49,10 @@ import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
+import { applyMirrorTemplate } from './core/mirrorTemplate.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
 import { classifyError } from './errorTaxonomy.js'
+import { recoverStuckSendLogs, STUCK_SEND_LOG_CUTOFF_MS } from './jobs/stuckSendLogs.js'
 import { detectMessageKind, extractIncomingText, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
 import { broadcastSourceGroup } from './offerQueue/sourceTag.js'
 import Redis from 'ioredis'
@@ -441,6 +445,20 @@ async function loadConfig() {
     }
   }
 
+  Object.defineProperty(credentials, '__onCredentialPatch', {
+    enumerable: false,
+    value: async (platform, patch) => {
+      try {
+        const updated = await persistCredentialPatch({ userId, platform, patch })
+        if (updated && credentials[platform]) {
+          credentials[platform] = { ...credentials[platform], ...patch }
+        }
+      } catch (err) {
+        logger.warn({ platform, err: err?.message }, 'Falha ao persistir cookies rotacionados da credencial')
+      }
+    },
+  })
+
   const { groups } = buildEntitledGroupConfig({
     groups: user.groups,
     groupTargets: user.groupTargets,
@@ -573,6 +591,18 @@ async function checkScheduledMessages() {
 }
 
 setInterval(checkScheduledMessages, 30_000)
+
+// Watchdog de MessageLog preso em 'sending' (safety net): roda a cada 5min e
+// reclassifica como erro recuperável as linhas paradas em 'sending' há mais que
+// o cutoff. unref() para não segurar o processo. Ver src/jobs/stuckSendLogs.js.
+const STUCK_SEND_LOG_SWEEP_MS = Math.max(60_000, Number(process.env.STUCK_SEND_LOG_SWEEP_MS || 5 * 60_000))
+setInterval(() => {
+  recoverStuckSendLogs({ userId })
+    .then(({ recovered }) => {
+      if (recovered > 0) logger.warn({ recovered, cutoffMs: STUCK_SEND_LOG_CUTOFF_MS }, 'Watchdog: MessageLog preso em sending reclassificado como erro')
+    })
+    .catch(err => logger.error({ err: err.message }, 'Watchdog de envios presos falhou'))
+}, STUCK_SEND_LOG_SWEEP_MS).unref()
 
 // Força re-emissão de sender_keys do WhatsApp via groupFetchAllParticipating().
 // Compartilhado entre o watchdog e o endpoint manual /refresh-wa-state.
@@ -1111,6 +1141,21 @@ async function deferSendJob(job, gate) {
   }
 }
 
+// Plano B: preset default de preservação da conta (fallback para destinos sem
+// preset/override). Cache curto para não consultar o banco a cada envio. value
+// undefined = ainda não carregado; null = carregado e não existe.
+let defaultPresetCache = { value: undefined, at: 0 }
+const DEFAULT_PRESET_TTL_MS = 30_000
+async function getDefaultPreservationPreset() {
+  const now = Date.now()
+  if (defaultPresetCache.value !== undefined && now - defaultPresetCache.at < DEFAULT_PRESET_TTL_MS) {
+    return defaultPresetCache.value
+  }
+  const preset = await db.preservationPreset.findFirst({ where: { userId, isDefault: true } }).catch(() => null)
+  defaultPresetCache = { value: preset ?? null, at: now }
+  return defaultPresetCache.value
+}
+
 async function processSendJob(job) {
   const startedAt = Date.now()
   let payload = null
@@ -1122,7 +1167,10 @@ async function processSendJob(job) {
   try {
     await db.messageLog.update({
       where: { id: job.logId },
-      data: { status: 'sending', errorMsg: null },
+      // sentAt estampado ao ENTRAR em 'sending' para o watchdog de envios presos
+      // (recoverStuckSendLogs) medir tempo-em-sending, não tempo desde a criação
+      // (a linha pode ter sido criada/adiada horas antes).
+      data: { status: 'sending', errorMsg: null, sentAt: new Date() },
     })
     sendMetrics.sendingTotal++
 
@@ -1149,19 +1197,41 @@ async function processSendJob(job) {
     try {
       const g = await db.group.findFirst({
         where: { userId, waJid: job.destJid, role: 'post' },
-        select: { id: true, quietHoursEnabled: true, quietHoursJson: true },
+        select: {
+          id: true, quietHoursEnabled: true, quietHoursJson: true,
+          // Plano B: config de preservação por destino (Fase 1b).
+          preservationPresetId: true, operatingHoursEnabled: true, operatingHoursJson: true,
+          throttleEnabled: true, minIntervalSec: true, burstCap: true, burstWindowSec: true,
+          dailyCap: true, preservationPreset: true,
+        },
       })
       destGroupId = g?.id ?? null
       if (destGroupId) {
-        // checkAndReserve já cobre: pausa por health, quiet hours, daily cap,
-        // intervalo mínimo, burst cap. Reserva o slot quando libera. A janela
-        // silenciosa POR GRUPO (g.quietHours*) sobrepõe a global do BotConfig
-        // para este destino quando habilitada.
+        // checkAndReserve já cobre: pausa por health, horário/quiet, daily cap,
+        // intervalo mínimo, burst cap. Reserva o slot quando libera.
         const cfgFull = await getConfig().catch(() => null)
         const cfg = cfgFull?.botConfig ?? {}
+        // Plano B: quando há config direcionada (preset atribuído, default da
+        // conta semeado, ou override no grupo), o gate usa a config POR DESTINO
+        // (horário de funcionamento + anti-ban do destino). Sem ela, cai no
+        // caminho legado (global do BotConfig + janela silenciosa).
+        const defaultPreset = await getDefaultPreservationPreset()
+        const hasDestConfig = !!(g.preservationPreset || defaultPreset ||
+          g.operatingHoursEnabled != null || g.throttleEnabled != null ||
+          g.minIntervalSec != null || g.burstCap != null || g.burstWindowSec != null ||
+          g.dailyCap != null || g.operatingHoursJson != null)
+        const destPreservation = hasDestConfig
+          ? resolveDestinationPreservation(g, { preset: g.preservationPreset, defaultPreset })
+          : undefined
         const gateOpts = {
           group: g,
           preservationActive: shouldRunChannelScheduler(cfgFull?.preservationActive, cfg),
+          // A-2: fila com horário próprio sobrepõe a janela GLOBAL no worker (a
+          // fila já checou seu horário antes de despachar). No caminho por
+          // destino (Plano B), isso vira ignoreOperatingHours em decideDestination.
+          ignoreGlobalQuietHours: job.ignoreGlobalQuietHours === true,
+          // Plano B: config direcionada por destino, quando existir.
+          ...(destPreservation ? { destPreservation } : {}),
         }
         let gate = await throttleCheckAndReserve(destGroupId, cfg, gateOpts)
         let throttleCycles = 0
@@ -2040,13 +2110,62 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       }
         finalText = applyConversionsAndBranding(sanitizedText, conversions, cfg.botConfig.brandingGroupLink, cfg.botConfig.brandingCtaText)
       }
+      // Eleição do link primário (oferta/dedup/log) entre as conversões válidas.
+      // Decisão de produto 3.4: o grupo escolhe primeiro/último link; sem override
+      // por grupo, herda o default global do BotConfig (default 'first' = histórico).
+      const effectiveLinkTarget = monitorGroup?.primaryLinkTarget
+        || cfg.botConfig?.primaryLinkTargetDefault
+        || 'first'
+      const orderedConversions = conversions.filter(c => c && c.platform !== 'nolink')
+      const primary = (orderedConversions.length
+        ? (effectiveLinkTarget === 'last' ? orderedConversions[orderedConversions.length - 1] : orderedConversions[0])
+        : conversions[0]) ?? { platform: 'nolink', url: '', converted: '' }
+
+      // Template efetivo (decisão 3.2: por grupo, com default global). Três estados
+      // de monitorGroup.templateKey: null/undefined = herda o default global;
+      // '' = relay explícito (não aplica template mesmo havendo default); 'chave'
+      // = template fixo do grupo.
+      const groupTemplateKey = monitorGroup?.templateKey
+      const effectiveTemplateKey = (groupTemplateKey === null || groupTemplateKey === undefined)
+        ? (cfg.botConfig?.mirrorTemplateKeyDefault || '')
+        : groupTemplateKey
+
+      // `templateApplied` indica que o caption foi REMONTADO a partir do título/
+      // preço raspados (não é mais a caption do upstream). Nesse caso o guard de
+      // mismatch abaixo é (a) redundante — já raspamos a página aqui — e (b)
+      // sem sentido: ele compara a caption original do upstream, que não é mais
+      // o que vai sair. Quando o template cai no relay (texto inalterado), o
+      // guard volta a valer normalmente.
+      let templateApplied = false
+      // Só montamos o template quando há um link CONVERTIDO do nosso cliente.
+      // No espelhamento os links de entrada são de OUTROS afiliados; a oferta
+      // precisa sair com o link do nosso cliente (primary.converted) ou não
+      // sair como oferta (cai no relay). NUNCA emitir primary.url (link do
+      // terceiro) — isso daria comissão ao concorrente.
+      if (effectiveTemplateKey && primary.converted) {
+        const templatedText = await applyMirrorTemplate(finalText, {
+          botConfig: cfg.botConfig,
+          templateKey: effectiveTemplateKey,
+          // originalUrl = link do upstream (terceiro): usado só como alvo de
+          // leitura de título/preço (é a mesma página de produto).
+          originalUrl: primary.url || links[0]?.url || '',
+          // convertedUrl = link de afiliado do NOSSO cliente: o único que pode
+          // ser emitido na oferta. Sem fallback para o link do terceiro.
+          convertedUrl: primary.converted,
+          platform: primary.platform,
+          credentialsMap: cfg.credentials,
+          logger,
+        })
+        if (templatedText !== finalText) {
+          finalText = templatedText
+          templateApplied = true
+        }
+      }
       const originalMedia = getOriginalMediaMessage()
       if (!finalText && !originalMedia) {
         logger.warn({ msgId: msg.key.id }, 'Mensagem vazia após processamento — envio ignorado')
         return
       }
-
-      const primary = conversions[0] ?? { platform: 'nolink', url: '', converted: '' }
 
       // Guard anti-mismatch: já apareceu em produção mensagem com caption
       // de "toalhas", link de "mochila" e foto de "jaqueta" (upstream
@@ -2057,6 +2176,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       // falha — não queremos derrubar oferta legítima por timeout.
       if (
         !TITLE_MISMATCH_GUARD_DISABLED &&
+        !templateApplied &&
         primary.url &&
         TITLE_MISMATCH_GUARD_PLATFORMS.has(primary.platform)
       ) {
@@ -2586,6 +2706,10 @@ process.on('message', async msg => {
         delayMs: buildSmartDelayMs((await getConfig()).botConfig),
         typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
         channelForward: broadcastChannelForward,
+        // Fila de ofertas com horário próprio pede para ignorar a janela
+        // silenciosa global neste envio (origem 'offerQueue'). Propagado ao
+        // gate em processSendJob. Sem o flag = comportamento histórico.
+        ignoreGlobalQuietHours: msg.options?.ignoreGlobalQuietHours === true,
         ...(imageRecipe ? { payloadRecipe: imageRecipe } : { payload: { text: msg.text } }),
       })
       if (accepted) {

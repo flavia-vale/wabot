@@ -50,6 +50,7 @@ model User {
   offerQueueItems       OfferQueueItem[]
   affiliateLinks        AffiliateLink[]
   probeEvidences       ProbeEvidence[]
+  preservationPresets   PreservationPreset[]
 
   affiliateProfileId    String?  @unique
   affiliateProfile      AffiliateProfile? @relation("UserAffiliate")
@@ -91,6 +92,8 @@ model Group {
   fallbackToOriginal Boolean @default(false)
   forwardMode       String   @default("LINK_ONLY")
   noLinkScope       String?
+  templateKey       String?
+  primaryLinkTarget String?
   blockedKeywords   String?
   allowedPlatforms  String?
   welcomeMsg        String?
@@ -98,6 +101,19 @@ model Group {
   channelButtonName String?
   quietHoursEnabled Boolean @default(false)
   quietHoursJson    String?
+  // Plano B (config direcionada): preservação por DESTINO. Vínculo opcional a um
+  // preset reutilizável + overrides nuláveis (null = herda do preset). Substitui
+  // gradualmente a config global do BotConfig. Ver
+  // docs/superpowers/plans/2026-06-22-plano-b-config-direcionada-design.md
+  preservationPresetId  String?
+  preservationPreset    PreservationPreset? @relation(fields: [preservationPresetId], references: [id], onDelete: SetNull)
+  operatingHoursEnabled Boolean?
+  operatingHoursJson    String?
+  throttleEnabled       Boolean?
+  minIntervalSec        Int?
+  burstCap              Int?
+  burstWindowSec        Int?
+  dailyCap              Int?
   monitorTargets   GroupTarget[] @relation("MonitorTargets")
   postTargets      GroupTarget[] @relation("PostTargets")
   channelHealth    ChannelHealth?
@@ -107,6 +123,37 @@ model Group {
 
   @@unique([userId, waJid, role])
   @@index([userId, kind])
+  @@index([preservationPresetId])
+}
+
+// Plano B: preset reutilizável de preservação (anti-ban + horário de
+// funcionamento), por usuário. Base aplicável a vários destinos; campos setados
+// no Group sobrepõem o preset. O preset isDefault semeia novos destinos e é o
+// fallback quando o destino não tem preset nem override. A pausa de saúde (403)
+// NÃO mora aqui: é reativa, por-destino (ChannelHealth), sempre ligada.
+model PreservationPreset {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  isDefault Boolean @default(false)
+
+  // Horário de FUNCIONAMENTO (quando ENVIA). Fora dele = silêncio implícito.
+  operatingHoursEnabled Boolean @default(false)
+  operatingHoursJson    String  @default("{\"startHour\":8,\"endHour\":22,\"tz\":\"America/Sao_Paulo\"}")
+
+  // Anti-ban (cadência por destino).
+  throttleEnabled Boolean @default(true)
+  minIntervalSec  Int     @default(30)
+  burstCap        Int     @default(6)
+  burstWindowSec  Int     @default(600)
+  dailyCap        Int?
+
+  groups    Group[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model GroupTarget {
@@ -237,6 +284,8 @@ model BotConfig {
   probeEnabled            Boolean @default(false)
   mobileTemplatesJson     String  @default("{}")
   mobileCouponLinksJson   String  @default("{}")
+  mirrorTemplateKeyDefault String?
+  primaryLinkTargetDefault String  @default("first")
   preservationEnabled     Boolean @default(false)
   channelForwardJid       String?
   channelForwardName      String?

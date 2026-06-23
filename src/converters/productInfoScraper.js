@@ -252,6 +252,11 @@ const BOGUS_SCRAPE_TITLES = [
   'amazon.com.br',
   'mercado livre',
   'mercado livre brasil',
+  // Grafia espanhola: é o og:title da página anti-bot/verificação do ML
+  // (/gz/account-verification). Sem isso, um scrape bloqueado vaza
+  // "Mercado Libre" como título de produto na oferta.
+  'mercado libre',
+  'mercado libre brasil',
   'shopee brasil',
   'shopee',
   'página não encontrada',
@@ -261,10 +266,32 @@ const BOGUS_SCRAPE_TITLES = [
   '404',
 ]
 
+// Páginas anti-bot/interstício servem um og:title que é uma FRASE (não um
+// rótulo de loja), então o casamento exato/prefixo acima não pega. Ex. real
+// (Shopee, 2026-06): "Oops! Seu navegador não é mais aceito!" vazou como título
+// da oferta. Estes padrões casam a frase em qualquer posição. São específicos o
+// bastante para não pegar título de produto legítimo (NÃO usar "navegador"
+// sozinho — existe "GPS navegador automotivo").
+const BOGUS_SCRAPE_TITLE_PATTERNS = [
+  /seu navegador n[ãa]o (é|e) mais (aceito|suportado)/i,
+  /navegador n[ãa]o (é|e) mais (aceito|suportado)/i,
+  /navegador .{0,24}(n[ãa]o suportado|desatualizado|incompat[íi]vel)/i,
+  /(unsupported|outdated) browser/i,
+  /your browser is no longer (supported|accepted)/i,
+  /browser .{0,24}(not supported|no longer supported|not accepted)/i,
+  /update your browser/i,
+  /verifica[çc][ãa]o de seguran[çc]a/i,
+  /security (check|verification)/i,
+  /suspicious (traffic|activity)/i,
+  /(verify you are|are you a) human/i,
+  /acesso negado/i,
+]
+
 function isBogusScrapeTitle(title) {
   if (!title) return true
   const lower = title.trim().toLowerCase()
-  return BOGUS_SCRAPE_TITLES.some(bad => lower === bad || lower.startsWith(bad + ' |') || lower.startsWith(bad + ':'))
+  if (BOGUS_SCRAPE_TITLES.some(bad => lower === bad || lower.startsWith(bad + ' |') || lower.startsWith(bad + ':'))) return true
+  return BOGUS_SCRAPE_TITLE_PATTERNS.some(re => re.test(lower))
 }
 
 function extractTitleFallback(html) {
@@ -875,7 +902,12 @@ export async function fetchProductInfo(url, opts = {}) {
   const titleFromUrl = extractTitleFromUrl(finalUrl || url) || extractTitleFromUrl(resolvedUrl) || extractTitleFromUrl(url)
   const rawFallbackTitle = extractTitleFallback(html)
   const fallbackTitle = isBogusScrapeTitle(rawFallbackTitle) ? null : rawFallbackTitle
-  const title = jsonLd?.title || mlHtml?.title || amazonFallback?.title || shopeeApiFallback?.title || mercadoLivreApiFallback?.title || mlItemApiFallback?.title || titleFromUrl || fallbackTitle
+  // Mesmo og:title vindo de extractMercadoLivreFromHtml pode ser o título
+  // genérico da página anti-bot ("Mercado Libre"/"Shopee"/"Amazon.com.br").
+  // Filtra o título final por isBogusScrapeTitle para nunca apresentar um
+  // rótulo de loja como nome de produto (vazaria na oferta espelhada).
+  const rawTitle = jsonLd?.title || mlHtml?.title || amazonFallback?.title || shopeeApiFallback?.title || mercadoLivreApiFallback?.title || mlItemApiFallback?.title || titleFromUrl || fallbackTitle
+  const title = isBogusScrapeTitle(rawTitle) ? '' : rawTitle
 
   // Numa share /social/ a página tem VÁRIOS produtos; extractMercadoLivreFromHtml
   // pode casar o `"price":{"value":..}` de um produto vizinho (errado). O bloco

@@ -11,11 +11,47 @@ test('checkMercadoLivreSession: 401 => sessão expirada (alive=false)', async (t
   assert.deepEqual(r, { configured: true, alive: false, reason: 'expired' })
 })
 
+
+test('checkMercadoLivreSession: 403 => indeterminado/forbidden (não marca SSID expirado)', async (t) => {
+  t.mock.method(axios, 'post', async () => ({ status: 403, data: '<html>blocked</html>', headers: {} }))
+  const r = await checkMercadoLivreSession(CREDS)
+  assert.deepEqual(r, { configured: true, alive: null, reason: 'forbidden' })
+})
+
+test('checkMercadoLivreSession: 429 => indeterminado/rate_limited (não marca SSID expirado)', async (t) => {
+  t.mock.method(axios, 'post', async () => ({ status: 429, data: { message: 'rate limited' }, headers: {} }))
+  const r = await checkMercadoLivreSession(CREDS)
+  assert.deepEqual(r, { configured: true, alive: null, reason: 'rate_limited' })
+})
+
 test('checkMercadoLivreSession: 200 => sessão viva (alive=true)', async (t) => {
   t.mock.method(axios, 'post', async () => ({ status: 200, data: { status: 200, urls: [] }, headers: {} }))
   const r = await checkMercadoLivreSession(CREDS)
   assert.deepEqual(r, { configured: true, alive: true, reason: 'ok' })
 })
+
+
+test('checkMercadoLivreSession: devolve credentialPatch quando ML rotaciona cookies', async (t) => {
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: { status: 200, urls: [] },
+    headers: {
+      'set-cookie': [
+        'ssid=ssid-rotacionado; Path=/; HttpOnly',
+        '_csrf=csrf-rotacionado; Path=/',
+      ],
+    },
+  }))
+  const r = await checkMercadoLivreSession({ ...CREDS, csrf: 'csrf-antigo' })
+  assert.equal(r.configured, true)
+  assert.equal(r.alive, true)
+  assert.equal(r.reason, 'ok')
+  assert.equal(r.credentialPatch.ssid, 'ssid-rotacionado')
+  assert.equal(r.credentialPatch.csrf, 'csrf-rotacionado')
+  assert.match(r.credentialPatch.cookie, /ssid=ssid-rotacionado/)
+  assert.match(r.credentialPatch.cookie, /_csrf=csrf-rotacionado/)
+})
+
 
 test('checkMercadoLivreSession: 400 (autenticado, sem produto) ainda conta como sessão viva', async (t) => {
   t.mock.method(axios, 'post', async () => ({ status: 400, data: { message: 'bad request' }, headers: {} }))

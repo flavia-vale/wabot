@@ -88,6 +88,79 @@ async function requirePreservationAccess(req, reply) {
   return false
 }
 
+// ---------- Plano B: validação de preset/override por destino ----------
+const HOURS_TZ_DEFAULT = 'America/Sao_Paulo'
+
+function validateOperatingHoursJson(value, errors, key) {
+  if (typeof value !== 'string') { errors.push(`${key} deve ser string JSON`); return undefined }
+  let parsed
+  try { parsed = JSON.parse(value) } catch { errors.push(`${key} contém JSON inválido`); return undefined }
+  const okHour = (h) => Number.isInteger(h) && h >= 0 && h <= 23
+  if (!okHour(parsed?.startHour) || !okHour(parsed?.endHour)) {
+    errors.push(`${key} deve ter startHour/endHour inteiros entre 0 e 23`)
+    return undefined
+  }
+  return JSON.stringify({
+    startHour: parsed.startHour,
+    endHour: parsed.endHour,
+    tz: typeof parsed.tz === 'string' && parsed.tz ? parsed.tz : HOURS_TZ_DEFAULT,
+  })
+}
+
+// Campos de preservação compartilhados por preset e override de destino.
+// nullable=true (override de destino) aceita null = "herda do preset".
+function collectPreservationFields(body, { nullable }) {
+  const updates = {}
+  const errors = []
+  const has = (k) => k in body
+
+  const num = (key, min, max, allowNull = false) => {
+    if (!has(key)) return
+    const v = body[key]
+    if ((nullable || allowNull) && v === null) { updates[key] = null; return }
+    if (!Number.isInteger(v) || v < min || v > max) { errors.push(`${key} deve ser inteiro entre ${min} e ${max}`); return }
+    updates[key] = v
+  }
+  const bool = (key) => {
+    if (!has(key)) return
+    const v = body[key]
+    if (nullable && v === null) { updates[key] = null; return }
+    if (typeof v !== 'boolean') { errors.push(`${key} deve ser boolean`); return }
+    updates[key] = v
+  }
+  const hoursJson = (key) => {
+    if (!has(key)) return
+    if (nullable && body[key] === null) { updates[key] = null; return }
+    const normalized = validateOperatingHoursJson(body[key], errors, key)
+    if (normalized !== undefined) updates[key] = normalized
+  }
+
+  bool('operatingHoursEnabled')
+  hoursJson('operatingHoursJson')
+  bool('throttleEnabled')
+  num('minIntervalSec', 1, 86400)
+  num('burstCap', 1, 1000)
+  num('burstWindowSec', 60, 86400)
+  num('dailyCap', 1, 10000, true)
+  return { updates, errors }
+}
+
+function validatePresetBody(body = {}, { partial = false } = {}) {
+  const { updates, errors } = collectPreservationFields(body, { nullable: false })
+  if ('name' in body) {
+    const name = typeof body.name === 'string' ? body.name.trim() : ''
+    if (!name) errors.push('name é obrigatório')
+    else updates.name = name
+  } else if (!partial) {
+    errors.push('name é obrigatório')
+  }
+  if ('isDefault' in body) {
+    if (typeof body.isDefault !== 'boolean') errors.push('isDefault deve ser boolean')
+    else updates.isDefault = body.isDefault
+  }
+  return { updates, errors }
+}
+
 export async function preservationRoutes(app) {
   app.addHook('preHandler', async (req) => {
     if (typeof app.authenticate === 'function') {
@@ -125,6 +198,124 @@ export async function preservationRoutes(app) {
       },
     })
     return { config: pickConfig(updated) }
+  })
+
+  // ---------- Plano B: presets de preservação ----------
+  const PRESET_SELECT = {
+    id: true, name: true, isDefault: true,
+    operatingHoursEnabled: true, operatingHoursJson: true,
+    throttleEnabled: true, minIntervalSec: true, burstCap: true, burstWindowSec: true, dailyCap: true,
+    createdAt: true, updatedAt: true,
+  }
+
+  // Garante um único isDefault por usuário (desmarca os demais).
+  async function clearOtherDefaults(userId, keepId) {
+    await db.preservationPreset.updateMany({
+      where: { userId, isDefault: true, ...(keepId ? { id: { not: keepId } } : {}) },
+      data: { isDefault: false },
+    })
+  }
+
+  app.get('/presets', async (req, reply) => {
+    if (await requirePreservationAccess(req, reply)) return
+    const presets = await db.preservationPreset.findMany({
+      where: { userId: req.user.sub },
+      select: PRESET_SELECT,
+      orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+    })
+    return { presets }
+  })
+
+  app.post('/presets', async (req, reply) => {
+    if (await requirePreservationAccess(req, reply)) return
+    const { updates, errors } = validatePresetBody(req.body)
+    if (errors.length) return reply.code(400).send({ error: errors.join('; '), errors })
+    if (updates.isDefault) await clearOtherDefaults(req.user.sub)
+    const preset = await db.preservationPreset.create({
+      data: { userId: req.user.sub, ...updates },
+      select: PRESET_SELECT,
+    })
+    return { preset }
+  })
+
+  app.put('/presets/:id', async (req, reply) => {
+    if (await requirePreservationAccess(req, reply)) return
+    const { updates, errors } = validatePresetBody(req.body, { partial: true })
+    if (errors.length) return reply.code(400).send({ error: errors.join('; '), errors })
+    const owned = await db.preservationPreset.findFirst({ where: { id: req.params.id, userId: req.user.sub }, select: { id: true } })
+    if (!owned) return reply.code(404).send({ error: 'Preset não encontrado' })
+    if (updates.isDefault) await clearOtherDefaults(req.user.sub, owned.id)
+    const updated = await db.preservationPreset.update({
+      where: { id: owned.id },
+      data: updates,
+      select: PRESET_SELECT,
+    })
+    return { preset: updated }
+  })
+
+  app.delete('/presets/:id', async (req, reply) => {
+    if (await requirePreservationAccess(req, reply)) return
+    const owned = await db.preservationPreset.findFirst({ where: { id: req.params.id, userId: req.user.sub }, select: { id: true, isDefault: true } })
+    if (!owned) return reply.code(404).send({ error: 'Preset não encontrado' })
+    // O default é o fallback da conta — não pode sumir sem deixar destinos sem
+    // proteção. Para trocar, marque outro como default antes.
+    if (owned.isDefault) return reply.code(409).send({ error: 'Não é possível excluir o preset padrão. Marque outro como padrão primeiro.' })
+    // Grupos que referenciam o preset caem para null (FK SET NULL) → herdam o default.
+    await db.preservationPreset.delete({ where: { id: owned.id } })
+    return { ok: true }
+  })
+
+  // Aplica um preset a vários destinos de uma vez (UX de escala).
+  app.post('/presets/:id/apply', async (req, reply) => {
+    if (await requirePreservationAccess(req, reply)) return
+    const groupIds = Array.isArray(req.body?.groupIds) ? req.body.groupIds.filter((g) => typeof g === 'string') : null
+    if (!groupIds || groupIds.length === 0) return reply.code(400).send({ error: 'groupIds deve ser uma lista não vazia' })
+    const owned = await db.preservationPreset.findFirst({ where: { id: req.params.id, userId: req.user.sub }, select: { id: true } })
+    if (!owned) return reply.code(404).send({ error: 'Preset não encontrado' })
+    const res = await db.group.updateMany({
+      where: { id: { in: groupIds }, userId: req.user.sub, role: 'post' },
+      data: { preservationPresetId: owned.id },
+    })
+    return { applied: res.count }
+  })
+
+  // ---------- Plano B: preservação por destino (Group role=post) ----------
+  const DESTINATION_SELECT = {
+    id: true, name: true, waJid: true, kind: true, preservationPresetId: true,
+    operatingHoursEnabled: true, operatingHoursJson: true,
+    throttleEnabled: true, minIntervalSec: true, burstCap: true, burstWindowSec: true, dailyCap: true,
+  }
+
+  app.get('/destinations', async (req, reply) => {
+    if (await requirePreservationAccess(req, reply)) return
+    const destinations = await db.group.findMany({
+      where: { userId: req.user.sub, role: 'post' },
+      select: DESTINATION_SELECT,
+      orderBy: { name: 'asc' },
+    })
+    return { destinations }
+  })
+
+  app.put('/destinations/:id', async (req, reply) => {
+    if (await requirePreservationAccess(req, reply)) return
+    const { updates, errors } = collectPreservationFields(req.body ?? {}, { nullable: true })
+    if ('preservationPresetId' in (req.body ?? {})) {
+      const presetId = req.body.preservationPresetId
+      if (presetId === null) {
+        updates.preservationPresetId = null
+      } else if (typeof presetId === 'string') {
+        const preset = await db.preservationPreset.findFirst({ where: { id: presetId, userId: req.user.sub }, select: { id: true } })
+        if (!preset) errors.push('preservationPresetId não encontrado')
+        else updates.preservationPresetId = presetId
+      } else {
+        errors.push('preservationPresetId deve ser string ou null')
+      }
+    }
+    if (errors.length) return reply.code(400).send({ error: errors.join('; '), errors })
+    const owned = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub, role: 'post' }, select: { id: true } })
+    if (!owned) return reply.code(404).send({ error: 'Destino não encontrado' })
+    const updated = await db.group.update({ where: { id: owned.id }, data: updates, select: DESTINATION_SELECT })
+    return { destination: updated }
   })
 
   // ---------- Probe session (PR-1 foundation) ----------

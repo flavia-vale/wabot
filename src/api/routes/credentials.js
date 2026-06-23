@@ -23,7 +23,15 @@ export async function credentialsRoutes(app) {
     if (!cred) return { configured: false, alive: null, reason: 'not_configured' }
     const data = parseCredentialData(cred.data)
     const result = await checkMercadoLivreSession(data)
-    return { ...result, checkedAt: new Date().toISOString() }
+    const { credentialPatch, ...publicResult } = result
+    if (credentialPatch) {
+      const patchedData = { ...data, ...credentialPatch }
+      await db.credential.update({
+        where: { userId_platform: { userId: req.user.sub, platform: 'mercadolivre' } },
+        data: { data: encryptCredential(JSON.stringify(patchedData)) },
+      })
+    }
+    return { ...publicResult, checkedAt: new Date().toISOString() }
   })
 
   app.put('/:platform', { onRequest: [app.authenticate] }, async (req, reply) => {
