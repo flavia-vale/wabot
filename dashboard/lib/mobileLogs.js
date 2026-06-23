@@ -18,7 +18,10 @@ export const MOBILE_LOG_PLATFORM_LABEL = {
 export function friendlyMobileLogError(errorMsg) {
   if (!errorMsg) return null
   if (errorMsg.startsWith('warning:amazon_cookies_expired')) return 'Seus cookies da Amazon expiraram. As ofertas continuam saindo, mas para gerar links curtos amzn.to renove em Conta → Credenciais → Amazon.'
-  if (errorMsg.startsWith('warning:ml_ssid_expired')) return 'Sua credencial do Mercado Livre (SSID) expirou. As ofertas continuam saindo; renove em Conta → Credenciais → Mercado Livre para voltar a gerar links curtos.'
+  if (errorMsg.startsWith('warning:ml_ssid_expired')) return 'Sua credencial do Mercado Livre (SSID/cookie) expirou. As ofertas continuam saindo; renove em Conta → Credenciais → Mercado Livre para voltar a gerar links curtos.'
+  if (errorMsg.startsWith('warning:ml_affiliate_forbidden')) return 'O Mercado Livre recusou a geração do link curto neste momento. As ofertas continuam saindo com link de afiliado longo; aguarde antes de tentar novamente.'
+  if (errorMsg.startsWith('warning:ml_affiliate_rate_limited')) return 'O Mercado Livre limitou temporariamente as conversões. As ofertas continuam saindo com link de afiliado longo; o bot evita novas tentativas imediatas.'
+  if (errorMsg.startsWith('warning:ml_affiliate_busy')) return 'Outra conversão do Mercado Livre já está usando esta credencial. Esta oferta saiu com link de afiliado longo para evitar disputa de sessão.'
   if (errorMsg.startsWith('skip:dedup')) return 'Link já enviado nas últimas 2 horas — bloqueado para não duplicar.'
   if (errorMsg.startsWith('skip:blocked_keyword')) return 'Contém uma palavra que você marcou para bloquear.'
   if (errorMsg.startsWith('skip:title_mismatch')) return 'O texto da oferta não combina com o produto do link. Bloqueado por segurança.'

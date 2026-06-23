@@ -36,6 +36,13 @@ test('friendlyMobileLogError traduz warning:ml_ssid_expired com texto PT-BR', ()
   assert.ok(result.includes('SSID') || result.includes('credencial'), 'deve mencionar credencial/SSID')
 })
 
+
+test('friendlyMobileLogError traduz warnings específicos do Mercado Livre', () => {
+  assert.match(friendlyMobileLogError('warning:ml_affiliate_forbidden'), /recusou/i)
+  assert.match(friendlyMobileLogError('warning:ml_affiliate_rate_limited'), /limitou/i)
+  assert.match(friendlyMobileLogError('warning:ml_affiliate_busy'), /Outra conversão/i)
+})
+
 test('ações seguras incluem cópia sempre que há link e abertura só para URL válida', () => {
   const actions = mobileLogLinkActions({
     link: 'https://loja.test/produto',
