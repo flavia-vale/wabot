@@ -355,8 +355,9 @@ export async function authRoutes(app) {
       } catch {}
     }
 
+    let user
     try {
-      const user = await createUserWithSecureFields({
+      user = await createUserWithSecureFields({
         name,
         email,
         passwordHash,
@@ -376,10 +377,27 @@ export async function authRoutes(app) {
         termsAcceptedUserAgent: String(req.headers?.['user-agent'] ?? '').slice(0, 500) || null,
         ...(affiliateProfileId && { affiliateProfileId }),
       })
+    } catch (err) {
+      if (String(err?.code) === 'P2002' || String(err?.message ?? '').includes('Unique constraint failed')) {
+        return reply.code(409).send({ error: 'Este número de telefone já está cadastrado' })
+      }
+      throw err
+    }
 
+    // A conta já está criada e commitada no banco. A partir daqui NENHUM passo
+    // auxiliar pode transformar um cadastro bem-sucedido em erro: se a rota
+    // retornasse 500 aqui, o frontend mostraria "falha", a pessoa acharia que
+    // não se cadastrou, tentaria de novo e bateria em "telefone já cadastrado"
+    // (era exatamente o loop observado em produção). Tudo abaixo é best-effort;
+    // o cadastro sempre devolve token e loga a pessoa.
+    try {
       await createDefaultBotConfigForUser(user.id)
+    } catch (err) {
+      req.log?.warn?.({ err, userId: user.id }, 'register: falha ao criar botConfig default (best-effort)')
+    }
 
-      if (referrer) {
+    if (referrer) {
+      try {
         const base = referrer.accessExpiresAt && referrer.accessExpiresAt > new Date()
           ? referrer.accessExpiresAt.getTime()
           : Date.now()
@@ -387,42 +405,39 @@ export async function authRoutes(app) {
           where: { id: referrer.id },
           data: { accessExpiresAt: new Date(base + 7 * 24 * 60 * 60 * 1000) },
         })
+      } catch (err) {
+        req.log?.warn?.({ err, referrerId: referrer.id }, 'register: falha ao creditar bônus de indicação (best-effort)')
       }
-
-      trackAnalyticsEventSafe({
-        userId: user.id,
-        event: 'signup_created',
-        metadata: {
-          source: source || utmSource || (affiliateProfileId ? 'affiliate' : 'direct'),
-          ref: ref || null,
-          aff_code: affiliateProfileId ? aff_code : null,
-          promo: isPromoVipFlow ? 'vip7dias' : 'none',
-          utm_source: utmSource || source || (affiliateProfileId ? 'affiliate' : 'direct'),
-          utm_medium: utmMedium || null,
-          utm_campaign: utmCampaign || null,
-          utm_content: utmContent || null,
-          utm_term: utmTerm || null,
-          conversion_prompt_id: conversionPromptId || null,
-          conversion_prompt_variant: conversionPromptVariant || null,
-          terms_version: acceptedTermsVersion,
-        },
-      })
-      // E-mail de boas-vindas: fire-and-forget, só para e-mails reais
-      // informados pelo usuário (não para o fallback user_*@sistema.com).
-      // No-op quando SMTP não está configurado; nunca derruba o signup.
-      if (providedEmail) {
-        sendWelcomeEmail({ to: providedEmail, name }).catch(() => {})
-      }
-
-      const token = app.jwt.sign({ sub: user.id, email: user.email, jti: randomToken(12) }, { expiresIn: '7d' })
-      setAuthCookie(reply, token, req)
-      return { user: publicUser(user), token }
-    } catch (err) {
-      if (String(err?.code) === 'P2002' || String(err?.message ?? '').includes('Unique constraint failed')) {
-        return reply.code(409).send({ error: 'Este número de telefone já está cadastrado' })
-      }
-      throw err
     }
+
+    trackAnalyticsEventSafe({
+      userId: user.id,
+      event: 'signup_created',
+      metadata: {
+        source: source || utmSource || (affiliateProfileId ? 'affiliate' : 'direct'),
+        ref: ref || null,
+        aff_code: affiliateProfileId ? aff_code : null,
+        promo: isPromoVipFlow ? 'vip7dias' : 'none',
+        utm_source: utmSource || source || (affiliateProfileId ? 'affiliate' : 'direct'),
+        utm_medium: utmMedium || null,
+        utm_campaign: utmCampaign || null,
+        utm_content: utmContent || null,
+        utm_term: utmTerm || null,
+        conversion_prompt_id: conversionPromptId || null,
+        conversion_prompt_variant: conversionPromptVariant || null,
+        terms_version: acceptedTermsVersion,
+      },
+    })
+    // E-mail de boas-vindas: fire-and-forget, só para e-mails reais
+    // informados pelo usuário (não para o fallback user_*@sistema.com).
+    // No-op quando SMTP não está configurado; nunca derruba o signup.
+    if (providedEmail) {
+      sendWelcomeEmail({ to: providedEmail, name }).catch(() => {})
+    }
+
+    const token = app.jwt.sign({ sub: user.id, email: user.email, jti: randomToken(12) }, { expiresIn: '7d' })
+    setAuthCookie(reply, token, req)
+    return { user: publicUser(user), token }
   })
 
   app.post('/login', async (req, reply) => {
