@@ -308,6 +308,35 @@ async function callCreateLinkApi(mlUrl, tag, { cookieHeader, csrf }) {
 // nenhum link de afiliado (created=undefined), então o probe é sem efeito
 // colateral.
 const SESSION_PROBE_URL = 'https://www.mercadolivre.com.br/'
+const ML_AFFILIATE_ERROR_WARNING = {
+  expired: 'ml_ssid_expired',
+  forbidden: 'ml_affiliate_forbidden',
+  rate_limited: 'ml_affiliate_rate_limited',
+}
+
+function classifyMlAffiliateFailure(status, apiError = '') {
+  if (status === 401 || /auth|unauthoriz|login|sess[aã]o|expirad/i.test(apiError)) {
+    return { type: 'expired', warning: ML_AFFILIATE_ERROR_WARNING.expired, retryable: false }
+  }
+  if (status === 403 || /forbidden/i.test(apiError)) {
+    return { type: 'forbidden', warning: ML_AFFILIATE_ERROR_WARNING.forbidden, retryable: false }
+  }
+  if (status === 429) {
+    return { type: 'rate_limited', warning: ML_AFFILIATE_ERROR_WARNING.rate_limited, retryable: false }
+  }
+  return null
+}
+
+function buildMlAffiliateError(classification) {
+  const err = new Error(classification.type === 'expired'
+    ? 'Credencial Mercado Livre inválida/expirada. Renove o SSID (ou cookie) e tente novamente.'
+    : classification.type === 'forbidden'
+      ? 'Mercado Livre recusou a geração do link afiliado (403). Usando fallback partner_id.'
+      : 'Mercado Livre limitou temporariamente a geração de links afiliados (429). Usando fallback partner_id.')
+  err.mlWarning = classification.warning
+  err.mlFailureType = classification.type
+  return err
+}
 
 // Checa se a sessão de afiliado do Mercado Livre (cookie ssid) ainda está
 // válida, com UM request autenticado. Usado pelo painel para avisar a usuária
@@ -323,10 +352,12 @@ export async function checkMercadoLivreSession(creds = {}) {
   if (!cookieHeader) return { configured: false, alive: null, reason: 'no_cookie' }
   try {
     const res = await callCreateLinkApi(SESSION_PROBE_URL, tag || '', { cookieHeader, csrf })
-    // 401 é o ÚNICO sinal de auth: cookie expirado/inválido -> redireciona ao
-    // login. Qualquer outro status (200, ou 400 por URL/tag neutra) significa
-    // que a requisição passou pela autenticação -> sessão viva.
+    // 401 é sinal de auth: cookie expirado/inválido -> redireciona ao login.
+    // 403/429 não provam expiração do SSID; são bloqueio/rate-limit e ficam
+    // indeterminados para não alarmar a usuária com falso "SSID expirou".
     if (res.status === 401) return { configured: true, alive: false, reason: 'expired' }
+    if (res.status === 403) return { configured: true, alive: null, reason: 'forbidden' }
+    if (res.status === 429) return { configured: true, alive: null, reason: 'rate_limited' }
     return { configured: true, alive: true, reason: 'ok' }
   } catch {
     return { configured: true, alive: null, reason: 'network_error' }
@@ -349,8 +380,8 @@ async function createAffiliateLink(mlUrl, tag, creds) {
   }
 
   let lastError = null
-  let authFailed = false
-  const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504])
+  let terminalFailure = null
+  const RETRYABLE_STATUS = new Set([408, 409, 425, 500, 502, 503, 504])
   const retryBackoffMs = [400, 1200, 2800]
   for (const attempt of attempts) {
     for (let i = 0; i <= retryBackoffMs.length; i++) {
@@ -365,8 +396,8 @@ async function createAffiliateLink(mlUrl, tag, creds) {
 
         const status = Number(res.status) || 0
         const apiError = String(result?.error || result?.message || res.data?.error || res.data?.message || '')
-        const looksAuthIssue = status === 401 || status === 403 || /auth|unauthoriz|forbidden|login|sess[aã]o|expirad/i.test(apiError)
-        if (looksAuthIssue) authFailed = true
+        const affiliateFailure = classifyMlAffiliateFailure(status, apiError)
+        if (affiliateFailure) terminalFailure = affiliateFailure
 
         lastError = {
           status,
@@ -376,6 +407,11 @@ async function createAffiliateLink(mlUrl, tag, creds) {
           urls: res.data?.urls,
           rawBody: typeof res.data === 'string' ? res.data.slice(0, 500) : JSON.stringify(res.data).slice(0, 500),
           responseHeaders: { 'content-type': res.headers?.['content-type'], 'set-cookie': res.headers?.['set-cookie']?.length },
+        }
+
+        if (affiliateFailure) {
+          logger.warn({ ...lastError, failureType: affiliateFailure.type }, 'ML createLink: falha terminal sem retry')
+          break
         }
 
         if (RETRYABLE_STATUS.has(status) && i < retryBackoffMs.length) {
@@ -389,7 +425,15 @@ async function createAffiliateLink(mlUrl, tag, creds) {
         break
       } catch (err) {
         const status = Number(err.response?.status) || 0
-        lastError = { attempt: attempt.label, retry: i, err: err.message, status }
+        const apiError = String(err.response?.data?.error || err.response?.data?.message || err.message || '')
+        const affiliateFailure = classifyMlAffiliateFailure(status, apiError)
+        if (affiliateFailure) terminalFailure = affiliateFailure
+        lastError = { attempt: attempt.label, retry: i, err: err.message, status, apiError }
+
+        if (affiliateFailure) {
+          logger.warn({ ...lastError, failureType: affiliateFailure.type }, 'ML createLink: falha terminal sem retry')
+          break
+        }
 
         if (RETRYABLE_STATUS.has(status) && i < retryBackoffMs.length) {
           const wait = retryBackoffMs[i]
@@ -402,10 +446,11 @@ async function createAffiliateLink(mlUrl, tag, creds) {
         break
       }
     }
+    if (terminalFailure) break
   }
 
-  if (authFailed) {
-    throw new Error('Credencial Mercado Livre inválida/expirada. Renove o SSID (ou cookie) e tente novamente.')
+  if (terminalFailure) {
+    throw buildMlAffiliateError(terminalFailure)
   }
 
   return null
@@ -550,10 +595,10 @@ export async function convert(url, creds) {
     const anchorMlbId = extractMlbId(target)
     logger.info({ inputUrl: url, target, anchorMlbId, hasSsid: !!ssid }, 'ML convert: target resolvido')
 
-    // Sinaliza quando o SSID/cookie do afiliado expirou: a oferta ainda sai
-    // via fallback partner_id, mas o painel avisa o usuário para renovar a
-    // credencial e voltar a gerar short links meli.la.
-    let authExpired = false
+    // Sinaliza falhas terminais da API de afiliados do ML: a oferta ainda sai
+    // via fallback partner_id, mas o painel mostra o motivo correto (expiração,
+    // bloqueio 403 ou rate-limit 429) em vez de culpar sempre o SSID.
+    let affiliateWarning = null
 
     // Sem MLB no target, não há como validar — chamar a API neste caso é
     // tiro no escuro (o ML pode devolver short para produto qualquer).
@@ -601,10 +646,10 @@ export async function convert(url, creds) {
           return affiliateUrl
         } catch (err) {
           logger.warn({ candidate, err: err.message }, 'ML createLink: tentativa falhou')
-          // Credencial expirada falha igual em todos os candidates: marca e
-          // para de tentar (poupa chamadas) — cai no fallback com aviso.
-          if (/credencial|inv[aá]lida|expirad/i.test(err.message)) {
-            authExpired = true
+          // Falhas terminais repetiriam em todos os candidates: marca e para
+          // de tentar (poupa chamadas) — cai no fallback com aviso específico.
+          if (err.mlWarning || /credencial|inv[aá]lida|expirad|recusou|limitou/i.test(err.message)) {
+            affiliateWarning = err.mlWarning || 'ml_ssid_expired'
             break
           }
         }
@@ -627,7 +672,7 @@ export async function convert(url, creds) {
     // Fallback: injetar partner_id na URL resolvida (ou na meli.la original se resolve falhou)
     u.searchParams.delete('partner_id')
     if (tag) u.searchParams.set('partner_id', tag)
-    if (authExpired) return { url: u.toString(), warning: 'ml_ssid_expired' }
+    if (affiliateWarning) return { url: u.toString(), warning: affiliateWarning }
     return u.toString()
   } catch {
     return null
