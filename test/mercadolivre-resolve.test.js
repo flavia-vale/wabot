@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import axios from 'axios'
-import { resolveToCleanProductUrl, convert } from '../src/converters/mercadolivre.js'
+import { clearMercadoLivreAffiliateCooldownsForTest, resolveToCleanProductUrl, convert } from '../src/converters/mercadolivre.js'
 
 test('link de recomendação com MLB no path resolve para o produto (tracking removido)', async () => {
   const url = 'https://produto.mercadolivre.com.br/MLB-4049246221-secadora-roupas-portatil-_JM?searchVariation=188766696371#polycard_client=recommendations&reco_backend=x&c_id=/home/element'
@@ -24,8 +24,8 @@ test('convert sinaliza warning ml_ssid_expired quando API de afiliado rejeita au
   assert.match(result.url, /partner_id=475630078/)
 })
 
-
 test('convert sinaliza warning ml_affiliate_forbidden e não retrya quando API retorna 403', async (t) => {
+  clearMercadoLivreAffiliateCooldownsForTest()
   let calls = 0
   t.mock.method(axios, 'post', async () => {
     calls += 1
@@ -40,6 +40,7 @@ test('convert sinaliza warning ml_affiliate_forbidden e não retrya quando API r
 })
 
 test('convert sinaliza warning ml_affiliate_rate_limited e não retrya quando API retorna 429', async (t) => {
+  clearMercadoLivreAffiliateCooldownsForTest()
   let calls = 0
   t.mock.method(axios, 'post', async () => {
     calls += 1
@@ -50,6 +51,60 @@ test('convert sinaliza warning ml_affiliate_rate_limited e não retrya quando AP
   assert.equal(typeof result, 'object')
   assert.equal(result.warning, 'ml_affiliate_rate_limited')
   assert.match(result.url, /partner_id=475630078/)
+  assert.equal(calls, 1)
+})
+
+
+test('convert aplica cooldown após 403 e pula createLink na conversão seguinte da mesma credencial', async (t) => {
+  clearMercadoLivreAffiliateCooldownsForTest()
+  let calls = 0
+  t.mock.method(axios, 'post', async () => {
+    calls += 1
+    return { status: 403, data: '<html>blocked</html>', headers: { 'content-type': 'text/html' } }
+  })
+  const url = 'https://produto.mercadolivre.com.br/MLB-4049246221-secadora-_JM'
+  const creds = { tag: '475630078', ssid: 'ssid-forbidden-cooldown-1234567890', csrf: 'csrf-token' }
+
+  const first = await convert(url, creds)
+  const second = await convert(url, creds)
+
+  assert.equal(first.warning, 'ml_affiliate_forbidden')
+  assert.equal(second.warning, 'ml_affiliate_forbidden')
+  assert.equal(calls, 1)
+  clearMercadoLivreAffiliateCooldownsForTest()
+})
+
+test('convert aplica cooldown após 429 e pula createLink na conversão seguinte da mesma credencial', async (t) => {
+  clearMercadoLivreAffiliateCooldownsForTest()
+  let calls = 0
+  t.mock.method(axios, 'post', async () => {
+    calls += 1
+    return { status: 429, data: { message: 'rate limited' }, headers: {} }
+  })
+  const url = 'https://produto.mercadolivre.com.br/MLB-4049246221-secadora-_JM'
+  const creds = { tag: '475630078', ssid: 'ssid-cooldown-1234567890', csrf: 'csrf-token' }
+
+  const first = await convert(url, creds)
+  const second = await convert(url, creds)
+
+  assert.equal(first.warning, 'ml_affiliate_rate_limited')
+  assert.equal(second.warning, 'ml_affiliate_rate_limited')
+  assert.equal(calls, 1)
+  clearMercadoLivreAffiliateCooldownsForTest()
+})
+
+test('convert limita createLink ao primeiro candidate canônico por padrão', async (t) => {
+  clearMercadoLivreAffiliateCooldownsForTest()
+  let calls = 0
+  t.mock.method(axios, 'post', async () => {
+    calls += 1
+    return { status: 400, data: { message: 'bad candidate' }, headers: {} }
+  })
+  const url = 'https://www.mercadolivre.com.br/secador/p/MLB70009242'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+
+  assert.equal(typeof result, 'string')
+  assert.match(result, /partner_id=475630078/)
   assert.equal(calls, 1)
 })
 

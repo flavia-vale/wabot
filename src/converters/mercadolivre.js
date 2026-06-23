@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import axios from 'axios'
 import logger from '../logger.js'
 
@@ -9,6 +10,10 @@ const RESOLVE_CACHE_MAX = Math.max(50, Number(process.env.ML_RESOLVE_CACHE_MAX) 
 const RESOLVE_CACHE_TTL_MS = Math.max(60_000, Number(process.env.ML_RESOLVE_CACHE_TTL_MS) || 6 * 60 * 60_000)
 const ML_RESOLVE_FETCH_TIMEOUT_MS = Math.max(1_000, Number(process.env.ML_RESOLVE_FETCH_TIMEOUT_MS) || 4_000)
 const resolveCache = new Map()
+const ML_AFFILIATE_FORBIDDEN_COOLDOWN_MS = Math.max(60_000, Number(process.env.ML_AFFILIATE_FORBIDDEN_COOLDOWN_MS) || 15 * 60_000)
+const ML_AFFILIATE_RATE_LIMIT_COOLDOWN_MS = Math.max(60_000, Number(process.env.ML_AFFILIATE_RATE_LIMIT_COOLDOWN_MS) || 5 * 60_000)
+const ML_CREATE_LINK_MAX_CANDIDATES = Math.max(1, Number(process.env.ML_CREATE_LINK_MAX_CANDIDATES) || 1)
+const affiliateCooldowns = new Map()
 
 function getCachedResolve(url) {
   const entry = resolveCache.get(url)
@@ -30,6 +35,49 @@ function setCachedResolve(url, value) {
     if (oldest) resolveCache.delete(oldest)
   }
   resolveCache.set(url, { value, at: Date.now() })
+}
+
+
+function affiliateCooldownKey(creds = {}) {
+  const parts = [
+    String(creds.userId || ''),
+    String(creds.tag || ''),
+    String(creds.id || ''),
+    String(creds.ssid || creds.cookie || ''),
+  ]
+  return crypto.createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 16)
+}
+
+function pruneAffiliateCooldowns(now = Date.now()) {
+  for (const [key, entry] of affiliateCooldowns) {
+    if (!entry || entry.until <= now) affiliateCooldowns.delete(key)
+  }
+}
+
+function getAffiliateCooldown(creds, now = Date.now()) {
+  pruneAffiliateCooldowns(now)
+  const entry = affiliateCooldowns.get(affiliateCooldownKey(creds))
+  if (!entry || entry.until <= now) return null
+  return entry
+}
+
+function setAffiliateCooldown(creds, failureType, now = Date.now()) {
+  const warning = failureType === 'forbidden'
+    ? ML_AFFILIATE_ERROR_WARNING.forbidden
+    : failureType === 'rate_limited'
+      ? ML_AFFILIATE_ERROR_WARNING.rate_limited
+      : null
+  if (!warning) return null
+  const durationMs = failureType === 'forbidden'
+    ? ML_AFFILIATE_FORBIDDEN_COOLDOWN_MS
+    : ML_AFFILIATE_RATE_LIMIT_COOLDOWN_MS
+  const entry = { failureType, warning, until: now + durationMs }
+  affiliateCooldowns.set(affiliateCooldownKey(creds), entry)
+  return entry
+}
+
+export function clearMercadoLivreAffiliateCooldownsForTest() {
+  affiliateCooldowns.clear()
 }
 
 // Captura o Location do redirect meli.la sem seguir até o ML
@@ -149,6 +197,33 @@ function buildCanonicalCandidates(targetUrl) {
     `https://produto.mercadolivre.com.br/${id}-x-_JM`,
   ]
   return [...new Set(candidates)]
+}
+
+function selectCreateLinkCandidates(targetUrl, candidates = [], anchorMlbId = null) {
+  const seen = new Set()
+  const selected = []
+  const push = (candidate) => {
+    if (!candidate || seen.has(candidate)) return
+    seen.add(candidate)
+    if (anchorMlbId) {
+      const candidateMlbId = extractMlbId(candidate)
+      if (candidateMlbId && candidateMlbId !== anchorMlbId) {
+        logger.warn({ candidate, anchorMlbId, candidateMlbId }, 'ML createLink: candidate diverge do MLB esperado — pulando')
+        return
+      }
+    }
+    selected.push(candidate)
+  }
+
+  push(candidates[0] || targetUrl)
+  // Escape hatch operacional: default 1 para reduzir amplificação. Se o ML mudar
+  // formato e for preciso testar variações canônicas, a env aumenta o teto sem
+  // reintroduzir o produto cartesiano N candidates × attempts × retries.
+  for (const candidate of candidates.slice(1)) {
+    if (selected.length >= ML_CREATE_LINK_MAX_CANDIDATES) break
+    push(candidate)
+  }
+  return selected
 }
 
 // Extrai MLB do HTML usando SÓ fontes estruturadas (que apontam para o
@@ -606,30 +681,14 @@ export async function convert(url, creds) {
     if (ssid && !anchorMlbId) {
       logger.warn({ inputUrl: url, target }, 'ML convert: anchorMlbId nulo — pulando API de afiliados (fallback partner_id)')
     } else if (ssid) {
-      const tries = [...candidates]
-      try {
-        const clean = new URL(candidates[0] ?? target)
-        clean.search = ''
-        tries.push(clean.toString())
-      } catch {}
-      try {
-        const clean = new URL(target)
-        clean.search = ''
-        tries.push(clean.toString())
-      } catch {}
+      const cooldown = getAffiliateCooldown(creds)
+      if (cooldown) {
+        affiliateWarning = cooldown.warning
+        logger.warn({ failureType: cooldown.failureType, until: new Date(cooldown.until).toISOString() }, 'ML createLink: cooldown ativo — usando fallback partner_id')
+      }
 
-      const seen = new Set()
+      const tries = cooldown ? [] : selectCreateLinkCandidates(target, candidates, anchorMlbId)
       for (const candidate of tries) {
-        if (seen.has(candidate)) continue
-        seen.add(candidate)
-        // Não enviar para a API um candidate que já diverge do MLB esperado
-        if (anchorMlbId) {
-          const candidateMlbId = extractMlbId(candidate)
-          if (candidateMlbId && candidateMlbId !== anchorMlbId) {
-            logger.warn({ candidate, anchorMlbId, candidateMlbId }, 'ML createLink: candidate diverge do MLB esperado — pulando')
-            continue
-          }
-        }
         try {
           const affiliateUrl = await createAffiliateLink(candidate, tag, creds)
           if (!affiliateUrl) continue
@@ -650,6 +709,9 @@ export async function convert(url, creds) {
           // de tentar (poupa chamadas) — cai no fallback com aviso específico.
           if (err.mlWarning || /credencial|inv[aá]lida|expirad|recusou|limitou/i.test(err.message)) {
             affiliateWarning = err.mlWarning || 'ml_ssid_expired'
+            if (err.mlFailureType === 'forbidden' || err.mlFailureType === 'rate_limited') {
+              setAffiliateCooldown(creds, err.mlFailureType)
+            }
             break
           }
         }
