@@ -3,6 +3,7 @@ import { detectLinks } from '../../detector.js'
 import { convertLink as defaultConvertLink } from '../../converters/index.js'
 import { fetchProductInfo as defaultFetchProductInfo } from '../../converters/productInfoScraper.js'
 import { validateCredentialData } from '../../credentialHealth.js'
+import { persistCredentialPatch } from '../../credentialPatch.js'
 import { assertPublicUrl } from '../../core/ssrfGuard.js'
 import {
   buildScrapedOffer,
@@ -49,6 +50,24 @@ function getRateStateForUser(rateState, userId, windowMs, now = Date.now()) {
     return next
   }
   return current
+}
+
+
+function attachCredentialPatchHandler(credentialsMap, userId, logger) {
+  Object.defineProperty(credentialsMap, '__onCredentialPatch', {
+    enumerable: false,
+    value: async (platform, patch) => {
+      try {
+        const updated = await persistCredentialPatch({ userId, platform, patch })
+        if (updated && credentialsMap[platform]) {
+          credentialsMap[platform] = { ...credentialsMap[platform], ...patch }
+        }
+      } catch (err) {
+        logger?.warn({ platform, err: err?.message }, 'Falha ao persistir cookies rotacionados da credencial')
+      }
+    },
+  })
+  return credentialsMap
 }
 
 function buildErrorResult(index, link, validation, code, error) {
@@ -121,7 +140,7 @@ export async function linkConversionRoutes(app, opts = {}) {
 
     const userId = req.user.sub
     const credentials = await findCredentials(userId)
-    const credentialsMap = buildCredentialsMap(credentials)
+    const credentialsMap = attachCredentialPatchHandler(buildCredentialsMap(credentials), userId, app.log)
 
     // TEMPORÁRIO (2026-06): o painel "Criar oferta" exige que o usuário cole o
     // PRÓPRIO link de afiliado e NÃO devolve mais link convertido — mesmo
@@ -238,7 +257,7 @@ export async function linkConversionRoutes(app, opts = {}) {
       }
 
       const credentials = await findCredentials(userId)
-      const credentialsMap = buildCredentialsMap(credentials)
+      const credentialsMap = attachCredentialPatchHandler(buildCredentialsMap(credentials), userId, app.log)
       const deadlineAt = Date.now() + operational.requestDeadlineMs
 
       const results = []

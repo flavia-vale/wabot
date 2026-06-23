@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import axios from 'axios'
 import logger from '../logger.js'
 
@@ -9,6 +10,10 @@ const RESOLVE_CACHE_MAX = Math.max(50, Number(process.env.ML_RESOLVE_CACHE_MAX) 
 const RESOLVE_CACHE_TTL_MS = Math.max(60_000, Number(process.env.ML_RESOLVE_CACHE_TTL_MS) || 6 * 60 * 60_000)
 const ML_RESOLVE_FETCH_TIMEOUT_MS = Math.max(1_000, Number(process.env.ML_RESOLVE_FETCH_TIMEOUT_MS) || 4_000)
 const resolveCache = new Map()
+const ML_AFFILIATE_FORBIDDEN_COOLDOWN_MS = Math.max(60_000, Number(process.env.ML_AFFILIATE_FORBIDDEN_COOLDOWN_MS) || 15 * 60_000)
+const ML_AFFILIATE_RATE_LIMIT_COOLDOWN_MS = Math.max(60_000, Number(process.env.ML_AFFILIATE_RATE_LIMIT_COOLDOWN_MS) || 5 * 60_000)
+const ML_CREATE_LINK_MAX_CANDIDATES = Math.max(1, Number(process.env.ML_CREATE_LINK_MAX_CANDIDATES) || 1)
+const affiliateCooldowns = new Map()
 
 function getCachedResolve(url) {
   const entry = resolveCache.get(url)
@@ -30,6 +35,49 @@ function setCachedResolve(url, value) {
     if (oldest) resolveCache.delete(oldest)
   }
   resolveCache.set(url, { value, at: Date.now() })
+}
+
+
+function affiliateCooldownKey(creds = {}) {
+  const parts = [
+    String(creds.userId || ''),
+    String(creds.tag || ''),
+    String(creds.id || ''),
+    String(creds.ssid || creds.cookie || ''),
+  ]
+  return crypto.createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 16)
+}
+
+function pruneAffiliateCooldowns(now = Date.now()) {
+  for (const [key, entry] of affiliateCooldowns) {
+    if (!entry || entry.until <= now) affiliateCooldowns.delete(key)
+  }
+}
+
+function getAffiliateCooldown(creds, now = Date.now()) {
+  pruneAffiliateCooldowns(now)
+  const entry = affiliateCooldowns.get(affiliateCooldownKey(creds))
+  if (!entry || entry.until <= now) return null
+  return entry
+}
+
+function setAffiliateCooldown(creds, failureType, now = Date.now()) {
+  const warning = failureType === 'forbidden'
+    ? ML_AFFILIATE_ERROR_WARNING.forbidden
+    : failureType === 'rate_limited'
+      ? ML_AFFILIATE_ERROR_WARNING.rate_limited
+      : null
+  if (!warning) return null
+  const durationMs = failureType === 'forbidden'
+    ? ML_AFFILIATE_FORBIDDEN_COOLDOWN_MS
+    : ML_AFFILIATE_RATE_LIMIT_COOLDOWN_MS
+  const entry = { failureType, warning, until: now + durationMs }
+  affiliateCooldowns.set(affiliateCooldownKey(creds), entry)
+  return entry
+}
+
+export function clearMercadoLivreAffiliateCooldownsForTest() {
+  affiliateCooldowns.clear()
 }
 
 // Captura o Location do redirect meli.la sem seguir até o ML
@@ -149,6 +197,33 @@ function buildCanonicalCandidates(targetUrl) {
     `https://produto.mercadolivre.com.br/${id}-x-_JM`,
   ]
   return [...new Set(candidates)]
+}
+
+function selectCreateLinkCandidates(targetUrl, candidates = [], anchorMlbId = null) {
+  const seen = new Set()
+  const selected = []
+  const push = (candidate) => {
+    if (!candidate || seen.has(candidate)) return
+    seen.add(candidate)
+    if (anchorMlbId) {
+      const candidateMlbId = extractMlbId(candidate)
+      if (candidateMlbId && candidateMlbId !== anchorMlbId) {
+        logger.warn({ candidate, anchorMlbId, candidateMlbId }, 'ML createLink: candidate diverge do MLB esperado — pulando')
+        return
+      }
+    }
+    selected.push(candidate)
+  }
+
+  push(candidates[0] || targetUrl)
+  // Escape hatch operacional: default 1 para reduzir amplificação. Se o ML mudar
+  // formato e for preciso testar variações canônicas, a env aumenta o teto sem
+  // reintroduzir o produto cartesiano N candidates × attempts × retries.
+  for (const candidate of candidates.slice(1)) {
+    if (selected.length >= ML_CREATE_LINK_MAX_CANDIDATES) break
+    push(candidate)
+  }
+  return selected
 }
 
 // Extrai MLB do HTML usando SÓ fontes estruturadas (que apontam para o
@@ -281,6 +356,68 @@ function buildCookieHeader({ ssid, csrf, cookie, id }) {
   return pairs.join('; ')
 }
 
+function parseCookieHeader(cookieHeader = '') {
+  const jar = new Map()
+  for (const part of String(cookieHeader || '').split(';')) {
+    const trimmed = part.trim()
+    if (!trimmed) continue
+    const eq = trimmed.indexOf('=')
+    if (eq <= 0) continue
+    jar.set(trimmed.slice(0, eq), trimmed.slice(eq + 1))
+  }
+  return jar
+}
+
+function getSetCookieLines(headers = {}) {
+  const value = headers?.['set-cookie'] ?? headers?.['Set-Cookie']
+  if (!value) return []
+  return Array.isArray(value) ? value.filter(Boolean) : [value]
+}
+
+function mergeSetCookieIntoJar(cookieHeader, setCookieLines) {
+  const jar = parseCookieHeader(cookieHeader)
+  for (const line of setCookieLines) {
+    const first = String(line || '').split(';')[0]?.trim()
+    if (!first) continue
+    const eq = first.indexOf('=')
+    if (eq <= 0) continue
+    jar.set(first.slice(0, eq), first.slice(eq + 1))
+  }
+  return jar
+}
+
+function serializeCookieJar(jar) {
+  return [...jar.entries()].map(([name, value]) => `${name}=${value}`).join('; ')
+}
+
+function buildCredentialPatchFromSetCookie(creds = {}, cookieHeader = '', headers = {}) {
+  const lines = getSetCookieLines(headers)
+  if (!lines.length) return null
+  const before = parseCookieHeader(cookieHeader)
+  const after = mergeSetCookieIntoJar(cookieHeader, lines)
+  const changedNames = [...after.keys()].filter(name => before.get(name) !== after.get(name))
+  if (!changedNames.length) return null
+
+  const patch = { cookie: serializeCookieJar(after) }
+  if (after.has('ssid')) patch.ssid = after.get('ssid')
+  if (after.has('_csrf')) patch.csrf = after.get('_csrf')
+  if (after.has('id')) patch.id = after.get('id')
+
+  // Quando a credencial foi cadastrada em campos separados, mantenha os campos
+  // conhecidos mesmo que o ML só tenha rotacionado cookies companheiros no jar.
+  if (!patch.ssid && creds.ssid) patch.ssid = creds.ssid
+  if (!patch.csrf && creds.csrf) patch.csrf = creds.csrf
+  if (!patch.id && creds.id) patch.id = creds.id
+  return patch
+}
+
+async function notifyCredentialPatch(creds = {}, patch) {
+  if (!patch) return
+  if (typeof creds.__onCredentialPatch === 'function') {
+    await creds.__onCredentialPatch('mercadolivre', patch)
+  }
+}
+
 async function callCreateLinkApi(mlUrl, tag, { cookieHeader, csrf }) {
   const res = await axios.post(
     'https://www.mercadolivre.com.br/affiliate-program/api/v2/affiliates/createLink',
@@ -308,6 +445,35 @@ async function callCreateLinkApi(mlUrl, tag, { cookieHeader, csrf }) {
 // nenhum link de afiliado (created=undefined), então o probe é sem efeito
 // colateral.
 const SESSION_PROBE_URL = 'https://www.mercadolivre.com.br/'
+const ML_AFFILIATE_ERROR_WARNING = {
+  expired: 'ml_ssid_expired',
+  forbidden: 'ml_affiliate_forbidden',
+  rate_limited: 'ml_affiliate_rate_limited',
+}
+
+function classifyMlAffiliateFailure(status, apiError = '') {
+  if (status === 401 || /auth|unauthoriz|login|sess[aã]o|expirad/i.test(apiError)) {
+    return { type: 'expired', warning: ML_AFFILIATE_ERROR_WARNING.expired, retryable: false }
+  }
+  if (status === 403 || /forbidden/i.test(apiError)) {
+    return { type: 'forbidden', warning: ML_AFFILIATE_ERROR_WARNING.forbidden, retryable: false }
+  }
+  if (status === 429) {
+    return { type: 'rate_limited', warning: ML_AFFILIATE_ERROR_WARNING.rate_limited, retryable: false }
+  }
+  return null
+}
+
+function buildMlAffiliateError(classification) {
+  const err = new Error(classification.type === 'expired'
+    ? 'Credencial Mercado Livre inválida/expirada. Renove o SSID (ou cookie) e tente novamente.'
+    : classification.type === 'forbidden'
+      ? 'Mercado Livre recusou a geração do link afiliado (403). Usando fallback partner_id.'
+      : 'Mercado Livre limitou temporariamente a geração de links afiliados (429). Usando fallback partner_id.')
+  err.mlWarning = classification.warning
+  err.mlFailureType = classification.type
+  return err
+}
 
 // Checa se a sessão de afiliado do Mercado Livre (cookie ssid) ainda está
 // válida, com UM request autenticado. Usado pelo painel para avisar a usuária
@@ -323,11 +489,14 @@ export async function checkMercadoLivreSession(creds = {}) {
   if (!cookieHeader) return { configured: false, alive: null, reason: 'no_cookie' }
   try {
     const res = await callCreateLinkApi(SESSION_PROBE_URL, tag || '', { cookieHeader, csrf })
-    // 401 é o ÚNICO sinal de auth: cookie expirado/inválido -> redireciona ao
-    // login. Qualquer outro status (200, ou 400 por URL/tag neutra) significa
-    // que a requisição passou pela autenticação -> sessão viva.
-    if (res.status === 401) return { configured: true, alive: false, reason: 'expired' }
-    return { configured: true, alive: true, reason: 'ok' }
+    const credentialPatch = buildCredentialPatchFromSetCookie(creds, cookieHeader, res.headers)
+    // 401 é sinal de auth: cookie expirado/inválido -> redireciona ao login.
+    // 403/429 não provam expiração do SSID; são bloqueio/rate-limit e ficam
+    // indeterminados para não alarmar a usuária com falso "SSID expirou".
+    if (res.status === 401) return { configured: true, alive: false, reason: 'expired', ...(credentialPatch ? { credentialPatch } : {}) }
+    if (res.status === 403) return { configured: true, alive: null, reason: 'forbidden', ...(credentialPatch ? { credentialPatch } : {}) }
+    if (res.status === 429) return { configured: true, alive: null, reason: 'rate_limited', ...(credentialPatch ? { credentialPatch } : {}) }
+    return { configured: true, alive: true, reason: 'ok', ...(credentialPatch ? { credentialPatch } : {}) }
   } catch {
     return { configured: true, alive: null, reason: 'network_error' }
   }
@@ -349,24 +518,29 @@ async function createAffiliateLink(mlUrl, tag, creds) {
   }
 
   let lastError = null
-  let authFailed = false
-  const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504])
+  let terminalFailure = null
+  let terminalCredentialPatch = null
+  const RETRYABLE_STATUS = new Set([408, 409, 425, 500, 502, 503, 504])
   const retryBackoffMs = [400, 1200, 2800]
   for (const attempt of attempts) {
     for (let i = 0; i <= retryBackoffMs.length; i++) {
       try {
         logger.info({ attempt: attempt.label, retry: i, mlUrl, hasSsid: !!ssid, hasCsrf: !!csrf }, 'ML createLink: tentando chamada API')
         const res = await callCreateLinkApi(mlUrl, tag, attempt)
+        const credentialPatch = buildCredentialPatchFromSetCookie(creds, attempt.cookieHeader, res.headers)
         const result = res.data?.urls?.[0]
         if (result?.short_url) {
-          logger.info({ attempt: attempt.label, retry: i, mlUrl }, 'ML createLink: short_url gerado')
-          return result.short_url
+          logger.info({ attempt: attempt.label, retry: i, mlUrl, rotatedCookie: !!credentialPatch }, 'ML createLink: short_url gerado')
+          return { shortUrl: result.short_url, credentialPatch }
         }
 
         const status = Number(res.status) || 0
         const apiError = String(result?.error || result?.message || res.data?.error || res.data?.message || '')
-        const looksAuthIssue = status === 401 || status === 403 || /auth|unauthoriz|forbidden|login|sess[aã]o|expirad/i.test(apiError)
-        if (looksAuthIssue) authFailed = true
+        const affiliateFailure = classifyMlAffiliateFailure(status, apiError)
+        if (affiliateFailure) {
+          terminalFailure = affiliateFailure
+          terminalCredentialPatch = credentialPatch
+        }
 
         lastError = {
           status,
@@ -376,6 +550,11 @@ async function createAffiliateLink(mlUrl, tag, creds) {
           urls: res.data?.urls,
           rawBody: typeof res.data === 'string' ? res.data.slice(0, 500) : JSON.stringify(res.data).slice(0, 500),
           responseHeaders: { 'content-type': res.headers?.['content-type'], 'set-cookie': res.headers?.['set-cookie']?.length },
+        }
+
+        if (affiliateFailure) {
+          logger.warn({ ...lastError, failureType: affiliateFailure.type }, 'ML createLink: falha terminal sem retry')
+          break
         }
 
         if (RETRYABLE_STATUS.has(status) && i < retryBackoffMs.length) {
@@ -389,7 +568,18 @@ async function createAffiliateLink(mlUrl, tag, creds) {
         break
       } catch (err) {
         const status = Number(err.response?.status) || 0
-        lastError = { attempt: attempt.label, retry: i, err: err.message, status }
+        const apiError = String(err.response?.data?.error || err.response?.data?.message || err.message || '')
+        const affiliateFailure = classifyMlAffiliateFailure(status, apiError)
+        if (affiliateFailure) {
+          terminalFailure = affiliateFailure
+          terminalCredentialPatch = buildCredentialPatchFromSetCookie(creds, attempt.cookieHeader, err.response?.headers)
+        }
+        lastError = { attempt: attempt.label, retry: i, err: err.message, status, apiError }
+
+        if (affiliateFailure) {
+          logger.warn({ ...lastError, failureType: affiliateFailure.type }, 'ML createLink: falha terminal sem retry')
+          break
+        }
 
         if (RETRYABLE_STATUS.has(status) && i < retryBackoffMs.length) {
           const wait = retryBackoffMs[i]
@@ -402,10 +592,13 @@ async function createAffiliateLink(mlUrl, tag, creds) {
         break
       }
     }
+    if (terminalFailure) break
   }
 
-  if (authFailed) {
-    throw new Error('Credencial Mercado Livre inválida/expirada. Renove o SSID (ou cookie) e tente novamente.')
+  if (terminalFailure) {
+    const err = buildMlAffiliateError(terminalFailure)
+    err.credentialPatch = terminalCredentialPatch
+    throw err
   }
 
   return null
@@ -550,10 +743,10 @@ export async function convert(url, creds) {
     const anchorMlbId = extractMlbId(target)
     logger.info({ inputUrl: url, target, anchorMlbId, hasSsid: !!ssid }, 'ML convert: target resolvido')
 
-    // Sinaliza quando o SSID/cookie do afiliado expirou: a oferta ainda sai
-    // via fallback partner_id, mas o painel avisa o usuário para renovar a
-    // credencial e voltar a gerar short links meli.la.
-    let authExpired = false
+    // Sinaliza falhas terminais da API de afiliados do ML: a oferta ainda sai
+    // via fallback partner_id, mas o painel mostra o motivo correto (expiração,
+    // bloqueio 403 ou rate-limit 429) em vez de culpar sempre o SSID.
+    let affiliateWarning = null
 
     // Sem MLB no target, não há como validar — chamar a API neste caso é
     // tiro no escuro (o ML pode devolver short para produto qualquer).
@@ -561,33 +754,19 @@ export async function convert(url, creds) {
     if (ssid && !anchorMlbId) {
       logger.warn({ inputUrl: url, target }, 'ML convert: anchorMlbId nulo — pulando API de afiliados (fallback partner_id)')
     } else if (ssid) {
-      const tries = [...candidates]
-      try {
-        const clean = new URL(candidates[0] ?? target)
-        clean.search = ''
-        tries.push(clean.toString())
-      } catch {}
-      try {
-        const clean = new URL(target)
-        clean.search = ''
-        tries.push(clean.toString())
-      } catch {}
+      const cooldown = getAffiliateCooldown(creds)
+      if (cooldown) {
+        affiliateWarning = cooldown.warning
+        logger.warn({ failureType: cooldown.failureType, until: new Date(cooldown.until).toISOString() }, 'ML createLink: cooldown ativo — usando fallback partner_id')
+      }
 
-      const seen = new Set()
+      const tries = cooldown ? [] : selectCreateLinkCandidates(target, candidates, anchorMlbId)
       for (const candidate of tries) {
-        if (seen.has(candidate)) continue
-        seen.add(candidate)
-        // Não enviar para a API um candidate que já diverge do MLB esperado
-        if (anchorMlbId) {
-          const candidateMlbId = extractMlbId(candidate)
-          if (candidateMlbId && candidateMlbId !== anchorMlbId) {
-            logger.warn({ candidate, anchorMlbId, candidateMlbId }, 'ML createLink: candidate diverge do MLB esperado — pulando')
-            continue
-          }
-        }
         try {
-          const affiliateUrl = await createAffiliateLink(candidate, tag, creds)
+          const affiliateResult = await createAffiliateLink(candidate, tag, creds)
+          const affiliateUrl = typeof affiliateResult === 'string' ? affiliateResult : affiliateResult?.shortUrl
           if (!affiliateUrl) continue
+          await notifyCredentialPatch(creds, affiliateResult?.credentialPatch)
           if (anchorMlbId) {
             const verdict = await validateAffiliateRedirect(affiliateUrl, anchorMlbId)
             // Só descartamos com mismatch comprovado. 'inconclusive' (muro
@@ -601,10 +780,14 @@ export async function convert(url, creds) {
           return affiliateUrl
         } catch (err) {
           logger.warn({ candidate, err: err.message }, 'ML createLink: tentativa falhou')
-          // Credencial expirada falha igual em todos os candidates: marca e
-          // para de tentar (poupa chamadas) — cai no fallback com aviso.
-          if (/credencial|inv[aá]lida|expirad/i.test(err.message)) {
-            authExpired = true
+          // Falhas terminais repetiriam em todos os candidates: marca e para
+          // de tentar (poupa chamadas) — cai no fallback com aviso específico.
+          if (err.mlWarning || /credencial|inv[aá]lida|expirad|recusou|limitou/i.test(err.message)) {
+            await notifyCredentialPatch(creds, err.credentialPatch)
+            affiliateWarning = err.mlWarning || 'ml_ssid_expired'
+            if (err.mlFailureType === 'forbidden' || err.mlFailureType === 'rate_limited') {
+              setAffiliateCooldown(creds, err.mlFailureType)
+            }
             break
           }
         }
@@ -627,7 +810,7 @@ export async function convert(url, creds) {
     // Fallback: injetar partner_id na URL resolvida (ou na meli.la original se resolve falhou)
     u.searchParams.delete('partner_id')
     if (tag) u.searchParams.set('partner_id', tag)
-    if (authExpired) return { url: u.toString(), warning: 'ml_ssid_expired' }
+    if (affiliateWarning) return { url: u.toString(), warning: affiliateWarning }
     return u.toString()
   } catch {
     return null

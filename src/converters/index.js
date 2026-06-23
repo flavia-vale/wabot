@@ -21,7 +21,10 @@ export async function convertLink(platform, url, credentials) {
   if (!fn) return null
   const creds = credentials[platform]
   if (!creds) return null
-  const result = await fn(url, creds)
+  const platformCreds = typeof credentials.__onCredentialPatch === 'function'
+    ? { ...creds, __onCredentialPatch: credentials.__onCredentialPatch }
+    : creds
+  const result = await fn(url, platformCreds)
   if (!result) return null
   if (typeof result === 'string') return { url: result, warning: null }
   if (result.url) return { url: result.url, warning: result.warning ?? null }

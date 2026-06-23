@@ -24,6 +24,7 @@ import { trackAnalyticsEventSafe } from './analytics.js'
 import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { decryptCredential } from './credentialCrypto.js'
+import { persistCredentialPatch } from './credentialPatch.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode, findUnserializableField } from './sendQueueBackend.js'
 import { withSendTimeout as withSendTimeoutImpl } from './sendMessageTimeout.js'
@@ -443,6 +444,20 @@ async function loadConfig() {
       logger.warn({ platform: c.platform, err: err.message }, 'Credencial inválida ignorada')
     }
   }
+
+  Object.defineProperty(credentials, '__onCredentialPatch', {
+    enumerable: false,
+    value: async (platform, patch) => {
+      try {
+        const updated = await persistCredentialPatch({ userId, platform, patch })
+        if (updated && credentials[platform]) {
+          credentials[platform] = { ...credentials[platform], ...patch }
+        }
+      } catch (err) {
+        logger.warn({ platform, err: err?.message }, 'Falha ao persistir cookies rotacionados da credencial')
+      }
+    },
+  })
 
   const { groups } = buildEntitledGroupConfig({
     groups: user.groups,
