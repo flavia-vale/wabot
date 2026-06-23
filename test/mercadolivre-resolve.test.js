@@ -158,6 +158,64 @@ test('convert persiste patch de cookies rotacionados quando createLink retorna S
   assert.match(patchArgs?.[1]?.cookie, /_mldataSessionId=session-nova/)
 })
 
+test('convert ignora Set-Cookie de DELEÇÃO do ssid (valor vazio) — não bricka sessão viva', async (t) => {
+  clearMercadoLivreAffiliateCooldownsForTest()
+  let patchArgs = null
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: { urls: [{ short_url: 'https://mercadolivre.com/sec/2Abcd' }] },
+    headers: {
+      'set-cookie': [
+        'ssid=; Path=/; HttpOnly; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+        '_csrf=csrf-novo; Path=/',
+      ],
+    },
+  }))
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/p/MLB70009242' }))
+
+  const result = await convert('https://www.mercadolivre.com.br/secador/p/MLB70009242', {
+    tag: '475630078',
+    ssid: 'ssid-antigo',
+    __onCredentialPatch: async (...args) => { patchArgs = args },
+  })
+
+  assert.equal(result, 'https://mercadolivre.com/sec/2Abcd')
+  // ssid de deleção NÃO entra no patch; o ssid conhecido é preservado.
+  assert.equal(patchArgs?.[1]?.ssid, 'ssid-antigo')
+  assert.equal(patchArgs?.[1]?.csrf, 'csrf-novo')
+  // O jar serializado nunca pode conter um ssid vazio (quebraria a auth no ML).
+  assert.doesNotMatch(patchArgs?.[1]?.cookie, /ssid=(?:;|$)/)
+  assert.match(patchArgs?.[1]?.cookie, /ssid=ssid-antigo/)
+  assert.match(patchArgs?.[1]?.cookie, /_csrf=csrf-novo/)
+})
+
+test('convert trata Max-Age=0 como deleção e não sobrescreve o ssid conhecido', async (t) => {
+  clearMercadoLivreAffiliateCooldownsForTest()
+  let patchArgs = null
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: { urls: [{ short_url: 'https://mercadolivre.com/sec/2Abcd' }] },
+    headers: {
+      'set-cookie': [
+        'ssid=valor-de-logout; Path=/; Max-Age=0',
+        '_csrf=csrf-novo; Path=/',
+      ],
+    },
+  }))
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/p/MLB70009242' }))
+
+  const result = await convert('https://www.mercadolivre.com.br/secador/p/MLB70009242', {
+    tag: '475630078',
+    ssid: 'ssid-antigo',
+    __onCredentialPatch: async (...args) => { patchArgs = args },
+  })
+
+  assert.equal(result, 'https://mercadolivre.com/sec/2Abcd')
+  assert.equal(patchArgs?.[1]?.ssid, 'ssid-antigo')
+  assert.doesNotMatch(patchArgs?.[1]?.cookie, /valor-de-logout/)
+  assert.match(patchArgs?.[1]?.cookie, /ssid=ssid-antigo/)
+})
+
 
 test('resolveToCleanProductUrl retorna null para /social/ sem produto extraível (sem ?ref=)', async (t) => {
   // Sem ?ref= a página é o perfil genérico do afiliado — sem produto identificável.

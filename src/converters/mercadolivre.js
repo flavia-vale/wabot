@@ -375,20 +375,54 @@ function getSetCookieLines(headers = {}) {
   return Array.isArray(value) ? value.filter(Boolean) : [value]
 }
 
+// Detecta `Set-Cookie` de DELEÇÃO. O ML (e qualquer servidor) apaga um cookie
+// reemitindo-o com valor vazio (`ssid=;`), `Max-Age=0` ou `Expires` no passado.
+// Tratar uma deleção como "rotação" gravaria `ssid=` vazio no jar — e como o jar
+// (`cookie`) tem precedência sobre o campo `ssid` em buildCookieHeader, isso
+// passaria a enviar um SSID vazio em todo request, brickando uma sessão que
+// ainda podia estar viva (deleção transitória/espúria). Por isso deleções são
+// IGNORADAS: nunca sobrescrevem nem removem um valor já conhecido no jar. Se o
+// ML realmente nos deslogou, o próximo request responde 401 e o painel sinaliza
+// expiração — sem depender de persistir o cookie de deleção.
+function parseSetCookieLine(line) {
+  const raw = String(line || '')
+  const first = raw.split(';')[0]?.trim()
+  if (!first) return null
+  const eq = first.indexOf('=')
+  if (eq <= 0) return null
+  const name = first.slice(0, eq)
+  const value = first.slice(eq + 1)
+  const attrs = raw.slice(raw.indexOf(';') + 1)
+  const maxAgeZero = /;\s*max-age\s*=\s*0\s*(?:;|$)/i.test(raw)
+  const expiresPast = (() => {
+    const m = raw.match(/;\s*expires\s*=\s*([^;]+)/i)
+    if (!m) return false
+    const ts = Date.parse(m[1].trim())
+    return Number.isFinite(ts) && ts <= Date.now()
+  })()
+  const isDeletion = value === '' || maxAgeZero || (attrs && expiresPast)
+  return { name, value, isDeletion }
+}
+
 function mergeSetCookieIntoJar(cookieHeader, setCookieLines) {
   const jar = parseCookieHeader(cookieHeader)
   for (const line of setCookieLines) {
-    const first = String(line || '').split(';')[0]?.trim()
-    if (!first) continue
-    const eq = first.indexOf('=')
-    if (eq <= 0) continue
-    jar.set(first.slice(0, eq), first.slice(eq + 1))
+    const parsed = parseSetCookieLine(line)
+    if (!parsed) continue
+    // Deleção nunca poda/sobrescreve o jar — só rotações com valor real entram.
+    if (parsed.isDeletion) continue
+    jar.set(parsed.name, parsed.value)
   }
   return jar
 }
 
 function serializeCookieJar(jar) {
-  return [...jar.entries()].map(([name, value]) => `${name}=${value}`).join('; ')
+  // Defesa em profundidade: nunca serializar par com valor vazio (um `ssid=`
+  // vazio no header de cookie derruba a autenticação no ML).
+  return [...jar.entries()]
+    .filter(([, value]) => value !== '')
+    .map(([name, value]) => `${name}=${value}`)
+    .join('; ')
 }
 
 function buildCredentialPatchFromSetCookie(creds = {}, cookieHeader = '', headers = {}) {
