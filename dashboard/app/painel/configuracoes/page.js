@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
+import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import { usePainelHeader } from '../PainelShell'
 
 const DEFAULT_BRANDING_CTA_TEXT = 'Participe do grupo:'
@@ -27,12 +28,14 @@ export default function ConfiguracoesPage() {
   const [loadError, setLoadError] = useState('')
   const [saving, setSaving] = useState(false)
   const [feedback, setFeedback] = useState(null) // { type, message }
+  const [templates, setTemplates] = useState([])
 
   useEffect(() => {
     let active = true
-    api.getConfig()
-      .then((cfg) => {
+    Promise.all([api.getConfig(), loadTemplateStore().catch(() => ({}))])
+      .then(([cfg, templateStore]) => {
         if (!active) return
+        setTemplates(composeTemplates(templateStore))
         setForm({
           delayMin: cfg.delayMin ?? 5,
           delayMax: cfg.delayMax ?? 15,
@@ -43,6 +46,8 @@ export default function ConfiguracoesPage() {
           postToStatus: cfg.postToStatus ?? false,
           brandingGroupLink: cfg.brandingGroupLink ?? '',
           brandingCtaText: cfg.brandingCtaText ?? DEFAULT_BRANDING_CTA_TEXT,
+          mirrorTemplateKeyDefault: cfg.mirrorTemplateKeyDefault ?? '',
+          primaryLinkTargetDefault: cfg.primaryLinkTargetDefault ?? 'first',
         })
       })
       .catch((err) => { if (active) setLoadError(err?.message || 'Não foi possível carregar as configurações.') })
@@ -82,6 +87,8 @@ export default function ConfiguracoesPage() {
         postToStatus: form.postToStatus,
         brandingGroupLink,
         brandingCtaText,
+        mirrorTemplateKeyDefault: String(form.mirrorTemplateKeyDefault ?? '').trim() || null,
+        primaryLinkTargetDefault: form.primaryLinkTargetDefault === 'last' ? 'last' : 'first',
       })
       setFeedback({ type: 'success', message: 'Configurações salvas com sucesso.' })
     } catch (err) {
@@ -139,6 +146,32 @@ export default function ConfiguracoesPage() {
 
         <button type="button" className="pnl-btn is-primary" style={{ marginTop: 16, width: '100%', justifyContent: 'center' }} onClick={save} disabled={saving}>
           {saving ? 'Salvando…' : 'Salvar cadência'}
+        </button>
+      </section>
+
+      {/* Padrão global do espelhamento com template */}
+      <section className="pnl-card">
+        <div className="pnl-card-title">Espelhamento com template (padrão global)</div>
+        <p className="pnl-card-note" style={{ marginBottom: 14 }}>Aplicado a todos os grupos monitorados que não definem o próprio template. Cada grupo pode sobrescrever isto na aba Grupos (inclusive optar por manter o texto original).</p>
+
+        <div className="pnl-field">
+          <label className="pnl-label" htmlFor="mirrorTemplateKeyDefault">Template padrão</label>
+          <select id="mirrorTemplateKeyDefault" className="pnl-input" value={form.mirrorTemplateKeyDefault ?? ''} onChange={(e) => patch({ mirrorTemplateKeyDefault: e.target.value })} disabled={saving}>
+            <option value="">Sem template (manter texto original convertido)</option>
+            {templates.map((t) => <option key={t.key} value={t.key}>{t.name}</option>)}
+          </select>
+        </div>
+
+        <div className="pnl-field" style={{ marginTop: 12 }}>
+          <label className="pnl-label" htmlFor="primaryLinkTargetDefault">Link a converter quando há vários</label>
+          <select id="primaryLinkTargetDefault" className="pnl-input" value={form.primaryLinkTargetDefault ?? 'first'} onChange={(e) => patch({ primaryLinkTargetDefault: e.target.value })} disabled={saving}>
+            <option value="first">Primeiro link da mensagem</option>
+            <option value="last">Último link da mensagem</option>
+          </select>
+        </div>
+
+        <button type="button" className="pnl-btn is-primary" style={{ marginTop: 16, width: '100%', justifyContent: 'center' }} onClick={save} disabled={saving}>
+          {saving ? 'Salvando…' : 'Salvar padrão de espelhamento'}
         </button>
       </section>
 

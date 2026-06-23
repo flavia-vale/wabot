@@ -21,6 +21,8 @@ const DEFAULTS = {
   copyVariationEnabled: false,
   mobileTemplatesJson: '{}',
   mobileCouponLinksJson: '{}',
+  mirrorTemplateKeyDefault: null,
+  primaryLinkTargetDefault: 'first',
 }
 
 
@@ -55,7 +57,7 @@ export async function configRoutes(app, opts = {}) {
 
   app.put('/', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
-    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg, feedGlobal, postToStatus, brandingGroupLink, brandingCtaText, couponLink, copyVariationPoolJson, copyVariationEnabled, mobileTemplatesJson, mobileCouponLinksJson } = req.body ?? {}
+    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg, feedGlobal, postToStatus, brandingGroupLink, brandingCtaText, couponLink, copyVariationPoolJson, copyVariationEnabled, mobileTemplatesJson, mobileCouponLinksJson, mirrorTemplateKeyDefault, primaryLinkTargetDefault } = req.body ?? {}
 
     if (delayMin !== undefined && !isIntegerInRange(delayMin)) {
       return reply.code(400).send({ error: 'delayMin deve ser um número inteiro entre 0 e 300' })
@@ -94,6 +96,16 @@ export async function configRoutes(app, opts = {}) {
         return reply.code(400).send({ error: `${field} contém JSON inválido` })
       }
     }
+
+    if (mirrorTemplateKeyDefault !== undefined && mirrorTemplateKeyDefault !== null && String(mirrorTemplateKeyDefault).trim() && !/^[A-Za-z0-9_-]{1,80}$/.test(String(mirrorTemplateKeyDefault).trim())) {
+      return reply.code(400).send({ error: 'mirrorTemplateKeyDefault inválido' })
+    }
+    if (primaryLinkTargetDefault !== undefined && !['first', 'last'].includes(primaryLinkTargetDefault)) {
+      return reply.code(400).send({ error: 'primaryLinkTargetDefault inválido' })
+    }
+    const normalizedMirrorTemplateKeyDefault = mirrorTemplateKeyDefault === undefined
+      ? undefined
+      : (String(mirrorTemplateKeyDefault ?? '').trim() || null)
 
     const requestsAdvancedPreservation = feedGlobal === true || postToStatus === true
     if (requestsAdvancedPreservation && !(await ensureAdvancedPreservationAllowed(db, userId, reply))) return
@@ -139,6 +151,8 @@ export async function configRoutes(app, opts = {}) {
         copyVariationEnabled: copyVariationEnabled ?? DEFAULTS.copyVariationEnabled,
         ...(mobileTemplatesJson !== undefined && { mobileTemplatesJson: canonicalizeTemplateStoreJson(mobileTemplatesJson) }),
         ...(mobileCouponLinksJson !== undefined && { mobileCouponLinksJson }),
+        ...(normalizedMirrorTemplateKeyDefault !== undefined && { mirrorTemplateKeyDefault: normalizedMirrorTemplateKeyDefault }),
+        ...(primaryLinkTargetDefault !== undefined && { primaryLinkTargetDefault }),
       },
       update: {
         ...(delayMin !== undefined && { delayMin }),
@@ -155,6 +169,8 @@ export async function configRoutes(app, opts = {}) {
         ...(copyVariationEnabled !== undefined && { copyVariationEnabled }),
         ...(mobileTemplatesJson !== undefined && { mobileTemplatesJson: canonicalizeTemplateStoreJson(mobileTemplatesJson) }),
         ...(mobileCouponLinksJson !== undefined && { mobileCouponLinksJson }),
+        ...(normalizedMirrorTemplateKeyDefault !== undefined && { mirrorTemplateKeyDefault: normalizedMirrorTemplateKeyDefault }),
+        ...(primaryLinkTargetDefault !== undefined && { primaryLinkTargetDefault }),
       },
     })
     reloadConfig(userId)
