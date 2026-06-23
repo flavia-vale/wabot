@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import axios from 'axios'
 import logger from '../logger.js'
+import { withMercadoLivreCredentialLock } from './mercadolivreCredentialLock.js'
 
 // Cache LRU simples para evitar reexpansão de short links repetidos
 // (campanhas de cupons disparam o mesmo meli.la várias vezes seguidas).
@@ -449,6 +450,7 @@ const ML_AFFILIATE_ERROR_WARNING = {
   expired: 'ml_ssid_expired',
   forbidden: 'ml_affiliate_forbidden',
   rate_limited: 'ml_affiliate_rate_limited',
+  busy: 'ml_affiliate_busy',
 }
 
 function classifyMlAffiliateFailure(status, apiError = '') {
@@ -488,7 +490,7 @@ export async function checkMercadoLivreSession(creds = {}) {
   const cookieHeader = buildCookieHeader({ ssid, csrf, cookie, id })
   if (!cookieHeader) return { configured: false, alive: null, reason: 'no_cookie' }
   try {
-    const res = await callCreateLinkApi(SESSION_PROBE_URL, tag || '', { cookieHeader, csrf })
+    const res = await withMercadoLivreCredentialLock(creds, () => callCreateLinkApi(SESSION_PROBE_URL, tag || '', { cookieHeader, csrf }))
     const credentialPatch = buildCredentialPatchFromSetCookie(creds, cookieHeader, res.headers)
     // 401 é sinal de auth: cookie expirado/inválido -> redireciona ao login.
     // 403/429 não provam expiração do SSID; são bloqueio/rate-limit e ficam
@@ -497,7 +499,8 @@ export async function checkMercadoLivreSession(creds = {}) {
     if (res.status === 403) return { configured: true, alive: null, reason: 'forbidden', ...(credentialPatch ? { credentialPatch } : {}) }
     if (res.status === 429) return { configured: true, alive: null, reason: 'rate_limited', ...(credentialPatch ? { credentialPatch } : {}) }
     return { configured: true, alive: true, reason: 'ok', ...(credentialPatch ? { credentialPatch } : {}) }
-  } catch {
+  } catch (err) {
+    if (err?.code === 'ML_AFFILIATE_LOCK_TIMEOUT') return { configured: true, alive: null, reason: 'busy' }
     return { configured: true, alive: null, reason: 'network_error' }
   }
 }
@@ -763,7 +766,7 @@ export async function convert(url, creds) {
       const tries = cooldown ? [] : selectCreateLinkCandidates(target, candidates, anchorMlbId)
       for (const candidate of tries) {
         try {
-          const affiliateResult = await createAffiliateLink(candidate, tag, creds)
+          const affiliateResult = await withMercadoLivreCredentialLock(creds, () => createAffiliateLink(candidate, tag, creds))
           const affiliateUrl = typeof affiliateResult === 'string' ? affiliateResult : affiliateResult?.shortUrl
           if (!affiliateUrl) continue
           await notifyCredentialPatch(creds, affiliateResult?.credentialPatch)
@@ -782,6 +785,10 @@ export async function convert(url, creds) {
           logger.warn({ candidate, err: err.message }, 'ML createLink: tentativa falhou')
           // Falhas terminais repetiriam em todos os candidates: marca e para
           // de tentar (poupa chamadas) — cai no fallback com aviso específico.
+          if (err.code === 'ML_AFFILIATE_LOCK_TIMEOUT') {
+            affiliateWarning = ML_AFFILIATE_ERROR_WARNING.busy
+            break
+          }
           if (err.mlWarning || /credencial|inv[aá]lida|expirad|recusou|limitou/i.test(err.message)) {
             await notifyCredentialPatch(creds, err.credentialPatch)
             affiliateWarning = err.mlWarning || 'ml_ssid_expired'

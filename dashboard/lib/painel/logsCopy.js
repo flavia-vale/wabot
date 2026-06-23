@@ -17,6 +17,9 @@ export function explainErrorMsg(errorMsg) {
   if (errorMsg.startsWith('warning:ml_affiliate_rate_limited')) {
     return 'O Mercado Livre limitou temporariamente as conversões (429). As ofertas continuam saindo com link longo de afiliado (partner_id), e o bot evita novas tentativas imediatas para proteger a sessão.'
   }
+  if (errorMsg.startsWith('warning:ml_affiliate_busy')) {
+    return 'Outra conversão do Mercado Livre já estava usando esta credencial. A oferta saiu com link longo para evitar disputa de sessão.'
+  }
   if (errorMsg.startsWith('skip:dedup')) return 'Link já enviado nas últimas 2 horas — bloqueado para não duplicar.'
   if (errorMsg.startsWith('skip:blocked_keyword')) return 'Contém uma palavra que você marcou para bloquear.'
   if (errorMsg.startsWith('skip:title_mismatch')) return 'O texto da oferta não combina com o produto do link. Bloqueado por segurança.'
