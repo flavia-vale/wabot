@@ -254,8 +254,13 @@ export async function checkAndReserve(groupId, botConfig, opts = {}) {
     })
     effective = { throttleOn: dest.throttleEnabled !== false, burstWindowSec: dest.burstWindowSec, tz: parseQuietHours(dest.operatingHoursJson).tz }
   } else {
-    // Caminho legado (global): A-2 mantém o override de horário da fila
-    // (ignoreGlobalQuietHours) pulando só a janela silenciosa global.
+    // DEPRECATED (Plano B / Fase 3): caminho legado da global. O worker já passa
+    // sempre `destPreservation`, então este ramo virou efetivamente código morto
+    // em produção. Mantido só por retrocompat de chamadores/testes antigos até a
+    // remoção física das colunas do BotConfig (ver checklist de teardown no doc
+    // 2026-06-22-plano-b-config-direcionada-design.md / seção "Fase 3").
+    // Enquanto vivo, ainda honra o A-2: `ignoreGlobalQuietHours` (override de
+    // horário da fila) pula só a janela silenciosa global no `decide()` abaixo.
     decision = decide({
       now,
       throttle,
