@@ -36,6 +36,7 @@ import {
   recordStreamError as recordChannelStreamError,
 } from './core/channelHealth.js'
 import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
+import { resolveDestinationPreservation } from './core/preservationConfig.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
 import { PRESERVATION_FEATURE, isPreservationFeatureEnabled, shouldRunChannelScheduler } from './core/preservationFeatures.js'
 import { mutate as mutateChannelImage } from './core/imageMutation.js'
@@ -1125,6 +1126,21 @@ async function deferSendJob(job, gate) {
   }
 }
 
+// Plano B: preset default de preservação da conta (fallback para destinos sem
+// preset/override). Cache curto para não consultar o banco a cada envio. value
+// undefined = ainda não carregado; null = carregado e não existe.
+let defaultPresetCache = { value: undefined, at: 0 }
+const DEFAULT_PRESET_TTL_MS = 30_000
+async function getDefaultPreservationPreset() {
+  const now = Date.now()
+  if (defaultPresetCache.value !== undefined && now - defaultPresetCache.at < DEFAULT_PRESET_TTL_MS) {
+    return defaultPresetCache.value
+  }
+  const preset = await db.preservationPreset.findFirst({ where: { userId, isDefault: true } }).catch(() => null)
+  defaultPresetCache = { value: preset ?? null, at: now }
+  return defaultPresetCache.value
+}
+
 async function processSendJob(job) {
   const startedAt = Date.now()
   let payload = null
@@ -1166,24 +1182,41 @@ async function processSendJob(job) {
     try {
       const g = await db.group.findFirst({
         where: { userId, waJid: job.destJid, role: 'post' },
-        select: { id: true, quietHoursEnabled: true, quietHoursJson: true },
+        select: {
+          id: true, quietHoursEnabled: true, quietHoursJson: true,
+          // Plano B: config de preservação por destino (Fase 1b).
+          preservationPresetId: true, operatingHoursEnabled: true, operatingHoursJson: true,
+          throttleEnabled: true, minIntervalSec: true, burstCap: true, burstWindowSec: true,
+          dailyCap: true, preservationPreset: true,
+        },
       })
       destGroupId = g?.id ?? null
       if (destGroupId) {
-        // checkAndReserve já cobre: pausa por health, quiet hours, daily cap,
-        // intervalo mínimo, burst cap. Reserva o slot quando libera. A janela
-        // silenciosa POR GRUPO (g.quietHours*) sobrepõe a global do BotConfig
-        // para este destino quando habilitada.
+        // checkAndReserve já cobre: pausa por health, horário/quiet, daily cap,
+        // intervalo mínimo, burst cap. Reserva o slot quando libera.
         const cfgFull = await getConfig().catch(() => null)
         const cfg = cfgFull?.botConfig ?? {}
+        // Plano B: quando há config direcionada (preset atribuído, default da
+        // conta semeado, ou override no grupo), o gate usa a config POR DESTINO
+        // (horário de funcionamento + anti-ban do destino). Sem ela, cai no
+        // caminho legado (global do BotConfig + janela silenciosa).
+        const defaultPreset = await getDefaultPreservationPreset()
+        const hasDestConfig = !!(g.preservationPreset || defaultPreset ||
+          g.operatingHoursEnabled != null || g.throttleEnabled != null ||
+          g.minIntervalSec != null || g.burstCap != null || g.burstWindowSec != null ||
+          g.dailyCap != null || g.operatingHoursJson != null)
+        const destPreservation = hasDestConfig
+          ? resolveDestinationPreservation(g, { preset: g.preservationPreset, defaultPreset })
+          : undefined
         const gateOpts = {
           group: g,
           preservationActive: shouldRunChannelScheduler(cfgFull?.preservationActive, cfg),
-          // Fila com horário de funcionamento próprio sobrepõe a janela
-          // silenciosa GLOBAL no worker (a fila já checou seu horário antes de
-          // despachar). Setado por origem 'offerQueue' via options. Demais
-          // proteções anti-ban continuam valendo.
+          // A-2: fila com horário próprio sobrepõe a janela GLOBAL no worker (a
+          // fila já checou seu horário antes de despachar). No caminho por
+          // destino (Plano B), isso vira ignoreOperatingHours em decideDestination.
           ignoreGlobalQuietHours: job.ignoreGlobalQuietHours === true,
+          // Plano B: config direcionada por destino, quando existir.
+          ...(destPreservation ? { destPreservation } : {}),
         }
         let gate = await throttleCheckAndReserve(destGroupId, cfg, gateOpts)
         let throttleCycles = 0
