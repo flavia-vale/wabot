@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import axios from 'axios'
-import { fetchShopeeProductInfo, shopeeDecimalPriceToString } from '../src/converters/shopee.js'
+import { convert, fetchShopeeProductInfo, shopeeDecimalPriceToString } from '../src/converters/shopee.js'
 
 // Credenciais fictícias — o axios.post é stubbado, então o valor não importa.
 const CREDS = { appId: '1234567890', secretKey: 'TEST_SECRET_KEY_PLACEHOLDER_0000' }
@@ -67,4 +67,37 @@ test('fetchShopeeProductInfo sem desconto não inventa preço "de"', async (t) =
 
 test('fetchShopeeProductInfo retorna null sem credenciais', async () => {
   assert.equal(await fetchShopeeProductInfo('https://shopee.com.br/product/1/2', {}), null)
+})
+
+// Regressão: links afiliados gerados pela API (s.shopee.com.br) bloqueiam o
+// WebView do WhatsApp com "Seu navegador não é mais aceito!". O convert() deve
+// resolver o shortLink para a URL canônica shopee.com.br antes de retornar.
+test('convert() resolve o shortLink da API para URL canônica shopee.com.br (evita bloqueio WebView)', async (t) => {
+  const shortLink = 'https://s.shopee.com.br/AfXXXfake'
+  const canonicalWithUtm = 'https://shopee.com.br/product/306423459/6895145599?utm_medium=affiliates&utm_source=an_1234567890'
+
+  t.after(stubAxiosPost(async () => ({
+    data: { data: { generateShortLink: { shortLink } } },
+  })))
+
+  // Injeta fetchImpl para simular o redirect do s.shopee.com.br → shopee.com.br
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (url, init) => {
+    if (url === shortLink) {
+      return {
+        ok: false,
+        status: 302,
+        url,
+        headers: { get: (name) => name.toLowerCase() === 'location' ? canonicalWithUtm : null },
+        text: async () => '',
+        body: null,
+      }
+    }
+    throw new Error(`fetch inesperado: ${url}`)
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const result = await convert('https://shopee.com.br/product/306423459/6895145599', CREDS)
+  assert.equal(result, canonicalWithUtm, 'deve retornar shopee.com.br, não s.shopee.com.br')
+  assert.ok(!result.includes('s.shopee.com.br'), 'resultado não deve ter short link da Shopee')
 })
