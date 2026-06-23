@@ -252,6 +252,11 @@ const BOGUS_SCRAPE_TITLES = [
   'amazon.com.br',
   'mercado livre',
   'mercado livre brasil',
+  // Grafia espanhola: é o og:title da página anti-bot/verificação do ML
+  // (/gz/account-verification). Sem isso, um scrape bloqueado vaza
+  // "Mercado Libre" como título de produto na oferta.
+  'mercado libre',
+  'mercado libre brasil',
   'shopee brasil',
   'shopee',
   'página não encontrada',
@@ -875,7 +880,12 @@ export async function fetchProductInfo(url, opts = {}) {
   const titleFromUrl = extractTitleFromUrl(finalUrl || url) || extractTitleFromUrl(resolvedUrl) || extractTitleFromUrl(url)
   const rawFallbackTitle = extractTitleFallback(html)
   const fallbackTitle = isBogusScrapeTitle(rawFallbackTitle) ? null : rawFallbackTitle
-  const title = jsonLd?.title || mlHtml?.title || amazonFallback?.title || shopeeApiFallback?.title || mercadoLivreApiFallback?.title || mlItemApiFallback?.title || titleFromUrl || fallbackTitle
+  // Mesmo og:title vindo de extractMercadoLivreFromHtml pode ser o título
+  // genérico da página anti-bot ("Mercado Libre"/"Shopee"/"Amazon.com.br").
+  // Filtra o título final por isBogusScrapeTitle para nunca apresentar um
+  // rótulo de loja como nome de produto (vazaria na oferta espelhada).
+  const rawTitle = jsonLd?.title || mlHtml?.title || amazonFallback?.title || shopeeApiFallback?.title || mercadoLivreApiFallback?.title || mlItemApiFallback?.title || titleFromUrl || fallbackTitle
+  const title = isBogusScrapeTitle(rawTitle) ? '' : rawTitle
 
   // Numa share /social/ a página tem VÁRIOS produtos; extractMercadoLivreFromHtml
   // pode casar o `"price":{"value":..}` de um produto vizinho (errado). O bloco
