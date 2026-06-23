@@ -72,9 +72,11 @@ export async function resolveMirrorOfferFromLink({
   logger = null,
 } = {}) {
   const original = String(originalUrl || '').trim()
-  const converted = String(convertedUrl || originalUrl || '').trim()
-  // Link emitido na oferta = sempre o convertido (afiliado) já aprovado pelo
-  // worker. Sem ele não há oferta válida para montar.
+  // Link EMITIDO na oferta = estritamente o convertido (afiliado do NOSSO
+  // cliente) já aprovado pelo worker. NUNCA cai para o link original do
+  // upstream (que é de outro afiliado) — isso vazaria a comissão para um
+  // terceiro. Sem link convertido, não há oferta válida: o chamador faz relay.
+  const converted = String(convertedUrl || '').trim()
   if (!converted) return null
 
   const scrapeOpts = {

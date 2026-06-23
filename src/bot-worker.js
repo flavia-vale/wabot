@@ -2024,12 +2024,21 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       // o que vai sair. Quando o template cai no relay (texto inalterado), o
       // guard volta a valer normalmente.
       let templateApplied = false
-      if (effectiveTemplateKey) {
+      // Só montamos o template quando há um link CONVERTIDO do nosso cliente.
+      // No espelhamento os links de entrada são de OUTROS afiliados; a oferta
+      // precisa sair com o link do nosso cliente (primary.converted) ou não
+      // sair como oferta (cai no relay). NUNCA emitir primary.url (link do
+      // terceiro) — isso daria comissão ao concorrente.
+      if (effectiveTemplateKey && primary.converted) {
         const templatedText = await applyMirrorTemplate(finalText, {
           botConfig: cfg.botConfig,
           templateKey: effectiveTemplateKey,
+          // originalUrl = link do upstream (terceiro): usado só como alvo de
+          // leitura de título/preço (é a mesma página de produto).
           originalUrl: primary.url || links[0]?.url || '',
-          convertedUrl: primary.converted || primary.url || links[0]?.url || '',
+          // convertedUrl = link de afiliado do NOSSO cliente: o único que pode
+          // ser emitido na oferta. Sem fallback para o link do terceiro.
+          convertedUrl: primary.converted,
           platform: primary.platform,
           credentialsMap: cfg.credentials,
           logger,

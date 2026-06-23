@@ -49,6 +49,18 @@ test('resolveMirrorOfferFromLink usa o convertido como último recurso quando o 
   assert.equal(fields.link, 'https://loja.test/convertido')
 })
 
+test('resolveMirrorOfferFromLink NUNCA emite o link do terceiro: sem convertido, devolve null', async () => {
+  // No espelhamento o originalUrl é o link de OUTRO afiliado. Sem link
+  // convertido do nosso cliente, não pode sair oferta (evita vazar comissão).
+  const fields = await resolveMirrorOfferFromLink({
+    originalUrl: 'https://loja.test/terceiro?tag=concorrente',
+    convertedUrl: '',
+    platform: 'amazon',
+    fetchInfo: async () => ({ title: 'Produto', oldPrice: '', newPrice: 'R$ 10,00' }),
+  })
+  assert.equal(fields, null)
+})
+
 test('applyMirrorTemplate renderiza com título/preço vindos do scraper, não do texto espelhado', async () => {
   const text = await applyMirrorTemplate('🔥 Oferta imperdível\nCaption upstream errado\nR$ 1,00\nhttps://loja.test/produto', {
     templateKey: 'tpl_mirror',
