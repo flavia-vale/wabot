@@ -11,6 +11,12 @@ export function explainErrorMsg(errorMsg) {
   if (errorMsg.startsWith('warning:ml_ssid_expired')) {
     return 'Sua credencial do Mercado Livre (SSID/cookie) expirou. As ofertas continuam saindo com link longo de afiliado (partner_id) e creditando comissão, mas para voltar a gerar links curtos meli.la, renove o SSID em IDs de afiliada → Mercado Livre.'
   }
+  if (errorMsg.startsWith('warning:ml_affiliate_forbidden')) {
+    return 'O Mercado Livre recusou a geração do link curto neste momento (403). As ofertas continuam saindo com link longo de afiliado (partner_id); aguarde antes de tentar novamente ou revise a sessão se o bloqueio persistir.'
+  }
+  if (errorMsg.startsWith('warning:ml_affiliate_rate_limited')) {
+    return 'O Mercado Livre limitou temporariamente as conversões (429). As ofertas continuam saindo com link longo de afiliado (partner_id), e o bot evita novas tentativas imediatas para proteger a sessão.'
+  }
   if (errorMsg.startsWith('skip:dedup')) return 'Link já enviado nas últimas 2 horas — bloqueado para não duplicar.'
   if (errorMsg.startsWith('skip:blocked_keyword')) return 'Contém uma palavra que você marcou para bloquear.'
   if (errorMsg.startsWith('skip:title_mismatch')) return 'O texto da oferta não combina com o produto do link. Bloqueado por segurança.'

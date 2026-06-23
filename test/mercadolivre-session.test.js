@@ -11,6 +11,19 @@ test('checkMercadoLivreSession: 401 => sessão expirada (alive=false)', async (t
   assert.deepEqual(r, { configured: true, alive: false, reason: 'expired' })
 })
 
+
+test('checkMercadoLivreSession: 403 => indeterminado/forbidden (não marca SSID expirado)', async (t) => {
+  t.mock.method(axios, 'post', async () => ({ status: 403, data: '<html>blocked</html>', headers: {} }))
+  const r = await checkMercadoLivreSession(CREDS)
+  assert.deepEqual(r, { configured: true, alive: null, reason: 'forbidden' })
+})
+
+test('checkMercadoLivreSession: 429 => indeterminado/rate_limited (não marca SSID expirado)', async (t) => {
+  t.mock.method(axios, 'post', async () => ({ status: 429, data: { message: 'rate limited' }, headers: {} }))
+  const r = await checkMercadoLivreSession(CREDS)
+  assert.deepEqual(r, { configured: true, alive: null, reason: 'rate_limited' })
+})
+
 test('checkMercadoLivreSession: 200 => sessão viva (alive=true)', async (t) => {
   t.mock.method(axios, 'post', async () => ({ status: 200, data: { status: 200, urls: [] }, headers: {} }))
   const r = await checkMercadoLivreSession(CREDS)
