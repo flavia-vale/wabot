@@ -353,6 +353,15 @@ export const api = {
   preservationProbeSessionSelect: (probeAccountSessionId) => apiFetch('/api/preservation/probe/session/select', { method: 'POST', body: JSON.stringify({ probeAccountSessionId }) }),
   preservationClicks: () => apiFetch('/api/preservation/monitoring/clicks'),
 
+  // Plano B — presets de preservação + config por destino.
+  preservationPresets: () => apiFetch('/api/preservation/presets'),
+  createPreservationPreset: (body) => apiFetch('/api/preservation/presets', { method: 'POST', body: JSON.stringify(body) }),
+  updatePreservationPreset: (id, patch) => apiFetch(`/api/preservation/presets/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  deletePreservationPreset: (id) => apiFetch(`/api/preservation/presets/${id}`, { method: 'DELETE' }),
+  applyPreservationPreset: (id, groupIds) => apiFetch(`/api/preservation/presets/${id}/apply`, { method: 'POST', body: JSON.stringify({ groupIds }) }),
+  preservationDestinations: () => apiFetch('/api/preservation/destinations'),
+  updatePreservationDestination: (id, patch) => apiFetch(`/api/preservation/destinations/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+
   logs: (status = 'all', page = 1, limit = 20, search = '') => {
     const params = new URLSearchParams({ status, page: String(page), limit: String(limit) })
     const q = String(search || '').trim()
