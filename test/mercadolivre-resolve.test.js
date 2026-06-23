@@ -24,6 +24,35 @@ test('convert sinaliza warning ml_ssid_expired quando API de afiliado rejeita au
   assert.match(result.url, /partner_id=475630078/)
 })
 
+
+test('convert sinaliza warning ml_affiliate_forbidden e não retrya quando API retorna 403', async (t) => {
+  let calls = 0
+  t.mock.method(axios, 'post', async () => {
+    calls += 1
+    return { status: 403, data: '<html>blocked</html>', headers: { 'content-type': 'text/html' } }
+  })
+  const url = 'https://produto.mercadolivre.com.br/MLB-4049246221-secadora-_JM'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890', csrf: 'csrf-token' })
+  assert.equal(typeof result, 'object')
+  assert.equal(result.warning, 'ml_affiliate_forbidden')
+  assert.match(result.url, /partner_id=475630078/)
+  assert.equal(calls, 1)
+})
+
+test('convert sinaliza warning ml_affiliate_rate_limited e não retrya quando API retorna 429', async (t) => {
+  let calls = 0
+  t.mock.method(axios, 'post', async () => {
+    calls += 1
+    return { status: 429, data: { message: 'rate limited' }, headers: {} }
+  })
+  const url = 'https://produto.mercadolivre.com.br/MLB-4049246221-secadora-_JM'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890', csrf: 'csrf-token' })
+  assert.equal(typeof result, 'object')
+  assert.equal(result.warning, 'ml_affiliate_rate_limited')
+  assert.match(result.url, /partner_id=475630078/)
+  assert.equal(calls, 1)
+})
+
 test('convert mantém short_url quando validação é inconclusiva (muro anti-bot do VPS)', async (t) => {
   // createLink devolve short_url válido para o produto de catálogo
   t.mock.method(axios, 'post', async () => ({
