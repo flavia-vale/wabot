@@ -116,6 +116,12 @@ export const NAV_GROUPS = [
         pro: true,
         icon: i(<><path d="M12 2 4 5v6c0 5 3.5 8 8 11 4.5-3 8-6 8-11V5l-8-3z" /><path d="m9 12 2 2 4-4" /></>),
       },
+      {
+        label: 'Preservação por destino',
+        href: '/painel/preservacao/destinos',
+        pro: true,
+        icon: i(<><circle cx="12" cy="10" r="3" /><path d="M12 2a8 8 0 0 0-8 8c0 5.4 8 12 8 12s8-6.6 8-12a8 8 0 0 0-8-8z" /></>),
+      },
     ],
   },
   {
