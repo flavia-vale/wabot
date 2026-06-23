@@ -2,31 +2,63 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { applyMirrorTemplate, resolveMirrorOfferFromLink } from '../src/core/mirrorTemplate.js'
 
-test('resolveMirrorOfferFromLink busca dados pelo motor de oferta usando o link convertido', async () => {
-  const calls = []
+test('resolveMirrorOfferFromLink lê o link ORIGINAL do produto e emite o link convertido', async () => {
+  const scraped = []
   const fields = await resolveMirrorOfferFromLink({
     originalUrl: 'https://loja.test/produto',
-    convertedUrl: 'https://loja.test/produto?tag=afiliado',
+    convertedUrl: 'https://loja.test/sec/abc123',
     platform: 'amazon',
-    credentialsMap: { amazon: { tag: 'afiliado' } },
-    buildOffer: async (args) => {
-      calls.push(args)
-      const converted = await args.convertLink('amazon', 'https://loja.test/produto', args.credentialsMap)
-      assert.equal(converted.url, 'https://loja.test/produto?tag=afiliado')
-      return { title: 'Título do scraper', oldPrice: 'R$ 199,90', newPrice: 'R$ 99,90', displayUrl: 'https://loja.test/produto-canonico' }
+    credentialsMap: { amazon: { tag: 'afiliado' }, mercadolivre: { ssid: 'x' } },
+    fetchInfo: async (url, opts) => {
+      scraped.push({ url, opts })
+      return { title: 'Título do produto', oldPrice: 'R$ 199,90', newPrice: 'R$ 99,90', finalUrl: 'https://loja.test/produto-canonico' }
     },
   })
 
-  assert.equal(calls.length, 1)
-  assert.equal(calls[0].keepOriginalLink, false)
-  assert.equal(calls[0].url, 'https://loja.test/produto')
+  // Raspa o ORIGINAL (alvo confiável), não o convertido /sec/ de vitrine.
+  assert.equal(scraped.length, 1)
+  assert.equal(scraped[0].url, 'https://loja.test/produto')
+  // Credenciais do ML repassadas ao scraper para evitar anti-bot.
+  assert.equal(scraped[0].opts.mlCredentials.ssid, 'x')
   assert.deepEqual(fields, {
-    title: 'Título do scraper',
+    title: 'Título do produto',
     oldPrice: 'R$ 199,90',
     price: 'R$ 99,90',
-    link: 'https://loja.test/produto?tag=afiliado',
+    // O link emitido é SEMPRE o convertido (afiliado), nunca o finalUrl canônico.
+    link: 'https://loja.test/sec/abc123',
     storeName: 'Amazon',
   })
+})
+
+test('resolveMirrorOfferFromLink usa o convertido como último recurso quando o original não traz nada', async () => {
+  const scraped = []
+  const fields = await resolveMirrorOfferFromLink({
+    originalUrl: 'https://loja.test/original',
+    convertedUrl: 'https://loja.test/convertido',
+    platform: 'mercadolivre',
+    fetchInfo: async (url) => {
+      scraped.push(url)
+      if (url === 'https://loja.test/original') return { title: '', oldPrice: '', newPrice: '' }
+      return { title: 'Produto real', oldPrice: '', newPrice: 'R$ 50,00' }
+    },
+  })
+
+  assert.deepEqual(scraped, ['https://loja.test/original', 'https://loja.test/convertido'])
+  assert.equal(fields.title, 'Produto real')
+  assert.equal(fields.price, 'R$ 50,00')
+  assert.equal(fields.link, 'https://loja.test/convertido')
+})
+
+test('resolveMirrorOfferFromLink NUNCA emite o link do terceiro: sem convertido, devolve null', async () => {
+  // No espelhamento o originalUrl é o link de OUTRO afiliado. Sem link
+  // convertido do nosso cliente, não pode sair oferta (evita vazar comissão).
+  const fields = await resolveMirrorOfferFromLink({
+    originalUrl: 'https://loja.test/terceiro?tag=concorrente',
+    convertedUrl: '',
+    platform: 'amazon',
+    fetchInfo: async () => ({ title: 'Produto', oldPrice: '', newPrice: 'R$ 10,00' }),
+  })
+  assert.equal(fields, null)
 })
 
 test('applyMirrorTemplate renderiza com título/preço vindos do scraper, não do texto espelhado', async () => {
@@ -36,7 +68,7 @@ test('applyMirrorTemplate renderiza com título/preço vindos do scraper, não d
     convertedUrl: 'https://loja.test/produto?tag=afiliado',
     platform: 'amazon',
     botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_mirror', name: 'Mirror', body: '🔥 {produto}\n💰 {preço}\n👉 {link}' }] }) },
-    buildOffer: async () => ({ title: 'Título real do link', oldPrice: '', newPrice: 'R$ 99,90', displayUrl: 'https://loja.test/produto?tag=afiliado' }),
+    fetchInfo: async () => ({ title: 'Título real do link', oldPrice: '', newPrice: 'R$ 99,90' }),
   })
 
   assert.equal(text, '🔥 Título real do link\n💰 R$ 99,90\n👉 https://loja.test/produto?tag=afiliado')
@@ -62,7 +94,7 @@ test('applyMirrorTemplate não vaza placeholders vazios e mantém branding do gr
       brandingGroupLink: 'https://chat.whatsapp.com/grupo',
       brandingCtaText: 'Entre no grupo VIP:',
     },
-    buildOffer: async () => ({ title: 'Fone Bluetooth XPTO', oldPrice: '', newPrice: '', displayUrl: 'https://ex.com/a?tag=ok' }),
+    fetchInfo: async () => ({ title: 'Fone Bluetooth XPTO', oldPrice: '', newPrice: '' }),
   })
   assert.doesNotMatch(text, /\{(?:preço|preço_de|desconto|rating|vendas)\}/)
   assert.match(text, /Fone Bluetooth XPTO/)
@@ -70,7 +102,6 @@ test('applyMirrorTemplate não vaza placeholders vazios e mantém branding do gr
   assert.match(text, /Entre no grupo VIP:/)
   assert.match(text, /https:\/\/chat\.whatsapp\.com\/grupo/)
 })
-
 
 test('applyMirrorTemplate preserva texto original quando o scraper lança erro inesperado', async () => {
   const warnings = []
@@ -81,11 +112,12 @@ test('applyMirrorTemplate preserva texto original quando o scraper lança erro i
     convertedUrl: 'https://ex.com/a?tag=ok',
     platform: 'amazon',
     botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_mirror', name: 'Mirror', body: '{produto}\n{link}' }] }) },
-    buildOffer: async () => { throw new Error('scraper indisponível') },
+    fetchInfo: async () => { throw new Error('scraper indisponível') },
     logger: { warn: (payload, message) => warnings.push({ payload, message }) },
   })
+  // Erro em ambos os candidatos => sem info útil => cai no relay (sem título/preço).
   assert.equal(text, original)
-  assert.equal(warnings.length, 1)
+  assert.ok(warnings.length >= 1)
 })
 
 test('applyMirrorTemplate cai no relay quando o scrape não traz título nem preço', async () => {
@@ -96,7 +128,7 @@ test('applyMirrorTemplate cai no relay quando o scrape não traz título nem pre
     convertedUrl: 'https://ex.com/a?tag=ok',
     platform: 'amazon',
     botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_mirror', name: 'Mirror', body: '🔥 {produto}\n💰 {preço}\n👉 {link}' }] }) },
-    buildOffer: async () => ({ title: '', oldPrice: '', newPrice: '', displayUrl: 'https://ex.com/a?tag=ok' }),
+    fetchInfo: async () => ({ title: '', oldPrice: '', newPrice: '' }),
   })
   assert.equal(text, original)
 })
@@ -111,7 +143,7 @@ test('applyMirrorTemplate cai no relay quando o scrape estoura o orçamento de t
     platform: 'amazon',
     scrapeBudgetMs: 20,
     botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_mirror', name: 'Mirror', body: '{produto}\n{link}' }] }) },
-    buildOffer: () => new Promise(() => {}), // nunca resolve — simula loja lenta
+    fetchInfo: () => new Promise(() => {}), // nunca resolve — simula loja lenta
     logger: { warn: (payload, message) => warnings.push({ payload, message }) },
   })
   assert.equal(text, original)
