@@ -30,7 +30,7 @@ function summarizePreset(p) {
     try { const h = JSON.parse(p.operatingHoursJson); parts.push(`envia ${h.startHour}h–${h.endHour}h`) }
     catch { /* ignore */ }
   } else parts.push('envia 24h')
-  if (p.throttleEnabled !== false) parts.push(`min ${p.minIntervalSec}s · ${p.burstCap}/janela${p.dailyCap ? ` · ${p.dailyCap}/dia` : ''}`)
+  if (p.throttleEnabled !== false) parts.push(`${p.minIntervalSec}s entre envios · até ${p.burstCap} a cada ${Math.round((p.burstWindowSec ?? 600) / 60)}min${p.dailyCap ? ` · ${p.dailyCap}/dia` : ''}`)
   else parts.push('sem limite anti-ban')
   return parts.join(' · ')
 }

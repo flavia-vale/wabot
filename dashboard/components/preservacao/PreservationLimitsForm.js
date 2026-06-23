@@ -7,10 +7,10 @@ import { FeatureToggle } from './FeatureToggle'
 // channel* da config global legada).
 
 const FIELDS = [
-  { key: 'minIntervalSec', label: 'Intervalo mínimo entre envios (segundos)', hint: 'Tempo mínimo entre 2 mensagens seguidas neste destino.', min: 1, max: 86400 },
-  { key: 'burstCap', label: 'Máximo de envios na janela', hint: 'Quantos envios cabem dentro da janela de rajada (anti-flood).', min: 1, max: 1000 },
-  { key: 'burstWindowSec', label: 'Janela de rajada (segundos)', hint: 'Tamanho da janela do limite acima. Ex.: 600 = 10 minutos.', min: 60, max: 86400 },
-  { key: 'dailyCap', label: 'Limite diário (envios/dia)', hint: 'Máximo por dia. Vazio = sem limite.', min: 1, max: 10000, nullable: true },
+  { key: 'minIntervalSec', label: 'Tempo de espera entre um envio e outro (segundos)', hint: 'Quanto o bot espera depois de cada mensagem antes de mandar a próxima. Ex.: 60 = 1 minuto entre os envios.', min: 1, max: 86400 },
+  { key: 'burstCap', label: 'Quantos envios seguidos no máximo', hint: 'Quantas mensagens o bot pode mandar de uma vez antes de dar uma pausa — evita disparar muita coisa junta e chamar atenção.', min: 1, max: 1000 },
+  { key: 'burstWindowSec', label: 'Em quanto tempo conta esses envios (segundos)', hint: 'Período usado para contar o limite acima. Ex.: 600 = 10 minutos. Juntando os dois campos: "no máximo X envios a cada 10 minutos".', min: 60, max: 86400 },
+  { key: 'dailyCap', label: 'Limite de envios por dia', hint: 'Total máximo de mensagens em um dia. Deixe vazio para não ter limite diário.', min: 1, max: 10000, nullable: true },
 ]
 
 const PRESETS = [
