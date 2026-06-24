@@ -15,6 +15,31 @@ function buildAuth(appId, secretKey, payload) {
   }
 }
 
+// Strips noise from a resolved Shopee affiliate URL, keeping only the params
+// that matter for commission attribution. The full resolved URL carries dozens
+// of tracking tokens (gads_t_sig, exp_group, __mobile__, etc.) that make the
+// message unreadable. Essential affiliate params are:
+//   utm_medium  — identifies the channel as "affiliates"
+//   utm_source  — identifies the affiliate (an_{appId})
+//   mmp_pid     — MMP click-level attribution
+//   uls_trackid — Shopee's unique link tracking ID for this conversion
+// Everything else is stripped. If no product IDs can be extracted (edge case),
+// the resolved URL is returned as-is rather than silently losing the link.
+export function cleanAffiliateUrl(resolvedUrl) {
+  const ids = extractShopeeIds(resolvedUrl)
+  if (!ids) return resolvedUrl
+  let params
+  try { params = new URL(resolvedUrl).searchParams } catch { params = new URLSearchParams() }
+  const kept = new URLSearchParams()
+  for (const key of ['utm_medium', 'utm_source', 'mmp_pid', 'uls_trackid']) {
+    const val = params.get(key)
+    if (val) kept.set(key, val)
+  }
+  const base = `https://shopee.com.br/product/${ids.shopId}/${ids.itemId}`
+  const qs = kept.toString()
+  return qs ? `${base}?${qs}` : base
+}
+
 export async function convert(url, creds) {
   const { appId, secretKey } = creds
   const canonical = await resolveCanonical(url)
@@ -43,7 +68,11 @@ export async function convert(url, creds) {
       const err = data?.errors?.[0]?.message
       throw new Error(err || 'Resposta inesperada')
     }
-    return link
+    // Resolve s.shopee.com.br → shopee.com.br to avoid WhatsApp WebView blocker,
+    // then strip noise params (gads_t_sig, exp_group, __mobile__, etc.) keeping
+    // only the affiliate attribution params.
+    const resolved = await resolveShopeeShortLink(link, { timeoutMs: 5000 })
+    return cleanAffiliateUrl(resolved || link)
   } catch (err) {
     throw new Error(`Shopee converter: ${err.message}`)
   }
