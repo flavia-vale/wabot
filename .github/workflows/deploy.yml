@@ -109,6 +109,12 @@ jobs:
           host: ${{ secrets.REMOTE_HOST }}
           username: ${{ secrets.REMOTE_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          # O default do appleboy é command_timeout=10m, curto demais para um
+          # deploy "limpo" (npm install do zero na raiz + dashboard + build
+          # completo do Next + respawn do PM2). Já estourou exatamente no passo
+          # [8/9] PM2 status, deixando o smoke [9/9] sem rodar. 25m dá folga sem
+          # mascarar travamento real.
+          command_timeout: 25m
           script: |
             set -euo pipefail
             if [ "${{ github.ref }}" = "refs/heads/main" ]; then
