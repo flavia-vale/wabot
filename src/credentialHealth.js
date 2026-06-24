@@ -134,3 +134,19 @@ export function getCredentialSaveMessage(validation) {
   }
   return `Credenciais de ${validation.label} salvas e prontas para conversão.`
 }
+
+// Quando a usuária cola um SSID NOVO do Mercado Livre, o `cookie` (jar completo)
+// e o `_csrf`/`id` persistidos por rotações anteriores ficam OBSOLETOS — e, pior,
+// `buildCookieHeader` dá precedência ao `cookie` sobre o `ssid`. Sem limpar, o jar
+// antigo (com o ssid expirado dentro) sombreava o ssid recém-colado e a credencial
+// continuava "expirada" para sempre. O formulário do painel só coleta tag+ssid;
+// qualquer `cookie`/`csrf`/`id` no corpo é round-trip de artefato de rotação. Então,
+// ao salvar ML com ssid explícito, descartamos esses artefatos — a rotação os
+// reconstrói no primeiro createLink bem-sucedido.
+export function sanitizeCredentialBody(platform, body = {}) {
+  if (platform !== 'mercadolivre' || !body || typeof body !== 'object') return body
+  const ssid = typeof body.ssid === 'string' ? body.ssid.trim() : ''
+  if (!ssid) return body
+  const { cookie, csrf, id, ...rest } = body
+  return rest
+}
