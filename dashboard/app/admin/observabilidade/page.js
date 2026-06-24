@@ -154,38 +154,39 @@ export default function AdminObservabilityPage() {
   }, [])
 
   const goldenSignals = useMemo(() => {
-    const totalRequests = metrics?.totalRequests ?? health?.api?.totalRequests ?? 0
-    const total5xx = metrics?.total5xx ?? health?.api?.total5xx ?? 0
-    const total4xx = metrics?.total4xx ?? health?.api?.total4xx ?? 0
-    const errorRate = pct(total4xx + total5xx, totalRequests)
+    const contractSignals = observability?.goldenSignals ?? null
+    const totalRequests = contractSignals?.traffic?.totalRequests ?? metrics?.totalRequests ?? health?.api?.totalRequests ?? 0
+    const total5xx = contractSignals?.errors?.http5xx ?? metrics?.total5xx ?? health?.api?.total5xx ?? 0
+    const total4xx = contractSignals?.errors?.http4xx ?? metrics?.total4xx ?? health?.api?.total4xx ?? 0
+    const errorRate = contractSignals?.errors?.httpErrorRatePct ?? pct(total4xx + total5xx, totalRequests)
     const messages = logsSummary?.counts ?? {}
-    const messageAttempts = (messages.success || 0) + (messages.timeoutTotal || 0) + (messages.errorOther || 0) + (messages.skippedConfig || 0) + (messages.skippedDedup || 0)
-    const sendErrorRate = pct((messages.timeoutTotal || 0) + (messages.errorOther || 0), messageAttempts)
+    const messageAttempts = contractSignals?.traffic?.messageAttempts ?? ((messages.success || 0) + (messages.timeoutTotal || 0) + (messages.errorOther || 0) + (messages.skippedConfig || 0) + (messages.skippedDedup || 0))
+    const sendErrorRate = contractSignals?.errors?.sendFailureRatePct ?? pct((messages.timeoutTotal || 0) + (messages.errorOther || 0), messageAttempts)
     const sessionRows = sessions?.sessions ?? []
-    const disconnected = sessionRows.filter(session => session.status !== 'connected').length
+    const disconnected = contractSignals?.saturation?.disconnectedSessions ?? sessionRows.filter(session => session.status !== 'connected').length
     return {
       latency: {
-        value: `${metrics?.p95RouteAvgMs ?? health?.api?.p95RouteAvgMs ?? 0}ms`,
-        subtitle: `P95 aproximado por média de rota · média global ${metrics?.avgLatencyMs ?? health?.api?.avgLatencyMs ?? 0}ms`,
-        tone: (metrics?.p95RouteAvgMs ?? 0) > 1500 ? 'risk' : 'ok',
+        value: `${contractSignals?.latency?.valueMs ?? metrics?.p95RouteAvgMs ?? health?.api?.p95RouteAvgMs ?? 0}ms`,
+        subtitle: `P95 aproximado · média global ${contractSignals?.latency?.avgMs ?? metrics?.avgLatencyMs ?? health?.api?.avgLatencyMs ?? 0}ms`,
+        tone: normalizeTone(contractSignals?.latency?.status || ((metrics?.p95RouteAvgMs ?? 0) > 1500 ? 'risk' : 'ok')),
       },
       traffic: {
         value: numberFmt(totalRequests),
-        subtitle: `Requests desde o boot · ${numberFmt(messageAttempts)} eventos de MessageLog no período 7d`,
-        tone: totalRequests > 0 ? 'ok' : 'warn',
+        subtitle: `Requests desde o boot · ${numberFmt(messageAttempts)} eventos de MessageLog no contrato`,
+        tone: normalizeTone(contractSignals?.traffic?.status || (totalRequests > 0 ? 'ok' : 'warn')),
       },
       errors: {
         value: `${errorRate}%`,
         subtitle: `${numberFmt(total5xx)} respostas 5xx · erro de envio ${sendErrorRate}%`,
-        tone: total5xx > 0 || sendErrorRate >= 5 ? 'risk' : 'ok',
+        tone: normalizeTone(contractSignals?.errors?.status || (total5xx > 0 || sendErrorRate >= 5 ? 'risk' : 'ok')),
       },
       saturation: {
-        value: `${health?.memory?.heapUsedMb ?? 0}MB`,
-        subtitle: `Heap usado · ${disconnected}/${sessionRows.length || 0} sessões não conectadas · uptime ${minutes(metrics?.uptimeSeconds ?? health?.uptimeSeconds)}`,
-        tone: health?.status === 'critical' ? 'critical' : health?.status === 'degraded' ? 'warn' : 'ok',
+        value: `${contractSignals?.saturation?.inFlight ?? 0} em voo`,
+        subtitle: `${disconnected}/${(contractSignals?.saturation?.totalSessions ?? sessionRows.length) || 0} sessões não conectadas · uptime ${minutes(contractSignals?.saturation?.uptimeSeconds ?? metrics?.uptimeSeconds ?? health?.uptimeSeconds)}`,
+        tone: normalizeTone(contractSignals?.saturation?.status || health?.status || 'ok'),
       },
     }
-  }, [health, logsSummary, metrics, sessions])
+  }, [health, logsSummary, metrics, observability, sessions])
 
   if (loading) return <LoadingState title="Carregando observabilidade" message="Consolidando API, logs, sessões, Telegram e gate operacional." />
 
@@ -259,9 +260,10 @@ export default function AdminObservabilityPage() {
             <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-200">Dependências</p>
             <h2 className="mt-1 text-2xl font-black text-white">Mapa vivo</h2>
             <div className="mt-5 grid gap-3">
-              <DependencyPill label="SQLite/Prisma" ok={Boolean(health?.dbOk ?? observability?.goNoGo?.dbOk)} detail="SELECT 1 via admin health" />
-              <DependencyPill label="Fastify API" ok={Boolean(health)} detail={`${numberFmt(metrics?.totalRequests)} req desde boot`} />
-              <DependencyPill label="Supervisor" ok={(observability?.supervisor?.sessionOwnerMismatchTotal ?? 0) === 0} detail={`${observability?.supervisor?.sessionOwnerMismatchTotal ?? 0} owner mismatch`} />
+              <DependencyPill label="SQLite/Prisma" ok={Boolean(observability?.dependencies?.database?.ok ?? health?.dbOk)} detail={observability?.dependencies?.database?.probe || 'SELECT 1 via admin health'} />
+              <DependencyPill label="Fastify API" ok={Boolean(observability?.dependencies?.api?.ok ?? health)} detail={`${numberFmt(observability?.dependencies?.api?.totalRequests ?? metrics?.totalRequests)} req desde boot`} />
+              <DependencyPill label="Redis" ok={Boolean(observability?.dependencies?.redis?.ok)} detail={observability?.dependencies?.redis?.requiredForRemoteSupervisor ? 'Obrigatório no modo remote' : 'Opcional no modo inline'} />
+              <DependencyPill label="Supervisor" ok={Boolean(observability?.dependencies?.supervisor?.ok ?? ((observability?.supervisor?.sessionOwnerMismatchTotal ?? 0) === 0))} detail={`${observability?.supervisor?.mode || 'inline'} · alive ${String(observability?.supervisor?.alive ?? 'n/a')}`} />
               <DependencyPill label="Telegram Offer Bot" ok={Boolean(telegram?.config?.tokenConfigured)} detail={`${telegram?.successRate ?? 0}% sucesso · último evento ${safeDate(telegram?.lastEventAt)}`} />
             </div>
           </div>
@@ -291,6 +293,31 @@ export default function AdminObservabilityPage() {
               <MetricTile label="Config block" value={numberFmt(logsSummary?.counts?.skippedConfig)} tone="warn" />
               <MetricTile label="Timeout" value={numberFmt(logsSummary?.counts?.timeoutTotal)} tone={(logsSummary?.counts?.timeoutTotal ?? 0) > 0 ? 'risk' : 'ok'} />
               <MetricTile label="Outros erros" value={numberFmt(logsSummary?.counts?.errorOther)} tone={(logsSummary?.counts?.errorOther ?? 0) > 0 ? 'critical' : 'ok'} />
+            </div>
+          </div>
+        </section>
+
+        <section className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-5 shadow-2xl shadow-black/20 ring-1 ring-white/5 backdrop-blur-xl">
+            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-200">Filas</p>
+            <h2 className="mt-1 text-2xl font-black text-white">Backpressure e DLQs</h2>
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <MetricTile label="Offer items" value={numberFmt(observability?.queues?.offerQueueItems?.total)} tone="info" helper="Total por status no banco." />
+              <MetricTile label="Queued/Sending" value={numberFmt((observability?.queues?.offerQueueItems?.queued || 0) + (observability?.queues?.offerQueueItems?.sending || 0))} tone={((observability?.queues?.offerQueueItems?.queued || 0) + (observability?.queues?.offerQueueItems?.sending || 0)) > 0 ? 'warn' : 'ok'} />
+              <MetricTile label="Send DLQ" value={numberFmt(observability?.queues?.sendDlq?.lastKnownDlqTotal)} tone={(observability?.queues?.sendDlq?.lastKnownDlqTotal || 0) > 0 ? 'risk' : 'ok'} />
+            </div>
+            <p className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">Payment DLQ aberta: {numberFmt(observability?.queues?.paymentWebhookDlq?.open)} · última poda de DLQ: {observability?.queues?.sendDlq?.lastRunAt ? safeDate(observability.queues.sendDlq.lastRunAt) : 'sem execução registrada'} · removidos: {numberFmt(observability?.queues?.sendDlq?.lastRemovedTotal)}</p>
+          </div>
+
+          <div className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-5 shadow-2xl shadow-black/20 ring-1 ring-white/5 backdrop-blur-xl">
+            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-200">Privacidade</p>
+            <h2 className="mt-1 text-2xl font-black text-white">Contrato safe-summary</h2>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <MetricTile label="MessageText bruto" value={observability?.privacy?.exposesRawMessageText ? 'Exposto' : 'Não'} tone={observability?.privacy?.exposesRawMessageText ? 'critical' : 'ok'} />
+              <MetricTile label="Credenciais brutas" value={observability?.privacy?.exposesRawCredentialData ? 'Expostas' : 'Não'} tone={observability?.privacy?.exposesRawCredentialData ? 'critical' : 'ok'} />
+            </div>
+            <div className="mt-4 space-y-2">
+              {(observability?.privacy?.notes ?? []).map((note) => <p key={note} className="rounded-2xl border border-white/10 bg-slate-950/60 p-3 text-xs leading-relaxed text-slate-300">{note}</p>)}
             </div>
           </div>
         </section>
