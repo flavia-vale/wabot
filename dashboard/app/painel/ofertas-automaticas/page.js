@@ -107,6 +107,7 @@ export default function OfertasAutomaticasPage() {
   const [saveError, setSaveError] = useState('')
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [triggering, setTriggering] = useState(null)
+  const [bulkToggling, setBulkToggling] = useState(null)
   const [triggerResult, setTriggerResult] = useState({})
   const [planSubject, setPlanSubject] = useState({ plan: 'pro', accessExpiresAt: null })
 
@@ -183,6 +184,21 @@ export default function OfertasAutomaticasPage() {
       await load()
     } catch (err) {
       setError(err.message)
+    }
+  }
+
+  async function handleToggleAll(enabled) {
+    const targets = automations.filter((a) => a.enabled !== enabled)
+    if (!targets.length) return
+    setBulkToggling(enabled ? 'on' : 'off')
+    setError('')
+    try {
+      await Promise.all(targets.map((a) => api.offerAutomationUpdate(a.id, { enabled })))
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBulkToggling(null)
     }
   }
 
@@ -276,6 +292,8 @@ export default function OfertasAutomaticasPage() {
     return `há ${Math.round(h / 24)} d`
   }
   const lastRunLabel = relativeAgo(lastRunMs)
+  const allAutomationsEnabled = automations.length > 0 && activeCount === automations.length
+  const bulkToggleLabel = allAutomationsEnabled ? 'Desativar todas' : 'Ativar todas'
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 720, margin: '0 auto' }}>
@@ -304,9 +322,16 @@ export default function OfertasAutomaticasPage() {
                 {lastRunLabel ? ` · última busca ${lastRunLabel}` : ' · ainda não buscou'}
               </div>
             </div>
-            <svg width="120" height="40" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true" style={{ flexShrink: 0, opacity: 0.85 }}>
-              <polyline points="0,34 18,30 36,32 54,24 72,26 90,18 108,21 126,12 144,15 162,8 180,11 200,5" fill="none" stroke="var(--accent-2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <button
+              type="button"
+              className="pnl-btn is-primary"
+              onClick={() => handleToggleAll(!allAutomationsEnabled)}
+              disabled={bulkToggling !== null}
+              aria-label={`${bulkToggleLabel} automações de ofertas`}
+              style={{ flexShrink: 0 }}
+            >
+              {bulkToggling ? 'Atualizando…' : bulkToggleLabel}
+            </button>
           </section>
 
           <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
