@@ -28,6 +28,39 @@ configure_public_git_dependencies() {
   git config --global --add url."https://github.com/".insteadOf "git@github.com:"
 }
 
+ensure_pm2_app_running() {
+  # Reinicia o app se ele existir; senão, cria a partir do ecosystem.config.cjs.
+  # Sob `set -e`, um `pm2 restart <app>` cru aborta o deploy inteiro quando o
+  # processo não está registrado no PM2 do VPS (ex.: daemon respawnado pelo
+  # `pm2 update`, dump não salvo, ou app nunca criado). Espelha o helper do
+  # deploy_safe_staging.sh para tornar o restart idempotente.
+  local app_name="$1"
+
+  if pm2 describe "$app_name" >/dev/null 2>&1; then
+    # `pm2 describe` passar NÃO garante que o restart funcione: se o daemon foi
+    # respawnado (ex.: `pm2 update`) o app pode seguir no dump mas com o slot de
+    # processo inválido — aí `pm2 restart` falha com 'Process N not found' e, sob
+    # set -e, abortaria o deploy. Nesse caso, derruba o registro órfão e recria.
+    if pm2 restart "$app_name" --update-env; then
+      return 0
+    fi
+    echo "  Aviso: restart de '$app_name' falhou (registro órfão no PM2). Recriando via ecosystem.config.cjs..."
+    pm2 delete "$app_name" >/dev/null 2>&1 || true
+  else
+    echo "  Aviso: processo PM2 '$app_name' não encontrado. Tentando criar via ecosystem.config.cjs..."
+  fi
+
+  if pm2 start "$ROOT_DIR/ecosystem.config.cjs" --only "$app_name" --update-env >/tmp/wabot_pm2_start_${app_name}.log 2>&1; then
+    echo "  PM2 app '$app_name' criado com sucesso via ecosystem.config.cjs."
+    return 0
+  fi
+
+  echo "ERRO: não foi possível iniciar '$app_name' via ecosystem.config.cjs."
+  cat /tmp/wabot_pm2_start_${app_name}.log || true
+  echo "Dica: valide o nome do app no PM2 (pm2 status) e no ecosystem.config.cjs de produção."
+  exit 1
+}
+
 check_http_with_retry() {
   local path="$1"
   local attempts="${2:-8}"
@@ -262,8 +295,8 @@ else
 fi
 
 echo "[7b/9] Restart PM2 apps"
-pm2 restart dashboard --update-env
-pm2 restart api --update-env
+ensure_pm2_app_running "dashboard"
+ensure_pm2_app_running "api"
 
 # bot-supervisor (prod) é INTENCIONALMENTE preservado: ver comentário
 # detalhado em scripts/deploy_safe_staging.sh. Reinicie manualmente quando

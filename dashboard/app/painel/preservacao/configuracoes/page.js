@@ -9,9 +9,9 @@ import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState, ErrorState } from '@/components/States'
-import { ThrottleForm } from '@/components/preservacao/ThrottleForm'
+import Link from 'next/link'
+import { ChannelStaggerForm } from '@/components/preservacao/ChannelStaggerForm'
 import { FollowGuardForm } from '@/components/preservacao/FollowGuardForm'
-import { QuietHoursForm } from '@/components/preservacao/QuietHoursForm'
 import { ImageMutationToggle } from '@/components/preservacao/ImageMutationToggle'
 import { usePainelHeader } from '../../PainelShell'
 
@@ -30,7 +30,7 @@ export default function ConfiguracoesAvancadasPage() {
       setError('')
       const data = await api.preservationConfig()
       setConfig(data.config)
-      setDraft({ ...data.config, channelBurstWindowSec: 3600 })
+      setDraft({ ...data.config })
     } catch (e) { setError(e.message) }
   }
 
@@ -63,9 +63,20 @@ export default function ConfiguracoesAvancadasPage() {
       {error && <div className="mb-4"><Alert type="error" message={error} /></div>}
       {savedAt && <div className="mb-4"><Alert type="success" message={`Configurações salvas às ${savedAt.toLocaleTimeString('pt-BR')}.`} /></div>}
 
+      <div className="mb-4 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-900">
+        <p className="font-semibold">Horário de funcionamento e limites anti-ban agora são por destino.</p>
+        <p className="mt-1 text-green-800">
+          O intervalo entre envios, rajada, limite diário e o horário de cada grupo/canal
+          ficam em{' '}
+          <Link href="/painel/preservacao/destinos" className="font-semibold underline">
+            Preservação por destino
+          </Link>
+          {' '}(presets reutilizáveis). Aqui ficam só os ajustes que valem para a conta toda.
+        </p>
+      </div>
+
       <div className="flex flex-col gap-4">
-        <ThrottleForm value={draft} onChange={update} disabled={saving} />
-        <QuietHoursForm value={draft} onChange={update} disabled={saving} />
+        <ChannelStaggerForm value={draft} onChange={update} disabled={saving} />
         <FollowGuardForm value={draft} onChange={update} disabled={saving} />
         <ImageMutationToggle value={draft} onChange={update} disabled={saving} />
       </div>

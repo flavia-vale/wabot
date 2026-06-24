@@ -219,16 +219,13 @@ export async function checkAndReserve(groupId, botConfig, opts = {}) {
   const now = opts.now ?? Date.now()
   const dest = opts.destPreservation ?? null
 
-  if (opts.preservationActive === false) {
-    // Master de preservação off: throttle/health não se aplicam. Mas o horário
-    // (escolha explícita por destino) continua valendo.
-    if (dest) {
-      if (dest.operatingHoursEnabled === true && opts.ignoreGlobalQuietHours !== true) {
-        const s = operatingHoursState(now, parseQuietHours(dest.operatingHoursJson))
-        if (!s.inOperating) return { allow: false, reason: DEFER_REASON.OUTSIDE_OPERATING_HOURS, deferUntil: now + s.deferMs }
-      }
-      return { allow: true, reason: 'gating_off' }
-    }
+  // Plano B / Fase 3: com config POR DESTINO (destPreservation) o anti-ban está
+  // SEMPRE ativo — preset/HARD_DEFAULT garantem limites sãos, e o master global
+  // de preservação não desliga mais a proteção do destino (invariante "nunca sem
+  // proteção anti-ban"). O curto-circuito legado vale só SEM destPreservation.
+  if (opts.preservationActive === false && !dest) {
+    // Master de preservação off (caminho legado/sem destino): throttle/health
+    // não se aplicam, mas a janela explícita por grupo continua valendo.
     if (opts.group?.quietHoursEnabled === true) {
       const q = quietHoursState(now, parseQuietHours(opts.group.quietHoursJson))
       if (q.inQuiet) return { allow: false, reason: DEFER_REASON.QUIET_HOURS, deferUntil: now + q.deferMs }
