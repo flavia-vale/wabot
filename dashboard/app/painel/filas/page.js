@@ -51,6 +51,7 @@ export default function FilasPage() {
   const [message, setMessage] = useState('')
   const [notice, setNotice] = useState('')
   const [toggling, setToggling] = useState(null)
+  const [bulkToggling, setBulkToggling] = useState(null)
   const [loading, setLoading] = useState(true)
   const [planSubject, setPlanSubject] = useState({ plan: 'pro', accessExpiresAt: null })
 
@@ -85,6 +86,22 @@ export default function FilasPage() {
   async function remove(queue) {
     if (!window.confirm(`Excluir a fila “${queue.name}” e todos os seus itens?`)) return
     try { await api.offerQueueDelete(queue.id); await load() } catch (error) { setMessage(error.message) }
+  }
+  async function toggleAllQueues(enabled) {
+    const targets = queues.filter((queue) => queue.enabled !== enabled)
+    if (!targets.length) return
+    setBulkToggling(enabled ? 'on' : 'off')
+    setMessage('')
+    setNotice('')
+    try {
+      await Promise.all(targets.map((queue) => api.offerQueueUpdate(queue.id, { enabled })))
+      setNotice(enabled ? 'Todas as filas foram ativadas.' : 'Todas as filas foram pausadas. Os itens pendentes continuam guardados.')
+      await load()
+    } catch (error) {
+      setMessage(error.message)
+    } finally {
+      setBulkToggling(null)
+    }
   }
   async function toggleQueue(queue) {
     const enabled = !queue.enabled
@@ -129,6 +146,9 @@ export default function FilasPage() {
     const names = jids.map((jid) => groups.find((group) => group.waJid === jid)?.name || jid)
     return names.join(' · ')
   }
+  const activeQueueCount = queues.filter((queue) => queue.enabled).length
+  const allQueuesEnabled = queues.length > 0 && activeQueueCount === queues.length
+  const bulkQueueLabel = allQueuesEnabled ? 'Desativar todas' : 'Ativar todas'
   const itemDestinations = (jids) => {
     const list = Array.isArray(jids) ? jids : []
     if (!list.length) return 'Grupos da fila'
@@ -165,6 +185,19 @@ export default function FilasPage() {
 
   return <div className="pnl-grid" style={{ maxWidth: 980, margin: '0 auto' }}>
     <PainelContentActions><button type="button" className="pnl-btn is-primary" onClick={openCreate}>+ Nova fila</button></PainelContentActions>
+    {queues.length > 0 && <section className="pnl-master">
+      <div className="pnl-master-ico" aria-hidden="true">⏱</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span className="pnl-master-title">{activeQueueCount > 0 ? 'Filas automáticas ligadas' : 'Filas pausadas'}</span>
+          <span className="pnl-master-status"><span className={`pnl-dot ${activeQueueCount > 0 ? 'is-on' : 'is-idle'}`} aria-hidden="true" />{activeQueueCount} de {queues.length} ativas</span>
+        </div>
+        <div className="pnl-master-sub">Use o controle mestre para pausar ou retomar todas as filas de uma vez.</div>
+      </div>
+      <button type="button" className="pnl-btn is-primary" onClick={() => toggleAllQueues(!allQueuesEnabled)} disabled={bulkToggling !== null} style={{ flexShrink: 0 }}>
+        {bulkToggling ? 'Atualizando…' : bulkQueueLabel}
+      </button>
+    </section>}
     {message && <div className="pnl-note-box is-error" role="alert">{message}</div>}
     {notice && <div className="pnl-note-box" role="status">{notice}</div>}
     {showForm && <form className="pnl-card" onSubmit={save}>

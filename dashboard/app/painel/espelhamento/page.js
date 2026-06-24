@@ -80,13 +80,14 @@ function num(v) {
 
 export default function EspelhamentoPage() {
   usePainelHeader({ title: 'Espelhamento', subtitle: 'Monitora grupos de promoção e reposta com o seu link' })
-  const { online } = usePainel()
+  const { online, refreshSession } = usePainel()
 
   const [groups, setGroups] = useState([])
   const [summary, setSummary] = useState(null)
   const [config, setConfig] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
+  const [switchingMirror, setSwitchingMirror] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -119,6 +120,20 @@ export default function EspelhamentoPage() {
     ? `1 envio a cada ${num(config.delayMin)}–${num(config.delayMax)} s`
     : 'Cadência configurada nas Configurações'
 
+  async function toggleMirroring() {
+    setSwitchingMirror(true)
+    setLoadError('')
+    try {
+      if (online) await api.sessionStop()
+      else await api.sessionStart()
+      await refreshSession()
+    } catch (err) {
+      setLoadError(err.message || 'Não foi possível atualizar o espelhamento.')
+    } finally {
+      setSwitchingMirror(false)
+    }
+  }
+
   return (
     <div className="pnl-grid" style={{ maxWidth: 1120, margin: '0 auto' }}>
       <PainelContentActions>
@@ -135,7 +150,7 @@ export default function EspelhamentoPage() {
       )}
 
       {/* Controle mestre — reflete a conexão WhatsApp (não há flag própria) */}
-      <Link href="/painel/whatsapp" className="pnl-master" style={{ textDecoration: 'none' }}>
+      <section className="pnl-master">
         <div className="pnl-master-ico">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M3 7a5 5 0 0 1 5-5h4" /><path d="M7 12l-4-5 5-2" />
@@ -158,7 +173,18 @@ export default function EspelhamentoPage() {
               : 'conecte o WhatsApp para o bot voltar a monitorar e repostar'}
           </div>
         </div>
-      </Link>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            className="pnl-btn is-primary"
+            onClick={toggleMirroring}
+            disabled={switchingMirror || online === null}
+          >
+            {switchingMirror ? 'Atualizando…' : online ? 'Desativar todos' : 'Ativar todos'}
+          </button>
+          <Link href="/painel/whatsapp" className="pnl-btn">Conexão</Link>
+        </div>
+      </section>
 
       {/* Stats factuais do dia */}
       <div className="pnl-kpis" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
