@@ -37,10 +37,10 @@ function safeDate(value) {
 
 function normalizeTone(input) {
   const value = String(input || '').toLowerCase()
-  if (['critical', 'fail', 'no-go'].includes(value)) return 'critical'
-  if (['risk', 'error'].includes(value)) return 'risk'
-  if (['warn', 'warning', 'degraded'].includes(value)) return 'warn'
-  if (['ok', 'healthy', 'go'].includes(value)) return 'ok'
+  if (['p1', 'critical', 'fail', 'no-go'].includes(value)) return 'critical'
+  if (['p2', 'risk', 'error'].includes(value)) return 'risk'
+  if (['p3', 'warn', 'warning', 'degraded'].includes(value)) return 'warn'
+  if (['ok', 'healthy', 'go', 'good'].includes(value)) return 'ok'
   return 'info'
 }
 
@@ -71,13 +71,19 @@ function SignalCard({ title, value, subtitle, tone = 'info' }) {
 }
 
 function AlertRow({ alert, index }) {
-  const tone = normalizeTone(alert?.tone || alert?.severity)
+  const severity = String(alert?.severity || 'INFO').toUpperCase()
+  const tone = normalizeTone(alert?.tone || severity)
   return (
     <div className={`rounded-2xl border p-4 ${toneStyles[tone] || toneStyles.info}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-black text-white">{alert?.title || `Alerta ${index + 1}`}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-black/25 px-2 py-1 text-[10px] font-black uppercase tracking-wide">{severity}</span>
+            <span className="rounded-full bg-black/15 px-2 py-1 text-[10px] font-black uppercase tracking-wide">{alert?.signal || 'operational'}</span>
+          </div>
+          <p className="mt-2 text-sm font-black text-white">{alert?.title || `Alerta ${index + 1}`}</p>
           <p className="mt-1 text-xs leading-relaxed opacity-80">{String(alert?.value ?? alert?.message ?? 'Sem detalhe adicional')}</p>
+          {alert?.runbook && <p className="mt-2 rounded-xl bg-black/15 p-2 text-xs leading-relaxed opacity-85">Runbook: {alert.runbook}</p>}
         </div>
         <span className="rounded-full bg-black/20 px-2 py-1 text-[10px] font-black uppercase tracking-wide">{tone}</span>
       </div>
@@ -293,6 +299,16 @@ export default function AdminObservabilityPage() {
               <MetricTile label="Config block" value={numberFmt(logsSummary?.counts?.skippedConfig)} tone="warn" />
               <MetricTile label="Timeout" value={numberFmt(logsSummary?.counts?.timeoutTotal)} tone={(logsSummary?.counts?.timeoutTotal ?? 0) > 0 ? 'risk' : 'ok'} />
               <MetricTile label="Outros erros" value={numberFmt(logsSummary?.counts?.errorOther)} tone={(logsSummary?.counts?.errorOther ?? 0) > 0 ? 'critical' : 'ok'} />
+            </div>
+            <div className="mt-5 grid gap-2">
+              {Object.entries(observability?.windows ?? {}).map(([key, window]) => (
+                <div key={key} className="rounded-2xl border border-white/10 bg-slate-950/60 p-3 text-xs text-slate-300">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-black uppercase tracking-wide text-cyan-100">{key}</span>
+                    <span>{numberFmt(window?.logs?.timeoutTotal)} timeouts · {numberFmt(window?.logs?.errorOther)} outros erros</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </section>
