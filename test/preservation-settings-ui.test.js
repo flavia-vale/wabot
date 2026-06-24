@@ -45,3 +45,8 @@ test('toggle de mutação usa diretamente o opt-in público imageMutationEnabled
   assert.match(source, /checked=\{!!value\.imageMutationEnabled\}/)
   assert.match(source, /onChange=\{checked => onChange\(\{ imageMutationEnabled: checked \}\)\}/)
 })
+
+test('toggle de mutação sinaliza que mensagens espelhadas ainda não são cobertas (issue #1033)', () => {
+  const source = read('dashboard/components/preservacao/ImageMutationToggle.js')
+  assert.match(source, /não se aplica às mensagens espelhadas/i)
+})

@@ -6,7 +6,10 @@ export function ImageMutationToggle({ value, onChange, disabled }) {
     <fieldset className="bg-white rounded-2xl shadow p-5">
       <legend className="text-base font-semibold text-gray-800">🖼️ Mutação de imagem</legend>
       <p className="text-xs text-gray-500 mb-3">
-        Quando ligado, o bot corta 1 ou 2 pixels da borda e re-salva a imagem com qualidade levemente diferente. Isso muda o &quot;hash&quot; da imagem sem afetar visualmente, evitando filtros que detectam reenvio.
+        Quando ligado, o bot corta 1 ou 2 pixels da borda e re-salva a imagem com qualidade levemente diferente. Isso muda o &quot;hash&quot; da imagem sem afetar visualmente, evitando filtros que detectam reenvio. Vale tanto para canais quanto para grupos de destino.
+      </p>
+      <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-3">
+        ⚠️ Por enquanto este recurso <strong>não se aplica às mensagens espelhadas</strong> (encaminhamento ao vivo de um grupo monitorado para outro grupo, que reaproveita a mídia original). Atua nas imagens re-processadas — ofertas automáticas, envios em massa e agendados.
       </p>
       <FeatureToggle
         checked={!!value.imageMutationEnabled}
