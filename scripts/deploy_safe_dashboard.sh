@@ -37,11 +37,19 @@ ensure_pm2_app_running() {
   local app_name="$1"
 
   if pm2 describe "$app_name" >/dev/null 2>&1; then
-    pm2 restart "$app_name" --update-env
-    return 0
+    # `pm2 describe` passar NÃO garante que o restart funcione: se o daemon foi
+    # respawnado (ex.: `pm2 update`) o app pode seguir no dump mas com o slot de
+    # processo inválido — aí `pm2 restart` falha com 'Process N not found' e, sob
+    # set -e, abortaria o deploy. Nesse caso, derruba o registro órfão e recria.
+    if pm2 restart "$app_name" --update-env; then
+      return 0
+    fi
+    echo "  Aviso: restart de '$app_name' falhou (registro órfão no PM2). Recriando via ecosystem.config.cjs..."
+    pm2 delete "$app_name" >/dev/null 2>&1 || true
+  else
+    echo "  Aviso: processo PM2 '$app_name' não encontrado. Tentando criar via ecosystem.config.cjs..."
   fi
 
-  echo "  Aviso: processo PM2 '$app_name' não encontrado. Tentando criar via ecosystem.config.cjs..."
   if pm2 start "$ROOT_DIR/ecosystem.config.cjs" --only "$app_name" --update-env >/tmp/wabot_pm2_start_${app_name}.log 2>&1; then
     echo "  PM2 app '$app_name' criado com sucesso via ecosystem.config.cjs."
     return 0
