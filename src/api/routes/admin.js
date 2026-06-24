@@ -1,6 +1,6 @@
 import db from '../../db.js'
 import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
-import { listRunningBots } from '../../manager.js'
+import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE } from '../../manager.js'
 import { getApiMetricsSnapshot } from '../metrics.js'
 import { getSupervisorOperationalCounters } from '../../supervisor/operationalCounters.js'
 import { summarizeCredentialHealth } from '../../credentialHealth.js'
@@ -9,6 +9,8 @@ import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { createAdminService } from '../../domain/admin/service.js'
 import { readBacklogPipeline, updateBacklogIssueStatus } from '../../backlogPipeline.js'
 import { TERMS_DOCUMENT_ID, getEffectiveTermsDocument, nextTermsVersion, normalizeTermsContent } from '../../legalTerms.js'
+import { getDlqMaintenanceSnapshot } from '../../jobs/dlqMaintenance.js'
+import { redactAdminPayload, serializeAdminAuditValue } from '../../adminRedaction.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -28,6 +30,13 @@ const CANONICAL_OWNER_ADMIN_EMAILS = new Set(DEFAULT_BOOTSTRAP_ADMIN_EMAILS)
 
 const CS_RISK_DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000
 const csRiskDetectedWindow = new Map()
+const OBSERVABILITY_WINDOWS = Object.freeze([
+  { key: '5m', label: '5 minutos', ms: 5 * 60 * 1000 },
+  { key: '30m', label: '30 minutos', ms: 30 * 60 * 1000 },
+  { key: '1h', label: '1 hora', ms: 60 * 60 * 1000 },
+  { key: '6h', label: '6 horas', ms: 6 * 60 * 60 * 1000 },
+  { key: '24h', label: '24 horas', ms: 24 * 60 * 60 * 1000 },
+])
 
 export function shouldTrackRiskDetected({ userId = '', strategy = 'risk_first', reasons = [], now = Date.now() } = {}) {
   const reasonKey = Array.isArray(reasons) ? reasons.slice().sort().join('|').slice(0, 120) : ''
@@ -121,8 +130,7 @@ function maskPhone(phone) {
 }
 
 function serializeAuditValue(value) {
-  if (value === undefined || value === null) return null
-  return JSON.stringify(value)
+  return serializeAdminAuditValue(value)
 }
 
 function addDays(date, days) {
@@ -257,6 +265,179 @@ function parseLpPlanInput(body = {}, existing = null) {
   }
 
   return { ok: true, data: { title, description, price, features: JSON.stringify(features), position } }
+}
+
+function pct(part, total) {
+  const denominator = Number(total || 0)
+  if (!denominator) return 0
+  return Math.round((Number(part || 0) / denominator) * 1000) / 10
+}
+
+function emptyOperationalLogCounts() {
+  return { success: 0, skippedDedup: 0, skippedConfig: 0, timeoutTotal: 0, errorOther: 0, inFlight: 0 }
+}
+
+function classifyOperationalLogIntoCounts(counts, log) {
+  if (log.status === 'queued' || log.status === 'sending') { counts.inFlight++; return }
+  if (log.status === 'success') { counts.success++; return }
+  const category = categorizeErrorMsg(log.errorMsg)
+  if (category === ERROR_CATEGORIES.DEDUP) { counts.skippedDedup++; return }
+  if (category === ERROR_CATEGORIES.CONFIG_BLOCK) { counts.skippedConfig++; return }
+  if (category === ERROR_CATEGORIES.TIMEOUT) counts.timeoutTotal++
+  else if (log.status === 'error') counts.errorOther++
+}
+
+function buildOperationalWindows(recentLogs, now = new Date()) {
+  const nowMs = now.getTime()
+  const windows = {}
+  for (const window of OBSERVABILITY_WINDOWS) {
+    const counts = emptyOperationalLogCounts()
+    for (const log of recentLogs) {
+      const sentAt = new Date(log.sentAt).getTime()
+      if (Number.isFinite(sentAt) && nowMs - sentAt <= window.ms) classifyOperationalLogIntoCounts(counts, log)
+    }
+    windows[window.key] = {
+      label: window.label,
+      from: new Date(nowMs - window.ms).toISOString(),
+      to: now.toISOString(),
+      logs: counts,
+    }
+  }
+  return windows
+}
+
+function buildAdminObservabilityContract({
+  checkedAt,
+  metrics,
+  dbOk,
+  dlqOpen,
+  supervisor,
+  supervisorAlive,
+  dlqSnapshot,
+  queueCounts,
+  sessionCounts,
+  logCounts,
+  windows,
+}) {
+  const sessionOwnerMismatchTotal = Number(supervisor.sessionOwnerMismatchTotal ?? 0)
+  const sessionCircuitBreakerAlertTotal = Number(supervisor.sessionCircuitBreakerAlertTotal ?? 0)
+  const sessionQuarantineTotal = Number(supervisor.sessionQuarantineTotal ?? 0)
+  const totalRequests = Number(metrics.totalRequests ?? 0)
+  const total5xx = Number(metrics.total5xx ?? 0)
+  const total4xx = Number(metrics.total4xx ?? 0)
+  const messageAttempts = Object.values(logCounts).reduce((sum, value) => sum + Number(value || 0), 0)
+  const sendFailures = Number(logCounts.timeoutTotal || 0) + Number(logCounts.errorOther || 0)
+  const inFlight = Number(logCounts.inFlight || 0) + Number(queueCounts.queued || 0) + Number(queueCounts.sending || 0)
+
+  const alerts = []
+  const pushAlert = ({ severity = 'INFO', tone = severity, title, value, runbook, signal = 'operational' }) => {
+    alerts.push({ severity, tone, title, value, signal, runbook })
+  }
+
+  if (!dbOk) pushAlert({ severity: 'P1', tone: 'critical', title: 'Banco indisponível', value: 'db query failed', signal: 'database', runbook: 'Verificar SQLite/Prisma e locks antes de reiniciar serviços.' })
+  if (SUPERVISOR_MODE === 'remote' && supervisorAlive === false) pushAlert({ severity: 'P1', tone: 'critical', title: 'Supervisor remoto sem heartbeat', value: 'supervisor_alive=0', signal: 'supervisor', runbook: 'Verificar PM2 bot-supervisor e Redis antes de reenviar comandos.' })
+  if (total5xx > 0) pushAlert({ severity: 'P2', tone: 'risk', title: 'Erros 5xx recentes', value: total5xx, signal: 'errors', runbook: 'Abrir erros recentes, correlacionar com deploy e checar logs da API.' })
+  if ((dlqOpen ?? 0) > 0) pushAlert({ severity: 'P2', tone: 'risk', title: 'Payment DLQ pendente', value: dlqOpen, signal: 'queues', runbook: 'Reprocessar webhooks pendentes após validar Mercado Pago.' })
+  if ((dlqSnapshot.lastKnownDlqTotal ?? 0) > 0) pushAlert({ severity: 'P2', tone: 'risk', title: 'Send DLQ pendente', value: dlqSnapshot.lastKnownDlqTotal, signal: 'queues', runbook: 'Inspecionar DLQ por usuário antes de retry/purge.' })
+  if (sessionOwnerMismatchTotal > 0) pushAlert({ severity: 'P2', tone: 'risk', title: 'Shard owner mismatch detectado', value: sessionOwnerMismatchTotal, signal: 'supervisor', runbook: 'Validar BOT_SUPERVISOR_MODE, cwd do PM2 e Redis DB canônica.' })
+  if (sessionCircuitBreakerAlertTotal > 0) pushAlert({ severity: 'P2', tone: 'risk', title: 'Circuit breaker de sessão acionado', value: sessionCircuitBreakerAlertTotal, signal: 'supervisor', runbook: 'Checar loops de reconexão e possível conflito de sessão WhatsApp.' })
+  if ((metrics.uptimeSeconds ?? 0) < 300) pushAlert({ severity: 'P3', tone: 'warn', title: 'Uptime baixo (reinício recente)', value: `${metrics.uptimeSeconds}s`, signal: 'saturation', runbook: 'Confirmar se houve deploy/restart esperado ou crash loop.' })
+  if (!alerts.length) pushAlert({ severity: 'INFO', tone: 'good', title: 'Sem alertas críticos', value: 'OK', signal: 'operational', runbook: 'Continuar monitoramento normal.' })
+
+  const goldenSignals = {
+    latency: {
+      valueMs: Number(metrics.p95RouteAvgMs ?? 0),
+      avgMs: Number(metrics.avgLatencyMs ?? 0),
+      status: Number(metrics.p95RouteAvgMs ?? 0) > 1500 ? 'risk' : 'ok',
+      source: 'api_metrics_snapshot',
+    },
+    traffic: {
+      totalRequests,
+      messageAttempts,
+      status: totalRequests > 0 ? 'ok' : 'warn',
+      source: 'api_metrics_and_message_log',
+    },
+    errors: {
+      http4xx: total4xx,
+      http5xx: total5xx,
+      httpErrorRatePct: pct(total4xx + total5xx, totalRequests),
+      sendFailures,
+      sendFailureRatePct: pct(sendFailures, messageAttempts),
+      status: total5xx > 0 || pct(sendFailures, messageAttempts) >= 5 ? 'risk' : 'ok',
+      source: 'api_metrics_and_message_log',
+    },
+    saturation: {
+      inFlight,
+      uptimeSeconds: Number(metrics.uptimeSeconds ?? 0),
+      dlqTotal: Number(dlqSnapshot.lastKnownDlqTotal ?? 0),
+      disconnectedSessions: Number(sessionCounts.disconnected ?? 0),
+      totalSessions: Number(sessionCounts.total ?? 0),
+      status: !dbOk ? 'critical' : inFlight > 0 || Number(dlqSnapshot.lastKnownDlqTotal ?? 0) > 0 ? 'warn' : 'ok',
+      source: 'queue_session_and_process_snapshot',
+    },
+  }
+
+  const dependencies = {
+    database: { ok: dbOk, kind: 'sqlite/prisma', probe: 'SELECT 1' },
+    api: { ok: true, uptimeSeconds: metrics.uptimeSeconds ?? 0, totalRequests },
+    redis: { ok: SUPERVISOR_MODE !== 'remote' || Boolean(supervisor.redisAvailable), available: Boolean(supervisor.redisAvailable), requiredForRemoteSupervisor: SUPERVISOR_MODE === 'remote' },
+    supervisor: { mode: SUPERVISOR_MODE, alive: supervisorAlive, ok: SUPERVISOR_MODE !== 'remote' || supervisorAlive === true },
+  }
+
+  const queues = {
+    offerQueueItems: queueCounts,
+    paymentWebhookDlq: { open: dlqOpen ?? 0 },
+    sendDlq: dlqSnapshot,
+  }
+
+  const database = {
+    ok: dbOk,
+    provider: 'sqlite',
+    operationalSignals: metrics.operationalSignals ?? {},
+  }
+
+  const privacy = {
+    mode: 'admin_observability_safe_summary',
+    exposesRawMessageText: false,
+    exposesRawCredentialData: false,
+    notes: [
+      'Payload agregado para observabilidade; não incluir messageText, cookies, tokens ou secrets.',
+      'Drill-downs devem preferir ids internos, hash/alias de JID e URLs redigidas.',
+    ],
+  }
+
+  const goNoGo = {
+    dbOk,
+    has5xx: total5xx > 0,
+    paymentDlqOpen: dlqOpen ?? 0,
+    sendDlqTotal: dlqSnapshot.lastKnownDlqTotal ?? 0,
+    uptimeSeconds: metrics.uptimeSeconds ?? 0,
+    sessionOwnerMismatchTotal,
+    sessionCircuitBreakerAlertTotal,
+    recommended: dbOk && total5xx === 0 && (dlqOpen ?? 0) === 0 && (dlqSnapshot.lastKnownDlqTotal ?? 0) === 0 && sessionCircuitBreakerAlertTotal === 0 && (SUPERVISOR_MODE !== 'remote' || supervisorAlive === true) ? 'go' : 'no-go',
+  }
+
+  return {
+    checkedAt,
+    version: 2,
+    goldenSignals,
+    dependencies,
+    alerts,
+    queues,
+    supervisor: {
+      ...supervisor,
+      mode: SUPERVISOR_MODE,
+      alive: supervisorAlive,
+      sessionOwnerMismatchTotal,
+      sessionCircuitBreakerAlertTotal,
+      sessionQuarantineTotal,
+    },
+    database,
+    privacy,
+    windows,
+    goNoGo,
+    api: metrics,
+  }
 }
 
 async function listLpPlansSafe() {
@@ -684,41 +865,68 @@ export async function adminRoutes(app) {
     return metrics
   })
 
-  // Fase C/D (P0): resumo operacional para painel admin (observabilidade + go/no-go).
+  // Contrato estruturado de observabilidade para /admin/observabilidade.
+  // Mantém compatibilidade com os campos legados (`alerts`, `goNoGo`, `api`,
+  // `supervisor`) e adiciona a forma canônica da Fase 1: Golden Signals,
+  // dependências, filas, banco e privacidade.
   app.get('/system/observability', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'tech:read'))) return
     const metrics = getApiMetricsSnapshot()
-    const now = new Date().toISOString()
-    const [dlqOpen, dbOk, supervisor] = await Promise.all([
+    const now = new Date()
+    const since24h = addDays(now, -1)
+    const checkedAt = now.toISOString()
+    const dlqSnapshot = getDlqMaintenanceSnapshot()
+
+    const [dlqOpen, dbOk, supervisor, supervisorAlive, queueStatusRows, sessionStatusRows, recentLogs] = await Promise.all([
       db.paymentWebhookDlq.count({ where: { resolvedAt: null } }).catch(() => null),
       db.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
       getSupervisorOperationalCounters(),
+      isSupervisorAlive(),
+      db.offerQueueItem.groupBy({ by: ['status'], _count: { _all: true } }).catch(() => []),
+      db.waSession.groupBy({ by: ['status'], _count: { _all: true } }).catch(() => []),
+      db.messageLog.findMany({
+        where: { sentAt: { gte: since24h, lte: now } },
+        select: { status: true, errorMsg: true, sentAt: true },
+      }).catch(() => []),
     ])
 
-    const sessionOwnerMismatchTotal = Number(supervisor.sessionOwnerMismatchTotal ?? 0)
-    const sessionCircuitBreakerAlertTotal = Number(supervisor.sessionCircuitBreakerAlertTotal ?? 0)
-
-    const alerts = []
-    if (!dbOk) alerts.push({ tone: 'critical', title: 'Banco indisponível', value: 'db query failed' })
-    if ((metrics.total5xx ?? 0) > 0) alerts.push({ tone: 'risk', title: 'Erros 5xx recentes', value: metrics.total5xx })
-    if ((metrics.uptimeSeconds ?? 0) < 300) alerts.push({ tone: 'risk', title: 'Uptime baixo (reinício recente)', value: `${metrics.uptimeSeconds}s` })
-    if ((dlqOpen ?? 0) > 0) alerts.push({ tone: 'risk', title: 'Payment DLQ pendente', value: dlqOpen })
-    if (sessionOwnerMismatchTotal > 0) alerts.push({ tone: 'risk', title: 'Shard owner mismatch detectado', value: sessionOwnerMismatchTotal })
-    if (sessionCircuitBreakerAlertTotal > 0) alerts.push({ tone: 'risk', title: 'Circuit breaker de sessão acionado', value: sessionCircuitBreakerAlertTotal })
-    if (!alerts.length) alerts.push({ tone: 'good', title: 'Sem alertas críticos', value: 'OK' })
-
-    const goNoGo = {
-      dbOk,
-      has5xx: (metrics.total5xx ?? 0) > 0,
-      paymentDlqOpen: dlqOpen ?? 0,
-      uptimeSeconds: metrics.uptimeSeconds ?? 0,
-      sessionOwnerMismatchTotal,
-      sessionCircuitBreakerAlertTotal,
-      recommended: dbOk && (metrics.total5xx ?? 0) === 0 && (dlqOpen ?? 0) === 0 && sessionCircuitBreakerAlertTotal === 0 ? 'go' : 'no-go',
+    const queueCounts = { pending: 0, queued: 0, sending: 0, sent: 0, cancelled: 0, error: 0, failed: 0, total: 0 }
+    for (const row of queueStatusRows) {
+      const key = String(row.status || 'unknown')
+      const count = Number(row._count?._all ?? 0)
+      queueCounts[key] = (queueCounts[key] || 0) + count
+      queueCounts.total += count
     }
 
-    await writeAdminAuditLog(req, { action: 'admin.system.observability.read', resource: 'systemObservability' })
-    return { checkedAt: now, alerts, goNoGo, api: metrics, supervisor }
+    const sessionCounts = { total: 0, connected: 0, disconnected: 0, other: 0 }
+    for (const row of sessionStatusRows) {
+      const key = String(row.status || 'unknown')
+      const count = Number(row._count?._all ?? 0)
+      sessionCounts.total += count
+      if (key === 'connected') sessionCounts.connected += count
+      else if (key === 'disconnected') sessionCounts.disconnected += count
+      else sessionCounts.other += count
+    }
+
+    const windows = buildOperationalWindows(recentLogs, now)
+    const logCounts = windows['24h']?.logs ?? emptyOperationalLogCounts()
+
+    const contract = buildAdminObservabilityContract({
+      checkedAt,
+      metrics,
+      dbOk,
+      dlqOpen,
+      supervisor,
+      supervisorAlive,
+      dlqSnapshot,
+      queueCounts,
+      sessionCounts,
+      logCounts,
+      windows,
+    })
+
+    await writeAdminAuditLog(req, { action: 'admin.system.observability.read', resource: 'systemObservability', after: { version: contract.version, alertCount: contract.alerts.length } })
+    return contract
   })
 
   // Telegram offer bot: métricas e requisições recentes para a aba /admin.
@@ -1580,21 +1788,28 @@ export async function adminRoutes(app) {
   app.get('/logs/summary', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'support:read'))) return
     const rawPeriod = String(req.query?.period || '7d').toLowerCase()
-    const period = ['today', '7d', '30d'].includes(rawPeriod) ? rawPeriod : '7d'
+    const periodMsByKey = {
+      '5m': 5 * 60_000,
+      '30m': 30 * 60_000,
+      '1h': 60 * 60_000,
+      '6h': 6 * 60 * 60_000,
+      '24h': 24 * 60 * 60_000,
+      '7d': 7 * 24 * 60 * 60_000,
+      '30d': 30 * 24 * 60 * 60_000,
+    }
+    const period = rawPeriod === 'today' || periodMsByKey[rawPeriod] ? rawPeriod : '7d'
     const now = new Date()
     const to = now
     let from
     if (period === 'today') {
       from = new Date(now); from.setHours(0, 0, 0, 0)
-    } else if (period === '30d') {
-      from = new Date(now.getTime() - 30 * 24 * 60 * 60_000)
     } else {
-      from = new Date(now.getTime() - 7 * 24 * 60 * 60_000)
+      from = new Date(now.getTime() - periodMsByKey[period])
     }
 
     const logs = await db.messageLog.findMany({
       where: { sentAt: { gte: from, lte: to } },
-      select: { userId: true, status: true, errorMsg: true, destGroup: true },
+      select: { userId: true, status: true, errorMsg: true, destGroup: true, sentAt: true },
     })
 
     const counts = {
@@ -1628,7 +1843,7 @@ export async function adminRoutes(app) {
     }
 
     const topTimeoutDests = Array.from(timeoutByDest.entries())
-      .map(([destJid, count]) => ({ destJid, count }))
+      .map(([destJid, count]) => ({ destJid: redactAdminPayload({ destJid }).destJid, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10)
     const topErrorUsers = Array.from(errorsByUser.entries())
@@ -1643,6 +1858,7 @@ export async function adminRoutes(app) {
       counts,
       topTimeoutDests,
       topErrorUsers,
+      windows: buildOperationalWindows(logs, now),
     }
   })
 
