@@ -53,6 +53,8 @@ const RISK_FILTERS = [
 const CS_ALLOWED_EMAILS = ['flavia.vale@usp.br', 'flaviaroberta.1496@gmail.com', 'tacianeaas02@gmail.com']
 const CS_PERMISSION_KEYS = ['customer_success', 'customer_success_ops', 'success']
 const resolveAdminEmail = (admin) => String(admin?.email || admin?.user?.email || admin?.profile?.email || '').toLowerCase().trim()
+const asArray = (value) => Array.isArray(value) ? value : []
+const asPlainObject = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {}
 
 const SUCCESS_REASON_LABELS = {
   missing_phone: 'Sem celular',
@@ -106,10 +108,11 @@ const CREDENTIAL_STATUS_META = {
 }
 
 function CredentialHealthBadges({ health = [], compact = false }) {
-  if (!health.length) return <span className="text-xs text-gray-400">Sem diagnóstico</span>
+  const safeHealth = asArray(health)
+  if (!safeHealth.length) return <span className="text-xs text-gray-400">Sem diagnóstico</span>
   return (
     <div className="flex flex-wrap gap-1">
-      {health.map(item => {
+      {safeHealth.map(item => {
         const meta = CREDENTIAL_STATUS_META[item.status] ?? CREDENTIAL_STATUS_META.missing
         return (
           <span key={item.platform} title={[...(item.missing || []).map(field => `Falta ${field}`), ...(item.warnings || [])].join(' | ')} className={`rounded-full px-2 py-1 text-[11px] font-bold ${meta.className}`}>
@@ -122,13 +125,14 @@ function CredentialHealthBadges({ health = [], compact = false }) {
 }
 
 function RiskBadges({ flags = [] }) {
-  if (!flags.length) return <span className="rounded-full bg-green-100 px-2 py-1 text-[11px] font-bold text-green-700">OK</span>
+  const safeFlags = asArray(flags)
+  if (!safeFlags.length) return <span className="rounded-full bg-green-100 px-2 py-1 text-[11px] font-bold text-green-700">OK</span>
   return (
     <div className="flex flex-wrap gap-1">
-      {flags.slice(0, 4).map(flag => (
+      {safeFlags.slice(0, 4).map(flag => (
         <span key={flag} className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-700">{RISK_LABELS[flag] ?? flag}</span>
       ))}
-      {flags.length > 4 && <span className="rounded-full bg-gray-100 px-2 py-1 text-[11px] font-bold text-gray-600">+{flags.length - 4}</span>}
+      {safeFlags.length > 4 && <span className="rounded-full bg-gray-100 px-2 py-1 text-[11px] font-bold text-gray-600">+{safeFlags.length - 4}</span>}
     </div>
   )
 }
@@ -225,9 +229,9 @@ function DetailPanel({ detail, onClose, onApplyAccess }) {
         <div>
           <h3 className="mb-2 text-sm font-bold text-gray-800">Pagamentos recentes</h3>
           <div className="space-y-2">
-            {(detail.payments || []).slice(0, 5).map(payment => (
-              <div key={payment.id} className="rounded-xl border border-gray-100 p-3 text-xs text-gray-600">
-                <span className="font-bold text-gray-900">{payment.status}</span> · {payment.plan} · {formatCurrency(payment.amount)} · {formatDate(payment.createdAt)}
+            {asArray(detail.payments).slice(0, 5).map(payment => (
+              <div key={payment?.id ?? `${payment?.user?.email}-${payment?.createdAt}`} className="rounded-xl border border-gray-100 p-3 text-xs text-gray-600">
+                <span className="font-bold text-gray-900">{payment?.status ?? '—'}</span> · {payment?.plan ?? '—'} · {formatCurrency(payment?.amount)} · {formatDate(payment?.createdAt)}
               </div>
             ))}
             {!detail.payments?.length && <p className="text-sm text-gray-400">Sem pagamentos.</p>}
@@ -236,17 +240,17 @@ function DetailPanel({ detail, onClose, onApplyAccess }) {
         <div>
           <h3 className="mb-2 text-sm font-bold text-gray-800">Últimos logs</h3>
           <div className="mb-2 flex flex-wrap gap-1">
-            {(detail.platformStats7d || []).map(stat => (
+            {asArray(detail.platformStats7d).map(stat => (
               <span key={`${stat.platform}-${stat.status}`} className={`rounded-full px-2 py-1 text-[11px] font-bold ${stat.status === 'error' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>{stat.platform}: {stat.status} {stat.count}</span>
             ))}
           </div>
           <div className="space-y-2">
-            {(detail.recentLogs || []).slice(0, 5).map(log => (
-              <div key={log.id} className="rounded-xl border border-gray-100 p-3 text-xs text-gray-600">
-                <span className={`font-bold ${log.status === 'error' ? 'text-red-600' : 'text-green-700'}`}>{log.status}</span> · {log.platform} · {formatDate(log.sentAt)}
+            {asArray(detail.recentLogs).slice(0, 5).map(log => (
+              <div key={log?.id ?? `${log?.user?.email}-${log?.sentAt}`} className="rounded-xl border border-gray-100 p-3 text-xs text-gray-600">
+                <span className={`font-bold ${log?.status === 'error' ? 'text-red-600' : 'text-green-700'}`}>{log?.status ?? '—'}</span> · {log.platform} · {formatDate(log.sentAt)}
                 <p className="mt-1 text-gray-500">Origem: {log.sourceGroupName || log.sourceGroup || '—'} · Destino: {log.destGroupName || log.destGroup || '—'}</p>
-                {log.messageText && <p className="mt-1 text-gray-500 line-clamp-2">{log.messageText}</p>}
-                {log.errorMsg && <p className="mt-1 text-red-500">{log.errorMsg}</p>}
+                {log?.messageText && <p className="mt-1 text-gray-500 line-clamp-2">{log?.messageText}</p>}
+                {log?.errorMsg && <p className="mt-1 text-red-500">{log?.errorMsg}</p>}
               </div>
             ))}
             {!detail.recentLogs?.length && <p className="text-sm text-gray-400">Sem logs.</p>}
@@ -398,7 +402,7 @@ function FaqEditor({ faq, onSave, onDelete }) {
       </form>
 
       <div className="space-y-3">
-        {(faq?.items ?? []).map(item => (
+        {asArray(faq?.items).map(item => (
           <div key={item.id} className="rounded-xl border border-gray-100 p-3 text-sm">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
@@ -479,7 +483,7 @@ function TermsEditor({ terms, onSave }) {
   function updateSection(index, patch) {
     setForm(current => ({
       ...current,
-      sections: current.sections.map((section, idx) => idx === index ? { ...section, ...patch } : section),
+      sections: asArray(current.sections).map((section, idx) => idx === index ? { ...section, ...patch } : section),
     }))
   }
 
@@ -492,7 +496,7 @@ function TermsEditor({ terms, onSave }) {
 
   function removeSection(index) {
     if (!window.confirm('Remover esta seção dos Termos?')) return
-    setForm(current => ({ ...current, sections: current.sections.filter((_, idx) => idx !== index) }))
+    setForm(current => ({ ...current, sections: asArray(current.sections).filter((_, idx) => idx !== index) }))
   }
 
   async function submit(e) {
@@ -507,7 +511,7 @@ function TermsEditor({ terms, onSave }) {
           lastUpdatedLabel: form.lastUpdatedLabel,
           intro: form.intro,
           finalDeclaration: form.finalDeclaration,
-          sections: form.sections.map(section => ({
+          sections: asArray(form.sections).map(section => ({
             title: section.title,
             warning: Boolean(section.warning),
             body: Array.isArray(section.body) ? section.body : String(section.body ?? '').split(/\n\s*\n/g),
@@ -564,7 +568,7 @@ function TermsEditor({ terms, onSave }) {
             <h3 className="text-base font-black text-gray-900">Seções dos termos</h3>
             <button type="button" onClick={addSection} className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100">Adicionar seção</button>
           </div>
-          {form.sections.map((section, index) => (
+          {asArray(form.sections).map((section, index) => (
             <div key={`${index}-${section.title}`} className={`rounded-2xl border p-4 ${section.warning ? 'border-red-200 bg-red-50' : 'border-gray-100 bg-gray-50'}`}>
               <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                 <input value={section.title} onChange={event => updateSection(index, { title: event.target.value })} className="flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-400" required />
@@ -635,7 +639,7 @@ function LandingPageContentAccordion({ plans, faq, tutorial, onSavePlan, onSaveF
               <p className="text-sm text-gray-500">Edite título, descrição, valor e bullet points dos planos Trial, Basic e Pro (sincronizado com LP e Dashboard).</p>
             </div>
             <div className="grid gap-4 lg:grid-cols-3">
-              {(plans ?? []).map(plan => <PlanEditor key={`${plan.id}-${plan.updatedAt ?? ''}`} plan={plan} onSave={onSavePlan} />)}
+              {asArray(plans).map(plan => <PlanEditor key={`${plan.id}-${plan.updatedAt ?? ''}`} plan={plan} onSave={onSavePlan} />)}
               {!plans?.length && <p className="text-sm text-gray-400">Nenhum plano cadastrado.</p>}
             </div>
           </div>
@@ -776,7 +780,7 @@ export default function AdminPage() {
     return () => { active = false }
   }, [])
 
-  const atRiskUsers = useMemo(() => users?.users?.filter(user => user.riskFlags?.length) ?? [], [users])
+  const atRiskUsers = useMemo(() => asArray(users?.users).filter(user => asArray(user.riskFlags).length), [users])
   const canAccessCustomerSuccess = useMemo(() => {
     const email = resolveAdminEmail(admin)
     const permissions = Array.isArray(admin?.permissions) ? admin.permissions : []
@@ -992,10 +996,10 @@ export default function AdminPage() {
               <div className="rounded-xl bg-blue-50 p-3"><p className="text-xs text-blue-600">Uptime</p><p className="text-xl font-black text-blue-700">{Math.round((systemObservability.goNoGo?.uptimeSeconds ?? 0)/60)}m</p></div>
             </div>
             <div className="mt-4 space-y-2">
-              {(systemObservability.alerts ?? []).map((a, idx) => (
-                <div key={`${a.title}-${idx}`} className="rounded-xl border border-gray-100 p-3 text-sm">
-                  <p className="font-bold text-gray-900">{a.title}</p>
-                  <p className="text-gray-600">{String(a.value ?? '')}</p>
+              {asArray(systemObservability.alerts).map((a, idx) => (
+                <div key={`${a?.title ?? 'alerta'}-${idx}`} className="rounded-xl border border-gray-100 p-3 text-sm">
+                  <p className="font-bold text-gray-900">{a?.title ?? 'Alerta'}</p>
+                  <p className="text-gray-600">{String(a?.value ?? '')}</p>
                 </div>
               ))}
             </div>
@@ -1026,28 +1030,28 @@ export default function AdminPage() {
               <div>
                 <h3 className="mb-3 text-sm font-bold text-gray-800">Rotas mais chamadas</h3>
                 <div className="space-y-2">
-                  {(systemMetrics?.routes ?? []).slice(0, 6).map(route => (
-                    <div key={`${route.method}-${route.route}`} className="rounded-xl border border-gray-100 p-3 text-xs text-gray-600">
+                  {asArray(systemMetrics?.routes).slice(0, 6).map(route => (
+                    <div key={`${route?.method ?? 'GET'}-${route?.route ?? 'rota'}`} className="rounded-xl border border-gray-100 p-3 text-xs text-gray-600">
                       <div className="flex items-center justify-between gap-3">
-                        <span className="font-bold text-gray-900">{route.method} {route.route}</span>
-                        <span>{route.count} req · {route.avgMs}ms méd.</span>
+                        <span className="font-bold text-gray-900">{route?.method ?? '—'} {route?.route ?? '—'}</span>
+                        <span>{route?.count ?? 0} req · {route?.avgMs ?? 0}ms méd.</span>
                       </div>
-                      <p className="mt-1">4xx: {route.status4xxCount} · 5xx: {route.status5xxCount} · máx: {route.maxMs}ms</p>
+                      <p className="mt-1">4xx: {route?.status4xxCount ?? 0} · 5xx: {route?.status5xxCount ?? 0} · máx: {route?.maxMs ?? 0}ms</p>
                     </div>
                   ))}
-                  {!systemMetrics?.routes?.length && <p className="text-sm text-gray-400">Sem métricas de rota ainda.</p>}
+                  {!asArray(systemMetrics?.routes).length && <p className="text-sm text-gray-400">Sem métricas de rota ainda.</p>}
                 </div>
               </div>
               <div>
                 <h3 className="mb-3 text-sm font-bold text-gray-800">Erros recentes</h3>
                 <div className="space-y-2">
-                  {(systemMetrics?.recentErrors ?? []).slice(0, 6).map((item, index) => (
-                    <div key={`${item.at}-${index}`} className="rounded-xl border border-red-100 bg-red-50 p-3 text-xs text-red-700">
-                      <p className="font-bold">{item.statusCode} · {item.method} {item.route}</p>
-                      <p>{item.error || item.url} · {formatDate(item.at)}</p>
+                  {asArray(systemMetrics?.recentErrors).slice(0, 6).map((item, index) => (
+                    <div key={`${item?.at ?? 'erro'}-${index}`} className="rounded-xl border border-red-100 bg-red-50 p-3 text-xs text-red-700">
+                      <p className="font-bold">{item?.statusCode ?? '—'} · {item?.method ?? '—'} {item?.route ?? '—'}</p>
+                      <p>{item?.error || item?.url || 'Erro sem detalhes'} · {formatDate(item?.at)}</p>
                     </div>
                   ))}
-                  {!systemMetrics?.recentErrors?.length && <p className="text-sm text-gray-400">Sem erros 5xx recentes.</p>}
+                  {!asArray(systemMetrics?.recentErrors).length && <p className="text-sm text-gray-400">Sem erros 5xx recentes.</p>}
                 </div>
               </div>
             </div>
@@ -1075,27 +1079,27 @@ export default function AdminPage() {
             </div>
 
             <div className="mt-5 space-y-3">
-              {(successQueue?.queue ?? []).map(customer => (
-                <div key={customer.id} className="rounded-xl border border-gray-100 p-3 text-sm">
+              {asArray(successQueue?.queue).map(customer => (
+                <div key={customer?.id ?? customer?.email} className="rounded-xl border border-gray-100 p-3 text-sm">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div>
-                      <p className="font-bold text-gray-900">{customer.email}</p>
-                      <p className="text-xs text-gray-500">{customer.contactPhone || 'Sem celular'} · {customer.plan} · último contato {formatDate(customer.lastSupportContactAt)}</p>
+                      <p className="font-bold text-gray-900">{customer?.email ?? 'Cliente sem e-mail'}</p>
+                      <p className="text-xs text-gray-500">{customer?.contactPhone || 'Sem celular'} · {customer?.plan ?? '—'} · último contato {formatDate(customer?.lastSupportContactAt)}</p>
                       <div className="mt-2 flex flex-wrap gap-1">
-                        {customer.contactReasons.map(reason => (
+                        {asArray(customer.contactReasons).map(reason => (
                           <span key={reason} className="rounded-full bg-blue-100 px-2 py-1 text-[11px] font-bold text-blue-700">{SUCCESS_REASON_LABELS[reason] ?? reason}</span>
                         ))}
                       </div>
-                      {customer.lastContact?.notes && <p className="mt-2 text-xs text-gray-500">Último registro: {customer.lastContact.notes}</p>}
+                      {customer?.lastContact?.notes && <p className="mt-2 text-xs text-gray-500">Último registro: {customer?.lastContact?.notes}</p>}
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={() => openUserDetail(customer.id)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Drill-down</button>
+                      <button onClick={() => openUserDetail(customer?.id)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Drill-down</button>
                       <button onClick={() => recordContact(customer)} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700">Registrar contato</button>
                     </div>
                   </div>
                 </div>
               ))}
-              {!successQueue?.queue?.length && <p className="text-sm text-gray-400">Nenhum cliente na fila proativa agora.</p>}
+              {!asArray(successQueue?.queue).length && <p className="text-sm text-gray-400">Nenhum cliente na fila proativa agora.</p>}
             </div>
           </section>
         )}
@@ -1122,29 +1126,29 @@ export default function AdminPage() {
               <div>
                 <h3 className="mb-3 text-sm font-bold text-gray-800">Expirações próximas</h3>
                 <div className="space-y-2">
-                  {(subscriptions?.subscriptions ?? []).map(subscription => (
-                    <button key={subscription.id} onClick={() => openUserDetail(subscription.id)} className="w-full rounded-xl border border-gray-100 p-3 text-left text-sm hover:bg-gray-50">
+                  {asArray(subscriptions?.subscriptions).map(subscription => (
+                    <button key={subscription?.id ?? subscription?.email} onClick={() => openUserDetail(subscription?.id)} className="w-full rounded-xl border border-gray-100 p-3 text-left text-sm hover:bg-gray-50">
                       <div className="flex items-center justify-between gap-3">
-                        <p className="font-bold text-gray-900">{subscription.email}</p>
-                        <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-700">{subscription.daysRemaining ?? '—'} dias</span>
+                        <p className="font-bold text-gray-900">{subscription?.email ?? 'Cliente sem e-mail'}</p>
+                        <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-700">{subscription?.daysRemaining ?? '—'} dias</span>
                       </div>
-                      <p className="mt-1 text-xs text-gray-500">{subscription.plan} · LTV {formatCurrency(subscription.ltv)} · expira {formatDate(subscription.accessExpiresAt)}</p>
+                      <p className="mt-1 text-xs text-gray-500">{subscription?.plan ?? '—'} · LTV {formatCurrency(subscription?.ltv)} · expira {formatDate(subscription?.accessExpiresAt)}</p>
                     </button>
                   ))}
-                  {!subscriptions?.subscriptions?.length && <p className="text-sm text-gray-400">Sem assinaturas expirando no filtro atual.</p>}
+                  {!asArray(subscriptions?.subscriptions).length && <p className="text-sm text-gray-400">Sem assinaturas expirando no filtro atual.</p>}
                 </div>
               </div>
 
               <div>
                 <h3 className="mb-3 text-sm font-bold text-gray-800">Pagamentos recentes</h3>
                 <div className="space-y-2">
-                  {(payments?.payments ?? []).map(payment => (
-                    <div key={payment.id} className="rounded-xl border border-gray-100 p-3 text-sm">
+                  {asArray(payments?.payments).map(payment => (
+                    <div key={payment?.id ?? `${payment?.user?.email}-${payment?.createdAt}`} className="rounded-xl border border-gray-100 p-3 text-sm">
                       <div className="flex items-center justify-between gap-3">
-                        <p className="font-bold text-gray-900">{payment.user?.email}</p>
-                        <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${payment.status === 'approved' ? 'bg-green-100 text-green-700' : payment.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{payment.status}</span>
+                        <p className="font-bold text-gray-900">{payment?.user?.email ?? 'Cliente sem e-mail'}</p>
+                        <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${payment?.status === 'approved' ? 'bg-green-100 text-green-700' : payment?.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{payment?.status ?? '—'}</span>
                       </div>
-                      <p className="mt-1 text-xs text-gray-500">{payment.plan} · {formatCurrency(payment.amount)} · {formatDate(payment.createdAt)}</p>
+                      <p className="mt-1 text-xs text-gray-500">{payment?.plan ?? '—'} · {formatCurrency(payment?.amount)} · {formatDate(payment?.createdAt)}</p>
                     </div>
                   ))}
                   {!payments?.payments?.length && <p className="text-sm text-gray-400">Sem pagamentos no período.</p>}
@@ -1182,25 +1186,25 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {(users?.users ?? []).map(user => (
-                  <tr key={user.id} className={`align-top ${user.riskFlags?.length ? 'bg-amber-50/40' : ''}`}>
+                {asArray(users?.users).map(user => (
+                  <tr key={user?.id ?? user?.email} className={`align-top ${asArray(user?.riskFlags).length ? 'bg-amber-50/40' : ''}`}>
                     <td className="px-3 py-3">
-                      <p className="font-bold text-gray-900">{user.email}</p>
-                      <p className="text-xs text-gray-500">{user.contactPhone || 'Sem celular'} · {user.status}</p>
+                      <p className="font-bold text-gray-900">{user?.email ?? 'Cliente sem e-mail'}</p>
+                      <p className="text-xs text-gray-500">{user?.contactPhone || 'Sem celular'} · {user?.status ?? '—'}</p>
                     </td>
-                    <td className="px-3 py-3"><p className="font-semibold">{user.plan}</p><p className="text-xs text-gray-500">{user.accessStatus}</p></td>
+                    <td className="px-3 py-3"><p className="font-semibold">{user?.plan ?? '—'}</p><p className="text-xs text-gray-500">{user?.accessStatus ?? '—'}</p></td>
                     <td className="px-3 py-3 text-xs text-gray-600">
-                      <p>Bot: {user.botRunning ? 'rodando' : 'parado'}</p>
-                      <p>WA: {user.waSession?.status || '—'}</p>
-                      <p>Origem/Destino: {user.groupCounts?.monitor ?? 0}/{user.groupCounts?.post ?? 0}</p><div className="mt-1"><CredentialHealthBadges health={user.credentialHealth} compact /></div>
+                      <p>Bot: {user?.botRunning ? 'rodando' : 'parado'}</p>
+                      <p>WA: {user?.waSession?.status || '—'}</p>
+                      <p>Origem/Destino: {user?.groupCounts?.monitor ?? 0}/{user?.groupCounts?.post ?? 0}</p><div className="mt-1"><CredentialHealthBadges health={user?.credentialHealth} compact /></div>
                     </td>
                     <td className="px-3 py-3 text-xs text-gray-600">
-                      <p>Atividade: {formatDate(user.effectiveLastActivityAt)}</p>
-                      <p>Último log: {formatDate(user.lastMessageAt)}</p>
-                      <p>Erros 24h: {user.errorCount24h}</p>
+                      <p>Atividade: {formatDate(user?.effectiveLastActivityAt)}</p>
+                      <p>Último log: {formatDate(user?.lastMessageAt)}</p>
+                      <p>Erros 24h: {user?.errorCount24h ?? 0}</p>
                     </td>
-                    <td className="px-3 py-3"><RiskBadges flags={user.riskFlags} /></td>
-                    <td className="px-3 py-3"><button onClick={() => openUserDetail(user.id)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Drill-down</button></td>
+                    <td className="px-3 py-3"><RiskBadges flags={user?.riskFlags} /></td>
+                    <td className="px-3 py-3"><button onClick={() => openUserDetail(user?.id)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Drill-down</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -1214,17 +1218,17 @@ export default function AdminPage() {
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
             <h2 className="mb-4 text-lg font-black text-gray-900">Sessões WhatsApp</h2>
             <div className="space-y-3">
-              {(sessions?.sessions ?? []).map(session => (
-                <div key={session.id} className="rounded-xl border border-gray-100 p-3 text-sm">
+              {asArray(sessions?.sessions).map(session => (
+                <div key={session?.id ?? session?.user?.email} className="rounded-xl border border-gray-100 p-3 text-sm">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="font-bold text-gray-900">{session.user.email}</p>
-                    <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${session.status === 'connected' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{session.status}</span>
+                    <p className="font-bold text-gray-900">{session?.user?.email ?? 'Cliente sem e-mail'}</p>
+                    <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${session?.status === 'connected' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{session?.status ?? '—'}</span>
                   </div>
-                  <p className="mt-1 text-xs text-gray-500">Bot: {session.botRunning ? 'rodando' : 'parado'} · Atualizado: {formatDate(session.updatedAt)}</p>
+                  <p className="mt-1 text-xs text-gray-500">Bot: {session?.botRunning ? 'rodando' : 'parado'} · Atualizado: {formatDate(session?.updatedAt)}</p>
                 </div>
               ))}
 
-              {!sessions?.sessions?.length && <p className="text-sm text-gray-400">Sem sessões.</p>}
+              {!asArray(sessions?.sessions).length && <p className="text-sm text-gray-400">Sem sessões.</p>}
             </div>
           </section>
 
@@ -1233,22 +1237,22 @@ export default function AdminPage() {
               <h3 className="text-sm font-bold text-gray-800">Telemetria de conexão WhatsApp</h3>
               <span className="text-xs text-gray-500">Últimos {sessionTelemetry?.total ?? 0} eventos</span>
             </div>
-            <div className="mb-3 flex flex-wrap gap-2">{Object.entries(sessionTelemetry?.summary || {}).slice(0, 8).map(([key, count]) => <span key={key} className="rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">{key}: {count}</span>)}</div>
-            <div className="space-y-2">{(sessionTelemetry?.events || []).slice(0, 12).map((evt) => <div key={evt.id} className="rounded-lg border border-gray-100 p-2 text-xs text-gray-700"><p className="font-semibold">{evt.user?.email || evt.userId || 'usuário'} · {evt.stage || 'unknown'} / {evt.event || 'unknown'}</p><p className="text-gray-500">{formatDate(evt.createdAt)}{evt.elapsedSec != null ? ` · ${evt.elapsedSec}s` : ''}{evt.detail ? ` · ${evt.detail}` : ''}</p></div>)}{!sessionTelemetry?.events?.length && <p className="text-sm text-gray-400">Sem telemetria recente.</p>}</div>
+            <div className="mb-3 flex flex-wrap gap-2">{Object.entries(asPlainObject(sessionTelemetry?.summary)).slice(0, 8).map(([key, count]) => <span key={key} className="rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">{key}: {count}</span>)}</div>
+            <div className="space-y-2">{asArray(sessionTelemetry?.events).slice(0, 12).map((evt) => <div key={evt?.id ?? `${evt?.userId ?? 'evento'}-${evt?.createdAt ?? 'sem-data'}`} className="rounded-lg border border-gray-100 p-2 text-xs text-gray-700"><p className="font-semibold">{evt?.user?.email || evt?.userId || 'usuário'} · {evt?.stage || 'unknown'} / {evt?.event || 'unknown'}</p><p className="text-gray-500">{formatDate(evt?.createdAt)}{evt?.elapsedSec != null ? ` · ${evt?.elapsedSec}s` : ''}{evt?.detail ? ` · ${evt?.detail}` : ''}</p></div>)}{!asArray(sessionTelemetry?.events).length && <p className="text-sm text-gray-400">Sem telemetria recente.</p>}</div>
           </section>
 
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
             <div className="mb-4 flex items-center justify-between gap-3"><div><h2 className="text-lg font-black text-gray-900">Logs recentes</h2><p className="text-xs text-gray-500">Últimos {logs?.logs?.length ?? 0} registros carregados de {logs?.total ?? 0} no período.</p></div><button onClick={applyFilters} className="rounded-lg bg-gray-100 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-200">Atualizar agora</button></div>
             <div className="space-y-3">
-              {(logs?.logs ?? []).map(log => (
-                <div key={log.id} className="rounded-xl border border-gray-100 p-3 text-sm">
+              {asArray(logs?.logs).map(log => (
+                <div key={log?.id ?? `${log?.user?.email}-${log?.sentAt}`} className="rounded-xl border border-gray-100 p-3 text-sm">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="font-bold text-gray-900">{log.user?.email}</p>
-                    <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${log.status === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{log.status}</span>
+                    <p className="font-bold text-gray-900">{log?.user?.email ?? 'Cliente sem e-mail'}</p>
+                    <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${log?.status === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{log?.status ?? '—'}</span>
                   </div>
-                  <p className="mt-1 text-xs text-gray-500">{log.platform} · {formatDate(log.sentAt)} · Destino: {log.destGroup || '—'}</p>
-                  {log.messageText && <p className="mt-1 text-xs text-gray-500 line-clamp-2">{log.messageText}</p>}
-                  {log.errorMsg && <p className="mt-1 text-xs text-red-500">{log.errorMsg}</p>}
+                  <p className="mt-1 text-xs text-gray-500">{log?.platform ?? '—'} · {formatDate(log?.sentAt)} · Destino: {log?.destGroup || '—'}</p>
+                  {log?.messageText && <p className="mt-1 text-xs text-gray-500 line-clamp-2">{log?.messageText}</p>}
+                  {log?.errorMsg && <p className="mt-1 text-xs text-red-500">{log?.errorMsg}</p>}
                 </div>
               ))}
               {!logs?.logs?.length && <p className="text-sm text-gray-400">Sem logs.</p>}

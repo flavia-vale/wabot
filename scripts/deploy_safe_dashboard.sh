@@ -7,6 +7,7 @@ ROOT_DIR="${ROOT_DIR:-$DEFAULT_ROOT_DIR}"
 DASHBOARD_DIR="$ROOT_DIR/dashboard"
 BRANCH="${BRANCH:-main}"
 FORCE_RESET_ON_SYNC="${FORCE_RESET_ON_SYNC:-0}"
+DASHBOARD_PORT="${DASHBOARD_PORT:-3000}"
 
 # APP_ENV precisa existir no ambiente do BUILD, não só no runtime do PM2.
 # O Next.js avalia next.config headers() em tempo de `npm run build` e grava
@@ -26,6 +27,61 @@ configure_public_git_dependencies() {
   # público para HTTPS sem alterar package-lock.
   git config --global --replace-all url."https://github.com/".insteadOf "ssh://git@github.com/"
   git config --global --add url."https://github.com/".insteadOf "git@github.com:"
+}
+
+
+kill_port_listeners() {
+  local port="$1"
+  local label="$2"
+
+  if [[ -z "$port" ]]; then
+    return 0
+  fi
+
+  if command -v fuser >/dev/null 2>&1; then
+    if fuser -k "${port}/tcp" >/tmp/wabot_fuser_${port}.log 2>&1; then
+      echo "  Listeners órfãos de ${label} na porta ${port} encerrados via fuser."
+      return 0
+    fi
+  fi
+
+  if command -v lsof >/dev/null 2>&1; then
+    local pids
+    pids=$(lsof -ti tcp:"$port" 2>/dev/null | tr '\n' ' ' || true)
+    if [[ -n "$pids" ]]; then
+      echo "  Encerrando listeners órfãos de ${label} na porta ${port}: ${pids}"
+      kill $pids >/dev/null 2>&1 || true
+      sleep 2
+      pids=$(lsof -ti tcp:"$port" 2>/dev/null | tr '\n' ' ' || true)
+      if [[ -n "$pids" ]]; then
+        kill -9 $pids >/dev/null 2>&1 || true
+      fi
+    fi
+  fi
+}
+
+recreate_frontend_pm2_app() {
+  local app_name="$1"
+  local port="$2"
+
+  # Apps Next iniciados historicamente via `npm start` podem deixar o processo
+  # filho `next start` órfão após `pm2 restart`. O órfão continua segurando a
+  # porta e servindo HTML de um build antigo, enquanto .next/static já aponta
+  # para outro build — exatamente o 404 em /_next/static visto no /admin.
+  # Para dashboard/visual, deploy deve ser start fresco: delete PM2 + limpar
+  # listener da porta + start pelo ecosystem (que agora chama o binário do Next
+  # diretamente, sem wrapper npm).
+  pm2 delete "$app_name" >/dev/null 2>&1 || true
+  kill_port_listeners "$port" "$app_name"
+
+  if pm2 start "$ROOT_DIR/ecosystem.config.cjs" --only "$app_name" --update-env >/tmp/wabot_pm2_start_${app_name}.log 2>&1; then
+    echo "  PM2 frontend '$app_name' recriado com processo Next fresco."
+    return 0
+  fi
+
+  echo "ERRO: não foi possível recriar frontend '$app_name' via ecosystem.config.cjs."
+  cat /tmp/wabot_pm2_start_${app_name}.log || true
+  exit 1
 }
 
 ensure_pm2_app_running() {
@@ -79,6 +135,64 @@ check_http_with_retry() {
 
   echo "Smoke test falhou para ${path} após ${attempts} tentativas."
   return 1
+}
+
+
+assert_next_static_assets_available() {
+  local label="$1"
+  local page_url="$2"
+  local origin="$3"
+  local html_file
+  local assets_file
+
+  html_file=$(mktemp /tmp/wabot_next_assets_html.XXXXXX)
+  assets_file=$(mktemp /tmp/wabot_next_assets_list.XXXXXX)
+
+  if ! curl -fsS --max-time 15 "$page_url" -o "$html_file"; then
+    echo "ERRO: não foi possível baixar HTML de ${label} (${page_url}) para validar assets do Next."
+    rm -f "$html_file" "$assets_file"
+    exit 1
+  fi
+
+  node - "$html_file" > "$assets_file" <<'NODE'
+const { readFileSync } = require('node:fs')
+const html = readFileSync(process.argv[2], 'utf8')
+const assets = new Set()
+const re = /(?:src|href)=["']([^"']*\/_next\/static\/[^"']+)["']/g
+let match
+while ((match = re.exec(html))) {
+  const value = match[1].replace(/&amp;/g, '&')
+  if (/\.(?:js|css)(?:\?|$)/.test(value)) assets.add(value)
+}
+for (const asset of assets) console.log(asset)
+NODE
+
+  if [[ ! -s "$assets_file" ]]; then
+    echo "ERRO: HTML de ${label} não referenciou assets JS/CSS em /_next/static. Isso indica build incompleto ou resposta inesperada."
+    head -c 1200 "$html_file" || true
+    echo
+    rm -f "$html_file" "$assets_file"
+    exit 1
+  fi
+
+  while IFS= read -r asset_path; do
+    local asset_url="$asset_path"
+    if [[ "$asset_url" == /_next/* ]]; then
+      asset_url="${origin%/}${asset_url}"
+    fi
+    local code
+    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$asset_url" || echo "000")
+    echo "  asset ${asset_url} -> HTTP ${code}"
+    if [[ "$code" != "200" ]]; then
+      echo "ERRO: asset do Next referenciado por ${label} indisponível (HTTP ${code}): ${asset_url}"
+      echo "Causa provável: HTML e .next/static fora de sincronia ou build/deploy incompleto. Abortando para não publicar Admin quebrado."
+      rm -f "$html_file" "$assets_file"
+      exit 1
+    fi
+  done < "$assets_file"
+
+  rm -f "$html_file" "$assets_file"
+  echo "  Assets JS/CSS do Next validados para ${label}"
 }
 
 verify_next_polyfill() {
@@ -295,7 +409,7 @@ else
 fi
 
 echo "[7b/9] Restart PM2 apps"
-ensure_pm2_app_running "dashboard"
+recreate_frontend_pm2_app "dashboard" "$DASHBOARD_PORT"
 ensure_pm2_app_running "api"
 
 # bot-supervisor (prod) é INTENCIONALMENTE preservado: ver comentário
@@ -337,6 +451,7 @@ echo "[9/9] Smoke tests (hard gate com retry)"
 for path in /login /admin /painel; do
   check_http_with_retry "$path" 8 2
 done
+assert_next_static_assets_available "dashboard /admin" "http://espelhagrupos.com.br/admin" "http://espelhagrupos.com.br"
 
 echo "  Validando abertura mobile do site (/ e /login)"
 "$ROOT_DIR/scripts/smoke_mobile_dashboard.sh" "http://espelhagrupos.com.br" / /login
