@@ -39,7 +39,7 @@ import {
 import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
 import { resolveDestinationPreservation } from './core/preservationConfig.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
-import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/preservationFeatures.js'
+import { PRESERVATION_FEATURE, isPreservationFeatureEnabled, shouldMutateOutgoingImage } from './core/preservationFeatures.js'
 import { mutate as mutateChannelImage } from './core/imageMutation.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
@@ -2338,7 +2338,11 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             if (imageMode === 'original' && !image) {
               useLinkPreview = true
             }
-            if (image && isChannelDest && isPreservationFeatureEnabled(cfg.preservationActive, cfg.botConfig, PRESERVATION_FEATURE.IMAGE_MUTATION)) {
+            // Issue #1033: mutação de imagem permanece toggle GLOBAL, mas vale
+            // para canal E grupo (não só canal). Envios de grupo com mídia
+            // original já saíram pelo caminho de relay acima (return), então só
+            // chegam aqui imagens não-relay (getImage) — mutáveis com segurança.
+            if (image && shouldMutateOutgoingImage(destJid, cfg.preservationActive, cfg.botConfig)) {
               const mutated = await mutateChannelImage(image.buffer, image.mimetype, {
                 groupId: destJid,
                 enabled: true,
