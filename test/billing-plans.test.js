@@ -77,12 +77,16 @@ test('pro can use channels and advanced preservation', () => {
 test('isPreservationActive requires plan access and at least one enabled defense', () => {
   assert.equal(isPreservationActive({ active: true }, {}), false)
   assert.equal(isPreservationActive({ active: true }, null), false)
-  assert.equal(isPreservationActive({ active: false }, { channelThrottleEnabled: true }), false)
-  assert.equal(isPreservationActive({ active: true }, { channelThrottleEnabled: true }), true)
-  assert.equal(isPreservationActive({ active: true }, { quietHoursEnabled: true }), true)
+  assert.equal(isPreservationActive({ active: false }, { followGuardEnabled: true }), false)
+  // Plano B/Fase 3: throttle/quiet viraram config por destino (sempre ativa) e
+  // NÃO definem mais "preservação ativa" da conta — sozinhos não ativam o módulo.
+  assert.equal(isPreservationActive({ active: true }, { channelThrottleEnabled: true }), false)
+  assert.equal(isPreservationActive({ active: true }, { quietHoursEnabled: true }), false)
+  // As features opcionais que seguem globais continuam ativando.
   assert.equal(isPreservationActive({ active: true }, { followGuardEnabled: true }), true)
   assert.equal(isPreservationActive({ active: true }, { copyVariationEnabled: true }), true)
   assert.equal(isPreservationActive({ active: true }, { imageMutationActive: true }), true)
+  assert.equal(isPreservationActive({ active: true }, { probeEnabled: true }), true)
 })
 
 test('isPreservationActive accepts a boolean plan-access shorthand', () => {
@@ -94,13 +98,12 @@ test('isPreservationActive accepts a boolean plan-access shorthand', () => {
 
 test('PRESERVATION_FEATURE_SELECT cobre exatamente os flags usados no runtime', async () => {
   const { PRESERVATION_FEATURE_SELECT } = await import('../src/billing/plans.js')
+  // Plano B / Fase 3: throttle/quiet saíram (viraram config por destino).
   assert.deepEqual(Object.keys(PRESERVATION_FEATURE_SELECT).sort(), [
-    'channelThrottleEnabled',
     'copyVariationEnabled',
     'followGuardEnabled',
     'imageMutationActive',
     'probeEnabled',
-    'quietHoursEnabled',
   ])
   assert.equal(isPreservationActive(true, { preservationEnabled: true }), false, 'toggle mestre legado não pode reativar o módulo')
   assert.equal(isPreservationActive(true, { imageMutationEnabled: true }), false, 'preferência legada da imagem não é o opt-in')

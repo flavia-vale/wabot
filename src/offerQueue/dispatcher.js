@@ -1,6 +1,5 @@
 import dbDefault from '../db.js'
 import { isRunning as isRunningDefault, sendBroadcast as sendBroadcastDefault } from '../manager.js'
-import { parseQuietHours, quietHoursState } from '../core/channelThrottle.js'
 import { startOfSaoPauloDayUtc } from './time.js'
 import { isOutsideOperatingHours } from './operatingHours.js'
 
@@ -78,12 +77,12 @@ export async function evaluateQueueGate(queue, deps = {}) {
   const now = deps.now ? deps.now() : new Date()
   if (!queue.enabled) return 'queue_disabled'
   if (!await isRunning(queue.userId)) return 'bot_offline'
-  // Horário por fila (override) vs. janela silenciosa global.
-  if (queue.operatingHoursEnabled) {
-    if (isOutsideOperatingHours(now, queue.operatingHoursStart, queue.operatingHoursEnd)) return 'outside_operating_hours'
-  } else {
-    const botConfig = await db.botConfig?.findFirst?.({ where: { userId: queue.userId } })
-    if (botConfig?.quietHoursEnabled === true && quietHoursState(now.getTime(), parseQuietHours(botConfig.channelQuietHoursJson)).inQuiet) return 'quiet_hours'
+  // Plano B / Fase 3: o horário próprio da fila é o único pré-check de janela
+  // aqui. Sem horário próprio, NÃO pré-bloqueamos pela antiga janela silenciosa
+  // global (aposentada) — a proteção anti-ban por destino é aplicada no envio
+  // (checkAndReserve com destPreservation), que adia o item se necessário.
+  if (queue.operatingHoursEnabled && isOutsideOperatingHours(now, queue.operatingHoursStart, queue.operatingHoursEnd)) {
+    return 'outside_operating_hours'
   }
   if (queue.intervalEnabled && queue.lastSentAt && now - new Date(queue.lastSentAt) < queue.intervalMinutes * 60_000) return 'interval_limit'
   if (queue.hourlyCapEnabled) {

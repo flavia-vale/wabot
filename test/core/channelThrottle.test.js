@@ -756,19 +756,32 @@ test('checkAndReserve: destPreservation com throttleEnabled=false permite sem re
   assert.equal(db._records.size, 0)
 })
 
-test('checkAndReserve: preservationActive=false com dest fora do horário ainda bloqueia', async () => {
-  const db = {
-    channelThrottle: {
-      findUnique: async () => { throw new Error('não deveria consultar throttle') },
-      upsert: async () => { throw new Error('não deveria reservar') },
-    },
-  }
+test('Plano B/Fase 3: com destPreservation, preservationActive=false NÃO desliga o anti-ban (reserva mesmo assim)', async () => {
+  // Antes o master global off curto-circuitava o gate (gating_off, sem reserva).
+  // Agora a config por destino é sempre ativa: dentro do horário, reserva o slot
+  // mesmo com preservationActive=false.
+  const db = makeFakeDb()
+  const res = await checkAndReserve('g-dest', {}, {
+    db,
+    preservationActive: false,
+    now: NOON_BRT_MS,
+    destPreservation: { ...DEST_DEFAULT, operatingHoursEnabled: true },
+    getHealth: async () => ({ status: 'green', pausedUntil: null }),
+  })
+  assert.equal(res.allow, true)
+  assert.equal(db._records.get('g-dest').postsToday, 1)
+})
+
+test('Plano B/Fase 3: preservationActive=false com dest fora do horário ainda bloqueia', async () => {
+  const db = makeFakeDb()
   const res = await checkAndReserve('g-dest', {}, {
     db,
     preservationActive: false,
     now: EARLY_BRT_MS,
     destPreservation: { ...DEST_DEFAULT, operatingHoursEnabled: true },
+    getHealth: async () => ({ status: 'green', pausedUntil: null }),
   })
   assert.equal(res.allow, false)
   assert.equal(res.reason, DEFER_REASON.OUTSIDE_OPERATING_HOURS)
+  assert.equal(db._records.size, 0)
 })

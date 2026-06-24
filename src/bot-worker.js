@@ -39,7 +39,7 @@ import {
 import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
 import { resolveDestinationPreservation } from './core/preservationConfig.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
-import { PRESERVATION_FEATURE, isPreservationFeatureEnabled, shouldRunChannelScheduler } from './core/preservationFeatures.js'
+import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/preservationFeatures.js'
 import { mutate as mutateChannelImage } from './core/imageMutation.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
@@ -1219,7 +1219,10 @@ async function processSendJob(job) {
         const destPreservation = resolveDestinationPreservation(g, { preset: g.preservationPreset, defaultPreset })
         const gateOpts = {
           group: g,
-          preservationActive: shouldRunChannelScheduler(cfgFull?.preservationActive, cfg),
+          // Plano B / Fase 3: anti-ban é SEMPRE ativo por destino (destPreservation
+          // sempre presente via preset/HARD_DEFAULT). O master global de preservação
+          // não governa mais o gate de envio — só as features opcionais.
+          preservationActive: true,
           // A-2: fila com horário próprio sobrepõe a janela GLOBAL no worker (a
           // fila já checou seu horário antes de despachar). No caminho por
           // destino (Plano B), isso vira ignoreOperatingHours em decideDestination.
@@ -2283,7 +2286,10 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           : finalText
 
         // Stagger: 1º destino sai sem atraso adicional; demais recebem jitter.
-        const staggerMs = (destIndex > 0 && isChannelDest && isPreservationFeatureEnabled(cfg.preservationActive, cfg.botConfig, PRESERVATION_FEATURE.CHANNEL_THROTTLE) && staggerJitterMs > 0)
+        // Plano B / Fase 3: o stagger entre canais virou config de conta dedicada
+        // (channelStaggerJitterMs), desacoplado do antigo toggle global de
+        // throttle — aplica sempre que houver jitter configurado.
+        const staggerMs = (destIndex > 0 && isChannelDest && staggerJitterMs > 0)
           ? Math.floor(Math.random() * staggerJitterMs)
           : 0
 

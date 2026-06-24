@@ -2,8 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   PRESERVATION_FEATURE,
+  ACCOUNT_PRESERVATION_FEATURES,
   isPreservationFeatureEnabled,
-  shouldRunChannelScheduler,
 } from '../../src/core/preservationFeatures.js'
 
 test('cada funcionalidade depende simultaneamente do plano/módulo efetivo e do próprio toggle', () => {
@@ -28,12 +28,13 @@ test('um toggle não ativa outra funcionalidade', () => {
   }
 })
 
-test('scheduler roda somente para throttle ou janela silenciosa', () => {
-  assert.equal(shouldRunChannelScheduler(true, { channelThrottleEnabled: true }), true)
-  assert.equal(shouldRunChannelScheduler(true, { quietHoursEnabled: true }), true)
-  assert.equal(shouldRunChannelScheduler(true, { copyVariationEnabled: true }), false)
-  assert.equal(shouldRunChannelScheduler(true, { imageMutationActive: true }), false)
-  assert.equal(shouldRunChannelScheduler(false, { channelThrottleEnabled: true, quietHoursEnabled: true }), false)
+test('Plano B/Fase 3: features de conta excluem throttle/quiet (que viraram por destino)', () => {
+  assert.ok(ACCOUNT_PRESERVATION_FEATURES.includes(PRESERVATION_FEATURE.FOLLOW_GUARD))
+  assert.ok(ACCOUNT_PRESERVATION_FEATURES.includes(PRESERVATION_FEATURE.COPY_VARIATION))
+  assert.ok(ACCOUNT_PRESERVATION_FEATURES.includes(PRESERVATION_FEATURE.IMAGE_MUTATION))
+  assert.ok(ACCOUNT_PRESERVATION_FEATURES.includes(PRESERVATION_FEATURE.PROBE))
+  assert.ok(!ACCOUNT_PRESERVATION_FEATURES.includes(PRESERVATION_FEATURE.CHANNEL_THROTTLE))
+  assert.ok(!ACCOUNT_PRESERVATION_FEATURES.includes(PRESERVATION_FEATURE.QUIET_HOURS))
 })
 
 test('nomes legados não são aceitos como opt-in de mutação', () => {
