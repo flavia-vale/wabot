@@ -1120,12 +1120,19 @@ async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
  * normalmente. O callback onDone (doneCallbacks por logId) é preservado: só
  * finalizamos o job se ele NÃO couber na fila.
  */
+function deferReasonMessage(reason) {
+  if (reason === 'burst_cap') {
+    return 'O bot está segurando os envios por alguns minutos para não mandar muitas mensagens de uma vez para este grupo/canal.'
+  }
+  return `aguardando janela de envio do destino (${reason ?? 'throttle'})`
+}
+
 async function deferSendJob(job, gate) {
   const deferUntil = gate?.deferUntil ?? Date.now()
   sendMetrics.deferredTotal++
   await db.messageLog.update({
     where: { id: job.logId },
-    data: { status: 'queued', errorMsg: `aguardando janela de envio do destino (${gate?.reason ?? 'throttle'})` },
+    data: { status: 'queued', errorMsg: deferReasonMessage(gate?.reason) },
   }).catch(() => {})
   logger.info(
     { destJid: job.destJid, reason: gate?.reason, deferUntil, logId: job.logId },
