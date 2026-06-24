@@ -1,8 +1,9 @@
 import db from '../../db.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
-import { getCredentialSaveMessage, parseCredentialData, PLATFORMS, validateCredentialData } from '../../credentialHealth.js'
+import { getCredentialSaveMessage, parseCredentialData, PLATFORMS, sanitizeCredentialBody, validateCredentialData } from '../../credentialHealth.js'
 import { encryptCredential } from '../../credentialCrypto.js'
 import { checkMercadoLivreSession } from '../../converters/mercadolivre.js'
+import { reloadConfig } from '../../manager.js'
 
 export async function credentialsRoutes(app) {
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
@@ -38,7 +39,9 @@ export async function credentialsRoutes(app) {
     const { platform } = req.params
     if (!PLATFORMS.includes(platform)) return reply.code(400).send({ error: 'Plataforma inválida' })
 
-    const validation = validateCredentialData(platform, req.body)
+    const sanitizedBody = sanitizeCredentialBody(platform, req.body)
+
+    const validation = validateCredentialData(platform, sanitizedBody)
     if (validation.missing.length) {
       return reply.code(400).send({
         error: `Campos obrigatórios: ${validation.missing.join(', ')}`,
@@ -46,12 +49,18 @@ export async function credentialsRoutes(app) {
       })
     }
 
-    const encryptedData = encryptCredential(JSON.stringify(req.body))
+    const encryptedData = encryptCredential(JSON.stringify(sanitizedBody))
     const cred = await db.credential.upsert({
       where: { userId_platform: { userId: req.user.sub, platform } },
       create: { userId: req.user.sub, platform, data: encryptedData },
       update: { data: encryptedData },
     })
+    // Recarrega a config do worker imediatamente — sem isso, o bot usa a
+    // credencial antiga em cache (CONFIG_CACHE_TTL_MS, ~60s) e ofertas novas
+    // seguem saindo com a credencial expirada logo após a troca. Best-effort
+    // (mesmo contrato de groups.js): só sinaliza, não bloqueia o save.
+    const configReloaded = reloadConfig(req.user.sub)
+    app.log.info({ platform, configReloaded }, 'Credencial salva; reload da config do worker solicitado')
     trackAnalyticsEventSafe({ userId: req.user.sub, event: 'credential_saved', metadata: { platform, status: validation.status } })
     return { ...cred, data: parseCredentialData(cred.data), validation, message: getCredentialSaveMessage(validation) }
   })
