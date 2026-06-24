@@ -13,16 +13,13 @@ import { getProbeSessionSnapshot, isProbeSessionSelectable, setProbeSession } fr
 // Nota: as variações de texto (gancho/CTA/convite) — pool e liga/desliga —
 // NÃO vivem mais aqui. São editadas exclusivamente em "Templates de mensagens"
 // (rota /api/config). Esta rota cuida só das defesas de preservação.
+// Plano B / Fase 3 (passo 2): a cadência/janela (min interval, burst, daily,
+// quiet hours + seus toggles) saiu da config GLOBAL e virou config POR DESTINO
+// (presets em /presets e overrides em /destinations). Esta rota cuida só do que
+// continua de conta: o stagger entre canais (dedicado) e as defesas opcionais.
 const PRESERVATION_CONFIG_KEYS = [
-  'channelMinIntervalSec',
-  'channelBurstCap',
-  'channelBurstWindowSec',
-  'channelDailyCap',
   'channelStaggerJitterMs',
-  'channelQuietHoursJson',
   'maxDailyFollows',
-  'channelThrottleEnabled',
-  'quietHoursEnabled',
   'followGuardEnabled',
   'imageMutationActive',
   'probeEnabled',
@@ -56,22 +53,9 @@ function validatePartialUpdate(body = {}) {
     if (typeof body[key] !== 'boolean') { errors.push(`${key} deve ser boolean`); return }
     updates[key] = body[key]
   }
-  const json = (key) => {
-    if (!(key in body)) return
-    if (typeof body[key] !== 'string') { errors.push(`${key} deve ser string JSON`); return }
-    try { JSON.parse(body[key]) } catch { errors.push(`${key} contém JSON inválido`); return }
-    updates[key] = body[key]
-  }
 
-  int('channelMinIntervalSec', { min: 1, max: 86400 })
-  int('channelBurstCap', { min: 1, max: 1000 })
-  int('channelBurstWindowSec', { min: 60, max: 86400 })
-  int('channelDailyCap', { min: 1, max: 10000, nullable: true })
   int('channelStaggerJitterMs', { min: 0, max: 600000 })
   int('maxDailyFollows', { min: 1, max: 50 })
-  json('channelQuietHoursJson')
-  bool('channelThrottleEnabled')
-  bool('quietHoursEnabled')
   bool('followGuardEnabled')
   bool('imageMutationEnabled')
   bool('probeEnabled')
