@@ -1,4 +1,4 @@
-import { PRESERVATION_FEATURE } from '../core/preservationFeatures.js'
+import { PRESERVATION_FEATURE, ACCOUNT_PRESERVATION_FEATURES } from '../core/preservationFeatures.js'
 export const PLAN_IDS = Object.freeze({
   TRIAL: 'trial',
   BASIC: 'basic',
@@ -126,16 +126,24 @@ export async function getAdvancedPreservationAccess(userId, opts = {}) {
 
 /**
  * A preservação fica disponível quando o plano permite e ao menos uma defesa
- * foi ligada. Cada defesa é opt-in e pode operar de forma independente.
+ * opt-in foi ligada. Cada defesa é opt-in e pode operar de forma independente.
+ * Plano B / Fase 3: cadência/janela (throttle + quiet) saiu da conta e virou
+ * config POR DESTINO, então NÃO entra mais neste select — só as defesas de conta
+ * (ACCOUNT_PRESERVATION_FEATURES). Isso também evita selecionar colunas que serão
+ * dropadas no teardown.
  */
 export const PRESERVATION_FEATURE_SELECT = Object.freeze(
-  Object.fromEntries(Object.values(PRESERVATION_FEATURE).map(key => [key, true])),
+  Object.fromEntries(ACCOUNT_PRESERVATION_FEATURES.map(key => [key, true])),
 )
 
 export function isPreservationActive(planAccess, botConfig) {
   const planAllows = typeof planAccess === 'boolean' ? planAccess : Boolean(planAccess?.active)
   if (!planAllows) return false
-  return Object.keys(PRESERVATION_FEATURE_SELECT).some(key => botConfig?.[key] === true)
+  // Plano B / Fase 3: cadência (throttle/quiet) virou config por destino, sempre
+  // ativa — não conta mais para "preservação ativa" da conta. O sinal deriva só
+  // das features opcionais que seguem globais (follow guard, variação de copy,
+  // mutação de imagem, probe).
+  return ACCOUNT_PRESERVATION_FEATURES.some(key => botConfig?.[key] === true)
 }
 
 export function buildFeatureGateError(feature = FEATURE_CODES.CHANNELS) {

@@ -225,12 +225,14 @@ test('horário de funcionamento da fila: dentro da janela ignora a janela silenc
   assert.equal(calls.sent.length, 1)
 })
 
-test('sem horário próprio: segue a janela silenciosa global quando habilitada', async () => {
-  // 12:00 BRT dentro de quiet 07-22 com quietHoursEnabled => bloqueia.
+test('Plano B/Fase 3: sem horário próprio NÃO pré-bloqueia pela antiga janela silenciosa global', async () => {
+  // A janela silenciosa global foi aposentada do pré-check da fila. Sem horário
+  // próprio, a fila drena normalmente — a proteção anti-ban passou a ser aplicada
+  // POR DESTINO no envio (checkAndReserve com destPreservation), não aqui.
   const { queue, calls, deps } = setup()
   deps.db.botConfig = { findFirst: async () => ({ quietHoursEnabled: true, channelQuietHoursJson: '{"startHour":7,"endHour":22,"tz":"America/Sao_Paulo"}' }) }
-  assert.deepEqual(await drainQueueOnce(queue, deps), { skipped: 'quiet_hours' })
-  assert.equal(calls.sent.length, 0)
+  assert.deepEqual(await drainQueueOnce(queue, deps), { sent: 'i1' })
+  assert.equal(calls.sent.length, 1)
 })
 
 test('sem horário próprio: janela silenciosa global desligada não bloqueia', async () => {
