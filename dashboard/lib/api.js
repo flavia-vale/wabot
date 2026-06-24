@@ -195,6 +195,17 @@ export const api = {
   paymentsRecover: (paymentId) =>
     apiFetch('/api/payments/recover', { method: 'POST', body: JSON.stringify({ paymentId }) }),
 
+  paymentsHealth: () => apiFetch('/api/payments/health'),
+  adminPaymentMpStatus: () => apiFetch('/api/payments/mp-status'),
+  adminPaymentDlqReprocess: () =>
+    apiFetch('/api/payments/dlq/reprocess', { method: 'POST' }),
+  adminPaymentProcessPending: ({ limit, mfaToken } = {}) =>
+    apiFetch('/api/payments/webhook/process-pending', {
+      method: 'POST',
+      body: JSON.stringify(limit ? { limit } : {}),
+      headers: mfaToken ? { 'x-admin-mfa-token': String(mfaToken).trim() } : {},
+    }),
+
   getConfig: () => apiFetch('/api/config'),
   saveConfig: (data) => apiFetch('/api/config', { method: 'PUT', body: JSON.stringify(data) }),
 
