@@ -78,6 +78,23 @@ function ExpiredPlanBanner({ user }) {
   )
 }
 
+function ExpiredMlSsidBanner({ expired }) {
+  if (!expired) return null
+
+  return (
+    <div className="pnl-note-box is-error pnl-expired-plan-banner" role="alert">
+      <div>
+        <strong style={{ fontWeight: 600 }}>Credencial do Mercado Livre expirada</strong>
+        <p style={{ marginTop: 6 }}>
+          Seu SSID do Mercado Livre expirou. As ofertas continuam saindo, mas com o link
+          de afiliado longo em vez do link curto. Renove o SSID para voltar a gerar links curtos.
+        </p>
+      </div>
+      <Link href="/painel/ids-afiliada" className="pnl-btn is-primary" style={{ flexShrink: 0 }}>Renovar SSID</Link>
+    </div>
+  )
+}
+
 function planInfo(user) {
   const plan = user?.plan
   const exp = user?.accessExpiresAt ? new Date(user.accessExpiresAt) : null
@@ -140,6 +157,7 @@ export default function PainelShell({ children }) {
   const [openGroups, setOpenGroups] = useState({})
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [header, setHeader] = useState({ title: 'Painel', subtitle: '' })
+  const [mlSsidExpired, setMlSsidExpired] = useState(false)
 
   // Autenticação — mesmo contrato do dashboard atual (api.me → /login no erro).
   useEffect(() => {
@@ -149,6 +167,22 @@ export default function PainelShell({ children }) {
       .catch(() => { if (active) router.replace('/login') })
     return () => { active = false }
   }, [router])
+
+  // Saúde do SSID de afiliado do Mercado Livre. O endpoint faz UM probe
+  // autenticado (e retorna `not_configured`/`no_cookie` sem tocar a rede do ML
+  // quando não há credencial). Checamos uma vez aqui no shell — que monta uma
+  // única vez para todo o painel (layout) — para exibir o aviso de expiração em
+  // TODAS as páginas, igual ao banner de plano vencido. Só alarmamos com
+  // `alive === false` (401 = expirado); 403/429/erro de rede ficam
+  // indeterminados e não disparam o banner (ver checkMercadoLivreSession).
+  useEffect(() => {
+    if (checking) return undefined
+    let active = true
+    api.mercadolivreSession()
+      .then((s) => { if (active) setMlSsidExpired(s?.alive === false) })
+      .catch(() => { if (active) setMlSsidExpired(false) })
+    return () => { active = false }
+  }, [checking])
 
   // Status de sessão + contagem de grupos (compartilhado com a tag do header
   // e a página de espelhamento, que leem `online` deste contexto). Precisa ser
@@ -368,6 +402,7 @@ export default function PainelShell({ children }) {
                 mais. sessionHealth segue exposto no contexto/metrics para
                 observabilidade, sem alarmar o usuário com uma ação enganosa. */}
             <ExpiredPlanBanner user={user} />
+            <ExpiredMlSsidBanner expired={mlSsidExpired} />
             {children}
           </div>
         </div>
