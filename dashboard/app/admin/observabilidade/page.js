@@ -109,22 +109,42 @@ function RouteRow({ route }) {
   )
 }
 
+function mpConnectionLabel(mpStatus) {
+  if (!mpStatus) return { text: 'verificando conexão com o Mercado Pago…', tone: 'info', ok: false }
+  if (!mpStatus.tokenConfigured) return { text: 'MP_ACCESS_TOKEN ausente — configure o token antes de reprocessar', tone: 'critical', ok: false }
+  if (mpStatus.reachable) return { text: `token válido e Mercado Pago respondendo${mpStatus.accountId ? ` · conta ${mpStatus.accountId}` : ''}`, tone: 'ok', ok: true }
+  if (mpStatus.tokenInvalid) return { text: 'token rejeitado pelo Mercado Pago (401/403) — atualize o MP_ACCESS_TOKEN', tone: 'critical', ok: false }
+  return { text: `Mercado Pago indisponível agora${mpStatus.status ? ` (HTTP ${mpStatus.status})` : ''} — aguarde e reprocesse`, tone: 'risk', ok: false }
+}
+
 function PaymentDlqRunbook({ dlqOpen, lastPrune, onReprocessed }) {
   const [health, setHealth] = useState(null)
+  const [mpStatus, setMpStatus] = useState(null)
   const [mfaToken, setMfaToken] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
   const [feedbackError, setFeedbackError] = useState('')
 
-  async function refreshHealth() {
-    const data = await api.paymentsHealth().catch(() => null)
-    setHealth(data)
-    return data
+  async function refreshStatus() {
+    const [healthData, mpData] = await Promise.all([
+      api.paymentsHealth().catch(() => null),
+      api.adminPaymentMpStatus().catch(() => null),
+    ])
+    setHealth(healthData)
+    setMpStatus(mpData)
+    return { healthData, mpData }
   }
 
   useEffect(() => {
     let active = true
-    refreshHealth().then((data) => { if (!active) setHealth(data) })
+    Promise.resolve()
+      .then(() => Promise.all([api.paymentsHealth().catch(() => null), api.adminPaymentMpStatus().catch(() => null)]))
+      .then(([healthData, mpData]) => {
+        if (!active) return
+        setHealth(healthData)
+        setMpStatus(mpData)
+      })
+      .catch(() => {})
     return () => { active = false }
   }, [])
 
@@ -145,7 +165,7 @@ function PaymentDlqRunbook({ dlqOpen, lastPrune, onReprocessed }) {
         else throw err
       }
       setResult({ requeue, processed, mfaRequired })
-      await refreshHealth()
+      await refreshStatus()
       await onReprocessed?.()
     } catch (err) {
       setFeedbackError(err?.message || 'Falha ao reprocessar webhooks pendentes.')
@@ -156,6 +176,7 @@ function PaymentDlqRunbook({ dlqOpen, lastPrune, onReprocessed }) {
 
   const open = Number(health?.dlqOpen ?? dlqOpen ?? 0)
   const tone = open > 0 ? 'warn' : 'ok'
+  const mpConn = mpConnectionLabel(mpStatus)
 
   return (
     <div className={`mt-4 rounded-2xl border p-4 ${toneStyles[tone] || toneStyles.info}`}>
@@ -163,7 +184,7 @@ function PaymentDlqRunbook({ dlqOpen, lastPrune, onReprocessed }) {
         <div>
           <p className="text-[11px] font-black uppercase tracking-[0.2em] opacity-70">Runbook · Payment DLQ</p>
           <p className="mt-1 text-sm font-black text-white">{numberFmt(open)} webhook(s) na DLQ · {numberFmt(health?.pendingLast24h ?? 0)} pagamento(s) pendentes (24h)</p>
-          <p className="mt-1 text-xs opacity-80">Mercado Pago: {health ? (health.ok ? 'sem pendências' : 'com pendências') : 'verificando…'} · última poda Send DLQ: {lastPrune ? safeDate(lastPrune) : 'sem registro'}</p>
+          <p className="mt-1 text-xs opacity-80">Última poda Send DLQ: {lastPrune ? safeDate(lastPrune) : 'sem registro'}</p>
         </div>
         <button
           onClick={runReprocess}
@@ -173,6 +194,16 @@ function PaymentDlqRunbook({ dlqOpen, lastPrune, onReprocessed }) {
           {busy ? 'Reprocessando…' : 'Reprocessar webhooks pendentes'}
         </button>
       </div>
+
+      <div className={`mt-3 rounded-xl border px-3 py-2 text-xs font-bold ${toneStyles[mpConn.tone] || toneStyles.info}`}>
+        Conexão Mercado Pago: {mpConn.text}
+      </div>
+
+      <p className="mt-3 text-xs leading-relaxed opacity-80">
+        Antes de reprocessar, confirme que o Mercado Pago está respondendo acima (token válido). A DLQ enche quando a
+        reconciliação contra o MP falha — quase sempre por <code>MP_ACCESS_TOKEN</code> expirado/revogado ou instabilidade
+        do provedor. Reprocessar com a conexão ainda quebrada só devolve os itens à DLQ.
+      </p>
 
       <label className="mt-4 block text-xs font-bold opacity-80">
         Token MFA (x-admin-mfa-token) — necessário para reconciliar contra o Mercado Pago

@@ -910,6 +910,48 @@ export async function paymentsRoutes(app) {
     return { ok: dlqOpen === 0, provider: 'mercado_pago', pendingLast24h: pending, dlqOpen, checkedAt: new Date().toISOString() }
   })
 
+  // Probe real de conectividade/credencial do Mercado Pago (owner-only, somente
+  // leitura). Diferente de /health (que só conta linhas no banco), aqui fazemos
+  // uma chamada autenticada barata a GET /users/me para confirmar que o
+  // MP_ACCESS_TOKEN está configurado, válido e que o MP está respondendo —
+  // exatamente o "validar Mercado Pago" do runbook de reprocessamento da DLQ.
+  app.get('/mp-status', { onRequest: [app.authenticate] }, async (req) => {
+    const userId = req.user?.sub
+    const adminUser = await db.adminUser.findUnique({ where: { userId }, select: { role: true, status: true } }).catch(() => null)
+    if (!adminUser || adminUser.status !== 'active' || adminUser.role !== 'owner') {
+      return { tokenConfigured: false, reachable: false, error: 'forbidden', checkedAt: new Date().toISOString() }
+    }
+    const accessToken = getMpAccessToken()
+    if (!accessToken) {
+      return { tokenConfigured: false, reachable: false, checkedAt: new Date().toISOString() }
+    }
+    try {
+      const response = await axios.get('https://api.mercadopago.com/users/me', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: 8000,
+      })
+      return {
+        tokenConfigured: true,
+        reachable: true,
+        status: response.status,
+        accountId: response.data?.id ? String(response.data.id) : null,
+        liveMode: response.data?.site_id ? Boolean(accessToken.startsWith('APP_USR-')) : null,
+        checkedAt: new Date().toISOString(),
+      }
+    } catch (err) {
+      const status = err?.response?.status ?? null
+      const tokenInvalid = status === 401 || status === 403
+      return {
+        tokenConfigured: true,
+        reachable: false,
+        tokenInvalid,
+        status,
+        error: String(err?.response?.data?.message ?? err?.message ?? 'mp_unreachable').slice(0, 200),
+        checkedAt: new Date().toISOString(),
+      }
+    }
+  })
+
   app.post('/dlq/reprocess', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user?.sub
     const adminUser = await db.adminUser.findUnique({ where: { userId }, select: { role: true, status: true } }).catch(() => null)

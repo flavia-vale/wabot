@@ -196,6 +196,7 @@ export const api = {
     apiFetch('/api/payments/recover', { method: 'POST', body: JSON.stringify({ paymentId }) }),
 
   paymentsHealth: () => apiFetch('/api/payments/health'),
+  adminPaymentMpStatus: () => apiFetch('/api/payments/mp-status'),
   adminPaymentDlqReprocess: () =>
     apiFetch('/api/payments/dlq/reprocess', { method: 'POST' }),
   adminPaymentProcessPending: ({ limit, mfaToken } = {}) =>
