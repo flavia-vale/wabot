@@ -69,44 +69,40 @@ test('fetchShopeeProductInfo retorna null sem credenciais', async () => {
   assert.equal(await fetchShopeeProductInfo('https://shopee.com.br/product/1/2', {}), null)
 })
 
-// Regressão 1: links afiliados de s.shopee.com.br bloqueiam o WebView do WhatsApp.
-// convert() deve resolver e limpar a URL antes de retornar.
-test('convert() resolve shortLink e entrega URL shopee.com.br limpa (sem s.shopee.com.br, sem parâmetros de ruído)', async (t) => {
+// Regressão 1: o espelhamento da Shopee deve enviar o shortLink oficial de
+// afiliado retornado pela API (formato visual esperado: s.shopee.com.br/...).
+// Não resolver para a URL longa /product?...; se a API parar de devolver link
+// curto, a conversão deve falhar para o worker não vazar link original/de outro
+// afiliado.
+test('convert() entrega o shortLink afiliado oficial da Shopee sem resolver para URL longa', async (t) => {
   const shortLink = 'https://s.shopee.com.br/AfXXXfake'
-  // URL com ruído real (gads_t_sig enorme, exp_group, __mobile__, etc.) — igual ao que
-  // chegou em produção e causou mensagens ilegíveis no WhatsApp (regressão 2026-06).
-  const noisyResolved = 'https://shopee.com.br/opaanlp/1509055233/58258316548'
-    + '?__mobile__=1&exp_group=rollout&gads_t_sig=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    + '&mmp_pid=an_18322390884&uls_trackid=55v1tprk00ol'
-    + '&utm_campaign=id_c08bc3b5b0f76ce3&utm_content=----&utm_medium=affiliates&utm_source=an_18322390884'
+  let fetchCalled = false
 
   t.after(stubAxiosPost(async () => ({
     data: { data: { generateShortLink: { shortLink } } },
   })))
 
   const originalFetch = globalThis.fetch
-  globalThis.fetch = async (url) => {
-    if (url === shortLink) {
-      return {
-        ok: false, status: 302, url,
-        headers: { get: (name) => name.toLowerCase() === 'location' ? noisyResolved : null },
-        text: async () => '', body: null,
-      }
-    }
-    throw new Error(`fetch inesperado: ${url}`)
+  globalThis.fetch = async () => {
+    fetchCalled = true
+    throw new Error('convert não deve resolver shortLink')
   }
   t.after(() => { globalThis.fetch = originalFetch })
 
   const result = await convert('https://shopee.com.br/product/1509055233/58258316548', CREDS)
-  assert.ok(!result.includes('s.shopee.com.br'), 'não deve ter s.shopee.com.br')
-  assert.ok(!result.includes('gads_t_sig'), 'não deve ter gads_t_sig (ruído)')
-  assert.ok(!result.includes('exp_group'), 'não deve ter exp_group (ruído)')
-  assert.ok(!result.includes('__mobile__'), 'não deve ter __mobile__ (ruído)')
-  assert.ok(result.includes('utm_medium=affiliates'), 'deve manter utm_medium')
-  assert.ok(result.includes('utm_source=an_18322390884'), 'deve manter utm_source')
-  assert.ok(result.includes('mmp_pid=an_18322390884'), 'deve manter mmp_pid')
-  assert.ok(result.includes('uls_trackid=55v1tprk00ol'), 'deve manter uls_trackid')
-  assert.match(result, /shopee\.com\.br\/product\/1509055233\/58258316548/, 'deve usar path /product/ canônico')
+  assert.equal(result, shortLink)
+  assert.equal(fetchCalled, false, 'não deve chamar fetch para resolver o shortLink')
+})
+
+test('convert() rejeita resposta sem shortLink afiliado válido', async (t) => {
+  t.after(stubAxiosPost(async () => ({
+    data: { data: { generateShortLink: { shortLink: 'https://shopee.com.br/product/1509055233/58258316548?utm_medium=affiliates' } } },
+  })))
+
+  await assert.rejects(
+    () => convert('https://shopee.com.br/product/1509055233/58258316548', CREDS),
+    /shortLink afiliado válido/,
+  )
 })
 
 // Regressão 2: cleanAffiliateUrl deve preservar a URL como-está quando não
