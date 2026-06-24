@@ -7,6 +7,7 @@ ROOT_DIR="${ROOT_DIR:-$DEFAULT_ROOT_DIR}"
 DASHBOARD_DIR="$ROOT_DIR/dashboard"
 BRANCH="${BRANCH:-main}"
 FORCE_RESET_ON_SYNC="${FORCE_RESET_ON_SYNC:-0}"
+DASHBOARD_PORT="${DASHBOARD_PORT:-3000}"
 
 # APP_ENV precisa existir no ambiente do BUILD, não só no runtime do PM2.
 # O Next.js avalia next.config headers() em tempo de `npm run build` e grava
@@ -26,6 +27,61 @@ configure_public_git_dependencies() {
   # público para HTTPS sem alterar package-lock.
   git config --global --replace-all url."https://github.com/".insteadOf "ssh://git@github.com/"
   git config --global --add url."https://github.com/".insteadOf "git@github.com:"
+}
+
+
+kill_port_listeners() {
+  local port="$1"
+  local label="$2"
+
+  if [[ -z "$port" ]]; then
+    return 0
+  fi
+
+  if command -v fuser >/dev/null 2>&1; then
+    if fuser -k "${port}/tcp" >/tmp/wabot_fuser_${port}.log 2>&1; then
+      echo "  Listeners órfãos de ${label} na porta ${port} encerrados via fuser."
+      return 0
+    fi
+  fi
+
+  if command -v lsof >/dev/null 2>&1; then
+    local pids
+    pids=$(lsof -ti tcp:"$port" 2>/dev/null | tr '\n' ' ' || true)
+    if [[ -n "$pids" ]]; then
+      echo "  Encerrando listeners órfãos de ${label} na porta ${port}: ${pids}"
+      kill $pids >/dev/null 2>&1 || true
+      sleep 2
+      pids=$(lsof -ti tcp:"$port" 2>/dev/null | tr '\n' ' ' || true)
+      if [[ -n "$pids" ]]; then
+        kill -9 $pids >/dev/null 2>&1 || true
+      fi
+    fi
+  fi
+}
+
+recreate_frontend_pm2_app() {
+  local app_name="$1"
+  local port="$2"
+
+  # Apps Next iniciados historicamente via `npm start` podem deixar o processo
+  # filho `next start` órfão após `pm2 restart`. O órfão continua segurando a
+  # porta e servindo HTML de um build antigo, enquanto .next/static já aponta
+  # para outro build — exatamente o 404 em /_next/static visto no /admin.
+  # Para dashboard/visual, deploy deve ser start fresco: delete PM2 + limpar
+  # listener da porta + start pelo ecosystem (que agora chama o binário do Next
+  # diretamente, sem wrapper npm).
+  pm2 delete "$app_name" >/dev/null 2>&1 || true
+  kill_port_listeners "$port" "$app_name"
+
+  if pm2 start "$ROOT_DIR/ecosystem.config.cjs" --only "$app_name" --update-env >/tmp/wabot_pm2_start_${app_name}.log 2>&1; then
+    echo "  PM2 frontend '$app_name' recriado com processo Next fresco."
+    return 0
+  fi
+
+  echo "ERRO: não foi possível recriar frontend '$app_name' via ecosystem.config.cjs."
+  cat /tmp/wabot_pm2_start_${app_name}.log || true
+  exit 1
 }
 
 ensure_pm2_app_running() {
@@ -353,7 +409,7 @@ else
 fi
 
 echo "[7b/9] Restart PM2 apps"
-ensure_pm2_app_running "dashboard"
+recreate_frontend_pm2_app "dashboard" "$DASHBOARD_PORT"
 ensure_pm2_app_running "api"
 
 # bot-supervisor (prod) é INTENCIONALMENTE preservado: ver comentário

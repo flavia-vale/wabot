@@ -12,6 +12,7 @@ FORCE_RESET_ON_SYNC="${FORCE_RESET_ON_SYNC:-0}"
 VISUAL_APP="${VISUAL_APP:-visual-staging}"
 API_APP="${API_APP:-api-staging}"
 VISUAL_BASE_URL="${VISUAL_BASE_URL:-http://178.105.54.0:3006}"
+VISUAL_PORT="${VISUAL_PORT:-3006}"
 API_BASE_URL="${API_BASE_URL:-http://127.0.0.1:3004}"
 
 # APP_ENV precisa existir no ambiente do BUILD do Next (headers() é avaliado em
@@ -265,6 +266,61 @@ build_dashboard_with_recovery() {
 }
 
 
+
+kill_port_listeners() {
+  local port="$1"
+  local label="$2"
+
+  if [[ -z "$port" ]]; then
+    return 0
+  fi
+
+  if command -v fuser >/dev/null 2>&1; then
+    if fuser -k "${port}/tcp" >/tmp/wabot_fuser_${port}.log 2>&1; then
+      echo "  Listeners órfãos de ${label} na porta ${port} encerrados via fuser."
+      return 0
+    fi
+  fi
+
+  if command -v lsof >/dev/null 2>&1; then
+    local pids
+    pids=$(lsof -ti tcp:"$port" 2>/dev/null | tr '\n' ' ' || true)
+    if [[ -n "$pids" ]]; then
+      echo "  Encerrando listeners órfãos de ${label} na porta ${port}: ${pids}"
+      kill $pids >/dev/null 2>&1 || true
+      sleep 2
+      pids=$(lsof -ti tcp:"$port" 2>/dev/null | tr '\n' ' ' || true)
+      if [[ -n "$pids" ]]; then
+        kill -9 $pids >/dev/null 2>&1 || true
+      fi
+    fi
+  fi
+}
+
+recreate_frontend_pm2_app() {
+  local app_name="$1"
+  local port="$2"
+
+  # Apps Next iniciados historicamente via `npm start` podem deixar o processo
+  # filho `next start` órfão após `pm2 restart`. O órfão continua segurando a
+  # porta e servindo HTML de um build antigo, enquanto .next/static já aponta
+  # para outro build — exatamente o 404 em /_next/static visto no /admin.
+  # Para dashboard/visual, deploy deve ser start fresco: delete PM2 + limpar
+  # listener da porta + start pelo ecosystem (que agora chama o binário do Next
+  # diretamente, sem wrapper npm).
+  pm2 delete "$app_name" >/dev/null 2>&1 || true
+  kill_port_listeners "$port" "$app_name"
+
+  if pm2 start "$ROOT_DIR/ecosystem.config.cjs" --only "$app_name" --update-env >/tmp/wabot_pm2_start_${app_name}.log 2>&1; then
+    echo "  PM2 frontend '$app_name' recriado com processo Next fresco."
+    return 0
+  fi
+
+  echo "ERRO: não foi possível recriar frontend '$app_name' via ecosystem.config.cjs."
+  cat /tmp/wabot_pm2_start_${app_name}.log || true
+  exit 1
+}
+
 ensure_pm2_app_running() {
   local app_name="$1"
 
@@ -455,7 +511,7 @@ if ! command -v pm2 >/dev/null 2>&1; then
   exit 1
 fi
 ensure_pm2_app_running "$API_APP"
-ensure_pm2_app_running "$VISUAL_APP"
+recreate_frontend_pm2_app "$VISUAL_APP" "$VISUAL_PORT"
 
 # bot-supervisor é INTENCIONALMENTE deixado de fora do restart automático
 # em todo deploy. O ponto do desacoplamento é justamente que deploy da API
