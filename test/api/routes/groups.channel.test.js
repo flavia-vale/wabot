@@ -592,56 +592,9 @@ test('PUT /:id permite forwardMode=ALLOW_NO_LINK para Pro', async (t) => {
   assert.equal(body.noLinkScope, 'ALL')
 })
 
-test('PUT /:id salva janela silenciosa do grupo de destino', async (t) => {
-  const { app, userId } = await buildApp({}, { plan: 'pro' })
-  const group = await db.group.create({
-    data: { userId, waJid: 'quiet-dest@g.us', name: 'Destino Quiet', role: 'post', kind: 'group', forwardMode: 'LINK_ONLY' },
-  })
-  t.after(async () => { await db.group.deleteMany({ where: { userId } }); await db.user.deleteMany({ where: { id: userId } }); await app.close() })
-
-  const res = await app.inject({
-    method: 'PUT',
-    url: `/api/groups/${group.id}`,
-    payload: { quietHoursEnabled: true, quietHoursJson: JSON.stringify({ startHour: 22, endHour: 8, tz: 'America/Sao_Paulo' }) },
-  })
-
-  assert.equal(res.statusCode, 200)
-  const body = JSON.parse(res.body)
-  assert.equal(body.quietHoursEnabled, true)
-  assert.deepEqual(JSON.parse(body.quietHoursJson), { startHour: 22, endHour: 8, tz: 'America/Sao_Paulo' })
-})
-
-test('PUT /:id rejeita janela silenciosa em grupo monitor', async (t) => {
-  const { app, userId } = await buildApp({}, { plan: 'pro' })
-  const group = await db.group.create({
-    data: { userId, waJid: 'quiet-mon@g.us', name: 'Monitor Quiet', role: 'monitor', kind: 'group', forwardMode: 'LINK_ONLY' },
-  })
-  t.after(async () => { await db.group.deleteMany({ where: { userId } }); await db.user.deleteMany({ where: { id: userId } }); await app.close() })
-
-  const res = await app.inject({
-    method: 'PUT',
-    url: `/api/groups/${group.id}`,
-    payload: { quietHoursEnabled: true },
-  })
-
-  assert.equal(res.statusCode, 400)
-})
-
-test('PUT /:id rejeita quietHoursJson com hora inválida', async (t) => {
-  const { app, userId } = await buildApp({}, { plan: 'pro' })
-  const group = await db.group.create({
-    data: { userId, waJid: 'quiet-bad@g.us', name: 'Destino Bad', role: 'post', kind: 'group', forwardMode: 'LINK_ONLY' },
-  })
-  t.after(async () => { await db.group.deleteMany({ where: { userId } }); await db.user.deleteMany({ where: { id: userId } }); await app.close() })
-
-  const res = await app.inject({
-    method: 'PUT',
-    url: `/api/groups/${group.id}`,
-    payload: { quietHoursJson: JSON.stringify({ startHour: 99, endHour: 8 }) },
-  })
-
-  assert.equal(res.statusCode, 400)
-})
+// Plano B / Fase 3: o override de janela silenciosa POR GRUPO foi removido da
+// rota (horário/anti-ban por destino vivem em /preservacao/destinos). Os testes
+// que cobriam quietHoursEnabled/quietHoursJson no PUT /:id saíram junto.
 
 test('PUT /:id persiste templateKey para espelhamento e rejeita chave inválida', async (t) => {
   const { app, userId } = await buildApp({}, { plan: 'pro' })
