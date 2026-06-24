@@ -43,7 +43,12 @@ export async function convert(url, creds) {
       const err = data?.errors?.[0]?.message
       throw new Error(err || 'Resposta inesperada')
     }
-    return link
+    // Resolve the s.shopee.com.br affiliate short link to the canonical shopee.com.br
+    // product URL (with UTM/affiliate params preserved). WhatsApp's in-app browser
+    // (WebView) is blocked by Shopee at s.shopee.com.br with "Seu navegador não é
+    // mais aceito!"; direct shopee.com.br URLs open normally.
+    const resolved = await resolveShopeeShortLink(link, { timeoutMs: 5000 })
+    return resolved || link
   } catch (err) {
     throw new Error(`Shopee converter: ${err.message}`)
   }
