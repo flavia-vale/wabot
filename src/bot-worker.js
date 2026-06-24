@@ -1197,15 +1197,15 @@ async function processSendJob(job) {
     //
     // O gate vale para QUALQUER destino-post — canal (@newsletter) E grupo
     // espelhado (@g.us). Historicamente o lookup filtrava `kind: 'channel'`,
-    // então grupos espelhados NUNCA passavam pela janela silenciosa nem pelo
-    // intervalo mínimo configurados em /painel/preservacao/configuracoes —
-    // por isso enviavam de madrugada e sem respeitar o espaçamento. A decisão
-    // (checkAndReserve/decide) já é agnóstica de kind; só o call site limitava.
+    // então grupos espelhados NUNCA passavam pelo horário nem pelo intervalo
+    // mínimo da preservação — por isso enviavam de madrugada e sem respeitar o
+    // espaçamento. A decisão (checkAndReserve → decideDestination) já é agnóstica
+    // de kind; só o call site limitava.
     try {
       const g = await db.group.findFirst({
         where: { userId, waJid: job.destJid, role: 'post' },
         select: {
-          id: true, quietHoursEnabled: true, quietHoursJson: true,
+          id: true,
           // Plano B: config de preservação por destino (Fase 1b).
           preservationPresetId: true, operatingHoursEnabled: true, operatingHoursJson: true,
           throttleEnabled: true, minIntervalSec: true, burstCap: true, burstWindowSec: true,
@@ -1225,18 +1225,12 @@ async function processSendJob(job) {
         const defaultPreset = await getDefaultPreservationPreset()
         const destPreservation = resolveDestinationPreservation(g, { preset: g.preservationPreset, defaultPreset })
         const gateOpts = {
-          group: g,
-          // Plano B / Fase 3: anti-ban é SEMPRE ativo por destino (destPreservation
-          // sempre presente via preset/HARD_DEFAULT). O master global de preservação
-          // não governa mais o gate de envio — só as features opcionais.
-          preservationActive: true,
-          // A-2: fila com horário próprio sobrepõe a janela GLOBAL no worker (a
-          // fila já checou seu horário antes de despachar). No caminho por
-          // destino (Plano B), isso vira ignoreOperatingHours em decideDestination.
+          // A-2: fila com horário próprio sobrepõe a janela do destino (a fila já
+          // checou seu horário antes de despachar) → ignoreOperatingHours.
           ignoreGlobalQuietHours: job.ignoreGlobalQuietHours === true,
-          // Plano B / Fase 3: destPreservation é sempre definido
-          // (resolveDestinationPreservation cai no preset default / HARD_DEFAULT),
-          // então vira a ÚNICA fonte de verdade do gate.
+          // Plano B / Fase 3: destPreservation (preset/override → preset default →
+          // HARD_DEFAULT) é a ÚNICA fonte de verdade do gate. Anti-ban sempre
+          // ativo por destino; o master global e o legado decide() foram removidos.
           destPreservation,
         }
         let gate = await throttleCheckAndReserve(destGroupId, cfg, gateOpts)

@@ -1,9 +1,12 @@
 // PR-5.B.1: velocity scheduler por canal-destino.
-// Ordem dos cheques (em decide): health pause → quiet hours → daily cap →
-// min interval → burst cap → allow + reserve.
+// Plano B / Fase 3: a decisão é SEMPRE por destino (decideDestination). Ordem
+// dos cheques: health pause → horário de funcionamento → daily cap → min
+// interval → burst cap → allow + reserve. O caminho legado global (decide() +
+// botConfig.channel*/janela silenciosa) foi removido no teardown.
 
 import defaultDb from '../db.js'
 import { getHealth, isChannelPaused } from './channelHealth.js'
+import { HARD_DEFAULT_PRESERVATION } from './preservationConfig.js'
 
 export const DEFER_REASON = Object.freeze({
   HEALTH_PAUSED: 'health_paused',
@@ -86,78 +89,8 @@ function toMs(v) {
 }
 
 /**
- * Decisão pura.
- * @param {{
- *   now: number,
- *   throttle: { postsToday: number, dayBucket: string, lastPostAt: Date|null,
- *               burstWindowStart: Date|null, postsInBurstWindow: number } | null,
- *   isPaused: boolean,
- *   botConfig: object,
- *   group?: { quietHoursEnabled?: boolean, quietHoursJson?: string|null } | null,
- *   ignoreGlobalQuietHours?: boolean,
- * }} input
- */
-export function decide({ now, throttle, isPaused, botConfig, group, ignoreGlobalQuietHours }) {
-  // Pausa por saúde (403/throttle do WhatsApp) é defesa do canal, não
-  // preferência de cadência: vale independente do toggle de throttle.
-  if (isPaused) {
-    return { allow: false, reason: DEFER_REASON.HEALTH_PAUSED, deferUntil: now + HOUR }
-  }
-
-  // Janela silenciosa por grupo espelhado (destino) SOBREPÕE a global, igual ao
-  // horário de funcionamento por fila. Se o grupo ativa a própria janela, a
-  // global é ignorada para ESTE destino; senão, cai na global do BotConfig.
-  const groupQuietActive = group?.quietHoursEnabled === true
-  const quiet = parseQuietHours(groupQuietActive ? group.quietHoursJson : botConfig.channelQuietHoursJson)
-  const q = quietHoursState(now, quiet)
-  const quietGateOn = groupQuietActive || botConfig.quietHoursEnabled !== false
-  // Fonte com horário de funcionamento PRÓPRIO (ex.: fila de ofertas) ignora a
-  // janela silenciosa GLOBAL para este envio — a fila já decidiu que está dentro
-  // do seu horário. A janela explícita POR GRUPO (escolha por destino) continua
-  // valendo; e todas as proteções anti-ban (health/daily/min_interval/burst)
-  // permanecem. Sem o flag = comportamento histórico.
-  const skipGlobalQuiet = ignoreGlobalQuietHours === true && !groupQuietActive
-  if (quietGateOn && q.inQuiet && !skipGlobalQuiet) {
-    return { allow: false, reason: DEFER_REASON.QUIET_HOURS, deferUntil: now + q.deferMs }
-  }
-
-  const today = tzDayBucket(now, quiet.tz)
-  const sameDay = throttle?.dayBucket === today
-  const postsToday = sameDay ? (throttle?.postsToday ?? 0) : 0
-
-  if (botConfig.channelThrottleEnabled !== false && botConfig.channelDailyCap != null && postsToday >= botConfig.channelDailyCap) {
-    return { allow: false, reason: DEFER_REASON.DAILY_CAP, deferUntil: now + DAY }
-  }
-
-  const minIntervalMs = (botConfig.channelMinIntervalSec ?? 30) * SEC
-  const lastPostMs = toMs(throttle?.lastPostAt)
-  if (botConfig.channelThrottleEnabled !== false && lastPostMs && now - lastPostMs < minIntervalMs) {
-    return {
-      allow: false,
-      reason: DEFER_REASON.MIN_INTERVAL,
-      deferUntil: lastPostMs + minIntervalMs,
-    }
-  }
-
-  const burstWindowMs = (botConfig.channelBurstWindowSec ?? 3600) * SEC
-  const burstCap = botConfig.channelBurstCap ?? 6
-  const winStartMs = toMs(throttle?.burstWindowStart)
-  const windowActive = winStartMs && now - winStartMs < burstWindowMs
-  const postsInWindow = windowActive ? (throttle?.postsInBurstWindow ?? 0) : 0
-  if (botConfig.channelThrottleEnabled !== false && windowActive && postsInWindow >= burstCap) {
-    return {
-      allow: false,
-      reason: DEFER_REASON.BURST_CAP,
-      deferUntil: winStartMs + burstWindowMs,
-    }
-  }
-
-  return { allow: true }
-}
-
-/**
- * Plano B — decisão pura por DESTINO (config direcionada). Mesma ordem de
- * cheques do decide() legado, mas com:
+ * Plano B — decisão pura por DESTINO (config direcionada). Único caminho de
+ * decisão após o teardown. Cheques:
  *  - HORÁRIO DE FUNCIONAMENTO (bloqueia FORA da janela), não janela silenciosa;
  *  - limites anti-ban vindos do destino resolvido (dest.*), não do botConfig.
  * `ignoreOperatingHours` (fonte com horário próprio, ex.: fila) pula só o gate
@@ -207,31 +140,18 @@ export function decideDestination({ now, throttle, isPaused, dest, ignoreOperati
 /**
  * Decide e (se allow) reserva o slot atomicamente via upsert.
  *
- * Plano B: quando `opts.destPreservation` é fornecido (config resolvida por
- * destino), usa decideDestination + horário de funcionamento. Sem ele, cai no
- * caminho legado (botConfig + janela silenciosa) — fallback durante a migração.
+ * Plano B / Fase 3: a decisão é SEMPRE por destino. `opts.destPreservation` traz
+ * a config resolvida (preset/override → preset default → HARD_DEFAULT). Sem ele,
+ * cai no HARD_DEFAULT — nunca sem proteção anti-ban. O 2º parâmetro `botConfig`
+ * é mantido só por compatibilidade de assinatura (não é mais lido).
  * @param {string} groupId
- * @param {object} botConfig
- * @param {{ db?: any, now?: number, getHealth?: function, group?: object,
+ * @param {object} _botConfig (legado, ignorado)
+ * @param {{ db?: any, now?: number, getHealth?: function,
  *   destPreservation?: object, ignoreGlobalQuietHours?: boolean }} [opts]
  */
-export async function checkAndReserve(groupId, botConfig, opts = {}) {
+export async function checkAndReserve(groupId, _botConfig, opts = {}) {
   const now = opts.now ?? Date.now()
-  const dest = opts.destPreservation ?? null
-
-  // Plano B / Fase 3: com config POR DESTINO (destPreservation) o anti-ban está
-  // SEMPRE ativo — preset/HARD_DEFAULT garantem limites sãos, e o master global
-  // de preservação não desliga mais a proteção do destino (invariante "nunca sem
-  // proteção anti-ban"). O curto-circuito legado vale só SEM destPreservation.
-  if (opts.preservationActive === false && !dest) {
-    // Master de preservação off (caminho legado/sem destino): throttle/health
-    // não se aplicam, mas a janela explícita por grupo continua valendo.
-    if (opts.group?.quietHoursEnabled === true) {
-      const q = quietHoursState(now, parseQuietHours(opts.group.quietHoursJson))
-      if (q.inQuiet) return { allow: false, reason: DEFER_REASON.QUIET_HOURS, deferUntil: now + q.deferMs }
-    }
-    return { allow: true, reason: 'gating_off' }
-  }
+  const dest = opts.destPreservation ?? HARD_DEFAULT_PRESERVATION
   const db = opts.db ?? defaultDb
   const fetchHealth = opts.getHealth ?? ((id) => getHealth(id, { db }))
 
@@ -239,39 +159,20 @@ export async function checkAndReserve(groupId, botConfig, opts = {}) {
     fetchHealth(groupId),
     db.channelThrottle.findUnique({ where: { groupId } }),
   ])
-  let decision
-  let effective
-  if (dest) {
-    decision = decideDestination({
-      now,
-      throttle,
-      isPaused: isChannelPaused(health, now),
-      dest,
-      ignoreOperatingHours: opts.ignoreGlobalQuietHours === true,
-    })
-    effective = { throttleOn: dest.throttleEnabled !== false, burstWindowSec: dest.burstWindowSec, tz: parseQuietHours(dest.operatingHoursJson).tz }
-  } else {
-    // DEPRECATED (Plano B / Fase 3): caminho legado da global. O worker já passa
-    // sempre `destPreservation`, então este ramo virou efetivamente código morto
-    // em produção. Mantido só por retrocompat de chamadores/testes antigos até a
-    // remoção física das colunas do BotConfig (ver checklist de teardown no doc
-    // 2026-06-22-plano-b-config-direcionada-design.md / seção "Fase 3").
-    // Enquanto vivo, ainda honra o A-2: `ignoreGlobalQuietHours` (override de
-    // horário da fila) pula só a janela silenciosa global no `decide()` abaixo.
-    decision = decide({
-      now,
-      throttle,
-      isPaused: isChannelPaused(health, now),
-      botConfig,
-      group: opts.group ?? null,
-      ignoreGlobalQuietHours: opts.ignoreGlobalQuietHours === true,
-    })
-    effective = { throttleOn: botConfig.channelThrottleEnabled !== false, burstWindowSec: botConfig.channelBurstWindowSec, tz: parseQuietHours(botConfig.channelQuietHoursJson).tz }
-  }
+  const decision = decideDestination({
+    now,
+    throttle,
+    isPaused: isChannelPaused(health, now),
+    dest,
+    ignoreOperatingHours: opts.ignoreGlobalQuietHours === true,
+  })
   if (!decision.allow) return decision
 
-  if (effective.throttleOn) {
-    await reserve(db, groupId, throttle, now, effective)
+  if (dest.throttleEnabled !== false) {
+    await reserve(db, groupId, throttle, now, {
+      burstWindowSec: dest.burstWindowSec,
+      tz: parseQuietHours(dest.operatingHoursJson).tz,
+    })
   }
   return decision
 }
