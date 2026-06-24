@@ -25,6 +25,8 @@ test('deploy_safe_staging.sh rebuilds dashboard and blocks Next prerender login 
   assert.match(script, /x-nextjs-prerender/, 'smoke test must reject Next.js prerender responses')
   assert.match(script, /content-type: .*application\/json/, 'smoke test must require JSON API response')
   assert.match(script, /assert_dashboard_security_headers/, 'dashboard security headers must be checked in staging')
+  assert.match(script, /assert_next_static_assets_available "visual \/admin"/, 'staging must verify that /admin referenced Next static JS/CSS assets return 200')
+  assert.match(script, /\/_next\\\/static\\\//, 'static asset verifier must inspect /_next/static references')
   assert.ok(script.includes('X-Content-Type-Options:[[:space:]]*nosniff'), 'staging must require nosniff')
   assert.ok(script.includes('X-Frame-Options:[[:space:]]*SAMEORIGIN'), 'staging must require same-origin framing')
   assert.ok(script.includes('Referrer-Policy:[[:space:]]*strict-origin-when-cross-origin'), 'staging must require the approved referrer policy')

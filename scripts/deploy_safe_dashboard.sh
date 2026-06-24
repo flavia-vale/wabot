@@ -81,6 +81,64 @@ check_http_with_retry() {
   return 1
 }
 
+
+assert_next_static_assets_available() {
+  local label="$1"
+  local page_url="$2"
+  local origin="$3"
+  local html_file
+  local assets_file
+
+  html_file=$(mktemp /tmp/wabot_next_assets_html.XXXXXX)
+  assets_file=$(mktemp /tmp/wabot_next_assets_list.XXXXXX)
+
+  if ! curl -fsS --max-time 15 "$page_url" -o "$html_file"; then
+    echo "ERRO: não foi possível baixar HTML de ${label} (${page_url}) para validar assets do Next."
+    rm -f "$html_file" "$assets_file"
+    exit 1
+  fi
+
+  node - "$html_file" > "$assets_file" <<'NODE'
+const { readFileSync } = require('node:fs')
+const html = readFileSync(process.argv[2], 'utf8')
+const assets = new Set()
+const re = /(?:src|href)=["']([^"']*\/_next\/static\/[^"']+)["']/g
+let match
+while ((match = re.exec(html))) {
+  const value = match[1].replace(/&amp;/g, '&')
+  if (/\.(?:js|css)(?:\?|$)/.test(value)) assets.add(value)
+}
+for (const asset of assets) console.log(asset)
+NODE
+
+  if [[ ! -s "$assets_file" ]]; then
+    echo "ERRO: HTML de ${label} não referenciou assets JS/CSS em /_next/static. Isso indica build incompleto ou resposta inesperada."
+    head -c 1200 "$html_file" || true
+    echo
+    rm -f "$html_file" "$assets_file"
+    exit 1
+  fi
+
+  while IFS= read -r asset_path; do
+    local asset_url="$asset_path"
+    if [[ "$asset_url" == /_next/* ]]; then
+      asset_url="${origin%/}${asset_url}"
+    fi
+    local code
+    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$asset_url" || echo "000")
+    echo "  asset ${asset_url} -> HTTP ${code}"
+    if [[ "$code" != "200" ]]; then
+      echo "ERRO: asset do Next referenciado por ${label} indisponível (HTTP ${code}): ${asset_url}"
+      echo "Causa provável: HTML e .next/static fora de sincronia ou build/deploy incompleto. Abortando para não publicar Admin quebrado."
+      rm -f "$html_file" "$assets_file"
+      exit 1
+    fi
+  done < "$assets_file"
+
+  rm -f "$html_file" "$assets_file"
+  echo "  Assets JS/CSS do Next validados para ${label}"
+}
+
 verify_next_polyfill() {
   local polyfill="$DASHBOARD_DIR/node_modules/next/dist/build/polyfills/polyfill-nomodule.js"
   [[ -f "$polyfill" ]]
@@ -337,6 +395,7 @@ echo "[9/9] Smoke tests (hard gate com retry)"
 for path in /login /admin /painel; do
   check_http_with_retry "$path" 8 2
 done
+assert_next_static_assets_available "dashboard /admin" "http://espelhagrupos.com.br/admin" "http://espelhagrupos.com.br"
 
 echo "  Validando abertura mobile do site (/ e /login)"
 "$ROOT_DIR/scripts/smoke_mobile_dashboard.sh" "http://espelhagrupos.com.br" / /login
