@@ -259,13 +259,23 @@ export default function WhatsAppPage() {
         setSocketState('idle')
         setStatusError('')
         setWsErrorMessage('')
+        setFeedback('Bot online ✅ Conexão concluída.')
       }
     }, 8000)
     return () => clearInterval(interval)
   }, [status?.running])
 
   useEffect(() => {
-    if (!(status?.running && status?.status === 'connecting')) return
+    // Polling acelerado (5s) enquanto o bot está conectando OU enquanto há
+    // código de pareamento ativo e status 'disconnected' (janela transitória
+    // normal do handshake pós-515: WA fecha o socket, bot reinicia ~500ms
+    // depois). Sem este caso, o polling pararia exatamente quando o celular
+    // mostra "Conectando..." e a UI nunca detectaria o 'connected' final.
+    const shouldPoll = status?.running && (
+      status?.status === 'connecting' ||
+      (status?.status === 'disconnected' && pairingCode)
+    )
+    if (!shouldPoll) return
     const interval = setInterval(async () => {
       const latest = await api.sessionStatusFast().catch(() => null)
       if (!latest) return
@@ -281,7 +291,7 @@ export default function WhatsAppPage() {
       }
     }, 5000)
     return () => clearInterval(interval)
-  }, [status?.running, status?.status])
+  }, [status?.running, status?.status, pairingCode])
 
   useEffect(() => {
     if (!(status?.running && status?.status !== 'connected') || qr || pairingCode) return
