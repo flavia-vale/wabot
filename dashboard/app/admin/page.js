@@ -652,6 +652,107 @@ function LandingPageContentAccordion({ plans, faq, tutorial, onSavePlan, onSaveF
   )
 }
 
+function StagingPowerCard({ admin }) {
+  const [status, setStatus] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const canRead = admin?.permissions?.includes('tech:read')
+  const canManage = admin?.permissions?.includes('tech:write')
+
+  function refresh() {
+    return api.adminStagingStatus()
+      .then((s) => { setStatus(s); setError('') })
+      .catch((e) => { setError(e.message); setStatus(null) })
+  }
+
+  useEffect(() => {
+    if (!canRead) return
+    let active = true
+    api.adminStagingStatus()
+      .then((s) => { if (active) { setStatus(s); setError('') } })
+      .catch((e) => { if (active) { setError(e.message); setStatus(null) } })
+    return () => { active = false }
+  }, [canRead])
+
+  async function toggle(action) {
+    if (busy) return
+    setBusy(true); setError('')
+    try {
+      setStatus(await api.adminStagingPower(action))
+    } catch (e) {
+      setError(e.message)
+      await refresh()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!canRead) return null
+  const on = status?.on
+
+  return (
+    <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">Infra · Economia de memória</p>
+          <h2 className="text-lg font-black text-gray-900">Staging (liga/desliga)</h2>
+          <p className="text-sm text-gray-500">Desligue o staging quando não estiver testando para liberar RAM no VPS. Ligue só durante validações.</p>
+        </div>
+        <span className={`rounded-full px-3 py-1 text-xs font-bold ${status ? (on ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600') : 'bg-gray-100 text-gray-400'}`}>
+          {status ? (on ? 'Ligado' : 'Desligado') : '—'}
+        </span>
+      </div>
+
+      {status && (
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {status.apps.map((app) => (
+            <div key={app.name} className="rounded-xl bg-gray-50 p-3">
+              <p className="text-xs text-gray-400">{app.name}</p>
+              <p className={`text-sm font-black ${app.online ? 'text-green-700' : 'text-gray-500'}`}>{app.online ? 'online' : 'parado'}</p>
+              <p className="text-xs text-gray-400">{app.memoryMB} MB</p>
+            </div>
+          ))}
+          <div className="rounded-xl bg-indigo-50 p-3">
+            <p className="text-xs text-indigo-600">RAM staging</p>
+            <p className="text-xl font-black text-indigo-700">{status.totalMemoryMB} MB</p>
+          </div>
+        </div>
+      )}
+
+      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+
+      <div className="flex flex-wrap gap-3">
+        <button
+          type="button"
+          disabled={!canManage || busy || !status || !on}
+          onClick={() => toggle('off')}
+          className="rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {busy ? 'Aguarde…' : 'Desligar staging'}
+        </button>
+        <button
+          type="button"
+          disabled={!canManage || busy || !status || on}
+          onClick={() => toggle('on')}
+          className="rounded-xl bg-green-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {busy ? 'Aguarde…' : 'Ligar staging'}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={refresh}
+          className="rounded-xl bg-gray-100 px-4 py-2 text-sm font-bold text-gray-700 disabled:opacity-40"
+        >
+          Atualizar
+        </button>
+      </div>
+      {!canManage && <p className="mt-2 text-xs text-gray-400">Somente leitura — sem permissão tech:write para alternar.</p>}
+    </section>
+  )
+}
+
 export default function AdminPage() {
   const [overview, setOverview] = useState(null)
   const [admin, setAdmin] = useState(null)
@@ -1057,6 +1158,8 @@ export default function AdminPage() {
             </div>
           </section>
         )}
+
+        <StagingPowerCard admin={admin} />
 
         {success && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">

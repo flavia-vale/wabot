@@ -60,6 +60,9 @@ export const ANALYTICS_EVENTS = new Set([
   // duplicado / double-possession) — fonte raiz do spam de notificação de
   // "sincronização concluída". Durável p/ diagnóstico cross-processo em prod.
   'ops_wa_connection_replaced',
+  // Desconexão 403/forbidden do WhatsApp — sinal de chip restringido/banido,
+  // vigiado por chip para agir antes do ban definitivo.
+  'ops_wa_forbidden',
 ])
 
 const SENSITIVE_KEY_PATTERN = /(token|secret|password|cookie|credential|csrf|ssid|key|message|text|url|phone|email)/i

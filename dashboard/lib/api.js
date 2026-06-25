@@ -269,6 +269,13 @@ export const api = {
   adminSystemHealth: () => apiFetch('/api/admin/system/health'),
   adminSystemMetrics: () => apiFetch('/api/admin/system/metrics'),
   adminSystemObservability: () => apiFetch('/api/admin/system/observability'),
+  adminStagingStatus: () => apiFetch('/api/admin/staging-power'),
+  adminStagingPower: (action, { mfaToken } = {}) =>
+    apiFetch('/api/admin/staging-power', {
+      method: 'POST',
+      body: JSON.stringify({ action }),
+      headers: mfaToken ? { 'x-admin-mfa-token': String(mfaToken).trim() } : {},
+    }),
   adminTelegramOverview: () => apiFetch('/api/admin/telegram/overview'),
   adminTelegramRequests: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
