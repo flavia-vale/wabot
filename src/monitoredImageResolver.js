@@ -31,11 +31,13 @@ export async function resolveMonitoredImage({
   fetchProductImage,
   fetchImageBuffer,
   fallbackToOriginal = true,
+  skipActiveFetch = false,
   logger,
 }) {
   const log = logger || { info: () => {}, warn: () => {} }
 
   async function tryActiveFetch() {
+    if (skipActiveFetch) return null
     if (!target?.url) return null
     try {
       const productImageUrl = await fetchProductImage(target.platform, target.url, credentials || {})

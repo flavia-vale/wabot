@@ -14,7 +14,7 @@ import { dirname } from 'path'
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
-import { applyConversionsAndBranding, stripUrlsFromText, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from './messageProcessor.js'
+import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage } from './monitoredImageResolver.js'
@@ -1865,6 +1865,8 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       const sanitizedText = text ? sanitizeInviteLinks(text) : ''
       if (text && !sanitizedText) return
 
+      const isCouponMsg = isCouponAnnouncement(sanitizedText)
+
       const links = detectLinks(sanitizedText)
       const messageKind = detectMessageKind(innerMessage, sanitizedText)
       const policy = normalizeForwardingPolicy(monitorGroup)
@@ -2006,6 +2008,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           fetchProductImage,
           fetchImageBuffer,
           fallbackToOriginal: monitorGroup.fallbackToOriginal !== false,
+          skipActiveFetch: isCouponMsg,
           logger,
         })
         return cachedImage
@@ -2198,6 +2201,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       if (
         !TITLE_MISMATCH_GUARD_DISABLED &&
         !templateApplied &&
+        !isCouponMsg &&
         primary.url &&
         TITLE_MISMATCH_GUARD_PLATFORMS.has(primary.platform)
       ) {

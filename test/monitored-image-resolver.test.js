@@ -196,6 +196,39 @@ test('mode=fetch com fallbackToOriginal=false retorna null quando marketplace fa
   assert.equal(downloadCalls, 0)
 })
 
+test('skipActiveFetch=true pula fetch ativo e usa original (modo original com thumbnail)', async () => {
+  let fetchCalls = 0
+  const result = await resolveMonitoredImage({
+    mode: 'original',
+    target: { platform: 'mercadolivre', url: 'https://mercadolivre.com.br/social/listas' },
+    credentials: {},
+    downloadOriginalImage: async () => THUMBNAIL_IMAGE,
+    fetchProductImage: async () => { fetchCalls++; return 'https://mlstatic.com/produto.jpg' },
+    fetchImageBuffer: async () => { fetchCalls++; return HIRES_FROM_MARKET },
+    skipActiveFetch: true,
+    logger: silentLogger(),
+  })
+  assert.equal(result, THUMBNAIL_IMAGE, 'cupom: usa thumbnail original, não a imagem do produto')
+  assert.equal(fetchCalls, 0, 'não deve chamar fetch ativo para mensagens de cupom')
+})
+
+test('skipActiveFetch=true em mode=fetch cai direto para original', async () => {
+  let fetchCalls = 0
+  const result = await resolveMonitoredImage({
+    mode: 'fetch',
+    target: { platform: 'amazon', url: 'https://amzn.to/cupom' },
+    credentials: {},
+    downloadOriginalImage: async () => THUMBNAIL_IMAGE,
+    fetchProductImage: async () => { fetchCalls++; return 'https://m.media-amazon.com/img.jpg' },
+    fetchImageBuffer: async () => { fetchCalls++; return HIRES_FROM_MARKET },
+    skipActiveFetch: true,
+    fallbackToOriginal: true,
+    logger: silentLogger(),
+  })
+  assert.equal(result, THUMBNAIL_IMAGE, 'cupom: usa original como fallback, não busca imagem do produto')
+  assert.equal(fetchCalls, 0)
+})
+
 test('mode=none ou desconhecido retorna null sem chamar nada', async () => {
   let calls = 0
   const result = await resolveMonitoredImage({
