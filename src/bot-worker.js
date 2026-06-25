@@ -2116,7 +2116,19 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       }
         finalText = applyConversionsAndBranding(sanitizedText, conversions, cfg.botConfig.brandingGroupLink, cfg.botConfig.brandingCtaText)
         if (urlsToStrip.length) {
-          finalText = stripUrlsFromText(finalText, urlsToStrip)
+          const userCouponLink = String(cfg.botConfig.couponLink || '').trim()
+          if (userCouponLink) {
+            // User configured their own coupon link: substitute each stripped
+            // URL with it so commission stays with the right affiliate.
+            for (const url of urlsToStrip) {
+              finalText = finalText.replace(url, userCouponLink)
+            }
+          } else {
+            // No coupon link configured: remove the URL and the entire CTA
+            // line that contained it to avoid orphaned text like
+            // "🏷️ Cupons disponíveis aqui:" with no clickable link.
+            finalText = stripUrlsFromText(finalText, urlsToStrip)
+          }
         }
       }
       // Eleição do link primário (oferta/dedup/log) entre as conversões válidas.

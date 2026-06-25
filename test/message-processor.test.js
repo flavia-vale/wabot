@@ -198,12 +198,13 @@ test('hasSignificantTokenOverlap ignora ruído de marketplace (nomes de platafor
   assert.equal(hasSignificantTokenOverlap(titulo, caption), false)
 })
 
-test('stripUrlsFromText remove URL de cupom do texto e normaliza espaços', () => {
+test('stripUrlsFromText remove a linha inteira (CTA + URL) quando a URL é de cupom', () => {
   const text = '🔗 Compre aqui:\nhttps://s.shopee.com.br/6Aiuu0cLP2\n\n🏷️ Cupons disponíveis aqui: https://s.shopee.com.br/40eQK1or1O\n\n🛍️ Vitrine de Links'
   const result = stripUrlsFromText(text, ['https://s.shopee.com.br/40eQK1or1O'])
   assert.ok(!result.includes('40eQK1or1O'), 'URL de cupom deve ser removida')
+  assert.ok(!result.includes('Cupons disponíveis aqui'), 'CTA da linha do cupom deve ser removido junto')
   assert.ok(result.includes('6Aiuu0cLP2'), 'URL de produto deve ser preservada')
-  assert.ok(!result.includes('\n\n\n'), 'não deve sobrar linhas em branco excessivas')
+  assert.ok(result.includes('Vitrine de Links'), 'linhas não relacionadas devem ser preservadas')
 })
 
 test('stripUrlsFromText não altera texto quando lista de URLs for vazia', () => {
