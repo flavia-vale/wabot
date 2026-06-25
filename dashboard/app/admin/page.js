@@ -660,12 +660,20 @@ function StagingPowerCard({ admin }) {
   const canRead = admin?.permissions?.includes('tech:read')
   const canManage = admin?.permissions?.includes('tech:write')
 
-  async function refresh() {
-    try { setStatus(await api.adminStagingStatus()); setError('') }
-    catch (e) { setError(e.message); setStatus(null) }
+  function refresh() {
+    return api.adminStagingStatus()
+      .then((s) => { setStatus(s); setError('') })
+      .catch((e) => { setError(e.message); setStatus(null) })
   }
 
-  useEffect(() => { if (canRead) refresh() }, [canRead])
+  useEffect(() => {
+    if (!canRead) return
+    let active = true
+    api.adminStagingStatus()
+      .then((s) => { if (active) { setStatus(s); setError('') } })
+      .catch((e) => { if (active) { setError(e.message); setStatus(null) } })
+    return () => { active = false }
+  }, [canRead])
 
   async function toggle(action) {
     if (busy) return
