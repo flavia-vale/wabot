@@ -49,3 +49,11 @@ test('recordOperationalSignal retorna o total acumulado e não lança', () => {
   assert.equal(recordOperationalSignal('dedup_fail_open'), 1)
   assert.equal(recordOperationalSignal('dedup_fail_open'), 2)
 })
+
+test('sinal wa_forbidden é contabilizado por chip (vigilância de 403/ban)', () => {
+  assert.equal(recordOperationalSignal('wa_forbidden', { userId: 'u1', code: 403 }), 1)
+  recordOperationalSignal('wa_forbidden', { userId: 'u1', code: 403 })
+  const snap = getOperationalSignalsSnapshot()
+  assert.equal(snap.wa_forbidden.total, 2)
+  assert.equal(snap.wa_forbidden.last1h, 2)
+})

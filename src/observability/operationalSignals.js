@@ -20,6 +20,10 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   sqlite_busy: 'ops_sqlite_busy',
   dedup_fail_open: 'ops_dedup_fail_open',
   wa_connection_replaced: 'ops_wa_connection_replaced',
+  // Desconexão 403/forbidden do WhatsApp: chip possivelmente restringido/banido
+  // (costuma vir após flapping prolongado). Sinal durável para vigiar por chip
+  // e agir antes de virar ban definitivo.
+  wa_forbidden: 'ops_wa_forbidden',
 }
 
 let cachedTrackFn = null
@@ -31,7 +35,10 @@ async function emitDurable(name, metadata) {
       const mod = await import('../analytics.js')
       cachedTrackFn = mod.trackAnalyticsEventSafe
     }
-    cachedTrackFn({ event, metadata })
+    // userId top-level (quando vier na metadata) popula a coluna userId do
+    // AnalyticsEvent, permitindo agregação por chip (GROUP BY userId) sem
+    // precisar parsear JSON. Backward-compatible: sinais sem userId seguem null.
+    cachedTrackFn({ event, userId: metadata?.userId ?? null, metadata })
   } catch {
     // best-effort: o contador in-memory já registrou. Em SQLITE_BUSY, a própria
     // escrita do AnalyticsEvent pode falhar — e tudo bem, é só durabilidade.
