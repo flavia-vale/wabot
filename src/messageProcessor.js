@@ -114,13 +114,28 @@ export function appendBrandingFooter(text, brandingLink, brandingCtaText = DEFAU
   return `${message}\n\n${cta} ${link}`
 }
 
-// Removes entire lines that contain any of the given URLs, then normalizes
-// whitespace. Stripping the whole line instead of just the URL avoids leaving
-// orphaned CTAs like "🏷️ Cupons disponíveis aqui:" with no link after it.
+// Strips the given URLs from the text. Strategy:
+// 1. Replace each stripped URL in-place (inline removal).
+// 2. If a line still contains another http URL after removal (e.g. a converted
+//    product link on the same line), keep the cleaned line.
+// 3. If the line has no remaining URL, drop it entirely — this removes orphaned
+//    CTAs like "🏷️ Cupons disponíveis aqui:" that have no link to follow.
+//
+// Rationale: the old implementation filtered whole lines containing the URL,
+// which accidentally killed converted product links when a product URL and a
+// coupon URL landed on the same line — breaking mirroring for those messages.
 export function stripUrlsFromText(text, urls) {
   if (!urls || !urls.length) return text
   const result = String(text ?? '').split('\n')
-    .filter(line => !urls.some(url => line.includes(url)))
+    .map(line => {
+      if (!urls.some(url => line.includes(url))) return line
+      let cleaned = line
+      for (const url of urls) {
+        cleaned = cleaned.split(url).join('')
+      }
+      // Keep the line only if another URL (e.g. the converted product link) remains.
+      return /https?:\/\//.test(cleaned) ? cleaned : ''
+    })
     .join('\n')
   return normalizeMessageWhitespace(result)
 }
