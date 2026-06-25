@@ -121,11 +121,11 @@ check_http_with_retry() {
   local path="$1"
   local attempts="${2:-8}"
   local sleep_seconds="${3:-2}"
-  local url="http://espelhagrupos.com.br${path}"
+  local url="https://espelhagrupos.com.br${path}"
 
   for ((i=1; i<=attempts; i++)); do
     local code
-    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$url" || echo "000")
+    code=$(curl -sL -o /dev/null -w "%{http_code}" --max-time 10 "$url" || echo "000")
     echo "  tentativa ${i}/${attempts} ${path} -> HTTP ${code}"
     if [[ "$code" == "200" || "$code" == "301" || "$code" == "302" || "$code" == "307" || "$code" == "308" ]]; then
       return 0
@@ -148,7 +148,7 @@ assert_next_static_assets_available() {
   html_file=$(mktemp /tmp/wabot_next_assets_html.XXXXXX)
   assets_file=$(mktemp /tmp/wabot_next_assets_list.XXXXXX)
 
-  if ! curl -fsS --max-time 15 "$page_url" -o "$html_file"; then
+  if ! curl -fsSL --max-time 15 "$page_url" -o "$html_file"; then
     echo "ERRO: não foi possível baixar HTML de ${label} (${page_url}) para validar assets do Next."
     rm -f "$html_file" "$assets_file"
     exit 1
@@ -181,7 +181,7 @@ NODE
       asset_url="${origin%/}${asset_url}"
     fi
     local code
-    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$asset_url" || echo "000")
+    code=$(curl -sL -o /dev/null -w "%{http_code}" --max-time 15 "$asset_url" || echo "000")
     echo "  asset ${asset_url} -> HTTP ${code}"
     if [[ "$code" != "200" ]]; then
       echo "ERRO: asset do Next referenciado por ${label} indisponível (HTTP ${code}): ${asset_url}"
@@ -451,10 +451,10 @@ echo "[9/9] Smoke tests (hard gate com retry)"
 for path in /login /admin /painel; do
   check_http_with_retry "$path" 8 2
 done
-assert_next_static_assets_available "dashboard /admin" "http://espelhagrupos.com.br/admin" "http://espelhagrupos.com.br"
+assert_next_static_assets_available "dashboard /admin" "https://espelhagrupos.com.br/admin" "https://espelhagrupos.com.br"
 
 echo "  Validando abertura mobile do site (/ e /login)"
-"$ROOT_DIR/scripts/smoke_mobile_dashboard.sh" "http://espelhagrupos.com.br" / /login
+"$ROOT_DIR/scripts/smoke_mobile_dashboard.sh" "https://espelhagrupos.com.br" / /login
 
 echo "  Validando proxy /api/auth/login (não pode ser 404/prerender do Next.js)"
 api_code=$(curl -s -o /tmp/wabot_login_smoke_body.txt -D /tmp/wabot_login_smoke_headers.txt -w "%{http_code}" \
@@ -462,7 +462,7 @@ api_code=$(curl -s -o /tmp/wabot_login_smoke_body.txt -D /tmp/wabot_login_smoke_
   -X POST \
   -H "Content-Type: application/json" \
   --data '{"email":"smoke@example.invalid","password":"invalid"}' \
-  http://espelhagrupos.com.br/api/auth/login || echo "000")
+  https://espelhagrupos.com.br/api/auth/login || echo "000")
 echo "  POST /api/auth/login -> HTTP ${api_code}"
 if [[ "$api_code" == "404" || "$api_code" == "000" ]]; then
   echo "ERRO: /api/auth/login não chegou à API (HTTP ${api_code}). Headers:"

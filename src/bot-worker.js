@@ -1668,11 +1668,20 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       const isLoggedOut = code === DisconnectReason.loggedOut
       const isRestartRequired = code === DisconnectReason.restartRequired
       const isConnectionReplaced = code === DisconnectReason.connectionReplaced
+      const isForbidden = code === DisconnectReason.forbidden
       const wasPairing = pairingState.suppressAutoRestart()
       activeSock = null
       pendingSock = null
       if (process.send) process.send({ type: 'status', data: 'disconnected' })
 await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: code != null ? String(code) : null }).catch(() => {})
+      if (isForbidden) {
+        // 403/forbidden: o WhatsApp recusou a sessão — chip possivelmente
+        // restringido/banido (costuma vir após flapping prolongado). Sinal
+        // durável por chip para vigiar e agir antes do ban definitivo. Só
+        // observabilidade: NÃO altera o fluxo de reconexão abaixo.
+        logger.error({ code, userId }, 'WA recusou a sessão (403/forbidden) — chip sob risco de restrição/ban')
+        try { recordOperationalSignal('wa_forbidden', { userId, code }) } catch {}
+      }
       if (isLoggedOut) {
         // Sessão revogada/expirada — limpar auth para que próximo start gere QR limpo
         await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
