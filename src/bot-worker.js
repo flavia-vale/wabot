@@ -39,7 +39,7 @@ import {
 import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
 import { resolveDestinationPreservation } from './core/preservationConfig.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
-import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/preservationFeatures.js'
+import { PRESERVATION_FEATURE, isPreservationFeatureEnabled, shouldMutateOutgoingImage } from './core/preservationFeatures.js'
 import { mutate as mutateChannelImage } from './core/imageMutation.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
@@ -1120,12 +1120,19 @@ async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
  * normalmente. O callback onDone (doneCallbacks por logId) é preservado: só
  * finalizamos o job se ele NÃO couber na fila.
  */
+function deferReasonMessage(reason) {
+  if (reason === 'burst_cap') {
+    return 'O bot está segurando os envios por alguns minutos para não mandar muitas mensagens de uma vez para este grupo/canal.'
+  }
+  return `aguardando janela de envio do destino (${reason ?? 'throttle'})`
+}
+
 async function deferSendJob(job, gate) {
   const deferUntil = gate?.deferUntil ?? Date.now()
   sendMetrics.deferredTotal++
   await db.messageLog.update({
     where: { id: job.logId },
-    data: { status: 'queued', errorMsg: `aguardando janela de envio do destino (${gate?.reason ?? 'throttle'})` },
+    data: { status: 'queued', errorMsg: deferReasonMessage(gate?.reason) },
   }).catch(() => {})
   logger.info(
     { destJid: job.destJid, reason: gate?.reason, deferUntil, logId: job.logId },
@@ -1190,15 +1197,15 @@ async function processSendJob(job) {
     //
     // O gate vale para QUALQUER destino-post — canal (@newsletter) E grupo
     // espelhado (@g.us). Historicamente o lookup filtrava `kind: 'channel'`,
-    // então grupos espelhados NUNCA passavam pela janela silenciosa nem pelo
-    // intervalo mínimo configurados em /painel/preservacao/configuracoes —
-    // por isso enviavam de madrugada e sem respeitar o espaçamento. A decisão
-    // (checkAndReserve/decide) já é agnóstica de kind; só o call site limitava.
+    // então grupos espelhados NUNCA passavam pelo horário nem pelo intervalo
+    // mínimo da preservação — por isso enviavam de madrugada e sem respeitar o
+    // espaçamento. A decisão (checkAndReserve → decideDestination) já é agnóstica
+    // de kind; só o call site limitava.
     try {
       const g = await db.group.findFirst({
         where: { userId, waJid: job.destJid, role: 'post' },
         select: {
-          id: true, quietHoursEnabled: true, quietHoursJson: true,
+          id: true,
           // Plano B: config de preservação por destino (Fase 1b).
           preservationPresetId: true, operatingHoursEnabled: true, operatingHoursJson: true,
           throttleEnabled: true, minIntervalSec: true, burstCap: true, burstWindowSec: true,
@@ -1218,18 +1225,12 @@ async function processSendJob(job) {
         const defaultPreset = await getDefaultPreservationPreset()
         const destPreservation = resolveDestinationPreservation(g, { preset: g.preservationPreset, defaultPreset })
         const gateOpts = {
-          group: g,
-          // Plano B / Fase 3: anti-ban é SEMPRE ativo por destino (destPreservation
-          // sempre presente via preset/HARD_DEFAULT). O master global de preservação
-          // não governa mais o gate de envio — só as features opcionais.
-          preservationActive: true,
-          // A-2: fila com horário próprio sobrepõe a janela GLOBAL no worker (a
-          // fila já checou seu horário antes de despachar). No caminho por
-          // destino (Plano B), isso vira ignoreOperatingHours em decideDestination.
+          // A-2: fila com horário próprio sobrepõe a janela do destino (a fila já
+          // checou seu horário antes de despachar) → ignoreOperatingHours.
           ignoreGlobalQuietHours: job.ignoreGlobalQuietHours === true,
-          // Plano B / Fase 3: destPreservation é sempre definido
-          // (resolveDestinationPreservation cai no preset default / HARD_DEFAULT),
-          // então vira a ÚNICA fonte de verdade do gate.
+          // Plano B / Fase 3: destPreservation (preset/override → preset default →
+          // HARD_DEFAULT) é a ÚNICA fonte de verdade do gate. Anti-ban sempre
+          // ativo por destino; o master global e o legado decide() foram removidos.
           destPreservation,
         }
         let gate = await throttleCheckAndReserve(destGroupId, cfg, gateOpts)
@@ -2066,11 +2067,17 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           logger.info({ platform, converted: conversionResult.url, warning: conversionResult.warning }, 'Link convertido')
           return { platform, url, converted: conversionResult.url, warning: conversionResult.warning }
         } catch (err) {
+          if (err.stripFromMessage) {
+            // Non-product link (coupon/voucher): strip from mirrored text to
+            // avoid misattributing commission to the source group's affiliate.
+            return { platform, url, strip: true }
+          }
           await recordConversionIssue({ platform, url, jid, text, reason: `Falha na conversão de ${credentialValidation.label}: ${err.message}` })
           return null
         }
       }))
-      const conversions = linkResults.filter(Boolean)
+      const conversions = linkResults.filter(r => r && !r.strip)
+      const urlsToStrip = linkResults.filter(r => r?.strip).map(r => r.url)
 
       const warningKinds = new Set(conversions.map(c => c.warning).filter(Boolean))
       for (const kind of warningKinds) {
@@ -2111,6 +2118,21 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         return
       }
         finalText = applyConversionsAndBranding(sanitizedText, conversions, cfg.botConfig.brandingGroupLink, cfg.botConfig.brandingCtaText)
+        if (urlsToStrip.length) {
+          const userCouponLink = String(cfg.botConfig.couponLink || '').trim()
+          if (userCouponLink) {
+            // User configured their own coupon link: substitute each stripped
+            // URL with it so commission stays with the right affiliate.
+            for (const url of urlsToStrip) {
+              finalText = finalText.replace(url, userCouponLink)
+            }
+          } else {
+            // No coupon link configured: remove the URL and the entire CTA
+            // line that contained it to avoid orphaned text like
+            // "🏷️ Cupons disponíveis aqui:" with no clickable link.
+            finalText = stripUrlsFromText(finalText, urlsToStrip)
+          }
+        }
       }
       // Eleição do link primário (oferta/dedup/log) entre as conversões válidas.
       // Decisão de produto 3.4: o grupo escolhe primeiro/último link; sem override
@@ -2335,7 +2357,11 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             if (imageMode === 'original' && !image) {
               useLinkPreview = true
             }
-            if (image && isChannelDest && isPreservationFeatureEnabled(cfg.preservationActive, cfg.botConfig, PRESERVATION_FEATURE.IMAGE_MUTATION)) {
+            // Issue #1033: mutação de imagem permanece toggle GLOBAL, mas vale
+            // para canal E grupo (não só canal). Envios de grupo com mídia
+            // original já saíram pelo caminho de relay acima (return), então só
+            // chegam aqui imagens não-relay (getImage) — mutáveis com segurança.
+            if (image && shouldMutateOutgoingImage(destJid, cfg.preservationActive, cfg.botConfig)) {
               const mutated = await mutateChannelImage(image.buffer, image.mimetype, {
                 groupId: destJid,
                 enabled: true,

@@ -114,6 +114,17 @@ export function appendBrandingFooter(text, brandingLink, brandingCtaText = DEFAU
   return `${message}\n\n${cta} ${link}`
 }
 
+// Removes entire lines that contain any of the given URLs, then normalizes
+// whitespace. Stripping the whole line instead of just the URL avoids leaving
+// orphaned CTAs like "🏷️ Cupons disponíveis aqui:" with no link after it.
+export function stripUrlsFromText(text, urls) {
+  if (!urls || !urls.length) return text
+  const result = String(text ?? '').split('\n')
+    .filter(line => !urls.some(url => line.includes(url)))
+    .join('\n')
+  return normalizeMessageWhitespace(result)
+}
+
 export function applyConversionsAndBranding(sanitizedText, conversions, brandingLink, brandingCtaText = DEFAULT_BRANDING_CTA_TEXT) {
   let finalText = String(sanitizedText ?? '')
   for (const { url, converted } of conversions) {

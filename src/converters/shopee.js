@@ -46,6 +46,21 @@ export function cleanAffiliateUrl(resolvedUrl) {
 export async function convert(url, creds) {
   const { appId, secretKey } = creds
   const canonical = await resolveCanonical(url)
+
+  // Coupon/voucher links (s.shopee.com.br/XXXXX that resolve to non-product
+  // paths like /buyer/voucher) have no shopId+itemId. The affiliate API may
+  // still accept them and return a short link, but that link routes through
+  // the web affiliate redirect chain — causing "Oops! Seu navegador não é
+  // mais aceito!" in WhatsApp's in-app WebView. Keeping the original link
+  // is not an option either: its cookies attribute any subsequent purchase
+  // to the source group's affiliate, not ours. Stripping it from the
+  // mirrored message is the only safe behavior.
+  if (!extractShopeeIds(canonical)) {
+    const err = new Error('link não é de produto — removido para evitar atribuição incorreta de comissão')
+    err.stripFromMessage = true
+    throw err
+  }
+
   const safeUrl = canonical.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
   const body = {
     query: `mutation {

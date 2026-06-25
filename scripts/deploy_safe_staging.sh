@@ -12,6 +12,7 @@ FORCE_RESET_ON_SYNC="${FORCE_RESET_ON_SYNC:-0}"
 VISUAL_APP="${VISUAL_APP:-visual-staging}"
 API_APP="${API_APP:-api-staging}"
 VISUAL_BASE_URL="${VISUAL_BASE_URL:-http://178.105.54.0:3006}"
+VISUAL_PORT="${VISUAL_PORT:-3006}"
 API_BASE_URL="${API_BASE_URL:-http://127.0.0.1:3004}"
 
 # APP_ENV precisa existir no ambiente do BUILD do Next (headers() é avaliado em
@@ -148,6 +149,64 @@ assert_login_api_not_next_404() {
   fi
 }
 
+
+assert_next_static_assets_available() {
+  local label="$1"
+  local page_url="$2"
+  local origin="$3"
+  local html_file
+  local assets_file
+
+  html_file=$(mktemp /tmp/wabot_next_assets_html.XXXXXX)
+  assets_file=$(mktemp /tmp/wabot_next_assets_list.XXXXXX)
+
+  if ! curl -fsS --max-time 15 "$page_url" -o "$html_file"; then
+    echo "ERRO: não foi possível baixar HTML de ${label} (${page_url}) para validar assets do Next."
+    rm -f "$html_file" "$assets_file"
+    exit 1
+  fi
+
+  node - "$html_file" > "$assets_file" <<'NODE'
+const { readFileSync } = require('node:fs')
+const html = readFileSync(process.argv[2], 'utf8')
+const assets = new Set()
+const re = /(?:src|href)=["']([^"']*\/_next\/static\/[^"']+)["']/g
+let match
+while ((match = re.exec(html))) {
+  const value = match[1].replace(/&amp;/g, '&')
+  if (/\.(?:js|css)(?:\?|$)/.test(value)) assets.add(value)
+}
+for (const asset of assets) console.log(asset)
+NODE
+
+  if [[ ! -s "$assets_file" ]]; then
+    echo "ERRO: HTML de ${label} não referenciou assets JS/CSS em /_next/static. Isso indica build incompleto ou resposta inesperada."
+    head -c 1200 "$html_file" || true
+    echo
+    rm -f "$html_file" "$assets_file"
+    exit 1
+  fi
+
+  while IFS= read -r asset_path; do
+    local asset_url="$asset_path"
+    if [[ "$asset_url" == /_next/* ]]; then
+      asset_url="${origin%/}${asset_url}"
+    fi
+    local code
+    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$asset_url" || echo "000")
+    echo "  asset ${asset_url} -> HTTP ${code}"
+    if [[ "$code" != "200" ]]; then
+      echo "ERRO: asset do Next referenciado por ${label} indisponível (HTTP ${code}): ${asset_url}"
+      echo "Causa provável: HTML e .next/static fora de sincronia ou build/deploy incompleto. Abortando para não publicar Admin quebrado."
+      rm -f "$html_file" "$assets_file"
+      exit 1
+    fi
+  done < "$assets_file"
+
+  rm -f "$html_file" "$assets_file"
+  echo "  Assets JS/CSS do Next validados para ${label}"
+}
+
 verify_next_polyfill() {
   local polyfill="$DASHBOARD_DIR/node_modules/next/dist/build/polyfills/polyfill-nomodule.js"
   [[ -f "$polyfill" ]]
@@ -206,6 +265,61 @@ build_dashboard_with_recovery() {
   npm run build
 }
 
+
+
+kill_port_listeners() {
+  local port="$1"
+  local label="$2"
+
+  if [[ -z "$port" ]]; then
+    return 0
+  fi
+
+  if command -v fuser >/dev/null 2>&1; then
+    if fuser -k "${port}/tcp" >/tmp/wabot_fuser_${port}.log 2>&1; then
+      echo "  Listeners órfãos de ${label} na porta ${port} encerrados via fuser."
+      return 0
+    fi
+  fi
+
+  if command -v lsof >/dev/null 2>&1; then
+    local pids
+    pids=$(lsof -ti tcp:"$port" 2>/dev/null | tr '\n' ' ' || true)
+    if [[ -n "$pids" ]]; then
+      echo "  Encerrando listeners órfãos de ${label} na porta ${port}: ${pids}"
+      kill $pids >/dev/null 2>&1 || true
+      sleep 2
+      pids=$(lsof -ti tcp:"$port" 2>/dev/null | tr '\n' ' ' || true)
+      if [[ -n "$pids" ]]; then
+        kill -9 $pids >/dev/null 2>&1 || true
+      fi
+    fi
+  fi
+}
+
+recreate_frontend_pm2_app() {
+  local app_name="$1"
+  local port="$2"
+
+  # Apps Next iniciados historicamente via `npm start` podem deixar o processo
+  # filho `next start` órfão após `pm2 restart`. O órfão continua segurando a
+  # porta e servindo HTML de um build antigo, enquanto .next/static já aponta
+  # para outro build — exatamente o 404 em /_next/static visto no /admin.
+  # Para dashboard/visual, deploy deve ser start fresco: delete PM2 + limpar
+  # listener da porta + start pelo ecosystem (que agora chama o binário do Next
+  # diretamente, sem wrapper npm).
+  pm2 delete "$app_name" >/dev/null 2>&1 || true
+  kill_port_listeners "$port" "$app_name"
+
+  if pm2 start "$ROOT_DIR/ecosystem.config.cjs" --only "$app_name" --update-env >/tmp/wabot_pm2_start_${app_name}.log 2>&1; then
+    echo "  PM2 frontend '$app_name' recriado com processo Next fresco."
+    return 0
+  fi
+
+  echo "ERRO: não foi possível recriar frontend '$app_name' via ecosystem.config.cjs."
+  cat /tmp/wabot_pm2_start_${app_name}.log || true
+  exit 1
+}
 
 ensure_pm2_app_running() {
   local app_name="$1"
@@ -397,7 +511,7 @@ if ! command -v pm2 >/dev/null 2>&1; then
   exit 1
 fi
 ensure_pm2_app_running "$API_APP"
-ensure_pm2_app_running "$VISUAL_APP"
+recreate_frontend_pm2_app "$VISUAL_APP" "$VISUAL_PORT"
 
 # bot-supervisor é INTENCIONALMENTE deixado de fora do restart automático
 # em todo deploy. O ponto do desacoplamento é justamente que deploy da API
@@ -423,6 +537,8 @@ pm2 status
 
 echo "[9/9] Smoke tests staging"
 check_http_with_retry "visual /login" "${VISUAL_BASE_URL%/}/login" 8 2
+check_http_with_retry "visual /admin" "${VISUAL_BASE_URL%/}/admin" 8 2
+assert_next_static_assets_available "visual /admin" "${VISUAL_BASE_URL%/}/admin" "$VISUAL_BASE_URL"
 assert_dashboard_security_headers
 echo "  Validando abertura mobile do site (/ e /login)"
 "$ROOT_DIR/scripts/smoke_mobile_dashboard.sh" "$VISUAL_BASE_URL" / /login

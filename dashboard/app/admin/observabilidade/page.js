@@ -109,6 +109,130 @@ function RouteRow({ route }) {
   )
 }
 
+function mpConnectionLabel(mpStatus) {
+  if (!mpStatus) return { text: 'verificando conexão com o Mercado Pago…', tone: 'info', ok: false }
+  if (!mpStatus.tokenConfigured) return { text: 'MP_ACCESS_TOKEN ausente — configure o token antes de reprocessar', tone: 'critical', ok: false }
+  if (mpStatus.reachable) return { text: `token válido e Mercado Pago respondendo${mpStatus.accountId ? ` · conta ${mpStatus.accountId}` : ''}`, tone: 'ok', ok: true }
+  if (mpStatus.tokenInvalid) return { text: 'token rejeitado pelo Mercado Pago (401/403) — atualize o MP_ACCESS_TOKEN', tone: 'critical', ok: false }
+  return { text: `Mercado Pago indisponível agora${mpStatus.status ? ` (HTTP ${mpStatus.status})` : ''} — aguarde e reprocesse`, tone: 'risk', ok: false }
+}
+
+function PaymentDlqRunbook({ dlqOpen, lastPrune, onReprocessed }) {
+  const [health, setHealth] = useState(null)
+  const [mpStatus, setMpStatus] = useState(null)
+  const [mfaToken, setMfaToken] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState(null)
+  const [feedbackError, setFeedbackError] = useState('')
+
+  async function refreshStatus() {
+    const [healthData, mpData] = await Promise.all([
+      api.paymentsHealth().catch(() => null),
+      api.adminPaymentMpStatus().catch(() => null),
+    ])
+    setHealth(healthData)
+    setMpStatus(mpData)
+    return { healthData, mpData }
+  }
+
+  useEffect(() => {
+    let active = true
+    Promise.resolve()
+      .then(() => Promise.all([api.paymentsHealth().catch(() => null), api.adminPaymentMpStatus().catch(() => null)]))
+      .then(([healthData, mpData]) => {
+        if (!active) return
+        setHealth(healthData)
+        setMpStatus(mpData)
+      })
+      .catch(() => {})
+    return () => { active = false }
+  }, [])
+
+  async function runReprocess() {
+    setBusy(true)
+    setResult(null)
+    setFeedbackError('')
+    try {
+      // Passo 1: re-enfileirar os webhooks na DLQ como `received`.
+      const requeue = await api.adminPaymentDlqReprocess()
+      // Passo 2: reconciliar os pendentes contra o Mercado Pago (exige step-up MFA).
+      let processed = null
+      let mfaRequired = false
+      try {
+        processed = await api.adminPaymentProcessPending({ mfaToken: mfaToken || undefined })
+      } catch (err) {
+        if (err?.status === 401) mfaRequired = true
+        else throw err
+      }
+      setResult({ requeue, processed, mfaRequired })
+      await refreshStatus()
+      await onReprocessed?.()
+    } catch (err) {
+      setFeedbackError(err?.message || 'Falha ao reprocessar webhooks pendentes.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const open = Number(health?.dlqOpen ?? dlqOpen ?? 0)
+  const tone = open > 0 ? 'warn' : 'ok'
+  const mpConn = mpConnectionLabel(mpStatus)
+
+  return (
+    <div className={`mt-4 rounded-2xl border p-4 ${toneStyles[tone] || toneStyles.info}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-black uppercase tracking-[0.2em] opacity-70">Runbook · Payment DLQ</p>
+          <p className="mt-1 text-sm font-black text-white">{numberFmt(open)} webhook(s) na DLQ · {numberFmt(health?.pendingLast24h ?? 0)} pagamento(s) pendentes (24h)</p>
+          <p className="mt-1 text-xs opacity-80">Última poda Send DLQ: {lastPrune ? safeDate(lastPrune) : 'sem registro'}</p>
+        </div>
+        <button
+          onClick={runReprocess}
+          disabled={busy || open === 0}
+          className="rounded-2xl bg-white px-4 py-2 text-sm font-black text-slate-950 shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy ? 'Reprocessando…' : 'Reprocessar webhooks pendentes'}
+        </button>
+      </div>
+
+      <div className={`mt-3 rounded-xl border px-3 py-2 text-xs font-bold ${toneStyles[mpConn.tone] || toneStyles.info}`}>
+        Conexão Mercado Pago: {mpConn.text}
+      </div>
+
+      <p className="mt-3 text-xs leading-relaxed opacity-80">
+        Antes de reprocessar, confirme que o Mercado Pago está respondendo acima (token válido). A DLQ enche quando a
+        reconciliação contra o MP falha — quase sempre por <code>MP_ACCESS_TOKEN</code> expirado/revogado ou instabilidade
+        do provedor. Reprocessar com a conexão ainda quebrada só devolve os itens à DLQ.
+      </p>
+
+      <label className="mt-4 block text-xs font-bold opacity-80">
+        Token MFA (x-admin-mfa-token) — necessário para reconciliar contra o Mercado Pago
+        <input
+          type="password"
+          value={mfaToken}
+          onChange={(e) => setMfaToken(e.target.value)}
+          placeholder="ADMIN_MFA_TOKEN"
+          autoComplete="off"
+          className="mt-1 w-full rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2 font-mono text-xs text-white placeholder:text-slate-500 focus:border-cyan-300 focus:outline-none"
+        />
+      </label>
+
+      {feedbackError && <p className="mt-3 rounded-xl bg-red-500/20 p-3 text-xs font-bold text-red-100">{feedbackError}</p>}
+
+      {result && (
+        <div className="mt-3 space-y-1 rounded-xl bg-black/25 p-3 text-xs leading-relaxed">
+          <p>Re-enfileirados da DLQ: <strong>{numberFmt(result.requeue?.resolved)}</strong> de {numberFmt(result.requeue?.picked)} selecionados.</p>
+          {result.processed
+            ? <p>Reconciliados contra o Mercado Pago: <strong>{numberFmt(result.processed?.processed)}</strong> processados · {numberFmt(result.processed?.failed)} falhas (lote de {numberFmt(result.processed?.total)}).</p>
+            : result.mfaRequired
+              ? <p className="text-amber-100">Itens re-enfileirados, mas a reconciliação exige token MFA válido. Informe o <code>ADMIN_MFA_TOKEN</code> acima e reprocesse, ou aguarde o processador periódico (<code>BILLING_WEBHOOK_AUTOPROCESS</code>).</p>
+              : <p className="text-amber-100">Reconciliação não executada.</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DependencyPill({ label, ok, detail }) {
   return (
     <div className={`rounded-2xl border px-4 py-3 ${ok ? toneStyles.ok : toneStyles.critical}`}>
@@ -322,7 +446,11 @@ export default function AdminObservabilityPage() {
               <MetricTile label="Queued/Sending" value={numberFmt((observability?.queues?.offerQueueItems?.queued || 0) + (observability?.queues?.offerQueueItems?.sending || 0))} tone={((observability?.queues?.offerQueueItems?.queued || 0) + (observability?.queues?.offerQueueItems?.sending || 0)) > 0 ? 'warn' : 'ok'} />
               <MetricTile label="Send DLQ" value={numberFmt(observability?.queues?.sendDlq?.lastKnownDlqTotal)} tone={(observability?.queues?.sendDlq?.lastKnownDlqTotal || 0) > 0 ? 'risk' : 'ok'} />
             </div>
-            <p className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">Payment DLQ aberta: {numberFmt(observability?.queues?.paymentWebhookDlq?.open)} · última poda de DLQ: {observability?.queues?.sendDlq?.lastRunAt ? safeDate(observability.queues.sendDlq.lastRunAt) : 'sem execução registrada'} · removidos: {numberFmt(observability?.queues?.sendDlq?.lastRemovedTotal)}</p>
+            <PaymentDlqRunbook
+              dlqOpen={observability?.queues?.paymentWebhookDlq?.open}
+              lastPrune={observability?.queues?.sendDlq?.lastRunAt}
+              onReprocessed={loadData}
+            />
           </div>
 
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-5 shadow-2xl shadow-black/20 ring-1 ring-white/5 backdrop-blur-xl">

@@ -32,7 +32,7 @@ module.exports = {
     {
       name: 'dashboard',
       cwd: './dashboard',
-      script: 'npm',
+      script: './node_modules/next/dist/bin/next',
       args: 'start',
       exec_mode: 'fork',
       instances: 1,
@@ -185,7 +185,7 @@ module.exports = {
       // ROOT_DIR (~/wabot-staging) onde o pm2 start foi invocado.
       name: 'visual-staging',
       cwd: './dashboard',
-      script: 'npm',
+      script: './node_modules/next/dist/bin/next',
       args: 'start',
       exec_mode: 'fork',
       instances: 1,

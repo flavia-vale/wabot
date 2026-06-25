@@ -105,6 +105,31 @@ test('convert() rejeita resposta sem shortLink afiliado válido', async (t) => {
   )
 })
 
+// Regressão: links de cupom/voucher Shopee (s.shopee.com.br/XXX que resolvem
+// para /buyer/voucher ou similares, sem shopId+itemId) NÃO devem ser convertidos
+// via API de afiliado. A API pode aceitar essas URLs e retornar um shortLink que
+// roteia via web em vez de deep-link para o app, causando "Oops! Seu navegador
+// não é mais aceito!" no browser do WhatsApp. convert() deve rejeitar antes de
+// chamar a API, preservando o link original intacto.
+test('convert() rejeita link de cupom/voucher sem IDs de produto antes de chamar a API', async (t) => {
+  let apiCalled = false
+  t.after(stubAxiosPost(async () => { apiCalled = true; return { data: {} } }))
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => ({ ok: true, status: 200, url: 'https://shopee.com.br/buyer/voucher?spm=xxx', headers: { get: () => null }, body: null, text: async () => '' })
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  let caughtErr
+  try {
+    await convert('https://s.shopee.com.br/40eQK1or1O', CREDS)
+  } catch (err) {
+    caughtErr = err
+  }
+  assert.ok(caughtErr, 'deve lançar erro')
+  assert.match(caughtErr.message, /link não é de produto/)
+  assert.equal(caughtErr.stripFromMessage, true, 'erro deve ter stripFromMessage=true para bot-worker remover o link da mensagem')
+  assert.equal(apiCalled, false, 'API de afiliado não deve ser chamada para link de cupom')
+})
+
 // Regressão 2: cleanAffiliateUrl deve preservar a URL como-está quando não
 // consegue extrair IDs (fallback seguro: melhor URL longa do que link perdido).
 test('cleanAffiliateUrl preserva URL sem IDs de produto intacta (fallback seguro)', () => {
