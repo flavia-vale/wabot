@@ -1685,10 +1685,28 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         pairingState.clear()
         setTimeout(startBot, 500)
       } else if (wasPairing) {
-        // Pairing pendente (usuário ainda digitando código no app) ou falha
-        // não-515 durante pairing: NÃO auto-reiniciar agora. Se o usuário
-        // falhar em colar o código a tempo, a UI chamará novamente o endpoint.
-        logger.warn({ code }, 'WA close durante pairing (não-515) — não reiniciando automaticamente')
+        // Diferencia dois sub-casos:
+        //   a) código ainda não chegou ao usuário (pairingState.code == null):
+        //      NÃO reiniciar — o socket WA fechou antes do usuário receber o
+        //      código. A UI detecta o erro e exige nova tentativa.
+        //   b) código já foi entregue ao usuário (pairingState.code != null):
+        //      o usuário já digitou (ou está digitando) no app e WA enviou um
+        //      close não-515 (falha de rede, erro de servidor, etc.). As creds
+        //      provavelmente já foram salvas via creds.update antes do close.
+        //      Reiniciar com backoff é a resposta certa — sem isso o celular
+        //      fica travado em "Conectando..." para sempre.
+        const codeAlreadyDelivered = Boolean(pairingState.snapshot().code)
+        if (codeAlreadyDelivered) {
+          logger.warn({ code }, 'WA close não-515 após código entregue ao usuário — reiniciando para completar handshake de pairing')
+          pairingState.clear()
+          const delayMs = calcReconnectDelayMs()
+          reconnectAttempts++
+          setTimeout(startBot, delayMs)
+        } else {
+          // Código ainda não foi mostrado — NÃO auto-reiniciar. Se o usuário
+          // falhar em colar o código a tempo, a UI chamará novamente o endpoint.
+          logger.warn({ code }, 'WA close durante pairing pré-código (não-515) — não reiniciando automaticamente')
+        }
       } else if (isConnectionReplaced) {
         // Outro socket assumiu a MESMA credencial (worker duplicado /
         // double-possession — vide AGENTS.md "WhatsApp caindo toda hora").
