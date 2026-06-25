@@ -261,7 +261,6 @@ model BotConfig {
   platforms       String   @default("shopee,amazon,mercadolivre,magazineluiza")
   blockedKeywords String   @default("")
   welcomeMsg      String   @default("")
-  feedGlobal      Boolean  @default(false)
   postToStatus    Boolean  @default(false)
   brandingGroupLink String   @default("")
   couponLink        String   @default("")
@@ -603,22 +602,6 @@ model ProbeEvidence {
 
   @@index([userId, groupId, seenAt])
   @@index([groupId, messageFingerprint])
-}
-
-model TelegramOfferLog {
-  id        String   @id @default(cuid())
-  chatId    String
-  inputUrl  String
-  platform  String?
-  status    String
-  withImage Boolean  @default(false)
-  errorMsg  String?
-  latencyMs Int?
-  createdAt DateTime @default(now())
-
-  @@index([createdAt])
-  @@index([status, createdAt])
-  @@index([platform, createdAt])
 }
 
 model OfferAutomation {

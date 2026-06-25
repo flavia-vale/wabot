@@ -279,7 +279,7 @@ echo "[3/9] Apply database migrations"
 # Skip se não houver migrations pendentes — evita tocar no DB enquanto
 # PM2 está escrevendo, o que dispara SQLITE_BUSY mesmo com busy_timeout=5000
 # do src/db.js. Apps que importam src/db.js e podem segurar prod.db:
-# api, bot-supervisor, telegram-offer-bot e snapshot-cron.
+# api, bot-supervisor e snapshot-cron.
 MIGRATE_STOPPED_APPS_PROD=""
 MIGRATE_STOPPED_NO_RESTART_APPS_PROD=""
 
@@ -347,7 +347,6 @@ else
   echo "  Migrations pendentes — parando processos que travam o banco..."
   stop_app_for_migration_prod "api" 1
   stop_app_for_migration_prod "bot-supervisor" 1
-  stop_app_for_migration_prod "telegram-offer-bot" 1
   stop_app_for_migration_prod "snapshot-cron" 0
 
   migrate_attempt=0
@@ -421,27 +420,6 @@ if [[ "${RESTART_SUPERVISOR:-0}" == "1" ]]; then
   pm2 restart bot-supervisor --update-env
 else
   echo "  bot-supervisor preservado. Sessões WhatsApp continuam ativas."
-fi
-
-# telegram-offer-bot: garante UM ÚNICO poller após o deploy. O passo [7/9]
-# roda `pm2 update`, que respawna o daemon e reinicia processos gerenciados —
-# se nesse meio sobrar um poller manual (fora do PM2) ou um processo não
-# salvo no dump, dois pollers colidem no mesmo token e ambos param com
-# `409 Conflict` (long-polling getUpdates exige um poller por token). Para
-# tornar o deploy auto-recuperável, recriamos o app de forma determinística:
-# delete + start a partir do ecosystem (start fresco recarrega o token do
-# .env via dotenv — evita a pegadinha #1) + pm2 save. Best-effort: falha aqui
-# não aborta o deploy, mas é logada para inspeção.
-echo "[7c/9] Garante telegram-offer-bot (poller único)"
-if pm2 delete telegram-offer-bot >/dev/null 2>&1; then
-  echo "  telegram-offer-bot anterior removido (evita poller duplicado)."
-fi
-if pm2 start ecosystem.config.cjs --only telegram-offer-bot >/tmp/wabot_pm2_telegram.log 2>&1; then
-  echo "  telegram-offer-bot iniciado como poller único."
-  pm2 save >/dev/null 2>&1 || true
-else
-  echo "  AVISO: não foi possível iniciar telegram-offer-bot — deploy segue."
-  tail -n 20 /tmp/wabot_pm2_telegram.log || true
 fi
 
 echo "[8/9] PM2 status"

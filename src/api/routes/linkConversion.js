@@ -143,8 +143,8 @@ export async function linkConversionRoutes(app, opts = {}) {
     const credentialsMap = attachCredentialPatchHandler(buildCredentialsMap(credentials), userId, app.log)
 
     // TEMPORÁRIO (2026-06): o painel "Criar oferta" exige que o usuário cole o
-    // PRÓPRIO link de afiliado e NÃO devolve mais link convertido — mesmo
-    // contrato do bot do Telegram (keepOriginalLink=true). A conversão ainda
+    // PRÓPRIO link de afiliado e NÃO devolve mais link convertido
+    // (keepOriginalLink=true). A conversão ainda
     // roda internamente só para BUSCAR título/preço (resolve short link,
     // cookie ML), mas a oferta sai sempre com o link colado. A busca de
     // título/preço vive no motor único compartilhado (offerEngine.js).

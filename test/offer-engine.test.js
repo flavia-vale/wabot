@@ -28,7 +28,7 @@ test('buildScrapedOffer: painel usa link convertido como displayUrl (keepOrigina
   assert.equal(offer.conversion.success, true)
 })
 
-test('buildScrapedOffer: Telegram busca pelo convertido mas devolve link original (keepOriginalLink=true)', async () => {
+test('buildScrapedOffer: busca pelo convertido mas devolve link original (keepOriginalLink=true)', async () => {
   const original = 'https://www.amazon.com.br/dp/B09VQ39F41'
   const converted = 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20'
   const scraped = []
@@ -95,7 +95,7 @@ test('buildScrapedOffer: completa preço pelo original quando convertido traz s�
   assert.equal(offer.title, 'Mixer Turbo')
   assert.equal(offer.newPrice, '149')
   assert.equal(offer.oldPrice, '199')
-  // Mesmo no fallback de dados, Telegram mantém o link original.
+  // Mesmo no fallback de dados, keepOriginalLink mantém o link original.
   assert.equal(offer.displayUrl, original)
 })
 

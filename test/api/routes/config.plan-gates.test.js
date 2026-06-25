@@ -20,9 +20,9 @@ async function buildApp({ plan = 'basic', accessExpiresAt = null } = {}) {
   return { app, userId }
 }
 
-test('PUT / bloqueia feedGlobal=true para Basic', async () => {
+test('PUT / bloqueia postToStatus=true para Basic', async () => {
   const { app } = await buildApp({ plan: 'basic' })
-  const res = await app.inject({ method: 'PUT', url: '/api/config', payload: { feedGlobal: true } })
+  const res = await app.inject({ method: 'PUT', url: '/api/config', payload: { postToStatus: true } })
   assert.equal(res.statusCode, 403)
   const body = JSON.parse(res.body)
   assert.equal(body.code, 'FEATURE_REQUIRES_PRO')
@@ -30,11 +30,11 @@ test('PUT / bloqueia feedGlobal=true para Basic', async () => {
   await app.close()
 })
 
-test('PUT / permite feedGlobal=true para Pro', async () => {
+test('PUT / permite postToStatus=true para Pro', async () => {
   const { app } = await buildApp({ plan: 'pro' })
-  const res = await app.inject({ method: 'PUT', url: '/api/config', payload: { feedGlobal: true } })
+  const res = await app.inject({ method: 'PUT', url: '/api/config', payload: { postToStatus: true } })
   assert.equal(res.statusCode, 200)
-  assert.equal(JSON.parse(res.body).feedGlobal, true)
+  assert.equal(JSON.parse(res.body).postToStatus, true)
   await app.close()
 })
 

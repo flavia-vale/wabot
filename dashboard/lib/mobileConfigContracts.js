@@ -1,4 +1,4 @@
-export const MOBILE_CONFIG_CONTRACT_KEYS = ['welcomeMsg', 'brandingGroupLink', 'brandingCtaText', 'delayMin', 'delayMax', 'blockedKeywords', 'platforms', 'feedGlobal', 'postToStatus']
+export const MOBILE_CONFIG_CONTRACT_KEYS = ['welcomeMsg', 'brandingGroupLink', 'brandingCtaText', 'delayMin', 'delayMax', 'blockedKeywords', 'platforms', 'postToStatus']
 
 function normalizeKeywords(text) {
   const parts = String(text || '').split(',').map(k => k.trim().toLowerCase()).filter(Boolean)
@@ -29,7 +29,6 @@ export function buildMobilePreferencesPayload(draft = {}) {
     delayMax,
     blockedKeywords: normalizeKeywords(draft?.blockedKeywords),
     platforms: Array.isArray(draft?.platforms) ? draft.platforms : [],
-    feedGlobal: Boolean(draft?.feedGlobal),
     postToStatus: Boolean(draft?.postToStatus),
   }
 }
