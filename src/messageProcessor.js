@@ -114,6 +114,18 @@ export function appendBrandingFooter(text, brandingLink, brandingCtaText = DEFAU
   return `${message}\n\n${cta} ${link}`
 }
 
+// Remove URLs from text and normalizes the resulting whitespace. Used to strip
+// non-product affiliate links (e.g. Shopee coupon links) whose cookies would
+// misattribute commission to the source group's affiliate.
+export function stripUrlsFromText(text, urls) {
+  if (!urls || !urls.length) return text
+  let result = String(text ?? '')
+  for (const url of urls) {
+    result = result.replace(url, '')
+  }
+  return normalizeMessageWhitespace(result)
+}
+
 export function applyConversionsAndBranding(sanitizedText, conversions, brandingLink, brandingCtaText = DEFAULT_BRANDING_CTA_TEXT) {
   let finalText = String(sanitizedText ?? '')
   for (const { url, converted } of conversions) {

@@ -118,10 +118,15 @@ test('convert() rejeita link de cupom/voucher sem IDs de produto antes de chamar
   globalThis.fetch = async () => ({ ok: true, status: 200, url: 'https://shopee.com.br/buyer/voucher?spm=xxx', headers: { get: () => null }, body: null, text: async () => '' })
   t.after(() => { globalThis.fetch = originalFetch })
 
-  await assert.rejects(
-    () => convert('https://s.shopee.com.br/40eQK1or1O', CREDS),
-    /link não é de produto/,
-  )
+  let caughtErr
+  try {
+    await convert('https://s.shopee.com.br/40eQK1or1O', CREDS)
+  } catch (err) {
+    caughtErr = err
+  }
+  assert.ok(caughtErr, 'deve lançar erro')
+  assert.match(caughtErr.message, /link não é de produto/)
+  assert.equal(caughtErr.stripFromMessage, true, 'erro deve ter stripFromMessage=true para bot-worker remover o link da mensagem')
   assert.equal(apiCalled, false, 'API de afiliado não deve ser chamada para link de cupom')
 })
 
