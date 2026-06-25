@@ -13,7 +13,6 @@ export const QUEUE_BLOCK_REASONS = Object.freeze([
   'plan_inactive',
   'bot_offline',
   'outside_operating_hours',
-  'quiet_hours',
   'interval_limit',
   'hourly_limit',
   'daily_limit',

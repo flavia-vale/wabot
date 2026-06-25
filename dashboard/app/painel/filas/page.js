@@ -28,7 +28,6 @@ const BLOCK_REASON_COPY = {
   plan_inactive: 'Plano sem acesso às filas — os itens ficam guardados e voltam a sair quando o plano for reativado.',
   bot_offline: 'WhatsApp desconectado — reconecte o bot e os itens pendentes saem automaticamente.',
   outside_operating_hours: 'Fora do horário de funcionamento desta fila — os envios retomam dentro da janela configurada.',
-  quiet_hours: 'Dentro da janela silenciosa global — os envios retomam quando a janela terminar.',
   interval_limit: 'Aguardando o intervalo mínimo entre ofertas — a próxima sai assim que o tempo passar.',
   hourly_limit: 'Limite de ofertas por hora atingido — os envios retomam na próxima hora.',
   daily_limit: 'Limite de ofertas por dia atingido — os envios retomam amanhã.',
@@ -215,7 +214,7 @@ export default function FilasPage() {
       <div className="pnl-grid" style={{ marginTop: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>{LIMITS.map(([toggle, value, label, unit]) => <div className="pnl-card" key={toggle} style={{ boxShadow: 'none' }}><label className="pnl-check"><input type="checkbox" checked={form[toggle]} onChange={(e) => setForm((current) => ({ ...current, [toggle]: e.target.checked }))} />{label}</label>{form[toggle] && <div className="pnl-field" style={{ marginTop: 12 }}><label className="pnl-label" htmlFor={value}>Valor ({unit})</label><input id={value} className="pnl-input" type="number" min="1" step="1" value={form[value]} onChange={(e) => setForm((current) => ({ ...current, [value]: Number(e.target.value) }))} required /></div>}</div>)}</div>
       <div className="pnl-card" style={{ marginTop: 16, boxShadow: 'none' }}>
         <label className="pnl-check"><input type="checkbox" checked={form.operatingHoursEnabled} onChange={(e) => setForm((current) => ({ ...current, operatingHoursEnabled: e.target.checked }))} />Selecionar horário de funcionamento SÓ dessa fila?</label>
-        <p className="pnl-hint" style={{ marginTop: 6 }}>Se marcado, esta fila obedece somente ao horário definido aqui e ignora a janela silenciosa global das configurações. Se desmarcado, a fila segue a janela silenciosa global.</p>
+        <p className="pnl-hint" style={{ marginTop: 6 }}>Se marcado, esta fila só libera ofertas dentro do horário definido aqui. Se desmarcado, a fila pode liberar a qualquer hora — e cada grupo de destino ainda respeita o horário de funcionamento e os limites anti-ban definidos em <Link href="/painel/preservacao/destinos">Preservação por destino</Link>.</p>
         {form.operatingHoursEnabled && <div className="pnl-grid" style={{ marginTop: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
           <div className="pnl-field"><label className="pnl-label" htmlFor="operatingHoursStart">Início</label><input id="operatingHoursStart" className="pnl-input" type="time" value={form.operatingHoursStart} onChange={(e) => setForm((current) => ({ ...current, operatingHoursStart: e.target.value }))} required /></div>
           <div className="pnl-field"><label className="pnl-label" htmlFor="operatingHoursEnd">Fim</label><input id="operatingHoursEnd" className="pnl-input" type="time" value={form.operatingHoursEnd} onChange={(e) => setForm((current) => ({ ...current, operatingHoursEnd: e.target.value }))} required /></div>
