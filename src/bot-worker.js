@@ -14,7 +14,7 @@ import { dirname } from 'path'
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
-import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from './messageProcessor.js'
+import { applyConversionsAndBranding, stripUrlsFromText, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage } from './monitoredImageResolver.js'
@@ -2064,11 +2064,17 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           logger.info({ platform, converted: conversionResult.url, warning: conversionResult.warning }, 'Link convertido')
           return { platform, url, converted: conversionResult.url, warning: conversionResult.warning }
         } catch (err) {
+          if (err.stripFromMessage) {
+            // Non-product link (coupon/voucher): strip from mirrored text to
+            // avoid misattributing commission to the source group's affiliate.
+            return { platform, url, strip: true }
+          }
           await recordConversionIssue({ platform, url, jid, text, reason: `Falha na conversão de ${credentialValidation.label}: ${err.message}` })
           return null
         }
       }))
-      const conversions = linkResults.filter(Boolean)
+      const conversions = linkResults.filter(r => r && !r.strip)
+      const urlsToStrip = linkResults.filter(r => r?.strip).map(r => r.url)
 
       const warningKinds = new Set(conversions.map(c => c.warning).filter(Boolean))
       for (const kind of warningKinds) {
@@ -2109,6 +2115,21 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         return
       }
         finalText = applyConversionsAndBranding(sanitizedText, conversions, cfg.botConfig.brandingGroupLink, cfg.botConfig.brandingCtaText)
+        if (urlsToStrip.length) {
+          const userCouponLink = String(cfg.botConfig.couponLink || '').trim()
+          if (userCouponLink) {
+            // User configured their own coupon link: substitute each stripped
+            // URL with it so commission stays with the right affiliate.
+            for (const url of urlsToStrip) {
+              finalText = finalText.replace(url, userCouponLink)
+            }
+          } else {
+            // No coupon link configured: remove the URL and the entire CTA
+            // line that contained it to avoid orphaned text like
+            // "🏷️ Cupons disponíveis aqui:" with no clickable link.
+            finalText = stripUrlsFromText(finalText, urlsToStrip)
+          }
+        }
       }
       // Eleição do link primário (oferta/dedup/log) entre as conversões válidas.
       // Decisão de produto 3.4: o grupo escolhe primeiro/último link; sem override
