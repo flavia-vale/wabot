@@ -544,6 +544,34 @@ após observar timeouts excessivos com Amazon BR lenta (HTML ~1.3MB).
 **Não desligar os timeouts** — sem eles, um socket Baileys silenciosamente
 morto trava a fila serial inteira até reinício do worker.
 
+## Teto de memória por bot-worker (`BOT_WORKER_MAX_OLD_SPACE_MB`)
+
+Os bot-workers são `fork()` da API (modo `inline`) ou do supervisor (modo
+`remote`) e **não são alcançados pelo `max_memory_restart` do PM2** — esse só
+enxerga os apps PM2, não os filhos forkados. Sem teto, um worker incha sob
+scrape pesado (Amazon ~1.3MB + buffers de imagem hi-res) e, num VPS apertado
+**sem swap**, a pausa de GC trava o event-loop o bastante para o keepalive do
+WhatsApp estourar → o socket cai (408/428) → reconexão em loop, que no celular
+vira spam de "A sincronização foi concluída" e, nas mensagens em vôo, a linha
+`error:worker_restart` ("O bot reiniciou enquanto essa mensagem estava
+esperando para ser enviada"). Quedas repetidas ainda dessincronizam o Signal
+(Bad MAC / `badSession` 500).
+
+`src/core/sessionCore.js` passa `--max-old-space-size` no `execArgv` do
+`fork()`, resolvido por `resolveWorkerExecArgv()` em
+`src/core/workerSpawnOptions.js` (módulo puro/testável p/ não tocar a lógica do
+`[PROTECTED_CORE]`):
+
+| Env                            | Default | Efeito                                                       |
+|--------------------------------|---------|--------------------------------------------------------------|
+| `BOT_WORKER_MAX_OLD_SPACE_MB`  | `384`   | Teto do old-space (heap JS) de cada worker, em MB.           |
+|                                | `0`/``  | Escape hatch: desliga o cap (comportamento histórico).       |
+
+Limitação: o flag limita só o heap JS, não a memória externa (Buffers de
+mídia). É mitigação de pico de GC, **não** teto rígido de RSS — em VPS
+subdimensionado, **swap continua sendo pré-requisito** (a primeira linha de
+defesa). Teste: `test/core/worker-spawn-options.test.js`.
+
 ## Fila de envio (BullMQ + DLQ)
 
 Cada bot-worker tem uma fila própria de envio (`wabot-send-<userId>`) e

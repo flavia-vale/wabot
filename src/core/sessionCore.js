@@ -5,6 +5,7 @@ import { fork } from 'child_process'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { safeCoreEvent } from './errors.js'
+import { resolveWorkerExecArgv } from './workerSpawnOptions.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const workerPath = join(__dirname, '..', 'bot-worker.js')
@@ -64,7 +65,14 @@ export function startSessionHealthMonitor(db, log = console) {
 
 export function startBot(userId) {
   if (bots.has(userId)) return false
-  const proc = fork(workerPath, [], { env: { ...process.env, BOT_USER_ID: userId } })
+  // execArgv: aplica teto de heap por worker (--max-old-space-size) via
+  // BOT_WORKER_MAX_OLD_SPACE_MB. Workers forkados não são alcançados pelo
+  // max_memory_restart do PM2; sem isso um worker incha e, num VPS sem folga,
+  // a pausa de GC derruba o socket WhatsApp (ver workerSpawnOptions.js).
+  const proc = fork(workerPath, [], {
+    env: { ...process.env, BOT_USER_ID: userId },
+    execArgv: resolveWorkerExecArgv(process.env),
+  })
   const entry = { proc, qrListeners: new Set(), statusListeners: new Set(), lastQR: null, lastHeartbeatAt: Date.now() }
   bots.set(userId, entry)
 
