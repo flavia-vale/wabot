@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { applyConversionsAndBranding, appendBrandingFooter, buildProcessedMessage, DEFAULT_BRANDING_CTA_TEXT, extractKeywordTokens, hasSignificantTokenOverlap, isValidBrandingLink, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from '../src/messageProcessor.js'
+import { applyConversionsAndBranding, appendBrandingFooter, buildProcessedMessage, DEFAULT_BRANDING_CTA_TEXT, extractKeywordTokens, hasSignificantTokenOverlap, isCouponAnnouncement, isValidBrandingLink, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from '../src/messageProcessor.js'
 
 test('sanitizeInviteLinks remove convites WhatsApp e Telegram preservando oferta', () => {
   const original = 'Oferta top https://amzn.to/item\nEntre no grupo https://chat.whatsapp.com/AbCdEf12345 e t.me/+ConviteXYZ'
@@ -196,4 +196,46 @@ test('hasSignificantTokenOverlap ignora ruído de marketplace (nomes de platafor
   const titulo = 'Amazon.com.br Mochila Esportiva Trefoil 30L'
   const caption = 'Oferta Amazon imperdível confira'
   assert.equal(hasSignificantTokenOverlap(titulo, caption), false)
+})
+
+test('isCouponAnnouncement detecta mensagens de cupom genérico (casos reais dos prints)', () => {
+  assert.equal(
+    isCouponAnnouncement('🛒 *NOVO CUPOM AMAZON* 🛒 ➡ _10% OFF acima de R$200, limitado a R$50_ 🎟 CUPOM: *ALOCUPOM*...'),
+    true,
+    'Amazon coupon com código ALOCUPOM'
+  )
+  assert.equal(
+    isCouponAnnouncement('🎟 *NOVO CUPOM ML* 🎟 ➡ _10% OFF em R$79, limitado a R$40 OFF_ 🎟 cupom: *GRAMADOVERDE*'),
+    true,
+    'Mercado Livre coupon com código GRAMADOVERDE'
+  )
+  assert.equal(
+    isCouponAnnouncement('NOVO CUPOM NO ML\n\nUse o Cupom: TORCIDAO\n10% OFF, mínimo de R$ 99\nLimite de R$ 40'),
+    true,
+    'Outro padrão de ML com código TORCIDAO'
+  )
+})
+
+test('isCouponAnnouncement não confunde oferta de produto com cupom', () => {
+  assert.equal(
+    isCouponAnnouncement('Camiseta Adidas Branca 30% OFF - R$99'),
+    false,
+    'oferta de produto sem cupom'
+  )
+  assert.equal(
+    isCouponAnnouncement('Tênis Nike Air Max imperdível hoje'),
+    false,
+    'oferta sem cupom nem código'
+  )
+  assert.equal(
+    isCouponAnnouncement('Frete grátis em compras acima de R$50 na Amazon'),
+    false,
+    'promoção de frete sem cupom'
+  )
+})
+
+test('isCouponAnnouncement retorna false para texto vazio ou sem cupom', () => {
+  assert.equal(isCouponAnnouncement(''), false)
+  assert.equal(isCouponAnnouncement('   '), false)
+  assert.equal(isCouponAnnouncement('Produto incrível ADIDAS disponível'), false, 'palavra maiúscula sem cupom')
 })

@@ -179,4 +179,15 @@ export function hasSignificantTokenOverlap(referenceText, candidateText, { minRe
   return false
 }
 
+// Detecta anúncios de cupom genérico (ex: "CUPOM: GRAMADOVERDE", "Use o Cupom ALOCUPOM").
+// Esses captions descrevem um desconto aplicável a qualquer produto do marketplace —
+// o link pode resolver para produtos aleatórios, então o guard de title_mismatch
+// não se aplica (não há "o produto" para comparar com o caption).
+// Critério: presença de "cupom" (qualquer case) + palavra toda em maiúsculas ≥4 chars
+// (o código do cupom em si, ex: GRAMADOVERDE, ALOCUPOM, TORCIDAO).
+export function isCouponAnnouncement(text) {
+  if (!/\bcupom\b/i.test(text)) return false
+  return /\b[A-Z]{4,}\b/.test(text)
+}
+
 export { DEFAULT_BRANDING_CTA_TEXT, GROUP_INVITE_URL_RE, MAX_BRANDING_CTA_CHARS, PRODUCT_MATCH_STOPWORDS }
