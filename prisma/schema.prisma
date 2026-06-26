@@ -57,7 +57,9 @@ model User {
   affiliateRef          AffiliateProfile? @relation("AffiliateUser", fields: [affiliateProfileId], references: [id])
   referredCommissions   AffiliateCommission[] @relation("ReferredUserCommissions")
   paidCommissions       AffiliateCommission[] @relation("PaidCommissions")
+  approvedCommissions   AffiliateCommission[] @relation("ApprovedCommissions")
   subscriptions         Subscription[]
+  affiliateAttributionTouches AffiliateAttributionTouch[]
 
   @@index([status, plan, accessExpiresAt])
   @@index([lastActivityAt])
@@ -191,12 +193,17 @@ model Payment {
   expiresAt      DateTime?
   gatewayEventId String?
   lastSyncedAt   DateTime?
+  affiliateProfileIdAtCheckout String?
+  affiliateClickId             String?
+  attributionModel             String?
+  attributionLockedAt          DateTime?
   createdAt      DateTime  @default(now())
 
   affiliateCommission AffiliateCommission?
 
   @@index([status, createdAt])
   @@index([gatewayEventId])
+  @@index([affiliateProfileIdAtCheckout, createdAt])
 }
 
 
@@ -659,6 +666,9 @@ model AffiliateSettings {
   commissionPercent          Int     @default(30)
   commissionRecurringPercent Int     @default(30)
   recurringCommissionEnabled Boolean @default(true)
+  commissionHoldDays         Int     @default(30)
+  attributionWindowDays      Int     @default(30)
+  attributionModel           String  @default("last_non_direct")
 }
 
 model AffiliateProfile {
@@ -678,8 +688,33 @@ model AffiliateProfile {
   user         User                  @relation("UserAffiliate", fields: [userId], references: [id], onDelete: Cascade)
   referredUser User?                 @relation("AffiliateUser")
   commissions  AffiliateCommission[]
+  attributionTouches AffiliateAttributionTouch[]
 
   @@index([status])
+}
+
+model AffiliateAttributionTouch {
+  id            String   @id @default(cuid())
+  affiliateId   String
+  affiliateCode String?
+  clickId       String?
+  visitorId     String?
+  userId        String?
+  source        String?
+  medium        String?
+  campaign      String?
+  landingPage   String?
+  ipHash        String?
+  uaHash        String?
+  touchedAt     DateTime @default(now())
+
+  affiliate AffiliateProfile @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  user      User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([affiliateId, touchedAt])
+  @@index([userId, touchedAt])
+  @@index([visitorId, touchedAt])
+  @@index([clickId])
 }
 
 model AffiliateCommission {
@@ -693,6 +728,13 @@ model AffiliateCommission {
   commissionRatePct     Int       @default(30)
   status                String    @default("pending")
   cycleMonth            String
+  eligibleAt            DateTime?
+  approvedAt            DateTime?
+  approvedByUserId      String?
+  heldAt                DateTime?
+  holdReason            String?
+  reversedAt            DateTime?
+  reversalReason        String?
   paidAt                DateTime?
   paidByUserId          String?
   createdAt             DateTime  @default(now())
@@ -701,7 +743,9 @@ model AffiliateCommission {
   payment      Payment          @relation(fields: [paymentId], references: [id])
   referredUser User             @relation("ReferredUserCommissions", fields: [referredUserId], references: [id])
   paidBy       User?            @relation("PaidCommissions", fields: [paidByUserId], references: [id])
+  approvedBy   User?            @relation("ApprovedCommissions", fields: [approvedByUserId], references: [id])
 
   @@index([affiliateId, cycleMonth, status])
+  @@index([status, eligibleAt])
   @@index([referredUserId])
 }

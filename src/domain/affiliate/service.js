@@ -3,11 +3,71 @@ import defaultDb from '../../db.js'
 
 const db = defaultDb
 
-const DEFAULT_SETTINGS = { cookieDurationHours: 24, commissionPercent: 30, commissionRecurringPercent: 30, recurringCommissionEnabled: true }
+const DEFAULT_SETTINGS = { cookieDurationHours: 24, commissionPercent: 30, commissionRecurringPercent: 30, recurringCommissionEnabled: true, commissionHoldDays: 30, attributionWindowDays: 30, attributionModel: 'last_non_direct' }
 
 export async function getAffiliateSettings(dbi = db) {
   const settings = await dbi.affiliateSettings.findFirst({ where: { id: 1 } })
   return settings ?? DEFAULT_SETTINGS
+}
+
+function normalizeComparable(value) {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+function normalizeDigits(value) {
+  return String(value ?? '').replace(/\D/g, '')
+}
+
+function addDays(date, days) {
+  const base = date ? new Date(date) : new Date()
+  return new Date(base.getTime() + Math.max(0, Number(days) || 0) * 24 * 60 * 60 * 1000)
+}
+
+function pixMatchesReferredUser(profile, referredUser) {
+  const pix = normalizeComparable(profile?.pixKey)
+  if (!pix) return false
+  if (profile?.pixKeyType === 'email' && pix === normalizeComparable(referredUser?.email)) return true
+  if (profile?.pixKeyType === 'phone' && normalizeDigits(pix) && normalizeDigits(pix) === normalizeDigits(referredUser?.contactPhone)) return true
+  return false
+}
+
+export function evaluateAffiliateCommissionRisk({ profile, referredUser }) {
+  if (!profile || !referredUser) return { decision: 'block', reason: 'missing_affiliate_or_user' }
+  if (profile.userId && profile.userId === referredUser.id) return { decision: 'block', reason: 'self_referral' }
+  if (normalizeComparable(profile.user?.email) && normalizeComparable(profile.user?.email) === normalizeComparable(referredUser.email)) return { decision: 'block', reason: 'same_email' }
+  if (normalizeDigits(profile.user?.contactPhone) && normalizeDigits(profile.user?.contactPhone) === normalizeDigits(referredUser.contactPhone)) return { decision: 'block', reason: 'same_phone' }
+  if (pixMatchesReferredUser(profile, referredUser)) return { decision: 'hold', reason: `pix_matches_referred_${profile.pixKeyType}` }
+  return { decision: 'allow' }
+}
+
+export async function recordAffiliateAttributionTouch({ affiliateId, affiliateCode, userId, clickId = null, visitorId = null, source = null, medium = null, campaign = null, landingPage = null, ipHash = null, uaHash = null, touchedAt = new Date(), db: dbi = db } = {}) {
+  if (!affiliateId || typeof dbi.affiliateAttributionTouch?.create !== 'function') return { skipped: 'missing_affiliate_or_store' }
+  const touch = await dbi.affiliateAttributionTouch.create({
+    data: {
+      affiliateId,
+      affiliateCode: affiliateCode || null,
+      userId: userId || null,
+      clickId: clickId || null,
+      visitorId: visitorId || null,
+      source: source || null,
+      medium: medium || null,
+      campaign: campaign || null,
+      landingPage: landingPage || null,
+      ipHash: ipHash || null,
+      uaHash: uaHash || null,
+      touchedAt,
+    },
+  })
+  return { created: true, touchId: touch.id }
+}
+
+export async function attachAffiliateAttributionTouchesToUser({ visitorId, userId, affiliateId = null, db: dbi = db } = {}) {
+  const normalizedVisitorId = String(visitorId ?? '').trim().slice(0, 120)
+  if (!normalizedVisitorId || !userId || typeof dbi.affiliateAttributionTouch?.updateMany !== 'function') return { updated: 0, skipped: 'missing_visitor_or_store' }
+  const where = { visitorId: normalizedVisitorId, userId: null }
+  if (affiliateId) where.affiliateId = affiliateId
+  const result = await dbi.affiliateAttributionTouch.updateMany({ where, data: { userId } })
+  return { updated: result.count ?? 0 }
 }
 
 async function generateUniqueCode() {
@@ -52,20 +112,31 @@ export async function getAffiliateMeData({ userId }) {
     }),
   ])
 
-  const totalEarnedCents = commissions.reduce((s, c) => s + c.commissionAmountCents, 0)
-  const totalSales = commissions.length
+  const payableStatuses = new Set(['eligible', 'approved'])
+  const paidCommissions = commissions.filter(c => c.status === 'paid')
+  const payableCommissions = commissions.filter(c => payableStatuses.has(c.status))
+  const pendingCommissions = commissions.filter(c => ['pending', 'held'].includes(c.status))
+  const reversedCommissions = commissions.filter(c => c.status === 'reversed')
+  const totalEarnedCents = paidCommissions.reduce((s, c) => s + c.commissionAmountCents, 0)
+  const payableCents = payableCommissions.reduce((s, c) => s + c.commissionAmountCents, 0)
+  const pendingCents = pendingCommissions.reduce((s, c) => s + c.commissionAmountCents, 0)
+  const reversedCents = reversedCommissions.reduce((s, c) => s + c.commissionAmountCents, 0)
+  const totalSales = commissions.filter(c => c.status !== 'reversed').length
 
+  const statusPriority = { held: 1, pending: 2, eligible: 3, approved: 4, paid: 5, reversed: 6 }
   const byMonth = {}
   for (const c of commissions) {
-    if (!byMonth[c.cycleMonth]) byMonth[c.cycleMonth] = { month: c.cycleMonth, totalCents: 0, status: 'paid', count: 0 }
-    byMonth[c.cycleMonth].totalCents += c.commissionAmountCents
+    if (!byMonth[c.cycleMonth]) byMonth[c.cycleMonth] = { month: c.cycleMonth, totalCents: 0, status: c.status, count: 0 }
+    if (c.status !== 'reversed') byMonth[c.cycleMonth].totalCents += c.commissionAmountCents
     byMonth[c.cycleMonth].count++
-    if (c.status === 'pending') byMonth[c.cycleMonth].status = 'pending'
+    const currentPriority = statusPriority[byMonth[c.cycleMonth].status] ?? 99
+    const nextPriority = statusPriority[c.status] ?? 99
+    if (nextPriority < currentPriority) byMonth[c.cycleMonth].status = c.status
   }
 
   return {
     profile,
-    stats: { totalReferrals, totalSales, totalEarnedCents },
+    stats: { totalReferrals, totalSales, totalEarnedCents, payableCents, pendingCents, reversedCents },
     months: Object.values(byMonth).sort((a, b) => b.month.localeCompare(a.month)),
   }
 }
@@ -193,12 +264,66 @@ function resolveRate(settings, profile, isRecurring) {
   return profile.commissionPercentOverride ?? settings.commissionPercent
 }
 
+export const COMMISSION_PAYABLE_STATUSES = ['eligible', 'approved']
+export const COMMISSION_APPROVABLE_STATUSES = ['held', 'eligible']
+export const COMMISSION_REVERSIBLE_STATUSES = ['pending', 'eligible', 'approved', 'held']
+
+export async function approveAffiliateCommission({ id, adminUserId, db: dbi = db } = {}) {
+  if (!id) throw new Error('approveAffiliateCommission: id obrigatório')
+  const now = new Date()
+  const result = await dbi.affiliateCommission.updateMany({
+    where: { id, status: { in: COMMISSION_APPROVABLE_STATUSES } },
+    data: { status: 'approved', approvedAt: now, approvedByUserId: adminUserId ?? null },
+  })
+  if (result.count !== 1) return { updated: false, reason: 'not_approvable' }
+  const commission = typeof dbi.affiliateCommission.findUnique === 'function'
+    ? await dbi.affiliateCommission.findUnique({ where: { id } })
+    : null
+  return { updated: true, commission }
+}
+
+export async function reverseAffiliateCommission({ id, reason, db: dbi = db } = {}) {
+  if (!id) throw new Error('reverseAffiliateCommission: id obrigatório')
+  const normalizedReason = String(reason ?? '').trim().slice(0, 500)
+  if (!normalizedReason) return { updated: false, reason: 'missing_reason' }
+  const now = new Date()
+  const result = await dbi.affiliateCommission.updateMany({
+    where: { id, status: { in: COMMISSION_REVERSIBLE_STATUSES } },
+    data: { status: 'reversed', reversedAt: now, reversalReason: normalizedReason },
+  })
+  if (result.count !== 1) return { updated: false, reason: 'not_reversible' }
+  const commission = typeof dbi.affiliateCommission.findUnique === 'function'
+    ? await dbi.affiliateCommission.findUnique({ where: { id } })
+    : null
+  return { updated: true, commission }
+}
+
+export async function reverseAffiliateCommissionForPayment({ paymentId, reason, db: dbi = db } = {}) {
+  if (!paymentId) throw new Error('reverseAffiliateCommissionForPayment: paymentId obrigatório')
+  const normalizedReason = String(reason ?? '').trim().slice(0, 500)
+  if (!normalizedReason) return { updated: 0, reason: 'missing_reason' }
+  const now = new Date()
+  const result = await dbi.affiliateCommission.updateMany({
+    where: { paymentId, status: { in: COMMISSION_REVERSIBLE_STATUSES } },
+    data: { status: 'reversed', reversedAt: now, reversalReason: normalizedReason },
+  })
+  if ((result.count ?? 0) < 1) return { updated: 0, reason: 'not_reversible' }
+  return { updated: result.count ?? 0 }
+}
+
 export async function tryCreateAffiliateCommission({ userId, paymentId, saleAmountCents, occurredAt, log, db: dbi = db }) {
   try {
-    const user = await dbi.user.findUnique({ where: { id: userId }, select: { affiliateProfileId: true } })
-    if (!user?.affiliateProfileId) return { skipped: 'no_affiliate' }
+    const user = await dbi.user.findUnique({ where: { id: userId }, select: { id: true, email: true, contactPhone: true, affiliateProfileId: true } })
+    const paymentSnapshot = typeof dbi.payment?.findUnique === 'function'
+      ? await dbi.payment.findUnique({ where: { id: paymentId }, select: { affiliateProfileIdAtCheckout: true } }).catch(() => null)
+      : null
+    const attributedAffiliateId = paymentSnapshot?.affiliateProfileIdAtCheckout ?? user?.affiliateProfileId ?? null
+    if (!attributedAffiliateId) return { skipped: 'no_affiliate' }
 
-    const profile = await dbi.affiliateProfile.findUnique({ where: { id: user.affiliateProfileId } })
+    const profile = await dbi.affiliateProfile.findUnique({
+      where: { id: attributedAffiliateId },
+      include: { user: { select: { id: true, email: true, contactPhone: true } } },
+    })
     if (!profile || profile.status !== 'approved') return { skipped: 'not_approved' }
 
     const existingCommission = await dbi.affiliateCommission.findFirst({ where: { referredUserId: userId, affiliateId: profile.id } })
@@ -207,11 +332,16 @@ export async function tryCreateAffiliateCommission({ userId, paymentId, saleAmou
     const settings = await getAffiliateSettings(dbi)
     if (isRecurring && !settings.recurringCommissionEnabled) return { skipped: 'recurring_disabled' }
 
+    const risk = evaluateAffiliateCommissionRisk({ profile, referredUser: user })
+    if (risk.decision === 'block') return { skipped: risk.reason }
+
     const commissionRatePct = resolveRate(settings, profile, isRecurring)
     const commissionAmountCents = Math.round(saleAmountCents * commissionRatePct / 100)
     // occurredAt permite que a reconciliação retroativa atribua a comissão ao
     // ciclo do pagamento original, não ao mês em que o backfill rodou.
     const cycleMonth = (occurredAt ? new Date(occurredAt) : new Date()).toISOString().slice(0, 7)
+    const eligibleAt = addDays(occurredAt, settings.commissionHoldDays ?? DEFAULT_SETTINGS.commissionHoldDays)
+    const isHeld = risk.decision === 'hold'
 
     const commission = await dbi.affiliateCommission.create({
       data: {
@@ -222,11 +352,13 @@ export async function tryCreateAffiliateCommission({ userId, paymentId, saleAmou
         commissionAmountCents,
         commissionType: isRecurring ? 'recurring' : 'initial',
         commissionRatePct,
-        status: 'pending',
+        status: isHeld ? 'held' : 'pending',
         cycleMonth,
+        eligibleAt,
+        ...(isHeld ? { heldAt: new Date(), holdReason: risk.reason } : {}),
       },
     })
-    return { created: true, commissionId: commission.id, commissionType: commission.commissionType }
+    return { created: true, commissionId: commission.id, commissionType: commission.commissionType, status: commission.status }
   } catch (err) {
     if (err.code === 'P2002') return { skipped: 'duplicate_payment' }
     log?.error?.({ err }, 'tryCreateAffiliateCommission failed')
@@ -275,6 +407,31 @@ export async function reconcileAffiliateCommissions({ db: dbi = db, log, batchSi
     } catch (err) {
       result.failed++
       log?.error?.({ err: err?.message, paymentId: payment.id }, 'affiliate_commission_reconcile_failed')
+    }
+  }
+  return result
+}
+
+
+export async function promoteEligibleAffiliateCommissions({ db: dbi = db, now = new Date(), batchSize = 200, log } = {}) {
+  const rows = await dbi.affiliateCommission.findMany({
+    where: { status: 'pending', eligibleAt: { lte: now } },
+    select: { id: true },
+    orderBy: { eligibleAt: 'asc' },
+    take: batchSize,
+  })
+
+  const result = { checked: rows.length, promoted: 0, failed: 0 }
+  for (const row of rows) {
+    try {
+      await dbi.affiliateCommission.update({
+        where: { id: row.id },
+        data: { status: 'eligible' },
+      })
+      result.promoted++
+    } catch (err) {
+      result.failed++
+      log?.error?.({ err: err?.message, commissionId: row.id }, 'affiliate_commission_eligibility_failed')
     }
   }
   return result

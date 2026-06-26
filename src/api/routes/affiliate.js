@@ -1,4 +1,5 @@
-import { applyAffiliate, getAffiliateMeData, getAffiliateReferrals, getAffiliateSettings, tryCreateAffiliateCommission } from '../../domain/affiliate/service.js'
+import { createHash } from 'crypto'
+import { COMMISSION_PAYABLE_STATUSES, applyAffiliate, approveAffiliateCommission, getAffiliateMeData, getAffiliateReferrals, getAffiliateSettings, recordAffiliateAttributionTouch, reverseAffiliateCommission, tryCreateAffiliateCommission } from '../../domain/affiliate/service.js'
 import { resolveAdminAccess, writeAdminAuditLog } from './admin.js'
 import db from '../../db.js'
 
@@ -23,6 +24,18 @@ const ROLE_PERMISSIONS = {
   read_only: ['admin:read', 'support:read'],
 }
 
+
+function shortHash(value) {
+  if (value == null || value === '') return null
+  return createHash('sha256').update(String(value)).digest('hex').slice(0, 12)
+}
+
+
+function toSafeTrackingValue(value, max = 120) {
+  const text = typeof value === 'string' ? value.trim() : ''
+  return text ? text.slice(0, max) : null
+}
+
 function hasPermission(role, permission) {
   return ROLE_PERMISSIONS[role]?.includes(permission) ?? false
 }
@@ -40,7 +53,40 @@ async function requireAdminAccess(req, reply, permission) {
 export async function affiliateRoutes(app) {
   app.get('/affiliate/config', async (_req, _reply) => {
     const settings = await getAffiliateSettings()
-    return { cookieDurationHours: settings.cookieDurationHours, commissionPercent: settings.commissionPercent }
+    return {
+      cookieDurationHours: settings.cookieDurationHours,
+      commissionPercent: settings.commissionPercent,
+      commissionRecurringPercent: settings.commissionRecurringPercent,
+      recurringCommissionEnabled: settings.recurringCommissionEnabled,
+      commissionHoldDays: settings.commissionHoldDays,
+      attributionWindowDays: settings.attributionWindowDays,
+      attributionModel: settings.attributionModel,
+    }
+  })
+
+
+  app.post('/affiliate/track', async (req, reply) => {
+    const { affiliateCode, visitorId, source, medium, campaign, landingPage } = req.body ?? {}
+    const code = typeof affiliateCode === 'string' ? affiliateCode.trim().toUpperCase().slice(0, 64) : ''
+    const normalizedVisitorId = typeof visitorId === 'string' ? visitorId.trim().slice(0, 120) : ''
+    if (!code || !normalizedVisitorId) return reply.code(400).send({ error: 'affiliateCode e visitorId são obrigatórios' })
+
+    const profile = await db.affiliateProfile.findUnique({ where: { code }, select: { id: true, code: true, status: true } }).catch(() => null)
+    if (!profile || profile.status !== 'approved') return { tracked: false, reason: 'affiliate_not_approved' }
+
+    await recordAffiliateAttributionTouch({
+      affiliateId: profile.id,
+      affiliateCode: profile.code,
+      visitorId: normalizedVisitorId,
+      source: toSafeTrackingValue(source) || 'affiliate_link',
+      medium: toSafeTrackingValue(medium),
+      campaign: toSafeTrackingValue(campaign),
+      landingPage: toSafeTrackingValue(landingPage, 500),
+      ipHash: shortHash(req.ip),
+      uaHash: shortHash(req.headers?.['user-agent']),
+      db,
+    })
+    return { tracked: true }
   })
 
   app.post('/affiliate/apply', { onRequest: [app.authenticate] }, async (req, reply) => {
@@ -230,6 +276,52 @@ export async function affiliateRoutes(app) {
     return { commissions, total, page, limit }
   })
 
+  app.post('/admin/affiliates/commissions/:id/approve', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const access = await requireAdminAccess(req, reply, 'billing:write')
+    if (!access) return
+
+    const { id } = req.params
+    const before = await db.affiliateCommission.findUnique({ where: { id } })
+    if (!before) return reply.code(404).send({ error: 'Comissão não encontrada' })
+
+    const result = await approveAffiliateCommission({ id, adminUserId: req.user.sub, db })
+    if (!result.updated) return reply.code(409).send({ error: 'Somente comissões em hold/elegíveis podem ser aprovadas manualmente' })
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.affiliate.commission.approve',
+      resource: 'affiliateCommission',
+      resourceId: id,
+      targetUserId: before.referredUserId,
+      before: { status: before.status, commissionAmountCents: before.commissionAmountCents, cycleMonth: before.cycleMonth },
+      after: { status: 'approved', approvedByUserId: req.user.sub },
+    })
+    return { commission: result.commission }
+  })
+
+  app.post('/admin/affiliates/commissions/:id/reverse', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const access = await requireAdminAccess(req, reply, 'billing:write')
+    if (!access) return
+
+    const { id } = req.params
+    const { reason } = req.body ?? {}
+    const before = await db.affiliateCommission.findUnique({ where: { id } })
+    if (!before) return reply.code(404).send({ error: 'Comissão não encontrada' })
+
+    const result = await reverseAffiliateCommission({ id, reason, db })
+    if (result.reason === 'missing_reason') return reply.code(400).send({ error: 'Motivo da reversão é obrigatório' })
+    if (!result.updated) return reply.code(409).send({ error: 'Comissão paga não pode ser revertida automaticamente; faça estorno financeiro manual' })
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.affiliate.commission.reverse',
+      resource: 'affiliateCommission',
+      resourceId: id,
+      targetUserId: before.referredUserId,
+      before: { status: before.status, commissionAmountCents: before.commissionAmountCents, cycleMonth: before.cycleMonth },
+      after: { status: 'reversed', reversalReason: String(reason ?? '').trim().slice(0, 500) },
+    })
+    return { commission: result.commission }
+  })
+
   app.post('/admin/affiliates/commissions/:id/mark-paid', { onRequest: [app.authenticate] }, async (req, reply) => {
     const access = await requireAdminAccess(req, reply, 'billing:write')
     if (!access) return
@@ -238,11 +330,14 @@ export async function affiliateRoutes(app) {
     const commission = await db.affiliateCommission.findUnique({ where: { id } })
     if (!commission) return reply.code(404).send({ error: 'Comissão não encontrada' })
     if (commission.status === 'paid') return reply.code(409).send({ error: 'Comissão já marcada como paga' })
+    if (!COMMISSION_PAYABLE_STATUSES.includes(commission.status)) return reply.code(409).send({ error: 'Somente comissões elegíveis/aprovadas podem ser pagas' })
 
-    const updated = await db.affiliateCommission.update({
-      where: { id },
+    const result = await db.affiliateCommission.updateMany({
+      where: { id, status: { in: COMMISSION_PAYABLE_STATUSES } },
       data: { status: 'paid', paidAt: new Date(), paidByUserId: req.user.sub },
     })
+    if (result.count !== 1) return reply.code(409).send({ error: 'Comissão mudou de status; recarregue a página antes de pagar' })
+    const updated = await db.affiliateCommission.findUnique({ where: { id } })
     await writeAdminAuditLog(req, {
       action: 'admin.affiliate.commission.mark_paid',
       resource: 'affiliateCommission',
@@ -262,7 +357,7 @@ export async function affiliateRoutes(app) {
     if (!month || !/^\d{4}-\d{2}$/.test(month)) return reply.code(400).send({ error: 'Formato de mês inválido (use YYYY-MM)' })
 
     const result = await db.affiliateCommission.updateMany({
-      where: { cycleMonth: month, status: 'pending' },
+      where: { cycleMonth: month, status: { in: COMMISSION_PAYABLE_STATUSES } },
       data: { status: 'paid', paidAt: new Date(), paidByUserId: req.user.sub },
     })
     await writeAdminAuditLog(req, {
@@ -286,7 +381,7 @@ export async function affiliateRoutes(app) {
     const access = await requireAdminAccess(req, reply, 'billing:write')
     if (!access) return
 
-    const { cookieDurationHours, commissionPercent, commissionRecurringPercent, recurringCommissionEnabled } = req.body ?? {}
+    const { cookieDurationHours, commissionPercent, commissionRecurringPercent, recurringCommissionEnabled, commissionHoldDays, attributionWindowDays, attributionModel } = req.body ?? {}
     if (cookieDurationHours !== undefined && (typeof cookieDurationHours !== 'number' || cookieDurationHours < 1)) {
       return reply.code(400).send({ error: 'cookieDurationHours deve ser um número maior que 0' })
     }
@@ -299,6 +394,15 @@ export async function affiliateRoutes(app) {
     if (recurringCommissionEnabled !== undefined && typeof recurringCommissionEnabled !== 'boolean') {
       return reply.code(400).send({ error: 'recurringCommissionEnabled deve ser um booleano' })
     }
+    if (commissionHoldDays !== undefined && (typeof commissionHoldDays !== 'number' || commissionHoldDays < 0 || commissionHoldDays > 365)) {
+      return reply.code(400).send({ error: 'commissionHoldDays deve ser um número entre 0 e 365' })
+    }
+    if (attributionWindowDays !== undefined && (typeof attributionWindowDays !== 'number' || attributionWindowDays < 1 || attributionWindowDays > 365)) {
+      return reply.code(400).send({ error: 'attributionWindowDays deve ser um número entre 1 e 365' })
+    }
+    if (attributionModel !== undefined && !['last_non_direct'].includes(attributionModel)) {
+      return reply.code(400).send({ error: 'attributionModel inválido' })
+    }
 
     const updated = await db.affiliateSettings.upsert({
       where: { id: 1 },
@@ -308,12 +412,18 @@ export async function affiliateRoutes(app) {
         commissionPercent: commissionPercent ?? 30,
         commissionRecurringPercent: commissionRecurringPercent ?? 30,
         recurringCommissionEnabled: recurringCommissionEnabled ?? true,
+        commissionHoldDays: commissionHoldDays ?? 30,
+        attributionWindowDays: attributionWindowDays ?? 30,
+        attributionModel: attributionModel ?? 'last_non_direct',
       },
       update: {
         ...(cookieDurationHours !== undefined && { cookieDurationHours }),
         ...(commissionPercent !== undefined && { commissionPercent }),
         ...(commissionRecurringPercent !== undefined && { commissionRecurringPercent }),
         ...(recurringCommissionEnabled !== undefined && { recurringCommissionEnabled }),
+        ...(commissionHoldDays !== undefined && { commissionHoldDays }),
+        ...(attributionWindowDays !== undefined && { attributionWindowDays }),
+        ...(attributionModel !== undefined && { attributionModel }),
       },
     })
     return updated

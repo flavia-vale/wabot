@@ -24,6 +24,20 @@ function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value ?? '').trim())
 }
 
+
+function getOrCreateAffiliateVisitorId() {
+  if (typeof window === 'undefined') return ''
+  try {
+    const existing = window.localStorage.getItem('aff_visitor_id')
+    if (existing) return existing
+    const generated = (window.crypto?.randomUUID?.() || `visitor_${Date.now()}_${Math.random().toString(16).slice(2)}`).slice(0, 120)
+    window.localStorage.setItem('aff_visitor_id', generated)
+    return generated
+  } catch {
+    return `visitor_${Date.now()}_${Math.random().toString(16).slice(2)}`.slice(0, 120)
+  }
+}
+
 function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -56,18 +70,25 @@ function LoginContent() {
     if (!isRegister) return
     const fromUrl = searchParams.get('aff')
     if (fromUrl) {
+      const visitorId = getOrCreateAffiliateVisitorId()
+      const landingPage = `${window.location.pathname}${window.location.search}`.slice(0, 500)
+      const persistCode = (hours = 24) => {
+        const expires = new Date(Date.now() + hours * 3600 * 1000).toUTCString()
+        document.cookie = `aff_code=${fromUrl}; expires=${expires}; path=/; SameSite=Lax`
+        document.cookie = `aff_visitor_id=${visitorId}; expires=${expires}; path=/; SameSite=Lax`
+        setAffCode(fromUrl)
+      }
       api.affiliateConfig()
-        .then(cfg => {
-          const hours = cfg?.cookieDurationHours ?? 24
-          const expires = new Date(Date.now() + hours * 3600 * 1000).toUTCString()
-          document.cookie = `aff_code=${fromUrl}; expires=${expires}; path=/; SameSite=Lax`
-          setAffCode(fromUrl)
-        })
-        .catch(() => {
-          const expires = new Date(Date.now() + 24 * 3600 * 1000).toUTCString()
-          document.cookie = `aff_code=${fromUrl}; expires=${expires}; path=/; SameSite=Lax`
-          setAffCode(fromUrl)
-        })
+        .then(cfg => persistCode(cfg?.cookieDurationHours ?? 24))
+        .catch(() => persistCode(24))
+      api.affiliateTrack({
+        affiliateCode: fromUrl,
+        visitorId,
+        source: signupAttribution.source || signupAttribution.utm_source || 'affiliate_link',
+        medium: signupAttribution.utm_medium || null,
+        campaign: signupAttribution.utm_campaign || null,
+        landingPage,
+      }).catch(() => {})
     } else {
       const match = document.cookie.match(/(?:^|;\s*)aff_code=([^;]+)/)
       if (match) Promise.resolve(decodeURIComponent(match[1])).then(code => setAffCode(code))
@@ -126,7 +147,7 @@ function LoginContent() {
         ...(isRegister ? trackingAttribution : {}),
       })
       if (isRegister) {
-        await api.register(cleanName, cleanEmail, password, cleanPhone, { ...signupAttribution, ...(ref && { ref }), ...(affCode && { aff_code: affCode }), termsAccepted, termsVersion: TERMS_VERSION })
+        await api.register(cleanName, cleanEmail, password, cleanPhone, { ...signupAttribution, ...(ref && { ref }), ...(affCode && { aff_code: affCode, affiliateVisitorId: getOrCreateAffiliateVisitorId() }), termsAccepted, termsVersion: TERMS_VERSION })
         trackEvent(TRACKING_EVENTS.SIGNUP_SUCCESS, { origin: 'login_page', has_ref: Boolean(ref), ...trackingAttribution })
       } else {
         await api.login(cleanEmail, password)
