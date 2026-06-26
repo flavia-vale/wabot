@@ -24,15 +24,16 @@ export function isPreservationFeatureEnabled(preservationActive, botConfig, feat
   return preservationActive === true && botConfig?.[feature] === true
 }
 
-// Issue #1033 (escopo revisado 2026-06-24): a mutação de imagem permanece um
-// toggle GLOBAL (configurações avançadas / BotConfig.imageMutationActive), mas
-// deixa de ser exclusiva de CANAL. O anti-fingerprint de imagem repetida
-// também protege GRUPO-destino, então o gate passa a aceitar canal OU grupo.
+// shouldMutateOutgoingImage: predicado elegível para destinos que devem ter
+// mutação de imagem aplicada. Atualmente NÃO é usado no bot-worker —
+// o gate direto `isChannelDest && isPreservationFeatureEnabled(...)` é
+// mantido lá para evitar dupla compressão JPEG em grupos (vide invariante
+// no bot-worker, commit image-upload-bug-fix 2026-06).
 //
-// A exclusão dos envios de grupo que usam o caminho de relay (mídia original
-// já hospedada, não mutável) é ESTRUTURAL no bot-worker (early-return antes do
-// bloco de mutação) — não cabe a este predicado. Aqui só decidimos se o destino
-// é elegível e se o opt-in global está ligado.
+// Esta função existe para testes unitários de preservationFeatures e como
+// ponto de extensão futuro. Para ativar em grupos será necessário antes
+// combinar normalizeImageForWhatsApp + mutateChannelImage em um único passo
+// de sharp (sem recompressão JPEG dupla).
 export function shouldMutateOutgoingImage(destJid, preservationActive, botConfig) {
   if (!isMirrorableJid(destJid)) return false
   return isPreservationFeatureEnabled(preservationActive, botConfig, PRESERVATION_FEATURE.IMAGE_MUTATION)
