@@ -40,7 +40,6 @@ import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrott
 import { resolveDestinationPreservation } from './core/preservationConfig.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
 import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/preservationFeatures.js'
-import { mutate as mutateChannelImage } from './core/imageMutation.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
@@ -2414,30 +2413,21 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           let image = null
           if (wantImage) {
             const fetched = await getImage()
-            image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
+            // Mutação anti-fingerprint SOMENTE para canal-destino (newsletter
+            // JID) e quando o opt-in global está ligado. NÃO aplicar a grupos.
+            // Quando ligada, o crop + qualidade variada vão DENTRO do mesmo
+            // encode do normalize (sem 2º encode JPEG = sem dupla compressão).
+            // Regressão de dupla compressão documentada em 2026-06
+            // (commit image-upload-bug-fix). Ver normalizeImageForWhatsApp.
+            const wantMutation = isChannelDest && isPreservationFeatureEnabled(cfg.preservationActive, cfg.botConfig, PRESERVATION_FEATURE.IMAGE_MUTATION)
+            image = fetched
+              ? await normalizeImageForWhatsApp(fetched.buffer, wantMutation ? { mutation: { groupId: destJid } } : {})
+              : null
             if (fetched && !image) {
               logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
             }
             if (imageMode === 'original' && !image) {
               useLinkPreview = true
-            }
-            // Mutação SOMENTE para canal-destino (newsletter JID).
-            // INVARIANTE: NÃO aplicar a grupos — a imagem já passou por
-            // normalizeImageForWhatsApp (JPEG 95% mozjpeg) e uma segunda
-            // recompressão pela mutação (JPEG 85-92%) causaria degradação
-            // visível sem ganho real de anti-fingerprint em grupos.
-            // Para canais o pipeline de qualidade é diferente (relay não é
-            // usado → getImage é sempre chamado → uma única compressão aqui
-            // é o passo final antes do upload). Regressão de qualidade em grupos
-            // documentada em 2026-06 (commit image-upload-bug-fix).
-            if (image && isChannelDest && isPreservationFeatureEnabled(cfg.preservationActive, cfg.botConfig, PRESERVATION_FEATURE.IMAGE_MUTATION)) {
-              const mutated = await mutateChannelImage(image.buffer, image.mimetype, {
-                groupId: destJid,
-                enabled: true,
-              })
-              if (mutated.buffer !== image.buffer) {
-                image = { ...image, buffer: mutated.buffer, mimetype: mutated.mimetype }
-              }
             }
           }
 
