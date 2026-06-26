@@ -39,18 +39,27 @@ export function isLikelyJpegThumbnail(image) {
 //
 // Discriminador SEGURO = overlap entre o título raspado do link e o caption
 // (mesmo sinal do guard de title_mismatch). `titleOverlap`:
-//   'match'    → caption descreve o produto (caso B)  → NÃO pular
+//   'match'    → caption descreve o produto (caso B)  → NÃO pular (busca hi-res)
 //   'mismatch' → caption não bate com o produto (caso A) → pular
-//   'unknown'  → não foi possível raspar (timeout/plataforma fora do guard):
-//                se há link de produto, favorece a qualidade visível (caso B é
-//                muito mais comum que o A quando há link de produto convertido).
+//   'unknown'  → não foi possível raspar (timeout, short link de cupom que não
+//                resolve og:title, ou plataforma fora do guard, ex: Shopee).
+//                Aqui NÃO temos confirmação do título, então decidimos pela
+//                FORMA do caption (`looksGeneric`): cupom store-wide ("em
+//                compras a partir de", "pesquise pelo produto desejado") →
+//                pular (o link resolve p/ produto aleatório — regressão 2026-06
+//                da camiseta branca); caption que nomeia um produto → manter a
+//                aposta de produto e buscar hi-res (preserva Shopee/etc.
+//                produto+cupom, que sempre cai em 'unknown' por estar fora do
+//                guard de scrape).
 //
 // Mensagens não-cupom nunca pulam (comportamento histórico das ofertas normais).
-export function decideSkipActiveFetchForCoupon({ isCouponMsg, hasProductLink, titleOverlap }) {
+export function decideSkipActiveFetchForCoupon({ isCouponMsg, hasProductLink, titleOverlap, looksGeneric = false }) {
   if (!isCouponMsg) return false
   if (!hasProductLink) return true
+  if (titleOverlap === 'match') return false
   if (titleOverlap === 'mismatch') return true
-  return false
+  // titleOverlap === 'unknown': decide pela forma do caption.
+  return !!looksGeneric
 }
 
 export async function resolveMonitoredImage({

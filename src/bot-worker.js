@@ -14,7 +14,7 @@ import { dirname } from 'path'
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
-import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from './messageProcessor.js'
+import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
@@ -2279,13 +2279,18 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
 
       // Decide a estratégia de imagem para cupom ANTES do loop de destinos
       // (vale para todos os destinos da mensagem). getImage() lê esta flag.
+      // looksGeneric só decide o caso 'unknown' (scrape indisponível): caption
+      // com cara de cupom store-wide → não buscar hi-res (evita puxar produto
+      // aleatório, ex: camiseta branca). Não afeta 'match'/'mismatch'.
+      const couponLooksGeneric = isCouponMsg && looksLikeGenericCoupon(sanitizedText)
       couponSkipActiveFetch = decideSkipActiveFetchForCoupon({
         isCouponMsg,
         hasProductLink,
         titleOverlap,
+        looksGeneric: couponLooksGeneric,
       })
       if (isCouponMsg) {
-        logger.info({ msgId: msg.key.id, hasProductLink, titleOverlap, couponSkipActiveFetch }, 'estratégia de imagem para mensagem de cupom')
+        logger.info({ msgId: msg.key.id, hasProductLink, titleOverlap, looksGeneric: couponLooksGeneric, couponSkipActiveFetch }, 'estratégia de imagem para mensagem de cupom')
       }
 
       const baseDestinations = monitorGroup?.targetPostJids?.length ? monitorGroup.targetPostJids : cfg.groups.post
