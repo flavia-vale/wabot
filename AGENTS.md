@@ -578,6 +578,86 @@ mídia). É mitigação de pico de GC, **não** teto rígido de RSS — em VPS
 subdimensionado, **swap continua sendo pré-requisito** (a primeira linha de
 defesa). Teste: `test/core/worker-spawn-options.test.js`.
 
+## Política de memória (CANÔNICA — LEIA antes de qualquer mudança que afete RAM)
+
+> **REGRA #1 — SUPER SINALIZAR antes de executar.** Qualquer decisão/mudança
+> que **possa aumentar significativamente o uso de memória** (novo processo
+> PM2, novo worker/serviço, subir limite de heap, ligar BullMQ/Redis, cache
+> em memória, manter staging ligado, adicionar dependência pesada, processar
+> mídia maior, aumentar concorrência/`instances`, etc.) **DEVE ser destacada
+> de forma explícita para a usuária ANTES de aplicar** — com a estimativa de
+> RAM adicional e o impacto no VPS atual. Nunca aplicar mudança memory-heavy
+> em produção sem esse aviso e o OK explícito.
+>
+> **REGRA #2 — Sempre oferecer alternativas mais leves.** Ao propor qualquer
+> solução, trazer junto opção(ões) que **ocupem menos memória** (ex.: stream
+> em vez de buffer, fila persistente em disco/Redis em vez de in-memory,
+> processo sob demanda em vez de long-running, lazy import, paginação).
+>
+> **REGRA #3 — Sempre oferecer limpeza de memória que NÃO prejudique o
+> sistema.** Liberações seguras e reversíveis primeiro; nunca sugerir algo que
+> derrube sessões, perca dados ou mascare um vazamento. Ver lista abaixo.
+
+### Por que esta política existe (incidente jun/2026 — RCA resumido)
+
+Sintomas: spam de push **"A sincronização foi concluída"** no celular +
+mensagens **"O bot reiniciou enquanto essa mensagem estava esperando para ser
+enviada"** (`error:worker_restart`).
+
+Causa raiz: **VPS sufocado de RAM, sem swap.** VPS de 3.7 GB, **swap = 0**,
+rodando prod **e** staging juntos (10+ bot-workers ~2.4 GB + `api` +
+`dashboard`/Next + bots Telegram). Os bot-workers são `fork()` e **não têm
+teto de memória** (o `max_memory_restart` do PM2 não alcança filho forkado).
+Sob scrape pesado (Amazon ~1.3 MB + buffers de imagem) ou pausa de GC, o
+event-loop do worker travava → keepalive do WhatsApp estourava → socket caía
+(408/428) → reconexão em loop. Cada reconexão = push de sync; mensagens em vôo
+viravam `worker_restart`. Quedas repetidas dessincronizavam o Signal (Bad MAC
+/ `badSession` 500). Diagnóstico por `bot.log` (tally de `code`) + tabela
+`AnalyticsEvent` (`whatsapp_connected`, `ops_wa_*`) + `free -h`.
+
+Descartados com dados (não regredir o diagnóstico): dupla posse/`connectionReplaced`
+(440 recente = 0), worker órfão (todos filhos da API, 1 por userId), API em
+churn (1 restart/6h), monitor de heartbeat matando workers ("heartbeat
+estagnado" = 0).
+
+Correções aplicadas: **swap de 4 GB em prod** (zerou `worker_restart`) + **teto
+de heap por worker** (`BOT_WORKER_MAX_OLD_SPACE_MB`, seção acima) + **botão
+liga/desliga staging** (economia de RAM sob demanda) + **vigilância 403**
+(`ops_wa_forbidden`).
+
+### Fatos de capacidade (use para estimar antes de sinalizar)
+
+- **Orçamento por sessão WhatsApp ativa:** ~**0,35 GB** de RSS (worker sob o
+  teto de 384 MB + overhead). Base fixa (api+dashboard+telegram+OS) ~**2 GB**.
+- **Fórmula:** `RAM ≈ 2 GB + N_sessões × 0,35 GB + (staging co-locado? +2 GB) + ~20% folga`.
+- **Custo marginal de infra por cliente:** ~R$1,75/mês (marginal) a ~R$2-3/mês
+  (com base amortizada). Não é o gargalo do produto — RAM é barata perto do ticket.
+- **Swap é pré-requisito, não muleta:** num VPS apertado, swap ativo é a 1ª
+  linha de defesa contra pico de GC. Mas swap EM USO constante = sinal de que
+  o box está subdimensionado de verdade (dimensionar mais RAM).
+- VPS atual é **x86 (AMD)** — rescale Hetzner só dentro da mesma arquitetura
+  (CPX/dedicado); ARM (CAX, ~3-6x mais barato por GB) exige servidor novo +
+  migração, não rescale.
+
+### Limpezas de memória SEGURAS (não prejudicam o sistema)
+
+Preferir sempre estas antes de qualquer upgrade ou medida agressiva:
+
+- **Adicionar swap** (`fallocate`/`mkswap`/`swapon` + `/etc/fstab`) — rede de
+  segurança, sem downtime, reversível.
+- **Desligar staging quando não está validando** (botão admin / `pm2 stop
+  api-staging visual-staging`) — libera ~1-1.4 GB. Reversível.
+- **Confirmar o teto de heap dos workers** (`BOT_WORKER_MAX_OLD_SPACE_MB`)
+  está aplicado — força GC em vez de inchar.
+- **Parar processos não-essenciais ociosos** (ex.: `bot-supervisor` em modo
+  inline já fica em standby; `snapshot-cron` só roda na janela).
+
+Limpezas **PROIBIDAS** sem OK explícito (podem prejudicar): `pm2 restart api`
+em massa (derruba sessões em modo inline), matar bot-workers à mão (perde
+mensagens em vôo + dessincroniza Signal), `redis-cli FLUSHALL`/`del` em filas
+BullMQ (pegadinha #9 — dessincroniza o Worker), reduzir timeouts do pipeline
+(seção "Timeouts"), baixar `IMAGE_HTML_MAX_BYTES` < 2MB (quebra scrape Amazon).
+
 ## Fila de envio (BullMQ + DLQ)
 
 Cada bot-worker tem uma fila própria de envio (`wabot-send-<userId>`) e
@@ -999,6 +1079,11 @@ Testes: `test/offer-engine.test.js` (motor),
 
 ## Regras para qualquer agente de IA neste repo
 
+- **MEMÓRIA — SUPER SINALIZAR.** Qualquer mudança que **possa aumentar muito o
+  uso de RAM** deve ser destacada explicitamente para a usuária **antes** de
+  executar (com estimativa de RAM e impacto no VPS). Sempre trazer junto
+  **alternativas mais leves** e **opções de limpeza de memória que NÃO
+  prejudiquem o sistema**. Detalhes e listas em "Política de memória" acima.
 - **Não trocar portas** sem atualizar os 3 lugares listados acima.
 - **Não criar PR para `main` direto** — sempre `feature → develop → main`.
 - **Não amend** commits já mergeados; criar commit novo.
