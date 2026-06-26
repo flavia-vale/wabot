@@ -190,18 +190,18 @@ export default function TutorialPage() {
       </PlatformCard>
 
       {/* Mercado Livre */}
-      <PlatformCard color="blue" icon="🔵" title="Mercado Livre — Pegando seu ID e SSID">
+      <PlatformCard color="blue" icon="🔵" title="Mercado Livre — Pegando sua Etiqueta em uso e SSID">
         <p className="text-sm text-gray-700">
-          Você vai precisar de dois códigos: o <strong>ID</strong> (identificador do afiliado) e o <strong>SSID</strong> (código de sessão). Veja como pegar cada um:
+          Você vai precisar de dois códigos: a <strong>Etiqueta em uso</strong> (identificador do afiliado no Gerador de Links) e o <strong>SSID</strong> (código de sessão). Veja como pegar cada um:
         </p>
 
         <div className="space-y-1">
-          <Badge color="blue">Parte 1 — Pegando o ID</Badge>
+          <Badge color="blue">Parte 1 — Pegando a Etiqueta em uso</Badge>
         </div>
         <StepList steps={[
           <>Faça login na sua conta do Mercado Livre com o perfil de afiliado.</>,
           <><ExternalLink href={LINKS.mercadoLivreLinkBuilder}>Acesse o Gerador de Links ML</ExternalLink> — ou navegue por: <strong>Minha Conta → Afiliados e Criadores → Gerador de links</strong>.</>,
-          <>Na página do Gerador de Links, você vai ver um campo chamado <strong>&quot;Etiqueta em uso&quot;</strong> com um código (ex: <code className="bg-gray-100 px-1 rounded text-xs">47xxxxx</code> ou <code className="bg-gray-100 px-1 rounded text-xs">faxxxxx</code>). Esse é o seu <strong>ID</strong>. Copie-o.</>,
+          <>Na página do Gerador de Links, você vai ver um campo chamado <strong>&quot;Etiqueta em uso&quot;</strong> com um código (ex: <code className="bg-gray-100 px-1 rounded text-xs">47xxxxx</code> ou <code className="bg-gray-100 px-1 rounded text-xs">faxxxxx</code>). Essa é a informação que deve ser colada no campo <strong>Etiqueta em uso</strong>. Copie-a exatamente como aparece.</>,
         ]} />
         <TutorialInlineImage src="https://i.postimg.cc/cvYC69ZM/Captura-de-Tela-2026-05-16-a-s-11-26-03.png" alt="Mercado Livre parte 1: campo etiqueta em uso" />
 

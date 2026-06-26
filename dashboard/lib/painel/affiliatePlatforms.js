@@ -38,10 +38,10 @@ export const AFFILIATE_PLATFORMS = [
   {
     id: 'mercadolivre',
     label: 'Mercado Livre',
-    instructions: 'Onde obter: afiliados.mercadolivre.com.br. A Tag vem do painel; SSID é o cookie da sessão ativa e deve ser tratado como dado sensível.',
-    platformWarning: 'Para gerar link curto (meli.la), preencha Tag e SSID.',
+    instructions: 'Onde obter: afiliados.mercadolivre.com.br. A Etiqueta em uso vem do Gerador de Links; SSID é o cookie da sessão ativa e deve ser tratado como dado sensível.',
+    platformWarning: 'Para gerar link curto (meli.la), preencha Etiqueta em uso e SSID.',
     fields: [
-      { key: 'tag', label: 'Tag numérica', hint: 'Somente números da sua afiliação.', help: 'Copie a tag exibida no painel de afiliados do Mercado Livre.' },
+      { key: 'tag', label: 'Etiqueta em uso', hint: 'Copie exatamente como aparece no Mercado Livre.', help: 'Copie a etiqueta em uso exibida no Gerador de Links do Mercado Livre.' },
       { key: 'ssid', label: 'SSID (cookie)', hint: 'Cookie da sessão ativa do Mercado Livre.', sensitive: true, help: 'No navegador, acesse os cookies do Mercado Livre na sua sessão ativa e copie apenas o valor do cookie ssid. Não compartilhe esse valor fora do painel.' },
     ],
   },

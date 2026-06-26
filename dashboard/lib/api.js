@@ -296,6 +296,14 @@ export const api = {
   adminUpdateAccess: (id, data) =>
     apiFetch(`/api/admin/users/${id}/access`, { method: 'POST', body: JSON.stringify(data) }),
 
+  adminStagingStatus: () => apiFetch('/api/admin/staging-power'),
+  adminStagingPower: (action, { mfaToken } = {}) =>
+    apiFetch('/api/admin/staging-power', {
+      method: 'POST',
+      body: JSON.stringify({ action }),
+      headers: mfaToken ? { 'x-admin-mfa-token': String(mfaToken).trim() } : {},
+    }),
+
   adminMarketingOverview: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/marketing/overview${query ? `?${query}` : ''}`)

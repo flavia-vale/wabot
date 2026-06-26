@@ -322,9 +322,39 @@ test('decisão: produto + cupom (título bate) busca hi-res — NÃO pula o fetc
   )
 })
 
-test('decisão: cupom com link de produto mas scrape indisponível favorece hi-res (caso B é o comum)', () => {
-  // titleOverlap='unknown' (timeout ou plataforma fora do guard, ex: Shopee):
-  // havendo link de produto convertido, a aposta segura é a oferta de produto.
+test('decisão: cupom unknown + caption NÃO-genérico favorece hi-res (Shopee produto+cupom)', () => {
+  // titleOverlap='unknown' (plataforma fora do guard, ex: Shopee) E caption que
+  // nomeia um produto (não tem cara de store-wide): mantém a aposta de produto.
+  assert.equal(
+    decideSkipActiveFetchForCoupon({ isCouponMsg: true, hasProductLink: true, titleOverlap: 'unknown', looksGeneric: false }),
+    false,
+  )
+})
+
+test('decisão: cupom unknown + caption store-wide PULA o fetch (regressão camiseta branca)', () => {
+  // titleOverlap='unknown' (short link de cupom que não resolve og:title) MAS o
+  // caption tem cara de cupom de loja ("em compras a partir de", "pesquise pelo
+  // produto desejado") → não buscar hi-res, senão puxa produto aleatório.
+  assert.equal(
+    decideSkipActiveFetchForCoupon({ isCouponMsg: true, hasProductLink: true, titleOverlap: 'unknown', looksGeneric: true }),
+    true,
+  )
+})
+
+test('decisão: looksGeneric NÃO sobrepõe match/mismatch (só atua em unknown)', () => {
+  // match confirmado sempre busca hi-res, mesmo que o caption tenha algum marcador.
+  assert.equal(
+    decideSkipActiveFetchForCoupon({ isCouponMsg: true, hasProductLink: true, titleOverlap: 'match', looksGeneric: true }),
+    false,
+  )
+  // mismatch confirmado sempre pula, independente de looksGeneric.
+  assert.equal(
+    decideSkipActiveFetchForCoupon({ isCouponMsg: true, hasProductLink: true, titleOverlap: 'mismatch', looksGeneric: false }),
+    true,
+  )
+})
+
+test('decisão: default looksGeneric=false mantém compat (unknown sem flag = hi-res)', () => {
   assert.equal(
     decideSkipActiveFetchForCoupon({ isCouponMsg: true, hasProductLink: true, titleOverlap: 'unknown' }),
     false,

@@ -5,6 +5,7 @@ import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
 import AdminTutorialAccordion from '@/components/AdminTutorialAccordion'
+import SectionErrorBoundary from '@/components/SectionErrorBoundary'
 
 const STAT_LABELS = {
   totalUsers: 'Clientes totais',
@@ -426,10 +427,10 @@ function FaqEditor({ faq, onSave, onDelete }) {
 function TutorialEditor({ tutorial, onSave }) {
   const defaultTemplate = {
     title: 'Guia de Configuração: Pegando suas Credenciais (BOTinho)',
-    body: `Para que o BOTinho trabalhe para você, precisamos conectar suas contas de afiliado.\n\n🛠️ Passo 0 — Ferramenta Essencial\n1. Instale a extensão Cookie-Editor no Google Chrome (computador).\n2. Abra a Chrome Web Store e clique em “Usar no Chrome”.\n\n🔵 Mercado Livre — Como conseguir credenciais\n1. Faça login na sua conta de afiliado.\n2. Acesse o Gerador de Links: https://www.mercadolivre.com.br/afiliados/linkbuilder#hub\n3. Copie o ID exibido no campo de identificação.\n4. Clique na extensão Cookie-Editor e localize o cookie “ssid”.\n5. Copie o valor do “ssid” e salve no BOTinho.\n\n🟡 Amazon — Como conseguir credenciais\n1. Acesse https://associados.amazon.com.br/\n2. Com a página aberta, clique no Cookie-Editor.\n3. Copie os cookies solicitados pelo BOTinho.\n\n🟠 Shopee — Solicitação de API\n1. Acesse o formulário: https://help.shopee.com.br/portal/webform/bbce78695c364ba18c9cbceb74ec9091?entryPoint=1&lastArticleID=\n2. Respostas: AFILIADO > Dúvidas sobre o Programa de Afiliados > Próximo > SIM > Não, estou com outras dificuldades/dúvidas.\n3. Informe seu ID de afiliado e selecione tema/cenário para ativar API.\n4. Envie e acompanhe diariamente: https://affiliate.shopee.com.br/open_api\n\n⏳ E agora?\nApós a liberação da Shopee, clique em “Redefinir” para visualizar Key/Secret e colar no BOTinho.`,
+    body: `Para que o BOTinho trabalhe para você, precisamos conectar suas contas de afiliado.\n\n🛠️ Passo 0 — Ferramenta Essencial\n1. Instale a extensão Cookie-Editor no Google Chrome (computador).\n2. Abra a Chrome Web Store e clique em “Usar no Chrome”.\n\n🔵 Mercado Livre — Como conseguir credenciais\n1. Faça login na sua conta de afiliado.\n2. Acesse o Gerador de Links: https://www.mercadolivre.com.br/afiliados/linkbuilder#hub\n3. Copie a Etiqueta em uso exibida no Gerador de Links.\n4. Clique na extensão Cookie-Editor e localize o cookie “ssid”.\n5. Copie o valor do “ssid” e salve no BOTinho.\n\n🟡 Amazon — Como conseguir credenciais\n1. Acesse https://associados.amazon.com.br/\n2. Com a página aberta, clique no Cookie-Editor.\n3. Copie os cookies solicitados pelo BOTinho.\n\n🟠 Shopee — Solicitação de API\n1. Acesse o formulário: https://help.shopee.com.br/portal/webform/bbce78695c364ba18c9cbceb74ec9091?entryPoint=1&lastArticleID=\n2. Respostas: AFILIADO > Dúvidas sobre o Programa de Afiliados > Próximo > SIM > Não, estou com outras dificuldades/dúvidas.\n3. Informe seu ID de afiliado e selecione tema/cenário para ativar API.\n4. Envie e acompanhe diariamente: https://affiliate.shopee.com.br/open_api\n\n⏳ E agora?\nApós a liberação da Shopee, clique em “Redefinir” para visualizar Key/Secret e colar no BOTinho.`,
     images: [
       { id: 'print-1', label: 'PRINT 1 — Cookie-Editor', url: '', note: 'Destaque o botão “Usar no Chrome”.' },
-      { id: 'print-2', label: 'PRINT 2 — Mercado Livre ID', url: '', note: 'Destaque o número do ID.' },
+      { id: 'print-2', label: 'PRINT 2 — Mercado Livre Etiqueta em uso', url: '', note: 'Destaque a Etiqueta em uso.' },
       { id: 'print-3', label: 'PRINT 3 — Ícone da extensão', url: '', note: 'Mostre onde clicar no ícone de extensões.' },
       { id: 'print-4', label: 'PRINT 4 — Cookie ssid', url: '', note: 'Destaque o valor do cookie ssid.' },
       { id: 'print-amazon', label: 'PRINT AMAZON', url: '', note: 'Mostre os cookies necessários na Amazon.' },
@@ -661,17 +662,22 @@ function StagingPowerCard({ admin }) {
   const canManage = admin?.permissions?.includes('tech:write')
 
   function refresh() {
-    return api.adminStagingStatus()
+    // Promise.resolve().then(...) garante que mesmo um throw síncrono
+    // (ex.: api.adminStagingStatus indefinida em bundle defasado) vire uma
+    // rejeição capturada pelo .catch, em vez de derrubar o painel inteiro.
+    return Promise.resolve()
+      .then(() => api.adminStagingStatus())
       .then((s) => { setStatus(s); setError('') })
-      .catch((e) => { setError(e.message); setStatus(null) })
+      .catch((e) => { setError(e?.message || 'Falha ao carregar status do staging.'); setStatus(null) })
   }
 
   useEffect(() => {
     if (!canRead) return
     let active = true
-    api.adminStagingStatus()
+    Promise.resolve()
+      .then(() => api.adminStagingStatus())
       .then((s) => { if (active) { setStatus(s); setError('') } })
-      .catch((e) => { if (active) { setError(e.message); setStatus(null) } })
+      .catch((e) => { if (active) { setError(e?.message || 'Falha ao carregar status do staging.'); setStatus(null) } })
     return () => { active = false }
   }, [canRead])
 
@@ -681,7 +687,7 @@ function StagingPowerCard({ admin }) {
     try {
       setStatus(await api.adminStagingPower(action))
     } catch (e) {
-      setError(e.message)
+      setError(e?.message || 'Falha ao alternar staging.')
       await refresh()
     } finally {
       setBusy(false)
@@ -1158,7 +1164,9 @@ export default function AdminPage() {
           </section>
         )}
 
-        <StagingPowerCard admin={admin} />
+        <SectionErrorBoundary label="Staging (liga/desliga)">
+          <StagingPowerCard admin={admin} />
+        </SectionErrorBoundary>
 
         {success && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
