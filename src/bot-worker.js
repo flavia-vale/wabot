@@ -39,7 +39,7 @@ import {
 import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
 import { resolveDestinationPreservation } from './core/preservationConfig.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
-import { PRESERVATION_FEATURE, isPreservationFeatureEnabled, shouldMutateOutgoingImage } from './core/preservationFeatures.js'
+import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/preservationFeatures.js'
 import { mutate as mutateChannelImage } from './core/imageMutation.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
@@ -2027,6 +2027,16 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const platform = target?.platform || 'unknown'
         logger.info({ msgId: msg.key.id, imageMode: monitorGroup.imageMode, platform }, 'getImage: iniciando resolução de imagem')
 
+        // INVARIANTE: nunca passar skipActiveFetch=true aqui.
+        // isCouponMsg=true NÃO significa "sem produto" — mensagens como
+        // "Tênis Polo... Use o Cupom: VEMAPROVEITAR" têm URL de produto real
+        // e dependem do fetch ativo para obter a imagem em alta resolução.
+        // Com skipActiveFetch=true, o fallback é o jpegThumbnail (~300px) do
+        // preview do WA, que aparece borrado/pixelado ao ser exibido em tamanho
+        // completo. Vide regressão corrigida em 2026-06 (commit image-upload-bug-fix).
+        // Se precisar bloquear o fetch para cupons genéricos, faça isso DENTRO de
+        // resolveMonitoredImage com base no resultado real do fetchProductImage,
+        // não por antecipação em getImage().
         cachedImage = await resolveMonitoredImage({
           mode: monitorGroup.imageMode,
           target,
@@ -2035,7 +2045,6 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           fetchProductImage,
           fetchImageBuffer,
           fallbackToOriginal: monitorGroup.fallbackToOriginal !== false,
-          skipActiveFetch: isCouponMsg,
           logger,
         })
         return cachedImage
@@ -2384,11 +2393,16 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             if (imageMode === 'original' && !image) {
               useLinkPreview = true
             }
-            // Issue #1033: mutação de imagem permanece toggle GLOBAL, mas vale
-            // para canal E grupo (não só canal). Envios de grupo com mídia
-            // original já saíram pelo caminho de relay acima (return), então só
-            // chegam aqui imagens não-relay (getImage) — mutáveis com segurança.
-            if (image && shouldMutateOutgoingImage(destJid, cfg.preservationActive, cfg.botConfig)) {
+            // Mutação SOMENTE para canal-destino (newsletter JID).
+            // INVARIANTE: NÃO aplicar a grupos — a imagem já passou por
+            // normalizeImageForWhatsApp (JPEG 95% mozjpeg) e uma segunda
+            // recompressão pela mutação (JPEG 85-92%) causaria degradação
+            // visível sem ganho real de anti-fingerprint em grupos.
+            // Para canais o pipeline de qualidade é diferente (relay não é
+            // usado → getImage é sempre chamado → uma única compressão aqui
+            // é o passo final antes do upload). Regressão de qualidade em grupos
+            // documentada em 2026-06 (commit image-upload-bug-fix).
+            if (image && isChannelDest && isPreservationFeatureEnabled(cfg.preservationActive, cfg.botConfig, PRESERVATION_FEATURE.IMAGE_MUTATION)) {
               const mutated = await mutateChannelImage(image.buffer, image.mimetype, {
                 groupId: destJid,
                 enabled: true,
