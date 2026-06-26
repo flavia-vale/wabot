@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   resolveMonitoredImage,
   isLikelyJpegThumbnail,
+  decideSkipActiveFetchForCoupon,
   MONITORED_THUMBNAIL_BYTES_THRESHOLD,
 } from '../src/monitoredImageResolver.js'
 
@@ -279,4 +280,53 @@ test('mode=none ou desconhecido retorna null sem chamar nada', async () => {
   })
   assert.equal(result, null)
   assert.equal(calls, 0)
+})
+
+// ── decideSkipActiveFetchForCoupon: discriminador seguro cupom-genérico vs produto+cupom ──
+
+test('decisão: oferta normal (não-cupom) NUNCA pula o fetch ativo', () => {
+  for (const titleOverlap of ['match', 'mismatch', 'unknown']) {
+    assert.equal(
+      decideSkipActiveFetchForCoupon({ isCouponMsg: false, hasProductLink: true, titleOverlap }),
+      false,
+      `não-cupom com overlap=${titleOverlap}`,
+    )
+  }
+  assert.equal(
+    decideSkipActiveFetchForCoupon({ isCouponMsg: false, hasProductLink: false, titleOverlap: 'unknown' }),
+    false,
+  )
+})
+
+test('decisão: cupom genérico SEM link de produto pula o fetch (usa thumbnail original)', () => {
+  assert.equal(
+    decideSkipActiveFetchForCoupon({ isCouponMsg: true, hasProductLink: false, titleOverlap: 'unknown' }),
+    true,
+  )
+})
+
+test('decisão: cupom com link cujo título NÃO bate (produto aleatório) pula o fetch', () => {
+  // Caso A: "NOVO CUPOM ML cupom: GRAMADOVERDE" → link resolve p/ produto
+  // aleatório (ex: Camiseta Adidas) cujo título não tem overlap com o caption.
+  assert.equal(
+    decideSkipActiveFetchForCoupon({ isCouponMsg: true, hasProductLink: true, titleOverlap: 'mismatch' }),
+    true,
+  )
+})
+
+test('decisão: produto + cupom (título bate) busca hi-res — NÃO pula o fetch', () => {
+  // Caso B: "Tênis Polo Wear... Use o Cupom VEMAPROVEITAR" + link real do produto.
+  assert.equal(
+    decideSkipActiveFetchForCoupon({ isCouponMsg: true, hasProductLink: true, titleOverlap: 'match' }),
+    false,
+  )
+})
+
+test('decisão: cupom com link de produto mas scrape indisponível favorece hi-res (caso B é o comum)', () => {
+  // titleOverlap='unknown' (timeout ou plataforma fora do guard, ex: Shopee):
+  // havendo link de produto convertido, a aposta segura é a oferta de produto.
+  assert.equal(
+    decideSkipActiveFetchForCoupon({ isCouponMsg: true, hasProductLink: true, titleOverlap: 'unknown' }),
+    false,
+  )
 })
