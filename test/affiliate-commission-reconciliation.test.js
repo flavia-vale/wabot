@@ -1,24 +1,31 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { tryCreateAffiliateCommission, reconcileAffiliateCommissions } from '../src/domain/affiliate/service.js'
+import { attachAffiliateAttributionTouchesToUser, approveAffiliateCommission, reverseAffiliateCommission, reverseAffiliateCommissionForPayment, tryCreateAffiliateCommission, reconcileAffiliateCommissions, promoteEligibleAffiliateCommissions } from '../src/domain/affiliate/service.js'
 
-function mkDb({ payments = [], existingCommissions = [], profileStatus = 'approved', settings = null, failCreateWith = null } = {}) {
+function mkDb({ payments = [], existingCommissions = [], profileStatus = 'approved', settings = null, failCreateWith = null, referredUser = null, profile = null, eligibleRows = [], paymentSnapshot = null } = {}) {
   const created = []
   const db = {
     payment: {
       findMany: async () => payments,
+      findUnique: async () => paymentSnapshot,
     },
     user: {
-      findUnique: async () => ({ affiliateProfileId: 'prof-1' }),
+      findUnique: async () => referredUser ?? ({ id: 'user-1', email: 'cliente@example.com', contactPhone: '+5511999990000', affiliateProfileId: 'prof-1' }),
     },
     affiliateProfile: {
-      findUnique: async () => ({ id: 'prof-1', status: profileStatus, commissionPercentOverride: null, commissionRecurringPercentOverride: null }),
+      findUnique: async () => profile ?? ({ id: 'prof-1', userId: 'affiliate-user-1', status: profileStatus, pixKey: 'affiliate-pix@example.com', pixKeyType: 'email', commissionPercentOverride: null, commissionRecurringPercentOverride: null, user: { id: 'affiliate-user-1', email: 'afiliado@example.com', contactPhone: '+5511888880000' } }),
     },
     affiliateSettings: {
       findFirst: async () => settings,
     },
     affiliateCommission: {
       findFirst: async ({ where }) => existingCommissions.find(c => c.referredUserId === where.referredUserId) ?? null,
+      findMany: async () => eligibleRows,
+      update: async ({ where, data }) => {
+        const row = eligibleRows.find(r => r.id === where.id)
+        if (row) Object.assign(row, data)
+        return row ?? { id: where.id, ...data }
+      },
       create: async ({ data }) => {
         if (failCreateWith) throw failCreateWith
         const row = { id: `comm-${created.length + 1}`, ...data }
@@ -103,4 +110,143 @@ test('comissão recorrente é classificada quando já existe comissão anterior 
   const result = await tryCreateAffiliateCommission({ userId: 'user-1', paymentId: 'pay-2', saleAmountCents: 3900, db })
   assert.equal(result.created, true)
   assert.equal(created[0].commissionType, 'recurring')
+})
+
+
+test('tryCreateAffiliateCommission define elegibilidade futura pelo hold em dias', async () => {
+  const { db, created } = mkDb({ settings: { commissionPercent: 30, commissionRecurringPercent: 30, recurringCommissionEnabled: true, commissionHoldDays: 15 } })
+  await tryCreateAffiliateCommission({
+    userId: 'user-1',
+    paymentId: 'pay-1',
+    saleAmountCents: 3900,
+    occurredAt: new Date('2026-06-01T00:00:00.000Z'),
+    db,
+  })
+  assert.equal(created[0].status, 'pending')
+  assert.equal(created[0].eligibleAt.toISOString(), '2026-06-16T00:00:00.000Z')
+})
+
+test('tryCreateAffiliateCommission bloqueia autoafiliação do mesmo usuário', async () => {
+  const { db, created } = mkDb({
+    referredUser: { id: 'affiliate-user-1', email: 'afiliado@example.com', contactPhone: '+5511888880000', affiliateProfileId: 'prof-1' },
+  })
+  const result = await tryCreateAffiliateCommission({ userId: 'affiliate-user-1', paymentId: 'pay-self', saleAmountCents: 3900, db })
+  assert.equal(result.skipped, 'self_referral')
+  assert.equal(created.length, 0)
+})
+
+test('tryCreateAffiliateCommission coloca em held quando Pix do afiliado bate com indicado', async () => {
+  const { db, created } = mkDb({
+    profile: { id: 'prof-1', userId: 'affiliate-user-1', status: 'approved', pixKey: 'cliente@example.com', pixKeyType: 'email', commissionPercentOverride: null, commissionRecurringPercentOverride: null, user: { id: 'affiliate-user-1', email: 'afiliado@example.com', contactPhone: '+5511888880000' } },
+  })
+  const result = await tryCreateAffiliateCommission({ userId: 'user-1', paymentId: 'pay-held', saleAmountCents: 3900, db })
+  assert.equal(result.status, 'held')
+  assert.equal(created[0].status, 'held')
+  assert.equal(created[0].holdReason, 'pix_matches_referred_email')
+})
+
+test('promoteEligibleAffiliateCommissions promove pendentes vencidas para eligible', async () => {
+  const eligibleRows = [{ id: 'comm-1' }, { id: 'comm-2' }]
+  const { db } = mkDb({ eligibleRows })
+  const result = await promoteEligibleAffiliateCommissions({ db, now: new Date('2026-07-01T00:00:00.000Z') })
+  assert.deepEqual(result, { checked: 2, promoted: 2, failed: 0 })
+  assert.equal(eligibleRows[0].status, 'eligible')
+  assert.equal(eligibleRows[1].status, 'eligible')
+})
+
+
+test('tryCreateAffiliateCommission usa snapshot imutável do pagamento antes do User atual', async () => {
+  const { db, created } = mkDb({
+    referredUser: { id: 'user-1', email: 'cliente@example.com', contactPhone: '+5511999990000', affiliateProfileId: 'prof-current' },
+    paymentSnapshot: { affiliateProfileIdAtCheckout: 'prof-snapshot' },
+    profile: { id: 'prof-snapshot', userId: 'affiliate-user-2', status: 'approved', pixKey: 'snapshot@example.com', pixKeyType: 'email', commissionPercentOverride: null, commissionRecurringPercentOverride: null, user: { id: 'affiliate-user-2', email: 'snapshot-aff@example.com', contactPhone: '+5511777770000' } },
+  })
+  const result = await tryCreateAffiliateCommission({ userId: 'user-1', paymentId: 'pay-snapshot', saleAmountCents: 3900, db })
+  assert.equal(result.created, true)
+  assert.equal(created[0].affiliateId, 'prof-snapshot')
+})
+
+
+test('approveAffiliateCommission aprova hold/elegível de forma atômica', async () => {
+  const rows = [{ id: 'comm-1', status: 'held', referredUserId: 'user-1' }]
+  const db = {
+    affiliateCommission: {
+      updateMany: async ({ where, data }) => {
+        const row = rows.find(r => r.id === where.id && where.status.in.includes(r.status))
+        if (!row) return { count: 0 }
+        Object.assign(row, data)
+        return { count: 1 }
+      },
+      findUnique: async ({ where }) => rows.find(r => r.id === where.id) ?? null,
+    },
+  }
+
+  const result = await approveAffiliateCommission({ id: 'comm-1', adminUserId: 'admin-1', db })
+  assert.equal(result.updated, true)
+  assert.equal(rows[0].status, 'approved')
+  assert.equal(rows[0].approvedByUserId, 'admin-1')
+  assert.ok(rows[0].approvedAt instanceof Date)
+})
+
+test('reverseAffiliateCommission exige motivo e não reverte comissão paga', async () => {
+  const rows = [{ id: 'paid-1', status: 'paid' }, { id: 'eligible-1', status: 'eligible' }]
+  const db = {
+    affiliateCommission: {
+      updateMany: async ({ where, data }) => {
+        const row = rows.find(r => r.id === where.id && where.status.in.includes(r.status))
+        if (!row) return { count: 0 }
+        Object.assign(row, data)
+        return { count: 1 }
+      },
+      findUnique: async ({ where }) => rows.find(r => r.id === where.id) ?? null,
+    },
+  }
+
+  assert.deepEqual(await reverseAffiliateCommission({ id: 'eligible-1', reason: '', db }), { updated: false, reason: 'missing_reason' })
+  assert.deepEqual(await reverseAffiliateCommission({ id: 'paid-1', reason: 'chargeback', db }), { updated: false, reason: 'not_reversible' })
+
+  const result = await reverseAffiliateCommission({ id: 'eligible-1', reason: 'chargeback confirmado', db })
+  assert.equal(result.updated, true)
+  assert.equal(rows[1].status, 'reversed')
+  assert.equal(rows[1].reversalReason, 'chargeback confirmado')
+  assert.ok(rows[1].reversedAt instanceof Date)
+})
+
+
+test('attachAffiliateAttributionTouchesToUser associa touches anônimos ao usuário no cadastro', async () => {
+  const calls = []
+  const db = {
+    affiliateAttributionTouch: {
+      updateMany: async (args) => {
+        calls.push(args)
+        return { count: 2 }
+      },
+    },
+  }
+
+  const result = await attachAffiliateAttributionTouchesToUser({ visitorId: ' visitor-1 ', userId: 'user-1', affiliateId: 'prof-1', db })
+  assert.deepEqual(result, { updated: 2 })
+  assert.deepEqual(calls[0].where, { visitorId: 'visitor-1', userId: null, affiliateId: 'prof-1' })
+  assert.deepEqual(calls[0].data, { userId: 'user-1' })
+})
+
+test('reverseAffiliateCommissionForPayment reverte apenas comissões reversíveis do pagamento', async () => {
+  const calls = []
+  const db = {
+    affiliateCommission: {
+      updateMany: async (args) => {
+        calls.push(args)
+        return { count: 1 }
+      },
+    },
+  }
+
+  assert.deepEqual(await reverseAffiliateCommissionForPayment({ paymentId: 'pay-1', reason: '', db }), { updated: 0, reason: 'missing_reason' })
+  const result = await reverseAffiliateCommissionForPayment({ paymentId: 'pay-1', reason: 'payment_refunded', db })
+  assert.deepEqual(result, { updated: 1 })
+  assert.equal(calls[0].where.paymentId, 'pay-1')
+  assert.deepEqual(calls[0].where.status.in, ['pending', 'eligible', 'approved', 'held'])
+  assert.equal(calls[0].data.status, 'reversed')
+  assert.equal(calls[0].data.reversalReason, 'payment_refunded')
+  assert.ok(calls[0].data.reversedAt instanceof Date)
 })

@@ -406,6 +406,7 @@ export const api = {
     }),
 
   affiliateConfig: () => apiFetch('/api/affiliate/config'),
+  affiliateTrack: (data) => apiFetch('/api/affiliate/track', { method: 'POST', body: JSON.stringify(data) }),
   affiliateApply: (data) => apiFetch('/api/affiliate/apply', { method: 'POST', body: JSON.stringify(data) }),
   affiliateMe: () => apiFetch('/api/affiliate/me'),
   affiliateMeUpdate: (data) => apiFetch('/api/affiliate/me', { method: 'PUT', body: JSON.stringify(data) }),
@@ -415,6 +416,8 @@ export const api = {
   adminAffiliateApprove: (id) => apiFetch(`/api/admin/affiliates/${id}/approve`, { method: 'POST' }),
   adminAffiliateReject: (id, notes) => apiFetch(`/api/admin/affiliates/${id}/reject`, { method: 'POST', body: JSON.stringify({ adminNotes: notes }) }),
   adminAffiliateCommissions: (params) => apiFetch(`/api/admin/affiliates/commissions${params ? '?' + new URLSearchParams(params) : ''}`),
+  adminAffiliateCommissionApprove: (id) => apiFetch(`/api/admin/affiliates/commissions/${id}/approve`, { method: 'POST' }),
+  adminAffiliateCommissionReverse: (id, reason) => apiFetch(`/api/admin/affiliates/commissions/${id}/reverse`, { method: 'POST', body: JSON.stringify({ reason }) }),
   adminAffiliateCommissionMarkPaid: (id) => apiFetch(`/api/admin/affiliates/commissions/${id}/mark-paid`, { method: 'POST' }),
   adminAffiliateCycleMarkAllPaid: (month) => apiFetch(`/api/admin/affiliates/cycle/${month}/mark-all-paid`, { method: 'POST' }),
   adminAffiliateSettings: () => apiFetch('/api/admin/affiliates/settings'),

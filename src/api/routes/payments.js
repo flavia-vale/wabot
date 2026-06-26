@@ -4,7 +4,7 @@ import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { resolvePlanForPayment, DEFAULT_PLANS } from '../../domain/payments/service.js'
 import { appContainer } from '../../app/container.js'
 import { writeWebhookEvent } from '../../events/store.js'
-import { tryCreateAffiliateCommission, reconcileAffiliateCommissions } from '../../domain/affiliate/service.js'
+import { tryCreateAffiliateCommission, reconcileAffiliateCommissions, promoteEligibleAffiliateCommissions, reverseAffiliateCommissionForPayment } from '../../domain/affiliate/service.js'
 export { resolvePlanForPayment }
 
 const MP_WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET
@@ -185,6 +185,11 @@ export function summarizeWebhookEvent(payload = {}) {
 
 export function shouldReconcilePayment(summary = {}) {
   return summary.type === 'payment' && Boolean(summary.dataResourceId)
+}
+
+
+export function isReversiblePaymentStatus(status) {
+  return ['refunded', 'charged_back', 'cancelled'].includes(String(status ?? '').toLowerCase())
 }
 
 // Activates a payment and grants 30-day access. Shared by /recover, /callback and webhook processor.
@@ -483,7 +488,30 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
       if (shouldReconcilePayment(summary)) {
         reconciliation = await fetchMercadoPagoPaymentSnapshot(summary.dataResourceId)
 
-        if (reconciliation.ok && reconciliation.providerStatus === 'approved' && reconciliation.externalReference) {
+        if (reconciliation.ok && isReversiblePaymentStatus(reconciliation.providerStatus)) {
+          const payment = await db.payment.findUnique({
+            where: { mpPaymentId: String(summary.dataResourceId) },
+            select: { id: true, userId: true },
+          }).catch(() => null)
+
+          if (payment) {
+            await db.payment.update({
+              where: { id: payment.id },
+              data: { status: String(reconciliation.providerStatus), lastSyncedAt: new Date() },
+            })
+            const reversal = await reverseAffiliateCommissionForPayment({
+              paymentId: payment.id,
+              reason: `payment_${reconciliation.providerStatus}`,
+              db,
+            })
+            activation = { triggered: false, reason: 'payment_reversed', status: reconciliation.providerStatus, reversed: reversal.updated }
+            if (reversal.updated > 0) {
+              trackAnalyticsEventSafe({ userId: payment.userId, event: 'affiliate_commission_reversed', metadata: { source: 'webhook', status: reconciliation.providerStatus, count: reversal.updated } })
+            }
+          } else {
+            activation = { triggered: false, reason: 'payment_not_found_for_reversal', status: reconciliation.providerStatus }
+          }
+        } else if (reconciliation.ok && reconciliation.providerStatus === 'approved' && reconciliation.externalReference) {
           const userId = reconciliation.externalReference
           const plans = await getBillingPlans()
           const plan = resolvePlanForPayment({ preferredPlan: reconciliation.preferredPlan, amount: reconciliation.transactionAmount, plans })
@@ -675,6 +703,14 @@ function startWebhookProcessor(app) {
         }
       } catch (err) {
         app.log.error({ err: err?.message }, 'affiliate_commission_reconciliation_cycle_failed')
+      }
+      try {
+        const result = await promoteEligibleAffiliateCommissions({ log: app.log })
+        if (result.promoted > 0 || result.failed > 0) {
+          app.log.info({ result }, 'affiliate_commission_eligibility_cycle_completed')
+        }
+      } catch (err) {
+        app.log.error({ err: err?.message }, 'affiliate_commission_eligibility_cycle_failed')
       }
     }, PAYMENT_RECONCILIATION_INTERVAL_MS)
     reconciliationTimer.unref?.()
