@@ -147,7 +147,7 @@ function AffiliateRulesCard({ config = DEFAULT_AFFILIATE_CONFIG, affiliateLink =
           {affiliateLink ? (
             <p className="mt-2 leading-6">Use sempre este link: <code className="rounded bg-amber-100 px-1 py-0.5 text-xs">{affiliateLink}</code></p>
           ) : (
-            <p className="mt-2 leading-6">Você pode resgatar seu link personalizado em <a href="/painel/afiliados" className="font-bold text-amber-800 underline underline-offset-4">https://espelhagrupos.com.br/painel/afiliados</a>.</p>
+            <p className="mt-2 leading-6">Você pode resgatar seu link personalizado nesta página, em <code className="rounded bg-amber-100 px-1 py-0.5 text-xs font-bold text-amber-800">https://espelhagrupos.com.br/painel/afiliados</code>.</p>
           )}
         </div>
       </div>
