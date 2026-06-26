@@ -216,4 +216,30 @@ export function isCouponAnnouncement(text) {
   return /\b[A-Z]{4,}\b/.test(text)
 }
 
+// Marcadores de cupom de LOJA / store-wide: frases que só aparecem quando o
+// desconto vale para o catálogo inteiro (não para um produto específico). Um
+// "produto + cupom" (ex: "Tênis Polo Wear... Use o Cupom VEMAPROVEITAR") nunca
+// usa essas frases — ele nomeia o produto. Alta precisão (poucos falsos
+// positivos) de propósito: na dúvida, NÃO classificar como genérico.
+const GENERIC_COUPON_MARKERS = [
+  /compras?\s+a\s+partir\s+de/i,        // limite mínimo de carrinho ("em compras a partir de R$ X")
+  /pesquise\s+(pelo|o|seu)\s+produto/i, // "pesquise pelo produto desejado"
+  /produto\s+desejado/i,
+  /qualquer\s+produto/i,
+  /em\s+todo\s+o?\s*site/i,
+  /v[áa]lido\s+(para|em)\s+(todo|qualquer)/i,
+]
+
+// True quando o caption tem cara de cupom store-wide (catálogo inteiro), e não
+// de oferta de um produto específico. Usado para decidir a imagem de mensagens
+// de cupom quando o título do link não pôde ser raspado (titleOverlap='unknown',
+// ex: short link de cupom que não resolve og:title, ou Shopee fora do guard):
+// store-wide → não buscar imagem hi-res (o link resolve p/ produto aleatório);
+// não-genérico → manter a aposta de produto (busca hi-res). Ver
+// decideSkipActiveFetchForCoupon em monitoredImageResolver.js.
+export function looksLikeGenericCoupon(text) {
+  if (!text) return false
+  return GENERIC_COUPON_MARKERS.some((re) => re.test(text))
+}
+
 export { DEFAULT_BRANDING_CTA_TEXT, GROUP_INVITE_URL_RE, MAX_BRANDING_CTA_CHARS, PRODUCT_MATCH_STOPWORDS }

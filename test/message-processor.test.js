@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { applyConversionsAndBranding, appendBrandingFooter, buildProcessedMessage, DEFAULT_BRANDING_CTA_TEXT, extractKeywordTokens, hasSignificantTokenOverlap, isCouponAnnouncement, isValidBrandingLink, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, stripUrlsFromText } from '../src/messageProcessor.js'
+import { applyConversionsAndBranding, appendBrandingFooter, buildProcessedMessage, DEFAULT_BRANDING_CTA_TEXT, extractKeywordTokens, hasSignificantTokenOverlap, isCouponAnnouncement, isValidBrandingLink, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, stripUrlsFromText } from '../src/messageProcessor.js'
 
 test('sanitizeInviteLinks remove convites WhatsApp e Telegram preservando oferta', () => {
   const original = 'Oferta top https://amzn.to/item\nEntre no grupo https://chat.whatsapp.com/AbCdEf12345 e t.me/+ConviteXYZ'
@@ -238,6 +238,29 @@ test('isCouponAnnouncement retorna false para texto vazio ou sem cupom', () => {
   assert.equal(isCouponAnnouncement(''), false)
   assert.equal(isCouponAnnouncement('   '), false)
   assert.equal(isCouponAnnouncement('Produto incrível ADIDAS disponível'), false, 'palavra maiúscula sem cupom')
+})
+
+// looksLikeGenericCoupon — decide a imagem de cupons quando o título do link não
+// pôde ser raspado (titleOverlap='unknown'). Caso real da regressão 2026-06: um
+// cupom store-wide do ML mostrava uma camiseta branca aleatória em hi-res.
+test('looksLikeGenericCoupon detecta cupom store-wide (caso real da camiseta branca)', () => {
+  assert.equal(
+    looksLikeGenericCoupon('NOVO CUPOM NO ML\nCupom: OFFMELI\n10% OFF em compras a partir de R$ 79\nLimite de R$ 60\nAtive e pesquise pelo produto desejado: https://meli.la/1cUFh49'),
+    true,
+  )
+  assert.equal(looksLikeGenericCoupon('10% OFF em compras a partir de R$ 200'), true, 'limite mínimo de carrinho')
+  assert.equal(looksLikeGenericCoupon('pesquise pelo produto desejado'), true)
+  assert.equal(looksLikeGenericCoupon('válido para qualquer produto da loja'), true)
+})
+
+test('looksLikeGenericCoupon NÃO marca oferta de produto específico (preserva produto+cupom)', () => {
+  // Produto + cupom nomeia o produto; não usa frases de cupom de loja.
+  assert.equal(
+    looksLikeGenericCoupon('Tênis Polo Wear Masculino Casual por R$ 89,90\nUse o Cupom: VEMAPROVEITAR'),
+    false,
+  )
+  assert.equal(looksLikeGenericCoupon('Camiseta Adidas Branca 30% OFF - R$99 Cupom: TORCIDAO'), false)
+  assert.equal(looksLikeGenericCoupon(''), false)
 })
 
 // Regressão — bug introduzido em PR #1061: stripUrlsFromText removia a linha
