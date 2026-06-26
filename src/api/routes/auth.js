@@ -5,7 +5,7 @@ import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { normalizeEmail } from '../auth-utils.js'
 import { DEFAULT_COPY_VARIATION_POOL_JSON } from '../../core/copyVariation.js'
 import { sendWelcomeEmail } from '../../email/welcomeEmail.js'
-import { attachAffiliateAttributionTouchesToUser, recordAffiliateAttributionTouch } from '../../domain/affiliate/service.js'
+import { attachAffiliateAttributionTouchesToUser, attachOrphanTouchesByDevice, recordAffiliateAttributionTouch } from '../../domain/affiliate/service.js'
 import { DEFAULT_TERMS_VERSION, getEffectiveTermsVersion } from '../../legalTerms.js'
 
 // Hash descartável usado só para igualar o custo de tempo do bcrypt.compare
@@ -417,6 +417,9 @@ export async function authRoutes(app) {
         })
         if (affiliateVisitorId) {
           await attachAffiliateAttributionTouchesToUser({ visitorId: affiliateVisitorId, userId: user.id, affiliateId: affiliateProfileId, db })
+        } else {
+          // O3: sem visitorId no body, casa touches anônimos do mesmo dispositivo.
+          await attachOrphanTouchesByDevice({ affiliateId: affiliateProfileId, ipHash: accountAuditId(req.ip), uaHash: accountAuditId(req.headers?.['user-agent']), userId: user.id, db })
         }
       } catch (err) {
         req.log?.warn?.({ err, userId: user.id, affiliateProfileId }, 'register: falha ao gravar touch de afiliado (best-effort)')

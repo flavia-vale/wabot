@@ -267,6 +267,15 @@ boot (`src/api/server.js`) mata o processo se ausente/malformada.
   da env).
 - Escrita: `src/api/routes/credentials.js` (PUT) e `src/api/routes/mlOAuth.js`
   (merge OAuth).
+- **Chave PIX de afiliado (`AffiliateProfile.pixKey`)** também é cifrada com o
+  MESMO esquema (pode ser CPF/telefone/e-mail). Escrita: `applyAffiliate` em
+  `src/domain/affiliate/service.js` e `PUT /affiliate/me` em
+  `src/api/routes/affiliate.js` chamam `encryptCredential`. Leitura: as rotas
+  admin e `getAffiliateMeData` decifram via `presentAffiliateProfile` /
+  `decryptCredential`; o antifraude (`pixMatchesReferredUser`) decifra antes de
+  comparar. Migração das linhas existentes:
+  `scripts/migrate-affiliate-pixkey-encrypt.mjs` (idempotente, mesmas precauções
+  de parar API + backup).
 
 **Migração das linhas existentes:** `scripts/migrate-credentials-encrypt.mjs`
 (idempotente). **Parar a API antes** (`pm2 stop api`) para evitar SQLITE_BUSY
