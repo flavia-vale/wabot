@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   resolveMonitoredImage,
   isLikelyJpegThumbnail,
+  decideSkipActiveFetchForCoupon,
   MONITORED_THUMBNAIL_BYTES_THRESHOLD,
 } from '../src/monitoredImageResolver.js'
 
@@ -229,6 +230,43 @@ test('skipActiveFetch=true em mode=fetch cai direto para original', async () => 
   assert.equal(fetchCalls, 0)
 })
 
+// REGRESSÃO 2026-06: mensagens de produto com código de cupom embutido
+// ("Tênis Polo... Use o Cupom: VEMAPROVEITAR") têm URL de produto real e
+// devem buscar a imagem de alta resolução via fetch ativo.
+// skipActiveFetch NUNCA deve ser true no getImage() do bot-worker — vide
+// invariante documentada no código e commit image-upload-bug-fix.
+test('produto com cupom embutido: fetch ativo busca imagem hi-res do produto (sem skipActiveFetch)', async () => {
+  let fetchCalls = 0
+  const result = await resolveMonitoredImage({
+    mode: 'original',
+    target: { platform: 'mercadolivre', url: 'https://meli.ia/2qNSHwQ' },
+    credentials: {},
+    downloadOriginalImage: async () => THUMBNAIL_IMAGE,
+    fetchProductImage: async () => { fetchCalls++; return 'https://mlstatic.com/polo-tenis.jpg' },
+    fetchImageBuffer: async (url) => { fetchCalls++; return HIRES_FROM_MARKET },
+    // skipActiveFetch ausente (default false) — comportamento correto para produto+cupom
+    logger: silentLogger(),
+  })
+  assert.equal(result, HIRES_FROM_MARKET, 'deve usar imagem hi-res do produto, não o thumbnail borrado')
+  assert.equal(fetchCalls, 2, 'fetchProductImage + fetchImageBuffer devem ser chamados')
+})
+
+test('skipActiveFetch=false equivale a ausente: fetch ativo roda normalmente', async () => {
+  let fetchCalls = 0
+  const result = await resolveMonitoredImage({
+    mode: 'original',
+    target: { platform: 'amazon', url: 'https://amzn.to/abc123' },
+    credentials: {},
+    downloadOriginalImage: async () => THUMBNAIL_IMAGE,
+    fetchProductImage: async () => { fetchCalls++; return 'https://m.media-amazon.com/hires.jpg' },
+    fetchImageBuffer: async () => { fetchCalls++; return HIRES_FROM_MARKET },
+    skipActiveFetch: false,
+    logger: silentLogger(),
+  })
+  assert.equal(result, HIRES_FROM_MARKET)
+  assert.equal(fetchCalls, 2)
+})
+
 test('mode=none ou desconhecido retorna null sem chamar nada', async () => {
   let calls = 0
   const result = await resolveMonitoredImage({
@@ -242,4 +280,53 @@ test('mode=none ou desconhecido retorna null sem chamar nada', async () => {
   })
   assert.equal(result, null)
   assert.equal(calls, 0)
+})
+
+// ── decideSkipActiveFetchForCoupon: discriminador seguro cupom-genérico vs produto+cupom ──
+
+test('decisão: oferta normal (não-cupom) NUNCA pula o fetch ativo', () => {
+  for (const titleOverlap of ['match', 'mismatch', 'unknown']) {
+    assert.equal(
+      decideSkipActiveFetchForCoupon({ isCouponMsg: false, hasProductLink: true, titleOverlap }),
+      false,
+      `não-cupom com overlap=${titleOverlap}`,
+    )
+  }
+  assert.equal(
+    decideSkipActiveFetchForCoupon({ isCouponMsg: false, hasProductLink: false, titleOverlap: 'unknown' }),
+    false,
+  )
+})
+
+test('decisão: cupom genérico SEM link de produto pula o fetch (usa thumbnail original)', () => {
+  assert.equal(
+    decideSkipActiveFetchForCoupon({ isCouponMsg: true, hasProductLink: false, titleOverlap: 'unknown' }),
+    true,
+  )
+})
+
+test('decisão: cupom com link cujo título NÃO bate (produto aleatório) pula o fetch', () => {
+  // Caso A: "NOVO CUPOM ML cupom: GRAMADOVERDE" → link resolve p/ produto
+  // aleatório (ex: Camiseta Adidas) cujo título não tem overlap com o caption.
+  assert.equal(
+    decideSkipActiveFetchForCoupon({ isCouponMsg: true, hasProductLink: true, titleOverlap: 'mismatch' }),
+    true,
+  )
+})
+
+test('decisão: produto + cupom (título bate) busca hi-res — NÃO pula o fetch', () => {
+  // Caso B: "Tênis Polo Wear... Use o Cupom VEMAPROVEITAR" + link real do produto.
+  assert.equal(
+    decideSkipActiveFetchForCoupon({ isCouponMsg: true, hasProductLink: true, titleOverlap: 'match' }),
+    false,
+  )
+})
+
+test('decisão: cupom com link de produto mas scrape indisponível favorece hi-res (caso B é o comum)', () => {
+  // titleOverlap='unknown' (timeout ou plataforma fora do guard, ex: Shopee):
+  // havendo link de produto convertido, a aposta segura é a oferta de produto.
+  assert.equal(
+    decideSkipActiveFetchForCoupon({ isCouponMsg: true, hasProductLink: true, titleOverlap: 'unknown' }),
+    false,
+  )
 })
