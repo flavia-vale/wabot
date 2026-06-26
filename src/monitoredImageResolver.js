@@ -23,6 +23,36 @@ export function isLikelyJpegThumbnail(image) {
   return image.buffer.length < MONITORED_THUMBNAIL_BYTES_THRESHOLD && image.mimetype === 'image/jpeg'
 }
 
+// Decide se o fetch ativo (imagem hi-res raspada da página do produto) deve ser
+// PULADO para mensagens que mencionam cupom. Resolve com segurança a colisão
+// entre dois casos que ambos casam isCouponAnnouncement() ("cupom" + CÓDIGO):
+//
+//   A. Cupom GENÉRICO ("NOVO CUPOM ML 🎟 cupom: GRAMADOVERDE"): o link resolve
+//      para um produto ALEATÓRIO do marketplace. Buscar a imagem desse produto
+//      mostraria a foto errada (regressão original do commit a1a2637).
+//      → skipActiveFetch=true: usa a imagem original da mensagem upstream.
+//
+//   B. PRODUTO + cupom ("Tênis Polo Wear... Use o Cupom: VEMAPROVEITAR" + link
+//      real do produto): o link resolve para O produto certo. Pular o fetch
+//      mandaria o jpegThumbnail (~300px) borrado (regressão image-upload-bug-fix).
+//      → skipActiveFetch=false: busca a imagem hi-res do produto.
+//
+// Discriminador SEGURO = overlap entre o título raspado do link e o caption
+// (mesmo sinal do guard de title_mismatch). `titleOverlap`:
+//   'match'    → caption descreve o produto (caso B)  → NÃO pular
+//   'mismatch' → caption não bate com o produto (caso A) → pular
+//   'unknown'  → não foi possível raspar (timeout/plataforma fora do guard):
+//                se há link de produto, favorece a qualidade visível (caso B é
+//                muito mais comum que o A quando há link de produto convertido).
+//
+// Mensagens não-cupom nunca pulam (comportamento histórico das ofertas normais).
+export function decideSkipActiveFetchForCoupon({ isCouponMsg, hasProductLink, titleOverlap }) {
+  if (!isCouponMsg) return false
+  if (!hasProductLink) return true
+  if (titleOverlap === 'mismatch') return true
+  return false
+}
+
 export async function resolveMonitoredImage({
   mode,
   target,
