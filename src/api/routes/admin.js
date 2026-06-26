@@ -684,6 +684,7 @@ async function requireAdmin(req, reply, permission = 'admin:read') {
   }
 
   req.admin = {
+    email: user.email,
     role,
     permissions: ROLE_PERMISSIONS[role],
     adminUserId: adminAccess.adminUserId,
