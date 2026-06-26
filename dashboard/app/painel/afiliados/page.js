@@ -5,6 +5,7 @@ import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 
 const PIX_KEY_TYPE_LABELS = { cpf: 'CPF', email: 'E-mail', phone: 'Telefone', random: 'Chave aleatória' }
+const DEFAULT_AFFILIATE_CONFIG = { commissionPercent: 30, commissionRecurringPercent: 30, recurringCommissionEnabled: true, commissionHoldDays: 30, attributionWindowDays: 30 }
 
 function formatCurrency(cents) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100)
@@ -77,12 +78,80 @@ function MyReferrals() {
   )
 }
 
-function StatCard({ label, value }) {
+function StatCard({ label, value, helper = null }) {
   return (
     <div className="rounded-xl bg-white border border-gray-100 p-4 shadow-sm">
       <p className="text-xs font-bold uppercase tracking-wide text-gray-500">{label}</p>
       <p className="mt-1 text-2xl font-black text-gray-900">{value}</p>
+      {helper && <p className="mt-1 text-xs text-gray-500">{helper}</p>}
     </div>
+  )
+}
+
+const MONTH_STATUS_LABELS = {
+  paid: { label: 'Pago', className: 'bg-emerald-100 text-emerald-700' },
+  approved: { label: 'Aprovado', className: 'bg-blue-100 text-blue-700' },
+  eligible: { label: 'Liberado', className: 'bg-cyan-100 text-cyan-700' },
+  pending: { label: 'Aguardando 30 dias', className: 'bg-amber-100 text-amber-700' },
+  held: { label: 'Em análise', className: 'bg-orange-100 text-orange-700' },
+  reversed: { label: 'Estornado', className: 'bg-red-100 text-red-700' },
+}
+
+function MonthStatusBadge({ status }) {
+  const meta = MONTH_STATUS_LABELS[status] ?? { label: 'Pendente', className: 'bg-amber-100 text-amber-700' }
+  return <span className={`rounded-full px-2 py-1 text-xs font-bold ${meta.className}`}>{meta.label}</span>
+}
+
+function AffiliateRulesCard({ config = DEFAULT_AFFILIATE_CONFIG, affiliateLink = null }) {
+  const commissionPercent = Number(config.commissionPercent ?? DEFAULT_AFFILIATE_CONFIG.commissionPercent)
+  const recurringPercent = Number(config.commissionRecurringPercent ?? DEFAULT_AFFILIATE_CONFIG.commissionRecurringPercent)
+  const holdDays = Number(config.commissionHoldDays ?? DEFAULT_AFFILIATE_CONFIG.commissionHoldDays)
+  const attributionDays = Number(config.attributionWindowDays ?? DEFAULT_AFFILIATE_CONFIG.attributionWindowDays)
+  const recurringEnabled = config.recurringCommissionEnabled ?? DEFAULT_AFFILIATE_CONFIG.recurringCommissionEnabled
+
+  return (
+    <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-950" aria-labelledby="affiliate-rules-title">
+      <p className="text-xs font-black uppercase tracking-wide text-amber-700">Regras do programa</p>
+      <h2 id="affiliate-rules-title" className="mt-1 text-lg font-black text-amber-950">Leia antes de divulgar seu link</h2>
+
+      <div className="mt-4 grid gap-4">
+        <div className="rounded-xl bg-white/70 border border-amber-100 p-4">
+          <h3 className="font-black text-amber-950">💰 Comissão</h3>
+          <p className="mt-1 leading-6">
+            Você recebe <strong>{commissionPercent}% de comissão</strong> sobre a primeira compra confirmada de cada cliente indicado.
+            {recurringEnabled && <> Pagamentos recorrentes elegíveis podem gerar <strong>{recurringPercent}% de comissão recorrente</strong>, conforme as regras vigentes do programa.</>}
+          </p>
+        </div>
+
+        <div className="rounded-xl bg-white/70 border border-amber-100 p-4">
+          <h3 className="font-black text-amber-950">⏳ Regra de repasse e segurança (estorno/reembolso)</h3>
+          <p className="mt-1 leading-6">
+            Como toda transação digital e por respeito às leis de proteção ao consumidor, cada cliente tem direito a solicitar reembolso dentro do prazo legal.
+            Por isso, o repasse da comissão só é válido <strong>{holdDays} dias após o pagamento do cliente</strong>.
+          </p>
+          <p className="mt-2 leading-6">
+            Essa medida é necessária porque, caso o usuário peça reembolso, o valor é devolvido integralmente a ele — ou seja, nem nós, nem você ficamos com o dinheiro.
+            Passados os <strong>{holdDays} dias de segurança</strong>, o saldo fica elegível para liberação/pagamento via PIX.
+          </p>
+        </div>
+
+        <div className="rounded-xl bg-white/70 border border-amber-100 p-4">
+          <h3 className="font-black text-amber-950">🔗 Como o sistema sabe que a indicação foi sua?</h3>
+          <p className="mt-1 leading-6">
+            Para que a comissão seja contabilizada corretamente, o cliente indicado precisa obrigatoriamente se cadastrar usando o seu link exclusivo.
+            Se ele entrar pelo site geral sem o seu link, o sistema não consegue rastrear a venda para você.
+          </p>
+          <p className="mt-2 leading-6">
+            A janela de atribuição atual é de <strong>{attributionDays} dias</strong>, e a atribuição é congelada no momento do pagamento para reduzir disputas e perda de rastreio.
+          </p>
+          {affiliateLink ? (
+            <p className="mt-2 leading-6">Use sempre este link: <code className="rounded bg-amber-100 px-1 py-0.5 text-xs">{affiliateLink}</code></p>
+          ) : (
+            <p className="mt-2 leading-6">Você pode resgatar seu link personalizado em <a href="/painel/afiliados" className="font-bold text-amber-800 underline underline-offset-4">https://espelhagrupos.com.br/painel/afiliados</a>.</p>
+          )}
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -205,15 +274,21 @@ export default function AffiliatePage() {
   const [showPixEdit, setShowPixEdit] = useState(false)
 
   function loadData() {
-    api.affiliateMe()
-      .then(result => setData(result))
+    Promise.all([
+      api.affiliateMe(),
+      api.affiliateConfig().catch(() => DEFAULT_AFFILIATE_CONFIG),
+    ])
+      .then(([result, config]) => setData({ ...result, config }))
       .catch(() => setData(null))
   }
 
   useEffect(() => {
     let active = true
-    api.affiliateMe()
-      .then(result => { if (active) setData(result) })
+    Promise.all([
+      api.affiliateMe(),
+      api.affiliateConfig().catch(() => DEFAULT_AFFILIATE_CONFIG),
+    ])
+      .then(([result, config]) => { if (active) setData({ ...result, config }) })
       .catch(() => { if (active) setData(null) })
     return () => { active = false }
   }, [])
@@ -227,23 +302,25 @@ export default function AffiliatePage() {
   }
 
   const profile = data?.profile ?? null
+  const affiliateConfig = data?.config ?? DEFAULT_AFFILIATE_CONFIG
 
   if (!profile) {
     return (
       <div className="max-w-lg mx-auto p-6">
         <h1 className="text-2xl font-black text-gray-900 mb-2">Programa de Afiliados</h1>
         <p className="text-gray-600 text-sm mb-4">
-          Ganhe {30}% de comissão sobre a primeira compra de cada cliente que você indicar.
-          Compartilhe seu link único, acompanhe indicações e receba via PIX mensalmente.
+          Ganhe {affiliateConfig.commissionPercent ?? 30}% de comissão sobre a primeira compra de cada cliente que você indicar.
+          Compartilhe seu link único, acompanhe indicações e receba via PIX após a janela de segurança.
         </p>
         <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-4 mb-4">
           <ul className="text-sm text-emerald-800 space-y-1">
             <li>✅ Código e link únicos gerados automaticamente</li>
-            <li>✅ Comissão de 30% sobre a primeira compra</li>
-            <li>✅ Pagamento mensal via PIX</li>
+            <li>✅ Comissão de {affiliateConfig.commissionPercent ?? 30}% sobre a primeira compra</li>
+            <li>✅ Pagamento via PIX após {affiliateConfig.commissionHoldDays ?? 30} dias de segurança</li>
             <li>✅ Painel para acompanhar indicações e ganhos</li>
           </ul>
         </div>
+        <AffiliateRulesCard config={affiliateConfig} />
         <ApplyForm onApplied={loadData} />
       </div>
     )
@@ -257,6 +334,7 @@ export default function AffiliatePage() {
           <p className="text-amber-800 font-semibold">Candidatura em análise</p>
           <p className="text-amber-700 text-sm mt-1">Sua candidatura está em análise. Você receberá uma resposta em breve.</p>
         </div>
+        <div className="mt-4"><AffiliateRulesCard config={affiliateConfig} /></div>
       </div>
     )
   }
@@ -269,6 +347,7 @@ export default function AffiliatePage() {
           <p className="text-red-800 font-semibold">Candidatura não aprovada</p>
           {profile.adminNotes && <p className="text-red-700 text-sm mt-1">{profile.adminNotes}</p>}
         </div>
+        <AffiliateRulesCard config={affiliateConfig} />
         <ApplyForm onApplied={loadData} />
       </div>
     )
@@ -297,10 +376,15 @@ export default function AffiliatePage() {
         <p className="text-xs text-emerald-600 mt-2">Código: <strong>{profile.code}</strong> · PIX: {profile.pixKey} ({PIX_KEY_TYPE_LABELS[profile.pixKeyType] ?? profile.pixKeyType})</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <AffiliateRulesCard config={affiliateConfig} affiliateLink={affiliateLink} />
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Total de indicados" value={stats.totalReferrals ?? 0} />
-        <StatCard label="Vendas confirmadas" value={stats.totalSales ?? 0} />
-        <StatCard label="Total ganho" value={formatCurrency(stats.totalEarnedCents ?? 0)} />
+        <StatCard label="Vendas válidas" value={stats.totalSales ?? 0} helper="Não inclui estornos/reembolsos." />
+        <StatCard label="Saldo a liberar" value={formatCurrency(stats.pendingCents ?? 0)} helper="Aguardando a janela de segurança." />
+        <StatCard label="Disponível para saque" value={formatCurrency(stats.payableCents ?? 0)} helper="Comissões liberadas ou aprovadas." />
+        <StatCard label="Total pago" value={formatCurrency(stats.totalEarnedCents ?? 0)} helper="Somente valores já pagos via PIX." />
+        <StatCard label="Estornado/revertido" value={formatCurrency(stats.reversedCents ?? 0)} helper="Reembolsos e chargebacks removidos do saldo." />
       </div>
 
       <MyReferrals />
@@ -324,12 +408,7 @@ export default function AffiliatePage() {
                     <td className="px-4 py-3 text-gray-800">{formatMonth(m.month)}</td>
                     <td className="px-4 py-3 text-right text-gray-700">{m.count}</td>
                     <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(m.totalCents)}</td>
-                    <td className="px-4 py-3 text-right">
-                      {m.status === 'paid'
-                        ? <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-700">Pago</span>
-                        : <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">Pendente</span>
-                      }
-                    </td>
+                    <td className="px-4 py-3 text-right"><MonthStatusBadge status={m.status} /></td>
                   </tr>
                 ))}
               </tbody>

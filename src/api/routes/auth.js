@@ -5,6 +5,7 @@ import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { normalizeEmail } from '../auth-utils.js'
 import { DEFAULT_COPY_VARIATION_POOL_JSON } from '../../core/copyVariation.js'
 import { sendWelcomeEmail } from '../../email/welcomeEmail.js'
+import { attachAffiliateAttributionTouchesToUser, recordAffiliateAttributionTouch } from '../../domain/affiliate/service.js'
 import { DEFAULT_TERMS_VERSION, getEffectiveTermsVersion } from '../../legalTerms.js'
 
 // Hash descartável usado só para igualar o custo de tempo do bcrypt.compare
@@ -304,6 +305,7 @@ export async function authRoutes(app) {
       conversion_prompt_variant: conversionPromptVariant,
       coupon_code: couponCode,
       aff_code: rawAffCode,
+      affiliateVisitorId: rawAffiliateVisitorId,
       termsAccepted,
       termsVersion: rawTermsVersion,
     } = req.body ?? {}
@@ -345,12 +347,15 @@ export async function authRoutes(app) {
     }
 
     const aff_code = typeof rawAffCode === 'string' ? rawAffCode.trim().toUpperCase() : ''
+    const affiliateVisitorId = typeof rawAffiliateVisitorId === 'string' ? rawAffiliateVisitorId.trim().slice(0, 120) : ''
     let affiliateProfileId = undefined
+    let affiliateCodeForTouch = null
     if (aff_code) {
       try {
         const affProfile = await db.affiliateProfile.findUnique({ where: { code: aff_code } })
         if (affProfile?.status === 'approved') {
           affiliateProfileId = affProfile.id
+          affiliateCodeForTouch = affProfile.code
         }
       } catch {}
     }
@@ -394,6 +399,28 @@ export async function authRoutes(app) {
       await createDefaultBotConfigForUser(user.id)
     } catch (err) {
       req.log?.warn?.({ err, userId: user.id }, 'register: falha ao criar botConfig default (best-effort)')
+    }
+
+    if (affiliateProfileId) {
+      try {
+        await recordAffiliateAttributionTouch({
+          affiliateId: affiliateProfileId,
+          affiliateCode: affiliateCodeForTouch ?? aff_code,
+          userId: user.id,
+          visitorId: affiliateVisitorId || null,
+          source: source || utmSource || 'affiliate',
+          medium: utmMedium || null,
+          campaign: utmCampaign || null,
+          ipHash: accountAuditId(req.ip),
+          uaHash: accountAuditId(req.headers?.['user-agent']),
+          db,
+        })
+        if (affiliateVisitorId) {
+          await attachAffiliateAttributionTouchesToUser({ visitorId: affiliateVisitorId, userId: user.id, affiliateId: affiliateProfileId, db })
+        }
+      } catch (err) {
+        req.log?.warn?.({ err, userId: user.id, affiliateProfileId }, 'register: falha ao gravar touch de afiliado (best-effort)')
+      }
     }
 
     if (referrer) {

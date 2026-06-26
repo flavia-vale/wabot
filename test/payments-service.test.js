@@ -142,3 +142,31 @@ test('activatePaymentAccess extends active expiry and updates existing payment',
   assert.equal(updatedUser.plan, 'pro')
   assert.ok(result.expiresAt > future)
 })
+
+
+test('activatePaymentAccess congela snapshot de atribuição do último touch válido', async () => {
+  const fixedNow = new Date('2026-06-20T12:00:00.000Z')
+  let createdPayment = null
+  const tx = {
+    user: {
+      findUnique: async ({ select }) => (select?.accessExpiresAt ? { accessExpiresAt: null } : { affiliateProfileId: 'prof-user' }),
+      update: async ({ data }) => data,
+    },
+    payment: {
+      findUnique: async () => null,
+      create: async ({ data }) => { createdPayment = data; return data },
+    },
+    affiliateSettings: {
+      findFirst: async () => ({ attributionWindowDays: 30, attributionModel: 'last_non_direct' }),
+    },
+    affiliateAttributionTouch: {
+      findFirst: async () => ({ affiliateId: 'prof-touch', clickId: 'click-1' }),
+    },
+  }
+  const service = createPaymentsService({ db: { lpPlan: { findMany: async () => [] } }, now: () => fixedNow })
+  await service.activatePaymentAccess(tx, { userId: 'u1', plan: 'pro', mpPaymentId: 'mp-snap', amount: 69 })
+  assert.equal(createdPayment.affiliateProfileIdAtCheckout, 'prof-touch')
+  assert.equal(createdPayment.affiliateClickId, 'click-1')
+  assert.equal(createdPayment.attributionModel, 'last_non_direct')
+  assert.equal(createdPayment.attributionLockedAt, fixedNow)
+})

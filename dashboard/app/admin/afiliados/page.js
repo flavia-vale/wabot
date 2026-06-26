@@ -27,6 +27,11 @@ function StatusBadge({ status }) {
 
 function CommissionStatusBadge({ status }) {
   if (status === 'paid') return <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-700">Pago</span>
+  if (status === 'eligible') return <span className="rounded-full bg-sky-100 px-2 py-1 text-xs font-bold text-sky-700">Elegível</span>
+  if (status === 'approved') return <span className="rounded-full bg-indigo-100 px-2 py-1 text-xs font-bold text-indigo-700">Aprovada</span>
+  if (status === 'held') return <span className="rounded-full bg-orange-100 px-2 py-1 text-xs font-bold text-orange-700">Em análise</span>
+  if (status === 'rejected') return <span className="rounded-full bg-red-100 px-2 py-1 text-xs font-bold text-red-700">Rejeitada</span>
+  if (status === 'reversed') return <span className="rounded-full bg-gray-200 px-2 py-1 text-xs font-bold text-gray-600">Revertida</span>
   return <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">Pendente</span>
 }
 
@@ -418,7 +423,30 @@ function CommissionsTab() {
     return () => { active = false }
   }, [month])
 
+  async function handleApprove(id) {
+    setBulkMessage('')
+    try {
+      await api.adminAffiliateCommissionApprove(id)
+      loadCommissions()
+    } catch (err) {
+      setBulkMessage(err.message || 'Erro ao aprovar comissão.')
+    }
+  }
+
+  async function handleReverse(id) {
+    setBulkMessage('')
+    const reason = window.prompt('Motivo da reversão (ex.: chargeback, reembolso, fraude confirmada)')
+    if (!reason) return
+    try {
+      await api.adminAffiliateCommissionReverse(id, reason)
+      loadCommissions()
+    } catch (err) {
+      setBulkMessage(err.message || 'Erro ao reverter comissão.')
+    }
+  }
+
   async function handleMarkPaid(id) {
+    setBulkMessage('')
     try {
       await api.adminAffiliateCommissionMarkPaid(id)
       loadCommissions()
@@ -431,7 +459,7 @@ function CommissionsTab() {
     setBulkMessage('')
     try {
       const result = await api.adminAffiliateCycleMarkAllPaid(month)
-      setBulkMessage(`${result.updated} comissões marcadas como pagas.`)
+      setBulkMessage(`${result.updated} comissões elegíveis marcadas como pagas.`)
       loadCommissions()
     } catch (err) {
       setBulkMessage(err.message || 'Erro ao marcar todas como pagas.')
@@ -454,7 +482,7 @@ function CommissionsTab() {
           onClick={handleMarkAllPaid}
           className="mt-4 rounded-lg bg-emerald-600 text-white px-4 py-2 text-sm font-semibold hover:bg-emerald-700 transition"
         >
-          Marcar mês inteiro como pago
+          Pagar elegíveis do mês
         </button>
       </div>
 
@@ -476,7 +504,8 @@ function CommissionsTab() {
                 <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Venda</th>
                 <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Comissão</th>
                 <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Status</th>
-                <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Data</th>
+                <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Criada</th>
+                <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Elegível em</th>
                 <th className="px-4 py-2"></th>
               </tr>
             </thead>
@@ -496,12 +525,25 @@ function CommissionsTab() {
                   <td className="px-4 py-3"><CommissionTypeBadge type={c.commissionType} /></td>
                   <td className="px-4 py-3 text-right text-gray-700">{formatCurrency(c.saleAmountCents)}</td>
                   <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(c.commissionAmountCents)}</td>
-                  <td className="px-4 py-3"><CommissionStatusBadge status={c.status} /></td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{formatDate(c.createdAt)}</td>
                   <td className="px-4 py-3">
-                    {c.status === 'pending' && (
-                      <button onClick={() => handleMarkPaid(c.id)} className="text-xs font-semibold text-emerald-700 hover:underline">Pagar</button>
-                    )}
+                    <CommissionStatusBadge status={c.status} />
+                    {c.holdReason && <p className="mt-1 text-[11px] text-orange-700">{c.holdReason}</p>}
+                    {c.reversalReason && <p className="mt-1 text-[11px] text-gray-500">{c.reversalReason}</p>}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{formatDate(c.createdAt)}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{formatDate(c.eligibleAt)}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col items-start gap-1">
+                      {['held', 'eligible'].includes(c.status) && (
+                        <button onClick={() => handleApprove(c.id)} className="text-xs font-semibold text-sky-700 hover:underline">Aprovar</button>
+                      )}
+                      {['eligible', 'approved'].includes(c.status) && (
+                        <button onClick={() => handleMarkPaid(c.id)} className="text-xs font-semibold text-emerald-700 hover:underline">Pagar</button>
+                      )}
+                      {['pending', 'eligible', 'approved', 'held'].includes(c.status) && (
+                        <button onClick={() => handleReverse(c.id)} className="text-xs font-semibold text-red-700 hover:underline">Reverter</button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -522,6 +564,8 @@ function SettingsTab() {
   const [commissionPct, setCommissionPct] = useState('')
   const [recurringCommissionPct, setRecurringCommissionPct] = useState('')
   const [recurringEnabled, setRecurringEnabled] = useState(true)
+  const [holdDays, setHoldDays] = useState('')
+  const [attributionWindowDays, setAttributionWindowDays] = useState('')
 
   useEffect(() => {
     let active = true
@@ -533,6 +577,8 @@ function SettingsTab() {
         setCommissionPct(String(result.commissionPercent))
         setRecurringCommissionPct(String(result.commissionRecurringPercent ?? 30))
         setRecurringEnabled(result.recurringCommissionEnabled ?? true)
+        setHoldDays(String(result.commissionHoldDays ?? 30))
+        setAttributionWindowDays(String(result.attributionWindowDays ?? 30))
       })
       .catch(() => { if (active) setSettings(null) })
       .finally(() => { if (active) setLoading(false) })
@@ -549,6 +595,9 @@ function SettingsTab() {
         commissionPercent: Number(commissionPct),
         commissionRecurringPercent: Number(recurringCommissionPct),
         recurringCommissionEnabled: recurringEnabled,
+        commissionHoldDays: Number(holdDays),
+        attributionWindowDays: Number(attributionWindowDays),
+        attributionModel: 'last_non_direct',
       })
       setSettings(result)
       setMessage('Configurações salvas.')
@@ -594,6 +643,30 @@ function SettingsTab() {
           onChange={e => setRecurringCommissionPct(e.target.value)}
           className="border rounded-lg px-3 py-2 text-sm w-full outline-none focus:ring-2 focus:ring-emerald-400"
         />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Hold de comissão (dias)</label>
+        <input
+          type="number"
+          min="0"
+          max="365"
+          value={holdDays}
+          onChange={e => setHoldDays(e.target.value)}
+          className="border rounded-lg px-3 py-2 text-sm w-full outline-none focus:ring-2 focus:ring-emerald-400"
+        />
+        <p className="mt-1 text-xs text-gray-500">Comissões ficam pendentes até esta janela passar, para reduzir risco de reembolso/chargeback.</p>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Janela de atribuição (dias)</label>
+        <input
+          type="number"
+          min="1"
+          max="365"
+          value={attributionWindowDays}
+          onChange={e => setAttributionWindowDays(e.target.value)}
+          className="border rounded-lg px-3 py-2 text-sm w-full outline-none focus:ring-2 focus:ring-emerald-400"
+        />
+        <p className="mt-1 text-xs text-gray-500">Modelo atual: último clique não-direto, congelado no pagamento.</p>
       </div>
       <div className="flex items-center gap-2">
         <input
