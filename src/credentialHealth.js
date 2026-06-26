@@ -44,9 +44,7 @@ function getFormatWarnings(platform, data = {}) {
   }
 
   if (platform === 'mercadolivre') {
-    const tag = getString(data, 'tag')
     const ssid = getString(data, 'ssid')
-    if (tag && !/^\d+$/.test(tag)) warnings.push('A tag do Mercado Livre normalmente é numérica.')
     if (ssid && ssid.length < 10) warnings.push('O SSID do Mercado Livre parece curto. Confira se copiou o valor completo do cookie.')
   }
 
