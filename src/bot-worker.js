@@ -17,7 +17,7 @@ import { convertLink } from './converters/index.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
-import { resolveMonitoredImage } from './monitoredImageResolver.js'
+import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
@@ -39,8 +39,7 @@ import {
 import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
 import { resolveDestinationPreservation } from './core/preservationConfig.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
-import { PRESERVATION_FEATURE, isPreservationFeatureEnabled, shouldMutateOutgoingImage } from './core/preservationFeatures.js'
-import { mutate as mutateChannelImage } from './core/imageMutation.js'
+import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/preservationFeatures.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
@@ -2015,6 +2014,12 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       // Pre-fetch da imagem (lazy, uma vez por mensagem). Retorna
       // { buffer, mimetype } pronto para enviar à Baileys, respeitando a
       // configuração de imagem do grupo monitorado.
+      // Estratégia de imagem para mensagens de cupom. Atribuído UMA vez logo após
+      // o guard de title_mismatch (que já raspa o og:title do produto), e lido
+      // por getImage() no dequeue. Default false = ofertas normais sempre buscam
+      // hi-res. Ver decideSkipActiveFetchForCoupon() para a lógica completa.
+      let couponSkipActiveFetch = false
+
       let cachedImage
       let imageFetched = false
       async function getImage() {
@@ -2025,8 +2030,13 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         const enabled = links.filter(l => enabledPlatforms.has(l.platform))
         const target = monitorGroup.imageLinkTarget === 'last' ? enabled[enabled.length - 1] : enabled[0]
         const platform = target?.platform || 'unknown'
-        logger.info({ msgId: msg.key.id, imageMode: monitorGroup.imageMode, platform }, 'getImage: iniciando resolução de imagem')
+        logger.info({ msgId: msg.key.id, imageMode: monitorGroup.imageMode, platform, couponSkipActiveFetch }, 'getImage: iniciando resolução de imagem')
 
+        // skipActiveFetch NÃO depende mais de "é cupom?" (isso borrava ofertas
+        // de produto com código de cupom — regressão image-upload-bug-fix). Só
+        // pula o fetch ativo quando a mensagem é um cupom GENÉRICO cujo link
+        // resolve para produto não relacionado (caso A em
+        // decideSkipActiveFetchForCoupon). Produto+cupom busca hi-res normalmente.
         cachedImage = await resolveMonitoredImage({
           mode: monitorGroup.imageMode,
           target,
@@ -2035,7 +2045,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           fetchProductImage,
           fetchImageBuffer,
           fallbackToOriginal: monitorGroup.fallbackToOriginal !== false,
-          skipActiveFetch: isCouponMsg,
+          skipActiveFetch: couponSkipActiveFetch,
           logger,
         })
         return cachedImage
@@ -2225,15 +2235,30 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       // og:title do link convertido e comparar com o caption pega o caso
       // sem confiar em nada do upstream. Skip silencioso quando o scrape
       // falha — não queremos derrubar oferta legítima por timeout.
+      // O scrape do og:title alimenta DUAS decisões a partir de UMA raspagem:
+      //   1. Guard de title_mismatch (bloqueia ofertas NÃO-cupom desalinhadas).
+      //   2. Estratégia de imagem para cupom (couponSkipActiveFetch): distingue
+      //      "produto + cupom" (busca hi-res) de "cupom genérico → produto
+      //      aleatório" (usa thumbnail). Por isso o scrape agora roda TAMBÉM para
+      //      mensagens de cupom — antes era pulado (!isCouponMsg), o que forçava
+      //      o skip cego que borrava ofertas de produto com cupom.
+      // titleOverlap: 'match' | 'mismatch' | 'unknown' (scrape falhou/indisponível).
+      const hasProductLink = !!(primary.url && primary.platform !== 'nolink')
+      let titleOverlap = 'unknown'
       if (
         !TITLE_MISMATCH_GUARD_DISABLED &&
         !templateApplied &&
-        !isCouponMsg &&
         primary.url &&
         TITLE_MISMATCH_GUARD_PLATFORMS.has(primary.platform)
       ) {
         const scrapedTitle = await scrapeProductTitle(primary.url).catch(() => null)
-        if (scrapedTitle && !hasSignificantTokenOverlap(scrapedTitle, sanitizedText)) {
+        if (scrapedTitle) {
+          titleOverlap = hasSignificantTokenOverlap(scrapedTitle, sanitizedText) ? 'match' : 'mismatch'
+        }
+        // Guard bloqueia só ofertas NÃO-cupom com mismatch confirmado. Mensagens
+        // de cupom não descrevem um produto específico, então nunca são bloqueadas
+        // aqui — mas o mesmo sinal de overlap decide a imagem (abaixo).
+        if (!isCouponMsg && titleOverlap === 'mismatch') {
           logger.warn({
             msgId: msg.key.id,
             platform: primary.platform,
@@ -2250,6 +2275,17 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           })
           return
         }
+      }
+
+      // Decide a estratégia de imagem para cupom ANTES do loop de destinos
+      // (vale para todos os destinos da mensagem). getImage() lê esta flag.
+      couponSkipActiveFetch = decideSkipActiveFetchForCoupon({
+        isCouponMsg,
+        hasProductLink,
+        titleOverlap,
+      })
+      if (isCouponMsg) {
+        logger.info({ msgId: msg.key.id, hasProductLink, titleOverlap, couponSkipActiveFetch }, 'estratégia de imagem para mensagem de cupom')
       }
 
       const baseDestinations = monitorGroup?.targetPostJids?.length ? monitorGroup.targetPostJids : cfg.groups.post
@@ -2377,25 +2413,21 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           let image = null
           if (wantImage) {
             const fetched = await getImage()
-            image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
+            // Mutação anti-fingerprint SOMENTE para canal-destino (newsletter
+            // JID) e quando o opt-in global está ligado. NÃO aplicar a grupos.
+            // Quando ligada, o crop + qualidade variada vão DENTRO do mesmo
+            // encode do normalize (sem 2º encode JPEG = sem dupla compressão).
+            // Regressão de dupla compressão documentada em 2026-06
+            // (commit image-upload-bug-fix). Ver normalizeImageForWhatsApp.
+            const wantMutation = isChannelDest && isPreservationFeatureEnabled(cfg.preservationActive, cfg.botConfig, PRESERVATION_FEATURE.IMAGE_MUTATION)
+            image = fetched
+              ? await normalizeImageForWhatsApp(fetched.buffer, wantMutation ? { mutation: { groupId: destJid } } : {})
+              : null
             if (fetched && !image) {
               logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
             }
             if (imageMode === 'original' && !image) {
               useLinkPreview = true
-            }
-            // Issue #1033: mutação de imagem permanece toggle GLOBAL, mas vale
-            // para canal E grupo (não só canal). Envios de grupo com mídia
-            // original já saíram pelo caminho de relay acima (return), então só
-            // chegam aqui imagens não-relay (getImage) — mutáveis com segurança.
-            if (image && shouldMutateOutgoingImage(destJid, cfg.preservationActive, cfg.botConfig)) {
-              const mutated = await mutateChannelImage(image.buffer, image.mimetype, {
-                groupId: destJid,
-                enabled: true,
-              })
-              if (mutated.buffer !== image.buffer) {
-                image = { ...image, buffer: mutated.buffer, mimetype: mutated.mimetype }
-              }
             }
           }
 
