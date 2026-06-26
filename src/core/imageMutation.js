@@ -1,7 +1,14 @@
 // PR-5.B.2: mutação de imagem fora do bloco protegido.
-// Aplicada APÓS o scraper (src/converters/imageScrapers.js) — recompress
-// + crop 0–2px numa borda determinística por (groupId, date). Quebra hash
-// MD5 entre canais sem degradar visualmente.
+// Crop 0–2px numa borda determinística por (groupId, date) + qualidade variada.
+// Quebra hash MD5 entre canais sem degradar visualmente.
+//
+// 2026-06 (image-upload-bug-fix): a mutação deixou de ser um SEGUNDO encode
+// JPEG aplicado SOBRE a imagem já normalizada (q95) — isso causava dupla
+// compressão. A geometria/qualidade do crop virou função PURA
+// (computeMutationCrop) e a aplicação real (extract + único encode JPEG)
+// passou a viver dentro de normalizeImageForWhatsApp, no MESMO passo sharp.
+// mutate() é mantida (utilitário standalone / compat) mas agora delega o
+// cálculo para computeMutationCrop.
 //
 // Regras invioláveis (PR #422 + AGENTS.md):
 // - Nunca abaixo de IMAGE_MIN_DIMENSION_PX em ambos os eixos.
@@ -9,22 +16,18 @@
 // - Em caso de qualquer falha, devolve o buffer original (não bloqueia envio).
 
 import sharp from 'sharp'
+import { computeMutationCrop, hashIndex, todayIsoDate, IMAGE_MIN_DIMENSION_PX } from './imageMutationCrop.js'
 
-export const IMAGE_MIN_DIMENSION_PX = 800
+// Re-export do módulo leaf puro para compatibilidade dos importadores atuais.
+export { computeMutationCrop, hashIndex, todayIsoDate, IMAGE_MIN_DIMENSION_PX }
+
 const SUPPORTED_MIMES = new Set(['image/jpeg', 'image/jpg'])
 
-export function hashIndex(...args) {
-  const mod = args[args.length - 1]
-  const parts = args.slice(0, -1).join('|')
-  let h = 2166136261 >>> 0
-  for (let i = 0; i < parts.length; i++) {
-    h ^= parts.charCodeAt(i)
-    h = Math.imul(h, 16777619) >>> 0
-  }
-  return h % mod
-}
-
 /**
+ * Utilitário standalone: aplica a mutação a um JPEG já codificado. Mantido para
+ * compat/uso avulso. O caminho de produção (canal) usa computeMutationCrop
+ * dentro de normalizeImageForWhatsApp para evitar dupla compressão.
+ *
  * @param {Buffer} buffer
  * @param {string} mimetype
  * @param {{ groupId: string, enabled?: boolean, date?: string, minDimension?: number }} opts
@@ -35,33 +38,16 @@ export async function mutate(buffer, mimetype, opts = {}) {
   if (!SUPPORTED_MIMES.has(String(mimetype).toLowerCase())) return { buffer, mimetype }
   if (!Buffer.isBuffer(buffer) || buffer.length < 100) return { buffer, mimetype }
 
-  const groupId = opts.groupId ?? 'unknown'
-  const date = opts.date ?? new Date().toISOString().slice(0, 10)
-  const minDim = opts.minDimension ?? IMAGE_MIN_DIMENSION_PX
+  const date = opts.date ?? todayIsoDate()
 
   try {
     const meta = await sharp(buffer).metadata()
-    if (!meta?.width || !meta?.height) return { buffer, mimetype }
-
-    // Crop 1–2px numa borda determinística. Borda 0..3 (top/right/bottom/left)
-    // e px 1..2. Total crop por eixo no pior caso: 2px.
-    const edge = hashIndex(groupId, date, 4)
-    const cropPx = 1 + hashIndex(groupId, date + 'p', 2) // 1 ou 2
-    const quality = 85 + hashIndex(groupId, date + 'q', 8) // 85..92
-
-    let left = 0, top = 0
-    let width = meta.width
-    let height = meta.height
-    if (edge === 0) { top = cropPx; height -= cropPx }
-    else if (edge === 1) { width -= cropPx }
-    else if (edge === 2) { height -= cropPx }
-    else { left = cropPx; width -= cropPx }
-
-    if (width < minDim || height < minDim) return { buffer, mimetype }
+    const crop = computeMutationCrop(meta, { groupId: opts.groupId, date, minDimension: opts.minDimension })
+    if (!crop) return { buffer, mimetype }
 
     const out = await sharp(buffer)
-      .extract({ left, top, width, height })
-      .jpeg({ quality, mozjpeg: false })
+      .extract({ left: crop.left, top: crop.top, width: crop.width, height: crop.height })
+      .jpeg({ quality: crop.quality, mozjpeg: false })
       .toBuffer()
 
     return { buffer: out, mimetype: 'image/jpeg' }
