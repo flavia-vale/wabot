@@ -43,12 +43,15 @@ test('nomes legados não são aceitos como opt-in de mutação', () => {
   assert.equal(isPreservationFeatureEnabled(true, { imageMutationActive: true }, PRESERVATION_FEATURE.IMAGE_MUTATION), true)
 })
 
-test('mutação de imagem (toggle global) abrange canal E grupo como destino', () => {
+// shouldMutateOutgoingImage aceita canal e grupo (predicado amplo), mas o
+// bot-worker NÃO a usa no gate de mutação — usa isChannelDest diretamente
+// para evitar dupla compressão JPEG em grupos (vide invariante no bot-worker).
+// Esta função existe como ponto de extensão futuro. Não restaurar o uso em
+// grupos sem antes unificar normalizeImageForWhatsApp+mutate em um passo só.
+test('shouldMutateOutgoingImage: predicado aceita canal e grupo (mas não é usado em grupos no bot-worker)', () => {
   const cfg = { imageMutationActive: true }
-  // Issue #1033 (escopo revisado): mutação permanece GLOBAL, mas deixa de ser
-  // exclusiva de canal — passa a valer também para grupo-destino.
   assert.equal(shouldMutateOutgoingImage('123@newsletter', true, cfg), true, 'canal')
-  assert.equal(shouldMutateOutgoingImage('123@g.us', true, cfg), true, 'grupo')
+  assert.equal(shouldMutateOutgoingImage('123@g.us', true, cfg), true, 'grupo — aceitável no predicado, mas gate real no bot-worker usa isChannelDest')
 })
 
 test('mutação respeita o opt-in global e o módulo de preservação', () => {
