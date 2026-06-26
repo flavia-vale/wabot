@@ -28,7 +28,7 @@ import { persistCredentialPatch } from './credentialPatch.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode, findUnserializableField } from './sendQueueBackend.js'
 import { withSendTimeout as withSendTimeoutImpl } from './sendMessageTimeout.js'
-import { isMirrorableJid, detectKind, JID_KIND } from './core/jid.js'
+import { detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
 import { getChannelMetadata, followChannel, listFollowedChannels } from './core/channelDirectory.js'
 import { logFollow } from './core/followGuard.js'
@@ -471,7 +471,6 @@ async function loadConfig() {
     platforms: 'shopee,amazon,mercadolivre,magazineluiza',
     blockedKeywords: '',
     welcomeMsg: '',
-    feedGlobal: false,
     postToStatus: false,
     brandingGroupLink: '',
     brandingCtaText: DEFAULT_BRANDING_CTA_TEXT,
@@ -1776,9 +1775,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       const jid = msg.key.remoteJid
       const normalizedJid = normalizeJidForMatch(jid)
       const cfg = await getConfig()
-      logger.info({ jid, monitorGroups: cfg.groups.monitor, feedGlobal: cfg.botConfig.feedGlobal }, 'mensagem recebida')
+      logger.info({ jid, monitorGroups: cfg.groups.monitor }, 'mensagem recebida')
       const monitorGroup = cfg.groups.monitor.find(m => normalizeJidForMatch(m.waJid) === normalizedJid)
-      const shouldTrackSkipped = Boolean(monitorGroup) || (cfg.botConfig.feedGlobal && isMirrorableJid(jid))
+      const shouldTrackSkipped = Boolean(monitorGroup)
       async function recordSkippedMessage({ reason, platform = 'unknown', originalUrl = '', convertedUrl = '' }) {
         if (!shouldTrackSkipped) return
         const messageText =
@@ -1853,13 +1852,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }).catch(() => {})
       }
 
-      if (!cfg.botConfig.feedGlobal && !monitorGroup) {
-        return
-      }
-      // feedGlobal aceita mensagens de qualquer JID espelhável (grupo ou canal).
-      // O pipeline downstream é agnóstico ao tipo; o tratamento específico
-      // de envio para canal-destino vem na Fase 3.
-      if (cfg.botConfig.feedGlobal && !isMirrorableJid(jid)) {
+      if (!monitorGroup) {
         return
       }
 
@@ -2543,8 +2536,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           const currentCfg = await getConfig().catch(() => null)
           const currentJid = msg.key.remoteJid
           const isMonitored = Boolean(currentCfg?.groups?.monitor?.find?.(m => m.waJid === currentJid))
-          const isFeedGlobalMirrorable = Boolean(currentCfg?.botConfig?.feedGlobal && isMirrorableJid(currentJid))
-          if (!isMonitored && !isFeedGlobalMirrorable) {
+          if (!isMonitored) {
             logger.error({ msgId, dedupKey, err: err.message }, 'Mensagem descartada fora do escopo monitorado — sem log em painel')
             return
           }

@@ -252,18 +252,16 @@ export default function AdminObservabilityPage() {
   const [observability, setObservability] = useState(null)
   const [logsSummary, setLogsSummary] = useState(null)
   const [sessions, setSessions] = useState(null)
-  const [telegram, setTelegram] = useState(null)
 
   async function loadData() {
     setError('')
-    const [adminData, healthData, metricsData, observabilityData, logsSummaryData, sessionsData, telegramData] = await Promise.all([
+    const [adminData, healthData, metricsData, observabilityData, logsSummaryData, sessionsData] = await Promise.all([
       api.adminMe(),
       api.adminSystemHealth().catch(() => null),
       api.adminSystemMetrics().catch(() => null),
       api.adminSystemObservability().catch(() => null),
       api.adminLogsSummary('7d').catch(() => null),
       api.adminSessions({ limit: 50 }).catch(() => null),
-      api.adminTelegramOverview().catch(() => null),
     ])
     setAdmin(adminData)
     setHealth(healthData)
@@ -271,7 +269,6 @@ export default function AdminObservabilityPage() {
     setObservability(observabilityData)
     setLogsSummary(logsSummaryData)
     setSessions(sessionsData)
-    setTelegram(telegramData)
   }
 
   useEffect(() => {
@@ -318,7 +315,7 @@ export default function AdminObservabilityPage() {
     }
   }, [health, logsSummary, metrics, observability, sessions])
 
-  if (loading) return <LoadingState title="Carregando observabilidade" message="Consolidando API, logs, sessões, Telegram e gate operacional." />
+  if (loading) return <LoadingState title="Carregando observabilidade" message="Consolidando API, logs, sessões e gate operacional." />
 
   if (error) {
     return (
@@ -394,7 +391,6 @@ export default function AdminObservabilityPage() {
               <DependencyPill label="Fastify API" ok={Boolean(observability?.dependencies?.api?.ok ?? health)} detail={`${numberFmt(observability?.dependencies?.api?.totalRequests ?? metrics?.totalRequests)} req desde boot`} />
               <DependencyPill label="Redis" ok={Boolean(observability?.dependencies?.redis?.ok)} detail={observability?.dependencies?.redis?.requiredForRemoteSupervisor ? 'Obrigatório no modo remote' : 'Opcional no modo inline'} />
               <DependencyPill label="Supervisor" ok={Boolean(observability?.dependencies?.supervisor?.ok ?? ((observability?.supervisor?.sessionOwnerMismatchTotal ?? 0) === 0))} detail={`${observability?.supervisor?.mode || 'inline'} · alive ${String(observability?.supervisor?.alive ?? 'n/a')}`} />
-              <DependencyPill label="Telegram Offer Bot" ok={Boolean(telegram?.config?.tokenConfigured)} detail={`${telegram?.successRate ?? 0}% sucesso · último evento ${safeDate(telegram?.lastEventAt)}`} />
             </div>
           </div>
         </section>
@@ -483,18 +479,6 @@ export default function AdminObservabilityPage() {
                 </div>
               ))}
             </div>
-          </div>
-
-          <div className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-5 shadow-2xl shadow-black/20 ring-1 ring-white/5 backdrop-blur-xl">
-            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-200">Integrações</p>
-            <h2 className="mt-1 text-2xl font-black text-white">Telegram Offer Bot</h2>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <MetricTile label="24h" value={numberFmt(telegram?.totals?.count24h)} tone="info" />
-              <MetricTile label="7d" value={numberFmt(telegram?.totals?.count7d)} tone="info" />
-              <MetricTile label="Sucesso" value={`${telegram?.successRate ?? 0}%`} tone={(telegram?.successRate ?? 0) >= 80 ? 'ok' : 'warn'} />
-              <MetricTile label="Com imagem" value={`${telegram?.withImageRate ?? 0}%`} tone="info" />
-            </div>
-            <p className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">Token: {telegram?.config?.tokenConfigured ? 'configurado' : 'ausente'} · chats permitidos: {telegram?.config?.allowedChatCount ?? 0} · último evento: {safeDate(telegram?.lastEventAt)}</p>
           </div>
         </section>
       </div>

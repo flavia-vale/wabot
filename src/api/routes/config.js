@@ -12,7 +12,6 @@ const DEFAULTS = {
   platforms: 'shopee,amazon,mercadolivre,magazineluiza',
   blockedKeywords: '',
   welcomeMsg: '',
-  feedGlobal: false,
   postToStatus: false,
   brandingGroupLink: '',
   couponLink: '',
@@ -57,16 +56,13 @@ export async function configRoutes(app, opts = {}) {
 
   app.put('/', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
-    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg, feedGlobal, postToStatus, brandingGroupLink, brandingCtaText, couponLink, copyVariationPoolJson, copyVariationEnabled, mobileTemplatesJson, mobileCouponLinksJson, mirrorTemplateKeyDefault, primaryLinkTargetDefault } = req.body ?? {}
+    const { delayMin, delayMax, platforms, blockedKeywords, welcomeMsg, postToStatus, brandingGroupLink, brandingCtaText, couponLink, copyVariationPoolJson, copyVariationEnabled, mobileTemplatesJson, mobileCouponLinksJson, mirrorTemplateKeyDefault, primaryLinkTargetDefault } = req.body ?? {}
 
     if (delayMin !== undefined && !isIntegerInRange(delayMin)) {
       return reply.code(400).send({ error: 'delayMin deve ser um número inteiro entre 0 e 300' })
     }
     if (delayMax !== undefined && !isIntegerInRange(delayMax)) {
       return reply.code(400).send({ error: 'delayMax deve ser um número inteiro entre 0 e 300' })
-    }
-    if (feedGlobal !== undefined && typeof feedGlobal !== 'boolean') {
-      return reply.code(400).send({ error: 'feedGlobal deve ser boolean' })
     }
     if (postToStatus !== undefined && typeof postToStatus !== 'boolean') {
       return reply.code(400).send({ error: 'postToStatus deve ser boolean' })
@@ -107,7 +103,7 @@ export async function configRoutes(app, opts = {}) {
       ? undefined
       : (String(mirrorTemplateKeyDefault ?? '').trim() || null)
 
-    const requestsAdvancedPreservation = feedGlobal === true || postToStatus === true
+    const requestsAdvancedPreservation = postToStatus === true
     if (requestsAdvancedPreservation && !(await ensureAdvancedPreservationAllowed(db, userId, reply))) return
     const rawBrandingGroupLink = String(brandingGroupLink ?? '').trim()
     const normalizedBrandingGroupLink = normalizeBrandingLink(rawBrandingGroupLink)
@@ -140,7 +136,6 @@ export async function configRoutes(app, opts = {}) {
         platforms: platforms ?? DEFAULTS.platforms,
         blockedKeywords: blockedKeywords ?? '',
         welcomeMsg: welcomeMsg ?? '',
-        feedGlobal: feedGlobal ?? DEFAULTS.feedGlobal,
         postToStatus: postToStatus ?? DEFAULTS.postToStatus,
         brandingGroupLink: normalizedBrandingGroupLink,
         brandingCtaText: normalizedBrandingCtaText,
@@ -160,7 +155,6 @@ export async function configRoutes(app, opts = {}) {
         ...(platforms !== undefined && { platforms }),
         ...(blockedKeywords !== undefined && { blockedKeywords }),
         ...(welcomeMsg !== undefined && { welcomeMsg }),
-        ...(feedGlobal !== undefined && { feedGlobal }),
         ...(postToStatus !== undefined && { postToStatus }),
         ...(brandingGroupLink !== undefined && { brandingGroupLink: normalizedBrandingGroupLink }),
         ...(brandingCtaText !== undefined && { brandingCtaText: normalizedBrandingCtaText }),

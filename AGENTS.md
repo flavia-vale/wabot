@@ -27,20 +27,9 @@ commits já mergeados — sempre criar commit novo.
 | `dashboard`              | prod     | Next.js                                                       |
 | `bot-supervisor`         | prod     | Ciclo de vida das sessões WhatsApp (fork dos bot-workers)     |
 | `snapshot-cron`          | prod     | Cron diário de snapshots de canais                            |
-| `telegram-offer-bot`     | prod     | Bot do Telegram que gera oferta a partir de um link colado    |
 | `api-staging`            | staging  | Espelho da API                                                |
 | `visual-staging`         | staging  | Espelho do dashboard                                          |
 | `bot-supervisor-staging` | staging  | Espelho do supervisor                                         |
-| `telegram-offer-bot-staging` | staging | Espelho do bot do Telegram (token SEPARADO do de prod)     |
-
-**Bot do Telegram (`telegram-offer-bot`)**: long-polling em `getUpdates`
-(`src/telegram/offerBotRunner.js`, usando a lógica de `src/telegram/offerBot.js`). Exige **um único poller por token** — duas
-instâncias com o mesmo `TELEGRAM_OFFER_BOT_TOKEN` dão `409 Conflict` e o bot
-para de responder. Prod e staging precisam de tokens **diferentes**. Se o bot
-parar de enviar mensagens, suspeite primeiro de: (1) processo morto fora do
-PM2 (antes não havia entrada PM2 e ele só subia à mão), (2) 409 por token
-duplicado ou webhook setado, (3) token ausente no `.env`. Detalhes em
-`docs/telegram/offer-bot.md`.
 
 **Por que `bot-supervisor` existe**: historicamente a API fazia `fork()`
 dos workers WhatsApp. Toda vez que a API reiniciava (deploy, OOM, bug)
@@ -61,7 +50,7 @@ ls ~/wabot/src/supervisor/
 ```
 
 Critérios de aprovação:
-- `grep` precisa listar **5 apps**: `api`, `dashboard`, `bot-supervisor`, `snapshot-cron` e (quando houver) os equivalentes de staging no repo correto.
+- `grep` precisa listar os **4 apps de prod**: `api`, `dashboard`, `bot-supervisor`, `snapshot-cron` e (quando houver) os equivalentes de staging no repo correto.
 - `ls` precisa mostrar `protocol.js`, `client.js`, `index.js` (e demais arquivos do supervisor).
 
 Se qualquer item falhar: **BLOQUEAR CUTOVER**. Primeiro promover `develop -> main`, aguardar autodeploy, revalidar pre-flight e só então prosseguir com o runbook de produção.
@@ -272,7 +261,7 @@ boot (`src/api/server.js`) mata o processo se ausente/malformada.
 
 **Pontos acoplados (todos precisam decifrar/cifrar):**
 - Leitura: `parseCredentialData` em `src/credentialHealth.js` (cobre painel,
-  `offerEngine`, `offerAutomation`, bot Telegram automaticamente).
+  `offerEngine`, `offerAutomation` automaticamente).
 - Leitura direta (único bypass): `src/bot-worker.js` (~linha 353) — decifra antes
   do `JSON.parse`. Por isso o worker tem `import 'dotenv/config'` no topo (precisa
   da env).
@@ -803,8 +792,7 @@ TABLE, CREATE INDEX) exige lock exclusivo do SQLite. Enquanto qualquer
 processo PM2 que importa `src/db.js` segura conexão aberta no `.db`,
 qualquer ALTER falha com `Error: SQLite database error / database is
 locked`. Exemplos: `api`/`api-staging`, `bot-supervisor`/
-`bot-supervisor-staging`, `telegram-offer-bot`/
-`telegram-offer-bot-staging` e, em produção, `snapshot-cron` quando está
+`bot-supervisor-staging` e, em produção, `snapshot-cron` quando está
 rodando. Os 5s de `busy_timeout` não bastam — a app nunca solta.
 
 Sintoma observado no autodeploy do PR #651 (2026-05-27): `prisma migrate
@@ -825,10 +813,10 @@ Se um deploy futuro falhar com `database is locked` mesmo após esse
 fix: confirmar que os apps PM2 estão sendo de fato parados (`pm2
 describe <app>` retorna ok antes do stop? `pm2 pid <app>` vira `0`?).
 Para destravar manualmente em emergência no staging: `pm2 stop
-api-staging bot-supervisor-staging telegram-offer-bot-staging && cd
+api-staging bot-supervisor-staging && cd
 ~/wabot-staging && npx prisma migrate deploy && pm2 restart
-api-staging bot-supervisor-staging telegram-offer-bot-staging --update-env`.
-Em produção, investigar também `telegram-offer-bot`, `snapshot-cron` e
+api-staging bot-supervisor-staging --update-env`.
+Em produção, investigar também `snapshot-cron` e
 eventuais `bot-worker.js` órfãos antes de repetir o migrate.
 
 ### 9. Supervisor iniciado do diretório errado consome a Redis DB errada (fila nunca drena)
@@ -963,64 +951,41 @@ Testes: `test/shopee-shortlink-resolve.test.js` + regressões em
 
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 
-Existem dois pontos que montam uma oferta (título + preço + link) a partir de
-um link colado:
+O **Painel "Criar oferta"** (`/m/op/offer` → `POST
+/api/link-conversion/scrape-offer`) monta uma oferta (título + preço + link) a
+partir de um link colado. A busca de título/preço (converter → resolver URL →
+scrapar com credenciais → fallback) vive em **um só lugar**:
+**`buildScrapedOffer()` em `src/converters/offerEngine.js`**. Mantido como ponto
+único para que qualquer futuro consumidor de oferta reaproveite a mesma lógica
+em vez de duplicá-la.
 
-1. **Painel "Criar oferta"** (`/m/op/offer` → `POST /api/link-conversion/scrape-offer`).
-2. **Bot do Telegram** (`src/telegram/offerBot.js`).
-
-Antes da unificação cada um buscava os dados de forma diferente: o painel
-convertia o link, passava credenciais (cookie ML) e tinha fallback; o Telegram
-scrapava o link **cru, anônimo e sem fallback**. Resultado: o MESMO link rendia
-ofertas diferentes (ML `/up/` falhava no Telegram, Amazon divergia nos dois
-sentidos). Hoje ambos chamam **`buildScrapedOffer()` em
-`src/converters/offerEngine.js`** — a busca de título/preço (converter →
-resolver URL → scrapar com credenciais → fallback) vive em **um só lugar**.
-
-A **única** diferença permitida entre os dois consumidores é qual link aparece
-na oferta final, via flag `keepOriginalLink`:
+Qual link aparece na oferta final é controlado pela flag `keepOriginalLink`:
 
 | Consumidor              | `keepOriginalLink` | `displayUrl` (link na oferta) |
 |-------------------------|--------------------|-------------------------------|
 | Painel "Criar oferta"   | `true` (**temporário**, 2026-06) | link **original** colado pelo usuário |
-| Bot do Telegram         | `true`             | link **original** colado pelo usuário |
-
-O Telegram **converte para buscar dados** (ganha resolução de short link/`/up/`
-e cookie ML), mas **devolve ao usuário o link que ele colou** — nunca o
-convertido.
 
 **MODO TEMPORÁRIO (2026-06):** como a conversão só funcionava bem para links
-do próprio afiliado, o painel "Criar oferta" passou a se comportar **igual ao
-Telegram**: `keepOriginalLink: true`, a UI avisa que o link colado precisa ser
-o do próprio afiliado, e a rota `/scrape-offer` devolve `conversion: null` e
-`conversionWarning: null` (a UI não exibe mais status de conversão). A
-conversão ainda roda **internamente** só para buscar título/preço. Contrato
-histórico a restaurar quando a conversão voltar: painel com
-`keepOriginalLink: false` (link convertido na oferta) + metadados de conversão
-na resposta.
-
-**Credenciais do bot do Telegram:** ele não tem usuário logado (só chat IDs
-autorizados). As credenciais (cookie ML, tag de afiliado) vêm de um **usuário
-fixo** definido pela env `TELEGRAM_OFFER_BOT_USER_ID` (lido por
-`defaultLoadCredentialsMap()` em `offerBot.js`). Sem a env, o bot roda
-**anônimo** (`credentialsMap {}`) — comportamento histórico, mantém os testes
-db-free. Para o ML `/up/` e outros links que exigem login funcionarem no
-Telegram, esse usuário precisa ter credenciais ML configuradas.
+do próprio afiliado, o painel "Criar oferta" usa `keepOriginalLink: true`: a UI
+avisa que o link colado precisa ser o do próprio afiliado, e a rota
+`/scrape-offer` devolve `conversion: null` e `conversionWarning: null` (a UI não
+exibe mais status de conversão). A conversão ainda roda **internamente** só para
+buscar título/preço (resolve short link/`/up/`, cookie ML). Contrato histórico a
+restaurar quando a conversão voltar: painel com `keepOriginalLink: false` (link
+convertido na oferta) + metadados de conversão na resposta.
 
 **Regras:**
 - **Não duplicar** a lógica de converter/scrapar/fallback fora de
-  `offerEngine.js`. Qualquer novo consumidor de oferta (ex.: outro bot) deve
-  chamar `buildScrapedOffer()`.
-- O Telegram **não pode** passar a devolver o link convertido. (O painel
-  devolve o link original apenas enquanto durar o modo temporário acima.)
+  `offerEngine.js`. Qualquer novo consumidor de oferta deve chamar
+  `buildScrapedOffer()`.
 - Exceção no scraper **não** vira erro pro usuário: o motor degrada para
-  fallback mínimo (`inferTitleFromUrl` + `scrapeWarning`), igual nos dois.
+  fallback mínimo (`inferTitleFromUrl` + `scrapeWarning`).
 - Links de recomendação ML `/up/MLBU...` são reconhecidos como landing em
   `isMercadoLivreLandingUrl` (`productInfoScraper.js`) e resolvidos para a URL
   canônica do produto via `wid=MLB...` do fragmento — defesa em profundidade
   mesmo quando o link não passa pela conversão.
 
-Testes: `test/offer-engine.test.js` (motor), `test/telegram-offer-bot.test.js`,
+Testes: `test/offer-engine.test.js` (motor),
 `test/link-conversion-route.test.js`.
 
 ## Triagem de novas demandas (implementar agora vs. backlog)
