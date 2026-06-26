@@ -80,6 +80,22 @@ const nextConfig = {
       },
     ]
 
+    // O HTML das telas autenticadas (admin/dashboard) é uma casca SPA que
+    // referencia chunks JS com hash no nome. Se o browser reaproveitar o HTML
+    // antigo do cache após um deploy, ele aponta para um chunk que já não
+    // existe (ou para código pré-fix), e a tela quebra — foi o que derrubou o
+    // /admin com "adminStagingStatus is not a function" mesmo após o fix já
+    // estar no ar. `no-store` força o browser a buscar o HTML fresco sempre,
+    // pegando os hashes novos. Os assets /_next/static seguem imutáveis e
+    // cacheáveis (não casam com estas rotas).
+    const noStoreHtmlHeaders = [
+      ...noIndexHeaders,
+      {
+        key: 'Cache-Control',
+        value: 'no-store, must-revalidate',
+      },
+    ]
+
     return [
       {
         source: '/:path*',
@@ -87,7 +103,11 @@ const nextConfig = {
       },
       {
         source: '/admin/:path*',
-        headers: noIndexHeaders,
+        headers: noStoreHtmlHeaders,
+      },
+      {
+        source: '/dashboard/:path*',
+        headers: noStoreHtmlHeaders,
       },
       {
         source: '/api/:path*',
