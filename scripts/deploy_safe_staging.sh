@@ -398,9 +398,8 @@ echo "[4/9] Apply database migrations no banco isolado de staging"
 # Skip se não houver migrations pendentes — evita tocar no DB enquanto
 # PM2 está escrevendo, o que dispara SQLITE_BUSY mesmo com busy_timeout=5000
 # do src/db.js. Apps que importam src/db.js e podem segurar staging.db:
-# api-staging, bot-supervisor-staging e telegram-offer-bot-staging.
+# api-staging e bot-supervisor-staging.
 SUPERVISOR_APP_FOR_MIGRATION="${SUPERVISOR_APP:-bot-supervisor-staging}"
-TELEGRAM_APP_FOR_MIGRATION="${TELEGRAM_APP:-telegram-offer-bot-staging}"
 MIGRATE_STOPPED_APPS=""
 
 pm2_pid_for_app() {
@@ -459,7 +458,6 @@ else
   echo "  Migrations pendentes — parando processos que travam o banco..."
   stop_app_for_migration "$API_APP"
   stop_app_for_migration "$SUPERVISOR_APP_FOR_MIGRATION"
-  stop_app_for_migration "$TELEGRAM_APP_FOR_MIGRATION"
 
   migrate_attempt=0
   until npx prisma migrate deploy; do

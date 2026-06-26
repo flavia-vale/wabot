@@ -1,21 +1,17 @@
-// Motor único de montagem de oferta compartilhado entre o endpoint
-// `/api/link-conversion/scrape-offer` (painel "Criar oferta") e o bot do
-// Telegram (`src/telegram/offerBot.js`).
+// Motor único de montagem de oferta usado pelo endpoint
+// `/api/link-conversion/scrape-offer` (painel "Criar oferta"). Mantido como
+// ponto único para que qualquer futuro consumidor de oferta reaproveite a
+// mesma busca de título/preço em vez de duplicar a lógica.
 //
-// Antes da unificação cada caminho buscava título/preço de forma diferente:
-// o painel convertia o link, passava credenciais (cookie ML) e tinha
-// fallback; o Telegram scrapava o link cru, sem credenciais e sem fallback.
-// Isso fazia o MESMO link render resultados diferentes (ver análise no
-// AGENTS.md / histórico). Aqui a lógica de "converter -> resolver -> scrapar
-// com credenciais -> fallback" vive em um só lugar.
+// A lógica de "converter -> resolver -> scrapar com credenciais (cookie ML) ->
+// fallback" vive aqui, em um só lugar.
 //
 // Qual link aparece na oferta final é controlado por `keepOriginalLink`:
-//   - Telegram: converte só para buscar dados, mas devolve o link colado pelo
-//     usuário -> keepOriginalLink = true
-//   - painel: TEMPORARIAMENTE (2026-06) também usa keepOriginalLink = true —
-//     o usuário cola o próprio link de afiliado e a oferta sai com ele.
+//   - painel: TEMPORARIAMENTE (2026-06) usa keepOriginalLink = true — o
+//     usuário cola o próprio link de afiliado e a oferta sai com ele. A
+//     conversão ainda roda internamente só para buscar título/preço.
 //     Contrato histórico (a restaurar): painel com keepOriginalLink = false
-//     (link convertido).
+//     (link convertido na oferta).
 
 import { detectLinks } from '../detector.js'
 import { convertLink as defaultConvertLink } from './index.js'
@@ -128,8 +124,8 @@ function injectOwnerTagInUrl(originalUrl, platform, credentialsMap) {
 //
 // `keepOriginalLink`:
 //   false -> `displayUrl` = link convertido (afiliado)
-//   true  (Telegram e, temporariamente, o painel) -> `displayUrl` = link
-//          original colado pelo usuário
+//   true  (temporariamente, o painel) -> `displayUrl` = link original colado
+//          pelo usuário
 //
 // Retorno: { title, oldPrice, newPrice, finalUrl, offerUrl, displayUrl,
 //            conversionWarning, conversion, scrapeWarning? }
@@ -198,8 +194,8 @@ export async function buildScrapedOffer({
     platform,
   })
 
-  // Link exibido ao usuário: Telegram quer SEMPRE o original colado; o painel
-  // quer o convertido (offerUrl).
+  // Link exibido ao usuário: com keepOriginalLink=true devolve o original
+  // colado; caso contrário, o convertido (offerUrl).
   // Exceção: se o link original já tiver `partner_id` de outra pessoa, troca
   // pela tag do próprio usuário (mantém a URL original, só substitui o ID).
   const displayUrl = injectOwnerTagInUrl(url, platform, credentialsMap)

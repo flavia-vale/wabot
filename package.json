@@ -12,8 +12,7 @@
     "pretest": "rm -f /tmp/wabot-test.db /tmp/wabot-test.db-wal /tmp/wabot-test.db-shm; NODE_ENV=test DATABASE_URL=\"file:/tmp/wabot-test.db\" prisma db push --skip-generate --force-reset",
     "test": "NODE_ENV=test DATABASE_URL=\"file:/tmp/wabot-test.db\" node --test --test-concurrency=1 test/*.test.js test/**/*.test.js",
     "report:marketing-funnel": "node scripts/marketing-funnel-baseline.mjs 7",
-    "typecheck": "tsc --noEmit",
-    "telegram:offer-bot": "node src/telegram/offerBotRunner.js"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@fastify/cors": "^11.2.0",

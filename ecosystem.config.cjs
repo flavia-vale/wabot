@@ -142,45 +142,6 @@ module.exports = {
       listen_timeout: 10000,
     },
     {
-      // telegram-offer-bot: bot do Telegram que gera uma oferta pronta a
-      // partir de um link colado (src/telegram/offerBotRunner.js). Faz long-polling
-      // em getUpdates, então precisa de UM ÚNICO processo por token — rodar
-      // duas instâncias com o mesmo TELEGRAM_OFFER_BOT_TOKEN causa 409
-      // Conflict e o bot para de receber/responder. Token e
-      // TELEGRAM_OFFER_BOT_ALLOWED_CHAT_IDS vêm do .env (pegadinha #1).
-      // autorestart garante que ele volte após crash/OOM/reboot — antes
-      // disso o bot só subia via `npm run telegram:offer-bot` e morria sem
-      // ninguém reiniciar.
-      name: 'telegram-offer-bot',
-      script: 'src/telegram/offerBotRunner.js',
-      exec_mode: 'fork',
-      instances: 1,
-      autorestart: true,
-      env: {
-        NODE_ENV: 'production',
-      },
-      max_memory_restart: '300M',
-      exp_backoff_restart_delay: 200,
-      min_uptime: 10000,
-    },
-    {
-      // Espelho staging do telegram-offer-bot. PRECISA de um token de bot
-      // SEPARADO do de produção no .env de staging — senão os dois pollers
-      // colidem em 409 Conflict e ambos param.
-      name: 'telegram-offer-bot-staging',
-      script: 'src/telegram/offerBotRunner.js',
-      exec_mode: 'fork',
-      instances: 1,
-      autorestart: true,
-      env: {
-        NODE_ENV: 'production',
-        APP_ENV: 'staging',
-      },
-      max_memory_restart: '300M',
-      exp_backoff_restart_delay: 200,
-      min_uptime: 10000,
-    },
-    {
       // Staging mirror de 'dashboard'. cwd ./dashboard é relativo a
       // ROOT_DIR (~/wabot-staging) onde o pm2 start foi invocado.
       name: 'visual-staging',
