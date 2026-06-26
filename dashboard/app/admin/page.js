@@ -5,6 +5,7 @@ import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
 import AdminTutorialAccordion from '@/components/AdminTutorialAccordion'
+import SectionErrorBoundary from '@/components/SectionErrorBoundary'
 
 const STAT_LABELS = {
   totalUsers: 'Clientes totais',
@@ -661,17 +662,22 @@ function StagingPowerCard({ admin }) {
   const canManage = admin?.permissions?.includes('tech:write')
 
   function refresh() {
-    return api.adminStagingStatus()
+    // Promise.resolve().then(...) garante que mesmo um throw síncrono
+    // (ex.: api.adminStagingStatus indefinida em bundle defasado) vire uma
+    // rejeição capturada pelo .catch, em vez de derrubar o painel inteiro.
+    return Promise.resolve()
+      .then(() => api.adminStagingStatus())
       .then((s) => { setStatus(s); setError('') })
-      .catch((e) => { setError(e.message); setStatus(null) })
+      .catch((e) => { setError(e?.message || 'Falha ao carregar status do staging.'); setStatus(null) })
   }
 
   useEffect(() => {
     if (!canRead) return
     let active = true
-    api.adminStagingStatus()
+    Promise.resolve()
+      .then(() => api.adminStagingStatus())
       .then((s) => { if (active) { setStatus(s); setError('') } })
-      .catch((e) => { if (active) { setError(e.message); setStatus(null) } })
+      .catch((e) => { if (active) { setError(e?.message || 'Falha ao carregar status do staging.'); setStatus(null) } })
     return () => { active = false }
   }, [canRead])
 
@@ -681,7 +687,7 @@ function StagingPowerCard({ admin }) {
     try {
       setStatus(await api.adminStagingPower(action))
     } catch (e) {
-      setError(e.message)
+      setError(e?.message || 'Falha ao alternar staging.')
       await refresh()
     } finally {
       setBusy(false)
@@ -1159,7 +1165,9 @@ export default function AdminPage() {
           </section>
         )}
 
-        <StagingPowerCard admin={admin} />
+        <SectionErrorBoundary label="Staging (liga/desliga)">
+          <StagingPowerCard admin={admin} />
+        </SectionErrorBoundary>
 
         {success && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
