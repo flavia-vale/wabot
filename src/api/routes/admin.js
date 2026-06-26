@@ -2194,4 +2194,32 @@ app.get('/sessions', async (req, reply) => {
       return reply.code(503).send({ error: err.message })
     }
   })
+
+  // Liga/desliga os apps PM2 de staging para economizar RAM enquanto não está
+  // em teste (staging e prod dividem o VPS). Ver src/ops/stagingPower.js.
+  app.get('/staging-power', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const { getStagingStatus } = await import('../../ops/stagingPower.js')
+    try {
+      return await getStagingStatus()
+    } catch (err) {
+      return reply.code(503).send({ error: `Falha ao consultar staging: ${err.message}` })
+    }
+  })
+
+  app.post('/staging-power', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:write'))) return
+    const action = String(req.body?.action ?? '').toLowerCase()
+    if (action !== 'on' && action !== 'off') {
+      return reply.code(400).send({ error: "Campo 'action' deve ser 'on' ou 'off'" })
+    }
+    const { setStagingPower } = await import('../../ops/stagingPower.js')
+    try {
+      const result = await setStagingPower(action)
+      await writeAdminAuditLog(req, { action: `admin.staging.${action}`, resource: 'stagingPower', resourceId: 'staging', after: result })
+      return result
+    } catch (err) {
+      return reply.code(503).send({ error: `Falha ao ${action === 'on' ? 'ligar' : 'desligar'} staging: ${err.message}` })
+    }
+  })
 }

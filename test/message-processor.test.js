@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { applyConversionsAndBranding, appendBrandingFooter, buildProcessedMessage, DEFAULT_BRANDING_CTA_TEXT, extractKeywordTokens, hasSignificantTokenOverlap, isCouponAnnouncement, isValidBrandingLink, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks } from '../src/messageProcessor.js'
+import { applyConversionsAndBranding, appendBrandingFooter, buildProcessedMessage, DEFAULT_BRANDING_CTA_TEXT, extractKeywordTokens, hasSignificantTokenOverlap, isCouponAnnouncement, isValidBrandingLink, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, stripUrlsFromText } from '../src/messageProcessor.js'
 
 test('sanitizeInviteLinks remove convites WhatsApp e Telegram preservando oferta', () => {
   const original = 'Oferta top https://amzn.to/item\nEntre no grupo https://chat.whatsapp.com/AbCdEf12345 e t.me/+ConviteXYZ'
@@ -238,4 +238,41 @@ test('isCouponAnnouncement retorna false para texto vazio ou sem cupom', () => {
   assert.equal(isCouponAnnouncement(''), false)
   assert.equal(isCouponAnnouncement('   '), false)
   assert.equal(isCouponAnnouncement('Produto incrível ADIDAS disponível'), false, 'palavra maiúscula sem cupom')
+})
+
+// Regressão — bug introduzido em PR #1061: stripUrlsFromText removia a linha
+// inteira quando a URL do produto (já convertida para afiliado) e a URL de
+// cupom estavam na MESMA LINHA, matando o link do produto e deixando a
+// mensagem vazia → espelhamento parava para mensagens nesse formato.
+test('stripUrlsFromText preserva link do produto quando na mesma linha do cupom', () => {
+  const productAffiliate = 'https://shopee.prf.hn/affiliate/produto123'
+  const couponUrl = 'https://s.shopee.com.br/couponXYZ'
+  const text = `OFERTA! ${productAffiliate} 🏷️ Cupons: ${couponUrl}`
+
+  const result = stripUrlsFromText(text, [couponUrl])
+
+  assert.ok(result.includes(productAffiliate), 'link do produto afiliado deve ser preservado')
+  assert.equal(result.includes(couponUrl), false, 'URL do cupom deve ser removida')
+})
+
+test('stripUrlsFromText remove a linha inteira quando só tem URL de cupom (CTA órfão)', () => {
+  const couponUrl = 'https://s.shopee.com.br/couponXYZ'
+  const text = `OFERTA incrível!\n🏷️ Cupons disponíveis aqui: ${couponUrl}`
+
+  const result = stripUrlsFromText(text, [couponUrl])
+
+  assert.ok(result.includes('OFERTA incrível'), 'texto do produto deve ser preservado')
+  assert.equal(result.includes(couponUrl), false, 'URL do cupom deve ser removida')
+  assert.equal(result.includes('Cupons disponíveis aqui'), false, 'CTA órfão deve ser removido')
+})
+
+test('stripUrlsFromText: mensagem com produto + cupom na mesma linha não fica vazia', () => {
+  const productAffiliate = 'https://shopee.prf.hn/affiliate/abc'
+  const couponUrl = 'https://s.shopee.com.br/cupomABC'
+  const text = `Produto TOP ${productAffiliate} | Cupom: ${couponUrl}`
+
+  const result = stripUrlsFromText(text, [couponUrl])
+
+  assert.ok(result.trim().length > 0, 'mensagem não pode ficar vazia')
+  assert.ok(result.includes(productAffiliate), 'produto afiliado preservado')
 })

@@ -219,6 +219,23 @@ o processo no boot — vide seção "D-3" abaixo. Gere uma por ambiente com:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
+## Liga/desliga staging pelo painel admin (economia de RAM)
+
+Como staging e prod dividem o mesmo VPS, o painel admin de prod tem um botão
+para **parar/subir os apps PM2 de staging** quando não há validação em curso,
+liberando RAM (parar `visual-staging` + `api-staging` libera ~1-1.4 GB). Backend
+em `src/ops/stagingPower.js`; rotas `GET/POST /api/admin/staging-power`
+(`tech:read`/`tech:write`, auditado em `AdminAuditLog`); botão em
+`dashboard/app/admin/page.js` (`StagingPowerCard`).
+
+- Usa `execFile` (sem shell, sem interpolação); a ação é allowlist `on`/`off`.
+- O **`on` sobe do `cwd` de staging** (`STAGING_DIR`, default `~/wabot-staging`)
+  para o pm2 resolver o `ecosystem.config.cjs` e o `.env` CERTOS — respeita a
+  pegadinha #9 (supervisor/api no diretório errado lê o `.env` errado).
+- Só roda no host de **produção** (`APP_ENV != staging`).
+- Envs opcionais: `STAGING_PM2_APPS` (default `api-staging visual-staging`),
+  `STAGING_DIR`, `PM2_BIN`. Teste: `test/ops-staging-power.test.js`.
+
 ## D-3 — Criptografia de credenciais em repouso (canônico)
 
 As credenciais de afiliado (cookie de sessão ML/Amazon, tokens OAuth, secret da

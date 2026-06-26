@@ -1,5 +1,6 @@
 import sharp from 'sharp'
 import { extractShopeeIds, resolveShopeeShortLink as resolveShopeeShortLinkShared } from './shopee.js'
+import { computeMutationCrop } from '../core/imageMutationCrop.js'
 
 const OG_IMAGE_RE = [
   /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
@@ -429,8 +430,13 @@ export async function fetchProductImage(platform, productUrl, creds) {
 // (HEIC sem libheif, AVIF, ou bytes corrompidos), o sharp falha e a imagem
 // chega quebrada no WhatsApp. Pré-gerando o thumbnail aqui, a Baileys pula
 // sua chamada interna ao sharp (messages.js:132).
-export async function normalizeImageForWhatsApp(buf) {
+// `opts.mutation` (opcional): { groupId, date? } liga o anti-fingerprint de
+// canal — crop determinístico de 1-2px + qualidade JPEG variada (85-92)
+// aplicados NESTE MESMO encode (sem 2º encode JPEG sobre a imagem já q95).
+// Default (sem mutation) = comportamento histórico idêntico (q95 mozjpeg 4:4:4).
+export async function normalizeImageForWhatsApp(buf, opts = {}) {
   if (!buf?.length) return null
+  const mutation = opts.mutation || null
   try {
     const meta = await sharp(buf, { failOn: 'none' }).metadata()
     if (!meta?.width || !meta?.height) return null
@@ -440,18 +446,48 @@ export async function normalizeImageForWhatsApp(buf) {
     // própria infra, então enviar com qualidade folgada (q=95 mozjpeg
     // + sharpen leve) sobrevive melhor à 2ª compressão. Limite de
     // 1600 cobre fotos grandes do ML/Shopee/Amazon sem upscale.
-    const main = await sharp(buf, { failOn: 'none' })
-      .rotate()
-      .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
-      .sharpen({ sigma: 0.6 })
-      .jpeg({ quality: 95, mozjpeg: true, chromaSubsampling: '4:4:4' })
-      .toBuffer()
+    let main
+    if (mutation) {
+      // Anti-fingerprint de canal num ÚNICO encode JPEG: renderiza resize+
+      // sharpen em RAW (lossless) só para medir as dimensões pós-resize e
+      // recortar; o crop + a qualidade variada vão no único toBuffer() JPEG.
+      // Falha na mutação NUNCA derruba o envio — cai para o encode q95 normal.
+      try {
+        const { data, info } = await sharp(buf, { failOn: 'none' })
+          .rotate()
+          .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
+          .sharpen({ sigma: 0.6 })
+          .raw()
+          .toBuffer({ resolveWithObject: true })
+        const crop = computeMutationCrop(info, { groupId: mutation.groupId, date: mutation.date })
+        let pipeline = sharp(data, { raw: { width: info.width, height: info.height, channels: info.channels } })
+        if (crop) pipeline = pipeline.extract({ left: crop.left, top: crop.top, width: crop.width, height: crop.height })
+        main = await pipeline
+          .jpeg({ quality: crop ? crop.quality : 95, mozjpeg: true, chromaSubsampling: '4:4:4' })
+          .toBuffer()
+      } catch {
+        main = await sharp(buf, { failOn: 'none' })
+          .rotate()
+          .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
+          .sharpen({ sigma: 0.6 })
+          .jpeg({ quality: 95, mozjpeg: true, chromaSubsampling: '4:4:4' })
+          .toBuffer()
+      }
+    } else {
+      main = await sharp(buf, { failOn: 'none' })
+        .rotate()
+        .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
+        .sharpen({ sigma: 0.6 })
+        .jpeg({ quality: 95, mozjpeg: true, chromaSubsampling: '4:4:4' })
+        .toBuffer()
+    }
 
     // jpegThumbnail é o que o WA exibe de cara em link previews e
     // imageMessages enquanto a mídia full-res é carregada. 200x200 q=60
     // estourava ao ser renderizado em cards grandes (~800px no retina).
     // 500x500 q=80 cabe folgado no campo protobuf (~50-80KB) e mantém
-    // a foto nítida desde o primeiro frame.
+    // a foto nítida desde o primeiro frame. (O thumbnail não é mutado —
+    // anti-fingerprint sempre incidiu só sobre a imagem principal.)
     const thumbnail = await sharp(buf, { failOn: 'none' })
       .rotate()
       .resize({ width: 500, height: 500, fit: 'inside', withoutEnlargement: true })
