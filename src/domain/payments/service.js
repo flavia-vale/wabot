@@ -23,6 +23,38 @@ export function resolvePlanForPayment({ preferredPlan = null, amount = null, pla
   return inferPlanFromAmountWithPlans(amount, plans)
 }
 
+const DEFAULT_ATTRIBUTION = { attributionWindowDays: 30, attributionModel: 'last_non_direct' }
+
+async function getAffiliateAttributionSettings(tx) {
+  if (typeof tx.affiliateSettings?.findFirst !== 'function') return DEFAULT_ATTRIBUTION
+  const settings = await tx.affiliateSettings.findFirst({ where: { id: 1 } }).catch(() => null)
+  return {
+    attributionWindowDays: settings?.attributionWindowDays ?? DEFAULT_ATTRIBUTION.attributionWindowDays,
+    attributionModel: settings?.attributionModel ?? DEFAULT_ATTRIBUTION.attributionModel,
+  }
+}
+
+async function resolveAffiliateAttributionSnapshot(tx, userId, nowDate) {
+  const settings = await getAffiliateAttributionSettings(tx)
+  const user = await tx.user.findUnique({ where: { id: userId }, select: { affiliateProfileId: true } })
+  const since = new Date(nowDate.getTime() - Math.max(0, Number(settings.attributionWindowDays) || 0) * 24 * 60 * 60 * 1000)
+  const touch = typeof tx.affiliateAttributionTouch?.findFirst === 'function'
+    ? await tx.affiliateAttributionTouch.findFirst({
+      where: { userId, touchedAt: { gte: since } },
+      orderBy: { touchedAt: 'desc' },
+      select: { affiliateId: true, clickId: true },
+    }).catch(() => null)
+    : null
+
+  const affiliateProfileIdAtCheckout = touch?.affiliateId ?? user?.affiliateProfileId ?? null
+  return {
+    affiliateProfileIdAtCheckout,
+    affiliateClickId: touch?.clickId ?? null,
+    attributionModel: settings.attributionModel,
+    attributionLockedAt: nowDate,
+  }
+}
+
 export function createPaymentsService({ db, now = () => new Date() } = {}) {
   if (!db) throw new Error('createPaymentsService: db é obrigatório')
 
@@ -49,6 +81,7 @@ export function createPaymentsService({ db, now = () => new Date() } = {}) {
   async function activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount }) {
     const nowDate = now()
     const user = await tx.user.findUnique({ where: { id: userId }, select: { accessExpiresAt: true } })
+    const attribution = await resolveAffiliateAttributionSnapshot(tx, userId, nowDate)
     const currentExpiry = user?.accessExpiresAt ? new Date(user.accessExpiresAt) : null
     const baseDate = currentExpiry && currentExpiry > nowDate ? currentExpiry : nowDate
     const expiresAt = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000)
@@ -63,10 +96,10 @@ export function createPaymentsService({ db, now = () => new Date() } = {}) {
       throw err
     }
     if (existing) {
-      await tx.payment.update({ where: { id: existing.id }, data: { status: 'approved', expiresAt, lastSyncedAt: nowDate } })
+      await tx.payment.update({ where: { id: existing.id }, data: { status: 'approved', expiresAt, lastSyncedAt: nowDate, ...attribution } })
     } else {
       await tx.payment.create({
-        data: { userId, mpPaymentId: String(mpPaymentId), plan, status: 'approved', amount, expiresAt, lastSyncedAt: nowDate },
+        data: { userId, mpPaymentId: String(mpPaymentId), plan, status: 'approved', amount, expiresAt, lastSyncedAt: nowDate, ...attribution },
       })
     }
     await tx.user.update({ where: { id: userId }, data: { plan, accessExpiresAt: expiresAt } })
