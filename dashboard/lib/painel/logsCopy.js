@@ -30,7 +30,12 @@ export function explainErrorMsg(errorMsg) {
     return 'Mensagem fora das regras de encaminhamento que você configurou para este grupo.'
   }
   if (errorMsg.startsWith('skip:decrypt_failed')) return 'O WhatsApp não conseguiu decifrar essa mensagem na sua ponta. Costuma ser pontual.'
-  if (errorMsg.startsWith('skip:incoming_error')) return 'Tivemos um erro ao processar essa mensagem antes de enviar.'
+  if (errorMsg.startsWith('skip:incoming_error')) {
+    const detail = errorMsg.slice('skip:incoming_error'.length).replace(/^:/, '').trim()
+    return detail
+      ? `Tivemos um erro ao processar essa mensagem antes de enviar. Detalhe técnico: ${detail}`
+      : 'Tivemos um erro ao processar essa mensagem antes de enviar.'
+  }
   if (errorMsg.startsWith('timeout:send')) return 'O envio para o canal/grupo de destino demorou demais e foi cancelado.'
   if (errorMsg.startsWith('timeout:incoming')) return 'A leitura e o preparo dessa promoção demoraram demais. Costuma ser site de produto lento.'
   if (errorMsg.startsWith('error:queue_full')) return 'Fila interna de envios cheia neste instante — tente novamente em alguns minutos.'

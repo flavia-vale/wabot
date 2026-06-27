@@ -43,6 +43,18 @@ test('friendlyMobileLogError traduz warnings específicos do Mercado Livre', () 
   assert.match(friendlyMobileLogError('warning:ml_affiliate_busy'), /Outra conversão/i)
 })
 
+test('friendlyMobileLogError expõe o detalhe técnico do skip:incoming_error', () => {
+  const result = friendlyMobileLogError('skip:incoming_error:Cannot read properties of undefined (reading foo)')
+  assert.match(result, /processar essa mensagem/i)
+  assert.match(result, /Detalhe técnico: Cannot read properties of undefined \(reading foo\)/)
+})
+
+test('friendlyMobileLogError sem detalhe mantém a frase genérica do incoming_error', () => {
+  const result = friendlyMobileLogError('skip:incoming_error')
+  assert.match(result, /processar essa mensagem/i)
+  assert.ok(!result.includes('Detalhe técnico'), 'sem detalhe não deve anexar rótulo técnico')
+})
+
 test('ações seguras incluem cópia sempre que há link e abertura só para URL válida', () => {
   const actions = mobileLogLinkActions({
     link: 'https://loja.test/produto',
