@@ -8,7 +8,7 @@
  * componentes existentes (ConfirmDialog, HelpLink, AddChannelModal, badges,
  * ChannelHealthPanel). Nenhuma mudança no back end — só o layout. */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -81,7 +81,6 @@ export default function GruposPage() {
   const [targetEditorId, setTargetEditorId] = useState(null)
   const [targetPostIds, setTargetPostIds] = useState([])
   const [targetLoading, setTargetLoading] = useState(false)
-  const autoFixingImageModeRef = useRef(new Set())
   const [showChannelModal, setShowChannelModal] = useState(false)
   const [channelButtonGroupId, setChannelButtonGroupId] = useState(null)
   const [tab, setTab] = useState('monitor')
@@ -100,7 +99,6 @@ export default function GruposPage() {
     try {
       const list = await api.groups()
       setGroups(list)
-      await ensureHiddenImageDefaults(list)
     } catch (err) {
       setActionError(err.message)
     } finally {
@@ -117,7 +115,6 @@ export default function GruposPage() {
         setPlanSubject({ plan: me?.plan ?? 'trial', accessExpiresAt: me?.accessExpiresAt ?? null })
         if (!active) return
         setGroups(data)
-        await ensureHiddenImageDefaults(data)
       })
       .catch((err) => { if (active) setActionError(err.message) })
       .finally(() => { if (active) setLoadingGroups(false) })
@@ -196,21 +193,6 @@ export default function GruposPage() {
       return false
     } finally {
       setSavingGroupId((current) => current === id ? null : current)
-    }
-  }
-
-  async function ensureHiddenImageDefaults(list) {
-    const monitorGroups = list.filter((g) => g.role === 'monitor')
-    for (const group of monitorGroups) {
-      const needsFix = (group.imageMode ?? 'original') !== 'original' || group.fallbackToOriginal === false
-      if (!needsFix || autoFixingImageModeRef.current.has(group.id)) continue
-      autoFixingImageModeRef.current.add(group.id)
-      await handleUpdateGroup(group.id, {
-        imageMode: 'original',
-        imageLinkTarget: group.imageLinkTarget ?? 'first',
-        fallbackToOriginal: true,
-      })
-      autoFixingImageModeRef.current.delete(group.id)
     }
   }
 
@@ -327,6 +309,24 @@ export default function GruposPage() {
             })}
           </div>
           <p className="pnl-hint" style={{ marginTop: 6 }}>Sem seleção, usa as plataformas globais.</p>
+        </div>
+        <div>
+          <p className="pnl-label" style={{ marginBottom: 6 }}>Imagem das ofertas espelhadas</p>
+          <select
+            className="pnl-input"
+            value={g.imageMode ?? 'original'}
+            onChange={(e) => handleUpdateGroup(g.id, { imageMode: e.target.value })}
+          >
+            <option value="fetch">Imagem oficial da loja</option>
+            <option value="original">Imagem que veio na mensagem</option>
+            <option value="none">Sem imagem (só o link com prévia)</option>
+          </select>
+          <p className="pnl-hint" style={{ marginTop: 6 }}>
+            <strong>Imagem oficial da loja</strong>: busca a foto direto no site do produto, sem marca d’água de outros grupos (se o site não retornar, usa a imagem da mensagem). <strong>Imagem que veio na mensagem</strong>: reaproveita a foto do grupo de origem. <strong>Sem imagem</strong>: envia só o link com a prévia automática do WhatsApp.
+          </p>
+          <p className="pnl-hint" style={{ marginTop: 6, color: '#b5742a' }}>
+            Na <strong>Shopee</strong>, a imagem oficial nem sempre está disponível: quando a loja não retorna a foto, a oferta usa a imagem que veio na mensagem (que pode ter marca d’água). Amazon e Mercado Livre buscam a foto oficial normalmente.
+          </p>
         </div>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

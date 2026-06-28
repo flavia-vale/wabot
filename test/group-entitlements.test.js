@@ -27,6 +27,22 @@ test('buildEntitledGroupConfig removes all channel monitors, posts and targets f
   assert.deepEqual(result.groups.postDetails, [{ waJid: 'post@g.us', kind: 'group', welcomeMsg: 'oi', channelButtonJid: null, channelButtonName: null }])
 })
 
+test('buildEntitledGroupConfig reflects per-group imageMode from the DB (default original)', () => {
+  const custom = [
+    { id: 'm-default', role: 'monitor', waJid: 'a@g.us', kind: 'group', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' },
+    { id: 'm-fetch', role: 'monitor', waJid: 'b@g.us', kind: 'group', imageMode: 'fetch', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' },
+    { id: 'm-none', role: 'monitor', waJid: 'c@g.us', kind: 'group', imageMode: 'none', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' },
+  ]
+  const result = buildEntitledGroupConfig({ groups: custom, groupTargets: [], planSubject: { plan: 'pro' } })
+  const byJid = Object.fromEntries(result.groups.monitor.map(g => [g.waJid, g]))
+
+  assert.equal(byJid['a@g.us'].imageMode, 'original')
+  assert.equal(byJid['b@g.us'].imageMode, 'fetch')
+  assert.equal(byJid['c@g.us'].imageMode, 'none')
+  // fallbackToOriginal segue sempre ligado para o modo 'fetch' ter rede de segurança.
+  assert.equal(byJid['b@g.us'].fallbackToOriginal, true)
+})
+
 test('buildEntitledGroupConfig keeps channels for active trial and Pro', () => {
   const trial = buildEntitledGroupConfig({ groups, groupTargets, planSubject: { plan: 'trial', accessExpiresAt: new Date(Date.now() + 86400000) } })
   const pro = buildEntitledGroupConfig({ groups, groupTargets, planSubject: { plan: 'pro' } })

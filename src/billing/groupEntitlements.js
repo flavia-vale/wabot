@@ -10,7 +10,14 @@ function toMonitorGroup(group, targetPostJids = []) {
     id: group.id,
     waJid: group.waJid,
     kind: group.kind,
-    imageMode: 'original',
+    // A escolha de imagem é por grupo monitorado (UI no painel de grupos).
+    // 'original' = reaproveita a foto da mensagem do grupo de origem;
+    // 'fetch' = busca a imagem oficial no site da loja; 'none' = sem imagem.
+    // Default 'original' preserva o comportamento histórico (antes era fixo aqui)
+    // para grupos sem escolha explícita. fallbackToOriginal fica sempre ligado:
+    // no modo 'fetch', se o site não retornar imagem, cai na foto da mensagem em
+    // vez de mandar a oferta sem imagem.
+    imageMode: group.imageMode ?? 'original',
     imageLinkTarget: group.imageLinkTarget ?? 'first',
     fallbackToOriginal: true,
     blockedKeywords: group.blockedKeywords,
