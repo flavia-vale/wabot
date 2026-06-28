@@ -153,6 +153,33 @@ function stubCouponResolution(t) {
   t.after(() => { globalThis.fetch = originalFetch })
 }
 
+function stubCouponResolutionThenGeneratedAffiliate(t, generatedFinalUrl) {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    const raw = String(url)
+    if (raw.includes('cupomAFIL') || raw.includes('cupomDIRETO')) {
+      return {
+        ok: true, status: 302, url,
+        headers: { get: (key) => String(key).toLowerCase() === 'location' ? generatedFinalUrl : null },
+        body: null,
+        text: async () => '',
+      }
+    }
+    if (raw === generatedFinalUrl) {
+      return {
+        ok: true, status: 200, url: generatedFinalUrl,
+        headers: { get: () => null }, body: null, text: async () => '',
+      }
+    }
+    return {
+      ok: true, status: 200,
+      url: 'https://shopee.com.br/m/cupom?promotionId=999&utm_source=an_123&utm_medium=affiliates&gads_t_sig=XYZ',
+      headers: { get: () => null }, body: null, text: async () => '',
+    }
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+}
+
 // stripAffiliateTracking: remove tracking de terceiro, preserva identidade do
 // cupom, idempotente.
 test('stripAffiliateTracking remove tracking de terceiro e preserva a identidade do cupom', () => {
@@ -184,7 +211,7 @@ test('normalizeShopeeCouponOrigin troca rotas app-only por /m/cupom-de-desconto 
 // aceito"; ela precisa sair como a landing web /m/cupom-de-desconto.
 test('convert() converte cupom Shopee usando landing web segura quando COUPON_LINK_CONVERT=true', async (t) => {
   withCouponConvertEnabled(t)
-  stubCouponResolution(t)
+  stubCouponResolutionThenGeneratedAffiliate(t, 'https://shopee.com.br/voucher/details?promotionId=999&voucherCode=ABC&utm_source=an_999&utm_medium=affiliates&uls_trackid=OWN')
   let sentQuery = ''
   t.after(stubAxiosPost(async (_url, body) => {
     sentQuery = body.query
@@ -192,7 +219,7 @@ test('convert() converte cupom Shopee usando landing web segura quando COUPON_LI
   }))
 
   const result = await convert('https://s.shopee.com.br/40eQK1or1O', CREDS)
-  assert.equal(result, 'https://s.shopee.com.br/cupomAFIL123')
+  assert.equal(result, 'https://shopee.com.br/m/cupom-de-desconto?promotionId=999&voucherCode=ABC&utm_source=an_999&utm_medium=affiliates&uls_trackid=OWN')
   assert.ok(sentQuery.includes('https://shopee.com.br/m/cupom-de-desconto'), 'origin enviada usa landing web segura')
   assert.ok(sentQuery.includes('promotionId=999'), 'origin mantém a identidade do cupom')
   assert.ok(!/\/m\/cupom(?:\?|$)|\/buyer\/voucher|\/voucher\/details|utm_source|utm_medium|gads_t_sig/.test(sentQuery), 'origin não leva rota mobile/app nem tracking de terceiro')
@@ -200,6 +227,7 @@ test('convert() converte cupom Shopee usando landing web segura quando COUPON_LI
 
 test('convert() converte URL direta de cupom Shopee com COUPON_LINK_CONVERT=true sem rota app-only', async (t) => {
   withCouponConvertEnabled(t)
+  stubCouponResolutionThenGeneratedAffiliate(t, 'https://shopee.com.br/buyer/voucher?promotionId=999&voucherCode=ABC&utm_source=an_999&utm_medium=affiliates')
   let sentQuery = ''
   t.after(stubAxiosPost(async (_url, body) => {
     sentQuery = body.query
@@ -207,7 +235,7 @@ test('convert() converte URL direta de cupom Shopee com COUPON_LINK_CONVERT=true
   }))
 
   const result = await convert('https://shopee.com.br/m/cupom?promotionId=999&voucherCode=ABC', CREDS)
-  assert.equal(result, 'https://s.shopee.com.br/cupomDIRETO')
+  assert.equal(result, 'https://shopee.com.br/m/cupom-de-desconto?promotionId=999&voucherCode=ABC&utm_source=an_999&utm_medium=affiliates')
   assert.ok(sentQuery.includes('https://shopee.com.br/m/cupom-de-desconto'))
   assert.ok(!sentQuery.includes('/m/cupom?'))
   assert.ok(!sentQuery.includes('/voucher/details'))

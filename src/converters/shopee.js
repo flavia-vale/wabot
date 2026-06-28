@@ -87,17 +87,43 @@ function isShopeeStoreHost(hostname) {
 // Para converter sem cair nessa página, a origin enviada à API de afiliado é a
 // landing web pública de cupons (`/m/cupom-de-desconto`), preservando parâmetros
 // úteis e removendo tracking de terceiros antes da mutation.
-export function normalizeShopeeCouponOrigin(rawUrl) {
-  const stripped = stripAffiliateTracking(rawUrl)
+function normalizeShopeeCouponLanding(rawUrl, { stripTracking = true } = {}) {
+  const input = stripTracking ? stripAffiliateTracking(rawUrl) : String(rawUrl)
   let u
-  try { u = new URL(String(stripped)) } catch { return stripped }
-  if (!isShopeeStoreHost(u.hostname) || extractShopeeIds(stripped)) return stripped
-  if (!SHOPEE_UNSAFE_COUPON_PATH_RE.test(u.pathname)) return stripped
+  try { u = new URL(String(input)) } catch { return input }
+  if (!isShopeeStoreHost(u.hostname) || extractShopeeIds(input)) return input
+  if (!SHOPEE_UNSAFE_COUPON_PATH_RE.test(u.pathname)) return input
   u.protocol = 'https:'
   u.hostname = 'shopee.com.br'
   u.pathname = SHOPEE_COUPON_SAFE_PATH
   u.hash = ''
   return u.toString()
+}
+
+export function normalizeShopeeCouponOrigin(rawUrl) {
+  return normalizeShopeeCouponLanding(rawUrl, { stripTracking: true })
+}
+
+function isUnsafeShopeeCouponRoute(rawUrl) {
+  try {
+    const u = new URL(String(rawUrl))
+    return isShopeeStoreHost(u.hostname) && !extractShopeeIds(rawUrl) && SHOPEE_UNSAFE_COUPON_PATH_RE.test(u.pathname)
+  } catch {
+    return false
+  }
+}
+
+// Mesmo quando a origin enviada à API é segura, a Shopee pode devolver um
+// shortLink que redireciona para uma rota app-only de voucher. Pós-validamos o
+// shortLink e, se ele cair nesse fluxo, enviamos a URL longa afiliada reescrita
+// para a landing web pública — preservando os parâmetros de atribuição gerados
+// pela Shopee e eliminando a página de erro no clique.
+async function stabilizeShopeeCouponLink(shortLink) {
+  const resolved = await resolveShopeeShortLink(shortLink, { timeoutMs: 5000 })
+  if (isUnsafeShopeeCouponRoute(resolved)) {
+    return normalizeShopeeCouponLanding(resolved, { stripTracking: false })
+  }
+  return shortLink
 }
 
 // Chama a mutation generateShortLink da API de afiliado para `originUrl` e
@@ -155,7 +181,8 @@ export async function convert(url, creds) {
   if (shouldConvertCouponLinks()) {
     const origin = normalizeShopeeCouponOrigin(canonical)
     try {
-      return await generateAffiliateShortLink(origin, creds)
+      const shortLink = await generateAffiliateShortLink(origin, creds)
+      return await stabilizeShopeeCouponLink(shortLink)
     } catch {
       // Fallback seguro: se a Shopee recusar a origin, removemos o link para
       // nunca vazar afiliado de terceiro.
