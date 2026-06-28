@@ -275,7 +275,7 @@ function withAffiliateTag(target, tag) {
 async function convertStoreUrlWithoutAsin(target, tag, creds, hasCookies) {
   const longUrl = withAffiliateTag(target, tag)
   if (hasCookies) {
-    const { shortUrl, transient } = await createAmazonShortLink(target, tag, creds)
+    const { shortUrl, transient } = await createAmazonShortLink(longUrl, tag, creds)
     if (shortUrl) return shortUrl
     logger.warn({ target, longUrl, transient }, 'Amazon: API não retornou shortUrl para link sem ASIN — fallback para ?tag=')
     return { url: longUrl, warning: transient ? null : 'amazon_cookies_expired' }

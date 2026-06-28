@@ -217,13 +217,33 @@ test('Amazon: link sem ASIN com COUPON_LINK_CONVERT=true gera amzn.to quando coo
     const couponUrl = 'https://www.amazon.com.br/prime?ref=promo'
     const restore = mockAxiosOnce(async (url, options) => {
       assert.ok(url.includes('sitestripe/getShortUrl'))
-      assert.equal(options.params.longUrl, couponUrl)
+      assert.equal(options.params.longUrl, `${couponUrl}&tag=${CREDS.tag}`)
       assert.equal(options.params.tag, CREDS.tag)
       return { status: 200, data: { shortUrl: 'https://amzn.to/3O3r9E8' }, headers: {} }
     })
     try {
       const result = await convert(couponUrl, CREDS)
       assert.equal(result, 'https://amzn.to/3O3r9E8')
+    } finally {
+      restore()
+    }
+  })
+})
+
+
+test('Amazon: link sem ASIN remove tag antiga antes de gerar amzn.to convertido', async () => {
+  await withCouponConvert('true', async () => {
+    const couponUrl = 'https://www.amazon.com.br/prime?ref=promo&tag=promobaby07-20'
+    const expectedConvertedLongUrl = 'https://www.amazon.com.br/prime?ref=promo&tag=flaviavale-20'
+    const restore = mockAxiosOnce(async (url, options) => {
+      assert.ok(url.includes('sitestripe/getShortUrl'))
+      assert.equal(options.params.longUrl, expectedConvertedLongUrl)
+      assert.equal(options.params.tag, CREDS.tag)
+      return { status: 200, data: { shortUrl: 'https://amzn.to/converted123' }, headers: {} }
+    })
+    try {
+      const result = await convert(couponUrl, CREDS)
+      assert.equal(result, 'https://amzn.to/converted123')
     } finally {
       restore()
     }
