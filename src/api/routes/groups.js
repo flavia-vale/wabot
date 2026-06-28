@@ -81,7 +81,9 @@ export async function groupsRoutes(app, opts = {}) {
 
     try {
       const group = await db.group.create({
-        data: { userId: req.user.sub, waJid, name, role, kind, forwardMode: FORWARD_MODE.LINK_ONLY },
+        // Grupos monitorados nascem em 'original' (reaproveita a foto da
+        // mensagem de origem) — padrão histórico; o cliente pode trocar no painel.
+        data: { userId: req.user.sub, waJid, name, role, kind, forwardMode: FORWARD_MODE.LINK_ONLY, imageMode: role === 'monitor' ? 'original' : 'none' },
       })
       trackAnalyticsEventSafe({
         userId: req.user.sub,
