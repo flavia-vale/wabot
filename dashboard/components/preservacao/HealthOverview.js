@@ -27,33 +27,35 @@ export function HealthOverview() {
 
   return (
     <section className="bg-white rounded-2xl shadow p-4">
-      <header className="flex items-center justify-between mb-3">
+      <header className="mb-3 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="font-semibold text-gray-800 text-sm">🩺 Saúde dos canais</h3>
-          <p className="text-xs text-gray-500">
+          <p className="break-words text-xs text-gray-500">
             Cada canal de destino tem um status: verde envia normal, amarelo está com falhas, vermelho está pausado pelo bot, cinza sem dados ainda.
           </p>
         </div>
-        <button onClick={load} className="text-xs text-green-700 hover:underline">Atualizar</button>
+        <button onClick={load} className="min-h-11 rounded-lg px-3 py-2 text-xs font-semibold text-green-700 hover:bg-green-50 hover:underline sm:min-h-0 sm:px-0 sm:py-0">Atualizar</button>
       </header>
       {error && <ErrorState message={error} />}
       {!items && !error && <LoadingState message="Carregando saúde..." />}
       {items && items.length === 0 && <p className="text-xs text-gray-500">Sem canais de destino configurados.</p>}
       {items && items.length > 0 && (
-        <table className="w-full text-xs">
+        <div className="overflow-x-auto rounded-lg border border-gray-100 sm:border-0">
+          <table className="w-full min-w-[520px] text-xs">
           <thead className="text-gray-500 text-left">
             <tr><th className="py-1">Canal</th><th>Status</th><th>Última falha</th></tr>
           </thead>
           <tbody>
             {items.map(it => (
               <tr key={it.groupId} className="border-t border-gray-100">
-                <td className="py-1.5 pr-2 font-medium text-gray-700">{it.name || it.waJid}</td>
+                <td className="py-1.5 pr-2 font-medium text-gray-700 break-words">{it.name || it.waJid}</td>
                 <td>{STATUS_LABEL[it.health?.status ?? 'gray'] ?? '⚫ Sem dados'}</td>
                 <td className="text-gray-500">{it.health?.lastFailureAt ? new Date(it.health.lastFailureAt).toLocaleString('pt-BR') : '—'}</td>
               </tr>
             ))}
           </tbody>
-        </table>
+          </table>
+        </div>
       )}
     </section>
   )

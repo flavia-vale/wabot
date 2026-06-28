@@ -82,7 +82,7 @@ function StatCard({ label, value, helper = null }) {
   return (
     <div className="rounded-xl bg-white border border-gray-100 p-4 shadow-sm">
       <p className="text-xs font-bold uppercase tracking-wide text-gray-500">{label}</p>
-      <p className="mt-1 text-2xl font-black text-gray-900">{value}</p>
+      <p className="mt-1 break-words text-2xl font-black text-gray-900">{value}</p>
       {helper && <p className="mt-1 text-xs text-gray-500">{helper}</p>}
     </div>
   )
@@ -145,9 +145,9 @@ function AffiliateRulesCard({ config = DEFAULT_AFFILIATE_CONFIG, affiliateLink =
             A janela de atribuição atual é de <strong>{attributionDays} dias</strong>, e a atribuição é congelada no momento do pagamento para reduzir disputas e perda de rastreio.
           </p>
           {affiliateLink ? (
-            <p className="mt-2 leading-6">Use sempre este link: <code className="rounded bg-amber-100 px-1 py-0.5 text-xs">{affiliateLink}</code></p>
+            <p className="mt-2 leading-6">Use sempre este link: <code className="rounded bg-amber-100 px-1 py-0.5 text-xs break-all">{affiliateLink}</code></p>
           ) : (
-            <p className="mt-2 leading-6">Você pode resgatar seu link personalizado nesta página, em <code className="rounded bg-amber-100 px-1 py-0.5 text-xs font-bold text-amber-800">https://espelhagrupos.com.br/painel/afiliados</code>.</p>
+            <p className="mt-2 leading-6">Você pode resgatar seu link personalizado nesta página, em <code className="rounded bg-amber-100 px-1 py-0.5 text-xs font-bold text-amber-800 break-all">https://espelhagrupos.com.br/painel/afiliados</code>.</p>
           )}
         </div>
       </div>
@@ -357,23 +357,23 @@ export default function AffiliatePage() {
   const { stats = {}, months = [] } = data
 
   return (
-    <div className="max-w-2xl mx-auto p-6 space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6 p-4 sm:p-6">
       <h1 className="text-2xl font-black text-gray-900">Programa de Afiliados</h1>
 
       <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4">
         <p className="text-xs font-bold uppercase tracking-wide text-emerald-700 mb-2">Seu link de indicação</p>
-        <div className="flex items-center gap-2">
-          <code className="flex-1 rounded-lg bg-white border border-emerald-200 px-3 py-2 text-sm text-gray-800 overflow-x-auto">
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+          <code className="w-full min-w-0 flex-1 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800 break-all">
             {affiliateLink}
           </code>
           <button
             onClick={() => copyToClipboard(affiliateLink, () => { setCopied(true); setTimeout(() => setCopied(false), 2000) })}
-            className="rounded-lg bg-emerald-600 text-white px-3 py-2 text-sm font-semibold hover:bg-emerald-700 transition whitespace-nowrap"
+            className="min-h-11 w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 sm:w-auto whitespace-nowrap"
           >
             {copied ? 'Copiado!' : 'Copiar'}
           </button>
         </div>
-        <p className="text-xs text-emerald-600 mt-2">Código: <strong>{profile.code}</strong> · PIX: {profile.pixKey} ({PIX_KEY_TYPE_LABELS[profile.pixKeyType] ?? profile.pixKeyType})</p>
+        <p className="mt-2 break-words text-xs text-emerald-600">Código: <strong className="break-all">{profile.code}</strong> · PIX: <span className="break-all">{profile.pixKey}</span> ({PIX_KEY_TYPE_LABELS[profile.pixKeyType] ?? profile.pixKeyType})</p>
       </div>
 
       <AffiliateRulesCard config={affiliateConfig} affiliateLink={affiliateLink} />
