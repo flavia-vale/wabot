@@ -9,6 +9,7 @@ import { AddChannelModal } from '@/components/AddChannelModal'
 import { SelectChannelModal } from '@/components/SelectChannelModal'
 import { TypeBadge, FollowBadge, AdminBadge, HealthBadge } from '@/components/ChannelStatusBadges'
 import { ChannelHealthPanel } from '@/components/ChannelHealthPanel'
+import Link from 'next/link'
 import { usePainelHeader, PainelContentActions } from '../PainelShell'
 
 const roleLabels = {
@@ -173,7 +174,7 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
 
   const encaminhar = (g.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK'
 
-  const templateValue = g.templateKey == null ? '__inherit__' : (g.templateKey === '' ? '__relay__' : g.templateKey)
+  const templateValue = (g.templateKey == null || g.templateKey === '') ? '__relay__' : g.templateKey
   const templateApplied = g.templateKey !== null && g.templateKey !== ''
 
   const cachedIds = targetsCache[g.id]
@@ -234,10 +235,10 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
                   onSetActionError('O Módulo de Preservação Avançada está disponível no Trial ativo e no plano Pro.')
                   return
                 }
-                onUpdate(g.id, {
-                  forwardMode: encaminhar ? 'LINK_ONLY' : 'ALLOW_NO_LINK',
-                  noLinkScope: encaminhar ? null : (g.noLinkScope ?? 'TEXT_ONLY'),
-                })
+                onUpdate(g.id, encaminhar
+                  ? { forwardMode: 'LINK_ONLY' }
+                  : { forwardMode: 'ALLOW_NO_LINK', noLinkScope: g.noLinkScope ?? 'TEXT_ONLY' }
+                )
               }}
             ><span /></button>
             <div style={{ paddingTop: 3 }}>
@@ -276,13 +277,18 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
             value={templateValue}
             onChange={(e) => {
               const v = e.target.value
-              onUpdate(g.id, { templateKey: v === '__inherit__' ? null : v === '__relay__' ? '' : v })
+              onUpdate(g.id, { templateKey: v === '__relay__' ? '' : v })
             }}
           >
-            <option value="__inherit__">Usar padrão global (Configurações)</option>
             <option value="__relay__">Manter texto original convertido</option>
-            {templates.map((t) => <option key={t.key} value={t.key}>{t.name}</option>)}
+            {templates.map((t) => <option key={t.key} value={t.key}>Template: {t.name}</option>)}
           </select>
+          <Link
+            href="/painel/mensagens"
+            style={{ display: 'inline-block', marginTop: 8, fontSize: 12.5, color: 'var(--accent-strong)', textDecoration: 'none' }}
+          >
+            Criar ou editar templates →
+          </Link>
         </CfgRow>
 
         {templateApplied && (
@@ -296,7 +302,7 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
               value={g.primaryLinkTarget ?? ''}
               onChange={(e) => onUpdate(g.id, { primaryLinkTarget: e.target.value })}
             >
-              <option value="">Usar padrão global (Configurações)</option>
+              <option value="">Primeiro link (padrão)</option>
               <option value="first">Primeiro link da mensagem</option>
               <option value="last">Último link da mensagem</option>
             </select>
