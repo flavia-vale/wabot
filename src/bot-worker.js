@@ -2237,7 +2237,11 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }).catch(() => {})
         return
       }
-        finalText = applyConversionsAndBranding(sanitizedText, conversions, cfg.botConfig.brandingGroupLink, cfg.botConfig.brandingCtaText)
+        // Relay mode ("Manter texto original convertido") deve apenas trocar
+        // os links upstream pelos links convertidos do usuário. Variáveis globais
+        // de /painel/mensagens, como {{grupoLink}} e {{cupomLink}}, pertencem ao
+        // caminho de templates e não devem ser anexadas ao texto original.
+        finalText = applyConversionsAndBranding(sanitizedText, conversions)
         if (urlsToStrip.length) {
           const userCouponLink = String(cfg.botConfig.couponLink || '').trim()
           if (userCouponLink) {

@@ -41,6 +41,12 @@ function stripUnresolvedPlaceholders(text = '') {
     .trim()
 }
 
+function applyMirrorGlobalLinkVariables(body, botConfig = {}) {
+  return String(body || '')
+    .replace(/\{\{grupoLink\}\}/g, botConfig?.brandingGroupLink || '')
+    .replace(/\{\{cupomLink\}\}/g, botConfig?.couponLink || '')
+}
+
 export function resolveMirrorTemplateBody(botConfig, templateKey) {
   const key = String(templateKey || '').trim()
   if (!key) return null
@@ -152,12 +158,7 @@ export async function applyMirrorTemplate(text, {
     product: fields,
     link: fields.link,
     template: templateKey,
-    templateBody: body,
-    bonusMode: botConfig?.brandingGroupLink ? 'group' : '',
-    groupBonus: {
-      link: botConfig?.brandingGroupLink || '',
-      cta: botConfig?.brandingCtaText || '',
-    },
+    templateBody: applyMirrorGlobalLinkVariables(body, botConfig),
     preserveAutomationPlaceholders: false,
   })
   return stripUnresolvedPlaceholders(rendered) || text
