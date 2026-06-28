@@ -266,6 +266,23 @@ async function createAmazonShortLink(longUrl, tag, creds) {
   return { shortUrl: null, transient: lastStatus == null || lastStatus >= 500 }
 }
 
+function withAffiliateTag(target, tag) {
+  const u = new URL(target)
+  u.searchParams.set('tag', tag)
+  return u.toString()
+}
+
+async function convertStoreUrlWithoutAsin(target, tag, creds, hasCookies) {
+  const longUrl = withAffiliateTag(target, tag)
+  if (hasCookies) {
+    const { shortUrl, transient } = await createAmazonShortLink(target, tag, creds)
+    if (shortUrl) return shortUrl
+    logger.warn({ target, longUrl, transient }, 'Amazon: API não retornou shortUrl para link sem ASIN — fallback para ?tag=')
+    return { url: longUrl, warning: transient ? null : 'amazon_cookies_expired' }
+  }
+  return longUrl
+}
+
 function buildLongUrl(target, asin) {
   try {
     const pathname = new URL(target).pathname
@@ -306,12 +323,10 @@ export async function convert(url, creds) {
       // URL amazon.com.br, então (com a conversão de cupom ligada) anexamos a
       // tag à URL resolvida em vez de descartar. Só quando o target já está num
       // host Amazon REAL — não no encurtador não-resolvido, onde a tag não
-      // gruda em nada útil. Sem WebView issue: é a própria URL da loja, não um
-      // shortlink que redireciona.
+      // gruda em nada útil. Com cookies válidos do SiteStripe, tentamos gerar
+      // amzn.to também para Prime/cupons; se falhar, o fallback ?tag= credita.
       if (shouldConvertCouponLinks() && tag && AMAZON_STORE_HOST.test(new URL(target).hostname)) {
-        const u = new URL(target)
-        u.searchParams.set('tag', tag)
-        return u.toString()
+        return await convertStoreUrlWithoutAsin(target, tag, creds, hasCookies)
       }
       logger.warn({ url, target }, 'Amazon: ASIN não encontrado, abortando para evitar link malformado')
       return null
