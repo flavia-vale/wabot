@@ -1137,7 +1137,7 @@ async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
  */
 function deferReasonMessage(reason) {
   if (reason === 'burst_cap') {
-    return 'O bot está segurando os envios por alguns minutos para não mandar muitas mensagens de uma vez para este grupo/canal.'
+    return 'O bot está segurando os envios por alguns minutos para não mandar muitas mensagens de uma vez para este grupo/canal. A espera foi definida na página "Preservação por destino", no campo "Máximo de envios na janela".'
   }
   return `aguardando janela de envio do destino (${reason ?? 'throttle'})`
 }
