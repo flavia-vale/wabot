@@ -68,3 +68,33 @@ test('Amazon: ASIN ausente continua devolvendo null (segurança contra link malf
   const result = await convert('https://www.amazon.com.br/gp/help', CREDS)
   assert.equal(result, null)
 })
+
+test('Amazon: short link amzn.la é resolvido e convertido como amzn.to', async () => {
+  const restore = mockAxiosOnce(async (url, opts) => {
+    if (url.includes('sitestripe/getShortUrl')) {
+      return { status: 200, data: { shortUrl: 'https://amzn.to/abc123' }, headers: {} }
+    }
+    // resolveShortUrl segue o redirect do amzn.la até a página do produto
+    return { status: 200, request: { res: { responseUrl: LONG_URL } }, config: { url: LONG_URL } }
+  })
+  try {
+    const result = await convert('https://amzn.la/d/abc123', CREDS)
+    assert.equal(result, 'https://amzn.to/abc123')
+  } finally {
+    restore()
+  }
+})
+
+test('Amazon: amzn.la que não resolve para produto devolve null (sem link malformado)', async () => {
+  const restore = mockAxiosOnce(async (url) => {
+    // short link resolve para uma landing sem ASIN
+    const NO_ASIN = 'https://www.amazon.com.br/gp/bestsellers'
+    return { status: 200, request: { res: { responseUrl: NO_ASIN } }, config: { url: NO_ASIN } }
+  })
+  try {
+    const result = await convert('https://amzn.la/x/noasin', CREDS)
+    assert.equal(result, null)
+  } finally {
+    restore()
+  }
+})

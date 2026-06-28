@@ -34,6 +34,16 @@ test('detecta subdomínios de amazon e magazine', () => {
   assert.equal(detectLinks('https://www.magazinevoce.com.br/magazinex/p/123').length, 1)
 })
 
+// Regressão: short link amzn.la (encurtador Amazon usado por afiliados BR) não
+// era reconhecido, então a oferta caía como "nolink" e a política LINK_ONLY do
+// grupo ignorava ("Mensagem fora das regras de encaminhamento").
+test('detecta short link amzn.la como amazon', () => {
+  const links = detectLinks('promoção imperdível https://amzn.la/d/abc123 corre')
+  assert.equal(links.length, 1)
+  assert.equal(links[0].platform, 'amazon')
+  assert.equal(links[0].url, 'https://amzn.la/d/abc123')
+})
+
 test('não casa host colado (notmercadolivre.com.br)', () => {
   assert.equal(detectLinks('https://notmercadolivre.com.br/p/MLB123').length, 0)
 })
