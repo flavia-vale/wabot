@@ -124,6 +124,8 @@ test('isAmazonShortLink reconhece encurtadores e ignora URL plena de produto', (
   assert.equal(isAmazonShortLink('https://amzn.la/ipojO'), true)
   assert.equal(isAmazonShortLink('https://amzn.to/abc'), true)
   assert.equal(isAmazonShortLink('https://a.co/d/abc'), true)
+  assert.equal(isAmazonShortLink('https://link.amazon/B00WDbu4a'), true)
+  assert.equal(isAmazonShortLink('https://link.amazonaws.com/x/y'), false)
   assert.equal(isAmazonShortLink('https://www.amazon.com.br/dp/B09WG452T1'), false)
 })
 

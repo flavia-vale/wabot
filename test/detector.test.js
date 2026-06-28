@@ -48,6 +48,20 @@ test('não casa host colado (notmercadolivre.com.br)', () => {
   assert.equal(detectLinks('https://notmercadolivre.com.br/p/MLB123').length, 0)
 })
 
+// Regressão (2026-06): o encurtador da Amazon `link.amazon` (usado como
+// "COMPRE AQUI" em ofertas reais) não era reconhecido — o link do PRODUTO caía
+// como não-loja e era removido da mensagem espelhada (sumia o "Compre aqui").
+test('detecta short link link.amazon como amazon', () => {
+  const links = detectLinks('🔗 COMPRE AQUI: https://link.amazon/B00WDbu4a corre')
+  assert.equal(links.length, 1)
+  assert.equal(links[0].platform, 'amazon')
+  assert.equal(links[0].url, 'https://link.amazon/B00WDbu4a')
+})
+
+test('NÃO casa link.amazonaws.com (AWS) como amazon', () => {
+  assert.equal(detectLinks('https://link.amazonaws.com/bucket/key.jpg').length, 0)
+})
+
 // Regressão (incidente 2026-06-23): "último link" deve significar "último link
 // DE LOJA". Numa mensagem espelhada com link de produto + link de cupom (ambos
 // de loja) + link de vitrine de afiliado (iadivu.link, NÃO-loja) + grupo de
