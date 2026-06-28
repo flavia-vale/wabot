@@ -69,19 +69,31 @@ test('Amazon: ASIN ausente continua devolvendo null (segurança contra link malf
   assert.equal(result, null)
 })
 
-test('Amazon: short link amzn.la é resolvido e convertido como amzn.to', async () => {
-  const restore = mockAxiosOnce(async (url, opts) => {
+test('Amazon: short link amzn.la é resolvido (robust-first via fetch) e convertido como amzn.to', async () => {
+  const restore = mockAxiosOnce(async (url) => {
     if (url.includes('sitestripe/getShortUrl')) {
       return { status: 200, data: { shortUrl: 'https://amzn.to/abc123' }, headers: {} }
     }
-    // resolveShortUrl segue o redirect do amzn.la até a página do produto
-    return { status: 200, request: { res: { responseUrl: LONG_URL } }, config: { url: LONG_URL } }
+    throw new Error('resolveShortUrl (axios) NÃO deve ser chamado no caminho feliz — robust-first resolve via fetch')
   })
+  // O conversor resolve o short link via resolveAmazonShortLink (globalThis.fetch)
+  // ANTES do axios — um hit só no encurtador.
+  const originalFetch = globalThis.fetch
+  let fetchHits = 0
+  globalThis.fetch = async (u) => {
+    fetchHits++
+    return {
+      url: u,
+      headers: { getSetCookie: () => [], get: (k) => String(k).toLowerCase() === 'location' ? LONG_URL : null },
+    }
+  }
   try {
     const result = await convert('https://amzn.la/d/abc123', CREDS)
     assert.equal(result, 'https://amzn.to/abc123')
+    assert.equal(fetchHits, 1, 'resolve o short link com um único hit no encurtador')
   } finally {
     restore()
+    globalThis.fetch = originalFetch
   }
 })
 

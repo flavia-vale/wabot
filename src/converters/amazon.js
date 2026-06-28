@@ -258,13 +258,17 @@ export async function convert(url, creds) {
 
     let target = url
     if (SHORT_HOST.test(url)) {
-      target = await resolveShortUrl(url)
-      // amzn.la e afins podem servir interstitial (redirect via JS/meta) que o
-      // follow do axios não atravessa — o ASIN some. Cai no resolvedor robusto
-      // (redirect manual + cookie jar + extração do corpo) como segunda tentativa.
+      // Resolvedor robusto PRIMEIRO: atravessa o interstitial do amzn.la
+      // (redirect via JS/meta) e também segue o redirect HTTP do amzn.to. Bater
+      // no axios antes fazia DOIS hits rápidos no encurtador no caminho feliz —
+      // o segundo hit do amzn.la era barrado pelo anti-bot, o robusto voltava
+      // sem ASIN e a conversão falhava (enquanto o scrape, com 1 hit só,
+      // funcionava). O axios fica como fallback só quando o robusto não acha o
+      // ASIN, preservando o hit único no caso comum.
+      target = await resolveAmazonShortLink(url)
       if (!extractAsin(target)) {
-        const robust = await resolveAmazonShortLink(url)
-        if (extractAsin(robust)) target = robust
+        const viaAxios = await resolveShortUrl(url)
+        if (extractAsin(viaAxios)) target = viaAxios
       }
     }
 
