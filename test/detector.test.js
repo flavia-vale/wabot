@@ -44,6 +44,13 @@ test('detecta short link amzn.la como amazon', () => {
   assert.equal(links[0].url, 'https://amzn.la/d/abc123')
 })
 
+test('detecta short link link.amazon como amazon', () => {
+  const links = detectLinks('promoção imperdível https://link.amazon/B00WDbu4a corre')
+  assert.equal(links.length, 1)
+  assert.equal(links[0].platform, 'amazon')
+  assert.equal(links[0].url, 'https://link.amazon/B00WDbu4a')
+})
+
 test('não casa host colado (notmercadolivre.com.br)', () => {
   assert.equal(detectLinks('https://notmercadolivre.com.br/p/MLB123').length, 0)
 })

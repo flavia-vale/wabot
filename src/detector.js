@@ -3,7 +3,7 @@
 // casa hosts coladas como `notmercadolivre.com.br`.
 const PATTERNS = {
   mercadolivre: /https?:\/\/(?:[a-z0-9-]+\.)*(?:mercadolivre\.com\.br|mercadolivre\.com|mercadolibre\.com|meli\.la|mluvem\.com)[^\s]*/gi,
-  amazon:       /https?:\/\/(?:[a-z0-9-]+\.)*(?:amazon\.com\.br|amzn\.to|amzn\.la|a\.co|amzn\.divulgador\.link|amzlink\.to)[^\s]*/gi,
+  amazon:       /https?:\/\/(?:[a-z0-9-]+\.)*(?:amazon\.com\.br|link\.amazon|amzn\.to|amzn\.la|a\.co|amzn\.divulgador\.link|amzlink\.to)[^\s]*/gi,
   shopee:       /https?:\/\/(?:[a-z0-9-]+\.)*(?:shope\.ee|shopee\.com\.br)[^\s]*/gi,
   magazineluiza:/https?:\/\/(?:[a-z0-9-]+\.)*(?:magazineluiza\.com\.br|magazinevoce\.com\.br|mlz\.me)[^\s]*/gi,
 }
