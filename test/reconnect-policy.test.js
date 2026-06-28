@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { calcBackoffDelayMs, registerReplacedAndDecide } from '../src/core/reconnectPolicy.js'
+import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide } from '../src/core/reconnectPolicy.js'
 
 test('backoff cresce exponencialmente a partir de baseMs', () => {
   const opts = { baseMs: 5_000, maxMs: 300_000, jitterRatio: 0, random: () => 0.5 }
@@ -66,4 +66,82 @@ test('registerReplacedAndDecide não muta a lista de entrada', () => {
   const r = registerReplacedAndDecide(input, 200, { windowMs: 300_000, giveUpThreshold: 5 })
   assert.deepEqual(input, [100])
   assert.deepEqual(r.timestamps, [100, 200])
+})
+
+// --- flap (closes genéricos 500/428/408) ---
+
+test('flap: não aciona cooldown antes do limiar; aciona ao atingir', () => {
+  const win = { windowMs: 600_000, flapThreshold: 3 }
+  let r = registerCloseAndDecide([], 1_000, win)
+  assert.equal(r.count, 1)
+  assert.equal(r.flapping, false)
+  r = registerCloseAndDecide(r.timestamps, 2_000, win)
+  assert.equal(r.flapping, false)
+  r = registerCloseAndDecide(r.timestamps, 3_000, win)
+  assert.equal(r.count, 3)
+  assert.equal(r.flapping, true)
+})
+
+test('flap: closes fora da janela são descartados (não aciona)', () => {
+  const win = { windowMs: 60_000, flapThreshold: 3 }
+  let r = registerCloseAndDecide([], 0, win)
+  r = registerCloseAndDecide(r.timestamps, 10_000, win)
+  r = registerCloseAndDecide(r.timestamps, 500_000, win)
+  assert.equal(r.count, 1)
+  assert.equal(r.flapping, false)
+})
+
+test('flap: registerCloseAndDecide não muta a entrada', () => {
+  const input = [100]
+  const r = registerCloseAndDecide(input, 200, { windowMs: 300_000, flapThreshold: 5 })
+  assert.deepEqual(input, [100])
+  assert.deepEqual(r.timestamps, [100, 200])
+})
+
+// --- shouldResetBackoff (estabilidade) ---
+
+test('shouldResetBackoff: só zera após conexão estável o bastante', () => {
+  // openedAt em t=0; minStable=60s
+  assert.equal(shouldResetBackoff(0, 30_000, 60_000), false) // openedAt=0 (falsy) → nunca estável
+  assert.equal(shouldResetBackoff(null, 999_999, 60_000), false) // nunca abriu
+  assert.equal(shouldResetBackoff(1_000, 30_000, 60_000), false) // abriu há 29s → flap
+  assert.equal(shouldResetBackoff(1_000, 61_000, 60_000), true) // abriu há 60s → estável
+})
+
+// --- badSession (500) → reset de auth ---
+
+test('badSession: reseta auth só com repetição E sem conexão estável', () => {
+  const base = { windowMs: 600_000, resetThreshold: 3, hadStableOpen: false }
+  let r = registerBadSessionAndDecide([], 1_000, base)
+  assert.equal(r.shouldResetAuth, false)
+  r = registerBadSessionAndDecide(r.timestamps, 2_000, base)
+  assert.equal(r.shouldResetAuth, false)
+  r = registerBadSessionAndDecide(r.timestamps, 3_000, base)
+  assert.equal(r.count, 3)
+  assert.equal(r.shouldResetAuth, true)
+})
+
+test('badSession: NÃO reseta se a sessão estava estável (500 transitório)', () => {
+  const win = { windowMs: 600_000, resetThreshold: 2, hadStableOpen: true }
+  let r = registerBadSessionAndDecide([], 1_000, win)
+  r = registerBadSessionAndDecide(r.timestamps, 2_000, win)
+  r = registerBadSessionAndDecide(r.timestamps, 3_000, win)
+  assert.ok(r.count >= 2)
+  assert.equal(r.shouldResetAuth, false) // chip que recupera não tem cred apagada
+})
+
+test('badSession: resetThreshold <= 0 desliga o auto-reset', () => {
+  const win = { windowMs: 600_000, resetThreshold: 0, hadStableOpen: false }
+  let r = registerBadSessionAndDecide([], 1_000, win)
+  r = registerBadSessionAndDecide(r.timestamps, 2_000, win)
+  r = registerBadSessionAndDecide(r.timestamps, 3_000, win)
+  assert.equal(r.shouldResetAuth, false)
+})
+
+test('badSession: janela descarta eventos antigos', () => {
+  const win = { windowMs: 60_000, resetThreshold: 2, hadStableOpen: false }
+  let r = registerBadSessionAndDecide([], 0, win)
+  r = registerBadSessionAndDecide(r.timestamps, 500_000, win) // muito depois
+  assert.equal(r.count, 1)
+  assert.equal(r.shouldResetAuth, false)
 })

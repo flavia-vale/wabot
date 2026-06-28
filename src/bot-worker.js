@@ -43,7 +43,7 @@ import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/prese
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
-import { calcBackoffDelayMs, registerReplacedAndDecide } from './core/reconnectPolicy.js'
+import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide } from './core/reconnectPolicy.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
 import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
@@ -685,6 +685,23 @@ const FETCH_WA_VERSION_TIMEOUT_MS = Math.max(5_000, envNumber('FETCH_WA_VERSION_
 const RECONNECT_REPLACED_DELAY_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_REPLACED_DELAY_MS', RECONNECT_MAX_MS))
 const RECONNECT_REPLACED_WINDOW_MS = Math.max(10_000, envNumber('RECONNECT_REPLACED_WINDOW_MS', 5 * 60_000))
 const RECONNECT_REPLACED_GIVEUP_THRESHOLD = Math.max(2, envNumber('RECONNECT_REPLACED_GIVEUP_THRESHOLD', 3))
+// Flapping genérico (500 badSession / 428 / 408 / ...): o socket cai por conta
+// própria (não por outro device, como o 440) mas o efeito no celular é o mesmo —
+// cada `open` curto dispara a notificação "A sincronização foi concluída". Após
+// RECONNECT_FLAP_THRESHOLD closes em RECONNECT_FLAP_WINDOW_MS, aplicamos um
+// cooldown longo (recupera sozinho quando o chip estabiliza). Ver core/reconnectPolicy.js.
+const RECONNECT_FLAP_WINDOW_MS = Math.max(30_000, envNumber('RECONNECT_FLAP_WINDOW_MS', 10 * 60_000))
+const RECONNECT_FLAP_THRESHOLD = Math.max(2, envNumber('RECONNECT_FLAP_THRESHOLD', 5))
+const RECONNECT_FLAP_COOLDOWN_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_FLAP_COOLDOWN_MS', 2 * 60_000))
+// Tempo mínimo de conexão para ser considerada "estável": só abaixo disso um
+// `open` deixa o backoff subir. Acima, a queda é de uma sessão saudável e o
+// backoff recomeça do zero (reconexão rápida). Ver shouldResetBackoff.
+const RECONNECT_STABLE_MS = Math.max(5_000, envNumber('RECONNECT_STABLE_MS', 60_000))
+// badSession (500): re-pareamento automático (limpa auth → QR limpo) só quando
+// o 500 REPETE e a sessão não fica estável (credencial Signal corrompida de
+// verdade). RECONNECT_BADSESSION_RESET_THRESHOLD <= 0 desliga o auto-reset.
+const RECONNECT_BADSESSION_WINDOW_MS = Math.max(60_000, envNumber('RECONNECT_BADSESSION_WINDOW_MS', 10 * 60_000))
+const RECONNECT_BADSESSION_RESET_THRESHOLD = envNumber('RECONNECT_BADSESSION_RESET_THRESHOLD', 4)
 // Keep-alive do socket: sem ping periódico, um socket morto silenciosamente só
 // é detectado tarde, causando reconexão (e nova notificação). 25s é conservador.
 const WA_KEEPALIVE_INTERVAL_MS = Math.max(10_000, envNumber('WA_KEEPALIVE_INTERVAL_MS', 25_000))
@@ -1449,6 +1466,13 @@ let reconnectAttempts = 0
 // Timestamps de eventos connectionReplaced (440) na janela deslizante. NÃO é
 // zerado num `open` curto — é justamente quando o ping-pong reabre a cada ciclo.
 let replacedTimestamps = []
+// Timestamps de closes genéricos (flap) e de badSession (500) nas janelas
+// deslizantes. Mesma lógica do replaced: imunes a `open` curto.
+let closeTimestamps = []
+let badSessionTimestamps = []
+// Momento (ms) em que o socket atingiu `connection: 'open'` nesta tentativa.
+// Usado no close para medir se a sessão foi estável antes de cair.
+let connectionOpenedAt = null
 
 function calcReconnectDelayMs() {
   return calcBackoffDelayMs(reconnectAttempts, { baseMs: RECONNECT_BASE_MS, maxMs: RECONNECT_MAX_MS })
@@ -1649,7 +1673,12 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
 
     if (connection === 'open') {
       setLifecycleState(WA_LIFECYCLE.READY, { reason: 'connection_open' })
-      reconnectAttempts = 0
+      // NÃO zeramos reconnectAttempts aqui: um `open` curto seguido de novo close
+      // (flap) zerava o backoff a cada ciclo, então ele nunca escalava e o chip
+      // reanunciava 'open' a cada poucos segundos — spam de "sincronização
+      // concluída". O reset agora é decidido no close, só se a sessão foi estável
+      // (shouldResetBackoff). Aqui só marcamos quando ela abriu.
+      connectionOpenedAt = Date.now()
       activeSock = sock
       pendingSock = null
       pairingState.clear()
@@ -1667,7 +1696,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       const isRestartRequired = code === DisconnectReason.restartRequired
       const isConnectionReplaced = code === DisconnectReason.connectionReplaced
       const isForbidden = code === DisconnectReason.forbidden
+      const isBadSession = code === DisconnectReason.badSession // 500
       const wasPairing = pairingState.suppressAutoRestart()
+      // Mede a estabilidade desta sessão (quanto tempo ficou em 'open') ANTES de
+      // limpar o marcador. Um `open` longo = sessão saudável que caiu; curto = flap.
+      const now = Date.now()
+      const wasStable = shouldResetBackoff(connectionOpenedAt, now, RECONNECT_STABLE_MS)
+      connectionOpenedAt = null
       activeSock = null
       pendingSock = null
       if (process.send) process.send({ type: 'status', data: 'disconnected' })
@@ -1723,7 +1758,6 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // no celular — spam a cada poucos segundos. Em vez disso usamos um
         // cooldown LONGO (não some, mas recupera sozinho se o duplicado morrer)
         // e, em surto, escalamos o log + sinal operacional para diagnóstico.
-        const now = Date.now()
         const r = registerReplacedAndDecide(replacedTimestamps, now, {
           windowMs: RECONNECT_REPLACED_WINDOW_MS,
           giveUpThreshold: RECONNECT_REPLACED_GIVEUP_THRESHOLD,
@@ -1743,9 +1777,65 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         }
         setTimeout(startBot, delayMs)
       } else {
-        const delayMs = calcReconnectDelayMs()
-        reconnectAttempts++
-        logger.warn({ code, attempt: reconnectAttempts, delayMs }, 'WA conexão fechada, agendando restart automático')
+        // Close genérico (500 badSession, 428, 408, 515 fora de pairing, ...).
+        // Dois males históricos tratados aqui:
+        //
+        // (a) badSession (500) com credencial Signal corrompida: reconectar com
+        //     a MESMA cred dá 500 de novo, eterno. Se o 500 repete E a sessão não
+        //     fica estável (nunca recupera), limpamos o auth → próximo start gera
+        //     QR limpo (re-pareamento), igual ao loggedOut. A guarda `wasStable`
+        //     evita apagar a cred de um chip que cai e SE recupera (500 transitório).
+        //
+        // (b) flapping: antes, um `open` curto zerava reconnectAttempts (no
+        //     handler de 'open'), então o backoff nunca escalava e um chip caindo
+        //     a cada poucos minutos reanunciava 'open' → spam de "A sincronização
+        //     foi concluída". Agora o reset do backoff é gated por estabilidade
+        //     (wasStable) e, se detectamos flap (muitos closes na janela),
+        //     aplicamos um cooldown longo em vez do backoff curto.
+        if (isBadSession && RECONNECT_BADSESSION_RESET_THRESHOLD > 0) {
+          const b = registerBadSessionAndDecide(badSessionTimestamps, now, {
+            windowMs: RECONNECT_BADSESSION_WINDOW_MS,
+            resetThreshold: RECONNECT_BADSESSION_RESET_THRESHOLD,
+            hadStableOpen: wasStable,
+          })
+          badSessionTimestamps = b.timestamps
+          if (b.shouldResetAuth) {
+            logger.error(
+              { code, badSessionCount: b.count, userId },
+              'badSession (500) repetido sem conexão estável — credencial Signal corrompida. Limpando auth_info para re-pareamento (QR limpo no próximo start). Sessão fica offline até novo pareamento.'
+            )
+            try { recordOperationalSignal('wa_bad_session_reset', { userId, count: b.count }) } catch {}
+            await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
+            badSessionTimestamps = []
+            reconnectAttempts = 0
+            // NÃO reconecta sozinho (igual loggedOut): sem auth, reconectar só
+            // geraria erro. O usuário re-pareia pelo painel.
+            return
+          }
+        }
+
+        // Só zera o backoff se a sessão que caiu foi estável; senão deixa escalar.
+        if (wasStable) reconnectAttempts = 0
+
+        const f = registerCloseAndDecide(closeTimestamps, now, {
+          windowMs: RECONNECT_FLAP_WINDOW_MS,
+          flapThreshold: RECONNECT_FLAP_THRESHOLD,
+        })
+        closeTimestamps = f.timestamps
+
+        let delayMs
+        if (f.flapping) {
+          delayMs = RECONNECT_FLAP_COOLDOWN_MS
+          logger.warn(
+            { code, closeCount: f.count, windowMs: RECONNECT_FLAP_WINDOW_MS, delayMs },
+            'Flapping detectado (closes repetidos na janela) — cooldown longo para conter o spam de "sincronização concluída". Recupera sozinho quando o chip estabilizar.'
+          )
+          try { recordOperationalSignal('wa_flap_cooldown', { userId, code, count: f.count }) } catch {}
+        } else {
+          delayMs = calcReconnectDelayMs()
+          reconnectAttempts++
+          logger.warn({ code, attempt: reconnectAttempts, delayMs }, 'WA conexão fechada, agendando restart automático')
+        }
         setTimeout(startBot, delayMs)
       }
     }

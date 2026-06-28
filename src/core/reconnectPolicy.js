@@ -38,3 +38,48 @@ export function registerReplacedAndDecide(timestamps, now, { windowMs, giveUpThr
     escalate: recent.length >= giveUpThreshold,
   }
 }
+
+// Generaliza o registro acima para closes de QUALQUER código (500 badSession,
+// 428 connectionClosed, 408 timeout, ...) e detecta "flapping": muitos closes
+// numa janela curta. Sintoma em produção: o socket abre (dispara o push
+// "A sincronização foi concluída" no celular), cai em poucos segundos/minutos e
+// repete. O backoff exponencial sozinho NÃO contém isso porque um `open` curto
+// zerava o contador a cada ciclo (ver shouldResetBackoff). Mesma forma do
+// replaced, mas o booleano de saída fala de flap (→ cooldown longo), não de
+// give-up. Imutável: não muta a entrada.
+export function registerCloseAndDecide(timestamps, now, { windowMs, flapThreshold }) {
+  const recent = (timestamps || []).filter(ts => now - ts <= windowMs)
+  recent.push(now)
+  return {
+    timestamps: recent,
+    count: recent.length,
+    flapping: recent.length >= flapThreshold,
+  }
+}
+
+// Decide se o backoff de reconexão deve ser ZERADO quando o socket fecha. Só
+// zera quando a conexão que acabou de cair ficou ESTÁVEL por >= minStableMs —
+// uma queda pontual de um chip saudável recomeça do backoff base (reconexão
+// rápida). Já um `open` curto (típico de flap) NÃO zera, deixando o contador
+// subir para o backoff escalar de fato. openedAt nulo/0 (nunca abriu nesta
+// tentativa) ⇒ não estável.
+export function shouldResetBackoff(openedAt, now, minStableMs) {
+  if (!openedAt) return false
+  return now - openedAt >= minStableMs
+}
+
+// badSession (500): a credencial Signal pode estar corrompida. Só sinalizamos
+// reset de auth (forçar re-pareamento) quando o 500 REPETE na janela E a sessão
+// que caiu NÃO estava estável (`hadStableOpen=false`). Sem essa segunda guarda,
+// um 500 transitório — que em produção se recupera sozinho e volta a conectar —
+// apagaria a credencial de um chip que funciona, forçando QR à toa. resetThreshold
+// <= 0 desliga o reset (a guarda fica no chamador). Imutável: não muta a entrada.
+export function registerBadSessionAndDecide(timestamps, now, { windowMs, resetThreshold, hadStableOpen }) {
+  const recent = (timestamps || []).filter(ts => now - ts <= windowMs)
+  recent.push(now)
+  return {
+    timestamps: recent,
+    count: recent.length,
+    shouldResetAuth: resetThreshold > 0 && recent.length >= resetThreshold && !hadStableOpen,
+  }
+}
