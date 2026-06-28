@@ -275,3 +275,28 @@ test('fetchProductImage da Amazon prefere /images/I/ extraido do data-a-dynamic-
 
   assert.equal(image, 'https://m.media-amazon.com/images/I/91-produto._AC_SL1500_.jpg')
 })
+
+test('fetchProductImage resolve short link Amazon amzn.la antes de buscar imagem', async (t) => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const productUrl = 'https://www.amazon.com.br/dp/B0AMZNLA01'
+  const imageUrl = 'https://m.media-amazon.com/images/I/91-amznla._AC_SL1500_.jpg'
+  const html = `<html><body>
+    <img id="landingImage" data-a-dynamic-image="{&quot;${imageUrl}&quot;:[1500,1500]}" />
+  </body></html>`
+
+  globalThis.fetch = async (url) => {
+    const urlStr = String(url)
+    calls.push(urlStr)
+    if (urlStr === 'https://amzn.la/img123') return htmlResponse('', productUrl)
+    if (urlStr === productUrl) return htmlResponse(html, productUrl)
+    throw new Error(`fetch inesperado: ${urlStr}`)
+  }
+
+  const image = await fetchProductImage('amazon', 'https://amzn.la/img123', {})
+
+  assert.equal(image, imageUrl)
+  assert.deepEqual(calls, ['https://amzn.la/img123', productUrl])
+})
