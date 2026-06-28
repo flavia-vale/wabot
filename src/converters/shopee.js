@@ -73,7 +73,7 @@ export function stripAffiliateTracking(rawUrl) {
   return changed ? u.toString() : String(rawUrl)
 }
 
-const SHOPEE_COUPON_SAFE_PATH = '/voucher/details'
+const SHOPEE_COUPON_SAFE_PATH = '/m/cupom-de-desconto'
 const SHOPEE_UNSAFE_COUPON_PATH_RE = /^\/(?:m\/(?:cupom|cupons)(?:-de-desconto)?|buyer\/voucher|voucher\/details)(?:\/|$)/i
 
 function isShopeeStoreHost(hostname) {
@@ -81,10 +81,12 @@ function isShopeeStoreHost(hostname) {
 }
 
 // Páginas mobile/app de cupom da Shopee (`/m/cupom`, `/buyer/voucher`) podem
-// abrir no WhatsApp como a tela "Oops! Seu navegador não é mais aceito!". Para
-// converter cupom sem cair nessa página, a origin enviada à API de afiliado é
-// sempre a rota web canônica `/voucher/details`, preservando os parâmetros que
-// identificam o cupom e removendo tracking de terceiros antes da mutation.
+// abrir no WhatsApp como a tela "Oops! Seu navegador não é mais aceito!". A
+// causa raiz é encurtar uma origin de rota app-only (`/voucher/details` ou
+// `/buyer/voucher`): o shortLink afiliado continua apontando para esse fluxo.
+// Para converter sem cair nessa página, a origin enviada à API de afiliado é a
+// landing web pública de cupons (`/m/cupom-de-desconto`), preservando parâmetros
+// úteis e removendo tracking de terceiros antes da mutation.
 export function normalizeShopeeCouponOrigin(rawUrl) {
   const stripped = stripAffiliateTracking(rawUrl)
   let u
@@ -148,7 +150,8 @@ export async function convert(url, creds) {
   // Cupom/voucher/campanha (sem shopId+itemId). Com COUPON_LINK_CONVERT
   // ligado, força a conversão pela API de afiliado, mas NUNCA usando a rota
   // mobile/app que dispara "Oops! Seu navegador não é mais aceito!". A origin é
-  // normalizada para `/voucher/details` e sem tracking de terceiro antes da API.
+  // normalizada para a landing web pública `/m/cupom-de-desconto` e sem
+  // tracking de terceiro antes da API.
   if (shouldConvertCouponLinks()) {
     const origin = normalizeShopeeCouponOrigin(canonical)
     try {

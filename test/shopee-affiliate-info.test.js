@@ -160,7 +160,7 @@ test('stripAffiliateTracking remove tracking de terceiro e preserva a identidade
   const clean = stripAffiliateTracking(dirty)
   assert.ok(clean.includes('promotionId=999'), 'mantém promotionId')
   assert.ok(clean.includes('signature=abc'), 'mantém signature')
-  assert.ok(!/utm_source|utm_medium|gads_t_sig|af_siteid/.test(clean), 'remove todo tracking de terceiro')
+  assert.ok(!/de utm_source|utm_medium|gads_t_sig|af_siteid/.test(clean), 'remove todo tracking de terceiro')
   // Idempotente: sem tracking, devolve intacta.
   const pristine = 'https://shopee.com.br/voucher/details?promotionId=5&voucherCode=ABC'
   assert.equal(stripAffiliateTracking(pristine), pristine)
@@ -168,11 +168,11 @@ test('stripAffiliateTracking remove tracking de terceiro e preserva a identidade
   assert.equal(stripAffiliateTracking('not a url'), 'not a url')
 })
 
-test('normalizeShopeeCouponOrigin troca rotas mobile/app por /voucher/details e limpa tracking', () => {
+test('normalizeShopeeCouponOrigin troca rotas app-only por /m/cupom-de-desconto e limpa tracking', () => {
   const dirty = 'https://shopee.com.br/m/cupom?promotionId=999&voucherCode=ABC&utm_source=an_123&utm_medium=affiliates&gads_t_sig=XYZ#app'
   const normalized = normalizeShopeeCouponOrigin(dirty)
   const u = new URL(normalized)
-  assert.equal(u.origin + u.pathname, 'https://shopee.com.br/voucher/details')
+  assert.equal(u.origin + u.pathname, 'https://shopee.com.br/m/cupom-de-desconto')
   assert.equal(u.searchParams.get('promotionId'), '999')
   assert.equal(u.searchParams.get('voucherCode'), 'ABC')
   assert.equal(u.hash, '')
@@ -180,9 +180,9 @@ test('normalizeShopeeCouponOrigin troca rotas mobile/app por /voucher/details e 
 })
 
 // Com COUPON_LINK_CONVERT=true, cupom Shopee deve ser convertido, mas a origin
-// enviada à API nunca pode ser a rota mobile/app que dispara "navegador não
-// aceito"; ela precisa sair como /voucher/details.
-test('convert() converte cupom Shopee usando origin /voucher/details segura quando COUPON_LINK_CONVERT=true', async (t) => {
+// enviada à API nunca pode ser rota app-only que dispara "navegador não
+// aceito"; ela precisa sair como a landing web /m/cupom-de-desconto.
+test('convert() converte cupom Shopee usando landing web segura quando COUPON_LINK_CONVERT=true', async (t) => {
   withCouponConvertEnabled(t)
   stubCouponResolution(t)
   let sentQuery = ''
@@ -193,12 +193,12 @@ test('convert() converte cupom Shopee usando origin /voucher/details segura quan
 
   const result = await convert('https://s.shopee.com.br/40eQK1or1O', CREDS)
   assert.equal(result, 'https://s.shopee.com.br/cupomAFIL123')
-  assert.ok(sentQuery.includes('https://shopee.com.br/voucher/details'), 'origin enviada usa rota web segura')
+  assert.ok(sentQuery.includes('https://shopee.com.br/m/cupom-de-desconto'), 'origin enviada usa landing web segura')
   assert.ok(sentQuery.includes('promotionId=999'), 'origin mantém a identidade do cupom')
-  assert.ok(!/\/m\/cupom|\/buyer\/voucher|utm_source|utm_medium|gads_t_sig/.test(sentQuery), 'origin não leva rota mobile/app nem tracking de terceiro')
+  assert.ok(!/\/m\/cupom(?:\?|$)|\/buyer\/voucher|\/voucher\/details|utm_source|utm_medium|gads_t_sig/.test(sentQuery), 'origin não leva rota mobile/app nem tracking de terceiro')
 })
 
-test('convert() converte URL direta de cupom Shopee com COUPON_LINK_CONVERT=true sem rota mobile/app', async (t) => {
+test('convert() converte URL direta de cupom Shopee com COUPON_LINK_CONVERT=true sem rota app-only', async (t) => {
   withCouponConvertEnabled(t)
   let sentQuery = ''
   t.after(stubAxiosPost(async (_url, body) => {
@@ -208,8 +208,9 @@ test('convert() converte URL direta de cupom Shopee com COUPON_LINK_CONVERT=true
 
   const result = await convert('https://shopee.com.br/m/cupom?promotionId=999&voucherCode=ABC', CREDS)
   assert.equal(result, 'https://s.shopee.com.br/cupomDIRETO')
-  assert.ok(sentQuery.includes('https://shopee.com.br/voucher/details'))
-  assert.ok(!sentQuery.includes('/m/cupom'))
+  assert.ok(sentQuery.includes('https://shopee.com.br/m/cupom-de-desconto'))
+  assert.ok(!sentQuery.includes('/m/cupom?'))
+  assert.ok(!sentQuery.includes('/voucher/details'))
 })
 
 // Invariante de segurança: mesmo com o flag ligado, se a API recusar o cupom,
