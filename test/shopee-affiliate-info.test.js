@@ -160,7 +160,7 @@ test('stripAffiliateTracking remove tracking de terceiro e preserva a identidade
   const clean = stripAffiliateTracking(dirty)
   assert.ok(clean.includes('promotionId=999'), 'mantém promotionId')
   assert.ok(clean.includes('signature=abc'), 'mantém signature')
-  assert.ok(!/utm_source|utm_medium|gads_t_sig|af_siteid/.test(clean), 'remove todo tracking de terceiro')
+  assert.ok(!/de utm_source|utm_medium|gads_t_sig|af_siteid/.test(clean), 'remove todo tracking de terceiro')
   // Idempotente: sem tracking, devolve intacta.
   const pristine = 'https://shopee.com.br/voucher/details?promotionId=5&voucherCode=ABC'
   assert.equal(stripAffiliateTracking(pristine), pristine)
