@@ -324,6 +324,9 @@ export default function GruposPage() {
           <p className="pnl-hint" style={{ marginTop: 6 }}>
             <strong>Imagem oficial da loja</strong>: busca a foto direto no site do produto, sem marca d’água de outros grupos (se o site não retornar, usa a imagem da mensagem). <strong>Imagem que veio na mensagem</strong>: reaproveita a foto do grupo de origem. <strong>Sem imagem</strong>: envia só o link com a prévia automática do WhatsApp.
           </p>
+          <p className="pnl-hint" style={{ marginTop: 6, color: '#b5742a' }}>
+            Na <strong>Shopee</strong>, a imagem oficial nem sempre está disponível: quando a loja não retorna a foto, a oferta usa a imagem que veio na mensagem (que pode ter marca d’água). Amazon e Mercado Livre buscam a foto oficial normalmente.
+          </p>
         </div>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
