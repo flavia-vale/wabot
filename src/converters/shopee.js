@@ -73,6 +73,31 @@ export function stripAffiliateTracking(rawUrl) {
   return changed ? u.toString() : String(rawUrl)
 }
 
+const SHOPEE_COUPON_SAFE_PATH = '/voucher/details'
+const SHOPEE_UNSAFE_COUPON_PATH_RE = /^\/(?:m\/(?:cupom|cupons)(?:-de-desconto)?|buyer\/voucher|voucher\/details)(?:\/|$)/i
+
+function isShopeeStoreHost(hostname) {
+  return /(^|\.)shopee\.com\.br$/.test(String(hostname || ''))
+}
+
+// Páginas mobile/app de cupom da Shopee (`/m/cupom`, `/buyer/voucher`) podem
+// abrir no WhatsApp como a tela "Oops! Seu navegador não é mais aceito!". Para
+// converter cupom sem cair nessa página, a origin enviada à API de afiliado é
+// sempre a rota web canônica `/voucher/details`, preservando os parâmetros que
+// identificam o cupom e removendo tracking de terceiros antes da mutation.
+export function normalizeShopeeCouponOrigin(rawUrl) {
+  const stripped = stripAffiliateTracking(rawUrl)
+  let u
+  try { u = new URL(String(stripped)) } catch { return stripped }
+  if (!isShopeeStoreHost(u.hostname) || extractShopeeIds(stripped)) return stripped
+  if (!SHOPEE_UNSAFE_COUPON_PATH_RE.test(u.pathname)) return stripped
+  u.protocol = 'https:'
+  u.hostname = 'shopee.com.br'
+  u.pathname = SHOPEE_COUPON_SAFE_PATH
+  u.hash = ''
+  return u.toString()
+}
+
 // Chama a mutation generateShortLink da API de afiliado para `originUrl` e
 // devolve o shortLink oficial (ex.: https://s.shopee.com.br/2g92F2xepl). NÃO
 // resolvemos para /product?... aqui: isso deixaria a mensagem com URL longa e
@@ -120,21 +145,17 @@ export async function convert(url, creds) {
     return generateAffiliateShortLink(canonical, creds)
   }
 
-  // Cupom/voucher/campanha (sem shopId+itemId). Atrás de COUPON_LINK_CONVERT
-  // só para rollout seguro (validar em staging antes de virar default em prod).
-  //
-  // A conversão É a única saída correta: o link original credita a comissão ao
-  // afiliado do grupo de origem (concorrente) e o preço da oferta muitas vezes
-  // só faz sentido com o cupom. O passo que faltava para ser confiável é LIMPAR
-  // o tracking de terceiros da origin URL (stripAffiliateTracking) — sem isso a
-  // API recusava com "Invalid origin URL".
+  // Cupom/voucher/campanha (sem shopId+itemId). Com COUPON_LINK_CONVERT
+  // ligado, força a conversão pela API de afiliado, mas NUNCA usando a rota
+  // mobile/app que dispara "Oops! Seu navegador não é mais aceito!". A origin é
+  // normalizada para `/voucher/details` e sem tracking de terceiro antes da API.
   if (shouldConvertCouponLinks()) {
-    const origin = stripAffiliateTracking(canonical)
+    const origin = normalizeShopeeCouponOrigin(canonical)
     try {
       return await generateAffiliateShortLink(origin, creds)
     } catch {
-      // Último recurso EXISTE só para nunca encaminhar o link do concorrente.
-      // Com a limpeza acima deve ser raríssimo. Cai no strip seguro abaixo.
+      // Fallback seguro: se a Shopee recusar a origin, removemos o link para
+      // nunca vazar afiliado de terceiro.
     }
   }
 
