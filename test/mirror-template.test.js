@@ -75,6 +75,59 @@ test('applyMirrorTemplate renderiza com título/preço vindos do scraper, não d
   assert.doesNotMatch(text, /Caption upstream errado|R\$ 1,00/)
 })
 
+test('applyMirrorTemplate substitui grupoLink e cupomLink apenas quando o template contém as variáveis', async () => {
+  const text = await applyMirrorTemplate('Texto original https://ex.com/a', {
+    templateKey: 'tpl_links',
+    originalUrl: 'https://ex.com/a',
+    convertedUrl: 'https://ex.com/a?tag=ok',
+    platform: 'amazon',
+    botConfig: {
+      mobileTemplatesJson: JSON.stringify({
+        custom: [{
+          key: 'tpl_links',
+          name: 'Links globais',
+          body: '🔥 {produto}\n👉 {link}\nGrupo: {{grupoLink}}\nCupom: {{cupomLink}}',
+        }],
+      }),
+      brandingGroupLink: 'https://chat.whatsapp.com/grupo',
+      couponLink: 'https://cupom.test/oferta',
+    },
+    fetchInfo: async () => ({ title: 'Produto com links', oldPrice: '', newPrice: 'R$ 99,90' }),
+  })
+
+  assert.equal(text, [
+    '🔥 Produto com links',
+    '👉 https://ex.com/a?tag=ok',
+    'Grupo: https://chat.whatsapp.com/grupo',
+    'Cupom: https://cupom.test/oferta',
+  ].join('\n'))
+})
+
+test('applyMirrorTemplate não injeta grupoLink nem cupomLink quando o template não contém as variáveis', async () => {
+  const text = await applyMirrorTemplate('Texto original https://ex.com/a', {
+    templateKey: 'tpl_sem_links_globais',
+    originalUrl: 'https://ex.com/a',
+    convertedUrl: 'https://ex.com/a?tag=ok',
+    platform: 'amazon',
+    botConfig: {
+      mobileTemplatesJson: JSON.stringify({
+        custom: [{
+          key: 'tpl_sem_links_globais',
+          name: 'Sem links globais',
+          body: '🔥 {produto}\n👉 {link}',
+        }],
+      }),
+      brandingGroupLink: 'https://chat.whatsapp.com/grupo',
+      couponLink: 'https://cupom.test/oferta',
+    },
+    fetchInfo: async () => ({ title: 'Produto sem links globais', oldPrice: '', newPrice: 'R$ 49,90' }),
+  })
+
+  assert.equal(text, '🔥 Produto sem links globais\n👉 https://ex.com/a?tag=ok')
+  assert.doesNotMatch(text, /chat\.whatsapp\.com\/grupo/)
+  assert.doesNotMatch(text, /cupom\.test\/oferta/)
+})
+
 test('applyMirrorTemplate preserva texto original quando não há template válido ou link', async () => {
   assert.equal(await applyMirrorTemplate('original', { templateKey: 'missing', botConfig: {} }), 'original')
   assert.equal(await applyMirrorTemplate('Só um aviso sem link', {
@@ -83,7 +136,7 @@ test('applyMirrorTemplate preserva texto original quando não há template váli
   }), 'Só um aviso sem link')
 })
 
-test('applyMirrorTemplate não vaza placeholders vazios e mantém branding do grupo', async () => {
+test('applyMirrorTemplate não vaza placeholders vazios nem injeta branding quando variável não existe no template', async () => {
   const text = await applyMirrorTemplate('Texto upstream sem preço\nhttps://ex.com/a', {
     templateKey: 'simples',
     originalUrl: 'https://ex.com/a',
@@ -99,8 +152,8 @@ test('applyMirrorTemplate não vaza placeholders vazios e mantém branding do gr
   assert.doesNotMatch(text, /\{(?:preço|preço_de|desconto|rating|vendas)\}/)
   assert.match(text, /Fone Bluetooth XPTO/)
   assert.match(text, /https:\/\/ex\.com\/a\?tag=ok/)
-  assert.match(text, /Entre no grupo VIP:/)
-  assert.match(text, /https:\/\/chat\.whatsapp\.com\/grupo/)
+  assert.doesNotMatch(text, /Entre no grupo VIP:/)
+  assert.doesNotMatch(text, /https:\/\/chat\.whatsapp\.com\/grupo/)
 })
 
 test('applyMirrorTemplate preserva texto original quando o scraper lança erro inesperado', async () => {
