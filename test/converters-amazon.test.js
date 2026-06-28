@@ -159,3 +159,30 @@ test('resolveAmazonShortLink: URL que já tem ASIN é devolvida sem fetch', asyn
   assert.equal(resolved, direct)
   assert.equal(called, false, 'URL plena não dispara fetch')
 })
+
+// Conversão de cupom (COUPON_LINK_CONVERT): link Amazon sem ASIN (oferta/cupom)
+// passa a creditar com ?tag= na URL da loja, em vez de ser descartado.
+function withCouponConvert(value, fn) {
+  const prev = process.env.COUPON_LINK_CONVERT
+  if (value === undefined) delete process.env.COUPON_LINK_CONVERT
+  else process.env.COUPON_LINK_CONVERT = value
+  return Promise.resolve(fn()).finally(() => {
+    if (prev === undefined) delete process.env.COUPON_LINK_CONVERT
+    else process.env.COUPON_LINK_CONVERT = prev
+  })
+}
+
+test('Amazon: link sem ASIN com COUPON_LINK_CONVERT=true credita via ?tag= na URL da loja', async () => {
+  await withCouponConvert('true', async () => {
+    const couponUrl = 'https://www.amazon.com.br/deals?ref=promo'
+    const result = await convert(couponUrl, CREDS)
+    assert.equal(result, `${couponUrl}&tag=${CREDS.tag}`)
+  })
+})
+
+test('Amazon: link sem ASIN com flag OFF segue descartado (null) — comportamento histórico', async () => {
+  await withCouponConvert(undefined, async () => {
+    const result = await convert('https://www.amazon.com.br/deals?ref=promo', CREDS)
+    assert.equal(result, null)
+  })
+})

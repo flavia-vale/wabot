@@ -1038,28 +1038,47 @@ Fonte única de verdade em `src/converters/shopee.js`:
 Testes: `test/shopee-shortlink-resolve.test.js` + regressões em
 `test/product-info-scraper.test.js`.
 
-### Conversão de link de cupom Shopee (`SHOPEE_COUPON_CONVERT`, default OFF)
+### Conversão de link de cupom — TODAS as lojas (`COUPON_LINK_CONVERT`, default OFF)
 
-Links Shopee que **não são de produto** (cupom/voucher como
-`s.shopee.com.br/XXX` → `/buyer/voucher`, sem `shopId+itemId`) historicamente
-eram **removidos** da mensagem espelhada: mandar o original credita a comissão
-ao afiliado do grupo de origem (concorrente), e convertê-los pela API podia
-gerar um shortLink que dispara **"Oops! Seu navegador não é mais aceito!"** no
-WebView do WhatsApp.
+Links que **não são de produto** (cupom/voucher/campanha, sem ID de produto)
+historicamente eram **removidos** (Shopee) ou **descartados/`null`** (Amazon, ML)
+na mensagem espelhada. Isso é ruim: o cupom muitas vezes é parte essencial da
+oferta (o preço anunciado só fecha com ele), substituí-lo por um link fixo da
+conta não serve (as páginas de cupom mudam o tempo todo na origem) e mandar o
+original credita a comissão ao afiliado do grupo de origem (concorrente).
 
-| Env                     | Default | Efeito                                                                 |
-|-------------------------|---------|-----------------------------------------------------------------------|
-| `SHOPEE_COUPON_CONVERT` | `false` | OFF: comportamento histórico (cupom removido via `stripFromMessage`). |
-|                         | `true`  | Tenta converter o cupom pela API de afiliado; se a API recusar, cai no strip seguro (**nunca** encaminha o link original). |
+**Solução: converter o cupom como afiliado da cliente.** O flag único
+`COUPON_LINK_CONVERT` (default OFF, lido em runtime via
+`src/converters/couponPolicy.js → shouldConvertCouponLinks()`) governa o caminho
+de cupom em TODOS os conversores. É um **interruptor de rollout seguro**: os
+caminhos com risco real só passam a valer depois de validados em staging.
+Rollback em prod = desligar a env (sem redeploy). Os caminhos de **produto ficam
+inalterados** em todos os conversores.
 
-Lido em runtime em `src/converters/shopee.js` (`shouldConvertNonProductLinks`),
-então o rollback em prod é só **desligar a env** (sem redeploy). **Risco que só
-um teste real resolve:** mesmo com a API devolvendo shortLink, o link de cupom
-pode disparar o erro "navegador não aceito" no WhatsApp. **Validar em staging
-clicando no link num celular ANTES de ligar em prod.** Invariante de segurança
-preservada: o link original (de terceiro) nunca é encaminhado. Testes:
-`test/shopee-affiliate-info.test.js` (flag ON: API aceita → converte; API
-recusa → strip seguro).
+Como cada loja credita o cupom (mecanismo é diferente por afiliado):
+
+| Loja   | Cupom com flag ON | Risco | Notas |
+|--------|-------------------|-------|-------|
+| **Magalu** | já convertia (sempre): `partner_id` em qualquer URL | nenhum | independe do flag (comportamento pré-existente) |
+| **Amazon** | `?tag=` na URL da loja (`amazon.com.br`), não no encurtador | baixo, sem WebView | `convert()` em `amazon.js`, fallback aditivo quando não há ASIN |
+| **Shopee** | resolve → `stripAffiliateTracking` → `generateShortLink` (retry só em falha de transporte) | ⚠️ **WebView** ("Oops! Seu navegador não é mais aceito!") | foi a causa da regressão de 2026-06 (commit `3e10e1c`) |
+| **ML** | ⚠️ **a definir / em teste** | ⚠️ **comissão** | pendurar `partner_id` em página não-produto NÃO credita (vai pro dono do código — ver `mercadolivre.js:700`). Em avaliação: tentar `createLink` no link de cupom e validar em staging. |
+
+`stripAffiliateTracking()` (Shopee) remove só o tracking de terceiros
+(`utm_source=an_<id>`, `utm_medium=affiliates`, `af_*`/`deep_and_*`,
+`gads_t_sig`, etc.) e **preserva a identidade do cupom** (`path` +
+`promotionId`/`voucherCode`/`signature`) — sem isso a API recusa com "Invalid
+origin URL".
+
+Invariante de segurança em TODOS os caminhos: **o link original de terceiro
+NUNCA é encaminhado.** Se a conversão falhar, cai no strip seguro (não vaza
+comissão).
+
+**O que só um teste real em staging resolve (não dá para validar no sandbox):**
+(1) a Shopee aceita a origin de voucher limpa e o shortLink abre no app sem o
+erro do WebView? (2) o ML credita cupom de algum jeito? **Validar clicando no
+link num celular ANTES de ligar em prod.** Testes:
+`test/shopee-affiliate-info.test.js` e `test/converters-amazon.test.js`.
 
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 

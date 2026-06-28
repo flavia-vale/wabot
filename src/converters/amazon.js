@@ -1,5 +1,9 @@
 import axios from 'axios'
 import logger from '../logger.js'
+import { shouldConvertCouponLinks } from './couponPolicy.js'
+
+// Host da loja Amazon BR de verdade (não o encurtador) — onde `?tag=` credita.
+const AMAZON_STORE_HOST = /(^|\.)amazon\.com\.br$/
 
 const ASIN_RE = /(?:\/dp\/|\/gp\/product\/|\/product-reviews\/|\/exec\/obidos\/ASIN\/)([A-Z0-9]{10})/i
 const AMAZON_HOST = /amazon\.com\.br|amzn\.to|amzn\.la|a\.co|amzn\.divulgador\.link|amzlink\.to/
@@ -274,6 +278,17 @@ export async function convert(url, creds) {
 
     const asin = extractAsin(target)
     if (!asin) {
+      // Cupom/oferta sem ASIN: o afiliado Amazon credita com `?tag=` em QUALQUER
+      // URL amazon.com.br, então (com a conversão de cupom ligada) anexamos a
+      // tag à URL resolvida em vez de descartar. Só quando o target já está num
+      // host Amazon REAL — não no encurtador não-resolvido, onde a tag não
+      // gruda em nada útil. Sem WebView issue: é a própria URL da loja, não um
+      // shortlink que redireciona.
+      if (shouldConvertCouponLinks() && tag && AMAZON_STORE_HOST.test(new URL(target).hostname)) {
+        const u = new URL(target)
+        u.searchParams.set('tag', tag)
+        return u.toString()
+      }
       logger.warn({ url, target }, 'Amazon: ASIN não encontrado, abortando para evitar link malformado')
       return null
     }
