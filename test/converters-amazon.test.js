@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mock } from 'node:test'
 import axios from 'axios'
-import { convert } from '../src/converters/amazon.js'
+import { convert, isAmazonShortLink, resolveAmazonShortLink } from '../src/converters/amazon.js'
 
 const CREDS = {
   tag: 'flaviavale-20',
@@ -91,10 +91,59 @@ test('Amazon: amzn.la que não resolve para produto devolve null (sem link malfo
     const NO_ASIN = 'https://www.amazon.com.br/gp/bestsellers'
     return { status: 200, request: { res: { responseUrl: NO_ASIN } }, config: { url: NO_ASIN } }
   })
+  // O fallback robusto usa globalThis.fetch — estuba para não tocar a rede e
+  // também não achar ASIN (interstitial sem URL de produto).
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (u) => ({
+    url: u,
+    headers: { getSetCookie: () => [], get: () => null },
+    text: async () => '<html><body>sem produto</body></html>',
+  })
   try {
     const result = await convert('https://amzn.la/x/noasin', CREDS)
     assert.equal(result, null)
   } finally {
     restore()
+    globalThis.fetch = originalFetch
   }
+})
+
+test('isAmazonShortLink reconhece encurtadores e ignora URL plena de produto', () => {
+  assert.equal(isAmazonShortLink('https://amzn.la/ipojO'), true)
+  assert.equal(isAmazonShortLink('https://amzn.to/abc'), true)
+  assert.equal(isAmazonShortLink('https://a.co/d/abc'), true)
+  assert.equal(isAmazonShortLink('https://www.amazon.com.br/dp/B09WG452T1'), false)
+})
+
+test('resolveAmazonShortLink: segue redirect HTTP até a PDP com ASIN', async () => {
+  const PDP = 'https://www.amazon.com.br/dp/B09WG452T1?tag=promobaby07-20'
+  const fetchImpl = async (u) => ({
+    url: u,
+    headers: {
+      getSetCookie: () => [],
+      get: (k) => (String(k).toLowerCase() === 'location' && u === 'https://amzn.la/ipojO') ? PDP : null,
+    },
+  })
+  const resolved = await resolveAmazonShortLink('https://amzn.la/ipojO', { fetchImpl })
+  assert.equal(resolved, PDP)
+})
+
+test('resolveAmazonShortLink: extrai destino do corpo quando é interstitial 200 (redirect JS)', async () => {
+  const PDP = 'https://www.amazon.com.br/dp/B09WG452T1?tag=x'
+  const fetchImpl = async (u) => ({
+    url: u,
+    headers: { getSetCookie: () => [], get: () => null },
+    text: async () => `<html><script>location.replace("${PDP}")</script></html>`,
+  })
+  const resolved = await resolveAmazonShortLink('https://amzn.la/ipojO', { fetchImpl })
+  assert.equal(resolved, PDP)
+})
+
+test('resolveAmazonShortLink: URL que já tem ASIN é devolvida sem fetch', async () => {
+  let called = false
+  const fetchImpl = async () => { called = true; return {} }
+  const direct = 'https://www.amazon.com.br/dp/B09WG452T1'
+  const resolved = await resolveAmazonShortLink(direct, { fetchImpl })
+  assert.equal(resolved, direct)
+  assert.equal(called, false, 'URL plena não dispara fetch')
 })
