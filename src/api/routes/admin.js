@@ -11,6 +11,7 @@ import { readBacklogPipeline, updateBacklogIssueStatus } from '../../backlogPipe
 import { TERMS_DOCUMENT_ID, getEffectiveTermsDocument, nextTermsVersion, normalizeTermsContent } from '../../legalTerms.js'
 import { getDlqMaintenanceSnapshot } from '../../jobs/dlqMaintenance.js'
 import { redactAdminPayload, serializeAdminAuditValue } from '../../adminRedaction.js'
+import { buildErrorsByMessage } from '../../adminLogSummary.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -272,6 +273,7 @@ function pct(part, total) {
   if (!denominator) return 0
   return Math.round((Number(part || 0) / denominator) * 1000) / 10
 }
+
 
 function emptyOperationalLogCounts() {
   return { success: 0, skippedDedup: 0, skippedConfig: 0, timeoutTotal: 0, errorOther: 0, inFlight: 0 }
@@ -1738,6 +1740,7 @@ export async function adminRoutes(app) {
       where: { sentAt: { gte: from, lte: to } },
       select: { userId: true, status: true, errorMsg: true, destGroup: true, sentAt: true },
     })
+    const topErrorsLimit = Math.max(1, Math.min(200, parseInt(req.query?.topErrors ?? '50') || 50))
 
     const counts = {
       success: 0,
@@ -1785,6 +1788,7 @@ export async function adminRoutes(app) {
       counts,
       topTimeoutDests,
       topErrorUsers,
+      errorsByMessage: buildErrorsByMessage(logs, { limit: topErrorsLimit }),
       windows: buildOperationalWindows(logs, now),
     }
   })
