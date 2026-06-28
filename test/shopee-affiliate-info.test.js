@@ -105,13 +105,14 @@ test('convert() rejeita resposta sem shortLink afiliado válido', async (t) => {
   )
 })
 
-// Regressão: links de cupom/voucher Shopee (s.shopee.com.br/XXX que resolvem
-// para /buyer/voucher ou similares, sem shopId+itemId) NÃO devem ser convertidos
-// via API de afiliado. A API pode aceitar essas URLs e retornar um shortLink que
-// roteia via web em vez de deep-link para o app, causando "Oops! Seu navegador
-// não é mais aceito!" no browser do WhatsApp. convert() deve rejeitar antes de
-// chamar a API, preservando o link original intacto.
-test('convert() rejeita link de cupom/voucher sem IDs de produto antes de chamar a API', async (t) => {
+// Regressão (comportamento DEFAULT, SHOPEE_COUPON_CONVERT desligado): links de
+// cupom/voucher Shopee (s.shopee.com.br/XXX que resolvem para /buyer/voucher ou
+// similares, sem shopId+itemId) NÃO devem ser convertidos via API de afiliado.
+// A API pode aceitar essas URLs e retornar um shortLink que roteia via web em
+// vez de deep-link para o app, causando "Oops! Seu navegador não é mais
+// aceito!" no browser do WhatsApp. convert() deve rejeitar antes de chamar a
+// API, preservando o comportamento de strip (sem vazar o link de terceiro).
+test('convert() rejeita link de cupom/voucher sem IDs de produto antes de chamar a API (flag OFF)', async (t) => {
   let apiCalled = false
   t.after(stubAxiosPost(async () => { apiCalled = true; return { data: {} } }))
   const originalFetch = globalThis.fetch
@@ -128,6 +129,58 @@ test('convert() rejeita link de cupom/voucher sem IDs de produto antes de chamar
   assert.match(caughtErr.message, /link não é de produto/)
   assert.equal(caughtErr.stripFromMessage, true, 'erro deve ter stripFromMessage=true para bot-worker remover o link da mensagem')
   assert.equal(apiCalled, false, 'API de afiliado não deve ser chamada para link de cupom')
+})
+
+function withCouponConvertEnabled(t) {
+  const prev = process.env.SHOPEE_COUPON_CONVERT
+  process.env.SHOPEE_COUPON_CONVERT = 'true'
+  t.after(() => {
+    if (prev === undefined) delete process.env.SHOPEE_COUPON_CONVERT
+    else process.env.SHOPEE_COUPON_CONVERT = prev
+  })
+}
+
+function stubCouponResolution(t) {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => ({
+    ok: true, status: 200, url: 'https://shopee.com.br/buyer/voucher?spm=xxx',
+    headers: { get: () => null }, body: null, text: async () => '',
+  })
+  t.after(() => { globalThis.fetch = originalFetch })
+}
+
+// Com SHOPEE_COUPON_CONVERT=true: cupom é convertido pela API de afiliado e o
+// shortLink resultante (comissão nossa) é devolvido para espelhar o CTA.
+test('convert() converte link de cupom quando SHOPEE_COUPON_CONVERT=true e a API aceita', async (t) => {
+  withCouponConvertEnabled(t)
+  stubCouponResolution(t)
+  let apiCalled = false
+  t.after(stubAxiosPost(async () => {
+    apiCalled = true
+    return { data: { data: { generateShortLink: { shortLink: 'https://s.shopee.com.br/cupomAFIL123' } } } }
+  }))
+
+  const result = await convert('https://s.shopee.com.br/40eQK1or1O', CREDS)
+  assert.equal(result, 'https://s.shopee.com.br/cupomAFIL123')
+  assert.equal(apiCalled, true, 'API de afiliado deve ser chamada para tentar converter o cupom')
+})
+
+// Invariante de segurança: mesmo com o flag ligado, se a API recusar o cupom
+// (ela rejeita re-etiquetar link de outro afiliado), caímos no strip — NUNCA
+// devolvemos o link original do concorrente.
+test('convert() faz strip seguro quando SHOPEE_COUPON_CONVERT=true mas a API recusa o cupom', async (t) => {
+  withCouponConvertEnabled(t)
+  stubCouponResolution(t)
+  t.after(stubAxiosPost(async () => ({ data: { errors: [{ message: 'Invalid origin URL' }] } })))
+
+  let caughtErr
+  try {
+    await convert('https://s.shopee.com.br/40eQK1or1O', CREDS)
+  } catch (err) {
+    caughtErr = err
+  }
+  assert.ok(caughtErr, 'deve lançar')
+  assert.equal(caughtErr.stripFromMessage, true, 'fallback seguro: nunca encaminha o link original do concorrente')
 })
 
 // Regressão 2: cleanAffiliateUrl deve preservar a URL como-está quando não
