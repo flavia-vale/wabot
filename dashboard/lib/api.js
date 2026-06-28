@@ -257,7 +257,10 @@ export const api = {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/logs${query ? `?${query}` : ''}`)
   },
-  adminLogsSummary: (period = '7d') => apiFetch(`/api/admin/logs/summary?period=${encodeURIComponent(period)}`),
+  adminLogsSummary: (period = '7d', params = {}) => {
+    const query = new URLSearchParams(Object.entries({ period, ...params }).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/logs/summary?${query}`)
+  },
   adminSessions: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/sessions${query ? `?${query}` : ''}`)

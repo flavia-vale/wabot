@@ -76,6 +76,65 @@ function formatCurrency(value) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value ?? 0))
 }
 
+
+function formatNumber(value) {
+  return new Intl.NumberFormat('pt-BR').format(Number(value ?? 0))
+}
+
+function ErrorVolumeCard({ summary }) {
+  const items = asArray(summary?.errorsByMessage)
+  const total = items.reduce((sum, item) => sum + Number(item?.count || 0), 0)
+  const rangeFrom = summary?.range?.from ? formatDate(summary.range.from) : 'últimas 24h'
+  const rangeTo = summary?.range?.to ? formatDate(summary.range.to) : 'agora'
+
+  return (
+    <section className="rounded-2xl bg-slate-950 p-5 text-white shadow-sm ring-1 ring-slate-800 lg:col-span-2">
+      <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-cyan-300">Volumetria operacional</p>
+          <h2 className="mt-1 text-xl font-black">Erros nas últimas 24h</h2>
+          <p className="mt-1 text-xs text-slate-400">Agrupado por mensagem técnica de erro, sem expor texto bruto das mensagens.</p>
+        </div>
+        <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-right">
+          <p className="text-2xl font-black text-cyan-100">{formatNumber(total)}</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-cyan-300">eventos agrupados</p>
+          <p className="mt-1 text-[11px] text-slate-400">{rangeFrom} → {rangeTo}</p>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-white/10">
+        <div className="grid grid-cols-[1fr_auto] gap-3 bg-white/5 px-4 py-3 text-[11px] font-black uppercase tracking-wide text-slate-400 md:grid-cols-[1fr_130px_100px_150px]">
+          <span>Mensagem / grupo</span>
+          <span className="hidden md:block">Categoria</span>
+          <span className="text-right">Volume</span>
+          <span className="hidden text-right md:block">Último visto</span>
+        </div>
+        <div className="divide-y divide-white/10">
+          {items.map((item, index) => {
+            const percent = total ? Math.round((Number(item?.count || 0) / total) * 1000) / 10 : 0
+            return (
+              <div key={item?.errorMsg ?? `error-${index}`} className="grid grid-cols-[1fr_auto] gap-3 px-4 py-3 text-sm md:grid-cols-[1fr_130px_100px_150px]">
+                <div className="min-w-0">
+                  <p className="break-words font-mono text-xs font-bold text-slate-100">{item?.errorMsg || 'unknown'}</p>
+                  {item?.sampleErrorMsg && item.sampleErrorMsg !== item.errorMsg && <p className="mt-1 break-words text-[11px] text-slate-500">Exemplo recente: {item.sampleErrorMsg}</p>}
+                  <p className="mt-1 text-[11px] text-slate-500 md:hidden">{item?.category || 'UNKNOWN'} · último {formatDate(item?.lastSeenAt)}</p>
+                </div>
+                <span className="hidden self-start rounded-full bg-white/10 px-2 py-1 text-[11px] font-black text-slate-300 md:inline-block">{item?.category || 'UNKNOWN'}</span>
+                <div className="text-right">
+                  <p className="text-base font-black text-cyan-100">{formatNumber(item?.count)}</p>
+                  <p className="text-[11px] text-slate-500">{percent}%</p>
+                </div>
+                <span className="hidden self-center text-right text-xs text-slate-400 md:block">{formatDate(item?.lastSeenAt)}</span>
+              </div>
+            )
+          })}
+          {!items.length && <p className="px-4 py-6 text-sm text-slate-400">Nenhum erro ou bloqueio com mensagem técnica nas últimas 24h.</p>}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function statValue(key, value) {
   if (key === 'revenue30d') return formatCurrency(value)
   if (key === 'successRate24h') return value === null || value === undefined ? '—' : `${value}%`
@@ -766,6 +825,7 @@ export default function AdminPage() {
   const [sessions, setSessions] = useState(null)
   const [sessionTelemetry, setSessionTelemetry] = useState(null)
   const [logs, setLogs] = useState(null)
+  const [logsSummary24h, setLogsSummary24h] = useState(null)
   const [finance, setFinance] = useState(null)
   const [payments, setPayments] = useState(null)
   const [subscriptions, setSubscriptions] = useState(null)
@@ -788,13 +848,14 @@ export default function AdminPage() {
   async function loadAdminData(nextRisk = risk, nextSearch = search) {
     if (accessDenied) return
     setError('')
-    const [adminData, overviewData, usersData, sessionsData, sessionTelemetryData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, lpContentData, termsData] = await Promise.all([
+    const [adminData, overviewData, usersData, sessionsData, sessionTelemetryData, logsData, logsSummary24hData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, lpContentData, termsData] = await Promise.all([
       api.adminMe(),
       api.adminOverview(),
       api.adminUsers({ risk: nextRisk, search: nextSearch, limit: 20 }),
       api.adminSessions({ limit: 10 }),
       api.adminSessionTelemetry({ limit: 60 }).catch(() => null),
       api.adminLogs({ limit: 25, status: 'all' }),
+      api.adminLogsSummary('24h', { topErrors: 50 }).catch(() => null),
       api.adminFinanceOverview().catch(() => null),
       api.adminPayments({ limit: 10 }).catch(() => null),
       api.adminSubscriptions({ limit: 10, status: 'expiring_soon' }).catch(() => null),
@@ -812,6 +873,7 @@ export default function AdminPage() {
     setSessions(sessionsData)
     setSessionTelemetry(sessionTelemetryData)
     setLogs(logsData)
+    setLogsSummary24h(logsSummary24hData)
     setFinance(financeData)
     setPayments(paymentsData)
     setSubscriptions(subscriptionsData)
@@ -840,6 +902,7 @@ export default function AdminPage() {
           api.adminSessions({ limit: 10 }),
           api.adminSessionTelemetry({ limit: 60 }).catch(() => null),
           api.adminLogs({ limit: 25, status: 'all' }),
+          api.adminLogsSummary('24h', { topErrors: 50 }).catch(() => null),
           api.adminFinanceOverview().catch(() => null),
           api.adminPayments({ limit: 10 }).catch(() => null),
           api.adminSubscriptions({ limit: 10, status: 'expiring_soon' }).catch(() => null),
@@ -854,13 +917,14 @@ export default function AdminPage() {
       })
       .then((result) => {
         if (!active || !result) return
-        const [adminData, overviewData, usersData, sessionsData, sessionTelemetryData, logsData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, lpContentData, termsData] = result
+        const [adminData, overviewData, usersData, sessionsData, sessionTelemetryData, logsData, logsSummary24hData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, lpContentData, termsData] = result
         setAdmin(adminData)
         setOverview(overviewData)
         setUsers(usersData)
         setSessions(sessionsData)
         setSessionTelemetry(sessionTelemetryData)
         setLogs(logsData)
+        setLogsSummary24h(logsSummary24hData)
         setFinance(financeData)
         setPayments(paymentsData)
         setSubscriptions(subscriptionsData)
@@ -1350,6 +1414,8 @@ export default function AdminPage() {
             <div className="mb-3 flex flex-wrap gap-2">{Object.entries(asPlainObject(sessionTelemetry?.summary)).slice(0, 8).map(([key, count]) => <span key={key} className="rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">{key}: {count}</span>)}</div>
             <div className="space-y-2">{asArray(sessionTelemetry?.events).slice(0, 12).map((evt) => <div key={evt?.id ?? `${evt?.userId ?? 'evento'}-${evt?.createdAt ?? 'sem-data'}`} className="rounded-lg border border-gray-100 p-2 text-xs text-gray-700"><p className="font-semibold">{evt?.user?.email || evt?.userId || 'usuário'} · {evt?.stage || 'unknown'} / {evt?.event || 'unknown'}</p><p className="text-gray-500">{formatDate(evt?.createdAt)}{evt?.elapsedSec != null ? ` · ${evt?.elapsedSec}s` : ''}{evt?.detail ? ` · ${evt?.detail}` : ''}</p></div>)}{!asArray(sessionTelemetry?.events).length && <p className="text-sm text-gray-400">Sem telemetria recente.</p>}</div>
           </section>
+
+          <ErrorVolumeCard summary={logsSummary24h} />
 
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
             <div className="mb-4 flex items-center justify-between gap-3"><div><h2 className="text-lg font-black text-gray-900">Logs recentes</h2><p className="text-xs text-gray-500">Últimos {logs?.logs?.length ?? 0} registros carregados de {logs?.total ?? 0} no período.</p></div><button onClick={applyFilters} className="rounded-lg bg-gray-100 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-200">Atualizar agora</button></div>

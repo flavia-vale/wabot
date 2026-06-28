@@ -48,3 +48,11 @@ test('admin page normaliza coleções opcionais antes de renderizar listas vinda
     )
   }
 })
+
+
+test('admin page exibe volumetria de erros das últimas 24h', () => {
+  assert.match(adminPageSource, /api\.adminLogsSummary\('24h', \{ topErrors: 50 \}\)/)
+  assert.match(adminPageSource, /function ErrorVolumeCard\(\{ summary \}\)/)
+  assert.match(adminPageSource, /Erros nas últimas 24h/)
+  assert.match(adminPageSource, /errorsByMessage/)
+})
