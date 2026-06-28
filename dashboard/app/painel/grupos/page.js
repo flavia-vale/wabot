@@ -311,7 +311,7 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
             <strong>Sem imagem:</strong> envia só o link com a prévia do WhatsApp.
           </>}
           hint="De onde vem a foto que acompanha a oferta."
-          last={!templateApplied}
+          last
         >
           <div>
             <select
