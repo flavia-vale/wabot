@@ -4,7 +4,6 @@
  * dados do fluxo canônico de espelhamento:
  *   - api.groups()       → origem (role:'monitor') e destino (role:'post')
  *   - api.logsSummary('today') → métricas factuais do dia
- *   - api.getConfig()    → cadência de envio (delayMin/delayMax)
  *   - estado "ligado"    → reflete a sessão WhatsApp conectada (usePainel.online);
  *     NÃO há flag própria no backend — o bot espelha enquanto a sessão roda.
  *
@@ -84,19 +83,17 @@ export default function EspelhamentoPage() {
 
   const [groups, setGroups] = useState([])
   const [summary, setSummary] = useState(null)
-  const [config, setConfig] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [switchingMirror, setSwitchingMirror] = useState(false)
 
   useEffect(() => {
     let active = true
-    Promise.allSettled([api.groups(), api.logsSummary('today'), api.getConfig()]).then(([g, s, c]) => {
+    Promise.allSettled([api.groups(), api.logsSummary('today')]).then(([g, s]) => {
       if (!active) return
       if (g.status === 'fulfilled' && Array.isArray(g.value)) setGroups(g.value)
       else setLoadError('Não foi possível carregar os grupos do espelhamento.')
       if (s.status === 'fulfilled') setSummary(s.value)
-      if (c.status === 'fulfilled') setConfig(c.value)
       setLoading(false)
     })
     return () => { active = false }
@@ -115,10 +112,6 @@ export default function EspelhamentoPage() {
   const lastSendLabel = summary?.lastSendAt
     ? new Date(summary.lastSendAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     : null
-
-  const ritmo = config && (config.delayMin != null || config.delayMax != null)
-    ? `1 envio a cada ${num(config.delayMin)}–${num(config.delayMax)} s`
-    : 'Cadência configurada nas Configurações'
 
   async function toggleMirroring() {
     setSwitchingMirror(true)
@@ -223,19 +216,6 @@ export default function EspelhamentoPage() {
         />
       </div>
 
-      {/* Ritmo de envio */}
-      <section className="pnl-card" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        <span className="pnl-icon-tile" aria-hidden="true">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-          </svg>
-        </span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="pnl-card-title" style={{ marginBottom: 2 }}>{ritmo}</div>
-          <p className="pnl-card-note" style={{ margin: 0 }}>Evita parecer spam · ajustável em Configurações</p>
-        </div>
-        <Link href="/painel/configuracoes" className="pnl-link-btn">Ajustar</Link>
-      </section>
     </div>
   )
 }

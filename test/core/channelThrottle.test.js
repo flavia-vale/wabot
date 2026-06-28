@@ -5,6 +5,7 @@ import {
   checkAndReserve,
   recordPost,
   decideDestination,
+  calculateMinIntervalWithJitterMs,
   operatingHoursState,
   quietHoursState,
   tzDayBucket,
@@ -81,6 +82,18 @@ test('quietHoursState: janela 0-0 nunca está em quiet (start==end com start<=en
   const t = new Date('2026-05-20T15:00:00Z').getTime()
   const state = quietHoursState(t, { startHour: 0, endHour: 0, tz: 'UTC' })
   assert.equal(state.inQuiet, false)
+})
+
+
+test('calculateMinIntervalWithJitterMs applies 0 to 20 percent jitter above the configured interval', () => {
+  assert.equal(calculateMinIntervalWithJitterMs(600, () => 0), 600_000)
+  assert.equal(calculateMinIntervalWithJitterMs(600, () => 0.999), 720_000)
+  assert.equal(calculateMinIntervalWithJitterMs(600, () => 0.5), 660_000)
+})
+
+test('calculateMinIntervalWithJitterMs clamps invalid interval to the hard default before jitter', () => {
+  assert.equal(calculateMinIntervalWithJitterMs(null, () => 0), 30_000)
+  assert.equal(calculateMinIntervalWithJitterMs(undefined, () => 0.999), 36_000)
 })
 
 // ---------- I/O com fake db ----------
@@ -222,7 +235,7 @@ test('decideDestination: ignoreOperatingHours pula o horário mas mantém anti-b
   assert.equal(res.reason, DEFER_REASON.BURST_CAP)
 })
 
-test('decideDestination: limites anti-ban vêm do destino (minInterval do dest)', () => {
+test('decideDestination: limites anti-ban vêm do destino com jitter de 0% no mínimo', () => {
   const now = NOON_BRT_MS
   const lastPostMs = now - 40 * SEC
   const res = decideDestination({
@@ -230,10 +243,33 @@ test('decideDestination: limites anti-ban vêm do destino (minInterval do dest)'
     throttle: { postsToday: 1, dayBucket: tzDayBucket(now, 'America/Sao_Paulo'), lastPostAt: new Date(lastPostMs), burstWindowStart: new Date(lastPostMs), postsInBurstWindow: 1 },
     isPaused: false,
     dest: { ...DEST_DEFAULT, minIntervalSec: 60 }, // 40s < 60s → bloqueia
+    random: () => 0,
   })
   assert.equal(res.allow, false)
   assert.equal(res.reason, DEFER_REASON.MIN_INTERVAL)
   assert.equal(res.deferUntil, lastPostMs + 60 * SEC)
+})
+
+test('decideDestination waits until lastPostAt plus randomized min interval', () => {
+  const now = Date.UTC(2026, 0, 1, 12, 10, 0)
+  const lastPostAt = new Date(Date.UTC(2026, 0, 1, 12, 0, 0))
+  const res = decideDestination({
+    now,
+    throttle: { lastPostAt, dayBucket: '2026-01-01', postsToday: 1, burstWindowStart: lastPostAt, postsInBurstWindow: 1 },
+    isPaused: false,
+    dest: {
+      ...DEST_DEFAULT,
+      minIntervalSec: 600,
+      burstCap: 99,
+      burstWindowSec: 3600,
+      dailyCap: null,
+    },
+    random: () => 0.999,
+  })
+
+  assert.equal(res.allow, false)
+  assert.equal(res.reason, DEFER_REASON.MIN_INTERVAL)
+  assert.equal(res.deferUntil, Date.UTC(2026, 0, 1, 12, 12, 0))
 })
 
 test('decideDestination: dailyCap do destino bloqueia', () => {

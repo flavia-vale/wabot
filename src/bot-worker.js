@@ -46,7 +46,7 @@ import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingSta
 import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide } from './core/reconnectPolicy.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
-import { calculateJitterDelayMs, calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
+import { calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { applyMirrorTemplate } from './core/mirrorTemplate.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
@@ -548,7 +548,7 @@ async function checkScheduledMessages() {
           destJid: jid,
           platforms: 'scheduled',
           plan: 'scheduled',
-          delayMs: buildSmartDelayMs((await getConfig()).botConfig),
+          delayMs: buildQueuePressureDelayMs(),
           typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           channelForward: scheduledChannelForward,
           ...(scheduledImageRecipe ? { payloadRecipe: scheduledImageRecipe } : { payload: { text: msg.text } }),
@@ -954,13 +954,9 @@ function getSendBackendQueueSize() {
   return typeof size === 'number' ? size : 0
 }
 
-function buildSmartDelayMs(botConfig, queueSize = getSendBackendQueueSize()) {
-  const jitterDelayMs = calculateJitterDelayMs({
-    delayMin: botConfig?.delayMin,
-    delayMax: botConfig?.delayMax,
-  })
+function buildQueuePressureDelayMs(queueSize = getSendBackendQueueSize()) {
   return calculateProgressiveDelayMs({
-    baseDelayMs: jitterDelayMs,
+    baseDelayMs: 0,
     queueSize,
     threshold: SMART_DELAY_PROGRESSIVE_THRESHOLD,
     stepMs: SMART_DELAY_PROGRESSIVE_STEP_MS,
@@ -2536,7 +2532,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           destJid,
           platforms,
           plan: cfg.plan,
-          delayMs: buildSmartDelayMs(cfg.botConfig) + staggerMs,
+          delayMs: buildQueuePressureDelayMs() + staggerMs,
           typingDelayMs: calculateTypingDelayMs({ text: variantText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           channelForward,
           buildPayload,
@@ -2885,7 +2881,7 @@ process.on('message', async msg => {
         destJid: jid,
         platforms: 'broadcast',
         plan: 'broadcast',
-        delayMs: buildSmartDelayMs((await getConfig()).botConfig),
+        delayMs: buildQueuePressureDelayMs(),
         typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
         channelForward: broadcastChannelForward,
         // Fila de ofertas com horário próprio pede para ignorar a janela

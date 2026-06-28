@@ -7,7 +7,7 @@ import { FeatureToggle } from './FeatureToggle'
 // channel* da config global legada).
 
 const FIELDS = [
-  { key: 'minIntervalSec', label: 'Intervalo mínimo entre envios (segundos)', hint: 'Tempo mínimo entre 2 mensagens seguidas neste destino.', min: 1, max: 86400 },
+  { key: 'minIntervalSec', label: 'Intervalo mínimo entre envios (segundos)', hint: 'O bot espera este valor + até 20% aleatório. Ex.: 600 envia entre 600 e 720s.', min: 1, max: 86400 },
   { key: 'burstCap', label: 'Máximo de envios na janela', hint: 'Quantos envios cabem dentro da janela de rajada (anti-flood).', min: 1, max: 1000 },
   { key: 'burstWindowSec', label: 'Janela de rajada (segundos)', hint: 'Tamanho da janela do limite acima. Ex.: 600 = 10 minutos.', min: 60, max: 86400 },
   { key: 'dailyCap', label: 'Limite diário (envios/dia)', hint: 'Máximo por dia. Vazio = sem limite.', min: 1, max: 10000, nullable: true },
