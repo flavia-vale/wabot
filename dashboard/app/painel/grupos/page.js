@@ -1,13 +1,5 @@
 'use client'
 
-/* Grupos — interface responsiva Menta para configuração de grupos:
- * abas 👁 Monitorar / ⚡ Publicar com contagem + config por grupo recolhível
- * (em vez de duas seções longas sempre expandidas). Mesma lógica/back end de
- * sempre: api.groups / addGroup / updateGroup / deleteGroup / groupTargets /
- * updateGroupTargets / sessionWAGroups + canais (follow/admin/health). Reusa os
- * componentes existentes (ConfirmDialog, HelpLink, AddChannelModal, badges,
- * ChannelHealthPanel). Nenhuma mudança no back end — só o layout. */
-
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
@@ -64,6 +56,306 @@ function GroupAvatar({ name, index }) {
   )
 }
 
+/* ── Inline SVG icons (subset needed for the config panel) ────────────── */
+function CfgIcon({ name, size = 17 }) {
+  const p = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round' }
+  if (name === 'search') return <svg {...p}><circle cx="10" cy="10" r="7"/><path d="M21 21l-4.3-4.3"/><path d="M10.5 6.5 8.5 10.2h3L9.5 13.8"/></svg>
+  if (name === 'bolt')   return <svg {...p}><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg>
+  if (name === 'send')   return <svg {...p}><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+  if (name === 'check')  return <svg {...p} strokeWidth={2.8}><path d="M5 12.5 10 17 19 7"/></svg>
+  if (name === 'x')      return <svg {...p} strokeWidth={2}><path d="M6 6l12 12M18 6 6 18"/></svg>
+  if (name === 'plus')   return <svg {...p}><path d="M12 5v14M5 12h14"/></svg>
+  return null
+}
+
+/* ── "?" popover for long help text ──────────────────────────────────── */
+function InfoDot({ children }) {
+  return (
+    <span className="cfg-info" style={{ display: 'inline-flex' }}>
+      <span style={{
+        width: 16, height: 16, borderRadius: '50%', cursor: 'help',
+        border: '1.5px solid var(--ink-faint)', color: 'var(--ink-faint)',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 10, fontWeight: 700,
+      }}>?</span>
+      <span className="cfg-pop" style={{
+        position: 'absolute', top: 'calc(100% + 8px)', left: '50%', transform: 'translateX(-50%)',
+        width: 280, padding: '12px 14px', zIndex: 30,
+        background: 'var(--ink)', color: 'rgba(255,255,255,0.92)', borderRadius: 12,
+        fontSize: 12, lineHeight: 1.55, fontWeight: 400,
+        boxShadow: '0 18px 40px -16px rgba(0,0,0,0.45)',
+        opacity: 0, visibility: 'hidden', pointerEvents: 'none',
+      }}>{children}</span>
+    </span>
+  )
+}
+
+/* ── Section wrapper ─────────────────────────────────────────────────── */
+function CfgSection({ icon, title, desc, children }) {
+  return (
+    <div className="cfg-section">
+      <div className="cfg-section-head">
+        <div className="cfg-section-icon"><CfgIcon name={icon} /></div>
+        <div>
+          <div style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--ink)' }}>{title}</div>
+          {desc && <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>{desc}</div>}
+        </div>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+/* ── Row (label left / control right) ───────────────────────────────── */
+function CfgRow({ label, hint, info, last, extra, children }) {
+  return (
+    <div className={`cfg-row${extra ? ' ' + extra : ''}`} style={last ? { borderBottom: 'none' } : undefined}>
+      <div>
+        <div className="cfg-row-label">{label}{info && <InfoDot>{info}</InfoDot>}</div>
+        {hint && <div className="cfg-row-hint">{hint}</div>}
+      </div>
+      <div>{children}</div>
+    </div>
+  )
+}
+
+/* ── Keyword tag input ───────────────────────────────────────────────── */
+function KeywordTagInput({ keywords, draft, onDraftChange, onAdd, onRemove }) {
+  return (
+    <div className="cfg-keyword-box">
+      {keywords.map((kw) => (
+        <span key={kw} className="cfg-keyword-pill">
+          {kw}
+          <button type="button" className="cfg-keyword-pill-rm" onClick={() => onRemove(kw)} aria-label={`Remover "${kw}"`}>
+            <CfgIcon name="x" size={12} />
+          </button>
+        </span>
+      ))}
+      <input
+        className="cfg-keyword-input"
+        value={draft}
+        onChange={(e) => onDraftChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); onAdd() }
+          if (e.key === 'Backspace' && !draft && keywords.length > 0) onRemove(keywords[keywords.length - 1])
+        }}
+        placeholder={keywords.length ? 'adicionar…' : 'ex: usado, recondicionado'}
+      />
+    </div>
+  )
+}
+
+/* ── Monitor group config panel (redesigned) ────────────────────────── */
+function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, onOpenTargetEditor, onSetActionError, templates }) {
+  const [draft, setDraft] = useState('')
+
+  const keywords = (g.blockedKeywords || '').split(',').map((s) => s.trim()).filter(Boolean)
+
+  function addKeyword() {
+    const v = draft.trim().replace(/,$/, '')
+    if (v && !keywords.includes(v)) onUpdate(g.id, { blockedKeywords: [...keywords, v].join(',') })
+    setDraft('')
+  }
+
+  function removeKeyword(kw) {
+    onUpdate(g.id, { blockedKeywords: keywords.filter((k) => k !== kw).join(',') })
+  }
+
+  function togglePlatform(platformId) {
+    const current = g.allowedPlatforms
+      ? g.allowedPlatforms.split(',').filter(Boolean)
+      : ALL_PLATFORMS.map((p) => p.id)
+    const next = current.includes(platformId)
+      ? current.filter((p) => p !== platformId)
+      : [...current, platformId]
+    onUpdate(g.id, { allowedPlatforms: next.join(',') })
+  }
+
+  const encaminhar = (g.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK'
+
+  const templateValue = g.templateKey == null ? '__inherit__' : (g.templateKey === '' ? '__relay__' : g.templateKey)
+  const templateApplied = g.templateKey !== null && g.templateKey !== ''
+
+  const cachedIds = targetsCache[g.id]
+  const destNames = cachedIds
+    ? (cachedIds.length === 0 ? null : cachedIds.map((id) => post.find((p) => p.id === id)?.name).filter(Boolean))
+    : null
+
+  return (
+    <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 16, display: 'grid', gap: 14 }}>
+
+      {/* ── Seção 1: O que o bot captura ── */}
+      <CfgSection icon="search" title="O que o bot captura" desc="Quais links viram oferta a partir desse grupo.">
+
+        <CfgRow label="Lojas aceitas" hint="Sem nenhuma marcada, usa as plataformas da configuração global.">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {ALL_PLATFORMS.map((platform) => {
+              const selected = new Set((g.allowedPlatforms || '').split(',').filter(Boolean))
+              const on = g.allowedPlatforms ? selected.has(platform.id) : true
+              return (
+                <button
+                  key={platform.id}
+                  type="button"
+                  className={`cfg-platform-chip${on ? ' is-on' : ''}`}
+                  onClick={() => togglePlatform(platform.id)}
+                >
+                  <span style={{ display: 'flex', opacity: on ? 1 : 0.3 }}><CfgIcon name="check" size={13} /></span>
+                  {platform.label}
+                </button>
+              )
+            })}
+          </div>
+        </CfgRow>
+
+        <CfgRow label="Palavras bloqueadas" hint="Ignora mensagens com essas palavras. Soma à lista global.">
+          <KeywordTagInput
+            keywords={keywords}
+            draft={draft}
+            onDraftChange={setDraft}
+            onAdd={addKeyword}
+            onRemove={removeKeyword}
+          />
+        </CfgRow>
+
+        <CfgRow
+          label="Encaminhar mensagens sem link"
+          hint="Repassa também posts que não têm link de produto."
+          last
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={encaminhar}
+              disabled={!canUseChannels}
+              className={`pnl-switch${encaminhar ? ' is-on' : ''}`}
+              onClick={() => {
+                if (!encaminhar && !canUseChannels) {
+                  onSetActionError('O Módulo de Preservação Avançada está disponível no Trial ativo e no plano Pro.')
+                  return
+                }
+                onUpdate(g.id, {
+                  forwardMode: encaminhar ? 'LINK_ONLY' : 'ALLOW_NO_LINK',
+                  noLinkScope: encaminhar ? null : (g.noLinkScope ?? 'TEXT_ONLY'),
+                })
+              }}
+            ><span /></button>
+            <div style={{ paddingTop: 3 }}>
+              <span style={{ fontSize: 13, color: 'var(--ink)' }}>
+                {!canUseChannels && <span style={{ color: '#b5742a', fontWeight: 600 }}>(Pro) </span>}
+                {encaminhar ? 'Ligado' : 'Desligado'}
+              </span>
+              {encaminhar && (
+                <>
+                  <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>Pode aumentar bastante o volume de mensagens.</div>
+                  <select
+                    className="pnl-input"
+                    style={{ marginTop: 10 }}
+                    value={g.noLinkScope ?? 'TEXT_ONLY'}
+                    onChange={(e) => onUpdate(g.id, { forwardMode: 'ALLOW_NO_LINK', noLinkScope: e.target.value })}
+                  >
+                    {NO_LINK_SCOPE_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                  </select>
+                </>
+              )}
+            </div>
+          </div>
+        </CfgRow>
+      </CfgSection>
+
+      {/* ── Seção 2: Como a oferta é publicada ── */}
+      <CfgSection icon="bolt" title="Como a oferta é publicada" desc="A aparência da mensagem que sai com o seu código.">
+
+        <CfgRow
+          label="Formato da mensagem"
+          info='"Manter texto original" converte os links dentro do texto que veio do grupo. Um template reescreve tudo num layout de oferta (um produto por vez).'
+          hint={templateApplied ? 'Reescreve num layout de oferta — ideal para um produto só.' : 'Mantém o texto do grupo e só troca os links pelos seus.'}
+        >
+          <select
+            className="pnl-input"
+            value={templateValue}
+            onChange={(e) => {
+              const v = e.target.value
+              onUpdate(g.id, { templateKey: v === '__inherit__' ? null : v === '__relay__' ? '' : v })
+            }}
+          >
+            <option value="__inherit__">Usar padrão global (Configurações)</option>
+            <option value="__relay__">Manter texto original convertido</option>
+            {templates.map((t) => <option key={t.key} value={t.key}>{t.name}</option>)}
+          </select>
+        </CfgRow>
+
+        {templateApplied && (
+          <CfgRow
+            label="Link a converter quando há vários"
+            hint="O template vira oferta de um produto só — escolha qual link usar."
+            extra="cfg-fadeup"
+          >
+            <select
+              className="pnl-input"
+              value={g.primaryLinkTarget ?? ''}
+              onChange={(e) => onUpdate(g.id, { primaryLinkTarget: e.target.value })}
+            >
+              <option value="">Usar padrão global (Configurações)</option>
+              <option value="first">Primeiro link da mensagem</option>
+              <option value="last">Último link da mensagem</option>
+            </select>
+          </CfgRow>
+        )}
+
+        <CfgRow
+          label="Imagem da oferta"
+          info={<>
+            <strong>Oficial da loja:</strong> busca a foto no site do produto, sem marca d&apos;água.<br />
+            <strong>Da mensagem:</strong> reaproveita a foto do grupo de origem.<br />
+            <strong>Sem imagem:</strong> envia só o link com a prévia do WhatsApp.
+          </>}
+          hint="De onde vem a foto que acompanha a oferta."
+          last
+        >
+          <div>
+            <select
+              className="pnl-input"
+              value={g.imageMode ?? 'original'}
+              onChange={(e) => onUpdate(g.id, { imageMode: e.target.value })}
+            >
+              <option value="fetch">Imagem oficial da loja</option>
+              <option value="original">Imagem que veio na mensagem</option>
+              <option value="none">Sem imagem (só o link com prévia)</option>
+            </select>
+            {(g.imageMode ?? 'original') === 'fetch' && (
+              <div className="cfg-inline-warn">
+                <span style={{ color: 'var(--danger)', flexShrink: 0, display: 'flex', paddingTop: 1 }}>⚡</span>
+                <span>Na <strong>Shopee</strong>, quando a loja não retorna a foto, a oferta usa a imagem da mensagem (pode ter marca d&apos;água).</span>
+              </div>
+            )}
+          </div>
+        </CfgRow>
+      </CfgSection>
+
+      {/* ── Seção 3: Para onde vai ── */}
+      <CfgSection icon="send" title="Para onde esse grupo envia" desc="Os destinos que recebem as ofertas desse grupo.">
+        <CfgRow label="Destinos" hint="Sem nenhum escolhido, envia para todos os grupos de destino." last>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            {destNames && destNames.length > 0
+              ? destNames.map((name) => (
+                  <span key={name} className="cfg-dest-pill">⚡ {name}</span>
+                ))
+              : cachedIds !== undefined
+                ? <span className="pnl-hint" style={{ paddingTop: 4 }}>Todos os destinos (sem filtro)</span>
+                : null}
+            <button type="button" className="pnl-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={() => onOpenTargetEditor(g.id)}>
+              <CfgIcon name="plus" size={13} />
+              {cachedIds !== undefined ? 'Editar destinos' : 'Escolher destinos'}
+            </button>
+          </div>
+        </CfgRow>
+      </CfgSection>
+
+    </div>
+  )
+}
+
 export default function GruposPage() {
   usePainelHeader({ title: 'Grupos e canais', subtitle: 'Defina quais grupos o bot escuta e onde ele publica' })
 
@@ -92,6 +384,7 @@ export default function GruposPage() {
   const [expandedHealthId, setExpandedHealthId] = useState(null)
   const [planSubject, setPlanSubject] = useState({ plan: 'trial', accessExpiresAt: null })
   const [templates, setTemplates] = useState([])
+  const [groupTargetsCache, setGroupTargetsCache] = useState({})
 
   async function load() {
     setLoadingGroups(true)
@@ -119,7 +412,6 @@ export default function GruposPage() {
       .catch((err) => { if (active) setActionError(err.message) })
       .finally(() => { if (active) setLoadingGroups(false) })
     return () => { active = false }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -196,23 +488,15 @@ export default function GruposPage() {
     }
   }
 
-  function toggleGroupPlatform(group, platformId) {
-    const current = group.allowedPlatforms
-      ? group.allowedPlatforms.split(',').filter(Boolean)
-      : ALL_PLATFORMS.map((p) => p.id)
-    const next = current.includes(platformId)
-      ? current.filter((p) => p !== platformId)
-      : [...current, platformId]
-    handleUpdateGroup(group.id, { allowedPlatforms: next.join(',') })
-  }
-
   async function openTargetEditor(groupId) {
     setActionError('')
     setTargetLoading(true)
     setTargetEditorId(groupId)
     try {
       const data = await api.groupTargets(groupId)
-      setTargetPostIds(data.postIds ?? [])
+      const ids = data.postIds ?? []
+      setTargetPostIds(ids)
+      setGroupTargetsCache((prev) => ({ ...prev, [groupId]: ids }))
     } catch (err) {
       setActionError(err.message)
       setTargetEditorId(null)
@@ -233,6 +517,7 @@ export default function GruposPage() {
     setActionError('')
     try {
       await api.updateGroupTargets(targetEditorId, targetPostIds)
+      setGroupTargetsCache((prev) => ({ ...prev, [targetEditorId]: targetPostIds }))
       setTargetEditorId(null)
     } catch (err) {
       setActionError(err.message)
@@ -281,128 +566,6 @@ export default function GruposPage() {
     return !Number.isNaN(expiresAt.getTime()) && expiresAt > new Date()
   })()
 
-  function renderMonitorConfig(g) {
-    return (
-      <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 14, display: 'grid', gap: 16 }}>
-        <div>
-          <p className="pnl-label" style={{ marginBottom: 6 }}>Palavras bloqueadas só neste grupo</p>
-          <input
-            className="pnl-input"
-            value={g.blockedKeywords ?? ''}
-            onChange={(e) => handleUpdateGroup(g.id, { blockedKeywords: e.target.value })}
-            placeholder="ex: usado, recondicionado"
-          />
-          <p className="pnl-hint" style={{ marginTop: 6 }}>Soma à lista global. Separe por vírgula.</p>
-        </div>
-        <div>
-          <p className="pnl-label" style={{ marginBottom: 8 }}>Lojas que esse grupo aceita</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
-            {ALL_PLATFORMS.map((platform) => {
-              const selected = new Set((g.allowedPlatforms || '').split(',').filter(Boolean))
-              const checked = g.allowedPlatforms ? selected.has(platform.id) : true
-              return (
-                <label key={platform.id} className="pnl-check" style={{ fontWeight: 400, fontSize: 12.5 }}>
-                  <input type="checkbox" checked={checked} onChange={() => toggleGroupPlatform(g, platform.id)} />
-                  {platform.label}
-                </label>
-              )
-            })}
-          </div>
-          <p className="pnl-hint" style={{ marginTop: 6 }}>Sem seleção, usa as plataformas globais.</p>
-        </div>
-        <div>
-          <p className="pnl-label" style={{ marginBottom: 6 }}>Imagem das ofertas espelhadas</p>
-          <select
-            className="pnl-input"
-            value={g.imageMode ?? 'original'}
-            onChange={(e) => handleUpdateGroup(g.id, { imageMode: e.target.value })}
-          >
-            <option value="fetch">Imagem oficial da loja</option>
-            <option value="original">Imagem que veio na mensagem</option>
-            <option value="none">Sem imagem (só o link com prévia)</option>
-          </select>
-          <p className="pnl-hint" style={{ marginTop: 6 }}>
-            <strong>Imagem oficial da loja</strong>: busca a foto direto no site do produto, sem marca d’água de outros grupos (se o site não retornar, usa a imagem da mensagem). <strong>Imagem que veio na mensagem</strong>: reaproveita a foto do grupo de origem. <strong>Sem imagem</strong>: envia só o link com a prévia automática do WhatsApp.
-          </p>
-          <p className="pnl-hint" style={{ marginTop: 6, color: '#b5742a' }}>
-            Na <strong>Shopee</strong>, a imagem oficial nem sempre está disponível: quando a loja não retorna a foto, a oferta usa a imagem que veio na mensagem (que pode ter marca d’água). Amazon e Mercado Livre buscam a foto oficial normalmente.
-          </p>
-        </div>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={(g.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK'}
-              disabled={!canUseChannels}
-              className={`pnl-switch${(g.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK' ? ' is-on' : ''}`}
-              onClick={() => {
-                const enabled = (g.forwardMode ?? 'LINK_ONLY') !== 'ALLOW_NO_LINK'
-                if (enabled && !canUseChannels) {
-                  setActionError('O Módulo de Preservação Avançada está disponível no Trial ativo e no plano Pro.')
-                  return
-                }
-                handleUpdateGroup(g.id, {
-                  forwardMode: enabled ? 'ALLOW_NO_LINK' : 'LINK_ONLY',
-                  noLinkScope: enabled ? (g.noLinkScope ?? 'TEXT_ONLY') : null,
-                })
-              }}
-            >
-              <span />
-            </button>
-            <span style={{ fontSize: 13, color: 'var(--ink)' }}>Encaminhar mensagens sem link {!canUseChannels && '(Pro)'}</span>
-          </div>
-          {(g.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK' && (
-            <select
-              className="pnl-input"
-              style={{ marginTop: 8 }}
-              value={g.noLinkScope ?? 'TEXT_ONLY'}
-              onChange={(e) => handleUpdateGroup(g.id, { forwardMode: 'ALLOW_NO_LINK', noLinkScope: e.target.value })}
-            >
-              {NO_LINK_SCOPE_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-            </select>
-          )}
-          <p className="pnl-hint" style={{ marginTop: 6, color: '#b5742a' }}>Ativar pode aumentar o volume de mensagens encaminhadas.</p>
-        </div>
-        <div>
-          <p className="pnl-label" style={{ marginBottom: 6 }}>Template das mensagens espelhadas</p>
-          <select
-            className="pnl-input"
-            value={g.templateKey == null ? '__inherit__' : (g.templateKey === '' ? '__relay__' : g.templateKey)}
-            onChange={(e) => {
-              const v = e.target.value
-              const templateKey = v === '__inherit__' ? null : v === '__relay__' ? '' : v
-              handleUpdateGroup(g.id, { templateKey })
-            }}
-          >
-            <option value="__inherit__">Usar padrão global (Configurações)</option>
-            <option value="__relay__">Manter texto original convertido</option>
-            {templates.map((template) => <option key={template.key} value={template.key}>{template.name}</option>)}
-          </select>
-          <p className="pnl-hint" style={{ marginTop: 6 }}>Ideal para mensagens de um produto. Aplica um template do Gerar oferta depois de converter o link. Com vários produtos, só o link escolhido abaixo vira oferta. Templates sem preço deixam placeholders quando o preço não aparece no texto original.</p>
-        </div>
-        <div>
-          <p className="pnl-label" style={{ marginBottom: 6 }}>Link a converter quando há vários</p>
-          <select
-            className="pnl-input"
-            value={g.primaryLinkTarget ?? ''}
-            onChange={(e) => handleUpdateGroup(g.id, { primaryLinkTarget: e.target.value })}
-          >
-            <option value="">Usar padrão global (Configurações)</option>
-            <option value="first">Primeiro link da mensagem</option>
-            <option value="last">Último link da mensagem</option>
-          </select>
-          <p className="pnl-hint" style={{ marginTop: 6 }}>Quando a mensagem espelhada tem mais de um link de loja, escolhe qual deles é convertido e usado na oferta.</p>
-        </div>
-        <div>
-          <p className="pnl-label" style={{ marginBottom: 6 }}>Para onde esse grupo envia</p>
-          <button type="button" className="pnl-btn" onClick={() => openTargetEditor(g.id)}>Escolher destinos</button>
-          <p className="pnl-hint" style={{ marginTop: 6 }}>Sem escolha, envia para todos os grupos de destino.</p>
-        </div>
-      </div>
-    )
-  }
-
   function renderPostConfig(g) {
     return (
       <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 14, display: 'grid', gap: 14 }}>
@@ -419,9 +582,9 @@ export default function GruposPage() {
         </div>
         {g.kind !== 'channel' && (
           <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12 }}>
-            <p className="pnl-label" style={{ marginBottom: 6 }}>Botão “Ver canal” ao final das mensagens</p>
+            <p className="pnl-label" style={{ marginBottom: 6 }}>Botão &quot;Ver canal&quot; ao final das mensagens</p>
             <p className="pnl-hint" style={{ marginTop: 0, marginBottom: 8 }}>
-              Toda mensagem enviada para este grupo (espelhada, oferta automática ou agendada) sai com um botão “Ver canal” apontando para o canal escolhido. Deixe sem canal para não inserir botão.
+              Toda mensagem enviada para este grupo (espelhada, oferta automática ou agendada) sai com um botão &quot;Ver canal&quot; apontando para o canal escolhido. Deixe sem canal para não inserir botão.
             </p>
             {g.channelButtonJid ? (
               <div style={{ display: 'grid', gap: 8 }}>
@@ -540,7 +703,19 @@ export default function GruposPage() {
                     </div>
                   </div>
                   {groupErrors[g.id] && <p className="pnl-hint" style={{ color: 'var(--danger)', marginTop: 6 }}>{groupErrors[g.id]}</p>}
-                  {configOpen && (tab === 'monitor' ? renderMonitorConfig(g) : renderPostConfig(g))}
+                  {configOpen && tab === 'monitor' && (
+                    <MonitorGroupConfig
+                      g={g}
+                      onUpdate={handleUpdateGroup}
+                      canUseChannels={canUseChannels}
+                      post={post}
+                      targetsCache={groupTargetsCache}
+                      onOpenTargetEditor={openTargetEditor}
+                      onSetActionError={setActionError}
+                      templates={templates}
+                    />
+                  )}
+                  {configOpen && tab === 'post' && renderPostConfig(g)}
                 </li>
               )
             })}
@@ -612,7 +787,7 @@ export default function GruposPage() {
         </div>
       </section>
 
-      {/* Editor de alvos */}
+      {/* Editor de alvos (modal) */}
       {targetEditorId && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', padding: 16 }}>
           <div className="pnl-card" style={{ width: '100%', maxWidth: 420 }}>
