@@ -212,11 +212,37 @@ function withCouponConvert(value, fn) {
   })
 }
 
-test('Amazon: link sem ASIN com COUPON_LINK_CONVERT=true credita via ?tag= na URL da loja', async () => {
+test('Amazon: link sem ASIN com COUPON_LINK_CONVERT=true gera amzn.to quando cookies estão válidos', async () => {
+  await withCouponConvert('true', async () => {
+    const couponUrl = 'https://www.amazon.com.br/prime?ref=promo'
+    const restore = mockAxiosOnce(async (url, options) => {
+      assert.ok(url.includes('sitestripe/getShortUrl'))
+      assert.equal(options.params.longUrl, couponUrl)
+      assert.equal(options.params.tag, CREDS.tag)
+      return { status: 200, data: { shortUrl: 'https://amzn.to/3O3r9E8' }, headers: {} }
+    })
+    try {
+      const result = await convert(couponUrl, CREDS)
+      assert.equal(result, 'https://amzn.to/3O3r9E8')
+    } finally {
+      restore()
+    }
+  })
+})
+
+test('Amazon: link sem ASIN com COUPON_LINK_CONVERT=true cai para ?tag= quando shortlink falha', async () => {
   await withCouponConvert('true', async () => {
     const couponUrl = 'https://www.amazon.com.br/deals?ref=promo'
-    const result = await convert(couponUrl, CREDS)
-    assert.equal(result, `${couponUrl}&tag=${CREDS.tag}`)
+    const restore = mockAxiosOnce(async (url) => {
+      assert.ok(url.includes('sitestripe/getShortUrl'))
+      return { status: 401, data: { error: 'unauthorized' }, headers: {} }
+    })
+    try {
+      const result = await convert(couponUrl, CREDS)
+      assert.deepEqual(result, { url: `${couponUrl}&tag=${CREDS.tag}`, warning: 'amazon_cookies_expired' })
+    } finally {
+      restore()
+    }
   })
 })
 
