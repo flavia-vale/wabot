@@ -151,6 +151,45 @@ test('resolveAmazonShortLink: extrai destino do corpo quando é interstitial 200
   assert.equal(resolved, PDP)
 })
 
+
+test('resolveAmazonShortLink: retry em Cloudflare challenge antes de desistir do amzn.la', async () => {
+  const PDP = 'https://www.amazon.com.br/dp/B09WG452T1?tag=promobaby07-20'
+  let calls = 0
+  const waits = []
+  const fetchImpl = async () => {
+    calls++
+    if (calls === 1) {
+      return {
+        status: 403,
+        url: 'https://amzn.la/ipojO',
+        headers: {
+          getSetCookie: () => [],
+          get: (k) => String(k).toLowerCase() === 'cf-mitigated' ? 'challenge' : null,
+        },
+        text: async () => '<html><head><title>Just a moment...</title></head><body>https://challenges.cloudflare.com</body></html>',
+      }
+    }
+    return {
+      status: 302,
+      url: 'https://amzn.la/ipojO',
+      headers: {
+        getSetCookie: () => [],
+        get: (k) => String(k).toLowerCase() === 'location' ? PDP : null,
+      },
+    }
+  }
+
+  const resolved = await resolveAmazonShortLink('https://amzn.la/ipojO', {
+    fetchImpl,
+    cloudflareRetryBackoffMs: [0],
+    sleepImpl: async (ms) => { waits.push(ms) },
+  })
+
+  assert.equal(resolved, PDP)
+  assert.equal(calls, 2)
+  assert.deepEqual(waits, [])
+})
+
 test('resolveAmazonShortLink: URL que já tem ASIN é devolvida sem fetch', async () => {
   let called = false
   const fetchImpl = async () => { called = true; return {} }

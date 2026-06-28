@@ -34,6 +34,7 @@ export function isAmazonShortLink(url) {
 
 const SHORT_LINK_MAX_HOPS = 6
 const SHORT_LINK_BODY_MAX_BYTES = 256 * 1024
+const SHORT_LINK_CLOUDFLARE_RETRY_BACKOFF_MS = [300, 800, 1500]
 const SHORT_LINK_BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
 
 function collectSetCookies(res, jar) {
@@ -78,6 +79,12 @@ function extractRedirectTargetFromHtml(html, baseUrl) {
   return fallback
 }
 
+function isCloudflareChallenge(res, html = '') {
+  const mitigated = res?.headers?.get?.('cf-mitigated')
+  if (String(mitigated || '').toLowerCase() === 'challenge') return true
+  return /<title>Just a moment\.\.\.<\/title>|challenges\.cloudflare\.com|cf-mitigated/i.test(String(html || ''))
+}
+
 async function readBodyLimited(res) {
   try {
     if (!res?.body?.getReader) {
@@ -113,11 +120,17 @@ async function readBodyLimited(res) {
 // do produto e tanto a conversão (extractAsin) quanto o scrape de título/preço
 // morrem. Segue redirects manualmente com cookie jar e para no primeiro hop
 // cuja URL já contém o ASIN; sem redirect HTTP, extrai o alvo do corpo.
-export async function resolveAmazonShortLink(url, { timeoutMs = 8000, fetchImpl = globalThis.fetch } = {}) {
+export async function resolveAmazonShortLink(url, {
+  timeoutMs = 8000,
+  fetchImpl = globalThis.fetch,
+  cloudflareRetryBackoffMs = SHORT_LINK_CLOUDFLARE_RETRY_BACKOFF_MS,
+  sleepImpl = sleep,
+} = {}) {
   let current = String(url || '')
   if (!isAmazonShortLink(current)) return current
 
   const jar = new Map()
+  let cloudflareRetry = 0
   for (let hop = 0; hop < SHORT_LINK_MAX_HOPS; hop++) {
     if (extractAsin(current)) return current
 
@@ -156,6 +169,17 @@ export async function resolveAmazonShortLink(url, { timeoutMs = 8000, fetchImpl 
     if (target && target !== current) {
       current = target
       continue
+    }
+
+    if (isCloudflareChallenge(res, html) && cloudflareRetry < cloudflareRetryBackoffMs.length) {
+      const wait = cloudflareRetryBackoffMs[cloudflareRetry++]
+      logger.warn({ url, current, status: res?.status, retryInMs: wait, cloudflareRetry }, 'Amazon: short link bloqueado por Cloudflare challenge — retry')
+      if (wait > 0) await sleepImpl(wait)
+      continue
+    }
+
+    if (isCloudflareChallenge(res, html)) {
+      logger.warn({ url, current, status: res?.status, retries: cloudflareRetry }, 'Amazon: short link bloqueado por Cloudflare challenge — sem ASIN')
     }
     return current
   }
