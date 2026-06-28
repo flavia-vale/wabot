@@ -43,25 +43,21 @@ export function cleanAffiliateUrl(resolvedUrl) {
   return qs ? `${base}?${qs}` : base
 }
 
-export async function convert(url, creds) {
-  const { appId, secretKey } = creds
-  const canonical = await resolveCanonical(url)
+// Liga a tentativa de converter links que NÃO são de produto (cupom/voucher)
+// em vez de removê-los. Default OFF: mantém o comportamento histórico (strip)
+// até a env ser ligada. Lido em runtime de propósito — permite validar em
+// staging e fazer rollback instantâneo em prod só mexendo na env (sem redeploy).
+function shouldConvertNonProductLinks() {
+  return String(process.env.SHOPEE_COUPON_CONVERT || '').trim().toLowerCase() === 'true'
+}
 
-  // Coupon/voucher links (s.shopee.com.br/XXXXX that resolve to non-product
-  // paths like /buyer/voucher) have no shopId+itemId. The affiliate API may
-  // still accept them and return a short link, but that link routes through
-  // the web affiliate redirect chain — causing "Oops! Seu navegador não é
-  // mais aceito!" in WhatsApp's in-app WebView. Keeping the original link
-  // is not an option either: its cookies attribute any subsequent purchase
-  // to the source group's affiliate, not ours. Stripping it from the
-  // mirrored message is the only safe behavior.
-  if (!extractShopeeIds(canonical)) {
-    const err = new Error('link não é de produto — removido para evitar atribuição incorreta de comissão')
-    err.stripFromMessage = true
-    throw err
-  }
-
-  const safeUrl = canonical.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+// Chama a mutation generateShortLink da API de afiliado para `originUrl` e
+// devolve o shortLink oficial (ex.: https://s.shopee.com.br/2g92F2xepl). Lança
+// em qualquer falha (rede, resposta inesperada, link inválido). NÃO resolvemos
+// para /product?... aqui: isso deixaria a mensagem com URL longa e poderia
+// mascarar regressões em que a API deixa de devolver link curto.
+async function generateAffiliateShortLink(originUrl, { appId, secretKey }) {
+  const safeUrl = String(originUrl).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
   const body = {
     query: `mutation {
       generateShortLink(input: { originUrl: "${safeUrl}", subIds: [""] }) {
@@ -86,17 +82,45 @@ export async function convert(url, creds) {
       const err = data?.errors?.[0]?.message
       throw new Error(err || 'Resposta inesperada')
     }
-    // O link enviado no espelhamento deve ser o shortLink oficial da API de
-    // afiliados da Shopee (ex.: https://s.shopee.com.br/2g92F2xepl). Não
-    // resolvemos para /product?... aqui: isso deixa a mensagem com URL longa e
-    // pode mascarar regressões em que a API deixa de devolver link curto.
-    // Se a Shopee não devolver um shortLink válido, falhamos a conversão e o
-    // worker bloqueia o envio como `skip:no_valid_conversions`, em vez de vazar
-    // o link original/de terceiro.
     return assertShopeeAffiliateShortLink(link)
   } catch (err) {
     throw new Error(`Shopee converter: ${err.message}`)
   }
+}
+
+export async function convert(url, creds) {
+  const canonical = await resolveCanonical(url)
+
+  // Links que NÃO são de produto (cupom/voucher como s.shopee.com.br/XXXXX que
+  // resolvem para /buyer/voucher, sem shopId+itemId).
+  //
+  // Default (SHOPEE_COUPON_CONVERT desligado): remover. Manter o link original
+  // não é opção — seus cookies atribuem a comissão ao afiliado do grupo de
+  // origem (concorrente), não a nós.
+  //
+  // Com SHOPEE_COUPON_CONVERT=true: tentamos converter o cupom pela API de
+  // afiliado para que o CTA de cupom seja espelhado com a comissão creditada a
+  // NÓS. Se a API recusar (ela rejeita re-etiquetar link de outro afiliado),
+  // caímos no strip seguro abaixo — NUNCA encaminhamos o link original.
+  //
+  // RISCO CONHECIDO (validar em staging num celular ANTES de prod): mesmo que a
+  // API devolva um shortLink, ele pode rotear via web e disparar "Oops! Seu
+  // navegador não é mais aceito!" no WebView do WhatsApp. Por isso o flag é
+  // default OFF e o rollback é só desligar a env.
+  if (!extractShopeeIds(canonical)) {
+    if (shouldConvertNonProductLinks()) {
+      try {
+        return await generateAffiliateShortLink(canonical, creds)
+      } catch {
+        // API recusou/falhou a conversão do cupom — cai no strip seguro abaixo.
+      }
+    }
+    const err = new Error('link não é de produto — removido para evitar atribuição incorreta de comissão')
+    err.stripFromMessage = true
+    throw err
+  }
+
+  return generateAffiliateShortLink(canonical, creds)
 }
 
 // Resolve short links (shope.ee, s.shopee.com.br) para a URL canônica
