@@ -25,6 +25,21 @@ const HOUR = 60 * MIN
 const DAY = 24 * HOUR
 
 const DEFAULT_QUIET = { startHour: 0, endHour: 6, tz: 'America/Sao_Paulo' }
+export const MIN_INTERVAL_JITTER_RATIO = 0.2
+
+function clampPositiveInteger(value, fallback) {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n <= 0) return fallback
+  return Math.floor(n)
+}
+
+export function calculateMinIntervalWithJitterMs(minIntervalSec, random = Math.random) {
+  const baseSec = clampPositiveInteger(minIntervalSec, 30)
+  const safeRandom = typeof random === 'function' ? random : Math.random
+  const jitterRangeSec = Math.floor(baseSec * MIN_INTERVAL_JITTER_RATIO)
+  const jitterSec = Math.floor(safeRandom() * (jitterRangeSec + 1))
+  return (baseSec + jitterSec) * SEC
+}
 
 export function parseQuietHours(raw) {
   if (!raw) return DEFAULT_QUIET
@@ -98,7 +113,7 @@ function toMs(v) {
  * @param {{ now:number, throttle:object|null, isPaused:boolean,
  *   dest:object, ignoreOperatingHours?:boolean }} input
  */
-export function decideDestination({ now, throttle, isPaused, dest, ignoreOperatingHours }) {
+export function decideDestination({ now, throttle, isPaused, dest, ignoreOperatingHours, random = Math.random }) {
   if (isPaused) {
     return { allow: false, reason: DEFER_REASON.HEALTH_PAUSED, deferUntil: now + HOUR }
   }
@@ -119,7 +134,7 @@ export function decideDestination({ now, throttle, isPaused, dest, ignoreOperati
     return { allow: false, reason: DEFER_REASON.DAILY_CAP, deferUntil: now + DAY }
   }
 
-  const minIntervalMs = (dest.minIntervalSec ?? 30) * SEC
+  const minIntervalMs = calculateMinIntervalWithJitterMs(dest.minIntervalSec, random)
   const lastPostMs = toMs(throttle?.lastPostAt)
   if (throttleOn && lastPostMs && now - lastPostMs < minIntervalMs) {
     return { allow: false, reason: DEFER_REASON.MIN_INTERVAL, deferUntil: lastPostMs + minIntervalMs }
@@ -165,6 +180,7 @@ export async function checkAndReserve(groupId, _botConfig, opts = {}) {
     isPaused: isChannelPaused(health, now),
     dest,
     ignoreOperatingHours: opts.ignoreGlobalQuietHours === true,
+    random: opts.random,
   })
   if (!decision.allow) return decision
 

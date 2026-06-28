@@ -70,15 +70,15 @@ test('PUT / não toca templates/cupons quando o campo não é enviado', async (t
   const templates = JSON.stringify({ overrides: {}, custom: [{ key: 'tpl_keep', name: 'Keep', body: 'k' }] })
   await app.inject({ method: 'PUT', url: '/api/config', payload: { mobileTemplatesJson: templates } })
   // Atualiza outro campo sem mandar mobileTemplatesJson — deve preservar.
-  await app.inject({ method: 'PUT', url: '/api/config', payload: { delayMin: 7 } })
+  await app.inject({ method: 'PUT', url: '/api/config', payload: { blockedKeywords: 'spam, cupom' } })
 
   const get = await app.inject({ method: 'GET', url: '/api/config' })
   const body = JSON.parse(get.body)
   assert.equal(body.mobileTemplatesJson, templates)
-  assert.equal(body.delayMin, 7)
+  assert.equal(body.blockedKeywords, 'spam, cupom')
 })
 
-test('PUT / persiste defaults globais de espelhamento (template + first/last) e valida', async (t) => {
+test('PUT / ainda aceita defaults globais legados de espelhamento para compatibilidade', async (t) => {
   const { app } = await buildApp()
   t.after(() => app.close())
 
