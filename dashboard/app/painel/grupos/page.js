@@ -306,7 +306,7 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
         <CfgRow
           label="Imagem da oferta"
           info={<>
-            <strong>Oficial da loja:</strong> busca a foto no site do produto, sem marca d'água.<br />
+            <strong>Oficial da loja:</strong> busca a foto no site do produto, sem marca d&apos;água.<br />
             <strong>Da mensagem:</strong> reaproveita a foto do grupo de origem.<br />
             <strong>Sem imagem:</strong> envia só o link com a prévia do WhatsApp.
           </>}
@@ -326,7 +326,7 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
             {(g.imageMode ?? 'original') === 'fetch' && (
               <div className="cfg-inline-warn">
                 <span style={{ color: 'var(--danger)', flexShrink: 0, display: 'flex', paddingTop: 1 }}>⚡</span>
-                <span>Na <strong>Shopee</strong>, quando a loja não retorna a foto, a oferta usa a imagem da mensagem (pode ter marca d'água).</span>
+                <span>Na <strong>Shopee</strong>, quando a loja não retorna a foto, a oferta usa a imagem da mensagem (pode ter marca d&apos;água).</span>
               </div>
             )}
           </div>
@@ -412,7 +412,6 @@ export default function GruposPage() {
       .catch((err) => { if (active) setActionError(err.message) })
       .finally(() => { if (active) setLoadingGroups(false) })
     return () => { active = false }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -583,9 +582,9 @@ export default function GruposPage() {
         </div>
         {g.kind !== 'channel' && (
           <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12 }}>
-            <p className="pnl-label" style={{ marginBottom: 6 }}>Botão "Ver canal" ao final das mensagens</p>
+            <p className="pnl-label" style={{ marginBottom: 6 }}>Botão &quot;Ver canal&quot; ao final das mensagens</p>
             <p className="pnl-hint" style={{ marginTop: 0, marginBottom: 8 }}>
-              Toda mensagem enviada para este grupo (espelhada, oferta automática ou agendada) sai com um botão "Ver canal" apontando para o canal escolhido. Deixe sem canal para não inserir botão.
+              Toda mensagem enviada para este grupo (espelhada, oferta automática ou agendada) sai com um botão &quot;Ver canal&quot; apontando para o canal escolhido. Deixe sem canal para não inserir botão.
             </p>
             {g.channelButtonJid ? (
               <div style={{ display: 'grid', gap: 8 }}>
