@@ -1,19 +1,15 @@
 'use client'
 
 /* Plano e cobrança — reskin Menta do corpo. Mesma lógica de
- * Usa os contratos canônicos: api.me + api.publicPlans + api.paymentsOverview
+ * Usa os contratos canônicos: api.publicPlans + api.paymentsOverview
  * para mostrar a assinatura atual e os planos; api.paymentsCheckout para o
- * Mercado Pago; PIX manual + comprovante no WhatsApp. Sem mudança no back end.
+ * Mercado Pago. Sem mudança no back end.
  * Reusa apenas classes Menta já existentes (não toca em painel.css). */
 
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { DEFAULT_LANDING_PLANS } from '@/lib/marketing-content'
 import { usePainelHeader } from '../PainelShell'
-
-const SUPPORT_PHONE = '(32) 99984-4020'
-const SUPPORT_WA_NUMBER = '5532999844020'
-const PIX_KEY = 'd80c705f-3893-4802-939b-cce5c9338c66'
 
 const PAID_PLAN_IDS = ['basic', 'pro']
 const PLAN_LABELS = { trial: 'Trial', basic: 'Basic', pro: 'Pro' }
@@ -54,20 +50,16 @@ export default function PlanoPage() {
 
   const [plans, setPlans] = useState(FALLBACK_PLAN_CARDS)
   const [overview, setOverview] = useState(null)
-  const [email, setEmail] = useState('')
   const [selectedPlanId, setSelectedPlanId] = useState('pro')
   const [checkoutPlan, setCheckoutPlan] = useState('')
   const [checkoutError, setCheckoutError] = useState('')
   const [subscribePlan, setSubscribePlan] = useState('')
   const [subscribeError, setSubscribeError] = useState('')
-  const [copied, setCopied] = useState(false)
-  const [copyError, setCopyError] = useState('')
 
   useEffect(() => {
     let active = true
-    Promise.allSettled([api.me(), api.publicPlans(), api.paymentsOverview()]).then(([u, p, o]) => {
+    Promise.allSettled([api.publicPlans(), api.paymentsOverview()]).then(([p, o]) => {
       if (!active) return
-      if (u.status === 'fulfilled') setEmail(u.value?.email || '')
       if (p.status === 'fulfilled') setPlans(mergePlanCards(Array.isArray(p.value?.plans) ? p.value.plans : []))
       if (o.status === 'fulfilled') setOverview(o.value || null)
     })
@@ -76,21 +68,16 @@ export default function PlanoPage() {
 
   const selectedPlan = useMemo(() => plans.find((p) => p.id === selectedPlanId) ?? plans[0], [plans, selectedPlanId])
 
-  const whatsappLink = useMemo(() => {
-    const payload = `Olá, acabei de fazer o PIX do ${selectedPlan.name} (${selectedPlan.price}/30 dias). Segue o comprovante para ativação da conta ${email || '[E-MAIL DO USUÁRIO]'}.`
-    return `https://wa.me/${SUPPORT_WA_NUMBER}?text=${encodeURIComponent(payload)}`
-  }, [email, selectedPlan])
-
   async function handleCheckout(planId) {
     if (checkoutPlan) return
     setCheckoutError('')
     setCheckoutPlan(planId)
     try {
       const data = await api.paymentsCheckout(planId)
-      if (!data?.checkout_url) throw new Error('Checkout indisponível no momento. Use o PIX manual ou fale com o suporte.')
+      if (!data?.checkout_url) throw new Error('Checkout indisponível no momento. Tente novamente ou fale com o suporte.')
       window.location.assign(data.checkout_url)
     } catch (err) {
-      setCheckoutError(err?.message || 'Não foi possível iniciar o checkout. Use o PIX manual ou fale com o suporte.')
+      setCheckoutError(err?.message || 'Não foi possível iniciar o checkout. Tente novamente ou fale com o suporte.')
       setCheckoutPlan('')
     }
   }
@@ -101,22 +88,11 @@ export default function PlanoPage() {
     setSubscribePlan(planId)
     try {
       const data = await api.paymentsCreateSubscription(planId)
-      if (!data?.init_point) throw new Error('Assinatura indisponível no momento. Use o pagamento avulso ou o PIX manual.')
+      if (!data?.init_point) throw new Error('Assinatura indisponível no momento. Use o pagamento avulso ou fale com o suporte.')
       window.location.assign(data.init_point)
     } catch (err) {
-      setSubscribeError(err?.message || 'Não foi possível iniciar a assinatura. Use o pagamento avulso ou o PIX manual.')
+      setSubscribeError(err?.message || 'Não foi possível iniciar a assinatura. Use o pagamento avulso ou fale com o suporte.')
       setSubscribePlan('')
-    }
-  }
-
-  async function handleCopyPix() {
-    setCopyError('')
-    try {
-      await navigator.clipboard.writeText(PIX_KEY)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1800)
-    } catch {
-      setCopyError('Não foi possível copiar automaticamente. Pressione e segure para copiar manualmente.')
     }
   }
 
@@ -172,7 +148,6 @@ export default function PlanoPage() {
           <div className="pnl-note-box is-warn" style={{ marginTop: 14 }} role="alert">
             <strong style={{ fontWeight: 600 }}>Assinatura não iniciada</strong>
             <p style={{ marginTop: 4 }}>{subscribeError}</p>
-            <p style={{ marginTop: 4 }}>Você ainda pode usar o pagamento avulso ou o PIX manual abaixo.</p>
           </div>
         )}
 
@@ -185,7 +160,6 @@ export default function PlanoPage() {
           <div className="pnl-note-box is-warn" style={{ marginTop: 14 }} role="alert">
             <strong style={{ fontWeight: 600 }}>Checkout não iniciado</strong>
             <p style={{ marginTop: 4 }}>{checkoutError}</p>
-            <p style={{ marginTop: 4 }}>Você ainda pode pagar via PIX manual abaixo e enviar o comprovante no WhatsApp.</p>
           </div>
         )}
 
@@ -193,21 +167,6 @@ export default function PlanoPage() {
           {checkoutPlan === selectedPlanId ? 'Aguarde…' : `Pagar 30 dias avulso (sem renovação)`}
         </button>
         <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 8 }}>Pagamento único de 30 dias. Você renova manualmente ao expirar.</p>
-      </section>
-
-      {/* PIX manual */}
-      <section className="pnl-card">
-        <div className="pnl-card-title">Prefere pagar via PIX manual?</div>
-        <p className="pnl-card-note" style={{ marginBottom: 12 }}>Copie a chave PIX abaixo e envie o comprovante no WhatsApp.</p>
-        <p className="pnl-label" style={{ marginBottom: 8 }}>PIX Copia e Cola · {selectedPlan.name} ({selectedPlan.price}/30 dias)</p>
-        <div className="pnl-inline-form">
-          <input className="pnl-input" readOnly value={PIX_KEY} aria-label="Chave PIX para copiar" />
-          <button type="button" className="pnl-btn is-primary" style={{ justifyContent: 'center' }} onClick={handleCopyPix} aria-live="polite">{copied ? 'Copiado!' : 'Copiar chave PIX'}</button>
-        </div>
-        {copyError && <p className="pnl-field-error" style={{ marginTop: 8 }}>{copyError}</p>}
-
-        <p className="pnl-card-note" style={{ marginTop: 14 }}>Assim que pagar o PIX do {selectedPlan.name}, envie o comprovante pelo botão abaixo — a mensagem já vai com o plano escolhido. Suporte: {SUPPORT_PHONE}</p>
-        <a className="pnl-btn is-primary" style={{ marginTop: 12, justifyContent: 'center' }} href={whatsappLink} target="_blank" rel="noreferrer">Enviar comprovante no WhatsApp</a>
       </section>
     </div>
   )
