@@ -4,6 +4,7 @@
 
 import { fetchShopeeProductInfo, extractShopeeIds, isShopeeShortLink, resolveShopeeShortLink } from './shopee.js'
 import { resolveToCleanProductUrl } from './mercadolivre.js'
+import { isAmazonShortLink, resolveAmazonShortLink } from './amazon.js'
 
 const HTML_FETCH_TIMEOUT_MS = Number(process.env.PRODUCT_INFO_TIMEOUT_MS) || 8_000
 const HTML_MAX_BYTES = Number(process.env.PRODUCT_INFO_MAX_BYTES) || 2 * 1024 * 1024
@@ -762,6 +763,12 @@ export async function fetchProductInfo(url, opts = {}) {
     // URL do produto mesmo quando o fetch follow do short link terminaria numa
     // página anti-bot sem os IDs.
     resolvedUrl = await resolveShopeeShortLink(url, { timeoutMs: HTML_FETCH_TIMEOUT_MS })
+  } else if (isAmazonShortLink(url)) {
+    // Pré-resolve short link da Amazon (amzn.la, amzn.to, a.co...) ANTES do
+    // fetch de HTML. amzn.la pode servir interstitial (redirect via JS/meta)
+    // que o fetch(redirect:follow) não atravessa, deixando o scrape na página
+    // de redirect sem og:title/preço. O resolvedor robusto chega na PDP real.
+    resolvedUrl = await resolveAmazonShortLink(url, { timeoutMs: HTML_FETCH_TIMEOUT_MS })
   }
 
   // Cookie/UA mobile são checados sobre a URL JÁ resolvida: meli.la/mluvem.com
