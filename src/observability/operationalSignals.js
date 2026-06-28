@@ -24,6 +24,11 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   // (costuma vir após flapping prolongado). Sinal durável para vigiar por chip
   // e agir antes de virar ban definitivo.
   wa_forbidden: 'ops_wa_forbidden',
+  // Flapping (closes repetidos 500/428/408/...) que disparou o cooldown longo —
+  // fonte do spam de "A sincronização foi concluída". Durável por chip.
+  wa_flap_cooldown: 'ops_wa_flap_cooldown',
+  // badSession (500) repetido sem conexão estável → auth limpo p/ re-pareamento.
+  wa_bad_session_reset: 'ops_wa_bad_session_reset',
 }
 
 let cachedTrackFn = null

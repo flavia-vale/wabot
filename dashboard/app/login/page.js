@@ -79,7 +79,11 @@ function LoginContent() {
         setAffCode(fromUrl)
       }
       api.affiliateConfig()
-        .then(cfg => persistCode(cfg?.cookieDurationHours ?? 24))
+        // R4: a duração do cookie segue a JANELA DE ATRIBUIÇÃO do servidor
+        // (fonte de verdade), para o browser não esquecer o código antes — nem
+        // mantê-lo muito depois — da janela em que a venda conta. Fallback para
+        // cookieDurationHours e, por fim, 24h.
+        .then(cfg => persistCode(cfg?.attributionWindowDays ? cfg.attributionWindowDays * 24 : (cfg?.cookieDurationHours ?? 24)))
         .catch(() => persistCode(24))
       api.affiliateTrack({
         affiliateCode: fromUrl,
@@ -93,7 +97,9 @@ function LoginContent() {
       const match = document.cookie.match(/(?:^|;\s*)aff_code=([^;]+)/)
       if (match) Promise.resolve(decodeURIComponent(match[1])).then(code => setAffCode(code))
     }
-  }, [isRegister, searchParams])
+    // signupAttribution.* derivam de searchParams (já nas deps); listadas para o
+    // exhaustive-deps sem alterar a semântica do efeito.
+  }, [isRegister, searchParams, signupAttribution.source, signupAttribution.utm_source, signupAttribution.utm_medium, signupAttribution.utm_campaign])
 
   function markFormStarted(field) {
     if (formStarted) return

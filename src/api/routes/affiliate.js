@@ -1,7 +1,14 @@
 import { createHash } from 'crypto'
-import { COMMISSION_PAYABLE_STATUSES, applyAffiliate, approveAffiliateCommission, getAffiliateMeData, getAffiliateReferrals, getAffiliateSettings, recordAffiliateAttributionTouch, reverseAffiliateCommission, tryCreateAffiliateCommission } from '../../domain/affiliate/service.js'
+import { COMMISSION_PAYABLE_STATUSES, applyAffiliate, approveAffiliateCommission, getAffiliateMeData, getAffiliateReferrals, getAffiliateSettings, recordAffiliateAttributionTouch, reverseAffiliateCommission, tryCreateAffiliateCommission, writeCommissionLedger } from '../../domain/affiliate/service.js'
+import { encryptCredential, decryptCredential } from '../../credentialCrypto.js'
+import { createTrackGuard } from './affiliateTrackGuard.js'
 import { resolveAdminAccess, writeAdminAuditLog } from './admin.js'
 import db from '../../db.js'
+
+// R2: guarda in-memory do /affiliate/track (rate-limit + dedup). Cleanup unref().
+const trackGuard = createTrackGuard()
+const trackCleanupTimer = setInterval(() => trackGuard.cleanup(), 5 * 60_000)
+trackCleanupTimer.unref?.()
 
 async function loadAdminUser(userId) {
   return db.user.findUnique({
@@ -71,8 +78,14 @@ export async function affiliateRoutes(app) {
     const normalizedVisitorId = typeof visitorId === 'string' ? visitorId.trim().slice(0, 120) : ''
     if (!code || !normalizedVisitorId) return reply.code(400).send({ error: 'affiliateCode e visitorId são obrigatórios' })
 
+    // Rate-limit ANTES do lookup no banco, para o flood não tocar o SQLite.
+    if (trackGuard.rateLimited(req.ip)) return reply.code(429).send({ tracked: false, reason: 'rate_limited' })
+
     const profile = await db.affiliateProfile.findUnique({ where: { code }, select: { id: true, code: true, status: true } }).catch(() => null)
     if (!profile || profile.status !== 'approved') return { tracked: false, reason: 'affiliate_not_approved' }
+
+    // Dedup: um mesmo (visitor, afiliado) não grava N touches em poucos minutos.
+    if (trackGuard.isDuplicate(normalizedVisitorId, profile.id)) return { tracked: true, deduped: true }
 
     await recordAffiliateAttributionTouch({
       affiliateId: profile.id,
@@ -121,9 +134,9 @@ export async function affiliateRoutes(app) {
 
     const updated = await db.affiliateProfile.update({
       where: { userId: req.user.sub },
-      data: { pixKey, pixKeyType },
+      data: { pixKey: encryptCredential(pixKey), pixKeyType },
     })
-    return { profile: updated }
+    return { profile: { ...updated, pixKey: decryptCredential(updated.pixKey) } }
   })
 
   // Visão anônima do próprio afiliado: quem se cadastrou com o código dele,
@@ -156,23 +169,40 @@ export async function affiliateRoutes(app) {
         orderBy: { appliedAt: 'desc' },
         include: {
           user: { select: { id: true, name: true, email: true } },
-          commissions: { select: { commissionAmountCents: true, status: true } },
         },
       }),
       db.affiliateProfile.count({ where }),
     ])
 
-    const enriched = await Promise.all(profiles.map(async (profile) => {
-      const totalReferrals = await db.user.count({ where: { affiliateProfileId: profile.id } })
-      const totalCommissions = profile.commissions.reduce((s, c) => s + c.commissionAmountCents, 0)
-      const pendingCommissions = profile.commissions.filter(c => c.status === 'pending').reduce((s, c) => s + c.commissionAmountCents, 0)
-      const paidCommissions = profile.commissions.filter(c => c.status === 'paid').reduce((s, c) => s + c.commissionAmountCents, 0)
+    // O5: evita N+1. Em vez de 1 count por perfil + carregar TODAS as comissões
+    // de cada um, agrega indicados e somas de comissão da PÁGINA em 2 queries.
+    const profileIds = profiles.map(p => p.id)
+    const [referralCounts, commissionSums] = profileIds.length
+      ? await Promise.all([
+        db.user.groupBy({ by: ['affiliateProfileId'], where: { affiliateProfileId: { in: profileIds } }, _count: true }),
+        db.affiliateCommission.groupBy({ by: ['affiliateId', 'status'], where: { affiliateId: { in: profileIds } }, _sum: { commissionAmountCents: true } }),
+      ])
+      : [[], []]
+
+    const referralCountMap = new Map(referralCounts.map(r => [r.affiliateProfileId, typeof r._count === 'number' ? r._count : (r._count?._all ?? 0)]))
+    const sumMap = new Map()
+    for (const g of commissionSums) {
+      const cur = sumMap.get(g.affiliateId) ?? { total: 0, pending: 0, paid: 0 }
+      const s = g._sum?.commissionAmountCents ?? 0
+      cur.total += s
+      if (g.status === 'pending') cur.pending += s
+      if (g.status === 'paid') cur.paid += s
+      sumMap.set(g.affiliateId, cur)
+    }
+
+    const enriched = profiles.map((profile) => {
+      const sums = sumMap.get(profile.id) ?? { total: 0, pending: 0, paid: 0 }
       return {
         id: profile.id,
         userId: profile.userId,
         code: profile.code,
         status: profile.status,
-        pixKey: profile.pixKey,
+        pixKey: decryptCredential(profile.pixKey),
         pixKeyType: profile.pixKeyType,
         appliedAt: profile.appliedAt,
         approvedAt: profile.approvedAt,
@@ -181,12 +211,12 @@ export async function affiliateRoutes(app) {
         commissionPercentOverride: profile.commissionPercentOverride,
         commissionRecurringPercentOverride: profile.commissionRecurringPercentOverride,
         user: profile.user,
-        totalReferrals,
-        totalCommissions,
-        pendingCommissions,
-        paidCommissions,
+        totalReferrals: referralCountMap.get(profile.id) ?? 0,
+        totalCommissions: sums.total,
+        pendingCommissions: sums.pending,
+        paidCommissions: sums.paid,
       }
-    }))
+    })
 
     return { profiles: enriched, total, page, limit }
   })
@@ -223,7 +253,7 @@ export async function affiliateRoutes(app) {
       where: { id },
       data: { status: 'approved', approvedAt: new Date(), rejectedAt: null, adminNotes: null },
     })
-    return { profile: updated }
+    return { profile: { ...updated, pixKey: decryptCredential(updated.pixKey) } }
   })
 
   app.post('/admin/affiliates/:id/reject', { onRequest: [app.authenticate] }, async (req, reply) => {
@@ -239,7 +269,7 @@ export async function affiliateRoutes(app) {
       where: { id },
       data: { status: 'rejected', rejectedAt: new Date(), approvedAt: null, adminNotes: adminNotes || null },
     })
-    return { profile: updated }
+    return { profile: { ...updated, pixKey: decryptCredential(updated.pixKey) } }
   })
 
   app.get('/admin/affiliates/commissions', { onRequest: [app.authenticate] }, async (req, reply) => {
@@ -327,16 +357,20 @@ export async function affiliateRoutes(app) {
     if (!access) return
 
     const { id } = req.params
-    const commission = await db.affiliateCommission.findUnique({ where: { id } })
+    const commission = await db.affiliateCommission.findUnique({ where: { id }, include: { affiliate: { select: { status: true } } } })
     if (!commission) return reply.code(404).send({ error: 'Comissão não encontrada' })
     if (commission.status === 'paid') return reply.code(409).send({ error: 'Comissão já marcada como paga' })
     if (!COMMISSION_PAYABLE_STATUSES.includes(commission.status)) return reply.code(409).send({ error: 'Somente comissões elegíveis/aprovadas podem ser pagas' })
+    // O2: afiliado suspenso/rejeitado não recebe o backlog acumulado.
+    if (commission.affiliate?.status !== 'approved') return reply.code(409).send({ error: 'Afiliado não está aprovado; não é possível pagar a comissão' })
 
+    const now = new Date()
     const result = await db.affiliateCommission.updateMany({
       where: { id, status: { in: COMMISSION_PAYABLE_STATUSES } },
-      data: { status: 'paid', paidAt: new Date(), paidByUserId: req.user.sub },
+      data: { status: 'paid', paidAt: now, paidByUserId: req.user.sub },
     })
     if (result.count !== 1) return reply.code(409).send({ error: 'Comissão mudou de status; recarregue a página antes de pagar' })
+    await writeCommissionLedger({ commissionId: id, affiliateId: commission.affiliateId, fromStatus: commission.status, toStatus: 'paid', amountCents: commission.commissionAmountCents, reason: 'mark_paid', actor: req.user.sub, at: now, db })
     const updated = await db.affiliateCommission.findUnique({ where: { id } })
     await writeAdminAuditLog(req, {
       action: 'admin.affiliate.commission.mark_paid',
@@ -356,10 +390,24 @@ export async function affiliateRoutes(app) {
     const { month } = req.params
     if (!month || !/^\d{4}-\d{2}$/.test(month)) return reply.code(400).send({ error: 'Formato de mês inválido (use YYYY-MM)' })
 
-    const result = await db.affiliateCommission.updateMany({
-      where: { cycleMonth: month, status: { in: COMMISSION_PAYABLE_STATUSES } },
-      data: { status: 'paid', paidAt: new Date(), paidByUserId: req.user.sub },
+    // O2: só paga comissões cujo afiliado está aprovado. updateMany não filtra
+    // por relação, então selecionamos os ids elegíveis primeiro (findMany suporta
+    // filtro de relação) e pagamos por id.
+    const eligible = await db.affiliateCommission.findMany({
+      where: { cycleMonth: month, status: { in: COMMISSION_PAYABLE_STATUSES }, affiliate: { status: 'approved' } },
+      select: { id: true, affiliateId: true, status: true, commissionAmountCents: true },
     })
+    const ids = eligible.map(c => c.id)
+    const now = new Date()
+    const result = ids.length
+      ? await db.affiliateCommission.updateMany({
+        where: { id: { in: ids }, status: { in: COMMISSION_PAYABLE_STATUSES } },
+        data: { status: 'paid', paidAt: now, paidByUserId: req.user.sub },
+      })
+      : { count: 0 }
+    for (const c of eligible) {
+      await writeCommissionLedger({ commissionId: c.id, affiliateId: c.affiliateId, fromStatus: c.status, toStatus: 'paid', amountCents: c.commissionAmountCents, reason: 'cycle_mark_all_paid', actor: req.user.sub, at: now, db })
+    }
     await writeAdminAuditLog(req, {
       action: 'admin.affiliate.cycle.mark_all_paid',
       resource: 'affiliateCommission',
@@ -451,7 +499,7 @@ export async function affiliateRoutes(app) {
       if (commissionRecurringPercentOverride !== undefined) data.commissionRecurringPercentOverride = commissionRecurringPercentOverride === null ? null : Number(commissionRecurringPercentOverride)
 
       const profile = await db.affiliateProfile.update({ where: { id }, data })
-      return { profile }
+      return { profile: { ...profile, pixKey: decryptCredential(profile.pixKey) } }
     } catch (err) {
       if (err.code === 'P2025') return reply.code(404).send({ error: 'Afiliado não encontrado' })
       throw err

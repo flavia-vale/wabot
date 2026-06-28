@@ -63,6 +63,11 @@ export const ANALYTICS_EVENTS = new Set([
   // Desconexão 403/forbidden do WhatsApp — sinal de chip restringido/banido,
   // vigiado por chip para agir antes do ban definitivo.
   'ops_wa_forbidden',
+  // Flapping de socket (closes 500/428/408 repetidos) que disparou o cooldown
+  // longo — fonte raiz do spam de "A sincronização foi concluída".
+  'ops_wa_flap_cooldown',
+  // badSession (500) repetido sem conexão estável → auth limpo p/ re-pareamento.
+  'ops_wa_bad_session_reset',
 ])
 
 const SENSITIVE_KEY_PATTERN = /(token|secret|password|cookie|credential|csrf|ssid|key|message|text|url|phone|email)/i
