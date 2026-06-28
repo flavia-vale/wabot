@@ -6,8 +6,8 @@ import { shouldConvertCouponLinks } from './couponPolicy.js'
 const AMAZON_STORE_HOST = /(^|\.)amazon\.com\.br$/
 
 const ASIN_RE = /(?:\/dp\/|\/gp\/product\/|\/product-reviews\/|\/exec\/obidos\/ASIN\/)([A-Z0-9]{10})/i
-const AMAZON_HOST = /amazon\.com\.br|amzn\.to|amzn\.la|a\.co|amzn\.divulgador\.link|amzlink\.to/
-const SHORT_HOST = /amzn\.to|amzn\.la|a\.co|amzn\.divulgador\.link|amzlink\.to/
+const AMAZON_HOST = /amazon\.com\.br|link\.amazon|amzn\.to|amzn\.la|a\.co|amzn\.divulgador\.link|amzlink\.to/
+const SHORT_HOST = /link\.amazon|amzn\.to|amzn\.la|a\.co|amzn\.divulgador\.link|amzlink\.to/
 
 async function resolveShortUrl(url) {
   try {
