@@ -184,6 +184,28 @@ test('stripAffiliateTracking remove tracking de terceiro e preserva a identidade
 // é devolvido COMO-ESTÁ. O probe contra a API real provou que esse short link
 // abre o app da Shopee — reescrever o caminho para uma landing web era o que
 // disparava "Oops! Seu navegador não é mais aceito!" no WebView do WhatsApp.
+test('convert() remove short link de cupom quando a resolução server-side cai em unsupported.html', async (t) => {
+  withCouponConvertEnabled(t)
+  let apiCalled = false
+  t.after(stubAxiosPost(async () => {
+    apiCalled = true
+    return { data: { data: { generateShortLink: { shortLink: 'https://s.shopee.com.br/quebrado' } } } }
+  }))
+  stubCouponResolutionTo(t, 'https://shopee.com.br/unsupported.html?mmp_pid=an_18322390884&uls_trackid=560r2u3b00ol&utm_campaign=id_jNC42FRaVr&utm_medium=affiliates&utm_source=an_18322390884')
+
+  let caughtErr
+  try {
+    await convert('https://s.shopee.com.br/AAF4y0vuQJ', CREDS)
+  } catch (err) {
+    caughtErr = err
+  }
+
+  assert.ok(caughtErr, 'deve lançar para o bot remover o short link quebrado')
+  assert.equal(caughtErr.stripFromMessage, true)
+  assert.match(caughtErr.message, /unsupported\.html/)
+  assert.equal(apiCalled, false, 'não deve encurtar unsupported.html como originUrl')
+})
+
 test('convert() converte cupom Shopee preservando o caminho e devolve o short link da API', async (t) => {
   withCouponConvertEnabled(t)
   stubCouponResolutionTo(t, 'https://shopee.com.br/m/envio-rapido?utm_source=an_123&utm_medium=affiliates&gads_t_sig=XYZ')

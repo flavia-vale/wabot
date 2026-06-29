@@ -114,6 +114,19 @@ async function generateAffiliateShortLink(originUrl, { appId, secretKey }, { att
 export async function convert(url, creds) {
   const canonical = await resolveCanonical(url)
 
+  // Se a resolução server-side do short link cair em /unsupported.html, NÃO
+  // use essa URL como originUrl da generateShortLink. Esse é exatamente o
+  // bug observado em staging: o servidor resolve o short do concorrente para
+  // a parede web da Shopee e, se encurtarmos isso, geramos um shortLink nosso
+  // que nasce quebrado. Nesse caso o link isolado é inseguro; o bot deve
+  // removê-lo da mensagem (ou deixar outro link Shopee da mesma mensagem ser
+  // convertido normalmente).
+  if (isShopeeUnsupportedUrl(canonical)) {
+    const err = new Error('link Shopee resolveu para unsupported.html — removido para não gerar shortLink quebrado')
+    err.stripFromMessage = true
+    throw err
+  }
+
   // Produto: a URL canônica já vem como /product/{shopId}/{itemId}
   // (normalizeShopeeUrl), limpa e aceita pela API. Caminho inalterado.
   if (extractShopeeIds(canonical)) {
@@ -164,6 +177,15 @@ const SHOPEE_SHORT_HOST_RE = /^(shope\.ee|s\.shopee\.com\.br)$/
 const SHOPEE_BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 const SHORT_LINK_MAX_HOPS = 6
 const SHORT_LINK_BODY_MAX_BYTES = 512 * 1024
+
+function isShopeeUnsupportedUrl(rawUrl) {
+  try {
+    const u = new URL(String(rawUrl || ''))
+    return /(^|\.)shopee\.com\.br$/.test(u.hostname) && u.pathname === '/unsupported.html'
+  } catch {
+    return false
+  }
+}
 
 export function isShopeeShortLink(url) {
   try {
