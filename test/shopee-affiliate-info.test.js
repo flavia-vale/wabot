@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import axios from 'axios'
-import { convert, fetchShopeeProductInfo, shopeeDecimalPriceToString, cleanAffiliateUrl, stripAffiliateTracking, normalizeShopeeCouponOrigin } from '../src/converters/shopee.js'
+import { convert, fetchShopeeProductInfo, shopeeDecimalPriceToString, cleanAffiliateUrl, stripAffiliateTracking } from '../src/converters/shopee.js'
 
 // Credenciais fictícias — o axios.post é stubbado, então o valor não importa.
 const CREDS = { appId: '1234567890', secretKey: 'TEST_SECRET_KEY_PLACEHOLDER_0000' }
@@ -153,30 +153,14 @@ function stubCouponResolution(t) {
   t.after(() => { globalThis.fetch = originalFetch })
 }
 
-function stubCouponResolutionThenGeneratedAffiliate(t, generatedFinalUrl) {
+// Resolve o short link de cupom para uma URL de voucher com caminho app-routable
+// e tracking de terceiro. O conversor preserva o caminho e remove só o tracking.
+function stubCouponResolutionTo(t, resolvedUrl) {
   const originalFetch = globalThis.fetch
-  globalThis.fetch = async (url) => {
-    const raw = String(url)
-    if (raw.includes('cupomAFIL') || raw.includes('cupomDIRETO')) {
-      return {
-        ok: true, status: 302, url,
-        headers: { get: (key) => String(key).toLowerCase() === 'location' ? generatedFinalUrl : null },
-        body: null,
-        text: async () => '',
-      }
-    }
-    if (raw === generatedFinalUrl) {
-      return {
-        ok: true, status: 200, url: generatedFinalUrl,
-        headers: { get: () => null }, body: null, text: async () => '',
-      }
-    }
-    return {
-      ok: true, status: 200,
-      url: 'https://shopee.com.br/m/cupom?promotionId=999&utm_source=an_123&utm_medium=affiliates&gads_t_sig=XYZ',
-      headers: { get: () => null }, body: null, text: async () => '',
-    }
-  }
+  globalThis.fetch = async () => ({
+    ok: true, status: 200, url: resolvedUrl,
+    headers: { get: () => null }, body: null, text: async () => '',
+  })
   t.after(() => { globalThis.fetch = originalFetch })
 }
 
@@ -195,23 +179,14 @@ test('stripAffiliateTracking remove tracking de terceiro e preserva a identidade
   assert.equal(stripAffiliateTracking('not a url'), 'not a url')
 })
 
-test('normalizeShopeeCouponOrigin troca rotas app-only por /m/cupom-de-desconto e limpa tracking', () => {
-  const dirty = 'https://shopee.com.br/m/cupom?promotionId=999&voucherCode=ABC&utm_source=an_123&utm_medium=affiliates&gads_t_sig=XYZ#app'
-  const normalized = normalizeShopeeCouponOrigin(dirty)
-  const u = new URL(normalized)
-  assert.equal(u.origin + u.pathname, 'https://shopee.com.br/m/cupom-de-desconto')
-  assert.equal(u.searchParams.get('promotionId'), '999')
-  assert.equal(u.searchParams.get('voucherCode'), 'ABC')
-  assert.equal(u.hash, '')
-  assert.ok(!/utm_source|utm_medium|gads_t_sig/.test(normalized), 'remove tracking de terceiro antes da API')
-})
-
-// Com COUPON_LINK_CONVERT=true, cupom Shopee deve ser convertido, mas a origin
-// enviada à API nunca pode ser rota app-only que dispara "navegador não
-// aceito"; ela precisa sair como a landing web /m/cupom-de-desconto.
-test('convert() converte cupom Shopee usando landing web segura quando COUPON_LINK_CONVERT=true', async (t) => {
+// Com COUPON_LINK_CONVERT=true, o cupom é convertido PRESERVANDO o caminho
+// original (só removendo o tracking do afiliado de origem) e o short link da API
+// é devolvido COMO-ESTÁ. O probe contra a API real provou que esse short link
+// abre o app da Shopee — reescrever o caminho para uma landing web era o que
+// disparava "Oops! Seu navegador não é mais aceito!" no WebView do WhatsApp.
+test('convert() converte cupom Shopee preservando o caminho e devolve o short link da API', async (t) => {
   withCouponConvertEnabled(t)
-  stubCouponResolutionThenGeneratedAffiliate(t, 'https://shopee.com.br/voucher/details?promotionId=999&voucherCode=ABC&utm_source=an_999&utm_medium=affiliates&uls_trackid=OWN')
+  stubCouponResolutionTo(t, 'https://shopee.com.br/m/envio-rapido?utm_source=an_123&utm_medium=affiliates&gads_t_sig=XYZ')
   let sentQuery = ''
   t.after(stubAxiosPost(async (_url, body) => {
     sentQuery = body.query
@@ -219,15 +194,18 @@ test('convert() converte cupom Shopee usando landing web segura quando COUPON_LI
   }))
 
   const result = await convert('https://s.shopee.com.br/40eQK1or1O', CREDS)
-  assert.equal(result, 'https://shopee.com.br/m/cupom-de-desconto?promotionId=999&voucherCode=ABC&utm_source=an_999&utm_medium=affiliates&uls_trackid=OWN')
-  assert.ok(sentQuery.includes('https://shopee.com.br/m/cupom-de-desconto'), 'origin enviada usa landing web segura')
-  assert.ok(sentQuery.includes('promotionId=999'), 'origin mantém a identidade do cupom')
-  assert.ok(!/\/m\/cupom(?:\?|$)|\/buyer\/voucher|\/voucher\/details|utm_source|utm_medium|gads_t_sig/.test(sentQuery), 'origin não leva rota mobile/app nem tracking de terceiro')
+  // Devolve o short link da API como-está (abre o app), NÃO uma landing web.
+  assert.equal(result, 'https://s.shopee.com.br/cupomAFIL123')
+  // A origin enviada à API preserva o caminho original do cupom (não reescreve
+  // para /m/cupom-de-desconto) e remove só o tracking de terceiro.
+  assert.ok(sentQuery.includes('https://shopee.com.br/m/envio-rapido'), 'origin preserva o caminho original do cupom')
+  assert.ok(!/cupom-de-desconto/.test(sentQuery), 'NÃO reescreve para a landing web')
+  assert.ok(!/utm_source|utm_medium|gads_t_sig/.test(sentQuery), 'remove tracking de terceiro antes da API')
 })
 
-test('convert() converte URL direta de cupom Shopee com COUPON_LINK_CONVERT=true sem rota app-only', async (t) => {
+test('convert() converte URL direta de cupom Shopee preservando o caminho', async (t) => {
   withCouponConvertEnabled(t)
-  stubCouponResolutionThenGeneratedAffiliate(t, 'https://shopee.com.br/buyer/voucher?promotionId=999&voucherCode=ABC&utm_source=an_999&utm_medium=affiliates')
+  stubCouponResolutionTo(t, 'https://shopee.com.br/m/cupom?promotionId=999&voucherCode=ABC')
   let sentQuery = ''
   t.after(stubAxiosPost(async (_url, body) => {
     sentQuery = body.query
@@ -235,10 +213,10 @@ test('convert() converte URL direta de cupom Shopee com COUPON_LINK_CONVERT=true
   }))
 
   const result = await convert('https://shopee.com.br/m/cupom?promotionId=999&voucherCode=ABC', CREDS)
-  assert.equal(result, 'https://shopee.com.br/m/cupom-de-desconto?promotionId=999&voucherCode=ABC&utm_source=an_999&utm_medium=affiliates')
-  assert.ok(sentQuery.includes('https://shopee.com.br/m/cupom-de-desconto'))
-  assert.ok(!sentQuery.includes('/m/cupom?'))
-  assert.ok(!sentQuery.includes('/voucher/details'))
+  assert.equal(result, 'https://s.shopee.com.br/cupomDIRETO')
+  assert.ok(sentQuery.includes('/m/cupom?'), 'origin preserva o caminho /m/cupom')
+  assert.ok(sentQuery.includes('promotionId=999'), 'origin mantém a identidade do cupom')
+  assert.ok(!/cupom-de-desconto/.test(sentQuery), 'NÃO reescreve para a landing web')
 })
 
 // Invariante de segurança: mesmo com o flag ligado, se a API recusar o cupom,

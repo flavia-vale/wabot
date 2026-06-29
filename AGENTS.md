@@ -1069,7 +1069,7 @@ Como cada loja credita o cupom (mecanismo é diferente por afiliado):
 |--------|-------------------|-------|-------|
 | **Magalu** | já convertia (sempre): `partner_id` em qualquer URL | nenhum | independe do flag (comportamento pré-existente) |
 | **Amazon** | `?tag=` na URL da loja (`amazon.com.br`), não no encurtador | baixo, sem WebView | `convert()` em `amazon.js`, fallback aditivo quando não há ASIN |
-| **Shopee** | resolve → `stripAffiliateTracking` → `generateShortLink` (retry só em falha de transporte) | ⚠️ **WebView** ("Oops! Seu navegador não é mais aceito!") | foi a causa da regressão de 2026-06 (commit `3e10e1c`) |
+| **Shopee** | resolve → `stripAffiliateTracking` (preserva o caminho) → `generateShortLink` → devolve o short link **como-está** | baixo | o short link da API abre direto o app |
 | **ML** | ⚠️ **a definir / em teste** | ⚠️ **comissão** | pendurar `partner_id` em página não-produto NÃO credita (vai pro dono do código — ver `mercadolivre.js:700`). Em avaliação: tentar `createLink` no link de cupom e validar em staging. |
 
 `stripAffiliateTracking()` (Shopee) remove só o tracking de terceiros
@@ -1078,15 +1078,30 @@ Como cada loja credita o cupom (mecanismo é diferente por afiliado):
 `promotionId`/`voucherCode`/`signature`) — sem isso a API recusa com "Invalid
 origin URL".
 
+**Causa raiz do "Oops! Seu navegador não é mais aceito!" (resolvida 2026-06) —
+NÃO REGREDIR:** o `unsupported.html` é uma **parede do lado do cliente**: a
+Shopee detecta o User-Agent do WebView do WhatsApp e bloqueia **qualquer página
+web** `shopee.com.br/...`. O que escapa é o short link `s.shopee.com.br/XXX` da
+`generateShortLink`, que ao ser tocado **abre direto o app** (deep-link),
+exatamente como os links de produto. Um probe contra a API real
+(`scripts/shopee-linktype-probe.mjs`) provou que a API gera um short link
+app-deeplink para a origem **natural** do cupom (qualquer caminho `/m/...`,
+`/buyer/voucher`, etc.). **A regressão era do nosso código:** uma tentativa
+anterior **reescrevia** a origem do cupom para a landing web
+`/m/cupom-de-desconto` (e pós-reescrevia o resultado via `stabilizeShopeeCouponLink`)
+— isso transformava um link que abriria o app numa página web que SEMPRE cai no
+`unsupported.html`. A correção foi **remover a reescrita**: preservar o caminho
+original e devolver o short link da API como-está. **Não reintroduzir nenhuma
+reescrita de cupom para landing web.**
+
 Invariante de segurança em TODOS os caminhos: **o link original de terceiro
 NUNCA é encaminhado.** Se a conversão falhar, cai no strip seguro (não vaza
 comissão).
 
 **O que só um teste real em staging resolve (não dá para validar no sandbox):**
-(1) a Shopee aceita a origin de voucher limpa e o shortLink abre no app sem o
-erro do WebView? (2) o ML credita cupom de algum jeito? **Validar clicando no
-link num celular ANTES de ligar em prod.** Testes:
-`test/shopee-affiliate-info.test.js` e `test/converters-amazon.test.js`.
+(1) o ML credita cupom de algum jeito? **Validar clicando no link num celular
+ANTES de ligar em prod.** Testes: `test/shopee-affiliate-info.test.js` e
+`test/converters-amazon.test.js`.
 
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 
