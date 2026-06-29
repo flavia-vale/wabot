@@ -821,6 +821,17 @@ export async function adminRoutes(app) {
     return result
   })
 
+  app.get('/users/wa-disconnected', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+    const result = await adminService.listWaDisconnectedUsers({ query: req.query ?? {}, adminRole: req.admin.role })
+    await writeAdminAuditLog(req, {
+      action: 'admin.users.wa_disconnected.list',
+      resource: 'user',
+      after: { total: result.total, paidAtRisk: result.summary?.paidAtRisk ?? 0 },
+    })
+    return result
+  })
+
 
   app.get('/system/health', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'tech:read'))) return
