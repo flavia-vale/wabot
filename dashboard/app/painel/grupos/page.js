@@ -291,23 +291,27 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
           </Link>
         </CfgRow>
 
-        {templateApplied && (
-          <CfgRow
-            label="Link a converter quando há vários"
-            hint="O template vira oferta de um produto só — escolha qual link usar."
-            extra="cfg-fadeup"
+        <CfgRow
+          label="Link principal quando há vários"
+          info={<>
+            Define qual produto vira a referência principal quando a mensagem espelhada traz mais de um link.<br />
+            Com template, esse é o link usado para montar a oferta de um produto só. Sem template, o texto original continua com todos os links convertidos, mas esta escolha orienta a imagem/dados principais e os registros do envio.
+          </>}
+          hint={templateApplied
+            ? 'O template usa esse link para buscar título, preço e imagem do produto principal.'
+            : 'Útil em ofertas espelhadas com vários links: todos continuam no texto, mas a imagem/dados principais seguem esta escolha.'}
+          extra="cfg-fadeup"
+        >
+          <select
+            className="pnl-input"
+            value={g.primaryLinkTarget ?? ''}
+            onChange={(e) => onUpdate(g.id, { primaryLinkTarget: e.target.value })}
           >
-            <select
-              className="pnl-input"
-              value={g.primaryLinkTarget ?? ''}
-              onChange={(e) => onUpdate(g.id, { primaryLinkTarget: e.target.value })}
-            >
-              <option value="">Primeiro link (padrão)</option>
-              <option value="first">Primeiro link da mensagem</option>
-              <option value="last">Último link da mensagem</option>
-            </select>
-          </CfgRow>
-        )}
+            <option value="">Primeiro link (padrão)</option>
+            <option value="first">Primeiro link da mensagem</option>
+            <option value="last">Último link da mensagem</option>
+          </select>
+        </CfgRow>
 
         <CfgRow
           label="Imagem da oferta"
