@@ -252,6 +252,10 @@ export const api = {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/users${query ? `?${query}` : ''}`)
   },
+  adminWaDisconnectedUsers: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/users/wa-disconnected${query ? `?${query}` : ''}`)
+  },
   adminUserDetail: (id) => apiFetch(`/api/admin/users/${id}`),
   adminLogs: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()

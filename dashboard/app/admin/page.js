@@ -50,6 +50,7 @@ const RISK_FILTERS = [
   ['missing_credentials', 'Sem credenciais'],
   ['missing_monitor', 'Sem origem'],
   ['missing_post', 'Sem destino'],
+  ['wa_disconnected', 'WhatsApp off'],
 ]
 const CS_ALLOWED_EMAILS = ['flavia.vale@usp.br', 'flaviaroberta.1496@gmail.com', 'tacianeaas02@gmail.com']
 const CS_PERMISSION_KEYS = ['customer_success', 'customer_success_ops', 'success']
@@ -818,10 +819,110 @@ function StagingPowerCard({ admin }) {
   )
 }
 
+
+function WhatsAppDisconnectedTable({ data, onOpenDetail, onRecordContact }) {
+  const users = asArray(data?.users)
+  const summary = asPlainObject(data?.summary)
+  const hasUsers = users.length > 0
+
+  return (
+    <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-red-100">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-red-700">Suporte · Reconexão prioritária</p>
+          <h2 className="text-lg font-black text-gray-900">Clientes com WhatsApp desconectado após uso</h2>
+          <p className="mt-1 max-w-3xl text-sm text-gray-500">Clientes ativos que já tiveram envio com sucesso, mas hoje estão sem sessão WhatsApp conectada. Priorize pagantes e use o botão para chamar o cliente diretamente.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-right sm:grid-cols-4 lg:min-w-[520px]">
+          <div className="rounded-xl bg-red-50 px-3 py-2">
+            <p className="text-lg font-black text-red-700">{formatNumber(summary.total ?? data?.total ?? 0)}</p>
+            <p className="text-[11px] font-bold uppercase text-red-500">WA off</p>
+          </div>
+          <div className="rounded-xl bg-amber-50 px-3 py-2">
+            <p className="text-lg font-black text-amber-700">{formatNumber(summary.paidAtRisk ?? 0)}</p>
+            <p className="text-[11px] font-bold uppercase text-amber-600">pagantes</p>
+          </div>
+          <div className="rounded-xl bg-indigo-50 px-3 py-2">
+            <p className="text-lg font-black text-indigo-700">{formatCurrency(summary.estimatedMrrAtRisk ?? 0)}</p>
+            <p className="text-[11px] font-bold uppercase text-indigo-600">MRR risco</p>
+          </div>
+          <div className="rounded-xl bg-gray-50 px-3 py-2">
+            <p className="text-lg font-black text-gray-800">{formatNumber(summary.noRecentSupportContact ?? 0)}</p>
+            <p className="text-[11px] font-bold uppercase text-gray-500">sem contato</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="text-xs uppercase tracking-wide text-gray-400">
+            <tr>
+              <th className="px-3 py-2">Cliente</th>
+              <th className="px-3 py-2">Uso anterior</th>
+              <th className="px-3 py-2">WhatsApp</th>
+              <th className="px-3 py-2">Operação</th>
+              <th className="px-3 py-2">Prioridade</th>
+              <th className="px-3 py-2">Ação</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {users.map(user => {
+              const canOpenWhatsApp = Boolean(user?.whatsappContactUrl)
+              return (
+                <tr key={user?.id ?? user?.email} className="align-top bg-red-50/30">
+                  <td className="px-3 py-3">
+                    <p className="font-bold text-gray-900">{user?.email ?? 'Cliente sem e-mail'}</p>
+                    <p className="text-xs text-gray-500">{user?.contactPhone || 'Sem celular'} · {user?.plan ?? '—'} · {user?.accessStatus ?? '—'}</p>
+                    <p className="mt-1 text-[11px] text-gray-400">Contato CS: {formatDate(user?.lastSupportContactAt)}</p>
+                  </td>
+                  <td className="px-3 py-3 text-xs text-gray-600">
+                    <p><strong>{formatNumber(user?.successCount ?? 0)}</strong> sucessos · {formatNumber(user?.totalLogCount ?? 0)} logs</p>
+                    <p>Último sucesso: {formatDate(user?.lastSuccessAt)}</p>
+                    <p>Último log: {formatDate(user?.lastMessageAt)}</p>
+                  </td>
+                  <td className="px-3 py-3 text-xs text-gray-600">
+                    <span className="inline-flex rounded-full bg-red-100 px-2 py-1 text-[11px] font-black text-red-700">{user?.waSession?.status || 'sem sessão'}</span>
+                    <p className="mt-1">Atualizado: {formatDate(user?.waSession?.updatedAt)}</p>
+                    {user?.waSession?.lastDisconnectCode && <p>Código: {user.waSession.lastDisconnectCode}</p>}
+                  </td>
+                  <td className="px-3 py-3 text-xs text-gray-600">
+                    <p>Bot: {user?.botRunning ? 'rodando' : 'parado'}</p>
+                    <p>Origem/Destino: {user?.groupCounts?.monitor ?? 0}/{user?.groupCounts?.post ?? 0}</p>
+                    <div className="mt-1"><CredentialHealthBadges health={user?.credentialHealth} compact /></div>
+                  </td>
+                  <td className="px-3 py-3">
+                    <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-black text-amber-800">{user?.priorityLabel || 'Reconectar'}</span>
+                    <p className="mt-2 text-xs font-bold text-gray-700">Score {user?.priorityScore ?? 0}/100</p>
+                    <p className="mt-1 text-[11px] text-gray-500">{user?.suggestedAction || 'Reconectar WhatsApp'}</p>
+                  </td>
+                  <td className="px-3 py-3">
+                    <div className="flex flex-col gap-2">
+                      <button onClick={() => onOpenDetail(user?.id)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Drill-down</button>
+                      {canOpenWhatsApp ? (
+                        <a href={user.whatsappContactUrl} target="_blank" rel="noreferrer" className="rounded-lg bg-green-600 px-3 py-2 text-center text-xs font-bold text-white hover:bg-green-700">Chamar no WhatsApp</a>
+                      ) : (
+                        <span className="rounded-lg bg-gray-100 px-3 py-2 text-center text-xs font-bold text-gray-400">Sem WhatsApp</span>
+                      )}
+                      <button onClick={() => onRecordContact(user)} className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100">Registrar contato</button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {!hasUsers && <p className="rounded-xl bg-green-50 px-4 py-3 text-sm font-semibold text-green-700">Nenhum cliente ativo com sucesso anterior e WhatsApp desconectado no momento.</p>}
+    </section>
+  )
+}
+
 export default function AdminPage() {
   const [overview, setOverview] = useState(null)
   const [admin, setAdmin] = useState(null)
   const [users, setUsers] = useState(null)
+  const [waDisconnectedUsers, setWaDisconnectedUsers] = useState(null)
   const [sessions, setSessions] = useState(null)
   const [sessionTelemetry, setSessionTelemetry] = useState(null)
   const [logs, setLogs] = useState(null)
@@ -848,10 +949,11 @@ export default function AdminPage() {
   async function loadAdminData(nextRisk = risk, nextSearch = search) {
     if (accessDenied) return
     setError('')
-    const [adminData, overviewData, usersData, sessionsData, sessionTelemetryData, logsData, logsSummary24hData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, lpContentData, termsData] = await Promise.all([
+    const [adminData, overviewData, usersData, waDisconnectedUsersData, sessionsData, sessionTelemetryData, logsData, logsSummary24hData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, lpContentData, termsData] = await Promise.all([
       api.adminMe(),
       api.adminOverview(),
       api.adminUsers({ risk: nextRisk, search: nextSearch, limit: 20 }),
+      api.adminWaDisconnectedUsers({ search: nextSearch, limit: 12, minSuccess: 1 }).catch(() => null),
       api.adminSessions({ limit: 10 }),
       api.adminSessionTelemetry({ limit: 60 }).catch(() => null),
       api.adminLogs({ limit: 25, status: 'all' }),
@@ -870,6 +972,7 @@ export default function AdminPage() {
     setAdmin(adminData)
     setOverview(overviewData)
     setUsers(usersData)
+    setWaDisconnectedUsers(waDisconnectedUsersData)
     setSessions(sessionsData)
     setSessionTelemetry(sessionTelemetryData)
     setLogs(logsData)
@@ -899,6 +1002,7 @@ export default function AdminPage() {
           Promise.resolve(adminData),
           api.adminOverview(),
           api.adminUsers({ limit: 20 }),
+          api.adminWaDisconnectedUsers({ limit: 12, minSuccess: 1 }).catch(() => null),
           api.adminSessions({ limit: 10 }),
           api.adminSessionTelemetry({ limit: 60 }).catch(() => null),
           api.adminLogs({ limit: 25, status: 'all' }),
@@ -917,10 +1021,11 @@ export default function AdminPage() {
       })
       .then((result) => {
         if (!active || !result) return
-        const [adminData, overviewData, usersData, sessionsData, sessionTelemetryData, logsData, logsSummary24hData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, lpContentData, termsData] = result
+        const [adminData, overviewData, usersData, waDisconnectedUsersData, sessionsData, sessionTelemetryData, logsData, logsSummary24hData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, lpContentData, termsData] = result
         setAdmin(adminData)
         setOverview(overviewData)
         setUsers(usersData)
+        setWaDisconnectedUsers(waDisconnectedUsersData)
         setSessions(sessionsData)
         setSessionTelemetry(sessionTelemetryData)
         setLogs(logsData)
@@ -1331,6 +1436,8 @@ export default function AdminPage() {
             </div>
           </section>
         )}
+
+        <WhatsAppDisconnectedTable data={waDisconnectedUsers} onOpenDetail={openUserDetail} onRecordContact={recordContact} />
 
         <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
           <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
