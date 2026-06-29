@@ -253,7 +253,7 @@ export async function getAffiliateReferrals({ affiliateProfileId, page = 1, limi
       }),
       dbi.affiliateCommission.findMany({
         where: { affiliateId: affiliateProfileId, referredUserId: { in: userIds } },
-        select: { referredUserId: true, commissionType: true, commissionAmountCents: true },
+        select: { referredUserId: true, commissionType: true, commissionAmountCents: true, status: true, eligibleAt: true, paidAt: true },
       }),
     ])
     : [[], []]
@@ -269,16 +269,28 @@ export async function getAffiliateReferrals({ affiliateProfileId, page = 1, limi
 
   const commAgg = new Map()
   for (const c of commissions) {
-    const cur = commAgg.get(c.referredUserId) ?? { initialCents: 0, recurringCents: 0, totalCents: 0 }
-    if (c.commissionType === 'recurring') cur.recurringCents += c.commissionAmountCents
-    else cur.initialCents += c.commissionAmountCents
-    cur.totalCents += c.commissionAmountCents
+    const cur = commAgg.get(c.referredUserId) ?? {
+      initialCents: 0, recurringCents: 0, totalCents: 0,
+      pendingCents: 0, payableCents: 0, paidCents: 0, reversedCents: 0,
+      lastEligibleAt: null, lastPaidAt: null, statuses: {},
+    }
+    const amount = c.commissionAmountCents ?? 0
+    if (c.commissionType === 'recurring') cur.recurringCents += amount
+    else cur.initialCents += amount
+    cur.totalCents += amount
+    if (c.status === 'pending' || c.status === 'held') cur.pendingCents += amount
+    else if (c.status === 'eligible' || c.status === 'approved') cur.payableCents += amount
+    else if (c.status === 'paid') cur.paidCents += amount
+    else if (c.status === 'reversed') cur.reversedCents += amount
+    cur.statuses[c.status] = (cur.statuses[c.status] ?? 0) + 1
+    if (c.eligibleAt && (!cur.lastEligibleAt || new Date(c.eligibleAt) > new Date(cur.lastEligibleAt))) cur.lastEligibleAt = c.eligibleAt
+    if (c.paidAt && (!cur.lastPaidAt || new Date(c.paidAt) > new Date(cur.lastPaidAt))) cur.lastPaidAt = c.paidAt
     commAgg.set(c.referredUserId, cur)
   }
 
   const referrals = users.map(u => {
     const pay = payAgg.get(u.id) ?? { count: 0, totalCents: 0, lastPaymentAt: null }
-    const comm = commAgg.get(u.id) ?? { initialCents: 0, recurringCents: 0, totalCents: 0 }
+    const comm = commAgg.get(u.id) ?? { initialCents: 0, recurringCents: 0, totalCents: 0, pendingCents: 0, payableCents: 0, paidCents: 0, reversedCents: 0, lastEligibleAt: null, lastPaidAt: null, statuses: {} }
     const accessStatus = resolveAccessStatus(u, now)
     const isActive = accessStatus === 'active' || accessStatus === 'trial'
 
@@ -292,10 +304,19 @@ export async function getAffiliateReferrals({ affiliateProfileId, page = 1, limi
         accessStatus,
         isActive,
         paymentCount: pay.count,
+        lastPaymentAt: pay.lastPaymentAt,
+        commissionInitialCents: comm.initialCents,
+        commissionRecurringCents: comm.recurringCents,
         commissionTotalCents: comm.totalCents,
+        commissionPendingCents: comm.pendingCents,
+        commissionPayableCents: comm.payableCents,
+        commissionPaidCents: comm.paidCents,
+        commissionReversedCents: comm.reversedCents,
+        lastCommissionEligibleAt: comm.lastEligibleAt,
+        lastCommissionPaidAt: comm.lastPaidAt,
+        commissionStatuses: comm.statuses,
       }
     }
-
     return {
       userId: u.id,
       name: u.name,
@@ -314,6 +335,13 @@ export async function getAffiliateReferrals({ affiliateProfileId, page = 1, limi
       commissionInitialCents: comm.initialCents,
       commissionRecurringCents: comm.recurringCents,
       commissionTotalCents: comm.totalCents,
+      commissionPendingCents: comm.pendingCents,
+      commissionPayableCents: comm.payableCents,
+      commissionPaidCents: comm.paidCents,
+      commissionReversedCents: comm.reversedCents,
+      lastCommissionEligibleAt: comm.lastEligibleAt,
+      lastCommissionPaidAt: comm.lastPaidAt,
+      commissionStatuses: comm.statuses,
     }
   })
 
