@@ -29,6 +29,9 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   wa_flap_cooldown: 'ops_wa_flap_cooldown',
   // badSession (500) repetido sem conexão estável → auth limpo p/ re-pareamento.
   wa_bad_session_reset: 'ops_wa_bad_session_reset',
+  // Sessão ficou estável e mesmo assim cai em cadência periódica; cooldown
+  // maior para reduzir re-sync/push notification sem limpar auth.
+  wa_stable_close_cooldown: 'ops_wa_stable_close_cooldown',
 }
 
 let cachedTrackFn = null

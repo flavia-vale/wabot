@@ -83,3 +83,26 @@ export function registerBadSessionAndDecide(timestamps, now, { windowMs, resetTh
     shouldResetAuth: resetThreshold > 0 && recent.length >= resetThreshold && !hadStableOpen,
   }
 }
+
+// Quedas "tipo relógio": produção mostrou sessões que ficam estáveis por ~50min
+// e caem com 500/428/408 em cadência quase exata. Isso NÃO é flap curto, então o
+// detector de flap não deve disparar; mas reconectar imediatamente também gera
+// um novo `open` a cada ciclo e, portanto, uma nova notificação no celular. Este
+// helper registra apenas closes que vieram de uma conexão estável e aplica um
+// cooldown quando eles se repetem dentro de uma janela maior.
+export function registerStableCloseAndDecide(timestamps, now, { windowMs, cooldownThreshold, hadStableOpen }) {
+  if (!hadStableOpen) {
+    return {
+      timestamps: timestamps || [],
+      count: (timestamps || []).length,
+      shouldCooldown: false,
+    }
+  }
+  const recent = (timestamps || []).filter(ts => now - ts <= windowMs)
+  recent.push(now)
+  return {
+    timestamps: recent,
+    count: recent.length,
+    shouldCooldown: cooldownThreshold > 0 && recent.length >= cooldownThreshold,
+  }
+}

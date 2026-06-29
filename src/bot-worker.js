@@ -44,7 +44,7 @@ import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/prese
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
-import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide } from './core/reconnectPolicy.js'
+import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, registerStableCloseAndDecide } from './core/reconnectPolicy.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
 import { calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
@@ -703,6 +703,15 @@ const RECONNECT_STABLE_MS = Math.max(5_000, envNumber('RECONNECT_STABLE_MS', 60_
 // verdade). RECONNECT_BADSESSION_RESET_THRESHOLD <= 0 desliga o auto-reset.
 const RECONNECT_BADSESSION_WINDOW_MS = Math.max(60_000, envNumber('RECONNECT_BADSESSION_WINDOW_MS', 10 * 60_000))
 const RECONNECT_BADSESSION_RESET_THRESHOLD = envNumber('RECONNECT_BADSESSION_RESET_THRESHOLD', 4)
+// Queda periódica de sessão estável: produção mostrou vários chips caindo em
+// code 500/428/408 a cada ~50min (cadência de timer, não flap curto). Como a
+// sessão fica estável por muito mais que RECONNECT_STABLE_MS, o backoff normal
+// zera e reconecta rápido — cada ciclo vira uma nova push notification no
+// celular. Após N quedas estáveis na janela, aplicamos um cooldown maior para
+// reduzir o volume de re-sync sem apagar auth nem exigir re-pareamento.
+const RECONNECT_STABLE_CLOSE_WINDOW_MS = Math.max(30 * 60_000, envNumber('RECONNECT_STABLE_CLOSE_WINDOW_MS', 3 * 60 * 60_000))
+const RECONNECT_STABLE_CLOSE_THRESHOLD = Math.max(2, envNumber('RECONNECT_STABLE_CLOSE_THRESHOLD', 3))
+const RECONNECT_STABLE_CLOSE_COOLDOWN_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_STABLE_CLOSE_COOLDOWN_MS', 30 * 60_000))
 // Keep-alive do socket: sem ping periódico, um socket morto silenciosamente só
 // é detectado tarde, causando reconexão (e nova notificação). 25s é conservador.
 const WA_KEEPALIVE_INTERVAL_MS = Math.max(10_000, envNumber('WA_KEEPALIVE_INTERVAL_MS', 25_000))
@@ -1467,6 +1476,7 @@ let replacedTimestamps = []
 // deslizantes. Mesma lógica do replaced: imunes a `open` curto.
 let closeTimestamps = []
 let badSessionTimestamps = []
+let stableCloseTimestamps = []
 // Momento (ms) em que o socket atingiu `connection: 'open'` nesta tentativa.
 // Usado no close para medir se a sessão foi estável antes de cair.
 let connectionOpenedAt = null
@@ -1828,6 +1838,25 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             'Flapping detectado (closes repetidos na janela) — cooldown longo para conter o spam de "sincronização concluída". Recupera sozinho quando o chip estabilizar.'
           )
           try { recordOperationalSignal('wa_flap_cooldown', { userId, code, count: f.count }) } catch {}
+        } else if (wasStable && [DisconnectReason.badSession, DisconnectReason.connectionClosed, DisconnectReason.timedOut].includes(code)) {
+          const s = registerStableCloseAndDecide(stableCloseTimestamps, now, {
+            windowMs: RECONNECT_STABLE_CLOSE_WINDOW_MS,
+            cooldownThreshold: RECONNECT_STABLE_CLOSE_THRESHOLD,
+            hadStableOpen: wasStable,
+          })
+          stableCloseTimestamps = s.timestamps
+          if (s.shouldCooldown) {
+            delayMs = RECONNECT_STABLE_CLOSE_COOLDOWN_MS
+            logger.warn(
+              { code, stableCloseCount: s.count, windowMs: RECONNECT_STABLE_CLOSE_WINDOW_MS, delayMs },
+              'Quedas periódicas de sessão WA estável detectadas — cooldown maior para reduzir re-sync/push notification sem limpar auth.'
+            )
+            try { recordOperationalSignal('wa_stable_close_cooldown', { userId, code, count: s.count }) } catch {}
+          } else {
+            delayMs = calcReconnectDelayMs()
+            reconnectAttempts++
+            logger.warn({ code, attempt: reconnectAttempts, delayMs, stableCloseCount: s.count }, 'WA conexão estável fechada, agendando restart automático')
+          }
         } else {
           delayMs = calcReconnectDelayMs()
           reconnectAttempts++
