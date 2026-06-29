@@ -110,7 +110,16 @@ export async function convert(url, creds) {
   if (!extractShopeeIds(canonical)) {
     if (shouldConvertNonProductLinks()) {
       try {
-        return await generateAffiliateShortLink(canonical, creds)
+        const affiliateShortLink = await generateAffiliateShortLink(canonical, creds)
+        // s.shopee.com.br shortLinks para cupons/vouchers abrem no WebView do
+        // WhatsApp, onde a Shopee bloqueia a renderização da página /buyer/voucher
+        // ("Oops! Seu navegador não é mais aceito!"). Ao resolver o shortLink para
+        // a URL canônica com os params de atribuição (utm_source, uls_trackid), o
+        // link final fica no domínio shopee.com.br — que é Universal Link no iOS e
+        // App Link no Android — fazendo o SO abrir direto o app Shopee sem passar
+        // pelo WebView. A conversão é atribuída via uls_trackid na URL destino.
+        const resolved = await resolveShopeeShortLink(affiliateShortLink)
+        return (resolved && resolved !== affiliateShortLink) ? resolved : affiliateShortLink
       } catch {
         // API recusou/falhou a conversão do cupom — cai no strip seguro abaixo.
       }

@@ -1041,25 +1041,28 @@ Testes: `test/shopee-shortlink-resolve.test.js` + regressões em
 ### Conversão de link de cupom Shopee (`SHOPEE_COUPON_CONVERT`, default OFF)
 
 Links Shopee que **não são de produto** (cupom/voucher como
-`s.shopee.com.br/XXX` → `/buyer/voucher`, sem `shopId+itemId`) historicamente
-eram **removidos** da mensagem espelhada: mandar o original credita a comissão
-ao afiliado do grupo de origem (concorrente), e convertê-los pela API podia
-gerar um shortLink que dispara **"Oops! Seu navegador não é mais aceito!"** no
-WebView do WhatsApp.
+`s.shopee.com.br/XXX` → `/buyer/voucher`, sem `shopId+itemId`) eram
+**removidos** da mensagem espelhada: mandar o original credita a comissão ao
+afiliado do grupo de origem (concorrente).
 
 | Env                     | Default | Efeito                                                                 |
 |-------------------------|---------|-----------------------------------------------------------------------|
 | `SHOPEE_COUPON_CONVERT` | `false` | OFF: comportamento histórico (cupom removido via `stripFromMessage`). |
-|                         | `true`  | Tenta converter o cupom pela API de afiliado; se a API recusar, cai no strip seguro (**nunca** encaminha o link original). |
+|                         | `true`  | Converte o cupom pela API de afiliado e resolve o shortLink para a URL canônica (`shopee.com.br/buyer/voucher?...&utm_source=an_APPID&uls_trackid=...`). A URL canônica abre via App Link (Android) / Universal Link (iOS) diretamente no app Shopee, evitando o WebView do WhatsApp. Se a API recusar, cai no strip seguro (**nunca** encaminha o link original). |
 
 Lido em runtime em `src/converters/shopee.js` (`shouldConvertNonProductLinks`),
-então o rollback em prod é só **desligar a env** (sem redeploy). **Risco que só
-um teste real resolve:** mesmo com a API devolvendo shortLink, o link de cupom
-pode disparar o erro "navegador não aceito" no WhatsApp. **Validar em staging
-clicando no link num celular ANTES de ligar em prod.** Invariante de segurança
-preservada: o link original (de terceiro) nunca é encaminhado. Testes:
-`test/shopee-affiliate-info.test.js` (flag ON: API aceita → converte; API
-recusa → strip seguro).
+então o rollback em prod é só **desligar a env** (sem redeploy).
+
+**Por que resolve em vez de encaminhar o shortLink:** o shortLink
+`s.shopee.com.br/XXX` abria no WebView do WhatsApp e a Shopee bloqueava a
+página `/buyer/voucher` com "Oops! Seu navegador não é mais aceito!". A URL
+canônica `shopee.com.br` é o domínio App Link registrado pelo app Shopee no
+Android/iOS; o SO intercepta e abre direto o app — sem WebView, sem bloqueio.
+Fallback: se a resolução falhar (rede), o shortLink é devolvido mesmo (melhor
+que remover o cupom). Invariante de segurança preservada: o link original (de
+terceiro) nunca é encaminhado. Testes: `test/shopee-affiliate-info.test.js`
+(flag ON: API aceita → converte + resolve; API recusa → strip seguro; resolução
+falha → fallback ao shortLink).
 
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 
