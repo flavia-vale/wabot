@@ -30,6 +30,7 @@ test('classifyError aceita context.kind para casos sem exception', () => {
   assert.equal(classifyError(null, { kind: 'queue_full' }), 'error:queue_full')
   assert.equal(classifyError(null, { kind: 'worker_restart' }), 'error:worker_restart')
   assert.equal(classifyError(null, { kind: 'channel_forbidden' }), 'error:channel_forbidden')
+  assert.equal(classifyError(null, { kind: 'send_stuck' }), 'timeout:send:stuck')
 })
 
 test('classifyError mapeia statusCode Boom para error:baileys:<code>', () => {
@@ -64,6 +65,7 @@ test('categorizeErrorMsg agrupa proteções como categoria correta', () => {
 
 test('categorizeErrorMsg agrupa timeouts e erros operacionais', () => {
   assert.equal(categorizeErrorMsg('timeout:send:foo@s.whatsapp.net'), ERROR_CATEGORIES.TIMEOUT)
+  assert.equal(categorizeErrorMsg('timeout:send:stuck'), ERROR_CATEGORIES.TIMEOUT)
   assert.equal(categorizeErrorMsg('timeout:incoming'), ERROR_CATEGORIES.TIMEOUT)
   assert.equal(categorizeErrorMsg('error:channel_forbidden'), ERROR_CATEGORIES.CHANNEL_FORBIDDEN)
   assert.equal(categorizeErrorMsg('error:queue_full'), ERROR_CATEGORIES.QUEUE_FULL)
