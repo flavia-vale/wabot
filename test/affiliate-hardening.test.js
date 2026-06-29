@@ -4,6 +4,7 @@ import {
   evaluateAffiliateCommissionRisk,
   tryCreateAffiliateCommission,
   getAffiliateMeData,
+  getAffiliateReferrals,
   approveAffiliateCommission,
 } from '../src/domain/affiliate/service.js'
 import { encryptCredential } from '../src/credentialCrypto.js'
@@ -146,4 +147,36 @@ test('O6: getAffiliateMeData soma por status a partir do groupBy', async () => {
   assert.equal(data.months[1].month, '2026-05')
   assert.equal(data.months[1].totalCents, 700) // reversed não soma
   assert.equal(data.months[1].status, 'eligible')
+})
+
+test('getAffiliateReferrals retorna múltiplos indicados com detalhes financeiros anonimizados', async () => {
+  const users = [
+    { id: 'u1', name: 'Marlene Jahn', email: 'marlene@example.com', contactPhone: null, status: 'active', plan: 'pro', accessExpiresAt: new Date('2026-08-01T00:00:00Z'), createdAt: new Date('2026-06-01T00:00:00Z'), lastActivityAt: null },
+    { id: 'u2', name: 'Ana Silva', email: 'ana@example.com', contactPhone: null, status: 'active', plan: 'trial', accessExpiresAt: new Date('2026-07-01T00:00:00Z'), createdAt: new Date('2026-06-02T00:00:00Z'), lastActivityAt: null },
+  ]
+  const db = {
+    user: {
+      count: async ({ where }) => where.affiliateProfileId === 'prof-1' ? 2 : 0,
+      findMany: async ({ where }) => where.affiliateProfileId === 'prof-1' ? users : [],
+    },
+    payment: { findMany: async () => [
+      { userId: 'u1', amount: 39, createdAt: new Date('2026-06-10T00:00:00Z') },
+      { userId: 'u1', amount: 39, createdAt: new Date('2026-06-20T00:00:00Z') },
+    ] },
+    affiliateCommission: { findMany: async () => [
+      { referredUserId: 'u1', commissionType: 'initial', commissionAmountCents: 1170, status: 'pending', eligibleAt: new Date('2026-07-10T00:00:00Z'), paidAt: null },
+      { referredUserId: 'u1', commissionType: 'recurring', commissionAmountCents: 1170, status: 'paid', eligibleAt: new Date('2026-07-20T00:00:00Z'), paidAt: new Date('2026-07-25T00:00:00Z') },
+    ] },
+  }
+
+  const result = await getAffiliateReferrals({ affiliateProfileId: 'prof-1', anonymized: true, db, now: new Date('2026-06-29T00:00:00Z') })
+  assert.equal(result.total, 2)
+  assert.equal(result.referrals.length, 2)
+  assert.equal(result.referrals[0].name, 'Marlene J.')
+  assert.equal(result.referrals[0].paymentCount, 2)
+  assert.equal(result.referrals[0].commissionInitialCents, 1170)
+  assert.equal(result.referrals[0].commissionRecurringCents, 1170)
+  assert.equal(result.referrals[0].commissionPendingCents, 1170)
+  assert.equal(result.referrals[0].commissionPaidCents, 1170)
+  assert.deepEqual(result.referrals[0].commissionStatuses, { pending: 1, paid: 1 })
 })

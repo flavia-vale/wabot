@@ -52,7 +52,7 @@ model User {
   probeEvidences       ProbeEvidence[]
   preservationPresets   PreservationPreset[]
 
-  affiliateProfileId    String?  @unique
+  affiliateProfileId    String?
   affiliateProfile      AffiliateProfile? @relation("UserAffiliate")
   affiliateRef          AffiliateProfile? @relation("AffiliateUser", fields: [affiliateProfileId], references: [id])
   referredCommissions   AffiliateCommission[] @relation("ReferredUserCommissions")
@@ -64,6 +64,7 @@ model User {
   @@index([status, plan, accessExpiresAt])
   @@index([lastActivityAt])
   @@index([supportStatus])
+  @@index([affiliateProfileId])
 }
 
 model WaSession {
@@ -686,7 +687,7 @@ model AffiliateProfile {
   commissionRecurringPercentOverride Int?
 
   user         User                  @relation("UserAffiliate", fields: [userId], references: [id], onDelete: Cascade)
-  referredUser User?                 @relation("AffiliateUser")
+  referredUsers User[]               @relation("AffiliateUser")
   commissions  AffiliateCommission[]
   attributionTouches AffiliateAttributionTouch[]
 
