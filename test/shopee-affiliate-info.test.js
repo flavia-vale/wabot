@@ -149,10 +149,15 @@ function stubCouponResolution(t) {
   t.after(() => { globalThis.fetch = originalFetch })
 }
 
-// Com SHOPEE_COUPON_CONVERT=true: cupom é convertido pela API de afiliado e o
-// shortLink resultante (comissão nossa) é devolvido para espelhar o CTA.
+// Com SHOPEE_COUPON_CONVERT=true: cupom é convertido e o shortLink afiliado é
+// resolvido para a URL canônica com params de atribuição (shopee.com.br).
+// Assim o link abre via App Link/Universal Link no app Shopee — sem WebView —
+// e a Shopee não bloqueia com "Oops! Seu navegador não é mais aceito!".
 test('convert() converte link de cupom quando SHOPEE_COUPON_CONVERT=true e a API aceita', async (t) => {
   withCouponConvertEnabled(t)
+  // stubCouponResolution devolve a mesma URL de voucher para qualquer fetch,
+  // cobrindo tanto a resolução do short link original quanto a resolução do
+  // affiliate shortLink retornado pela API.
   stubCouponResolution(t)
   let apiCalled = false
   t.after(stubAxiosPost(async () => {
@@ -161,8 +166,34 @@ test('convert() converte link de cupom quando SHOPEE_COUPON_CONVERT=true e a API
   }))
 
   const result = await convert('https://s.shopee.com.br/40eQK1or1O', CREDS)
-  assert.equal(result, 'https://s.shopee.com.br/cupomAFIL123')
+  // Deve retornar a URL resolvida (shopee.com.br) — não o shortLink — para que o
+  // SO abra o app Shopee diretamente sem passar pelo WebView do WhatsApp.
+  assert.equal(result, 'https://shopee.com.br/buyer/voucher?spm=xxx')
   assert.equal(apiCalled, true, 'API de afiliado deve ser chamada para tentar converter o cupom')
+})
+
+// Fallback: se a resolução pós-conversão falhar (rede), devolve o shortLink da
+// API como antes — degradação controlada em vez de strip do link.
+test('convert() usa o shortLink como fallback se a resolução do cupom afiliado falhar', async (t) => {
+  withCouponConvertEnabled(t)
+  const affiliateShortLink = 'https://s.shopee.com.br/cupomAFIL123'
+  const originalFetch = globalThis.fetch
+  let fetchCount = 0
+  globalThis.fetch = async (url) => {
+    fetchCount++
+    const urlStr = String(url)
+    if (urlStr.includes('40eQK1or1O')) {
+      return { ok: true, status: 200, url: 'https://shopee.com.br/buyer/voucher?spm=xxx', headers: { get: () => null }, body: null, text: async () => '' }
+    }
+    // Resolução do affiliate shortLink retorna a mesma URL (sem redirect) — simula
+    // falha de resolução.
+    return { ok: true, status: 200, url: urlStr, headers: { get: () => null }, body: null, text: async () => '' }
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+  t.after(stubAxiosPost(async () => ({ data: { data: { generateShortLink: { shortLink: affiliateShortLink } } } })))
+
+  const result = await convert('https://s.shopee.com.br/40eQK1or1O', CREDS)
+  assert.equal(result, affiliateShortLink, 'fallback: shortLink afiliado quando resolução não avança')
 })
 
 // Invariante de segurança: mesmo com o flag ligado, se a API recusar o cupom
