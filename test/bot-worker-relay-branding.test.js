@@ -26,3 +26,20 @@ test('bot-worker mantém substituição de cupom do usuário após conversão do
   assert.notEqual(couponBlockIndex, -1)
   assert.ok(couponBlockIndex > conversionCallIndex)
 })
+
+test('bot-worker usa primaryLinkTarget também para escolher a imagem do link principal', () => {
+  const targetSelectionIndex = botWorkerSource.indexOf('const target = effectiveLinkTarget === \'last\' ? enabled[enabled.length - 1] : enabled[0]')
+  const primarySelectionIndex = botWorkerSource.indexOf('const primary = (orderedConversions.length')
+
+  assert.notEqual(targetSelectionIndex, -1)
+  assert.notEqual(primarySelectionIndex, -1)
+  assert.ok(targetSelectionIndex < primarySelectionIndex, 'getImage deve usar a mesma escolha antes do envio')
+  assert.match(
+    botWorkerSource,
+    /const effectiveLinkTarget = monitorGroup\?\.primaryLinkTarget\s*\|\|\s*cfg\.botConfig\?\.primaryLinkTargetDefault\s*\|\|\s*'first'/,
+  )
+  assert.doesNotMatch(
+    botWorkerSource,
+    /const target = monitorGroup\.imageLinkTarget === 'last'/,
+  )
+})
