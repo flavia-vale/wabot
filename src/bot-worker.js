@@ -1056,7 +1056,10 @@ async function buildPayloadFromRecipe(recipe) {
   let image = null
   try {
     const fetched = await fetchImageBuffer(recipe.imageUrl, recipe.refererUrl)
-    image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
+    image = fetched ? await normalizeImageForWhatsApp(fetched.buffer, { fit: 'contain' }) : null
+    if (image) {
+      logger.info({ imageFit: 'contain', source: 'broadcastImage' }, 'Imagem normalizada com canvas WhatsApp-safe')
+    }
     if (fetched && !image) {
       logger.warn({ srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'broadcast image: normalizeImageForWhatsApp falhou — enviando texto com preview')
     }
@@ -2486,7 +2489,11 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // "Imagem que veio na mensagem". No modo "Imagem oficial da loja"
         // precisamos forçar o caminho de upload (getImage → fetch ativo) para não
         // vazar a imagem do anúncio/origem por cima da escolha do usuário.
-        const original = shouldRelayOriginalMediaForImageMode(imageMode) ? originalMedia : null
+        const imageFitPolicy = 'contain'
+        const original = shouldRelayOriginalMediaForImageMode(imageMode, {
+          mediaType: originalMedia?.type,
+          imageFit: imageFitPolicy,
+        }) ? originalMedia : null
         let useLinkPreview = false  // será setado a true se jpegThumbnail for descartado
 
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
@@ -2525,8 +2532,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
           // o NOSSO canal nele faz o WhatsApp derrubar o envio. Em vez disso caímos
           // no caminho sendMessage com a imagem rebaixada (getImage) — o MESMO
           // caminho comprovado das ofertas automáticas — e a injeção central
-          // (mídia-only) adiciona o botão. Sem botão, mantemos o relay (fidelidade
-          // máxima de mídia, inclui vídeo).
+          // (mídia-only) adiciona o botão. Sem botão, mantemos o relay somente
+          // para mídias que não precisam de normalização; imagens agora passam
+          // por upload para receber o canvas WhatsApp-safe.
           if (shouldUseRelayPath({ destJid, hasOriginal: !!original }) && !channelForward) {
             const hasCaption = original.type === 'imageMessage' || original.type === 'videoMessage'
             // Higieniza o contextInfo herdado da ORIGEM (remove botão de terceiros
@@ -2554,9 +2562,16 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             // Regressão de dupla compressão documentada em 2026-06
             // (commit image-upload-bug-fix). Ver normalizeImageForWhatsApp.
             const wantMutation = isChannelDest && isPreservationFeatureEnabled(cfg.preservationActive, cfg.botConfig, PRESERVATION_FEATURE.IMAGE_MUTATION)
+            const imageNormalizeOptions = {
+              fit: imageFitPolicy,
+              ...(wantMutation ? { mutation: { groupId: destJid } } : {}),
+            }
             image = fetched
-              ? await normalizeImageForWhatsApp(fetched.buffer, wantMutation ? { mutation: { groupId: destJid } } : {})
+              ? await normalizeImageForWhatsApp(fetched.buffer, imageNormalizeOptions)
               : null
+            if (image) {
+              logger.info({ msgId: msg.key.id, destJid, imageMode, imageFit: imageFitPolicy }, 'Imagem monitorada normalizada com canvas WhatsApp-safe')
+            }
             if (fetched && !image) {
               logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
             }

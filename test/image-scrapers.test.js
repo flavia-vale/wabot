@@ -5,7 +5,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 
-import { fetchImageBuffer, fetchProductImage } from '../src/converters/imageScrapers.js'
+import { WHATSAPP_SAFE_IMAGE_SIZE, WHATSAPP_SAFE_THUMBNAIL_SIZE } from '../src/core/imageFit.js'
+import { fetchImageBuffer, fetchProductImage, normalizeImageForWhatsApp } from '../src/converters/imageScrapers.js'
 
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures')
 const readFixture = (name) => fs.readFileSync(path.join(fixturesDir, name), 'utf-8')
@@ -32,6 +33,57 @@ function imageResponse(bytes, url = 'https://down-br.img.susercontent.com/file/p
   Object.defineProperty(response, 'url', { value: url })
   return response
 }
+
+test('normalizeImageForWhatsApp fit=contain mantém produto vertical inteiro em canvas quadrado', async () => {
+  const input = await imageBytes({ width: 600, height: 1400, color: '#ef4444' })
+
+  const normalized = await normalizeImageForWhatsApp(input, { fit: 'contain' })
+  const mainMeta = await sharp(normalized.buffer).metadata()
+  const thumbMeta = await sharp(normalized.jpegThumbnail).metadata()
+
+  assert.equal(mainMeta.width, WHATSAPP_SAFE_IMAGE_SIZE)
+  assert.equal(mainMeta.height, WHATSAPP_SAFE_IMAGE_SIZE)
+  assert.equal(thumbMeta.width, WHATSAPP_SAFE_THUMBNAIL_SIZE)
+  assert.equal(thumbMeta.height, WHATSAPP_SAFE_THUMBNAIL_SIZE)
+  assert.equal(normalized.mimetype, 'image/jpeg')
+})
+
+test('normalizeImageForWhatsApp fit=contain mantém produto horizontal inteiro em canvas quadrado', async () => {
+  const input = await imageBytes({ width: 1600, height: 500, color: '#22c55e' })
+
+  const normalized = await normalizeImageForWhatsApp(input, { fit: 'contain' })
+  const mainMeta = await sharp(normalized.buffer).metadata()
+  const thumbMeta = await sharp(normalized.jpegThumbnail).metadata()
+
+  assert.equal(mainMeta.width, WHATSAPP_SAFE_IMAGE_SIZE)
+  assert.equal(mainMeta.height, WHATSAPP_SAFE_IMAGE_SIZE)
+  assert.equal(thumbMeta.width, WHATSAPP_SAFE_THUMBNAIL_SIZE)
+  assert.equal(thumbMeta.height, WHATSAPP_SAFE_THUMBNAIL_SIZE)
+  assert.equal(normalized.mimetype, 'image/jpeg')
+})
+
+test('normalizeImageForWhatsApp fit=contain preserva canvas quadrado mesmo com mutação', async () => {
+  const input = await imageBytes({ width: 900, height: 1600, color: '#2563eb' })
+
+  const normalized = await normalizeImageForWhatsApp(input, {
+    fit: 'contain',
+    mutation: { groupId: 'canal-promos', date: '2026-06-29' },
+  })
+  const mainMeta = await sharp(normalized.buffer).metadata()
+
+  assert.equal(mainMeta.width, WHATSAPP_SAFE_IMAGE_SIZE)
+  assert.equal(mainMeta.height, WHATSAPP_SAFE_IMAGE_SIZE)
+})
+
+test('normalizeImageForWhatsApp sem fit=contain preserva comportamento legado inside', async () => {
+  const input = await imageBytes({ width: 600, height: 1400, color: '#f97316' })
+
+  const normalized = await normalizeImageForWhatsApp(input)
+  const mainMeta = await sharp(normalized.buffer).metadata()
+
+  assert.equal(mainMeta.width, 600)
+  assert.equal(mainMeta.height, 1400)
+})
 
 test('fetchProductImage resolve imagem da Amazon via data-a-dynamic-image quando og:image nao vem no HTML', async (t) => {
   const originalFetch = globalThis.fetch
