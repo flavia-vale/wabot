@@ -70,6 +70,19 @@ export function tzDayBucket(nowMs, tz) {
   }).format(new Date(nowMs))
 }
 
+function nextLocalDayStartMs(nowMs, tz) {
+  // Busca simples e robusta: avança até o bucket local mudar. Evita adiar um
+  // daily cap por 24h rolantes quando o limite só precisa resetar na virada do
+  // dia local do destino.
+  const currentBucket = tzDayBucket(nowMs, tz)
+  let candidate = nowMs + MIN
+  for (let i = 0; i < 24 * 60 + 5; i++) {
+    if (tzDayBucket(candidate, tz) !== currentBucket) return candidate
+    candidate += MIN
+  }
+  return nowMs + DAY
+}
+
 export function quietHoursState(nowMs, { startHour, endHour, tz }) {
   const { hour, minute } = tzHourMin(nowMs, tz)
   const inQuiet = startHour <= endHour
@@ -115,7 +128,8 @@ function toMs(v) {
  */
 export function decideDestination({ now, throttle, isPaused, dest, ignoreOperatingHours, random = Math.random }) {
   if (isPaused) {
-    return { allow: false, reason: DEFER_REASON.HEALTH_PAUSED, deferUntil: now + HOUR }
+    const pausedUntilMs = toMs(isPaused?.pausedUntil ?? isPaused)
+    return { allow: false, reason: DEFER_REASON.HEALTH_PAUSED, deferUntil: Number.isFinite(pausedUntilMs) ? pausedUntilMs : now + HOUR }
   }
   const hours = parseQuietHours(dest.operatingHoursJson)
   if (dest.operatingHoursEnabled === true && ignoreOperatingHours !== true) {
@@ -131,7 +145,7 @@ export function decideDestination({ now, throttle, isPaused, dest, ignoreOperati
   const postsToday = sameDay ? (throttle?.postsToday ?? 0) : 0
 
   if (throttleOn && dest.dailyCap != null && postsToday >= dest.dailyCap) {
-    return { allow: false, reason: DEFER_REASON.DAILY_CAP, deferUntil: now + DAY }
+    return { allow: false, reason: DEFER_REASON.DAILY_CAP, deferUntil: nextLocalDayStartMs(now, hours.tz) }
   }
 
   const minIntervalMs = calculateMinIntervalWithJitterMs(dest.minIntervalSec, random)
@@ -177,7 +191,7 @@ export async function checkAndReserve(groupId, _botConfig, opts = {}) {
   const decision = decideDestination({
     now,
     throttle,
-    isPaused: isChannelPaused(health, now),
+    isPaused: isChannelPaused(health, now) ? health : false,
     dest,
     ignoreOperatingHours: opts.ignoreGlobalQuietHours === true,
     random: opts.random,
