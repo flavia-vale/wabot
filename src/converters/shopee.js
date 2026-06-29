@@ -73,59 +73,6 @@ export function stripAffiliateTracking(rawUrl) {
   return changed ? u.toString() : String(rawUrl)
 }
 
-const SHOPEE_COUPON_SAFE_PATH = '/m/cupom-de-desconto'
-const SHOPEE_UNSAFE_COUPON_PATH_RE = /^\/(?:m\/(?:cupom|cupons)(?:-de-desconto)?|buyer\/voucher|voucher\/details)(?:\/|$)/i
-
-function isShopeeStoreHost(hostname) {
-  return /(^|\.)shopee\.com\.br$/.test(String(hostname || ''))
-}
-
-// Páginas mobile/app de cupom da Shopee (`/m/cupom`, `/buyer/voucher`) podem
-// abrir no WhatsApp como a tela "Oops! Seu navegador não é mais aceito!". A
-// causa raiz é encurtar uma origin de rota app-only (`/voucher/details` ou
-// `/buyer/voucher`): o shortLink afiliado continua apontando para esse fluxo.
-// Para converter sem cair nessa página, a origin enviada à API de afiliado é a
-// landing web pública de cupons (`/m/cupom-de-desconto`), preservando parâmetros
-// úteis e removendo tracking de terceiros antes da mutation.
-function normalizeShopeeCouponLanding(rawUrl, { stripTracking = true } = {}) {
-  const input = stripTracking ? stripAffiliateTracking(rawUrl) : String(rawUrl)
-  let u
-  try { u = new URL(String(input)) } catch { return input }
-  if (!isShopeeStoreHost(u.hostname) || extractShopeeIds(input)) return input
-  if (!SHOPEE_UNSAFE_COUPON_PATH_RE.test(u.pathname)) return input
-  u.protocol = 'https:'
-  u.hostname = 'shopee.com.br'
-  u.pathname = SHOPEE_COUPON_SAFE_PATH
-  u.hash = ''
-  return u.toString()
-}
-
-export function normalizeShopeeCouponOrigin(rawUrl) {
-  return normalizeShopeeCouponLanding(rawUrl, { stripTracking: true })
-}
-
-function isUnsafeShopeeCouponRoute(rawUrl) {
-  try {
-    const u = new URL(String(rawUrl))
-    return isShopeeStoreHost(u.hostname) && !extractShopeeIds(rawUrl) && SHOPEE_UNSAFE_COUPON_PATH_RE.test(u.pathname)
-  } catch {
-    return false
-  }
-}
-
-// Mesmo quando a origin enviada à API é segura, a Shopee pode devolver um
-// shortLink que redireciona para uma rota app-only de voucher. Pós-validamos o
-// shortLink e, se ele cair nesse fluxo, enviamos a URL longa afiliada reescrita
-// para a landing web pública — preservando os parâmetros de atribuição gerados
-// pela Shopee e eliminando a página de erro no clique.
-async function stabilizeShopeeCouponLink(shortLink) {
-  const resolved = await resolveShopeeShortLink(shortLink, { timeoutMs: 5000 })
-  if (isUnsafeShopeeCouponRoute(resolved)) {
-    return normalizeShopeeCouponLanding(resolved, { stripTracking: false })
-  }
-  return shortLink
-}
-
 // Chama a mutation generateShortLink da API de afiliado para `originUrl` e
 // devolve o shortLink oficial (ex.: https://s.shopee.com.br/2g92F2xepl). NÃO
 // resolvemos para /product?... aqui: isso deixaria a mensagem com URL longa e
@@ -174,15 +121,22 @@ export async function convert(url, creds) {
   }
 
   // Cupom/voucher/campanha (sem shopId+itemId). Com COUPON_LINK_CONVERT
-  // ligado, força a conversão pela API de afiliado, mas NUNCA usando a rota
-  // mobile/app que dispara "Oops! Seu navegador não é mais aceito!". A origin é
-  // normalizada para a landing web pública `/m/cupom-de-desconto` e sem
-  // tracking de terceiro antes da API.
+  // ligado, converte pela API de afiliado PRESERVANDO o caminho original do
+  // cupom — só removendo o tracking do afiliado de ORIGEM (que a API recusaria
+  // com "Invalid origin URL"). O short link gerado abre direto o app da Shopee,
+  // igual aos links de produto.
+  //
+  // NÃO reescrevemos o caminho para uma landing web (ex.: `/m/cupom-de-desconto`).
+  // Um probe contra a API real em staging provou que a `generateShortLink` gera
+  // um short link `s.shopee.com.br/XXX` que ABRE O APP para a origem natural do
+  // cupom (qualquer caminho `/m/...`, `/buyer/voucher`, etc.). Reescrever para a
+  // landing web era JUSTAMENTE o que transformava um link app-deeplink numa
+  // página web bloqueada pelo WebView do WhatsApp ("Oops! Seu navegador não é
+  // mais aceito!"). Devolvemos o short link como-está, como no caminho de produto.
   if (shouldConvertCouponLinks()) {
-    const origin = normalizeShopeeCouponOrigin(canonical)
+    const origin = stripAffiliateTracking(canonical)
     try {
-      const shortLink = await generateAffiliateShortLink(origin, creds)
-      return await stabilizeShopeeCouponLink(shortLink)
+      return await generateAffiliateShortLink(origin, creds)
     } catch {
       // Fallback seguro: se a Shopee recusar a origin, removemos o link para
       // nunca vazar afiliado de terceiro.
