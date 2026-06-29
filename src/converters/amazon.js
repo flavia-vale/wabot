@@ -1,9 +1,13 @@
 import axios from 'axios'
 import logger from '../logger.js'
+import { shouldConvertCouponLinks } from './couponPolicy.js'
+
+// Host da loja Amazon BR de verdade (não o encurtador) — onde `?tag=` credita.
+const AMAZON_STORE_HOST = /(^|\.)amazon\.com\.br$/
 
 const ASIN_RE = /(?:\/dp\/|\/gp\/product\/|\/product-reviews\/|\/exec\/obidos\/ASIN\/)([A-Z0-9]{10})/i
-const AMAZON_HOST = /amazon\.com\.br|amzn\.to|amzn\.la|a\.co|amzn\.divulgador\.link|amzlink\.to/
-const SHORT_HOST = /amzn\.to|amzn\.la|a\.co|amzn\.divulgador\.link|amzlink\.to/
+const AMAZON_HOST = /amazon\.com\.br|link\.amazon|amzn\.to|amzn\.la|a\.co|amzn\.divulgador\.link|amzlink\.to/
+const SHORT_HOST = /link\.amazon|amzn\.to|amzn\.la|a\.co|amzn\.divulgador\.link|amzlink\.to/
 
 async function resolveShortUrl(url) {
   try {
@@ -34,6 +38,7 @@ export function isAmazonShortLink(url) {
 
 const SHORT_LINK_MAX_HOPS = 6
 const SHORT_LINK_BODY_MAX_BYTES = 256 * 1024
+const SHORT_LINK_CLOUDFLARE_RETRY_BACKOFF_MS = [300, 800, 1500]
 const SHORT_LINK_BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
 
 function collectSetCookies(res, jar) {
@@ -78,6 +83,12 @@ function extractRedirectTargetFromHtml(html, baseUrl) {
   return fallback
 }
 
+function isCloudflareChallenge(res, html = '') {
+  const mitigated = res?.headers?.get?.('cf-mitigated')
+  if (String(mitigated || '').toLowerCase() === 'challenge') return true
+  return /<title>Just a moment\.\.\.<\/title>|challenges\.cloudflare\.com|cf-mitigated/i.test(String(html || ''))
+}
+
 async function readBodyLimited(res) {
   try {
     if (!res?.body?.getReader) {
@@ -113,11 +124,17 @@ async function readBodyLimited(res) {
 // do produto e tanto a conversão (extractAsin) quanto o scrape de título/preço
 // morrem. Segue redirects manualmente com cookie jar e para no primeiro hop
 // cuja URL já contém o ASIN; sem redirect HTTP, extrai o alvo do corpo.
-export async function resolveAmazonShortLink(url, { timeoutMs = 8000, fetchImpl = globalThis.fetch } = {}) {
+export async function resolveAmazonShortLink(url, {
+  timeoutMs = 8000,
+  fetchImpl = globalThis.fetch,
+  cloudflareRetryBackoffMs = SHORT_LINK_CLOUDFLARE_RETRY_BACKOFF_MS,
+  sleepImpl = sleep,
+} = {}) {
   let current = String(url || '')
   if (!isAmazonShortLink(current)) return current
 
   const jar = new Map()
+  let cloudflareRetry = 0
   for (let hop = 0; hop < SHORT_LINK_MAX_HOPS; hop++) {
     if (extractAsin(current)) return current
 
@@ -156,6 +173,17 @@ export async function resolveAmazonShortLink(url, { timeoutMs = 8000, fetchImpl 
     if (target && target !== current) {
       current = target
       continue
+    }
+
+    if (isCloudflareChallenge(res, html) && cloudflareRetry < cloudflareRetryBackoffMs.length) {
+      const wait = cloudflareRetryBackoffMs[cloudflareRetry++]
+      logger.warn({ url, current, status: res?.status, retryInMs: wait, cloudflareRetry }, 'Amazon: short link bloqueado por Cloudflare challenge — retry')
+      if (wait > 0) await sleepImpl(wait)
+      continue
+    }
+
+    if (isCloudflareChallenge(res, html)) {
+      logger.warn({ url, current, status: res?.status, retries: cloudflareRetry }, 'Amazon: short link bloqueado por Cloudflare challenge — sem ASIN')
     }
     return current
   }
@@ -238,6 +266,23 @@ async function createAmazonShortLink(longUrl, tag, creds) {
   return { shortUrl: null, transient: lastStatus == null || lastStatus >= 500 }
 }
 
+function withAffiliateTag(target, tag) {
+  const u = new URL(target)
+  u.searchParams.set('tag', tag)
+  return u.toString()
+}
+
+async function convertStoreUrlWithoutAsin(target, tag, creds, hasCookies) {
+  const longUrl = withAffiliateTag(target, tag)
+  if (hasCookies) {
+    const { shortUrl, transient } = await createAmazonShortLink(longUrl, tag, creds)
+    if (shortUrl) return shortUrl
+    logger.warn({ target, longUrl, transient }, 'Amazon: API não retornou shortUrl para link sem ASIN — fallback para ?tag=')
+    return { url: longUrl, warning: transient ? null : 'amazon_cookies_expired' }
+  }
+  return longUrl
+}
+
 function buildLongUrl(target, asin) {
   try {
     const pathname = new URL(target).pathname
@@ -274,6 +319,15 @@ export async function convert(url, creds) {
 
     const asin = extractAsin(target)
     if (!asin) {
+      // Cupom/oferta sem ASIN: o afiliado Amazon credita com `?tag=` em QUALQUER
+      // URL amazon.com.br, então (com a conversão de cupom ligada) anexamos a
+      // tag à URL resolvida em vez de descartar. Só quando o target já está num
+      // host Amazon REAL — não no encurtador não-resolvido, onde a tag não
+      // gruda em nada útil. Com cookies válidos do SiteStripe, tentamos gerar
+      // amzn.to também para Prime/cupons; se falhar, o fallback ?tag= credita.
+      if (shouldConvertCouponLinks() && tag && AMAZON_STORE_HOST.test(new URL(target).hostname)) {
+        return await convertStoreUrlWithoutAsin(target, tag, creds, hasCookies)
+      }
       logger.warn({ url, target }, 'Amazon: ASIN não encontrado, abortando para evitar link malformado')
       return null
     }

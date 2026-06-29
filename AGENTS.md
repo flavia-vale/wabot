@@ -177,6 +177,10 @@ API_URL=http://178.105.54.0:3006
 # delega ciclo de vida dos bots ao app PM2 bot-supervisor-staging via Redis.
 BOT_SUPERVISOR_MODE=inline
 REDIS_URL=redis://127.0.0.1:6379/1
+# Converte links de cupom/voucher (Shopee, Amazon, ML) com comissão nossa em vez
+# de removê-los. Resolve o shortLink afiliado para a landing web segura
+# (/m/cupom-de-desconto) evitando "Oops! Seu navegador não é mais aceito!".
+COUPON_LINK_CONVERT=true
 ```
 
 ### `~/wabot-staging/dashboard/.env.local`
@@ -201,6 +205,10 @@ API_URL=http://espelhagrupos.com.br
 # Ver seção "Processos PM2" para detalhes sobre cutover inline -> remote.
 BOT_SUPERVISOR_MODE=inline
 REDIS_URL=redis://127.0.0.1:6379/0
+# Converte links de cupom/voucher (Shopee, Amazon, ML) com comissão nossa em vez
+# de removê-los. Resolve o shortLink afiliado para a landing web segura
+# (/m/cupom-de-desconto) evitando "Oops! Seu navegador não é mais aceito!".
+COUPON_LINK_CONVERT=true
 ```
 
 ### `~/wabot/dashboard/.env.local`
@@ -1038,28 +1046,74 @@ Fonte única de verdade em `src/converters/shopee.js`:
 Testes: `test/shopee-shortlink-resolve.test.js` + regressões em
 `test/product-info-scraper.test.js`.
 
-### Conversão de link de cupom Shopee (`SHOPEE_COUPON_CONVERT`, default OFF)
+### Conversão de link de cupom — TODAS as lojas (`COUPON_LINK_CONVERT`, default OFF)
 
-Links Shopee que **não são de produto** (cupom/voucher como
-`s.shopee.com.br/XXX` → `/buyer/voucher`, sem `shopId+itemId`) historicamente
-eram **removidos** da mensagem espelhada: mandar o original credita a comissão
-ao afiliado do grupo de origem (concorrente), e convertê-los pela API podia
-gerar um shortLink que dispara **"Oops! Seu navegador não é mais aceito!"** no
-WebView do WhatsApp.
+Links que **não são de produto** (cupom/voucher/campanha, sem ID de produto)
+historicamente eram **removidos** (Shopee) ou **descartados/`null`** (Amazon, ML)
+na mensagem espelhada. Isso é ruim: o cupom muitas vezes é parte essencial da
+oferta (o preço anunciado só fecha com ele), substituí-lo por um link fixo da
+conta não serve (as páginas de cupom mudam o tempo todo na origem) e mandar o
+original credita a comissão ao afiliado do grupo de origem (concorrente).
 
-| Env                     | Default | Efeito                                                                 |
-|-------------------------|---------|-----------------------------------------------------------------------|
-| `SHOPEE_COUPON_CONVERT` | `false` | OFF: comportamento histórico (cupom removido via `stripFromMessage`). |
-|                         | `true`  | Tenta converter o cupom pela API de afiliado; se a API recusar, cai no strip seguro (**nunca** encaminha o link original). |
+**Solução: converter o cupom como afiliado da cliente.** O flag único
+`COUPON_LINK_CONVERT` (default OFF, lido em runtime via
+`src/converters/couponPolicy.js → shouldConvertCouponLinks()`) governa o caminho
+de cupom em TODOS os conversores. É um **interruptor de rollout seguro**: os
+caminhos com risco real só passam a valer depois de validados em staging.
+Rollback em prod = desligar a env (sem redeploy). Os caminhos de **produto ficam
+inalterados** em todos os conversores.
 
-Lido em runtime em `src/converters/shopee.js` (`shouldConvertNonProductLinks`),
-então o rollback em prod é só **desligar a env** (sem redeploy). **Risco que só
-um teste real resolve:** mesmo com a API devolvendo shortLink, o link de cupom
-pode disparar o erro "navegador não aceito" no WhatsApp. **Validar em staging
-clicando no link num celular ANTES de ligar em prod.** Invariante de segurança
-preservada: o link original (de terceiro) nunca é encaminhado. Testes:
-`test/shopee-affiliate-info.test.js` (flag ON: API aceita → converte; API
-recusa → strip seguro).
+Como cada loja credita o cupom (mecanismo é diferente por afiliado):
+
+| Loja   | Cupom com flag ON | Risco | Notas |
+|--------|-------------------|-------|-------|
+| **Magalu** | já convertia (sempre): `partner_id` em qualquer URL | nenhum | independe do flag (comportamento pré-existente) |
+| **Amazon** | `?tag=` na URL da loja (`amazon.com.br`), não no encurtador | baixo, sem WebView | `convert()` em `amazon.js`, fallback aditivo quando não há ASIN |
+| **Shopee** | resolve → `stripAffiliateTracking` (preserva o caminho) → `generateShortLink` → devolve o short link **como-está** | baixo | o short link da API abre direto o app |
+| **ML** | ⚠️ **a definir / em teste** | ⚠️ **comissão** | pendurar `partner_id` em página não-produto NÃO credita (vai pro dono do código — ver `mercadolivre.js:700`). Em avaliação: tentar `createLink` no link de cupom e validar em staging. |
+
+`stripAffiliateTracking()` (Shopee) remove só o tracking de terceiros
+(`utm_source=an_<id>`, `utm_medium=affiliates`, `af_*`/`deep_and_*`,
+`gads_t_sig`, etc.) e **preserva a identidade do cupom** (`path` +
+`promotionId`/`voucherCode`/`signature`) — sem isso a API recusa com "Invalid
+origin URL".
+
+**Causa raiz do "Oops! Seu navegador não é mais aceito!" (resolvida 2026-06) —
+NÃO REGREDIR:** o `unsupported.html` é uma **parede do lado do cliente**: a
+Shopee detecta o User-Agent do WebView do WhatsApp e bloqueia **qualquer página
+web** `shopee.com.br/...`. O que escapa é o short link `s.shopee.com.br/XXX` da
+`generateShortLink`, que ao ser tocado **abre direto o app** (deep-link),
+exatamente como os links de produto. Um probe contra a API real
+(`scripts/shopee-linktype-probe.mjs`) provou que a API gera um short link
+app-deeplink para a origem **natural** do cupom (qualquer caminho `/m/...`,
+`/buyer/voucher`, etc.). Há duas invariantes importantes:
+
+1. **Nunca reescrever a origem para landing web** (`/m/cupom-de-desconto` ou
+   similar). Essa reescrita transformava um link que abriria o app numa página
+   web que SEMPRE cai no `unsupported.html`. A correção é preservar o caminho
+   original e devolver o short link da API como-está.
+2. **Nunca encurtar `unsupported.html` como `originUrl`.** Alguns short links de
+   concorrente resolvem server-side para `https://shopee.com.br/unsupported.html?...`
+   (por causa do UA/anti-bot fora do app). Se essa URL for enviada para
+   `generateShortLink`, a Shopee gera um shortLink nosso que nasce quebrado e
+   cai no mesmo erro no WhatsApp. Quando `resolveShopeeShortLink()` terminar em
+   `unsupported.html`, `convert()` deve descartar essa URL resolvida e tentar a
+   conversão usando o **short link original** (`s.shopee.com.br/...`) como
+   `originUrl`; se a API recusar, aí sim cai no strip seguro. Não remover
+   preventivamente o cupom só porque a resolução server-side caiu na parede web.
+
+**Não reintroduzir nenhuma reescrita de cupom para landing web, não usar
+`unsupported.html` como origem de afiliado e não remover cupom antes de tentar o
+fallback pelo short link original.**
+
+Invariante de segurança em TODOS os caminhos: **o link original de terceiro
+NUNCA é encaminhado.** Se a conversão falhar, cai no strip seguro (não vaza
+comissão).
+
+**O que só um teste real em staging resolve (não dá para validar no sandbox):**
+(1) o ML credita cupom de algum jeito? **Validar clicando no link num celular
+ANTES de ligar em prod.** Testes: `test/shopee-affiliate-info.test.js` e
+`test/converters-amazon.test.js`.
 
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 

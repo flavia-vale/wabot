@@ -103,8 +103,8 @@ test('template variable copy uses a real reusable clipboard helper with fallback
   assert.match(read('dashboard/lib/clipboard.js'), /execCommand\('copy'\)/)
 })
 
-test('painel configuracoes exposes only the delivery cadence card', () => {
+test('painel configuracoes does not expose removed global cadence/template cards', () => {
   const page = read('dashboard/app/painel/configuracoes/page.js')
-  assert.match(page, /Cadência entre envios/)
-  assert.doesNotMatch(page, /Marca nas mensagens|Filtros e boas-vindas/)
+  assert.match(page, /Preferências gerais/)
+  assert.doesNotMatch(page, /Cadência entre envios|Espelhamento com template|Marca nas mensagens|Filtros e boas-vindas/)
 })
