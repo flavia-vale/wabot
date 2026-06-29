@@ -27,12 +27,12 @@ test('recoverStuckSendLogs alveja status=sending mais velho que o cutoff', async
   assert.equal(where.sentAt.lt.toISOString(), new Date(NOW.getTime() - 15 * 60_000).toISOString())
 })
 
-test('recoverStuckSendLogs reclassifica como erro recuperável (taxonomia worker_restart) e estampa sentAt', async () => {
+test('recoverStuckSendLogs reclassifica como timeout de envio preso e estampa sentAt', async () => {
   const db = makeFakeDb()
   await recoverStuckSendLogs({ db, now: () => NOW, cutoffMs: 1000 })
   const { data } = db.calls[0]
   assert.equal(data.status, 'error')
-  assert.equal(data.errorMsg, 'error:worker_restart')
+  assert.equal(data.errorMsg, 'timeout:send:stuck')
   assert.equal(data.sentAt, NOW)
 })
 

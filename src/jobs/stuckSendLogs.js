@@ -7,11 +7,16 @@ import { classifyError } from '../errorTaxonomy.js'
 // ou o processo morrendo no meio. Sem isso a linha fica 'sending' para sempre: o
 // painel mostra "enviando…" eterno e o card de erros nunca contabiliza a falha.
 //
-// Estratégia: reclassificar como erro recuperável (taxonomia 'worker_restart',
-// que já significa "job em vôo perdido"), NÃO re-enfileirar — o payload original
-// (buildPayload/recipe) não existe mais fora do processo que o criou, então um
-// re-envio cego mandaria conteúdo incompleto. A fonte (fila/automação) tem seus
-// próprios retries e reenfileira o item por conta própria.
+// Estratégia: reclassificar como timeout de envio preso, NÃO como
+// worker_restart. O sintoma aqui é "ficou tempo demais em sending"; pode ter
+// sido socket morto, await travado ou processo morto, mas o watchdog não tem
+// evidência de restart real. Antes isso inflava `error:worker_restart` e
+// escondia que a causa operacional dominante era timeout/stuck-send.
+//
+// NÃO re-enfileirar — o payload original (buildPayload/recipe) não existe mais
+// fora do processo que o criou, então um re-envio cego mandaria conteúdo
+// incompleto. A fonte (fila/automação) tem seus próprios retries e reenfileira o
+// item por conta própria.
 //
 // Mede tempo-EM-'sending': processSendJob estampa `sentAt` ao entrar em 'sending',
 // então `sentAt < cutoff` com `status:'sending'` é um envio genuinamente travado
@@ -30,7 +35,7 @@ export async function recoverStuckSendLogs(deps = {}) {
     where,
     data: {
       status: 'error',
-      errorMsg: classifyError(null, { kind: 'worker_restart' }),
+      errorMsg: classifyError(null, { kind: 'send_stuck' }),
       sentAt: now,
     },
   })

@@ -68,6 +68,9 @@ export const ANALYTICS_EVENTS = new Set([
   'ops_wa_flap_cooldown',
   // badSession (500) repetido sem conexão estável → auth limpo p/ re-pareamento.
   'ops_wa_bad_session_reset',
+  // Quedas periódicas de sessão estável (ex.: 500/428/408 a cada ~50min) que
+  // disparam cooldown maior para reduzir push notification de re-sync.
+  'ops_wa_stable_close_cooldown',
 ])
 
 const SENSITIVE_KEY_PATTERN = /(token|secret|password|cookie|credential|csrf|ssid|key|message|text|url|phone|email)/i

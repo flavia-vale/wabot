@@ -35,6 +35,7 @@ export function classifyError(err, context = {}) {
   if (context.kind === 'queue_full') return 'error:queue_full'
   if (context.kind === 'worker_restart') return 'error:worker_restart'
   if (context.kind === 'channel_forbidden') return 'error:channel_forbidden'
+  if (context.kind === 'send_stuck') return 'timeout:send:stuck'
 
   if (code === 'SEND_MESSAGE_TIMEOUT') {
     const dest = context.destJid ? `:${context.destJid}` : ''

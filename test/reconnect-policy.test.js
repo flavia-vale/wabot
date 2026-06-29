@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide } from '../src/core/reconnectPolicy.js'
+import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, registerStableCloseAndDecide } from '../src/core/reconnectPolicy.js'
 
 test('backoff cresce exponencialmente a partir de baseMs', () => {
   const opts = { baseMs: 5_000, maxMs: 300_000, jitterRatio: 0, random: () => 0.5 }
@@ -144,4 +144,38 @@ test('badSession: janela descarta eventos antigos', () => {
   r = registerBadSessionAndDecide(r.timestamps, 500_000, win) // muito depois
   assert.equal(r.count, 1)
   assert.equal(r.shouldResetAuth, false)
+})
+
+// --- quedas periódicas de sessões estáveis ---
+
+test('stable close: aciona cooldown ao atingir limiar dentro da janela', () => {
+  const win = { windowMs: 3 * 60 * 60_000, cooldownThreshold: 3, hadStableOpen: true }
+  let r = registerStableCloseAndDecide([], 1_000, win)
+  assert.equal(r.count, 1)
+  assert.equal(r.shouldCooldown, false)
+  r = registerStableCloseAndDecide(r.timestamps, 50 * 60_000, win)
+  assert.equal(r.shouldCooldown, false)
+  r = registerStableCloseAndDecide(r.timestamps, 100 * 60_000, win)
+  assert.equal(r.count, 3)
+  assert.equal(r.shouldCooldown, true)
+})
+
+test('stable close: ignora close de sessão que não ficou estável', () => {
+  const input = [1_000, 2_000]
+  const r = registerStableCloseAndDecide(input, 3_000, {
+    windowMs: 60_000,
+    cooldownThreshold: 3,
+    hadStableOpen: false,
+  })
+  assert.deepEqual(r.timestamps, input)
+  assert.equal(r.count, 2)
+  assert.equal(r.shouldCooldown, false)
+})
+
+test('stable close: janela descarta eventos antigos', () => {
+  const win = { windowMs: 60_000, cooldownThreshold: 2, hadStableOpen: true }
+  let r = registerStableCloseAndDecide([], 0, win)
+  r = registerStableCloseAndDecide(r.timestamps, 500_000, win)
+  assert.equal(r.count, 1)
+  assert.equal(r.shouldCooldown, false)
 })
