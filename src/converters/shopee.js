@@ -114,10 +114,21 @@ async function generateAffiliateShortLink(originUrl, { appId, secretKey }, { att
 export async function convert(url, creds) {
   const canonical = await resolveCanonical(url)
 
+  // Se a resolução server-side do short link cair em /unsupported.html, NÃO
+  // use essa URL como originUrl da generateShortLink. Esse foi o caso observado
+  // em staging: o servidor resolve o short do concorrente para a parede web da
+  // Shopee; encurtar essa parede gera um shortLink nosso que nasce quebrado.
+  // Para não sumir com o cupom, tentamos reetiquetar o próprio short link
+  // original (s.shopee.com.br/...) — a API da Shopee é quem decide se aceita.
+  // Se recusar, caímos no strip seguro abaixo, sem vazar afiliado de terceiro.
+  const originCandidate = isShopeeUnsupportedUrl(canonical) && isShopeeShortLink(url)
+    ? String(url)
+    : canonical
+
   // Produto: a URL canônica já vem como /product/{shopId}/{itemId}
   // (normalizeShopeeUrl), limpa e aceita pela API. Caminho inalterado.
-  if (extractShopeeIds(canonical)) {
-    return generateAffiliateShortLink(canonical, creds)
+  if (extractShopeeIds(originCandidate)) {
+    return generateAffiliateShortLink(originCandidate, creds)
   }
 
   // Cupom/voucher/campanha (sem shopId+itemId). Com COUPON_LINK_CONVERT
@@ -134,7 +145,7 @@ export async function convert(url, creds) {
   // página web bloqueada pelo WebView do WhatsApp ("Oops! Seu navegador não é
   // mais aceito!"). Devolvemos o short link como-está, como no caminho de produto.
   if (shouldConvertCouponLinks()) {
-    const origin = stripAffiliateTracking(canonical)
+    const origin = stripAffiliateTracking(originCandidate)
     try {
       return await generateAffiliateShortLink(origin, creds)
     } catch {
@@ -164,6 +175,15 @@ const SHOPEE_SHORT_HOST_RE = /^(shope\.ee|s\.shopee\.com\.br)$/
 const SHOPEE_BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 const SHORT_LINK_MAX_HOPS = 6
 const SHORT_LINK_BODY_MAX_BYTES = 512 * 1024
+
+function isShopeeUnsupportedUrl(rawUrl) {
+  try {
+    const u = new URL(String(rawUrl || ''))
+    return /(^|\.)shopee\.com\.br$/.test(u.hostname) && u.pathname === '/unsupported.html'
+  } catch {
+    return false
+  }
+}
 
 export function isShopeeShortLink(url) {
   try {

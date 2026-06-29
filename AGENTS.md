@@ -1086,13 +1086,25 @@ web** `shopee.com.br/...`. O que escapa é o short link `s.shopee.com.br/XXX` da
 exatamente como os links de produto. Um probe contra a API real
 (`scripts/shopee-linktype-probe.mjs`) provou que a API gera um short link
 app-deeplink para a origem **natural** do cupom (qualquer caminho `/m/...`,
-`/buyer/voucher`, etc.). **A regressão era do nosso código:** uma tentativa
-anterior **reescrevia** a origem do cupom para a landing web
-`/m/cupom-de-desconto` (e pós-reescrevia o resultado via `stabilizeShopeeCouponLink`)
-— isso transformava um link que abriria o app numa página web que SEMPRE cai no
-`unsupported.html`. A correção foi **remover a reescrita**: preservar o caminho
-original e devolver o short link da API como-está. **Não reintroduzir nenhuma
-reescrita de cupom para landing web.**
+`/buyer/voucher`, etc.). Há duas invariantes importantes:
+
+1. **Nunca reescrever a origem para landing web** (`/m/cupom-de-desconto` ou
+   similar). Essa reescrita transformava um link que abriria o app numa página
+   web que SEMPRE cai no `unsupported.html`. A correção é preservar o caminho
+   original e devolver o short link da API como-está.
+2. **Nunca encurtar `unsupported.html` como `originUrl`.** Alguns short links de
+   concorrente resolvem server-side para `https://shopee.com.br/unsupported.html?...`
+   (por causa do UA/anti-bot fora do app). Se essa URL for enviada para
+   `generateShortLink`, a Shopee gera um shortLink nosso que nasce quebrado e
+   cai no mesmo erro no WhatsApp. Quando `resolveShopeeShortLink()` terminar em
+   `unsupported.html`, `convert()` deve descartar essa URL resolvida e tentar a
+   conversão usando o **short link original** (`s.shopee.com.br/...`) como
+   `originUrl`; se a API recusar, aí sim cai no strip seguro. Não remover
+   preventivamente o cupom só porque a resolução server-side caiu na parede web.
+
+**Não reintroduzir nenhuma reescrita de cupom para landing web, não usar
+`unsupported.html` como origem de afiliado e não remover cupom antes de tentar o
+fallback pelo short link original.**
 
 Invariante de segurança em TODOS os caminhos: **o link original de terceiro
 NUNCA é encaminhado.** Se a conversão falhar, cai no strip seguro (não vaza
