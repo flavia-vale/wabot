@@ -177,6 +177,10 @@ API_URL=http://178.105.54.0:3006
 # delega ciclo de vida dos bots ao app PM2 bot-supervisor-staging via Redis.
 BOT_SUPERVISOR_MODE=inline
 REDIS_URL=redis://127.0.0.1:6379/1
+# Converte links de cupom/voucher (Shopee, Amazon, ML) com comissão nossa em vez
+# de removê-los. Resolve o shortLink afiliado para a landing web segura
+# (/m/cupom-de-desconto) evitando "Oops! Seu navegador não é mais aceito!".
+COUPON_LINK_CONVERT=true
 ```
 
 ### `~/wabot-staging/dashboard/.env.local`
@@ -201,6 +205,10 @@ API_URL=http://espelhagrupos.com.br
 # Ver seção "Processos PM2" para detalhes sobre cutover inline -> remote.
 BOT_SUPERVISOR_MODE=inline
 REDIS_URL=redis://127.0.0.1:6379/0
+# Converte links de cupom/voucher (Shopee, Amazon, ML) com comissão nossa em vez
+# de removê-los. Resolve o shortLink afiliado para a landing web segura
+# (/m/cupom-de-desconto) evitando "Oops! Seu navegador não é mais aceito!".
+COUPON_LINK_CONVERT=true
 ```
 
 ### `~/wabot/dashboard/.env.local`
