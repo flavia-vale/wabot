@@ -1097,12 +1097,14 @@ app-deeplink para a origem **natural** do cupom (qualquer caminho `/m/...`,
    (por causa do UA/anti-bot fora do app). Se essa URL for enviada para
    `generateShortLink`, a Shopee gera um shortLink nosso que nasce quebrado e
    cai no mesmo erro no WhatsApp. Quando `resolveShopeeShortLink()` terminar em
-   `unsupported.html`, `convert()` deve lançar `stripFromMessage=true` para o
-   bot remover esse link isolado; se a mensagem também trouxer a URL natural
-   (`/m/envio-rapido`, `/m/...` etc.), ela será convertida normalmente.
+   `unsupported.html`, `convert()` deve descartar essa URL resolvida e tentar a
+   conversão usando o **short link original** (`s.shopee.com.br/...`) como
+   `originUrl`; se a API recusar, aí sim cai no strip seguro. Não remover
+   preventivamente o cupom só porque a resolução server-side caiu na parede web.
 
-**Não reintroduzir nenhuma reescrita de cupom para landing web e não usar
-`unsupported.html` como origem de afiliado.**
+**Não reintroduzir nenhuma reescrita de cupom para landing web, não usar
+`unsupported.html` como origem de afiliado e não remover cupom antes de tentar o
+fallback pelo short link original.**
 
 Invariante de segurança em TODOS os caminhos: **o link original de terceiro
 NUNCA é encaminhado.** Se a conversão falhar, cai no strip seguro (não vaza

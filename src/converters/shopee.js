@@ -115,22 +115,20 @@ export async function convert(url, creds) {
   const canonical = await resolveCanonical(url)
 
   // Se a resolução server-side do short link cair em /unsupported.html, NÃO
-  // use essa URL como originUrl da generateShortLink. Esse é exatamente o
-  // bug observado em staging: o servidor resolve o short do concorrente para
-  // a parede web da Shopee e, se encurtarmos isso, geramos um shortLink nosso
-  // que nasce quebrado. Nesse caso o link isolado é inseguro; o bot deve
-  // removê-lo da mensagem (ou deixar outro link Shopee da mesma mensagem ser
-  // convertido normalmente).
-  if (isShopeeUnsupportedUrl(canonical)) {
-    const err = new Error('link Shopee resolveu para unsupported.html — removido para não gerar shortLink quebrado')
-    err.stripFromMessage = true
-    throw err
-  }
+  // use essa URL como originUrl da generateShortLink. Esse foi o caso observado
+  // em staging: o servidor resolve o short do concorrente para a parede web da
+  // Shopee; encurtar essa parede gera um shortLink nosso que nasce quebrado.
+  // Para não sumir com o cupom, tentamos reetiquetar o próprio short link
+  // original (s.shopee.com.br/...) — a API da Shopee é quem decide se aceita.
+  // Se recusar, caímos no strip seguro abaixo, sem vazar afiliado de terceiro.
+  const originCandidate = isShopeeUnsupportedUrl(canonical) && isShopeeShortLink(url)
+    ? String(url)
+    : canonical
 
   // Produto: a URL canônica já vem como /product/{shopId}/{itemId}
   // (normalizeShopeeUrl), limpa e aceita pela API. Caminho inalterado.
-  if (extractShopeeIds(canonical)) {
-    return generateAffiliateShortLink(canonical, creds)
+  if (extractShopeeIds(originCandidate)) {
+    return generateAffiliateShortLink(originCandidate, creds)
   }
 
   // Cupom/voucher/campanha (sem shopId+itemId). Com COUPON_LINK_CONVERT
@@ -147,7 +145,7 @@ export async function convert(url, creds) {
   // página web bloqueada pelo WebView do WhatsApp ("Oops! Seu navegador não é
   // mais aceito!"). Devolvemos o short link como-está, como no caminho de produto.
   if (shouldConvertCouponLinks()) {
-    const origin = stripAffiliateTracking(canonical)
+    const origin = stripAffiliateTracking(originCandidate)
     try {
       return await generateAffiliateShortLink(origin, creds)
     } catch {
