@@ -18,6 +18,7 @@ import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantT
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
+import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
@@ -2438,9 +2439,14 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         // para upload simples de imagem com caption e, por último, texto puro.
         // Quando imageMode=original mas só houver jpegThumbnail minúsculo, usa
         // preview automático do WhatsApp em vez de imagem pixelada.
-        const imageMode = monitorGroup?.imageMode
+        const imageMode = monitorGroup?.imageMode ?? 'original'
         const wantImage = imageMode !== 'none'
-        const original = wantImage ? originalMedia : null
+        // O caminho de relay reaproveita a mídia hospedada da mensagem de origem.
+        // Portanto ele só é correto quando a preferência é explicitamente
+        // "Imagem que veio na mensagem". No modo "Imagem oficial da loja"
+        // precisamos forçar o caminho de upload (getImage → fetch ativo) para não
+        // vazar a imagem do anúncio/origem por cima da escolha do usuário.
+        const original = shouldRelayOriginalMediaForImageMode(imageMode) ? originalMedia : null
         let useLinkPreview = false  // será setado a true se jpegThumbnail for descartado
 
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
