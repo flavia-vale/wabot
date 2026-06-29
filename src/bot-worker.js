@@ -2129,6 +2129,18 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       // hi-res. Ver decideSkipActiveFetchForCoupon() para a lógica completa.
       let couponSkipActiveFetch = false
 
+      // Eleição canônica do link principal entre múltiplas URLs da mesma
+      // mensagem. A mesma escolha precisa governar:
+      //   1) imagem/dados principais da oferta espelhada;
+      //   2) link usado pelo template de um produto só;
+      //   3) dedup/logs abaixo.
+      // Antes getImage() lia `imageLinkTarget` (campo legado sem UI atual),
+      // então selecionar "Último link" em primaryLinkTarget ainda buscava a
+      // imagem do primeiro link.
+      const effectiveLinkTarget = monitorGroup?.primaryLinkTarget
+        || cfg.botConfig?.primaryLinkTargetDefault
+        || 'first'
+
       let cachedImage
       let imageFetched = false
       async function getImage() {
@@ -2137,9 +2149,9 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
         if (!monitorGroup || monitorGroup.imageMode === 'none') return null
 
         const enabled = links.filter(l => enabledPlatforms.has(l.platform))
-        const target = monitorGroup.imageLinkTarget === 'last' ? enabled[enabled.length - 1] : enabled[0]
+        const target = effectiveLinkTarget === 'last' ? enabled[enabled.length - 1] : enabled[0]
         const platform = target?.platform || 'unknown'
-        logger.info({ msgId: msg.key.id, imageMode: monitorGroup.imageMode, platform, couponSkipActiveFetch }, 'getImage: iniciando resolução de imagem')
+        logger.info({ msgId: msg.key.id, imageMode: monitorGroup.imageMode, linkTarget: effectiveLinkTarget, platform, couponSkipActiveFetch }, 'getImage: iniciando resolução de imagem')
 
         // skipActiveFetch NÃO depende mais de "é cupom?" (isso borrava ofertas
         // de produto com código de cupom — regressão image-upload-bug-fix). Só
@@ -2287,9 +2299,8 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
       // Eleição do link primário (oferta/dedup/log) entre as conversões válidas.
       // Decisão de produto 3.4: o grupo escolhe primeiro/último link; sem override
       // por grupo, herda o default global do BotConfig (default 'first' = histórico).
-      const effectiveLinkTarget = monitorGroup?.primaryLinkTarget
-        || cfg.botConfig?.primaryLinkTargetDefault
-        || 'first'
+      // A constante é definida antes de getImage() para manter texto/template,
+      // imagem, dedup e logs alinhados na mesma escolha.
       const orderedConversions = conversions.filter(c => c && c.platform !== 'nolink')
       const primary = (orderedConversions.length
         ? (effectiveLinkTarget === 'last' ? orderedConversions[orderedConversions.length - 1] : orderedConversions[0])

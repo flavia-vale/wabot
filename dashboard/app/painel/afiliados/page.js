@@ -25,10 +25,19 @@ function formatDate(value) {
   return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(new Date(value))
 }
 
-function ReferralStatusBadge({ active }) {
-  return active
-    ? <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-700">Ativo</span>
-    : <span className="rounded-full bg-gray-200 px-2 py-1 text-xs font-bold text-gray-600">Inativo</span>
+const REFERRAL_ACCESS_STATUS = {
+  active: { label: 'Ativo', className: 'bg-emerald-100 text-emerald-700' },
+  trial: { label: 'Teste', className: 'bg-blue-100 text-blue-700' },
+  expired: { label: 'Expirado', className: 'bg-amber-100 text-amber-700' },
+  suspended: { label: 'Suspenso', className: 'bg-red-100 text-red-700' },
+  banned: { label: 'Banido', className: 'bg-red-100 text-red-700' },
+}
+
+function ReferralStatusBadge({ status, active }) {
+  const meta = REFERRAL_ACCESS_STATUS[status] ?? (active
+    ? { label: 'Ativo', className: 'bg-emerald-100 text-emerald-700' }
+    : { label: 'Inativo', className: 'bg-gray-200 text-gray-600' })
+  return <span className={`rounded-full px-2 py-1 text-xs font-bold ${meta.className}`}>{meta.label}</span>
 }
 
 function MyReferrals() {
@@ -44,36 +53,59 @@ function MyReferrals() {
 
   if (data === undefined) return null
   const referrals = data?.referrals ?? []
-  if (referrals.length === 0) return null
+  const total = data?.total ?? referrals.length
 
   return (
     <div>
-      <h2 className="text-base font-bold text-gray-800 mb-2">Meus indicados</h2>
-      <p className="text-xs text-gray-500 mb-2">Por privacidade, mostramos apenas o nome parcial dos clientes.</p>
-      <div className="rounded-xl border border-gray-100 overflow-x-auto">
-        <table className="w-full text-sm min-w-[460px]">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Cliente</th>
-              <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Cadastro</th>
-              <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Situação</th>
-              <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Pagamentos</th>
-              <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Comissão gerada</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {referrals.map((r, i) => (
-              <tr key={i} className="bg-white">
-                <td className="px-4 py-3 text-gray-800">{r.name}</td>
-                <td className="px-4 py-3 text-xs text-gray-500">{formatDate(r.createdAt)}</td>
-                <td className="px-4 py-3"><ReferralStatusBadge active={r.isActive} /></td>
-                <td className="px-4 py-3 text-right text-gray-700">{r.paymentCount}</td>
-                <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(r.commissionTotalCents ?? 0)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-base font-bold text-gray-800">Meus indicados</h2>
+          <p className="text-xs text-gray-500">Detalhes por cliente indicado, com privacidade preservada: nome parcial, status, datas e comissões geradas.</p>
+        </div>
+        <span className="text-xs font-bold text-emerald-700">{total} indicado{total === 1 ? '' : 's'} no total</span>
       </div>
+      {data === null ? (
+        <div className="rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">Não foi possível carregar seus indicados agora. Tente atualizar a página.</div>
+      ) : referrals.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+          Nenhum cadastro atribuído ao seu link apareceu ainda. Confira se a pessoa usou exatamente o link acima no cadastro.
+        </div>
+      ) : (
+        <div className="rounded-xl border border-gray-100 overflow-x-auto">
+          <table className="w-full text-sm min-w-[900px]">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Cliente</th>
+                <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Cadastro</th>
+                <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Situação</th>
+                <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Último pagamento</th>
+                <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Pagamentos</th>
+                <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Inicial</th>
+                <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Recorrente</th>
+                <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">A liberar</th>
+                <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Disponível</th>
+                <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Pago</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {referrals.map((r, i) => (
+                <tr key={i} className="bg-white align-top">
+                  <td className="px-4 py-3 text-gray-800">{r.name}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{formatDate(r.createdAt)}</td>
+                  <td className="px-4 py-3"><ReferralStatusBadge status={r.accessStatus} active={r.isActive} /></td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{formatDate(r.lastPaymentAt)}</td>
+                  <td className="px-4 py-3 text-right text-gray-700">{r.paymentCount}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(r.commissionInitialCents ?? 0)}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(r.commissionRecurringCents ?? 0)}</td>
+                  <td className="px-4 py-3 text-right text-amber-700">{formatCurrency(r.commissionPendingCents ?? 0)}</td>
+                  <td className="px-4 py-3 text-right text-cyan-700">{formatCurrency(r.commissionPayableCents ?? 0)}</td>
+                  <td className="px-4 py-3 text-right text-emerald-700">{formatCurrency(r.commissionPaidCents ?? 0)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }
