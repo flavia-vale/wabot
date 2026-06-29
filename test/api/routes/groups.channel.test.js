@@ -138,6 +138,26 @@ test('POST /resolve-channel-jid rejeita jid não-@newsletter', async () => {
 
 // ---------- PUT /:id/targets ----------
 
+test('GET /:id/targets mostra todos os destinos quando monitor usa fallback sem GroupTarget', async (t) => {
+  const { app, userId } = await buildApp({}, { plan: 'pro' })
+  const monitor = await db.group.create({
+    data: { userId, waJid: 'monitor-all@g.us', name: 'Monitor All', role: 'monitor', kind: 'group', forwardMode: 'LINK_ONLY' },
+  })
+  const postA = await db.group.create({
+    data: { userId, waJid: 'post-a@g.us', name: 'Destino A', role: 'post', kind: 'group', forwardMode: 'LINK_ONLY' },
+  })
+  const postB = await db.group.create({
+    data: { userId, waJid: 'post-b@g.us', name: 'Destino B', role: 'post', kind: 'group', forwardMode: 'LINK_ONLY' },
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({ method: 'GET', url: `/api/groups/${monitor.id}/targets` })
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.mode, 'all')
+  assert.deepEqual(new Set(body.postIds), new Set([postA.id, postB.id]))
+})
+
 test('PUT /:id/targets bloqueia destino canal para Basic sem apagar registros', async (t) => {
   const { app, userId } = await buildApp({}, { plan: 'basic' })
   const monitor = await db.group.create({
