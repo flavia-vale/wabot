@@ -104,7 +104,18 @@ export async function groupsRoutes(app, opts = {}) {
     if (!monitor) return reply.code(404).send({ error: 'Grupo monitor não encontrado' })
 
     const targets = await db.groupTarget.findMany({ where: { userId: req.user.sub, monitorId: monitor.id }, select: { postId: true } })
-    return { postIds: targets.map(t => t.postId) }
+    if (targets.length > 0) return { postIds: targets.map(t => t.postId), mode: 'explicit' }
+
+    // Sem linhas em GroupTarget significa fallback canônico: o monitor envia
+    // para TODOS os destinos de postagem do usuário. Retornamos esses ids para
+    // a UI não parecer que o sistema “desmarcou sozinho” os destinos; o campo
+    // mode preserva a semântica para clientes que queiram exibir o fallback.
+    const allPosts = await db.group.findMany({
+      where: { userId: req.user.sub, role: 'post' },
+      select: { id: true },
+      orderBy: { name: 'asc' },
+    })
+    return { postIds: allPosts.map(g => g.id), mode: 'all' }
   })
 
   app.put('/:id/targets', { onRequest: [app.authenticate] }, async (req, reply) => {

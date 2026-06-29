@@ -382,6 +382,7 @@ export default function GruposPage() {
   const [groupErrors, setGroupErrors] = useState({})
   const [targetEditorId, setTargetEditorId] = useState(null)
   const [targetPostIds, setTargetPostIds] = useState([])
+  const [targetMode, setTargetMode] = useState('explicit')
   const [targetLoading, setTargetLoading] = useState(false)
   const [showChannelModal, setShowChannelModal] = useState(false)
   const [channelButtonGroupId, setChannelButtonGroupId] = useState(null)
@@ -505,6 +506,7 @@ export default function GruposPage() {
     try {
       const data = await api.groupTargets(groupId)
       const ids = data.postIds ?? []
+      setTargetMode(data.mode ?? 'explicit')
       setTargetPostIds(ids)
       setGroupTargetsCache((prev) => ({ ...prev, [groupId]: ids }))
     } catch (err) {
@@ -527,6 +529,7 @@ export default function GruposPage() {
     setActionError('')
     try {
       await api.updateGroupTargets(targetEditorId, targetPostIds)
+      setTargetMode('explicit')
       setGroupTargetsCache((prev) => ({ ...prev, [targetEditorId]: targetPostIds }))
       setTargetEditorId(null)
     } catch (err) {
@@ -803,6 +806,11 @@ export default function GruposPage() {
           <div className="pnl-card" style={{ width: '100%', maxWidth: 420 }}>
             <div className="pnl-card-title">Configurar destinos</div>
             <p className="pnl-card-note" style={{ marginTop: 4, marginBottom: 12 }}>Escolha quais grupos de destino recebem mensagens deste grupo monitorado. Se nenhum for selecionado, o bot envia para todos.</p>
+            {targetMode === 'all' && (
+              <p className="pnl-hint" style={{ color: '#166534', marginBottom: 12 }}>
+                Este monitor está usando o padrão “todos os destinos”. Eles aparecem marcados para deixar claro que estão ativos.
+              </p>
+            )}
             {post.length === 0 ? (
               <p className="pnl-hint" style={{ color: '#b5742a', marginBottom: 12 }}>Cadastre ao menos um grupo de postagem para configurar destinos.</p>
             ) : (

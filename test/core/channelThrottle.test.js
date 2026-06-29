@@ -282,6 +282,8 @@ test('decideDestination: dailyCap do destino bloqueia', () => {
   })
   assert.equal(res.allow, false)
   assert.equal(res.reason, DEFER_REASON.DAILY_CAP)
+  assert.ok(res.deferUntil > now)
+  assert.ok(res.deferUntil - now <= 13 * 60 * 60 * 1000, 'daily cap deve liberar na próxima virada local, não em 24h rolantes')
 })
 
 test('decideDestination: throttleEnabled=false ignora caps mas horário ainda vale', () => {
@@ -298,14 +300,16 @@ test('decideDestination: throttleEnabled=false ignora caps mas horário ainda va
 })
 
 test('decideDestination: pausa de saúde bloqueia primeiro', () => {
+  const pausedUntil = NOON_BRT_MS + 12 * 60 * 1000
   const res = decideDestination({
     now: NOON_BRT_MS,
     throttle: null,
-    isPaused: true,
+    isPaused: { pausedUntil: new Date(pausedUntil) },
     dest: { ...DEST_DEFAULT, operatingHoursEnabled: true },
   })
   assert.equal(res.allow, false)
   assert.equal(res.reason, DEFER_REASON.HEALTH_PAUSED)
+  assert.equal(res.deferUntil, pausedUntil)
 })
 
 test('checkAndReserve: destPreservation usa horário de funcionamento e reserva slot', async () => {
