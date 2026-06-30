@@ -23,11 +23,21 @@ mídia pelo cliente/infra do WhatsApp** ou no **payload enviado pela Baileys**.
 
 ## Probe de URL de mídia
 
-Rode a partir do clone que tem Node 18+:
+Rode a partir do clone que tem Node 18+. O primeiro argumento pode ser a URL
+direta da imagem **ou** um link de produto/short link de marketplace; quando for
+produto, o script tenta resolver a `imageUrl` pelo mesmo scraper usado pela app e
+só então executa os probes HTTP.
 
 ```bash
 node scripts/diagnose-media-delivery.mjs "https://exemplo.com/imagem.jpg" "https://pagina-do-produto-ou-referer/"
+node scripts/diagnose-media-delivery.mjs "https://s.shopee.com.br/8fQOrj52cW"
 ```
+
+
+> Não copie os placeholders literalmente. Substitua `https://exemplo.com/imagem.jpg`
+> pela URL real da imagem ou por um link real de produto. Linhas como
+> `"status": 403` no JSON são exemplos de leitura do relatório, não comandos
+> para digitar no shell.
 
 O script mede:
 
@@ -51,10 +61,10 @@ Sinais de falha:
 No VPS, colete uma janela curta em volta do horário da mensagem com problema:
 
 ```bash
-pm2 logs api --lines 300 --nostream
-pm2 logs bot-supervisor --lines 300 --nostream
-pm2 logs api-staging --lines 300 --nostream
-pm2 logs bot-supervisor-staging --lines 300 --nostream
+pm2 logs api --lines 300 --nostream | grep -E "broadcast image|normalizeImageForWhatsApp|sendMessage timeout|timeout:send|Falha ao resolver imagem"
+pm2 logs bot-supervisor --lines 300 --nostream | grep -E "broadcast image|normalizeImageForWhatsApp|sendMessage timeout|timeout:send|Falha ao resolver imagem"
+pm2 logs api-staging --lines 300 --nostream | grep -E "broadcast image|normalizeImageForWhatsApp|sendMessage timeout|timeout:send|Falha ao resolver imagem"
+pm2 logs bot-supervisor-staging --lines 300 --nostream | grep -E "broadcast image|normalizeImageForWhatsApp|sendMessage timeout|timeout:send|Falha ao resolver imagem"
 ```
 
 Busque principalmente por:

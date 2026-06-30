@@ -152,7 +152,7 @@ export async function groupsRoutes(app, opts = {}) {
       if (invalid) return reply.code(400).send({ error: 'allowedPlatforms contém plataforma inválida' })
     }
 
-    if (imageMode !== undefined && !['none', 'fetch', 'original'].includes(imageMode)) {
+    if (imageMode !== undefined && !['none', 'fetch', 'original', 'preview'].includes(imageMode)) {
       return reply.code(400).send({ error: 'imageMode inválido' })
     }
     if (imageLinkTarget !== undefined && !['first', 'last'].includes(imageLinkTarget)) {

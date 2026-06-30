@@ -316,11 +316,12 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
         <CfgRow
           label="Imagem da oferta"
           info={<>
-            <strong>Oficial da loja:</strong> busca a foto no site do produto, sem marca d&apos;água.<br />
-            <strong>Da mensagem:</strong> reaproveita a foto do grupo de origem.<br />
-            <strong>Sem imagem:</strong> envia só o link com a prévia do WhatsApp.
+            <strong>Preview clicável:</strong> envia uma mensagem única de texto com card grande do WhatsApp; o clique abre o link.<br />
+            <strong>Oficial da loja:</strong> busca a foto no site do produto e envia como imagem com legenda.<br />
+            <strong>Da mensagem:</strong> reaproveita a foto do grupo de origem como mídia.<br />
+            <strong>Sem imagem:</strong> envia texto puro, sem forçar preview.
           </>}
-          hint="De onde vem a foto que acompanha a oferta."
+          hint="Escolha se a oferta sai como card clicável ou como mídia com legenda."
           last
         >
           <div>
@@ -329,10 +330,17 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
               value={g.imageMode ?? 'original'}
               onChange={(e) => onUpdate(g.id, { imageMode: e.target.value })}
             >
+              <option value="preview">Preview clicável do WhatsApp</option>
               <option value="fetch">Imagem oficial da loja</option>
               <option value="original">Imagem que veio na mensagem</option>
-              <option value="none">Sem imagem (só o link com prévia)</option>
+              <option value="none">Sem imagem (texto puro)</option>
             </select>
+            {(g.imageMode ?? 'original') === 'preview' && (
+              <div className="cfg-inline-warn">
+                <span style={{ color: 'var(--accent)', flexShrink: 0, display: 'flex', paddingTop: 1 }}>🔗</span>
+                <span>Replica o layout de card clicável: o WhatsApp monta o preview a partir do link convertido na mensagem.</span>
+              </div>
+            )}
             {(g.imageMode ?? 'original') === 'fetch' && (
               <div className="cfg-inline-warn">
                 <span style={{ color: 'var(--danger)', flexShrink: 0, display: 'flex', paddingTop: 1 }}>⚡</span>

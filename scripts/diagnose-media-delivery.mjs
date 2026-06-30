@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import dns from 'node:dns/promises'
 import { performance } from 'node:perf_hooks'
+import { detectLinks } from '../src/detector.js'
+import { fetchProductImage } from '../src/converters/imageScrapers.js'
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.MEDIA_DIAG_TIMEOUT_MS || 15000)
 const DEFAULT_RANGE_BYTES = Number(process.env.MEDIA_DIAG_RANGE_BYTES || 65535)
@@ -18,13 +20,59 @@ const IMAGE_MAGIC = [
 ]
 
 function usage() {
-  console.error(`Uso: node scripts/diagnose-media-delivery.mjs <image-url> [referer-url]\n\nInvestiga DNS, TTFB, headers, Range, MIME e possível bloqueio de User-Agent Meta/WhatsApp.`)
+  console.error(`Uso: node scripts/diagnose-media-delivery.mjs <image-ou-produto-url> [referer-url]\n\nAceita URL direta de imagem OU link de produto/short link de marketplace. Quando receber produto, tenta resolver a imageUrl pelo mesmo scraper do app antes dos probes. Investiga DNS, TTFB, headers, Range, MIME e possível bloqueio de User-Agent Meta/WhatsApp.`)
 }
 
 function ms(n) { return `${Math.round(n)}ms` }
 function getHeader(headers, name) { return headers.get(name) || '' }
 function detectMagic(buffer) { return IMAGE_MAGIC.find(x => x.test(buffer))?.mime || 'unknown' }
 function verdict(ok, message) { return { ok, message } }
+
+function isLikelyDirectImageUrl(url) {
+  try {
+    const u = new URL(url)
+    return /\.(?:jpe?g|png|gif|webp|avif)(?:$|[?#])/i.test(u.pathname)
+      || /(?:^|\.)(?:img\.susercontent\.com|media-amazon\.com|mlstatic\.com|ssl-images-amazon\.com)$/.test(u.hostname)
+  } catch {
+    return false
+  }
+}
+
+async function resolveDiagnosticTarget(rawUrl, explicitReferer) {
+  const links = detectLinks(rawUrl)
+  const platform = links[0]?.platform || null
+  if (!platform || isLikelyDirectImageUrl(rawUrl)) {
+    return {
+      sourceUrl: rawUrl,
+      imageUrl: rawUrl,
+      refererUrl: explicitReferer || null,
+      platform,
+      resolution: platform ? 'direct-image-url' : 'non-marketplace-url',
+      resolutionError: null,
+    }
+  }
+
+  try {
+    const imageUrl = await fetchProductImage(platform, rawUrl, {})
+    return {
+      sourceUrl: rawUrl,
+      imageUrl: imageUrl || rawUrl,
+      refererUrl: explicitReferer || rawUrl,
+      platform,
+      resolution: imageUrl ? 'marketplace-product-image' : 'marketplace-image-not-resolved; probing original URL',
+      resolutionError: null,
+    }
+  } catch (err) {
+    return {
+      sourceUrl: rawUrl,
+      imageUrl: rawUrl,
+      refererUrl: explicitReferer || rawUrl,
+      platform,
+      resolution: 'marketplace-image-resolution-failed; probing original URL',
+      resolutionError: err?.message || String(err),
+    }
+  }
+}
 
 async function timedFetch(url, options = {}) {
   const startedAt = performance.now()
@@ -106,12 +154,21 @@ function analyze({ head, range, full, uaResults }) {
 async function main() {
   const [rawUrl, referer] = process.argv.slice(2)
   if (!rawUrl) { usage(); process.exit(2) }
-  const url = new URL(rawUrl)
+  if (!/^https?:\/\//i.test(rawUrl)) {
+    usage()
+    throw new Error(`URL inválida: "${rawUrl}". Troque os placeholders por um link real, por exemplo: https://s.shopee.com.br/8fQOrj52cW`)
+  }
+  if (referer && !/^https?:\/\//i.test(referer)) {
+    usage()
+    throw new Error(`Referer inválido: "${referer}". Omita o segundo argumento ou use uma URL real começando com http(s).`)
+  }
+  const target = await resolveDiagnosticTarget(rawUrl, referer)
+  const url = new URL(target.imageUrl)
   if (!/^https?:$/.test(url.protocol)) throw new Error('URL precisa ser http(s)')
 
   const dnsResult = await probeDns(url.hostname)
   const baseHeaders = { 'User-Agent': BROWSER_UA, 'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8' }
-  if (referer) baseHeaders.Referer = new URL(referer).origin + '/'
+  if (target.refererUrl) baseHeaders.Referer = new URL(target.refererUrl).origin + '/'
   const head = await timedFetch(url, { method: 'HEAD', headers: baseHeaders })
   const range = await timedFetch(url, { method: 'GET', headers: { ...baseHeaders, Range: `bytes=0-${DEFAULT_RANGE_BYTES}` } })
   const full = await timedFetch(url, { method: 'GET', headers: baseHeaders })
@@ -119,7 +176,12 @@ async function main() {
   for (const ua of META_UAS) uaResults.push({ ua, result: await timedFetch(url, { method: 'HEAD', headers: { ...baseHeaders, 'User-Agent': ua } }) })
 
   const report = {
-    url: url.toString(),
+    sourceUrl: target.sourceUrl,
+    imageUrl: url.toString(),
+    refererUrl: target.refererUrl,
+    platform: target.platform,
+    imageResolution: target.resolution,
+    imageResolutionError: target.resolutionError,
     checkedAt: new Date().toISOString(),
     dns: { ...dnsResult, ms: Math.round(dnsResult.ms) },
     head: head.ok ? { status: head.res.status, finalUrl: head.res.url, headersMs: Math.round(head.timings.headersMs), headers: Object.fromEntries(head.res.headers.entries()) } : { error: head.error },
