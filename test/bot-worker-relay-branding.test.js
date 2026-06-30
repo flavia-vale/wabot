@@ -18,13 +18,27 @@ test('bot-worker relay convertido não passa branding global para texto original
   )
 })
 
-test('bot-worker mantém substituição de cupom do usuário após conversão do relay', () => {
+test('bot-worker preserva link de cupom original quando conversor pede strip', () => {
   const conversionCallIndex = botWorkerSource.indexOf('finalText = applyConversionsAndBranding(sanitizedText, conversions)')
-  const couponBlockIndex = botWorkerSource.indexOf('const userCouponLink = String(cfg.botConfig.couponLink || \'\').trim()', conversionCallIndex)
+  const passthroughIndex = botWorkerSource.indexOf('return { platform, url, converted: url, passthrough: true }')
 
   assert.notEqual(conversionCallIndex, -1)
-  assert.notEqual(couponBlockIndex, -1)
-  assert.ok(couponBlockIndex > conversionCallIndex)
+  assert.notEqual(passthroughIndex, -1)
+  assert.doesNotMatch(botWorkerSource, /const userCouponLink = String\(cfg\.botConfig\.couponLink/)
+  assert.doesNotMatch(botWorkerSource, /urlsToStrip|stripUrlsFromText\s*\(/)
+})
+
+test('bot-worker usa link convertido como chave de dedup de envio', () => {
+  assert.match(
+    botWorkerSource,
+    /const dedupSubject = primary\.converted \|\| primary\.url \|\|/,
+    'dedup precisa usar o link convertido que sai no grupo antes do link upstream',
+  )
+  assert.doesNotMatch(
+    botWorkerSource,
+    /const dedupSubject = primary\.url \|\| `\$\{msg\.key\.id/,
+    'não pode deduplicar primeiro pelo link original do grupo monitorado',
+  )
 })
 
 test('bot-worker usa primaryLinkTarget também para escolher a imagem do link principal', () => {

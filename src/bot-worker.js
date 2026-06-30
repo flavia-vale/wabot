@@ -14,7 +14,7 @@ import { dirname } from 'path'
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
-import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, stripUrlsFromText, uniqueConversionsByUrl } from './messageProcessor.js'
+import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
@@ -1057,10 +1057,7 @@ async function buildPayloadFromRecipe(recipe) {
   let image = null
   try {
     const fetched = await fetchImageBuffer(recipe.imageUrl, recipe.refererUrl)
-    image = fetched ? await normalizeImageForWhatsApp(fetched.buffer, { fit: 'contain' }) : null
-    if (image) {
-      logger.info({ imageFit: 'contain', source: 'broadcastImage' }, 'Imagem normalizada com canvas WhatsApp-safe')
-    }
+    image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
     if (fetched && !image) {
       logger.warn({ srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'broadcast image: normalizeImageForWhatsApp falhou — enviando texto com preview')
     }
@@ -2236,16 +2233,17 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           return { platform, url, converted: conversionResult.url, warning: conversionResult.warning }
         } catch (err) {
           if (err.stripFromMessage) {
-            // Non-product link (coupon/voucher): strip from mirrored text to
-            // avoid misattributing commission to the source group's affiliate.
-            return { platform, url, strip: true }
+            // Cupom/voucher que não conseguiu virar link afiliado oficial: não
+            // removemos mais nada da mensagem espelhada. O link fica como veio
+            // para preservar a oferta/CTA original, enquanto os demais links
+            // válidos da mesma mensagem continuam sendo convertidos juntos.
+            return { platform, url, converted: url, passthrough: true }
           }
           await recordConversionIssue({ platform, url, jid, text, reason: `Falha na conversão de ${credentialValidation.label}: ${err.message}` })
           return null
         }
       }))
-      const conversions = uniqueConversionsByUrl(linkResults.filter(r => r && !r.strip))
-      const urlsToStrip = [...new Set(linkResults.filter(r => r?.strip).map(r => r.url).filter(Boolean))]
+      const conversions = uniqueConversionsByUrl(linkResults.filter(r => r && r.converted))
 
       const warningKinds = new Set(conversions.map(c => c.warning).filter(Boolean))
       for (const kind of warningKinds) {
@@ -2290,28 +2288,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // de /painel/mensagens, como {{grupoLink}} e {{cupomLink}}, pertencem ao
         // caminho de templates e não devem ser anexadas ao texto original.
         finalText = applyConversionsAndBranding(sanitizedText, conversions)
-        if (urlsToStrip.length) {
-          const userCouponLink = String(cfg.botConfig.couponLink || '').trim()
-          if (userCouponLink) {
-            // User configured their own coupon link: substitute each stripped
-            // URL with it so commission stays with the right affiliate.
-            for (const url of urlsToStrip) {
-              finalText = finalText.replace(url, userCouponLink)
-            }
-          } else {
-            // No coupon link configured: remove the URL and the entire CTA
-            // line that contained it to avoid orphaned text like
-            // "🏷️ Cupons disponíveis aqui:" with no clickable link.
-            finalText = stripUrlsFromText(finalText, urlsToStrip)
-          }
-        }
       }
       // Eleição do link primário (oferta/dedup/log) entre as conversões válidas.
       // Decisão de produto 3.4: o grupo escolhe primeiro/último link; sem override
       // por grupo, herda o default global do BotConfig (default 'first' = histórico).
       // A constante é definida antes de getImage() para manter texto/template,
       // imagem, dedup e logs alinhados na mesma escolha.
-      const orderedConversions = conversions.filter(c => c && c.platform !== 'nolink')
+      const orderedConversions = conversions.filter(c => c && c.platform !== 'nolink' && !c.passthrough)
       const primary = (orderedConversions.length
         ? (effectiveLinkTarget === 'last' ? orderedConversions[orderedConversions.length - 1] : orderedConversions[0])
         : conversions[0]) ?? { platform: 'nolink', url: '', converted: '' }
@@ -2437,7 +2420,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         destIndex++
         // Botão "Ver canal" definido pelo GRUPO DE DESTINO (ou null = sem botão).
         const channelForward = resolveChannelForward(cfg.groups.postDetails.find(g => g.waJid === destJid))
-        const dedupSubject = primary.url || `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
+        const dedupSubject = primary.converted || primary.url || `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
         const key = `${destJid}:${dedupSubject}`
         if (dedup.links[key] && Date.now() - dedup.links[key] < linkDedupWindowMs) {
           await registerDedupBlock({
@@ -2496,11 +2479,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // "Imagem que veio na mensagem". No modo "Imagem oficial da loja"
         // precisamos forçar o caminho de upload (getImage → fetch ativo) para não
         // vazar a imagem do anúncio/origem por cima da escolha do usuário.
-        const imageFitPolicy = 'contain'
-        const original = shouldRelayOriginalMediaForImageMode(imageMode, {
-          mediaType: originalMedia?.type,
-          imageFit: imageFitPolicy,
-        }) ? originalMedia : null
+        const original = shouldRelayOriginalMediaForImageMode(imageMode) ? originalMedia : null
         let useLinkPreview = false  // será setado a true se jpegThumbnail for descartado
 
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
@@ -2539,9 +2518,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           // o NOSSO canal nele faz o WhatsApp derrubar o envio. Em vez disso caímos
           // no caminho sendMessage com a imagem rebaixada (getImage) — o MESMO
           // caminho comprovado das ofertas automáticas — e a injeção central
-          // (mídia-only) adiciona o botão. Sem botão, mantemos o relay somente
-          // para mídias que não precisam de normalização; imagens agora passam
-          // por upload para receber o canvas WhatsApp-safe.
+          // (mídia-only) adiciona o botão. Sem botão, mantemos o relay (fidelidade
+          // máxima de mídia, inclui vídeo).
           if (shouldUseRelayPath({ destJid, hasOriginal: !!original }) && !channelForward) {
             const hasCaption = original.type === 'imageMessage' || original.type === 'videoMessage'
             // Higieniza o contextInfo herdado da ORIGEM (remove botão de terceiros
@@ -2569,16 +2547,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             // Regressão de dupla compressão documentada em 2026-06
             // (commit image-upload-bug-fix). Ver normalizeImageForWhatsApp.
             const wantMutation = isChannelDest && isPreservationFeatureEnabled(cfg.preservationActive, cfg.botConfig, PRESERVATION_FEATURE.IMAGE_MUTATION)
-            const imageNormalizeOptions = {
-              fit: imageFitPolicy,
-              ...(wantMutation ? { mutation: { groupId: destJid } } : {}),
-            }
             image = fetched
-              ? await normalizeImageForWhatsApp(fetched.buffer, imageNormalizeOptions)
+              ? await normalizeImageForWhatsApp(fetched.buffer, wantMutation ? { mutation: { groupId: destJid } } : {})
               : null
-            if (image) {
-              logger.info({ msgId: msg.key.id, destJid, imageMode, imageFit: imageFitPolicy }, 'Imagem monitorada normalizada com canvas WhatsApp-safe')
-            }
             if (fetched && !image) {
               logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
             }
