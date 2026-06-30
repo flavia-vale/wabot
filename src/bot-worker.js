@@ -10,6 +10,7 @@ import { Boom } from '@hapi/boom'
 import { readFileSync, mkdirSync } from 'fs'
 import { rm, writeFile, readdir } from 'fs/promises'
 import { dirname } from 'path'
+import sharp from 'sharp'
 
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
@@ -1077,6 +1078,85 @@ function derivePreviewDescriptionFromText(text) {
   return lines.slice(1, 4).join(' • ') || lines[0] || ''
 }
 
+function escapeSvgText(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function wrapTextLines(value, maxChars, maxLines) {
+  const words = cleanPreviewText(value, maxChars * maxLines * 2).split(/\s+/).filter(Boolean)
+  const lines = []
+  let current = ''
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word
+    if (next.length > maxChars && current) {
+      lines.push(current)
+      current = word
+      if (lines.length >= maxLines) break
+    } else {
+      current = next
+    }
+  }
+  if (current && lines.length < maxLines) lines.push(current)
+  if (lines.length === maxLines && words.join(' ').length > lines.join(' ').length) {
+    lines[maxLines - 1] = `${lines[maxLines - 1].replace(/…$/, '')}…`
+  }
+  return lines
+}
+
+async function buildWideLinkPreviewThumbnail({ imageBuffer, title, description, sourceUrl }) {
+  if (!imageBuffer?.length) return null
+  const width = 1200
+  const height = 630
+  const product = await sharp(imageBuffer, { failOn: 'none' })
+    .rotate()
+    .resize({ width: 500, height: 500, fit: 'inside', withoutEnlargement: true, background: '#ffffff' })
+    .flatten({ background: '#ffffff' })
+    .jpeg({ quality: 92, mozjpeg: true })
+    .toBuffer()
+
+  const titleLines = wrapTextLines(title, 27, 3)
+  const descLines = wrapTextLines(description, 34, 2)
+  const host = (() => {
+    try { return new URL(sourceUrl).hostname.replace(/^www\./, '') } catch { return '' }
+  })()
+  const titleSvg = titleLines.map((line, idx) => `<tspan x="620" dy="${idx === 0 ? 0 : 54}">${escapeSvgText(line)}</tspan>`).join('')
+  const descSvg = descLines.map((line, idx) => `<tspan x="620" dy="${idx === 0 ? 0 : 40}">${escapeSvgText(line)}</tspan>`).join('')
+
+  const svg = Buffer.from(`
+    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#063f2c"/>
+          <stop offset="100%" stop-color="#111827"/>
+        </linearGradient>
+        <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000000" flood-opacity="0.35"/>
+        </filter>
+      </defs>
+      <rect width="1200" height="630" fill="url(#bg)"/>
+      <circle cx="1080" cy="82" r="150" fill="#16a34a" opacity="0.16"/>
+      <circle cx="102" cy="550" r="180" fill="#22c55e" opacity="0.10"/>
+      <rect x="48" y="58" width="532" height="514" rx="34" fill="#ffffff" filter="url(#shadow)"/>
+      <text x="620" y="128" font-family="Arial, Helvetica, sans-serif" font-size="46" font-weight="800" fill="#ffffff">${titleSvg}</text>
+      <text x="620" y="342" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="#bbf7d0">${descSvg}</text>
+      <text x="620" y="505" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" fill="#22c55e">🔗 ${escapeSvgText(host)}</text>
+      <text x="620" y="558" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#e5e7eb">Toque para abrir a oferta</text>
+    </svg>
+  `)
+
+  return sharp({ create: { width, height, channels: 3, background: '#0f172a' } })
+    .composite([
+      { input: svg, top: 0, left: 0 },
+      { input: product, top: 65, left: 64 },
+    ])
+    .jpeg({ quality: 90, mozjpeg: true, chromaSubsampling: '4:4:4' })
+    .toBuffer()
+}
+
 function buildLargePreviewAdReply(linkPreview) {
   if (!linkPreview || typeof linkPreview !== 'object') return null
   const sourceUrl = linkPreview['canonical-url'] || linkPreview['matched-text']
@@ -1105,22 +1185,27 @@ async function buildManualLinkPreview({ text, primary, credentialsMap }) {
     primary?.platform ? fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}).catch(() => null) : Promise.resolve(null),
   ])
 
-  let jpegThumbnail
-  if (isHttpUrl(imageUrl)) {
-    try {
-      const fetched = await fetchImageBuffer(imageUrl, sourceUrl)
-      const normalized = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
-      jpegThumbnail = normalized?.jpegThumbnail || undefined
-    } catch (err) {
-      logger.warn({ err: err?.message, imageUrl, sourceUrl }, 'linkPreview manual: falha ao baixar thumbnail — enviando preview sem imagem manual')
-    }
-  }
-
   const title = cleanPreviewText(productInfo?.title, 120) || derivePreviewTitleFromText(text)
   const description = cleanPreviewText(
     productInfo?.newPrice ? `Por: ${productInfo.newPrice}` : derivePreviewDescriptionFromText(text),
     180,
   )
+
+  let jpegThumbnail
+  if (isHttpUrl(imageUrl)) {
+    try {
+      const fetched = await fetchImageBuffer(imageUrl, sourceUrl)
+      jpegThumbnail = fetched?.buffer
+        ? await buildWideLinkPreviewThumbnail({ imageBuffer: fetched.buffer, title, description, sourceUrl: matchedText })
+        : null
+      if (!jpegThumbnail && fetched?.buffer) {
+        const normalized = await normalizeImageForWhatsApp(fetched.buffer)
+        jpegThumbnail = normalized?.jpegThumbnail || undefined
+      }
+    } catch (err) {
+      logger.warn({ err: err?.message, imageUrl, sourceUrl }, 'linkPreview manual: falha ao baixar thumbnail — enviando preview sem imagem manual')
+    }
+  }
 
   return {
     'canonical-url': matchedText,
