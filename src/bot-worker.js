@@ -16,6 +16,7 @@ import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
+import { fetchProductInfo } from './converters/productInfoScraper.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
 import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
@@ -1051,6 +1052,70 @@ function buildBroadcastImageRecipe(text, options = {}) {
   }
 }
 
+function cleanPreviewText(value, maxLength = 140) {
+  return String(value || '')
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/[~*_`>|#]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength)
+}
+
+function derivePreviewTitleFromText(text) {
+  const line = String(text || '')
+    .split(/\r?\n/)
+    .map(part => cleanPreviewText(part, 120))
+    .find(Boolean)
+  return line || 'Oferta'
+}
+
+function derivePreviewDescriptionFromText(text) {
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .map(part => cleanPreviewText(part, 180))
+    .filter(Boolean)
+  return lines.slice(1, 4).join(' • ') || lines[0] || ''
+}
+
+async function buildManualLinkPreview({ text, primary, credentialsMap }) {
+  const matchedText = isHttpUrl(primary?.converted) ? primary.converted : (isHttpUrl(primary?.url) ? primary.url : '')
+  if (!matchedText) return null
+
+  const sourceUrl = isHttpUrl(primary?.url) ? primary.url : matchedText
+  const [productInfo, imageUrl] = await Promise.all([
+    fetchProductInfo(sourceUrl, {
+      mlCredentials: credentialsMap?.mercadolivre,
+      shopeeCredentials: credentialsMap?.shopee,
+    }).catch(() => null),
+    primary?.platform ? fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}).catch(() => null) : Promise.resolve(null),
+  ])
+
+  let jpegThumbnail
+  if (isHttpUrl(imageUrl)) {
+    try {
+      const fetched = await fetchImageBuffer(imageUrl, sourceUrl)
+      const normalized = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
+      jpegThumbnail = normalized?.jpegThumbnail || undefined
+    } catch (err) {
+      logger.warn({ err: err?.message, imageUrl, sourceUrl }, 'linkPreview manual: falha ao baixar thumbnail — enviando preview sem imagem manual')
+    }
+  }
+
+  const title = cleanPreviewText(productInfo?.title, 120) || derivePreviewTitleFromText(text)
+  const description = cleanPreviewText(
+    productInfo?.newPrice ? `Por: ${productInfo.newPrice}` : derivePreviewDescriptionFromText(text),
+    180,
+  )
+
+  return {
+    'canonical-url': matchedText,
+    'matched-text': matchedText,
+    title,
+    description,
+    ...(jpegThumbnail ? { jpegThumbnail } : {}),
+  }
+}
+
 async function buildPayloadFromRecipe(recipe) {
   if (recipe?.type !== 'imageUrl') return undefined
 
@@ -1578,6 +1643,10 @@ async function startBotInner() {
     // Ping periódico para detectar socket morto cedo, em vez de descobrir tarde
     // e reconectar (cada reconexão = nova notificação de sincronização no app).
     keepAliveIntervalMs: WA_KEEPALIVE_INTERVAL_MS,
+    // Necessário para o Baileys montar previews grandes de URL. Sem isso,
+    // mensagens textuais com link podem sair como texto puro mesmo quando
+    // buildMonitoredMessagePayload pede linkPreview.
+    generateHighQualityLinkPreview: true,
     logger: instrumentBaileysLoggerForHealth(logger.child({ name: 'baileys' })),
   })
 
@@ -2619,13 +2688,19 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // passar pelo Redis. Ver enqueueSendJob() para a explicação completa.
         const buildPayload = async () => {
           // Modo "preview": envia uma única mensagem de texto com link preview
-          // clicável do WhatsApp. Não baixa nem faz upload de imagem, porque isso
-          // viraria imageMessage (clique amplia foto) em vez de card clicável.
+          // clicável do WhatsApp. Baixa só a thumbnail do card quando possível;
+          // não faz upload de imageMessage (clique ampliaria a foto).
           if (imageMode === 'preview') {
+            const linkPreview = await buildManualLinkPreview({
+              text: variantText,
+              primary,
+              credentialsMap: cfg.credentials,
+            })
             return buildMonitoredMessagePayload({
               finalText: variantText,
               image: null,
               useLinkPreview: true,
+              linkPreview,
             })
           }
 
