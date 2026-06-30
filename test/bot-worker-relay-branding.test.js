@@ -18,13 +18,37 @@ test('bot-worker relay convertido não passa branding global para texto original
   )
 })
 
-test('bot-worker mantém substituição de cupom do usuário após conversão do relay', () => {
+test('bot-worker preserva link de cupom original quando conversor pede strip', () => {
   const conversionCallIndex = botWorkerSource.indexOf('finalText = applyConversionsAndBranding(sanitizedText, conversions)')
-  const couponBlockIndex = botWorkerSource.indexOf('const userCouponLink = String(cfg.botConfig.couponLink || \'\').trim()', conversionCallIndex)
+  const passthroughIndex = botWorkerSource.indexOf('return { platform, url, converted: url, passthrough: true }')
 
   assert.notEqual(conversionCallIndex, -1)
-  assert.notEqual(couponBlockIndex, -1)
-  assert.ok(couponBlockIndex > conversionCallIndex)
+  assert.notEqual(passthroughIndex, -1)
+  assert.doesNotMatch(botWorkerSource, /const userCouponLink = String\(cfg\.botConfig\.couponLink/)
+  assert.doesNotMatch(botWorkerSource, /urlsToStrip|stripUrlsFromText\s*\(/)
+})
+
+test('bot-worker usa link original e convertido como chaves de dedup de envio', () => {
+  assert.match(
+    botWorkerSource,
+    /const dedupSubjects = \[\.\.\.new Set\(\[primary\.url, primary\.converted, fallbackDedupSubject\]/,
+    'dedup precisa guardar o link upstream estável e o link convertido final',
+  )
+  assert.match(
+    botWorkerSource,
+    /const dedupKeys = dedupSubjects\.map\(subject => `\$\{destJid\}:\$\{subject\}`\)/,
+    'dedup deve aplicar as chaves por destino',
+  )
+  assert.match(
+    botWorkerSource,
+    /dedupKeys\.some\(key => dedup\.links\[key\]/,
+    'dedup local precisa bloquear se qualquer chave já foi vista',
+  )
+  assert.match(
+    botWorkerSource,
+    /for \(const key of dedupKeys\) dedup\.links\[key\] = Date\.now\(\)/,
+    'ao enviar, todas as chaves devem ser registradas para o próximo repost',
+  )
 })
 
 test('bot-worker usa primaryLinkTarget também para escolher a imagem do link principal', () => {
