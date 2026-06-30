@@ -128,7 +128,8 @@ export async function convert(url, creds) {
   // Produto: a URL canônica já vem como /product/{shopId}/{itemId}
   // (normalizeShopeeUrl), limpa e aceita pela API. Caminho inalterado.
   if (extractShopeeIds(originCandidate)) {
-    return generateAffiliateShortLink(originCandidate, creds)
+    const shortLink = await generateAffiliateShortLink(originCandidate, creds)
+    return { url: shortLink, linkKind: 'product' }
   }
 
   // Cupom/voucher/campanha (sem shopId+itemId). Com COUPON_LINK_CONVERT
@@ -147,7 +148,8 @@ export async function convert(url, creds) {
   if (shouldConvertCouponLinks()) {
     const origin = stripAffiliateTracking(originCandidate)
     try {
-      return await generateAffiliateShortLink(origin, creds)
+      const shortLink = await generateAffiliateShortLink(origin, creds)
+      return { url: shortLink, linkKind: 'coupon' }
     } catch {
       // Fallback seguro: se a Shopee recusar a origin, removemos o link para
       // nunca vazar afiliado de terceiro.

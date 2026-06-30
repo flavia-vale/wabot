@@ -20,12 +20,26 @@ test('bot-worker relay convertido não passa branding global para texto original
 
 test('bot-worker preserva link de cupom original quando conversor pede strip', () => {
   const conversionCallIndex = botWorkerSource.indexOf('finalText = applyConversionsAndBranding(sanitizedText, conversions)')
-  const passthroughIndex = botWorkerSource.indexOf('return { platform, url, converted: url, passthrough: true }')
+  const passthroughIndex = botWorkerSource.indexOf("return { platform, url, converted: url, passthrough: true, linkKind: 'coupon' }")
 
   assert.notEqual(conversionCallIndex, -1)
   assert.notEqual(passthroughIndex, -1)
   assert.doesNotMatch(botWorkerSource, /const userCouponLink = String\(cfg\.botConfig\.couponLink/)
   assert.doesNotMatch(botWorkerSource, /urlsToStrip|stripUrlsFromText\s*\(/)
+})
+
+
+test('bot-worker não usa cupom como primary quando há produto na mesma mensagem', () => {
+  assert.match(
+    botWorkerSource,
+    /const primaryCandidates = orderedConversions\.filter\(c => c\.linkKind !== 'coupon'\)/,
+    'primary deve ignorar cupom quando houver conversão de produto',
+  )
+  assert.match(
+    botWorkerSource,
+    /const selectableConversions = primaryCandidates\.length \? primaryCandidates : orderedConversions/,
+    'se só houver cupom, mantém fallback para não descartar a mensagem',
+  )
 })
 
 test('bot-worker usa link original e convertido como chaves de dedup de envio', () => {
@@ -53,7 +67,7 @@ test('bot-worker usa link original e convertido como chaves de dedup de envio', 
 
 test('bot-worker usa primaryLinkTarget também para escolher a imagem do link principal', () => {
   const targetSelectionIndex = botWorkerSource.indexOf('const target = effectiveLinkTarget === \'last\' ? enabled[enabled.length - 1] : enabled[0]')
-  const primarySelectionIndex = botWorkerSource.indexOf('const primary = (orderedConversions.length')
+  const primarySelectionIndex = botWorkerSource.indexOf('const primary = (selectableConversions.length')
 
   assert.notEqual(targetSelectionIndex, -1)
   assert.notEqual(primarySelectionIndex, -1)

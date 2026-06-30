@@ -2233,14 +2233,14 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             return null
           }
           logger.info({ platform, converted: conversionResult.url, warning: conversionResult.warning }, 'Link convertido')
-          return { platform, url, converted: conversionResult.url, warning: conversionResult.warning }
+          return { platform, url, converted: conversionResult.url, warning: conversionResult.warning, linkKind: conversionResult.linkKind }
         } catch (err) {
           if (err.stripFromMessage) {
             // Cupom/voucher que não conseguiu virar link afiliado oficial: não
             // removemos mais nada da mensagem espelhada. O link fica como veio
             // para preservar a oferta/CTA original, enquanto os demais links
             // válidos da mesma mensagem continuam sendo convertidos juntos.
-            return { platform, url, converted: url, passthrough: true }
+            return { platform, url, converted: url, passthrough: true, linkKind: 'coupon' }
           }
           await recordConversionIssue({ platform, url, jid, text, reason: `Falha na conversão de ${credentialValidation.label}: ${err.message}` })
           return null
@@ -2298,8 +2298,14 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // A constante é definida antes de getImage() para manter texto/template,
       // imagem, dedup e logs alinhados na mesma escolha.
       const orderedConversions = conversions.filter(c => c && c.platform !== 'nolink' && !c.passthrough)
-      const primary = (orderedConversions.length
-        ? (effectiveLinkTarget === 'last' ? orderedConversions[orderedConversions.length - 1] : orderedConversions[0])
+      // Produto+cupom: cupom pode ser sempre o mesmo entre ofertas diferentes.
+      // Portanto ele NÃO deve virar primary de dedup/template/imagem quando há
+      // link de produto convertido na mesma mensagem, mesmo que a config do grupo
+      // escolha o último link. O cupom continua no finalText via conversions.
+      const primaryCandidates = orderedConversions.filter(c => c.linkKind !== 'coupon')
+      const selectableConversions = primaryCandidates.length ? primaryCandidates : orderedConversions
+      const primary = (selectableConversions.length
+        ? (effectiveLinkTarget === 'last' ? selectableConversions[selectableConversions.length - 1] : selectableConversions[0])
         : conversions[0]) ?? { platform: 'nolink', url: '', converted: '' }
 
       // Template efetivo (decisão 3.2: por grupo, com default global). Três estados
