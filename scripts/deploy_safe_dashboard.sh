@@ -8,6 +8,13 @@ DASHBOARD_DIR="$ROOT_DIR/dashboard"
 BRANCH="${BRANCH:-main}"
 FORCE_RESET_ON_SYNC="${FORCE_RESET_ON_SYNC:-0}"
 DASHBOARD_PORT="${DASHBOARD_PORT:-3000}"
+# A blindagem das sessões WhatsApp depende de o bot-supervisor continuar vivo
+# enquanto a API/dashboard são reciclados. Mesmo quando há migration pendente,
+# o default é NÃO parar o supervisor: se ele estiver em modo remote, parar esse
+# PM2 mata os bot-workers filhos e derruba as conexões Baileys dos clientes.
+# Só use 0 numa janela explícita de manutenção/cutover em que queda das sessões
+# seja aceitável.
+PRESERVE_SUPERVISOR_DURING_MIGRATION="${PRESERVE_SUPERVISOR_DURING_MIGRATION:-1}"
 
 # APP_ENV precisa existir no ambiente do BUILD, não só no runtime do PM2.
 # O Next.js avalia next.config headers() em tempo de `npm run build` e grava
@@ -341,12 +348,19 @@ if npx prisma migrate status 2>&1 | grep -q "Database schema is up to date"; the
   echo "  Nenhuma migration pendente — pulando migrate deploy."
 else
   # Há migration pendente. DDL como ALTER TABLE precisa de lock exclusivo no
-  # SQLite — incompatível com processos segurando conexões WAL. Paramos todos
-  # os PM2 versionados que importam Prisma antes de migrar e religamos os
-  # serviços long-running logo depois.
+  # SQLite — incompatível com processos segurando conexões WAL. A API e o cron
+  # podem ser parados na janela de deploy, mas o bot-supervisor é o dono das
+  # sessões WhatsApp em modo remote; pará-lo aqui desfaz a blindagem prometida
+  # ("deploy da API não derruba sessões"). Por isso ele é preservado por
+  # default e o migrate usa retry/backoff se houver lock transitório.
   echo "  Migrations pendentes — parando processos que travam o banco..."
   stop_app_for_migration_prod "api" 1
-  stop_app_for_migration_prod "bot-supervisor" 1
+  if [[ "$PRESERVE_SUPERVISOR_DURING_MIGRATION" == "1" ]]; then
+    echo "    - bot-supervisor preservado (PRESERVE_SUPERVISOR_DURING_MIGRATION=1) para manter sessões WhatsApp ativas"
+  else
+    echo "    - ATENÇÃO: parando bot-supervisor por override explícito; sessões WhatsApp podem cair"
+    stop_app_for_migration_prod "bot-supervisor" 1
+  fi
   stop_app_for_migration_prod "snapshot-cron" 0
 
   migrate_attempt=0
