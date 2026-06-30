@@ -14,7 +14,7 @@ import { dirname } from 'path'
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
-import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, stripUrlsFromText } from './messageProcessor.js'
+import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, stripUrlsFromText, uniqueConversionsByUrl } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
@@ -2244,8 +2244,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           return null
         }
       }))
-      const conversions = linkResults.filter(r => r && !r.strip)
-      const urlsToStrip = linkResults.filter(r => r?.strip).map(r => r.url)
+      const conversions = uniqueConversionsByUrl(linkResults.filter(r => r && !r.strip))
+      const urlsToStrip = [...new Set(linkResults.filter(r => r?.strip).map(r => r.url).filter(Boolean))]
 
       const warningKinds = new Set(conversions.map(c => c.warning).filter(Boolean))
       for (const kind of warningKinds) {
