@@ -1,12 +1,6 @@
 import sharp from 'sharp'
 import { extractShopeeIds, resolveShopeeShortLink as resolveShopeeShortLinkShared } from './shopee.js'
 import { computeMutationCrop } from '../core/imageMutationCrop.js'
-import {
-  WHATSAPP_SAFE_IMAGE_BACKGROUND,
-  WHATSAPP_SAFE_THUMBNAIL_SIZE,
-  buildContainedImageResizeOptions,
-  shouldContainImageForWhatsApp,
-} from '../core/imageFit.js'
 
 const OG_IMAGE_RE = [
   /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
@@ -443,13 +437,6 @@ export async function fetchProductImage(platform, productUrl, creds) {
 export async function normalizeImageForWhatsApp(buf, opts = {}) {
   if (!buf?.length) return null
   const mutation = opts.mutation || null
-  const containForWhatsApp = shouldContainImageForWhatsApp(opts.fit)
-  const baseResizeOptions = containForWhatsApp
-    ? buildContainedImageResizeOptions()
-    : { width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true }
-  const thumbnailResizeOptions = containForWhatsApp
-    ? buildContainedImageResizeOptions(WHATSAPP_SAFE_THUMBNAIL_SIZE)
-    : { width: 500, height: 500, fit: 'inside', withoutEnlargement: true }
   try {
     const meta = await sharp(buf, { failOn: 'none' }).metadata()
     if (!meta?.width || !meta?.height) return null
@@ -468,31 +455,20 @@ export async function normalizeImageForWhatsApp(buf, opts = {}) {
       try {
         const { data, info } = await sharp(buf, { failOn: 'none' })
           .rotate()
-          .resize(baseResizeOptions)
+          .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
           .sharpen({ sigma: 0.6 })
           .raw()
           .toBuffer({ resolveWithObject: true })
         const crop = computeMutationCrop(info, { groupId: mutation.groupId, date: mutation.date })
         let pipeline = sharp(data, { raw: { width: info.width, height: info.height, channels: info.channels } })
-        if (crop) {
-          pipeline = pipeline.extract({ left: crop.left, top: crop.top, width: crop.width, height: crop.height })
-          if (containForWhatsApp) {
-            pipeline = pipeline.extend({
-              top: crop.top,
-              left: crop.left,
-              bottom: info.height - crop.top - crop.height,
-              right: info.width - crop.left - crop.width,
-              background: WHATSAPP_SAFE_IMAGE_BACKGROUND,
-            })
-          }
-        }
+        if (crop) pipeline = pipeline.extract({ left: crop.left, top: crop.top, width: crop.width, height: crop.height })
         main = await pipeline
           .jpeg({ quality: crop ? crop.quality : 95, mozjpeg: true, chromaSubsampling: '4:4:4' })
           .toBuffer()
       } catch {
         main = await sharp(buf, { failOn: 'none' })
           .rotate()
-          .resize(baseResizeOptions)
+          .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
           .sharpen({ sigma: 0.6 })
           .jpeg({ quality: 95, mozjpeg: true, chromaSubsampling: '4:4:4' })
           .toBuffer()
@@ -500,7 +476,7 @@ export async function normalizeImageForWhatsApp(buf, opts = {}) {
     } else {
       main = await sharp(buf, { failOn: 'none' })
         .rotate()
-        .resize(baseResizeOptions)
+        .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
         .sharpen({ sigma: 0.6 })
         .jpeg({ quality: 95, mozjpeg: true, chromaSubsampling: '4:4:4' })
         .toBuffer()
@@ -514,7 +490,7 @@ export async function normalizeImageForWhatsApp(buf, opts = {}) {
     // anti-fingerprint sempre incidiu só sobre a imagem principal.)
     const thumbnail = await sharp(buf, { failOn: 'none' })
       .rotate()
-      .resize(thumbnailResizeOptions)
+      .resize({ width: 500, height: 500, fit: 'inside', withoutEnlargement: true })
       .sharpen({ sigma: 0.5 })
       .jpeg({ quality: 80, mozjpeg: true })
       .toBuffer()
