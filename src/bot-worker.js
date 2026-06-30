@@ -2153,7 +2153,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       async function getImage() {
         if (imageFetched) return cachedImage
         imageFetched = true
-        if (!monitorGroup || monitorGroup.imageMode === 'none') return null
+        if (!monitorGroup || ['none', 'preview'].includes(monitorGroup.imageMode)) return null
 
         const enabled = links.filter(l => enabledPlatforms.has(l.platform))
         const target = effectiveLinkTarget === 'last' ? enabled[enabled.length - 1] : enabled[0]
@@ -2570,7 +2570,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // Quando imageMode=original mas só houver jpegThumbnail minúsculo, usa
         // preview automático do WhatsApp em vez de imagem pixelada.
         const imageMode = monitorGroup?.imageMode ?? 'original'
-        const wantImage = imageMode !== 'none'
+        const wantImage = !['none', 'preview'].includes(imageMode)
         // O caminho de relay reaproveita a mídia hospedada da mensagem de origem.
         // Portanto ele só é correto quando a preferência é explicitamente
         // "Imagem que veio na mensagem". No modo "Imagem oficial da loja"
@@ -2618,6 +2618,17 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // worker. Mantém image.buffer (Buffer) em memória do processo, sem
         // passar pelo Redis. Ver enqueueSendJob() para a explicação completa.
         const buildPayload = async () => {
+          // Modo "preview": envia uma única mensagem de texto com link preview
+          // clicável do WhatsApp. Não baixa nem faz upload de imagem, porque isso
+          // viraria imageMessage (clique amplia foto) em vez de card clicável.
+          if (imageMode === 'preview') {
+            return buildMonitoredMessagePayload({
+              finalText: variantText,
+              image: null,
+              useLinkPreview: true,
+            })
+          }
+
           // Quando o destino tem botão de canal (channelForward), pulamos o relay
           // de propósito: o relay reaproveita o proto de mídia da ORIGEM e injetar
           // o NOSSO canal nele faz o WhatsApp derrubar o envio. Em vez disso caímos
