@@ -10,11 +10,11 @@ test('relay da mídia original só é permitido no modo imagem da mensagem', () 
   assert.equal(shouldRelayOriginalMediaForImageMode('none'), false)
 })
 
-test('relay de imagem é bloqueado quando canvas contain é necessário', () => {
+test('relay de imagem original continua permitido mesmo com fallback contain', () => {
   assert.equal(
     shouldRelayOriginalMediaForImageMode('original', { mediaType: 'imageMessage', imageFit: 'contain' }),
-    false,
-    'imagem precisa passar por normalizeImageForWhatsApp para ganhar padding/canvas',
+    true,
+    'grupo→grupo deve reaproveitar a mídia original para evitar novo upload; contain só vale para fallback sem relay',
   )
 })
 
