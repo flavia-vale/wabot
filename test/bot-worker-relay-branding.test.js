@@ -65,6 +65,29 @@ test('bot-worker usa link original e convertido como chaves de dedup de envio', 
   )
 })
 
+test('bot-worker consulta MessageLog para dedup compartilhada entre processos', () => {
+  assert.match(
+    botWorkerSource,
+    /const dedupLookupUrls = \[\.\.\.new Set\(\[primary\.url, primary\.converted\]\.filter\(Boolean\)\)\]/,
+    'dedup DB deve consultar link original e convertido',
+  )
+  assert.match(
+    botWorkerSource,
+    /db\.messageLog\.findFirst\(\{[\s\S]*userId,[\s\S]*destGroup: destJid,[\s\S]*status: \{ in: \['queued', 'sending', 'success'\] \}/,
+    'dedup DB deve bloquear envios recentes já enfileirados/enviados para mesmo usuário e destino',
+  )
+  assert.match(
+    botWorkerSource,
+    /originalUrl: \{ in: dedupLookupUrls \}[\s\S]*convertedUrl: \{ in: dedupLookupUrls \}/,
+    'dedup DB deve comparar tanto originalUrl quanto convertedUrl',
+  )
+  assert.match(
+    botWorkerSource,
+    /Duplicata DB ignorada/,
+    'dedup DB precisa deixar evidência nos logs quando bloquear',
+  )
+})
+
 test('bot-worker usa primaryLinkTarget também para escolher a imagem do link principal', () => {
   const targetSelectionIndex = botWorkerSource.indexOf('const target = effectiveLinkTarget === \'last\' ? enabled[enabled.length - 1] : enabled[0]')
   const primarySelectionIndex = botWorkerSource.indexOf('const primary = (selectableConversions.length')
