@@ -5,15 +5,12 @@ import { fileURLToPath } from 'node:url'
 
 import * as messageProcessor from '../src/messageProcessor.js'
 
-// Regressão: `stripUrlsFromText` era usado em src/bot-worker.js (caminho de
-// remoção de link de cupom) mas NÃO estava na lista de imports de
-// './messageProcessor.js'. Em runtime isso lançava
-// `ReferenceError: stripUrlsFromText is not defined`, que o pipeline capturava
-// como `skip:incoming_error` e DESCARTAVA a mensagem inteira. Efeito visível:
-// grupos cujas ofertas trazem um link de cupom separado (ex.: "RESGATE OS
-// CUPONS ATIVOS" da Shopee) paravam de espelhar enquanto os demais seguiam
-// normais. Este guard pega qualquer função do messageProcessor que seja
-// chamada no bot-worker sem estar importada — não só esse caso.
+// Regressão: cupom/voucher que o conversor classifica como `stripFromMessage`
+// não pode mais remover nada da caption espelhada. O bot deve preservar o link
+// original como passthrough e continuar convertendo os demais links da mesma
+// mensagem. O segundo teste abaixo continua garantindo que qualquer função de
+// messageProcessor usada pelo bot-worker esteja importada corretamente.
+
 
 const botWorkerSource = readFileSync(
   fileURLToPath(new URL('../src/bot-worker.js', import.meta.url)),
@@ -31,15 +28,16 @@ function importedNamesFromMessageProcessor(source) {
   )
 }
 
-test('bot-worker importa stripUrlsFromText do messageProcessor (regressão incoming_error)', () => {
-  const imported = importedNamesFromMessageProcessor(botWorkerSource)
-  assert.ok(
-    /\bstripUrlsFromText\s*\(/.test(botWorkerSource),
-    'pré-condição do teste: bot-worker.js deve chamar stripUrlsFromText',
+test('bot-worker preserva links de cupom/voucher quando a conversão pede strip', () => {
+  assert.match(
+    botWorkerSource,
+    /err\.stripFromMessage[\s\S]*converted:\s*url[\s\S]*passthrough:\s*true/,
+    'cupom/voucher não convertido deve ser passthrough, não removido da mensagem',
   )
-  assert.ok(
-    imported.has('stripUrlsFromText'),
-    'bot-worker.js chama stripUrlsFromText mas não a importa de ./messageProcessor.js',
+  assert.doesNotMatch(
+    botWorkerSource,
+    /urlsToStrip|stripUrlsFromText\s*\(/,
+    'bot-worker não deve remover URLs de cupom/voucher da mensagem espelhada',
   )
 })
 

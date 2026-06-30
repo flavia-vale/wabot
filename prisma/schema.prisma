@@ -39,6 +39,7 @@ model User {
   botConfig             BotConfig?
   scheduled             ScheduledMessage[]
   messageLogs           MessageLog[]
+  sendDedupKeys         SendDedupKey[]
   adminUser             AdminUser?
   adminAuditActors      AdminAuditLog[]      @relation("AdminAuditActor")
   adminAuditTargets     AdminAuditLog[]      @relation("AdminAuditTarget")
@@ -470,9 +471,27 @@ model MessageLog {
   dedupHits    Int      @default(0)
   sentAt       DateTime @default(now())
 
+  sendDedupKeys SendDedupKey[]
+
   @@index([userId, sentAt])
   @@index([userId, status, sentAt])
   @@index([userId, destGroup, convertedUrl, sentAt])
+}
+
+model SendDedupKey {
+  id           String      @id @default(cuid())
+  userId       String
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  destGroup    String
+  dedupKey     String
+  messageLogId String?
+  messageLog   MessageLog? @relation(fields: [messageLogId], references: [id], onDelete: SetNull)
+  createdAt    DateTime    @default(now())
+  expiresAt    DateTime
+
+  @@unique([userId, destGroup, dedupKey])
+  @@index([expiresAt])
+  @@index([userId, destGroup, createdAt])
 }
 
 model AdminUser {
