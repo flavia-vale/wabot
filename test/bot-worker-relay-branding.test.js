@@ -88,6 +88,29 @@ test('bot-worker consulta MessageLog para dedup compartilhada entre processos', 
   )
 })
 
+test('bot-worker reserva chave de dedup de forma atômica antes de enfileirar envio', () => {
+  assert.match(
+    botWorkerSource,
+    /db\.sendDedupKey\.create\(\{[\s\S]*data: \{ userId, destGroup: destJid, dedupKey: key, expiresAt: reservationExpiresAt \}/,
+    'reserva precisa ser um create protegido por índice único antes do MessageLog queued',
+  )
+  assert.match(
+    botWorkerSource,
+    /err\?\.code === 'P2002'[\s\S]*reservedDuplicate = true/,
+    'colisão de índice único deve virar bloqueio de duplicata',
+  )
+  assert.match(
+    botWorkerSource,
+    /Duplicata reservada DB ignorada/,
+    'bloqueio por reserva precisa deixar evidência no log',
+  )
+  assert.match(
+    botWorkerSource,
+    /db\.sendDedupKey\.updateMany\(\{[\s\S]*messageLogId: log\.id/,
+    'reservas devem ser vinculadas ao MessageLog criado',
+  )
+})
+
 test('bot-worker usa primaryLinkTarget também para escolher a imagem do link principal', () => {
   const targetSelectionIndex = botWorkerSource.indexOf('const target = effectiveLinkTarget === \'last\' ? enabled[enabled.length - 1] : enabled[0]')
   const primarySelectionIndex = botWorkerSource.indexOf('const primary = (selectableConversions.length')

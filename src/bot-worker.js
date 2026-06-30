@@ -2485,6 +2485,44 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           continue
         }
 
+        // Reserva atômica cross-worker. O findFirst acima é diagnóstico/legado,
+        // mas sozinho ainda tem janela de corrida: dois workers podem consultar
+        // antes de qualquer um criar MessageLog. O índice único em SendDedupKey
+        // transforma a dedup em compare-and-set no SQLite.
+        const reservationExpiresAt = new Date(Date.now() + linkDedupWindowMs)
+        await db.sendDedupKey.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch(err => {
+          logger.warn({ err: err?.message }, 'Limpeza de SendDedupKey expirada falhou')
+        })
+        const reservedDedupKeys = []
+        let reservedDuplicate = false
+        for (const key of dedupKeys) {
+          try {
+            const reservation = await db.sendDedupKey.create({
+              data: { userId, destGroup: destJid, dedupKey: key, expiresAt: reservationExpiresAt },
+              select: { id: true },
+            })
+            reservedDedupKeys.push(reservation.id)
+          } catch (err) {
+            if (err?.code === 'P2002') {
+              reservedDuplicate = true
+              break
+            }
+            logger.warn({ err: err?.message, destJid }, 'Reserva SendDedupKey falhou; seguindo com dedup local/global')
+          }
+        }
+        if (reservedDuplicate) {
+          await registerDedupBlock({
+            reason: 'skip:dedup_recent_link',
+            platform: primary.platform,
+            destJid,
+            originalUrl: primary.url,
+            convertedUrl: primary.converted,
+            messageText: finalText,
+          })
+          logger.info({ destJid, dedupKeyCount: dedupKeys.length }, 'Duplicata reservada DB ignorada')
+          continue
+        }
+
         if (GLOBAL_DEDUP_MODE !== 'off') {
           // Usa a janela longa (diária) também na dedup cross-instância via
           // Redis — antes usava dedupeWindowMs (5min), o que deixava a mesma
@@ -2545,6 +2583,14 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         const log = await db.messageLog.create({
           data: { ...logData, status: 'queued' },
         })
+        if (reservedDedupKeys.length) {
+          await db.sendDedupKey.updateMany({
+            where: { id: { in: reservedDedupKeys } },
+            data: { messageLogId: log.id },
+          }).catch(err => {
+            logger.warn({ err: err?.message, logId: log.id }, 'Falha ao vincular SendDedupKey ao MessageLog')
+          })
+        }
         let sentVia = 'text'
 
         // PR-5.B.2: variação de copy por canal-destino. Aplica só em canal —
