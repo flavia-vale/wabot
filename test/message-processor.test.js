@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { applyConversionsAndBranding, appendBrandingFooter, buildProcessedMessage, DEFAULT_BRANDING_CTA_TEXT, extractKeywordTokens, hasSignificantTokenOverlap, isCouponAnnouncement, isValidBrandingLink, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, stripUrlsFromText } from '../src/messageProcessor.js'
+import { applyConversionsAndBranding, appendBrandingFooter, buildProcessedMessage, DEFAULT_BRANDING_CTA_TEXT, extractKeywordTokens, hasSignificantTokenOverlap, isCouponAnnouncement, isValidBrandingLink, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, stripUrlsFromText, uniqueConversionsByUrl } from '../src/messageProcessor.js'
 
 test('sanitizeInviteLinks remove convites WhatsApp e Telegram preservando oferta', () => {
   const original = 'Oferta top https://amzn.to/item\nEntre no grupo https://chat.whatsapp.com/AbCdEf12345 e t.me/+ConviteXYZ'
@@ -102,6 +102,42 @@ test('sanitizeInviteLinks remove CTA+link final irrelevante fora de marketplaces
   assert.equal(sanitized.includes('Conheça nossos grupos'), false)
   assert.equal(sanitized.includes('https://s.shopee.com.br/809mpYoiVb?lp=aff'), true)
   assert.equal(sanitized.includes('https://s.shopee.com.br/7VDWEdqxpm'), true)
+})
+
+
+test('applyConversionsAndBranding converte todos os links na mesma mensagem sem duplicar envio lógico', () => {
+  const first = 'https://amzn.to/oferta-a'
+  const second = 'https://s.shopee.com.br/oferta-b'
+  const finalText = applyConversionsAndBranding(
+    [
+      `Combo com dois links: ${first}`,
+      `Também tem esse: ${second}`,
+      `Repetindo o primeiro no final: ${first}`,
+    ].join('\n'),
+    [
+      { url: first, converted: 'https://amazon.example/convertido-a', platform: 'amazon' },
+      { url: second, converted: 'https://shopee.example/convertido-b', platform: 'shopee' },
+    ],
+  )
+
+  assert.equal(finalText.includes(first), false)
+  assert.equal(finalText.includes(second), false)
+  assert.equal(finalText.match(/https:\/\/amazon\.example\/convertido-a/g)?.length, 2)
+  assert.equal(finalText.match(/https:\/\/shopee\.example\/convertido-b/g)?.length, 1)
+})
+
+test('uniqueConversionsByUrl mantém uma conversão por URL para evitar processamento duplicado', () => {
+  const conversions = uniqueConversionsByUrl([
+    { url: 'https://amzn.to/a', converted: 'https://amazon.example/a', platform: 'amazon' },
+    { url: 'https://amzn.to/a', converted: 'https://amazon.example/a-duplicado', platform: 'amazon' },
+    { url: 'https://s.shopee.com.br/b', converted: 'https://shopee.example/b', platform: 'shopee' },
+    { url: '', converted: 'https://invalid.example' },
+  ])
+
+  assert.deepEqual(conversions.map(c => c.converted), [
+    'https://amazon.example/a',
+    'https://shopee.example/b',
+  ])
 })
 
 test('branding vazio ou inválido não altera a mensagem', () => {
