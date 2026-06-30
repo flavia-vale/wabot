@@ -61,7 +61,18 @@ jobs:
           git config --global --add url."https://github.com/".insteadOf "git@github.com:"
 
       - name: Instalar dependências da API sem alterar lockfile
-        run: npm ci
+        run: |
+          for attempt in 1 2 3; do
+            echo "npm ci (API) — tentativa ${attempt}/3"
+            if npm ci --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000; then
+              exit 0
+            fi
+            status=$?
+            echo "::warning::npm ci (API) falhou na tentativa ${attempt}/3 com exit ${status}. Aguardando antes de tentar novamente..."
+            npm cache verify || true
+            sleep $((attempt * 10))
+          done
+          exit "${status:-1}"
 
       - name: Validar Prisma e gerar client
         run: |
@@ -70,7 +81,18 @@ jobs:
 
       - name: Instalar dependências do dashboard sem alterar lockfile
         working-directory: dashboard
-        run: npm ci
+        run: |
+          for attempt in 1 2 3; do
+            echo "npm ci (dashboard) — tentativa ${attempt}/3"
+            if npm ci --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000; then
+              exit 0
+            fi
+            status=$?
+            echo "::warning::npm ci (dashboard) falhou na tentativa ${attempt}/3 com exit ${status}. Aguardando antes de tentar novamente..."
+            npm cache verify || true
+            sleep $((attempt * 10))
+          done
+          exit "${status:-1}"
 
       - name: Guardrail da página de configurações
         working-directory: dashboard

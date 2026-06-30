@@ -10,8 +10,11 @@ function assertNoExternalAdReply(value, path = 'payload') {
   }
 }
 
-export function buildMonitoredMessagePayload({ finalText, image, useLinkPreview = false }) {
+export function buildMonitoredMessagePayload({ finalText, image, useLinkPreview = false, linkPreview = null }) {
   const textPayload = { text: String(finalText || '') }
+  if (useLinkPreview && linkPreview && typeof linkPreview === 'object') {
+    textPayload.linkPreview = linkPreview
+  }
   const textSendOptions = useLinkPreview ? { generateHighQualityLinkPreview: true } : undefined
 
   if (!image?.buffer) {

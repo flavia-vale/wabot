@@ -32,6 +32,7 @@ test('buildEntitledGroupConfig reflects per-group imageMode from the DB (default
     { id: 'm-default', role: 'monitor', waJid: 'a@g.us', kind: 'group', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' },
     { id: 'm-fetch', role: 'monitor', waJid: 'b@g.us', kind: 'group', imageMode: 'fetch', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' },
     { id: 'm-none', role: 'monitor', waJid: 'c@g.us', kind: 'group', imageMode: 'none', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' },
+    { id: 'm-preview', role: 'monitor', waJid: 'd@g.us', kind: 'group', imageMode: 'preview', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' },
   ]
   const result = buildEntitledGroupConfig({ groups: custom, groupTargets: [], planSubject: { plan: 'pro' } })
   const byJid = Object.fromEntries(result.groups.monitor.map(g => [g.waJid, g]))
@@ -39,6 +40,7 @@ test('buildEntitledGroupConfig reflects per-group imageMode from the DB (default
   assert.equal(byJid['a@g.us'].imageMode, 'original')
   assert.equal(byJid['b@g.us'].imageMode, 'fetch')
   assert.equal(byJid['c@g.us'].imageMode, 'none')
+  assert.equal(byJid['d@g.us'].imageMode, 'preview')
   // fallbackToOriginal segue sempre ligado para o modo 'fetch' ter rede de segurança.
   assert.equal(byJid['b@g.us'].fallbackToOriginal, true)
 })
