@@ -90,7 +90,8 @@ test('convert() entrega o shortLink afiliado oficial da Shopee sem resolver para
   t.after(() => { globalThis.fetch = originalFetch })
 
   const result = await convert('https://shopee.com.br/product/1509055233/58258316548', CREDS)
-  assert.equal(result, shortLink)
+  assert.equal(result.url, shortLink)
+  assert.equal(result.linkKind, 'product')
   assert.equal(fetchCalled, false, 'não deve chamar fetch para resolver o shortLink')
 })
 
@@ -196,7 +197,8 @@ test('convert() não usa unsupported.html como origin e tenta converter o short 
 
   const result = await convert(inputShort, CREDS)
 
-  assert.equal(result, 'https://s.shopee.com.br/cupomAFILfallback')
+  assert.equal(result.url, 'https://s.shopee.com.br/cupomAFILfallback')
+  assert.equal(result.linkKind, 'coupon')
   assert.ok(sentQuery.includes(inputShort), 'usa o short link original como fallback de originUrl')
   assert.ok(!sentQuery.includes('unsupported.html'), 'não envia unsupported.html para a API')
 })
@@ -212,7 +214,8 @@ test('convert() converte cupom Shopee preservando o caminho e devolve o short li
 
   const result = await convert('https://s.shopee.com.br/40eQK1or1O', CREDS)
   // Devolve o short link da API como-está (abre o app), NÃO uma landing web.
-  assert.equal(result, 'https://s.shopee.com.br/cupomAFIL123')
+  assert.equal(result.url, 'https://s.shopee.com.br/cupomAFIL123')
+  assert.equal(result.linkKind, 'coupon')
   // A origin enviada à API preserva o caminho original do cupom (não reescreve
   // para /m/cupom-de-desconto) e remove só o tracking de terceiro.
   assert.ok(sentQuery.includes('https://shopee.com.br/m/envio-rapido'), 'origin preserva o caminho original do cupom')
@@ -230,7 +233,8 @@ test('convert() converte URL direta de cupom Shopee preservando o caminho', asyn
   }))
 
   const result = await convert('https://shopee.com.br/m/cupom?promotionId=999&voucherCode=ABC', CREDS)
-  assert.equal(result, 'https://s.shopee.com.br/cupomDIRETO')
+  assert.equal(result.url, 'https://s.shopee.com.br/cupomDIRETO')
+  assert.equal(result.linkKind, 'coupon')
   assert.ok(sentQuery.includes('/m/cupom?'), 'origin preserva o caminho /m/cupom')
   assert.ok(sentQuery.includes('promotionId=999'), 'origin mantém a identidade do cupom')
   assert.ok(!/cupom-de-desconto/.test(sentQuery), 'NÃO reescreve para a landing web')
