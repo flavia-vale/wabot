@@ -140,10 +140,27 @@ export function stripUrlsFromText(text, urls) {
   return normalizeMessageWhitespace(result)
 }
 
+export function uniqueConversionsByUrl(conversions) {
+  const seen = new Set()
+  const unique = []
+  for (const conversion of conversions || []) {
+    const url = String(conversion?.url ?? '')
+    const converted = String(conversion?.converted ?? '')
+    if (!url || !converted || seen.has(url)) continue
+    seen.add(url)
+    unique.push(conversion)
+  }
+  return unique
+}
+
 export function applyConversionsAndBranding(sanitizedText, conversions, brandingLink, brandingCtaText = DEFAULT_BRANDING_CTA_TEXT) {
   let finalText = String(sanitizedText ?? '')
-  for (const { url, converted } of conversions) {
-    finalText = finalText.replace(url, converted)
+  for (const { url, converted } of uniqueConversionsByUrl(conversions)) {
+    // A mesma URL pode aparecer mais de uma vez na caption (ex.: botão/link no
+    // topo e repetição no final). `String#replace` troca só a primeira
+    // ocorrência; split/join garante que todas sejam convertidas sem criar
+    // mensagens separadas nem deixar link de afiliado do grupo monitorado.
+    finalText = finalText.split(url).join(converted)
   }
   return appendBrandingFooter(finalText, brandingLink, brandingCtaText)
 }
