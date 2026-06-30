@@ -20,7 +20,7 @@ test('bot-worker relay convertido não passa branding global para texto original
 
 test('bot-worker preserva link de cupom original quando conversor pede strip', () => {
   const conversionCallIndex = botWorkerSource.indexOf('finalText = applyConversionsAndBranding(sanitizedText, conversions)')
-  const passthroughIndex = botWorkerSource.indexOf('return { platform, url, converted: url, passthrough: true }')
+  const passthroughIndex = botWorkerSource.indexOf("return { platform, url, converted: url, passthrough: true, linkKind: 'coupon' }")
 
   assert.notEqual(conversionCallIndex, -1)
   assert.notEqual(passthroughIndex, -1)
@@ -28,22 +28,46 @@ test('bot-worker preserva link de cupom original quando conversor pede strip', (
   assert.doesNotMatch(botWorkerSource, /urlsToStrip|stripUrlsFromText\s*\(/)
 })
 
-test('bot-worker usa link convertido como chave de dedup de envio', () => {
+
+test('bot-worker não usa cupom como primary quando há produto na mesma mensagem', () => {
   assert.match(
     botWorkerSource,
-    /const dedupSubject = primary\.converted \|\| primary\.url \|\|/,
-    'dedup precisa usar o link convertido que sai no grupo antes do link upstream',
+    /const primaryCandidates = orderedConversions\.filter\(c => c\.linkKind !== 'coupon'\)/,
+    'primary deve ignorar cupom quando houver conversão de produto',
   )
-  assert.doesNotMatch(
+  assert.match(
     botWorkerSource,
-    /const dedupSubject = primary\.url \|\| `\$\{msg\.key\.id/,
-    'não pode deduplicar primeiro pelo link original do grupo monitorado',
+    /const selectableConversions = primaryCandidates\.length \? primaryCandidates : orderedConversions/,
+    'se só houver cupom, mantém fallback para não descartar a mensagem',
+  )
+})
+
+test('bot-worker usa link original e convertido como chaves de dedup de envio', () => {
+  assert.match(
+    botWorkerSource,
+    /const dedupSubjects = \[\.\.\.new Set\(\[primary\.url, primary\.converted, fallbackDedupSubject\]/,
+    'dedup precisa guardar o link upstream estável e o link convertido final',
+  )
+  assert.match(
+    botWorkerSource,
+    /const dedupKeys = dedupSubjects\.map\(subject => `\$\{destJid\}:\$\{subject\}`\)/,
+    'dedup deve aplicar as chaves por destino',
+  )
+  assert.match(
+    botWorkerSource,
+    /dedupKeys\.some\(key => dedup\.links\[key\]/,
+    'dedup local precisa bloquear se qualquer chave já foi vista',
+  )
+  assert.match(
+    botWorkerSource,
+    /for \(const key of dedupKeys\) dedup\.links\[key\] = Date\.now\(\)/,
+    'ao enviar, todas as chaves devem ser registradas para o próximo repost',
   )
 })
 
 test('bot-worker usa primaryLinkTarget também para escolher a imagem do link principal', () => {
   const targetSelectionIndex = botWorkerSource.indexOf('const target = effectiveLinkTarget === \'last\' ? enabled[enabled.length - 1] : enabled[0]')
-  const primarySelectionIndex = botWorkerSource.indexOf('const primary = (orderedConversions.length')
+  const primarySelectionIndex = botWorkerSource.indexOf('const primary = (selectableConversions.length')
 
   assert.notEqual(targetSelectionIndex, -1)
   assert.notEqual(primarySelectionIndex, -1)
