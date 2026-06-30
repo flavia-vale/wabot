@@ -17,6 +17,11 @@ on:
         description: 'Rótulo opcional para identificar este run nos logs (ex: "redeploy after lock fix")'
         required: false
         default: 'manual'
+      pm2_update_during_deploy:
+        description: 'Produção: rodar pm2 update? ATENÇÃO: recicla daemon, reinicia bot-supervisor e pode reconectar sessões WhatsApp.'
+        type: boolean
+        required: false
+        default: false
 
 # Serializa deploys por branch/ambiente. Sem isto, merges em sequência rápida
 # em develop (ou main) disparam workflows que rodam ao mesmo tempo no MESMO
@@ -133,7 +138,8 @@ jobs:
               git reset --hard origin/main
               git clean -fd
               chmod +x ./scripts/deploy_safe_dashboard.sh
-              ROOT_DIR=~/wabot BRANCH=main FORCE_RESET_ON_SYNC=1 ./scripts/deploy_safe_dashboard.sh
+              PM2_UPDATE_DURING_DEPLOY="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.pm2_update_during_deploy == 'true' && '1' || '0' }}" \
+                ROOT_DIR=~/wabot BRANCH=main FORCE_RESET_ON_SYNC=1 ./scripts/deploy_safe_dashboard.sh
             else
               echo "🧪 Enviando para STAGING..."
               cd ~/wabot-staging
