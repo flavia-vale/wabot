@@ -14,7 +14,7 @@ import { dirname } from 'path'
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
-import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, stripUrlsFromText, uniqueConversionsByUrl } from './messageProcessor.js'
+import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
@@ -2233,16 +2233,17 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           return { platform, url, converted: conversionResult.url, warning: conversionResult.warning }
         } catch (err) {
           if (err.stripFromMessage) {
-            // Non-product link (coupon/voucher): strip from mirrored text to
-            // avoid misattributing commission to the source group's affiliate.
-            return { platform, url, strip: true }
+            // Cupom/voucher que não conseguiu virar link afiliado oficial: não
+            // removemos mais nada da mensagem espelhada. O link fica como veio
+            // para preservar a oferta/CTA original, enquanto os demais links
+            // válidos da mesma mensagem continuam sendo convertidos juntos.
+            return { platform, url, converted: url, passthrough: true }
           }
           await recordConversionIssue({ platform, url, jid, text, reason: `Falha na conversão de ${credentialValidation.label}: ${err.message}` })
           return null
         }
       }))
-      const conversions = uniqueConversionsByUrl(linkResults.filter(r => r && !r.strip))
-      const urlsToStrip = [...new Set(linkResults.filter(r => r?.strip).map(r => r.url).filter(Boolean))]
+      const conversions = uniqueConversionsByUrl(linkResults.filter(r => r && r.converted))
 
       const warningKinds = new Set(conversions.map(c => c.warning).filter(Boolean))
       for (const kind of warningKinds) {
@@ -2287,28 +2288,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // de /painel/mensagens, como {{grupoLink}} e {{cupomLink}}, pertencem ao
         // caminho de templates e não devem ser anexadas ao texto original.
         finalText = applyConversionsAndBranding(sanitizedText, conversions)
-        if (urlsToStrip.length) {
-          const userCouponLink = String(cfg.botConfig.couponLink || '').trim()
-          if (userCouponLink) {
-            // User configured their own coupon link: substitute each stripped
-            // URL with it so commission stays with the right affiliate.
-            for (const url of urlsToStrip) {
-              finalText = finalText.replace(url, userCouponLink)
-            }
-          } else {
-            // No coupon link configured: remove the URL and the entire CTA
-            // line that contained it to avoid orphaned text like
-            // "🏷️ Cupons disponíveis aqui:" with no clickable link.
-            finalText = stripUrlsFromText(finalText, urlsToStrip)
-          }
-        }
       }
       // Eleição do link primário (oferta/dedup/log) entre as conversões válidas.
       // Decisão de produto 3.4: o grupo escolhe primeiro/último link; sem override
       // por grupo, herda o default global do BotConfig (default 'first' = histórico).
       // A constante é definida antes de getImage() para manter texto/template,
       // imagem, dedup e logs alinhados na mesma escolha.
-      const orderedConversions = conversions.filter(c => c && c.platform !== 'nolink')
+      const orderedConversions = conversions.filter(c => c && c.platform !== 'nolink' && !c.passthrough)
       const primary = (orderedConversions.length
         ? (effectiveLinkTarget === 'last' ? orderedConversions[orderedConversions.length - 1] : orderedConversions[0])
         : conversions[0]) ?? { platform: 'nolink', url: '', converted: '' }
@@ -2434,7 +2420,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         destIndex++
         // Botão "Ver canal" definido pelo GRUPO DE DESTINO (ou null = sem botão).
         const channelForward = resolveChannelForward(cfg.groups.postDetails.find(g => g.waJid === destJid))
-        const dedupSubject = primary.url || `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
+        const dedupSubject = primary.converted || primary.url || `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
         const key = `${destJid}:${dedupSubject}`
         if (dedup.links[key] && Date.now() - dedup.links[key] < linkDedupWindowMs) {
           await registerDedupBlock({
