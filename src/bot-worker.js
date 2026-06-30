@@ -2445,6 +2445,46 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           })
           logger.info({ destJid, dedupKeyCount: dedupKeys.length }, 'Duplicata ignorada'); continue
         }
+
+        // Trava compartilhada entre processos. A dedup local é por worker; se
+        // dois workers/sockets processarem a mesma sessão, ou se Redis estiver
+        // ausente/fail-open, o banco ainda enxerga os envios recentes para o
+        // mesmo usuário+destino+link e bloqueia a duplicata antes de criar novo
+        // log queued. Caso real: duas linhas success idênticas em ~9s com
+        // dedupHits=0.
+        const dedupLookupUrls = [...new Set([primary.url, primary.converted].filter(Boolean))]
+        const recentDbDuplicate = dedupLookupUrls.length
+          ? await db.messageLog.findFirst({
+              where: {
+                userId,
+                destGroup: destJid,
+                status: { in: ['queued', 'sending', 'success'] },
+                sentAt: { gte: new Date(Date.now() - linkDedupWindowMs) },
+                OR: [
+                  { originalUrl: { in: dedupLookupUrls } },
+                  { convertedUrl: { in: dedupLookupUrls } },
+                ],
+              },
+              orderBy: { sentAt: 'desc' },
+              select: { id: true },
+            }).catch(err => {
+              logger.warn({ err: err?.message, destJid }, 'Dedup DB lookup falhou; seguindo com dedup local/global')
+              return null
+            })
+          : null
+        if (recentDbDuplicate) {
+          await registerDedupBlock({
+            reason: 'skip:dedup_recent_link',
+            platform: primary.platform,
+            destJid,
+            originalUrl: primary.url,
+            convertedUrl: primary.converted,
+            messageText: finalText,
+          })
+          logger.info({ destJid, recentLogId: recentDbDuplicate.id, dedupKeyCount: dedupKeys.length }, 'Duplicata DB ignorada')
+          continue
+        }
+
         if (GLOBAL_DEDUP_MODE !== 'off') {
           // Usa a janela longa (diária) também na dedup cross-instância via
           // Redis — antes usava dedupeWindowMs (5min), o que deixava a mesma
