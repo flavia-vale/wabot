@@ -45,6 +45,7 @@ import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
 import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, registerStableCloseAndDecide } from './core/reconnectPolicy.js'
+import { buildAuthResetSessionPatch, buildCloseSessionPatch } from './core/sessionPersistencePolicy.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
 import { calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
@@ -1716,7 +1717,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       activeSock = null
       pendingSock = null
       if (process.send) process.send({ type: 'status', data: 'disconnected' })
-await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: code != null ? String(code) : null }).catch(() => {})
+      await persistSessionPatch(buildCloseSessionPatch({
+        code,
+        terminal: isLoggedOut,
+        ownerInstance: OWNER_INSTANCE,
+        now: new Date(),
+      })).catch(() => {})
       if (isForbidden) {
         // 403/forbidden: o WhatsApp recusou a sessão — chip possivelmente
         // restringido/banido (costuma vir após flapping prolongado). Sinal
@@ -1816,6 +1822,7 @@ await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected', o
             )
             try { recordOperationalSignal('wa_bad_session_reset', { userId, count: b.count }) } catch {}
             await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
+            await persistSessionPatch(buildAuthResetSessionPatch({ code, ownerInstance: OWNER_INSTANCE, now: new Date() })).catch(() => {})
             badSessionTimestamps = []
             reconnectAttempts = 0
             // NÃO reconecta sozinho (igual loggedOut): sem auth, reconectar só
