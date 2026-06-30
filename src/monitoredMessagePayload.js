@@ -10,9 +10,14 @@ function assertNoExternalAdReply(value, path = 'payload') {
   }
 }
 
-export function buildMonitoredMessagePayload({ finalText, image, useLinkPreview = false, linkPreview = null }) {
+export function buildMonitoredMessagePayload({ finalText, image, useLinkPreview = false, linkPreview = null, externalAdReply = null }) {
   const textPayload = { text: String(finalText || '') }
-  if (useLinkPreview && linkPreview && typeof linkPreview === 'object') {
+  if (useLinkPreview && externalAdReply && typeof externalAdReply === 'object') {
+    // externalAdReply com renderLargerThumbnail força o card grande no cliente
+    // WhatsApp. linkPreview=null evita o card compacto padrão em paralelo.
+    textPayload.linkPreview = null
+    textPayload.contextInfo = { externalAdReply }
+  } else if (useLinkPreview && linkPreview && typeof linkPreview === 'object') {
     textPayload.linkPreview = linkPreview
   }
   const textSendOptions = useLinkPreview ? { generateHighQualityLinkPreview: true } : undefined

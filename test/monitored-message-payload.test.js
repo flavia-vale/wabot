@@ -66,6 +66,30 @@ test('payload monitorado em modo preview pode injetar metadados manuais do card'
   assert.deepEqual(payload.fallbacks, [])
 })
 
+test('payload monitorado em modo preview grande usa externalAdReply e desativa card compacto', () => {
+  const finalText = 'Oferta convertida https://afiliado.example/produto'
+  const externalAdReply = {
+    title: 'Produto em oferta',
+    body: 'Por: R$ 62,90',
+    sourceUrl: 'https://afiliado.example/produto',
+    mediaType: 1,
+    renderLargerThumbnail: true,
+    thumbnail: Buffer.from('thumb'),
+  }
+  const payload = buildMonitoredMessagePayload({
+    finalText,
+    image: null,
+    useLinkPreview: true,
+    externalAdReply,
+  })
+
+  assert.equal(payload._route, 'text')
+  assert.equal(payload.primary.linkPreview, null)
+  assert.deepEqual(payload.primary.contextInfo, { externalAdReply })
+  assert.deepEqual(payload.primarySendOptions, { generateHighQualityLinkPreview: true })
+  assert.deepEqual(payload.fallbacks, [])
+})
+
 test('guarda rejeita externalAdReply para evitar novo drop silencioso em mensagens monitoradas', () => {
   assert.throws(
     () => __monitoredPayloadInternals.assertNoExternalAdReply({

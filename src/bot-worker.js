@@ -1077,6 +1077,21 @@ function derivePreviewDescriptionFromText(text) {
   return lines.slice(1, 4).join(' • ') || lines[0] || ''
 }
 
+function buildLargePreviewAdReply(linkPreview) {
+  if (!linkPreview || typeof linkPreview !== 'object') return null
+  const sourceUrl = linkPreview['canonical-url'] || linkPreview['matched-text']
+  if (!isHttpUrl(sourceUrl)) return null
+  return {
+    title: linkPreview.title || 'Oferta',
+    body: linkPreview.description || '',
+    sourceUrl,
+    mediaType: 1,
+    renderLargerThumbnail: true,
+    showAdAttribution: false,
+    ...(linkPreview.jpegThumbnail ? { thumbnail: linkPreview.jpegThumbnail } : {}),
+  }
+}
+
 async function buildManualLinkPreview({ text, primary, credentialsMap }) {
   const matchedText = isHttpUrl(primary?.converted) ? primary.converted : (isHttpUrl(primary?.url) ? primary.url : '')
   if (!matchedText) return null
@@ -1645,8 +1660,10 @@ async function startBotInner() {
     keepAliveIntervalMs: WA_KEEPALIVE_INTERVAL_MS,
     // Necessário para o Baileys montar previews grandes de URL. Sem isso,
     // mensagens textuais com link podem sair como texto puro mesmo quando
-    // buildMonitoredMessagePayload pede linkPreview.
+    // buildMonitoredMessagePayload pede linkPreview. A largura maior ajuda
+    // quando o fallback for o preview padrão do Baileys/WhatsApp.
     generateHighQualityLinkPreview: true,
+    linkPreviewImageThumbnailWidth: Number(process.env.WA_LINK_PREVIEW_THUMBNAIL_WIDTH || 800),
     logger: instrumentBaileysLoggerForHealth(logger.child({ name: 'baileys' })),
   })
 
@@ -2696,11 +2713,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               primary,
               credentialsMap: cfg.credentials,
             })
+            const externalAdReply = buildLargePreviewAdReply(linkPreview)
             return buildMonitoredMessagePayload({
               finalText: variantText,
               image: null,
               useLinkPreview: true,
               linkPreview,
+              externalAdReply,
             })
           }
 
