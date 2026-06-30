@@ -8,6 +8,13 @@ DASHBOARD_DIR="$ROOT_DIR/dashboard"
 BRANCH="${BRANCH:-main}"
 FORCE_RESET_ON_SYNC="${FORCE_RESET_ON_SYNC:-0}"
 DASHBOARD_PORT="${DASHBOARD_PORT:-3000}"
+# A blindagem das sessões WhatsApp depende de o bot-supervisor continuar vivo
+# enquanto a API/dashboard são reciclados. Mesmo quando há migration pendente,
+# o default é NÃO parar o supervisor: se ele estiver em modo remote, parar esse
+# PM2 mata os bot-workers filhos e derruba as conexões Baileys dos clientes.
+# Só use 0 numa janela explícita de manutenção/cutover em que queda das sessões
+# seja aceitável.
+PRESERVE_SUPERVISOR_DURING_MIGRATION="${PRESERVE_SUPERVISOR_DURING_MIGRATION:-1}"
 
 # APP_ENV precisa existir no ambiente do BUILD, não só no runtime do PM2.
 # O Next.js avalia next.config headers() em tempo de `npm run build` e grava
@@ -341,12 +348,19 @@ if npx prisma migrate status 2>&1 | grep -q "Database schema is up to date"; the
   echo "  Nenhuma migration pendente — pulando migrate deploy."
 else
   # Há migration pendente. DDL como ALTER TABLE precisa de lock exclusivo no
-  # SQLite — incompatível com processos segurando conexões WAL. Paramos todos
-  # os PM2 versionados que importam Prisma antes de migrar e religamos os
-  # serviços long-running logo depois.
+  # SQLite — incompatível com processos segurando conexões WAL. A API e o cron
+  # podem ser parados na janela de deploy, mas o bot-supervisor é o dono das
+  # sessões WhatsApp em modo remote; pará-lo aqui desfaz a blindagem prometida
+  # ("deploy da API não derruba sessões"). Por isso ele é preservado por
+  # default e o migrate usa retry/backoff se houver lock transitório.
   echo "  Migrations pendentes — parando processos que travam o banco..."
   stop_app_for_migration_prod "api" 1
-  stop_app_for_migration_prod "bot-supervisor" 1
+  if [[ "$PRESERVE_SUPERVISOR_DURING_MIGRATION" == "1" ]]; then
+    echo "    - bot-supervisor preservado (PRESERVE_SUPERVISOR_DURING_MIGRATION=1) para manter sessões WhatsApp ativas"
+  else
+    echo "    - ATENÇÃO: parando bot-supervisor por override explícito; sessões WhatsApp podem cair"
+    stop_app_for_migration_prod "bot-supervisor" 1
+  fi
   stop_app_for_migration_prod "snapshot-cron" 0
 
   migrate_attempt=0
@@ -396,16 +410,27 @@ cd "$DASHBOARD_DIR"
 echo "[6/9] Return to project root"
 cd "$ROOT_DIR"
 
-echo "[7/9] Sync PM2 daemon/runtime (best effort)"
-if command -v pm2 >/dev/null 2>&1; then
+echo "[7/9] Verificando PM2 sem reciclar daemon"
+if ! command -v pm2 >/dev/null 2>&1; then
+  echo "ERRO: pm2 não encontrado no PATH."
+  exit 1
+fi
+
+# `pm2 update` faz stop/delete de TODOS os apps, para o daemon e restaura o
+# dump.pm2. Em produção isso reinicia `bot-supervisor` e mata os bot-workers
+# filhos — exatamente o oposto da blindagem remote. Só permita em janela manual
+# explícita, ciente de que as sessões WhatsApp podem reconectar/cair.
+if [[ "${PM2_UPDATE_DURING_DEPLOY:-0}" == "1" ]]; then
+  echo "  ATENÇÃO: PM2_UPDATE_DURING_DEPLOY=1 — pm2 update recicla o daemon e pode derrubar sessões WhatsApp."
   pm2 update >/tmp/wabot_pm2_update.log 2>&1 || {
     echo "  Aviso: pm2 update falhou; seguindo com restart padrão."
     tail -n 20 /tmp/wabot_pm2_update.log || true
   }
 else
-  echo "ERRO: pm2 não encontrado no PATH."
-  exit 1
+  echo "  Pulando pm2 update para preservar bot-supervisor e sessões WhatsApp."
 fi
+
+SUPERVISOR_PID_BEFORE="$(pm2 pid bot-supervisor 2>/dev/null | tail -n 1 | tr -d '[:space:]' || true)"
 
 echo "[7b/9] Restart PM2 apps"
 recreate_frontend_pm2_app "dashboard" "$DASHBOARD_PORT"
@@ -420,6 +445,23 @@ if [[ "${RESTART_SUPERVISOR:-0}" == "1" ]]; then
   pm2 restart bot-supervisor --update-env
 else
   echo "  bot-supervisor preservado. Sessões WhatsApp continuam ativas."
+fi
+
+SUPERVISOR_PID_AFTER="$(pm2 pid bot-supervisor 2>/dev/null | tail -n 1 | tr -d '[:space:]' || true)"
+if [[ "${RESTART_SUPERVISOR:-0}" != "1" && -n "$SUPERVISOR_PID_BEFORE" && "$SUPERVISOR_PID_BEFORE" != "$SUPERVISOR_PID_AFTER" ]]; then
+  echo "ERRO: bot-supervisor reiniciou durante o deploy (${SUPERVISOR_PID_BEFORE} -> ${SUPERVISOR_PID_AFTER})."
+  echo "Isso quebra a blindagem WhatsApp; investigue comandos PM2 que reciclam o daemon/processo."
+  exit 1
+fi
+
+API_PID_AFTER="$(pm2 pid api 2>/dev/null | tail -n 1 | tr -d '[:space:]' || true)"
+if [[ -n "$API_PID_AFTER" ]]; then
+  API_OWNED_WORKERS="$(ps -eo pid=,ppid=,cmd= | awk -v api="$API_PID_AFTER" '$2 == api && $0 ~ /\/home\/deploy\/wabot\/src\/bot-worker\.js/ { print }' || true)"
+  if [[ -n "$API_OWNED_WORKERS" ]]; then
+    echo "ERRO: há bot-worker de produção filho da API; modo remote não está efetivo:"
+    echo "$API_OWNED_WORKERS"
+    exit 1
+  fi
 fi
 
 echo "[8/9] PM2 status"

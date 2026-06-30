@@ -14,6 +14,11 @@ API_APP="${API_APP:-api-staging}"
 VISUAL_BASE_URL="${VISUAL_BASE_URL:-http://178.105.54.0:3006}"
 VISUAL_PORT="${VISUAL_PORT:-3006}"
 API_BASE_URL="${API_BASE_URL:-http://127.0.0.1:3004}"
+# Em janela de teste do cutover, staging também pode rodar em modo remote.
+# Nesse cenário, parar bot-supervisor-staging durante migrations mata os
+# bot-workers filhos e invalida justamente o teste de que deploy da API não
+# derruba WhatsApp. Preserve por default; use 0 só em manutenção explícita.
+PRESERVE_SUPERVISOR_DURING_MIGRATION="${PRESERVE_SUPERVISOR_DURING_MIGRATION:-1}"
 
 # APP_ENV precisa existir no ambiente do BUILD do Next (headers() é avaliado em
 # `npm run build` e gravado no routes-manifest). Staging é HTTP, então força
@@ -451,13 +456,19 @@ if npx prisma migrate status 2>&1 | grep -q "Database schema is up to date"; the
   echo "  Nenhuma migration pendente — pulando migrate deploy."
 else
   # Há migration pendente. DDL como ALTER TABLE precisa de lock exclusivo no
-  # SQLite — incompatível com processos segurando conexões WAL. Paramos todos
-  # os PM2 versionados que importam Prisma antes de migrar e religamos logo
-  # depois. Janela de indisponibilidade ~10-30s; aceitável por ser staging e
-  # por só acontecer quando realmente há migration pendente.
+  # SQLite — incompatível com processos segurando conexões WAL. A API staging
+  # pode ser parada na janela de deploy, mas o supervisor é preservado por
+  # default para não derrubar sessões quando staging está em modo remote durante
+  # testes de cutover. O migrate abaixo já usa retry/backoff contra locks
+  # transitórios.
   echo "  Migrations pendentes — parando processos que travam o banco..."
   stop_app_for_migration "$API_APP"
-  stop_app_for_migration "$SUPERVISOR_APP_FOR_MIGRATION"
+  if [[ "$PRESERVE_SUPERVISOR_DURING_MIGRATION" == "1" ]]; then
+    echo "    - $SUPERVISOR_APP_FOR_MIGRATION preservado (PRESERVE_SUPERVISOR_DURING_MIGRATION=1) para manter sessões WhatsApp ativas"
+  else
+    echo "    - ATENÇÃO: parando $SUPERVISOR_APP_FOR_MIGRATION por override explícito; sessões WhatsApp podem cair"
+    stop_app_for_migration "$SUPERVISOR_APP_FOR_MIGRATION"
+  fi
 
   migrate_attempt=0
   until npx prisma migrate deploy; do
