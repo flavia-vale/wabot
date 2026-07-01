@@ -49,7 +49,7 @@ import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
 import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, registerStableCloseAndDecide } from './core/reconnectPolicy.js'
-import { buildAuthResetSessionPatch, buildCloseSessionPatch } from './core/sessionPersistencePolicy.js'
+import { buildAuthResetSessionPatch, buildCloseSessionPatch, computeHeartbeatState } from './core/sessionPersistencePolicy.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
 import { calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
@@ -193,6 +193,23 @@ function normalizeJidForMatch(jid) {
 let activeSock = null
 let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
 let shuttingDown = false
+// Timestamp (Date.now()) até quando uma reconexão automática já está agendada
+// (setTimeout(startBot, ...) pendente). Existe um intervalo real entre o close
+// (activeSock/pendingSock viram null) e o próximo startBot() de fato criar um
+// socket novo — de 5s (delay mínimo) a até 30min (cooldown de quedas estáveis/
+// flap/replaced). Sem isso o heartbeat (persistWorkerHeartbeat) via de tratar
+// esse intervalo como 'idle' e sobrescrever o status 'connecting' que o close
+// setou de propósito, fazendo o painel mostrar "desconectado" numa sessão que
+// vai se reconectar sozinha. Não é setado quando o close é terminal (logout,
+// reset de auth por badSession, ou pairing pré-código) — nesses casos o
+// próximo startBot só ocorre por ação do usuário, então 'idle'/disconnected
+// está correto.
+let reconnectDeadlineMs = 0
+
+function scheduleReconnect(delayMs) {
+  reconnectDeadlineMs = Date.now() + Math.max(0, delayMs)
+  setTimeout(startBot, delayMs)
+}
 
 // Pairing-by-phone-number mode. Ativado pela IPC 'requestPairingCode'.
 // Enquanto active=true:
@@ -272,7 +289,11 @@ function startHeartbeatIpc() {
   if (heartbeatTimer) return
   const intervalMs = Math.max(Number(process.env.WA_HEARTBEAT_INTERVAL_MS || 15000), 5000)
   heartbeatTimer = setInterval(() => {
-    const state = activeSock ? 'connected' : (pendingSock ? 'connecting' : 'idle')
+    const state = computeHeartbeatState({
+      hasActiveSock: Boolean(activeSock),
+      hasPendingSock: Boolean(pendingSock),
+      hasReconnectScheduled: Date.now() < reconnectDeadlineMs,
+    })
     if (process.send) process.send({ type: 'heartbeat', ts: Date.now(), state })
     void persistWorkerHeartbeat(state)
   }, intervalMs)
@@ -1716,7 +1737,7 @@ async function startBot() {
       const delayMs = calcReconnectDelayMs()
       reconnectAttempts++
       logger.error({ err: err?.message, attempt: reconnectAttempts, delayMs }, 'startBotInner falhou antes de criar socket; reagendando reconexão')
-      setTimeout(startBot, delayMs)
+      scheduleReconnect(delayMs)
     }
   } finally {
     startBotInFlight = false
@@ -1939,7 +1960,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // completar o handshake pós-pairing e chegar em connection: 'open'.
         logger.info({ code }, 'Pairing aceito pelo WA (restartRequired 515) — reiniciando com creds novas')
         pairingState.clear()
-        setTimeout(startBot, 500)
+        scheduleReconnect(500)
       } else if (wasPairing) {
         // Diferencia dois sub-casos:
         //   a) código ainda não chegou ao usuário (pairingState.code == null):
@@ -1957,7 +1978,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           pairingState.clear()
           const delayMs = calcReconnectDelayMs()
           reconnectAttempts++
-          setTimeout(startBot, delayMs)
+          scheduleReconnect(delayMs)
         } else {
           // Código ainda não foi mostrado — NÃO auto-reiniciar. Se o usuário
           // falhar em colar o código a tempo, a UI chamará novamente o endpoint.
@@ -1988,7 +2009,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         } else {
           logger.warn({ code, replacedCount: r.count, delayMs }, 'WA conexão substituída (replaced/440) — cooldown longo para evitar ping-pong')
         }
-        setTimeout(startBot, delayMs)
+        scheduleReconnect(delayMs)
       } else {
         // Close genérico (500 badSession, 428, 408, 515 fora de pairing, ...).
         // Dois males históricos tratados aqui:
@@ -2069,7 +2090,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           reconnectAttempts++
           logger.warn({ code, attempt: reconnectAttempts, delayMs }, 'WA conexão fechada, agendando restart automático')
         }
-        setTimeout(startBot, delayMs)
+        scheduleReconnect(delayMs)
       }
     }
   })
