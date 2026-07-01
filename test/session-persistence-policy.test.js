@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildAuthResetSessionPatch, buildCloseSessionPatch } from '../src/core/sessionPersistencePolicy.js'
+import { buildAuthResetSessionPatch, buildCloseSessionPatch, computeHeartbeatState } from '../src/core/sessionPersistencePolicy.js'
 
 test('close transitório fica resumível para blindar sessões ativas', () => {
   const now = new Date('2026-06-30T12:00:00.000Z')
@@ -28,4 +28,32 @@ test('reset explícito de auth marca necessidade de reparar sem parecer queda tr
   assert.equal(patch.lifecycle, 'auth_reset_required')
   assert.equal(patch.lastDisconnectCode, '500')
   assert.equal(patch.ownerInstance, 'worker-1')
+})
+
+test('computeHeartbeatState: socket ativo é sempre connected', () => {
+  assert.equal(
+    computeHeartbeatState({ hasActiveSock: true, hasPendingSock: false, hasReconnectScheduled: false }),
+    'connected',
+  )
+})
+
+test('computeHeartbeatState: socket pendente (handshake em curso) é connecting', () => {
+  assert.equal(
+    computeHeartbeatState({ hasActiveSock: false, hasPendingSock: true, hasReconnectScheduled: false }),
+    'connecting',
+  )
+})
+
+test('computeHeartbeatState: reconexão automática agendada NÃO pode virar idle (bug do falso offline)', () => {
+  assert.equal(
+    computeHeartbeatState({ hasActiveSock: false, hasPendingSock: false, hasReconnectScheduled: true }),
+    'connecting',
+  )
+})
+
+test('computeHeartbeatState: sem socket e sem reconexão agendada é idle de verdade', () => {
+  assert.equal(
+    computeHeartbeatState({ hasActiveSock: false, hasPendingSock: false, hasReconnectScheduled: false }),
+    'idle',
+  )
 })
