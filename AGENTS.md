@@ -589,7 +589,7 @@ enquanto o socket Baileys pisca":
 do worker (`persistWorkerHeartbeat`, `src/bot-worker.js`) calculava seu próprio
 status olhando só `activeSock`/`pendingSock` — e no intervalo real entre um
 close transitório e o próximo `startBot()` reconectar de fato (5s no caso
-comum, até 30min em cooldowns de flap/quedas-estáveis/replaced), os dois ficam
+comum, até 5min em cooldowns de flap/quedas-estáveis/replaced), os dois ficam
 `null`. Isso sobrescrevia para `disconnected` o `connecting` que
 `buildCloseSessionPatch` (`src/core/sessionPersistencePolicy.js`) já grava de
 propósito em qualquer close não-terminal. Fix: `scheduleReconnect()` centraliza
@@ -598,16 +598,29 @@ reporta `idle` se NÃO há reconexão agendada.
 
 **2. Válvula de segurança contra loop escondido do cliente.** O fix acima
 sozinho criava um risco oposto: cooldowns encadeados (flap → replaced →
-stable-close, até 30min cada) mantêm `hasReconnectScheduled=true`
-continuamente, então o cliente NUNCA veria "desconectado" mesmo preso num loop
-por dezenas de minutos. `disconnectedSinceMs` (`src/bot-worker.js`) marca a
-1ª vez que a sessão sai de `connected` (não reseta a cada retry dentro do
-mesmo episódio) e o heartbeat "desiste" de esconder depois de
-`WA_HEARTBEAT_MAX_RECONNECTING_MS` (default 5min, `computeHeartbeatState` em
-`sessionPersistencePolicy.js`) — reportando `idle`→`disconnected` mesmo com
-reconexão ainda agendada. O worker CONTINUA tentando reconectar sozinho (essa
-válvula só afeta o que é mostrado, não a lógica de retry); se reconectar depois
-do teto, o próximo `open` volta a marcar `connected` normalmente.
+stable-close) mantêm `hasReconnectScheduled=true` continuamente, então o
+cliente NUNCA veria "desconectado" mesmo preso num loop por dezenas de
+minutos. `disconnectedSinceMs` (`src/bot-worker.js`) marca a 1ª vez que a
+sessão sai de `connected` (não reseta a cada retry dentro do mesmo episódio) e
+o heartbeat "desiste" de esconder depois de `WA_HEARTBEAT_MAX_RECONNECTING_MS`
+(default 5min, `computeHeartbeatState` em `sessionPersistencePolicy.js`) —
+reportando `idle`→`disconnected` mesmo com reconexão ainda agendada. O worker
+CONTINUA tentando reconectar sozinho (essa válvula só afeta o que é mostrado,
+não a lógica de retry); se reconectar depois do teto, o próximo `open` volta a
+marcar `connected` normalmente.
+
+**Importante — durante qualquer cooldown de reconexão o bot está DE FATO fora
+do ar** (sem socket ativo, nada é recebido nem espelhado), não é só um detalhe
+de status no painel. Por isso `RECONNECT_STABLE_CLOSE_COOLDOWN_MS` (o cooldown
+mais longo, para quedas "tipo relógio" de sessão estável) foi reduzido de 30min
+para **5min** (2026-07) — 30min de indisponibilidade repetida era caro demais
+só para conter uma notificação de re-sync que aparece apenas no celular do
+dono da conta (não afeta os grupos). 5min também é o valor de
+`WA_HEARTBEAT_MAX_RECONNECTING_MS` acima, de propósito: é o mesmo instante em
+que o painel passa a avisar o cliente. `RECONNECT_REPLACED_DELAY_MS` (cooldown
+de double-possession) já usa `RECONNECT_MAX_MS` (5min por padrão) — mesma
+ordem de grandeza. Só `RECONNECT_FLAP_COOLDOWN_MS` (2min) fica abaixo, o que é
+esperado (flapping é o caso mais curto/menos grave).
 
 **3. Painel não pode mascarar o status honesto.** `dashboard/app/painel/whatsapp/page.js`
 tinha `isBootstrappingSession = isRunning && !isConnected && status === 'disconnected'`
