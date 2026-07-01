@@ -31,6 +31,8 @@ import { persistCredentialPatch } from './credentialPatch.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode, findUnserializableField } from './sendQueueBackend.js'
 import { withSendTimeout as withSendTimeoutImpl } from './sendMessageTimeout.js'
+import { buildStableSendMessageId } from './core/stableMessageId.js'
+import { resolveSendTimeoutOverrideMs, resolveSendTimeoutMs as resolveSendTimeoutMsPure, DEFAULT_SEND_TIMEOUT_BY_ATTEMPT_MS } from './core/sendTimeout.js'
 import { detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
 import { getChannelMetadata, followChannel, listFollowedChannels } from './core/channelDirectory.js'
@@ -728,12 +730,14 @@ const SHUTDOWN_DRAIN_TIMEOUT_MS = Math.max(0, envNumber('SHUTDOWN_DRAIN_TIMEOUT_
 // Política por tentativa: 1ª paciente (gera link preview, mídia hospedada,
 // rede pode oscilar), demais rápidas para liberar a fila. Configurável via
 // env caso precise uniformizar em incidentes — caem todos no mesmo valor.
-const SEND_MESSAGE_TIMEOUT_MS = Math.max(5_000, envNumber('SEND_MESSAGE_TIMEOUT_MS', 0)) || null
-const SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS = [90_000, 60_000, 45_000]
+// Override uniforme opcional; vazio/0 => null para cair no array por-tentativa.
+// (Lógica pura em core/sendTimeout.js — corrige o bug em que a expressão antiga
+// `Math.max(5000, envNumber(...,0)) || null` devolvia 5000 SEMPRE, travando
+// todo envio em 5s e deixando o array [90,60,45]s morto.)
+const SEND_MESSAGE_TIMEOUT_MS = resolveSendTimeoutOverrideMs(process.env.SEND_MESSAGE_TIMEOUT_MS)
+const SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS = DEFAULT_SEND_TIMEOUT_BY_ATTEMPT_MS
 function resolveSendTimeoutMs(attempt) {
-  if (SEND_MESSAGE_TIMEOUT_MS) return SEND_MESSAGE_TIMEOUT_MS
-  const idx = Math.max(0, Math.min(SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS.length - 1, (attempt || 1) - 1))
-  return SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS[idx]
+  return resolveSendTimeoutMsPure(attempt, { overrideMs: SEND_MESSAGE_TIMEOUT_MS, byAttempt: SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS })
 }
 const DEST_RATE_LIMIT_MS = Math.max(0, envNumber('DEST_RATE_LIMIT_MS', 1_000))
 const SMART_DELAY_PROGRESSIVE_THRESHOLD = Math.max(1, envNumber('SMART_DELAY_PROGRESSIVE_THRESHOLD', 20))
@@ -1265,9 +1269,20 @@ function resolveChannelForward(postDetail) {
 }
 
 async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
+  // messageId ESTÁVEL por job (derivado do logId), reutilizado em TODAS as rotas
+  // e tentativas: o WhatsApp deduplica no servidor pela key.id, então um
+  // timeout/Connection Closed que já entregou não vira duplicata quando o
+  // retry/fallback reenvia. null => Baileys gera o id normalmente (comportamento
+  // histórico) quando não há logId.
+  const stableMessageId = buildStableSendMessageId(job.logId)
+  const sendOptionsWith = (opts) => {
+    if (!stableMessageId) return opts || undefined
+    return { ...(opts || {}), messageId: stableMessageId }
+  }
+
   if (payload && payload._route === 'relay' && payload.relay?.type && payload.relay?.proto) {
     await withSendTimeout(
-      sock.relayMessage(job.destJid, { [payload.relay.type]: payload.relay.proto }, {}),
+      sock.relayMessage(job.destJid, { [payload.relay.type]: payload.relay.proto }, stableMessageId ? { messageId: stableMessageId } : {}),
       { destJid: job.destJid, route: 'relay', attempt },
     )
     return
@@ -1293,7 +1308,7 @@ async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
       const route = routes[i]
       try {
         await withSendTimeout(
-          sock.sendMessage(job.destJid, route.body, route.sendOptions || undefined),
+          sock.sendMessage(job.destJid, route.body, sendOptionsWith(route.sendOptions)),
           { destJid: job.destJid, route: i === 0 ? 'primary' : `fallback[${i - 1}]`, attempt },
         )
         return
@@ -1308,7 +1323,7 @@ async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
   }
 
   await withSendTimeout(
-    sock.sendMessage(job.destJid, payload),
+    sock.sendMessage(job.destJid, payload, sendOptionsWith()),
     { destJid: job.destJid, route: 'default', attempt },
   )
 }
@@ -2611,15 +2626,14 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         destIndex++
         // Botão "Ver canal" definido pelo GRUPO DE DESTINO (ou null = sem botão).
         const channelForward = resolveChannelForward(cfg.groups.postDetails.find(g => g.waJid === destJid))
-        // Segurança anti-duplicação por destino. Precisamos guardar DUAS chaves:
-        // - primary.url: link upstream estável. Bloqueia a mesma mensagem da fonte
-        //   repostada logo depois, mesmo que o conversor gere outro shortlink.
-        // - primary.converted: link final. Bloqueia fontes diferentes que caiam no
-        //   mesmo link afiliado.
-        const fallbackDedupSubject = `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
-        const dedupSubjects = [...new Set([primary.url, primary.converted, fallbackDedupSubject].filter(Boolean))]
-        const dedupKeys = dedupSubjects.map(subject => `${destJid}:${subject}`)
-        if (dedupKeys.some(key => dedup.links[key] && Date.now() - dedup.links[key] < linkDedupWindowMs)) {
+        // Chave de dedup por DESTINO: prefere o link CONVERTIDO (nosso afiliado),
+        // que é estável por produto, em vez de primary.url (link de origem do
+        // upstream, que rotaciona a cada repostagem — deixando a mesma oferta
+        // passar de novo). Alinha com a intenção documentada em `linkDedupWindowMs`.
+        // Fallback para o link de origem e, por fim, msgId:texto quando não há link.
+        const dedupSubject = primary.converted || primary.url || `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
+        const key = `${destJid}:${dedupSubject}`
+        if (dedup.links[key] && Date.now() - dedup.links[key] < linkDedupWindowMs) {
           await registerDedupBlock({
             reason: 'skip:dedup_recent_link',
             platform: primary.platform,
