@@ -74,8 +74,8 @@ function Nav() {
   );
 }
 
-export function Hero({ tone, primaryCtaLabel = 'Conectar meu WhatsApp', eyebrowLabel = 'Experimente grátis!', headlineOverride, subOverride, heroStyle }) {
-  const heroPrimaryHref = buildRegisterHref({ source: 'landing', campaign: 'home-hero', content: 'hero-primary' })
+export function Hero({ tone, primaryCtaLabel = 'Conectar meu WhatsApp', eyebrowLabel = 'Experimente grátis!', headlineOverride, subOverride, heroStyle, affiliateCode = '' }) {
+  const heroPrimaryHref = buildRegisterHref({ source: 'landing', campaign: 'home-hero', content: 'hero-primary', aff: affiliateCode })
   const headline = headlineOverride ?? (tone === 'direto'
     ? <><span>Ofertas conferidas,</span><br /><span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>rotina organizada.</span></>
     : tone === 'animado'

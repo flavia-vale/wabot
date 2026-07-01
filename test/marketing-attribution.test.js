@@ -40,3 +40,27 @@ test('shouldSuppressConversionPrompt blocks critical flows only', () => {
   assert.equal(shouldSuppressConversionPrompt('/privacidade'), true)
   assert.equal(shouldSuppressConversionPrompt('/blog/conferir-converter-link-afiliado-whatsapp'), false)
 })
+
+test('buildRegisterHref preserva código de afiliado no link de cadastro', () => {
+  const href = buildRegisterHref({
+    source: 'landing',
+    campaign: 'home-hero',
+    content: 'hero-primary',
+    aff: 'abc123',
+  })
+
+  const url = new URL(href, 'https://espelhagrupos.com.br')
+  assert.equal(url.pathname, '/login')
+  assert.equal(url.searchParams.get('mode'), 'register')
+  assert.equal(url.searchParams.get('aff'), 'abc123')
+  assert.equal(url.searchParams.get('utm_campaign'), 'home-hero')
+})
+
+test('readAttributionFromSearchParams mantém aff vindo da landing', () => {
+  const params = new URLSearchParams('mode=register&aff=AFILIADO42&utm_source=landing&utm_medium=organic')
+  const attribution = readAttributionFromSearchParams(params)
+  assert.equal(attribution.aff, 'AFILIADO42')
+  assert.equal(attribution.utm_source, 'landing')
+  assert.equal(attribution.utm_medium, 'organic')
+  assert.equal(attribution.source, 'landing')
+})

@@ -9,7 +9,9 @@ import Footer, { FinalCTA } from '@/components/landing/Footer'
 import { IntroCard, RulesCard } from '@/components/landing/IntroCard'
 import { BRAND_NAME, BRAND_SHORT_NAME, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS, CORE_FAQ_ITEMS } from '@/lib/marketing-content'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
+import { AffiliateLandingTracker } from '@/components/marketing/AffiliateLandingTracker'
 import { selectHomeHeroVariant } from '@/lib/cro-experiments'
+import { sanitizeAttributionValue } from '@/lib/marketing-attribution'
 
 export const metadata = {
   title: 'BOTinho | Bot para Afiliados no WhatsApp',
@@ -62,23 +64,27 @@ function buildHomeJsonLd() {
 }
 
 
-export default function LandingPage({ searchParams = {} }) {
-  const { variant, tone } = selectHomeHeroVariant(searchParams)
+export default async function LandingPage({ searchParams = {} }) {
+  const params = await searchParams
+  const rawAffiliateCode = Array.isArray(params?.aff) ? params.aff[0] : params?.aff
+  const affiliateCode = sanitizeAttributionValue(rawAffiliateCode, 96).toUpperCase()
+  const { variant, tone } = selectHomeHeroVariant(params)
   const jsonLd = buildHomeJsonLd()
   return (
     <div className="landing-root">
       <OrganicPageTracker route={{ slug: 'home', path: '/', cluster: 'homepage', intent: 'commercial', template: 'landing', variant }} />
+      <AffiliateLandingTracker affiliateCode={affiliateCode} />
       {jsonLd.map((schema) => (
         <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
       ))}
-      <Hero tone={tone} />
+      <Hero tone={tone} affiliateCode={affiliateCode} />
       <ProductDefinition />
       <How />
       <Features />
       <Social />
-      <Pricing />
+      <Pricing affiliateCode={affiliateCode} />
       <FAQ />
-      <FinalCTA />
+      <FinalCTA affiliateCode={affiliateCode} />
       <Footer />
     </div>
   )

@@ -8,6 +8,7 @@ export const ATTRIBUTION_QUERY_KEYS = [
   'utm_content',
   'utm_term',
   'ref',
+  'aff',
   'conversion_prompt_id',
   'conversion_prompt_variant',
 ]
@@ -35,6 +36,7 @@ export function buildRegisterHref({
   content = '',
   term = '',
   ref = '',
+  aff = '',
   conversionPromptId = '',
   conversionPromptVariant = '',
   extra = {},
@@ -47,6 +49,7 @@ export function buildRegisterHref({
   setIfPresent(params, 'utm_content', content)
   setIfPresent(params, 'utm_term', term)
   setIfPresent(params, 'ref', ref)
+  setIfPresent(params, 'aff', aff)
   setIfPresent(params, 'conversion_prompt_id', conversionPromptId)
   setIfPresent(params, 'conversion_prompt_variant', conversionPromptVariant)
 

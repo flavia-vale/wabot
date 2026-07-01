@@ -120,6 +120,46 @@ function StatCard({ label, value, helper = null }) {
   )
 }
 
+function ReferralLinkCard({ tone = 'emerald', title, description, link, buttonLabel, copied, onCopy }) {
+  const toneClasses = tone === 'sky'
+    ? {
+        shell: 'border-sky-200 bg-sky-50',
+        eyebrow: 'text-sky-700',
+        code: 'border-sky-200',
+        button: 'bg-sky-600 hover:bg-sky-700',
+        helper: 'text-sky-700',
+      }
+    : {
+        shell: 'border-emerald-200 bg-emerald-50',
+        eyebrow: 'text-emerald-700',
+        code: 'border-emerald-200',
+        button: 'bg-emerald-600 hover:bg-emerald-700',
+        helper: 'text-emerald-700',
+      }
+
+  return (
+    <div className={`rounded-2xl border p-4 shadow-sm ${toneClasses.shell}`}>
+      <p className={`text-xs font-black uppercase tracking-[0.16em] ${toneClasses.eyebrow}`}>{title}</p>
+      <p className="mt-1 text-sm leading-6 text-gray-700">{description}</p>
+      <div className="mt-3 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+        <code className={`w-full min-w-0 flex-1 rounded-xl border bg-white px-3 py-2 text-sm text-gray-800 break-all ${toneClasses.code}`}>
+          {link}
+        </code>
+        <button
+          type="button"
+          onClick={onCopy}
+          className={`min-h-11 w-full rounded-xl px-3 py-2 text-sm font-bold text-white transition sm:w-auto whitespace-nowrap ${toneClasses.button}`}
+        >
+          {copied ? 'Copiado!' : buttonLabel}
+        </button>
+      </div>
+      <p className={`mt-2 text-xs leading-5 ${toneClasses.helper}`}>
+        O código do afiliado é preservado automaticamente até o cadastro.
+      </p>
+    </div>
+  )
+}
+
 const MONTH_STATUS_LABELS = {
   paid: { label: 'Pago', className: 'bg-emerald-100 text-emerald-700' },
   approved: { label: 'Aprovado', className: 'bg-blue-100 text-blue-700' },
@@ -302,7 +342,7 @@ function PixEditForm({ profile, onUpdated }) {
 
 export default function AffiliatePage() {
   const [data, setData] = useState(undefined)
-  const [copied, setCopied] = useState(false)
+  const [copiedLink, setCopiedLink] = useState('')
   const [showPixEdit, setShowPixEdit] = useState(false)
 
   function loadData() {
@@ -386,26 +426,50 @@ export default function AffiliatePage() {
   }
 
   const affiliateLink = `https://espelhagrupos.com.br/cadastro?aff=${profile.code}`
+  const affiliateLandingLink = `https://espelhagrupos.com.br/?aff=${profile.code}`
   const { stats = {}, months = [] } = data
+  const handleCopyLink = (key, link) => {
+    copyToClipboard(link, () => {
+      setCopiedLink(key)
+      setTimeout(() => setCopiedLink(current => (current === key ? '' : current)), 2000)
+    })
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-4 sm:p-6">
       <h1 className="text-2xl font-black text-gray-900">Programa de Afiliados</h1>
 
-      <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4">
-        <p className="text-xs font-bold uppercase tracking-wide text-emerald-700 mb-2">Seu link de indicação</p>
-        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
-          <code className="w-full min-w-0 flex-1 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800 break-all">
-            {affiliateLink}
-          </code>
-          <button
-            onClick={() => copyToClipboard(affiliateLink, () => { setCopied(true); setTimeout(() => setCopied(false), 2000) })}
-            className="min-h-11 w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 sm:w-auto whitespace-nowrap"
-          >
-            {copied ? 'Copiado!' : 'Copiar'}
-          </button>
+      <div className="space-y-3 rounded-3xl border border-gray-100 bg-white p-4 shadow-sm">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-gray-500">Seus links de indicação</p>
+          <h2 className="mt-1 text-xl font-black text-gray-950">Escolha o link certo para cada divulgação</h2>
+          <p className="mt-1 text-sm leading-6 text-gray-600">
+            Os dois links usam o mesmo código <strong className="font-mono text-gray-900">{profile.code}</strong>. A diferença é o ponto de entrada do cliente.
+          </p>
         </div>
-        <p className="mt-2 break-words text-xs text-emerald-600">Código: <strong className="break-all">{profile.code}</strong> · PIX: <span className="break-all">{profile.pixKey}</span> ({PIX_KEY_TYPE_LABELS[profile.pixKeyType] ?? profile.pixKeyType})</p>
+
+        <ReferralLinkCard
+          title="Link direto para cadastro"
+          description="Use quando a pessoa já decidiu testar o BOTinho. Abre o formulário de registro com seu código aplicado."
+          link={affiliateLink}
+          buttonLabel="Copiar cadastro"
+          copied={copiedLink === 'signup'}
+          onCopy={() => handleCopyLink('signup', affiliateLink)}
+        />
+
+        <ReferralLinkCard
+          tone="sky"
+          title="Link da landing page"
+          description="Use em grupos, bio e conteúdos: a pessoa vê a página completa primeiro e, ao clicar em qualquer botão de cadastro, seu código já vai preenchido."
+          link={affiliateLandingLink}
+          buttonLabel="Copiar landing"
+          copied={copiedLink === 'landing'}
+          onCopy={() => handleCopyLink('landing', affiliateLandingLink)}
+        />
+
+        <p className="break-words text-xs text-gray-500">
+          Código: <strong className="break-all text-gray-800">{profile.code}</strong> · PIX: <span className="break-all">{profile.pixKey}</span> ({PIX_KEY_TYPE_LABELS[profile.pixKeyType] ?? profile.pixKeyType})
+        </p>
       </div>
 
       <AffiliateRulesCard config={affiliateConfig} affiliateLink={affiliateLink} />
