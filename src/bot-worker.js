@@ -748,7 +748,16 @@ const RECONNECT_BADSESSION_RESET_THRESHOLD = envNumber('RECONNECT_BADSESSION_RES
 // reduzir o volume de re-sync sem apagar auth nem exigir re-pareamento.
 const RECONNECT_STABLE_CLOSE_WINDOW_MS = Math.max(30 * 60_000, envNumber('RECONNECT_STABLE_CLOSE_WINDOW_MS', 3 * 60 * 60_000))
 const RECONNECT_STABLE_CLOSE_THRESHOLD = Math.max(2, envNumber('RECONNECT_STABLE_CLOSE_THRESHOLD', 3))
-const RECONNECT_STABLE_CLOSE_COOLDOWN_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_STABLE_CLOSE_COOLDOWN_MS', 30 * 60_000))
+// Era 30min: enquanto o cooldown corre, a sessão fica DE FATO fora do ar (sem
+// socket ativo — nada é recebido nem espelhado), não é só um detalhe de UI. 30min
+// de indisponibilidade repetida é caro demais só para conter uma notificação de
+// re-sync que aparece apenas no celular do próprio dono da conta (não afeta os
+// grupos). Reduzido para 5min — ainda corta a maior parte do volume de
+// reconexões em cadência curta, mas limita o tempo real sem espelhar. Alinhado
+// de propósito com WA_HEARTBEAT_MAX_RECONNECTING_MS (sessionPersistencePolicy.js):
+// esse é também o ponto em que o painel passa a mostrar "desconectado" — então o
+// cliente nunca fica muito tempo pensando que está tudo bem sem estar.
+const RECONNECT_STABLE_CLOSE_COOLDOWN_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_STABLE_CLOSE_COOLDOWN_MS', 5 * 60_000))
 // Keep-alive do socket: sem ping periódico, um socket morto silenciosamente só
 // é detectado tarde, causando reconexão (e nova notificação). 25s é conservador.
 const WA_KEEPALIVE_INTERVAL_MS = Math.max(10_000, envNumber('WA_KEEPALIVE_INTERVAL_MS', 25_000))
