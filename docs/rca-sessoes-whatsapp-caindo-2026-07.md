@@ -11,16 +11,18 @@
   `develop` dispara o deploy, que roda `pm2 restart api-staging`, matando os
   workers → **a sessão de staging cai a cada merge.** É a queda que a usuária
   sente no dia a dia (a sessão dela é a de staging).
-- **PROD está blindado e NÃO está perdendo sessões estabelecidas.** Prod roda em
-  `remote`: os bot-workers são filhos do `bot-supervisor` (não da API), então
-  `pm2 restart api` no deploy não os toca. Evidência de log: `logged out = 0`,
-  `connection closed = 103` (em dias, dominado por handshakes de pareamento),
-  `worker_restart = 0`, `conflict/connectionReplaced = 0`, `Bad MAC = 0`.
-- **O "408" que aparece 14.767x no `bot.log` é ruído benigno**: init-queries do
-  Baileys (`executeInitQueries → fetchProps`) estouram timeout com o socket **de
-  pé** — o erro é engolido e a sessão continua. Não é queda; é o que inflou o
-  `bot.log` para 835MB.
-- A "blindagem" nunca saiu do ar em prod — **ela nunca foi ligada em staging.**
+- **PROD está blindado contra queda por DEPLOY** (modo `remote`: workers são filhos
+  do `bot-supervisor`, `pm2 restart api` não os toca — supervisor uptime 28h/0
+  restarts atravessou o último merge em `main`). **MAS prod TEM um problema real e
+  separado de estabilidade de conexão** (Trilho B abaixo).
+- **CAUSA RAIZ das quedas de cliente em prod (CONFIRMADA 2026-07-01): loop de
+  init-queries 408.** Cada sessão cai ~11–12x/dia (~1 queda/75–90min): toda conexão
+  é seguida 60s depois de `init queries` 408 (`fetchProps` sem resposta do WA) →
+  WA encerra (500/428) → reconexão → repete. Não é deploy, não é memória, não é
+  dupla-posse. É interação Baileys 6.7.21 ↔ protocolo WA. (Correção de análise
+  anterior: o 408 **não** é benigno.)
+- A "blindagem" de deploy nunca saiu do ar em prod — **ela nunca foi ligada em
+  staging** (por isso staging cai a cada merge).
 
 ## Evidência coletada (VPS prod, 2026-07-01)
 
@@ -122,21 +124,45 @@ de dupla-posse mesmo com o supervisor de pé.
 > deploy, subindo staging só durante validação (botão liga/desliga). Não blinda —
 > só convive. **Recomendação: mover para `remote` (blindagem real).**
 
-### TRILHO B — PROD: silenciar o 408 (opcional, RAM-neutro, baixo risco)
+### TRILHO B — PROD: init-queries 408 → queda periódica (CAUSA RAIZ CONFIRMADA, prioridade alta)
 
-O 408 init-queries é ruído benigno (não derruba sessão). Duas opções, validar em
-staging antes de prod:
+**Correção do diagnóstico anterior:** o 408 init-queries **NÃO é benigno**. A
+telemetria de ciclo de vida (2026-07-01) provou que ele derruba as sessões.
 
-- **Reduzir o ruído/os retries** definindo `defaultQueryTimeoutMs` explícito e mais
-  folgado no `makeWASocket` de `src/bot-worker.js:1730` (hoje usa o default do
-  Baileys). Não muda comportamento de sessão; só evita init-queries estourarem por
-  latência VPS↔WA e enchendo o log.
-- **Baixar o nível de log** do erro de init-queries (via
-  `instrumentBaileysLoggerForHealth`, `src/bot-worker.js:929`) para não poluir o
-  `bot.log`. Higiene, não estabilidade.
+**Evidência (hoje, prod):** cada sessão de cliente caiu ~11–12x no dia
+(158808:9, 158811:12, 170219:12, 178384:11), ~1 queda/75–90min. **Toda** conexão
+(`opened connection to WA`) é seguida 60s depois de `unexpected error in 'init
+queries'` (statusCode 408, `executeInitQueries → fetchProps → waitForMessage`), e
+em seguida o WA encerra o stream com code 500/428 → nosso handler reinicia
+(`bot-worker.js:2005-2043`, "Quedas periódicas de sessão WA estável"). Correlação
+perfeita: `open == init408` nas sessões estabelecidas; `init408=0 → quedas=0`.
 
-Só entrar aqui se houver relato concreto de queda de prod em horário específico —
-caso contrário, é apenas limpeza de log (já mitigada pelo logrotate).
+**Descartado com dado:**
+- Versão WA: `fetchLatestBaileysVersion` → `[2,3000,1035194821]` isLatest:true (rede OK).
+- Memória/GC: workers recém-abertos (RSS baixo) também tomam 408 na 1ª conexão → não é GC.
+- Deploy / dupla-posse / logout: fora (uptimes estáveis; connectionReplaced=0).
+
+**Causa raiz:** Baileys `^6.7.16` (resolvido 6.7.21) manda a IQ de init props e
+**não recebe resposta** do WA → timeout de 60s (`defaultQueryTimeoutMs`) → sessão
+meio-inicializada → WA encerra (500/428) → loop de reconexão. Interação
+biblioteca↔protocolo WA, não infra. Idêntico em prod e staging.
+
+**Fix (validar SEMPRE em staging antes de prod — é mudança de dependência):**
+1. **Primário — bump do Baileys.** Testar a versão mais nova da linha 6.7.x/6.8.x
+   (checar changelog/issues por correção de `fetchProps`/init-queries no protocolo
+   WA `2.3000.x`). Critério de sucesso em staging: `init queries` 408 some e a
+   sessão fica `ready` estável (sem `quedas`).
+2. **Se o bump não resolver — tornar a init-query não-fatal.** Avaliar opções do
+   `makeWASocket` (`bot-worker.js:1730`) na versão instalada (ex.: desabilitar/relaxar
+   o fetch de props se a API do Baileys permitir). Aumentar `defaultQueryTimeoutMs`
+   **não** resolve (a resposta nunca chega; só adia a falha).
+3. **Band-aid já presente (manter):** o cooldown de 30min
+   (`RECONNECT_STABLE_CLOSE_COOLDOWN_MS`) reduz o spam de "A sincronização foi
+   concluída", mas o cliente segue offline entre quedas — não substitui o fix.
+
+**Higiene (RAM-neutra):** baixar o nível do log de init-queries em
+`instrumentBaileysLoggerForHealth` (`bot-worker.js:929`) — hoje são ~milhares de
+linhas/dia inflando o `bot.log` (já mitigado parcialmente pelo logrotate).
 
 ### TRILHO C — Blindagem preventiva de PROD (RAM-neutra)
 
