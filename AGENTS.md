@@ -121,6 +121,19 @@ basta (pegadinha #1: PM2 cacheia a env). Confirme no log que **não** aparece
 (`redis://127.0.0.1:6379/0` prod, `/1` staging). No modo `inline` o
 Redis é opcional.
 
+### Guard anti-reversão de modo (RCA 2026-07 — Trilho C, não regredir)
+
+`src/ops/modeRegressionGuard.js` (`shouldWarnModeRegression`) é um módulo puro
+consumido no boot de `src/api/server.js`: se `APP_ENV=production` **e**
+`BOT_SUPERVISOR_MODE != 'remote'` **e** já existe `WaSession.status='connected'`
+no banco, a API loga `error` e emite `AnalyticsEvent('ops_mode_regression')`
+(allowlist em `src/analytics.js`). Não bloqueia o boot (é aviso, não guard
+fail-fast) — o objetivo é pegar o `.env` derivando de volta para `inline` em
+produção **antes** do próximo deploy derrubar as sessões, em vez de descobrir
+pelo spam de "A sincronização foi concluída" no celular da cliente. Roda só
+quando o banco está disponível no boot (`databaseReadyAtBoot`). Teste puro
+(sem DB) em `test/ops-mode-regression-guard.test.js`.
+
 ### Arquivos do supervisor (não confundir)
 
 - `src/supervisor/protocol.js` — contrato (nomes de filas, eventos,
@@ -566,6 +579,42 @@ Defaults foram subidos em 2026-05 (15→25s incoming, 60→90/60/45s send)
 após observar timeouts excessivos com Amazon BR lenta (HTML ~1.3MB).
 **Não desligar os timeouts** — sem eles, um socket Baileys silenciosamente
 morto trava a fila serial inteira até reinício do worker.
+
+## Loop de init-queries 408 derrubando sessões (RCA 2026-07 — Trilho B)
+
+**Causa raiz confirmada (docs/rca-sessoes-whatsapp-caindo-2026-07.md):** cada
+sessão de cliente em prod caía ~11-12x/dia. Toda conexão (`opened connection
+to WA`) era seguida ~60s depois de `unexpected error in 'init queries'`
+(statusCode 408, `executeInitQueries → fetchProps → waitForMessage` sem
+resposta do WA) → o WA encerrava o stream (500/428) → reconexão → repete.
+Correlação perfeita: `open == init408` nas sessões estabelecidas. Não é
+deploy, memória/GC, dupla-posse nem versão de fetch (`fetchLatestBaileysVersion`
+respondia normalmente). Interação `@whiskeysockets/baileys` ↔ protocolo WA.
+
+**Fix aplicado (menor risco primeiro, por `docs/handoff-sonnet-execucao-sessoes-whatsapp.md`):**
+bump de `@whiskeysockets/baileys` de `^6.7.16` para `^6.7.23` (última da linha
+6.7.x — a lib foi renomeada para `baileys` no npm a partir da 6.17.x/7.x, mas
+migrar de pacote é mudança maior e fica para uma 2ª rodada se o bump patch não
+resolver). **Ainda não validado em staging/prod** — pendente:
+1. Merge `develop` → autodeploy staging → rodar a ferramenta de medição do
+   handoff (`ratio 408/open` e `quedas`) por ≥60min. Se staging estiver
+   `remote`, reiniciar `bot-supervisor-staging --update-env` para carregar o
+   código novo; se `inline`, o deploy já recarrega sozinho.
+2. Se `408/open` não cair a ~0 em staging, próxima alavanca é fixar uma versão
+   WA conhecida-boa em vez do `fetchLatestBaileysVersion()` (`fetchVersionCached`,
+   `src/bot-worker.js`), ou migrar para o pacote `baileys` (renomeado).
+3. Só depois de aprovado em staging: PR `develop → main` e, **passo manual
+   obrigatório**, `pm2 restart bot-supervisor --update-env` em prod — só assim
+   os workers já-rodando carregam a lib nova (deploy da API sozinho não toca
+   nos workers em modo `remote`). Essa reinicialização reconecta **todas** as
+   sessões de uma vez — anunciar/agendar antes, não fazer às cegas.
+
+**Higiene (não afeta a causa raiz):** `unexpected error in 'init queries'` é
+rebaixado de `error` para `debug` em `instrumentBaileysLoggerForHealth`
+(`src/bot-worker.js`) só para não inflar `bot.log` (~14k linhas/dia
+observadas) — não muda a lógica de reconexão nem a métrica de saúde
+(`SESSION_HEALTH_SIGNAL_RE`), que continuam olhando o fechamento real da
+conexão, não a linha de log.
 
 ## Teto de memória por bot-worker (`BOT_WORKER_MAX_OLD_SPACE_MB`)
 

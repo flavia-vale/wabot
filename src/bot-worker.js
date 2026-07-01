@@ -888,6 +888,15 @@ function getSendQueueMetrics() {
 // é o mais confiável: o Baileys o loga uma vez por mensagem indecifrável.
 const SESSION_HEALTH_SIGNAL_RE = /sent retry receipt|failed to decrypt|Bad MAC|MessageCounterError|Key used already or never filled/i
 
+// Baileys loga `unexpected error in 'init queries'` em nível error a cada 408
+// de fetchProps (ver RCA docs/rca-sessoes-whatsapp-caindo-2026-07.md — Trilho
+// B). Isso sozinho já gerou ~14k linhas/dia no bot.log antes do fix de causa
+// raiz (bump de versão). Rebaixamos para debug (não aparece no nível padrão
+// de produção) só para não inflar o log; não afeta a métrica de saúde acima
+// nem a lógica de reconexão, que dependem do fechamento da conexão, não da
+// linha de log em si.
+const INIT_QUERIES_LOG_RE = /unexpected error in 'init queries'/i
+
 function recordCryptoError() {
   const now = Date.now()
   lastCryptoErrorAt = now
@@ -937,6 +946,11 @@ function instrumentBaileysLoggerForHealth(baileysLogger) {
         try {
           for (const arg of args) {
             if (typeof arg === 'string' && SESSION_HEALTH_SIGNAL_RE.test(arg)) { recordCryptoError(); break }
+          }
+          if (level === 'error' && typeof target.debug === 'function') {
+            for (const arg of args) {
+              if (typeof arg === 'string' && INIT_QUERIES_LOG_RE.test(arg)) return target.debug(...args)
+            }
           }
         } catch {}
         return bound(...args)
