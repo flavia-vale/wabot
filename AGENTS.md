@@ -580,6 +580,44 @@ após observar timeouts excessivos com Amazon BR lenta (HTML ~1.3MB).
 **Não desligar os timeouts** — sem eles, um socket Baileys silenciosamente
 morto trava a fila serial inteira até reinício do worker.
 
+## Status honesto da sessão WA no painel: nem falso-offline, nem "conectando" eterno (2026-07)
+
+Dois bugs relacionados, resolvidos juntos, no eixo "o que o cliente vê no painel
+enquanto o socket Baileys pisca":
+
+**1. Falso "desconectado" durante reconexão automática.** O heartbeat periódico
+do worker (`persistWorkerHeartbeat`, `src/bot-worker.js`) calculava seu próprio
+status olhando só `activeSock`/`pendingSock` — e no intervalo real entre um
+close transitório e o próximo `startBot()` reconectar de fato (5s no caso
+comum, até 30min em cooldowns de flap/quedas-estáveis/replaced), os dois ficam
+`null`. Isso sobrescrevia para `disconnected` o `connecting` que
+`buildCloseSessionPatch` (`src/core/sessionPersistencePolicy.js`) já grava de
+propósito em qualquer close não-terminal. Fix: `scheduleReconnect()` centraliza
+todo `setTimeout(startBot, ...)` marcando `reconnectDeadlineMs`; o heartbeat só
+reporta `idle` se NÃO há reconexão agendada.
+
+**2. Válvula de segurança contra loop escondido do cliente.** O fix acima
+sozinho criava um risco oposto: cooldowns encadeados (flap → replaced →
+stable-close, até 30min cada) mantêm `hasReconnectScheduled=true`
+continuamente, então o cliente NUNCA veria "desconectado" mesmo preso num loop
+por dezenas de minutos. `disconnectedSinceMs` (`src/bot-worker.js`) marca a
+1ª vez que a sessão sai de `connected` (não reseta a cada retry dentro do
+mesmo episódio) e o heartbeat "desiste" de esconder depois de
+`WA_HEARTBEAT_MAX_RECONNECTING_MS` (default 5min, `computeHeartbeatState` em
+`sessionPersistencePolicy.js`) — reportando `idle`→`disconnected` mesmo com
+reconexão ainda agendada. O worker CONTINUA tentando reconectar sozinho (essa
+válvula só afeta o que é mostrado, não a lógica de retry); se reconectar depois
+do teto, o próximo `open` volta a marcar `connected` normalmente.
+
+**3. Painel não pode mascarar o status honesto.** `dashboard/app/painel/whatsapp/page.js`
+tinha `isBootstrappingSession = isRunning && !isConnected && status === 'disconnected'`
+renderizando "Conectando…" — isso escondia exatamente o sinal que os dois fixes
+acima existem para mostrar. Removido: `isAwaitingConnectStart` (estado local do
+clique em "Conectar") já cobre a corrida legítima de boot; `status==='disconnected'`
+agora sempre renderiza "Desconectado" no painel.
+
+Testes: `test/session-persistence-policy.test.js` (`computeHeartbeatState`).
+
 ## Loop de init-queries 408 derrubando sessões (RCA 2026-07 — Trilho B)
 
 **Causa raiz confirmada (docs/rca-sessoes-whatsapp-caindo-2026-07.md):** cada

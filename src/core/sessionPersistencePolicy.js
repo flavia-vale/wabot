@@ -42,8 +42,28 @@ export function buildCloseSessionPatch({
 // seria reportado como 'idle', sobrescrevendo o status 'connecting' que
 // buildCloseSessionPatch setou de propósito — reintroduzindo o falso
 // "desconectado" que a policy acima existe pra evitar.
-export function computeHeartbeatState({ hasActiveSock, hasPendingSock, hasReconnectScheduled }) {
+//
+// Válvula de segurança (a favor da outra direção): se a sessão ficar tempo
+// DEMAIS sem voltar a `connected` — encadeando cooldowns de flap/replaced/
+// stable-close, cada um reagendando o próximo antes do anterior expirar —
+// `hasReconnectScheduled` ficaria sempre true e o cliente nunca veria
+// "desconectado" mesmo estando preso num loop havia 20-30min. `disconnectedForMs`
+// (tempo desde a última vez que a sessão esteve `connected`) e `maxReconnectingMs`
+// (teto configurável, default abaixo) fazem o heartbeat "desistir" de esconder
+// e reportar `idle` — não porque o worker parou de tentar (ele continua), mas
+// porque o cliente merece saber que algo está errado em vez de confiar
+// cegamente num "conectando" que nunca termina.
+export const DEFAULT_MAX_RECONNECTING_MS = 5 * 60_000 // 5min
+
+export function computeHeartbeatState({
+  hasActiveSock,
+  hasPendingSock,
+  hasReconnectScheduled,
+  disconnectedForMs = 0,
+  maxReconnectingMs = DEFAULT_MAX_RECONNECTING_MS,
+}) {
   if (hasActiveSock) return 'connected'
+  if (disconnectedForMs >= maxReconnectingMs) return 'idle'
   if (hasPendingSock || hasReconnectScheduled) return 'connecting'
   return 'idle'
 }

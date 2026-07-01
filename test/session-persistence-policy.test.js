@@ -57,3 +57,49 @@ test('computeHeartbeatState: sem socket e sem reconexão agendada é idle de ver
     'idle',
   )
 })
+
+test('computeHeartbeatState: reconexão agendada mas dentro do teto continua connecting', () => {
+  assert.equal(
+    computeHeartbeatState({
+      hasActiveSock: false,
+      hasPendingSock: false,
+      hasReconnectScheduled: true,
+      disconnectedForMs: 60_000,
+      maxReconnectingMs: 300_000,
+    }),
+    'connecting',
+  )
+})
+
+test('computeHeartbeatState: válvula de segurança — preso reconectando além do teto vira idle mesmo com reconexão agendada', () => {
+  assert.equal(
+    computeHeartbeatState({
+      hasActiveSock: false,
+      hasPendingSock: false,
+      hasReconnectScheduled: true,
+      disconnectedForMs: 6 * 60_000,
+      maxReconnectingMs: 5 * 60_000,
+    }),
+    'idle',
+  )
+})
+
+test('computeHeartbeatState: válvula de segurança também vale com pendingSock vivo (handshake que nunca fecha)', () => {
+  assert.equal(
+    computeHeartbeatState({
+      hasActiveSock: false,
+      hasPendingSock: true,
+      hasReconnectScheduled: false,
+      disconnectedForMs: 10 * 60_000,
+      maxReconnectingMs: 5 * 60_000,
+    }),
+    'idle',
+  )
+})
+
+test('computeHeartbeatState: sem disconnectedForMs informado, usa 0 (comportamento antigo preservado)', () => {
+  assert.equal(
+    computeHeartbeatState({ hasActiveSock: false, hasPendingSock: false, hasReconnectScheduled: true }),
+    'connecting',
+  )
+})
