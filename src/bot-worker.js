@@ -2663,14 +2663,15 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         destIndex++
         // Botão "Ver canal" definido pelo GRUPO DE DESTINO (ou null = sem botão).
         const channelForward = resolveChannelForward(cfg.groups.postDetails.find(g => g.waJid === destJid))
-        // Chave de dedup por DESTINO: prefere o link CONVERTIDO (nosso afiliado),
-        // que é estável por produto, em vez de primary.url (link de origem do
-        // upstream, que rotaciona a cada repostagem — deixando a mesma oferta
-        // passar de novo). Alinha com a intenção documentada em `linkDedupWindowMs`.
-        // Fallback para o link de origem e, por fim, msgId:texto quando não há link.
-        const dedupSubject = primary.converted || primary.url || `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
-        const key = `${destJid}:${dedupSubject}`
-        if (dedup.links[key] && Date.now() - dedup.links[key] < linkDedupWindowMs) {
+        // Segurança anti-duplicação por destino. Precisamos guardar DUAS chaves:
+        // - primary.url: link upstream estável. Bloqueia a mesma mensagem da fonte
+        //   repostada logo depois, mesmo que o conversor gere outro shortlink.
+        // - primary.converted: link final. Bloqueia fontes diferentes que caiam no
+        //   mesmo link afiliado.
+        const fallbackDedupSubject = `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
+        const dedupSubjects = [...new Set([primary.url, primary.converted, fallbackDedupSubject].filter(Boolean))]
+        const dedupKeys = dedupSubjects.map(subject => `${destJid}:${subject}`)
+        if (dedupKeys.some(key => dedup.links[key] && Date.now() - dedup.links[key] < linkDedupWindowMs)) {
           await registerDedupBlock({
             reason: 'skip:dedup_recent_link',
             platform: primary.platform,
