@@ -10,12 +10,14 @@ import { Boom } from '@hapi/boom'
 import { readFileSync, mkdirSync } from 'fs'
 import { rm, writeFile, readdir } from 'fs/promises'
 import { dirname } from 'path'
+import sharp from 'sharp'
 
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
-import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, stripUrlsFromText, uniqueConversionsByUrl } from './messageProcessor.js'
+import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
+import { fetchProductInfo } from './converters/productInfoScraper.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
 import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
@@ -890,6 +892,15 @@ function getSendQueueMetrics() {
 // é o mais confiável: o Baileys o loga uma vez por mensagem indecifrável.
 const SESSION_HEALTH_SIGNAL_RE = /sent retry receipt|failed to decrypt|Bad MAC|MessageCounterError|Key used already or never filled/i
 
+// Baileys loga `unexpected error in 'init queries'` em nível error a cada 408
+// de fetchProps (ver RCA docs/rca-sessoes-whatsapp-caindo-2026-07.md — Trilho
+// B). Isso sozinho já gerou ~14k linhas/dia no bot.log antes do fix de causa
+// raiz (bump de versão). Rebaixamos para debug (não aparece no nível padrão
+// de produção) só para não inflar o log; não afeta a métrica de saúde acima
+// nem a lógica de reconexão, que dependem do fechamento da conexão, não da
+// linha de log em si.
+const INIT_QUERIES_LOG_RE = /unexpected error in 'init queries'/i
+
 function recordCryptoError() {
   const now = Date.now()
   lastCryptoErrorAt = now
@@ -939,6 +950,11 @@ function instrumentBaileysLoggerForHealth(baileysLogger) {
         try {
           for (const arg of args) {
             if (typeof arg === 'string' && SESSION_HEALTH_SIGNAL_RE.test(arg)) { recordCryptoError(); break }
+          }
+          if (level === 'error' && typeof target.debug === 'function') {
+            for (const arg of args) {
+              if (typeof arg === 'string' && INIT_QUERIES_LOG_RE.test(arg)) return target.debug(...args)
+            }
           }
         } catch {}
         return bound(...args)
@@ -1055,16 +1071,176 @@ function buildBroadcastImageRecipe(text, options = {}) {
   }
 }
 
+function cleanPreviewText(value, maxLength = 140) {
+  return String(value || '')
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/[~*_`>|#]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength)
+}
+
+function derivePreviewTitleFromText(text) {
+  const line = String(text || '')
+    .split(/\r?\n/)
+    .map(part => cleanPreviewText(part, 120))
+    .find(Boolean)
+  return line || 'Oferta'
+}
+
+function derivePreviewDescriptionFromText(text) {
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .map(part => cleanPreviewText(part, 180))
+    .filter(Boolean)
+  return lines.slice(1, 4).join(' • ') || lines[0] || ''
+}
+
+function escapeSvgText(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function wrapTextLines(value, maxChars, maxLines) {
+  const words = cleanPreviewText(value, maxChars * maxLines * 2).split(/\s+/).filter(Boolean)
+  const lines = []
+  let current = ''
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word
+    if (next.length > maxChars && current) {
+      lines.push(current)
+      current = word
+      if (lines.length >= maxLines) break
+    } else {
+      current = next
+    }
+  }
+  if (current && lines.length < maxLines) lines.push(current)
+  if (lines.length === maxLines && words.join(' ').length > lines.join(' ').length) {
+    lines[maxLines - 1] = `${lines[maxLines - 1].replace(/…$/, '')}…`
+  }
+  return lines
+}
+
+async function buildWideLinkPreviewThumbnail({ imageBuffer, title, description, sourceUrl }) {
+  if (!imageBuffer?.length) return null
+  const width = 1200
+  const height = 630
+  const product = await sharp(imageBuffer, { failOn: 'none' })
+    .rotate()
+    .resize({ width: 500, height: 500, fit: 'inside', withoutEnlargement: true, background: '#ffffff' })
+    .flatten({ background: '#ffffff' })
+    .jpeg({ quality: 92, mozjpeg: true })
+    .toBuffer()
+
+  const titleLines = wrapTextLines(title, 27, 3)
+  const descLines = wrapTextLines(description, 34, 2)
+  const host = (() => {
+    try { return new URL(sourceUrl).hostname.replace(/^www\./, '') } catch { return '' }
+  })()
+  const titleSvg = titleLines.map((line, idx) => `<tspan x="620" dy="${idx === 0 ? 0 : 54}">${escapeSvgText(line)}</tspan>`).join('')
+  const descSvg = descLines.map((line, idx) => `<tspan x="620" dy="${idx === 0 ? 0 : 40}">${escapeSvgText(line)}</tspan>`).join('')
+
+  const svg = Buffer.from(`
+    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#063f2c"/>
+          <stop offset="100%" stop-color="#111827"/>
+        </linearGradient>
+        <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000000" flood-opacity="0.35"/>
+        </filter>
+      </defs>
+      <rect width="1200" height="630" fill="url(#bg)"/>
+      <circle cx="1080" cy="82" r="150" fill="#16a34a" opacity="0.16"/>
+      <circle cx="102" cy="550" r="180" fill="#22c55e" opacity="0.10"/>
+      <rect x="48" y="58" width="532" height="514" rx="34" fill="#ffffff" filter="url(#shadow)"/>
+      <text x="620" y="128" font-family="Arial, Helvetica, sans-serif" font-size="46" font-weight="800" fill="#ffffff">${titleSvg}</text>
+      <text x="620" y="342" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="#bbf7d0">${descSvg}</text>
+      <text x="620" y="505" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" fill="#22c55e">🔗 ${escapeSvgText(host)}</text>
+      <text x="620" y="558" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#e5e7eb">Toque para abrir a oferta</text>
+    </svg>
+  `)
+
+  return sharp({ create: { width, height, channels: 3, background: '#0f172a' } })
+    .composite([
+      { input: svg, top: 0, left: 0 },
+      { input: product, top: 65, left: 64 },
+    ])
+    .jpeg({ quality: 90, mozjpeg: true, chromaSubsampling: '4:4:4' })
+    .toBuffer()
+}
+
+function buildLargePreviewAdReply(linkPreview) {
+  if (!linkPreview || typeof linkPreview !== 'object') return null
+  const sourceUrl = linkPreview['canonical-url'] || linkPreview['matched-text']
+  if (!isHttpUrl(sourceUrl)) return null
+  return {
+    title: linkPreview.title || 'Oferta',
+    body: linkPreview.description || '',
+    sourceUrl,
+    mediaType: 1,
+    renderLargerThumbnail: true,
+    showAdAttribution: false,
+    ...(linkPreview.jpegThumbnail ? { thumbnail: linkPreview.jpegThumbnail } : {}),
+  }
+}
+
+async function buildManualLinkPreview({ text, primary, credentialsMap }) {
+  const matchedText = isHttpUrl(primary?.converted) ? primary.converted : (isHttpUrl(primary?.url) ? primary.url : '')
+  if (!matchedText) return null
+
+  const sourceUrl = isHttpUrl(primary?.url) ? primary.url : matchedText
+  const [productInfo, imageUrl] = await Promise.all([
+    fetchProductInfo(sourceUrl, {
+      mlCredentials: credentialsMap?.mercadolivre,
+      shopeeCredentials: credentialsMap?.shopee,
+    }).catch(() => null),
+    primary?.platform ? fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}).catch(() => null) : Promise.resolve(null),
+  ])
+
+  const title = cleanPreviewText(productInfo?.title, 120) || derivePreviewTitleFromText(text)
+  const description = cleanPreviewText(
+    productInfo?.newPrice ? `Por: ${productInfo.newPrice}` : derivePreviewDescriptionFromText(text),
+    180,
+  )
+
+  let jpegThumbnail
+  if (isHttpUrl(imageUrl)) {
+    try {
+      const fetched = await fetchImageBuffer(imageUrl, sourceUrl)
+      jpegThumbnail = fetched?.buffer
+        ? await buildWideLinkPreviewThumbnail({ imageBuffer: fetched.buffer, title, description, sourceUrl: matchedText })
+        : null
+      if (!jpegThumbnail && fetched?.buffer) {
+        const normalized = await normalizeImageForWhatsApp(fetched.buffer)
+        jpegThumbnail = normalized?.jpegThumbnail || undefined
+      }
+    } catch (err) {
+      logger.warn({ err: err?.message, imageUrl, sourceUrl }, 'linkPreview manual: falha ao baixar thumbnail — enviando preview sem imagem manual')
+    }
+  }
+
+  return {
+    'canonical-url': matchedText,
+    'matched-text': matchedText,
+    title,
+    description,
+    ...(jpegThumbnail ? { jpegThumbnail } : {}),
+  }
+}
+
 async function buildPayloadFromRecipe(recipe) {
   if (recipe?.type !== 'imageUrl') return undefined
 
   let image = null
   try {
     const fetched = await fetchImageBuffer(recipe.imageUrl, recipe.refererUrl)
-    image = fetched ? await normalizeImageForWhatsApp(fetched.buffer, { fit: 'contain' }) : null
-    if (image) {
-      logger.info({ imageFit: 'contain', source: 'broadcastImage' }, 'Imagem normalizada com canvas WhatsApp-safe')
-    }
+    image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
     if (fetched && !image) {
       logger.warn({ srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'broadcast image: normalizeImageForWhatsApp falhou — enviando texto com preview')
     }
@@ -1596,6 +1772,12 @@ async function startBotInner() {
     // Ping periódico para detectar socket morto cedo, em vez de descobrir tarde
     // e reconectar (cada reconexão = nova notificação de sincronização no app).
     keepAliveIntervalMs: WA_KEEPALIVE_INTERVAL_MS,
+    // Necessário para o Baileys montar previews grandes de URL. Sem isso,
+    // mensagens textuais com link podem sair como texto puro mesmo quando
+    // buildMonitoredMessagePayload pede linkPreview. A largura maior ajuda
+    // quando o fallback for o preview padrão do Baileys/WhatsApp.
+    generateHighQualityLinkPreview: true,
+    linkPreviewImageThumbnailWidth: Number(process.env.WA_LINK_PREVIEW_THUMBNAIL_WIDTH || 800),
     logger: instrumentBaileysLoggerForHealth(logger.child({ name: 'baileys' })),
   })
 
@@ -2171,7 +2353,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       async function getImage() {
         if (imageFetched) return cachedImage
         imageFetched = true
-        if (!monitorGroup || monitorGroup.imageMode === 'none') return null
+        if (!monitorGroup || ['none', 'preview'].includes(monitorGroup.imageMode)) return null
 
         const enabled = links.filter(l => enabledPlatforms.has(l.platform))
         const target = effectiveLinkTarget === 'last' ? enabled[enabled.length - 1] : enabled[0]
@@ -2248,19 +2430,20 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             return null
           }
           logger.info({ platform, converted: conversionResult.url, warning: conversionResult.warning }, 'Link convertido')
-          return { platform, url, converted: conversionResult.url, warning: conversionResult.warning }
+          return { platform, url, converted: conversionResult.url, warning: conversionResult.warning, linkKind: conversionResult.linkKind }
         } catch (err) {
           if (err.stripFromMessage) {
-            // Non-product link (coupon/voucher): strip from mirrored text to
-            // avoid misattributing commission to the source group's affiliate.
-            return { platform, url, strip: true }
+            // Cupom/voucher que não conseguiu virar link afiliado oficial: não
+            // removemos mais nada da mensagem espelhada. O link fica como veio
+            // para preservar a oferta/CTA original, enquanto os demais links
+            // válidos da mesma mensagem continuam sendo convertidos juntos.
+            return { platform, url, converted: url, passthrough: true, linkKind: 'coupon' }
           }
           await recordConversionIssue({ platform, url, jid, text, reason: `Falha na conversão de ${credentialValidation.label}: ${err.message}` })
           return null
         }
       }))
-      const conversions = uniqueConversionsByUrl(linkResults.filter(r => r && !r.strip))
-      const urlsToStrip = [...new Set(linkResults.filter(r => r?.strip).map(r => r.url).filter(Boolean))]
+      const conversions = uniqueConversionsByUrl(linkResults.filter(r => r && r.converted))
 
       const warningKinds = new Set(conversions.map(c => c.warning).filter(Boolean))
       for (const kind of warningKinds) {
@@ -2305,30 +2488,21 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // de /painel/mensagens, como {{grupoLink}} e {{cupomLink}}, pertencem ao
         // caminho de templates e não devem ser anexadas ao texto original.
         finalText = applyConversionsAndBranding(sanitizedText, conversions)
-        if (urlsToStrip.length) {
-          const userCouponLink = String(cfg.botConfig.couponLink || '').trim()
-          if (userCouponLink) {
-            // User configured their own coupon link: substitute each stripped
-            // URL with it so commission stays with the right affiliate.
-            for (const url of urlsToStrip) {
-              finalText = finalText.replace(url, userCouponLink)
-            }
-          } else {
-            // No coupon link configured: remove the URL and the entire CTA
-            // line that contained it to avoid orphaned text like
-            // "🏷️ Cupons disponíveis aqui:" with no clickable link.
-            finalText = stripUrlsFromText(finalText, urlsToStrip)
-          }
-        }
       }
       // Eleição do link primário (oferta/dedup/log) entre as conversões válidas.
       // Decisão de produto 3.4: o grupo escolhe primeiro/último link; sem override
       // por grupo, herda o default global do BotConfig (default 'first' = histórico).
       // A constante é definida antes de getImage() para manter texto/template,
       // imagem, dedup e logs alinhados na mesma escolha.
-      const orderedConversions = conversions.filter(c => c && c.platform !== 'nolink')
-      const primary = (orderedConversions.length
-        ? (effectiveLinkTarget === 'last' ? orderedConversions[orderedConversions.length - 1] : orderedConversions[0])
+      const orderedConversions = conversions.filter(c => c && c.platform !== 'nolink' && !c.passthrough)
+      // Produto+cupom: cupom pode ser sempre o mesmo entre ofertas diferentes.
+      // Portanto ele NÃO deve virar primary de dedup/template/imagem quando há
+      // link de produto convertido na mesma mensagem, mesmo que a config do grupo
+      // escolha o último link. O cupom continua no finalText via conversions.
+      const primaryCandidates = orderedConversions.filter(c => c.linkKind !== 'coupon')
+      const selectableConversions = primaryCandidates.length ? primaryCandidates : orderedConversions
+      const primary = (selectableConversions.length
+        ? (effectiveLinkTarget === 'last' ? selectableConversions[selectableConversions.length - 1] : selectableConversions[0])
         : conversions[0]) ?? { platform: 'nolink', url: '', converted: '' }
 
       // Template efetivo (decisão 3.2: por grupo, com default global). Três estados
@@ -2468,15 +2642,100 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             convertedUrl: primary.converted,
             messageText: finalText,
           })
-          logger.info({ destJid }, 'Duplicata ignorada'); continue
+          logger.info({ destJid, dedupKeyCount: dedupKeys.length }, 'Duplicata ignorada'); continue
         }
+
+        // Trava compartilhada entre processos. A dedup local é por worker; se
+        // dois workers/sockets processarem a mesma sessão, ou se Redis estiver
+        // ausente/fail-open, o banco ainda enxerga os envios recentes para o
+        // mesmo usuário+destino+link e bloqueia a duplicata antes de criar novo
+        // log queued. Caso real: duas linhas success idênticas em ~9s com
+        // dedupHits=0.
+        const dedupLookupUrls = [...new Set([primary.url, primary.converted].filter(Boolean))]
+        const recentDbDuplicate = dedupLookupUrls.length
+          ? await db.messageLog.findFirst({
+              where: {
+                userId,
+                destGroup: destJid,
+                status: { in: ['queued', 'sending', 'success'] },
+                sentAt: { gte: new Date(Date.now() - linkDedupWindowMs) },
+                OR: [
+                  { originalUrl: { in: dedupLookupUrls } },
+                  { convertedUrl: { in: dedupLookupUrls } },
+                ],
+              },
+              orderBy: { sentAt: 'desc' },
+              select: { id: true },
+            }).catch(err => {
+              logger.warn({ err: err?.message, destJid }, 'Dedup DB lookup falhou; seguindo com dedup local/global')
+              return null
+            })
+          : null
+        if (recentDbDuplicate) {
+          await registerDedupBlock({
+            reason: 'skip:dedup_recent_link',
+            platform: primary.platform,
+            destJid,
+            originalUrl: primary.url,
+            convertedUrl: primary.converted,
+            messageText: finalText,
+          })
+          logger.info({ destJid, recentLogId: recentDbDuplicate.id, dedupKeyCount: dedupKeys.length }, 'Duplicata DB ignorada')
+          continue
+        }
+
+        // Reserva atômica cross-worker. O findFirst acima é diagnóstico/legado,
+        // mas sozinho ainda tem janela de corrida: dois workers podem consultar
+        // antes de qualquer um criar MessageLog. O índice único em SendDedupKey
+        // transforma a dedup em compare-and-set no SQLite.
+        const reservationExpiresAt = new Date(Date.now() + linkDedupWindowMs)
+        await db.sendDedupKey.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch(err => {
+          logger.warn({ err: err?.message }, 'Limpeza de SendDedupKey expirada falhou')
+        })
+        const reservedDedupKeys = []
+        let reservedDuplicate = false
+        for (const key of dedupKeys) {
+          try {
+            const reservation = await db.sendDedupKey.create({
+              data: { userId, destGroup: destJid, dedupKey: key, expiresAt: reservationExpiresAt },
+              select: { id: true },
+            })
+            reservedDedupKeys.push(reservation.id)
+          } catch (err) {
+            if (err?.code === 'P2002') {
+              reservedDuplicate = true
+              break
+            }
+            logger.warn({ err: err?.message, destJid }, 'Reserva SendDedupKey falhou; seguindo com dedup local/global')
+          }
+        }
+        if (reservedDuplicate) {
+          await registerDedupBlock({
+            reason: 'skip:dedup_recent_link',
+            platform: primary.platform,
+            destJid,
+            originalUrl: primary.url,
+            convertedUrl: primary.converted,
+            messageText: finalText,
+          })
+          logger.info({ destJid, dedupKeyCount: dedupKeys.length }, 'Duplicata reservada DB ignorada')
+          continue
+        }
+
         if (GLOBAL_DEDUP_MODE !== 'off') {
           // Usa a janela longa (diária) também na dedup cross-instância via
           // Redis — antes usava dedupeWindowMs (5min), o que deixava a mesma
           // oferta passar de novo poucos minutos depois quando o bloqueio
           // in-memory não pegava (ex.: outro processo/instância).
-          const globalDedup = await globalDedupCheckAndSet(key, linkDedupWindowMs)
-          if (globalDedup.duplicate) {
+          let globalDuplicate = false
+          for (const key of dedupKeys) {
+            const globalDedup = await globalDedupCheckAndSet(key, linkDedupWindowMs)
+            if (globalDedup.duplicate) {
+              globalDuplicate = true
+              break
+            }
+          }
+          if (globalDuplicate) {
             await registerDedupBlock({
               reason: 'skip:dedup_recent_link_global',
               platform: primary.platform,
@@ -2485,11 +2744,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               convertedUrl: primary.converted,
               messageText: finalText,
             })
-            logger.info({ destJid }, 'Duplicata global ignorada')
+            logger.info({ destJid, dedupKeyCount: dedupKeys.length }, 'Duplicata global ignorada')
             continue
           }
         }
-        dedup.links[key] = Date.now()
+        for (const key of dedupKeys) dedup.links[key] = Date.now()
         scheduleDedupSave(dedup)
 
         const platforms = conversions.length ? conversions.map(c => c.platform).join('+') : 'nolink'
@@ -2510,23 +2769,27 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // Quando imageMode=original mas só houver jpegThumbnail minúsculo, usa
         // preview automático do WhatsApp em vez de imagem pixelada.
         const imageMode = monitorGroup?.imageMode ?? 'original'
-        const wantImage = imageMode !== 'none'
+        const wantImage = !['none', 'preview'].includes(imageMode)
         // O caminho de relay reaproveita a mídia hospedada da mensagem de origem.
         // Portanto ele só é correto quando a preferência é explicitamente
         // "Imagem que veio na mensagem". No modo "Imagem oficial da loja"
         // precisamos forçar o caminho de upload (getImage → fetch ativo) para não
         // vazar a imagem do anúncio/origem por cima da escolha do usuário.
-        const imageFitPolicy = 'contain'
-        const original = shouldRelayOriginalMediaForImageMode(imageMode, {
-          mediaType: originalMedia?.type,
-          imageFit: imageFitPolicy,
-        }) ? originalMedia : null
+        const original = shouldRelayOriginalMediaForImageMode(imageMode) ? originalMedia : null
         let useLinkPreview = false  // será setado a true se jpegThumbnail for descartado
 
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
         const log = await db.messageLog.create({
           data: { ...logData, status: 'queued' },
         })
+        if (reservedDedupKeys.length) {
+          await db.sendDedupKey.updateMany({
+            where: { id: { in: reservedDedupKeys } },
+            data: { messageLogId: log.id },
+          }).catch(err => {
+            logger.warn({ err: err?.message, logId: log.id }, 'Falha ao vincular SendDedupKey ao MessageLog')
+          })
+        }
         let sentVia = 'text'
 
         // PR-5.B.2: variação de copy por canal-destino. Aplica só em canal —
@@ -2554,14 +2817,32 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // worker. Mantém image.buffer (Buffer) em memória do processo, sem
         // passar pelo Redis. Ver enqueueSendJob() para a explicação completa.
         const buildPayload = async () => {
+          // Modo "preview": envia uma única mensagem de texto com link preview
+          // clicável do WhatsApp. Baixa só a thumbnail do card quando possível;
+          // não faz upload de imageMessage (clique ampliaria a foto).
+          if (imageMode === 'preview') {
+            const linkPreview = await buildManualLinkPreview({
+              text: variantText,
+              primary,
+              credentialsMap: cfg.credentials,
+            })
+            const externalAdReply = buildLargePreviewAdReply(linkPreview)
+            return buildMonitoredMessagePayload({
+              finalText: variantText,
+              image: null,
+              useLinkPreview: true,
+              linkPreview,
+              externalAdReply,
+            })
+          }
+
           // Quando o destino tem botão de canal (channelForward), pulamos o relay
           // de propósito: o relay reaproveita o proto de mídia da ORIGEM e injetar
           // o NOSSO canal nele faz o WhatsApp derrubar o envio. Em vez disso caímos
           // no caminho sendMessage com a imagem rebaixada (getImage) — o MESMO
           // caminho comprovado das ofertas automáticas — e a injeção central
-          // (mídia-only) adiciona o botão. Sem botão, mantemos o relay somente
-          // para mídias que não precisam de normalização; imagens agora passam
-          // por upload para receber o canvas WhatsApp-safe.
+          // (mídia-only) adiciona o botão. Sem botão, mantemos o relay (fidelidade
+          // máxima de mídia, inclui vídeo).
           if (shouldUseRelayPath({ destJid, hasOriginal: !!original }) && !channelForward) {
             const hasCaption = original.type === 'imageMessage' || original.type === 'videoMessage'
             // Higieniza o contextInfo herdado da ORIGEM (remove botão de terceiros
@@ -2589,16 +2870,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             // Regressão de dupla compressão documentada em 2026-06
             // (commit image-upload-bug-fix). Ver normalizeImageForWhatsApp.
             const wantMutation = isChannelDest && isPreservationFeatureEnabled(cfg.preservationActive, cfg.botConfig, PRESERVATION_FEATURE.IMAGE_MUTATION)
-            const imageNormalizeOptions = {
-              fit: imageFitPolicy,
-              ...(wantMutation ? { mutation: { groupId: destJid } } : {}),
-            }
             image = fetched
-              ? await normalizeImageForWhatsApp(fetched.buffer, imageNormalizeOptions)
+              ? await normalizeImageForWhatsApp(fetched.buffer, wantMutation ? { mutation: { groupId: destJid } } : {})
               : null
-            if (image) {
-              logger.info({ msgId: msg.key.id, destJid, imageMode, imageFit: imageFitPolicy }, 'Imagem monitorada normalizada com canvas WhatsApp-safe')
-            }
             if (fetched && !image) {
               logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
             }

@@ -33,6 +33,8 @@ import db from '../db.js'
 import { revokeTokenJtiGlobal, isTokenRevokedGlobal } from '../core/tokenRevocationStore.js'
 import { validateEncryptionKey } from '../credentialCrypto.js'
 import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, SUPERVISOR_MODE } from '../manager.js'
+import { shouldWarnModeRegression } from '../ops/modeRegressionGuard.js'
+import { trackAnalyticsEventSafe } from '../analytics.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
 registerApiMetricsHooks(app)
@@ -336,6 +338,26 @@ if (!databaseReadyAtBoot) {
   }
   app.log.warn('API iniciada em modo degradado: execute "npx prisma migrate deploy" e reinicie quando o banco estiver pronto')
 }
+
+// Guard anti-reversão de modo (RCA docs/rca-sessoes-whatsapp-caindo-2026-07.md
+// — Trilho C): produção só está blindada contra queda por deploy quando
+// BOT_SUPERVISOR_MODE=remote. Se o `.env` voltar para `inline` (ou vazio)
+// com sessão já conectada, o próximo deploy vai derrubá-la sem aviso —
+// registrar aqui em vez de descobrir pelo spam de "A sincronização foi
+// concluída" no celular da cliente.
+if (databaseReadyAtBoot) {
+  try {
+    const appEnv = process.env.APP_ENV || process.env.NODE_ENV
+    const hasConnectedSession = (await db.waSession.count({ where: { status: 'connected' } })) > 0
+    if (shouldWarnModeRegression({ appEnv, supervisorMode: SUPERVISOR_MODE, hasConnectedSession })) {
+      app.log.error({ supervisorMode: SUPERVISOR_MODE }, 'BOT_SUPERVISOR_MODE não é "remote" em produção com sessão conectada — deploy vai derrubar sessões (ver AGENTS.md, Processos PM2)')
+      trackAnalyticsEventSafe({ event: 'ops_mode_regression', metadata: { supervisorMode: SUPERVISOR_MODE } })
+    }
+  } catch (err) {
+    app.log.warn({ err: err.message }, 'Falha ao checar guard anti-reversão de modo')
+  }
+}
+
 startLogRetentionJob()
 startActivityCacheCleanup()
 startProbeWatchdogJob()
