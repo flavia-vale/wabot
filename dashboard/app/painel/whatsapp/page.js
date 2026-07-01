@@ -565,7 +565,6 @@ export default function WhatsAppPage() {
   const isConnected = status?.status === 'connected'
   const isConnecting = status?.status === 'connecting'
   const isRunning = status?.running
-  const isBootstrappingSession = isRunning && !isConnected && status?.status === 'disconnected'
   const isAwaitingConnectStart = qrRetrying || actionLoading === 'connect' || actionLoading === 'retry_qr'
   const showQrRetry = isRunning && isConnecting && !qr && !pairingCode && qrWaitElapsed >= QR_TIMEOUT_SECONDS
   const qrAgeSeconds = qr ? Math.max(qrWaitElapsed - qrStartElapsed, 0) : 0
@@ -645,7 +644,7 @@ export default function WhatsAppPage() {
           {statusLoading ? (
             <p className="pnl-card-note">{statusLoadingTimedOut ? 'Status demorando mais do que o esperado…' : 'Carregando status do WhatsApp…'}</p>
           ) : (
-            <p style={{ fontWeight: 600, color: 'var(--ink)' }}>{isConnected ? 'Conectado' : (isConnecting || isAwaitingConnectStart || isBootstrappingSession) ? 'Conectando…' : statusError ? 'Status indisponível' : 'Desconectado'}</p>
+            <p style={{ fontWeight: 600, color: 'var(--ink)' }}>{isConnected ? 'Conectado' : (isConnecting || isAwaitingConnectStart) ? 'Conectando…' : statusError ? 'Status indisponível' : 'Desconectado'}</p>
           )}
           {status?.phone && <p className="pnl-hint">+{status.phone}</p>}
         </div>

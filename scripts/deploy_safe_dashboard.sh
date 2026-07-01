@@ -368,6 +368,21 @@ else
     migrate_attempt=$((migrate_attempt + 1))
     if [ "$migrate_attempt" -ge 5 ]; then
       echo "ERRO: prisma migrate deploy falhou após 5 tentativas."
+      if [[ "$PRESERVE_SUPERVISOR_DURING_MIGRATION" == "1" ]]; then
+        echo "  Causa provável (pegadinha #8 do AGENTS.md): bot-supervisor foi preservado"
+        echo "  (PRESERVE_SUPERVISOR_DURING_MIGRATION=1) e segue segurando conexão WAL no"
+        echo "  SQLite; sob escrita contínua dos bot-workers, o migrate nunca encontra a"
+        echo "  janela de lock exclusivo que uma DDL (CREATE TABLE/ALTER TABLE) precisa."
+        echo "  Deploy NÃO foi aplicado a propósito (fail-safe) — código já está em"
+        echo "  \$BRANCH mas o schema do banco ficou parado na versão anterior; \`api\`"
+        echo "  já foi religada com o código novo (sem quebrar, pois nada no boot exige"
+        echo "  a tabela nova ainda)."
+        echo "  Para destravar manualmente (janela curta, reconecta TODAS as sessões WA"
+        echo "  — anunciar antes):"
+        echo "    pm2 stop bot-supervisor"
+        echo "    cd $ROOT_DIR && npx prisma migrate deploy"
+        echo "    pm2 restart bot-supervisor --update-env && pm2 save"
+      fi
       restart_apps_stopped_for_migration_prod
       exit 1
     fi
