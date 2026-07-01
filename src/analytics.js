@@ -71,6 +71,10 @@ export const ANALYTICS_EVENTS = new Set([
   // Quedas periódicas de sessão estável (ex.: 500/428/408 a cada ~50min) que
   // disparam cooldown maior para reduzir push notification de re-sync.
   'ops_wa_stable_close_cooldown',
+  // Guard anti-reversão de modo (RCA sessões WA caindo, Trilho C): produção
+  // com BOT_SUPERVISOR_MODE != remote e sessão conectada — deploy da API vai
+  // derrubar a sessão na próxima janela.
+  'ops_mode_regression',
 ])
 
 const SENSITIVE_KEY_PATTERN = /(token|secret|password|cookie|credential|csrf|ssid|key|message|text|url|phone|email)/i
