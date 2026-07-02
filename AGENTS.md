@@ -687,7 +687,23 @@ específica travada.
 **Não regredir:** não remover `msgRetryCounterCache`/`placeholderResendCache`
 do config do `makeWASocket()`, e não recriá-los dentro de `startBotInner()`
 (precisam ficar em escopo de módulo, fora da função que roda a cada
-reconexão) — senão o bug volta.
+reconexão) — senão o bug volta. Guardado por teste estrutural em
+`test/bot-worker-retry-cache-wiring.test.js` (lê o source e falha se a
+declaração for movida pra dentro de `startBotInner` ou sumir da config do
+`makeWASocket`).
+
+**Blindagem contra recorrência (mesmo por causa raiz diferente):** o fix acima
+resolve o mecanismo específico encontrado, mas não impede que uma OUTRA causa
+volte a travar uma mensagem em loop de reentrega no futuro. Por isso, além do
+fix, `src/bot-worker.js` agora rastreia `stuckMessageTimestamps` (Map por
+messageId) via `extractAckMessageIdFromStreamErrorNode` +
+`registerStuckMessageAndDecide` (`src/core/reconnectPolicy.js`, puras/
+testadas): se o MESMO `messageId` aparecer no ack de um `stream:error` 2+
+vezes (`WA_STUCK_MSG_THRESHOLD`, default 2) dentro de 2h
+(`WA_STUCK_MSG_WINDOW_MS`), emite `logger.error` + `AnalyticsEvent
+ops_wa_stuck_message_retry` — visibilidade operacional ANTES do cliente
+reclamar, independente de qual bug específico estiver causando o travamento
+dessa vez.
 
 ## Loop de init-queries 408 derrubando sessões (RCA 2026-07 — Trilho B)
 

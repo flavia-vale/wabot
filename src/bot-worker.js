@@ -50,7 +50,7 @@ import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/prese
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
-import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, registerStableCloseAndDecide } from './core/reconnectPolicy.js'
+import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, registerStableCloseAndDecide, extractAckMessageIdFromStreamErrorNode, registerStuckMessageAndDecide } from './core/reconnectPolicy.js'
 import { buildAuthResetSessionPatch, buildCloseSessionPatch, computeHeartbeatState, DEFAULT_MAX_RECONNECTING_MS } from './core/sessionPersistencePolicy.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
@@ -777,6 +777,16 @@ const RECONNECT_STABLE_CLOSE_THRESHOLD = Math.max(2, envNumber('RECONNECT_STABLE
 // esse é também o ponto em que o painel passa a mostrar "desconectado" — então o
 // cliente nunca fica muito tempo pensando que está tudo bem sem estar.
 const RECONNECT_STABLE_CLOSE_COOLDOWN_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_STABLE_CLOSE_COOLDOWN_MS', 5 * 60_000))
+// RCA 2026-07 ("Loop de retry-receipt travado"): visibilidade operacional pra
+// detectar essa CLASSE de problema cedo, mesmo que reapareça por uma causa
+// raiz diferente do bug já corrigido (msgRetryCounterCache resetando a cada
+// reconexão). Se o MESMO messageId aparecer no ack de um stream:error
+// `WA_STUCK_MSG_THRESHOLD`+ vezes dentro de `WA_STUCK_MSG_WINDOW_MS`, algo
+// está impedindo aquela mensagem específica de ser esquecida — alertar antes
+// que o cliente perceba a sessão caindo em loop.
+const STUCK_MSG_WINDOW_MS = Math.max(5 * 60_000, envNumber('WA_STUCK_MSG_WINDOW_MS', 2 * 60 * 60_000))
+const STUCK_MSG_THRESHOLD = Math.max(0, envNumber('WA_STUCK_MSG_THRESHOLD', 2))
+let stuckMessageTimestamps = new Map()
 // Keep-alive do socket: sem ping periódico, um socket morto silenciosamente só
 // é detectado tarde, causando reconexão (e nova notificação). 25s é conservador.
 const WA_KEEPALIVE_INTERVAL_MS = Math.max(10_000, envNumber('WA_KEEPALIVE_INTERVAL_MS', 25_000))
@@ -1975,6 +1985,25 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // limpar o marcador. Um `open` longo = sessão saudável que caiu; curto = flap.
       const now = Date.now()
       const wasStable = shouldResetBackoff(connectionOpenedAt, now, RECONNECT_STABLE_MS)
+      // Node bruto do stream:error (quando existir) — só ele revela se o close
+      // foi causado por uma mensagem específica travada em loop de reentrega
+      // (ver AGENTS.md "Loop de retry-receipt travado"). `code` sozinho não
+      // distingue isso de qualquer outro close genérico.
+      const stuckMsgId = extractAckMessageIdFromStreamErrorNode(lastDisconnect?.error?.data)
+      if (stuckMsgId) {
+        const stuckResult = registerStuckMessageAndDecide(stuckMessageTimestamps, stuckMsgId, now, {
+          windowMs: STUCK_MSG_WINDOW_MS,
+          threshold: STUCK_MSG_THRESHOLD,
+        })
+        stuckMessageTimestamps = stuckResult.state
+        if (stuckResult.stuck) {
+          logger.error(
+            { msgId: stuckMsgId, count: stuckResult.count, windowMs: STUCK_MSG_WINDOW_MS },
+            'Mensagem travada em loop de retry-receipt derrubando a sessão repetidamente — ver AGENTS.md "Loop de retry-receipt travado"'
+          )
+          try { recordOperationalSignal('wa_stuck_message_retry', { userId, msgId: stuckMsgId, count: stuckResult.count }) } catch {}
+        }
+      }
       connectionOpenedAt = null
       activeSock = null
       pendingSock = null
