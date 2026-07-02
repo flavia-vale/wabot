@@ -31,6 +31,9 @@ import { persistCredentialPatch } from './credentialPatch.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode, findUnserializableField } from './sendQueueBackend.js'
 import { withSendTimeout as withSendTimeoutImpl } from './sendMessageTimeout.js'
+import { buildStableSendMessageId } from './core/stableMessageId.js'
+import { buildMirrorDedupKeys } from './core/mirrorDedupKey.js'
+import { resolveSendTimeoutOverrideMs, resolveSendTimeoutMs as resolveSendTimeoutMsPure, DEFAULT_SEND_TIMEOUT_BY_ATTEMPT_MS } from './core/sendTimeout.js'
 import { detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
 import { getChannelMetadata, followChannel, listFollowedChannels } from './core/channelDirectory.js'
@@ -47,7 +50,7 @@ import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
 import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, registerStableCloseAndDecide } from './core/reconnectPolicy.js'
-import { buildAuthResetSessionPatch, buildCloseSessionPatch } from './core/sessionPersistencePolicy.js'
+import { buildAuthResetSessionPatch, buildCloseSessionPatch, computeHeartbeatState, DEFAULT_MAX_RECONNECTING_MS } from './core/sessionPersistencePolicy.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
 import { calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
@@ -191,6 +194,32 @@ function normalizeJidForMatch(jid) {
 let activeSock = null
 let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
 let shuttingDown = false
+// Timestamp (Date.now()) até quando uma reconexão automática já está agendada
+// (setTimeout(startBot, ...) pendente). Existe um intervalo real entre o close
+// (activeSock/pendingSock viram null) e o próximo startBot() de fato criar um
+// socket novo — de 5s (delay mínimo) a até 30min (cooldown de quedas estáveis/
+// flap/replaced). Sem isso o heartbeat (persistWorkerHeartbeat) via de tratar
+// esse intervalo como 'idle' e sobrescrever o status 'connecting' que o close
+// setou de propósito, fazendo o painel mostrar "desconectado" numa sessão que
+// vai se reconectar sozinha. Não é setado quando o close é terminal (logout,
+// reset de auth por badSession, ou pairing pré-código) — nesses casos o
+// próximo startBot só ocorre por ação do usuário, então 'idle'/disconnected
+// está correto.
+let reconnectDeadlineMs = 0
+
+// Marca desde quando a sessão está sem `connected` (null enquanto conectada).
+// Setado na PRIMEIRA vez que se sai de `connected` (não é resetado a cada
+// retry dentro do mesmo episódio de queda) — é o que permite ao heartbeat
+// medir "há quanto tempo estamos tentando" e desistir de mostrar 'connecting'
+// depois de MAX_RECONNECTING_MS (válvula de segurança contra loop escondido
+// do cliente; ver computeHeartbeatState em core/sessionPersistencePolicy.js).
+let disconnectedSinceMs = Date.now()
+const MAX_RECONNECTING_MS = Math.max(30_000, envNumber('WA_HEARTBEAT_MAX_RECONNECTING_MS', DEFAULT_MAX_RECONNECTING_MS))
+
+function scheduleReconnect(delayMs) {
+  reconnectDeadlineMs = Date.now() + Math.max(0, delayMs)
+  setTimeout(startBot, delayMs)
+}
 
 // Pairing-by-phone-number mode. Ativado pela IPC 'requestPairingCode'.
 // Enquanto active=true:
@@ -270,7 +299,13 @@ function startHeartbeatIpc() {
   if (heartbeatTimer) return
   const intervalMs = Math.max(Number(process.env.WA_HEARTBEAT_INTERVAL_MS || 15000), 5000)
   heartbeatTimer = setInterval(() => {
-    const state = activeSock ? 'connected' : (pendingSock ? 'connecting' : 'idle')
+    const state = computeHeartbeatState({
+      hasActiveSock: Boolean(activeSock),
+      hasPendingSock: Boolean(pendingSock),
+      hasReconnectScheduled: Date.now() < reconnectDeadlineMs,
+      disconnectedForMs: disconnectedSinceMs == null ? 0 : Date.now() - disconnectedSinceMs,
+      maxReconnectingMs: MAX_RECONNECTING_MS,
+    })
     if (process.send) process.send({ type: 'heartbeat', ts: Date.now(), state })
     void persistWorkerHeartbeat(state)
   }, intervalMs)
@@ -714,7 +749,16 @@ const RECONNECT_BADSESSION_RESET_THRESHOLD = envNumber('RECONNECT_BADSESSION_RES
 // reduzir o volume de re-sync sem apagar auth nem exigir re-pareamento.
 const RECONNECT_STABLE_CLOSE_WINDOW_MS = Math.max(30 * 60_000, envNumber('RECONNECT_STABLE_CLOSE_WINDOW_MS', 3 * 60 * 60_000))
 const RECONNECT_STABLE_CLOSE_THRESHOLD = Math.max(2, envNumber('RECONNECT_STABLE_CLOSE_THRESHOLD', 3))
-const RECONNECT_STABLE_CLOSE_COOLDOWN_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_STABLE_CLOSE_COOLDOWN_MS', 30 * 60_000))
+// Era 30min: enquanto o cooldown corre, a sessão fica DE FATO fora do ar (sem
+// socket ativo — nada é recebido nem espelhado), não é só um detalhe de UI. 30min
+// de indisponibilidade repetida é caro demais só para conter uma notificação de
+// re-sync que aparece apenas no celular do próprio dono da conta (não afeta os
+// grupos). Reduzido para 5min — ainda corta a maior parte do volume de
+// reconexões em cadência curta, mas limita o tempo real sem espelhar. Alinhado
+// de propósito com WA_HEARTBEAT_MAX_RECONNECTING_MS (sessionPersistencePolicy.js):
+// esse é também o ponto em que o painel passa a mostrar "desconectado" — então o
+// cliente nunca fica muito tempo pensando que está tudo bem sem estar.
+const RECONNECT_STABLE_CLOSE_COOLDOWN_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_STABLE_CLOSE_COOLDOWN_MS', 5 * 60_000))
 // Keep-alive do socket: sem ping periódico, um socket morto silenciosamente só
 // é detectado tarde, causando reconexão (e nova notificação). 25s é conservador.
 const WA_KEEPALIVE_INTERVAL_MS = Math.max(10_000, envNumber('WA_KEEPALIVE_INTERVAL_MS', 25_000))
@@ -728,12 +772,14 @@ const SHUTDOWN_DRAIN_TIMEOUT_MS = Math.max(0, envNumber('SHUTDOWN_DRAIN_TIMEOUT_
 // Política por tentativa: 1ª paciente (gera link preview, mídia hospedada,
 // rede pode oscilar), demais rápidas para liberar a fila. Configurável via
 // env caso precise uniformizar em incidentes — caem todos no mesmo valor.
-const SEND_MESSAGE_TIMEOUT_MS = Math.max(5_000, envNumber('SEND_MESSAGE_TIMEOUT_MS', 0)) || null
-const SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS = [90_000, 60_000, 45_000]
+// Override uniforme opcional; vazio/0 => null para cair no array por-tentativa.
+// (Lógica pura em core/sendTimeout.js — corrige o bug em que a expressão antiga
+// `Math.max(5000, envNumber(...,0)) || null` devolvia 5000 SEMPRE, travando
+// todo envio em 5s e deixando o array [90,60,45]s morto.)
+const SEND_MESSAGE_TIMEOUT_MS = resolveSendTimeoutOverrideMs(process.env.SEND_MESSAGE_TIMEOUT_MS)
+const SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS = DEFAULT_SEND_TIMEOUT_BY_ATTEMPT_MS
 function resolveSendTimeoutMs(attempt) {
-  if (SEND_MESSAGE_TIMEOUT_MS) return SEND_MESSAGE_TIMEOUT_MS
-  const idx = Math.max(0, Math.min(SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS.length - 1, (attempt || 1) - 1))
-  return SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS[idx]
+  return resolveSendTimeoutMsPure(attempt, { overrideMs: SEND_MESSAGE_TIMEOUT_MS, byAttempt: SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS })
 }
 const DEST_RATE_LIMIT_MS = Math.max(0, envNumber('DEST_RATE_LIMIT_MS', 1_000))
 const SMART_DELAY_PROGRESSIVE_THRESHOLD = Math.max(1, envNumber('SMART_DELAY_PROGRESSIVE_THRESHOLD', 20))
@@ -1265,9 +1311,20 @@ function resolveChannelForward(postDetail) {
 }
 
 async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
+  // messageId ESTÁVEL por job (derivado do logId), reutilizado em TODAS as rotas
+  // e tentativas: o WhatsApp deduplica no servidor pela key.id, então um
+  // timeout/Connection Closed que já entregou não vira duplicata quando o
+  // retry/fallback reenvia. null => Baileys gera o id normalmente (comportamento
+  // histórico) quando não há logId.
+  const stableMessageId = buildStableSendMessageId(job.logId)
+  const sendOptionsWith = (opts) => {
+    if (!stableMessageId) return opts || undefined
+    return { ...(opts || {}), messageId: stableMessageId }
+  }
+
   if (payload && payload._route === 'relay' && payload.relay?.type && payload.relay?.proto) {
     await withSendTimeout(
-      sock.relayMessage(job.destJid, { [payload.relay.type]: payload.relay.proto }, {}),
+      sock.relayMessage(job.destJid, { [payload.relay.type]: payload.relay.proto }, stableMessageId ? { messageId: stableMessageId } : {}),
       { destJid: job.destJid, route: 'relay', attempt },
     )
     return
@@ -1293,7 +1350,7 @@ async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
       const route = routes[i]
       try {
         await withSendTimeout(
-          sock.sendMessage(job.destJid, route.body, route.sendOptions || undefined),
+          sock.sendMessage(job.destJid, route.body, sendOptionsWith(route.sendOptions)),
           { destJid: job.destJid, route: i === 0 ? 'primary' : `fallback[${i - 1}]`, attempt },
         )
         return
@@ -1308,7 +1365,7 @@ async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
   }
 
   await withSendTimeout(
-    sock.sendMessage(job.destJid, payload),
+    sock.sendMessage(job.destJid, payload, sendOptionsWith()),
     { destJid: job.destJid, route: 'default', attempt },
   )
 }
@@ -1701,7 +1758,7 @@ async function startBot() {
       const delayMs = calcReconnectDelayMs()
       reconnectAttempts++
       logger.error({ err: err?.message, attempt: reconnectAttempts, delayMs }, 'startBotInner falhou antes de criar socket; reagendando reconexão')
-      setTimeout(startBot, delayMs)
+      scheduleReconnect(delayMs)
     }
   } finally {
     startBotInFlight = false
@@ -1874,6 +1931,7 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       connectionOpenedAt = Date.now()
       activeSock = sock
       pendingSock = null
+      disconnectedSinceMs = null
       pairingState.clear()
       const phone = sock.user?.id?.split(':')[0] ?? null
       if (process.send) process.send({ type: 'status', data: 'connected', phone })
@@ -1898,6 +1956,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       connectionOpenedAt = null
       activeSock = null
       pendingSock = null
+      // Só marca o início do episódio de queda na 1ª vez (não reseta a cada
+      // retry) — é o que dá ao heartbeat a duração REAL do loop de reconexão,
+      // mesmo que cada tentativa individual pareça "nova".
+      if (disconnectedSinceMs == null) disconnectedSinceMs = now
       if (process.send) process.send({ type: 'status', data: 'disconnected' })
       await persistSessionPatch(buildCloseSessionPatch({
         code,
@@ -1924,7 +1986,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // completar o handshake pós-pairing e chegar em connection: 'open'.
         logger.info({ code }, 'Pairing aceito pelo WA (restartRequired 515) — reiniciando com creds novas')
         pairingState.clear()
-        setTimeout(startBot, 500)
+        scheduleReconnect(500)
       } else if (wasPairing) {
         // Diferencia dois sub-casos:
         //   a) código ainda não chegou ao usuário (pairingState.code == null):
@@ -1942,7 +2004,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           pairingState.clear()
           const delayMs = calcReconnectDelayMs()
           reconnectAttempts++
-          setTimeout(startBot, delayMs)
+          scheduleReconnect(delayMs)
         } else {
           // Código ainda não foi mostrado — NÃO auto-reiniciar. Se o usuário
           // falhar em colar o código a tempo, a UI chamará novamente o endpoint.
@@ -1973,7 +2035,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         } else {
           logger.warn({ code, replacedCount: r.count, delayMs }, 'WA conexão substituída (replaced/440) — cooldown longo para evitar ping-pong')
         }
-        setTimeout(startBot, delayMs)
+        scheduleReconnect(delayMs)
       } else {
         // Close genérico (500 badSession, 428, 408, 515 fora de pairing, ...).
         // Dois males históricos tratados aqui:
@@ -2054,7 +2116,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           reconnectAttempts++
           logger.warn({ code, attempt: reconnectAttempts, delayMs }, 'WA conexão fechada, agendando restart automático')
         }
-        setTimeout(startBot, delayMs)
+        scheduleReconnect(delayMs)
       }
     }
   })
@@ -2617,8 +2679,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // - primary.converted: link final. Bloqueia fontes diferentes que caiam no
         //   mesmo link afiliado.
         const fallbackDedupSubject = `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
-        const dedupSubjects = [...new Set([primary.url, primary.converted, fallbackDedupSubject].filter(Boolean))]
-        const dedupKeys = dedupSubjects.map(subject => `${destJid}:${subject}`)
+        const { dedupKeys } = buildMirrorDedupKeys({
+          destJid,
+          primaryUrl: primary.url,
+          primaryConverted: primary.converted,
+          fallbackSubject: fallbackDedupSubject,
+        })
         if (dedupKeys.some(key => dedup.links[key] && Date.now() - dedup.links[key] < linkDedupWindowMs)) {
           await registerDedupBlock({
             reason: 'skip:dedup_recent_link',
@@ -3025,6 +3091,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
     }
     activeSock = null
     pendingSock = null
+    reconnectDeadlineMs = Date.now() + 1_000
     setTimeout(() => {
       startBot()
         .catch(error => logger.error({ err: error?.message }, 'Falha ao reiniciar sessão após surto de erro criptográfico'))
