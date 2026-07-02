@@ -631,6 +631,80 @@ agora sempre renderiza "Desconectado" no painel.
 
 Testes: `test/session-persistence-policy.test.js` (`computeHeartbeatState`).
 
+## Loop de retry-receipt travado derrubando sessão a cada ~50min (RCA 2026-07)
+
+**Sintoma:** cliente reportou queda "de novo hoje". Investigação encontrou uma
+sessão caindo em cadência de relógio quase exata (a cada ~50min, por DIAS),
+código `500` no close. Antes de investigar fundo parecia o mesmo padrão do
+Trilho B (init-queries 408) — mas `init408=0` pra essa sessão (o bump do
+Baileys já tinha resolvido aquele sintoma). Causa raiz é outra e mais
+específica.
+
+**Causa raiz confirmada:** uma mensagem EDITADA de um canal (`@newsletter`)
+seguido pela conta ficou com a sessão de chave dessincronizada — o Baileys não
+conseguia decifrá-la e mandava `sendRetryRequest` ("sent retry receipt") pra
+pedir reenvio. O WhatsApp reoferecia a mesma mensagem periodicamente; toda vez
+que a oferta não era aceita (ack rejeitado), o servidor mandava
+`stream:error` com o node de ack daquela mensagem embutido — e o Baileys
+**desconhece esse motivo específico**, então cai no default `DisconnectReason.badSession`
+(`500`) em `getErrorCodeFromStreamError` (só `"conflict"` tem mapeamento
+próprio; qualquer outro motivo vira 500). Ou seja: **`500` não significa
+necessariamente sessão corrompida — é o fallback do Baileys pra motivo
+desconhecido.** Sempre inspecionar o campo `node` bruto da linha `"stream
+errored out"` (não só o `code`) antes de assumir que é badSession de verdade.
+
+**Por que o loop nunca se resolvia sozinho:** o Baileys tem um limite
+embutido (`maxMsgRetryCount`, default 5) — depois de 5 tentativas de retry
+pra uma mensagem, ele desiste e limpa o contador (`msgRetryCache.del(key)`).
+Mas esse contador (`msgRetryCounterCache`) é criado **do zero a cada
+`makeWASocket()`** a menos que seja passado explicitamente na config — ou
+seja, a cada reconexão. Como a própria mensagem travada estava CAUSANDO a
+reconexão (via `stream:error`), o contador nunca sobrevivia até a próxima
+tentativa: sempre voltava a 0, nunca chegava a 5, o Baileys nunca desistia, o
+WhatsApp nunca parava de reoferecer. Loop que se autoalimenta indefinidamente
+— sem outra intervenção, teria continuado pra sempre (a sessão real ficou
+presa nisso por pelo menos 3+ dias antes de ser detectada).
+
+**Fix (`src/bot-worker.js`):** `msgRetryCounterCache` e `placeholderResendCache`
+(a segunda evita reconsultar `requestPlaceholderResend` pra mensagem que já
+pediu) agora são criados **uma vez em escopo de módulo** (`NodeCache` de
+`@cacheable/node-cache`, mesma lib que o Baileys usa internamente — já vinha
+como dependência transitiva, promovida a dependência direta) e passados
+explicitamente pro `makeWASocket()`. Sobrevivem a reconexões dentro do MESMO
+processo worker; começam limpos a cada restart do worker (aceitável — não é
+esse o vetor do bug). `stdTTL` de 1h e `useClones: false` espelham os defaults
+internos do Baileys.
+
+**Não é sobre decrypt/crypto em si.** As falhas de "failed to decrypt
+message" (`Bad MAC`/`SessionError`/`MessageCounterError`) que aparecem em
+volta são RUÍDO SECUNDÁRIO da mesma mensagem travada tentando decifrar de
+novo a cada ciclo — não são a causa da queda, e resetar a sessão inteira da
+conta (ou pedir pro cliente reescanear o QR) NÃO ataca a causa raiz. Cuidado
+ao diagnosticar: a correlação temporal entre "decrypt failure" e "close" pode
+enganar — só a inspeção do `node` bruto do `stream:error` revelou a mensagem
+específica travada.
+
+**Não regredir:** não remover `msgRetryCounterCache`/`placeholderResendCache`
+do config do `makeWASocket()`, e não recriá-los dentro de `startBotInner()`
+(precisam ficar em escopo de módulo, fora da função que roda a cada
+reconexão) — senão o bug volta. Guardado por teste estrutural em
+`test/bot-worker-retry-cache-wiring.test.js` (lê o source e falha se a
+declaração for movida pra dentro de `startBotInner` ou sumir da config do
+`makeWASocket`).
+
+**Blindagem contra recorrência (mesmo por causa raiz diferente):** o fix acima
+resolve o mecanismo específico encontrado, mas não impede que uma OUTRA causa
+volte a travar uma mensagem em loop de reentrega no futuro. Por isso, além do
+fix, `src/bot-worker.js` agora rastreia `stuckMessageTimestamps` (Map por
+messageId) via `extractAckMessageIdFromStreamErrorNode` +
+`registerStuckMessageAndDecide` (`src/core/reconnectPolicy.js`, puras/
+testadas): se o MESMO `messageId` aparecer no ack de um `stream:error` 2+
+vezes (`WA_STUCK_MSG_THRESHOLD`, default 2) dentro de 2h
+(`WA_STUCK_MSG_WINDOW_MS`), emite `logger.error` + `AnalyticsEvent
+ops_wa_stuck_message_retry` — visibilidade operacional ANTES do cliente
+reclamar, independente de qual bug específico estiver causando o travamento
+dessa vez.
+
 ## Loop de init-queries 408 derrubando sessões (RCA 2026-07 — Trilho B)
 
 **Causa raiz confirmada (docs/rca-sessoes-whatsapp-caindo-2026-07.md):** cada

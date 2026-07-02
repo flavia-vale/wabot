@@ -75,6 +75,10 @@ export const ANALYTICS_EVENTS = new Set([
   // com BOT_SUPERVISOR_MODE != remote e sessão conectada — deploy da API vai
   // derrubar a sessão na próxima janela.
   'ops_mode_regression',
+  // Mesma mensagem repetindo no ack de um stream:error N+ vezes — sinal de
+  // loop de retry-receipt travado derrubando a sessão em cadência (RCA
+  // 2026-07, ver AGENTS.md "Loop de retry-receipt travado").
+  'ops_wa_stuck_message_retry',
 ])
 
 const SENSITIVE_KEY_PATTERN = /(token|secret|password|cookie|credential|csrf|ssid|key|message|text|url|phone|email)/i
