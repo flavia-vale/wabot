@@ -32,6 +32,9 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   // Sessão ficou estável e mesmo assim cai em cadência periódica; cooldown
   // maior para reduzir re-sync/push notification sem limpar auth.
   wa_stable_close_cooldown: 'ops_wa_stable_close_cooldown',
+  // Mesma mensagem repetindo no ack de um stream:error — loop de
+  // retry-receipt travado derrubando a sessão em cadência (RCA 2026-07).
+  wa_stuck_message_retry: 'ops_wa_stuck_message_retry',
 }
 
 let cachedTrackFn = null

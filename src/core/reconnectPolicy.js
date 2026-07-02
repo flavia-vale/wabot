@@ -106,3 +106,42 @@ export function registerStableCloseAndDecide(timestamps, now, { windowMs, cooldo
     shouldCooldown: cooldownThreshold > 0 && recent.length >= cooldownThreshold,
   }
 }
+
+// RCA 2026-07 (AGENTS.md, "Loop de retry-receipt travado"): quando o WhatsApp
+// rejeita a confirmação de uma mensagem específica, ele fecha o stream com um
+// `stream:error` que embute o node de `ack` daquela mensagem. `code` sozinho
+// não distingue isso de qualquer outro close genérico — só o conteúdo bruto
+// do node revela a mensagem específica travada. Extrai o id do ack de
+// mensagem de um node de stream:error, ou null se o node não for desse tipo
+// (ex.: closes com `attrs.code` explícito, como 515 de pareamento, não têm
+// esse conteúdo). Puro: só leitura de estrutura, sem I/O.
+export function extractAckMessageIdFromStreamErrorNode(node) {
+  if (!node || node.tag !== 'stream:error' || !Array.isArray(node.content)) return null
+  const ackChild = node.content.find(child => child?.tag === 'ack' && child?.attrs?.class === 'message')
+  return ackChild?.attrs?.id ?? null
+}
+
+// Rastreia, por messageId, quantas vezes o MESMO ack apareceu embutido num
+// stream:error dentro da janela — sinal de que uma mensagem específica está
+// travada num loop de reentrega (o Baileys deveria desistir sozinho depois de
+// `maxMsgRetryCount`, mas se isso não estiver acontecendo — ex.: regressão da
+// fiação do msgRetryCounterCache — o mesmo id volta a aparecer indefinidamente).
+// Poda por mensagem (janela) E poda entradas totalmente expiradas do Map, para
+// não crescer sem limite ao longo da vida do processo. Imutável: devolve um
+// novo Map, não muta a entrada.
+export function registerStuckMessageAndDecide(stateByMsgId, msgId, now, { windowMs, threshold }) {
+  const next = new Map(stateByMsgId instanceof Map ? stateByMsgId : [])
+  for (const [id, timestamps] of next) {
+    const stillRecent = timestamps.filter(ts => now - ts <= windowMs)
+    if (stillRecent.length === 0) next.delete(id)
+    else next.set(id, stillRecent)
+  }
+  const recent = (next.get(msgId) || []).filter(ts => now - ts <= windowMs)
+  recent.push(now)
+  next.set(msgId, recent)
+  return {
+    state: next,
+    count: recent.length,
+    stuck: threshold > 0 && recent.length >= threshold,
+  }
+}

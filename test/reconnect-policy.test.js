@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, registerStableCloseAndDecide } from '../src/core/reconnectPolicy.js'
+import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, registerStableCloseAndDecide, extractAckMessageIdFromStreamErrorNode, registerStuckMessageAndDecide } from '../src/core/reconnectPolicy.js'
 
 test('backoff cresce exponencialmente a partir de baseMs', () => {
   const opts = { baseMs: 5_000, maxMs: 300_000, jitterRatio: 0, random: () => 0.5 }
@@ -178,4 +178,79 @@ test('stable close: janela descarta eventos antigos', () => {
   r = registerStableCloseAndDecide(r.timestamps, 500_000, win)
   assert.equal(r.count, 1)
   assert.equal(r.shouldCooldown, false)
+})
+
+test('extractAckMessageIdFromStreamErrorNode: extrai id do ack de mensagem (caso real da RCA)', () => {
+  const node = {
+    tag: 'stream:error',
+    attrs: {},
+    content: [{ tag: 'ack', attrs: { class: 'message', type: 'text', id: '3A6E99E5503150F1616A' } }],
+  }
+  assert.equal(extractAckMessageIdFromStreamErrorNode(node), '3A6E99E5503150F1616A')
+})
+
+test('extractAckMessageIdFromStreamErrorNode: null quando não é stream:error', () => {
+  assert.equal(extractAckMessageIdFromStreamErrorNode({ tag: 'other', content: [] }), null)
+})
+
+test('extractAckMessageIdFromStreamErrorNode: null em stream:error de pareamento (attrs.code, sem content)', () => {
+  const node = { tag: 'stream:error', attrs: { code: '515' } }
+  assert.equal(extractAckMessageIdFromStreamErrorNode(node), null)
+})
+
+test('extractAckMessageIdFromStreamErrorNode: null em node ausente/undefined', () => {
+  assert.equal(extractAckMessageIdFromStreamErrorNode(null), null)
+  assert.equal(extractAckMessageIdFromStreamErrorNode(undefined), null)
+})
+
+test('extractAckMessageIdFromStreamErrorNode: ignora child ack que não é classe message', () => {
+  const node = {
+    tag: 'stream:error',
+    attrs: {},
+    content: [{ tag: 'ack', attrs: { class: 'call', id: 'X' } }],
+  }
+  assert.equal(extractAckMessageIdFromStreamErrorNode(node), null)
+})
+
+test('registerStuckMessageAndDecide: mesma mensagem repetindo atinge o threshold', () => {
+  const win = { windowMs: 2 * 60 * 60_000, threshold: 2 }
+  let r = registerStuckMessageAndDecide(new Map(), 'MSG1', 0, win)
+  assert.equal(r.count, 1)
+  assert.equal(r.stuck, false)
+  r = registerStuckMessageAndDecide(r.state, 'MSG1', 50 * 60_000, win)
+  assert.equal(r.count, 2)
+  assert.equal(r.stuck, true)
+})
+
+test('registerStuckMessageAndDecide: mensagens diferentes não se misturam', () => {
+  const win = { windowMs: 2 * 60 * 60_000, threshold: 2 }
+  let r = registerStuckMessageAndDecide(new Map(), 'MSG1', 0, win)
+  r = registerStuckMessageAndDecide(r.state, 'MSG2', 1_000, win)
+  assert.equal(r.count, 1)
+  assert.equal(r.stuck, false)
+  assert.equal(r.state.get('MSG1').length, 1)
+  assert.equal(r.state.get('MSG2').length, 1)
+})
+
+test('registerStuckMessageAndDecide: janela expira e some do estado (poda)', () => {
+  const win = { windowMs: 60_000, threshold: 2 }
+  let r = registerStuckMessageAndDecide(new Map(), 'MSG1', 0, win)
+  r = registerStuckMessageAndDecide(r.state, 'MSG2', 500_000, win)
+  // MSG1 saiu da janela em relação ao "now" de MSG2 (500_000 - 0 > 60_000) e deve ser podada
+  assert.equal(r.state.has('MSG1'), false)
+  assert.equal(r.state.get('MSG2').length, 1)
+})
+
+test('registerStuckMessageAndDecide: threshold<=0 nunca marca stuck', () => {
+  const win = { windowMs: 60_000, threshold: 0 }
+  let r = registerStuckMessageAndDecide(new Map(), 'MSG1', 0, win)
+  r = registerStuckMessageAndDecide(r.state, 'MSG1', 1_000, win)
+  assert.equal(r.stuck, false)
+})
+
+test('registerStuckMessageAndDecide: imutável — não muta o Map de entrada', () => {
+  const original = new Map([['MSG1', [0]]])
+  const r = registerStuckMessageAndDecide(original, 'MSG1', 1_000, { windowMs: 60_000, threshold: 2 })
+  assert.equal(original.get('MSG1').length, 1)
+  assert.equal(r.state.get('MSG1').length, 2)
 })
