@@ -300,3 +300,31 @@ test('fetchProductImage resolve short link Amazon amzn.la antes de buscar imagem
   assert.equal(image, imageUrl)
   assert.deepEqual(calls, ['https://amzn.la/img123', productUrl])
 })
+
+test('fetchProductImage resolve short link meli.la do Mercado Livre antes de buscar imagem (regressão: texto do produto A com imagem do produto B)', async (t) => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const shortUrl = 'https://meli.la/1asTUog'
+  const productUrl = 'https://produto.mercadolivre.com.br/MLB-1234567890-copo-termico-inox-887ml-_JM'
+  const cupImageUrl = 'https://http2.mlstatic.com/D_NQ_NP_copo-termico.jpg'
+  const html = `<html><head>
+    <meta property="og:image" content="${cupImageUrl}" />
+  </head></html>`
+
+  globalThis.fetch = async (url) => {
+    const urlStr = String(url)
+    calls.push(urlStr)
+    // Short link resolve() segue redirect e devolve a URL final do produto —
+    // NUNCA a landing intermediária (que teria og:image de outro produto).
+    if (urlStr === shortUrl) return htmlResponse('', productUrl)
+    if (urlStr === productUrl) return htmlResponse(html, productUrl)
+    throw new Error(`fetch inesperado: ${urlStr}`)
+  }
+
+  const image = await fetchProductImage('mercadolivre', shortUrl, {})
+
+  assert.equal(image, cupImageUrl)
+  assert.deepEqual(calls, [shortUrl, productUrl])
+})

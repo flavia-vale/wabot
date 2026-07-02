@@ -1,5 +1,6 @@
 import sharp from 'sharp'
 import { extractShopeeIds, resolveShopeeShortLink as resolveShopeeShortLinkShared } from './shopee.js'
+import { resolveToCleanProductUrl } from './mercadolivre.js'
 import { computeMutationCrop } from '../core/imageMutationCrop.js'
 
 const OG_IMAGE_RE = [
@@ -296,6 +297,20 @@ async function resolveAmazonImage(url) {
   return resolveAmazonImageFromWidget(asin)
 }
 
+// meli.la/mluvem.com/`/sec/` são short links de afiliado do ML: um fetch cru
+// com apenas redirect HTTP (resolveByHtmlLayers) pode cair numa landing
+// intermediária que devolve 200 com HTML de app-install/recomendações em vez
+// do produto (`resolve()` em mercadolivre.js documenta esse caso — "Alguns
+// meli.la retornam 200 com HTML intermediário (sem 3xx)"). O og:image dessa
+// landing é de um produto aleatório/rotativo, não o compartilhado — causa
+// confirmada do texto/link batendo com um produto e a imagem vindo de outro.
+// resolveToCleanProductUrl já faz essa resolução completa (usada para montar
+// o link de afiliado do texto); reaproveitamos aqui para a imagem também.
+async function resolveMercadoLivreImage(url) {
+  const target = (await resolveToCleanProductUrl(url).catch(() => null)) || url
+  return resolveByHtmlLayers(target, { ua: BROWSER_UA })
+}
+
 function isAmazonImageUrl(rawUrl) {
   try {
     const u = new URL(rawUrl)
@@ -411,6 +426,8 @@ export async function fetchProductImage(platform, productUrl, creds) {
       image = await resolveShopeeImage(productUrl, creds)
     } else if (platform === 'amazon') {
       image = await resolveAmazonImage(productUrl)
+    } else if (platform === 'mercadolivre') {
+      image = await resolveMercadoLivreImage(productUrl)
     }
     if (!image) image = await resolveByHtmlLayers(productUrl, { ua: BROWSER_UA })
 
