@@ -1,0 +1,27 @@
+name: Backend lint (no-undef)
+
+# Rede de segurança que faltava: a CI existente (deploy.yml) só lintava o
+# dashboard (Next) e nunca rodava lint no backend. Um merge mal resolvido
+# deixou `dedupKeys` indefinido e quebrou o envio espelhado sem nada pegar.
+# Este job roda ESLint com a regra no-undef em src/ + test/ em toda PR.
+#
+# Roda com `npx eslint` puro (sem `npm ci`): não instala deps do repo, não
+# dispara o postinstall do Prisma e não depende do package-lock — só baixa o
+# ESLint e usa o eslint.config.js (que não importa nada).
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main, develop ]
+
+jobs:
+  no-undef:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: ESLint no-undef (src + test)
+        run: npx --yes eslint@9 src test
