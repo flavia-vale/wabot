@@ -7,6 +7,7 @@ import makeWASocket, {
   extractMessageContent,
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
+import NodeCache from '@cacheable/node-cache'
 import { readFileSync, mkdirSync } from 'fs'
 import { rm, writeFile, readdir } from 'fs/promises'
 import { dirname } from 'path'
@@ -194,6 +195,23 @@ function normalizeJidForMatch(jid) {
 let activeSock = null
 let pendingSock = null  // socket criado mas ainda não conectado (disponível para pairing code)
 let shuttingDown = false
+
+// RCA 2026-07: por padrão o Baileys cria `msgRetryCounterCache` e
+// `placeholderResendCache` do zero a cada makeWASocket() — ou seja, a cada
+// reconexão. Isso zera o contador de tentativas de qualquer mensagem que o
+// cliente não conseguiu decifrar (ex.: edição de mensagem de canal/@newsletter
+// com sessão de chave dessincronizada): o Baileys deveria desistir depois de
+// `maxMsgRetryCount` (5, default) e a TTL de 1h, mas como o contador nunca
+// sobrevive à próxima reconexão, ele nunca chega a 5 — o WhatsApp reoferece a
+// MESMA mensagem pra sempre, cada oferta rejeitada derruba o stream inteiro
+// (`stream:error`), e a queda reseta o contador de novo. Loop que se
+// autoalimenta: a queda impede a mensagem de ser esquecida, e a mensagem não-
+// esquecida causa a próxima queda (caso real: sessão caindo a cada ~50min por
+// dias seguidos presa numa única mensagem). Fix: manter as caches vivas no
+// escopo do módulo (sobrevivem a reconexões dentro do mesmo processo worker,
+// mas começam limpas a cada restart do worker — aceitável).
+const msgRetryCounterCache = new NodeCache({ stdTTL: 60 * 60, useClones: false })
+const placeholderResendCache = new NodeCache({ stdTTL: 60 * 60, useClones: false })
 // Timestamp (Date.now()) até quando uma reconexão automática já está agendada
 // (setTimeout(startBot, ...) pendente). Existe um intervalo real entre o close
 // (activeSock/pendingSock viram null) e o próximo startBot() de fato criar um
@@ -1821,6 +1839,10 @@ async function startBotInner() {
     generateHighQualityLinkPreview: true,
     linkPreviewImageThumbnailWidth: Number(process.env.WA_LINK_PREVIEW_THUMBNAIL_WIDTH || 800),
     logger: instrumentBaileysLoggerForHealth(logger.child({ name: 'baileys' })),
+    // Sobrevive a reconexões dentro do mesmo processo — ver comentário na
+    // declaração acima (RCA 2026-07: loop infinito de retry-receipt).
+    msgRetryCounterCache,
+    placeholderResendCache,
   })
 
   pendingSock = sock
