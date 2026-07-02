@@ -32,6 +32,7 @@ import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode, findUnserializableField } from './sendQueueBackend.js'
 import { withSendTimeout as withSendTimeoutImpl } from './sendMessageTimeout.js'
 import { buildStableSendMessageId } from './core/stableMessageId.js'
+import { buildMirrorDedupKeys } from './core/mirrorDedupKey.js'
 import { resolveSendTimeoutOverrideMs, resolveSendTimeoutMs as resolveSendTimeoutMsPure, DEFAULT_SEND_TIMEOUT_BY_ATTEMPT_MS } from './core/sendTimeout.js'
 import { detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
@@ -2678,8 +2679,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // - primary.converted: link final. Bloqueia fontes diferentes que caiam no
         //   mesmo link afiliado.
         const fallbackDedupSubject = `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
-        const dedupSubjects = [...new Set([primary.url, primary.converted, fallbackDedupSubject].filter(Boolean))]
-        const dedupKeys = dedupSubjects.map(subject => `${destJid}:${subject}`)
+        const { dedupKeys } = buildMirrorDedupKeys({
+          destJid,
+          primaryUrl: primary.url,
+          primaryConverted: primary.converted,
+          fallbackSubject: fallbackDedupSubject,
+        })
         if (dedupKeys.some(key => dedup.links[key] && Date.now() - dedup.links[key] < linkDedupWindowMs)) {
           await registerDedupBlock({
             reason: 'skip:dedup_recent_link',
