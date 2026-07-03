@@ -209,7 +209,7 @@ export default function SendHistory() {
               </thead>
               <tbody>
                 {logs.map((log) => {
-                  const dest = log.destGroup !== 'skipped' && log.destGroup !== 'conversion' ? log.destGroupName : null
+                  const dest = log.destGroup !== 'skipped' && log.destGroup !== 'conversion' && log.destGroup !== 'warning' ? log.destGroupName : null
                   return (
                     <tr key={log.id}>
                       <td className="pnl-faint" style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{formatDateTime(log.sentAt)}</td>
@@ -232,7 +232,7 @@ export default function SendHistory() {
           {/* Cards mobile */}
           <div className="pnl-cards-mobile">
             {logs.map((log) => {
-              const dest = log.destGroup !== 'skipped' && log.destGroup !== 'conversion' ? log.destGroupName : null
+              const dest = log.destGroup !== 'skipped' && log.destGroup !== 'conversion' && log.destGroup !== 'warning' ? log.destGroupName : null
               return (
                 <div key={`m-${log.id}`} className="pnl-card" style={{ padding: 14 }}>
                   <div className="pnl-toolbar" style={{ justifyContent: 'space-between' }}>
