@@ -316,10 +316,10 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
         <CfgRow
           label="Imagem da oferta"
           info={<>
-            <strong>Preview clicável:</strong> envia uma mensagem única de texto com card grande do WhatsApp; o clique abre o link.<br />
+            <strong>Preview clicável:</strong> envia uma mensagem única de texto com card do WhatsApp montado pelo bot (foto do produto, título e preço); o clique abre o link.<br />
             <strong>Oficial da loja:</strong> busca a foto no site do produto e envia como imagem com legenda.<br />
             <strong>Da mensagem:</strong> reaproveita a foto do grupo de origem como mídia.<br />
-            <strong>Sem imagem:</strong> envia texto puro, sem forçar preview.
+            <strong>Sem imagem:</strong> envia só o texto; o WhatsApp ainda pode montar a prévia padrão do link quando o site permite.
           </>}
           hint="Escolha se a oferta sai como card clicável ou como mídia com legenda."
           last
@@ -338,7 +338,7 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
             {(g.imageMode ?? 'original') === 'preview' && (
               <div className="cfg-inline-warn">
                 <span style={{ color: 'var(--accent)', flexShrink: 0, display: 'flex', paddingTop: 1 }}>🔗</span>
-                <span>Replica o layout de card clicável: o WhatsApp monta o preview a partir do link convertido na mensagem.</span>
+                <span>O bot monta o card com a foto e o preço do produto mesmo quando a loja bloqueia a prévia automática do WhatsApp (links de afiliado Shopee/Amazon).</span>
               </div>
             )}
             {(g.imageMode ?? 'original') === 'fetch' && (
