@@ -1218,9 +1218,27 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
   return {
     'canonical-url': matchedText,
     'matched-text': matchedText,
+    // Título = nome da LOJA (nunca título de produto/preço — decisão de
+    // produto 2026-07). O campo não pode ser omitido: sem title o cliente
+    // WhatsApp NÃO renderiza o card (regressão observada em staging no
+    // deploy do PR #1186 — cards sumiram até este fix).
+    title: storePreviewTitle(primary?.platform, matchedText),
     ...(jpegThumbnail ? { jpegThumbnail } : {}),
     ...(highQualityThumbnail ? { highQualityThumbnail } : {}),
   }
+}
+
+const STORE_PREVIEW_TITLES = {
+  amazon: 'Amazon',
+  shopee: 'Shopee',
+  mercadolivre: 'Mercado Livre',
+  magazineluiza: 'Magalu',
+}
+
+function storePreviewTitle(platform, url) {
+  const label = STORE_PREVIEW_TITLES[String(platform || '')]
+  if (label) return label
+  try { return new URL(url).hostname.replace(/^www\./, '') } catch { return 'Oferta' }
 }
 
 async function buildPayloadFromRecipe(recipe) {
