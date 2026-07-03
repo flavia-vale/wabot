@@ -18,6 +18,7 @@ import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
+import { buildStoreBrandCardImage } from './converters/storeBrandCard.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
 import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
@@ -1173,33 +1174,39 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
   if (!String(text || '').includes(matchedText)) return null
 
   const sourceUrl = isHttpUrl(primary?.url) ? primary.url : matchedText
-  const imageUrl = primary?.platform
-    ? await fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}).catch((err) => {
-        logger.debug({ err: err?.message, sourceUrl }, 'linkPreview manual: fetchProductImage falhou — preview sem imagem')
-        return null
-      })
-    : null
 
   let jpegThumbnail
-  let highQualityThumbnail
-  if (isHttpUrl(imageUrl)) {
-    try {
-      const fetched = await fetchImageBuffer(imageUrl, sourceUrl)
-      const normalized = fetched?.buffer ? await normalizeImageForWhatsApp(fetched.buffer) : null
-      jpegThumbnail = normalized?.jpegThumbnail || undefined
-      if (jpegThumbnail && typeof uploadToServer === 'function') {
-        try {
-          const { imageMessage } = await prepareWAMessageMedia(
-            { image: jpegThumbnail },
-            { upload: uploadToServer, mediaTypeOverride: 'thumbnail-link' },
-          )
-          highQualityThumbnail = imageMessage || undefined
-        } catch (err) {
-          logger.warn({ err: err?.message, sourceUrl }, 'linkPreview manual: upload da thumbnail HQ falhou — card sai compacto')
-        }
+  if (primary?.linkKind === 'coupon') {
+    // Link de cupom/campanha não tem produto: raspar a landing pegava a
+    // imagem de um produto promovido aleatório no card. Usa o banner da
+    // marca da loja (storeBrandCard), como os canais concorrentes fazem.
+    jpegThumbnail = (await buildStoreBrandCardImage(primary?.platform)) || undefined
+  } else if (primary?.platform) {
+    const imageUrl = await fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}).catch((err) => {
+      logger.debug({ err: err?.message, sourceUrl }, 'linkPreview manual: fetchProductImage falhou — preview sem imagem')
+      return null
+    })
+    if (isHttpUrl(imageUrl)) {
+      try {
+        const fetched = await fetchImageBuffer(imageUrl, sourceUrl)
+        const normalized = fetched?.buffer ? await normalizeImageForWhatsApp(fetched.buffer) : null
+        jpegThumbnail = normalized?.jpegThumbnail || undefined
+      } catch (err) {
+        logger.warn({ err: err?.message, imageUrl, sourceUrl }, 'linkPreview manual: falha ao baixar thumbnail — preview sem imagem')
       }
+    }
+  }
+
+  let highQualityThumbnail
+  if (jpegThumbnail && typeof uploadToServer === 'function') {
+    try {
+      const { imageMessage } = await prepareWAMessageMedia(
+        { image: jpegThumbnail },
+        { upload: uploadToServer, mediaTypeOverride: 'thumbnail-link' },
+      )
+      highQualityThumbnail = imageMessage || undefined
     } catch (err) {
-      logger.warn({ err: err?.message, imageUrl, sourceUrl }, 'linkPreview manual: falha ao baixar thumbnail — preview sem imagem')
+      logger.warn({ err: err?.message, sourceUrl }, 'linkPreview manual: upload da thumbnail HQ falhou — card sai compacto')
     }
   }
 
