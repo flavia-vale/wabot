@@ -19,6 +19,7 @@ import { convertLink } from './converters/index.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
 import { buildStoreBrandCardImage } from './converters/storeBrandCard.js'
+import { resolveLinkKind } from './converters/linkKind.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
 import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
@@ -1243,8 +1244,10 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     // Título = nome da LOJA (nunca título de produto/preço — decisão de
     // produto 2026-07). O campo não pode ser omitido: sem title o cliente
     // WhatsApp NÃO renderiza o card (regressão observada em staging no
-    // deploy do PR #1186 — cards sumiram até este fix).
-    title: storePreviewTitle(primary?.platform, matchedText),
+    // deploy do PR #1186 — cards sumiram até este fix). Em cupom, prefixa
+    // "Cupom" — mesmo texto do banner (buildStoreBrandCardImage), pra não
+    // ficar inconsistente (imagem diz "Cupom Amazon", título diz só "Amazon").
+    title: storePreviewTitle(primary?.platform, matchedText, primary?.linkKind === 'coupon'),
     ...(jpegThumbnail ? { jpegThumbnail } : {}),
     ...(highQualityThumbnail ? { highQualityThumbnail } : {}),
   }
@@ -1257,9 +1260,9 @@ const STORE_PREVIEW_TITLES = {
   magazineluiza: 'Magalu',
 }
 
-function storePreviewTitle(platform, url) {
+function storePreviewTitle(platform, url, isCoupon) {
   const label = STORE_PREVIEW_TITLES[String(platform || '')]
-  if (label) return label
+  if (label) return isCoupon ? `Cupom ${label}` : label
   try { return new URL(url).hostname.replace(/^www\./, '') } catch { return 'Oferta' }
 }
 
@@ -2487,7 +2490,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             return null
           }
           logger.info({ platform, converted: conversionResult.url, warning: conversionResult.warning }, 'Link convertido')
-          return { platform, url, converted: conversionResult.url, warning: conversionResult.warning, linkKind: conversionResult.linkKind }
+          // amazon.js/mercadolivre.js não marcam linkKind de forma confiável
+          // (só shopee.js marca no próprio converter) — resolveLinkKind
+          // classifica pela URL quando o converter não decidiu (ver
+          // converters/linkKind.js: por que não mudamos o contrato dos
+          // converters em vez disso).
+          const linkKind = resolveLinkKind(platform, { url, converted: conversionResult.url, linkKind: conversionResult.linkKind })
+          return { platform, url, converted: conversionResult.url, warning: conversionResult.warning, linkKind }
         } catch (err) {
           if (err.stripFromMessage) {
             // Cupom/voucher que não conseguiu virar link afiliado oficial: não
@@ -2638,7 +2647,18 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // Guard bloqueia só ofertas NÃO-cupom com mismatch confirmado. Mensagens
         // de cupom não descrevem um produto específico, então nunca são bloqueadas
         // aqui — mas o mesmo sinal de overlap decide a imagem (abaixo).
-        if (!isCouponMsg && titleOverlap === 'mismatch') {
+        //
+        // isCouponMsg (texto) exige a palavra "cupom" + um código em CAIXA
+        // ALTA (isCouponAnnouncement) — não pega cupom sem código visível na
+        // legenda (ex.: "Cupom Mercado Livre" apontando pra página de cupons
+        // do catálogo). Nesse caso o texto NÃO parece cupom, mas o LINK
+        // também não é de produto — a raspagem do og:title da página de
+        // cupons nunca vai bater com a legenda, e bloquear é falso positivo
+        // (bug real: "Cupom mercado livre" pra /cupons foi bloqueado com
+        // "Bloqueado por segurança"). primary.linkKind === 'coupon' cobre
+        // esse caso via a URL (ver converters/linkKind.js), sem depender de
+        // a legenda ter um código visível.
+        if (!isCouponMsg && primary.linkKind !== 'coupon' && titleOverlap === 'mismatch') {
           logger.warn({
             msgId: msg.key.id,
             platform: primary.platform,

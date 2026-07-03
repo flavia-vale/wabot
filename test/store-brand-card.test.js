@@ -20,6 +20,12 @@ test('gera banner JPEG por plataforma conhecida com as dimensões do card', asyn
   }
 })
 
+test('label de todas as lojas tem o prefixo "Cupom" (pedido explícito: evitar confundir com card de produto)', () => {
+  for (const style of Object.values(__storeBrandCardInternals.BRAND_STYLES)) {
+    assert.match(style.label, /^Cupom /, `label "${style.label}" precisa começar com "Cupom "`)
+  }
+})
+
 test('plataforma desconhecida devolve null sem lançar', async () => {
   assert.equal(await buildStoreBrandCardImage('lojainexistente'), null)
   assert.equal(await buildStoreBrandCardImage(null), null)
@@ -63,7 +69,7 @@ test('bot-worker sempre inclui title (nome da loja) no urlInfo manual do preview
   const botWorkerSource = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
   assert.match(
     botWorkerSource,
-    /title: storePreviewTitle\(primary\?\.platform, matchedText\)/,
+    /title: storePreviewTitle\(primary\?\.platform, matchedText, primary\?\.linkKind === 'coupon'\)/,
     'urlInfo manual precisa de title fixo do nome da loja',
   )
 })
@@ -91,5 +97,33 @@ test('bot-worker sobe imagem em resolução maior (hqSourceBuffer) para o card H
     botWorkerSource,
     /hqSourceBuffer = normalized\?\.buffer \|\| jpegThumbnail/,
     'produto: hqSourceBuffer precisa vir do buffer principal (até 1600px), não do thumbnail',
+  )
+})
+
+// Bug real: mensagem "Cupom mercado livre" apontando pra página de cupons
+// (sem MLB/ASIN no link) foi bloqueada com "Bloqueado por segurança" porque
+// isCouponAnnouncement (texto) exige um código em CAIXA ALTA visível na
+// legenda, que essa mensagem não tinha. O guard de title_mismatch precisa
+// também aceitar o sinal vindo da URL (linkKind resolvido por
+// resolveLinkKind), não só o sinal de texto.
+test('guard de title_mismatch exime mensagem quando primary.linkKind === coupon (não só isCouponMsg)', () => {
+  const botWorkerSource = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
+  assert.match(
+    botWorkerSource,
+    /if \(!isCouponMsg && primary\.linkKind !== 'coupon' && titleOverlap === 'mismatch'\)/,
+    'condição de bloqueio precisa exigir tanto !isCouponMsg quanto linkKind !== coupon',
+  )
+})
+
+// amazon.js/mercadolivre.js não marcam linkKind no retorno (só shopee.js
+// marca) — sem o backfill via resolveLinkKind, tanto o guard acima quanto o
+// banner de cupom (buildManualLinkPreview) nunca veem linkKind='coupon'
+// pra esses dois marketplaces.
+test('bot-worker preenche linkKind via resolveLinkKind quando o converter não decidiu', () => {
+  const botWorkerSource = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
+  assert.match(
+    botWorkerSource,
+    /const linkKind = resolveLinkKind\(platform, \{ url, converted: conversionResult\.url, linkKind: conversionResult\.linkKind \}\)/,
+    'linkKind da conversão precisa passar por resolveLinkKind antes de virar primary.linkKind',
   )
 })

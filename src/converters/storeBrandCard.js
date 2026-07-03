@@ -12,11 +12,15 @@ import sharp from 'sharp'
 // - font-family termina em sans-serif genérico: o VPS não tem Arial; o
 //   fontconfig resolve para DejaVu Sans, que renderiza texto latino normal.
 // - Saída é JPEG flat pequeno (~15-40KB), longe de qualquer limite de proto.
+// Label sempre "Cupom + Loja": link de cupom não tem produto, e sem o
+// prefixo "Cupom" o card ficava ambíguo com um card de produto de verdade
+// (a cliente reportou confusão — pediu explicitamente "Cupom Amazon",
+// "Cupom Shopee" etc. em vez de só o nome da loja).
 const BRAND_STYLES = {
-  amazon: { label: 'amazon', bg: '#131A22', fg: '#FFFFFF', accent: '#FF9900' },
-  shopee: { label: 'Shopee', bg: '#EE4D2D', fg: '#FFFFFF', accent: '#FFFFFF' },
-  mercadolivre: { label: 'Mercado Livre', bg: '#FFE600', fg: '#2D3277', accent: '#2D3277' },
-  magazineluiza: { label: 'Magalu', bg: '#0086FF', fg: '#FFFFFF', accent: '#FFFFFF' },
+  amazon: { label: 'Cupom Amazon', bg: '#131A22', fg: '#FFFFFF', accent: '#FF9900' },
+  shopee: { label: 'Cupom Shopee', bg: '#EE4D2D', fg: '#FFFFFF', accent: '#FFFFFF' },
+  mercadolivre: { label: 'Cupom Mercado Livre', bg: '#FFE600', fg: '#2D3277', accent: '#2D3277' },
+  magazineluiza: { label: 'Cupom Magalu', bg: '#0086FF', fg: '#FFFFFF', accent: '#FFFFFF' },
 }
 
 const WIDTH = 800
@@ -27,8 +31,20 @@ const HEIGHT = 420
 // mensagem num ambiente sem suporte a SVG/fontes.
 const cache = new Map()
 
+// Auto-size grosseiro por comprimento do label (glyph bold ~0.58*fontSize de
+// largura média) para o texto mais longo ("Cupom Mercado Livre", 19 chars)
+// não estourar os 800px do banner — antes só havia 2 níveis (>8 chars → 84),
+// insuficiente depois de todo label ganhar o prefixo "Cupom ".
+function fontSizeForLabel(label) {
+  const len = label.length
+  if (len <= 12) return 96
+  if (len <= 16) return 78
+  if (len <= 20) return 62
+  return 50
+}
+
 function buildBrandSvg({ label, bg, fg, accent }) {
-  const fontSize = label.length > 8 ? 84 : 110
+  const fontSize = fontSizeForLabel(label)
   return `<svg width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" xmlns="http://www.w3.org/2000/svg">
   <rect width="${WIDTH}" height="${HEIGHT}" fill="${bg}"/>
   <text x="${WIDTH / 2}" y="${HEIGHT / 2}" dominant-baseline="central" text-anchor="middle" font-family="DejaVu Sans, Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="700" fill="${fg}">${label}</text>
