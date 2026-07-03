@@ -20,9 +20,15 @@ test('gera banner JPEG por plataforma conhecida com as dimensões do card', asyn
   }
 })
 
-test('label de todas as lojas tem o prefixo "Cupom" (pedido explícito: evitar confundir com card de produto)', () => {
+test('banner tem canvas quadrado (não regredir para landscape — cortava texto no card do Desktop)', () => {
+  assert.equal(__storeBrandCardInternals.WIDTH, __storeBrandCardInternals.HEIGHT, 'WIDTH e HEIGHT precisam ser iguais (canvas quadrado)')
+})
+
+test('SVG de todas as lojas desenha "CUPOM" + o nome da loja (pedido explícito: evitar confundir com card de produto)', async () => {
+  const storeBrandCardSource = readFileSync(new URL('../src/converters/storeBrandCard.js', import.meta.url), 'utf8')
+  assert.match(storeBrandCardSource, />CUPOM</, 'SVG precisa desenhar o texto fixo "CUPOM"')
   for (const style of Object.values(__storeBrandCardInternals.BRAND_STYLES)) {
-    assert.match(style.label, /^Cupom /, `label "${style.label}" precisa começar com "Cupom "`)
+    assert.ok(style.store?.length, 'cada loja precisa de um nome (store) pra desenhar embaixo do rótulo "CUPOM"')
   }
 })
 
@@ -80,7 +86,7 @@ test('bot-worker sempre inclui title (nome da loja) no urlInfo manual do preview
 // Desktop respeita esse tamanho (ao contrário do Mobile, que estica pra
 // preencher o balão). O upload HQ precisa usar um buffer maior
 // (hqSourceBuffer, o "main" de normalizeImageForWhatsApp — até 1600px, ou o
-// banner 800x420 no caso de cupom), nunca o jpegThumbnail pequeno.
+// banner 720x720 no caso de cupom), nunca o jpegThumbnail pequeno.
 test('bot-worker sobe imagem em resolução maior (hqSourceBuffer) para o card HQ, não o thumbnail pequeno', () => {
   const botWorkerSource = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
   assert.match(

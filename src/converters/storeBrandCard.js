@@ -12,43 +12,54 @@ import sharp from 'sharp'
 // - font-family termina em sans-serif genérico: o VPS não tem Arial; o
 //   fontconfig resolve para DejaVu Sans, que renderiza texto latino normal.
 // - Saída é JPEG flat pequeno (~15-40KB), longe de qualquer limite de proto.
-// Label sempre "Cupom + Loja": link de cupom não tem produto, e sem o
-// prefixo "Cupom" o card ficava ambíguo com um card de produto de verdade
-// (a cliente reportou confusão — pediu explicitamente "Cupom Amazon",
-// "Cupom Shopee" etc. em vez de só o nome da loja).
+//
+// CANVAS QUADRADO (não regredir para 800x420 landscape): staging mostrou o
+// texto "Cupom Amazon" cortado nas bordas ("oom Ama") no WhatsApp Desktop.
+// O card compacto de link preview do WhatsApp recorta a thumbnail pro CENTRO
+// de um box aproximadamente quadrado — uma imagem landscape 800x420 perdia
+// ~24% de cada lado nesse recorte, cortando texto perto das bordas. Um
+// canvas quadrado não sofre esse corte (nada a recortar), e é a mesma
+// explicação por trás do card ainda saindo "pequeno": o box de exibição no
+// Desktop já é per se compacto/quadrado, então uma imagem larga sempre
+// aparentava "fina" ali. Texto em duas linhas ("CUPOM" pequeno em cima,
+// nome da loja grande embaixo) também evita precisar espremer o label
+// inteiro numa única linha larga.
 const BRAND_STYLES = {
-  amazon: { label: 'Cupom Amazon', bg: '#131A22', fg: '#FFFFFF', accent: '#FF9900' },
-  shopee: { label: 'Cupom Shopee', bg: '#EE4D2D', fg: '#FFFFFF', accent: '#FFFFFF' },
-  mercadolivre: { label: 'Cupom Mercado Livre', bg: '#FFE600', fg: '#2D3277', accent: '#2D3277' },
-  magazineluiza: { label: 'Cupom Magalu', bg: '#0086FF', fg: '#FFFFFF', accent: '#FFFFFF' },
+  amazon: { store: 'Amazon', bg: '#131A22', fg: '#FFFFFF', accent: '#FF9900' },
+  shopee: { store: 'Shopee', bg: '#EE4D2D', fg: '#FFFFFF', accent: '#FFFFFF' },
+  mercadolivre: { store: 'Mercado Livre', bg: '#FFE600', fg: '#2D3277', accent: '#2D3277' },
+  magazineluiza: { store: 'Magalu', bg: '#0086FF', fg: '#FFFFFF', accent: '#FFFFFF' },
 }
 
-const WIDTH = 800
-const HEIGHT = 420
+const WIDTH = 720
+const HEIGHT = 720
+const COUPON_LABEL_FONT_SIZE = 60
 
 // Banner é determinístico por plataforma → gera uma vez por processo.
 // Falha de render também é cacheada (null) para não tentar de novo a cada
 // mensagem num ambiente sem suporte a SVG/fontes.
 const cache = new Map()
 
-// Auto-size grosseiro por comprimento do label (glyph bold ~0.58*fontSize de
-// largura média) para o texto mais longo ("Cupom Mercado Livre", 19 chars)
-// não estourar os 800px do banner — antes só havia 2 níveis (>8 chars → 84),
-// insuficiente depois de todo label ganhar o prefixo "Cupom ".
-function fontSizeForLabel(label) {
-  const len = label.length
-  if (len <= 12) return 96
-  if (len <= 16) return 78
-  if (len <= 20) return 62
-  return 50
+// Auto-size grosseiro por comprimento do NOME DA LOJA (glyph bold
+// ~0.58*fontSize de largura média), mantendo o texto dentro de uma margem
+// segura (~600px de 720) mesmo se o crop do card não for perfeitamente
+// quadrado. "Mercado Livre" (13 chars) é o mais longo hoje.
+function fontSizeForStoreName(store) {
+  const len = store.length
+  if (len <= 8) return 130
+  if (len <= 14) return 78
+  return 56
 }
 
-function buildBrandSvg({ label, bg, fg, accent }) {
-  const fontSize = fontSizeForLabel(label)
+function buildBrandSvg({ store, bg, fg, accent }) {
+  const storeFontSize = fontSizeForStoreName(store)
+  const labelY = HEIGHT * 0.32
+  const storeY = HEIGHT * 0.58
   return `<svg width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" xmlns="http://www.w3.org/2000/svg">
   <rect width="${WIDTH}" height="${HEIGHT}" fill="${bg}"/>
-  <text x="${WIDTH / 2}" y="${HEIGHT / 2}" dominant-baseline="central" text-anchor="middle" font-family="DejaVu Sans, Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="700" fill="${fg}">${label}</text>
-  <rect x="${WIDTH / 2 - 120}" y="${HEIGHT / 2 + fontSize * 0.75}" width="240" height="10" rx="5" fill="${accent}"/>
+  <text x="${WIDTH / 2}" y="${labelY}" dominant-baseline="central" text-anchor="middle" font-family="DejaVu Sans, Arial, Helvetica, sans-serif" font-size="${COUPON_LABEL_FONT_SIZE}" font-weight="700" letter-spacing="6" fill="${accent}">CUPOM</text>
+  <text x="${WIDTH / 2}" y="${storeY}" dominant-baseline="central" text-anchor="middle" font-family="DejaVu Sans, Arial, Helvetica, sans-serif" font-size="${storeFontSize}" font-weight="700" fill="${fg}">${store}</text>
+  <rect x="${WIDTH / 2 - 100}" y="${storeY + storeFontSize * 0.7}" width="200" height="8" rx="4" fill="${accent}"/>
 </svg>`
 }
 
