@@ -67,3 +67,29 @@ test('bot-worker sempre inclui title (nome da loja) no urlInfo manual do preview
     'urlInfo manual precisa de title fixo do nome da loja',
   )
 })
+
+// Card pequeno/fino só no Desktop (celular ficava ótimo): a causa era subir o
+// jpegThumbnail JÁ REDUZIDO (≤500px) como fonte do upload HQ — o WhatsApp
+// grava as dimensões REAIS do buffer upado em thumbnailWidth/Height, e o
+// Desktop respeita esse tamanho (ao contrário do Mobile, que estica pra
+// preencher o balão). O upload HQ precisa usar um buffer maior
+// (hqSourceBuffer, o "main" de normalizeImageForWhatsApp — até 1600px, ou o
+// banner 800x420 no caso de cupom), nunca o jpegThumbnail pequeno.
+test('bot-worker sobe imagem em resolução maior (hqSourceBuffer) para o card HQ, não o thumbnail pequeno', () => {
+  const botWorkerSource = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
+  assert.match(
+    botWorkerSource,
+    /image: hqSourceBuffer/,
+    'upload HQ precisa usar hqSourceBuffer (resolução maior), não jpegThumbnail',
+  )
+  assert.doesNotMatch(
+    botWorkerSource,
+    /prepareWAMessageMedia\(\s*\{\s*image:\s*jpegThumbnail/,
+    'regressão: upload HQ não pode voltar a usar o jpegThumbnail já reduzido a 500px como fonte',
+  )
+  assert.match(
+    botWorkerSource,
+    /hqSourceBuffer = normalized\?\.buffer \|\| jpegThumbnail/,
+    'produto: hqSourceBuffer precisa vir do buffer principal (até 1600px), não do thumbnail',
+  )
+})

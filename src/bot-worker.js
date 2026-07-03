@@ -1175,12 +1175,33 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
 
   const sourceUrl = isHttpUrl(primary?.url) ? primary.url : matchedText
 
+  // jpegThumbnail = placeholder pequeno (inline no proto, mostrado antes da
+  // HQ carregar). hqSourceBuffer = imagem em resolução MAIOR, usada só como
+  // fonte do upload que alimenta highQualityThumbnail.
+  //
+  // Por que os dois: prepareWAMessageMedia lê as dimensões reais do buffer
+  // que sobe (Utils/messages-media.js:extractImageThumb → sharp .metadata())
+  // e grava em thumbnailWidth/thumbnailHeight do proto (Utils/messages.js).
+  // Fizemos upload do PRÓPRIO jpegThumbnail (capado em 500px) até aqui, então
+  // o card nascia com thumbnailWidth/Height ≤500 — o WhatsApp Mobile estica a
+  // imagem pra preencher a largura do balão de qualquer forma, mas o Desktop/
+  // Web respeita as dimensões gravadas e renderiza um card pequeno/fino num
+  // layout com muito mais espaço horizontal disponível (card ruim só no PC,
+  // reportado pela cliente). O preview automático do Baileys nunca tinha esse
+  // problema porque sobe a imagem ORIGINAL da página (sem redimensionar antes
+  // do upload) — aqui replicamos isso com o buffer "main" (até 1600px) do
+  // normalizeImageForWhatsApp, o mesmo já usado no envio de imagem normal.
   let jpegThumbnail
+  let hqSourceBuffer
   if (primary?.linkKind === 'coupon') {
     // Link de cupom/campanha não tem produto: raspar a landing pegava a
     // imagem de um produto promovido aleatório no card. Usa o banner da
     // marca da loja (storeBrandCard), como os canais concorrentes fazem.
-    jpegThumbnail = (await buildStoreBrandCardImage(primary?.platform)) || undefined
+    // O banner já nasce em 800x420 (bem acima de 500px) — mesma fonte para
+    // os dois campos.
+    const banner = (await buildStoreBrandCardImage(primary?.platform)) || undefined
+    jpegThumbnail = banner
+    hqSourceBuffer = banner
   } else if (primary?.platform) {
     const imageUrl = await fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}).catch((err) => {
       logger.debug({ err: err?.message, sourceUrl }, 'linkPreview manual: fetchProductImage falhou — preview sem imagem')
@@ -1191,6 +1212,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
         const fetched = await fetchImageBuffer(imageUrl, sourceUrl)
         const normalized = fetched?.buffer ? await normalizeImageForWhatsApp(fetched.buffer) : null
         jpegThumbnail = normalized?.jpegThumbnail || undefined
+        hqSourceBuffer = normalized?.buffer || jpegThumbnail
       } catch (err) {
         logger.warn({ err: err?.message, imageUrl, sourceUrl }, 'linkPreview manual: falha ao baixar thumbnail — preview sem imagem')
       }
@@ -1198,10 +1220,10 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
   }
 
   let highQualityThumbnail
-  if (jpegThumbnail && typeof uploadToServer === 'function') {
+  if (hqSourceBuffer && typeof uploadToServer === 'function') {
     try {
       const { imageMessage } = await prepareWAMessageMedia(
-        { image: jpegThumbnail },
+        { image: hqSourceBuffer },
         { upload: uploadToServer, mediaTypeOverride: 'thumbnail-link' },
       )
       highQualityThumbnail = imageMessage || undefined
