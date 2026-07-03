@@ -66,8 +66,11 @@ jobs:
             echo "npm ci (API) — tentativa ${attempt}/3"
             if npm ci --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000; then
               exit 0
+            else
+              # status precisa ser capturado no else: após um `if` sem ramo
+              # executado, $? é 0 e o step "passaria" mesmo com npm ci quebrado.
+              status=$?
             fi
-            status=$?
             echo "::warning::npm ci (API) falhou na tentativa ${attempt}/3 com exit ${status}. Aguardando antes de tentar novamente..."
             npm cache verify || true
             sleep $((attempt * 10))
@@ -86,8 +89,11 @@ jobs:
             echo "npm ci (dashboard) — tentativa ${attempt}/3"
             if npm ci --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000; then
               exit 0
+            else
+              # status precisa ser capturado no else: após um `if` sem ramo
+              # executado, $? é 0 e o step "passaria" mesmo com npm ci quebrado.
+              status=$?
             fi
-            status=$?
             echo "::warning::npm ci (dashboard) falhou na tentativa ${attempt}/3 com exit ${status}. Aguardando antes de tentar novamente..."
             npm cache verify || true
             sleep $((attempt * 10))

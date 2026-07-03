@@ -5,13 +5,13 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   downloadMediaMessage,
   extractMessageContent,
+  prepareWAMessageMedia,
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import NodeCache from '@cacheable/node-cache'
 import { readFileSync, mkdirSync } from 'fs'
 import { rm, writeFile, readdir } from 'fs/promises'
 import { dirname } from 'path'
-import sharp from 'sharp'
 
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
@@ -1166,111 +1166,45 @@ function derivePreviewDescriptionFromText(text) {
   return lines.slice(1, 4).join(' • ') || lines[0] || ''
 }
 
-function escapeSvgText(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
-function wrapTextLines(value, maxChars, maxLines) {
-  const words = cleanPreviewText(value, maxChars * maxLines * 2).split(/\s+/).filter(Boolean)
-  const lines = []
-  let current = ''
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word
-    if (next.length > maxChars && current) {
-      lines.push(current)
-      current = word
-      if (lines.length >= maxLines) break
-    } else {
-      current = next
-    }
-  }
-  if (current && lines.length < maxLines) lines.push(current)
-  if (lines.length === maxLines && words.join(' ').length > lines.join(' ').length) {
-    lines[maxLines - 1] = `${lines[maxLines - 1].replace(/…$/, '')}…`
-  }
-  return lines
-}
-
-async function buildWideLinkPreviewThumbnail({ imageBuffer, title, description, sourceUrl }) {
-  if (!imageBuffer?.length) return null
-  const width = 1200
-  const height = 630
-  const product = await sharp(imageBuffer, { failOn: 'none' })
-    .rotate()
-    .resize({ width: 500, height: 500, fit: 'inside', withoutEnlargement: true, background: '#ffffff' })
-    .flatten({ background: '#ffffff' })
-    .jpeg({ quality: 92, mozjpeg: true })
-    .toBuffer()
-
-  const titleLines = wrapTextLines(title, 27, 3)
-  const descLines = wrapTextLines(description, 34, 2)
-  const host = (() => {
-    try { return new URL(sourceUrl).hostname.replace(/^www\./, '') } catch { return '' }
-  })()
-  const titleSvg = titleLines.map((line, idx) => `<tspan x="620" dy="${idx === 0 ? 0 : 54}">${escapeSvgText(line)}</tspan>`).join('')
-  const descSvg = descLines.map((line, idx) => `<tspan x="620" dy="${idx === 0 ? 0 : 40}">${escapeSvgText(line)}</tspan>`).join('')
-
-  const svg = Buffer.from(`
-    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#063f2c"/>
-          <stop offset="100%" stop-color="#111827"/>
-        </linearGradient>
-        <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000000" flood-opacity="0.35"/>
-        </filter>
-      </defs>
-      <rect width="1200" height="630" fill="url(#bg)"/>
-      <circle cx="1080" cy="82" r="150" fill="#16a34a" opacity="0.16"/>
-      <circle cx="102" cy="550" r="180" fill="#22c55e" opacity="0.10"/>
-      <rect x="48" y="58" width="532" height="514" rx="34" fill="#ffffff" filter="url(#shadow)"/>
-      <text x="620" y="128" font-family="Arial, Helvetica, sans-serif" font-size="46" font-weight="800" fill="#ffffff">${titleSvg}</text>
-      <text x="620" y="342" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="#bbf7d0">${descSvg}</text>
-      <text x="620" y="505" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" fill="#22c55e">🔗 ${escapeSvgText(host)}</text>
-      <text x="620" y="558" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#e5e7eb">Toque para abrir a oferta</text>
-    </svg>
-  `)
-
-  return sharp({ create: { width, height, channels: 3, background: '#0f172a' } })
-    .composite([
-      { input: svg, top: 0, left: 0 },
-      { input: product, top: 65, left: 64 },
-    ])
-    .jpeg({ quality: 90, mozjpeg: true, chromaSubsampling: '4:4:4' })
-    .toBuffer()
-}
-
-function buildLargePreviewAdReply(linkPreview) {
-  if (!linkPreview || typeof linkPreview !== 'object') return null
-  const sourceUrl = linkPreview['canonical-url'] || linkPreview['matched-text']
-  if (!isHttpUrl(sourceUrl)) return null
-  return {
-    title: linkPreview.title || 'Oferta',
-    body: linkPreview.description || '',
-    sourceUrl,
-    mediaType: 1,
-    renderLargerThumbnail: true,
-    showAdAttribution: false,
-    ...(linkPreview.jpegThumbnail ? { thumbnail: linkPreview.jpegThumbnail } : {}),
-  }
-}
-
-async function buildManualLinkPreview({ text, primary, credentialsMap }) {
+// Monta o WAUrlInfo manual do modo "preview" (card clicável). Necessário
+// porque links de afiliado (s.shopee.com.br, amzn.to, /sec/ do ML) bloqueiam
+// o scraper automático do Baileys (link-preview-js) e o preview não sai.
+//
+// Card GRANDE: o WhatsApp só renderiza o card grande quando o proto carrega
+// thumbnailDirectPath/mediaKey de uma thumbnail UPADA nos servidores do WA —
+// linkPreview.highQualityThumbnail preenchido via prepareWAMessageMedia com
+// mediaTypeOverride 'thumbnail-link', o MESMO caminho interno que o Baileys
+// usa em generateHighQualityLinkPreview (ver Utils/link-preview.js). Uma
+// thumbnail inline gigante NÃO produz card grande — só incha o proto (risco
+// de rejeição). O inline aqui é o thumb 500px q80 já validado em produção
+// (normalizeImageForWhatsApp), como placeholder enquanto o cliente baixa a HQ.
+//
+// NUNCA usar contextInfo.externalAdReply para "forçar" card grande: é campo
+// de anúncio e causa drop silencioso em mensagem monitorada — a guarda em
+// monitoredMessagePayload.js rejeita payload com esse campo em qualquer rota.
+async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer }) {
   const matchedText = isHttpUrl(primary?.converted) ? primary.converted : (isHttpUrl(primary?.url) ? primary.url : '')
   if (!matchedText) return null
+  // matched-text precisa existir literalmente no corpo da mensagem; sem essa
+  // âncora o cliente WhatsApp não associa o card ao link e não renderiza nada.
+  // Sem âncora, devolve null e o Baileys tenta o preview automático.
+  if (!String(text || '').includes(matchedText)) return null
 
   const sourceUrl = isHttpUrl(primary?.url) ? primary.url : matchedText
   const [productInfo, imageUrl] = await Promise.all([
     fetchProductInfo(sourceUrl, {
       mlCredentials: credentialsMap?.mercadolivre,
       shopeeCredentials: credentialsMap?.shopee,
-    }).catch(() => null),
-    primary?.platform ? fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}).catch(() => null) : Promise.resolve(null),
+    }).catch((err) => {
+      logger.debug({ err: err?.message, sourceUrl }, 'linkPreview manual: fetchProductInfo falhou — usando texto da mensagem')
+      return null
+    }),
+    primary?.platform
+      ? fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}).catch((err) => {
+          logger.debug({ err: err?.message, sourceUrl }, 'linkPreview manual: fetchProductImage falhou — preview sem imagem')
+          return null
+        })
+      : Promise.resolve(null),
   ])
 
   const title = cleanPreviewText(productInfo?.title, 120) || derivePreviewTitleFromText(text)
@@ -1280,18 +1214,25 @@ async function buildManualLinkPreview({ text, primary, credentialsMap }) {
   )
 
   let jpegThumbnail
+  let highQualityThumbnail
   if (isHttpUrl(imageUrl)) {
     try {
       const fetched = await fetchImageBuffer(imageUrl, sourceUrl)
-      jpegThumbnail = fetched?.buffer
-        ? await buildWideLinkPreviewThumbnail({ imageBuffer: fetched.buffer, title, description, sourceUrl: matchedText })
-        : null
-      if (!jpegThumbnail && fetched?.buffer) {
-        const normalized = await normalizeImageForWhatsApp(fetched.buffer)
-        jpegThumbnail = normalized?.jpegThumbnail || undefined
+      const normalized = fetched?.buffer ? await normalizeImageForWhatsApp(fetched.buffer) : null
+      jpegThumbnail = normalized?.jpegThumbnail || undefined
+      if (jpegThumbnail && typeof uploadToServer === 'function') {
+        try {
+          const { imageMessage } = await prepareWAMessageMedia(
+            { image: jpegThumbnail },
+            { upload: uploadToServer, mediaTypeOverride: 'thumbnail-link' },
+          )
+          highQualityThumbnail = imageMessage || undefined
+        } catch (err) {
+          logger.warn({ err: err?.message, sourceUrl }, 'linkPreview manual: upload da thumbnail HQ falhou — card sai compacto')
+        }
       }
     } catch (err) {
-      logger.warn({ err: err?.message, imageUrl, sourceUrl }, 'linkPreview manual: falha ao baixar thumbnail — enviando preview sem imagem manual')
+      logger.warn({ err: err?.message, imageUrl, sourceUrl }, 'linkPreview manual: falha ao baixar thumbnail — preview sem imagem')
     }
   }
 
@@ -1301,6 +1242,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap }) {
     title,
     description,
     ...(jpegThumbnail ? { jpegThumbnail } : {}),
+    ...(highQualityThumbnail ? { highQualityThumbnail } : {}),
   }
 }
 
@@ -2921,21 +2863,23 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // passar pelo Redis. Ver enqueueSendJob() para a explicação completa.
         const buildPayload = async () => {
           // Modo "preview": envia uma única mensagem de texto com link preview
-          // clicável do WhatsApp. Baixa só a thumbnail do card quando possível;
-          // não faz upload de imageMessage (clique ampliaria a foto).
+          // clicável do WhatsApp (card grande via thumbnail HQ upada — ver
+          // buildManualLinkPreview). Não envia imageMessage: o clique no card
+          // abre o link, enquanto o clique numa imagem só ampliaria a foto.
+          // activeSock (e não um sock capturado) porque buildPayload roda no
+          // dequeue, possivelmente após reconexão.
           if (imageMode === 'preview') {
             const linkPreview = await buildManualLinkPreview({
               text: variantText,
               primary,
               credentialsMap: cfg.credentials,
+              uploadToServer: activeSock?.waUploadToServer,
             })
-            const externalAdReply = buildLargePreviewAdReply(linkPreview)
             return buildMonitoredMessagePayload({
               finalText: variantText,
               image: null,
               useLinkPreview: true,
               linkPreview,
-              externalAdReply,
             })
           }
 

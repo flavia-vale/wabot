@@ -1,7 +1,13 @@
 const EXTERNAL_AD_REPLY_KEY = 'externalAdReply'
 
+// Lição de produção (incidente "Ver canal" + tentativa de preview 2026-06):
+// contextInfo.externalAdReply em mensagem monitorada causa DROP SILENCIOSO no
+// WhatsApp — o envio "sucede" no Baileys e ninguém recebe. A guarda roda em
+// TODO payload retornado por buildMonitoredMessagePayload, inclusive na rota
+// de texto (foi por essa brecha que a regressão passou da última vez).
 function assertNoExternalAdReply(value, path = 'payload') {
   if (!value || typeof value !== 'object') return
+  if (Buffer.isBuffer(value) || value instanceof Uint8Array) return
   if (Object.prototype.hasOwnProperty.call(value, EXTERNAL_AD_REPLY_KEY)) {
     throw new Error(`Payload monitorado inseguro: ${path}.${EXTERNAL_AD_REPLY_KEY} causa drop silencioso no WhatsApp`)
   }
@@ -10,26 +16,29 @@ function assertNoExternalAdReply(value, path = 'payload') {
   }
 }
 
-export function buildMonitoredMessagePayload({ finalText, image, useLinkPreview = false, linkPreview = null, externalAdReply = null }) {
+// `linkPreview` (formato WAUrlInfo do Baileys) permite injetar o card de URL
+// manualmente quando o destino do link bloqueia o scraper automático (links
+// de afiliado Shopee/Amazon). Para o card GRANDE, o chamador deve preencher
+// linkPreview.highQualityThumbnail com o resultado de um upload prévio via
+// prepareWAMessageMedia (thumbnail-link) — thumbnail inline gigante NÃO
+// produz card grande e arrisca rejeição do proto.
+export function buildMonitoredMessagePayload({ finalText, image, useLinkPreview = false, linkPreview = null }) {
   const textPayload = { text: String(finalText || '') }
-  if (useLinkPreview && externalAdReply && typeof externalAdReply === 'object') {
-    // externalAdReply com renderLargerThumbnail força o card grande no cliente
-    // WhatsApp. linkPreview=null evita o card compacto padrão em paralelo.
-    textPayload.linkPreview = null
-    textPayload.contextInfo = { externalAdReply }
-  } else if (useLinkPreview && linkPreview && typeof linkPreview === 'object') {
+  if (useLinkPreview && linkPreview && typeof linkPreview === 'object') {
     textPayload.linkPreview = linkPreview
   }
   const textSendOptions = useLinkPreview ? { generateHighQualityLinkPreview: true } : undefined
 
   if (!image?.buffer) {
-    return {
+    const payload = {
       _route: 'text',
       primary: textPayload,
       primarySendOptions: textSendOptions,
       fallbacks: [],
       fallbackSendOptions: [],
     }
+    assertNoExternalAdReply(payload)
+    return payload
   }
 
   const imagePayload = {
