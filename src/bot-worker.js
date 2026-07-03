@@ -18,7 +18,6 @@ import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
-import { fetchProductInfo } from './converters/productInfoScraper.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
 import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
@@ -1141,34 +1140,17 @@ function buildBroadcastImageRecipe(text, options = {}) {
   }
 }
 
-function cleanPreviewText(value, maxLength = 140) {
-  return String(value || '')
-    .replace(/https?:\/\/\S+/g, ' ')
-    .replace(/[~*_`>|#]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, maxLength)
-}
-
-function derivePreviewTitleFromText(text) {
-  const line = String(text || '')
-    .split(/\r?\n/)
-    .map(part => cleanPreviewText(part, 120))
-    .find(Boolean)
-  return line || 'Oferta'
-}
-
-function derivePreviewDescriptionFromText(text) {
-  const lines = String(text || '')
-    .split(/\r?\n/)
-    .map(part => cleanPreviewText(part, 180))
-    .filter(Boolean)
-  return lines.slice(1, 4).join(' • ') || lines[0] || ''
-}
-
 // Monta o WAUrlInfo manual do modo "preview" (card clicável). Necessário
 // porque links de afiliado (s.shopee.com.br, amzn.to, /sec/ do ML) bloqueiam
 // o scraper automático do Baileys (link-preview-js) e o preview não sai.
+//
+// O card é SÓ IMAGEM por decisão de produto (2026-07): título e preço ficam
+// exclusivamente no texto da mensagem. O preço raspado do card divergia do
+// preço real da oferta com cupom (ex.: card "Por: 1.825,87" vs texto
+// "POR 1.675,87 com cupom") e o título duplicava a primeira linha do texto.
+// Sem título/descrição o WhatsApp renderiza imagem + domínio, e de quebra o
+// modo preview deixou de raspar a página do produto (fetchProductInfo) —
+// só busca a imagem.
 //
 // Card GRANDE: o WhatsApp só renderiza o card grande quando o proto carrega
 // thumbnailDirectPath/mediaKey de uma thumbnail UPADA nos servidores do WA —
@@ -1191,27 +1173,12 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
   if (!String(text || '').includes(matchedText)) return null
 
   const sourceUrl = isHttpUrl(primary?.url) ? primary.url : matchedText
-  const [productInfo, imageUrl] = await Promise.all([
-    fetchProductInfo(sourceUrl, {
-      mlCredentials: credentialsMap?.mercadolivre,
-      shopeeCredentials: credentialsMap?.shopee,
-    }).catch((err) => {
-      logger.debug({ err: err?.message, sourceUrl }, 'linkPreview manual: fetchProductInfo falhou — usando texto da mensagem')
-      return null
-    }),
-    primary?.platform
-      ? fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}).catch((err) => {
-          logger.debug({ err: err?.message, sourceUrl }, 'linkPreview manual: fetchProductImage falhou — preview sem imagem')
-          return null
-        })
-      : Promise.resolve(null),
-  ])
-
-  const title = cleanPreviewText(productInfo?.title, 120) || derivePreviewTitleFromText(text)
-  const description = cleanPreviewText(
-    productInfo?.newPrice ? `Por: ${productInfo.newPrice}` : derivePreviewDescriptionFromText(text),
-    180,
-  )
+  const imageUrl = primary?.platform
+    ? await fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}).catch((err) => {
+        logger.debug({ err: err?.message, sourceUrl }, 'linkPreview manual: fetchProductImage falhou — preview sem imagem')
+        return null
+      })
+    : null
 
   let jpegThumbnail
   let highQualityThumbnail
@@ -1236,11 +1203,14 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     }
   }
 
+  // Sem thumbnail não há card de imagem para montar; um urlInfo só com
+  // matched-text renderia uma barra vazia. Null deixa o Baileys tentar o
+  // preview automático (e a mensagem sai como texto quando ele não vier).
+  if (!jpegThumbnail) return null
+
   return {
     'canonical-url': matchedText,
     'matched-text': matchedText,
-    title,
-    description,
     ...(jpegThumbnail ? { jpegThumbnail } : {}),
     ...(highQualityThumbnail ? { highQualityThumbnail } : {}),
   }

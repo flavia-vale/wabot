@@ -46,11 +46,11 @@ test('payload monitorado sem imagem + useLinkPreview pede preview automático do
 
 test('payload monitorado em modo preview injeta linkPreview manual (com thumbnail HQ upada)', () => {
   const finalText = 'Oferta convertida https://afiliado.example/produto'
+  // Card só-imagem (decisão de produto 2026-07): sem title/description —
+  // título e preço vivem apenas no texto da mensagem.
   const linkPreview = {
     'canonical-url': 'https://afiliado.example/produto',
     'matched-text': 'https://afiliado.example/produto',
-    title: 'Produto em oferta',
-    description: 'Por: R$ 62,90',
     jpegThumbnail: Buffer.from('thumb'),
     // Resultado de prepareWAMessageMedia (thumbnail-link): é o que faz o
     // WhatsApp renderizar o card GRANDE (thumbnailDirectPath/mediaKey).
