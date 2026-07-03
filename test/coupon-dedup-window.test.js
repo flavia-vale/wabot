@@ -36,7 +36,7 @@ test('effectiveDedupWindowMs é escolhido por primary.linkKind === coupon antes 
 test('checagens de dedup local/DB/Redis no loop de destinos usam effectiveDedupWindowMs, não linkDedupWindowMs', () => {
   assert.match(
     botWorkerSource,
-    /Date\.now\(\) - dedup\.links\[key\] < effectiveDedupWindowMs/,
+    /\.find\(m => m\.ageMs < effectiveDedupWindowMs\)/,
     'dedup local (in-memory) precisa usar effectiveDedupWindowMs',
   )
   assert.match(
@@ -77,7 +77,20 @@ test('reserva SendDedupKey usa SEND_DEDUP_RESERVATION_TTL_MS fixo, não effectiv
   )
 })
 
-test('dedup global via Redis compara timestamp guardado contra ttlMs do chamador, não o TTL nativo da chave', () => {
+// A lógica de "timestamp guardado vs. janela do chamador" mora em
+// core/globalDedup.js (coberta por testes FUNCIONAIS reais com ioredis-mock
+// em test/core/global-dedup.test.js — bot-worker.js é grande demais pra
+// importar em teste sem efeitos colaterais, então antes só tinha regex
+// checando o texto do source, sem nunca provar que o Redis se comportava
+// como esperado). Aqui só garantimos que bot-worker.js está de fato
+// chamando essa lógica extraída, com o safety-cap fixo certo — não a janela
+// lógica — e não voltou a reimplementar o SET NX inline com ttlMs.
+test('globalDedupCheckAndSet delega para checkAndSetGlobalDedup (core/globalDedup.js) com o safety-cap fixo certo', () => {
+  assert.match(
+    botWorkerSource,
+    /import \{ checkAndSetGlobalDedup \} from '\.\/core\/globalDedup\.js'/,
+    'bot-worker.js precisa importar a lógica extraída e testada de core/globalDedup.js',
+  )
   assert.match(
     botWorkerSource,
     /const GLOBAL_DEDUP_REDIS_SAFETY_CAP_MS = Math\.max\(60_000, Number\(process\.env\.GLOBAL_DEDUP_REDIS_SAFETY_CAP_MS\) \|\| 24 \* 60 \* 60_000\)/,
@@ -85,12 +98,12 @@ test('dedup global via Redis compara timestamp guardado contra ttlMs do chamador
   )
   assert.match(
     botWorkerSource,
-    /if \(existingTs && now - existingTs < ttlMs\) return \{ duplicate: true \}/,
-    'decisão de duplicata precisa comparar o timestamp guardado contra ttlMs (janela do chamador) em tempo de leitura',
+    /return await checkAndSetGlobalDedup\(r, `dedup:\$\{userId\}:\$\{key\}`, ttlMs, \{ safetyCapMs: GLOBAL_DEDUP_REDIS_SAFETY_CAP_MS \}\)/,
+    'globalDedupCheckAndSet precisa delegar pra checkAndSetGlobalDedup com o safetyCapMs fixo (não ttlMs) como TTL nativo',
   )
   assert.doesNotMatch(
     botWorkerSource,
-    /const ok = await r\.set\(`dedup:\$\{userId\}:\$\{key\}`, '1', 'PX', ttlMs, 'NX'\)/,
+    /await r\.set\(`dedup:\$\{userId\}:\$\{key\}`, '1', 'PX', ttlMs, 'NX'\)/,
     'regressão: não pode voltar a gravar TTL=ttlMs direto na chave (prende dedup na janela de quando a chave foi criada)',
   )
 })
@@ -98,11 +111,40 @@ test('dedup global via Redis compara timestamp guardado contra ttlMs do chamador
 test('registerDedupBlock aceita dedupWindowMs explícito e as 4 chamadas do loop passam effectiveDedupWindowMs', () => {
   assert.match(
     botWorkerSource,
-    /async function registerDedupBlock\(\{ reason, platform, destJid, originalUrl: incomingUrl, convertedUrl: outgoingUrl, messageText, dedupWindowMs = linkDedupWindowMs \}\)/,
+    /async function registerDedupBlock\(\{ reason, platform, destJid, originalUrl: incomingUrl, convertedUrl: outgoingUrl, messageText, dedupWindowMs = linkDedupWindowMs, ageMs = null \}\)/,
     'registerDedupBlock precisa aceitar dedupWindowMs (default linkDedupWindowMs para chamadores fora do loop)',
   )
   const callsWithEffectiveWindow = (botWorkerSource.match(/dedupWindowMs: effectiveDedupWindowMs,/g) || []).length
   assert.equal(callsWithEffectiveWindow, 4, 'as 4 chamadas de registerDedupBlock dentro do loop de destinos precisam passar effectiveDedupWindowMs')
+})
+
+// Diagnóstico (RCA de cupom preso em dedup — 3ª rodada de reports): sem
+// saber HÁ QUANTO TEMPO o bloqueio anterior aconteceu, cada novo report de
+// "cupom ainda bloqueado" virava suposição nova em vez de dado conclusivo.
+// registerDedupBlock grava esse tempo direto no errorMsg (sufixo
+// :age=Xs:window=Ys, prefixo skip:dedup* preservado pra categorizeErrorMsg
+// continuar batendo por startsWith).
+test('registerDedupBlock grava o sufixo de idade (:age=Xs:window=Ys) no errorMsg quando ageMs é numérico', () => {
+  assert.match(
+    botWorkerSource,
+    /const ageSuffix = Number\.isFinite\(ageMs\) \? `:age=\$\{Math\.round\(ageMs \/ 1000\)\}s:window=\$\{Math\.round\(dedupWindowMs \/ 1000\)\}s` : ''/,
+    'sufixo de diagnóstico precisa ser calculado a partir de ageMs/dedupWindowMs',
+  )
+  assert.match(
+    botWorkerSource,
+    /errorMsg: reasonWithAge,/,
+    'a linha criada no MessageLog precisa usar reasonWithAge (reason + sufixo), não o reason cru',
+  )
+})
+
+// As 3 camadas que conseguem medir "há quanto tempo" (local, DB, Redis)
+// precisam passar ageMs pra registerDedupBlock — a reserva (SendDedupKey)
+// fica de fora de propósito (ver comentário no código: seu TTL já é o teto).
+test('as camadas local/DB/Redis calculam e passam ageMs para registerDedupBlock', () => {
+  assert.match(botWorkerSource, /ageMs: localDedupMatch\.ageMs,/, 'camada local precisa passar a idade da chave que bateu')
+  assert.match(botWorkerSource, /const dbAgeMs = Date\.now\(\) - new Date\(recentDbDuplicate\.sentAt\)\.getTime\(\)/, 'camada DB precisa calcular a idade a partir de sentAt')
+  assert.match(botWorkerSource, /ageMs: dbAgeMs,/, 'camada DB precisa passar a idade calculada')
+  assert.match(botWorkerSource, /ageMs: globalDuplicateAgeMs,/, 'camada Redis precisa passar a idade devolvida por checkAndSetGlobalDedup')
 })
 
 test('sendDedupKey.updateMany (vínculo com o MessageLog) continua logo após a reserva, sem depender do TTL', () => {

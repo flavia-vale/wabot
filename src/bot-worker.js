@@ -35,6 +35,7 @@ import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, reso
 import { withSendTimeout as withSendTimeoutImpl } from './sendMessageTimeout.js'
 import { buildStableSendMessageId } from './core/stableMessageId.js'
 import { buildMirrorDedupKeys } from './core/mirrorDedupKey.js'
+import { checkAndSetGlobalDedup } from './core/globalDedup.js'
 import { resolveSendTimeoutOverrideMs, resolveSendTimeoutMs as resolveSendTimeoutMsPure, DEFAULT_SEND_TIMEOUT_BY_ATTEMPT_MS } from './core/sendTimeout.js'
 import { detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
@@ -164,35 +165,13 @@ const SEND_DEDUP_RESERVATION_TTL_MS = Math.max(30_000, Number(process.env.SEND_D
 async function globalDedupCheckAndSet(key, ttlMs) {
   const r = ensureRuntimeRedis()
   if (!r) return { duplicate: false }
-  const redisKey = `dedup:${userId}:${key}`
   try {
-    const now = Date.now()
-    // Caminho comum (chave nova): SET NX continua atômico, sem round-trip
-    // extra — mesmo comportamento de sempre.
-    const ok = await r.set(redisKey, String(now), 'PX', GLOBAL_DEDUP_REDIS_SAFETY_CAP_MS, 'NX')
-    if (ok === 'OK') return { duplicate: false }
-
-    // Chave já existe. ANTES, isso bastava pra tratar como duplicata — bug
-    // real: cupom passou a usar janela curta (couponDedupWindowMs, 5min) em
-    // vez da diária, mas uma chave gravada ANTES dessa mudança (sob a janela
-    // longa antiga) continuava bloqueando reenvios legítimos até o TTL
-    // NATIVO da chave expirar sozinho (até 24h depois) — o código novo não
-    // tem como "encolher" o TTL de uma chave já gravada no Redis. Qualquer
-    // futura mudança de janela por linkKind sofreria do mesmo jeito.
-    //
-    // Fix: o valor guardado é o TIMESTAMP do último envio (não mais '1'); a
-    // decisão de duplicata compara esse timestamp contra ttlMs (a janela
-    // ATUAL do chamador) em tempo de leitura, igual à dedup local/DB — não
-    // contra o TTL nativo da chave. Key existe mas já passou de ttlMs?
-    // Não é duplicata de verdade: sobrescreve com o timestamp novo e libera.
-    // Só essa branch (chave já existente) paga o round-trip extra do GET;
-    // é uma race bem mais estreita que a proteção primária (índice único do
-    // SendDedupKey no SQLite, que já fecha a corrida cross-worker de verdade).
-    const existing = await r.get(redisKey)
-    const existingTs = Number(existing) || 0
-    if (existingTs && now - existingTs < ttlMs) return { duplicate: true }
-    await r.set(redisKey, String(now), 'PX', GLOBAL_DEDUP_REDIS_SAFETY_CAP_MS)
-    return { duplicate: false }
+    // Lógica em core/globalDedup.js (testada com ioredis-mock em
+    // test/core/global-dedup.test.js) — bot-worker.js é grande demais pra
+    // importar em teste sem efeitos colaterais, então essa extração é o que
+    // permite cobertura funcional de verdade (não só regex no source) pra
+    // uma lógica que já causou incidente real de cupom preso em dedup.
+    return await checkAndSetGlobalDedup(r, `dedup:${userId}:${key}`, ttlMs, { safetyCapMs: GLOBAL_DEDUP_REDIS_SAFETY_CAP_MS })
   } catch (err) {
     if (REDIS_DEDUP_FAIL_MODE === 'closed') throw new Error(`Global dedup unavailable: ${err.message}`)
     // Gatilho de escala observável (WABOT-010): em fail-open a dedup global
@@ -2237,8 +2216,17 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // couponDedupWindowMs — ver chamadas no loop de destinos). Se não houver
       // linha recente (estado dessincronizado após restart, por exemplo), cria
       // uma nova como fallback para não perder visibilidade do evento.
-      async function registerDedupBlock({ reason, platform, destJid, originalUrl: incomingUrl, convertedUrl: outgoingUrl, messageText, dedupWindowMs = linkDedupWindowMs }) {
+      async function registerDedupBlock({ reason, platform, destJid, originalUrl: incomingUrl, convertedUrl: outgoingUrl, messageText, dedupWindowMs = linkDedupWindowMs, ageMs = null }) {
         if (!shouldTrackSkipped) return
+        // Diagnóstico (RCA de cupom preso em dedup, 3ª rodada de reports):
+        // grava HÁ QUANTO TEMPO o bloqueio anterior aconteceu, direto no
+        // errorMsg (prefixo skip:dedup* preservado — categorizeErrorMsg
+        // continua batendo por startsWith). Sem isso, tanto o painel quanto
+        // o log só diziam "bloqueado", sem dar pra confirmar se o bloqueio
+        // estava mesmo dentro da janela configurada ou se era outro bug —
+        // cada report virava suposição nova em vez de diagnóstico conclusivo.
+        const ageSuffix = Number.isFinite(ageMs) ? `:age=${Math.round(ageMs / 1000)}s:window=${Math.round(dedupWindowMs / 1000)}s` : ''
+        const reasonWithAge = `${reason}${ageSuffix}`
         const since = new Date(Date.now() - dedupWindowMs)
         const lookupUrl = outgoingUrl || incomingUrl || ''
         try {
@@ -2277,7 +2265,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             convertedUrl: outgoingUrl || '',
             messageText: sanitizeMessageForLog(messageText || reason),
             status: 'skipped',
-            errorMsg: reason,
+            errorMsg: reasonWithAge,
             dedupHits: 0,
           },
         }).catch(() => {})
@@ -2770,7 +2758,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           primaryConverted: primary.converted,
           fallbackSubject: fallbackDedupSubject,
         })
-        if (dedupKeys.some(key => dedup.links[key] && Date.now() - dedup.links[key] < effectiveDedupWindowMs)) {
+        const localDedupMatch = dedupKeys
+          .map(key => (dedup.links[key] ? { key, ageMs: Date.now() - dedup.links[key] } : null))
+          .filter(Boolean)
+          .find(m => m.ageMs < effectiveDedupWindowMs)
+        if (localDedupMatch) {
           await registerDedupBlock({
             reason: 'skip:dedup_recent_link',
             platform: primary.platform,
@@ -2779,8 +2771,14 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             convertedUrl: primary.converted,
             messageText: finalText,
             dedupWindowMs: effectiveDedupWindowMs,
+            ageMs: localDedupMatch.ageMs,
           })
-          logger.info({ destJid, dedupKeyCount: dedupKeys.length }, 'Duplicata ignorada'); continue
+          // Diagnóstico (2ª rodada de reports de cupom preso): loga QUAL chave
+          // bateu (url original vs. convertido — ver buildMirrorDedupKeys) e há
+          // quanto tempo, pra distinguir "bloqueio de verdade dentro da janela"
+          // de "bug". matchedKey aqui é destJid:url — comparar com primary.url/
+          // primary.converted no log de 'Link convertido' de perto no tempo.
+          logger.info({ destJid, dedupKeyCount: dedupKeys.length, matchedKey: localDedupMatch.key, ageMs: localDedupMatch.ageMs, windowMs: effectiveDedupWindowMs, layer: 'local' }, 'Duplicata ignorada'); continue
         }
 
         // Trava compartilhada entre processos. A dedup local é por worker; se
@@ -2803,13 +2801,14 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
                 ],
               },
               orderBy: { sentAt: 'desc' },
-              select: { id: true },
+              select: { id: true, sentAt: true },
             }).catch(err => {
               logger.warn({ err: err?.message, destJid }, 'Dedup DB lookup falhou; seguindo com dedup local/global')
               return null
             })
           : null
         if (recentDbDuplicate) {
+          const dbAgeMs = Date.now() - new Date(recentDbDuplicate.sentAt).getTime()
           await registerDedupBlock({
             reason: 'skip:dedup_recent_link',
             platform: primary.platform,
@@ -2818,8 +2817,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             convertedUrl: primary.converted,
             messageText: finalText,
             dedupWindowMs: effectiveDedupWindowMs,
+            ageMs: dbAgeMs,
           })
-          logger.info({ destJid, recentLogId: recentDbDuplicate.id, dedupKeyCount: dedupKeys.length }, 'Duplicata DB ignorada')
+          logger.info({ destJid, recentLogId: recentDbDuplicate.id, dedupKeyCount: dedupKeys.length, ageMs: dbAgeMs, windowMs: effectiveDedupWindowMs, layer: 'db' }, 'Duplicata DB ignorada')
           continue
         }
 
@@ -2872,8 +2872,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             convertedUrl: primary.converted,
             messageText: finalText,
             dedupWindowMs: effectiveDedupWindowMs,
+            // Sem round-trip extra pra achar o createdAt da linha conflitante:
+            // por construção, SEND_DEDUP_RESERVATION_TTL_MS já é o teto (fixo,
+            // curto) de quão "recente" essa reserva pode ser.
+            ageMs: null,
           })
-          logger.info({ destJid, dedupKeyCount: dedupKeys.length }, 'Duplicata reservada DB ignorada')
+          logger.info({ destJid, dedupKeyCount: dedupKeys.length, windowMs: effectiveDedupWindowMs, layer: 'reservation' }, 'Duplicata reservada DB ignorada')
           continue
         }
 
@@ -2884,10 +2888,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           // PRODUTO passar de novo poucos minutos depois quando o bloqueio
           // in-memory não pegava (ex.: outro processo/instância).
           let globalDuplicate = false
+          let globalDuplicateAgeMs = null
           for (const key of dedupKeys) {
             const globalDedup = await globalDedupCheckAndSet(key, effectiveDedupWindowMs)
             if (globalDedup.duplicate) {
               globalDuplicate = true
+              globalDuplicateAgeMs = globalDedup.ageMs ?? null
               break
             }
           }
@@ -2900,8 +2906,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               convertedUrl: primary.converted,
               messageText: finalText,
               dedupWindowMs: effectiveDedupWindowMs,
+              ageMs: globalDuplicateAgeMs,
             })
-            logger.info({ destJid, dedupKeyCount: dedupKeys.length }, 'Duplicata global ignorada')
+            logger.info({ destJid, dedupKeyCount: dedupKeys.length, ageMs: globalDuplicateAgeMs, windowMs: effectiveDedupWindowMs, layer: 'redis' }, 'Duplicata global ignorada')
             continue
           }
         }
