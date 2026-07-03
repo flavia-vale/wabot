@@ -2848,6 +2848,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         })
         const reservedDedupKeys = []
         let reservedDuplicate = false
+        let reservedDuplicateKey = null
         for (const key of dedupKeys) {
           try {
             const reservation = await db.sendDedupKey.create({
@@ -2858,26 +2859,36 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           } catch (err) {
             if (err?.code === 'P2002') {
               reservedDuplicate = true
+              reservedDuplicateKey = key
               break
             }
             logger.warn({ err: err?.message, destJid }, 'Reserva SendDedupKey falhou; seguindo com dedup local/global')
           }
         }
         if (reservedDuplicate) {
+          // Diagnóstico: essa camada só existia sem idade explícita (RCA
+          // anterior) porque normalmente é a MENOS provável de disparar (as
+          // outras 3 já teriam bloqueado antes). Reports mostraram bloqueio
+          // sem o sufixo de idade mesmo assim — sinal de que ESTA é, às
+          // vezes, a camada que realmente pega. Um lookup extra aqui (só no
+          // caminho raro de conflito, não no comum) fecha a última lacuna de
+          // observabilidade.
+          const conflictingReservation = await db.sendDedupKey.findFirst({
+            where: { userId, destGroup: destJid, dedupKey: reservedDuplicateKey },
+            select: { createdAt: true },
+          }).catch(() => null)
+          const reservationAgeMs = conflictingReservation ? Date.now() - new Date(conflictingReservation.createdAt).getTime() : null
           await registerDedupBlock({
             reason: 'skip:dedup_recent_link',
             platform: primary.platform,
             destJid,
             originalUrl: primary.url,
             convertedUrl: primary.converted,
+            ageMs: reservationAgeMs,
             messageText: finalText,
             dedupWindowMs: effectiveDedupWindowMs,
-            // Sem round-trip extra pra achar o createdAt da linha conflitante:
-            // por construção, SEND_DEDUP_RESERVATION_TTL_MS já é o teto (fixo,
-            // curto) de quão "recente" essa reserva pode ser.
-            ageMs: null,
           })
-          logger.info({ destJid, dedupKeyCount: dedupKeys.length, windowMs: effectiveDedupWindowMs, layer: 'reservation' }, 'Duplicata reservada DB ignorada')
+          logger.info({ destJid, dedupKeyCount: dedupKeys.length, ageMs: reservationAgeMs, windowMs: effectiveDedupWindowMs, layer: 'reservation' }, 'Duplicata reservada DB ignorada')
           continue
         }
 
