@@ -36,7 +36,7 @@ function StatusTag({ status }) {
 function DedupChip({ hits }) {
   const n = num(hits)
   if (n <= 0) return null
-  return <span className="pnl-dedup" title="Mesmo link bloqueado novamente nas últimas 2h.">+{n} {n === 1 ? 'repetição' : 'repetições'}</span>
+  return <span className="pnl-dedup" title="Mesmo link bloqueado novamente por repetição (janela varia por tipo de link).">+{n} {n === 1 ? 'repetição' : 'repetições'}</span>
 }
 
 function ErrorDetails({ log, expanded, onToggle }) {
