@@ -1773,6 +1773,12 @@ async function startBotInner() {
   // Default 24h = "no máximo uma vez por dia"; override via DEDUP_LINK_WINDOW_MS.
   const dedupeWindowMs = Math.max(1_000, Number(process.env.DEDUP_MSGID_WINDOW_MS) || 300_000)
   const linkDedupWindowMs = Math.max(dedupeWindowMs, Number(process.env.DEDUP_LINK_WINDOW_MS) || 24 * 60 * 60_000)
+  // Cupom/campanha (primary.linkKind === 'coupon') usa janela CURTA própria:
+  // é comum a MESMA URL de cupom (ex.: página fixa de campanha) ser repostada
+  // várias vezes ao dia com códigos/textos diferentes — a janela diária
+  // (linkDedupWindowMs) bloqueava esses reenvios legítimos quase o dia
+  // inteiro. Default 5min; override via COUPON_DEDUP_WINDOW_MS.
+  const couponDedupWindowMs = Math.max(1_000, Number(process.env.COUPON_DEDUP_WINDOW_MS) || 5 * 60_000)
   const dedup = pruneDedupStore(
     loadDedup(),
     Date.now(),
@@ -2186,12 +2192,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // criar mais uma linha 'skip:dedup_recent_link' (gerando N rows iguais
       // que poluem o painel), incrementamos um contador na linha existente
       // mais recente do mesmo (userId, destJid, convertedUrl). Janela de busca
-      // = linkDedupWindowMs. Se não houver linha recente (estado dessincronizado
-      // após restart, por exemplo), cria uma nova como fallback para não perder
-      // visibilidade do evento.
-      async function registerDedupBlock({ reason, platform, destJid, originalUrl: incomingUrl, convertedUrl: outgoingUrl, messageText }) {
+      // = dedupWindowMs (linkDedupWindowMs por padrão; cupom passa
+      // couponDedupWindowMs — ver chamadas no loop de destinos). Se não houver
+      // linha recente (estado dessincronizado após restart, por exemplo), cria
+      // uma nova como fallback para não perder visibilidade do evento.
+      async function registerDedupBlock({ reason, platform, destJid, originalUrl: incomingUrl, convertedUrl: outgoingUrl, messageText, dedupWindowMs = linkDedupWindowMs }) {
         if (!shouldTrackSkipped) return
-        const since = new Date(Date.now() - linkDedupWindowMs)
+        const since = new Date(Date.now() - dedupWindowMs)
         const lookupUrl = outgoingUrl || incomingUrl || ''
         try {
           const recent = lookupUrl
@@ -2698,6 +2705,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // PR-5.B.2: stagger entre destinos para quebrar simultaneidade exata.
       // Primeiro destino sem atraso; demais com jitter aleatório limitado.
       const staggerJitterMs = Math.max(0, Number(cfg.botConfig.channelStaggerJitterMs ?? 0))
+      // Cupom usa a janela curta (couponDedupWindowMs); produto mantém a
+      // janela diária. primary.linkKind é resolvido por resolveLinkKind no
+      // momento da conversão (mesmo em Amazon/ML, que não marcam sozinhos —
+      // ver converters/linkKind.js), então já reflete a classificação correta
+      // aqui, igual pra todos os destinos desta mensagem.
+      const isCouponLink = primary.linkKind === 'coupon'
+      const effectiveDedupWindowMs = isCouponLink ? couponDedupWindowMs : linkDedupWindowMs
       let destIndex = -1
       for (const destJid of destinations) {
         destIndex++
@@ -2715,7 +2729,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           primaryConverted: primary.converted,
           fallbackSubject: fallbackDedupSubject,
         })
-        if (dedupKeys.some(key => dedup.links[key] && Date.now() - dedup.links[key] < linkDedupWindowMs)) {
+        if (dedupKeys.some(key => dedup.links[key] && Date.now() - dedup.links[key] < effectiveDedupWindowMs)) {
           await registerDedupBlock({
             reason: 'skip:dedup_recent_link',
             platform: primary.platform,
@@ -2723,6 +2737,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             originalUrl: primary.url,
             convertedUrl: primary.converted,
             messageText: finalText,
+            dedupWindowMs: effectiveDedupWindowMs,
           })
           logger.info({ destJid, dedupKeyCount: dedupKeys.length }, 'Duplicata ignorada'); continue
         }
@@ -2740,7 +2755,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
                 userId,
                 destGroup: destJid,
                 status: { in: ['queued', 'sending', 'success'] },
-                sentAt: { gte: new Date(Date.now() - linkDedupWindowMs) },
+                sentAt: { gte: new Date(Date.now() - effectiveDedupWindowMs) },
                 OR: [
                   { originalUrl: { in: dedupLookupUrls } },
                   { convertedUrl: { in: dedupLookupUrls } },
@@ -2761,6 +2776,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             originalUrl: primary.url,
             convertedUrl: primary.converted,
             messageText: finalText,
+            dedupWindowMs: effectiveDedupWindowMs,
           })
           logger.info({ destJid, recentLogId: recentDbDuplicate.id, dedupKeyCount: dedupKeys.length }, 'Duplicata DB ignorada')
           continue
@@ -2770,7 +2786,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // mas sozinho ainda tem janela de corrida: dois workers podem consultar
         // antes de qualquer um criar MessageLog. O índice único em SendDedupKey
         // transforma a dedup em compare-and-set no SQLite.
-        const reservationExpiresAt = new Date(Date.now() + linkDedupWindowMs)
+        const reservationExpiresAt = new Date(Date.now() + effectiveDedupWindowMs)
         await db.sendDedupKey.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch(err => {
           logger.warn({ err: err?.message }, 'Limpeza de SendDedupKey expirada falhou')
         })
@@ -2799,19 +2815,21 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             originalUrl: primary.url,
             convertedUrl: primary.converted,
             messageText: finalText,
+            dedupWindowMs: effectiveDedupWindowMs,
           })
           logger.info({ destJid, dedupKeyCount: dedupKeys.length }, 'Duplicata reservada DB ignorada')
           continue
         }
 
         if (GLOBAL_DEDUP_MODE !== 'off') {
-          // Usa a janela longa (diária) também na dedup cross-instância via
-          // Redis — antes usava dedupeWindowMs (5min), o que deixava a mesma
-          // oferta passar de novo poucos minutos depois quando o bloqueio
+          // Usa a mesma janela efetiva (diária pra produto, curta pra cupom)
+          // também na dedup cross-instância via Redis — antes usava
+          // dedupeWindowMs (5min) sempre, o que deixava a mesma oferta de
+          // PRODUTO passar de novo poucos minutos depois quando o bloqueio
           // in-memory não pegava (ex.: outro processo/instância).
           let globalDuplicate = false
           for (const key of dedupKeys) {
-            const globalDedup = await globalDedupCheckAndSet(key, linkDedupWindowMs)
+            const globalDedup = await globalDedupCheckAndSet(key, effectiveDedupWindowMs)
             if (globalDedup.duplicate) {
               globalDuplicate = true
               break
@@ -2825,6 +2843,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               originalUrl: primary.url,
               convertedUrl: primary.converted,
               messageText: finalText,
+              dedupWindowMs: effectiveDedupWindowMs,
             })
             logger.info({ destJid, dedupKeyCount: dedupKeys.length }, 'Duplicata global ignorada')
             continue
