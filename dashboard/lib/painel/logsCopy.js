@@ -20,7 +20,7 @@ export function explainErrorMsg(errorMsg) {
   if (errorMsg.startsWith('warning:ml_affiliate_busy')) {
     return 'Outra conversão do Mercado Livre já estava usando esta credencial. A oferta saiu com link longo para evitar disputa de sessão.'
   }
-  if (errorMsg.startsWith('skip:dedup')) return 'Link já enviado nas últimas 2 horas — bloqueado para não duplicar.'
+  if (errorMsg.startsWith('skip:dedup')) return 'Esse link já foi enviado recentemente para esse destino — bloqueado para não duplicar. Ofertas de produto ficam bloqueadas por até 24h; links de cupom, só por alguns minutos.'
   if (errorMsg.startsWith('skip:blocked_keyword')) return 'Contém uma palavra que você marcou para bloquear.'
   if (errorMsg.startsWith('skip:title_mismatch')) return 'O texto da oferta não combina com o produto do link. Bloqueado por segurança.'
   if (errorMsg.startsWith('skip:text_too_large')) return 'Mensagem muito grande — ignorada para não atrasar o restante da fila.'

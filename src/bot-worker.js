@@ -146,12 +146,53 @@ async function globalRateLimitWait(destJid, windowMs) {
   }
 }
 
+// TTL fixo (não o ttlMs do chamador) que a CHAVE do Redis usa pra se
+// autolimpar — só limita memória, não representa mais a janela lógica de
+// dedup (ver comentário dentro de globalDedupCheckAndSet: por quê).
+const GLOBAL_DEDUP_REDIS_SAFETY_CAP_MS = Math.max(60_000, Number(process.env.GLOBAL_DEDUP_REDIS_SAFETY_CAP_MS) || 24 * 60 * 60_000)
+
+// SendDedupKey (tabela SQLite) só existe pra fechar a corrida de
+// milissegundos entre o findFirst diagnóstico e o create do MessageLog (ver
+// uso em startBotInner) — não representa a janela lógica de dedup (essa é
+// decidida por dedup local + MessageLog/DB + Redis, que reavaliam a janela
+// atual a cada checagem). Fixo e curto de propósito: usar a janela lógica do
+// linkKind aqui (como era antes) prendia reservas de CUPOM com o TTL da
+// janela ANTIGA (até 24h) sempre que o índice único continuava ocupado —
+// bug real reportado em produção.
+const SEND_DEDUP_RESERVATION_TTL_MS = Math.max(30_000, Number(process.env.SEND_DEDUP_RESERVATION_TTL_MS) || 5 * 60_000)
+
 async function globalDedupCheckAndSet(key, ttlMs) {
   const r = ensureRuntimeRedis()
   if (!r) return { duplicate: false }
+  const redisKey = `dedup:${userId}:${key}`
   try {
-    const ok = await r.set(`dedup:${userId}:${key}`, '1', 'PX', ttlMs, 'NX')
-    return { duplicate: ok !== 'OK' }
+    const now = Date.now()
+    // Caminho comum (chave nova): SET NX continua atômico, sem round-trip
+    // extra — mesmo comportamento de sempre.
+    const ok = await r.set(redisKey, String(now), 'PX', GLOBAL_DEDUP_REDIS_SAFETY_CAP_MS, 'NX')
+    if (ok === 'OK') return { duplicate: false }
+
+    // Chave já existe. ANTES, isso bastava pra tratar como duplicata — bug
+    // real: cupom passou a usar janela curta (couponDedupWindowMs, 5min) em
+    // vez da diária, mas uma chave gravada ANTES dessa mudança (sob a janela
+    // longa antiga) continuava bloqueando reenvios legítimos até o TTL
+    // NATIVO da chave expirar sozinho (até 24h depois) — o código novo não
+    // tem como "encolher" o TTL de uma chave já gravada no Redis. Qualquer
+    // futura mudança de janela por linkKind sofreria do mesmo jeito.
+    //
+    // Fix: o valor guardado é o TIMESTAMP do último envio (não mais '1'); a
+    // decisão de duplicata compara esse timestamp contra ttlMs (a janela
+    // ATUAL do chamador) em tempo de leitura, igual à dedup local/DB — não
+    // contra o TTL nativo da chave. Key existe mas já passou de ttlMs?
+    // Não é duplicata de verdade: sobrescreve com o timestamp novo e libera.
+    // Só essa branch (chave já existente) paga o round-trip extra do GET;
+    // é uma race bem mais estreita que a proteção primária (índice único do
+    // SendDedupKey no SQLite, que já fecha a corrida cross-worker de verdade).
+    const existing = await r.get(redisKey)
+    const existingTs = Number(existing) || 0
+    if (existingTs && now - existingTs < ttlMs) return { duplicate: true }
+    await r.set(redisKey, String(now), 'PX', GLOBAL_DEDUP_REDIS_SAFETY_CAP_MS)
+    return { duplicate: false }
   } catch (err) {
     if (REDIS_DEDUP_FAIL_MODE === 'closed') throw new Error(`Global dedup unavailable: ${err.message}`)
     // Gatilho de escala observável (WABOT-010): em fail-open a dedup global
@@ -2188,7 +2229,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         }).catch(() => {})
       }
 
-      // Quando uma URL já enviada nas últimas 2h é vista de novo, em vez de
+      // Quando uma URL já enviada é vista de novo dentro da janela, em vez de
       // criar mais uma linha 'skip:dedup_recent_link' (gerando N rows iguais
       // que poluem o painel), incrementamos um contador na linha existente
       // mais recente do mesmo (userId, destJid, convertedUrl). Janela de busca
@@ -2786,7 +2827,22 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // mas sozinho ainda tem janela de corrida: dois workers podem consultar
         // antes de qualquer um criar MessageLog. O índice único em SendDedupKey
         // transforma a dedup em compare-and-set no SQLite.
-        const reservationExpiresAt = new Date(Date.now() + effectiveDedupWindowMs)
+        //
+        // expiresAt usa SEND_DEDUP_RESERVATION_TTL_MS (fixo, curto) — NÃO
+        // effectiveDedupWindowMs. Bug real corrigido: essa tabela existe só
+        // pra fechar a corrida de MILISSEGUNDOS entre o findFirst acima e o
+        // create do MessageLog logo abaixo (ver updateMany que vincula a
+        // reserva ao log recém-criado) — nunca precisou representar a janela
+        // lógica inteira de dedup. Usar effectiveDedupWindowMs aqui prendia
+        // reservas de CUPOM por até 24h (a janela ANTIGA, de antes da reserva
+        // ter sido criada) sempre que o índice único ainda estava ocupado, já
+        // que create() conflita pela EXISTÊNCIA da linha, não pelo seu
+        // expiresAt — só o deleteMany() abaixo libera o slot, e só libera
+        // quando expiresAt já passou. A dedup "de verdade" (é ou não duplicata
+        // dentro da janela do linkKind) já é decidida pelas outras 3 camadas
+        // (local, MessageLog/DB, Redis), que reavaliam a janela atual a cada
+        // checagem — essa aqui só precisa sobreviver ao tempo de um request.
+        const reservationExpiresAt = new Date(Date.now() + SEND_DEDUP_RESERVATION_TTL_MS)
         await db.sendDedupKey.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch(err => {
           logger.warn({ err: err?.message }, 'Limpeza de SendDedupKey expirada falhou')
         })
