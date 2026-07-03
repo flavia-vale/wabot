@@ -55,3 +55,15 @@ test('bot-worker roteia linkKind=coupon para o banner de marca no preview', () =
     'cupom usa o banner da marca da loja',
   )
 })
+
+// Sem title o cliente WhatsApp NÃO renderiza o card (cards sumiram em
+// staging no deploy do PR #1186). O urlInfo manual PRECISA sempre levar
+// title (nome da loja), nunca voltar a omiti-lo.
+test('bot-worker sempre inclui title (nome da loja) no urlInfo manual do preview', () => {
+  const botWorkerSource = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
+  assert.match(
+    botWorkerSource,
+    /title: storePreviewTitle\(primary\?\.platform, matchedText\)/,
+    'urlInfo manual precisa de title fixo do nome da loja',
+  )
+})
