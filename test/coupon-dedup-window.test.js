@@ -150,7 +150,7 @@ test('as 4 camadas (local/DB/reserva/Redis) calculam e passam ageMs para registe
   assert.match(botWorkerSource, /ageMs: dbAgeMs,/, 'camada DB precisa passar a idade calculada')
   assert.match(
     botWorkerSource,
-    /const reservationAgeMs = conflictingReservation \? Date\.now\(\) - new Date\(conflictingReservation\.createdAt\)\.getTime\(\) : null/,
+    /const conflictAgeMs = conflicting \? Date\.now\(\) - new Date\(conflicting\.createdAt\)\.getTime\(\) : null/,
     'camada de reserva (SendDedupKey) precisa calcular a idade a partir do createdAt da linha conflitante',
   )
   assert.match(botWorkerSource, /ageMs: reservationAgeMs,/, 'camada de reserva precisa passar a idade calculada')
@@ -162,5 +162,42 @@ test('sendDedupKey.updateMany (vínculo com o MessageLog) continua logo após a 
     botWorkerSource,
     /db\.sendDedupKey\.updateMany\(\{\s*where: \{ id: \{ in: reservedDedupKeys \} \},\s*data: \{ messageLogId: log\.id \},/,
     'a reserva precisa continuar sendo vinculada ao MessageLog logo após criado — SEND_DEDUP_RESERVATION_TTL_MS só cobre esse intervalo curto',
+  )
+})
+
+// Bug real (4ª rodada, com dado conclusivo do diagnóstico do PR anterior):
+// painel mostrou "bloqueado há 393min" com janela de 5min — impossível pela
+// lógica das outras 3 camadas (todas só reportam idade < janela, por
+// construção). Só a reserva (SendDedupKey) podia produzir isso: uma linha
+// gravada ANTES de SEND_DEDUP_RESERVATION_TTL_MS existir tem expiresAt até
+// 24h no futuro (herdado de uma versão anterior do código), e o deleteMany
+// só remove linha com expiresAt JÁ passado — a linha órfã nunca some
+// sozinha. Fix: medir createdAt contra o teto ATUAL, não confiar no
+// expiresAt gravado; se mais velha que o teto, deletar e tentar de novo.
+test('conflito de reserva mede createdAt contra SEND_DEDUP_RESERVATION_TTL_MS e se autocura (delete+retry) quando órfã', () => {
+  assert.match(
+    botWorkerSource,
+    /const conflicting = await db\.sendDedupKey\.findFirst\(\{\s*where: \{ userId, destGroup: destJid, dedupKey: key \},\s*select: \{ id: true, createdAt: true \},\s*\}\)\.catch\(\(\) => null\)/,
+    'conflito precisa buscar a linha conflitante (id + createdAt)',
+  )
+  assert.match(
+    botWorkerSource,
+    /const conflictAgeMs = conflicting \? Date\.now\(\) - new Date\(conflicting\.createdAt\)\.getTime\(\) : null/,
+    'precisa calcular a idade real da linha conflitante a partir do createdAt',
+  )
+  assert.match(
+    botWorkerSource,
+    /if \(conflicting && conflictAgeMs > SEND_DEDUP_RESERVATION_TTL_MS\) \{/,
+    'decisão de "é órfã" precisa comparar contra SEND_DEDUP_RESERVATION_TTL_MS (o teto atual), não contra o expiresAt gravado na linha',
+  )
+  assert.match(
+    botWorkerSource,
+    /await db\.sendDedupKey\.delete\(\{ where: \{ id: conflicting\.id \} \}\)\.catch\(\(\) => \{\}\)/,
+    'linha órfã precisa ser deletada explicitamente (deleteMany por expiresAt não alcança ela)',
+  )
+  assert.match(
+    botWorkerSource,
+    /const retried = await db\.sendDedupKey\.create\(\{/,
+    'depois de deletar a linha órfã, precisa tentar reservar de novo (não desistir/bloquear à toa)',
   )
 })

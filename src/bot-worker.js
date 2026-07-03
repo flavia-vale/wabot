@@ -2849,6 +2849,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         const reservedDedupKeys = []
         let reservedDuplicate = false
         let reservedDuplicateKey = null
+        let reservationAgeMs = null
         for (const key of dedupKeys) {
           try {
             const reservation = await db.sendDedupKey.create({
@@ -2858,26 +2859,52 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             reservedDedupKeys.push(reservation.id)
           } catch (err) {
             if (err?.code === 'P2002') {
+              // Bug real encontrado por report em produção (mesma família do
+              // fix do Redis/PR #1192, mas nesta tabela): uma linha gravada
+              // ANTES de SEND_DEDUP_RESERVATION_TTL_MS existir (ou sob
+              // qualquer versão anterior do código que usava um TTL mais
+              // longo pra expiresAt) pode ter expiresAt até 24h no futuro —
+              // o deleteMany acima só remove linha com expiresAt JÁ passado,
+              // então essa linha "órfã" nunca é limpa e conflita pra sempre
+              // até seu próprio expiresAt antigo vencer. Sintoma observado:
+              // painel mostrando "bloqueado há 393min" com janela de 5min.
+              //
+              // Fix: em vez de confiar no expiresAt gravado na linha, mede a
+              // idade REAL (createdAt) contra o teto ATUAL
+              // (SEND_DEDUP_RESERVATION_TTL_MS). Mais velha que o teto atual
+              // → não é uma corrida de verdade (essa reserva só precisa
+              // sobreviver a um request, nunca minutos): deleta e tenta de
+              // novo. Continua mais nova que o teto → é duplicata real
+              // (outro worker reservou a mesma chave há pouco), trata como
+              // bloqueio de verdade.
+              const conflicting = await db.sendDedupKey.findFirst({
+                where: { userId, destGroup: destJid, dedupKey: key },
+                select: { id: true, createdAt: true },
+              }).catch(() => null)
+              const conflictAgeMs = conflicting ? Date.now() - new Date(conflicting.createdAt).getTime() : null
+              if (conflicting && conflictAgeMs > SEND_DEDUP_RESERVATION_TTL_MS) {
+                await db.sendDedupKey.delete({ where: { id: conflicting.id } }).catch(() => {})
+                try {
+                  const retried = await db.sendDedupKey.create({
+                    data: { userId, destGroup: destJid, dedupKey: key, expiresAt: reservationExpiresAt },
+                    select: { id: true },
+                  })
+                  reservedDedupKeys.push(retried.id)
+                  continue
+                } catch {
+                  // Corrida genuína com outro worker que reservou no meio
+                  // desse delete+retry — cai no bloqueio normal abaixo.
+                }
+              }
               reservedDuplicate = true
               reservedDuplicateKey = key
+              reservationAgeMs = conflictAgeMs
               break
             }
             logger.warn({ err: err?.message, destJid }, 'Reserva SendDedupKey falhou; seguindo com dedup local/global')
           }
         }
         if (reservedDuplicate) {
-          // Diagnóstico: essa camada só existia sem idade explícita (RCA
-          // anterior) porque normalmente é a MENOS provável de disparar (as
-          // outras 3 já teriam bloqueado antes). Reports mostraram bloqueio
-          // sem o sufixo de idade mesmo assim — sinal de que ESTA é, às
-          // vezes, a camada que realmente pega. Um lookup extra aqui (só no
-          // caminho raro de conflito, não no comum) fecha a última lacuna de
-          // observabilidade.
-          const conflictingReservation = await db.sendDedupKey.findFirst({
-            where: { userId, destGroup: destJid, dedupKey: reservedDuplicateKey },
-            select: { createdAt: true },
-          }).catch(() => null)
-          const reservationAgeMs = conflictingReservation ? Date.now() - new Date(conflictingReservation.createdAt).getTime() : null
           await registerDedupBlock({
             reason: 'skip:dedup_recent_link',
             platform: primary.platform,
