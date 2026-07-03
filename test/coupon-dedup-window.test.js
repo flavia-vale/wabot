@@ -137,13 +137,23 @@ test('registerDedupBlock grava o sufixo de idade (:age=Xs:window=Ys) no errorMsg
   )
 })
 
-// As 3 camadas que conseguem medir "há quanto tempo" (local, DB, Redis)
-// precisam passar ageMs pra registerDedupBlock — a reserva (SendDedupKey)
-// fica de fora de propósito (ver comentário no código: seu TTL já é o teto).
-test('as camadas local/DB/Redis calculam e passam ageMs para registerDedupBlock', () => {
+// As 4 camadas (local, DB, reserva SendDedupKey, Redis) precisam passar
+// ageMs pra registerDedupBlock. A reserva inicialmente ficava de fora
+// (ageMs: null fixo) por ser "a camada menos provável de disparar" — mas um
+// report real mostrou o texto genérico (sem idade) mesmo com dedupHits=0
+// (ou seja, veio de um create() novo, não de agregação), o que só acontece
+// quando a camada que bloqueou foi exatamente essa. Sem idade nessa camada,
+// a lacuna de observabilidade persistia bem onde mais importava.
+test('as 4 camadas (local/DB/reserva/Redis) calculam e passam ageMs para registerDedupBlock', () => {
   assert.match(botWorkerSource, /ageMs: localDedupMatch\.ageMs,/, 'camada local precisa passar a idade da chave que bateu')
   assert.match(botWorkerSource, /const dbAgeMs = Date\.now\(\) - new Date\(recentDbDuplicate\.sentAt\)\.getTime\(\)/, 'camada DB precisa calcular a idade a partir de sentAt')
   assert.match(botWorkerSource, /ageMs: dbAgeMs,/, 'camada DB precisa passar a idade calculada')
+  assert.match(
+    botWorkerSource,
+    /const reservationAgeMs = conflictingReservation \? Date\.now\(\) - new Date\(conflictingReservation\.createdAt\)\.getTime\(\) : null/,
+    'camada de reserva (SendDedupKey) precisa calcular a idade a partir do createdAt da linha conflitante',
+  )
+  assert.match(botWorkerSource, /ageMs: reservationAgeMs,/, 'camada de reserva precisa passar a idade calculada')
   assert.match(botWorkerSource, /ageMs: globalDuplicateAgeMs,/, 'camada Redis precisa passar a idade devolvida por checkAndSetGlobalDedup')
 })
 
