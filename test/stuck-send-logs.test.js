@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { recoverStuckSendLogs, STUCK_SEND_LOG_CUTOFF_MS } from '../src/jobs/stuckSendLogs.js'
+import { recoverStuckSendLogs, clearUserQueuedSendLogs, STUCK_SEND_LOG_CUTOFF_MS } from '../src/jobs/stuckSendLogs.js'
 
 function makeFakeDb() {
   const calls = []
@@ -44,4 +44,25 @@ test('recoverStuckSendLogs sem userId varre todos os usuários (sem filtro de us
 
 test('cutoff default é >= 1min (sane floor)', () => {
   assert.ok(STUCK_SEND_LOG_CUTOFF_MS >= 60_000)
+})
+
+test('clearUserQueuedSendLogs alveja queued E sending do usuário, sem cutoff de tempo', async () => {
+  const db = makeFakeDb()
+  const res = await clearUserQueuedSendLogs({ db, now: () => NOW, userId: 'u1' })
+  assert.equal(res.cleared, 2)
+  assert.equal(db.calls.length, 1)
+  const { where, data } = db.calls[0]
+  assert.equal(where.userId, 'u1')
+  assert.deepEqual(where.status, { in: ['queued', 'sending'] })
+  // Não filtra por sentAt — é imediato, cobre até linhas recém-criadas.
+  assert.equal(where.sentAt, undefined)
+  assert.equal(data.status, 'skipped')
+  assert.equal(data.errorMsg, 'skip:queue_cleared')
+  assert.equal(data.sentAt, NOW)
+})
+
+test('clearUserQueuedSendLogs exige userId (nunca varre todos os usuários)', async () => {
+  const db = makeFakeDb()
+  await assert.rejects(() => clearUserQueuedSendLogs({ db, now: () => NOW }), /userId/)
+  assert.equal(db.calls.length, 0)
 })
