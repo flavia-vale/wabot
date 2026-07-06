@@ -28,7 +28,7 @@ test('Amazon: cookies expirados (4xx) caem para ?tag= longo e sinalizam amazon_c
   })
   try {
     const result = await convert(LONG_URL, CREDS)
-    assert.deepEqual(result, { url: `${LONG_URL}?tag=${CREDS.tag}`, warning: 'amazon_cookies_expired' })
+    assert.deepEqual(result, { url: `${LONG_URL}?tag=${CREDS.tag}`, linkKind: 'product', warning: 'amazon_cookies_expired' })
   } finally {
     restore()
   }
@@ -43,7 +43,7 @@ test('Amazon: API 5xx transitória cai para ?tag= longo sem warning (instabilida
   })
   try {
     const result = await convert(LONG_URL, CREDS)
-    assert.deepEqual(result, { url: `${LONG_URL}?tag=${CREDS.tag}`, warning: null })
+    assert.deepEqual(result, { url: `${LONG_URL}?tag=${CREDS.tag}`, linkKind: 'product', warning: null })
   } finally {
     restore()
   }
@@ -58,7 +58,7 @@ test('Amazon: shortUrl válido da API é usado quando disponível', async () => 
   })
   try {
     const result = await convert(LONG_URL, CREDS)
-    assert.equal(result, 'https://amzn.to/abc123')
+    assert.deepEqual(result, { url: 'https://amzn.to/abc123', linkKind: 'product' })
   } finally {
     restore()
   }
@@ -89,7 +89,7 @@ test('Amazon: short link amzn.la é resolvido (robust-first via fetch) e convert
   }
   try {
     const result = await convert('https://amzn.la/d/abc123', CREDS)
-    assert.equal(result, 'https://amzn.to/abc123')
+    assert.deepEqual(result, { url: 'https://amzn.to/abc123', linkKind: 'product' })
     assert.equal(fetchHits, 1, 'resolve o short link com um único hit no encurtador')
   } finally {
     restore()
@@ -223,7 +223,7 @@ test('Amazon: link sem ASIN com COUPON_LINK_CONVERT=true gera amzn.to quando coo
     })
     try {
       const result = await convert(couponUrl, CREDS)
-      assert.equal(result, 'https://amzn.to/3O3r9E8')
+      assert.deepEqual(result, { url: 'https://amzn.to/3O3r9E8', linkKind: 'coupon' })
     } finally {
       restore()
     }
@@ -243,7 +243,7 @@ test('Amazon: link sem ASIN remove tag antiga antes de gerar amzn.to convertido'
     })
     try {
       const result = await convert(couponUrl, CREDS)
-      assert.equal(result, 'https://amzn.to/converted123')
+      assert.deepEqual(result, { url: 'https://amzn.to/converted123', linkKind: 'coupon' })
     } finally {
       restore()
     }
@@ -259,7 +259,7 @@ test('Amazon: link sem ASIN com COUPON_LINK_CONVERT=true cai para ?tag= quando s
     })
     try {
       const result = await convert(couponUrl, CREDS)
-      assert.deepEqual(result, { url: `${couponUrl}&tag=${CREDS.tag}`, warning: 'amazon_cookies_expired' })
+      assert.deepEqual(result, { url: `${couponUrl}&tag=${CREDS.tag}`, linkKind: 'coupon', warning: 'amazon_cookies_expired' })
     } finally {
       restore()
     }

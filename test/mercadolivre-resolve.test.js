@@ -20,6 +20,7 @@ test('convert sinaliza warning ml_ssid_expired quando API de afiliado rejeita au
   const url = 'https://produto.mercadolivre.com.br/MLB-4049246221-secadora-_JM'
   const result = await convert(url, { tag: '475630078', ssid: 'ssid-expirado-1234567890' })
   assert.equal(typeof result, 'object')
+  assert.equal(result.linkKind, 'product')
   assert.equal(result.warning, 'ml_ssid_expired')
   assert.match(result.url, /partner_id=475630078/)
 })
@@ -34,6 +35,7 @@ test('convert sinaliza warning ml_affiliate_forbidden e não retrya quando API r
   const url = 'https://produto.mercadolivre.com.br/MLB-4049246221-secadora-_JM'
   const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890', csrf: 'csrf-token' })
   assert.equal(typeof result, 'object')
+  assert.equal(result.linkKind, 'product')
   assert.equal(result.warning, 'ml_affiliate_forbidden')
   assert.match(result.url, /partner_id=475630078/)
   assert.equal(calls, 1)
@@ -49,6 +51,7 @@ test('convert sinaliza warning ml_affiliate_rate_limited e não retrya quando AP
   const url = 'https://produto.mercadolivre.com.br/MLB-4049246221-secadora-_JM'
   const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890', csrf: 'csrf-token' })
   assert.equal(typeof result, 'object')
+  assert.equal(result.linkKind, 'product')
   assert.equal(result.warning, 'ml_affiliate_rate_limited')
   assert.match(result.url, /partner_id=475630078/)
   assert.equal(calls, 1)
@@ -103,8 +106,9 @@ test('convert limita createLink ao primeiro candidate canônico por padrão', as
   const url = 'https://www.mercadolivre.com.br/secador/p/MLB70009242'
   const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
 
-  assert.equal(typeof result, 'string')
-  assert.match(result, /partner_id=475630078/)
+  assert.equal(typeof result, 'object')
+  assert.equal(result.linkKind, 'product')
+  assert.match(result.url, /partner_id=475630078/)
   assert.equal(calls, 1)
 })
 
@@ -122,7 +126,7 @@ test('convert mantém short_url quando validação é inconclusiva (muro anti-bo
 
   const url = 'https://www.mercadolivre.com.br/secador/p/MLB70009242'
   const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
-  assert.equal(result, 'https://mercadolivre.com/sec/2Abcd')
+  assert.deepEqual(result, { url: 'https://mercadolivre.com/sec/2Abcd', linkKind: 'product' })
 })
 
 
@@ -149,7 +153,7 @@ test('convert persiste patch de cookies rotacionados quando createLink retorna S
     __onCredentialPatch: async (...args) => { patchArgs = args },
   })
 
-  assert.equal(result, 'https://mercadolivre.com/sec/2Abcd')
+  assert.deepEqual(result, { url: 'https://mercadolivre.com/sec/2Abcd', linkKind: 'product' })
   assert.deepEqual(patchArgs?.[0], 'mercadolivre')
   assert.equal(patchArgs?.[1]?.ssid, 'ssid-novo')
   assert.equal(patchArgs?.[1]?.csrf, 'csrf-novo')
@@ -179,7 +183,7 @@ test('convert ignora Set-Cookie de DELEÇÃO do ssid (valor vazio) — não bric
     __onCredentialPatch: async (...args) => { patchArgs = args },
   })
 
-  assert.equal(result, 'https://mercadolivre.com/sec/2Abcd')
+  assert.deepEqual(result, { url: 'https://mercadolivre.com/sec/2Abcd', linkKind: 'product' })
   // ssid de deleção NÃO entra no patch; o ssid conhecido é preservado.
   assert.equal(patchArgs?.[1]?.ssid, 'ssid-antigo')
   assert.equal(patchArgs?.[1]?.csrf, 'csrf-novo')
@@ -210,7 +214,7 @@ test('convert trata Max-Age=0 como deleção e não sobrescreve o ssid conhecido
     __onCredentialPatch: async (...args) => { patchArgs = args },
   })
 
-  assert.equal(result, 'https://mercadolivre.com/sec/2Abcd')
+  assert.deepEqual(result, { url: 'https://mercadolivre.com/sec/2Abcd', linkKind: 'product' })
   assert.equal(patchArgs?.[1]?.ssid, 'ssid-antigo')
   assert.doesNotMatch(patchArgs?.[1]?.cookie, /valor-de-logout/)
   assert.match(patchArgs?.[1]?.cookie, /ssid=ssid-antigo/)
@@ -260,10 +264,11 @@ test('/sec/ que resolve para landing sem MLB sai com partner_id na URL REAL (nã
   t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/cupom/MANDAGOL' }))
   const url = 'https://mercadolivre.com/sec/3cupomXy?partner_id=999999999'
   const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
-  assert.equal(typeof result, 'string')
-  assert.match(result, /partner_id=475630078/)
-  assert.doesNotMatch(result, /\/sec\//)
-  assert.doesNotMatch(result, /999999999/)
+  assert.equal(typeof result, 'object')
+  assert.equal(result.linkKind, 'coupon')
+  assert.match(result.url, /partner_id=475630078/)
+  assert.doesNotMatch(result.url, /\/sec\//)
+  assert.doesNotMatch(result.url, /999999999/)
 })
 
 test('/sec/ não-resolvível (muro anti-bot) não é encaminhado com partner_id cosmético', async (t) => {
@@ -289,7 +294,8 @@ test('convert descarta short_url quando validação comprova MLB diferente', asy
   const url = 'https://www.mercadolivre.com.br/secador/p/MLB70009242'
   const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
   // short_url descartado → cai no fallback partner_id preservando o MLB certo
-  assert.equal(typeof result, 'string')
-  assert.match(result, /partner_id=475630078/)
-  assert.match(result, /MLB70009242/)
+  assert.equal(typeof result, 'object')
+  assert.equal(result.linkKind, 'product')
+  assert.match(result.url, /partner_id=475630078/)
+  assert.match(result.url, /MLB70009242/)
 })
