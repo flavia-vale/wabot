@@ -276,11 +276,11 @@ async function convertStoreUrlWithoutAsin(target, tag, creds, hasCookies) {
   const longUrl = withAffiliateTag(target, tag)
   if (hasCookies) {
     const { shortUrl, transient } = await createAmazonShortLink(longUrl, tag, creds)
-    if (shortUrl) return shortUrl
+    if (shortUrl) return { url: shortUrl, linkKind: 'coupon' }
     logger.warn({ target, longUrl, transient }, 'Amazon: API não retornou shortUrl para link sem ASIN — fallback para ?tag=')
-    return { url: longUrl, warning: transient ? null : 'amazon_cookies_expired' }
+    return { url: longUrl, linkKind: 'coupon', warning: transient ? null : 'amazon_cookies_expired' }
   }
-  return longUrl
+  return { url: longUrl, linkKind: 'coupon' }
 }
 
 function buildLongUrl(target, asin) {
@@ -336,7 +336,7 @@ export async function convert(url, creds) {
 
     if (hasCookies) {
       const { shortUrl, transient } = await createAmazonShortLink(longUrl, tag, creds)
-      if (shortUrl) return shortUrl
+      if (shortUrl) return { url: shortUrl, linkKind: 'product' }
       // Cookies sitestripe expiram (~14-30d) e a API retorna 4xx. Antes
       // descartávamos a oferta nesse caso, mas o link longo ?tag= credita
       // comissão normalmente (só a tag é obrigatória). Entregar com link
@@ -345,10 +345,10 @@ export async function convert(url, creds) {
       // transient) sinalizamos `cookies_expired` pro painel avisar a
       // cliente; 5xx é instabilidade do lado da Amazon e não pede ação.
       logger.warn({ url, longUrl, transient }, 'Amazon: API não retornou shortUrl — fallback para ?tag=')
-      return { url: `${longUrl}?tag=${tag}`, warning: transient ? null : 'amazon_cookies_expired' }
+      return { url: `${longUrl}?tag=${tag}`, linkKind: 'product', warning: transient ? null : 'amazon_cookies_expired' }
     }
 
-    return `${longUrl}?tag=${tag}`
+    return { url: `${longUrl}?tag=${tag}`, linkKind: 'product' }
   } catch {
     return null
   }

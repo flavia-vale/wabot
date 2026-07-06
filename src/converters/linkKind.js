@@ -5,20 +5,18 @@
 // bot-worker.js) e o guard de title_mismatch (mensagens de cupom não têm
 // produto pra comparar título, então não podem ser bloqueadas por mismatch).
 //
-// shopee.js já marca `linkKind` no próprio retorno do converter (produto vs.
-// cupom, decidido durante a conversão). amazon.js e mercadolivre.js NÃO
-// marcam de forma confiável: amazon.js devolve string OU `{url,warning}` sem
-// linkKind nenhum, e mercadolivre.js nunca tenta. Mudar o contrato de
-// retorno desses dois converters pra sempre incluir linkKind quebraria as
-// dezenas de testes existentes que fazem assert.equal/deepEqual no shape
-// exato — por isso classificamos aqui, DE FORA, batendo regex na URL
-// (original ou convertida), sem depender do converter ter cooperado.
+// shopee.js, amazon.js e mercadolivre.js já marcam `linkKind` no próprio
+// retorno do converter (produto vs. cupom, decidido durante a conversão —
+// eles sabem a resposta certa porque já resolveram ASIN/MLB internamente
+// antes de gerar o link curto). O fallback por regex abaixo só entra em ação
+// quando o converter não cooperou (plataforma sem `PRODUCT_ID_DETECTORS`, ou
+// chamada fora do fluxo normal de conversão).
 //
-// Efeito de bug real corrigido: mensagens de cupom Amazon/ML (sem código de
-// afiliado com ASIN/MLB no link, ex. link genérico de campanha de cupons)
-// caíam sempre no ramo "produto" — buscavam foto de produto aleatório no
-// card do preview E podiam ser bloqueadas pelo guard de title_mismatch (que
-// só exime mensagens de cupom).
+// Por que o fallback sozinho NÃO basta: amzn.to/meli.la (short links de
+// afiliado) nunca expõem ASIN/MLB no texto da URL final — batendo regex só
+// nela, um produto de verdade com short link virava sempre 'coupon'. Por
+// isso amazon.js/mercadolivre.js foram migrados a devolver `{url, linkKind}`
+// sempre, e `resolveLinkKind` prioriza esse valor explícito.
 const AMAZON_ASIN_RE = /(?:\/dp\/|\/gp\/product\/|\/product-reviews\/|\/exec\/obidos\/ASIN\/)([A-Z0-9]{10})/i
 const MLB_ID_RE = /\bMLB[-_]?([0-9]{6,})\b/i
 
