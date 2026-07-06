@@ -310,6 +310,38 @@ test('/sec/ que resolve para a home (sem produto) vira CUPOM, não fabrica produ
   assert.doesNotMatch(result.url, /MLB9876543/)
 })
 
+test('cupom ML: /sec/ que resolve para vitrine /social/ de terceiro vira NOSSO link de afiliado (COUPON_LINK_CONVERT on)', async (t) => {
+  // Escolha da usuária: converter o cupom de vitrine de terceiro para o NOSSO
+  // link de afiliado (createLink), mantendo a mensagem com banner de cupom em
+  // vez de descartá-la. (Comissão a validar por clique no celular — ver PR.)
+  const prev = process.env.COUPON_LINK_CONVERT
+  process.env.COUPON_LINK_CONVERT = 'true'
+  t.after(() => { process.env.COUPON_LINK_CONVERT = prev })
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/social/xetdaspromocoes/lists/uuid-1?matt_tool=1&forceInApp=true' }))
+  t.mock.method(axios, 'post', async () => ({ status: 200, data: { urls: [{ short_url: 'https://mercadolivre.com/sec/NOSSO123' }] }, headers: {} }))
+  const url = 'https://mercadolivre.com/sec/2couponVitrine'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  assert.equal(typeof result, 'object')
+  assert.equal(result.linkKind, 'coupon')
+  assert.equal(result.url, 'https://mercadolivre.com/sec/NOSSO123')
+})
+
+test('cupom ML: /sec/ não-resolvível NÃO chama createLink no código de terceiro (leak-safe) mesmo com COUPON on', async (t) => {
+  // Se não escapamos do /sec/ de terceiro (muro anti-bot), gerar NOSSO short link
+  // a partir do código alheio creditaria o dono. Então nem tentamos: descarta.
+  const prev = process.env.COUPON_LINK_CONVERT
+  process.env.COUPON_LINK_CONVERT = 'true'
+  t.after(() => { process.env.COUPON_LINK_CONVERT = prev })
+  t.mock.method(global, 'fetch', async () => { throw new Error('network') })
+  t.mock.method(axios, 'get', async () => ({ data: '<html><body>redirecionando...</body></html>' }))
+  let postCalled = false
+  t.mock.method(axios, 'post', async () => { postCalled = true; return { status: 200, data: { urls: [{ short_url: 'x' }] }, headers: {} } })
+  const url = 'https://mercadolivre.com/sec/9wallCoupon'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  assert.equal(result, null)
+  assert.equal(postCalled, false)
+})
+
 test('convert descarta short_url quando validação comprova MLB diferente', async (t) => {
   t.mock.method(axios, 'post', async () => ({
     status: 200,

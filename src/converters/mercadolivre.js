@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 import axios from 'axios'
 import logger from '../logger.js'
 import { withMercadoLivreCredentialLock } from './mercadolivreCredentialLock.js'
+import { shouldConvertCouponLinks } from './couponPolicy.js'
 
 // Cache LRU simples para evitar reexpansão de short links repetidos
 // (campanhas de cupons disparam o mesmo meli.la várias vezes seguidas).
@@ -773,6 +774,58 @@ export async function resolveToCleanProductUrl(url) {
   }
 }
 
+// Cupom do ML sem produto (vitrine /social/ de terceiro, home, /cupom/,
+// /ofertas...). resolveToCleanProductUrl devolve null porque não há produto pra
+// mostrar no card. Com a conversão de cupom ligada, em vez de descartar a
+// mensagem inteira (skip:no_valid_conversions), tentamos gerar NOSSO short link
+// de afiliado (createLink) para a landing de cupom resolvida — mantendo a
+// mensagem com banner de cupom.
+//
+// EM AVALIAÇÃO (AGENTS.md, linha do cupom ML): o ML pode NÃO creditar link de
+// página não-produto (a comissão pode ir pro dono do código/handle). Por isso
+// isto fica atrás do flag COUPON_LINK_CONVERT (rollout seguro) e PRECISA ser
+// validado clicando no link num celular ANTES de ligar em prod.
+//
+// Invariante de segurança preservada: o link de terceiro NUNCA é encaminhado —
+// ou sai NOSSO short link, ou retorna null (descarta). Nada de passthrough do
+// código alheio.
+async function convertMlCouponWithoutProduct(url, creds) {
+  const { tag, ssid } = creds
+  if (!shouldConvertCouponLinks() || !tag || !ssid) return null
+
+  const resolved = await resolve(url).catch(() => url)
+  let landing
+  try {
+    landing = new URL(canonicalizeMlProductUrl(resolved))
+  } catch {
+    return null
+  }
+  // Só landing de 1ª parte do ML. Código /sec/ de terceiro NÃO resolvido (muro
+  // anti-bot) não dá pra converter com segurança — createLink no código alheio
+  // creditaria o dono. Melhor descartar.
+  if (!ML_HOST.test(landing.hostname)) return null
+  if (/^\/sec\//i.test(landing.pathname)) return null
+
+  try {
+    const affiliateResult = await withMercadoLivreCredentialLock(
+      creds,
+      () => createAffiliateLink(landing.toString(), tag, creds),
+    )
+    const affiliateUrl = typeof affiliateResult === 'string'
+      ? affiliateResult
+      : affiliateResult?.shortUrl
+    if (affiliateUrl) {
+      await notifyCredentialPatch(creds, affiliateResult?.credentialPatch)
+      logger.info({ url, landing: landing.toString(), affiliateUrl }, 'ML cupom: short link de afiliado gerado (sem produto)')
+      return { url: affiliateUrl, linkKind: 'coupon' }
+    }
+  } catch (err) {
+    await notifyCredentialPatch(creds, err.credentialPatch)
+    logger.warn({ url, resolved, err: err.message }, 'ML cupom: createLink falhou — descartando (não encaminha link de terceiro)')
+  }
+  return null
+}
+
 export async function convert(url, creds) {
   const { tag, ssid, resolveOnly } = creds
   try {
@@ -780,7 +833,13 @@ export async function convert(url, creds) {
     if (!ML_HOST.test(new URL(url).hostname)) return null
 
     const cleanTarget = await resolveToCleanProductUrl(url)
-    if (!cleanTarget) return null
+    if (!cleanTarget) {
+      // Sem produto: cupom/vitrine de terceiro. resolveOnly quer a URL do produto
+      // (não faz sentido converter cupom aqui). Caso normal: tenta converter o
+      // cupom para NOSSO link de afiliado em vez de descartar a mensagem.
+      if (resolveOnly) return null
+      return await convertMlCouponWithoutProduct(url, creds)
+    }
     if (resolveOnly) return cleanTarget
     const target = cleanTarget
     const candidates = buildCanonicalCandidates(target)
