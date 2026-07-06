@@ -738,29 +738,21 @@ export async function resolveToCleanProductUrl(url) {
         target = `https://produto.mercadolivre.com.br/${widMlb}-x-_JM`
       } else {
         const u = new URL(target)
-        // Seletor EXPLÍCITO de produto: só a share /social/ com ?ref= designa QUAL
-        // produto da vitrine do afiliado é o alvo. Sem esse seletor a página lista
-        // vários produtos (vitrine /social/ genérica, home, página de cupom) e
-        // tryExtractProductFromLanding pegaria o `recommended_items[0]` — um produto
-        // ALEATÓRIO. Era exatamente isso que fazia o card de um CUPOM sair com foto
-        // de produto errado (produto aleatório) no lugar do banner de cupom. Sem
-        // seletor, NÃO fabricamos produto.
-        const hasProductSelector =
-          /^\/social\//i.test(u.pathname) && /[?&]ref=/i.test(String(preCanonical))
-        // Landing de TERCEIRO: código /sec/ de afiliado alheio que NÃO resolvemos
-        // (muro anti-bot), ou vitrine /social/ de um handle alheio sem ?ref=.
-        // Pendurar um partner_id cosmético nesses vazaria a comissão pro dono do
-        // código/handle. Descartar (null) é melhor que vazar OU que fabricar um
-        // produto aleatório.
-        const isThirdPartyLanding =
-          /^\/sec\//i.test(u.pathname) || /^\/social\//i.test(u.pathname)
-
-        if (hasProductSelector) {
-          const extracted = await tryExtractProductFromLanding(preCanonical)
-          if (extracted) target = extracted
-          // share /social/?ref= sem produto extraível: best-effort — cai pra baixo
-          // e o convert() etiqueta a própria /social/ com partner_id.
-        } else if (isThirdPartyLanding) {
+        // ROBUSTEZ (não regredir): NUNCA fabricar produto a partir de uma página
+        // /social/ (perfil OU /lists/ de um afiliado) nem de um código /sec/ de
+        // terceiro não resolvido. Uma vitrine/lista tem VÁRIOS produtos; extrair
+        // "um" pegava o `recommended_items[0]` ALEATÓRIO, que:
+        //   1) saía com FOTO ERRADA no card (produto que ninguém pediu); e
+        //   2) sendo um id de CATÁLOGO (/p/MLB), o fallback ainda o transformava
+        //      numa URL de listing inexistente (produto.../MLB-x-_JM → 404,
+        //      "Parece que esta página não existe").
+        // A heurística anterior de "seletor ?ref=" era insuficiente: uma share de
+        // LISTA (/social/<handle>/lists/<uuid>?ref=...) também carrega ?ref= e
+        // continuava fabricando um produto aleatório. O produto legítimo via URL
+        // (/up/#wid=) já foi resolvido acima, SEM scrape. Estas páginas viram
+        // cupom no convert() (createLink nosso) ou são descartadas — nunca um
+        // produto aleatório/quebrado.
+        if (/^\/sec\//i.test(u.pathname) || /^\/social\//i.test(u.pathname)) {
           return null
         }
         // Demais landings de 1ª parte sem produto (home `/`, /cupom/, /m/,
@@ -910,15 +902,13 @@ export async function convert(url, creds) {
       // Cai no fallback partner_id abaixo (preserva ao menos o MLB correto)
     }
 
-    let fallbackTarget = target
+    // NÃO reescrever /p/MLB (id de CATÁLOGO) para produto.../MLB-x-_JM: esse
+    // formato `-x-_JM` é de id de LISTING, e reusar o id de catálogo nele gera
+    // uma URL inexistente (404 "Parece que esta página não existe" — bug real no
+    // card). A própria página /p/MLB é válida; só penduramos partner_id nela. O
+    // formato -x-_JM só é correto para o wid= (listing id), já tratado no resolve.
     const fallbackId = extractMlbId(target)
-    if (fallbackId) {
-      const parsed = new URL(target)
-      if (/^\/p\/MLB/i.test(parsed.pathname)) {
-        fallbackTarget = `https://produto.mercadolivre.com.br/${fallbackId}-x-_JM`
-      }
-    }
-    const u = new URL(canonicalizeMlProductUrl(fallbackTarget))
+    const u = new URL(canonicalizeMlProductUrl(target))
 
     // Fallback: injetar partner_id na URL resolvida (ou na meli.la original se resolve falhou)
     u.searchParams.delete('partner_id')
