@@ -41,3 +41,29 @@ export async function recoverStuckSendLogs(deps = {}) {
   })
   return { recovered: res.count ?? 0 }
 }
+
+// Ação manual do painel (botão "Limpar ofertas da fila", aba Envios): destrava
+// a fila reclassificando TODAS as mensagens em vôo (status 'queued' e 'sending')
+// de um usuário para um estado terminal de skip benigno. Diferente do watchdog
+// acima, é imediato (sem cutoff de tempo) e cobre 'queued' além de 'sending' —
+// serve para o cliente "soltar" agarramentos visíveis no contador "em vôo".
+//
+// Não re-enfileira nem cancela envios em andamento no worker: o payload já não
+// existe fora do processo que o criou. Apenas limpa o registro preso para que o
+// painel pare de mostrar "na fila/enviando" eterno e novas ofertas fluam.
+// Exige userId — nunca varre todos os usuários.
+export async function clearUserQueuedSendLogs(deps = {}) {
+  const db = deps.db ?? dbDefault
+  const userId = deps.userId
+  if (!userId) throw new Error('clearUserQueuedSendLogs: userId é obrigatório')
+  const now = deps.now ? deps.now() : new Date()
+  const res = await db.messageLog.updateMany({
+    where: { userId, status: { in: ['queued', 'sending'] } },
+    data: {
+      status: 'skipped',
+      errorMsg: classifyError(null, { kind: 'queue_cleared' }),
+      sentAt: now,
+    },
+  })
+  return { cleared: res.count ?? 0 }
+}

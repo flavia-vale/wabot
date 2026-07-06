@@ -66,6 +66,9 @@ export default function SendHistory() {
   const [expanded, setExpanded] = useState(() => new Set())
   const [confirmClear, setConfirmClear] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [confirmClearQueue, setConfirmClearQueue] = useState(false)
+  const [clearingQueue, setClearingQueue] = useState(false)
+  const [queueNotice, setQueueNotice] = useState('')
 
   // Summary (cards) por período.
   useEffect(() => {
@@ -135,6 +138,26 @@ export default function SendHistory() {
     }
   }
 
+  async function doClearQueue() {
+    setClearingQueue(true)
+    setQueueNotice('')
+    try {
+      const res = await api.logsClearQueue()
+      const cleared = num(res?.cleared)
+      setPage(1)
+      const [d, s] = await Promise.all([api.logs(tab, 1, LIMIT, debounced), api.logsSummary(period)])
+      setData(d); setSummary(s)
+      setQueueNotice(cleared > 0
+        ? `Fila destravada — ${cleared} ${cleared === 1 ? 'oferta foi removida' : 'ofertas foram removidas'} da fila de envio.`
+        : 'Nenhuma oferta estava presa na fila de envio no momento.')
+    } catch (e) {
+      setError(e?.message || 'Falha ao limpar a fila de envio.')
+    } finally {
+      setClearingQueue(false)
+      setConfirmClearQueue(false)
+    }
+  }
+
   function chipCount(value) {
     if (value === 'all') return statusCountsTotal
     return num(statusCounts[value])
@@ -165,6 +188,35 @@ export default function SendHistory() {
           ))}
         </div>
         {inFlight > 0 && <p className="pnl-card-note" style={{ marginTop: 12 }}>{inFlight} {inFlight === 1 ? 'mensagem' : 'mensagens'} em vôo (na fila/enviando).</p>}
+      </section>
+
+      {/* Destaque: destravar a fila de envio */}
+      <section className="pnl-card" style={{ borderColor: 'color-mix(in oklab, var(--warn) 55%, transparent)', borderWidth: 2, borderStyle: 'solid' }}>
+        <div className="pnl-toolbar" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="pnl-card-title">
+              <span aria-hidden="true" style={{ marginRight: 6 }}>⚠️</span>
+              Fila de envio travada?
+              {inFlight > 0 && <span className="pnl-tag is-flight" style={{ marginLeft: 8, verticalAlign: 'middle' }}>{inFlight} em vôo</span>}
+            </div>
+            <div className="pnl-note-box is-warn" role="note" style={{ marginTop: 10 }}>
+              <strong>Limpar ofertas da fila</strong> remove todas as mensagens que estão presas na fila de envio
+              (status <em>na fila</em> ou <em>enviando</em>), para <strong>destravar agarramentos</strong> e voltar a
+              enviar normalmente. As ofertas removidas <strong>não serão enviadas</strong> e ficam marcadas como
+              removidas no histórico — isto não apaga os envios já concluídos.
+            </div>
+          </div>
+          <button
+            type="button"
+            className="pnl-btn is-danger"
+            onClick={() => { setQueueNotice(''); setConfirmClearQueue(true) }}
+            disabled={clearingQueue}
+            style={{ flexShrink: 0, alignSelf: 'center' }}
+          >
+            {clearingQueue ? 'Limpando…' : 'Limpar ofertas da fila'}
+          </button>
+        </div>
+        {queueNotice && <div className="pnl-note-box is-success" role="status" style={{ marginTop: 12 }}>{queueNotice}</div>}
       </section>
 
       {/* Filtros */}
@@ -272,6 +324,23 @@ export default function SendHistory() {
             <div className="pnl-modal-actions">
               <button className="pnl-btn" onClick={() => setConfirmClear(false)} disabled={clearing}>Cancelar</button>
               <button className="pnl-btn is-danger" onClick={doClear} disabled={clearing}>{clearing ? 'Limpando…' : 'Limpar tudo'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmClearQueue && (
+        <div className="pnl-modal-overlay" role="dialog" aria-modal="true" aria-label="Limpar ofertas da fila">
+          <div className="pnl-modal">
+            <h3>Limpar ofertas da fila</h3>
+            <p>
+              Todas as ofertas que estão <strong>na fila de envio</strong> (na fila ou enviando){inFlight > 0 ? ` — ${inFlight} no momento` : ''} serão
+              removidas para destravar a fila. Elas <strong>não serão enviadas</strong> e ficam marcadas como removidas no histórico.
+              Envios já concluídos não são afetados.
+            </p>
+            <div className="pnl-modal-actions">
+              <button className="pnl-btn" onClick={() => setConfirmClearQueue(false)} disabled={clearingQueue}>Cancelar</button>
+              <button className="pnl-btn is-danger" onClick={doClearQueue} disabled={clearingQueue}>{clearingQueue ? 'Limpando…' : 'Limpar ofertas da fila'}</button>
             </div>
           </div>
         </div>
