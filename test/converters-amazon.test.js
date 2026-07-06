@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mock } from 'node:test'
 import axios from 'axios'
-import { convert, isAmazonShortLink, resolveAmazonShortLink } from '../src/converters/amazon.js'
+import { convert, isAmazonShortLink, resolveAmazonShortLink, normalizeAmazonCookie, checkAmazonSession } from '../src/converters/amazon.js'
 
 const CREDS = {
   tag: 'flaviavale-20',
@@ -271,4 +271,104 @@ test('Amazon: link sem ASIN com flag OFF segue descartado (null) — comportamen
     const result = await convert('https://www.amazon.com.br/deals?ref=promo', CREDS)
     assert.equal(result, null)
   })
+})
+
+// --- Cookie completo da sessão (RCA 2026-07: 3 cookies insuficientes/expiram) ---
+
+test('normalizeAmazonCookie: header cru é devolvido como está', () => {
+  assert.equal(normalizeAmazonCookie('a=1; b=2'), 'a=1; b=2')
+})
+
+test('normalizeAmazonCookie: JSON de export (extensão) vira header nome=valor', () => {
+  const json = JSON.stringify([
+    { name: 'session-id', value: '147-000' },
+    { name: 'at-acbbr', value: 'Atza|x' },
+  ])
+  assert.equal(normalizeAmazonCookie(json), 'session-id=147-000; at-acbbr=Atza|x')
+})
+
+test('normalizeAmazonCookie: vazio/invalid degradam com segurança', () => {
+  assert.equal(normalizeAmazonCookie(''), '')
+  assert.equal(normalizeAmazonCookie(null), '')
+  assert.equal(normalizeAmazonCookie('[não é json'), '[não é json')
+})
+
+test('Amazon: cookie completo é encaminhado inteiro ao SiteStripe (não só os 3 nomeados)', async () => {
+  const fullCookie = 'session-id=147; session-token=tok; at-acbbr=Atza|x; ubid-acbbr=u; x-acbbr=q'
+  let sentCookie = null
+  const restore = mockAxiosOnce(async (url, options) => {
+    if (url.includes('sitestripe/getShortUrl')) {
+      sentCookie = options.headers.Cookie
+      return { status: 200, data: { shortUrl: 'https://amzn.to/full1' }, headers: {} }
+    }
+    return { status: 200, request: { res: { responseUrl: LONG_URL } }, config: { url: LONG_URL } }
+  })
+  try {
+    const result = await convert(LONG_URL, { tag: 'x-20', cookie: fullCookie })
+    assert.deepEqual(result, { url: 'https://amzn.to/full1', linkKind: 'product' })
+    assert.equal(sentCookie, fullCookie, 'a sessão completa é enviada, incluindo session-token')
+  } finally {
+    restore()
+  }
+})
+
+test('Amazon: cookie completo em JSON é normalizado no header Cookie', async () => {
+  const json = JSON.stringify([
+    { name: 'session-id', value: '147' },
+    { name: 'session-token', value: 'tok' },
+    { name: 'at-acbbr', value: 'Atza|x' },
+  ])
+  let sentCookie = null
+  const restore = mockAxiosOnce(async (url, options) => {
+    if (url.includes('sitestripe/getShortUrl')) {
+      sentCookie = options.headers.Cookie
+      return { status: 200, data: { shortUrl: 'https://amzn.to/full2' }, headers: {} }
+    }
+    return { status: 200, request: { res: { responseUrl: LONG_URL } }, config: { url: LONG_URL } }
+  })
+  try {
+    await convert(LONG_URL, { tag: 'x-20', cookie: json })
+    assert.equal(sentCookie, 'session-id=147; session-token=tok; at-acbbr=Atza|x')
+  } finally {
+    restore()
+  }
+})
+
+test('checkAmazonSession: sem cookie devolve no_cookie', async () => {
+  const r = await checkAmazonSession({ tag: 'x-20' })
+  assert.deepEqual(r, { configured: false, alive: null, reason: 'no_cookie' })
+})
+
+test('checkAmazonSession: shortUrl gerado => alive', async () => {
+  const restore = mockAxiosOnce(async () => ({ status: 200, data: { shortUrl: 'https://amzn.to/ok' }, headers: {} }))
+  try {
+    const r = await checkAmazonSession(CREDS)
+    assert.deepEqual(r, { configured: true, alive: true, reason: 'ok' })
+  } finally {
+    restore()
+  }
+})
+
+test('checkAmazonSession: parede "Acessar Amazon" (200 HTML) => alive:false expired', async () => {
+  const restore = mockAxiosOnce(async () => ({
+    status: 200,
+    data: '<!doctype html><html><head><title>Acessar Amazon</title></head><body>ap/signin</body></html>',
+    headers: { 'content-type': 'text/html;charset=UTF-8' },
+  }))
+  try {
+    const r = await checkAmazonSession(CREDS)
+    assert.deepEqual(r, { configured: true, alive: false, reason: 'expired' })
+  } finally {
+    restore()
+  }
+})
+
+test('checkAmazonSession: 5xx transitório => indeterminado (não alarma falso-expired)', async () => {
+  const restore = mockAxiosOnce(async () => ({ status: 503, data: {}, headers: {} }))
+  try {
+    const r = await checkAmazonSession(CREDS)
+    assert.deepEqual(r, { configured: true, alive: null, reason: 'network_error' })
+  } finally {
+    restore()
+  }
 })

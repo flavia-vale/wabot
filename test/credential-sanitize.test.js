@@ -29,8 +29,29 @@ test('ML: ssid em branco não dispara o sanitize (mantém corpo)', () => {
   assert.deepEqual(out, body)
 })
 
-test('Outras plataformas não são afetadas (Amazon mantém cookies)', () => {
+test('Amazon: sem cookie completo mantém os 3 cookies nomeados intactos', () => {
   const body = { tag: 'amzn', 'ubid-acbbr': 'u', 'at-acbbr': 'a', 'x-acbbr': 'x' }
+  const out = sanitizeCredentialBody('amazon', body)
+  assert.deepEqual(out, body)
+})
+
+test('Amazon: cookie completo descarta os 3 cookies nomeados legados (não sombreia a sessão nova)', () => {
+  const body = {
+    tag: 'amzn-20',
+    cookie: 'session-id=1; at-acbbr=novo; session-token=abc',
+    'ubid-acbbr': 'antigo-u',
+    'at-acbbr': 'antigo-at',
+    'x-acbbr': 'antigo-x',
+  }
+  const out = sanitizeCredentialBody('amazon', body)
+  assert.deepEqual(out, { tag: 'amzn-20', cookie: 'session-id=1; at-acbbr=novo; session-token=abc' })
+  assert.equal('ubid-acbbr' in out, false)
+  assert.equal('at-acbbr' in out, false)
+  assert.equal('x-acbbr' in out, false)
+})
+
+test('Amazon: cookie em branco não dispara o sanitize (mantém os nomeados)', () => {
+  const body = { tag: 'amzn', cookie: '   ', 'ubid-acbbr': 'u', 'at-acbbr': 'a', 'x-acbbr': 'x' }
   const out = sanitizeCredentialBody('amazon', body)
   assert.deepEqual(out, body)
 })

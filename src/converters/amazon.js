@@ -190,7 +190,50 @@ export async function resolveAmazonShortLink(url, {
   return current
 }
 
+// Normaliza o campo `cookie` (sessão Amazon completa) para um header Cookie
+// (`nome=valor; nome=valor`).
+//
+// Contexto (RCA 2026-07): historicamente só enviávamos 3 cookies
+// (ubid-acbbr/at-acbbr/x-acbbr) ao SiteStripe. Eles deixam a sessão
+// "reconhecida" mas NÃO "plenamente autenticada" — sem os cookies de sessão
+// (session-id, session-token, sess-at-acbbr, sst-acbbr), a Amazon devolve HTTP
+// 200 com a página "Acessar Amazon" em vez do JSON com o shortUrl, e a conversão
+// cai no fallback ?tag= longo (comissão preservada, mas sem amzn.to). Aceitar o
+// cookie COMPLETO da sessão resolve isso.
+//
+// Aceita dois formatos porque os cookies de sessão exigidos são httpOnly — NÃO
+// aparecem em `document.cookie`. A captura confiável é via extensão de export
+// (Cookie-Editor/EditThisCookie), que devolve um JSON [{name,value,...}], ou o
+// header cru copiado do DevTools → Network.
+export function normalizeAmazonCookie(raw) {
+  const value = String(raw ?? '').trim()
+  if (!value) return ''
+  if (value.startsWith('[') || value.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(value)
+      const list = Array.isArray(parsed) ? parsed : [parsed]
+      const pairs = []
+      for (const cookie of list) {
+        const name = String(cookie?.name ?? '').trim()
+        if (!name) continue
+        const val = cookie?.value == null ? '' : String(cookie.value)
+        pairs.push(`${name}=${val}`)
+      }
+      return pairs.join('; ')
+    } catch {
+      return value // não era JSON válido; devolve cru
+    }
+  }
+  return value
+}
+
+// Quando o cookie completo da sessão existe, ele é a fonte única de verdade
+// (contém at-acbbr/session-token/etc.); os 3 campos nomeados são fallback legado
+// para credenciais já cadastradas. sanitizeCredentialBody garante que os dois
+// não coexistam (o cookie completo descarta os nomeados ao salvar).
 function buildCookieHeader(creds) {
+  const raw = normalizeAmazonCookie(creds?.cookie)
+  if (raw) return raw
   const pairs = []
   const ubid = creds['ubid-acbbr']
   const at = creds['at-acbbr']
@@ -244,12 +287,17 @@ async function createAmazonShortLink(longUrl, tag, creds) {
         continue
       }
 
+      const bodyText = typeof res.data === 'string' ? res.data : JSON.stringify(res.data ?? '')
+      const signinWall = /ap\/signin|Acessar Amazon|<title[^>]*>[^<]*Sign-?In/i.test(bodyText)
       logger.warn({
         status: res.status,
         attempt,
-        rawBody: typeof res.data === 'string' ? res.data.slice(0, 500) : JSON.stringify(res.data).slice(0, 500),
+        signinWall,
+        rawBody: bodyText.slice(0, 500),
         contentType: res.headers?.['content-type'],
-      }, 'Amazon createShortLink: API respondeu sem shortUrl')
+      }, signinWall
+        ? 'Amazon createShortLink: sessão não autenticada (parede "Acessar Amazon") — cookies precisam ser renovados'
+        : 'Amazon createShortLink: API respondeu sem shortUrl')
       return { shortUrl: null, transient: res.status >= 500 }
     } catch (err) {
       lastStatus = err.response?.status ?? null
@@ -292,6 +340,31 @@ function buildLongUrl(target, asin) {
     }
   } catch {}
   return `https://www.amazon.com.br/dp/${asin}`
+}
+
+// Checagem ativa da sessão de afiliado da Amazon (SiteStripe). Os cookies da
+// sessão expiram/rotacionam e, sem renovar, o getShortUrl passa a devolver a
+// página "Acessar Amazon" (200 HTML) — a oferta ainda sai com o ?tag= longo,
+// mas sem o amzn.to. O painel chama este endpoint ao carregar e avisa a usuária
+// quando expirado, em vez de o problema ficar escondido no bot.log. Mesma forma
+// de retorno de checkMercadoLivreSession: { configured, alive, reason }.
+const AMAZON_SESSION_PROBE_URL = 'https://www.amazon.com.br/dp/B07BB8NL42'
+
+export async function checkAmazonSession(creds = {}) {
+  const cookieHeader = buildCookieHeader(creds)
+  if (!cookieHeader) return { configured: false, alive: null, reason: 'no_cookie' }
+  const tag = String(creds?.tag ?? '').trim()
+  if (!tag) return { configured: false, alive: null, reason: 'no_tag' }
+  try {
+    const { shortUrl, transient } = await createAmazonShortLink(AMAZON_SESSION_PROBE_URL, tag, creds)
+    if (shortUrl) return { configured: true, alive: true, reason: 'ok' }
+    // transient (5xx/rede) não prova expiração — fica indeterminado para não
+    // alarmar com falso "cookies expiraram". 200-HTML/parede de login => expired.
+    if (transient) return { configured: true, alive: null, reason: 'network_error' }
+    return { configured: true, alive: false, reason: 'expired' }
+  } catch {
+    return { configured: true, alive: null, reason: 'network_error' }
+  }
 }
 
 export async function convert(url, creds) {

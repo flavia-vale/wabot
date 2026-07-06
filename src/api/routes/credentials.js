@@ -3,6 +3,7 @@ import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { getCredentialSaveMessage, parseCredentialData, PLATFORMS, sanitizeCredentialBody, validateCredentialData } from '../../credentialHealth.js'
 import { encryptCredential } from '../../credentialCrypto.js'
 import { checkMercadoLivreSession } from '../../converters/mercadolivre.js'
+import { checkAmazonSession } from '../../converters/amazon.js'
 import { reloadConfig } from '../../manager.js'
 
 export async function credentialsRoutes(app) {
@@ -33,6 +34,20 @@ export async function credentialsRoutes(app) {
       })
     }
     return { ...publicResult, checkedAt: new Date().toISOString() }
+  })
+
+  // Checagem ativa da sessão de afiliado da Amazon (SiteStripe). Os cookies
+  // expiram/rotacionam; sem renovar, o getShortUrl devolve a página "Acessar
+  // Amazon" e as ofertas saem com o ?tag= longo em vez do amzn.to. O painel
+  // chama este endpoint ao carregar e avisa a usuária quando expirado.
+  app.get('/amazon/session', { onRequest: [app.authenticate] }, async (req) => {
+    const cred = await db.credential.findUnique({
+      where: { userId_platform: { userId: req.user.sub, platform: 'amazon' } },
+    })
+    if (!cred) return { configured: false, alive: null, reason: 'not_configured' }
+    const data = parseCredentialData(cred.data)
+    const result = await checkAmazonSession(data)
+    return { ...result, checkedAt: new Date().toISOString() }
   })
 
   app.put('/:platform', { onRequest: [app.authenticate] }, async (req, reply) => {
