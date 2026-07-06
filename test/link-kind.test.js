@@ -39,6 +39,20 @@ test('mercadolivre: página de cupons (sem MLB) classifica como coupon — bug r
   )
 })
 
+test('amazon/ML: linkKind explícito do converter é respeitado mesmo quando url/converted são short links sem ASIN/MLB (bug real: produto virava cupom)', () => {
+  // amzn.to/meli.la nunca expõem ASIN/MLB no texto — sem o converter
+  // informar linkKind='product' diretamente, o fallback regex classificaria
+  // errado como 'coupon' mesmo sendo um produto de verdade.
+  assert.equal(
+    resolveLinkKind('amazon', { url: 'https://amzn.to/4gipdUe', converted: 'https://amzn.to/4gipdUe', linkKind: 'product' }),
+    'product',
+  )
+  assert.equal(
+    resolveLinkKind('mercadolivre', { url: 'https://meli.la/1fyQi7e', converted: 'https://meli.la/1fyQi7e', linkKind: 'product' }),
+    'product',
+  )
+})
+
 test('plataforma sem detector (magazineluiza) devolve undefined sem lançar', () => {
   assert.equal(resolveLinkKind('magazineluiza', { url: 'https://www.magazineluiza.com.br/produto/p/123' }), undefined)
 })

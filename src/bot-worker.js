@@ -2526,11 +2526,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             return null
           }
           logger.info({ platform, converted: conversionResult.url, warning: conversionResult.warning }, 'Link convertido')
-          // amazon.js/mercadolivre.js não marcam linkKind de forma confiável
-          // (só shopee.js marca no próprio converter) — resolveLinkKind
-          // classifica pela URL quando o converter não decidiu (ver
-          // converters/linkKind.js: por que não mudamos o contrato dos
-          // converters em vez disso).
+          // amazon.js/mercadolivre.js/shopee.js já marcam linkKind no próprio
+          // converter; resolveLinkKind só cai no fallback por regex quando o
+          // converter não decidiu (ver converters/linkKind.js).
           const linkKind = resolveLinkKind(platform, { url, converted: conversionResult.url, linkKind: conversionResult.linkKind })
           return { platform, url, converted: conversionResult.url, warning: conversionResult.warning, linkKind }
         } catch (err) {

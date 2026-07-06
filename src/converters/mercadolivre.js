@@ -814,7 +814,9 @@ export async function convert(url, creds) {
               continue
             }
           }
-          return affiliateUrl
+          // Só chega aqui com anchorMlbId truthy (o ramo `ssid && !anchorMlbId`
+          // acima cobre o caso sem MLB) — link de produto de verdade.
+          return { url: affiliateUrl, linkKind: 'product' }
         } catch (err) {
           logger.warn({ candidate, err: err.message }, 'ML createLink: tentativa falhou')
           // Falhas terminais repetiriam em todos os candidates: marca e para
@@ -851,8 +853,12 @@ export async function convert(url, creds) {
     // Fallback: injetar partner_id na URL resolvida (ou na meli.la original se resolve falhou)
     u.searchParams.delete('partner_id')
     if (tag) u.searchParams.set('partner_id', tag)
-    if (affiliateWarning) return { url: u.toString(), warning: affiliateWarning }
-    return u.toString()
+    // fallbackId (mesmo extractMlbId de anchorMlbId, recalculado sobre target)
+    // decide produto vs. cupom: link sem MLB nenhum (ex.: página de cupons)
+    // não tem produto pra mostrar no card do preview.
+    const fallbackLinkKind = fallbackId ? 'product' : 'coupon'
+    if (affiliateWarning) return { url: u.toString(), linkKind: fallbackLinkKind, warning: affiliateWarning }
+    return { url: u.toString(), linkKind: fallbackLinkKind }
   } catch {
     return null
   }
