@@ -3068,7 +3068,28 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           logger.warn({ err: dbgErr?.message }, 'DEBUG_INCOMING_UPSERT falhou')
         }
       }
-      if (msg.key.fromMe) continue
+      // Mensagens enviadas pelo próprio número conectado (fromMe) reaparecem no
+      // upsert. Historicamente TODAS eram descartadas aqui — o filtro protegia
+      // contra eco dos próprios envios do robô. Mas isso também bloqueava o caso
+      // legítimo: a dona da conta enviar ela mesma uma oferta num grupo
+      // DISTRIBUIDOR monitorado, esperando que o robô espelhe pros destinos.
+      // Agora só descartamos fromMe quando o grupo NÃO é uma fonte monitorada:
+      // os envios do robô vão pros grupos de DESTINO (role 'post'), que não são
+      // fontes, então continuam sendo ignorados; já a mensagem manual num grupo
+      // monitorado segue o pipeline normal. A brecha de eco de um grupo que
+      // fosse source E destino ao mesmo tempo é fechada por construção pela
+      // trava anti-eco no cadastro de grupos (POST /api/groups): um mesmo JID
+      // não pode existir como 'monitor' e 'post'. Fora isso, a dedup por link
+      // segue como rede final. Só pagamos o getConfig (cacheado) no ramo fromMe.
+      if (msg.key.fromMe) {
+        const selfCfg = await getConfig().catch(() => null)
+        const selfNormalizedJid = normalizeJidForMatch(msg.key.remoteJid)
+        const isMonitoredSource = Boolean(
+          selfNormalizedJid &&
+          selfCfg?.groups?.monitor?.some(m => normalizeJidForMatch(m.waJid) === selfNormalizedJid)
+        )
+        if (!isMonitoredSource) continue
+      }
       // Marca atividade do JID — usado pelo monitorSilenceWatchdog pra
       // diferenciar "monitor parado por falha de decrypt" de "monitor
       // inativo organicamente". Atualiza independente de filtros downstream.
