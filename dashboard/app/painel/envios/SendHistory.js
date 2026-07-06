@@ -201,9 +201,9 @@ export default function SendHistory() {
             </div>
             <div className="pnl-note-box is-warn" role="note" style={{ marginTop: 10 }}>
               <strong>Limpar ofertas da fila</strong> remove todas as mensagens que estão presas na fila de envio
-              (status <em>na fila</em> ou <em>enviando</em>), para <strong>destravar agarramentos</strong> e voltar a
-              enviar normalmente. As ofertas removidas <strong>não serão enviadas</strong> e ficam marcadas como
-              removidas no histórico — isto não apaga os envios já concluídos.
+              (status <em>na fila</em> ou <em>enviando</em>), destravando o envio das próximas ofertas. As ofertas
+              removidas <strong>não serão enviadas</strong> e ficam marcadas como removidas no histórico — isto
+              não apaga os envios já concluídos.
             </div>
           </div>
           <button
