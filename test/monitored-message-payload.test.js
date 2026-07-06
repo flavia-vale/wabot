@@ -44,14 +44,27 @@ test('payload monitorado sem imagem + useLinkPreview pede preview automático do
   assert.deepEqual(payload.fallbacks, [])
 })
 
-test('payload monitorado em modo preview pode injetar metadados manuais do card', () => {
+test('payload monitorado em modo preview injeta linkPreview manual (com thumbnail HQ upada)', () => {
   const finalText = 'Oferta convertida https://afiliado.example/produto'
+  // Card sem dados de produto (decisão 2026-07): title é o NOME DA LOJA
+  // (obrigatório — sem title o WhatsApp não renderiza o card; regressão do
+  // PR #1186) e description não existe; preço/título de produto só no texto.
   const linkPreview = {
     'canonical-url': 'https://afiliado.example/produto',
     'matched-text': 'https://afiliado.example/produto',
-    title: 'Produto em oferta',
-    description: 'Por: R$ 62,90',
+    title: 'Amazon',
     jpegThumbnail: Buffer.from('thumb'),
+    // Resultado de prepareWAMessageMedia (thumbnail-link): é o que faz o
+    // WhatsApp renderizar o card GRANDE (thumbnailDirectPath/mediaKey).
+    highQualityThumbnail: {
+      directPath: '/v/t62.36144-24/abc',
+      mediaKey: Buffer.from('key'),
+      mediaKeyTimestamp: 1234567890,
+      width: 500,
+      height: 500,
+      fileSha256: Buffer.from('sha'),
+      fileEncSha256: Buffer.from('encsha'),
+    },
   }
   const payload = buildMonitoredMessagePayload({
     finalText,
@@ -62,32 +75,33 @@ test('payload monitorado em modo preview pode injetar metadados manuais do card'
 
   assert.equal(payload._route, 'text')
   assert.deepEqual(payload.primary, { text: finalText, linkPreview })
+  assert.equal(payload.primary.contextInfo, undefined)
   assert.deepEqual(payload.primarySendOptions, { generateHighQualityLinkPreview: true })
   assert.deepEqual(payload.fallbacks, [])
 })
 
-test('payload monitorado em modo preview grande usa externalAdReply e desativa card compacto', () => {
-  const finalText = 'Oferta convertida https://afiliado.example/produto'
-  const externalAdReply = {
-    title: 'Produto em oferta',
-    body: 'Por: R$ 62,90',
-    sourceUrl: 'https://afiliado.example/produto',
-    mediaType: 1,
-    renderLargerThumbnail: true,
-    thumbnail: Buffer.from('thumb'),
-  }
-  const payload = buildMonitoredMessagePayload({
-    finalText,
-    image: null,
-    useLinkPreview: true,
-    externalAdReply,
-  })
+test('rota de texto TAMBÉM rejeita externalAdReply (regressão: a guarda só cobria a rota de imagem)', () => {
+  assert.throws(
+    () => buildMonitoredMessagePayload({
+      finalText: 'Oferta https://afiliado.example/produto',
+      image: null,
+      useLinkPreview: true,
+      linkPreview: {
+        'matched-text': 'https://afiliado.example/produto',
+        title: 'Produto',
+        externalAdReply: { sourceUrl: 'https://example.com' },
+      },
+    }),
+    /externalAdReply causa drop silencioso/,
+  )
+})
 
-  assert.equal(payload._route, 'text')
-  assert.equal(payload.primary.linkPreview, null)
-  assert.deepEqual(payload.primary.contextInfo, { externalAdReply })
-  assert.deepEqual(payload.primarySendOptions, { generateHighQualityLinkPreview: true })
-  assert.deepEqual(payload.fallbacks, [])
+test('guarda não itera bytes de Buffer (thumbnail grande não custa recursão nem falso positivo)', () => {
+  const payload = buildMonitoredMessagePayload({
+    finalText: 'Oferta https://afiliado.example/produto',
+    image: { buffer: Buffer.alloc(64 * 1024), mimetype: 'image/jpeg', jpegThumbnail: Buffer.alloc(32 * 1024) },
+  })
+  assert.equal(payload._route, 'image')
 })
 
 test('guarda rejeita externalAdReply para evitar novo drop silencioso em mensagens monitoradas', () => {

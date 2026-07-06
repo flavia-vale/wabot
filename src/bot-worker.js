@@ -5,20 +5,21 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   downloadMediaMessage,
   extractMessageContent,
+  prepareWAMessageMedia,
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import NodeCache from '@cacheable/node-cache'
 import { readFileSync, mkdirSync } from 'fs'
 import { rm, writeFile, readdir } from 'fs/promises'
 import { dirname } from 'path'
-import sharp from 'sharp'
 
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
-import { fetchProductInfo } from './converters/productInfoScraper.js'
+import { buildStoreBrandCardImage } from './converters/storeBrandCard.js'
+import { resolveLinkKind } from './converters/linkKind.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
 import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
@@ -34,6 +35,7 @@ import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, reso
 import { withSendTimeout as withSendTimeoutImpl } from './sendMessageTimeout.js'
 import { buildStableSendMessageId } from './core/stableMessageId.js'
 import { buildMirrorDedupKeys } from './core/mirrorDedupKey.js'
+import { checkAndSetGlobalDedup } from './core/globalDedup.js'
 import { resolveSendTimeoutOverrideMs, resolveSendTimeoutMs as resolveSendTimeoutMsPure, DEFAULT_SEND_TIMEOUT_BY_ATTEMPT_MS } from './core/sendTimeout.js'
 import { detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
@@ -145,12 +147,31 @@ async function globalRateLimitWait(destJid, windowMs) {
   }
 }
 
+// TTL fixo (não o ttlMs do chamador) que a CHAVE do Redis usa pra se
+// autolimpar — só limita memória, não representa mais a janela lógica de
+// dedup (ver comentário dentro de globalDedupCheckAndSet: por quê).
+const GLOBAL_DEDUP_REDIS_SAFETY_CAP_MS = Math.max(60_000, Number(process.env.GLOBAL_DEDUP_REDIS_SAFETY_CAP_MS) || 24 * 60 * 60_000)
+
+// SendDedupKey (tabela SQLite) só existe pra fechar a corrida de
+// milissegundos entre o findFirst diagnóstico e o create do MessageLog (ver
+// uso em startBotInner) — não representa a janela lógica de dedup (essa é
+// decidida por dedup local + MessageLog/DB + Redis, que reavaliam a janela
+// atual a cada checagem). Fixo e curto de propósito: usar a janela lógica do
+// linkKind aqui (como era antes) prendia reservas de CUPOM com o TTL da
+// janela ANTIGA (até 24h) sempre que o índice único continuava ocupado —
+// bug real reportado em produção.
+const SEND_DEDUP_RESERVATION_TTL_MS = Math.max(30_000, Number(process.env.SEND_DEDUP_RESERVATION_TTL_MS) || 5 * 60_000)
+
 async function globalDedupCheckAndSet(key, ttlMs) {
   const r = ensureRuntimeRedis()
   if (!r) return { duplicate: false }
   try {
-    const ok = await r.set(`dedup:${userId}:${key}`, '1', 'PX', ttlMs, 'NX')
-    return { duplicate: ok !== 'OK' }
+    // Lógica em core/globalDedup.js (testada com ioredis-mock em
+    // test/core/global-dedup.test.js) — bot-worker.js é grande demais pra
+    // importar em teste sem efeitos colaterais, então essa extração é o que
+    // permite cobertura funcional de verdade (não só regex no source) pra
+    // uma lógica que já causou incidente real de cupom preso em dedup.
+    return await checkAndSetGlobalDedup(r, `dedup:${userId}:${key}`, ttlMs, { safetyCapMs: GLOBAL_DEDUP_REDIS_SAFETY_CAP_MS })
   } catch (err) {
     if (REDIS_DEDUP_FAIL_MODE === 'closed') throw new Error(`Global dedup unavailable: ${err.message}`)
     // Gatilho de escala observável (WABOT-010): em fail-open a dedup global
@@ -1141,167 +1162,128 @@ function buildBroadcastImageRecipe(text, options = {}) {
   }
 }
 
-function cleanPreviewText(value, maxLength = 140) {
-  return String(value || '')
-    .replace(/https?:\/\/\S+/g, ' ')
-    .replace(/[~*_`>|#]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, maxLength)
-}
-
-function derivePreviewTitleFromText(text) {
-  const line = String(text || '')
-    .split(/\r?\n/)
-    .map(part => cleanPreviewText(part, 120))
-    .find(Boolean)
-  return line || 'Oferta'
-}
-
-function derivePreviewDescriptionFromText(text) {
-  const lines = String(text || '')
-    .split(/\r?\n/)
-    .map(part => cleanPreviewText(part, 180))
-    .filter(Boolean)
-  return lines.slice(1, 4).join(' • ') || lines[0] || ''
-}
-
-function escapeSvgText(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
-function wrapTextLines(value, maxChars, maxLines) {
-  const words = cleanPreviewText(value, maxChars * maxLines * 2).split(/\s+/).filter(Boolean)
-  const lines = []
-  let current = ''
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word
-    if (next.length > maxChars && current) {
-      lines.push(current)
-      current = word
-      if (lines.length >= maxLines) break
-    } else {
-      current = next
-    }
-  }
-  if (current && lines.length < maxLines) lines.push(current)
-  if (lines.length === maxLines && words.join(' ').length > lines.join(' ').length) {
-    lines[maxLines - 1] = `${lines[maxLines - 1].replace(/…$/, '')}…`
-  }
-  return lines
-}
-
-async function buildWideLinkPreviewThumbnail({ imageBuffer, title, description, sourceUrl }) {
-  if (!imageBuffer?.length) return null
-  const width = 1200
-  const height = 630
-  const product = await sharp(imageBuffer, { failOn: 'none' })
-    .rotate()
-    .resize({ width: 500, height: 500, fit: 'inside', withoutEnlargement: true, background: '#ffffff' })
-    .flatten({ background: '#ffffff' })
-    .jpeg({ quality: 92, mozjpeg: true })
-    .toBuffer()
-
-  const titleLines = wrapTextLines(title, 27, 3)
-  const descLines = wrapTextLines(description, 34, 2)
-  const host = (() => {
-    try { return new URL(sourceUrl).hostname.replace(/^www\./, '') } catch { return '' }
-  })()
-  const titleSvg = titleLines.map((line, idx) => `<tspan x="620" dy="${idx === 0 ? 0 : 54}">${escapeSvgText(line)}</tspan>`).join('')
-  const descSvg = descLines.map((line, idx) => `<tspan x="620" dy="${idx === 0 ? 0 : 40}">${escapeSvgText(line)}</tspan>`).join('')
-
-  const svg = Buffer.from(`
-    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#063f2c"/>
-          <stop offset="100%" stop-color="#111827"/>
-        </linearGradient>
-        <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000000" flood-opacity="0.35"/>
-        </filter>
-      </defs>
-      <rect width="1200" height="630" fill="url(#bg)"/>
-      <circle cx="1080" cy="82" r="150" fill="#16a34a" opacity="0.16"/>
-      <circle cx="102" cy="550" r="180" fill="#22c55e" opacity="0.10"/>
-      <rect x="48" y="58" width="532" height="514" rx="34" fill="#ffffff" filter="url(#shadow)"/>
-      <text x="620" y="128" font-family="Arial, Helvetica, sans-serif" font-size="46" font-weight="800" fill="#ffffff">${titleSvg}</text>
-      <text x="620" y="342" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="#bbf7d0">${descSvg}</text>
-      <text x="620" y="505" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" fill="#22c55e">🔗 ${escapeSvgText(host)}</text>
-      <text x="620" y="558" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#e5e7eb">Toque para abrir a oferta</text>
-    </svg>
-  `)
-
-  return sharp({ create: { width, height, channels: 3, background: '#0f172a' } })
-    .composite([
-      { input: svg, top: 0, left: 0 },
-      { input: product, top: 65, left: 64 },
-    ])
-    .jpeg({ quality: 90, mozjpeg: true, chromaSubsampling: '4:4:4' })
-    .toBuffer()
-}
-
-function buildLargePreviewAdReply(linkPreview) {
-  if (!linkPreview || typeof linkPreview !== 'object') return null
-  const sourceUrl = linkPreview['canonical-url'] || linkPreview['matched-text']
-  if (!isHttpUrl(sourceUrl)) return null
-  return {
-    title: linkPreview.title || 'Oferta',
-    body: linkPreview.description || '',
-    sourceUrl,
-    mediaType: 1,
-    renderLargerThumbnail: true,
-    showAdAttribution: false,
-    ...(linkPreview.jpegThumbnail ? { thumbnail: linkPreview.jpegThumbnail } : {}),
-  }
-}
-
-async function buildManualLinkPreview({ text, primary, credentialsMap }) {
+// Monta o WAUrlInfo manual do modo "preview" (card clicável). Necessário
+// porque links de afiliado (s.shopee.com.br, amzn.to, /sec/ do ML) bloqueiam
+// o scraper automático do Baileys (link-preview-js) e o preview não sai.
+//
+// O card é SÓ IMAGEM por decisão de produto (2026-07): título e preço ficam
+// exclusivamente no texto da mensagem. O preço raspado do card divergia do
+// preço real da oferta com cupom (ex.: card "Por: 1.825,87" vs texto
+// "POR 1.675,87 com cupom") e o título duplicava a primeira linha do texto.
+// Sem título/descrição o WhatsApp renderiza imagem + domínio, e de quebra o
+// modo preview deixou de raspar a página do produto (fetchProductInfo) —
+// só busca a imagem.
+//
+// Card GRANDE: o WhatsApp só renderiza o card grande quando o proto carrega
+// thumbnailDirectPath/mediaKey de uma thumbnail UPADA nos servidores do WA —
+// linkPreview.highQualityThumbnail preenchido via prepareWAMessageMedia com
+// mediaTypeOverride 'thumbnail-link', o MESMO caminho interno que o Baileys
+// usa em generateHighQualityLinkPreview (ver Utils/link-preview.js). Uma
+// thumbnail inline gigante NÃO produz card grande — só incha o proto (risco
+// de rejeição). O inline aqui é o thumb 500px q80 já validado em produção
+// (normalizeImageForWhatsApp), como placeholder enquanto o cliente baixa a HQ.
+//
+// NUNCA usar contextInfo.externalAdReply para "forçar" card grande: é campo
+// de anúncio e causa drop silencioso em mensagem monitorada — a guarda em
+// monitoredMessagePayload.js rejeita payload com esse campo em qualquer rota.
+async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer }) {
   const matchedText = isHttpUrl(primary?.converted) ? primary.converted : (isHttpUrl(primary?.url) ? primary.url : '')
   if (!matchedText) return null
+  // matched-text precisa existir literalmente no corpo da mensagem; sem essa
+  // âncora o cliente WhatsApp não associa o card ao link e não renderiza nada.
+  // Sem âncora, devolve null e o Baileys tenta o preview automático.
+  if (!String(text || '').includes(matchedText)) return null
 
   const sourceUrl = isHttpUrl(primary?.url) ? primary.url : matchedText
-  const [productInfo, imageUrl] = await Promise.all([
-    fetchProductInfo(sourceUrl, {
-      mlCredentials: credentialsMap?.mercadolivre,
-      shopeeCredentials: credentialsMap?.shopee,
-    }).catch(() => null),
-    primary?.platform ? fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}).catch(() => null) : Promise.resolve(null),
-  ])
 
-  const title = cleanPreviewText(productInfo?.title, 120) || derivePreviewTitleFromText(text)
-  const description = cleanPreviewText(
-    productInfo?.newPrice ? `Por: ${productInfo.newPrice}` : derivePreviewDescriptionFromText(text),
-    180,
-  )
-
+  // jpegThumbnail = placeholder pequeno (inline no proto, mostrado antes da
+  // HQ carregar). hqSourceBuffer = imagem em resolução MAIOR, usada só como
+  // fonte do upload que alimenta highQualityThumbnail.
+  //
+  // Por que os dois: prepareWAMessageMedia lê as dimensões reais do buffer
+  // que sobe (Utils/messages-media.js:extractImageThumb → sharp .metadata())
+  // e grava em thumbnailWidth/thumbnailHeight do proto (Utils/messages.js).
+  // Fizemos upload do PRÓPRIO jpegThumbnail (capado em 500px) até aqui, então
+  // o card nascia com thumbnailWidth/Height ≤500 — o WhatsApp Mobile estica a
+  // imagem pra preencher a largura do balão de qualquer forma, mas o Desktop/
+  // Web respeita as dimensões gravadas e renderiza um card pequeno/fino num
+  // layout com muito mais espaço horizontal disponível (card ruim só no PC,
+  // reportado pela cliente). O preview automático do Baileys nunca tinha esse
+  // problema porque sobe a imagem ORIGINAL da página (sem redimensionar antes
+  // do upload) — aqui replicamos isso com o buffer "main" (até 1600px) do
+  // normalizeImageForWhatsApp, o mesmo já usado no envio de imagem normal.
   let jpegThumbnail
-  if (isHttpUrl(imageUrl)) {
-    try {
-      const fetched = await fetchImageBuffer(imageUrl, sourceUrl)
-      jpegThumbnail = fetched?.buffer
-        ? await buildWideLinkPreviewThumbnail({ imageBuffer: fetched.buffer, title, description, sourceUrl: matchedText })
-        : null
-      if (!jpegThumbnail && fetched?.buffer) {
-        const normalized = await normalizeImageForWhatsApp(fetched.buffer)
+  let hqSourceBuffer
+  if (primary?.linkKind === 'coupon') {
+    // Link de cupom/campanha não tem produto: raspar a landing pegava a
+    // imagem de um produto promovido aleatório no card. Usa o banner da
+    // marca da loja (storeBrandCard), como os canais concorrentes fazem.
+    // O banner já nasce em 800x420 (bem acima de 500px) — mesma fonte para
+    // os dois campos.
+    const banner = (await buildStoreBrandCardImage(primary?.platform)) || undefined
+    jpegThumbnail = banner
+    hqSourceBuffer = banner
+  } else if (primary?.platform) {
+    const imageUrl = await fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}).catch((err) => {
+      logger.debug({ err: err?.message, sourceUrl }, 'linkPreview manual: fetchProductImage falhou — preview sem imagem')
+      return null
+    })
+    if (isHttpUrl(imageUrl)) {
+      try {
+        const fetched = await fetchImageBuffer(imageUrl, sourceUrl)
+        const normalized = fetched?.buffer ? await normalizeImageForWhatsApp(fetched.buffer) : null
         jpegThumbnail = normalized?.jpegThumbnail || undefined
+        hqSourceBuffer = normalized?.buffer || jpegThumbnail
+      } catch (err) {
+        logger.warn({ err: err?.message, imageUrl, sourceUrl }, 'linkPreview manual: falha ao baixar thumbnail — preview sem imagem')
       }
-    } catch (err) {
-      logger.warn({ err: err?.message, imageUrl, sourceUrl }, 'linkPreview manual: falha ao baixar thumbnail — enviando preview sem imagem manual')
     }
   }
+
+  let highQualityThumbnail
+  if (hqSourceBuffer && typeof uploadToServer === 'function') {
+    try {
+      const { imageMessage } = await prepareWAMessageMedia(
+        { image: hqSourceBuffer },
+        { upload: uploadToServer, mediaTypeOverride: 'thumbnail-link' },
+      )
+      highQualityThumbnail = imageMessage || undefined
+    } catch (err) {
+      logger.warn({ err: err?.message, sourceUrl }, 'linkPreview manual: upload da thumbnail HQ falhou — card sai compacto')
+    }
+  }
+
+  // Sem thumbnail não há card de imagem para montar; um urlInfo só com
+  // matched-text renderia uma barra vazia. Null deixa o Baileys tentar o
+  // preview automático (e a mensagem sai como texto quando ele não vier).
+  if (!jpegThumbnail) return null
 
   return {
     'canonical-url': matchedText,
     'matched-text': matchedText,
-    title,
-    description,
+    // Título = nome da LOJA (nunca título de produto/preço — decisão de
+    // produto 2026-07). O campo não pode ser omitido: sem title o cliente
+    // WhatsApp NÃO renderiza o card (regressão observada em staging no
+    // deploy do PR #1186 — cards sumiram até este fix). Em cupom, prefixa
+    // "Cupom" — mesmo texto do banner (buildStoreBrandCardImage), pra não
+    // ficar inconsistente (imagem diz "Cupom Amazon", título diz só "Amazon").
+    title: storePreviewTitle(primary?.platform, matchedText, primary?.linkKind === 'coupon'),
     ...(jpegThumbnail ? { jpegThumbnail } : {}),
+    ...(highQualityThumbnail ? { highQualityThumbnail } : {}),
   }
+}
+
+const STORE_PREVIEW_TITLES = {
+  amazon: 'Amazon',
+  shopee: 'Shopee',
+  mercadolivre: 'Mercado Livre',
+  magazineluiza: 'Magalu',
+}
+
+function storePreviewTitle(platform, url, isCoupon) {
+  const label = STORE_PREVIEW_TITLES[String(platform || '')]
+  if (label) return isCoupon ? `Cupom ${label}` : label
+  try { return new URL(url).hostname.replace(/^www\./, '') } catch { return 'Oferta' }
 }
 
 async function buildPayloadFromRecipe(recipe) {
@@ -1811,6 +1793,12 @@ async function startBotInner() {
   // Default 24h = "no máximo uma vez por dia"; override via DEDUP_LINK_WINDOW_MS.
   const dedupeWindowMs = Math.max(1_000, Number(process.env.DEDUP_MSGID_WINDOW_MS) || 300_000)
   const linkDedupWindowMs = Math.max(dedupeWindowMs, Number(process.env.DEDUP_LINK_WINDOW_MS) || 24 * 60 * 60_000)
+  // Cupom/campanha (primary.linkKind === 'coupon') usa janela CURTA própria:
+  // é comum a MESMA URL de cupom (ex.: página fixa de campanha) ser repostada
+  // várias vezes ao dia com códigos/textos diferentes — a janela diária
+  // (linkDedupWindowMs) bloqueava esses reenvios legítimos quase o dia
+  // inteiro. Default 5min; override via COUPON_DEDUP_WINDOW_MS.
+  const couponDedupWindowMs = Math.max(1_000, Number(process.env.COUPON_DEDUP_WINDOW_MS) || 5 * 60_000)
   const dedup = pruneDedupStore(
     loadDedup(),
     Date.now(),
@@ -2220,16 +2208,26 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         }).catch(() => {})
       }
 
-      // Quando uma URL já enviada nas últimas 2h é vista de novo, em vez de
+      // Quando uma URL já enviada é vista de novo dentro da janela, em vez de
       // criar mais uma linha 'skip:dedup_recent_link' (gerando N rows iguais
       // que poluem o painel), incrementamos um contador na linha existente
       // mais recente do mesmo (userId, destJid, convertedUrl). Janela de busca
-      // = linkDedupWindowMs. Se não houver linha recente (estado dessincronizado
-      // após restart, por exemplo), cria uma nova como fallback para não perder
-      // visibilidade do evento.
-      async function registerDedupBlock({ reason, platform, destJid, originalUrl: incomingUrl, convertedUrl: outgoingUrl, messageText }) {
+      // = dedupWindowMs (linkDedupWindowMs por padrão; cupom passa
+      // couponDedupWindowMs — ver chamadas no loop de destinos). Se não houver
+      // linha recente (estado dessincronizado após restart, por exemplo), cria
+      // uma nova como fallback para não perder visibilidade do evento.
+      async function registerDedupBlock({ reason, platform, destJid, originalUrl: incomingUrl, convertedUrl: outgoingUrl, messageText, dedupWindowMs = linkDedupWindowMs, ageMs = null }) {
         if (!shouldTrackSkipped) return
-        const since = new Date(Date.now() - linkDedupWindowMs)
+        // Diagnóstico (RCA de cupom preso em dedup, 3ª rodada de reports):
+        // grava HÁ QUANTO TEMPO o bloqueio anterior aconteceu, direto no
+        // errorMsg (prefixo skip:dedup* preservado — categorizeErrorMsg
+        // continua batendo por startsWith). Sem isso, tanto o painel quanto
+        // o log só diziam "bloqueado", sem dar pra confirmar se o bloqueio
+        // estava mesmo dentro da janela configurada ou se era outro bug —
+        // cada report virava suposição nova em vez de diagnóstico conclusivo.
+        const ageSuffix = Number.isFinite(ageMs) ? `:age=${Math.round(ageMs / 1000)}s:window=${Math.round(dedupWindowMs / 1000)}s` : ''
+        const reasonWithAge = `${reason}${ageSuffix}`
+        const since = new Date(Date.now() - dedupWindowMs)
         const lookupUrl = outgoingUrl || incomingUrl || ''
         try {
           const recent = lookupUrl
@@ -2267,7 +2265,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             convertedUrl: outgoingUrl || '',
             messageText: sanitizeMessageForLog(messageText || reason),
             status: 'skipped',
-            errorMsg: reason,
+            errorMsg: reasonWithAge,
             dedupHits: 0,
           },
         }).catch(() => {})
@@ -2528,7 +2526,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             return null
           }
           logger.info({ platform, converted: conversionResult.url, warning: conversionResult.warning }, 'Link convertido')
-          return { platform, url, converted: conversionResult.url, warning: conversionResult.warning, linkKind: conversionResult.linkKind }
+          // amazon.js/mercadolivre.js não marcam linkKind de forma confiável
+          // (só shopee.js marca no próprio converter) — resolveLinkKind
+          // classifica pela URL quando o converter não decidiu (ver
+          // converters/linkKind.js: por que não mudamos o contrato dos
+          // converters em vez disso).
+          const linkKind = resolveLinkKind(platform, { url, converted: conversionResult.url, linkKind: conversionResult.linkKind })
+          return { platform, url, converted: conversionResult.url, warning: conversionResult.warning, linkKind }
         } catch (err) {
           if (err.stripFromMessage) {
             // Cupom/voucher que não conseguiu virar link afiliado oficial: não
@@ -2679,7 +2683,18 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // Guard bloqueia só ofertas NÃO-cupom com mismatch confirmado. Mensagens
         // de cupom não descrevem um produto específico, então nunca são bloqueadas
         // aqui — mas o mesmo sinal de overlap decide a imagem (abaixo).
-        if (!isCouponMsg && titleOverlap === 'mismatch') {
+        //
+        // isCouponMsg (texto) exige a palavra "cupom" + um código em CAIXA
+        // ALTA (isCouponAnnouncement) — não pega cupom sem código visível na
+        // legenda (ex.: "Cupom Mercado Livre" apontando pra página de cupons
+        // do catálogo). Nesse caso o texto NÃO parece cupom, mas o LINK
+        // também não é de produto — a raspagem do og:title da página de
+        // cupons nunca vai bater com a legenda, e bloquear é falso positivo
+        // (bug real: "Cupom mercado livre" pra /cupons foi bloqueado com
+        // "Bloqueado por segurança"). primary.linkKind === 'coupon' cobre
+        // esse caso via a URL (ver converters/linkKind.js), sem depender de
+        // a legenda ter um código visível.
+        if (!isCouponMsg && primary.linkKind !== 'coupon' && titleOverlap === 'mismatch') {
           logger.warn({
             msgId: msg.key.id,
             platform: primary.platform,
@@ -2719,6 +2734,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // PR-5.B.2: stagger entre destinos para quebrar simultaneidade exata.
       // Primeiro destino sem atraso; demais com jitter aleatório limitado.
       const staggerJitterMs = Math.max(0, Number(cfg.botConfig.channelStaggerJitterMs ?? 0))
+      // Cupom usa a janela curta (couponDedupWindowMs); produto mantém a
+      // janela diária. primary.linkKind é resolvido por resolveLinkKind no
+      // momento da conversão (mesmo em Amazon/ML, que não marcam sozinhos —
+      // ver converters/linkKind.js), então já reflete a classificação correta
+      // aqui, igual pra todos os destinos desta mensagem.
+      const isCouponLink = primary.linkKind === 'coupon'
+      const effectiveDedupWindowMs = isCouponLink ? couponDedupWindowMs : linkDedupWindowMs
       let destIndex = -1
       for (const destJid of destinations) {
         destIndex++
@@ -2736,7 +2758,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           primaryConverted: primary.converted,
           fallbackSubject: fallbackDedupSubject,
         })
-        if (dedupKeys.some(key => dedup.links[key] && Date.now() - dedup.links[key] < linkDedupWindowMs)) {
+        const localDedupMatch = dedupKeys
+          .map(key => (dedup.links[key] ? { key, ageMs: Date.now() - dedup.links[key] } : null))
+          .filter(Boolean)
+          .find(m => m.ageMs < effectiveDedupWindowMs)
+        if (localDedupMatch) {
           await registerDedupBlock({
             reason: 'skip:dedup_recent_link',
             platform: primary.platform,
@@ -2744,8 +2770,15 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             originalUrl: primary.url,
             convertedUrl: primary.converted,
             messageText: finalText,
+            dedupWindowMs: effectiveDedupWindowMs,
+            ageMs: localDedupMatch.ageMs,
           })
-          logger.info({ destJid, dedupKeyCount: dedupKeys.length }, 'Duplicata ignorada'); continue
+          // Diagnóstico (2ª rodada de reports de cupom preso): loga QUAL chave
+          // bateu (url original vs. convertido — ver buildMirrorDedupKeys) e há
+          // quanto tempo, pra distinguir "bloqueio de verdade dentro da janela"
+          // de "bug". matchedKey aqui é destJid:url — comparar com primary.url/
+          // primary.converted no log de 'Link convertido' de perto no tempo.
+          logger.info({ destJid, dedupKeyCount: dedupKeys.length, matchedKey: localDedupMatch.key, ageMs: localDedupMatch.ageMs, windowMs: effectiveDedupWindowMs, layer: 'local' }, 'Duplicata ignorada'); continue
         }
 
         // Trava compartilhada entre processos. A dedup local é por worker; se
@@ -2761,20 +2794,21 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
                 userId,
                 destGroup: destJid,
                 status: { in: ['queued', 'sending', 'success'] },
-                sentAt: { gte: new Date(Date.now() - linkDedupWindowMs) },
+                sentAt: { gte: new Date(Date.now() - effectiveDedupWindowMs) },
                 OR: [
                   { originalUrl: { in: dedupLookupUrls } },
                   { convertedUrl: { in: dedupLookupUrls } },
                 ],
               },
               orderBy: { sentAt: 'desc' },
-              select: { id: true },
+              select: { id: true, sentAt: true },
             }).catch(err => {
               logger.warn({ err: err?.message, destJid }, 'Dedup DB lookup falhou; seguindo com dedup local/global')
               return null
             })
           : null
         if (recentDbDuplicate) {
+          const dbAgeMs = Date.now() - new Date(recentDbDuplicate.sentAt).getTime()
           await registerDedupBlock({
             reason: 'skip:dedup_recent_link',
             platform: primary.platform,
@@ -2782,8 +2816,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             originalUrl: primary.url,
             convertedUrl: primary.converted,
             messageText: finalText,
+            dedupWindowMs: effectiveDedupWindowMs,
+            ageMs: dbAgeMs,
           })
-          logger.info({ destJid, recentLogId: recentDbDuplicate.id, dedupKeyCount: dedupKeys.length }, 'Duplicata DB ignorada')
+          logger.info({ destJid, recentLogId: recentDbDuplicate.id, dedupKeyCount: dedupKeys.length, ageMs: dbAgeMs, windowMs: effectiveDedupWindowMs, layer: 'db' }, 'Duplicata DB ignorada')
           continue
         }
 
@@ -2791,12 +2827,29 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // mas sozinho ainda tem janela de corrida: dois workers podem consultar
         // antes de qualquer um criar MessageLog. O índice único em SendDedupKey
         // transforma a dedup em compare-and-set no SQLite.
-        const reservationExpiresAt = new Date(Date.now() + linkDedupWindowMs)
+        //
+        // expiresAt usa SEND_DEDUP_RESERVATION_TTL_MS (fixo, curto) — NÃO
+        // effectiveDedupWindowMs. Bug real corrigido: essa tabela existe só
+        // pra fechar a corrida de MILISSEGUNDOS entre o findFirst acima e o
+        // create do MessageLog logo abaixo (ver updateMany que vincula a
+        // reserva ao log recém-criado) — nunca precisou representar a janela
+        // lógica inteira de dedup. Usar effectiveDedupWindowMs aqui prendia
+        // reservas de CUPOM por até 24h (a janela ANTIGA, de antes da reserva
+        // ter sido criada) sempre que o índice único ainda estava ocupado, já
+        // que create() conflita pela EXISTÊNCIA da linha, não pelo seu
+        // expiresAt — só o deleteMany() abaixo libera o slot, e só libera
+        // quando expiresAt já passou. A dedup "de verdade" (é ou não duplicata
+        // dentro da janela do linkKind) já é decidida pelas outras 3 camadas
+        // (local, MessageLog/DB, Redis), que reavaliam a janela atual a cada
+        // checagem — essa aqui só precisa sobreviver ao tempo de um request.
+        const reservationExpiresAt = new Date(Date.now() + SEND_DEDUP_RESERVATION_TTL_MS)
         await db.sendDedupKey.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch(err => {
           logger.warn({ err: err?.message }, 'Limpeza de SendDedupKey expirada falhou')
         })
         const reservedDedupKeys = []
         let reservedDuplicate = false
+        let reservedDuplicateKey = null
+        let reservationAgeMs = null
         for (const key of dedupKeys) {
           try {
             const reservation = await db.sendDedupKey.create({
@@ -2806,7 +2859,46 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             reservedDedupKeys.push(reservation.id)
           } catch (err) {
             if (err?.code === 'P2002') {
+              // Bug real encontrado por report em produção (mesma família do
+              // fix do Redis/PR #1192, mas nesta tabela): uma linha gravada
+              // ANTES de SEND_DEDUP_RESERVATION_TTL_MS existir (ou sob
+              // qualquer versão anterior do código que usava um TTL mais
+              // longo pra expiresAt) pode ter expiresAt até 24h no futuro —
+              // o deleteMany acima só remove linha com expiresAt JÁ passado,
+              // então essa linha "órfã" nunca é limpa e conflita pra sempre
+              // até seu próprio expiresAt antigo vencer. Sintoma observado:
+              // painel mostrando "bloqueado há 393min" com janela de 5min.
+              //
+              // Fix: em vez de confiar no expiresAt gravado na linha, mede a
+              // idade REAL (createdAt) contra o teto ATUAL
+              // (SEND_DEDUP_RESERVATION_TTL_MS). Mais velha que o teto atual
+              // → não é uma corrida de verdade (essa reserva só precisa
+              // sobreviver a um request, nunca minutos): deleta e tenta de
+              // novo. Continua mais nova que o teto → é duplicata real
+              // (outro worker reservou a mesma chave há pouco), trata como
+              // bloqueio de verdade.
+              const conflicting = await db.sendDedupKey.findFirst({
+                where: { userId, destGroup: destJid, dedupKey: key },
+                select: { id: true, createdAt: true },
+              }).catch(() => null)
+              const conflictAgeMs = conflicting ? Date.now() - new Date(conflicting.createdAt).getTime() : null
+              if (conflicting && conflictAgeMs > SEND_DEDUP_RESERVATION_TTL_MS) {
+                await db.sendDedupKey.delete({ where: { id: conflicting.id } }).catch(() => {})
+                try {
+                  const retried = await db.sendDedupKey.create({
+                    data: { userId, destGroup: destJid, dedupKey: key, expiresAt: reservationExpiresAt },
+                    select: { id: true },
+                  })
+                  reservedDedupKeys.push(retried.id)
+                  continue
+                } catch {
+                  // Corrida genuína com outro worker que reservou no meio
+                  // desse delete+retry — cai no bloqueio normal abaixo.
+                }
+              }
               reservedDuplicate = true
+              reservedDuplicateKey = key
+              reservationAgeMs = conflictAgeMs
               break
             }
             logger.warn({ err: err?.message, destJid }, 'Reserva SendDedupKey falhou; seguindo com dedup local/global')
@@ -2819,22 +2911,27 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             destJid,
             originalUrl: primary.url,
             convertedUrl: primary.converted,
+            ageMs: reservationAgeMs,
             messageText: finalText,
+            dedupWindowMs: effectiveDedupWindowMs,
           })
-          logger.info({ destJid, dedupKeyCount: dedupKeys.length }, 'Duplicata reservada DB ignorada')
+          logger.info({ destJid, dedupKeyCount: dedupKeys.length, ageMs: reservationAgeMs, windowMs: effectiveDedupWindowMs, layer: 'reservation' }, 'Duplicata reservada DB ignorada')
           continue
         }
 
         if (GLOBAL_DEDUP_MODE !== 'off') {
-          // Usa a janela longa (diária) também na dedup cross-instância via
-          // Redis — antes usava dedupeWindowMs (5min), o que deixava a mesma
-          // oferta passar de novo poucos minutos depois quando o bloqueio
+          // Usa a mesma janela efetiva (diária pra produto, curta pra cupom)
+          // também na dedup cross-instância via Redis — antes usava
+          // dedupeWindowMs (5min) sempre, o que deixava a mesma oferta de
+          // PRODUTO passar de novo poucos minutos depois quando o bloqueio
           // in-memory não pegava (ex.: outro processo/instância).
           let globalDuplicate = false
+          let globalDuplicateAgeMs = null
           for (const key of dedupKeys) {
-            const globalDedup = await globalDedupCheckAndSet(key, linkDedupWindowMs)
+            const globalDedup = await globalDedupCheckAndSet(key, effectiveDedupWindowMs)
             if (globalDedup.duplicate) {
               globalDuplicate = true
+              globalDuplicateAgeMs = globalDedup.ageMs ?? null
               break
             }
           }
@@ -2846,8 +2943,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               originalUrl: primary.url,
               convertedUrl: primary.converted,
               messageText: finalText,
+              dedupWindowMs: effectiveDedupWindowMs,
+              ageMs: globalDuplicateAgeMs,
             })
-            logger.info({ destJid, dedupKeyCount: dedupKeys.length }, 'Duplicata global ignorada')
+            logger.info({ destJid, dedupKeyCount: dedupKeys.length, ageMs: globalDuplicateAgeMs, windowMs: effectiveDedupWindowMs, layer: 'redis' }, 'Duplicata global ignorada')
             continue
           }
         }
@@ -2921,21 +3020,23 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // passar pelo Redis. Ver enqueueSendJob() para a explicação completa.
         const buildPayload = async () => {
           // Modo "preview": envia uma única mensagem de texto com link preview
-          // clicável do WhatsApp. Baixa só a thumbnail do card quando possível;
-          // não faz upload de imageMessage (clique ampliaria a foto).
+          // clicável do WhatsApp (card grande via thumbnail HQ upada — ver
+          // buildManualLinkPreview). Não envia imageMessage: o clique no card
+          // abre o link, enquanto o clique numa imagem só ampliaria a foto.
+          // activeSock (e não um sock capturado) porque buildPayload roda no
+          // dequeue, possivelmente após reconexão.
           if (imageMode === 'preview') {
             const linkPreview = await buildManualLinkPreview({
               text: variantText,
               primary,
               credentialsMap: cfg.credentials,
+              uploadToServer: activeSock?.waUploadToServer,
             })
-            const externalAdReply = buildLargePreviewAdReply(linkPreview)
             return buildMonitoredMessagePayload({
               finalText: variantText,
               image: null,
               useLinkPreview: true,
               linkPreview,
-              externalAdReply,
             })
           }
 

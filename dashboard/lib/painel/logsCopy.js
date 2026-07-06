@@ -3,6 +3,23 @@
  * com a taxonomia canônica de erros exibida no painel de envios.
  * É copy de UI — não muda nenhuma regra de negócio. */
 
+function formatDuration(totalSeconds) {
+  if (totalSeconds < 60) return `${totalSeconds}s`
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return seconds ? `${minutes}min ${seconds}s` : `${minutes}min`
+}
+
+// skip:dedup_recent_link(_global)?:age=<segundos>s:window=<segundos>s — sufixo
+// de diagnóstico (RCA de cupom preso em dedup) que grava HÁ QUANTO TEMPO o
+// bloqueio anterior aconteceu, direto no errorMsg. Rows antigas (sem sufixo,
+// gravadas antes desse fix) caem no texto genérico abaixo.
+function parseDedupAgeSuffix(errorMsg) {
+  const m = errorMsg.match(/:age=(\d+)s:window=(\d+)s/)
+  if (!m) return null
+  return { ageSeconds: Number(m[1]), windowSeconds: Number(m[2]) }
+}
+
 export function explainErrorMsg(errorMsg) {
   if (!errorMsg) return null
   if (errorMsg.startsWith('warning:amazon_cookies_expired')) {
@@ -20,7 +37,13 @@ export function explainErrorMsg(errorMsg) {
   if (errorMsg.startsWith('warning:ml_affiliate_busy')) {
     return 'Outra conversão do Mercado Livre já estava usando esta credencial. A oferta saiu com link longo para evitar disputa de sessão.'
   }
-  if (errorMsg.startsWith('skip:dedup')) return 'Link já enviado nas últimas 2 horas — bloqueado para não duplicar.'
+  if (errorMsg.startsWith('skip:dedup')) {
+    const age = parseDedupAgeSuffix(errorMsg)
+    if (age) {
+      return `Esse link já tinha sido enviado para esse destino há ${formatDuration(age.ageSeconds)} — bloqueado para não duplicar (janela desse tipo de link: ${formatDuration(age.windowSeconds)}).`
+    }
+    return 'Esse link já foi enviado recentemente para esse destino — bloqueado para não duplicar. Ofertas de produto ficam bloqueadas por até 24h; links de cupom, só por alguns minutos.'
+  }
   if (errorMsg.startsWith('skip:blocked_keyword')) return 'Contém uma palavra que você marcou para bloquear.'
   if (errorMsg.startsWith('skip:title_mismatch')) return 'O texto da oferta não combina com o produto do link. Bloqueado por segurança.'
   if (errorMsg.startsWith('skip:text_too_large')) return 'Mensagem muito grande — ignorada para não atrasar o restante da fila.'
