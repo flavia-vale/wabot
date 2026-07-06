@@ -71,6 +71,25 @@ export async function groupsRoutes(app, opts = {}) {
     if (!waJid || !name || !role) return reply.code(400).send({ error: 'waJid, name e role obrigatórios' })
     if (!['monitor', 'post'].includes(role)) return reply.code(400).send({ error: 'role deve ser monitor ou post' })
     if (detectKind(waJid) !== kind) return reply.code(400).send({ error: `waJid não bate com kind=${kind}` })
+
+    // Trava de segurança (anti-eco): um mesmo grupo/canal NÃO pode ser fonte
+    // monitorada ('monitor') e destino ('post') ao mesmo tempo. Como o robô
+    // agora espelha também mensagens enviadas pelo próprio número (fromMe) em
+    // grupos monitorados, um grupo que fosse source E destino faria o robô
+    // reprocessar os próprios envios → loop de espelhamento (duplicação e risco
+    // de ban). Bloqueamos o cadastro no papel oposto antes de criar.
+    const oppositeRole = role === 'monitor' ? 'post' : 'monitor'
+    const roleConflict = await db.group.findFirst({
+      where: { userId: req.user.sub, waJid, role: oppositeRole },
+      select: { id: true },
+    })
+    if (roleConflict) {
+      const conflictMessage = role === 'post'
+        ? 'Bloqueado por segurança: este grupo já é um grupo MONITORADO (fonte). O mesmo grupo não pode ser também um grupo de DESTINO — isso criaria um loop de espelhamento, com o robô reenviando as próprias mensagens (duplicação e risco de banimento). Remova-o dos grupos monitorados antes de usá-lo como destino.'
+        : 'Bloqueado por segurança: este grupo já é um grupo de DESTINO. O mesmo grupo não pode ser também um grupo MONITORADO (fonte) — isso criaria um loop de espelhamento, com o robô reenviando as próprias mensagens (duplicação e risco de banimento). Remova-o dos destinos antes de monitorá-lo.'
+      return reply.code(409).send({ error: conflictMessage })
+    }
+
     if (kind === JID_KIND.CHANNEL && !(await ensureChannelFeatureAllowed(req.user.sub, reply))) return
     if (!(await ensureCountQuota(reply, {
       userId: req.user.sub,
