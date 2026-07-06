@@ -737,23 +737,34 @@ export async function resolveToCleanProductUrl(url) {
         target = `https://produto.mercadolivre.com.br/${widMlb}-x-_JM`
       } else {
         const u = new URL(target)
-        // `/sec/` ainda presente aqui = não conseguimos resolver o short link de
-        // afiliado de terceiro (resolve falhou / muro anti-bot). Encaminhá-lo com
-        // um partner_id cosmético vazaria comissão pro dono do código, então o
-        // tratamos como as landings /social/ e /up/: tenta extrair produto; sem
-        // produto, retorna null (não encaminha).
-        if (
-          /^\/social\//i.test(u.pathname) ||
-          /(?:^|\/)up\//i.test(u.pathname) ||
-          /^\/sec\//i.test(u.pathname) ||
-          /^\/$/.test(u.pathname)
-        ) {
+        // Seletor EXPLÍCITO de produto: só a share /social/ com ?ref= designa QUAL
+        // produto da vitrine do afiliado é o alvo. Sem esse seletor a página lista
+        // vários produtos (vitrine /social/ genérica, home, página de cupom) e
+        // tryExtractProductFromLanding pegaria o `recommended_items[0]` — um produto
+        // ALEATÓRIO. Era exatamente isso que fazia o card de um CUPOM sair com foto
+        // de produto errado (produto aleatório) no lugar do banner de cupom. Sem
+        // seletor, NÃO fabricamos produto.
+        const hasProductSelector =
+          /^\/social\//i.test(u.pathname) && /[?&]ref=/i.test(String(preCanonical))
+        // Landing de TERCEIRO: código /sec/ de afiliado alheio que NÃO resolvemos
+        // (muro anti-bot), ou vitrine /social/ de um handle alheio sem ?ref=.
+        // Pendurar um partner_id cosmético nesses vazaria a comissão pro dono do
+        // código/handle. Descartar (null) é melhor que vazar OU que fabricar um
+        // produto aleatório.
+        const isThirdPartyLanding =
+          /^\/sec\//i.test(u.pathname) || /^\/social\//i.test(u.pathname)
+
+        if (hasProductSelector) {
           const extracted = await tryExtractProductFromLanding(preCanonical)
-          // Se não conseguimos extrair um produto real de uma landing /social/,
-          // /up/ ou /sec/, retornar null é melhor que encaminhar o link de terceiro.
           if (extracted) target = extracted
-          else return null
+          // share /social/?ref= sem produto extraível: best-effort — cai pra baixo
+          // e o convert() etiqueta a própria /social/ com partner_id.
+        } else if (isThirdPartyLanding) {
+          return null
         }
+        // Demais landings de 1ª parte sem produto (home `/`, /cupom/, /m/,
+        // /ofertas, /up/ sem wid...): `target` segue sendo a URL resolvida SEM MLB
+        // → o convert() pendura partner_id e marca linkKind:'coupon' (banner).
       }
     }
     return target

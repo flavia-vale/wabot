@@ -282,6 +282,34 @@ test('/sec/ não-resolvível (muro anti-bot) não é encaminhado com partner_id 
   assert.equal(result, null)
 })
 
+test('resolveToCleanProductUrl NÃO fabrica produto de /social/ sem ?ref= mesmo com recommended_items no HTML (bug do card de cupom com foto errada)', async (t) => {
+  // Vitrine /social/ de handle alheio, SEM ?ref= (nenhum produto designado).
+  // Mesmo que o HTML traga recommended_items, NÃO podemos pegar o [0] — seria um
+  // produto ALEATÓRIO. Antes, era isso que fazia um CUPOM sair com foto de
+  // produto errado. Sem seletor explícito (?ref=), não fabricamos produto.
+  const html = `<html><body>{"recommended_items":[{"id":"MLB1234567","product_id":"MLB9876543"}]}</body></html>`
+  t.mock.method(axios, 'get', async () => ({ data: html }))
+  const url = 'https://www.mercadolivre.com.br/social/xetdaspromocoes?partner_id=475630078'
+  const clean = await resolveToCleanProductUrl(url)
+  assert.equal(clean, null)
+})
+
+test('/sec/ que resolve para a home (sem produto) vira CUPOM, não fabrica produto de recommended_items', async (t) => {
+  // O /sec/ de cupom resolve para a home genérica do ML. Antes, o
+  // tryExtractProductFromLanding raspava um recommended_items[0] (produto
+  // aleatório) e o card saía com foto de produto errado. Agora a home (1ª parte,
+  // sem código de terceiro) vira banner de cupom com partner_id da usuária.
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/' }))
+  const html = `<html><body>{"recommended_items":[{"id":"MLB1234567","product_id":"MLB9876543"}]}</body></html>`
+  t.mock.method(axios, 'get', async () => ({ data: html }))
+  const url = 'https://mercadolivre.com/sec/7homeZz'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  assert.equal(typeof result, 'object')
+  assert.equal(result.linkKind, 'coupon')
+  assert.match(result.url, /partner_id=475630078/)
+  assert.doesNotMatch(result.url, /MLB9876543/)
+})
+
 test('convert descarta short_url quando validação comprova MLB diferente', async (t) => {
   t.mock.method(axios, 'post', async () => ({
     status: 200,
