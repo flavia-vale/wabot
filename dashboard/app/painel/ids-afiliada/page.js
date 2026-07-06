@@ -27,8 +27,17 @@ function PlatformActionLinks({ links }) {
   )
 }
 
-function SessionWarning({ sessionStatus }) {
+function SessionWarning({ platformId, sessionStatus }) {
   if (!sessionStatus || sessionStatus.alive !== false) return null
+  if (platformId === 'amazon') {
+    return (
+      <div className="pnl-note-box is-error" style={{ marginBottom: 12 }} role="alert">
+        <strong>Cookies da Amazon expirados.</strong> A sessão não está mais autenticando — as ofertas ainda saem,
+        mas com o link longo (?tag=) em vez do amzn.to. Exporte um cookie novo da sua sessão logada e salve para
+        voltar a gerar o link curto.
+      </div>
+    )
+  }
   return (
     <div className="pnl-note-box is-error" style={{ marginBottom: 12 }} role="alert">
       <strong>Sessão expirada.</strong> O cookie SSID do Mercado Livre não está mais válido — a geração de ofertas do ML está pausada.
@@ -86,7 +95,7 @@ function PlatformCard({ platform, initialData, onSave, disabled, sessionStatus }
         <span className={`pnl-tag ${status.cls}`}>{status.label}</span>
       </div>
       {platform.instructions && <p className="pnl-card-note" style={{ marginBottom: 12 }}>{platform.instructions}</p>}
-      <SessionWarning sessionStatus={sessionStatus} />
+      <SessionWarning platformId={platform.id} sessionStatus={sessionStatus} />
       <PlatformActionLinks links={platform.actionLinks} />
       {platform.platformWarning && <div className="pnl-note-box is-warn" style={{ marginBottom: 12 }}>{platform.platformWarning}</div>}
 
@@ -156,6 +165,7 @@ export default function IdsAfiliadaPage() {
   const [credMap, setCredMap] = useState(null)
   const [loadError, setLoadError] = useState('')
   const [mlSession, setMlSession] = useState(null)
+  const [amazonSession, setAmazonSession] = useState(null)
 
   // Checa a validade do SSID do ML (sessão de afiliado). Só roda quando há
   // cookie cadastrado — o endpoint faz um request autenticado ao ML.
@@ -164,6 +174,16 @@ export default function IdsAfiliadaPage() {
     api.mercadolivreSession()
       .then((status) => setMlSession(status))
       .catch(() => setMlSession(null))
+  }
+
+  // Idem para a Amazon: só checa quando há tag + algum portador de cookie
+  // (o cookie completo OU o at-acbbr legado). O endpoint faz um getShortUrl
+  // autenticado no SiteStripe.
+  function refreshAmazonSession(data) {
+    if (!(data?.tag && (data?.cookie || data?.['at-acbbr']))) { setAmazonSession(null); return }
+    api.amazonSession()
+      .then((status) => setAmazonSession(status))
+      .catch(() => setAmazonSession(null))
   }
 
   useEffect(() => {
@@ -175,6 +195,7 @@ export default function IdsAfiliadaPage() {
         for (const c of list) map[c.platform] = c.data
         setCredMap(map)
         refreshMlSession(map.mercadolivre)
+        refreshAmazonSession(map.amazon)
       })
       .catch((err) => { if (active) setLoadError(err?.message || 'Falha ao carregar credenciais.') })
     return () => { active = false }
@@ -184,8 +205,9 @@ export default function IdsAfiliadaPage() {
     const result = await api.saveCredential(platform, data)
     const savedData = result?.data ?? data
     setCredMap((m) => ({ ...(m || {}), [platform]: savedData }))
-    // Ao salvar um SSID novo, re-checa a sessão para limpar/atualizar o aviso.
+    // Ao salvar cookies novos, re-checa a sessão para limpar/atualizar o aviso.
     if (platform === 'mercadolivre') refreshMlSession(savedData)
+    if (platform === 'amazon') refreshAmazonSession(savedData)
     return result
   }
 
@@ -213,7 +235,7 @@ export default function IdsAfiliadaPage() {
               initialData={credMap?.[p.id]}
               onSave={handleSave}
               disabled={!!loadError}
-              sessionStatus={p.id === 'mercadolivre' ? mlSession : null}
+              sessionStatus={p.id === 'mercadolivre' ? mlSession : p.id === 'amazon' ? amazonSession : null}
             />
           ))}
     </div>

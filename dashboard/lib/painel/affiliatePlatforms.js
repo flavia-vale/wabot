@@ -26,13 +26,14 @@ export const AFFILIATE_PLATFORMS = [
   {
     id: 'amazon',
     label: 'Amazon',
-    instructions: 'Onde obter: affiliate-program.amazon.com.br. A Tag vem do painel. Os cookies ubid-acbbr, at-acbbr e x-acbbr precisam ser copiados da sessão ativa logada na Amazon Brasil.',
-    platformWarning: 'Para gerar link curto (amzn.to), preencha Tag e os 3 cookies da sua sessão Amazon.',
+    instructions: 'Onde obter: affiliate-program.amazon.com.br. A Tag vem do painel. Para o link curto (amzn.to) sair de forma estável, cole o Cookie completo da sessão logada na Amazon Brasil (recomendado) — os 3 cookies separados param de autenticar em poucos dias.',
+    platformWarning: 'Para gerar link curto (amzn.to), preencha a Tag e o Cookie completo da sessão Amazon. Sem isso, a oferta ainda sai (com o link longo ?tag=), mas sem encurtar.',
     fields: [
       { key: 'tag', label: 'ID de associado/StoreID', hint: 'Ex.: suatag-20' },
-      { key: 'ubid-acbbr', label: 'Cookie ubid-acbbr', hint: 'Cookie de sessão da Amazon Brasil.', sensitive: true, help: 'Acesse amazon.com.br logado, abra o DevTools → Application → Cookies → amazon.com.br e copie o valor do cookie ubid-acbbr.' },
-      { key: 'at-acbbr', label: 'Cookie at-acbbr', hint: 'Cookie de autenticação da Amazon Brasil.', sensitive: true, help: 'Mesmo painel do DevTools: copie o valor do cookie at-acbbr.' },
-      { key: 'x-acbbr', label: 'Cookie x-acbbr', hint: 'Cookie de identificação da Amazon Brasil.', sensitive: true, help: 'Mesmo painel do DevTools: copie o valor do cookie x-acbbr.' },
+      { key: 'cookie', label: 'Cookie completo da sessão (recomendado)', required: false, sensitive: true, hint: 'Sessão completa logada da Amazon Brasil — mais estável que os 3 cookies separados.', help: 'Logada em amazon.com.br, use uma extensão de export de cookies (ex.: Cookie-Editor) → Exportar → e cole aqui o JSON gerado. Os cookies de sessão da Amazon são httpOnly e NÃO aparecem em document.cookie, por isso a captura precisa ser via extensão (ou pela aba DevTools → Network, copiando o cabeçalho Cookie de uma requisição). Também aceita o formato nome=valor; nome=valor.' },
+      { key: 'ubid-acbbr', label: 'Cookie ubid-acbbr (alternativo)', required: false, hint: 'Alternativa legada ao Cookie completo. Cookie de sessão da Amazon Brasil.', sensitive: true, help: 'Só precisa preencher se NÃO usar o Cookie completo acima. DevTools → Application → Cookies → amazon.com.br → copie o valor do cookie ubid-acbbr.' },
+      { key: 'at-acbbr', label: 'Cookie at-acbbr (alternativo)', required: false, hint: 'Alternativa legada ao Cookie completo. Cookie de autenticação da Amazon Brasil.', sensitive: true, help: 'Só precisa preencher se NÃO usar o Cookie completo acima. Mesmo painel do DevTools: copie o valor do cookie at-acbbr.' },
+      { key: 'x-acbbr', label: 'Cookie x-acbbr (alternativo)', required: false, hint: 'Alternativa legada ao Cookie completo. Cookie de identificação da Amazon Brasil.', sensitive: true, help: 'Só precisa preencher se NÃO usar o Cookie completo acima. Mesmo painel do DevTools: copie o valor do cookie x-acbbr.' },
     ],
   },
   {

@@ -180,6 +180,7 @@ export const api = {
   saveCredential: (platform, data) =>
     apiFetch(`/api/credentials/${platform}`, { method: 'PUT', body: JSON.stringify(data) }),
   mercadolivreSession: () => apiFetch('/api/credentials/mercadolivre/session'),
+  amazonSession: () => apiFetch('/api/credentials/amazon/session'),
 
   convertLinks: (text) =>
     apiFetch('/api/link-conversion/convert', { method: 'POST', body: JSON.stringify({ text }) }),
