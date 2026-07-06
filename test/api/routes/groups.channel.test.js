@@ -657,3 +657,52 @@ test('PUT /:id persiste primaryLinkTarget e rejeita valor inválido', async (t) 
   const bad = await app.inject({ method: 'PUT', url: `/api/groups/${group.id}`, payload: { primaryLinkTarget: 'middle' } })
   assert.equal(bad.statusCode, 400)
 })
+
+// ---------- trava anti-eco: mesmo JID não pode ser monitor e destino ----------
+
+test('POST / bloqueia destino quando o JID já é grupo monitorado (anti-eco)', async (t) => {
+  const { app, userId } = await buildApp({}, { plan: 'pro' })
+  t.after(async () => { await db.group.deleteMany({ where: { userId } }); await db.user.deleteMany({ where: { id: userId } }); await app.close() })
+
+  const monitor = await app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'dup@g.us', name: 'Distribuidor', role: 'monitor', kind: 'group' } })
+  assert.equal(monitor.statusCode, 200)
+
+  const asPost = await app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'dup@g.us', name: 'Distribuidor', role: 'post', kind: 'group' } })
+  assert.equal(asPost.statusCode, 409)
+  assert.match(JSON.parse(asPost.body).error, /Bloqueado por segurança/)
+  assert.match(JSON.parse(asPost.body).error, /MONITORADO/)
+
+  // Só existe a linha de monitor — o cadastro de destino foi barrado.
+  const count = await db.group.count({ where: { userId, waJid: 'dup@g.us' } })
+  assert.equal(count, 1)
+})
+
+test('POST / bloqueia monitor quando o JID já é grupo de destino (anti-eco, simétrico)', async (t) => {
+  const { app, userId } = await buildApp({}, { plan: 'pro' })
+  t.after(async () => { await db.group.deleteMany({ where: { userId } }); await db.user.deleteMany({ where: { id: userId } }); await app.close() })
+
+  const post = await app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'dup2@g.us', name: 'Meu Grupo', role: 'post', kind: 'group' } })
+  assert.equal(post.statusCode, 200)
+
+  const asMonitor = await app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'dup2@g.us', name: 'Meu Grupo', role: 'monitor', kind: 'group' } })
+  assert.equal(asMonitor.statusCode, 409)
+  assert.match(JSON.parse(asMonitor.body).error, /Bloqueado por segurança/)
+  assert.match(JSON.parse(asMonitor.body).error, /DESTINO/)
+})
+
+test('POST / permite o MESMO JID em papéis diferentes de usuários diferentes', async (t) => {
+  const a = await buildApp({}, { plan: 'pro' })
+  const b = await buildApp({}, { plan: 'pro' })
+  t.after(async () => {
+    await db.group.deleteMany({ where: { userId: a.userId } })
+    await db.group.deleteMany({ where: { userId: b.userId } })
+    await db.user.deleteMany({ where: { id: { in: [a.userId, b.userId] } } })
+    await a.app.close(); await b.app.close()
+  })
+
+  const aMonitor = await a.app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'shared@g.us', name: 'G', role: 'monitor', kind: 'group' } })
+  assert.equal(aMonitor.statusCode, 200)
+  // A trava é por usuário: o grupo de destino de OUTRO usuário com o mesmo JID passa.
+  const bPost = await b.app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'shared@g.us', name: 'G', role: 'post', kind: 'group' } })
+  assert.equal(bPost.statusCode, 200)
+})
