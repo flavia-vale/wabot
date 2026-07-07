@@ -23,6 +23,7 @@ import { buildRedisOptions } from '../core/redisFactory.js'
 import { buildShardTag, normalizeShardCount, shouldHandleUserOnShard } from './sharding.js'
 import { checkSupervisorEnvConsistency, supervisorManagesSessions, supervisorShouldAutoResume } from './envGuard.js'
 import { createRestartBudget, RESTART_BUDGET_MAX, RESTART_BUDGET_WINDOW_MS, RESTART_QUARANTINE_MS } from './restartBudget.js'
+import { createReloadConfigHandler } from './commandHandlers.js'
 import { parseEnumEnv, logModeSummary } from '../core/envModes.js'
 import {
   COMMAND,
@@ -293,7 +294,7 @@ const COMMAND_HANDLERS = {
     }
     return sessionCore.getBotMetrics(userId)
   },
-  [COMMAND.RELOAD_CONFIG]: ({ userId }) => belongsToThisShard(userId) ? sessionCore.reloadConfig(userId) : false,
+  [COMMAND.RELOAD_CONFIG]: createReloadConfigHandler({ belongsToThisShard, sessionCore, logger }),
   [COMMAND.REFRESH_WA_GROUPS]: ({ userId }) => {
     if (!belongsToThisShard(userId)) {
       void noteSessionOwnerMismatch(userId, 'refreshWaGroups')
