@@ -372,3 +372,71 @@ test('checkAmazonSession: 5xx transitório => indeterminado (não alarma falso-e
     restore()
   }
 })
+
+// --- Rotação de cookie (mantém a sessão viva; RCA: cookie completo morre em ~3h) ---
+
+test('buildAmazonCredentialPatchFromSetCookie: mescla Set-Cookie rotacionado sobre o enviado', async () => {
+  const { buildAmazonCredentialPatchFromSetCookie } = await import('../src/converters/amazon.js')
+  const sent = 'session-id=1; at-acbbr=velho; session-token=tokVelho'
+  const patch = buildAmazonCredentialPatchFromSetCookie(sent, {
+    'set-cookie': ['session-token=tokNOVO; Path=/; Secure', 'at-acbbr=atNOVO; Path=/'],
+  })
+  assert.ok(patch)
+  assert.match(patch.cookie, /session-token=tokNOVO/)
+  assert.match(patch.cookie, /at-acbbr=atNOVO/)
+  assert.match(patch.cookie, /session-id=1/, 'preserva os cookies não rotacionados')
+})
+
+test('buildAmazonCredentialPatchFromSetCookie: sem Set-Cookie ou sem mudança devolve null', async () => {
+  const { buildAmazonCredentialPatchFromSetCookie } = await import('../src/converters/amazon.js')
+  assert.equal(buildAmazonCredentialPatchFromSetCookie('a=1', {}), null)
+  assert.equal(buildAmazonCredentialPatchFromSetCookie('a=1', { 'set-cookie': ['a=1; Path=/'] }), null)
+})
+
+test('buildAmazonCredentialPatchFromSetCookie: ignora diretiva de limpeza (value vazio)', async () => {
+  const { buildAmazonCredentialPatchFromSetCookie } = await import('../src/converters/amazon.js')
+  assert.equal(buildAmazonCredentialPatchFromSetCookie('a=1', { 'set-cookie': ['a=; Expires=Thu, 01 Jan 1970'] }), null)
+})
+
+test('Amazon: sucesso persiste cookies rotacionados via __onCredentialPatch', async () => {
+  let patched = null
+  const creds = {
+    tag: 'x-20',
+    cookie: 'session-id=1; at-acbbr=velho; session-token=tokVelho',
+    __onCredentialPatch: async (platform, patch) => { patched = { platform, patch } },
+  }
+  const restore = mockAxiosOnce(async (url) => {
+    if (url.includes('sitestripe/getShortUrl')) {
+      return {
+        status: 200,
+        data: { shortUrl: 'https://amzn.to/rot1' },
+        headers: { 'set-cookie': ['session-token=tokNOVO; Path=/; Secure'] },
+      }
+    }
+    return { status: 200, request: { res: { responseUrl: LONG_URL } }, config: { url: LONG_URL } }
+  })
+  try {
+    const result = await convert(LONG_URL, creds)
+    assert.deepEqual(result, { url: 'https://amzn.to/rot1', linkKind: 'product' })
+    assert.ok(patched, '__onCredentialPatch foi chamado')
+    assert.equal(patched.platform, 'amazon')
+    assert.match(patched.patch.cookie, /session-token=tokNOVO/)
+  } finally {
+    restore()
+  }
+})
+
+test('Amazon: sem __onCredentialPatch (ex.: offerEngine) a rotação é no-op silencioso', async () => {
+  const restore = mockAxiosOnce(async (url) => {
+    if (url.includes('sitestripe/getShortUrl')) {
+      return { status: 200, data: { shortUrl: 'https://amzn.to/rot2' }, headers: { 'set-cookie': ['session-token=novo'] } }
+    }
+    return { status: 200, request: { res: { responseUrl: LONG_URL } }, config: { url: LONG_URL } }
+  })
+  try {
+    const result = await convert(LONG_URL, { tag: 'x-20', cookie: 'session-token=velho' })
+    assert.deepEqual(result, { url: 'https://amzn.to/rot2', linkKind: 'product' })
+  } finally {
+    restore()
+  }
+})
