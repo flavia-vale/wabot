@@ -51,20 +51,25 @@ test('SVG do banner não contém emoji nem fonte sem fallback genérico (liçõe
   assert.match(source, /sans-serif/, 'font-family precisa terminar em sans-serif genérico')
 })
 
-// Teste estrutural (padrão do repo, ver bot-worker-relay-branding.test.js):
-// o modo preview PRECISA rotear cupom para o banner de marca e nunca raspar
-// a landing de cupom em busca de imagem de produto.
-test('bot-worker roteia linkKind=coupon para o banner de marca no preview', () => {
+// ROLLBACK DE PRODUÇÃO (incidente 2026-07, hotfix #1205 em main): o banner de
+// cupom estava saindo em textos de PRODUTO (produto compartilhado por short
+// link sem ASIN/MLB caía como linkKind:'coupon' e ganhava o banner "Cupom
+// Loja" no lugar da foto). Até a classificação ficar robusta, o banner fica
+// DESLIGADO por flag — todo card usa a imagem raspada do produto.
+// buildStoreBrandCardImage continua no código, só gated. Este teste garante
+// que o flag permanece OFF em develop também (consistente com main —
+// promover develop→main não pode reativar o banner sem querer).
+test('bot-worker mantém o banner de cupom DESLIGADO no preview (rollback de produção)', () => {
   const botWorkerSource = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
   assert.match(
     botWorkerSource,
-    /primary\?\.linkKind === 'coupon'/,
-    'preview precisa detectar cupom pelo linkKind da conversão primária',
+    /const COUPON_BRAND_CARD_ENABLED = false/,
+    'banner de cupom deve permanecer desligado até a classificação ser robusta',
   )
   assert.match(
     botWorkerSource,
-    /await buildStoreBrandCardImage\(primary\?\.platform\)/,
-    'cupom usa o banner da marca da loja',
+    /COUPON_BRAND_CARD_ENABLED && primary\?\.linkKind === 'coupon'/,
+    'o ramo do banner de cupom deve estar atrás do flag (desligado)',
   )
 })
 
@@ -75,7 +80,7 @@ test('bot-worker sempre inclui title (nome da loja) no urlInfo manual do preview
   const botWorkerSource = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
   assert.match(
     botWorkerSource,
-    /title: storePreviewTitle\(primary\?\.platform, matchedText, primary\?\.linkKind === 'coupon'\)/,
+    /title: storePreviewTitle\(primary\?\.platform, matchedText, COUPON_BRAND_CARD_ENABLED && primary\?\.linkKind === 'coupon'\)/,
     'urlInfo manual precisa de title fixo do nome da loja',
   )
 })
