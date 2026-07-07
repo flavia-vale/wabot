@@ -784,7 +784,7 @@ const RECONNECT_BADSESSION_RESET_THRESHOLD = envNumber('RECONNECT_BADSESSION_RES
 // code 500/428/408 a cada ~50min (cadência de timer, não flap curto). Como a
 // sessão fica estável por muito mais que RECONNECT_STABLE_MS, o backoff normal
 // zera e reconecta rápido — cada ciclo vira uma nova push notification no
-// celular. Após N quedas estáveis na janela, aplicamos um cooldown maior para
+// celular. Após N quedas estáveis na janela, mantemos uma proteção residual para
 // reduzir o volume de re-sync sem apagar auth nem exigir re-pareamento.
 const RECONNECT_STABLE_CLOSE_WINDOW_MS = Math.max(30 * 60_000, envNumber('RECONNECT_STABLE_CLOSE_WINDOW_MS', 3 * 60 * 60_000))
 const RECONNECT_STABLE_CLOSE_THRESHOLD = Math.max(2, envNumber('RECONNECT_STABLE_CLOSE_THRESHOLD', 4))
@@ -2095,7 +2095,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         //     a cada poucos minutos reanunciava 'open' → spam de "A sincronização
         //     foi concluída". Agora o reset do backoff é gated por estabilidade
         //     (wasStable) e, se detectamos flap (muitos closes na janela),
-        //     aplicamos um cooldown longo em vez do backoff curto.
+        //     aplicamos um cooldown curto em vez do backoff imediato.
         if (isBadSession && RECONNECT_BADSESSION_RESET_THRESHOLD > 0) {
           const b = registerBadSessionAndDecide(badSessionTimestamps, now, {
             windowMs: RECONNECT_BADSESSION_WINDOW_MS,

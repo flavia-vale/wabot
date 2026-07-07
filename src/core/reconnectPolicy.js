@@ -45,7 +45,7 @@ export function registerReplacedAndDecide(timestamps, now, { windowMs, giveUpThr
 // "A sincronização foi concluída" no celular), cai em poucos segundos/minutos e
 // repete. O backoff exponencial sozinho NÃO contém isso porque um `open` curto
 // zerava o contador a cada ciclo (ver shouldResetBackoff). Mesma forma do
-// replaced, mas o booleano de saída fala de flap (→ cooldown longo), não de
+// replaced, mas o booleano de saída fala de flap (→ cooldown), não de
 // give-up. Imutável: não muta a entrada.
 export function registerCloseAndDecide(timestamps, now, { windowMs, flapThreshold }) {
   const recent = (timestamps || []).filter(ts => now - ts <= windowMs)
