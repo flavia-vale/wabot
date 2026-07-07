@@ -1214,7 +1214,16 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
   // normalizeImageForWhatsApp, o mesmo já usado no envio de imagem normal.
   let jpegThumbnail
   let hqSourceBuffer
-  if (primary?.linkKind === 'coupon') {
+  // ROLLBACK DE PRODUÇÃO (incidente 2026-07, hotfix #1205 em main): o banner de
+  // cupom estava saindo em textos que eram de PRODUTO. Um produto compartilhado
+  // por short link que não revela ASIN/MLB (ex.: amzn.to/amzn.divulgador.link/
+  // meli.la não resolvidos) cai como linkKind:'coupon' e ganhava o banner
+  // "Cupom Loja" no lugar da foto do produto. Até refinarmos a classificação com
+  // calma (produto vs. cupom robusto), o banner fica DESLIGADO aqui também —
+  // mantém main e develop consistentes (não regredir ao promover develop→main).
+  // Reativar = flip do flag quando a classificação estiver robusta.
+  const COUPON_BRAND_CARD_ENABLED = false
+  if (COUPON_BRAND_CARD_ENABLED && primary?.linkKind === 'coupon') {
     // Link de cupom/campanha não tem produto: raspar a landing pegava a
     // imagem de um produto promovido aleatório no card. Usa o banner da
     // marca da loja (storeBrandCard), como os canais concorrentes fazem.
@@ -1267,7 +1276,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     // deploy do PR #1186 — cards sumiram até este fix). Em cupom, prefixa
     // "Cupom" — mesmo texto do banner (buildStoreBrandCardImage), pra não
     // ficar inconsistente (imagem diz "Cupom Amazon", título diz só "Amazon").
-    title: storePreviewTitle(primary?.platform, matchedText, primary?.linkKind === 'coupon'),
+    title: storePreviewTitle(primary?.platform, matchedText, COUPON_BRAND_CARD_ENABLED && primary?.linkKind === 'coupon'),
     ...(jpegThumbnail ? { jpegThumbnail } : {}),
     ...(highQualityThumbnail ? { highQualityThumbnail } : {}),
   }
