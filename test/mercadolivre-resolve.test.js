@@ -237,14 +237,18 @@ test('convert retorna null para /social/ sem produto extraível (não encaminha 
   assert.equal(result, null)
 })
 
-test('resolveToCleanProductUrl extrai produto de /social/?ref= quando o HTML tem recommended_items', async (t) => {
-  const html = `<html><body>
-    {"recommended_items":[{"id":"MLB1234567","product_id":"MLB9876543"}]}
-  </body></html>`
+test('resolveToCleanProductUrl NÃO fabrica produto de /social/ NEM com ?ref= (robustez: vitrine/lista de terceiro nunca vira produto)', async (t) => {
+  // Antes, /social/?ref= com recommended_items extraía o [0] como produto. Mas a
+  // heurística do ?ref= era insuficiente: uma share de LISTA
+  // (/social/<handle>/lists/<uuid>?ref=...) também carrega ?ref= e acabava
+  // pegando um produto ALEATÓRIO — que saía com foto errada E virava um /p/MLB de
+  // catálogo que o fallback transformava numa URL 404. Robustez: NENHUMA página
+  // /social/ vira produto; o convert() a trata como cupom (createLink nosso).
+  const html = `<html><body>{"recommended_items":[{"id":"MLB1234567","product_id":"MLB9876543"}]}</body></html>`
   t.mock.method(axios, 'get', async () => ({ data: html }))
-  const url = 'https://www.mercadolivre.com.br/social/xetdaspromocoes?partner_id=475630078&ref=abc123'
+  const url = 'https://www.mercadolivre.com.br/social/xetdaspromocoes/lists/uuid-9?partner_id=475630078&ref=abc123'
   const clean = await resolveToCleanProductUrl(url)
-  assert.equal(clean, 'https://www.mercadolivre.com.br/p/MLB9876543')
+  assert.equal(clean, null)
 })
 
 test('short link /sec/ de terceiro é resolvido para o produto real (não encaminha o código alheio)', async (t) => {
@@ -280,6 +284,82 @@ test('/sec/ não-resolvível (muro anti-bot) não é encaminhado com partner_id 
   const url = 'https://mercadolivre.com/sec/9wallZz?partner_id=999999999'
   const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
   assert.equal(result, null)
+})
+
+test('produto de catálogo /p/MLB com createLink falho NÃO vira URL 404 produto.../MLB-x-_JM (mantém /p/ válida)', async (t) => {
+  // Bug real (screenshot): card de produto abrindo "Parece que esta página não
+  // existe". O fallback reescrevia /p/MLB (id de CATÁLOGO) para
+  // produto.../MLB-x-_JM (formato de LISTING) → 404. Agora mantém a /p/ válida.
+  clearMercadoLivreAffiliateCooldownsForTest()
+  t.mock.method(axios, 'post', async () => ({ status: 400, data: { message: 'bad candidate' }, headers: {} }))
+  const url = 'https://www.mercadolivre.com.br/p/MLB70009242'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  assert.equal(typeof result, 'object')
+  assert.equal(result.linkKind, 'product')
+  assert.match(result.url, /\/p\/MLB70009242/)
+  assert.match(result.url, /partner_id=475630078/)
+  assert.doesNotMatch(result.url, /produto\.mercadolivre\.com\.br/)
+  assert.doesNotMatch(result.url, /-x-_JM/)
+})
+
+test('resolveToCleanProductUrl NÃO fabrica produto de /social/ sem ?ref= mesmo com recommended_items no HTML (bug do card de cupom com foto errada)', async (t) => {
+  // Vitrine /social/ de handle alheio, SEM ?ref= (nenhum produto designado).
+  // Mesmo que o HTML traga recommended_items, NÃO podemos pegar o [0] — seria um
+  // produto ALEATÓRIO. Antes, era isso que fazia um CUPOM sair com foto de
+  // produto errado. Sem seletor explícito (?ref=), não fabricamos produto.
+  const html = `<html><body>{"recommended_items":[{"id":"MLB1234567","product_id":"MLB9876543"}]}</body></html>`
+  t.mock.method(axios, 'get', async () => ({ data: html }))
+  const url = 'https://www.mercadolivre.com.br/social/xetdaspromocoes?partner_id=475630078'
+  const clean = await resolveToCleanProductUrl(url)
+  assert.equal(clean, null)
+})
+
+test('/sec/ que resolve para a home (sem produto) vira CUPOM, não fabrica produto de recommended_items', async (t) => {
+  // O /sec/ de cupom resolve para a home genérica do ML. Antes, o
+  // tryExtractProductFromLanding raspava um recommended_items[0] (produto
+  // aleatório) e o card saía com foto de produto errado. Agora a home (1ª parte,
+  // sem código de terceiro) vira banner de cupom com partner_id da usuária.
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/' }))
+  const html = `<html><body>{"recommended_items":[{"id":"MLB1234567","product_id":"MLB9876543"}]}</body></html>`
+  t.mock.method(axios, 'get', async () => ({ data: html }))
+  const url = 'https://mercadolivre.com/sec/7homeZz'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  assert.equal(typeof result, 'object')
+  assert.equal(result.linkKind, 'coupon')
+  assert.match(result.url, /partner_id=475630078/)
+  assert.doesNotMatch(result.url, /MLB9876543/)
+})
+
+test('cupom ML: /sec/ que resolve para vitrine /social/ de terceiro vira NOSSO link de afiliado (COUPON_LINK_CONVERT on)', async (t) => {
+  // Escolha da usuária: converter o cupom de vitrine de terceiro para o NOSSO
+  // link de afiliado (createLink), mantendo a mensagem com banner de cupom em
+  // vez de descartá-la. (Comissão a validar por clique no celular — ver PR.)
+  const prev = process.env.COUPON_LINK_CONVERT
+  process.env.COUPON_LINK_CONVERT = 'true'
+  t.after(() => { process.env.COUPON_LINK_CONVERT = prev })
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/social/xetdaspromocoes/lists/uuid-1?matt_tool=1&forceInApp=true' }))
+  t.mock.method(axios, 'post', async () => ({ status: 200, data: { urls: [{ short_url: 'https://mercadolivre.com/sec/NOSSO123' }] }, headers: {} }))
+  const url = 'https://mercadolivre.com/sec/2couponVitrine'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  assert.equal(typeof result, 'object')
+  assert.equal(result.linkKind, 'coupon')
+  assert.equal(result.url, 'https://mercadolivre.com/sec/NOSSO123')
+})
+
+test('cupom ML: /sec/ não-resolvível NÃO chama createLink no código de terceiro (leak-safe) mesmo com COUPON on', async (t) => {
+  // Se não escapamos do /sec/ de terceiro (muro anti-bot), gerar NOSSO short link
+  // a partir do código alheio creditaria o dono. Então nem tentamos: descarta.
+  const prev = process.env.COUPON_LINK_CONVERT
+  process.env.COUPON_LINK_CONVERT = 'true'
+  t.after(() => { process.env.COUPON_LINK_CONVERT = prev })
+  t.mock.method(global, 'fetch', async () => { throw new Error('network') })
+  t.mock.method(axios, 'get', async () => ({ data: '<html><body>redirecionando...</body></html>' }))
+  let postCalled = false
+  t.mock.method(axios, 'post', async () => { postCalled = true; return { status: 200, data: { urls: [{ short_url: 'x' }] }, headers: {} } })
+  const url = 'https://mercadolivre.com/sec/9wallCoupon'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  assert.equal(result, null)
+  assert.equal(postCalled, false)
 })
 
 test('convert descarta short_url quando validação comprova MLB diferente', async (t) => {

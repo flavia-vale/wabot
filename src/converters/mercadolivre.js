@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 import axios from 'axios'
 import logger from '../logger.js'
 import { withMercadoLivreCredentialLock } from './mercadolivreCredentialLock.js'
+import { shouldConvertCouponLinks } from './couponPolicy.js'
 
 // Cache LRU simples para evitar reexpansão de short links repetidos
 // (campanhas de cupons disparam o mesmo meli.la várias vezes seguidas).
@@ -737,29 +738,84 @@ export async function resolveToCleanProductUrl(url) {
         target = `https://produto.mercadolivre.com.br/${widMlb}-x-_JM`
       } else {
         const u = new URL(target)
-        // `/sec/` ainda presente aqui = não conseguimos resolver o short link de
-        // afiliado de terceiro (resolve falhou / muro anti-bot). Encaminhá-lo com
-        // um partner_id cosmético vazaria comissão pro dono do código, então o
-        // tratamos como as landings /social/ e /up/: tenta extrair produto; sem
-        // produto, retorna null (não encaminha).
-        if (
-          /^\/social\//i.test(u.pathname) ||
-          /(?:^|\/)up\//i.test(u.pathname) ||
-          /^\/sec\//i.test(u.pathname) ||
-          /^\/$/.test(u.pathname)
-        ) {
-          const extracted = await tryExtractProductFromLanding(preCanonical)
-          // Se não conseguimos extrair um produto real de uma landing /social/,
-          // /up/ ou /sec/, retornar null é melhor que encaminhar o link de terceiro.
-          if (extracted) target = extracted
-          else return null
+        // ROBUSTEZ (não regredir): NUNCA fabricar produto a partir de uma página
+        // /social/ (perfil OU /lists/ de um afiliado) nem de um código /sec/ de
+        // terceiro não resolvido. Uma vitrine/lista tem VÁRIOS produtos; extrair
+        // "um" pegava o `recommended_items[0]` ALEATÓRIO, que:
+        //   1) saía com FOTO ERRADA no card (produto que ninguém pediu); e
+        //   2) sendo um id de CATÁLOGO (/p/MLB), o fallback ainda o transformava
+        //      numa URL de listing inexistente (produto.../MLB-x-_JM → 404,
+        //      "Parece que esta página não existe").
+        // A heurística anterior de "seletor ?ref=" era insuficiente: uma share de
+        // LISTA (/social/<handle>/lists/<uuid>?ref=...) também carrega ?ref= e
+        // continuava fabricando um produto aleatório. O produto legítimo via URL
+        // (/up/#wid=) já foi resolvido acima, SEM scrape. Estas páginas viram
+        // cupom no convert() (createLink nosso) ou são descartadas — nunca um
+        // produto aleatório/quebrado.
+        if (/^\/sec\//i.test(u.pathname) || /^\/social\//i.test(u.pathname)) {
+          return null
         }
+        // Demais landings de 1ª parte sem produto (home `/`, /cupom/, /m/,
+        // /ofertas, /up/ sem wid...): `target` segue sendo a URL resolvida SEM MLB
+        // → o convert() pendura partner_id e marca linkKind:'coupon' (banner).
       }
     }
     return target
   } catch {
     return null
   }
+}
+
+// Cupom do ML sem produto (vitrine /social/ de terceiro, home, /cupom/,
+// /ofertas...). resolveToCleanProductUrl devolve null porque não há produto pra
+// mostrar no card. Com a conversão de cupom ligada, em vez de descartar a
+// mensagem inteira (skip:no_valid_conversions), tentamos gerar NOSSO short link
+// de afiliado (createLink) para a landing de cupom resolvida — mantendo a
+// mensagem com banner de cupom.
+//
+// EM AVALIAÇÃO (AGENTS.md, linha do cupom ML): o ML pode NÃO creditar link de
+// página não-produto (a comissão pode ir pro dono do código/handle). Por isso
+// isto fica atrás do flag COUPON_LINK_CONVERT (rollout seguro) e PRECISA ser
+// validado clicando no link num celular ANTES de ligar em prod.
+//
+// Invariante de segurança preservada: o link de terceiro NUNCA é encaminhado —
+// ou sai NOSSO short link, ou retorna null (descarta). Nada de passthrough do
+// código alheio.
+async function convertMlCouponWithoutProduct(url, creds) {
+  const { tag, ssid } = creds
+  if (!shouldConvertCouponLinks() || !tag || !ssid) return null
+
+  const resolved = await resolve(url).catch(() => url)
+  let landing
+  try {
+    landing = new URL(canonicalizeMlProductUrl(resolved))
+  } catch {
+    return null
+  }
+  // Só landing de 1ª parte do ML. Código /sec/ de terceiro NÃO resolvido (muro
+  // anti-bot) não dá pra converter com segurança — createLink no código alheio
+  // creditaria o dono. Melhor descartar.
+  if (!ML_HOST.test(landing.hostname)) return null
+  if (/^\/sec\//i.test(landing.pathname)) return null
+
+  try {
+    const affiliateResult = await withMercadoLivreCredentialLock(
+      creds,
+      () => createAffiliateLink(landing.toString(), tag, creds),
+    )
+    const affiliateUrl = typeof affiliateResult === 'string'
+      ? affiliateResult
+      : affiliateResult?.shortUrl
+    if (affiliateUrl) {
+      await notifyCredentialPatch(creds, affiliateResult?.credentialPatch)
+      logger.info({ url, landing: landing.toString(), affiliateUrl }, 'ML cupom: short link de afiliado gerado (sem produto)')
+      return { url: affiliateUrl, linkKind: 'coupon' }
+    }
+  } catch (err) {
+    await notifyCredentialPatch(creds, err.credentialPatch)
+    logger.warn({ url, resolved, err: err.message }, 'ML cupom: createLink falhou — descartando (não encaminha link de terceiro)')
+  }
+  return null
 }
 
 export async function convert(url, creds) {
@@ -769,7 +825,13 @@ export async function convert(url, creds) {
     if (!ML_HOST.test(new URL(url).hostname)) return null
 
     const cleanTarget = await resolveToCleanProductUrl(url)
-    if (!cleanTarget) return null
+    if (!cleanTarget) {
+      // Sem produto: cupom/vitrine de terceiro. resolveOnly quer a URL do produto
+      // (não faz sentido converter cupom aqui). Caso normal: tenta converter o
+      // cupom para NOSSO link de afiliado em vez de descartar a mensagem.
+      if (resolveOnly) return null
+      return await convertMlCouponWithoutProduct(url, creds)
+    }
     if (resolveOnly) return cleanTarget
     const target = cleanTarget
     const candidates = buildCanonicalCandidates(target)
@@ -840,15 +902,13 @@ export async function convert(url, creds) {
       // Cai no fallback partner_id abaixo (preserva ao menos o MLB correto)
     }
 
-    let fallbackTarget = target
+    // NÃO reescrever /p/MLB (id de CATÁLOGO) para produto.../MLB-x-_JM: esse
+    // formato `-x-_JM` é de id de LISTING, e reusar o id de catálogo nele gera
+    // uma URL inexistente (404 "Parece que esta página não existe" — bug real no
+    // card). A própria página /p/MLB é válida; só penduramos partner_id nela. O
+    // formato -x-_JM só é correto para o wid= (listing id), já tratado no resolve.
     const fallbackId = extractMlbId(target)
-    if (fallbackId) {
-      const parsed = new URL(target)
-      if (/^\/p\/MLB/i.test(parsed.pathname)) {
-        fallbackTarget = `https://produto.mercadolivre.com.br/${fallbackId}-x-_JM`
-      }
-    }
-    const u = new URL(canonicalizeMlProductUrl(fallbackTarget))
+    const u = new URL(canonicalizeMlProductUrl(target))
 
     // Fallback: injetar partner_id na URL resolvida (ou na meli.la original se resolve falhou)
     u.searchParams.delete('partner_id')

@@ -71,6 +71,19 @@ export function validateCredentialData(platform, data = {}) {
   const required = REQUIRED_FIELDS[platform] ?? []
   const missing = required.filter(field => !hasValue(data?.[field]))
 
+  if (platform === 'amazon') {
+    // O cookie string COMPLETO da sessão (campo `cookie`) satisfaz a autenticação
+    // do SiteStripe sozinho — não exigir os 3 cookies nomeados quando ele existe.
+    // Ver buildCookieHeader em src/converters/amazon.js.
+    const rawCookie = getString(data, 'cookie')
+    if (rawCookie.length >= 20) {
+      for (const legacy of ['ubid-acbbr', 'at-acbbr', 'x-acbbr']) {
+        const idx = missing.indexOf(legacy)
+        if (idx !== -1) missing.splice(idx, 1)
+      }
+    }
+  }
+
   if (platform === 'mercadolivre') {
     const ssid = getString(data, 'ssid')
     const cookie = getString(data, 'cookie')
@@ -142,9 +155,25 @@ export function getCredentialSaveMessage(validation) {
 // ao salvar ML com ssid explícito, descartamos esses artefatos — a rotação os
 // reconstrói no primeiro createLink bem-sucedido.
 export function sanitizeCredentialBody(platform, body = {}) {
-  if (platform !== 'mercadolivre' || !body || typeof body !== 'object') return body
-  const ssid = typeof body.ssid === 'string' ? body.ssid.trim() : ''
-  if (!ssid) return body
-  const { cookie, csrf, id, ...rest } = body
-  return rest
+  if (!body || typeof body !== 'object') return body
+
+  if (platform === 'mercadolivre') {
+    const ssid = typeof body.ssid === 'string' ? body.ssid.trim() : ''
+    if (!ssid) return body
+    const { cookie, csrf, id, ...rest } = body
+    return rest
+  }
+
+  // Amazon: quando a usuária cola o cookie COMPLETO da sessão, ele é a fonte única
+  // de verdade (contém at-acbbr/session-token/etc.). Descartamos os 3 cookies
+  // nomeados legados para não sombrear a sessão nova com valores antigos (mesmo
+  // racional do ML ssid vs cookie). buildCookieHeader dá precedência ao `cookie`.
+  if (platform === 'amazon') {
+    const cookie = typeof body.cookie === 'string' ? body.cookie.trim() : ''
+    if (!cookie) return body
+    const { 'ubid-acbbr': _ubid, 'at-acbbr': _at, 'x-acbbr': _x, ...rest } = body
+    return { ...rest, cookie }
+  }
+
+  return body
 }

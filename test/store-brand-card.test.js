@@ -51,13 +51,14 @@ test('SVG do banner não contém emoji nem fonte sem fallback genérico (liçõe
   assert.match(source, /sans-serif/, 'font-family precisa terminar em sans-serif genérico')
 })
 
-// ROLLBACK DE PRODUÇÃO (incidente 2026-07): o banner de cupom estava saindo em
-// textos de PRODUTO (produto compartilhado por short link sem ASIN/MLB caía como
-// linkKind:'coupon' e ganhava o banner "Cupom Loja" no lugar da foto). Até a
-// classificação ficar robusta (em develop), o banner fica DESLIGADO por flag —
-// todo card usa a imagem raspada do produto. buildStoreBrandCardImage continua
-// no código, só gated. Este teste garante que o flag permanece OFF (reativar
-// exige decisão consciente + fix da classificação).
+// ROLLBACK DE PRODUÇÃO (incidente 2026-07, hotfix #1205 em main): o banner de
+// cupom estava saindo em textos de PRODUTO (produto compartilhado por short
+// link sem ASIN/MLB caía como linkKind:'coupon' e ganhava o banner "Cupom
+// Loja" no lugar da foto). Até a classificação ficar robusta, o banner fica
+// DESLIGADO por flag — todo card usa a imagem raspada do produto.
+// buildStoreBrandCardImage continua no código, só gated. Este teste garante
+// que o flag permanece OFF em develop também (consistente com main —
+// promover develop→main não pode reativar o banner sem querer).
 test('bot-worker mantém o banner de cupom DESLIGADO no preview (rollback de produção)', () => {
   const botWorkerSource = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
   assert.match(

@@ -36,6 +36,10 @@ export function classifyError(err, context = {}) {
   if (context.kind === 'worker_restart') return 'error:worker_restart'
   if (context.kind === 'channel_forbidden') return 'error:channel_forbidden'
   if (context.kind === 'send_stuck') return 'timeout:send:stuck'
+  // Usuário clicou "Limpar ofertas da fila" no painel de Envios para destravar
+  // mensagens presas em 'queued'/'sending'. É decisão de não enviar (skip
+  // benigno), não uma falha real — pinta cinza, não vermelho.
+  if (context.kind === 'queue_cleared') return 'skip:queue_cleared'
 
   if (code === 'SEND_MESSAGE_TIMEOUT') {
     const dest = context.destJid ? `:${context.destJid}` : ''

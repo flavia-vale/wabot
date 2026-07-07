@@ -190,7 +190,50 @@ export async function resolveAmazonShortLink(url, {
   return current
 }
 
+// Normaliza o campo `cookie` (sessão Amazon completa) para um header Cookie
+// (`nome=valor; nome=valor`).
+//
+// Contexto (RCA 2026-07): historicamente só enviávamos 3 cookies
+// (ubid-acbbr/at-acbbr/x-acbbr) ao SiteStripe. Eles deixam a sessão
+// "reconhecida" mas NÃO "plenamente autenticada" — sem os cookies de sessão
+// (session-id, session-token, sess-at-acbbr, sst-acbbr), a Amazon devolve HTTP
+// 200 com a página "Acessar Amazon" em vez do JSON com o shortUrl, e a conversão
+// cai no fallback ?tag= longo (comissão preservada, mas sem amzn.to). Aceitar o
+// cookie COMPLETO da sessão resolve isso.
+//
+// Aceita dois formatos porque os cookies de sessão exigidos são httpOnly — NÃO
+// aparecem em `document.cookie`. A captura confiável é via extensão de export
+// (Cookie-Editor/EditThisCookie), que devolve um JSON [{name,value,...}], ou o
+// header cru copiado do DevTools → Network.
+export function normalizeAmazonCookie(raw) {
+  const value = String(raw ?? '').trim()
+  if (!value) return ''
+  if (value.startsWith('[') || value.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(value)
+      const list = Array.isArray(parsed) ? parsed : [parsed]
+      const pairs = []
+      for (const cookie of list) {
+        const name = String(cookie?.name ?? '').trim()
+        if (!name) continue
+        const val = cookie?.value == null ? '' : String(cookie.value)
+        pairs.push(`${name}=${val}`)
+      }
+      return pairs.join('; ')
+    } catch {
+      return value // não era JSON válido; devolve cru
+    }
+  }
+  return value
+}
+
+// Quando o cookie completo da sessão existe, ele é a fonte única de verdade
+// (contém at-acbbr/session-token/etc.); os 3 campos nomeados são fallback legado
+// para credenciais já cadastradas. sanitizeCredentialBody garante que os dois
+// não coexistam (o cookie completo descarta os nomeados ao salvar).
 function buildCookieHeader(creds) {
+  const raw = normalizeAmazonCookie(creds?.cookie)
+  if (raw) return raw
   const pairs = []
   const ubid = creds['ubid-acbbr']
   const at = creds['at-acbbr']
@@ -199,6 +242,64 @@ function buildCookieHeader(creds) {
   if (at) pairs.push(`at-acbbr=${at}`)
   if (x) pairs.push(`x-acbbr=${x}`)
   return pairs.join('; ')
+}
+
+function parseCookieHeaderToJar(cookieHeader) {
+  const jar = new Map()
+  for (const part of String(cookieHeader || '').split(';')) {
+    const eq = part.indexOf('=')
+    if (eq <= 0) continue
+    const name = part.slice(0, eq).trim()
+    if (name) jar.set(name, part.slice(eq + 1).trim())
+  }
+  return jar
+}
+
+function getSetCookieLines(headers = {}) {
+  const value = headers?.['set-cookie'] ?? headers?.['Set-Cookie']
+  if (!value) return []
+  return Array.isArray(value) ? value.filter(Boolean) : [value]
+}
+
+// Mescla os cookies rotacionados que a Amazon devolve no Set-Cookie do
+// getShortUrl sobre o cookie enviado, devolvendo um patch { cookie } quando algo
+// mudou. Sem persistir isso, reenviamos sempre o token velho e a sessão morre em
+// horas quando a Amazon rotaciona (RCA 2026-07: cookie completo expirou em ~3h).
+// Espelha o mecanismo já usado no Mercado Livre.
+export function buildAmazonCredentialPatchFromSetCookie(cookieHeaderSent, responseHeaders) {
+  const lines = getSetCookieLines(responseHeaders)
+  if (!lines.length) return null
+  const jar = parseCookieHeaderToJar(cookieHeaderSent)
+  let changed = false
+  for (const line of lines) {
+    const pair = String(line).split(';')[0]
+    const eq = pair.indexOf('=')
+    if (eq <= 0) continue
+    const name = pair.slice(0, eq).trim()
+    const value = pair.slice(eq + 1).trim()
+    // Ignora diretivas de limpeza (value vazio) — não queremos apagar o token.
+    if (!name || !value) continue
+    if (jar.get(name) === value) continue
+    jar.set(name, value)
+    changed = true
+  }
+  if (!changed) return null
+  return { cookie: [...jar.entries()].map(([n, v]) => `${n}=${v}`).join('; ') }
+}
+
+// Best-effort: persiste os cookies rotacionados no Credential (via worker) para a
+// próxima chamada usar o token fresco. Nunca lança — analytics/rotina secundária.
+async function persistRotatedAmazonCookies(creds, cookieHeaderSent, responseHeaders) {
+  if (typeof creds?.__onCredentialPatch !== 'function') return false
+  const patch = buildAmazonCredentialPatchFromSetCookie(cookieHeaderSent, responseHeaders)
+  if (!patch) return false
+  try {
+    await creds.__onCredentialPatch('amazon', patch)
+    return true
+  } catch (err) {
+    logger.warn({ err: err?.message }, 'Amazon: falha ao persistir cookies rotacionados')
+    return false
+  }
 }
 
 const SHORTLINK_RETRY_BACKOFF_MS = [1000, 3000, 8000]
@@ -233,7 +334,10 @@ async function createAmazonShortLink(longUrl, tag, creds) {
 
       const shortUrl = res.data?.shortUrl || res.data?.shortenedUrl || res.data?.url
       if (shortUrl && /amzn\.to|a\.co/.test(shortUrl)) {
-        logger.info({ longUrl, shortUrl, attempt }, 'Amazon createShortLink: amzn.to gerado')
+        // Sessão viva: captura os cookies rotacionados antes que a Amazon
+        // invalide o token atual — mantém a sessão viva enquanto for usada.
+        const rotated = await persistRotatedAmazonCookies(creds, cookieHeader, res.headers)
+        logger.info({ longUrl, shortUrl, attempt, rotatedCookie: rotated }, 'Amazon createShortLink: amzn.to gerado')
         return { shortUrl, transient: false }
       }
 
@@ -244,12 +348,17 @@ async function createAmazonShortLink(longUrl, tag, creds) {
         continue
       }
 
+      const bodyText = typeof res.data === 'string' ? res.data : JSON.stringify(res.data ?? '')
+      const signinWall = /ap\/signin|Acessar Amazon|<title[^>]*>[^<]*Sign-?In/i.test(bodyText)
       logger.warn({
         status: res.status,
         attempt,
-        rawBody: typeof res.data === 'string' ? res.data.slice(0, 500) : JSON.stringify(res.data).slice(0, 500),
+        signinWall,
+        rawBody: bodyText.slice(0, 500),
         contentType: res.headers?.['content-type'],
-      }, 'Amazon createShortLink: API respondeu sem shortUrl')
+      }, signinWall
+        ? 'Amazon createShortLink: sessão não autenticada (parede "Acessar Amazon") — cookies precisam ser renovados'
+        : 'Amazon createShortLink: API respondeu sem shortUrl')
       return { shortUrl: null, transient: res.status >= 500 }
     } catch (err) {
       lastStatus = err.response?.status ?? null
@@ -292,6 +401,31 @@ function buildLongUrl(target, asin) {
     }
   } catch {}
   return `https://www.amazon.com.br/dp/${asin}`
+}
+
+// Checagem ativa da sessão de afiliado da Amazon (SiteStripe). Os cookies da
+// sessão expiram/rotacionam e, sem renovar, o getShortUrl passa a devolver a
+// página "Acessar Amazon" (200 HTML) — a oferta ainda sai com o ?tag= longo,
+// mas sem o amzn.to. O painel chama este endpoint ao carregar e avisa a usuária
+// quando expirado, em vez de o problema ficar escondido no bot.log. Mesma forma
+// de retorno de checkMercadoLivreSession: { configured, alive, reason }.
+const AMAZON_SESSION_PROBE_URL = 'https://www.amazon.com.br/dp/B07BB8NL42'
+
+export async function checkAmazonSession(creds = {}) {
+  const cookieHeader = buildCookieHeader(creds)
+  if (!cookieHeader) return { configured: false, alive: null, reason: 'no_cookie' }
+  const tag = String(creds?.tag ?? '').trim()
+  if (!tag) return { configured: false, alive: null, reason: 'no_tag' }
+  try {
+    const { shortUrl, transient } = await createAmazonShortLink(AMAZON_SESSION_PROBE_URL, tag, creds)
+    if (shortUrl) return { configured: true, alive: true, reason: 'ok' }
+    // transient (5xx/rede) não prova expiração — fica indeterminado para não
+    // alarmar com falso "cookies expiraram". 200-HTML/parede de login => expired.
+    if (transient) return { configured: true, alive: null, reason: 'network_error' }
+    return { configured: true, alive: false, reason: 'expired' }
+  } catch {
+    return { configured: true, alive: null, reason: 'network_error' }
+  }
 }
 
 export async function convert(url, creds) {

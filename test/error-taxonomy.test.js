@@ -31,6 +31,12 @@ test('classifyError aceita context.kind para casos sem exception', () => {
   assert.equal(classifyError(null, { kind: 'worker_restart' }), 'error:worker_restart')
   assert.equal(classifyError(null, { kind: 'channel_forbidden' }), 'error:channel_forbidden')
   assert.equal(classifyError(null, { kind: 'send_stuck' }), 'timeout:send:stuck')
+  assert.equal(classifyError(null, { kind: 'queue_cleared' }), 'skip:queue_cleared')
+})
+
+test('skip:queue_cleared é skip benigno (config_block, pinta cinza)', () => {
+  assert.equal(categorizeErrorMsg('skip:queue_cleared'), ERROR_CATEGORIES.CONFIG_BLOCK)
+  assert.equal(isBenignSkip('skip:queue_cleared'), true)
 })
 
 test('classifyError mapeia statusCode Boom para error:baileys:<code>', () => {

@@ -180,6 +180,7 @@ export const api = {
   saveCredential: (platform, data) =>
     apiFetch(`/api/credentials/${platform}`, { method: 'PUT', body: JSON.stringify(data) }),
   mercadolivreSession: () => apiFetch('/api/credentials/mercadolivre/session'),
+  amazonSession: () => apiFetch('/api/credentials/amazon/session'),
 
   convertLinks: (text) =>
     apiFetch('/api/link-conversion/convert', { method: 'POST', body: JSON.stringify({ text }) }),
@@ -393,6 +394,7 @@ export const api = {
   logsSummary: (period = '7d') => apiFetch(`/api/logs/summary?period=${encodeURIComponent(period)}`),
   logsSeries: (days = 7) => apiFetch(`/api/logs/series?days=${encodeURIComponent(days)}`),
   logsClear: () => apiFetch('/api/logs/clear', { method: 'DELETE' }),
+  logsClearQueue: () => apiFetch('/api/logs/queue', { method: 'DELETE' }),
 
   offerAutomations: () => apiFetch('/api/offer-automations'),
   offerAutomationCreate: (data) =>

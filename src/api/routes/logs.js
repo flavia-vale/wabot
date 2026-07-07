@@ -1,6 +1,7 @@
 import db from '../../db.js'
 import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
 import { buildOfferQueueSource, parseOfferQueueSourceId } from '../../offerQueue/sourceTag.js'
+import { clearUserQueuedSendLogs } from '../../jobs/stuckSendLogs.js'
 
 // Cache leve do /summary — métricas não precisam ser real-time-real-time.
 // Chave: `${userId}:${period}`. TTL curto para não pesar no banco em refresh
@@ -168,6 +169,14 @@ export async function logsRoutes(app) {
   app.delete('/clear', { onRequest: [app.authenticate] }, async (req) => {
     await db.messageLog.deleteMany({ where: { userId: req.user.sub } })
     return { ok: true }
+  })
+
+  // Destrava a fila: reclassifica as mensagens em vôo ('queued'/'sending') do
+  // usuário para um estado terminal, zerando o contador "em vôo" e soltando
+  // agarramentos visíveis no painel de Envios. Ver clearUserQueuedSendLogs.
+  app.delete('/queue', { onRequest: [app.authenticate] }, async (req) => {
+    const { cleared } = await clearUserQueuedSendLogs({ userId: req.user.sub })
+    return { ok: true, cleared }
   })
 
   // Resumo agregado para os cards da página de Logs do cliente.

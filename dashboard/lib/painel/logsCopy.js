@@ -52,6 +52,7 @@ export function explainErrorMsg(errorMsg) {
     if (errorMsg.endsWith(':unsupported_store')) return 'Essa promoção foi ignorada porque ainda não fazemos conversão automática de afiliado para essa loja.'
     return 'Mensagem fora das regras de encaminhamento que você configurou para este grupo.'
   }
+  if (errorMsg.startsWith('skip:queue_cleared')) return 'Você limpou a fila de envios manualmente — esta oferta foi removida da fila antes de ser enviada.'
   if (errorMsg.startsWith('skip:decrypt_failed')) return 'O WhatsApp não conseguiu decifrar essa mensagem na sua ponta. Costuma ser pontual.'
   if (errorMsg.startsWith('skip:incoming_error')) {
     const detail = errorMsg.slice('skip:incoming_error'.length).replace(/^:/, '').trim()
