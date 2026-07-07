@@ -52,7 +52,7 @@ import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/prese
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
-import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, registerStableCloseAndDecide, extractAckMessageIdFromStreamErrorNode, registerStuckMessageAndDecide } from './core/reconnectPolicy.js'
+import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, registerStableCloseAndDecide, shouldConsiderStableCloseCooldown, extractAckMessageIdFromStreamErrorNode, registerStuckMessageAndDecide } from './core/reconnectPolicy.js'
 import { buildAuthResetSessionPatch, buildCloseSessionPatch, computeHeartbeatState, DEFAULT_MAX_RECONNECTING_MS } from './core/sessionPersistencePolicy.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
@@ -767,10 +767,10 @@ const RECONNECT_REPLACED_GIVEUP_THRESHOLD = Math.max(2, envNumber('RECONNECT_REP
 // própria (não por outro device, como o 440) mas o efeito no celular é o mesmo —
 // cada `open` curto dispara a notificação "A sincronização foi concluída". Após
 // RECONNECT_FLAP_THRESHOLD closes em RECONNECT_FLAP_WINDOW_MS, aplicamos um
-// cooldown longo (recupera sozinho quando o chip estabiliza). Ver core/reconnectPolicy.js.
+// cooldown curto (recupera sozinho quando o chip estabiliza). Ver core/reconnectPolicy.js.
 const RECONNECT_FLAP_WINDOW_MS = Math.max(30_000, envNumber('RECONNECT_FLAP_WINDOW_MS', 10 * 60_000))
-const RECONNECT_FLAP_THRESHOLD = Math.max(2, envNumber('RECONNECT_FLAP_THRESHOLD', 5))
-const RECONNECT_FLAP_COOLDOWN_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_FLAP_COOLDOWN_MS', 2 * 60_000))
+const RECONNECT_FLAP_THRESHOLD = Math.max(2, envNumber('RECONNECT_FLAP_THRESHOLD', 8))
+const RECONNECT_FLAP_COOLDOWN_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_FLAP_COOLDOWN_MS', 30_000))
 // Tempo mínimo de conexão para ser considerada "estável": só abaixo disso um
 // `open` deixa o backoff subir. Acima, a queda é de uma sessão saudável e o
 // backoff recomeça do zero (reconexão rápida). Ver shouldResetBackoff.
@@ -787,17 +787,13 @@ const RECONNECT_BADSESSION_RESET_THRESHOLD = envNumber('RECONNECT_BADSESSION_RES
 // celular. Após N quedas estáveis na janela, aplicamos um cooldown maior para
 // reduzir o volume de re-sync sem apagar auth nem exigir re-pareamento.
 const RECONNECT_STABLE_CLOSE_WINDOW_MS = Math.max(30 * 60_000, envNumber('RECONNECT_STABLE_CLOSE_WINDOW_MS', 3 * 60 * 60_000))
-const RECONNECT_STABLE_CLOSE_THRESHOLD = Math.max(2, envNumber('RECONNECT_STABLE_CLOSE_THRESHOLD', 3))
-// Era 30min: enquanto o cooldown corre, a sessão fica DE FATO fora do ar (sem
-// socket ativo — nada é recebido nem espelhado), não é só um detalhe de UI. 30min
-// de indisponibilidade repetida é caro demais só para conter uma notificação de
-// re-sync que aparece apenas no celular do próprio dono da conta (não afeta os
-// grupos). Reduzido para 5min — ainda corta a maior parte do volume de
-// reconexões em cadência curta, mas limita o tempo real sem espelhar. Alinhado
-// de propósito com WA_HEARTBEAT_MAX_RECONNECTING_MS (sessionPersistencePolicy.js):
-// esse é também o ponto em que o painel passa a mostrar "desconectado" — então o
-// cliente nunca fica muito tempo pensando que está tudo bem sem estar.
-const RECONNECT_STABLE_CLOSE_COOLDOWN_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_STABLE_CLOSE_COOLDOWN_MS', 5 * 60_000))
+const RECONNECT_STABLE_CLOSE_THRESHOLD = Math.max(2, envNumber('RECONNECT_STABLE_CLOSE_THRESHOLD', 4))
+// Era 30min e depois 5min: enquanto o cooldown corre, a sessão fica DE FATO fora
+// do ar (sem socket ativo — nada é recebido nem espelhado), não é só detalhe de
+// UI. Para o produto cumprir a promessa de robô 24h, o default agora mantém uma
+// proteção residual contra queda periódica (~50min) mas segura por apenas 1min.
+// Quem precisar de postura mais conservadora ainda pode subir via env.
+const RECONNECT_STABLE_CLOSE_COOLDOWN_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_STABLE_CLOSE_COOLDOWN_MS', 60_000))
 // RCA 2026-07 ("Loop de retry-receipt travado"): visibilidade operacional pra
 // detectar essa CLASSE de problema cedo, mesmo que reapareça por uma causa
 // raiz diferente do bug já corrigido (msgRetryCounterCache resetando a cada
@@ -2137,10 +2133,15 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           delayMs = RECONNECT_FLAP_COOLDOWN_MS
           logger.warn(
             { code, closeCount: f.count, windowMs: RECONNECT_FLAP_WINDOW_MS, delayMs },
-            'Flapping detectado (closes repetidos na janela) — cooldown longo para conter o spam de "sincronização concluída". Recupera sozinho quando o chip estabilizar.'
+            'Flapping detectado (closes repetidos na janela) — cooldown curto para conter o spam de "sincronização concluída" sem sacrificar disponibilidade. Recupera sozinho quando o chip estabilizar.'
           )
           try { recordOperationalSignal('wa_flap_cooldown', { userId, code, count: f.count }) } catch {}
-        } else if (wasStable && [DisconnectReason.badSession, DisconnectReason.connectionClosed, DisconnectReason.timedOut].includes(code)) {
+        } else if (shouldConsiderStableCloseCooldown({
+          hadStableOpen: wasStable,
+          code,
+          stuckMsgId,
+          eligibleCodes: [DisconnectReason.badSession, DisconnectReason.connectionClosed, DisconnectReason.timedOut],
+        })) {
           const s = registerStableCloseAndDecide(stableCloseTimestamps, now, {
             windowMs: RECONNECT_STABLE_CLOSE_WINDOW_MS,
             cooldownThreshold: RECONNECT_STABLE_CLOSE_THRESHOLD,
@@ -2151,7 +2152,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             delayMs = RECONNECT_STABLE_CLOSE_COOLDOWN_MS
             logger.warn(
               { code, stableCloseCount: s.count, windowMs: RECONNECT_STABLE_CLOSE_WINDOW_MS, delayMs },
-              'Quedas periódicas de sessão WA estável detectadas — cooldown maior para reduzir re-sync/push notification sem limpar auth.'
+              'Quedas periódicas de sessão WA estável detectadas — cooldown curto para reduzir re-sync/push notification sem sacrificar disponibilidade.'
             )
             try { recordOperationalSignal('wa_stable_close_cooldown', { userId, code, count: s.count }) } catch {}
           } else {
@@ -2162,7 +2163,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         } else {
           delayMs = calcReconnectDelayMs()
           reconnectAttempts++
-          logger.warn({ code, attempt: reconnectAttempts, delayMs }, 'WA conexão fechada, agendando restart automático')
+          logger.warn({ code, attempt: reconnectAttempts, delayMs, stuckMsgId: stuckMsgId || undefined }, 'WA conexão fechada, agendando restart automático')
         }
         scheduleReconnect(delayMs)
       }

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildAuthResetSessionPatch, buildCloseSessionPatch, computeHeartbeatState } from '../src/core/sessionPersistencePolicy.js'
+import { buildAuthResetSessionPatch, buildCloseSessionPatch, computeHeartbeatState, DEFAULT_MAX_RECONNECTING_MS } from '../src/core/sessionPersistencePolicy.js'
 
 test('close transitório fica resumível para blindar sessões ativas', () => {
   const now = new Date('2026-06-30T12:00:00.000Z')
@@ -79,6 +79,19 @@ test('computeHeartbeatState: válvula de segurança — preso reconectando além
       hasReconnectScheduled: true,
       disconnectedForMs: 6 * 60_000,
       maxReconnectingMs: 5 * 60_000,
+    }),
+    'idle',
+  )
+})
+
+test('computeHeartbeatState: default de alta disponibilidade expõe reconnect preso após 2min', () => {
+  assert.equal(DEFAULT_MAX_RECONNECTING_MS, 2 * 60_000)
+  assert.equal(
+    computeHeartbeatState({
+      hasActiveSock: false,
+      hasPendingSock: false,
+      hasReconnectScheduled: true,
+      disconnectedForMs: DEFAULT_MAX_RECONNECTING_MS + 1,
     }),
     'idle',
   )
