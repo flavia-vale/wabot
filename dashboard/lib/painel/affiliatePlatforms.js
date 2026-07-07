@@ -27,7 +27,7 @@ export const AFFILIATE_PLATFORMS = [
     id: 'amazon',
     label: 'Amazon',
     instructions: 'Onde obter: affiliate-program.amazon.com.br. A Tag vem do painel. Para o link curto (amzn.to) sair de forma estável, cole o Cookie completo da sessão logada na Amazon Brasil (recomendado) — os 3 cookies separados param de autenticar em poucos dias.',
-    platformWarning: 'Para gerar link curto (amzn.to), preencha a Tag e o Cookie completo da sessão Amazon. Sem isso, a oferta ainda sai (com o link longo ?tag=), mas sem encurtar.',
+    platformWarning: 'A oferta da Amazon sempre sai e credita sua comissão (link de afiliado longo ?tag=). O link curto amzn.to é opcional e temporário: a Amazon encerra a sessão do gerador em poucos minutos, então o cookie precisa ser reenviado sempre que quiser o amzn.to. Preencha a Tag (obrigatória) e, se quiser tentar o link curto, o Cookie completo da sessão.',
     fields: [
       { key: 'tag', label: 'ID de associado/StoreID', hint: 'Ex.: suatag-20' },
       { key: 'cookie', label: 'Cookie completo da sessão (recomendado)', required: false, sensitive: true, hint: 'Sessão completa logada da Amazon Brasil — mais estável que os 3 cookies separados.', help: 'Logada em amazon.com.br, use uma extensão de export de cookies (ex.: Cookie-Editor) → Exportar → e cole aqui o JSON gerado. Os cookies de sessão da Amazon são httpOnly e NÃO aparecem em document.cookie, por isso a captura precisa ser via extensão (ou pela aba DevTools → Network, copiando o cabeçalho Cookie de uma requisição). Também aceita o formato nome=valor; nome=valor.' },

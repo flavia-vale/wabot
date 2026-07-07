@@ -31,10 +31,11 @@ function SessionWarning({ platformId, sessionStatus }) {
   if (!sessionStatus || sessionStatus.alive !== false) return null
   if (platformId === 'amazon') {
     return (
-      <div className="pnl-note-box is-error" style={{ marginBottom: 12 }} role="alert">
-        <strong>Cookies da Amazon expirados.</strong> A sessão não está mais autenticando — as ofertas ainda saem,
-        mas com o link longo (?tag=) em vez do amzn.to. Exporte um cookie novo da sua sessão logada e salve para
-        voltar a gerar o link curto.
+      <div className="pnl-note-box is-info" style={{ marginBottom: 12 }} role="status">
+        <strong>Link curto amzn.to indisponível no momento.</strong> As ofertas da Amazon continuam saindo e
+        creditando sua comissão normalmente, com o link de afiliado no formato longo. A Amazon encerra a sessão do
+        gerador de links curtos em poucos minutos, então isso é esperado. Se quiser tentar o amzn.to por um tempo,
+        exporte um cookie novo da sua sessão logada e salve aqui.
       </div>
     )
   }

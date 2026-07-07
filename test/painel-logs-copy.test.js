@@ -26,6 +26,9 @@ test('explainErrorMsg sem sufixo de diagnóstico mantém o texto genérico (rows
 
 test('explainErrorMsg outros prefixos continuam funcionando (sem regressão)', () => {
   assert.match(explainErrorMsg('skip:title_mismatch'), /não combina com o produto/)
-  assert.match(explainErrorMsg('warning:amazon_cookies_expired'), /cookies da Amazon/)
+  // Copy reframada (2026-07): o warning é informativo (comissão credita via
+  // ?tag=; amzn.to é best-effort e a sessão expira em minutos), não alarme.
+  assert.match(explainErrorMsg('warning:amazon_cookies_expired'), /creditando sua comissão/)
+  assert.match(explainErrorMsg('warning:amazon_cookies_expired'), /amzn\.to/)
   assert.equal(explainErrorMsg(null), null)
 })

@@ -23,7 +23,7 @@ function parseDedupAgeSuffix(errorMsg) {
 export function explainErrorMsg(errorMsg) {
   if (!errorMsg) return null
   if (errorMsg.startsWith('warning:amazon_cookies_expired')) {
-    return 'Seus cookies da Amazon (sitestripe) expiraram. As ofertas continuam saindo com link longo de afiliado e creditando comissão, mas para voltar a gerar links curtos amzn.to, renove os cookies em IDs de afiliada → Amazon.'
+    return 'Oferta enviada e creditando sua comissão normalmente, com o link de afiliado da Amazon (formato longo). O link curto amzn.to ficou indisponível no momento — a Amazon encerra a sessão do gerador de links em poucos minutos, então isso é esperado e não afeta a comissão. Se quiser tentar o link curto por um tempo, atualize o cookie em IDs de afiliada → Amazon.'
   }
   if (errorMsg.startsWith('warning:ml_ssid_expired')) {
     return 'Sua credencial do Mercado Livre (SSID/cookie) expirou. As ofertas continuam saindo com link longo de afiliado (partner_id) e creditando comissão, mas para voltar a gerar links curtos meli.la, renove o SSID em IDs de afiliada → Mercado Livre.'
