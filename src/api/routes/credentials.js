@@ -4,9 +4,10 @@ import { getCredentialSaveMessage, parseCredentialData, PLATFORMS, sanitizeCrede
 import { encryptCredential } from '../../credentialCrypto.js'
 import { checkMercadoLivreSession } from '../../converters/mercadolivre.js'
 import { checkAmazonSession } from '../../converters/amazon.js'
-import { reloadConfig } from '../../manager.js'
+import { reloadConfig as defaultReloadConfig } from '../../manager.js'
 
-export async function credentialsRoutes(app) {
+export async function credentialsRoutes(app, opts = {}) {
+  const reloadConfig = opts.reloadConfig || defaultReloadConfig
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
     const creds = await db.credential.findMany({ where: { userId: req.user.sub } })
     return creds.map(c => {
@@ -74,9 +75,16 @@ export async function credentialsRoutes(app) {
     // credencial antiga em cache (CONFIG_CACHE_TTL_MS, ~60s) e ofertas novas
     // seguem saindo com a credencial expirada logo após a troca. Best-effort
     // (mesmo contrato de groups.js): só sinaliza, não bloqueia o save.
-    const configReloaded = reloadConfig(req.user.sub)
-    app.log.info({ platform, configReloaded }, 'Credencial salva; reload da config do worker solicitado')
+    let configReloaded = false
+    let configReloadError = null
+    try {
+      configReloaded = Boolean(await reloadConfig(req.user.sub))
+    } catch (err) {
+      configReloadError = err?.message || 'Falha ao recarregar config do worker'
+      app.log.warn({ platform, err: configReloadError }, 'Falha ao recarregar config do worker após salvar credencial')
+    }
+    app.log.info({ platform, configReloaded, configReloadError }, 'Credencial salva; reload da config do worker solicitado')
     trackAnalyticsEventSafe({ userId: req.user.sub, event: 'credential_saved', metadata: { platform, status: validation.status } })
-    return { ...cred, data: parseCredentialData(cred.data), validation, message: getCredentialSaveMessage(validation) }
+    return { ...cred, data: parseCredentialData(cred.data), validation, message: getCredentialSaveMessage(validation), configReloaded, configReloadError }
   })
 }
