@@ -1,7 +1,7 @@
 ---
 name: flow-converge
 description: Fase "converge" do pipeline /speckit-flow. Invoca a skill speckit-converge para checar se o código atende spec/plan/tasks e anexar o que faltar. Não usar fora do /speckit-flow.
-model: sonnet
+model: opus
 color: purple
 ---
 

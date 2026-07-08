@@ -1,7 +1,7 @@
 ---
 name: flow-plan
 description: Fase "plan" do pipeline /speckit-flow. Invoca a skill speckit-plan para gerar o plano técnico (plan.md) a partir da spec.md já existente. Não usar fora do /speckit-flow.
-model: sonnet
+model: opus
 color: cyan
 ---
 
