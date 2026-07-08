@@ -53,7 +53,7 @@ import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
 import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, shouldResetAuthForBadSession, registerStableCloseAndDecide, shouldConsiderStableCloseCooldown, extractAckMessageIdFromStreamErrorNode, registerStuckMessageAndDecide } from './core/reconnectPolicy.js'
-import { buildAuthResetSessionPatch, buildCloseSessionPatch, computeHeartbeatState, DEFAULT_MAX_RECONNECTING_MS } from './core/sessionPersistencePolicy.js'
+import { buildAuthResetSessionPatch, buildCloseSessionPatch, buildHeartbeatSessionPatch, computeHeartbeatState, DEFAULT_MAX_RECONNECTING_MS } from './core/sessionPersistencePolicy.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
 import { calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
@@ -282,7 +282,7 @@ let lastCryptoErrorAt = null
 let heartbeatTimer = null
 let lastHeartbeatPersistAt = 0
 
-async function persistWorkerHeartbeat(state) {
+async function persistWorkerHeartbeat(state, { reconnectScheduled = false } = {}) {
   // Heartbeat IPC tells the manager process that the worker process is alive,
   // but the dashboard reads WaSession from the DB. Persist a lightweight,
   // throttled heartbeat so the panel cannot keep showing "connected" when
@@ -292,13 +292,10 @@ async function persistWorkerHeartbeat(state) {
   if (now - lastHeartbeatPersistAt < intervalMs) return
   lastHeartbeatPersistAt = now
 
-  const patch = { lastHeartbeatAt: new Date(), ownerInstance: OWNER_INSTANCE }
-  if (state === 'idle') {
-    patch.status = 'disconnected'
-    patch.lifecycle = 'disconnected'
-  } else if (state === 'connecting') {
-    patch.status = 'connecting'
-    patch.lifecycle = 'connecting'
+  const patch = {
+    lastHeartbeatAt: new Date(),
+    ownerInstance: OWNER_INSTANCE,
+    ...buildHeartbeatSessionPatch({ state, reconnectScheduled }),
   }
 
   await persistSessionPatch(patch).catch(err => {
@@ -341,15 +338,16 @@ function startHeartbeatIpc() {
   if (heartbeatTimer) return
   const intervalMs = Math.max(Number(process.env.WA_HEARTBEAT_INTERVAL_MS || 15000), 5000)
   heartbeatTimer = setInterval(() => {
+    const reconnectScheduled = Date.now() < reconnectDeadlineMs
     const state = computeHeartbeatState({
       hasActiveSock: Boolean(activeSock),
       hasPendingSock: Boolean(pendingSock),
-      hasReconnectScheduled: Date.now() < reconnectDeadlineMs,
+      hasReconnectScheduled: reconnectScheduled,
       disconnectedForMs: disconnectedSinceMs == null ? 0 : Date.now() - disconnectedSinceMs,
       maxReconnectingMs: MAX_RECONNECTING_MS,
     })
     if (process.send) process.send({ type: 'heartbeat', ts: Date.now(), state })
-    void persistWorkerHeartbeat(state)
+    void persistWorkerHeartbeat(state, { reconnectScheduled })
   }, intervalMs)
   heartbeatTimer.unref?.()
 }
