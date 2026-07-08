@@ -84,6 +84,39 @@ export function registerBadSessionAndDecide(timestamps, now, { windowMs, resetTh
   }
 }
 
+// Decide se um badSession (500) deve APAGAR o auth_info (forçar re-pareamento —
+// QR novo no celular do cliente). É a única ação que quebra a promessa de
+// "conectar 1× e rodar liso", então tratamos com camadas de proteção:
+//   1. resetThreshold <= 0 desliga o auto-reset (guarda no chamador).
+//   2. `stuckMsgId` presente ⇒ o 500 é o fallback do Baileys para um stream:error
+//      de mensagem travada (RCA "Loop de retry-receipt travado"), NÃO corrupção
+//      de credencial. Nunca conta para wipe — o loop se resolve pelo
+//      msgRetryCounterCache + observabilidade `ops_wa_stuck_message_retry`.
+//   3. `keepEstablishedAuth` (flag) ⇒ se a sessão JÁ conectou de forma estável
+//      alguma vez neste worker (`everHadStableOpen`), a credencial é válida por
+//      definição — uma rajada de 500 posterior é transitória/protocolo, não
+//      corrupção. Nesse modo o único gatilho legítimo de re-pareamento passa a
+//      ser loggedOut (401), tratado à parte. Default OFF (comportamento
+//      histórico) até validar em staging.
+//   4. `hadStableOpen` (queda atual foi estável) ⇒ 500 transitório de chip
+//      saudável que se recupera; não apaga.
+// Só apaga quando o 500 REPETE (>= threshold) numa sessão que nunca ficou
+// estável e sem nenhuma explicação mais benigna acima. Puro: sem I/O.
+export function shouldResetAuthForBadSession({
+  count = 0,
+  resetThreshold = 0,
+  hadStableOpen = false,
+  everHadStableOpen = false,
+  stuckMsgId = null,
+  keepEstablishedAuth = false,
+} = {}) {
+  if (resetThreshold <= 0) return false
+  if (stuckMsgId) return false
+  if (keepEstablishedAuth && everHadStableOpen) return false
+  if (hadStableOpen) return false
+  return count >= resetThreshold
+}
+
 // Quedas "tipo relógio": produção mostrou sessões que ficam estáveis por ~50min
 // e caem com 500/428/408 em cadência quase exata. Isso NÃO é flap curto, então o
 // detector de flap não deve disparar; mas reconectar imediatamente também gera

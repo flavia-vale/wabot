@@ -646,6 +646,9 @@ export default function WhatsAppPage() {
           ) : (
             <p style={{ fontWeight: 600, color: 'var(--ink)' }}>{isConnected ? 'Conectado' : (isConnecting || isAwaitingConnectStart) ? 'Conectando…' : statusError ? 'Status indisponível' : 'Desconectado'}</p>
           )}
+          {!statusLoading && !isConnected && !isConnecting && !isAwaitingConnectStart && !statusError && status?.lifecycle === 'reconnecting' && (
+            <p className="pnl-hint">O robô está tentando reconectar sozinho — você não precisa fazer nada.</p>
+          )}
           {status?.phone && <p className="pnl-hint">+{status.phone}</p>}
         </div>
       </section>

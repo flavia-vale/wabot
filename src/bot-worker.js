@@ -52,8 +52,8 @@ import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/prese
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
-import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, registerStableCloseAndDecide, shouldConsiderStableCloseCooldown, extractAckMessageIdFromStreamErrorNode, registerStuckMessageAndDecide } from './core/reconnectPolicy.js'
-import { buildAuthResetSessionPatch, buildCloseSessionPatch, computeHeartbeatState, DEFAULT_MAX_RECONNECTING_MS } from './core/sessionPersistencePolicy.js'
+import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, shouldResetAuthForBadSession, registerStableCloseAndDecide, shouldConsiderStableCloseCooldown, extractAckMessageIdFromStreamErrorNode, registerStuckMessageAndDecide } from './core/reconnectPolicy.js'
+import { buildAuthResetSessionPatch, buildCloseSessionPatch, buildHeartbeatSessionPatch, computeHeartbeatState, DEFAULT_MAX_RECONNECTING_MS } from './core/sessionPersistencePolicy.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
 import { calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
@@ -282,7 +282,7 @@ let lastCryptoErrorAt = null
 let heartbeatTimer = null
 let lastHeartbeatPersistAt = 0
 
-async function persistWorkerHeartbeat(state) {
+async function persistWorkerHeartbeat(state, { reconnectScheduled = false } = {}) {
   // Heartbeat IPC tells the manager process that the worker process is alive,
   // but the dashboard reads WaSession from the DB. Persist a lightweight,
   // throttled heartbeat so the panel cannot keep showing "connected" when
@@ -292,13 +292,10 @@ async function persistWorkerHeartbeat(state) {
   if (now - lastHeartbeatPersistAt < intervalMs) return
   lastHeartbeatPersistAt = now
 
-  const patch = { lastHeartbeatAt: new Date(), ownerInstance: OWNER_INSTANCE }
-  if (state === 'idle') {
-    patch.status = 'disconnected'
-    patch.lifecycle = 'disconnected'
-  } else if (state === 'connecting') {
-    patch.status = 'connecting'
-    patch.lifecycle = 'connecting'
+  const patch = {
+    lastHeartbeatAt: new Date(),
+    ownerInstance: OWNER_INSTANCE,
+    ...buildHeartbeatSessionPatch({ state, reconnectScheduled }),
   }
 
   await persistSessionPatch(patch).catch(err => {
@@ -341,15 +338,16 @@ function startHeartbeatIpc() {
   if (heartbeatTimer) return
   const intervalMs = Math.max(Number(process.env.WA_HEARTBEAT_INTERVAL_MS || 15000), 5000)
   heartbeatTimer = setInterval(() => {
+    const reconnectScheduled = Date.now() < reconnectDeadlineMs
     const state = computeHeartbeatState({
       hasActiveSock: Boolean(activeSock),
       hasPendingSock: Boolean(pendingSock),
-      hasReconnectScheduled: Date.now() < reconnectDeadlineMs,
+      hasReconnectScheduled: reconnectScheduled,
       disconnectedForMs: disconnectedSinceMs == null ? 0 : Date.now() - disconnectedSinceMs,
       maxReconnectingMs: MAX_RECONNECTING_MS,
     })
     if (process.send) process.send({ type: 'heartbeat', ts: Date.now(), state })
-    void persistWorkerHeartbeat(state)
+    void persistWorkerHeartbeat(state, { reconnectScheduled })
   }, intervalMs)
   heartbeatTimer.unref?.()
 }
@@ -783,6 +781,11 @@ const RECONNECT_STABLE_MS = Math.max(5_000, envNumber('RECONNECT_STABLE_MS', 60_
 // verdade). RECONNECT_BADSESSION_RESET_THRESHOLD <= 0 desliga o auto-reset.
 const RECONNECT_BADSESSION_WINDOW_MS = Math.max(60_000, envNumber('RECONNECT_BADSESSION_WINDOW_MS', 10 * 60_000))
 const RECONNECT_BADSESSION_RESET_THRESHOLD = envNumber('RECONNECT_BADSESSION_RESET_THRESHOLD', 4)
+// Alta disponibilidade / "conectar 1× e rodar liso": quando ON, uma sessão que
+// JÁ conectou de forma estável alguma vez NUNCA tem o auth apagado por rajada de
+// 500 (só loggedOut/401 força re-pareamento). Default OFF preserva o
+// comportamento histórico; ligar só após validar em staging (issue #1216).
+const RECONNECT_BADSESSION_KEEP_ESTABLISHED_AUTH = ['1', 'true'].includes(String(process.env.BADSESSION_KEEP_ESTABLISHED_AUTH || '').trim().toLowerCase())
 // Queda periódica de sessão estável: produção mostrou vários chips caindo em
 // code 500/428/408 a cada ~50min (cadência de timer, não flap curto). Como a
 // sessão fica estável por muito mais que RECONNECT_STABLE_MS, o backoff normal
@@ -1735,6 +1738,13 @@ let stableCloseTimestamps = []
 // Momento (ms) em que o socket atingiu `connection: 'open'` nesta tentativa.
 // Usado no close para medir se a sessão foi estável antes de cair.
 let connectionOpenedAt = null
+// Marca se esta sessão JÁ ficou estável (open >= RECONNECT_STABLE_MS) alguma vez
+// na vida deste worker. Persiste entre reconexões (escopo de módulo, fora de
+// startBot). Serve à política de badSession: uma credencial que já produziu uma
+// conexão estável é válida por definição — rajadas de 500 posteriores são
+// transitórias, não corrupção que justifique apagar auth. Ver
+// shouldResetAuthForBadSession(keepEstablishedAuth).
+let everHadStableOpen = false
 
 function calcReconnectDelayMs() {
   return calcBackoffDelayMs(reconnectAttempts, { baseMs: RECONNECT_BASE_MS, maxMs: RECONNECT_MAX_MS })
@@ -1981,6 +1991,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // limpar o marcador. Um `open` longo = sessão saudável que caiu; curto = flap.
       const now = Date.now()
       const wasStable = shouldResetBackoff(connectionOpenedAt, now, RECONNECT_STABLE_MS)
+      // Uma vez estável, sempre "já estável": marca que esta credencial produziu
+      // ao menos uma conexão saudável na vida deste worker (persiste entre
+      // reconexões). Base da política keepEstablishedAuth em badSession.
+      if (wasStable) everHadStableOpen = true
       // Node bruto do stream:error (quando existir) — só ele revela se o close
       // foi causado por uma mensagem específica travada em loop de reentrega
       // (ver AGENTS.md "Loop de retry-receipt travado"). `code` sozinho não
@@ -2099,14 +2113,26 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         //     foi concluída". Agora o reset do backoff é gated por estabilidade
         //     (wasStable) e, se detectamos flap (muitos closes na janela),
         //     aplicamos um cooldown curto em vez do backoff imediato.
-        if (isBadSession && RECONNECT_BADSESSION_RESET_THRESHOLD > 0) {
+        // Um 500 que carrega stuckMsgId é o fallback do Baileys para uma mensagem
+        // travada (RCA "Loop de retry-receipt travado"), NÃO corrupção de
+        // credencial — nem sequer entra na contagem de badSession para não
+        // envenenar o tally e acabar apagando auth de uma sessão viva.
+        if (isBadSession && RECONNECT_BADSESSION_RESET_THRESHOLD > 0 && !stuckMsgId) {
           const b = registerBadSessionAndDecide(badSessionTimestamps, now, {
             windowMs: RECONNECT_BADSESSION_WINDOW_MS,
             resetThreshold: RECONNECT_BADSESSION_RESET_THRESHOLD,
             hadStableOpen: wasStable,
           })
           badSessionTimestamps = b.timestamps
-          if (b.shouldResetAuth) {
+          const shouldResetAuth = shouldResetAuthForBadSession({
+            count: b.count,
+            resetThreshold: RECONNECT_BADSESSION_RESET_THRESHOLD,
+            hadStableOpen: wasStable,
+            everHadStableOpen,
+            stuckMsgId,
+            keepEstablishedAuth: RECONNECT_BADSESSION_KEEP_ESTABLISHED_AUTH,
+          })
+          if (shouldResetAuth) {
             logger.error(
               { code, badSessionCount: b.count, userId },
               'badSession (500) repetido sem conexão estável — credencial Signal corrompida. Limpando auth_info para re-pareamento (QR limpo no próximo start). Sessão fica offline até novo pareamento.'
