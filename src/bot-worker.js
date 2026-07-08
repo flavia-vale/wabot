@@ -1188,7 +1188,7 @@ function buildBroadcastImageRecipe(text, options = {}) {
 // NUNCA usar contextInfo.externalAdReply para "forçar" card grande: é campo
 // de anúncio e causa drop silencioso em mensagem monitorada — a guarda em
 // monitoredMessagePayload.js rejeita payload com esse campo em qualquer rota.
-async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer }) {
+async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid }) {
   const matchedText = isHttpUrl(primary?.converted) ? primary.converted : (isHttpUrl(primary?.url) ? primary.url : '')
   if (!matchedText) return null
   // matched-text precisa existir literalmente no corpo da mensagem; sem essa
@@ -1254,9 +1254,14 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
   let highQualityThumbnail
   if (hqSourceBuffer && typeof uploadToServer === 'function') {
     try {
+      // jid precisa ir aqui: é o que o Baileys usa (isJidNewsletter(options.jid)
+      // em prepareWAMessageMedia) para decidir upload raw/plaintext (canal) vs.
+      // criptografado (chat/grupo). Sem isso o thumbnail HQ sempre subia
+      // cifrado, e canal não decifra — card ficava borrado/em branco
+      // (o card caía pro jpegThumbnail inline pequeno, ou nem isso).
       const { imageMessage } = await prepareWAMessageMedia(
         { image: hqSourceBuffer },
-        { upload: uploadToServer, mediaTypeOverride: 'thumbnail-link' },
+        { upload: uploadToServer, mediaTypeOverride: 'thumbnail-link', jid: destJid },
       )
       highQualityThumbnail = imageMessage || undefined
     } catch (err) {
@@ -3068,6 +3073,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               primary,
               credentialsMap: cfg.credentials,
               uploadToServer: activeSock?.waUploadToServer,
+              destJid,
             })
             return buildMonitoredMessagePayload({
               finalText: variantText,
