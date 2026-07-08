@@ -486,8 +486,14 @@ const ML_AFFILIATE_ERROR_WARNING = {
   forbidden: 'ml_affiliate_forbidden',
   rate_limited: 'ml_affiliate_rate_limited',
   busy: 'ml_affiliate_busy',
+  unsupported_url: 'ml_url_not_supported',
 }
 
+// error_code 111 ("URL not allowed in affiliates program") é a resposta padrão
+// do ML quando a URL não é um produto/cupom válido para o programa de afiliados
+// (ex.: página de vitrine/perfil /social/<handle> sem produto). Vem com HTTP 200
+// (não é 401/403/429), então precisa de detecção por texto — e NÃO é falha de
+// credencial: renovar SSID não resolve, a URL em si não é aceita pelo ML.
 function classifyMlAffiliateFailure(status, apiError = '') {
   if (status === 401 || /auth|unauthoriz|login|sess[aã]o|expirad/i.test(apiError)) {
     return { type: 'expired', warning: ML_AFFILIATE_ERROR_WARNING.expired, retryable: false }
@@ -498,6 +504,9 @@ function classifyMlAffiliateFailure(status, apiError = '') {
   if (status === 429) {
     return { type: 'rate_limited', warning: ML_AFFILIATE_ERROR_WARNING.rate_limited, retryable: false }
   }
+  if (/not allowed in affiliates program|url not allowed/i.test(apiError)) {
+    return { type: 'unsupported_url', warning: ML_AFFILIATE_ERROR_WARNING.unsupported_url, retryable: false }
+  }
   return null
 }
 
@@ -506,7 +515,9 @@ function buildMlAffiliateError(classification) {
     ? 'Credencial Mercado Livre inválida/expirada. Renove o SSID (ou cookie) e tente novamente.'
     : classification.type === 'forbidden'
       ? 'Mercado Livre recusou a geração do link afiliado (403). Usando fallback partner_id.'
-      : 'Mercado Livre limitou temporariamente a geração de links afiliados (429). Usando fallback partner_id.')
+      : classification.type === 'unsupported_url'
+        ? 'Mercado Livre não aceita esse link no programa de afiliados (página sem produto, ex.: vitrine/perfil). Não é problema de credencial.'
+        : 'Mercado Livre limitou temporariamente a geração de links afiliados (429). Usando fallback partner_id.')
   err.mlWarning = classification.warning
   err.mlFailureType = classification.type
   return err
@@ -814,6 +825,12 @@ async function convertMlCouponWithoutProduct(url, creds) {
   } catch (err) {
     await notifyCredentialPatch(creds, err.credentialPatch)
     logger.warn({ url, resolved, err: err.message }, 'ML cupom: createLink falhou — descartando (não encaminha link de terceiro)')
+    // Falhas classificadas (SSID expirado, 403, 429, URL não aceita pelo
+    // programa de afiliados) sobem para o convert() e depois para o
+    // bot-worker.js, que grava o motivo REAL no painel em vez do genérico
+    // "não retornou link convertido — confira as credenciais" (enganoso quando
+    // o problema não é a credencial, ex.: link de vitrine sem produto).
+    if (err.mlFailureType) throw err
   }
   return null
 }
@@ -919,7 +936,12 @@ export async function convert(url, creds) {
     const fallbackLinkKind = fallbackId ? 'product' : 'coupon'
     if (affiliateWarning) return { url: u.toString(), linkKind: fallbackLinkKind, warning: affiliateWarning }
     return { url: u.toString(), linkKind: fallbackLinkKind }
-  } catch {
+  } catch (err) {
+    // Erros classificados (ver classifyMlAffiliateFailure) sobem para o
+    // bot-worker.js para virar diagnóstico específico no painel. Qualquer
+    // outro erro inesperado (rede, parsing, etc.) continua engolido — mantém
+    // o comportamento histórico resiliente para o caminho de produto normal.
+    if (err?.mlFailureType) throw err
     return null
   }
 }
