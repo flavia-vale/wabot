@@ -450,6 +450,52 @@ test('cupom ML: vitrineUrl inválida (não é link do ML) é ignorada — contin
   )
 })
 
+test('RCA regressão 2026-07-08: link de PRODUTO (meli.la) que resolve ambiguamente para /social/ é descartado silenciosamente, NÃO acusa "vitrine, cadastre a sua"', async (t) => {
+  // Reprodução do bug real: um link de produto genuíno (kit de cuecas, loja
+  // oficial, cupom MODASEMPRE) compartilhado via meli.la falhou em staging
+  // com a mensagem de vitrine — mensagem enganosa, porque o link original
+  // NUNCA foi diretamente uma página /social/, só chegou lá via encurtador
+  // (rede/anti-bot do VPS, ou loja oficial excluída do programa — motivo
+  // desconhecido e irrelevante: sem certeza de que é vitrine, não afirmamos).
+  const prev = process.env.COUPON_LINK_CONVERT
+  process.env.COUPON_LINK_CONVERT = 'true'
+  t.after(() => { process.env.COUPON_LINK_CONVERT = prev })
+  // resolve() do meli.la não escapa para um produto — aterrissa numa página
+  // /social/ ambígua (não é o link ORIGINAL compartilhado).
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/social/loja' }))
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: { status: 200, urls: [{ message: 'URL not allowed in affiliates program', error_code: 111, status: 200 }] },
+    headers: {},
+  }))
+  const url = 'https://meli.la/1Zgxo75'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  assert.equal(result, null)
+})
+
+test('RCA regressão 2026-07-08: mesmo cenário ambíguo, mas COM vitrine própria cadastrada — ainda usa o fallback (só a mensagem de culpa que muda, o fallback continua útil)', async (t) => {
+  const prev = process.env.COUPON_LINK_CONVERT
+  process.env.COUPON_LINK_CONVERT = 'true'
+  t.after(() => { process.env.COUPON_LINK_CONVERT = prev })
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/social/loja' }))
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: { status: 200, urls: [{ message: 'URL not allowed in affiliates program', error_code: 111, status: 200 }] },
+    headers: {},
+  }))
+  const url = 'https://meli.la/1Zgxo75'
+  const result = await convert(url, {
+    tag: '475630078',
+    ssid: 'ssid-valido-1234567890',
+    vitrineUrl: 'https://www.mercadolivre.com.br/social/minha-vitrine-oficial',
+  })
+  assert.deepEqual(result, {
+    url: 'https://www.mercadolivre.com.br/social/minha-vitrine-oficial',
+    linkKind: 'coupon',
+    warning: 'ml_vitrine_fallback_used',
+  })
+})
+
 test('convert descarta short_url quando validação comprova MLB diferente', async (t) => {
   t.mock.method(axios, 'post', async () => ({
     status: 200,

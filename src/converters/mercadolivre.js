@@ -799,6 +799,28 @@ function buildVitrineFallback(creds = {}) {
   return { url: vitrineUrl, linkKind: 'coupon', warning: 'ml_vitrine_fallback_used' }
 }
 
+// True só quando o link ORIGINAL compartilhado (antes de qualquer resolução
+// de rede) já era diretamente uma página /social/ do ML — ou seja, temos
+// CERTEZA de que é vitrine/perfil, porque foi isso que veio na mensagem.
+//
+// Quando o link original é um encurtador (meli.la/mluvem/sec) que só POR
+// FALHA DE RESOLUÇÃO (bloqueio anti-bot da rede do VPS — não recusa real do
+// ML) aterrissa numa página ambígua, NÃO temos certeza de que é vitrine: por
+// trás do encurtador pode haver um produto de verdade (inclusive de loja
+// oficial, que o ML também recusa com o MESMO error_code 111, por motivo
+// totalmente diferente — exclusão do programa de afiliados, não vitrine).
+// Regressão real (RCA 2026-07-08): um link de produto genuíno (kit de cuecas,
+// vendido por loja oficial) foi diagnosticado como "vitrine de terceiro,
+// cadastre a sua" — mensagem enganosa para esse caso.
+function isDirectVitrineShare(originalUrl) {
+  try {
+    const u = new URL(originalUrl)
+    return ML_HOST.test(u.hostname) && /^\/social\//i.test(u.pathname)
+  } catch {
+    return false
+  }
+}
+
 // Cupom do ML sem produto (vitrine /social/ de terceiro, home, /cupom/,
 // /ofertas...). resolveToCleanProductUrl devolve null porque não há produto pra
 // mostrar no card. Com a conversão de cupom ligada, em vez de descartar a
@@ -848,21 +870,34 @@ async function convertMlCouponWithoutProduct(url, creds) {
     await notifyCredentialPatch(creds, err.credentialPatch)
     logger.warn({ url, resolved, err: err.message }, 'ML cupom: createLink falhou — descartando (não encaminha link de terceiro)')
     if (err.mlFailureType === 'unsupported_url') {
-      // ML recusou createLink para essa vitrine/perfil de terceiro (regra do
-      // programa de afiliados, renovar SSID não resolve). Se a usuária tem uma
-      // vitrine PRÓPRIA cadastrada, usamos ela — mantém a mensagem com um link
-      // de afiliado nosso em vez de descartar.
+      // ML recusou createLink para essa página (regra do programa de
+      // afiliados, renovar SSID não resolve). Se a usuária tem uma vitrine
+      // PRÓPRIA cadastrada, usamos ela SEMPRE que isso acontece — melhora a
+      // monetização sem risco, seja o motivo genuína vitrine de terceiro ou
+      // produto ambíguo (abaixo).
       const fallback = buildVitrineFallback(creds)
       if (fallback) {
         logger.info({ url, vitrineUrl: fallback.url }, 'ML cupom: ML recusou o link de terceiro — usando vitrine cadastrada da própria afiliada')
         return fallback
       }
+      // Sem vitrine cadastrada: só afirmamos "é vitrine, cadastre a sua" com
+      // CERTEZA, isto é, quando o link original já era diretamente /social/.
+      // Quando chegamos aqui via encurtador (meli.la/mluvem/sec) que falhou a
+      // resolver, não sabemos se por trás havia um produto de verdade (ex.:
+      // loja oficial, que o ML também recusa com o MESMO error_code 111, por
+      // exclusão do programa de afiliados — não por ser vitrine). Nesse caso
+      // ambíguo, comportamento seguro histórico: descarta sem mensagem
+      // enganosa (RCA regressão 2026-07-08).
+      if (!isDirectVitrineShare(url)) {
+        logger.warn({ url }, 'ML cupom: recusa ambígua (não veio de link de vitrine direto) — descartando sem culpar vitrine/credencial')
+        return null
+      }
     }
-    // Falhas classificadas (SSID expirado, 403, 429, URL não aceita pelo
-    // programa de afiliados) sobem para o convert() e depois para o
-    // bot-worker.js, que grava o motivo REAL no painel em vez do genérico
-    // "não retornou link convertido — confira as credenciais" (enganoso quando
-    // o problema não é a credencial, ex.: link de vitrine sem produto).
+    // Falhas classificadas (SSID expirado, 403, 429, ou vitrine confirmada
+    // sem produto) sobem para o convert() e depois para o bot-worker.js, que
+    // grava o motivo REAL no painel em vez do genérico "não retornou link
+    // convertido — confira as credenciais" (enganoso quando o problema não é
+    // a credencial).
     if (err.mlFailureType) throw err
   }
   return null
