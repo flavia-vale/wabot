@@ -1,7 +1,7 @@
 ---
 name: flow-specify
 description: Fase "specify" do pipeline /speckit-flow. Invoca a skill speckit-specify para criar a spec.md da feature a partir de uma descrição em linguagem natural. Não usar fora do /speckit-flow.
-model: sonnet
+model: opus
 color: cyan
 ---
 

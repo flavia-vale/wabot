@@ -1,7 +1,7 @@
 ---
 name: flow-review
 description: Fase "review" do pipeline /speckit-flow. Revisa o diff da feature contra spec.md/plan.md e as convenções canônicas do AGENTS.md antes de liberar para teste. Não usar fora do /speckit-flow.
-model: sonnet
+model: opus
 color: purple
 ---
 
