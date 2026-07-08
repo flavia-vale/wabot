@@ -68,8 +68,11 @@ import Redis from 'ioredis'
 import { parseEnumEnv, logModeSummary } from './core/envModes.js'
 import { buildRedisOptions } from './core/redisFactory.js'
 import { installWorkerCrashGuards } from './core/workerCrashGuard.js'
+import { buildWorkerMetadata } from './workerMetadata.js'
 
 const userId = process.env.BOT_USER_ID
+const WORKER_STARTED_AT = Date.now()
+const workerMetadata = buildWorkerMetadata({ userId, startedAt: WORKER_STARTED_AT })
 
 // Guardas de processo: um throw assíncrono benigno do Baileys num socket já
 // fechado (ex.: 428 "Connection Closed" disparado por sendRetryRequest após um
@@ -3443,7 +3446,7 @@ process.on('message', async msg => {
   }
 
   if (msg?.type === 'metrics') {
-    process.send({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats(), sessionHealth: getSessionHealth() } })
+    process.send({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats(), sessionHealth: getSessionHealth(), worker: workerMetadata } })
   }
 
   if (msg?.type === 'broadcast') {
