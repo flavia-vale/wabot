@@ -362,6 +362,40 @@ test('cupom ML: /sec/ não-resolvível NÃO chama createLink no código de terce
   assert.equal(postCalled, false)
 })
 
+test('cupom ML: vitrine/perfil rejeitada pelo ML (error_code 111) propaga motivo real, não culpa credencial (RCA staging 2026-07-08)', async (t) => {
+  // Reproduz o incidente: link vira landing /social/<handle> (vitrine sem
+  // produto), COUPON_LINK_CONVERT tenta gerar NOSSO link de afiliado, e o ML
+  // recusa com HTTP 200 + error_code 111 "URL not allowed in affiliates
+  // program" (não é 401/403/429 — não é problema de SSID). Antes, isso virava
+  // silenciosamente `null` e o painel mostrava "confira as credenciais",
+  // mensagem enganosa. Agora sobe um erro com o motivo real.
+  const prev = process.env.COUPON_LINK_CONVERT
+  process.env.COUPON_LINK_CONVERT = 'true'
+  t.after(() => { process.env.COUPON_LINK_CONVERT = prev })
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/social/gatuna' }))
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: {
+      status: 200,
+      urls: [{ origin_url: 'https://www.mercadolivre.com.br/social/gatuna', message: 'URL not allowed in affiliates program', error_code: 111, status: 200 }],
+      total_items: 1,
+      total_success: 0,
+      total_error: 1,
+    },
+    headers: {},
+  }))
+  const url = 'https://www.mercadolivre.com.br/social/gatuna'
+  await assert.rejects(
+    () => convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' }),
+    (err) => {
+      assert.equal(err.mlFailureType, 'unsupported_url')
+      assert.equal(err.mlWarning, 'ml_url_not_supported')
+      assert.match(err.message, /não aceita esse link/i)
+      return true
+    },
+  )
+})
+
 test('convert descarta short_url quando validação comprova MLB diferente', async (t) => {
   t.mock.method(axios, 'post', async () => ({
     status: 200,
