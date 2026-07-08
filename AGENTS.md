@@ -103,19 +103,16 @@ Cutover seguro (validar staging primeiro):
 3. `pm2 start ecosystem.config.cjs --only bot-supervisor-staging`
 4. Setar `BOT_SUPERVISOR_MODE=remote` no `.env` da `api-staging` (NÃO no
    ecosystem) e fazer `pm2 delete api-staging && pm2 start
-   ecosystem.config.cjs --only api-staging`. `pm2 restart --update-env`
-   NÃO basta (vide pegadinha #1: dotenv não sobrescreve env já cacheada
-   pelo PM2 — precisa delete + start). Confirmar pelo dashboard staging
-   que QR, status e envio funcionam end-to-end.
+   ecosystem.config.cjs --only api-staging` (pegadinha #1 — delete+start,
+   não `restart --update-env`). Confirmar pelo dashboard staging que QR,
+   status e envio funcionam end-to-end.
 5. Teste de aceitação: `pm2 restart api-staging` enquanto há sessão
    conectada — sessão **deve continuar conectada** (esse é o ponto).
 6. Repetir para produção (`bot-supervisor` + ajustar `.env` + delete/start `api`).
 
-Rollback: setar `BOT_SUPERVISOR_MODE=inline` no `.env` + **delete + start**
-da API (`pm2 delete api-staging && pm2 start ecosystem.config.cjs --only
-api-staging && pm2 save`; idem `api` em prod). `pm2 restart --update-env` NÃO
-basta (pegadinha #1: PM2 cacheia a env). Confirme no log que **não** aparece
-`Manager em modo REMOTE`. Janela ≤ 2min.
+Rollback: setar `BOT_SUPERVISOR_MODE=inline` no `.env` + delete+start da API
+(pegadinha #1; `idem` `api` em prod, `pm2 save` ao final). Confirme no log
+que **não** aparece `Manager em modo REMOTE`. Janela ≤ 2min.
 
 **Pré-requisito do modo `remote`:** Redis local em `REDIS_URL`
 (`redis://127.0.0.1:6379/0` prod, `/1` staging). No modo `inline` o
@@ -349,10 +346,8 @@ falha silenciosamente.
 
 Evento a marcar: `payment`.
 
-**Aplicar as envs (pegadinha #1 — PM2 cacheia env vars):**
-
-Mudar `.env` + `pm2 restart --update-env` **não substitui** variáveis já
-cacheadas. Para qualquer mudança nas envs do MP fazer:
+**Aplicar as envs:** qualquer mudança nas envs do MP exige delete+start, não
+`restart --update-env` (pegadinha #1):
 
 ```bash
 pm2 delete api
@@ -1009,52 +1004,21 @@ arquivos commitados antes da regra continuam trackeados até `git rm --cached`.
 Confira periodicamente: `git ls-files | grep -E '\.db$|\.db-journal$'` deve
 retornar vazio.
 
-### 6. Em prod, o arquivo do banco se chamava `dev.db` até 2026-05-22
+### 6. Nome do arquivo do banco em prod é `prod.db` (não `dev.db`)
 
-Histórico: por meses a produção rodou com `DATABASE_URL` apontando para
-`prisma/dev.db` (5.8MB, dados reais), enquanto `prisma/prod.db` e
-`prisma/staging.db` existiam como arquivos vazios de 0 bytes no mesmo
-diretório — restos de tentativas anteriores de migração que nunca foram
-concluídas. Em 2026-05-22 fizemos o rename canônico: parou `api`,
-backup defensivo via `sqlite3 .backup`, `mv dev.db prod.db`, ajustou
-`DATABASE_URL`, `pm2 delete api && pm2 start` (pegadinha #1), validou.
+Risco: alguém trocar `DATABASE_URL` para um caminho que resolve num arquivo
+vazio de 0 bytes sem perceber. Login quebra, sessões somem, parece perda
+total. Antes de qualquer mudança de `DATABASE_URL`, sempre conferir
+`ls -la prisma/*.db` e `sqlite3 <db> "SELECT COUNT(*) FROM User"`.
 
-Risco que isso evita: alguém olhar o AGENTS.md, ver que prod "deve"
-usar `prod.db`, trocar `DATABASE_URL` para `file:./prisma/prod.db`,
-reiniciar — e a aplicação passar a usar o arquivo vazio de 0 bytes.
-Login quebra, sessões somem, parece perda total. Antes de qualquer
-mudança de `DATABASE_URL`, sempre conferir `ls -la prisma/*.db` e
-`sqlite3 <db> "SELECT COUNT(*) FROM User"`.
+### 7. Cron de backup deve chamar script versionado
 
-### 7. O cron de backup chamava um script órfão (`backup_safe.sh`)
-
-Até 2026-05-22 o `crontab -l` do VPS de prod chamava
-`/home/deploy/wabot/scripts/backup_safe.sh` — um arquivo que existia no
-diretório `scripts/` mas **não** estava versionado no git (untracked,
-copiado à mão em algum momento). Por isso `git pull` nunca tocou nele,
-e os bugs nunca foram corrigidos via PR:
-
-- Apontava hardcoded para `prisma/dev.db` (caminho errado depois do
-  rename — e tinha um `set -euo pipefail` que aborta o script entre
-  `pm2 stop api` e `pm2 start api`, deixando a API offline).
-- Resolvia `AUTH_INFO_DIR` via `node -e` **sem carregar `.env`**, então
-  caía no default errado. Resultado: 11 dias seguidos de backup
-  **sem `auth_info`** (`WARN.txt` em cada snapshot). Se o VPS pegasse
-  fogo, o restore não traria as sessões WhatsApp de volta.
-- Gravava em `/home/deploy/backups/wabot/` (não no canônico
-  `/home/deploy/wabot-backups/`).
-
-Correção: trocou cron para `scripts/backup_prod.sh` (canônico, no repo,
-WAL-safe via `sqlite3 .backup`, `AUTH_INFO_DIR` correto, grava em
-`/home/deploy/wabot-backups/`). Script órfão renomeado para
-`.deprecated`. Os 13 snapshots históricos em `/home/deploy/backups/wabot/`
-foram mantidos como rede de segurança até o novo diretório acumular
-histórico equivalente.
-
-Lição: se o cron de prod chamar um script, **confirmar que o script
-está versionado** (`git ls-files scripts/<nome>`). Scripts untracked
-no diretório do clone são bombas-relógio — sobrevivem deploys mas
-escapam de qualquer code review.
+`scripts/backup_prod.sh` (canônico, no repo, WAL-safe via `sqlite3 .backup`,
+`AUTH_INFO_DIR` correto) é o único script que o cron de prod deve chamar.
+Se o cron de prod chamar um script, **confirmar que está versionado**
+(`git ls-files scripts/<nome>`) — scripts untracked no diretório do clone
+sobrevivem a deploys mas escapam de qualquer code review, e bugs neles
+nunca são corrigidos via PR.
 
 ### 8. `prisma migrate deploy` quebra com SQLITE_BUSY se processos PM2 seguram o SQLite
 
@@ -1181,15 +1145,7 @@ Antes de mexer, leia esta seção inteira.
 | `cf.shopee.com.br` ↔ susercontent  | Alterna hostnames quando um responde 404                                 |
 | `mlstatic.com`                     | `D_NQ_NP_` → `D_NQ_NP_2X_` (não tocar — referência)                      |
 
-### Prova de funcionamento (PR #422)
-
-```
-Amazon B09VQ39F41 → 1000x1000 jpeg
-Amazon B0CDJ4L7CZ → 1000x679 jpeg
-amzn.to short     → 1500x300 jpeg
-```
-
-`node --test test/image-scrapers.test.js` → 12/12 pass.
+Teste: `node --test test/image-scrapers.test.js`.
 
 ## Resolução de short link da Shopee (canônico — não regredir)
 
@@ -1339,14 +1295,11 @@ Testes: `test/offer-engine.test.js` (motor),
 
 ## Regras para qualquer agente de IA neste repo
 
-- **MEMÓRIA — SUPER SINALIZAR.** Qualquer mudança que **possa aumentar muito o
-  uso de RAM** deve ser destacada explicitamente para a usuária **antes** de
-  executar (com estimativa de RAM e impacto no VPS). Sempre trazer junto
-  **alternativas mais leves** e **opções de limpeza de memória que NÃO
-  prejudiquem o sistema**. Detalhes e listas em "Política de memória" acima.
-- **Não trocar portas** sem atualizar os 3 lugares listados acima.
-- **Não criar PR para `main` direto** — sempre `feature → develop → main`.
-- **Não amend** commits já mergeados; criar commit novo.
+- **MEMÓRIA — SUPER SINALIZAR** antes de qualquer mudança que aumente RAM
+  (regras completas em "Política de memória" acima — não repetir aqui).
+- **Não trocar portas** sem atualizar os 3 lugares em "Ambientes e portas".
+- **Não criar PR para `main` direto**, **não amend** em commits já mergeados
+  — ver "Fluxo de desenvolvimento" acima.
 - **Não rodar destrutivos** (`reset --hard`, `push --force`, `branch -D`,
   `rm -rf` em paths reais) sem permissão explícita.
 - **Não mexer em `.env` ou banco** em produção sem confirmar com a usuária.
