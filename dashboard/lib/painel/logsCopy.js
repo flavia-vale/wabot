@@ -37,6 +37,12 @@ export function explainErrorMsg(errorMsg) {
   if (errorMsg.startsWith('warning:ml_affiliate_busy')) {
     return 'Outra conversão do Mercado Livre já estava usando esta credencial. A oferta saiu com link longo para evitar disputa de sessão.'
   }
+  if (errorMsg.startsWith('warning:ml_vitrine_fallback_used')) {
+    return 'Esse link era uma vitrine/perfil de outra loja, que o Mercado Livre não aceita converter em link de afiliado. A oferta saiu usando o link da SUA vitrine, cadastrado em IDs de afiliada → Mercado Livre.'
+  }
+  if (errorMsg.startsWith('error:conversion:') && errorMsg.includes('Cadastre o link da SUA vitrine')) {
+    return 'Esse link era uma vitrine/perfil de outra loja, que o Mercado Livre não aceita converter em link de afiliado. Cadastre o link da SUA vitrine em IDs de afiliada → Mercado Livre para que esses casos saiam com seu link automaticamente, em vez de serem descartados.'
+  }
   if (errorMsg.startsWith('skip:dedup')) {
     const age = parseDedupAgeSuffix(errorMsg)
     if (age) {

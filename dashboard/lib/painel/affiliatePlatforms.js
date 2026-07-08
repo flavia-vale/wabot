@@ -44,6 +44,7 @@ export const AFFILIATE_PLATFORMS = [
     fields: [
       { key: 'tag', label: 'Etiqueta em uso', hint: 'Copie exatamente como aparece no Mercado Livre.', help: 'Copie a etiqueta em uso exibida no Gerador de Links do Mercado Livre.' },
       { key: 'ssid', label: 'SSID (cookie)', hint: 'Cookie da sessão ativa do Mercado Livre.', sensitive: true, help: 'No navegador, acesse os cookies do Mercado Livre na sua sessão ativa e copie apenas o valor do cookie ssid. Não compartilhe esse valor fora do painel.' },
+      { key: 'vitrineUrl', label: 'Link da sua vitrine (opcional)', required: false, hint: 'Usado quando um link compartilhado é a vitrine/perfil de OUTRA loja — o Mercado Livre não permite gerar link de afiliado para vitrine de terceiro.', help: 'Cole aqui o link da SUA própria vitrine/perfil de afiliada no Mercado Livre (ex.: mercadolivre.com.br/social/seu-usuario). Quando um link compartilhado for uma vitrine de outra loja (sem produto específico), em vez de descartar a mensagem o bot substitui pelo link da sua vitrine.' },
     ],
   },
   {

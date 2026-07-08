@@ -516,7 +516,7 @@ function buildMlAffiliateError(classification) {
     : classification.type === 'forbidden'
       ? 'Mercado Livre recusou a geração do link afiliado (403). Usando fallback partner_id.'
       : classification.type === 'unsupported_url'
-        ? 'Mercado Livre não aceita esse link no programa de afiliados (página sem produto, ex.: vitrine/perfil). Não é problema de credencial.'
+        ? 'Mercado Livre não aceita esse link no programa de afiliados (página sem produto, ex.: vitrine/perfil de terceiro). Não é problema de credencial — cadastre o link da SUA vitrine em Painel → IDs de afiliada → Mercado Livre para que esses casos usem sua vitrine automaticamente.'
         : 'Mercado Livre limitou temporariamente a geração de links afiliados (429). Usando fallback partner_id.')
   err.mlWarning = classification.warning
   err.mlFailureType = classification.type
@@ -777,6 +777,28 @@ export async function resolveToCleanProductUrl(url) {
   }
 }
 
+// Vitrine da PRÓPRIA afiliada, cadastrada em Painel → IDs de afiliada →
+// Mercado Livre (campo `vitrineUrl`, junto das demais credenciais ML — mesmo
+// Credential.data, sem tabela/migration nova). Usada como fallback quando o ML
+// recusa createLink para uma vitrine/perfil de TERCEIRO (error_code 111: "URL
+// not allowed in affiliates program") — recusa que é regra do programa de
+// afiliados do ML, não depende de credencial válida nem de qual ambiente
+// (staging/prod) está rodando. RCA 2026-07-08.
+function isValidMlVitrineUrl(raw) {
+  if (typeof raw !== 'string' || !raw.trim()) return false
+  try {
+    return ML_HOST.test(new URL(raw.trim()).hostname)
+  } catch {
+    return false
+  }
+}
+
+function buildVitrineFallback(creds = {}) {
+  const vitrineUrl = typeof creds.vitrineUrl === 'string' ? creds.vitrineUrl.trim() : ''
+  if (!isValidMlVitrineUrl(vitrineUrl)) return null
+  return { url: vitrineUrl, linkKind: 'coupon', warning: 'ml_vitrine_fallback_used' }
+}
+
 // Cupom do ML sem produto (vitrine /social/ de terceiro, home, /cupom/,
 // /ofertas...). resolveToCleanProductUrl devolve null porque não há produto pra
 // mostrar no card. Com a conversão de cupom ligada, em vez de descartar a
@@ -825,6 +847,17 @@ async function convertMlCouponWithoutProduct(url, creds) {
   } catch (err) {
     await notifyCredentialPatch(creds, err.credentialPatch)
     logger.warn({ url, resolved, err: err.message }, 'ML cupom: createLink falhou — descartando (não encaminha link de terceiro)')
+    if (err.mlFailureType === 'unsupported_url') {
+      // ML recusou createLink para essa vitrine/perfil de terceiro (regra do
+      // programa de afiliados, renovar SSID não resolve). Se a usuária tem uma
+      // vitrine PRÓPRIA cadastrada, usamos ela — mantém a mensagem com um link
+      // de afiliado nosso em vez de descartar.
+      const fallback = buildVitrineFallback(creds)
+      if (fallback) {
+        logger.info({ url, vitrineUrl: fallback.url }, 'ML cupom: ML recusou o link de terceiro — usando vitrine cadastrada da própria afiliada')
+        return fallback
+      }
+    }
     // Falhas classificadas (SSID expirado, 403, 429, URL não aceita pelo
     // programa de afiliados) sobem para o convert() e depois para o
     // bot-worker.js, que grava o motivo REAL no painel em vez do genérico

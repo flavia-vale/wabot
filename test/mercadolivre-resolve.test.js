@@ -391,6 +391,60 @@ test('cupom ML: vitrine/perfil rejeitada pelo ML (error_code 111) propaga motivo
       assert.equal(err.mlFailureType, 'unsupported_url')
       assert.equal(err.mlWarning, 'ml_url_not_supported')
       assert.match(err.message, /não aceita esse link/i)
+      assert.match(err.message, /Cadastre o link da SUA vitrine/i)
+      return true
+    },
+  )
+})
+
+test('cupom ML: vitrine de terceiro rejeitada (error_code 111) usa a vitrine PRÓPRIA cadastrada como fallback', async (t) => {
+  // Mesmo cenário do teste acima, mas agora a usuária tem `vitrineUrl`
+  // cadastrado nas credenciais ML (Painel → IDs de afiliada). Em vez de
+  // descartar a mensagem, a oferta sai com o link da vitrine da própria
+  // afiliada — mantém monetização em vez de simplesmente falhar.
+  const prev = process.env.COUPON_LINK_CONVERT
+  process.env.COUPON_LINK_CONVERT = 'true'
+  t.after(() => { process.env.COUPON_LINK_CONVERT = prev })
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/social/gatuna' }))
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: {
+      status: 200,
+      urls: [{ origin_url: 'https://www.mercadolivre.com.br/social/gatuna', message: 'URL not allowed in affiliates program', error_code: 111, status: 200 }],
+      total_items: 1,
+      total_success: 0,
+      total_error: 1,
+    },
+    headers: {},
+  }))
+  const url = 'https://www.mercadolivre.com.br/social/gatuna'
+  const result = await convert(url, {
+    tag: '475630078',
+    ssid: 'ssid-valido-1234567890',
+    vitrineUrl: 'https://www.mercadolivre.com.br/social/minha-vitrine-oficial',
+  })
+  assert.deepEqual(result, {
+    url: 'https://www.mercadolivre.com.br/social/minha-vitrine-oficial',
+    linkKind: 'coupon',
+    warning: 'ml_vitrine_fallback_used',
+  })
+})
+
+test('cupom ML: vitrineUrl inválida (não é link do ML) é ignorada — continua propagando o erro real', async (t) => {
+  const prev = process.env.COUPON_LINK_CONVERT
+  process.env.COUPON_LINK_CONVERT = 'true'
+  t.after(() => { process.env.COUPON_LINK_CONVERT = prev })
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/social/gatuna' }))
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: { status: 200, urls: [{ message: 'URL not allowed in affiliates program', error_code: 111, status: 200 }] },
+    headers: {},
+  }))
+  const url = 'https://www.mercadolivre.com.br/social/gatuna'
+  await assert.rejects(
+    () => convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890', vitrineUrl: 'not-a-url' }),
+    (err) => {
+      assert.equal(err.mlFailureType, 'unsupported_url')
       return true
     },
   )
