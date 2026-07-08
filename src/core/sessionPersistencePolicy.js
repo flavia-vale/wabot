@@ -53,7 +53,7 @@ export function buildCloseSessionPatch({
 // e reportar `idle` — não porque o worker parou de tentar (ele continua), mas
 // porque o cliente merece saber que algo está errado em vez de confiar
 // cegamente num "conectando" que nunca termina.
-export const DEFAULT_MAX_RECONNECTING_MS = 5 * 60_000 // 5min
+export const DEFAULT_MAX_RECONNECTING_MS = 2 * 60_000 // 2min — alta disponibilidade: não esconder reconexão presa por muito tempo
 
 export function computeHeartbeatState({
   hasActiveSock,

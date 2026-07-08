@@ -45,7 +45,7 @@ export function registerReplacedAndDecide(timestamps, now, { windowMs, giveUpThr
 // "A sincronização foi concluída" no celular), cai em poucos segundos/minutos e
 // repete. O backoff exponencial sozinho NÃO contém isso porque um `open` curto
 // zerava o contador a cada ciclo (ver shouldResetBackoff). Mesma forma do
-// replaced, mas o booleano de saída fala de flap (→ cooldown longo), não de
+// replaced, mas o booleano de saída fala de flap (→ cooldown), não de
 // give-up. Imutável: não muta a entrada.
 export function registerCloseAndDecide(timestamps, now, { windowMs, flapThreshold }) {
   const recent = (timestamps || []).filter(ts => now - ts <= windowMs)
@@ -105,6 +105,17 @@ export function registerStableCloseAndDecide(timestamps, now, { windowMs, cooldo
     count: recent.length,
     shouldCooldown: cooldownThreshold > 0 && recent.length >= cooldownThreshold,
   }
+}
+
+// Decide se um close deve entrar na política de "queda periódica de sessão
+// estável". `stuckMsgId` representa uma causa raiz específica (retry-receipt
+// travado extraído do stream:error); nesse caso aplicar cooldown de stable-close
+// só aumenta downtime sem tratar o loop, então deixamos o worker reconectar pelo
+// backoff normal e confiamos na observabilidade `ops_wa_stuck_message_retry`.
+export function shouldConsiderStableCloseCooldown({ hadStableOpen = false, code = null, stuckMsgId = null, eligibleCodes = [] } = {}) {
+  if (!hadStableOpen) return false
+  if (stuckMsgId) return false
+  return eligibleCodes.includes(code)
 }
 
 // RCA 2026-07 (AGENTS.md, "Loop de retry-receipt travado"): quando o WhatsApp

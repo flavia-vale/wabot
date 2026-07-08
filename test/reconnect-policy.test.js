@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, registerStableCloseAndDecide, extractAckMessageIdFromStreamErrorNode, registerStuckMessageAndDecide } from '../src/core/reconnectPolicy.js'
+import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, registerStableCloseAndDecide, shouldConsiderStableCloseCooldown, extractAckMessageIdFromStreamErrorNode, registerStuckMessageAndDecide } from '../src/core/reconnectPolicy.js'
 
 test('backoff cresce exponencialmente a partir de baseMs', () => {
   const opts = { baseMs: 5_000, maxMs: 300_000, jitterRatio: 0, random: () => 0.5 }
@@ -178,6 +178,14 @@ test('stable close: janela descarta eventos antigos', () => {
   r = registerStableCloseAndDecide(r.timestamps, 500_000, win)
   assert.equal(r.count, 1)
   assert.equal(r.shouldCooldown, false)
+})
+
+test('stable close: considera cooldown só para sessão estável, código elegível e sem stuck message', () => {
+  const eligibleCodes = [500, 428, 408]
+  assert.equal(shouldConsiderStableCloseCooldown({ hadStableOpen: true, code: 500, eligibleCodes }), true)
+  assert.equal(shouldConsiderStableCloseCooldown({ hadStableOpen: false, code: 500, eligibleCodes }), false)
+  assert.equal(shouldConsiderStableCloseCooldown({ hadStableOpen: true, code: 401, eligibleCodes }), false)
+  assert.equal(shouldConsiderStableCloseCooldown({ hadStableOpen: true, code: 500, stuckMsgId: 'MSG1', eligibleCodes }), false)
 })
 
 test('extractAckMessageIdFromStreamErrorNode: extrai id do ack de mensagem (caso real da RCA)', () => {
