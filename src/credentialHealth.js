@@ -46,6 +46,10 @@ function getFormatWarnings(platform, data = {}) {
   if (platform === 'mercadolivre') {
     const ssid = getString(data, 'ssid')
     if (ssid && ssid.length < 10) warnings.push('O SSID do Mercado Livre parece curto. Confira se copiou o valor completo do cookie.')
+    const vitrineUrl = getString(data, 'vitrineUrl')
+    if (vitrineUrl && !/^https?:\/\/[^/]*(mercadolivre|mercadolibre|meli\.la|mluvem\.com)/i.test(vitrineUrl)) {
+      warnings.push('O link da sua vitrine não parece ser um link do Mercado Livre. Confira se colou a URL correta.')
+    }
   }
 
   if (platform === 'magazineluiza') {

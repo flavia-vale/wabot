@@ -35,6 +35,8 @@ export function friendlyMobileLogError(errorMsg) {
   if (errorMsg.startsWith('warning:ml_affiliate_forbidden')) return 'O Mercado Livre recusou a geração do link curto neste momento. As ofertas continuam saindo com link de afiliado longo; aguarde antes de tentar novamente.'
   if (errorMsg.startsWith('warning:ml_affiliate_rate_limited')) return 'O Mercado Livre limitou temporariamente as conversões. As ofertas continuam saindo com link de afiliado longo; o bot evita novas tentativas imediatas.'
   if (errorMsg.startsWith('warning:ml_affiliate_busy')) return 'Outra conversão do Mercado Livre já está usando esta credencial. Esta oferta saiu com link de afiliado longo para evitar disputa de sessão.'
+  if (errorMsg.startsWith('warning:ml_vitrine_fallback_used')) return 'Esse link era uma vitrine de outra loja, que o Mercado Livre não aceita converter. A oferta saiu com o link da SUA vitrine, cadastrado em Conta → Credenciais → Mercado Livre.'
+  if (errorMsg.startsWith('error:conversion:') && errorMsg.includes('Cadastre o link da SUA vitrine')) return 'Esse link era uma vitrine de outra loja, que o Mercado Livre não aceita converter. Cadastre o link da SUA vitrine em Conta → Credenciais → Mercado Livre para que esses casos saiam automaticamente.'
   if (errorMsg.startsWith('skip:dedup')) {
     const age = parseMobileDedupAgeSuffix(errorMsg)
     if (age) {
