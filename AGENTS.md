@@ -700,42 +700,6 @@ ops_wa_stuck_message_retry` — visibilidade operacional ANTES do cliente
 reclamar, independente de qual bug específico estiver causando o travamento
 dessa vez.
 
-## Loop de init-queries 408 derrubando sessões (RCA 2026-07 — Trilho B)
-
-**Causa raiz confirmada (docs/rca-sessoes-whatsapp-caindo-2026-07.md):** cada
-sessão de cliente em prod caía ~11-12x/dia. Toda conexão (`opened connection
-to WA`) era seguida ~60s depois de `unexpected error in 'init queries'`
-(statusCode 408, `executeInitQueries → fetchProps → waitForMessage` sem
-resposta do WA) → o WA encerrava o stream (500/428) → reconexão → repete.
-Correlação perfeita: `open == init408` nas sessões estabelecidas. Não é
-deploy, memória/GC, dupla-posse nem versão de fetch (`fetchLatestBaileysVersion`
-respondia normalmente). Interação `@whiskeysockets/baileys` ↔ protocolo WA.
-
-**Fix aplicado (menor risco primeiro, por `docs/handoff-sonnet-execucao-sessoes-whatsapp.md`):**
-bump de `@whiskeysockets/baileys` de `^6.7.16` para `^6.7.23` (última da linha
-6.7.x — a lib foi renomeada para `baileys` no npm a partir da 6.17.x/7.x, mas
-migrar de pacote é mudança maior e fica para uma 2ª rodada se o bump patch não
-resolver). **Ainda não validado em staging/prod** — pendente:
-1. Merge `develop` → autodeploy staging → rodar a ferramenta de medição do
-   handoff (`ratio 408/open` e `quedas`) por ≥60min. Se staging estiver
-   `remote`, reiniciar `bot-supervisor-staging --update-env` para carregar o
-   código novo; se `inline`, o deploy já recarrega sozinho.
-2. Se `408/open` não cair a ~0 em staging, próxima alavanca é fixar uma versão
-   WA conhecida-boa em vez do `fetchLatestBaileysVersion()` (`fetchVersionCached`,
-   `src/bot-worker.js`), ou migrar para o pacote `baileys` (renomeado).
-3. Só depois de aprovado em staging: PR `develop → main` e, **passo manual
-   obrigatório**, `pm2 restart bot-supervisor --update-env` em prod — só assim
-   os workers já-rodando carregam a lib nova (deploy da API sozinho não toca
-   nos workers em modo `remote`). Essa reinicialização reconecta **todas** as
-   sessões de uma vez — anunciar/agendar antes, não fazer às cegas.
-
-**Higiene (não afeta a causa raiz):** `unexpected error in 'init queries'` é
-rebaixado de `error` para `debug` em `instrumentBaileysLoggerForHealth`
-(`src/bot-worker.js`) só para não inflar `bot.log` (~14k linhas/dia
-observadas) — não muda a lógica de reconexão nem a métrica de saúde
-(`SESSION_HEALTH_SIGNAL_RE`), que continuam olhando o fechamento real da
-conexão, não a linha de log.
-
 ## Teto de memória por bot-worker (`BOT_WORKER_MAX_OLD_SPACE_MB`)
 
 Os bot-workers são `fork()` da API (modo `inline`) ou do supervisor (modo
@@ -1200,7 +1164,6 @@ Como cada loja credita o cupom (mecanismo é diferente por afiliado):
 | **Magalu** | já convertia (sempre): `partner_id` em qualquer URL | nenhum | independe do flag (comportamento pré-existente) |
 | **Amazon** | `?tag=` na URL da loja (`amazon.com.br`), não no encurtador | baixo, sem WebView | `convert()` em `amazon.js`, fallback aditivo quando não há ASIN |
 | **Shopee** | resolve → `stripAffiliateTracking` (preserva o caminho) → `generateShortLink` → devolve o short link **como-está** | baixo | o short link da API abre direto o app |
-| **ML** | ⚠️ **a definir / em teste** | ⚠️ **comissão** | pendurar `partner_id` em página não-produto NÃO credita (vai pro dono do código — ver `mercadolivre.js:700`). Em avaliação: tentar `createLink` no link de cupom e validar em staging. |
 
 `stripAffiliateTracking()` (Shopee) remove só o tracking de terceiros
 (`utm_source=an_<id>`, `utm_medium=affiliates`, `af_*`/`deep_and_*`,
@@ -1240,10 +1203,7 @@ Invariante de segurança em TODOS os caminhos: **o link original de terceiro
 NUNCA é encaminhado.** Se a conversão falhar, cai no strip seguro (não vaza
 comissão).
 
-**O que só um teste real em staging resolve (não dá para validar no sandbox):**
-(1) o ML credita cupom de algum jeito? **Validar clicando no link num celular
-ANTES de ligar em prod.** Testes: `test/shopee-affiliate-info.test.js` e
-`test/converters-amazon.test.js`.
+Testes: `test/shopee-affiliate-info.test.js` e `test/converters-amazon.test.js`.
 
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 
@@ -1259,16 +1219,7 @@ Qual link aparece na oferta final é controlado pela flag `keepOriginalLink`:
 
 | Consumidor              | `keepOriginalLink` | `displayUrl` (link na oferta) |
 |-------------------------|--------------------|-------------------------------|
-| Painel "Criar oferta"   | `true` (**temporário**, 2026-06) | link **original** colado pelo usuário |
-
-**MODO TEMPORÁRIO (2026-06):** como a conversão só funcionava bem para links
-do próprio afiliado, o painel "Criar oferta" usa `keepOriginalLink: true`: a UI
-avisa que o link colado precisa ser o do próprio afiliado, e a rota
-`/scrape-offer` devolve `conversion: null` e `conversionWarning: null` (a UI não
-exibe mais status de conversão). A conversão ainda roda **internamente** só para
-buscar título/preço (resolve short link/`/up/`, cookie ML). Contrato histórico a
-restaurar quando a conversão voltar: painel com `keepOriginalLink: false` (link
-convertido na oferta) + metadados de conversão na resposta.
+| Painel "Criar oferta"   | `true` | link **original** colado pelo usuário |
 
 **Regras:**
 - **Não duplicar** a lógica de converter/scrapar/fallback fora de
