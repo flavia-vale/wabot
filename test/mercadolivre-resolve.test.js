@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import axios from 'axios'
-import { clearMercadoLivreAffiliateCooldownsForTest, resolveToCleanProductUrl, convert } from '../src/converters/mercadolivre.js'
+import { clearMercadoLivreAffiliateCooldownsForTest, resolveToCleanProductUrl, convert, extractFeaturedSocialProduct } from '../src/converters/mercadolivre.js'
 
 test('link de recomendação com MLB no path resolve para o produto (tracking removido)', async () => {
   const url = 'https://produto.mercadolivre.com.br/MLB-4049246221-secadora-roupas-portatil-_JM?searchVariation=188766696371#polycard_client=recommendations&reco_backend=x&c_id=/home/element'
@@ -574,14 +574,56 @@ test('gatuna: link direto para /social/gatuna/lists (vitrine de verdade, listage
   })
 })
 
-test('gatuna: meli.la que resolve para vitrine ambígua (só ref= opaco, sem MLB) usa a vitrine cadastrada — reprodução real do incidente 2026-07-10', async (t) => {
-  // Confirmado via curl real em staging: meli.la/2zhxXFu, 2aQ2z1C, 2RACuU9,
-  // 1z9N5CX, 2D8dTw3 (e outros) resolvem TODOS para exatamente este padrão —
-  // sem MLB extraível em lugar nenhum (nem path, nem wid=). Geneticamente
-  // irrecuperável sem o app/webview do ML (o `ref=` é um blob assinado
-  // opaco). Com vitrine cadastrada, sai o link da vitrine em vez de descartar.
-  const resolved = 'https://www.mercadolivre.com.br/social/gatuna?matt_word=gatunawhatsapp&matt_tool=44711447&forceInApp=true&ref=BESfL2dGO%2Bq85jTd3I%2FWnvFYc%2BHZCEnM%2B9wl5cRHSluyJdiKgNIPayR38aeBWl%2B1HyBRiPJSjfQHxD%2BxtFbJEHhaxrVglDf0OLtN6ymda%2FBnmnKGmJmpEZK7HStcyhHaX9j409SLheMhdbaKUBsLKonAu5lCcIx4VmDHpyEKnpbmm8y3VAqZlWYMyXmEj8wTlr2B'
+// ===== Extração do produto destacado (featured) de share /social/?ref= =====
+// RCA 2026-07-10: todo meli.la do canal resolve para /social/<handle>?ref=<blob>.
+// O ML resolve o `ref` server-side e renderiza o PRODUTO-ALVO como card destacado
+// (primeiro polycard, marcado com `card-featured`) + og:title/og:image. HTML
+// fiel capturado em produção (estrutura real de "polycards").
+
+// Share de PRODUTO: tem `card-featured` e o 1o polycard traz o product_id certo.
+const FEATURED_SHARE_HTML = `<!doctype html><html><head>
+<meta property="og:title" content="Bioré Protetor Solar Facial Uv Perfect Milk Fps 50 - 40ml"/>
+<meta property="og:image" content="https://http2.mlstatic.com/D_NQ_NP_787057-MLA88338750087_072025-O.webp"/>
+</head><body><script>window.__PRELOADED_STATE__={"polycards":[{"unique_id":"7a20dcf319f4ccfd344","metadata":{"id":"MLB4013726737","product_id":"MLB22797411","user_product_id":"MLBU3063760375","url":"www.mercadolivre.com.br/biore-protetor-solar-facial-uv-perfect-milk-fps-50-40ml/p/MLB22797411"},"action_links":[{"id":"show_product","text":"Ir para produto","url":"https://www.mercadolivre.com.br/biore/p/MLB22797411?c_id=/home/card-featured/element"}]},{"unique_id":"rec1","metadata":{"id":"MLB46253773","product_id":"MLB46253773","url":"https://www.mercadolivre.com.br/x/p/MLB46253773?c_id=/home/affiliate-profile-recommendations/element"}}]};</script></body></html>`
+
+// Vitrine/lista genérica: SEM `card-featured`, og:title institucional, só
+// recomendações (produto qualquer). NÃO deve fabricar produto.
+const LISTS_VITRINE_HTML = `<!doctype html><html><head>
+<meta property="og:title" content="Minhas listas de recomendações"/>
+</head><body><script>window.__PRELOADED_STATE__={"polycards":[{"unique_id":"z","metadata":{"id":"MLB50829128","product_id":"MLB50829128","url":"https://www.mercadolivre.com.br/y/p/MLB50829128?c_id=/home/affiliate-profile-recommendations/element"}}]};</script></body></html>`
+
+test('extractFeaturedSocialProduct: share de produto (card destacado presente) devolve o product_id do 1o polycard', () => {
+  assert.equal(extractFeaturedSocialProduct(FEATURED_SHARE_HTML), 'https://www.mercadolivre.com.br/p/MLB22797411')
+})
+
+test('extractFeaturedSocialProduct: vitrine/lista (sem card destacado) devolve null — não fabrica produto de recomendação', () => {
+  assert.equal(extractFeaturedSocialProduct(LISTS_VITRINE_HTML), null)
+})
+
+test('gatuna: meli.la que resolve para /social/?ref= COM card destacado extrai o produto certo (Bioré MLB22797411) — RCA 2026-07-10', async (t) => {
+  const resolved = 'https://www.mercadolivre.com.br/social/gatuna?matt_word=gatunawhatsapp&matt_tool=44711447&forceInApp=true&ref=BBFoNtlrJiET%2FCrAZSX9QQaxk40NFaPjS'
+  // Código único (o resolveCache é módulo-level e persiste entre testes).
   t.mock.method(global, 'fetch', async () => ({ url: resolved }))
+  // O ML resolve o ref e serve o HTML com o produto destacado.
+  t.mock.method(axios, 'get', async () => ({ data: FEATURED_SHARE_HTML }))
+  const clean = await resolveToCleanProductUrl('https://meli.la/BIOREFEAT')
+  assert.equal(clean, 'https://www.mercadolivre.com.br/p/MLB22797411')
+
+  // Fluxo completo: convert() gera o link de afiliado do produto certo.
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: { urls: [{ short_url: 'https://mercadolivre.com/sec/bioreOK' }] },
+    headers: {},
+  }))
+  const result = await convert('https://meli.la/BIOREFEAT2', { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  assert.equal(result.linkKind, 'product')
+})
+
+test('gatuna: meli.la que resolve para /social/?ref= SEM card destacado (vitrine/lista real) usa a vitrine cadastrada — não fabrica produto aleatório', async (t) => {
+  const resolved = 'https://www.mercadolivre.com.br/social/gatuna?matt_word=gatunawhatsapp&matt_tool=44711447&forceInApp=true&ref=BESfL2dGO%2Bq85jTd3I'
+  t.mock.method(global, 'fetch', async () => ({ url: resolved }))
+  // ML serve uma página de listas/vitrine (sem card destacado).
+  t.mock.method(axios, 'get', async () => ({ data: LISTS_VITRINE_HTML }))
   t.mock.method(axios, 'post', async () => ({
     status: 200,
     data: { status: 200, urls: [{ message: 'URL not allowed in affiliates program', error_code: 111, status: 200 }] },
@@ -590,7 +632,7 @@ test('gatuna: meli.la que resolve para vitrine ambígua (só ref= opaco, sem MLB
   const prev = process.env.COUPON_LINK_CONVERT
   process.env.COUPON_LINK_CONVERT = 'true'
   t.after(() => { process.env.COUPON_LINK_CONVERT = prev })
-  const result = await convert('https://meli.la/2zhxXFu', {
+  const result = await convert('https://meli.la/VITRINELIST', {
     tag: '475630078',
     ssid: 'ssid-valido-1234567890',
     vitrineUrl: 'https://www.mercadolivre.com.br/social/minha-vitrine-oficial',

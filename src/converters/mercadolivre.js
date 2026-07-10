@@ -347,6 +347,71 @@ async function tryExtractProductFromLanding(url) {
   }
 }
 
+// Divulgação de PRODUTO via /social/<handle>?ref=<blob> (RCA 2026-07-10).
+//
+// Todo link meli.la desse tipo de canal resolve, server-side, para
+// `mercadolivre.com.br/social/<handle>?ref=<blob-opaco-por-produto>`. O `ref`
+// é um blob cifrado (não decodificável por nós), MAS o próprio ML o resolve no
+// servidor e renderiza o produto-alvo de duas formas confiáveis no HTML:
+//   1) og:title / og:image = título e foto do produto certo;
+//   2) um CARD DESTACADO (featured) — o PRIMEIRO polycard do HTML, marcado com
+//      `c_id=/home/card-featured/element` — cujo metadata traz o `product_id`
+//      de catálogo correto. Os polycards seguintes são RECOMENDAÇÕES da vitrine
+//      (produtos quaisquer) e NÃO devem ser usados.
+//
+// Discriminador robusto (validado em produção 2026-07-10):
+//   - `card-featured` presente  => é divulgação de produto => extrai o featured.
+//   - `card-featured` ausente    => vitrine/lista genérica ("Minhas listas de
+//     recomendações", /lists, cupom) => retorna null (NÃO fabrica produto — era
+//     exatamente o bug do "produto aleatório/foto errada" que motivou remover a
+//     heurística antiga de recommended_items[0]).
+//
+// Por que a heurística antiga (recommended_items[0]) falhava: pegava o primeiro
+// item de RECOMENDAÇÃO, não o card destacado. Aqui usamos o featured (og +
+// primeiro polycard), que é o alvo real do ref.
+export function extractFeaturedSocialProduct(html) {
+  if (typeof html !== 'string' || !html) return null
+  // Sem card destacado => não é divulgação de um produto específico.
+  if (!/card-featured/i.test(html)) return null
+  // O primeiro polycard é o featured; seu metadata traz o product_id de catálogo.
+  const productId = html.match(/"product_id"\s*:\s*"(MLB[0-9]+)"/i)?.[1]
+  if (productId) return `https://www.mercadolivre.com.br/p/${productId}`
+  // Sem product_id de catálogo: usa o id de LISTING do primeiro polycard.
+  const listingId = html.match(/"polycards"\s*:\s*\[\s*\{[\s\S]*?"id"\s*:\s*"(MLB[0-9]+)"/i)?.[1]
+  if (listingId) return `https://produto.mercadolivre.com.br/${listingId}-x-_JM`
+  return null
+}
+
+const ML_BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+
+// Busca o HTML da share /social/<handle>?ref=<blob> (o ML resolve o ref e
+// renderiza o produto destacado) e extrai o produto-alvo. Retorna a URL
+// canônica do produto ou null (vitrine/lista sem produto específico). É a
+// ÚNICA fonte usada para essas shares — NÃO cai na heurística frágil de
+// recommended_items[0] de tryExtractProductFromLanding.
+async function tryExtractFeaturedProductFromSocialShare(url) {
+  try {
+    const res = await axios.get(url, {
+      timeout: 8000,
+      headers: {
+        'User-Agent': ML_BROWSER_UA,
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+      },
+    })
+    const html = typeof res?.data === 'string' ? res.data : ''
+    const featured = extractFeaturedSocialProduct(html)
+    if (featured) {
+      logger.info({ landingUrl: url, featured }, 'ML social share: produto destacado extraído do ref resolvido pelo ML')
+      return featured
+    }
+    logger.info({ landingUrl: url }, 'ML social share: sem card destacado (vitrine/lista) — não fabrica produto')
+    return null
+  } catch (err) {
+    logger.warn({ landingUrl: url, err: err.message }, 'ML social share: erro ao buscar HTML')
+    return null
+  }
+}
+
 // Chama a API real de afiliados do ML para gerar um meli.la com a tag do usuário
 // Endpoint descoberto via reverse-engineering do portal afiliados.mercadolivre.com.br
 function buildCookieHeader({ ssid, csrf, cookie, id }) {
@@ -749,20 +814,29 @@ export async function resolveToCleanProductUrl(url) {
         target = `https://produto.mercadolivre.com.br/${widMlb}-x-_JM`
       } else {
         const u = new URL(target)
-        // ROBUSTEZ (não regredir): NUNCA fabricar produto a partir de uma página
-        // /social/ (perfil OU /lists/ de um afiliado) nem de um código /sec/ de
-        // terceiro não resolvido. Uma vitrine/lista tem VÁRIOS produtos; extrair
-        // "um" pegava o `recommended_items[0]` ALEATÓRIO, que:
-        //   1) saía com FOTO ERRADA no card (produto que ninguém pediu); e
-        //   2) sendo um id de CATÁLOGO (/p/MLB), o fallback ainda o transformava
-        //      numa URL de listing inexistente (produto.../MLB-x-_JM → 404,
-        //      "Parece que esta página não existe").
-        // A heurística anterior de "seletor ?ref=" era insuficiente: uma share de
-        // LISTA (/social/<handle>/lists/<uuid>?ref=...) também carrega ?ref= e
-        // continuava fabricando um produto aleatório. O produto legítimo via URL
-        // (/up/#wid=) já foi resolvido acima, SEM scrape. Estas páginas viram
-        // cupom no convert() (createLink nosso) ou são descartadas — nunca um
-        // produto aleatório/quebrado.
+        // Divulgação de PRODUTO via /social/<handle>?ref=<blob> (RCA 2026-07-10):
+        // o ML resolve o ref server-side e renderiza o produto-alvo como card
+        // destacado no HTML. Buscamos o HTML da URL COM ref (preCanonical —
+        // canonicalize remove o ref) e extraímos SÓ o card destacado (não as
+        // recomendações). Se houver produto destacado, esse é o alvo real.
+        //
+        // NÃO regride o bug do "produto aleatório/foto errada": a extração é
+        // gated no marcador `card-featured`. Vitrine/lista genérica (perfil sem
+        // produto, /lists, cupom — og:title "Minhas listas de recomendações")
+        // NÃO tem card destacado → extração devolve null → tratada como cupom no
+        // convert() (createLink nosso / vitrine cadastrada) ou descartada. Nunca
+        // usa recommended_items[0] (a heurística frágil removida em edbc86b).
+        if (
+          /^\/social\//i.test(u.pathname) &&
+          !/\/lists(?:\/|$)/i.test(u.pathname) &&
+          /[?&]ref=/i.test(String(preCanonical))
+        ) {
+          const featured = await tryExtractFeaturedProductFromSocialShare(preCanonical)
+          if (featured) return featured
+        }
+        // Sem card destacado extraível, landing de TERCEIRO (código /sec/ não
+        // resolvido, ou vitrine/perfil /social/): retornar null (convert() cai
+        // no cupom/vitrine cadastrada — nunca produto aleatório/quebrado).
         if (/^\/sec\//i.test(u.pathname) || /^\/social\//i.test(u.pathname)) {
           return null
         }
