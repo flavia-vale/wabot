@@ -513,3 +513,91 @@ test('convert descarta short_url quando validação comprova MLB diferente', asy
   assert.match(result.url, /partner_id=475630078/)
   assert.match(result.url, /MLB70009242/)
 })
+
+// Casos reais fornecidos pela usuária (canal "gatuna", 2026-07-10), cada um
+// com o produto esperado confirmado manualmente. Fixam o comportamento
+// correto: link com produto identificável (MLB no path OU wid= no
+// fragmento) SEMPRE resolve pro produto real, mesmo vindo de um encurtador
+// de campanha (matt_word/matt_tool/reco_*) do mesmo canal que também produz
+// links de vitrine pura sem produto (ver testes de vitrine ambígua acima).
+// Não fabricar produto de vitrine pura, mas também não tratar TODO link do
+// canal como vitrine — a distinção é por conteúdo resolvido, não por canal.
+test('gatuna: meli.la que resolve para /p/MLB direto no path (com params de recomendação) extrai o produto certo', async (t) => {
+  const resolved = 'https://www.mercadolivre.com.br/t-milk-fps-50-40ml/p/MLB22797411?matt_event_ts=1783693503765&matt_d2id=990f723f-e2ce-44fe-9a93-89f058220cc4&matt_tracing_id=1917ff3b-b6fa-45a8-9326-858786c9668a#polycard_client=recommendations_home_affiliate-profile&reco_backend=item_decorator&reco_client=home_affiliate-profile&matt_tool_id=44711447&reco_item_pos=0&source=affiliate-profile&reco_backend_type=function&reco_id=af225f22-cf5a-4975-a0db-531a64c74be9&tracking_id=bb005a74-3623-450b-96a0-ce857aff9b2f&c_id=/home/card-featured/element&c_uid=00710219-3c37-4d4c-9276-cf0a58ff2e60'
+  t.mock.method(global, 'fetch', async () => ({ url: resolved }))
+  const clean = await resolveToCleanProductUrl('https://meli.la/2z3F2hV')
+  assert.match(clean, /MLB22797411/)
+
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: { urls: [{ short_url: 'https://mercadolivre.com/sec/bioreProtetor' }] },
+    headers: {},
+  }))
+  const result = await convert('https://meli.la/2z3F2hV', { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  assert.equal(result.linkKind, 'product')
+})
+
+test('gatuna: meli.la que resolve para /up/MLBU com wid= (recomendação) extrai o produto certo, não a vitrine', async (t) => {
+  const resolved = 'https://www.mercadolivre.com.br/chinelo-masculino-e-feminino-leadcat-20-puma/up/MLBU3823917987?pdp_filters=item_id%3AMLB6420227108&matt_event_ts=1783693536218&matt_d2id=990f723f-e2ce-44fe-9a93-89f058220cc4&matt_tracing_id=9e9f381b-bfad-4e40-8d6b-0ec4e4515e6e#polycard_client=recommendations_home_affiliate-profile&wid=MLB6420227108&sid=recos&reco_backend=item_decorator&reco_client=home_affiliate-profile&matt_tool_id=44711447&reco_item_pos=0&source=affiliate-profile&reco_backend_type=function&reco_id=5cadbf53-66bd-4deb-837b-0e3c9518ffe6&tracking_id=752af55b-f49a-4590-b778-b8edebd5a0ca&c_id=/home/card-featured/element&c_uid=f84bbe16-0baa-442c-86ae-202137a05786'
+  t.mock.method(global, 'fetch', async () => ({ url: resolved }))
+  const clean = await resolveToCleanProductUrl('https://meli.la/1Jtyg4G')
+  assert.equal(clean, 'https://produto.mercadolivre.com.br/MLB6420227108-x-_JM')
+
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: { urls: [{ short_url: 'https://mercadolivre.com/sec/chinelo' }] },
+    headers: {},
+  }))
+  const result = await convert('https://meli.la/1Jtyg4G', { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  assert.equal(result.linkKind, 'product')
+})
+
+test('gatuna: link direto para /social/gatuna/lists (vitrine de verdade, listagem) usa a vitrine cadastrada', async (t) => {
+  const url = 'https://www.mercadolivre.com.br/social/gatuna/lists'
+  const prev = process.env.COUPON_LINK_CONVERT
+  process.env.COUPON_LINK_CONVERT = 'true'
+  t.after(() => { process.env.COUPON_LINK_CONVERT = prev })
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: { status: 200, urls: [{ message: 'URL not allowed in affiliates program', error_code: 111, status: 200 }] },
+    headers: {},
+  }))
+  const result = await convert(url, {
+    tag: '475630078',
+    ssid: 'ssid-valido-1234567890',
+    vitrineUrl: 'https://www.mercadolivre.com.br/social/minha-vitrine-oficial',
+  })
+  assert.deepEqual(result, {
+    url: 'https://www.mercadolivre.com.br/social/minha-vitrine-oficial',
+    linkKind: 'coupon',
+    warning: 'ml_vitrine_fallback_used',
+  })
+})
+
+test('gatuna: meli.la que resolve para vitrine ambígua (só ref= opaco, sem MLB) usa a vitrine cadastrada — reprodução real do incidente 2026-07-10', async (t) => {
+  // Confirmado via curl real em staging: meli.la/2zhxXFu, 2aQ2z1C, 2RACuU9,
+  // 1z9N5CX, 2D8dTw3 (e outros) resolvem TODOS para exatamente este padrão —
+  // sem MLB extraível em lugar nenhum (nem path, nem wid=). Geneticamente
+  // irrecuperável sem o app/webview do ML (o `ref=` é um blob assinado
+  // opaco). Com vitrine cadastrada, sai o link da vitrine em vez de descartar.
+  const resolved = 'https://www.mercadolivre.com.br/social/gatuna?matt_word=gatunawhatsapp&matt_tool=44711447&forceInApp=true&ref=BESfL2dGO%2Bq85jTd3I%2FWnvFYc%2BHZCEnM%2B9wl5cRHSluyJdiKgNIPayR38aeBWl%2B1HyBRiPJSjfQHxD%2BxtFbJEHhaxrVglDf0OLtN6ymda%2FBnmnKGmJmpEZK7HStcyhHaX9j409SLheMhdbaKUBsLKonAu5lCcIx4VmDHpyEKnpbmm8y3VAqZlWYMyXmEj8wTlr2B'
+  t.mock.method(global, 'fetch', async () => ({ url: resolved }))
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: { status: 200, urls: [{ message: 'URL not allowed in affiliates program', error_code: 111, status: 200 }] },
+    headers: {},
+  }))
+  const prev = process.env.COUPON_LINK_CONVERT
+  process.env.COUPON_LINK_CONVERT = 'true'
+  t.after(() => { process.env.COUPON_LINK_CONVERT = prev })
+  const result = await convert('https://meli.la/2zhxXFu', {
+    tag: '475630078',
+    ssid: 'ssid-valido-1234567890',
+    vitrineUrl: 'https://www.mercadolivre.com.br/social/minha-vitrine-oficial',
+  })
+  assert.deepEqual(result, {
+    url: 'https://www.mercadolivre.com.br/social/minha-vitrine-oficial',
+    linkKind: 'coupon',
+    warning: 'ml_vitrine_fallback_used',
+  })
+})
