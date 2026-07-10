@@ -373,12 +373,18 @@ export function extractFeaturedSocialProduct(html) {
   if (typeof html !== 'string' || !html) return null
   // Sem card destacado => não é divulgação de um produto específico.
   if (!/card-featured/i.test(html)) return null
-  // O primeiro polycard é o featured; seu metadata traz o product_id de catálogo.
-  const productId = html.match(/"product_id"\s*:\s*"(MLB[0-9]+)"/i)?.[1]
-  if (productId) return `https://www.mercadolivre.com.br/p/${productId}`
-  // Sem product_id de catálogo: usa o id de LISTING do primeiro polycard.
-  const listingId = html.match(/"polycards"\s*:\s*\[\s*\{[\s\S]*?"id"\s*:\s*"(MLB[0-9]+)"/i)?.[1]
-  if (listingId) return `https://produto.mercadolivre.com.br/${listingId}-x-_JM`
+  // Blindagem contra o bug histórico da "foto errada": ancoramos a extração no
+  // PRIMEIRO polycard (o card destacado), não no primeiro `product_id` que
+  // aparecer no HTML. Assim, mesmo que algum id apareça antes no documento (nav,
+  // header, blob não relacionado), pegamos o produto do card destacado — o alvo
+  // real do ref. Os polycards seguintes são recomendações e ficam de fora.
+  const firstPolycard = html.match(/"polycards"\s*:\s*\[\s*\{[\s\S]*?"metadata"\s*:\s*\{([\s\S]*?)\}/i)?.[1]
+  if (firstPolycard) {
+    const productId = firstPolycard.match(/"product_id"\s*:\s*"(MLB[0-9]+)"/i)?.[1]
+    if (productId) return `https://www.mercadolivre.com.br/p/${productId}`
+    const listingId = firstPolycard.match(/"id"\s*:\s*"(MLB[0-9]+)"/i)?.[1]
+    if (listingId) return `https://produto.mercadolivre.com.br/${listingId}-x-_JM`
+  }
   return null
 }
 
