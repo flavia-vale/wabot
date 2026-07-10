@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildAuthResetSessionPatch, buildCloseSessionPatch, computeHeartbeatState } from '../src/core/sessionPersistencePolicy.js'
+import { buildAuthResetSessionPatch, buildCloseSessionPatch, buildHeartbeatSessionPatch, computeHeartbeatState, DEFAULT_MAX_RECONNECTING_MS } from '../src/core/sessionPersistencePolicy.js'
 
 test('close transitório fica resumível para blindar sessões ativas', () => {
   const now = new Date('2026-06-30T12:00:00.000Z')
@@ -82,6 +82,38 @@ test('computeHeartbeatState: válvula de segurança — preso reconectando além
     }),
     'idle',
   )
+})
+
+test('computeHeartbeatState: default de alta disponibilidade expõe reconnect preso após 2min', () => {
+  assert.equal(DEFAULT_MAX_RECONNECTING_MS, 2 * 60_000)
+  assert.equal(
+    computeHeartbeatState({
+      hasActiveSock: false,
+      hasPendingSock: false,
+      hasReconnectScheduled: true,
+      disconnectedForMs: DEFAULT_MAX_RECONNECTING_MS + 1,
+    }),
+    'idle',
+  )
+})
+
+test('buildHeartbeatSessionPatch: idle com reconexão agendada é honesto (disconnected) mas lifecycle=reconnecting', () => {
+  // Ainda tentando sozinho: status honesto disconnected, mas painel pode tranquilizar.
+  assert.deepEqual(
+    buildHeartbeatSessionPatch({ state: 'idle', reconnectScheduled: true }),
+    { status: 'disconnected', lifecycle: 'reconnecting' },
+  )
+  // Idle sem reconexão agendada = parada de verdade.
+  assert.deepEqual(
+    buildHeartbeatSessionPatch({ state: 'idle', reconnectScheduled: false }),
+    { status: 'disconnected', lifecycle: 'disconnected' },
+  )
+  // Nunca mascara: idle jamais vira 'connecting'/'connected'.
+  assert.equal(buildHeartbeatSessionPatch({ state: 'idle', reconnectScheduled: true }).status, 'disconnected')
+  // connecting mapeia direto.
+  assert.deepEqual(buildHeartbeatSessionPatch({ state: 'connecting' }), { status: 'connecting', lifecycle: 'connecting' })
+  // connected não força status (deixa o caminho de 'open' escrever ready).
+  assert.deepEqual(buildHeartbeatSessionPatch({ state: 'connected' }), {})
 })
 
 test('computeHeartbeatState: válvula de segurança também vale com pendingSock vivo (handshake que nunca fecha)', () => {

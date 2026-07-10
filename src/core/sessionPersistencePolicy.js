@@ -53,7 +53,7 @@ export function buildCloseSessionPatch({
 // e reportar `idle` — não porque o worker parou de tentar (ele continua), mas
 // porque o cliente merece saber que algo está errado em vez de confiar
 // cegamente num "conectando" que nunca termina.
-export const DEFAULT_MAX_RECONNECTING_MS = 5 * 60_000 // 5min
+export const DEFAULT_MAX_RECONNECTING_MS = 2 * 60_000 // 2min — alta disponibilidade: não esconder reconexão presa por muito tempo
 
 export function computeHeartbeatState({
   hasActiveSock,
@@ -66,6 +66,26 @@ export function computeHeartbeatState({
   if (disconnectedForMs >= maxReconnectingMs) return 'idle'
   if (hasPendingSock || hasReconnectScheduled) return 'connecting'
   return 'idle'
+}
+
+// Traduz o estado do heartbeat em campos de sessão para o painel, SEM mascarar
+// o status honesto. Ponto sutil de alta disponibilidade (issue #1216, item #3):
+// quando `computeHeartbeatState` já "desistiu de esconder" e reporta 'idle'
+// (passou de maxReconnectingMs) MAS o worker AINDA tem reconexão agendada
+// (`reconnectScheduled`), a sessão está honestamente `disconnected` porém o robô
+// segue tentando sozinho. Nesse caso `lifecycle='reconnecting'` deixa o painel
+// tranquilizar o cliente ("tentando reconectar, você não precisa fazer nada")
+// em vez de só "Desconectado" seco — reduzindo o pânico que leva o cliente a
+// re-parear à toa — sem reintroduzir o falso "Conectando" que a policy proíbe.
+// Idle SEM reconexão agendada = parada de verdade → lifecycle='disconnected'.
+export function buildHeartbeatSessionPatch({ state, reconnectScheduled = false } = {}) {
+  if (state === 'idle') {
+    return { status: 'disconnected', lifecycle: reconnectScheduled ? 'reconnecting' : 'disconnected' }
+  }
+  if (state === 'connecting') {
+    return { status: 'connecting', lifecycle: 'connecting' }
+  }
+  return {}
 }
 
 export function buildAuthResetSessionPatch({

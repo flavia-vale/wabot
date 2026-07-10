@@ -121,6 +121,10 @@ export async function sessionRoutes(app) {
     return {
       running,
       status: session?.status ?? 'disconnected',
+      // lifecycle carrega a nuance dentro de 'disconnected': 'reconnecting' =
+      // o robô ainda está tentando reconectar sozinho (issue #1216, item #3).
+      // Permite ao painel tranquilizar sem mascarar o status honesto.
+      lifecycle: session?.lifecycle ?? null,
       phone: session?.phone ?? null,
       metrics,
       // Atalho de topo para o painel decidir o banner "reconecte" sem ter que

@@ -30,7 +30,7 @@ export const AFFILIATE_PLATFORMS = [
     platformWarning: 'Para gerar link curto (amzn.to), preencha a Tag e o Cookie completo da sessão Amazon. Sem isso, a oferta ainda sai (com o link longo ?tag=), mas sem encurtar.',
     fields: [
       { key: 'tag', label: 'ID de associado/StoreID', hint: 'Ex.: suatag-20' },
-      { key: 'cookie', label: 'Cookie completo da sessão (recomendado)', required: false, sensitive: true, hint: 'Sessão completa logada da Amazon Brasil — mais estável que os 3 cookies separados.', help: 'Logada em amazon.com.br, use uma extensão de export de cookies (ex.: Cookie-Editor) → Exportar → e cole aqui o JSON gerado. Os cookies de sessão da Amazon são httpOnly e NÃO aparecem em document.cookie, por isso a captura precisa ser via extensão (ou pela aba DevTools → Network, copiando o cabeçalho Cookie de uma requisição). Também aceita o formato nome=valor; nome=valor.' },
+      { key: 'cookie', label: 'Cookie completo da sessão (recomendado)', required: false, sensitive: true, hint: 'Sessão completa logada da Amazon Brasil — mais estável que os 3 cookies separados.', help: 'Logada em https://associados.amazon.com.br/ use a extensão Cookie-Editor → Export (botão no lado direito inferior) → JSON. Automaticamente o código é copiado e é só colá-lo aqui.' },
       { key: 'ubid-acbbr', label: 'Cookie ubid-acbbr (alternativo)', required: false, hint: 'Alternativa legada ao Cookie completo. Cookie de sessão da Amazon Brasil.', sensitive: true, help: 'Só precisa preencher se NÃO usar o Cookie completo acima. DevTools → Application → Cookies → amazon.com.br → copie o valor do cookie ubid-acbbr.' },
       { key: 'at-acbbr', label: 'Cookie at-acbbr (alternativo)', required: false, hint: 'Alternativa legada ao Cookie completo. Cookie de autenticação da Amazon Brasil.', sensitive: true, help: 'Só precisa preencher se NÃO usar o Cookie completo acima. Mesmo painel do DevTools: copie o valor do cookie at-acbbr.' },
       { key: 'x-acbbr', label: 'Cookie x-acbbr (alternativo)', required: false, hint: 'Alternativa legada ao Cookie completo. Cookie de identificação da Amazon Brasil.', sensitive: true, help: 'Só precisa preencher se NÃO usar o Cookie completo acima. Mesmo painel do DevTools: copie o valor do cookie x-acbbr.' },
@@ -44,6 +44,7 @@ export const AFFILIATE_PLATFORMS = [
     fields: [
       { key: 'tag', label: 'Etiqueta em uso', hint: 'Copie exatamente como aparece no Mercado Livre.', help: 'Copie a etiqueta em uso exibida no Gerador de Links do Mercado Livre.' },
       { key: 'ssid', label: 'SSID (cookie)', hint: 'Cookie da sessão ativa do Mercado Livre.', sensitive: true, help: 'No navegador, acesse os cookies do Mercado Livre na sua sessão ativa e copie apenas o valor do cookie ssid. Não compartilhe esse valor fora do painel.' },
+      { key: 'vitrineUrl', label: 'Link da sua vitrine (opcional)', required: false, hint: 'Usado quando um link compartilhado é a vitrine/perfil de OUTRA loja — o Mercado Livre não permite gerar link de afiliado para vitrine de terceiro.', help: 'Cole aqui o link da SUA própria vitrine/perfil de afiliada no Mercado Livre (ex.: mercadolivre.com.br/social/seu-usuario). Quando um link compartilhado for uma vitrine de outra loja (sem produto específico), em vez de descartar a mensagem o bot substitui pelo link da sua vitrine.' },
     ],
   },
   {

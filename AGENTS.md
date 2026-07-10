@@ -103,19 +103,16 @@ Cutover seguro (validar staging primeiro):
 3. `pm2 start ecosystem.config.cjs --only bot-supervisor-staging`
 4. Setar `BOT_SUPERVISOR_MODE=remote` no `.env` da `api-staging` (NÃO no
    ecosystem) e fazer `pm2 delete api-staging && pm2 start
-   ecosystem.config.cjs --only api-staging`. `pm2 restart --update-env`
-   NÃO basta (vide pegadinha #1: dotenv não sobrescreve env já cacheada
-   pelo PM2 — precisa delete + start). Confirmar pelo dashboard staging
-   que QR, status e envio funcionam end-to-end.
+   ecosystem.config.cjs --only api-staging` (pegadinha #1 — delete+start,
+   não `restart --update-env`). Confirmar pelo dashboard staging que QR,
+   status e envio funcionam end-to-end.
 5. Teste de aceitação: `pm2 restart api-staging` enquanto há sessão
    conectada — sessão **deve continuar conectada** (esse é o ponto).
 6. Repetir para produção (`bot-supervisor` + ajustar `.env` + delete/start `api`).
 
-Rollback: setar `BOT_SUPERVISOR_MODE=inline` no `.env` + **delete + start**
-da API (`pm2 delete api-staging && pm2 start ecosystem.config.cjs --only
-api-staging && pm2 save`; idem `api` em prod). `pm2 restart --update-env` NÃO
-basta (pegadinha #1: PM2 cacheia a env). Confirme no log que **não** aparece
-`Manager em modo REMOTE`. Janela ≤ 2min.
+Rollback: setar `BOT_SUPERVISOR_MODE=inline` no `.env` + delete+start da API
+(pegadinha #1; `idem` `api` em prod, `pm2 save` ao final). Confirme no log
+que **não** aparece `Manager em modo REMOTE`. Janela ≤ 2min.
 
 **Pré-requisito do modo `remote`:** Redis local em `REDIS_URL`
 (`redis://127.0.0.1:6379/0` prod, `/1` staging). No modo `inline` o
@@ -349,10 +346,8 @@ falha silenciosamente.
 
 Evento a marcar: `payment`.
 
-**Aplicar as envs (pegadinha #1 — PM2 cacheia env vars):**
-
-Mudar `.env` + `pm2 restart --update-env` **não substitui** variáveis já
-cacheadas. Para qualquer mudança nas envs do MP fazer:
+**Aplicar as envs:** qualquer mudança nas envs do MP exige delete+start, não
+`restart --update-env` (pegadinha #1):
 
 ```bash
 pm2 delete api
@@ -603,8 +598,9 @@ cliente NUNCA veria "desconectado" mesmo preso num loop por dezenas de
 minutos. `disconnectedSinceMs` (`src/bot-worker.js`) marca a 1ª vez que a
 sessão sai de `connected` (não reseta a cada retry dentro do mesmo episódio) e
 o heartbeat "desiste" de esconder depois de `WA_HEARTBEAT_MAX_RECONNECTING_MS`
-(default 5min, `computeHeartbeatState` em `sessionPersistencePolicy.js`) —
-reportando `idle`→`disconnected` mesmo com reconexão ainda agendada. O worker
+(default **2min** desde 2026-07 — era 5min; `DEFAULT_MAX_RECONNECTING_MS` /
+`computeHeartbeatState` em `sessionPersistencePolicy.js`) — reportando
+`idle`→`disconnected` mesmo com reconexão ainda agendada. O worker
 CONTINUA tentando reconectar sozinho (essa válvula só afeta o que é mostrado,
 não a lógica de retry); se reconectar depois do teto, o próximo `open` volta a
 marcar `connected` normalmente.
@@ -612,15 +608,20 @@ marcar `connected` normalmente.
 **Importante — durante qualquer cooldown de reconexão o bot está DE FATO fora
 do ar** (sem socket ativo, nada é recebido nem espelhado), não é só um detalhe
 de status no painel. Por isso `RECONNECT_STABLE_CLOSE_COOLDOWN_MS` (o cooldown
-mais longo, para quedas "tipo relógio" de sessão estável) foi reduzido de 30min
-para **5min** (2026-07) — 30min de indisponibilidade repetida era caro demais
-só para conter uma notificação de re-sync que aparece apenas no celular do
-dono da conta (não afeta os grupos). 5min também é o valor de
-`WA_HEARTBEAT_MAX_RECONNECTING_MS` acima, de propósito: é o mesmo instante em
-que o painel passa a avisar o cliente. `RECONNECT_REPLACED_DELAY_MS` (cooldown
-de double-possession) já usa `RECONNECT_MAX_MS` (5min por padrão) — mesma
-ordem de grandeza. Só `RECONNECT_FLAP_COOLDOWN_MS` (2min) fica abaixo, o que é
-esperado (flapping é o caso mais curto/menos grave).
+para quedas "tipo relógio" de sessão estável) foi reduzido 30min → 5min → e hoje
+**1min** (2026-07, prioridade de alta disponibilidade / issue #1216): enquanto o
+cooldown corre a sessão fica DE FATO fora do ar, e a promessa de robô 24h não
+tolera minutos de indisponibilidade só para conter uma notificação de re-sync
+que aparece apenas no celular do dono (não afeta os grupos). Threshold de stable
+close subiu 3 → **4** e o de flap 5 → **8** (`RECONNECT_FLAP_THRESHOLD`), com
+`RECONNECT_FLAP_COOLDOWN_MS` 2min → **30s** — na prática a proteção anti-spam
+virou residual, deliberadamente. Quem precisar de postura conservadora sobe via
+env (rollback do handoff em `docs/reconnect-cooldown-ha-review-handoff-2026-07-08.md`).
+O alinhamento antigo "cooldown == heartbeat == 5min de propósito" **deixou de
+valer**: agora o cooldown (1min) é menor que o teto do heartbeat (2min) — durante
+o cooldown o painel ainda mostra "conectando" (vai reconectar em 1min) e só expõe
+`disconnected` após 2min de reconexão genuinamente presa. `RECONNECT_REPLACED_DELAY_MS`
+(double-possession) segue em `RECONNECT_MAX_MS` (5min) — caso conservador preservado.
 
 **3. Painel não pode mascarar o status honesto.** `dashboard/app/painel/whatsapp/page.js`
 tinha `isBootstrappingSession = isRunning && !isConnected && status === 'disconnected'`
@@ -629,7 +630,43 @@ acima existem para mostrar. Removido: `isAwaitingConnectStart` (estado local do
 clique em "Conectar") já cobre a corrida legítima de boot; `status==='disconnected'`
 agora sempre renderiza "Desconectado" no painel.
 
-Testes: `test/session-persistence-policy.test.js` (`computeHeartbeatState`).
+**4. "Reconectando" ≠ "desconectado real" — tranquilizar sem mascarar (issue #1216, item #3).**
+Baixar o teto do heartbeat para 2min fez o painel expor "Desconectado" cedo
+durante uma reconexão que o robô recupera sozinho — alarme falso que leva o
+cliente a re-parear à toa (o oposto da meta 24h). Fix SEM violar o item 3 acima:
+`buildHeartbeatSessionPatch` (`sessionPersistencePolicy.js`, puro/testado) mantém
+`status='disconnected'` (honesto) mas, quando o heartbeat reporta `idle` **e ainda
+há reconexão agendada** (worker tentando sozinho), grava `lifecycle='reconnecting'`.
+O `GET /status` (`src/api/routes/session.js`) expõe `lifecycle`, e
+`dashboard/app/painel/whatsapp/page.js` mostra uma sub-linha ("O robô está
+tentando reconectar sozinho — você não precisa fazer nada") **abaixo** do
+"Desconectado", sem trocar a linha de status. `idle` SEM reconexão agendada =
+parada real → `lifecycle='disconnected'`. Invariante preservada: `idle` nunca
+vira "conectando"/"conectado".
+
+## badSession (500): auto-apagar auth é o único gatilho de re-pareamento sob nosso controle (issue #1216, item #2)
+
+Apagar `auth_info` (→ QR novo no celular do cliente) quebra a promessa de
+"conectar 1× e rodar liso", então o wipe por `badSession` (500) passa por
+`shouldResetAuthForBadSession` (`src/core/reconnectPolicy.js`, puro/testado) com
+camadas de proteção, e o RCA "Loop de retry-receipt travado" abaixo avisa que
+**500 é o fallback do Baileys para stream-error de motivo desconhecido — nem
+sempre é credencial corrompida**. Regras:
+
+- Um 500 que carrega `stuckMsgId` (mensagem travada) **nem entra na contagem** de
+  badSession — é o loop de retry-receipt, não corrupção. Trata-se pelo
+  `msgRetryCounterCache` + `ops_wa_stuck_message_retry`, não apagando auth.
+- `hadStableOpen` (a queda atual foi de sessão estável) → 500 transitório, não apaga.
+- **Flag `BADSESSION_KEEP_ESTABLISHED_AUTH` (default OFF).** Quando ON, uma sessão
+  que JÁ conectou de forma estável alguma vez neste worker (`everHadStableOpen`,
+  escopo de módulo em `bot-worker.js`, persiste reconexões) **nunca** tem auth
+  apagado por rajada de 500 — o único gatilho legítimo de re-pareamento passa a
+  ser `loggedOut` (401). Default OFF preserva o comportamento histórico; ligar só
+  após validar em staging. Rollback sem redeploy (desligar a env).
+
+Testes: `test/reconnect-policy.test.js` (`shouldResetAuthForBadSession`),
+`test/session-persistence-policy.test.js` (`buildHeartbeatSessionPatch`,
+`computeHeartbeatState`).
 
 ## Loop de retry-receipt travado derrubando sessão a cada ~50min (RCA 2026-07)
 
@@ -1009,52 +1046,21 @@ arquivos commitados antes da regra continuam trackeados até `git rm --cached`.
 Confira periodicamente: `git ls-files | grep -E '\.db$|\.db-journal$'` deve
 retornar vazio.
 
-### 6. Em prod, o arquivo do banco se chamava `dev.db` até 2026-05-22
+### 6. Nome do arquivo do banco em prod é `prod.db` (não `dev.db`)
 
-Histórico: por meses a produção rodou com `DATABASE_URL` apontando para
-`prisma/dev.db` (5.8MB, dados reais), enquanto `prisma/prod.db` e
-`prisma/staging.db` existiam como arquivos vazios de 0 bytes no mesmo
-diretório — restos de tentativas anteriores de migração que nunca foram
-concluídas. Em 2026-05-22 fizemos o rename canônico: parou `api`,
-backup defensivo via `sqlite3 .backup`, `mv dev.db prod.db`, ajustou
-`DATABASE_URL`, `pm2 delete api && pm2 start` (pegadinha #1), validou.
+Risco: alguém trocar `DATABASE_URL` para um caminho que resolve num arquivo
+vazio de 0 bytes sem perceber. Login quebra, sessões somem, parece perda
+total. Antes de qualquer mudança de `DATABASE_URL`, sempre conferir
+`ls -la prisma/*.db` e `sqlite3 <db> "SELECT COUNT(*) FROM User"`.
 
-Risco que isso evita: alguém olhar o AGENTS.md, ver que prod "deve"
-usar `prod.db`, trocar `DATABASE_URL` para `file:./prisma/prod.db`,
-reiniciar — e a aplicação passar a usar o arquivo vazio de 0 bytes.
-Login quebra, sessões somem, parece perda total. Antes de qualquer
-mudança de `DATABASE_URL`, sempre conferir `ls -la prisma/*.db` e
-`sqlite3 <db> "SELECT COUNT(*) FROM User"`.
+### 7. Cron de backup deve chamar script versionado
 
-### 7. O cron de backup chamava um script órfão (`backup_safe.sh`)
-
-Até 2026-05-22 o `crontab -l` do VPS de prod chamava
-`/home/deploy/wabot/scripts/backup_safe.sh` — um arquivo que existia no
-diretório `scripts/` mas **não** estava versionado no git (untracked,
-copiado à mão em algum momento). Por isso `git pull` nunca tocou nele,
-e os bugs nunca foram corrigidos via PR:
-
-- Apontava hardcoded para `prisma/dev.db` (caminho errado depois do
-  rename — e tinha um `set -euo pipefail` que aborta o script entre
-  `pm2 stop api` e `pm2 start api`, deixando a API offline).
-- Resolvia `AUTH_INFO_DIR` via `node -e` **sem carregar `.env`**, então
-  caía no default errado. Resultado: 11 dias seguidos de backup
-  **sem `auth_info`** (`WARN.txt` em cada snapshot). Se o VPS pegasse
-  fogo, o restore não traria as sessões WhatsApp de volta.
-- Gravava em `/home/deploy/backups/wabot/` (não no canônico
-  `/home/deploy/wabot-backups/`).
-
-Correção: trocou cron para `scripts/backup_prod.sh` (canônico, no repo,
-WAL-safe via `sqlite3 .backup`, `AUTH_INFO_DIR` correto, grava em
-`/home/deploy/wabot-backups/`). Script órfão renomeado para
-`.deprecated`. Os 13 snapshots históricos em `/home/deploy/backups/wabot/`
-foram mantidos como rede de segurança até o novo diretório acumular
-histórico equivalente.
-
-Lição: se o cron de prod chamar um script, **confirmar que o script
-está versionado** (`git ls-files scripts/<nome>`). Scripts untracked
-no diretório do clone são bombas-relógio — sobrevivem deploys mas
-escapam de qualquer code review.
+`scripts/backup_prod.sh` (canônico, no repo, WAL-safe via `sqlite3 .backup`,
+`AUTH_INFO_DIR` correto) é o único script que o cron de prod deve chamar.
+Se o cron de prod chamar um script, **confirmar que está versionado**
+(`git ls-files scripts/<nome>`) — scripts untracked no diretório do clone
+sobrevivem a deploys mas escapam de qualquer code review, e bugs neles
+nunca são corrigidos via PR.
 
 ### 8. `prisma migrate deploy` quebra com SQLITE_BUSY se processos PM2 seguram o SQLite
 
@@ -1181,15 +1187,7 @@ Antes de mexer, leia esta seção inteira.
 | `cf.shopee.com.br` ↔ susercontent  | Alterna hostnames quando um responde 404                                 |
 | `mlstatic.com`                     | `D_NQ_NP_` → `D_NQ_NP_2X_` (não tocar — referência)                      |
 
-### Prova de funcionamento (PR #422)
-
-```
-Amazon B09VQ39F41 → 1000x1000 jpeg
-Amazon B0CDJ4L7CZ → 1000x679 jpeg
-amzn.to short     → 1500x300 jpeg
-```
-
-`node --test test/image-scrapers.test.js` → 12/12 pass.
+Teste: `node --test test/image-scrapers.test.js`.
 
 ## Resolução de short link da Shopee (canônico — não regredir)
 
@@ -1339,14 +1337,11 @@ Testes: `test/offer-engine.test.js` (motor),
 
 ## Regras para qualquer agente de IA neste repo
 
-- **MEMÓRIA — SUPER SINALIZAR.** Qualquer mudança que **possa aumentar muito o
-  uso de RAM** deve ser destacada explicitamente para a usuária **antes** de
-  executar (com estimativa de RAM e impacto no VPS). Sempre trazer junto
-  **alternativas mais leves** e **opções de limpeza de memória que NÃO
-  prejudiquem o sistema**. Detalhes e listas em "Política de memória" acima.
-- **Não trocar portas** sem atualizar os 3 lugares listados acima.
-- **Não criar PR para `main` direto** — sempre `feature → develop → main`.
-- **Não amend** commits já mergeados; criar commit novo.
+- **MEMÓRIA — SUPER SINALIZAR** antes de qualquer mudança que aumente RAM
+  (regras completas em "Política de memória" acima — não repetir aqui).
+- **Não trocar portas** sem atualizar os 3 lugares em "Ambientes e portas".
+- **Não criar PR para `main` direto**, **não amend** em commits já mergeados
+  — ver "Fluxo de desenvolvimento" acima.
 - **Não rodar destrutivos** (`reset --hard`, `push --force`, `branch -D`,
   `rm -rf` em paths reais) sem permissão explícita.
 - **Não mexer em `.env` ou banco** em produção sem confirmar com a usuária.

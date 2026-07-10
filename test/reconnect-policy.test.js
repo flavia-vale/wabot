@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, registerStableCloseAndDecide, extractAckMessageIdFromStreamErrorNode, registerStuckMessageAndDecide } from '../src/core/reconnectPolicy.js'
+import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, shouldResetAuthForBadSession, registerStableCloseAndDecide, shouldConsiderStableCloseCooldown, extractAckMessageIdFromStreamErrorNode, registerStuckMessageAndDecide } from '../src/core/reconnectPolicy.js'
 
 test('backoff cresce exponencialmente a partir de baseMs', () => {
   const opts = { baseMs: 5_000, maxMs: 300_000, jitterRatio: 0, random: () => 0.5 }
@@ -178,6 +178,41 @@ test('stable close: janela descarta eventos antigos', () => {
   r = registerStableCloseAndDecide(r.timestamps, 500_000, win)
   assert.equal(r.count, 1)
   assert.equal(r.shouldCooldown, false)
+})
+
+test('badSession auth reset: só apaga com 500 repetido, sessão nunca estável e sem stuck message', () => {
+  const base = { count: 4, resetThreshold: 4, hadStableOpen: false, everHadStableOpen: false }
+  // Caso canônico de credencial corrompida: apaga.
+  assert.equal(shouldResetAuthForBadSession(base), true)
+  // Threshold desligado: nunca apaga.
+  assert.equal(shouldResetAuthForBadSession({ ...base, resetThreshold: 0 }), false)
+  // Abaixo do threshold: não apaga.
+  assert.equal(shouldResetAuthForBadSession({ ...base, count: 3 }), false)
+  // Queda atual foi estável (500 transitório de chip saudável): não apaga.
+  assert.equal(shouldResetAuthForBadSession({ ...base, hadStableOpen: true }), false)
+  // 500 com stuckMsgId é retry-receipt travado, não corrupção: nunca apaga.
+  assert.equal(shouldResetAuthForBadSession({ ...base, stuckMsgId: 'MSG1' }), false)
+})
+
+test('badSession auth reset: keepEstablishedAuth protege sessão que já conectou (nunca pede re-pareamento)', () => {
+  const established = { count: 10, resetThreshold: 4, hadStableOpen: false, everHadStableOpen: true }
+  // Flag OFF (default): mesmo já tendo conectado, rajada de 500 não-estável ainda apaga (comportamento histórico).
+  assert.equal(shouldResetAuthForBadSession({ ...established, keepEstablishedAuth: false }), true)
+  // Flag ON: sessão que já foi estável nunca tem auth apagado por 500 — só loggedOut força re-pareamento.
+  assert.equal(shouldResetAuthForBadSession({ ...established, keepEstablishedAuth: true }), false)
+  // Flag ON mas sessão nunca estabeleceu (pareamento inicial ruim): ainda apaga para gerar QR limpo.
+  assert.equal(
+    shouldResetAuthForBadSession({ count: 4, resetThreshold: 4, hadStableOpen: false, everHadStableOpen: false, keepEstablishedAuth: true }),
+    true,
+  )
+})
+
+test('stable close: considera cooldown só para sessão estável, código elegível e sem stuck message', () => {
+  const eligibleCodes = [500, 428, 408]
+  assert.equal(shouldConsiderStableCloseCooldown({ hadStableOpen: true, code: 500, eligibleCodes }), true)
+  assert.equal(shouldConsiderStableCloseCooldown({ hadStableOpen: false, code: 500, eligibleCodes }), false)
+  assert.equal(shouldConsiderStableCloseCooldown({ hadStableOpen: true, code: 401, eligibleCodes }), false)
+  assert.equal(shouldConsiderStableCloseCooldown({ hadStableOpen: true, code: 500, stuckMsgId: 'MSG1', eligibleCodes }), false)
 })
 
 test('extractAckMessageIdFromStreamErrorNode: extrai id do ack de mensagem (caso real da RCA)', () => {
