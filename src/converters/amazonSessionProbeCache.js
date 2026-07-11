@@ -43,4 +43,29 @@ export function pruneExpired(now = Date.now()) {
   }
 }
 
+// Invalida a entrada de um usuário — usado quando a credencial `amazon` é
+// regravada (PUT /:platform): sem isto, um cookie novo salvo pela usuária
+// continuava sendo mascarado pelo resultado antigo em cache (ex.: expirado)
+// até o TTL expirar (T022, review de código).
+export function invalidateCachedProbe(userId) {
+  cache.delete(userId)
+}
+
+// Poda periódica de baixa frequência (T024, review de código): sem isto,
+// `pruneExpired` fica exportado mas nunca chamado em `src/`, e entradas de
+// usuários que sondam uma única vez e não retornam permanecem no Map até um
+// novo acesso do mesmo userId (a eviction em `getCachedProbe` é lazy).
+// Espelha o padrão de `startLoginAttemptsCleanup` (src/api/routes/auth.js):
+// timer top-level com `unref()` para não segurar o event loop nem exigir
+// wiring em cada consumidor do módulo.
+let pruneTimer = null
+export function startProbeCachePrune() {
+  if (pruneTimer) return pruneTimer
+  pruneTimer = setInterval(() => pruneExpired(), 30 * 60_000)
+  pruneTimer.unref?.()
+  return pruneTimer
+}
+
+startProbeCachePrune()
+
 export const __testing = { cache, resolveTtlMs, DEFAULT_TTL_MS }

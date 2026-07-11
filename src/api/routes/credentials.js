@@ -4,7 +4,7 @@ import { getCredentialSaveMessage, parseCredentialData, PLATFORMS, sanitizeCrede
 import { encryptCredential } from '../../credentialCrypto.js'
 import { checkMercadoLivreSession } from '../../converters/mercadolivre.js'
 import { checkAmazonSession as defaultCheckAmazonSession } from '../../converters/amazon.js'
-import { getCachedProbe as defaultGetCachedProbe, setCachedProbe as defaultSetCachedProbe } from '../../converters/amazonSessionProbeCache.js'
+import { getCachedProbe as defaultGetCachedProbe, invalidateCachedProbe as defaultInvalidateCachedProbe, setCachedProbe as defaultSetCachedProbe } from '../../converters/amazonSessionProbeCache.js'
 import { getBotMetrics as defaultGetBotMetrics, isRunning as defaultIsRunning, reloadConfig as defaultReloadConfig, startBot as defaultStartBot, stopBot as defaultStopBot } from '../../manager.js'
 import { classifyWorkerHealth } from '../../workerHealth.js'
 import { restartStaleWorkerIfNeeded } from '../../workerRemediation.js'
@@ -14,6 +14,7 @@ export async function credentialsRoutes(app, opts = {}) {
   const checkAmazonSession = opts.checkAmazonSession ?? defaultCheckAmazonSession
   const getCachedAmazonProbe = opts.getCachedProbe ?? defaultGetCachedProbe
   const setCachedAmazonProbe = opts.setCachedProbe ?? defaultSetCachedProbe
+  const invalidateCachedAmazonProbe = opts.invalidateCachedProbe ?? defaultInvalidateCachedProbe
   const reloadConfig = opts.reloadConfig ?? defaultReloadConfig
   const getBotMetrics = opts.getBotMetrics ?? defaultGetBotMetrics
   const restartStaleWorker = opts.restartStaleWorker ?? ((args) => restartStaleWorkerIfNeeded({
@@ -88,7 +89,14 @@ export async function credentialsRoutes(app, opts = {}) {
     }
 
     const responseBody = { ...publicResult, checkedAt: new Date().toISOString() }
-    setCachedAmazonProbe(req.user.sub, responseBody)
+    // Só cacheia resultado definitivo (alive true/false). Estados indeterminados
+    // (alive:null — ex.: network_error) não entram no cache: um único blip
+    // transitório da Amazon não pode fixar o painel nesse estado pela janela
+    // inteira do TTL, impedindo refletir a sessão realmente viva/expirada na
+    // próxima abertura (T023, review de código).
+    if (responseBody.alive === true || responseBody.alive === false) {
+      setCachedAmazonProbe(req.user.sub, responseBody)
+    }
     return responseBody
   })
 
@@ -112,6 +120,14 @@ export async function credentialsRoutes(app, opts = {}) {
       create: { userId: req.user.sub, platform, data: encryptedData },
       update: { data: encryptedData },
     })
+    if (platform === 'amazon') {
+      // Sem isto, um cookie novo recadastrado pela usuária (fluxo de
+      // renovação após expiração — US1/SC-004) continuava mascarado pelo
+      // resultado antigo em GET /amazon/session (ex.: alive:false) até o
+      // cache expirar sozinho (até AMAZON_SESSION_PROBE_CACHE_TTL_MS,
+      // default 5min) (T022, review de código).
+      invalidateCachedAmazonProbe(req.user.sub)
+    }
     // Recarrega a config do worker imediatamente — sem isso, o bot usa a
     // credencial antiga em cache (CONFIG_CACHE_TTL_MS, ~60s) e ofertas novas
     // seguem saindo com a credencial expirada logo após a troca. Best-effort
