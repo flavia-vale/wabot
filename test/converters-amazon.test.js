@@ -373,6 +373,69 @@ test('checkAmazonSession: 5xx transitório => indeterminado (não alarma falso-e
   }
 })
 
+// --- credentialPatch em checkAmazonSession (001-amazon-cookie-expiry) ---
+// A sondagem do painel roda getShortUrl de verdade, que ROTACIONA o cookie da
+// sessão. Sem devolver o credentialPatch, a rota do painel (sem __onCredentialPatch)
+// descartava a rotação e a próxima chamada reenviava o token velho — sessão morre
+// cedo. checkAmazonSession agora repassa o credentialPatch que createAmazonShortLink
+// devolve, para a rota persistir.
+
+test('checkAmazonSession: devolve credentialPatch quando a Amazon rotaciona o cookie', async () => {
+  const restore = mockAxiosOnce(async () => ({
+    status: 200,
+    data: { shortUrl: 'https://amzn.to/rot-session' },
+    headers: { 'set-cookie': ['session-token=tokNOVO; Path=/; Secure'] },
+  }))
+  try {
+    const r = await checkAmazonSession({ tag: 'x-20', cookie: 'session-token=tokVelho' })
+    assert.equal(r.configured, true)
+    assert.equal(r.alive, true)
+    assert.equal(r.reason, 'ok')
+    assert.match(r.credentialPatch.cookie, /session-token=tokNOVO/)
+  } finally {
+    restore()
+  }
+})
+
+test('checkAmazonSession: sem Set-Cookie não devolve credentialPatch', async () => {
+  const restore = mockAxiosOnce(async () => ({ status: 200, data: { shortUrl: 'https://amzn.to/no-patch' }, headers: {} }))
+  try {
+    const r = await checkAmazonSession(CREDS)
+    assert.deepEqual(r, { configured: true, alive: true, reason: 'ok' })
+    assert.equal('credentialPatch' in r, false)
+  } finally {
+    restore()
+  }
+})
+
+test('checkAmazonSession: Set-Cookie sem mudança não devolve credentialPatch', async () => {
+  const restore = mockAxiosOnce(async () => ({
+    status: 200,
+    data: { shortUrl: 'https://amzn.to/unchanged' },
+    headers: { 'set-cookie': ['at-acbbr=expired-at-1234567890; Path=/'] },
+  }))
+  try {
+    const r = await checkAmazonSession(CREDS)
+    assert.equal('credentialPatch' in r, false)
+  } finally {
+    restore()
+  }
+})
+
+test('checkAmazonSession: Set-Cookie só com diretiva de limpeza (valor vazio) não devolve credentialPatch (não regressivo)', async () => {
+  const restore = mockAxiosOnce(async () => ({
+    status: 200,
+    data: { shortUrl: 'https://amzn.to/clean-only' },
+    headers: { 'set-cookie': ['session-token=; Expires=Thu, 01 Jan 1970 00:00:00 GMT'] },
+  }))
+  try {
+    const r = await checkAmazonSession({ tag: 'x-20', cookie: 'session-token=tokVelho' })
+    assert.equal('credentialPatch' in r, false)
+  } finally {
+    restore()
+  }
+})
+
 // --- Rotação de cookie (mantém a sessão viva; RCA: cookie completo morre em ~3h) ---
 
 test('buildAmazonCredentialPatchFromSetCookie: mescla Set-Cookie rotacionado sobre o enviado', async () => {

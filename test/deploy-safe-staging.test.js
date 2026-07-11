@@ -35,3 +35,28 @@ test('deploy_safe_staging.sh rebuilds dashboard and blocks Next prerender login 
   assert.match(script, /'Permissions-Policy' 'Content-Security-Policy-Report-Only'/, 'staging must require Permissions Policy and report-only CSP')
   assert.match(script, /grep -Eqi '\^Strict-Transport-Security:'/, 'staging HTTP must reject Strict-Transport-Security')
 })
+
+test('deploy_safe_staging.sh only preserves the supervisor during migration in remote mode', () => {
+  const scriptPath = path.join(__dirname, '..', 'scripts', 'deploy_safe_staging.sh')
+  const script = fs.readFileSync(scriptPath, 'utf8')
+
+  // Default must be mode-aware (empty), not a hardcoded "1" that keeps the
+  // standby supervisor holding the SQLite lock and breaking DDL migrations
+  // (pegadinha #8 / CI "database is locked" no autodeploy de staging).
+  assert.match(
+    script,
+    /PRESERVE_SUPERVISOR_DURING_MIGRATION="\$\{PRESERVE_SUPERVISOR_DURING_MIGRATION:-\}"/,
+    'preserve default must be empty (mode-aware), not 1',
+  )
+  assert.match(script, /read_env_var_from_file BOT_SUPERVISOR_MODE/, 'must read the effective supervisor mode from .env')
+  assert.match(
+    script,
+    /elif \[\[ "\$BOT_SUPERVISOR_MODE_EFFECTIVE" == "remote" \]\]; then\s*\n\s*PRESERVE_SUPERVISOR_EFFECTIVE="1"/,
+    'supervisor is only preserved when mode is remote',
+  )
+  assert.match(
+    script,
+    /if \[\[ "\$PRESERVE_SUPERVISOR_EFFECTIVE" == "1" \]\]; then/,
+    'migration branch must key off the resolved (mode-aware) decision',
+  )
+})

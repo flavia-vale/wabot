@@ -9,12 +9,15 @@ BRANCH="${BRANCH:-main}"
 FORCE_RESET_ON_SYNC="${FORCE_RESET_ON_SYNC:-0}"
 DASHBOARD_PORT="${DASHBOARD_PORT:-3000}"
 # A blindagem das sessões WhatsApp depende de o bot-supervisor continuar vivo
-# enquanto a API/dashboard são reciclados. Mesmo quando há migration pendente,
-# o default é NÃO parar o supervisor: se ele estiver em modo remote, parar esse
-# PM2 mata os bot-workers filhos e derruba as conexões Baileys dos clientes.
-# Só use 0 numa janela explícita de manutenção/cutover em que queda das sessões
-# seja aceitável.
-PRESERVE_SUPERVISOR_DURING_MIGRATION="${PRESERVE_SUPERVISOR_DURING_MIGRATION:-1}"
+# enquanto a API/dashboard são reciclados. Preservá-lo durante a migration só
+# faz sentido em modo remote, onde ele de fato forka os bot-workers: pará-lo aí
+# mata os filhos e derruba as conexões Baileys dos clientes. No modo canônico
+# (inline) ele fica em STANDBY — não forka worker nenhum, mas `import db.js` no
+# boot abre conexão WAL no prod.db, e essa conexão sozinha segura o lock que faz
+# o DDL do `prisma migrate deploy` estourar 'database is locked' (pegadinha #8).
+# Vazio (default) = mode-aware (preserva só em remote); força 1/0 só em janela
+# explícita de manutenção/cutover.
+PRESERVE_SUPERVISOR_DURING_MIGRATION="${PRESERVE_SUPERVISOR_DURING_MIGRATION:-}"
 
 # APP_ENV precisa existir no ambiente do BUILD, não só no runtime do PM2.
 # O Next.js avalia next.config headers() em tempo de `npm run build` e grava
@@ -290,6 +293,32 @@ echo "[3/9] Apply database migrations"
 MIGRATE_STOPPED_APPS_PROD=""
 MIGRATE_STOPPED_NO_RESTART_APPS_PROD=""
 
+# Lê o modo efetivo do supervisor do .env (o deploy não exporta essa env; o
+# processo PM2 a carrega via dotenv). Preserva o supervisor durante a migration
+# só quando ele REALMENTE gerencia sessões (modo remote). `.env` é gitignored,
+# então lê direto do arquivo em ROOT_DIR.
+read_env_var_from_file_prod() {
+  local var="$1"
+  local file="$ROOT_DIR/.env"
+  [[ -f "$file" ]] || return 0
+  grep -E "^[[:space:]]*${var}[[:space:]]*=" "$file" 2>/dev/null \
+    | tail -n 1 \
+    | sed -E "s/^[[:space:]]*${var}[[:space:]]*=[[:space:]]*//; s/^[\"']//; s/[\"'][[:space:]]*$//; s/[[:space:]]*$//" \
+    || true
+}
+
+BOT_SUPERVISOR_MODE_EFFECTIVE="${BOT_SUPERVISOR_MODE:-$(read_env_var_from_file_prod BOT_SUPERVISOR_MODE)}"
+BOT_SUPERVISOR_MODE_EFFECTIVE="${BOT_SUPERVISOR_MODE_EFFECTIVE:-inline}"
+
+# Override explícito (1/0) sempre vence; vazio = mode-aware.
+if [[ -n "$PRESERVE_SUPERVISOR_DURING_MIGRATION" ]]; then
+  PRESERVE_SUPERVISOR_EFFECTIVE="$PRESERVE_SUPERVISOR_DURING_MIGRATION"
+elif [[ "$BOT_SUPERVISOR_MODE_EFFECTIVE" == "remote" ]]; then
+  PRESERVE_SUPERVISOR_EFFECTIVE="1"
+else
+  PRESERVE_SUPERVISOR_EFFECTIVE="0"
+fi
+
 pm2_pid_for_app_prod() {
   pm2 pid "$1" 2>/dev/null | tail -n 1 | tr -d '[:space:]' || true
 }
@@ -355,10 +384,10 @@ else
   # default e o migrate usa retry/backoff se houver lock transitório.
   echo "  Migrations pendentes — parando processos que travam o banco..."
   stop_app_for_migration_prod "api" 1
-  if [[ "$PRESERVE_SUPERVISOR_DURING_MIGRATION" == "1" ]]; then
-    echo "    - bot-supervisor preservado (PRESERVE_SUPERVISOR_DURING_MIGRATION=1) para manter sessões WhatsApp ativas"
+  if [[ "$PRESERVE_SUPERVISOR_EFFECTIVE" == "1" ]]; then
+    echo "    - bot-supervisor preservado (modo=$BOT_SUPERVISOR_MODE_EFFECTIVE) para manter sessões WhatsApp ativas"
   else
-    echo "    - ATENÇÃO: parando bot-supervisor por override explícito; sessões WhatsApp podem cair"
+    echo "    - bot-supervisor parado (modo=$BOT_SUPERVISOR_MODE_EFFECTIVE): em standby ele não forka workers, só segura o lock do SQLite que faz o DDL estourar 'database is locked'"
     stop_app_for_migration_prod "bot-supervisor" 1
   fi
   stop_app_for_migration_prod "snapshot-cron" 0
@@ -368,9 +397,9 @@ else
     migrate_attempt=$((migrate_attempt + 1))
     if [ "$migrate_attempt" -ge 5 ]; then
       echo "ERRO: prisma migrate deploy falhou após 5 tentativas."
-      if [[ "$PRESERVE_SUPERVISOR_DURING_MIGRATION" == "1" ]]; then
+      if [[ "$PRESERVE_SUPERVISOR_EFFECTIVE" == "1" ]]; then
         echo "  Causa provável (pegadinha #8 do AGENTS.md): bot-supervisor foi preservado"
-        echo "  (PRESERVE_SUPERVISOR_DURING_MIGRATION=1) e segue segurando conexão WAL no"
+        echo "  (modo=$BOT_SUPERVISOR_MODE_EFFECTIVE) e segue segurando conexão WAL no"
         echo "  SQLite; sob escrita contínua dos bot-workers, o migrate nunca encontra a"
         echo "  janela de lock exclusivo que uma DDL (CREATE TABLE/ALTER TABLE) precisa."
         echo "  Deploy NÃO foi aplicado a propósito (fail-safe) — código já está em"

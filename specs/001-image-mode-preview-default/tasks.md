@@ -30,7 +30,7 @@ Monorepo único: `src/` (backend/worker), `dashboard/` (Next.js), `prisma/` (sch
 
 **Purpose**: Nenhuma inicialização de projeto necessária — infra já existe. Apenas confirmar baseline antes de tocar em código.
 
-- [ ] T001 Rodar a suite relevante como baseline (deve estar verde antes de qualquer mudança): `node --test test/group-entitlements.test.js test/bot-worker-manual-link-preview-channel.test.js test/image-scrapers.test.js test/groups-route.test.js 2>&1 | tail -40` (ajustar nome do arquivo de rota de grupos se divergir — confirmar com `ls test/ | grep -i group`)
+- [X] T001 Rodar a suite relevante como baseline (deve estar verde antes de qualquer mudança): `node --test test/group-entitlements.test.js test/bot-worker-manual-link-preview-channel.test.js test/image-scrapers.test.js test/groups-route.test.js 2>&1 | tail -40` (ajustar nome do arquivo de rota de grupos se divergir — confirmar com `ls test/ | grep -i group`)
 
 **Checkpoint**: Baseline confirmado — pode prosseguir para o chokepoint (Foundational).
 
@@ -42,8 +42,8 @@ Monorepo único: `src/` (backend/worker), `dashboard/` (Next.js), `prisma/` (sch
 
 **⚠️ CRITICAL**: Nenhuma user story deve ser considerada completa/testável sem esta fase pronta.
 
-- [ ] T002 Em `src/billing/groupEntitlements.js`, na função `toMonitorGroup()` (linha ~9), trocar `imageMode: group.imageMode ?? 'original'` por `imageMode: 'preview'` (sempre, ignorando o valor persistido) — atualizar/substituir o comentário existente (linhas ~13-18) para explicar que a escolha do cliente foi desativada (FR-001), que o valor efetivo é sempre `'preview'` (defesa em profundidade, FR-009), e referenciar `specs/001-image-mode-preview-default`
-- [ ] T003 [P] Ajustar `test/group-entitlements.test.js` para cobrir a nova invariante: para qualquer `group.imageMode` de entrada (`'fetch'`, `'original'`, `'none'`, `null`, valor legado desconhecido, `'preview'`), `toMonitorGroup()`/`resolveGroupEntitlements()` deve devolver `imageMode: 'preview'` no `cfg` resultante (INV-1 do data-model.md)
+- [X] T002 Em `src/billing/groupEntitlements.js`, na função `toMonitorGroup()` (linha ~9), trocar `imageMode: group.imageMode ?? 'original'` por `imageMode: 'preview'` (sempre, ignorando o valor persistido) — atualizar/substituir o comentário existente (linhas ~13-18) para explicar que a escolha do cliente foi desativada (FR-001), que o valor efetivo é sempre `'preview'` (defesa em profundidade, FR-009), e referenciar `specs/001-image-mode-preview-default`
+- [X] T003 [P] Ajustar `test/group-entitlements.test.js` para cobrir a nova invariante: para qualquer `group.imageMode` de entrada (`'fetch'`, `'original'`, `'none'`, `null`, valor legado desconhecido, `'preview'`), `toMonitorGroup()`/`resolveGroupEntitlements()` deve devolver `imageMode: 'preview'` no `cfg` resultante (INV-1 do data-model.md)
 
 **Checkpoint**: `node --test test/group-entitlements.test.js` verde — o pipeline de envio já é honesto quanto a FR-001/FR-009 mesmo antes de qualquer outra mudança (defesa em profundidade already in place). As user stories abaixo podem prosseguir.
 
@@ -57,14 +57,14 @@ Monorepo único: `src/` (backend/worker), `dashboard/` (Next.js), `prisma/` (sch
 
 ### Tests for User Story 1
 
-- [ ] T004 [P] [US1] Em `test/bot-worker-manual-link-preview-channel.test.js`, adicionar/ajustar casos cobrindo os 3 cenários de aceitação do spec: grupo antes em `fetch` → sai como preview; grupo antes em `none` → sai como preview; grupo já em `preview` → comportamento idêntico (sem regressão)
+- [X] T004 [P] [US1] Em `test/bot-worker-manual-link-preview-channel.test.js`, adicionar/ajustar casos cobrindo os 3 cenários de aceitação do spec: grupo antes em `fetch` → sai como preview; grupo antes em `none` → sai como preview; grupo já em `preview` → comportamento idêntico (sem regressão)
 
 ### Implementation for User Story 1
 
-- [ ] T005 [US1] Em `src/bot-worker.js`, no trecho `getImage` (linha ~2496: `if (!monitorGroup || ['none', 'preview'].includes(monitorGroup.imageMode)) return null`), adicionar comentário explicando que — como `resolveGroupEntitlements()` (T002) já força `imageMode: 'preview'` — este `return null` é o único ramo que roda em runtime; o restante da função (`fetch`/scrape de imagem oficial) fica dormente/preservado (FR-006), não removê-lo
-- [ ] T006 [US1] Em `src/bot-worker.js`, no trecho por volta da linha ~3013-3126 (`const imageMode = monitorGroup?.imageMode ?? 'original'`, `wantImage`, ramo `shouldRelayOriginalMediaForImageMode`, ramo `imageMode === 'original'`), adicionar comentário no topo do bloco explicando que `imageMode` chega sempre `'preview'` (via chokepoint T002) e que os ramos `fetch`/`original`/`none` ficam dormentes/preservados para reativação futura (FR-006) — não alterar a lógica condicional em si, só documentar
-- [ ] T007 [US1] Em `src/monitoredRelayPolicy.js`, na função `shouldRelayOriginalMediaForImageMode()` (linha ~4), adicionar comentário explicando que, com `imageMode` sempre `'preview'` a partir do chokepoint, esta função nunca retorna `true` em runtime (relay de mídia original fica dormente, FR-006) — preservar a lógica intacta
-- [ ] T008 [US1] Rodar `node --test test/bot-worker-manual-link-preview-channel.test.js test/group-entitlements.test.js` e confirmar verde (US1-AC1, US1-AC2, US1-AC3)
+- [X] T005 [US1] Em `src/bot-worker.js`, no trecho `getImage` (linha ~2496: `if (!monitorGroup || ['none', 'preview'].includes(monitorGroup.imageMode)) return null`), adicionar comentário explicando que — como `resolveGroupEntitlements()` (T002) já força `imageMode: 'preview'` — este `return null` é o único ramo que roda em runtime; o restante da função (`fetch`/scrape de imagem oficial) fica dormente/preservado (FR-006), não removê-lo
+- [X] T006 [US1] Em `src/bot-worker.js`, no trecho por volta da linha ~3013-3126 (`const imageMode = monitorGroup?.imageMode ?? 'original'`, `wantImage`, ramo `shouldRelayOriginalMediaForImageMode`, ramo `imageMode === 'original'`), adicionar comentário no topo do bloco explicando que `imageMode` chega sempre `'preview'` (via chokepoint T002) e que os ramos `fetch`/`original`/`none` ficam dormentes/preservados para reativação futura (FR-006) — não alterar a lógica condicional em si, só documentar
+- [X] T007 [US1] Em `src/monitoredRelayPolicy.js`, na função `shouldRelayOriginalMediaForImageMode()` (linha ~4), adicionar comentário explicando que, com `imageMode` sempre `'preview'` a partir do chokepoint, esta função nunca retorna `true` em runtime (relay de mídia original fica dormente, FR-006) — preservar a lógica intacta
+- [X] T008 [US1] Rodar `node --test test/bot-worker-manual-link-preview-channel.test.js test/group-entitlements.test.js` e confirmar verde (US1-AC1, US1-AC2, US1-AC3)
 
 **Checkpoint**: User Story 1 completa e testável de forma independente — qualquer grupo, seja qual for o `imageMode` histórico, sai como preview clicável.
 
@@ -78,14 +78,14 @@ Monorepo único: `src/` (backend/worker), `dashboard/` (Next.js), `prisma/` (sch
 
 ### Tests for User Story 2
 
-- [ ] T009 [P] [US2] Criar teste de migração (se o repo já tiver padrão de teste de migration Prisma, seguir o mesmo; caso contrário criar `test/migrations-group-image-mode-preview.test.js`) que: aplica a migration em um banco SQLite de teste populado com grupos em `'fetch'`, `'original'`, `'none'`, `null` e `'preview'`; confirma que todos ficam `'preview'`; roda a migration 2x e confirma idempotência (mesmo resultado, sem erro) — cobre AC-1 e AC-2 de US2
+- [X] T009 [P] [US2] Criar teste de migração (se o repo já tiver padrão de teste de migration Prisma, seguir o mesmo; caso contrário criar `test/migrations-group-image-mode-preview.test.js`) que: aplica a migration em um banco SQLite de teste populado com grupos em `'fetch'`, `'original'`, `'none'`, `null` e `'preview'`; confirma que todos ficam `'preview'`; roda a migration 2x e confirma idempotência (mesmo resultado, sem erro) — cobre AC-1 e AC-2 de US2
 
 ### Implementation for User Story 2
 
-- [ ] T010 [US2] Criar a migration Prisma em `prisma/migrations/20260710160000_group_image_mode_preview_default/migration.sql` com o SQL do data-model.md: comentário explicando o motivo (fixação em `preview`, referência a `specs/001-image-mode-preview-default`) seguido de `UPDATE "Group" SET "imageMode" = 'preview' WHERE "imageMode" IS NULL OR "imageMode" <> 'preview';` — seguir o precedente de `prisma/migrations/20260628120000_group_image_mode_choice/migration.sql`
-- [ ] T011 [US2] Em `prisma/schema.prisma` (linha ~94), trocar `imageMode String @default("none")` por `imageMode String @default("preview")` no model `Group`
-- [ ] T012 [US2] Rodar `npx prisma migrate dev` (ou `npx prisma validate` + `npx prisma migrate diff` conforme o fluxo local do repo) para confirmar que a migration criada em T010 bate com o schema alterado em T011 sem gerar migration adicional divergente
-- [ ] T013 [US2] Rodar o teste de T009 e confirmar idempotência local (`node --test test/migrations-group-image-mode-preview.test.js` ou equivalente)
+- [X] T010 [US2] Criar a migration Prisma em `prisma/migrations/20260710160000_group_image_mode_preview_default/migration.sql` com o SQL do data-model.md: comentário explicando o motivo (fixação em `preview`, referência a `specs/001-image-mode-preview-default`) seguido de `UPDATE "Group" SET "imageMode" = 'preview' WHERE "imageMode" IS NULL OR "imageMode" <> 'preview';` — seguir o precedente de `prisma/migrations/20260628120000_group_image_mode_choice/migration.sql`
+- [X] T011 [US2] Em `prisma/schema.prisma` (linha ~94), trocar `imageMode String @default("none")` por `imageMode String @default("preview")` no model `Group`
+- [X] T012 [US2] Rodar `npx prisma migrate dev` (ou `npx prisma validate` + `npx prisma migrate diff` conforme o fluxo local do repo) para confirmar que a migration criada em T010 bate com o schema alterado em T011 sem gerar migration adicional divergente
+- [X] T013 [US2] Rodar o teste de T009 e confirmar idempotência local (`node --test test/migrations-group-image-mode-preview.test.js` ou equivalente)
 
 **Checkpoint**: User Story 2 completa — migration versionada, idempotente, pronta para `prisma migrate deploy` no fluxo de deploy automático (staging→prod), sem tocar em outras colunas.
 
@@ -99,9 +99,9 @@ Monorepo único: `src/` (backend/worker), `dashboard/` (Next.js), `prisma/` (sch
 
 ### Implementation for User Story 3
 
-- [ ] T014 [US3] Em `dashboard/app/painel/grupos/page.js`, remover o bloco `<CfgRow label="Imagem da oferta" ...> ... </CfgRow>` inteiro (linhas ~316-351: select `imageMode`, textos `info`/`hint`, avisos condicionais `cfg-inline-warn` de `preview` e `fetch`) — mover a prop `last` (que hoje marca o fim da `CfgSection`) para o `CfgRow` anterior (`primaryLinkTarget`, linha ~296-314) para preservar o estilo visual de "último item da seção"
-- [ ] T015 [US3] Conferir se algum outro trecho do mesmo arquivo referencia `g.imageMode` fora do bloco removido (ex.: preview/resumo do card do grupo) e, se houver, decidir manter (leitura, não editável) ou remover conforme o contexto — documentar a decisão no commit
-- [ ] T016 [US3] Validação manual local do painel (dev): abrir a tela de configuração de um grupo e confirmar visualmente que "Imagem da oferta" não aparece e que outras configs (destinos, palavras bloqueadas, `primaryLinkTarget`) continuam editáveis e salvando (US3-AC1, US3-AC2)
+- [X] T014 [US3] Em `dashboard/app/painel/grupos/page.js`, remover o bloco `<CfgRow label="Imagem da oferta" ...> ... </CfgRow>` inteiro (linhas ~316-351: select `imageMode`, textos `info`/`hint`, avisos condicionais `cfg-inline-warn` de `preview` e `fetch`) — mover a prop `last` (que hoje marca o fim da `CfgSection`) para o `CfgRow` anterior (`primaryLinkTarget`, linha ~296-314) para preservar o estilo visual de "último item da seção"
+- [X] T015 [US3] Conferir se algum outro trecho do mesmo arquivo referencia `g.imageMode` fora do bloco removido (ex.: preview/resumo do card do grupo) e, se houver, decidir manter (leitura, não editável) ou remover conforme o contexto — documentar a decisão no commit
+- [X] T016 [US3] Validação manual local do painel (dev): abrir a tela de configuração de um grupo e confirmar visualmente que "Imagem da oferta" não aparece e que outras configs (destinos, palavras bloqueadas, `primaryLinkTarget`) continuam editáveis e salvando (US3-AC1, US3-AC2)
 
 **Checkpoint**: User Story 3 completa — seletor não existe mais na UI; salvamento de outras configs intacto.
 
@@ -115,12 +115,12 @@ Monorepo único: `src/` (backend/worker), `dashboard/` (Next.js), `prisma/` (sch
 
 ### Tests for User Story 4
 
-- [ ] T017 [P] [US4] Ajustar/adicionar teste de rota de criação de grupo (arquivo de teste de `src/api/routes/groups.js` — localizar com `ls test/ | grep -i group` e usar o existente, ou criar `test/groups-route-image-mode.test.js`) cobrindo: criar grupo com `role='monitor'` sem `imageMode` explícito → `imageMode` persistido é `'preview'`; criar grupo com `role` diferente de `monitor` sem `imageMode` → também `'preview'` (US4-AC1, US4-AC2)
+- [X] T017 [P] [US4] Ajustar/adicionar teste de rota de criação de grupo (arquivo de teste de `src/api/routes/groups.js` — localizar com `ls test/ | grep -i group` e usar o existente, ou criar `test/groups-route-image-mode.test.js`) cobrindo: criar grupo com `role='monitor'` sem `imageMode` explícito → `imageMode` persistido é `'preview'`; criar grupo com `role` diferente de `monitor` sem `imageMode` → também `'preview'` (US4-AC1, US4-AC2)
 
 ### Implementation for User Story 4
 
-- [ ] T018 [US4] Em `src/api/routes/groups.js` (linha ~105), trocar `imageMode: role === 'monitor' ? 'original' : 'none'` por `imageMode: 'preview'` no `data` do `create` de grupo
-- [ ] T019 [US4] Rodar o teste de T017 e confirmar verde; confirmar que o `@default("preview")` do schema (T011) cobre qualquer caminho de criação que não passe `imageMode` explicitamente (defesa em profundidade adicional a T018)
+- [X] T018 [US4] Em `src/api/routes/groups.js` (linha ~105), trocar `imageMode: role === 'monitor' ? 'original' : 'none'` por `imageMode: 'preview'` no `data` do `create` de grupo
+- [X] T019 [US4] Rodar o teste de T017 e confirmar verde; confirmar que o `@default("preview")` do schema (T011) cobre qualquer caminho de criação que não passe `imageMode` explicitamente (defesa em profundidade adicional a T018)
 
 **Checkpoint**: User Story 4 completa — todo novo grupo nasce em `preview` por dois níveis (app + schema).
 
@@ -130,11 +130,11 @@ Monorepo único: `src/` (backend/worker), `dashboard/` (Next.js), `prisma/` (sch
 
 **Purpose**: Documentação (FR-007), validação de não-regressão (FR-005/SC-004/SC-005) e roteiro fim-a-fim do quickstart.md.
 
-- [ ] T020 [P] Adicionar seção em `AGENTS.md` documentando a decisão: `imageMode` fixado em `'preview'` para todos os grupos (chokepoint em `src/billing/groupEntitlements.js`), motivo (padronizar comportamento, reduzir suporte), migration idempotente aplicada, e que o código de extração das outras fontes (scrapers Amazon/ML/Shopee, buffers, relay de mídia original) permanece no repositório **dormente/preservado** para reativação futura — seguir o estilo canônico das outras seções do arquivo (ver seções "D-3", "Image scrapers" como referência de formato)
-- [ ] T021 [P] Confirmar que `test/image-scrapers.test.js` continua verde sem nenhuma alteração (código dormente preservado, SC-005): `node --test test/image-scrapers.test.js`
-- [ ] T022 Rodar a suite completa afetada de uma vez para confirmar não-regressão: `node --test test/group-entitlements.test.js test/bot-worker-manual-link-preview-channel.test.js test/image-scrapers.test.js test/groups-route*.test.js test/migrations-group-image-mode-preview.test.js 2>&1 | tail -60` (ajustar nomes de arquivo conforme criados nas fases anteriores)
-- [ ] T023 Seguir o roteiro `specs/001-image-mode-preview-default/quickstart.md` passo 2 (idempotência da migração numa base de teste local) antes de abrir o PR para `develop`
-- [ ] T024 Abrir PR da branch `claude/speckit-flow-image-default-0bdady` contra `develop` (nunca direto para `main`, conforme fluxo canônico do AGENTS.md) — após merge, validar em staging (`http://178.105.54.0:3006`) seguindo os passos 3-5 do quickstart.md (painel, novo grupo, envio real) antes de promover para `main`
+- [X] T020 [P] Adicionar seção em `AGENTS.md` documentando a decisão: `imageMode` fixado em `'preview'` para todos os grupos (chokepoint em `src/billing/groupEntitlements.js`), motivo (padronizar comportamento, reduzir suporte), migration idempotente aplicada, e que o código de extração das outras fontes (scrapers Amazon/ML/Shopee, buffers, relay de mídia original) permanece no repositório **dormente/preservado** para reativação futura — seguir o estilo canônico das outras seções do arquivo (ver seções "D-3", "Image scrapers" como referência de formato)
+- [X] T021 [P] Confirmar que `test/image-scrapers.test.js` continua verde sem nenhuma alteração (código dormente preservado, SC-005): `node --test test/image-scrapers.test.js`
+- [X] T022 Rodar a suite completa afetada de uma vez para confirmar não-regressão: `node --test test/group-entitlements.test.js test/bot-worker-manual-link-preview-channel.test.js test/image-scrapers.test.js test/groups-route*.test.js test/migrations-group-image-mode-preview.test.js 2>&1 | tail -60` (ajustar nomes de arquivo conforme criados nas fases anteriores)
+- [X] T023 Seguir o roteiro `specs/001-image-mode-preview-default/quickstart.md` passo 2 (idempotência da migração numa base de teste local) antes de abrir o PR para `develop`
+- [X] T024 (branch commitada e pushada para `origin/claude/speckit-flow-image-default-0bdady`; **abertura da PR contra `develop` fica pendente de confirmação explícita da usuária** — política do repo: nunca abrir PR sem pedido explícito) Abrir PR da branch `claude/speckit-flow-image-default-0bdady` contra `develop` (nunca direto para `main`, conforme fluxo canônico do AGENTS.md) — após merge, validar em staging (`http://178.105.54.0:3006`) seguindo os passos 3-5 do quickstart.md (painel, novo grupo, envio real) antes de promover para `main`
 
 **Checkpoint final**: Todas as user stories P1 (US1-US3) e P2 (US4) completas, documentação atualizada, testes verdes, pronto para revisão/staging.
 
