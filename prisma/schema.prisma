@@ -91,7 +91,7 @@ model Group {
   name               String
   role               String
   kind               String  @default("group")
-  imageMode          String  @default("none")
+  imageMode          String  @default("preview")
   imageLinkTarget    String  @default("first")
   fallbackToOriginal Boolean @default(false)
   forwardMode       String   @default("LINK_ONLY")

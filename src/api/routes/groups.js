@@ -100,9 +100,14 @@ export async function groupsRoutes(app, opts = {}) {
 
     try {
       const group = await db.group.create({
-        // Grupos monitorados nascem em 'original' (reaproveita a foto da
-        // mensagem de origem) — padrão histórico; o cliente pode trocar no painel.
-        data: { userId: req.user.sub, waJid, name, role, kind, forwardMode: FORWARD_MODE.LINK_ONLY, imageMode: role === 'monitor' ? 'original' : 'none' },
+        // 2026-07 (specs/001-image-mode-preview-default): todo grupo novo
+        // nasce em 'preview' — a escolha por grupo foi desativada (UI removida
+        // em dashboard/app/painel/grupos/page.js) e o chokepoint em
+        // src/billing/groupEntitlements.js força 'preview' em runtime de
+        // qualquer forma. Fixo para monitor e post (role diferente de
+        // 'monitor' nunca leu este campo, mas mantemos único valor por
+        // simplicidade e defesa em profundidade — INV-3).
+        data: { userId: req.user.sub, waJid, name, role, kind, forwardMode: FORWARD_MODE.LINK_ONLY, imageMode: 'preview' },
       })
       trackAnalyticsEventSafe({
         userId: req.user.sub,

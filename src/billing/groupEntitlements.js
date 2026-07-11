@@ -10,14 +10,19 @@ function toMonitorGroup(group, targetPostJids = []) {
     id: group.id,
     waJid: group.waJid,
     kind: group.kind,
-    // A escolha de imagem é por grupo monitorado (UI no painel de grupos).
-    // 'original' = reaproveita a foto da mensagem do grupo de origem;
-    // 'fetch' = busca a imagem oficial no site da loja; 'none' = sem imagem.
-    // Default 'original' preserva o comportamento histórico (antes era fixo aqui)
-    // para grupos sem escolha explícita. fallbackToOriginal fica sempre ligado:
-    // no modo 'fetch', se o site não retornar imagem, cai na foto da mensagem em
-    // vez de mandar a oferta sem imagem.
-    imageMode: group.imageMode ?? 'original',
+    // 2026-07 (specs/001-image-mode-preview-default): a escolha de imagem por
+    // grupo (seletor no painel) foi DESATIVADA — todo grupo monitorado sai
+    // sempre como card de "Preview clicável do WhatsApp", independente do
+    // valor persistido em `group.imageMode` ('fetch'/'original'/'none'/nulo/
+    // legado). Este é o chokepoint de defesa em profundidade (FR-001/FR-009):
+    // mesmo que a coluna `Group.imageMode` ainda exista (dormente, para
+    // reativação futura) e a migration de dados não tenha rodado num grupo
+    // específico, o pipeline de envio nunca lê o valor persistido — ele
+    // ignora `group.imageMode` e força 'preview' aqui. Os ramos de código que
+    // tratavam 'fetch'/'original'/'none' (src/bot-worker.js,
+    // src/monitoredRelayPolicy.js, src/converters/imageScrapers.js)
+    // permanecem no repositório intactos/dormentes (FR-006) — não excluir.
+    imageMode: 'preview',
     imageLinkTarget: group.imageLinkTarget ?? 'first',
     fallbackToOriginal: true,
     blockedKeywords: group.blockedKeywords,

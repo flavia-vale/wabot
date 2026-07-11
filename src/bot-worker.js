@@ -2493,6 +2493,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       async function getImage() {
         if (imageFetched) return cachedImage
         imageFetched = true
+        // 2026-07 (specs/001-image-mode-preview-default): resolveGroupEntitlements()
+        // (src/billing/groupEntitlements.js, toMonitorGroup) já força
+        // `monitorGroup.imageMode` para 'preview' sempre, então este `return null`
+        // é o ÚNICO ramo que roda em runtime hoje — 'preview' está sempre incluído
+        // no array abaixo. O restante desta função (fetch ativo/scrape de imagem
+        // oficial via resolveMonitoredImage) fica dormente/preservado (FR-006),
+        // pronto para reativação futura caso a escolha por grupo volte.
         if (!monitorGroup || ['none', 'preview'].includes(monitorGroup.imageMode)) return null
 
         const enabled = links.filter(l => enabledPlatforms.has(l.platform))
@@ -3012,6 +3019,15 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // para upload simples de imagem com caption e, por último, texto puro.
         // Quando imageMode=original mas só houver jpegThumbnail minúsculo, usa
         // preview automático do WhatsApp em vez de imagem pixelada.
+        //
+        // 2026-07 (specs/001-image-mode-preview-default): `monitorGroup.imageMode`
+        // chega AQUI sempre como 'preview' — resolveGroupEntitlements() (chokepoint
+        // em src/billing/groupEntitlements.js) força esse valor independente do que
+        // está persistido no banco. Na prática, deste ponto em diante só o ramo
+        // `imageMode === 'preview'` (linha do `buildManualLinkPreview` abaixo) roda
+        // em runtime. Os ramos `wantImage`/`shouldRelayOriginalMediaForImageMode`/
+        // `imageMode === 'original'` ficam dormentes/preservados (FR-006) — não
+        // remover nem simplificar essa lógica condicional, apenas documentar.
         const imageMode = monitorGroup?.imageMode ?? 'original'
         const wantImage = !['none', 'preview'].includes(imageMode)
         // O caminho de relay reaproveita a mídia hospedada da mensagem de origem.
