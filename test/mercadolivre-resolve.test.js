@@ -600,6 +600,18 @@ test('extractFeaturedSocialProduct: vitrine/lista (sem card destacado) devolve n
   assert.equal(extractFeaturedSocialProduct(LISTS_VITRINE_HTML), null)
 })
 
+test('extractFeaturedSocialProduct: blindagem foto-errada — ignora product_id "chamariz" antes dos polycards, usa o card destacado', () => {
+  // Um product_id de um bloco não relacionado (ex.: header/nav/analytics)
+  // aparece ANTES do array de polycards. A extração deve pegar o product_id do
+  // PRIMEIRO polycard (card destacado = alvo do ref), não o chamariz. Sem essa
+  // âncora, sairia a foto do produto errado (o bug histórico).
+  const html = `<html><head><meta property="og:title" content="X"/></head><body>
+<script>window.__ANALYTICS__={"last_seen":{"product_id":"MLB99999999"}};
+window.__PRELOADED_STATE__={"polycards":[{"unique_id":"a","metadata":{"id":"MLB4013726737","product_id":"MLB22797411","url":"https://x/p/MLB22797411?c_id=/home/card-featured/element"}}]};</script>
+<a href="/home/card-featured/element">featured</a></body></html>`
+  assert.equal(extractFeaturedSocialProduct(html), 'https://www.mercadolivre.com.br/p/MLB22797411')
+})
+
 test('gatuna: meli.la que resolve para /social/?ref= COM card destacado extrai o produto certo (Bioré MLB22797411) — RCA 2026-07-10', async (t) => {
   const resolved = 'https://www.mercadolivre.com.br/social/gatuna?matt_word=gatunawhatsapp&matt_tool=44711447&forceInApp=true&ref=BBFoNtlrJiET%2FCrAZSX9QQaxk40NFaPjS'
   // Código único (o resolveCache é módulo-level e persiste entre testes).
