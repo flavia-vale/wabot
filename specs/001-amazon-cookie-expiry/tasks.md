@@ -114,9 +114,9 @@ Projeto single (Node.js backend): `src/`, `test/` na raiz do repo — sem `backe
 **Purpose**: Validação fim-a-fim e não regressão, seguindo `quickstart.md`.
 
 - [X] T018 [P] Rodar a suíte completa (`node --test`) e confirmar 0 regressões em relação ao baseline de T001 (em particular `test/converters-amazon.test.js`, `test/credential-health-amazon.test.js`, `test/credentials-amazon-session-route.test.js`, `test/amazon-session-probe-cache.test.js`).
-- [ ] T019 Executar o roteiro `quickstart.md` §3 em staging após merge em `develop` (autodeploy): abrir/recarregar o painel de credenciais Amazon ~10x em poucos minutos e confirmar no log que houve 1 sondagem efetiva (SC-003); confirmar que após uma conversão bem-sucedida o `Credential.data` foi atualizado com o token rotacionado (`rotatedCookie:true` no log) e a sessão permanece viva na chamada seguinte (SC-002).
-- [ ] T020 Executar `quickstart.md` §3 itens 3–4 em staging: sessão genuinamente expirada continua exibindo aviso "renovar cookies" com fallback `?tag=` (SC-004/FR-008); simular resposta 5xx/rede e confirmar estado indeterminado, não "cookies expirados" (SC-006/FR-007).
-- [ ] T021 Atualizar `specs/001-amazon-cookie-expiry/research.md` (seção "Riscos e mitigações") se a validação em staging (T019–T020) revelar necessidade de ajuste na causa C3 (uso concorrente) ou no TTL do cache escolhido em T002.
+- [~] T019 (DEFERIDO — validação manual em staging pós-merge, fora deste ambiente) Executar o roteiro `quickstart.md` §3 em staging após merge em `develop` (autodeploy): abrir/recarregar o painel de credenciais Amazon ~10x em poucos minutos e confirmar no log que houve 1 sondagem efetiva (SC-003); confirmar que após uma conversão bem-sucedida o `Credential.data` foi atualizado com o token rotacionado (`rotatedCookie:true` no log) e a sessão permanece viva na chamada seguinte (SC-002).
+- [~] T020 (DEFERIDO — validação manual em staging pós-merge, fora deste ambiente) Executar `quickstart.md` §3 itens 3–4 em staging: sessão genuinamente expirada continua exibindo aviso "renovar cookies" com fallback `?tag=` (SC-004/FR-008); simular resposta 5xx/rede e confirmar estado indeterminado, não "cookies expirados" (SC-006/FR-007).
+- [~] T021 (DEFERIDO — condicional a T019/T020, staging pós-merge) Atualizar `specs/001-amazon-cookie-expiry/research.md` (seção "Riscos e mitigações") se a validação em staging (T019–T020) revelar necessidade de ajuste na causa C3 (uso concorrente) ou no TTL do cache escolhido em T002.
 
 ---
 
