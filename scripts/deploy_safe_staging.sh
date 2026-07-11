@@ -17,8 +17,15 @@ API_BASE_URL="${API_BASE_URL:-http://127.0.0.1:3004}"
 # Em janela de teste do cutover, staging também pode rodar em modo remote.
 # Nesse cenário, parar bot-supervisor-staging durante migrations mata os
 # bot-workers filhos e invalida justamente o teste de que deploy da API não
-# derruba WhatsApp. Preserve por default; use 0 só em manutenção explícita.
-PRESERVE_SUPERVISOR_DURING_MIGRATION="${PRESERVE_SUPERVISOR_DURING_MIGRATION:-1}"
+# derruba WhatsApp. Por isso o supervisor só é preservado quando ele de fato
+# gerencia sessões (BOT_SUPERVISOR_MODE=remote). No modo canônico de staging
+# (inline) o supervisor fica em STANDBY: não faz fork de nenhum worker, mas
+# `import db.js` no boot abre conexão WAL no staging.db — preservá-lo aí não
+# mantém nenhuma sessão viva (quem forka é a api-staging, que é parada) e só
+# segura o lock que faz o DDL do `prisma migrate deploy` estourar
+# `database is locked` (pegadinha #8). Vazio (default) = mode-aware; força 1/0
+# só em manutenção explícita.
+PRESERVE_SUPERVISOR_DURING_MIGRATION="${PRESERVE_SUPERVISOR_DURING_MIGRATION:-}"
 
 # APP_ENV precisa existir no ambiente do BUILD do Next (headers() é avaliado em
 # `npm run build` e gravado no routes-manifest). Staging é HTTP, então força
@@ -407,6 +414,37 @@ echo "[4/9] Apply database migrations no banco isolado de staging"
 SUPERVISOR_APP_FOR_MIGRATION="${SUPERVISOR_APP:-bot-supervisor-staging}"
 MIGRATE_STOPPED_APPS=""
 
+# Lê o modo efetivo do supervisor do .env (o deploy não exporta essa env; o
+# processo PM2 a carrega via dotenv). Só preservamos o supervisor durante a
+# migration quando ele REALMENTE gerencia sessões (modo remote); em inline ele
+# está em standby e só segura o lock do SQLite. `.env` é gitignored, então lê
+# direto do arquivo em ROOT_DIR.
+read_env_var_from_file() {
+  local var="$1"
+  local file="$ROOT_DIR/.env"
+  [[ -f "$file" ]] || return 0
+  # Última definição vence; ignora comentários; tolera espaços em torno do `=`
+  # (dotenv aceita `KEY = value`); remove aspas e espaços.
+  grep -E "^[[:space:]]*${var}[[:space:]]*=" "$file" 2>/dev/null \
+    | tail -n 1 \
+    | sed -E "s/^[[:space:]]*${var}[[:space:]]*=[[:space:]]*//; s/^[\"']//; s/[\"'][[:space:]]*$//; s/[[:space:]]*$//" \
+    || true
+}
+
+BOT_SUPERVISOR_MODE_EFFECTIVE="${BOT_SUPERVISOR_MODE:-$(read_env_var_from_file BOT_SUPERVISOR_MODE)}"
+BOT_SUPERVISOR_MODE_EFFECTIVE="${BOT_SUPERVISOR_MODE_EFFECTIVE:-inline}"
+
+# Resolve a decisão de preservar. Override explícito (1/0) sempre vence; vazio
+# = mode-aware (preserva só em remote, onde parar o supervisor derrubaria os
+# bot-workers filhos e invalidaria o teste de cutover).
+if [[ -n "$PRESERVE_SUPERVISOR_DURING_MIGRATION" ]]; then
+  PRESERVE_SUPERVISOR_EFFECTIVE="$PRESERVE_SUPERVISOR_DURING_MIGRATION"
+elif [[ "$BOT_SUPERVISOR_MODE_EFFECTIVE" == "remote" ]]; then
+  PRESERVE_SUPERVISOR_EFFECTIVE="1"
+else
+  PRESERVE_SUPERVISOR_EFFECTIVE="0"
+fi
+
 pm2_pid_for_app() {
   pm2 pid "$1" 2>/dev/null | tail -n 1 | tr -d '[:space:]' || true
 }
@@ -463,10 +501,10 @@ else
   # transitórios.
   echo "  Migrations pendentes — parando processos que travam o banco..."
   stop_app_for_migration "$API_APP"
-  if [[ "$PRESERVE_SUPERVISOR_DURING_MIGRATION" == "1" ]]; then
-    echo "    - $SUPERVISOR_APP_FOR_MIGRATION preservado (PRESERVE_SUPERVISOR_DURING_MIGRATION=1) para manter sessões WhatsApp ativas"
+  if [[ "$PRESERVE_SUPERVISOR_EFFECTIVE" == "1" ]]; then
+    echo "    - $SUPERVISOR_APP_FOR_MIGRATION preservado (modo=$BOT_SUPERVISOR_MODE_EFFECTIVE) para manter sessões WhatsApp ativas"
   else
-    echo "    - ATENÇÃO: parando $SUPERVISOR_APP_FOR_MIGRATION por override explícito; sessões WhatsApp podem cair"
+    echo "    - $SUPERVISOR_APP_FOR_MIGRATION parado (modo=$BOT_SUPERVISOR_MODE_EFFECTIVE): em standby ele não forka workers, só segura o lock do SQLite que faz o DDL estourar 'database is locked'"
     stop_app_for_migration "$SUPERVISOR_APP_FOR_MIGRATION"
   fi
 
