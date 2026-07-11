@@ -22,6 +22,11 @@ on:
         type: boolean
         required: false
         default: false
+      stop_supervisor_for_migration:
+        description: 'Produção: parar bot-supervisor durante a migration (destrava SQLITE_BUSY quando modo=remote). ATENÇÃO: reconecta TODAS as sessões WhatsApp — anunciar antes. Só tem efeito num run manual; pushes automáticos preservam o supervisor (default seguro).'
+        type: boolean
+        required: false
+        default: false
 
 # Serializa deploys por branch/ambiente. Sem isto, merges em sequência rápida
 # em develop (ou main) disparam workflows que rodam ao mesmo tempo no MESMO
@@ -166,7 +171,13 @@ jobs:
               git reset --hard origin/main
               git clean -fd
               chmod +x ./scripts/deploy_safe_dashboard.sh
+              # PRESERVE_SUPERVISOR_DURING_MIGRATION: '1' (preserva sessões WA)
+              # por default em TODO push automático. Só vira '0' num run manual
+              # com o input stop_supervisor_for_migration marcado — usado para
+              # destravar uma migration presa em SQLITE_BUSY (modo=remote). Ligar
+              # reconecta TODAS as sessões WhatsApp; anunciar antes.
               PM2_UPDATE_DURING_DEPLOY="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.pm2_update_during_deploy == 'true' && '1' || '0' }}" \
+              PRESERVE_SUPERVISOR_DURING_MIGRATION="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.stop_supervisor_for_migration == 'true' && '0' || '1' }}" \
                 ROOT_DIR=~/wabot BRANCH=main FORCE_RESET_ON_SYNC=1 ./scripts/deploy_safe_dashboard.sh
             else
               echo "🧪 Enviando para STAGING..."
