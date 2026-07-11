@@ -289,10 +289,11 @@ export function buildAmazonCredentialPatchFromSetCookie(cookieHeaderSent, respon
 
 // Best-effort: persiste os cookies rotacionados no Credential (via worker) para a
 // próxima chamada usar o token fresco. Nunca lança — analytics/rotina secundária.
-async function persistRotatedAmazonCookies(creds, cookieHeaderSent, responseHeaders) {
-  if (typeof creds?.__onCredentialPatch !== 'function') return false
-  const patch = buildAmazonCredentialPatchFromSetCookie(cookieHeaderSent, responseHeaders)
-  if (!patch) return false
+// Backward-compat: só o caminho worker/linkConversion fornece `__onCredentialPatch`.
+// A rota do painel (sem esse gancho) usa o `credentialPatch` devolvido no retorno
+// de `createAmazonShortLink`/`checkAmazonSession` para persistir por conta própria.
+async function persistRotatedAmazonCookies(creds, patch) {
+  if (typeof creds?.__onCredentialPatch !== 'function' || !patch) return false
   try {
     await creds.__onCredentialPatch('amazon', patch)
     return true
@@ -336,9 +337,10 @@ async function createAmazonShortLink(longUrl, tag, creds) {
       if (shortUrl && /amzn\.to|a\.co/.test(shortUrl)) {
         // Sessão viva: captura os cookies rotacionados antes que a Amazon
         // invalide o token atual — mantém a sessão viva enquanto for usada.
-        const rotated = await persistRotatedAmazonCookies(creds, cookieHeader, res.headers)
+        const credentialPatch = buildAmazonCredentialPatchFromSetCookie(cookieHeader, res.headers)
+        const rotated = await persistRotatedAmazonCookies(creds, credentialPatch)
         logger.info({ longUrl, shortUrl, attempt, rotatedCookie: rotated }, 'Amazon createShortLink: amzn.to gerado')
-        return { shortUrl, transient: false }
+        return { shortUrl, transient: false, ...(credentialPatch ? { credentialPatch } : {}) }
       }
 
       if (res.status >= 500 && attempt < SHORTLINK_RETRY_BACKOFF_MS.length) {
@@ -417,8 +419,8 @@ export async function checkAmazonSession(creds = {}) {
   const tag = String(creds?.tag ?? '').trim()
   if (!tag) return { configured: false, alive: null, reason: 'no_tag' }
   try {
-    const { shortUrl, transient } = await createAmazonShortLink(AMAZON_SESSION_PROBE_URL, tag, creds)
-    if (shortUrl) return { configured: true, alive: true, reason: 'ok' }
+    const { shortUrl, transient, credentialPatch } = await createAmazonShortLink(AMAZON_SESSION_PROBE_URL, tag, creds)
+    if (shortUrl) return { configured: true, alive: true, reason: 'ok', ...(credentialPatch ? { credentialPatch } : {}) }
     // transient (5xx/rede) não prova expiração — fica indeterminado para não
     // alarmar com falso "cookies expiraram". 200-HTML/parede de login => expired.
     if (transient) return { configured: true, alive: null, reason: 'network_error' }

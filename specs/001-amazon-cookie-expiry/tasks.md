@@ -29,7 +29,7 @@ Projeto single (Node.js backend): `src/`, `test/` na raiz do repo — sem `backe
 
 **Purpose**: Nenhuma inicialização de projeto necessária — correção cirúrgica em arquivos já existentes. Fase reduzida a confirmar baseline antes de mexer.
 
-- [ ] T001 Rodar a suíte completa (`node --test`) e `node --test test/converters-amazon.test.js test/credential-health-amazon.test.js` para confirmar baseline verde antes de qualquer alteração; anotar contagem de testes existentes para comparação pós-implementação.
+- [X] T001 Rodar a suíte completa (`node --test`) e `node --test test/converters-amazon.test.js test/credential-health-amazon.test.js` para confirmar baseline verde antes de qualquer alteração; anotar contagem de testes existentes para comparação pós-implementação.
 
 **Checkpoint**: Baseline verde confirmado — seguro começar a Fase 2.
 
@@ -41,8 +41,8 @@ Projeto single (Node.js backend): `src/`, `test/` na raiz do repo — sem `backe
 
 **⚠️ CRITICAL**: T002–T003 bloqueiam a Fase 4 (US3) e o item de cache da Fase 3 (US1); podem começar imediatamente.
 
-- [ ] T002 [P] Criar módulo puro `src/converters/amazonSessionProbeCache.js` com `getCachedProbe(userId, now=Date.now())`, `setCachedProbe(userId, result, now=Date.now())`, `pruneExpired(now=Date.now())` sobre um `Map` interno por `userId`; TTL configurável via env (ex.: `AMAZON_SESSION_PROBE_CACHE_TTL_MS`, default seguro em minutos, ver research.md Decisão 2); sem import de DB/rede/Prisma.
-- [ ] T003 [P] Criar `test/amazon-session-probe-cache.test.js` cobrindo: miss inicial retorna `null`; hit dentro do TTL retorna o resultado salvo sem recomputar; após expirar o TTL o cache não serve mais o valor antigo (`getCachedProbe` retorna `null`); `pruneExpired` remove entradas expiradas sem afetar as válidas.
+- [X] T002 [P] Criar módulo puro `src/converters/amazonSessionProbeCache.js` com `getCachedProbe(userId, now=Date.now())`, `setCachedProbe(userId, result, now=Date.now())`, `pruneExpired(now=Date.now())` sobre um `Map` interno por `userId`; TTL configurável via env (ex.: `AMAZON_SESSION_PROBE_CACHE_TTL_MS`, default seguro em minutos, ver research.md Decisão 2); sem import de DB/rede/Prisma.
+- [X] T003 [P] Criar `test/amazon-session-probe-cache.test.js` cobrindo: miss inicial retorna `null`; hit dentro do TTL retorna o resultado salvo sem recomputar; após expirar o TTL o cache não serve mais o valor antigo (`getCachedProbe` retorna `null`); `pruneExpired` remove entradas expiradas sem afetar as válidas.
 
 **Checkpoint**: Módulo de cache pronto e testado — Fases 3 e 4 podem prosseguir.
 
@@ -58,16 +58,16 @@ Projeto single (Node.js backend): `src/`, `test/` na raiz do repo — sem `backe
 
 > Escrever estes testes PRIMEIRO; confirmar que falham antes de implementar.
 
-- [ ] T004 [P] [US1] Estender `test/converters-amazon.test.js`: `checkAmazonSession` devolve `{ configured:true, alive:true, reason:'ok', credentialPatch }` quando `createAmazonShortLink`/`axios.get` simulado retorna `Set-Cookie` com cookie rotacionado (mock via `t.mock.method(axios, 'get', ...)`, espelhando o padrão de `mercadolivre-session.test.js`); `credentialPatch` ausente quando a resposta não traz `Set-Cookie` ou quando nada mudou; `credentialPatch` ausente/não regressivo quando o `Set-Cookie` só traz diretiva de limpeza (valor vazio) — reusa `buildAmazonCredentialPatchFromSetCookie` já testado indiretamente.
-- [ ] T005 [P] [US1] Criar `test/credentials-amazon-session-route.test.js`: monta a rota `credentialsRoutes` (fastify) com `db` mockado (`findUnique`/`update`) e `checkAmazonSession` mockado para devolver `credentialPatch`; assert que `GET /amazon/session` chama `db.credential.update` com `data` cifrado (`encryptCredential`, valor começando com `v1:`) contendo o merge `{ ...data, ...credentialPatch }`, e que a resposta HTTP **não** expõe `credentialPatch` (mesma forma pública de hoje).
-- [ ] T006 [P] [US1] No mesmo arquivo de T005, cobrir: quando `checkAmazonSession` devolve `reason:'network_error'` (transitório), a rota **não** chama `db.credential.update` (nada a persistir) e a resposta mantém `alive:null, reason:'network_error'` (FR-007, não mascarar).
+- [X] T004 [P] [US1] Estender `test/converters-amazon.test.js`: `checkAmazonSession` devolve `{ configured:true, alive:true, reason:'ok', credentialPatch }` quando `createAmazonShortLink`/`axios.get` simulado retorna `Set-Cookie` com cookie rotacionado (mock via `t.mock.method(axios, 'get', ...)`, espelhando o padrão de `mercadolivre-session.test.js`); `credentialPatch` ausente quando a resposta não traz `Set-Cookie` ou quando nada mudou; `credentialPatch` ausente/não regressivo quando o `Set-Cookie` só traz diretiva de limpeza (valor vazio) — reusa `buildAmazonCredentialPatchFromSetCookie` já testado indiretamente.
+- [X] T005 [P] [US1] Criar `test/credentials-amazon-session-route.test.js`: monta a rota `credentialsRoutes` (fastify) com `db` mockado (`findUnique`/`update`) e `checkAmazonSession` mockado para devolver `credentialPatch`; assert que `GET /amazon/session` chama `db.credential.update` com `data` cifrado (`encryptCredential`, valor começando com `v1:`) contendo o merge `{ ...data, ...credentialPatch }`, e que a resposta HTTP **não** expõe `credentialPatch` (mesma forma pública de hoje).
+- [X] T006 [P] [US1] No mesmo arquivo de T005, cobrir: quando `checkAmazonSession` devolve `reason:'network_error'` (transitório), a rota **não** chama `db.credential.update` (nada a persistir) e a resposta mantém `alive:null, reason:'network_error'` (FR-007, não mascarar).
 
 ### Implementation for User Story 1
 
-- [ ] T007 [US1] Em `src/converters/amazon.js`, alterar `createAmazonShortLink` para **retornar** `credentialPatch` (via `buildAmazonCredentialPatchFromSetCookie(cookieHeader, res.headers)`) no caso de sucesso (`shortUrl` presente), além de manter a chamada best-effort a `persistRotatedAmazonCookies` quando `creds.__onCredentialPatch` existir (backward-compat worker/linkConversion — não duplicar escrita, só não quebrar quem já depende do gancho). Retorno passa a ser `{ shortUrl, transient, credentialPatch? }` (contracts/amazon-session-probe.md §3).
-- [ ] T008 [US1] Em `src/converters/amazon.js`, alterar `checkAmazonSession` para repassar o `credentialPatch` recebido de `createAmazonShortLink` no objeto de retorno quando `shortUrl` (sessão viva): `{ configured:true, alive:true, reason:'ok', credentialPatch? }`. Não incluir `credentialPatch` nos ramos `transient`/`expired`/sem cookie/sem tag.
-- [ ] T009 [US1] Em `src/api/routes/credentials.js`, alterar a rota `GET /amazon/session` para espelhar o bloco já existente de `/mercadolivre/session`: destructuring `const { credentialPatch, ...publicResult } = result`; se `credentialPatch` presente, `await db.credential.update({ where: { userId_platform: { userId: req.user.sub, platform: 'amazon' } }, data: { data: encryptCredential(JSON.stringify({ ...data, ...credentialPatch })) } })`; retornar `{ ...publicResult, checkedAt: new Date().toISOString() }`.
-- [ ] T010 [US1] Rodar `node --test test/converters-amazon.test.js test/credentials-amazon-session-route.test.js` e confirmar que os testes de T004–T006 passam.
+- [X] T007 [US1] Em `src/converters/amazon.js`, alterar `createAmazonShortLink` para **retornar** `credentialPatch` (via `buildAmazonCredentialPatchFromSetCookie(cookieHeader, res.headers)`) no caso de sucesso (`shortUrl` presente), além de manter a chamada best-effort a `persistRotatedAmazonCookies` quando `creds.__onCredentialPatch` existir (backward-compat worker/linkConversion — não duplicar escrita, só não quebrar quem já depende do gancho). Retorno passa a ser `{ shortUrl, transient, credentialPatch? }` (contracts/amazon-session-probe.md §3).
+- [X] T008 [US1] Em `src/converters/amazon.js`, alterar `checkAmazonSession` para repassar o `credentialPatch` recebido de `createAmazonShortLink` no objeto de retorno quando `shortUrl` (sessão viva): `{ configured:true, alive:true, reason:'ok', credentialPatch? }`. Não incluir `credentialPatch` nos ramos `transient`/`expired`/sem cookie/sem tag.
+- [X] T009 [US1] Em `src/api/routes/credentials.js`, alterar a rota `GET /amazon/session` para espelhar o bloco já existente de `/mercadolivre/session`: destructuring `const { credentialPatch, ...publicResult } = result`; se `credentialPatch` presente, `await db.credential.update({ where: { userId_platform: { userId: req.user.sub, platform: 'amazon' } }, data: { data: encryptCredential(JSON.stringify({ ...data, ...credentialPatch })) } })`; retornar `{ ...publicResult, checkedAt: new Date().toISOString() }`.
+- [X] T010 [US1] Rodar `node --test test/converters-amazon.test.js test/credentials-amazon-session-route.test.js` e confirmar que os testes de T004–T006 passam.
 
 **Checkpoint**: US1 completa e testável de forma independente — rotação de token é persistida em todos os caminhos (SC-002).
 
@@ -81,14 +81,14 @@ Projeto single (Node.js backend): `src/`, `test/` na raiz do repo — sem `backe
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T011 [P] [US3] Em `test/credentials-amazon-session-route.test.js` (mesmo arquivo de T005/T006), adicionar caso: duas chamadas consecutivas de `GET /amazon/session` para o mesmo `userId` dentro da janela TTL resultam em **apenas 1** chamada ao mock de `checkAmazonSession` (segunda chamada serve do cache, mesma resposta pública, incluindo `checkedAt` da 1ª sondagem ou comportamento documentado); chamadas para `userId` diferentes não compartilham cache.
-- [ ] T012 [P] [US3] Em `test/amazon-session-probe-cache.test.js` (mesmo arquivo de T003), garantir cobertura explícita de "janela TTL expira → próxima chamada é miss" (já coberto por T003, mas confirmar aqui o caso de reuso pela rota real via mock de `Date.now()`/tempo injetado).
+- [X] T011 [P] [US3] Em `test/credentials-amazon-session-route.test.js` (mesmo arquivo de T005/T006), adicionar caso: duas chamadas consecutivas de `GET /amazon/session` para o mesmo `userId` dentro da janela TTL resultam em **apenas 1** chamada ao mock de `checkAmazonSession` (segunda chamada serve do cache, mesma resposta pública, incluindo `checkedAt` da 1ª sondagem ou comportamento documentado); chamadas para `userId` diferentes não compartilham cache.
+- [X] T012 [P] [US3] Em `test/amazon-session-probe-cache.test.js` (mesmo arquivo de T003), garantir cobertura explícita de "janela TTL expira → próxima chamada é miss" (já coberto por T003, mas confirmar aqui o caso de reuso pela rota real via mock de `Date.now()`/tempo injetado).
 
 ### Implementation for User Story 3
 
-- [ ] T013 [US3] Em `src/api/routes/credentials.js`, na rota `GET /amazon/session`: antes de chamar `checkAmazonSession`, consultar `getCachedProbe(req.user.sub)`; em hit, retornar o resultado cacheado (com `checkedAt` apropriado) **sem** chamar `checkAmazonSession`/Amazon; em miss/expirado, sondar normalmente, persistir `credentialPatch` se houver (T009) e gravar o resultado público em `setCachedProbe(req.user.sub, publicResultWithCheckedAt)` antes de retornar.
-- [ ] T014 [US3] Adicionar log leve (ex.: `app.log.debug`/`logger.debug`) diferenciando "sondagem servida por cache" vs. "sondagem efetiva" na rota `/amazon/session`, para permitir medir objetivamente a queda de chamadas (FR-011/SC-003) sem instrumentação pesada.
-- [ ] T015 [US3] Rodar `node --test test/credentials-amazon-session-route.test.js test/amazon-session-probe-cache.test.js` e confirmar que os testes de T011–T012 passam.
+- [X] T013 [US3] Em `src/api/routes/credentials.js`, na rota `GET /amazon/session`: antes de chamar `checkAmazonSession`, consultar `getCachedProbe(req.user.sub)`; em hit, retornar o resultado cacheado (com `checkedAt` apropriado) **sem** chamar `checkAmazonSession`/Amazon; em miss/expirado, sondar normalmente, persistir `credentialPatch` se houver (T009) e gravar o resultado público em `setCachedProbe(req.user.sub, publicResultWithCheckedAt)` antes de retornar.
+- [X] T014 [US3] Adicionar log leve (ex.: `app.log.debug`/`logger.debug`) diferenciando "sondagem servida por cache" vs. "sondagem efetiva" na rota `/amazon/session`, para permitir medir objetivamente a queda de chamadas (FR-011/SC-003) sem instrumentação pesada.
+- [X] T015 [US3] Rodar `node --test test/credentials-amazon-session-route.test.js test/amazon-session-probe-cache.test.js` e confirmar que os testes de T011–T012 passam.
 
 **Checkpoint**: US1 e US3 funcionam juntas — rotação persistida E chamadas redundantes evitadas (SC-002 + SC-003).
 
@@ -102,8 +102,8 @@ Projeto single (Node.js backend): `src/`, `test/` na raiz do repo — sem `backe
 
 **Nota**: Esta user story já está satisfeita por `specs/001-amazon-cookie-expiry/research.md` (produzido na fase de planejamento, antes de tasks.md). As tarefas abaixo são de **checagem/consolidação**, não de redação do zero.
 
-- [ ] T016 [US2] Revisar `specs/001-amazon-cookie-expiry/research.md` e confirmar que os 7 itens (C1–C7) têm veredito e evidência (SC-005); se a implementação das Fases 3–4 revelar um fato novo que contradiga alguma evidência do diagnóstico (ex.: comportamento real diferente do esperado ao rodar os testes), atualizar o veredito correspondente em `research.md` antes de finalizar a feature.
-- [ ] T017 [US2] Confirmar em `test/converters-amazon.test.js` que os casos de C6 (Set-Cookie de limpeza não sobrescreve token válido) e C7 (falha transitória não conta como expiração) permanecem cobertos por teste de regressão após as mudanças de T007–T008 (não apenas documentados em research.md).
+- [X] T016 [US2] Revisar `specs/001-amazon-cookie-expiry/research.md` e confirmar que os 7 itens (C1–C7) têm veredito e evidência (SC-005); se a implementação das Fases 3–4 revelar um fato novo que contradiga alguma evidência do diagnóstico (ex.: comportamento real diferente do esperado ao rodar os testes), atualizar o veredito correspondente em `research.md` antes de finalizar a feature.
+- [X] T017 [US2] Confirmar em `test/converters-amazon.test.js` que os casos de C6 (Set-Cookie de limpeza não sobrescreve token válido) e C7 (falha transitória não conta como expiração) permanecem cobertos por teste de regressão após as mudanças de T007–T008 (não apenas documentados em research.md).
 
 **Checkpoint**: Diagnóstico revisado e sincronizado com o comportamento final implementado.
 
@@ -113,7 +113,7 @@ Projeto single (Node.js backend): `src/`, `test/` na raiz do repo — sem `backe
 
 **Purpose**: Validação fim-a-fim e não regressão, seguindo `quickstart.md`.
 
-- [ ] T018 [P] Rodar a suíte completa (`node --test`) e confirmar 0 regressões em relação ao baseline de T001 (em particular `test/converters-amazon.test.js`, `test/credential-health-amazon.test.js`, `test/credentials-amazon-session-route.test.js`, `test/amazon-session-probe-cache.test.js`).
+- [X] T018 [P] Rodar a suíte completa (`node --test`) e confirmar 0 regressões em relação ao baseline de T001 (em particular `test/converters-amazon.test.js`, `test/credential-health-amazon.test.js`, `test/credentials-amazon-session-route.test.js`, `test/amazon-session-probe-cache.test.js`).
 - [ ] T019 Executar o roteiro `quickstart.md` §3 em staging após merge em `develop` (autodeploy): abrir/recarregar o painel de credenciais Amazon ~10x em poucos minutos e confirmar no log que houve 1 sondagem efetiva (SC-003); confirmar que após uma conversão bem-sucedida o `Credential.data` foi atualizado com o token rotacionado (`rotatedCookie:true` no log) e a sessão permanece viva na chamada seguinte (SC-002).
 - [ ] T020 Executar `quickstart.md` §3 itens 3–4 em staging: sessão genuinamente expirada continua exibindo aviso "renovar cookies" com fallback `?tag=` (SC-004/FR-008); simular resposta 5xx/rede e confirmar estado indeterminado, não "cookies expirados" (SC-006/FR-007).
 - [ ] T021 Atualizar `specs/001-amazon-cookie-expiry/research.md` (seção "Riscos e mitigações") se a validação em staging (T019–T020) revelar necessidade de ajuste na causa C3 (uso concorrente) ou no TTL do cache escolhido em T002.

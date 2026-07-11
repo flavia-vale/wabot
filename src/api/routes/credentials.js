@@ -1,14 +1,19 @@
-import db from '../../db.js'
+import dbDefault from '../../db.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { getCredentialSaveMessage, parseCredentialData, PLATFORMS, sanitizeCredentialBody, validateCredentialData } from '../../credentialHealth.js'
 import { encryptCredential } from '../../credentialCrypto.js'
 import { checkMercadoLivreSession } from '../../converters/mercadolivre.js'
-import { checkAmazonSession } from '../../converters/amazon.js'
+import { checkAmazonSession as defaultCheckAmazonSession } from '../../converters/amazon.js'
+import { getCachedProbe as defaultGetCachedProbe, setCachedProbe as defaultSetCachedProbe } from '../../converters/amazonSessionProbeCache.js'
 import { getBotMetrics as defaultGetBotMetrics, isRunning as defaultIsRunning, reloadConfig as defaultReloadConfig, startBot as defaultStartBot, stopBot as defaultStopBot } from '../../manager.js'
 import { classifyWorkerHealth } from '../../workerHealth.js'
 import { restartStaleWorkerIfNeeded } from '../../workerRemediation.js'
 
 export async function credentialsRoutes(app, opts = {}) {
+  const db = opts.db ?? dbDefault
+  const checkAmazonSession = opts.checkAmazonSession ?? defaultCheckAmazonSession
+  const getCachedAmazonProbe = opts.getCachedProbe ?? defaultGetCachedProbe
+  const setCachedAmazonProbe = opts.setCachedProbe ?? defaultSetCachedProbe
   const reloadConfig = opts.reloadConfig ?? defaultReloadConfig
   const getBotMetrics = opts.getBotMetrics ?? defaultGetBotMetrics
   const restartStaleWorker = opts.restartStaleWorker ?? ((args) => restartStaleWorkerIfNeeded({
@@ -50,14 +55,41 @@ export async function credentialsRoutes(app, opts = {}) {
   // expiram/rotacionam; sem renovar, o getShortUrl devolve a página "Acessar
   // Amazon" e as ofertas saem com o ?tag= longo em vez do amzn.to. O painel
   // chama este endpoint ao carregar e avisa a usuária quando expirado.
+  //
+  // 001-amazon-cookie-expiry: cada chamada real dispara um getShortUrl que
+  // ROTACIONA o cookie de sessão. Sem persistir a rotação (esta rota não tem o
+  // gancho __onCredentialPatch do worker/linkConversion) e sem cache, cada
+  // reload do painel gastava uma rotação silenciosamente descartada — a sessão
+  // morria cedo. Agora: (1) cache curto por usuário evita sondar de novo dentro
+  // da janela TTL; (2) quando a sondagem ocorre e devolve credentialPatch, a
+  // rota persiste cifrado (espelha o bloco de /mercadolivre/session acima).
   app.get('/amazon/session', { onRequest: [app.authenticate] }, async (req) => {
+    const cached = getCachedAmazonProbe(req.user.sub)
+    if (cached) {
+      app.log.debug({ userId: req.user.sub }, 'Amazon session: sondagem servida por cache (sem chamada à Amazon)')
+      return cached
+    }
+
     const cred = await db.credential.findUnique({
       where: { userId_platform: { userId: req.user.sub, platform: 'amazon' } },
     })
     if (!cred) return { configured: false, alive: null, reason: 'not_configured' }
     const data = parseCredentialData(cred.data)
     const result = await checkAmazonSession(data)
-    return { ...result, checkedAt: new Date().toISOString() }
+    app.log.debug({ userId: req.user.sub }, 'Amazon session: sondagem efetiva (chamada real à Amazon)')
+
+    const { credentialPatch, ...publicResult } = result
+    if (credentialPatch) {
+      const patchedData = { ...data, ...credentialPatch }
+      await db.credential.update({
+        where: { userId_platform: { userId: req.user.sub, platform: 'amazon' } },
+        data: { data: encryptCredential(JSON.stringify(patchedData)) },
+      })
+    }
+
+    const responseBody = { ...publicResult, checkedAt: new Date().toISOString() }
+    setCachedAmazonProbe(req.user.sub, responseBody)
+    return responseBody
   })
 
   app.put('/:platform', { onRequest: [app.authenticate] }, async (req, reply) => {
