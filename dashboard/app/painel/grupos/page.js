@@ -301,6 +301,7 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
             ? 'O template usa esse link para buscar título, preço e imagem do produto principal.'
             : 'Útil em ofertas espelhadas com vários links: todos continuam no texto, mas a imagem/dados principais seguem esta escolha.'}
           extra="cfg-fadeup"
+          last
         >
           <select
             className="pnl-input"
@@ -313,42 +314,12 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
           </select>
         </CfgRow>
 
-        <CfgRow
-          label="Imagem da oferta"
-          info={<>
-            <strong>Preview clicável:</strong> envia uma mensagem única de texto com card do WhatsApp montado pelo bot (só a foto do produto — título e preço ficam no texto); o clique abre o link.<br />
-            <strong>Oficial da loja:</strong> busca a foto no site do produto e envia como imagem com legenda.<br />
-            <strong>Da mensagem:</strong> reaproveita a foto do grupo de origem como mídia.<br />
-            <strong>Sem imagem:</strong> envia só o texto; o WhatsApp ainda pode montar a prévia padrão do link quando o site permite.
-          </>}
-          hint="Escolha se a oferta sai como card clicável ou como mídia com legenda."
-          last
-        >
-          <div>
-            <select
-              className="pnl-input"
-              value={g.imageMode ?? 'original'}
-              onChange={(e) => onUpdate(g.id, { imageMode: e.target.value })}
-            >
-              <option value="preview">Preview clicável do WhatsApp</option>
-              <option value="fetch">Imagem oficial da loja</option>
-              <option value="original">Imagem que veio na mensagem</option>
-              <option value="none">Sem imagem (texto puro)</option>
-            </select>
-            {(g.imageMode ?? 'original') === 'preview' && (
-              <div className="cfg-inline-warn">
-                <span style={{ color: 'var(--accent)', flexShrink: 0, display: 'flex', paddingTop: 1 }}>🔗</span>
-                <span>O bot monta o card com a foto do produto mesmo quando a loja bloqueia a prévia automática do WhatsApp (links de afiliado Shopee/Amazon). Título e preço não vão no card — ficam só no texto da mensagem.</span>
-              </div>
-            )}
-            {(g.imageMode ?? 'original') === 'fetch' && (
-              <div className="cfg-inline-warn">
-                <span style={{ color: 'var(--danger)', flexShrink: 0, display: 'flex', paddingTop: 1 }}>⚡</span>
-                <span>Na <strong>Shopee</strong>, quando a loja não retorna a foto, a oferta usa a imagem da mensagem (pode ter marca d&apos;água).</span>
-              </div>
-            )}
-          </div>
-        </CfgRow>
+        {/* 2026-07 (specs/001-image-mode-preview-default): o seletor "Imagem da
+            oferta" foi removido da UI — toda oferta sai fixa como "Preview
+            clicável do WhatsApp" (chokepoint em src/billing/groupEntitlements.js
+            força imageMode='preview' em runtime, independente do que estiver
+            persistido em group.imageMode). Ver AGENTS.md para o histórico da
+            decisão. */}
       </CfgSection>
 
       {/* ── Seção 3: Para onde vai ── */}

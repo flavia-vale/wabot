@@ -1139,6 +1139,75 @@ Blindagem em código (não regredir): `src/supervisor/envGuard.js`
 supervisor no diretório errado falha no boot em vez de subir surdo pra fila.
 Teste: `test/supervisor-env-guard.test.js`.
 
+## `imageMode` fixado em `'preview'` para todos os grupos (2026-07, specs/001-image-mode-preview-default)
+
+A escolha de imagem por grupo monitorado ("Preview clicável" / "Imagem oficial
+da loja" / "Imagem que veio na mensagem" / "Sem imagem") foi **desativada**.
+Toda oferta espelhada sai sempre como card de **preview clicável do WhatsApp**
+(foto do produto no card; título/preço no texto; clique abre o link).
+
+**Motivo:** padronizar o comportamento (menos suporte "por que minha oferta
+saiu sem foto/com foto errada"), o preview clicável é o modo mais robusto
+contra bloqueio de prévia automática por lojas com link de afiliado
+(Shopee/Amazon), e reduz superfície de configuração para o cliente.
+
+**Chokepoint (defesa em profundidade — FR-001/FR-009):**
+`toMonitorGroup()` em `src/billing/groupEntitlements.js` ignora o valor
+persistido em `group.imageMode` e retorna sempre `imageMode: 'preview'` no
+`cfg` consumido pelo pipeline de envio (`src/bot-worker.js`). Mesmo que a
+coluna `Group.imageMode` ainda tenha um valor legado (grupo criado antes da
+migração, ou migração ainda não rodada num ambiente específico), o
+comportamento em runtime é sempre preview — não há caminho de código que leia
+o valor persistido sem passar por este chokepoint primeiro.
+
+**Migração de dados (não-destrutiva, idempotente):**
+`prisma/migrations/20260710160000_group_image_mode_preview_default/migration.sql`
+faz `UPDATE "Group" SET "imageMode" = 'preview' WHERE "imageMode" IS NULL OR
+"imageMode" <> 'preview'`, seguindo o precedente de
+`20260628120000_group_image_mode_choice/migration.sql` (mesmo padrão de
+`UPDATE`). É DML puro — não há `ALTER TABLE`, então convive com o WAL/
+`busy_timeout` sem exigir lock exclusivo nem parar API/supervisor
+(pegadinha #8 não se aplica aqui). `prisma/schema.prisma` também mudou o
+default da coluna de `@default("none")` para `@default("preview")` (defesa em
+profundidade adicional para qualquer `create()` futuro que omita o campo) —
+isso é só metadado do Prisma Client; o `DEFAULT` físico da coluna já
+materializada no SQLite de produção **não** é reescrito (mudar o `DEFAULT`
+físico via SQLite exigiria recriar a tabela inteira, risco/lock desnecessário
+para um valor que a aplicação nunca lê sem passar pelo chokepoint). Na
+criação de grupo (`src/api/routes/groups.js`), `imageMode` é sempre enviado
+explicitamente como `'preview'`, então nenhum caminho de criação depende do
+`DEFAULT` físico da coluna.
+
+**Novos grupos:** nascem em `'preview'` por dois níveis — app
+(`src/api/routes/groups.js`, `POST /groups`) e schema (`@default("preview")`).
+
+**UI removida:** o bloco "Imagem da oferta" (seletor + textos auxiliares) foi
+removido de `dashboard/app/painel/grupos/page.js`. O campo `imageMode`
+continua aceito/validado em `PUT /groups/:id` (dormente) — a coluna e a rota
+não foram removidas, só a superfície de UI.
+
+**Código de extração de imagem permanece DORMENTE, não foi apagado (FR-006):**
+com `imageMode` sempre `'preview'`, os ramos que tratavam `'fetch'`/
+`'original'`/`'none'` nunca executam em runtime, mas o código continua no
+repositório, comentado explicando a dormência, pronto para reativação futura
+sem precisar reescrever a lógica:
+- `src/bot-worker.js` — `getImage()` (fetch ativo de imagem oficial via
+  `resolveMonitoredImage`) e o bloco de `buildPayload` que tratava
+  `wantImage`/`imageMode === 'original'`.
+- `src/monitoredRelayPolicy.js` — `shouldRelayOriginalMediaForImageMode()`
+  nunca mais retorna `true` em runtime (relay de mídia original dormente).
+- `src/converters/imageScrapers.js` — scrapers de Amazon/Mercado
+  Livre/Shopee (regras da seção "Image scrapers" abaixo continuam válidas
+  para quando o código for reativado).
+
+**Não regredir:** não remover os ramos dormentes acima (só documentá-los como
+tais); não reintroduzir leitura direta de `group.imageMode` fora do
+chokepoint em `groupEntitlements.js` no caminho de envio. Testes:
+`test/group-entitlements.test.js`,
+`test/bot-worker-manual-link-preview-channel.test.js`,
+`test/migrations-group-image-mode-preview.test.js`,
+`test/groups-route-image-mode.test.js`.
+
 ## Image scrapers — configuração canônica (PR #422, não regredir)
 
 `src/converters/imageScrapers.js` entrega imagem hi-res para link preview
