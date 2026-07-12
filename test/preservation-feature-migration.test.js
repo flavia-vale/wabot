@@ -11,7 +11,15 @@ function sqlite(dbPath, sql, args = []) {
   return execFileSync('sqlite3', [...args, dbPath], { input: sql, encoding: 'utf8' }).trim()
 }
 
-test('migration converte o master toggle em flags independentes sem ativar mutação indevidamente', () => {
+// sqlite3 CLI é pré-requisito destes testes (aplicam a migration SQL de verdade).
+// Em CI/staging está instalado; num runtime sem o binário, skipamos em vez de
+// falhar — mesma convenção de test/backup-scripts.test.js.
+function hasSqlite3() {
+  try { execFileSync('sqlite3', ['--version'], { stdio: 'ignore' }); return true } catch { return false }
+}
+const skipNoSqlite3 = { skip: hasSqlite3() ? false : 'sqlite3 CLI não instalado' }
+
+test('migration converte o master toggle em flags independentes sem ativar mutação indevidamente', skipNoSqlite3, () => {
   const dir = mkdtempSync(join(tmpdir(), 'wabot-preservation-migration-'))
   const dbPath = join(dir, 'test.db')
   try {

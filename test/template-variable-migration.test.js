@@ -13,6 +13,14 @@ function sqlite(dbPath, sql, args = []) {
   return execFileSync('sqlite3', [...args, dbPath], { input: sql, encoding: 'utf8' }).trim()
 }
 
+// sqlite3 CLI é pré-requisito destes testes (aplicam a migration SQL de verdade).
+// Em CI/staging está instalado; num runtime sem o binário, skipamos em vez de
+// falhar — mesma convenção de test/backup-scripts.test.js.
+function hasSqlite3() {
+  try { execFileSync('sqlite3', ['--version'], { stdio: 'ignore' }); return true } catch { return false }
+}
+const skipNoSqlite3 = { skip: hasSqlite3() ? false : 'sqlite3 CLI não instalado' }
+
 test('canonicaliza apenas os aliases legados de variáveis de template', () => {
   assert.equal(
     canonicalizeTemplateBody('{{greeting}}|{{trailer}}|{{gancho}}|{{cta}}|{{convitegrupo}}'),
@@ -31,7 +39,7 @@ test('canonicaliza overrides e templates personalizados ao salvar ou carregar', 
   assert.equal(normalized.extra, 'preservado')
 })
 
-test('migration atualiza templates persistidos de todos os usuários e preserva JSON inválido', () => {
+test('migration atualiza templates persistidos de todos os usuários e preserva JSON inválido', skipNoSqlite3, () => {
   const dir = mkdtempSync(join(tmpdir(), 'wabot-template-vars-'))
   const dbPath = join(dir, 'test.db')
   try {
