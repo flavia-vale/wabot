@@ -23,8 +23,11 @@ test('histórico identifica execuções originadas de agendamento', () => {
   assert.match(history, /return 'Agendamento'/)
 })
 
-test('próximos envios só oferece cancelamento para pending e mantém refresh e vazio', () => {
-  assert.match(upcoming, /item\.status === 'pending'/)
+test('próximos envios só oferece cancelamento para itens canceláveis e mantém refresh e vazio', () => {
+  // O gating de cancelamento deixou de ser por status ('pending') e passou a
+  // usar o descritor item.cancellable vindo da API (mais flexível). A UI só
+  // mostra o botão "Cancelar" quando item.cancellable é verdadeiro.
+  assert.match(upcoming, /item\.cancellable \?/)
   assert.doesNotMatch(upcoming, /new Set\(\['pending', 'queued'\]\)/)
   assert.match(upcoming, /'Atualizar'/)
   assert.match(upcoming, /Nenhum envio programado/)
