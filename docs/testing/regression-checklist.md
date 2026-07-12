@@ -38,8 +38,9 @@ code 0, menos testes rodados, nenhum aviso) — sem essa checagem, um arquivo
 renomeado/apagado do subconjunto passaria despercebido, violando o requisito
 de falha visível (ver seção "Como isso foi validado" abaixo).
 
-`npm run smoke` roda em segundos (subconjunto), enquanto `npm test` roda a
-suíte completa (176 arquivos) — use `smoke` como sinal rápido local/pré-PR,
+`npm run smoke` roda em ~30s (26 arquivos), cerca de 2× mais rápido que
+`npm test`, que roda a suíte completa (176 arquivos, ~60s) — use `smoke`
+como sinal rápido local/pré-PR,
 não como substituto do gate completo (ver nota no fim deste documento).
 
 ### O que o smoke cobre — 11 eixos críticos, 26 arquivos
