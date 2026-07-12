@@ -16,6 +16,13 @@ jobs:
         with:
           node-version: 22
 
+      # sqlite3 CLI é pré-requisito dos testes de migration (aplicam o SQL de
+      # verdade) e dos testes de backup. ubuntu-latest normalmente já o traz;
+      # instalar explicitamente torna o gate determinístico e documenta a
+      # dependência — sem ele esses testes se auto-skipam (hasSqlite3()) e o
+      # gate deixaria de exercê-los.
+      - run: sudo apt-get update && sudo apt-get install -y sqlite3
+
       - run: npm ci
 
       - run: npm test
