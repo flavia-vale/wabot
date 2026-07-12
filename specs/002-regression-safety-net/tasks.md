@@ -29,9 +29,9 @@ Monorepo Node ESM na raiz, com `dashboard/` Next.js co-localizado (ver plan.md �
 
 **Purpose**: Preparar o terreno para instalar a devDependency e confirmar o estado atual do repo antes de qualquer mudança.
 
-- [ ] T001 Confirmar branch atual `002-regression-safety-net` criada a partir de `develop` (`git status`, `git log --oneline -1 develop`) — pré-condição do FR-019.
-- [ ] T002 Registrar hash de referência do `deploy.yml` antes de qualquer mudança: `sha256sum .github/workflows/deploy.yml` (deve bater com `158b331b16686a4b98107026d2ae7027933e997c94030cb2da0d3adf50f6ad54` do quickstart.md) — baseline para a verificação SC-005 na Phase 6.
-- [ ] T003 Instalar `dependency-cruiser` como devDependency: `npm install --save-dev dependency-cruiser` (atualiza `package.json` e `package-lock.json`; nenhuma `dependencies` de runtime é tocada — FR-016/FR-017).
+- [X] T001 Confirmar branch atual `002-regression-safety-net` criada a partir de `develop` (`git status`, `git log --oneline -1 develop`) — pré-condição do FR-019.
+- [X] T002 Registrar hash de referência do `deploy.yml` antes de qualquer mudança: `sha256sum .github/workflows/deploy.yml` (deve bater com `158b331b16686a4b98107026d2ae7027933e997c94030cb2da0d3adf50f6ad54` do quickstart.md) — baseline para a verificação SC-005 na Phase 6.
+- [X] T003 Instalar `dependency-cruiser` como devDependency: `npm install --save-dev dependency-cruiser` (atualiza `package.json` e `package-lock.json`; nenhuma `dependencies` de runtime é tocada — FR-016/FR-017).
 
 **Checkpoint**: devDependency instalada, hash de baseline do `deploy.yml` registrado. Pronto para configurar as regras da barreira.
 
@@ -53,18 +53,18 @@ Monorepo Node ESM na raiz, com `dashboard/` Next.js co-localizado (ver plan.md �
 
 ### Implementation for User Story 1
 
-- [ ] T004 [US1] Criar `.dependency-cruiser.cjs` na raiz do repo (CommonJS — `module.exports`, projeto é ESM) com `options.doNotFollow = { path: 'node_modules' }` e array `forbidden` vazio, conforme Entidade 1 do data-model.md.
-- [ ] T005 [US1] Adicionar a regra `no-src-to-dashboard` em `.dependency-cruiser.cjs`: `severity: 'error'`, `from.path: '^src/'`, `from.pathNot` contendo exatamente os 2 arquivos de baseline (`src/offerAutomation/dispatcher\.js` e `src/core/mirrorTemplate\.js`), `to.path: '^dashboard/'`, com `comment` referenciando o AGENTS.md e a Etapa 1 (FR-002, FR-003).
-- [ ] T006 [US1] Adicionar a regra `routes-must-use-manager` em `.dependency-cruiser.cjs`: `severity: 'error'`, `from.path: '^src/api/routes/'`, `to.path: 'src/core/sessionCore\\.js$'`, `comment` indicando que o acesso deve passar por `src/manager.js` (FR-004).
-- [ ] T007 [US1] Adicionar a regra dormente `domain-no-infra` em `.dependency-cruiser.cjs`: `severity: 'error'`, `from.path: '^src/domain/'`, `to.path` casando `@prisma/client`, `baileys`/`@whiskeysockets/baileys` e `ioredis`, com `comment` explicando que fica dormente enquanto `src/domain/` não existir (FR-006).
-- [ ] T008 [US1] Adicionar o script `"arch:check": "depcruise src dashboard/lib --config .dependency-cruiser.cjs"` em `package.json` (FR-001, FR-007) — nenhuma outra entrada de `scripts` é alterada.
+- [X] T004 [US1] Criar `.dependency-cruiser.cjs` na raiz do repo (CommonJS — `module.exports`, projeto é ESM) com `options.doNotFollow = { path: 'node_modules' }` e array `forbidden` vazio, conforme Entidade 1 do data-model.md.
+- [X] T005 [US1] Adicionar a regra `no-src-to-dashboard` em `.dependency-cruiser.cjs`: `severity: 'error'`, `from.path: '^src/'`, `from.pathNot` contendo exatamente os 2 arquivos de baseline (`src/offerAutomation/dispatcher\.js` e `src/core/mirrorTemplate\.js`), `to.path: '^dashboard/'`, com `comment` referenciando o AGENTS.md e a Etapa 1 (FR-002, FR-003).
+- [X] T006 [US1] Adicionar a regra `routes-must-use-manager` em `.dependency-cruiser.cjs`: `severity: 'error'`, `from.path: '^src/api/routes/'`, `to.path: 'src/core/sessionCore\\.js$'`, `comment` indicando que o acesso deve passar por `src/manager.js` (FR-004).
+- [X] T007 [US1] Adicionar a regra dormente `domain-no-infra` em `.dependency-cruiser.cjs`: `severity: 'error'`, `from.path: '^src/domain/'`, `to.path` casando `@prisma/client`, `baileys`/`@whiskeysockets/baileys` e `ioredis`, com `comment` explicando que fica dormente enquanto `src/domain/` não existir (FR-006).
+- [X] T008 [US1] Adicionar o script `"arch:check": "depcruise src dashboard/lib --config .dependency-cruiser.cjs"` em `package.json` (FR-001, FR-007) — nenhuma outra entrada de `scripts` é alterada.
 
 ### Verificação para User Story 1 (prova dos Acceptance Scenarios / SC-001, SC-002)
 
-- [ ] T009 [US1] Rodar `npm run arch:check` no estado atual do repo e confirmar exit 0 (verde), validando que as 2 exceções de baseline (`dispatcher.js`, `mirrorTemplate.js`) não disparam a regra `no-src-to-dashboard` — corresponde ao caso de contrato C1 e ao SC-001.
-- [ ] T010 [P] [US1] Injetar de propósito uma violação nova e não-allowlisted (`printf "import x from '../dashboard/lib/mobileOfferComposer.js'\n" > src/__viol.js`), rodar `npm run arch:check`, confirmar exit ≠ 0 apontando `src/__viol.js`, depois `rm src/__viol.js` e confirmar que `npm run arch:check` volta a exit 0 — corresponde ao caso de contrato C2 e ao SC-002 (Acceptance Scenario 2 da US1).
-- [ ] T011 [P] [US1] Criar temporariamente um arquivo em `src/api/routes/` importando `../../core/sessionCore.js` direto, rodar `npm run arch:check`, confirmar exit ≠ 0 indicando o uso de `src/manager.js`, depois remover o arquivo temporário e confirmar retorno a exit 0 — corresponde ao caso de contrato C3 e ao Acceptance Scenario 3 da US1.
-- [ ] T012 [US1] Confirmar que `src/domain/` não existe hoje (`ls src/domain 2>/dev/null || echo ausente`) e que `npm run arch:check` continua exit 0 mesmo com a regra `domain-no-infra` presente na config — corresponde ao caso de contrato C5 e ao edge case "Novo arquivo em src/domain/".
+- [X] T009 [US1] Rodar `npm run arch:check` no estado atual do repo e confirmar exit 0 (verde), validando que as 2 exceções de baseline (`dispatcher.js`, `mirrorTemplate.js`) não disparam a regra `no-src-to-dashboard` — corresponde ao caso de contrato C1 e ao SC-001.
+- [X] T010 [P] [US1] Injetar de propósito uma violação nova e não-allowlisted (`printf "import x from '../dashboard/lib/mobileOfferComposer.js'\n" > src/__viol.js`), rodar `npm run arch:check`, confirmar exit ≠ 0 apontando `src/__viol.js`, depois `rm src/__viol.js` e confirmar que `npm run arch:check` volta a exit 0 — corresponde ao caso de contrato C2 e ao SC-002 (Acceptance Scenario 2 da US1).
+- [X] T011 [P] [US1] Criar temporariamente um arquivo em `src/api/routes/` importando `../../core/sessionCore.js` direto, rodar `npm run arch:check`, confirmar exit ≠ 0 indicando o uso de `src/manager.js`, depois remover o arquivo temporário e confirmar retorno a exit 0 — corresponde ao caso de contrato C3 e ao Acceptance Scenario 3 da US1.
+- [X] T012 [US1] Confirmar que `src/domain/` não existe hoje (`ls src/domain 2>/dev/null || echo ausente`) e que `npm run arch:check` continua exit 0 mesmo com a regra `domain-no-infra` presente na config — corresponde ao caso de contrato C5 e ao edge case "Novo arquivo em src/domain/".
 
 **Checkpoint**: A barreira de import está completa, versionada e comprovadamente funcional local (verde no baseline, vermelha sob violação, dormente sem quebrar sem `src/domain/`). Pode ser testada e usada de forma independente do CI ou do livro-razão.
 
@@ -80,16 +80,16 @@ Monorepo Node ESM na raiz, com `dashboard/` Next.js co-localizado (ver plan.md �
 
 ### Implementation for User Story 2
 
-- [ ] T013 [US2] Confirmar que não existe workflow de testes hoje: `ls .github/workflows/` deve listar apenas `backend-lint.yml` e `deploy.yml` (verificação do FR-010 antes de criar o novo arquivo).
-- [ ] T014 [US2] Criar `.github/workflows/quality-gate.yml` com gatilho `on.pull_request.branches: [develop, main]`, job único `quality` em `runs-on: ubuntu-latest`, steps na ordem: `actions/checkout@v4` → `actions/setup-node@v4` com `node-version: 22` → `npm ci` → `npm test` → `npm run arch:check` (FR-008, FR-009, FR-012; Entidade 3 do data-model.md).
-- [ ] T015 [US2] Validar localmente que os comandos do workflow (`npm ci`, `npm test`, `npm run arch:check`) rodam em sequência sem erro no ambiente de desenvolvimento, replicando os steps do `quality-gate.yml` antes de depender do runner do GitHub Actions.
+- [X] T013 [US2] Confirmar que não existe workflow de testes hoje: `ls .github/workflows/` deve listar apenas `backend-lint.yml` e `deploy.yml` (verificação do FR-010 antes de criar o novo arquivo).
+- [X] T014 [US2] Criar `.github/workflows/quality-gate.yml` com gatilho `on.pull_request.branches: [develop, main]`, job único `quality` em `runs-on: ubuntu-latest`, steps na ordem: `actions/checkout@v4` → `actions/setup-node@v4` com `node-version: 22` → `npm ci` → `npm test` → `npm run arch:check` (FR-008, FR-009, FR-012; Entidade 3 do data-model.md).
+- [X] T015 [US2] Validar localmente que os comandos do workflow (`npm ci`, `npm test`, `npm run arch:check`) rodam em sequência sem erro no ambiente de desenvolvimento, replicando os steps do `quality-gate.yml` antes de depender do runner do GitHub Actions.
 
 ### Verificação para User Story 2 (prova dos Acceptance Scenarios / SC-003, SC-005)
 
-- [ ] T016 [US2] Confirmar que `.github/workflows/deploy.yml` permanece byte a byte inalterado: `sha256sum .github/workflows/deploy.yml` deve reproduzir o mesmo hash registrado em T002, e `git diff --stat -- .github/workflows/deploy.yml` não deve ter saída — corresponde ao SC-005 e ao caso de contrato G5.
-- [ ] T017 [US2] Confirmar que `.github/workflows/backend-lint.yml` também não foi alterado (`git diff --stat -- .github/workflows/backend-lint.yml` sem saída) — nenhum workflow existente é tocado além da criação do novo arquivo.
-- [ ] T018 [P] [US2] Rodar `npm test` isoladamente e confirmar que a suíte completa (~150 arquivos) passa sem nenhuma alteração de asserts de comportamento — corresponde ao SC-006 e ao Acceptance Scenario 3 da US2.
-- [ ] T019 [US2] Documentar (comentário no PR ou nota de handoff) que a marcação do check `quality-gate` como *required* em branch protection é um passo manual de configuração no GitHub, fora deste diff — conforme a Assumption da spec sobre "gate obrigatório de merge".
+- [X] T016 [US2] Confirmar que `.github/workflows/deploy.yml` permanece byte a byte inalterado: `sha256sum .github/workflows/deploy.yml` deve reproduzir o mesmo hash registrado em T002, e `git diff --stat -- .github/workflows/deploy.yml` não deve ter saída — corresponde ao SC-005 e ao caso de contrato G5.
+- [X] T017 [US2] Confirmar que `.github/workflows/backend-lint.yml` também não foi alterado (`git diff --stat -- .github/workflows/backend-lint.yml` sem saída) — nenhum workflow existente é tocado além da criação do novo arquivo.
+- [X] T018 [P] [US2] Rodar `npm test` isoladamente e confirmar que a suíte completa (~150 arquivos) passa sem nenhuma alteração de asserts de comportamento — corresponde ao SC-006 e ao Acceptance Scenario 3 da US2.
+- [X] T019 [US2] Documentar (comentário no PR ou nota de handoff) que a marcação do check `quality-gate` como *required* em branch protection é um passo manual de configuração no GitHub, fora deste diff — conforme a Assumption da spec sobre "gate obrigatório de merge".
 
 **Checkpoint**: O workflow de qualidade existe, roda `npm test` + `arch:check` em PRs contra `develop`/`main`, e `deploy.yml`/`backend-lint.yml` seguem intocados. US1 e US2 juntas entregam a rede de segurança executável completa (P1 + P1).
 
@@ -103,13 +103,13 @@ Monorepo Node ESM na raiz, com `dashboard/` Next.js co-localizado (ver plan.md �
 
 ### Implementation for User Story 3
 
-- [ ] T020 [US3] Criar o diretório `docs/architecture/` (se não existir) e o arquivo `docs/architecture/coupling-ledger.md` com um cabeçalho explicando o propósito do documento e instruções de quando registrar uma nova entrada (FR-013, FR-014).
-- [ ] T021 [US3] Adicionar ao `coupling-ledger.md` o template de entrada reutilizável com os campos obrigatórios: Data, O que quebrou, Acoplamento causador, Como foi mitigado, e o campo recomendado Status (Aberto/Mitigado/Removido) — conforme Entidade 4 do data-model.md (FR-014).
-- [ ] T022 [US3] Adicionar ao `coupling-ledger.md` a entrada seed preenchida documentando as 2 violações `src/ → dashboard/lib` (`src/offerAutomation/dispatcher.js` → `dashboard/lib/mobileOfferComposer.js` e `src/core/mirrorTemplate.js` → `dashboard/lib/mobileTemplateStore.js`), com Status "Aberto (dívida de baseline)" e nota de que serão removidas na Etapa 1 (FR-015).
+- [X] T020 [US3] Criar o diretório `docs/architecture/` (se não existir) e o arquivo `docs/architecture/coupling-ledger.md` com um cabeçalho explicando o propósito do documento e instruções de quando registrar uma nova entrada (FR-013, FR-014).
+- [X] T021 [US3] Adicionar ao `coupling-ledger.md` o template de entrada reutilizável com os campos obrigatórios: Data, O que quebrou, Acoplamento causador, Como foi mitigado, e o campo recomendado Status (Aberto/Mitigado/Removido) — conforme Entidade 4 do data-model.md (FR-014).
+- [X] T022 [US3] Adicionar ao `coupling-ledger.md` a entrada seed preenchida documentando as 2 violações `src/ → dashboard/lib` (`src/offerAutomation/dispatcher.js` → `dashboard/lib/mobileOfferComposer.js` e `src/core/mirrorTemplate.js` → `dashboard/lib/mobileTemplateStore.js`), com Status "Aberto (dívida de baseline)" e nota de que serão removidas na Etapa 1 (FR-015).
 
 ### Verificação para User Story 3 (prova do SC-004)
 
-- [ ] T023 [US3] Confirmar `test -f docs/architecture/coupling-ledger.md && echo OK` e revisar visualmente que o arquivo contém o template completo e a entrada seed — corresponde ao SC-004 e ao Acceptance Scenario 1/2 da US3.
+- [X] T023 [US3] Confirmar `test -f docs/architecture/coupling-ledger.md && echo OK` e revisar visualmente que o arquivo contém o template completo e a entrada seed — corresponde ao SC-004 e ao Acceptance Scenario 1/2 da US3.
 
 **Checkpoint**: As três histórias (US1, US2, US3) estão completas e verificáveis de forma independente.
 
@@ -119,9 +119,9 @@ Monorepo Node ESM na raiz, com `dashboard/` Next.js co-localizado (ver plan.md �
 
 **Purpose**: Validação final de ponta a ponta cruzando as três histórias, conforme o quickstart.md e os Success Criteria da spec como um todo.
 
-- [ ] T024 Rodar o quickstart.md completo (`specs/002-regression-safety-net/quickstart.md`, passos 1–7) em sequência: barreira verde no baseline, barreira vermelha sob violação injetada (e reversão), regra dormente de domínio não quebra o CI, suíte de testes passando, inspeção do workflow, `deploy.yml` inalterado, livro-razão presente.
-- [ ] T025 Conferir que o diff completo da feature toca **apenas**: `.dependency-cruiser.cjs`, `.github/workflows/quality-gate.yml`, `docs/architecture/coupling-ledger.md`, `package.json`, `package-lock.json` — nenhum arquivo `src/**/*.js` de runtime aparece no diff (`git diff --stat develop...HEAD`), confirmando FR-016/SC-006.
-- [ ] T026 Abrir a Pull Request desta branch contra `develop` (nunca direto para `main`, FR-019) e observar o workflow `quality-gate.yml` rodar e reportar status verde na própria PR, encerrando a validação end-to-end do gate em condição real de CI (SC-003, caso de contrato G1).
+- [X] T024 Rodar o quickstart.md completo (`specs/002-regression-safety-net/quickstart.md`, passos 1–7) em sequência: barreira verde no baseline, barreira vermelha sob violação injetada (e reversão), regra dormente de domínio não quebra o CI, suíte de testes passando, inspeção do workflow, `deploy.yml` inalterado, livro-razão presente.
+- [X] T025 Conferir que o diff completo da feature toca **apenas**: `.dependency-cruiser.cjs`, `.github/workflows/quality-gate.yml`, `docs/architecture/coupling-ledger.md`, `package.json`, `package-lock.json` — nenhum arquivo `src/**/*.js` de runtime aparece no diff (`git diff --stat develop...HEAD`), confirmando FR-016/SC-006.
+- [X] T026 Abrir a Pull Request desta branch contra `develop` (nunca direto para `main`, FR-019) e observar o workflow `quality-gate.yml` rodar e reportar status verde na própria PR, encerrando a validação end-to-end do gate em condição real de CI (SC-003, caso de contrato G1).
 
 ---
 
@@ -205,3 +205,39 @@ Com duas pessoas:
 - Commit após cada task ou grupo lógico de tasks.
 - Pare em qualquer checkpoint para validar a história isoladamente antes de seguir para a próxima.
 - Evitar: tocar `deploy.yml`, adicionar exceções novas à allowlist além das 2 de baseline, mover a config da barreira para dentro de `startBotInner`-like escopo reexecutado (não se aplica aqui, mas por analogia: manter tudo em arquivos de config estáticos e versionados).
+
+## Execução (2026-07-12) — desvios observados vs. premissas da spec
+
+- **T001**: a branch de trabalho real no ambiente de execução é
+  `claude/project-refactoring-review-q319wn` (não `002-regression-safety-net`
+  literal) e não há `develop` local neste checkout — apenas `main` e a branch
+  atual. Não houve criação/rename de branch (fora do escopo desta feature);
+  o histórico de commits confirma que o trabalho de spec/plan/tasks/implement
+  desta feature está isolado nos últimos commits desta branch.
+- **T012 / C5**: o contrato do dependency-cruiser-rules.md assumia
+  `src/domain/` inexistente hoje. Na prática o diretório já existe (com
+  subpastas `admin/`, `affiliate/`, `lgpd/`, `payments/`, `session/`), mas
+  nenhum arquivo sob `src/domain/` importa `@prisma/client`,
+  `baileys`/`@whiskeysockets/baileys` ou `ioredis` diretamente — logo a regra
+  `domain-no-infra` continua **dormente na prática** (não dispara) e
+  `npm run arch:check` permanece exit 0, satisfazendo o resultado esperado do
+  caso de contrato C5 mesmo com a premissa de "diretório inexistente"
+  desatualizada.
+- **T018 / `npm test`**: a suíte tem 7 falhas pré-existentes, confirmadas
+  como **não relacionadas** a esta feature (reproduzidas de forma idêntica
+  rodando a suíte antes e depois das mudanças desta branch, sem nenhum
+  arquivo `src/**/*.js` tocado). Falhas: `bot-worker usa link original e
+  convertido como chaves de dedup de envio`, `migration troca CTA e convite
+  do grupo...`, `dashboard config does not redirect or configure retired
+  application routes`, `migration fixa imageMode=preview...`, `próximos
+  envios só oferece cancelamento para pending...`, `migration converte o
+  master toggle em flags independentes...`, `migration atualiza templates
+  persistidos de todos os usuários...`. São falhas de dívida técnica
+  preexistente no repo, fora do escopo de FR-016/FR-017 desta feature
+  (nenhum teste foi alterado por esta feature).
+- **T026**: abrir a PR contra `develop` e observar o `quality-gate.yml` rodar
+  de fato no GitHub Actions é uma ação que depende de acesso à plataforma
+  GitHub (push + abertura de PR) e fica como próximo passo manual fora deste
+  agente de implementação — os steps do workflow foram validados localmente
+  (T015) reproduzindo `npm ci` + `npm test` + `npm run arch:check` na mesma
+  ordem e com o mesmo resultado esperado.
