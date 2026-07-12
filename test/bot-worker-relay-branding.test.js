@@ -43,19 +43,18 @@ test('bot-worker não usa cupom como primary quando há produto na mesma mensage
 })
 
 test('bot-worker usa link original e convertido como chaves de dedup de envio', () => {
+  // A construção das chaves foi extraída para buildMirrorDedupKeys
+  // (src/core/mirrorDedupKey.js, comportamento coberto por
+  // test/mirror-dedup-key.test.js). Aqui garantimos só a FIAÇÃO no worker:
+  // que ele delega passando os dois links e registra/consulta as chaves.
   assert.match(
     botWorkerSource,
-    /const dedupSubjects = \[\.\.\.new Set\(\[primary\.url, primary\.converted, fallbackDedupSubject\]/,
-    'dedup precisa guardar o link upstream estável e o link convertido final',
+    /buildMirrorDedupKeys\(\{[\s\S]*?primaryUrl: primary\.url,[\s\S]*?primaryConverted: primary\.converted,/,
+    'dedup precisa derivar as chaves do link upstream estável e do link convertido final',
   )
   assert.match(
     botWorkerSource,
-    /const dedupKeys = dedupSubjects\.map\(subject => `\$\{destJid\}:\$\{subject\}`\)/,
-    'dedup deve aplicar as chaves por destino',
-  )
-  assert.match(
-    botWorkerSource,
-    /dedupKeys\.some\(key => dedup\.links\[key\]/,
+    /\.map\(key => \(dedup\.links\[key\] \? \{ key, ageMs:/,
     'dedup local precisa bloquear se qualquer chave já foi vista',
   )
   assert.match(

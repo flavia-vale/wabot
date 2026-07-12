@@ -106,10 +106,6 @@ const nextConfig = {
         headers: noStoreHtmlHeaders,
       },
       {
-        source: '/dashboard/:path*',
-        headers: noStoreHtmlHeaders,
-      },
-      {
         source: '/api/:path*',
         headers: noIndexHeaders,
       },
