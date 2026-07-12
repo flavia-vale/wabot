@@ -12,7 +12,8 @@
     "pretest": "rm -f /tmp/wabot-test.db /tmp/wabot-test.db-wal /tmp/wabot-test.db-shm; NODE_ENV=test DATABASE_URL=\"file:/tmp/wabot-test.db\" prisma db push --skip-generate --force-reset",
     "test": "NODE_ENV=test DATABASE_URL=\"file:/tmp/wabot-test.db\" node --test --test-concurrency=1 test/*.test.js test/**/*.test.js",
     "report:marketing-funnel": "node scripts/marketing-funnel-baseline.mjs 7",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "arch:check": "depcruise src dashboard/lib --config .dependency-cruiser.cjs"
   },
   "dependencies": {
     "@cacheable/node-cache": "^1.7.6",
@@ -35,6 +36,7 @@
     "qrcode-terminal": "^0.12.0"
   },
   "devDependencies": {
+    "dependency-cruiser": "^18.0.0",
     "dotenv": "^17.4.2",
     "ioredis-mock": "^8.13.1",
     "prisma": "^5.22.0"
