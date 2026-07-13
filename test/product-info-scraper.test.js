@@ -918,3 +918,51 @@ test('getMlUserToken: sem oauthRefreshToken => { token:null, credentialPatch:nul
   assert.equal(result.token, null)
   assert.equal(result.credentialPatch, null)
 })
+
+// 005-ml-cookie-expiry (T030, Phase 7 — achado de review, severidade baixa):
+// duas chamadas concorrentes de refresh OAuth para a MESMA credencial (mesmo
+// ssid) usam o MESMO refresh_token single-use — sem serialização, as duas
+// batem na API do ML ao mesmo tempo e uma delas recebe `!res.ok` porque a
+// outra já invalidou o token. `getMlUserToken` agora serializa o refresh sob
+// o mesmo lock por credencial do eixo cookie (`withMercadoLivreCredentialLock`).
+test('getMlUserToken: duas chamadas concorrentes para a MESMA credencial serializam o refresh (nunca sobrepõem)', async (t) => {
+  const prevEnv = { ML_CLIENT_ID: process.env.ML_CLIENT_ID, ML_CLIENT_SECRET: process.env.ML_CLIENT_SECRET }
+  process.env.ML_CLIENT_ID = 'client-id-test'
+  process.env.ML_CLIENT_SECRET = 'client-secret-test'
+  t.after(() => {
+    process.env.ML_CLIENT_ID = prevEnv.ML_CLIENT_ID
+    process.env.ML_CLIENT_SECRET = prevEnv.ML_CLIENT_SECRET
+  })
+
+  let inFlight = 0
+  let maxConcurrent = 0
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => {
+    inFlight++
+    maxConcurrent = Math.max(maxConcurrent, inFlight)
+    await new Promise(resolve => setTimeout(resolve, 30))
+    inFlight--
+    return {
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: async () => ({ access_token: 'new-access-token', refresh_token: 'new-refresh-token', expires_in: 21600 }),
+    }
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const creds = {
+    ssid: 'x'.repeat(20),
+    oauthAccessToken: 'access-old',
+    oauthTokenExpiry: Date.now() - 1000,
+    oauthRefreshToken: 'refresh-old',
+  }
+
+  const [r1, r2] = await Promise.all([
+    getMlUserToken({ ...creds }),
+    getMlUserToken({ ...creds }),
+  ])
+
+  assert.equal(maxConcurrent, 1, 'as duas chamadas de refresh OAuth para a mesma credencial nunca devem sobrepor')
+  assert.equal(r1.credentialPatch?.oauthRefreshToken, 'new-refresh-token')
+  assert.equal(r2.credentialPatch?.oauthRefreshToken, 'new-refresh-token')
+})

@@ -6,6 +6,7 @@ import { fetchShopeeProductInfo, extractShopeeIds, isShopeeShortLink, resolveSho
 import { resolveToCleanProductUrl } from './mercadolivre.js'
 import { isAmazonShortLink, resolveAmazonShortLink } from './amazon.js'
 import { buildOAuthRefreshDecision, applyOAuthTokenResponse } from './mlOAuthTokenPolicy.js'
+import { withMercadoLivreCredentialLock } from './mercadolivreCredentialLock.js'
 
 const HTML_FETCH_TIMEOUT_MS = Number(process.env.PRODUCT_INFO_TIMEOUT_MS) || 8_000
 const HTML_MAX_BYTES = Number(process.env.PRODUCT_INFO_MAX_BYTES) || 2 * 1024 * 1024
@@ -360,11 +361,17 @@ async function fetchMercadoLivreProductInfo(url, { timeoutMs = HTML_FETCH_TIMEOU
 // patch são delegadas ao módulo puro `mlOAuthTokenPolicy.js` — quem chama
 // (`fetchMercadoLivreItemInfo`) persiste o patch via `__onCredentialPatch`
 // quando disponível, espelhando o padrão do eixo cookie.
-export async function getMlUserToken(mlCredentials) {
-  const decision = buildOAuthRefreshDecision(mlCredentials, Date.now())
-  if (decision.action === 'skip') return { token: null, credentialPatch: null }
-  if (decision.action === 'reuse') return { token: decision.token, credentialPatch: null }
-
+// 005-ml-cookie-expiry (T030, Phase 7): o refresh_token do ML é single-use —
+// duas chamadas concorrentes de scrape para a MESMA credencial (mesmo
+// userId/ssid) podem cair aqui ao mesmo tempo com o MESMO refresh_token
+// ainda válido; a segunda a chegar na API do ML recebe `!res.ok` porque o
+// primeiro refresh já invalidou o token que ela está tentando usar. Isso não
+// é fatal (o primeiro refresh persiste o token novo via `__onCredentialPatch`
+// e a sessão sobrevive), mas degrada aquele scrape específico e desperdiça
+// uma chamada à API do ML. Serializar sob o MESMO lock por credencial do eixo
+// cookie (`withMercadoLivreCredentialLock`, `mercadolivreCredentialLock.js`)
+// evita a corrida: só uma chamada de refresh por credencial em vôo por vez.
+async function refreshMlOAuthToken(mlCredentials) {
   const clientId = process.env.ML_CLIENT_ID
   const clientSecret = process.env.ML_CLIENT_SECRET
   if (!clientId || !clientSecret) return { token: null, credentialPatch: null }
@@ -387,6 +394,21 @@ export async function getMlUserToken(mlCredentials) {
     return { token: data.access_token, credentialPatch }
   } catch {
     return { token: null, credentialPatch: null }
+  }
+}
+
+export async function getMlUserToken(mlCredentials) {
+  const decision = buildOAuthRefreshDecision(mlCredentials, Date.now())
+  if (decision.action === 'skip') return { token: null, credentialPatch: null }
+  if (decision.action === 'reuse') return { token: decision.token, credentialPatch: null }
+
+  try {
+    return await withMercadoLivreCredentialLock(mlCredentials, () => refreshMlOAuthToken(mlCredentials))
+  } catch (err) {
+    // Timeout/erro do lock (ex.: `ML_AFFILIATE_LOCK_TIMEOUT`) não pode
+    // quebrar o scrape em curso — mesma postura best-effort do eixo cookie.
+    if (err?.code === 'ML_AFFILIATE_LOCK_TIMEOUT') return { token: null, credentialPatch: null }
+    throw err
   }
 }
 
