@@ -41,7 +41,7 @@ function DedupChip({ hits }) {
 
 function ErrorDetails({ log, expanded, onToggle }) {
   if (!log.errorMsg) return null
-  const benign = log.status === 'skipped'
+  const benign = log.status === 'skipped' || log.status === 'info'
   return (
     <div>
       <button type="button" className={`pnl-detail-btn${benign ? '' : ' is-error'}`} onClick={onToggle} aria-expanded={expanded}>

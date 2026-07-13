@@ -406,6 +406,7 @@
 .pnl-tag.is-error { background: color-mix(in oklab, var(--danger) 16%, transparent); color: var(--danger); }
 .pnl-tag.is-skip { background: var(--bg-soft); color: var(--ink-soft); }
 .pnl-tag.is-flight { background: color-mix(in oklab, var(--warn) 20%, transparent); color: #b5742a; }
+.pnl-tag.is-info { background: color-mix(in oklab, var(--accent) 16%, transparent); color: var(--accent-strong); }
 
 /* Top grupos / barras simples */
 .pnl-bars { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }

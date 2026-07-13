@@ -2608,7 +2608,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             originalUrl: sample?.url || '',
             convertedUrl: '',
             messageText: '',
-            status: 'skipped',
+            // 'info', NUNCA 'skipped': isto é uma notificação sobre um envio
+            // que aconteceu com sucesso em paralelo/depois (ex.: vitrine
+            // cadastrada usada, SSID expirado mas oferta saiu com fallback
+            // partner_id) — 'skipped' fazia o painel exibir o badge
+            // "Ignorado" contradizendo o envio real (RCA 2026-07-13,
+            // specs/004-ml-vitrine-fallback/research.md).
+            status: 'info',
             errorMsg: `warning:${kind}`,
           },
         }).catch(err => {

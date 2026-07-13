@@ -864,7 +864,7 @@ export async function resolveToCleanProductUrl(url) {
 // not allowed in affiliates program") — recusa que é regra do programa de
 // afiliados do ML, não depende de credencial válida nem de qual ambiente
 // (staging/prod) está rodando. RCA 2026-07-08.
-function isValidMlVitrineUrl(raw) {
+export function isValidMlVitrineUrl(raw) {
   if (typeof raw !== 'string' || !raw.trim()) return false
   try {
     return ML_HOST.test(new URL(raw.trim()).hostname)
@@ -873,7 +873,7 @@ function isValidMlVitrineUrl(raw) {
   }
 }
 
-function buildVitrineFallback(creds = {}) {
+export function buildVitrineFallback(creds = {}) {
   const vitrineUrl = typeof creds.vitrineUrl === 'string' ? creds.vitrineUrl.trim() : ''
   if (!isValidMlVitrineUrl(vitrineUrl)) return null
   return { url: vitrineUrl, linkKind: 'coupon', warning: 'ml_vitrine_fallback_used' }
@@ -892,7 +892,7 @@ function buildVitrineFallback(creds = {}) {
 // Regressão real (RCA 2026-07-08): um link de produto genuíno (kit de cuecas,
 // vendido por loja oficial) foi diagnosticado como "vitrine de terceiro,
 // cadastre a sua" — mensagem enganosa para esse caso.
-function isDirectVitrineShare(originalUrl) {
+export function isDirectVitrineShare(originalUrl) {
   try {
     const u = new URL(originalUrl)
     return ML_HOST.test(u.hostname) && /^\/social\//i.test(u.pathname)
@@ -994,6 +994,13 @@ export async function convert(url, creds) {
       // Sem produto: cupom/vitrine de terceiro. resolveOnly quer a URL do produto
       // (não faz sentido converter cupom aqui). Caso normal: tenta converter o
       // cupom para NOSSO link de afiliado em vez de descartar a mensagem.
+      // GUARDA ANTI-REGRESSÃO (US2/FR-005, T019): o ramo de vitrine
+      // (buildVitrineFallback, dentro de convertMlCouponWithoutProduct) só é
+      // alcançável a partir DESTE `if (!cleanTarget)` — ou seja, exclusivamente
+      // quando não há produto conversível. Link de produto legítimo (cleanTarget
+      // truthy) NUNCA entra neste bloco, então a vitrine cadastrada jamais
+      // substitui um link de produto. Não mover esta chamada para fora deste
+      // `if`, nem tratar `cleanTarget` como opcional aqui.
       if (resolveOnly) return null
       return await convertMlCouponWithoutProduct(url, creds)
     }
