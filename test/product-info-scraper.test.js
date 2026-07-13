@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { fetchProductInfo } from '../src/converters/productInfoScraper.js'
+import { fetchProductInfo, getMlUserToken } from '../src/converters/productInfoScraper.js'
 
 function mockHtmlResponse(html, url = 'https://www.amazon.com.br/dp/B0CXGBT3Z9') {
   return {
@@ -819,4 +819,150 @@ test('fetchProductInfo (Shopee) não vaza o interstício anti-bot "Oops! Seu nav
 
   const info = await fetchProductInfo('https://s.shopee.com.br/5VTC0c5D8e')
   assert.equal(info.title, '', 'interstício anti-bot não pode virar título de produto')
+})
+
+// 005-ml-cookie-expiry (US1/T006): getMlUserToken passa a retornar
+// { token, credentialPatch } em vez de uma string solta, para que o chamador
+// persista o refresh_token ROTACIONADO (single-use no ML) em vez de
+// descartá-lo — causa raiz nova confirmada em research.md.
+
+test('getMlUserToken: access token expirado + fetch mockado => credentialPatch com refresh_token novo (≠ do anterior)', async (t) => {
+  const prevEnv = { ML_CLIENT_ID: process.env.ML_CLIENT_ID, ML_CLIENT_SECRET: process.env.ML_CLIENT_SECRET }
+  process.env.ML_CLIENT_ID = 'client-id-test'
+  process.env.ML_CLIENT_SECRET = 'client-secret-test'
+  t.after(() => {
+    process.env.ML_CLIENT_ID = prevEnv.ML_CLIENT_ID
+    process.env.ML_CLIENT_SECRET = prevEnv.ML_CLIENT_SECRET
+  })
+
+  t.mock.method(global, 'fetch', async () => ({
+    ok: true,
+    json: async () => ({ access_token: 'access-fresh', refresh_token: 'refresh-fresh', expires_in: 21600 }),
+  }))
+
+  const result = await getMlUserToken({
+    oauthAccessToken: 'access-old',
+    oauthTokenExpiry: Date.now() - 1000,
+    oauthRefreshToken: 'refresh-old',
+  })
+
+  assert.equal(result.token, 'access-fresh')
+  assert.ok(result.credentialPatch)
+  assert.equal(result.credentialPatch.oauthAccessToken, 'access-fresh')
+  assert.equal(result.credentialPatch.oauthRefreshToken, 'refresh-fresh')
+  assert.notEqual(result.credentialPatch.oauthRefreshToken, 'refresh-old')
+})
+
+test('getMlUserToken: access ainda válido => reusa sem chamar fetch, credentialPatch é null', async (t) => {
+  const fetchSpy = t.mock.fn(async () => { throw new Error('fetch não deveria ser chamado') })
+  t.mock.method(global, 'fetch', fetchSpy)
+
+  const result = await getMlUserToken({
+    oauthAccessToken: 'access-valid',
+    oauthTokenExpiry: Date.now() + 60_000,
+    oauthRefreshToken: 'refresh-any',
+  })
+
+  assert.equal(result.token, 'access-valid')
+  assert.equal(result.credentialPatch, null)
+  assert.equal(fetchSpy.mock.callCount(), 0)
+})
+
+test('getMlUserToken: fetch falha (!res.ok) => { token:null, credentialPatch:null } sem apagar os campos de entrada', async (t) => {
+  const prevEnv = { ML_CLIENT_ID: process.env.ML_CLIENT_ID, ML_CLIENT_SECRET: process.env.ML_CLIENT_SECRET }
+  process.env.ML_CLIENT_ID = 'client-id-test'
+  process.env.ML_CLIENT_SECRET = 'client-secret-test'
+  t.after(() => {
+    process.env.ML_CLIENT_ID = prevEnv.ML_CLIENT_ID
+    process.env.ML_CLIENT_SECRET = prevEnv.ML_CLIENT_SECRET
+  })
+
+  t.mock.method(global, 'fetch', async () => ({ ok: false }))
+
+  const input = {
+    oauthAccessToken: 'access-old',
+    oauthTokenExpiry: Date.now() - 1000,
+    oauthRefreshToken: 'refresh-old',
+  }
+  const result = await getMlUserToken(input)
+
+  assert.equal(result.token, null)
+  assert.equal(result.credentialPatch, null)
+  // quem chama não é instruído a reescrever nada: input original permanece intocado
+  assert.equal(input.oauthRefreshToken, 'refresh-old')
+})
+
+test('getMlUserToken: fetch rejeita (erro de rede) => { token:null, credentialPatch:null }', async (t) => {
+  const prevEnv = { ML_CLIENT_ID: process.env.ML_CLIENT_ID, ML_CLIENT_SECRET: process.env.ML_CLIENT_SECRET }
+  process.env.ML_CLIENT_ID = 'client-id-test'
+  process.env.ML_CLIENT_SECRET = 'client-secret-test'
+  t.after(() => {
+    process.env.ML_CLIENT_ID = prevEnv.ML_CLIENT_ID
+    process.env.ML_CLIENT_SECRET = prevEnv.ML_CLIENT_SECRET
+  })
+
+  t.mock.method(global, 'fetch', async () => { throw new Error('ECONNRESET') })
+
+  const result = await getMlUserToken({
+    oauthAccessToken: 'access-old',
+    oauthTokenExpiry: Date.now() - 1000,
+    oauthRefreshToken: 'refresh-old',
+  })
+
+  assert.equal(result.token, null)
+  assert.equal(result.credentialPatch, null)
+})
+
+test('getMlUserToken: sem oauthRefreshToken => { token:null, credentialPatch:null }', async () => {
+  const result = await getMlUserToken({})
+  assert.equal(result.token, null)
+  assert.equal(result.credentialPatch, null)
+})
+
+// 005-ml-cookie-expiry (T030, Phase 7 — achado de review, severidade baixa):
+// duas chamadas concorrentes de refresh OAuth para a MESMA credencial (mesmo
+// ssid) usam o MESMO refresh_token single-use — sem serialização, as duas
+// batem na API do ML ao mesmo tempo e uma delas recebe `!res.ok` porque a
+// outra já invalidou o token. `getMlUserToken` agora serializa o refresh sob
+// o mesmo lock por credencial do eixo cookie (`withMercadoLivreCredentialLock`).
+test('getMlUserToken: duas chamadas concorrentes para a MESMA credencial serializam o refresh (nunca sobrepõem)', async (t) => {
+  const prevEnv = { ML_CLIENT_ID: process.env.ML_CLIENT_ID, ML_CLIENT_SECRET: process.env.ML_CLIENT_SECRET }
+  process.env.ML_CLIENT_ID = 'client-id-test'
+  process.env.ML_CLIENT_SECRET = 'client-secret-test'
+  t.after(() => {
+    process.env.ML_CLIENT_ID = prevEnv.ML_CLIENT_ID
+    process.env.ML_CLIENT_SECRET = prevEnv.ML_CLIENT_SECRET
+  })
+
+  let inFlight = 0
+  let maxConcurrent = 0
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => {
+    inFlight++
+    maxConcurrent = Math.max(maxConcurrent, inFlight)
+    await new Promise(resolve => setTimeout(resolve, 30))
+    inFlight--
+    return {
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: async () => ({ access_token: 'new-access-token', refresh_token: 'new-refresh-token', expires_in: 21600 }),
+    }
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const creds = {
+    ssid: 'x'.repeat(20),
+    oauthAccessToken: 'access-old',
+    oauthTokenExpiry: Date.now() - 1000,
+    oauthRefreshToken: 'refresh-old',
+  }
+
+  const [r1, r2] = await Promise.all([
+    getMlUserToken({ ...creds }),
+    getMlUserToken({ ...creds }),
+  ])
+
+  assert.equal(maxConcurrent, 1, 'as duas chamadas de refresh OAuth para a mesma credencial nunca devem sobrepor')
+  assert.equal(r1.credentialPatch?.oauthRefreshToken, 'new-refresh-token')
+  assert.equal(r2.credentialPatch?.oauthRefreshToken, 'new-refresh-token')
 })

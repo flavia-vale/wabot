@@ -148,7 +148,9 @@ export async function buildScrapedOffer({
   let reasonMessage = null
   let conversionWarning = null
 
-  const mlCredentials = credentialsMap.mercadolivre || null
+  const mlCredentials = typeof credentialsMap.__onCredentialPatch === 'function'
+    ? (credentialsMap.mercadolivre ? { ...credentialsMap.mercadolivre, __onCredentialPatch: credentialsMap.__onCredentialPatch } : null)
+    : (credentialsMap.mercadolivre || null)
   const shopeeCredentials = credentialsMap.shopee || null
 
   if (!platform) {

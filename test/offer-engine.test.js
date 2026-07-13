@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { buildScrapedOffer } from '../src/converters/offerEngine.js'
+import { fetchProductInfo as realFetchProductInfo } from '../src/converters/productInfoScraper.js'
 
 // Credenciais mínimas que passam em validateCredentialData para cada loja.
 const amazonCreds = {
@@ -170,4 +171,105 @@ test('buildScrapedOffer: keepOriginalLink sem credenciais mantém link original 
   })
 
   assert.equal(offer.displayUrl, url)
+})
+
+// ── T029 (005-ml-cookie-expiry, Phase 7 — achado de review) ─────────────────
+//
+// Cobre o caminho de PRODUÇÃO de ponta a ponta: buildScrapedOffer -> o
+// próprio `fetchProductInfo` real (não um stub) -> fetchMercadoLivreItemInfo
+// -> getMlUserToken, a partir de um `credentialsMap` com `__onCredentialPatch`
+// anexado exatamente como `attachCredentialPatchHandler` (linkConversion.js)
+// e o loadConfig do bot-worker fazem (Object.defineProperty não-enumerável no
+// MAP inteiro, não na credencial mercadolivre isolada). Isso é deliberado:
+// os testes de T006 (test/product-info-scraper.test.js) anexam o gancho
+// manualmente ao objeto `mlCredentials` que passam direto para
+// `getMlUserToken`/`fetchProductInfo`, o que NUNCA exercita a extração
+// `credentialsMap.mercadolivre` de `offerEngine.js` que descartava a
+// propriedade não-enumerável em produção (o bug de T028). Este teste FALHA
+// sem o fix de T028 porque, sem o merge do gancho na extração, o
+// `mlCredentials` que chega em `fetchMercadoLivreItemInfo` não tem
+// `__onCredentialPatch` e `patched` nunca é preenchido.
+test('T029: buildScrapedOffer com fetchProductInfo REAL persiste o refresh_token OAuth rotacionado via __onCredentialPatch (caminho real de produção)', async (t) => {
+  const prevEnv = { ML_CLIENT_ID: process.env.ML_CLIENT_ID, ML_CLIENT_SECRET: process.env.ML_CLIENT_SECRET }
+  process.env.ML_CLIENT_ID = 'client-id-test'
+  process.env.ML_CLIENT_SECRET = 'client-secret-test'
+  t.after(() => {
+    process.env.ML_CLIENT_ID = prevEnv.ML_CLIENT_ID
+    process.env.ML_CLIENT_SECRET = prevEnv.ML_CLIENT_SECRET
+  })
+
+  const url = 'https://www.mercadolivre.com.br/liquidificador-arno/MLB999888777'
+
+  // credentialsMap montado como em produção: credencial ML "crua" (o que
+  // sairia de `parseCredentialData`/`decryptCredential`) + access token OAuth
+  // JÁ EXPIRADO (força o refresh) + refresh_token antigo (single-use).
+  const credentialsMap = {
+    mercadolivre: {
+      tag: 'botinho',
+      ssid: 'x'.repeat(20),
+      oauthAccessToken: 'old-access-token',
+      oauthTokenExpiry: Date.now() - 60_000,
+      oauthRefreshToken: 'old-refresh-token',
+    },
+  }
+
+  let patched = null
+  // Mesmo padrão de `attachCredentialPatchHandler` (src/api/routes/linkConversion.js)
+  // e de `loadConfig` (src/bot-worker.js): a prop é anexada ao MAP inteiro,
+  // não a `credentialsMap.mercadolivre` isoladamente — é exatamente essa
+  // distinção que a extração de `offerEngine.js` precisa preservar.
+  Object.defineProperty(credentialsMap, '__onCredentialPatch', {
+    enumerable: false,
+    value: async (platform, patch) => { patched = { platform, patch } },
+  })
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const requestUrl = String(input)
+    if (requestUrl.includes('api.mercadolibre.com/oauth/token')) {
+      return {
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({
+          access_token: 'new-access-token',
+          refresh_token: 'new-refresh-token',
+          expires_in: 21600,
+        }),
+      }
+    }
+    if (requestUrl.includes('api.mercadolibre.com/items/')) {
+      return {
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ title: 'Liquidificador Arno', price: 149.9 }),
+      }
+    }
+    if (requestUrl.includes('api.mercadolibre.com/products/')) {
+      return { ok: false, headers: { get: () => null } }
+    }
+    // Fetch de HTML da própria página do produto: sem título/preço úteis,
+    // para forçar o fallback via API de item (fetchMercadoLivreItemInfo).
+    return {
+      ok: true,
+      url: requestUrl,
+      headers: { get: (name) => (name.toLowerCase() === 'content-type' ? 'text/html' : null) },
+      body: null,
+      text: async () => '<!doctype html><html><head><title>Mercado Livre</title></head><body></body></html>',
+    }
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  await buildScrapedOffer({
+    url,
+    credentialsMap,
+    keepOriginalLink: true,
+    convertLink: async () => ({ url }),
+    fetchProductInfo: realFetchProductInfo,
+  })
+
+  assert.ok(patched, '__onCredentialPatch deveria ter sido invocado com o refresh_token novo — sem o fix de T028 o gancho some na extração de offerEngine.js e o refresh_token rotacionado é descartado')
+  assert.equal(patched.platform, 'mercadolivre')
+  assert.equal(patched.patch.oauthRefreshToken, 'new-refresh-token')
+  assert.notEqual(patched.patch.oauthRefreshToken, 'old-refresh-token')
+  assert.equal(patched.patch.oauthAccessToken, 'new-access-token')
 })
