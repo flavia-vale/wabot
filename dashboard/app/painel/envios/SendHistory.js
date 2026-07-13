@@ -200,10 +200,11 @@ export default function SendHistory() {
               {inFlight > 0 && <span className="pnl-tag is-flight" style={{ marginLeft: 8, verticalAlign: 'middle' }}>{inFlight} em vôo</span>}
             </div>
             <div className="pnl-note-box is-warn" role="note" style={{ marginTop: 10 }}>
-              <strong>Limpar ofertas da fila</strong> remove todas as mensagens que estão presas na fila de envio
-              (status <em>na fila</em> ou <em>enviando</em>), para <strong>destravar agarramentos</strong> e voltar a
-              enviar normalmente. As ofertas removidas <strong>não serão enviadas</strong> e ficam marcadas como
-              removidas no histórico — isto não apaga os envios já concluídos.
+              Use isso quando os envios pararam de sair (status <em>na fila</em> ou <em>enviando</em> há muito
+              tempo). Ele limpa a fila e <strong>destrava o envio</strong>.
+              <br />
+              ⚠️ As ofertas presas <strong>não serão enviadas</strong> — ficam marcadas como removidas no
+              histórico. Envios já concluídos não são afetados.
             </div>
           </div>
           <button
@@ -334,8 +335,8 @@ export default function SendHistory() {
           <div className="pnl-modal">
             <h3>Limpar ofertas da fila</h3>
             <p>
-              Todas as ofertas que estão <strong>na fila de envio</strong> (na fila ou enviando){inFlight > 0 ? ` — ${inFlight} no momento` : ''} serão
-              removidas para destravar a fila. Elas <strong>não serão enviadas</strong> e ficam marcadas como removidas no histórico.
+              Todas as ofertas <strong>presas na fila</strong> (na fila ou enviando){inFlight > 0 ? ` — ${inFlight} no momento` : ''} serão
+              removidas para destravar o envio. Elas <strong>não serão enviadas</strong> e ficam marcadas como removidas no histórico.
               Envios já concluídos não são afetados.
             </p>
             <div className="pnl-modal-actions">
