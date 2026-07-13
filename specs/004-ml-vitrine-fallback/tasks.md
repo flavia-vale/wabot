@@ -63,14 +63,13 @@ em produção" de `research.md` são executados contra `~/wabot/prisma/prod.db` 
 
 ### Investigação para User Story 3
 
-- [ ] T003 [P] [US3] Executar a query do `MessageLog` da janela 12/07 21:10–21:20 (`research.md` §Investigação item 1) contra `~/wabot/prisma/prod.db` e registrar se há linha `warning:ml_vitrine_fallback_used` (destGroup='warning') coexistindo com linha `status='skipped'` da mesma mensagem/minuto
-- [ ] T004 [P] [US3] Confirmar presença/validade de `vitrineUrl` na credencial ML da usuária (`research.md` §Investigação item 2) decifrando `Credential.data` via caminho da aplicação (`src/credentialHealth.js`/`src/credentialCrypto.js`), não presumindo texto puro
-- [ ] T005 [P] [US3] Grep em `/home/deploy/BOTinho-shared/logs/bot.log` pelo ramo executado (`research.md` §Investigação item 3: `vitrine|createLink|mlFailureType|unsupported_url|usando vitrine cadastrada|descartando|recusa ambígua`) na janela de 12/07 21:1x
-- [ ] T006 [US3] Rastrear no código (`src/bot-worker.js` e `src/credentialHealth.js`) o caminho real que monta o objeto `creds` entregue a `convert()` e confirmar se `vitrineUrl` decifrado é propagado (`research.md` §Investigação item 4)
-- [ ] T007 [US3] Preencher a seção "Decisão de causa raiz" de `specs/004-ml-vitrine-fallback/research.md` com a hipótese confirmada (A/B/C/D), citando as linhas de log/registro de banco coletadas em T003-T006 (depende de T003, T004, T005, T006)
+- [x] T003 [P] [US3] Executar a query do `MessageLog` da janela 12/07 21:10–21:20 (`research.md` §Investigação item 1) contra `~/wabot/prisma/prod.db` e registrar se há linha `warning:ml_vitrine_fallback_used` (destGroup='warning') coexistindo com linha `status='skipped'` da mesma mensagem/minuto — **feito**: existem duas linhas (`warning`/`skipped` às 21:14:48 e `success` real às 21:28:49), ver `research.md` §Decisão de causa raiz
+- [x] T004 [P] [US3] Confirmar presença/validade de `vitrineUrl` na credencial ML da usuária (`research.md` §Investigação item 2) decifrando `Credential.data` via caminho da aplicação (`src/credentialHealth.js`/`src/credentialCrypto.js`), não presumindo texto puro — **feito**: `vitrineUrl` presente e válida (`https://mercadolivre.com/sec/1Psi79H`), refuta Hipóteses A/B
+- [x] T005 [P] [US3] Grep em `/home/deploy/BOTinho-shared/logs/bot.log` pelo ramo executado (`research.md` §Investigação item 3: `vitrine|createLink|mlFailureType|unsupported_url|usando vitrine cadastrada|descartando|recusa ambígua`) na janela de 12/07 21:1x — **feito**: grep não retornou linhas (nível debug/rotação), mas o `MessageLog` (T003) já é evidência decisiva e suficiente
+- [x] T006 [US3] Rastrear no código (`src/bot-worker.js` e `src/credentialHealth.js`) o caminho real que monta o objeto `creds` entregue a `convert()` e confirmar se `vitrineUrl` decifrado é propagado (`research.md` §Investigação item 4) — **feito**: propagação correta, confirmada indiretamente pelo envio de sucesso real (T003) usando a vitrine
+- [x] T007 [US3] Preencher a seção "Decisão de causa raiz" de `specs/004-ml-vitrine-fallback/research.md` com a hipótese confirmada (A/B/C/D), citando as linhas de log/registro de banco coletadas em T003-T006 (depende de T003, T004, T005, T006) — **feito**: Hipótese D confirmada (com precisão: notificação mal rotulada, não desalinhamento de decisão)
 
-**Checkpoint**: Causa raiz declarada em `research.md` com evidência real — só então
-prosseguir para a correção em US1/US2.
+**Checkpoint (concluído)**: Causa raiz declarada em `research.md` com evidência real de produção. **Resumo para as próximas fases**: a oferta de vitrine JÁ é entregue com sucesso (não há bug de substituição/decisão); o bug é que a linha de notificação `warning:ml_vitrine_fallback_used` (e demais `warning:*`) é gravada com `status='skipped'` hardcoded e o painel renderiza isso com o badge "Ignorado", contradizendo o texto explicativo e o envio real que aconteceu em paralelo/depois. T014 (hipótese A/B) portanto **não se aplica** — pular. T013/T015 devem implementar: introduzir um status não-skip (ex. `'info'`) para linhas `destGroup='warning'`, atualizado em `src/bot-worker.js` e refletido em toda a cadeia de exibição (`logsCopy.js`, `SendHistory.js`, `mobileLogs.js`, `/api/logs/summary`), sem alterar a lógica de conversão/fallback do Mercado Livre.
 
 ---
 
@@ -91,14 +90,23 @@ vitrine e o `MessageLog` fica com status de sucesso (não "ignorado").
 - [ ] T008 [P] [US1] Teste "vitrine cadastrada + recusa `unsupported_url` de vitrine direta → fallback retorna `{url: vitrineUrl, warning:'ml_vitrine_fallback_used'}`" em `test/ml-vitrine-fallback.test.js` (contrato caso 1, FR-001)
 - [ ] T009 [P] [US1] Teste "`vitrineUrl` ausente + recusa ambígua (não `/social/`) → `buildVitrineFallback`/`convert` retornam `null` (descarte seguro), sem afirmar vitrine" em `test/ml-vitrine-fallback.test.js` (contrato caso 3, FR-006)
 - [ ] T010 [P] [US1] Teste "`vitrineUrl` malformada → `isValidMlVitrineUrl` falso → `buildVitrineFallback` `null` → descarte seguro, copy não afirma envio" em `test/ml-vitrine-fallback.test.js` (contrato caso 4, edge case)
-- [ ] T011 [P] [US1] Teste de coerência mensagem×status: dada uma mensagem que gerou fallback mas foi barrada a jusante no pipeline, a linha `warning:ml_vitrine_fallback_used` NÃO deve coexistir com uma linha `status='skipped'` da mesma mensagem, exercitando a função responsável pela escrita em `src/bot-worker.js` (~linha 2597-2613) via teste isolado/mock de `db.messageLog.create` em `test/ml-vitrine-fallback.test.js` (contrato caso 5, FR-004)
+- [ ] T011 [P] [US1] Teste de coerência mensagem×status (causa raiz confirmada, `research.md`): a linha de notificação `warning:ml_vitrine_fallback_used` deve ser gravada com `status='info'` (nunca `'skipped'`), exercitando a função responsável pela escrita em `src/bot-worker.js` (~linha 2599-2617) via teste isolado/mock de `db.messageLog.create` em `test/ml-vitrine-fallback.test.js` (contrato caso 5, FR-004) — cobre também os outros 5 `warning:*` existentes (mesma função, mesmo bug)
 - [ ] T012 [P] [US1] Teste "invariante de segurança: em nenhum caso o retorno de `convert()`/`buildVitrineFallback` contém o link de terceiro original" em `test/ml-vitrine-fallback.test.js` (contrato caso 6, FR-003)
 
 ### Implementation for User Story 1
 
-- [ ] T013 [US1] Aplicar a correção da causa raiz declarada em T007: se Hipótese D (desacoplamento warning×status), ajustar `src/bot-worker.js` (~linha 2597-2613) para só gravar/exibir `errorMsg='warning:ml_vitrine_fallback_used'` quando a oferta efetivamente saiu com a vitrine (existe envio `status='success'` com `convertedUrl`=vitrine para a mesma mensagem), nunca em paralelo a um `status='skipped'` (depende de T007)
-- [ ] T014 [US1] Se a causa raiz confirmada for Hipótese A/B (vitrine não chega em `creds` ou é reprovada indevidamente): corrigir a propagação/validação em `src/credentialHealth.js` e/ou `isValidMlVitrineUrl`/`buildVitrineFallback` em `src/converters/mercadolivre.js` para que o `vitrineUrl` decifrado e válido chegue a `convert()` (depende de T007; executar apenas se aplicável à hipótese confirmada)
-- [ ] T015 [US1] Ajustar a tradução de copy em `dashboard/lib/painel/logsCopy.js` (~linha 40) e `dashboard/lib/mobileLogs.js` (~linha 38) para que o texto "a oferta saiu usando sua vitrine" só apareça quando coerente com o desfecho real, e a mensagem de "ignorado por falta de vitrine cadastrada" oriente o cadastro sem alegar envio (FR-004)
+> **Causa raiz confirmada em produção (T007/research.md)**: a oferta de vitrine
+> JÁ é entregue com sucesso — não há bug de decisão/substituição. O bug é que a
+> linha de NOTIFICAÇÃO (`destGroup='warning'`, escrita em `src/bot-worker.js`
+> ~2599-2617 para QUALQUER `warning:*`, não só vitrine) é gravada com
+> `status='skipped'` hardcoded, e o painel renderiza isso com o badge
+> "Ignorado" — contradizendo o texto explicativo ("a oferta saiu...") e o envio
+> real que ocorre em paralelo/depois. T014 (hipótese A/B) não se aplica —
+> vitrineUrl chega corretamente a `creds`; pular.
+
+- [ ] T013 [US1] Em `src/bot-worker.js` (~linha 2602-2613), gravar as linhas de notificação (`destGroup='warning'`) com um status não-skip dedicado (`status: 'info'`) em vez de `'skipped'` hardcoded — preserva `errorMsg='warning:<kind>'` (taxonomia inalterada) para os 6 tipos existentes (`ml_ssid_expired`, `amazon_cookies_expired`, `ml_affiliate_forbidden`, `ml_affiliate_rate_limited`, `ml_affiliate_busy`, `ml_vitrine_fallback_used`) — nenhum é uma decisão de descarte de oferta
+- [x] T014 [US1] ~~Se a causa raiz confirmada for Hipótese A/B~~ — **N/A**: vitrineUrl chega corretamente a `creds` (confirmado em T004/T006); nenhuma correção de propagação/validação necessária
+- [ ] T015 [US1] Propagar o novo status `'info'` pela cadeia de exibição sem inflar "Ignorados": `dashboard/lib/painel/logsCopy.js` (`STATUS_TAG` — adicionar entrada `info` com label não-"ignorado", ex. "aviso"; `STATUS_TABS` — decidir se aparece em "Todos" mas nunca em "Ignorados"), `dashboard/app/painel/envios/SendHistory.js` (filtro/contagem por status), `dashboard/lib/mobileLogs.js` (equivalente mobile), e o endpoint `/api/logs/summary` (não contar `status='info'` como bloqueada/ignorada). Copy de `explainErrorMsg` para `ml_vitrine_fallback_used` permanece correta (já diz "saiu usando sua vitrine") — o problema era só o badge de status, não o texto (FR-004)
 - [ ] T016 [US1] Rodar `node --test test/ml-vitrine-fallback.test.js` e confirmar que os testes T008-T012 passam após T013-T015
 
 **Checkpoint**: User Story 1 funcional e testável de forma independente — oferta de
