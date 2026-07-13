@@ -752,10 +752,28 @@ async function validateAffiliateRedirect(affiliateUrl, expectedMlbId) {
     // Atrás do muro de verificação a landing é a própria tela anti-bot (sem
     // produto), então nem tentamos raspar — só desperdiça uma chamada.
     if (!finalId && !hitVerificationWall) {
-      const fromLanding = await tryExtractProductFromLanding(resolved)
-      if (fromLanding) {
-        finalId = extractMlbId(fromLanding)
-        if (finalId) path = 'landing'
+      // Para essa conta o short link de afiliado resolve, do IP de datacenter do
+      // VPS, para a página de vitrine/share da PRÓPRIA afiliada
+      // (`/social/<tag>?ref=<blob>`), não direto para o produto. Nesse caso
+      // usamos o MESMO extrator confiável da entrada (card-featured) ANTES da
+      // heurística frágil — assim há mais chance de CONFIRMAR match no produto
+      // certo, em vez de pegar um produto de recomendação da vitrine (RCA
+      // 2026-07-13). Só cai em tryExtractProductFromLanding se não for /social/.
+      let isSocialShare = false
+      try { isSocialShare = /^\/social\//i.test(new URL(resolved).pathname) } catch { /* ignore */ }
+      if (isSocialShare) {
+        const featured = await tryExtractFeaturedProductFromSocialShare(resolved)
+        if (featured) {
+          finalId = extractMlbId(featured)
+          if (finalId) path = 'featured'
+        }
+      }
+      if (!finalId) {
+        const fromLanding = await tryExtractProductFromLanding(resolved)
+        if (fromLanding) {
+          finalId = extractMlbId(fromLanding)
+          if (finalId) path = 'landing'
+        }
       }
     }
 
@@ -767,6 +785,22 @@ async function validateAffiliateRedirect(affiliateUrl, expectedMlbId) {
       return 'inconclusive'
     }
     const ok = finalId === expectedMlbId
+    // Só descartamos com mismatch COMPROVADO — ou seja, quando o MLB veio da
+    // própria URL de redirect (`direct`/`canonicalize`). Um MLB derivado de uma
+    // página de vitrine/share `/social/<tag>?ref=` (paths `featured`/`landing`)
+    // NÃO prova mismatch: a vitrine mistura o produto-alvo com recomendações, e
+    // um chute errado ali descartava um short link de afiliado VÁLIDO,
+    // rebaixando a oferta para o `partner_id` cru (RCA 2026-07-13). Nesse caso
+    // um non-match vira `inconclusive` e mantemos o short link (que é NOSSO, com
+    // a tag da cliente — invariante de "nunca encaminhar link de terceiro"
+    // preservada). Só o `match` da vitrine confirma; o non-match não veta.
+    if (!ok && (path === 'featured' || path === 'landing')) {
+      logger.warn(
+        { affiliateUrl, resolved, finalId, expectedMlbId, path },
+        'ML validate: divergência derivada de vitrine/landing é inconclusiva — mantendo short link'
+      )
+      return 'inconclusive'
+    }
     logger[ok ? 'info' : 'warn'](
       { affiliateUrl, resolved, finalId, expectedMlbId, path, ok },
       ok ? 'ML validate: short_url confere' : 'ML validate: short_url resolveu para MLB diferente do esperado'
