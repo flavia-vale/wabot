@@ -145,7 +145,10 @@ test('subscribeToMonitorChannels — falha de subscribe não desfaz follow', asy
 test('subscribeToMonitorChannels — aplica delay entre follows', async () => {
   const sock = makeSock()
   let jitterCalls = 0
-  const start = Date.now()
+  // waitFn injetado em vez de medir tempo real de parede: setTimeout real é
+  // flaky (resolução de timer do SO pode disparar ~1ms antes do previsto),
+  // então a asserção fica sobre O QUE foi pedido, não sobre quanto tempo passou.
+  const waitCalls = []
   await subscribeToMonitorChannels({
     sock,
     channelMonitors: [
@@ -156,10 +159,10 @@ test('subscribeToMonitorChannels — aplica delay entre follows', async () => {
     followedSet: new Set(),
     logger: silentLogger(),
     jitterFn: () => { jitterCalls++; return 5 },
+    waitFn: async (ms) => { waitCalls.push(ms) },
   })
-  const elapsed = Date.now() - start
   assert.equal(jitterCalls, 2, 'jitter chamado entre N follows = N-1 vezes')
-  assert.ok(elapsed >= 10, `elapsed ${elapsed}ms deve ser ≥ 10ms (2 delays de 5ms)`)
+  assert.deepEqual(waitCalls, [5, 5], 'delay aplicado entre N follows = N-1 vezes, com o ms do jitter')
 })
 
 test('subscribeToMonitorChannels — invocações concorrentes não duplicam follow do mesmo JID', async () => {

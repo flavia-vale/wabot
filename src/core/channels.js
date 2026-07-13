@@ -22,6 +22,9 @@ function wait(ms) {
 //
 // delayBetweenMs: se null/undefined, usa jitter aleatório 30–60s.
 //                 Em testes, injete 0 para velocidade.
+// waitFn: injetável só em teste, pra assertar o delay sem depender de
+//         tempo real de parede (setTimeout real é flaky por natureza —
+//         resolução de timer do SO pode disparar ~1ms antes do previsto).
 export async function subscribeToMonitorChannels({
   sock,
   channelMonitors,
@@ -30,6 +33,7 @@ export async function subscribeToMonitorChannels({
   logger,
   delayBetweenMs = null,
   jitterFn = defaultJitterMs,
+  waitFn = wait,
 }) {
   const log = logger ?? console
   if (!sock || !Array.isArray(channelMonitors) || !followedSet) {
@@ -70,7 +74,7 @@ export async function subscribeToMonitorChannels({
 
       if (i < pending.length - 1) {
         const ms = delayBetweenMs == null ? jitterFn() : delayBetweenMs
-        if (ms > 0) await wait(ms)
+        if (ms > 0) await waitFn(ms)
       }
     }
   } finally {
