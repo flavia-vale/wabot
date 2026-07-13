@@ -82,6 +82,10 @@ export const STATUS_TAG = {
   success: { cls: 'is-success', label: 'enviado' },
   error: { cls: 'is-error', label: 'falhou' },
   skipped: { cls: 'is-skip', label: 'ignorado' },
+  // 'info': notificação sobre um envio que ocorreu com sucesso em
+  // paralelo/depois (ex.: warning:ml_vitrine_fallback_used) — NUNCA rotular
+  // como "ignorado", que contradiz o envio real (RCA 2026-07-13).
+  info: { cls: 'is-info', label: 'aviso' },
   queued: { cls: 'is-flight', label: 'na fila' },
   sending: { cls: 'is-flight', label: 'enviando' },
 }
