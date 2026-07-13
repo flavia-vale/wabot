@@ -5,6 +5,7 @@
 import { fetchShopeeProductInfo, extractShopeeIds, isShopeeShortLink, resolveShopeeShortLink } from './shopee.js'
 import { resolveToCleanProductUrl } from './mercadolivre.js'
 import { isAmazonShortLink, resolveAmazonShortLink } from './amazon.js'
+import { buildOAuthRefreshDecision, applyOAuthTokenResponse } from './mlOAuthTokenPolicy.js'
 
 const HTML_FETCH_TIMEOUT_MS = Number(process.env.PRODUCT_INFO_TIMEOUT_MS) || 8_000
 const HTML_MAX_BYTES = Number(process.env.PRODUCT_INFO_MAX_BYTES) || 2 * 1024 * 1024
@@ -350,14 +351,23 @@ async function fetchMercadoLivreProductInfo(url, { timeoutMs = HTML_FETCH_TIMEOU
   }
 }
 
-async function getMlUserToken(mlCredentials) {
-  if (!mlCredentials?.oauthRefreshToken) return null
-  if (mlCredentials.oauthAccessToken && Date.now() < (mlCredentials.oauthTokenExpiry || 0)) {
-    return mlCredentials.oauthAccessToken
-  }
+// 005-ml-cookie-expiry (US1): renova o access token OAuth do ML quando
+// expirado, e devolve o `credentialPatch` com os tokens ROTACIONADOS (o
+// refresh_token do ML é single-use — cada refresh invalida o anterior e emite
+// um novo). Antes, este retorno descartava o patch e só devolvia a string do
+// token; o refresh seguinte reenviava um refresh_token já invalidado e a
+// sessão OAuth morria cedo. A decisão de refresh/reuso e a construção do
+// patch são delegadas ao módulo puro `mlOAuthTokenPolicy.js` — quem chama
+// (`fetchMercadoLivreItemInfo`) persiste o patch via `__onCredentialPatch`
+// quando disponível, espelhando o padrão do eixo cookie.
+export async function getMlUserToken(mlCredentials) {
+  const decision = buildOAuthRefreshDecision(mlCredentials, Date.now())
+  if (decision.action === 'skip') return { token: null, credentialPatch: null }
+  if (decision.action === 'reuse') return { token: decision.token, credentialPatch: null }
+
   const clientId = process.env.ML_CLIENT_ID
   const clientSecret = process.env.ML_CLIENT_SECRET
-  if (!clientId || !clientSecret) return null
+  if (!clientId || !clientSecret) return { token: null, credentialPatch: null }
   try {
     const res = await fetch('https://api.mercadolibre.com/oauth/token', {
       method: 'POST',
@@ -370,11 +380,13 @@ async function getMlUserToken(mlCredentials) {
       }).toString(),
       signal: AbortSignal.timeout(5000),
     })
-    if (!res.ok) return null
+    if (!res.ok) return { token: null, credentialPatch: null }
     const data = await res.json().catch(() => null)
-    return data?.access_token || null
+    if (!data?.access_token) return { token: null, credentialPatch: null }
+    const credentialPatch = applyOAuthTokenResponse(mlCredentials, data, Date.now())
+    return { token: data.access_token, credentialPatch }
   } catch {
-    return null
+    return { token: null, credentialPatch: null }
   }
 }
 
@@ -389,7 +401,15 @@ async function fetchMercadoLivreItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_M
   if (!itemId) return null
   const endpoint = `https://api.mercadolibre.com/items/${itemId}`
   try {
-    const userToken = await getMlUserToken(mlCredentials)
+    const { token: userToken, credentialPatch } = await getMlUserToken(mlCredentials)
+    if (credentialPatch && typeof mlCredentials?.__onCredentialPatch === 'function') {
+      try {
+        await mlCredentials.__onCredentialPatch('mercadolivre', credentialPatch)
+      } catch (err) {
+        // Best-effort: persistência do refresh OAuth rotacionado não pode
+        // quebrar o fluxo de scrape em curso (mesmo padrão do eixo cookie).
+      }
+    }
     if (!userToken) return null
     const res = await fetch(endpoint, {
       headers: { 'User-Agent': BROWSER_UA, Accept: 'application/json,text/plain,*/*', Authorization: `Bearer ${userToken}` },

@@ -2,19 +2,24 @@ import dbDefault from '../../db.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { getCredentialSaveMessage, parseCredentialData, PLATFORMS, sanitizeCredentialBody, validateCredentialData } from '../../credentialHealth.js'
 import { encryptCredential } from '../../credentialCrypto.js'
-import { checkMercadoLivreSession } from '../../converters/mercadolivre.js'
+import { checkMercadoLivreSession as defaultCheckMercadoLivreSession } from '../../converters/mercadolivre.js'
 import { checkAmazonSession as defaultCheckAmazonSession } from '../../converters/amazon.js'
 import { getCachedProbe as defaultGetCachedProbe, invalidateCachedProbe as defaultInvalidateCachedProbe, setCachedProbe as defaultSetCachedProbe } from '../../converters/amazonSessionProbeCache.js'
+import { getCachedProbe as defaultGetCachedMlProbe, invalidateCachedProbe as defaultInvalidateCachedMlProbe, setCachedProbe as defaultSetCachedMlProbe } from '../../converters/mercadolivreSessionProbeCache.js'
 import { getBotMetrics as defaultGetBotMetrics, isRunning as defaultIsRunning, reloadConfig as defaultReloadConfig, startBot as defaultStartBot, stopBot as defaultStopBot } from '../../manager.js'
 import { classifyWorkerHealth } from '../../workerHealth.js'
 import { restartStaleWorkerIfNeeded } from '../../workerRemediation.js'
 
 export async function credentialsRoutes(app, opts = {}) {
   const db = opts.db ?? dbDefault
+  const checkMercadoLivreSession = opts.checkMercadoLivreSession ?? defaultCheckMercadoLivreSession
   const checkAmazonSession = opts.checkAmazonSession ?? defaultCheckAmazonSession
   const getCachedAmazonProbe = opts.getCachedProbe ?? defaultGetCachedProbe
   const setCachedAmazonProbe = opts.setCachedProbe ?? defaultSetCachedProbe
   const invalidateCachedAmazonProbe = opts.invalidateCachedProbe ?? defaultInvalidateCachedProbe
+  const getCachedMlProbe = opts.getMlProbeCache ?? defaultGetCachedMlProbe
+  const setCachedMlProbe = opts.setMlProbeCache ?? defaultSetCachedMlProbe
+  const invalidateCachedMlProbe = opts.invalidateMlProbeCache ?? defaultInvalidateCachedMlProbe
   const reloadConfig = opts.reloadConfig ?? defaultReloadConfig
   const getBotMetrics = opts.getBotMetrics ?? defaultGetBotMetrics
   const restartStaleWorker = opts.restartStaleWorker ?? ((args) => restartStaleWorkerIfNeeded({
@@ -34,13 +39,28 @@ export async function credentialsRoutes(app, opts = {}) {
   // Checagem ativa da sessão de afiliado do Mercado Livre. O cookie ssid expira
   // (dias/semanas) e, sem renovar, a raspagem/conversão do ML quebra em silêncio.
   // O painel chama este endpoint ao carregar e avisa a usuária quando expirado.
+  //
+  // 005-ml-cookie-expiry (US3): sem cache, cada abertura do painel disparava
+  // uma sondagem real ao ML — N aberturas = N chamadas, aumentando consumo de
+  // rotação de cookie. Agora: (1) cache curto por usuário evita sondar de
+  // novo dentro da janela TTL (espelha /amazon/session); (2) resultado
+  // transitório (alive:null) nunca é servido do cache (mercadolivreSessionProbeCache.js
+  // já filtra isso internamente).
   app.get('/mercadolivre/session', { onRequest: [app.authenticate] }, async (req) => {
+    const cached = getCachedMlProbe(req.user.sub)
+    if (cached) {
+      app.log.debug({ userId: req.user.sub }, 'Mercado Livre session: sondagem servida por cache (sem chamada ao ML)')
+      return cached
+    }
+
     const cred = await db.credential.findUnique({
       where: { userId_platform: { userId: req.user.sub, platform: 'mercadolivre' } },
     })
     if (!cred) return { configured: false, alive: null, reason: 'not_configured' }
     const data = parseCredentialData(cred.data)
     const result = await checkMercadoLivreSession(data)
+    app.log.debug({ userId: req.user.sub }, 'Mercado Livre session: sondagem efetiva (chamada real ao ML)')
+
     const { credentialPatch, ...publicResult } = result
     if (credentialPatch) {
       const patchedData = { ...data, ...credentialPatch }
@@ -49,7 +69,15 @@ export async function credentialsRoutes(app, opts = {}) {
         data: { data: encryptCredential(JSON.stringify(patchedData)) },
       })
     }
-    return { ...publicResult, checkedAt: new Date().toISOString() }
+
+    const responseBody = { ...publicResult, checkedAt: new Date().toISOString() }
+    // Só cacheia resultado definitivo (alive true/false) — mesmo contrato do
+    // eixo Amazon (T023 do precedente): um blip transitório não pode fixar o
+    // painel nesse estado pela janela inteira do TTL.
+    if (responseBody.alive === true || responseBody.alive === false) {
+      setCachedMlProbe(req.user.sub, responseBody)
+    }
+    return responseBody
   })
 
   // Checagem ativa da sessão de afiliado da Amazon (SiteStripe). Os cookies
@@ -127,6 +155,12 @@ export async function credentialsRoutes(app, opts = {}) {
       // cache expirar sozinho (até AMAZON_SESSION_PROBE_CACHE_TTL_MS,
       // default 5min) (T022, review de código).
       invalidateCachedAmazonProbe(req.user.sub)
+    }
+    if (platform === 'mercadolivre') {
+      // 005-ml-cookie-expiry (T016): mesmo padrão do Amazon — sem isto, uma
+      // credencial ML recadastrada continuaria mascarada pelo resultado
+      // antigo em GET /mercadolivre/session até o cache expirar sozinho.
+      invalidateCachedMlProbe(req.user.sub)
     }
     // Recarrega a config do worker imediatamente — sem isso, o bot usa a
     // credencial antiga em cache (CONFIG_CACHE_TTL_MS, ~60s) e ofertas novas
