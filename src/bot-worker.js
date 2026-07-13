@@ -52,7 +52,7 @@ import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/prese
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
-import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, shouldResetAuthForBadSession, registerStableCloseAndDecide, shouldConsiderStableCloseCooldown, extractAckMessageIdFromStreamErrorNode, registerStuckMessageAndDecide } from './core/reconnectPolicy.js'
+import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, shouldResetAuthForBadSession, registerStableCloseAndDecide, shouldConsiderStableCloseCooldown, extractAckMessageIdFromStreamErrorNode, registerStuckMessageAndDecide, extractRemoteJidFromLogArgs } from './core/reconnectPolicy.js'
 import { buildAuthResetSessionPatch, buildCloseSessionPatch, buildHeartbeatSessionPatch, computeHeartbeatState, DEFAULT_MAX_RECONNECTING_MS } from './core/sessionPersistencePolicy.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
@@ -810,6 +810,32 @@ const RECONNECT_STABLE_CLOSE_COOLDOWN_MS = Math.max(RECONNECT_BASE_MS, envNumber
 const STUCK_MSG_WINDOW_MS = Math.max(5 * 60_000, envNumber('WA_STUCK_MSG_WINDOW_MS', 2 * 60 * 60_000))
 const STUCK_MSG_THRESHOLD = Math.max(0, envNumber('WA_STUCK_MSG_THRESHOLD', 2))
 let stuckMessageTimestamps = new Map()
+// Auto-heal de grupo dessincronizado (issue #1216, Camada 3): investigação de produção
+// (jul/2026) achou um grupo NÃO-monitorado com sender-key do Signal dessincronizada
+// gerando centenas de falhas de decrypt e derrubando a sessão em cadência de ~50min (o
+// mesmo mecanismo do "Loop de retry-receipt travado", só que a fonte era um grupo inteiro,
+// não uma mensagem). Curar manualmente (achar o JID no log, pedir refresh/saída) não
+// escala por cliente. Aqui, quando o MESMO grupo cruza WA_GROUP_DESYNC_THRESHOLD falhas de
+// decrypt na janela, disparamos sozinhos um `triggerWaGroupsRefresh()` (a MESMA função do
+// endpoint manual /refresh-wa-state — só re-busca sender-keys no socket já conectado, NÃO
+// fecha o WebSocket, NÃO gera QR, NÃO exige nada da cliente). Threshold <= 0 desliga.
+const WA_GROUP_DESYNC_WINDOW_MS = Math.max(5 * 60_000, envNumber('WA_GROUP_DESYNC_WINDOW_MS', 30 * 60_000))
+const WA_GROUP_DESYNC_THRESHOLD = Math.max(0, envNumber('WA_GROUP_DESYNC_THRESHOLD', 5))
+// Evita martelar refresh pro MESMO grupo a cada nova falha dentro da mesma janela —
+// dá tempo do refresh anterior se propagar antes de tentar de novo.
+const WA_GROUP_DESYNC_REFRESH_COOLDOWN_MS = Math.max(60_000, envNumber('WA_GROUP_DESYNC_REFRESH_COOLDOWN_MS', 5 * 60_000))
+// Escalonamento (NUNCA automático além do refresh): se o auto-refresh disparar
+// repetidamente pro MESMO grupo numa janela maior sem as falhas pararem, é sinal de que
+// refresh sozinho não resolve — precisa de ação manual (cliente sair/reentrar no grupo).
+// Isso só gera visibilidade (evento durável); jamais sai do grupo sozinho.
+const WA_GROUP_DESYNC_ESCALATE_WINDOW_MS = Math.max(30 * 60_000, envNumber('WA_GROUP_DESYNC_ESCALATE_WINDOW_MS', 3 * 60 * 60_000))
+const WA_GROUP_DESYNC_ESCALATE_THRESHOLD = Math.max(0, envNumber('WA_GROUP_DESYNC_ESCALATE_THRESHOLD', 3))
+// Escopo de módulo (não dentro de startBotInner) de propósito — precisa sobreviver a
+// reconexões dentro do MESMO worker, senão o contador zera a cada `open`/close e o
+// threshold nunca é cruzado (mesma lição do RCA do msgRetryCounterCache).
+let groupDecryptTimestamps = new Map()
+let groupAutoRefreshTimestamps = new Map()
+const groupLastAutoRefreshAtByJid = new Map()
 // Keep-alive do socket: sem ping periódico, um socket morto silenciosamente só
 // é detectado tarde, causando reconexão (e nova notificação). 25s é conservador.
 const WA_KEEPALIVE_INTERVAL_MS = Math.max(10_000, envNumber('WA_KEEPALIVE_INTERVAL_MS', 25_000))
@@ -1027,6 +1053,51 @@ function getSessionHealth() {
   }
 }
 
+// Camada 3 (issue #1216): chamado a cada linha de log que já bateu em
+// SESSION_HEALTH_SIGNAL_RE (falha de decrypt). Tenta extrair o remoteJid do grupo/chat dos
+// args brutos do logger e, se o MESMO jid cruzar o threshold de falhas na janela, dispara
+// um refresh de sender-keys sozinho — sem derrubar a sessão, sem pedir nada da cliente.
+// Nunca lança: chamado de dentro do wrapper do logger, não pode quebrar o log em si.
+function handleGroupDecryptSignal(args) {
+  if (WA_GROUP_DESYNC_THRESHOLD <= 0) return
+  try {
+    const jid = extractRemoteJidFromLogArgs(args)
+    if (!jid) return
+    const now = Date.now()
+    const r = registerStuckMessageAndDecide(groupDecryptTimestamps, jid, now, {
+      windowMs: WA_GROUP_DESYNC_WINDOW_MS,
+      threshold: WA_GROUP_DESYNC_THRESHOLD,
+    })
+    groupDecryptTimestamps = r.state
+    if (!r.stuck) return
+    const lastRefreshAt = groupLastAutoRefreshAtByJid.get(jid) || 0
+    if (now - lastRefreshAt < WA_GROUP_DESYNC_REFRESH_COOLDOWN_MS) return
+    groupLastAutoRefreshAtByJid.set(jid, now)
+    logger.warn(
+      { jid, decryptFailures: r.count, windowMs: WA_GROUP_DESYNC_WINDOW_MS },
+      'Grupo com falhas de decrypt repetidas (sender-key dessincronizada) — disparando auto-refresh de sender-keys sozinho (não derruba a sessão)'
+    )
+    try { recordOperationalSignal('wa_group_desync_autoheal', { userId, jid, count: r.count }) } catch {}
+    void triggerWaGroupsRefresh('auto_group_desync')
+      .then(result => {
+        if (!result?.ok) return
+        const esc = registerStuckMessageAndDecide(groupAutoRefreshTimestamps, jid, Date.now(), {
+          windowMs: WA_GROUP_DESYNC_ESCALATE_WINDOW_MS,
+          threshold: WA_GROUP_DESYNC_ESCALATE_THRESHOLD,
+        })
+        groupAutoRefreshTimestamps = esc.state
+        if (esc.stuck) {
+          logger.error(
+            { jid, autoRefreshCount: esc.count },
+            'Grupo continua com falhas de decrypt após múltiplos auto-refresh — pode precisar que a cliente saia e reentre no grupo (ação manual, não-automática)'
+          )
+          try { recordOperationalSignal('wa_group_desync_unresolved', { userId, jid, count: esc.count }) } catch {}
+        }
+      })
+      .catch(() => {})
+  } catch {}
+}
+
 // Envelopa o logger pino do Baileys (e seus filhos) para incrementar o contador
 // de saúde sempre que uma linha casar com SESSION_HEALTH_SIGNAL_RE. Usa
 // defineProperty (própria, gravável) para não esbarrar em métodos não-graváveis
@@ -1042,7 +1113,7 @@ function instrumentBaileysLoggerForHealth(baileysLogger) {
       value: (...args) => {
         try {
           for (const arg of args) {
-            if (typeof arg === 'string' && SESSION_HEALTH_SIGNAL_RE.test(arg)) { recordCryptoError(); break }
+            if (typeof arg === 'string' && SESSION_HEALTH_SIGNAL_RE.test(arg)) { recordCryptoError(); handleGroupDecryptSignal(args); break }
           }
           if (level === 'error' && typeof target.debug === 'function') {
             for (const arg of args) {

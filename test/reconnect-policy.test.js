@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, shouldResetAuthForBadSession, registerStableCloseAndDecide, shouldConsiderStableCloseCooldown, extractAckMessageIdFromStreamErrorNode, registerStuckMessageAndDecide } from '../src/core/reconnectPolicy.js'
+import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, shouldResetAuthForBadSession, registerStableCloseAndDecide, shouldConsiderStableCloseCooldown, extractAckMessageIdFromStreamErrorNode, registerStuckMessageAndDecide, extractRemoteJidFromLogArgs } from '../src/core/reconnectPolicy.js'
 
 test('backoff cresce exponencialmente a partir de baseMs', () => {
   const opts = { baseMs: 5_000, maxMs: 300_000, jitterRatio: 0, random: () => 0.5 }
@@ -288,4 +288,50 @@ test('registerStuckMessageAndDecide: imutável — não muta o Map de entrada', 
   const r = registerStuckMessageAndDecide(original, 'MSG1', 1_000, { windowMs: 60_000, threshold: 2 })
   assert.equal(original.get('MSG1').length, 1)
   assert.equal(r.state.get('MSG1').length, 2)
+})
+
+test('extractRemoteJidFromLogArgs: acha remoteJid top-level em objeto de contexto', () => {
+  const args = [{ remoteJid: '120363407732632868@g.us', msgId: 'ABC' }, 'failed to decrypt message']
+  assert.equal(extractRemoteJidFromLogArgs(args), '120363407732632868@g.us')
+})
+
+test('extractRemoteJidFromLogArgs: acha remoteJid aninhado (key.remoteJid)', () => {
+  const args = [{ key: { remoteJid: '555@g.us', id: 'X' }, name: 'SessionError' }, 'Bad MAC']
+  assert.equal(extractRemoteJidFromLogArgs(args), '555@g.us')
+})
+
+test('extractRemoteJidFromLogArgs: acha remoteJid em profundidade 2+', () => {
+  const args = [{ err: { data: { key: { remoteJid: 'deep@g.us' } } } }]
+  assert.equal(extractRemoteJidFromLogArgs(args), 'deep@g.us')
+})
+
+test('extractRemoteJidFromLogArgs: retorna null quando não acha', () => {
+  const args = ['sent retry receipt', { msgId: 'ABC', name: 'MessageCounterError' }]
+  assert.equal(extractRemoteJidFromLogArgs(args), null)
+})
+
+test('extractRemoteJidFromLogArgs: ignora args não-objeto (strings/números/null/undefined)', () => {
+  assert.equal(extractRemoteJidFromLogArgs(['a string', 42, null, undefined, true]), null)
+})
+
+test('extractRemoteJidFromLogArgs: args não-array retorna null (defensivo)', () => {
+  assert.equal(extractRemoteJidFromLogArgs(null), null)
+  assert.equal(extractRemoteJidFromLogArgs(undefined), null)
+})
+
+test('extractRemoteJidFromLogArgs: não trava em referência circular', () => {
+  const obj = { msgId: 'X' }
+  obj.self = obj
+  assert.equal(extractRemoteJidFromLogArgs([obj]), null)
+})
+
+test('extractRemoteJidFromLogArgs: respeita maxDepth (não desce além do limite)', () => {
+  const args = [{ a: { b: { c: { d: { remoteJid: 'toofar@g.us' } } } } }]
+  assert.equal(extractRemoteJidFromLogArgs(args, { maxDepth: 2 }), null)
+  assert.equal(extractRemoteJidFromLogArgs(args, { maxDepth: 4 }), 'toofar@g.us')
+})
+
+test('extractRemoteJidFromLogArgs: ignora remoteJid vazio ou não-string', () => {
+  const args = [{ remoteJid: '' }, { remoteJid: 123 }, { remoteJid: 'valid@g.us' }]
+  assert.equal(extractRemoteJidFromLogArgs(args), 'valid@g.us')
 })

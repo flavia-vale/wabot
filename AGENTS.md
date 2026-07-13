@@ -668,6 +668,46 @@ Testes: `test/reconnect-policy.test.js` (`shouldResetAuthForBadSession`),
 `test/session-persistence-policy.test.js` (`buildHeartbeatSessionPatch`,
 `computeHeartbeatState`).
 
+## Auto-heal de grupo com sender-key dessincronizada (issue #1216, Camada 3)
+
+Investigação de produção (jul/2026, cliente `julianepumuceno16@gmail.com`) achou um grupo
+**não-monitorado** (`120363407732632868@g.us`, spam/pouco relevante) com a sender-key do
+Signal dessincronizada gerando **345 falhas de decrypt** e derrubando a sessão em cadência
+de ~50min — o mesmo mecanismo do "Loop de retry-receipt travado" abaixo, só que a fonte era
+um GRUPO inteiro reofertando mensagens indecifráveis repetidamente, não uma mensagem isolada.
+Curar manualmente (grepar o `bot.log` pra achar o JID culpado, pedir refresh ou pedir pra
+cliente sair do grupo) não escala por cliente.
+
+**Auto-remediação (não-destrutiva, sempre):**
+
+- `instrumentBaileysLoggerForHealth` (`src/bot-worker.js`) já intercepta toda linha de log
+  que bate `SESSION_HEALTH_SIGNAL_RE` (Bad MAC / SessionError / MessageCounterError / "sent
+  retry receipt"). Agora, além de contar pro indicador de saúde, `handleGroupDecryptSignal`
+  tenta extrair o `remoteJid` dos args brutos do logger via `extractRemoteJidFromLogArgs`
+  (`src/core/reconnectPolicy.js`, puro/testado — busca em largura, rasa e limitada, já que a
+  lib não garante posição fixa do campo na árvore de contexto do erro).
+- Quando o MESMO grupo cruza `WA_GROUP_DESYNC_THRESHOLD` (default 5) falhas de decrypt em
+  `WA_GROUP_DESYNC_WINDOW_MS` (default 30min), dispara **sozinho** um
+  `triggerWaGroupsRefresh()` — a MESMA função por trás do endpoint manual `/refresh-wa-state`
+  (`groupFetchAllParticipating()` no socket já conectado). **Não fecha o WebSocket, não gera
+  QR, não pede nada da cliente** — o robô continua enviando/recebendo durante e depois.
+  `WA_GROUP_DESYNC_REFRESH_COOLDOWN_MS` (default 5min) evita martelar o mesmo grupo.
+- Evento durável `ops_wa_group_desync_autoheal` a cada disparo (allowlist em
+  `src/analytics.js` + mapeamento em `src/observability/operationalSignals.js`).
+
+**Escalonamento — NUNCA automático além do refresh.** Se o auto-refresh disparar
+`WA_GROUP_DESYNC_ESCALATE_THRESHOLD` (default 3) vezes pro MESMO grupo dentro de
+`WA_GROUP_DESYNC_ESCALATE_WINDOW_MS` (default 3h) sem as falhas pararem, emite
+`ops_wa_group_desync_unresolved` (só visibilidade — decisão de sair do grupo fica **sempre**
+com humano/cliente, o sistema nunca sai de grupo sozinho).
+
+**Escopo de módulo (não regredir):** `groupDecryptTimestamps`, `groupAutoRefreshTimestamps` e
+`groupLastAutoRefreshAtByJid` vivem fora de `startBotInner` (mesma lição do RCA do
+`msgRetryCounterCache` abaixo) — precisam sobreviver a reconexões dentro do MESMO worker,
+senão o contador zera a cada `open`/close e o threshold nunca é cruzado.
+
+Testes: `test/reconnect-policy.test.js` (`extractRemoteJidFromLogArgs`).
+
 ## Loop de retry-receipt travado derrubando sessão a cada ~50min (RCA 2026-07)
 
 **Sintoma:** cliente reportou queda "de novo hoje". Investigação encontrou uma
