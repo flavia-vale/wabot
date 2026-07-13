@@ -1296,7 +1296,19 @@ const STORE_PREVIEW_TITLES = {
   magazineluiza: 'Magalu',
 }
 
+// Flag experimental (default OFF) para testar em staging se dá pra esconder
+// o nome da loja do card sem repetir a regressão do PR #1186 (card sumiu
+// quando `title` foi OMITIDO). Aqui a chave `title` continua SEMPRE presente
+// (guard estrutural em test/store-brand-card.test.js não muda) — só o
+// CONTEÚDO vira um espaço em vez do nome da loja. Não sabemos ainda se o
+// WhatsApp trata string vazia/proto3 default-value como "ausente" (o que
+// reproduziria o bug) — por isso espaço (valor não-default) em vez de "".
+// Validar mandando oferta real em staging e checando o card no celular
+// antes de promover para main; se o card sumir, desligar a env (sem redeploy).
+const PREVIEW_CARD_HIDE_STORE_TITLE = process.env.PREVIEW_CARD_HIDE_STORE_TITLE === 'true'
+
 function storePreviewTitle(platform, url, isCoupon) {
+  if (PREVIEW_CARD_HIDE_STORE_TITLE) return ' '
   const label = STORE_PREVIEW_TITLES[String(platform || '')]
   if (label) return isCoupon ? `Cupom ${label}` : label
   try { return new URL(url).hostname.replace(/^www\./, '') } catch { return 'Oferta' }

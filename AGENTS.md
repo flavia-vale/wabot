@@ -1208,6 +1208,28 @@ chokepoint em `groupEntitlements.js` no caminho de envio. Testes:
 `test/migrations-group-image-mode-preview.test.js`,
 `test/groups-route-image-mode.test.js`.
 
+## `title` do card de preview manual — NÃO pode ser omitido (regressão PR #1186)
+
+O card clicável do modo `preview` (`buildManualLinkPreview`, `src/bot-worker.js`)
+sempre mostra o nome da loja (Amazon/Shopee/Mercado Livre/Magalu) numa linha
+acima do domínio, entre a imagem e o texto. Isso **não é estético — é
+obrigatório**: no PR #1186 o campo `title` do `urlInfo` foi omitido e o
+WhatsApp **parou de renderizar o card inteiro** (regressão confirmada em
+staging, revertida no commit `1993c9b`). Há um teste estrutural
+(`test/store-brand-card.test.js`) que falha se a chamada
+`title: storePreviewTitle(...)` sumir da chamada de `buildManualLinkPreview`.
+
+**Flag experimental `PREVIEW_CARD_HIDE_STORE_TITLE`** (default OFF, lida em
+`storePreviewTitle`): quando `'true'`, o CONTEÚDO do `title` vira um espaço
+(`' '`) em vez do nome da loja — a chave continua presente (não reproduz a
+omissão do PR #1186), só o texto visível muda. **Não testado em produção
+ainda** — não se sabe se o WhatsApp trata string vazia/proto3 default-value
+como campo ausente (o que reproduziria o bug antigo); por isso espaço em vez
+de `''`. Antes de promover para main: ligar a flag em staging, mandar uma
+oferta real (Amazon/Shopee/ML/Magalu) e conferir no celular se o card ainda
+aparece com foto. Se sumir, desligar a flag (sem redeploy) e reverter para o
+nome da loja.
+
 ## Image scrapers — configuração canônica (PR #422, não regredir)
 
 `src/converters/imageScrapers.js` entrega imagem hi-res para link preview
