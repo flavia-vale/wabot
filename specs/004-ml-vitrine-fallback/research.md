@@ -102,17 +102,83 @@ produção, com as hipóteses que cada um confirma/refuta.
    prod, casada com o achado #2) se o objeto `creds` passado a `convert()` inclui
    `vitrineUrl` decifrado. Mapear a função que monta `creds` no worker.
 
-## Decisão de causa raiz (a preencher APÓS a investigação)
+## Decisão de causa raiz (CONFIRMADA em produção, 2026-07-13)
 
-> **NÃO PREENCHIDO NESTE PLANO** — depende da execução dos comandos acima na VPS.
-> O agente com acesso à produção deve concluir aqui com: (a) a linha de log/registro
-> de banco que comprova o ramo real; (b) qual das hipóteses A/B/C/D é a causa raiz;
-> (c) a correção correspondente. Enquanto isso, a hipótese D (desacoplamento
-> warning×status) é a **candidata primária** por ser a única que reproduz o sintoma
-> exato "mensagem de sucesso + status ignorado no mesmo minuto", mas **não é
-> declarada como causa raiz sem a evidência**.
+**Hipótese D confirmada — com uma precisão importante em relação ao enunciado
+original.** Evidência coletada via `sqlite3 ~/wabot/prisma/prod.db` na VPS de
+produção, para `userId='cmouds6zi000013s5z1p3bbkh'` (cliente do relato), link
+original `https://www.mercadolivre.com.br/social/gatuna/lists`:
 
-### Correções condicionais por hipótese (alternativas consideradas)
+```
+sqlite3 ~/wabot/prisma/prod.db "SELECT id, sentAt, destGroup, status, errorMsg, dedupHits, substr(originalUrl,1,90), substr(convertedUrl,1,90) FROM MessageLog WHERE userId='cmouds6zi000013s5z1p3bbkh' AND (originalUrl LIKE '%gatuna%' OR convertedUrl LIKE '%1Psi79H%' OR convertedUrl LIKE '%sec/%') ORDER BY sentAt;"
+```
+
+Trecho relevante da saída (12/07/2026):
+```
+cmrih07vr075lcoq6em1ggzqs|1783901688039|warning|skipped|warning:ml_vitrine_fallback_used|0|https://www.mercadolivre.com.br/social/gatuna/lists|
+cmrih08ea075tcoq63kmy90ag|1783902529040|120363409241456540@g.us|success||0|https://www.mercadolivre.com.br/social/gatuna/lists|https://mercadolivre.com/sec/1Psi79H
+```
+
+1. **A oferta FOI ENTREGUE COM SUCESSO usando a vitrine cadastrada.** A segunda
+   linha acima (`sentAt=1783902529040` → 2026-07-12 21:28:49 BRT), ~14 minutos
+   depois do processamento inicial, tem `destGroup` real
+   (`120363409241456540@g.us`), `status='success'` e `convertedUrl` = a vitrine
+   cadastrada da própria cliente. O atraso de ~14min é consistente com o
+   "Preservação por destino" (rate-limit de envio por janela) já existente no
+   pipeline — não é bug.
+
+2. **`vitrineUrl` presente e válida na credencial** (refuta Hipóteses A/B):
+   ```
+   Credential.data decifrado (via parseCredentialData, src/credentialHealth.js)
+   → vitrineUrl: 'https://mercadolivre.com/sec/1Psi79H'
+   ```
+
+3. **A linha que a cliente viu como "ignorado" (primeira linha acima,
+   `sentAt=1783901688039` → 21:14:48 BRT, mesmo minuto do relato) é uma segunda
+   linha `MessageLog`, puramente informativa**, escrita pelo bloco de `warning`
+   do `bot-worker.js` (linhas 2599-2617): `destGroup='warning'` (marcador
+   sintético, não é destino real), `status='skipped'` **hardcoded para
+   QUALQUER warning** (linha 2611), `convertedUrl=''` (nunca carrega o link
+   realmente enviado).
+
+**Causa raiz precisa**: não há desalinhamento entre decisão e envio — ambos
+corretos, a oferta saiu. O bug é que a linha de **notificação/aviso** (mecanismo
+compartilhado por TODOS os `warning:*`: `ml_ssid_expired`,
+`amazon_cookies_expired`, `ml_affiliate_forbidden`, `ml_affiliate_rate_limited`,
+`ml_affiliate_busy`, `ml_vitrine_fallback_used`) é gravada com `status:
+'skipped'` hardcoded, e o painel (`dashboard/lib/painel/logsCopy.js`,
+`STATUS_TAG.skipped = { label: 'ignorado' }`) renderiza QUALQUER linha com esse
+status com o badge "Ignorado" — inclusive essa linha de aviso, que não é uma
+decisão de descarte de oferta. Resultado visível: duas linhas próximas no
+painel, uma com o texto (corretamente) dizendo "a oferta saiu usando sua
+vitrine" e essa MESMA linha com o badge "Ignorado" ao lado — contraditório,
+mesmo a oferta real tendo sido entregue com sucesso (em outra linha, ~14min
+depois).
+
+**Hipóteses A/B/C: refutadas.** Vitrine presente e válida (refuta A/B); a
+recusa foi de fato `unsupported_url` de uma vitrine direta
+(`/social/gatuna/lists` é `isDirectVitrineShare`) — o fallback FOI corretamente
+acionado e a substituição ficou restrita a vitrine de verdade, exatamente como
+deveria (nenhuma regressão do RCA 2026-07-08, nenhum falso positivo em link de
+produto). Hipótese C (recusa ambígua descartada por design) não se aplica a
+este incidente.
+
+**Correção**: as linhas de notificação (`destGroup='warning'`) precisam de
+status distinto de um skip real — nunca devem herdar o badge "Ignorado".
+- `src/bot-worker.js` (~2599-2617): a linha de aviso não deve ser
+  contada/exibida como "ignorado". Introduzir um status não-skip dedicado a
+  notificações (ex.: `status: 'info'`) para essas linhas, preservando
+  `errorMsg='warning:<kind>'` para a taxonomia existente.
+- UI (`dashboard/lib/painel/logsCopy.js` `STATUS_TAG`/`STATUS_TABS`,
+  `dashboard/app/painel/envios/SendHistory.js`, `dashboard/lib/mobileLogs.js`,
+  endpoint `/api/logs/summary`) precisa reconhecer o novo status sem inflar a
+  contagem de "Ignorados" reais nem quebrar os filtros existentes.
+- **Não** é necessário mudar a lógica de decisão de conversão/fallback em
+  `src/converters/mercadolivre.js` — ela já está correta. T019 de `tasks.md`
+  permanece como guarda de regressão (confirma que nada mudou ali), não como
+  fix.
+
+### Correções condicionais por hipótese (histórico da investigação — mantido para rastreabilidade, não é mais o plano de ação)
 
 - **A/B (vitrine não chega / reprovada)**: garantir propagação de `vitrineUrl`
   decifrado até `creds` de `convert()`, e/ou revisar `isValidMlVitrineUrl`. Risco:

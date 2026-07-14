@@ -85,8 +85,12 @@ export async function resolveMirrorOfferFromLink({
   const converted = String(convertedUrl || '').trim()
   if (!converted) return null
 
+  const mlCredentials = typeof credentialsMap?.__onCredentialPatch === 'function'
+    ? (credentialsMap.mercadolivre ? { ...credentialsMap.mercadolivre, __onCredentialPatch: credentialsMap.__onCredentialPatch } : null)
+    : (credentialsMap?.mercadolivre || null)
+
   const scrapeOpts = {
-    mlCredentials: credentialsMap?.mercadolivre || null,
+    mlCredentials,
     shopeeCredentials: credentialsMap?.shopee || null,
   }
 

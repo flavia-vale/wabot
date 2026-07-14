@@ -35,6 +35,11 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   // Mesma mensagem repetindo no ack de um stream:error — loop de
   // retry-receipt travado derrubando a sessão em cadência (RCA 2026-07).
   wa_stuck_message_retry: 'ops_wa_stuck_message_retry',
+  // Camada 3 (issue #1216): grupo com sender-key dessincronizada disparou
+  // auto-refresh sozinho (não-destrutivo).
+  wa_group_desync_autoheal: 'ops_wa_group_desync_autoheal',
+  // Auto-refresh repetido não resolveu — precisa de ação manual (humano).
+  wa_group_desync_unresolved: 'ops_wa_group_desync_unresolved',
 }
 
 let cachedTrackFn = null

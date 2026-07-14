@@ -655,3 +655,65 @@ test('gatuna: meli.la que resolve para /social/?ref= SEM card destacado (vitrine
     warning: 'ml_vitrine_fallback_used',
   })
 })
+
+// --- RCA 2026-07-13: falso mismatch da validação descartava short link válido ---
+// O short link de afiliado resolve, do IP do VPS, para a vitrine da própria
+// afiliada (/social/<tag>?ref=<blob>). Extrair o produto dessa vitrine é
+// heurístico e às vezes pega uma recomendação em vez do alvo — non-match aí NÃO
+// prova mismatch e não pode vetar o short link (que é NOSSO, com a tag da
+// cliente). Só 'direct'/'canonicalize' (MLB da própria URL de redirect) provam.
+
+test('RCA 2026-07-13: non-match via landing (/social sem card destacado) é inconclusivo — mantém o short link (não cai no partner_id)', async (t) => {
+  clearMercadoLivreAffiliateCooldownsForTest()
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: { urls: [{ short_url: 'https://meli.la/KEEPLAND1' }] },
+    headers: {},
+  }))
+  // O short link resolve para a vitrine /social/<tag>?ref= (não pro produto).
+  const resolved = 'https://www.mercadolivre.com.br/social/475630078?matt_word=475630078&ref=BCaeBnLANDING'
+  t.mock.method(global, 'fetch', async () => ({ url: resolved }))
+  // Sem card destacado (featured→null); a landing frágil extrai um MLB DIFERENTE.
+  t.mock.method(axios, 'get', async () => ({ data: LISTS_VITRINE_HTML }))
+
+  const url = 'https://www.mercadolivre.com.br/secador/p/MLB70009242'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  assert.deepEqual(result, { url: 'https://meli.la/KEEPLAND1', linkKind: 'product' })
+})
+
+test('RCA 2026-07-13: non-match via featured (/social com card destacado divergente) é inconclusivo — mantém o short link', async (t) => {
+  clearMercadoLivreAffiliateCooldownsForTest()
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: { urls: [{ short_url: 'https://meli.la/KEEPFEAT1' }] },
+    headers: {},
+  }))
+  const resolved = 'https://www.mercadolivre.com.br/social/475630078?matt_word=475630078&ref=BCaeBnFEATURED'
+  t.mock.method(global, 'fetch', async () => ({ url: resolved }))
+  // Card destacado presente, mas aponta para MLB22797411 (≠ produto esperado).
+  t.mock.method(axios, 'get', async () => ({ data: FEATURED_SHARE_HTML }))
+
+  const url = 'https://www.mercadolivre.com.br/secador/p/MLB70009242'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  assert.deepEqual(result, { url: 'https://meli.la/KEEPFEAT1', linkKind: 'product' })
+})
+
+test('proteção preservada: mismatch REAL via redirect direto para outro produto ainda descarta o short link (fallback partner_id)', async (t) => {
+  clearMercadoLivreAffiliateCooldownsForTest()
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: { urls: [{ short_url: 'https://meli.la/REALMISS1' }] },
+    headers: {},
+  }))
+  // O short link resolve DIRETO para uma página de produto com MLB diferente:
+  // isso é mismatch comprovado ('direct') e deve descartar.
+  const resolved = 'https://produto.mercadolivre.com.br/MLB1111111-x-_JM'
+  t.mock.method(global, 'fetch', async () => ({ url: resolved }))
+
+  const url = 'https://www.mercadolivre.com.br/secador/p/MLB70009242'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  assert.equal(result.linkKind, 'product')
+  assert.match(result.url, /MLB70009242/)
+  assert.match(result.url, /partner_id=475630078/)
+  assert.doesNotMatch(result.url, /REALMISS1/)
+})

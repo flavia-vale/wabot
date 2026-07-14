@@ -4,6 +4,9 @@ export const MOBILE_LOG_STATUS_TO_UI = {
   queued: 'fila',
   sending: 'fila',
   skipped: 'ignorado',
+  // 'info': notificação sobre um envio que já saiu com sucesso (ex.:
+  // warning:ml_vitrine_fallback_used) — nunca rotular como "ignorado".
+  info: 'aviso',
 }
 
 export const MOBILE_LOG_PLATFORM_LABEL = {
@@ -142,7 +145,7 @@ export function toMobileLogItem(log = {}, now = new Date()) {
     link: log.originalUrl || null,
     conv: status === 'ok' && log.convertedUrl ? log.convertedUrl : null,
     erro: status === 'falha' ? friendlyMobileLogError(log.errorMsg) : null,
-    motivo: status === 'ignorado' ? friendlyMobileLogError(log.errorMsg) : null,
+    motivo: (status === 'ignorado' || status === 'aviso') ? friendlyMobileLogError(log.errorMsg) : null,
     canRetryInMobile: false,
   }
 }

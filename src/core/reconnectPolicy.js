@@ -189,3 +189,35 @@ export function registerStuckMessageAndDecide(stateByMsgId, msgId, now, { window
     stuck: threshold > 0 && recent.length >= threshold,
   }
 }
+
+// Auto-heal de grupo dessincronizado (issue #1216, Camada 3): quando o Baileys loga uma
+// falha de decrypt (Bad MAC / SessionError / MessageCounterError / "sent retry receipt"),
+// o remoteJid do chat/grupo vem embutido em algum lugar do objeto de contexto passado ao
+// logger — não em posição fixa (varia por tipo de erro/versão da lib). Confirmado
+// empiricamente em produção (grep no bot.log real durante a investigação do RCA) que o
+// campo `remoteJid` aparece nesses logs; como a lib não garante caminho fixo, fazemos uma
+// busca em largura, rasa e limitada (poucos níveis, poucos nós, guarda contra ciclo) em vez
+// de acessar um caminho fixo. Retorna null se não achar. Puro: só leitura, sem I/O.
+export function extractRemoteJidFromLogArgs(args, { maxDepth = 4, maxNodes = 200 } = {}) {
+  if (!Array.isArray(args)) return null
+  const seen = new Set()
+  const queue = []
+  for (const arg of args) {
+    if (arg && typeof arg === 'object') queue.push({ node: arg, depth: 0 })
+  }
+  let visited = 0
+  while (queue.length > 0 && visited < maxNodes) {
+    const { node, depth } = queue.shift()
+    if (!node || typeof node !== 'object' || seen.has(node)) continue
+    seen.add(node)
+    visited++
+    for (const key of Object.keys(node)) {
+      const value = node[key]
+      if (key === 'remoteJid' && typeof value === 'string' && value.length > 0) return value
+      if (value && typeof value === 'object' && depth < maxDepth) {
+        queue.push({ node: value, depth: depth + 1 })
+      }
+    }
+  }
+  return null
+}
