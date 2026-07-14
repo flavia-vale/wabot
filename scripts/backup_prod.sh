@@ -14,7 +14,10 @@
 #   BACKUP_DIR           Onde salvar (default: /home/deploy/wabot-backups)
 #   RETENTION_DAYS       Dias para guardar (default: 30)
 #   BACKUP_RCLONE_REMOTE Nome:caminho do remote rclone (ex.: b2-wabot:wabot-backups).
-#                        Se vazio ou rclone ausente, pula a etapa de nuvem.
+#                        Aceita múltiplos remotes separados por vírgula (ex.:
+#                        b2-wabot:wabot-backups,gdrive-wabot:wabot-backups) —
+#                        sobe o mesmo arquivo pra cada um. Vazio ou rclone
+#                        ausente pula a etapa de nuvem.
 #   BACKUP_AGE_RECIPIENT Chave pública age (age1...) para cifrar o backup.
 #                        O tarball contém .env, banco e auth_info — em texto
 #                        puro ele entrega JWT_SECRET, CREDENTIAL_ENCRYPTION_KEY
@@ -160,12 +163,16 @@ log "Rotação local concluída: $deleted arquivo(s) com mais de ${RETENTION_DAY
 if [[ -n "$BACKUP_RCLONE_REMOTE" ]]; then
   command -v rclone >/dev/null 2>&1 \
     || fail "BACKUP_RCLONE_REMOTE definido mas rclone não está instalado."
-  log "Subindo para nuvem: $BACKUP_RCLONE_REMOTE"
-  rclone copy "$archive" "$BACKUP_RCLONE_REMOTE" --no-traverse --quiet \
-    || fail "upload rclone falhou — backup local existe mas NÃO há cópia externa"
-  # Rotação na nuvem com mesmo critério
-  rclone delete "$BACKUP_RCLONE_REMOTE" --min-age "${RETENTION_DAYS}d" --include 'wabot-prod-*.tar.gz*' --quiet || true
-  log "Upload concluído"
+  IFS=',' read -ra rclone_remotes <<< "${BACKUP_RCLONE_REMOTE//[[:space:]]/}"
+  for remote in "${rclone_remotes[@]}"; do
+    [[ -z "$remote" ]] && continue
+    log "Subindo para nuvem: $remote"
+    rclone copy "$archive" "$remote" --no-traverse --quiet \
+      || fail "upload rclone falhou para $remote — backup local existe mas cópia externa incompleta"
+    # Rotação na nuvem com mesmo critério
+    rclone delete "$remote" --min-age "${RETENTION_DAYS}d" --include 'wabot-prod-*.tar.gz*' --quiet || true
+    log "Upload concluído: $remote"
+  done
 elif [[ "$BACKUP_REQUIRE_CLOUD" == "1" ]]; then
   fail "BACKUP_REQUIRE_CLOUD=1 mas BACKUP_RCLONE_REMOTE não está configurado"
 else
