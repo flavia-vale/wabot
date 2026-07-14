@@ -204,6 +204,12 @@ export default function PlanoPage() {
                 <p className="pnl-hint" style={{ marginTop: 6 }}>
                   Use um e-mail real e, de preferência, já cadastrado no Mercado Pago.
                 </p>
+                <p className="pnl-hint" style={{ marginTop: 6 }}>
+                  Ainda não tem conta no Mercado Pago? É necessária para confirmar a assinatura recorrente.{' '}
+                  <a href="https://www.mercadopago.com.br" target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>
+                    Criar conta gratuita no Mercado Pago
+                  </a>
+                </p>
               </form>
             )}
           </div>
@@ -213,6 +219,10 @@ export default function PlanoPage() {
           {subscribePlan === selectedPlanId ? 'Aguarde…' : `Assinar ${selectedPlan.name} com renovação automática`}
         </button>
         <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 8 }}>Cobrança mensal automática no Mercado Pago. Cancele quando quiser.</p>
+        <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 4 }}>
+          É necessário ter (ou criar) uma conta no Mercado Pago para confirmar a renovação automática.{' '}
+          <a href="https://www.mercadopago.com.br" target="_blank" rel="noopener noreferrer">Criar conta no Mercado Pago</a>
+        </p>
 
         {checkoutError && (
           <div className="pnl-note-box is-warn" style={{ marginTop: 14 }} role="alert">
