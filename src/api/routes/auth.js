@@ -542,6 +542,39 @@ export async function authRoutes(app) {
     return user
   })
 
+  // Troca de senha autenticada: exige a senha atual, valida a confirmação,
+  // grava hash novo e renova a sessão atual com um token novo.
+  app.patch('/me/password', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const userId = req.user.sub
+    const currentPassword = typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : ''
+    const newPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword : ''
+    const confirmPassword = typeof req.body?.confirmPassword === 'string' ? req.body.confirmPassword : ''
+
+    if (!currentPassword) return reply.code(400).send({ error: 'Senha atual obrigatória' })
+    if (!newPassword) return reply.code(400).send({ error: 'Nova senha obrigatória' })
+    if (newPassword.length < 8) return reply.code(400).send({ error: 'Nova senha deve ter no mínimo 8 caracteres' })
+    if (newPassword.length > 200) return reply.code(400).send({ error: 'Nova senha muito longa' })
+    if (confirmPassword && confirmPassword !== newPassword) return reply.code(400).send({ error: 'Confirmação de senha não confere' })
+
+    const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, passwordHash: true, email: true } })
+    if (!user) return reply.code(404).send({ error: 'Usuário não encontrado' })
+
+    const currentMatches = await bcrypt.compare(currentPassword, user.passwordHash)
+    if (!currentMatches) return reply.code(401).send({ error: 'Senha atual inválida' })
+
+    const samePassword = await bcrypt.compare(newPassword, user.passwordHash)
+    if (samePassword) return reply.code(400).send({ error: 'A nova senha precisa ser diferente da senha atual' })
+
+    const passwordHash = await bcrypt.hash(newPassword, 10)
+    await db.user.update({ where: { id: userId }, data: { passwordHash } })
+
+    if (req.user?.jti) app.revokeTokenJti?.(req.user.jti, req.user.exp)
+    const token = app.jwt.sign({ sub: user.id, email: user.email, jti: randomToken(12) }, { expiresIn: '7d' })
+    setAuthCookie(reply, token, req)
+    trackAnalyticsEventSafe({ userId, event: 'account_password_updated' })
+    return { ok: true, token }
+  })
+
   // Permite ao usuário trocar o e-mail da própria conta. Necessário porque o
   // `payer_email` da assinatura recorrente (Mercado Pago) vem daqui — contas
   // com e-mail fictício/fallback `@sistema.com` não conseguem assinar até

@@ -103,10 +103,13 @@ test('template variable copy uses a real reusable clipboard helper with fallback
   assert.match(read('dashboard/lib/clipboard.js'), /execCommand\('copy'\)/)
 })
 
-test('painel configuracoes does not expose removed global cadence/template cards', () => {
+test('painel configuracoes only exposes account email and password settings', () => {
   const page = read('dashboard/app/painel/configuracoes/page.js')
-  assert.match(page, /Preferências gerais/)
-  assert.doesNotMatch(page, /Cadência entre envios|Espelhamento com template|Marca nas mensagens|Filtros e boas-vindas/)
+  assert.match(page, /E-mail de acesso/)
+  assert.match(page, /Alterar senha/)
+  assert.match(page, /api\.updateAccountEmail/)
+  assert.match(page, /api\.updateAccountPassword/)
+  assert.doesNotMatch(page, /Preferências gerais|Cadência entre envios|Espelhamento com template|Marca nas mensagens|Filtros e boas-vindas|Plataformas ativas|Palavras bloqueadas|Mensagem de boas-vindas/)
 })
 
 test('painel grupos mantém seletor de link primário independente de template', () => {
