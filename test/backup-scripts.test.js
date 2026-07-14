@@ -294,6 +294,35 @@ test('backup_prod.sh com BACKUP_REQUIRE_CLOUD=1 e sem remote falha', async (t) =
   assert.match(result.stdout + result.stderr, /BACKUP_REQUIRE_CLOUD/)
 })
 
+test('backup_prod.sh sobe para múltiplos remotes quando BACKUP_RCLONE_REMOTE tem vírgula', async (t) => {
+  const env = setupFakeProd()
+  t.after(env.cleanup)
+
+  // rclone real não está instalado neste runtime — substitui por um fake
+  // no PATH que só registra os argumentos recebidos.
+  const fakeBinDir = mkdtempSync(join(tmpdir(), 'wabot-fake-rclone-'))
+  t.after(() => rmSync(fakeBinDir, { recursive: true, force: true }))
+  const callLog = join(fakeBinDir, 'calls.log')
+  writeFileSync(join(fakeBinDir, 'rclone'), '#!/usr/bin/env bash\necho "$@" >> "' + callLog + '"\nexit 0\n')
+  execSync(`chmod +x "${join(fakeBinDir, 'rclone')}"`)
+
+  const originalPath = process.env.PATH
+  process.env.PATH = `${fakeBinDir}:${originalPath}`
+  t.after(() => { process.env.PATH = originalPath })
+
+  runScript(BACKUP_SCRIPT, [], {
+    PROD_DIR: env.prodDir, PROD_DB: env.dbFile,
+    AUTH_INFO_DIR: env.authInfoDir, BACKUP_DIR: env.backupDir,
+    BACKUP_RCLONE_REMOTE: 'b2-wabot:wabot-backups, gdrive-wabot:wabot-backups',
+  })
+
+  const calls = readFileSync(callLog, 'utf8')
+  assert.match(calls, /copy .*b2-wabot:wabot-backups/, 'chamou rclone copy para o remote B2')
+  assert.match(calls, /copy .*gdrive-wabot:wabot-backups/, 'chamou rclone copy para o remote Drive')
+  assert.match(calls, /delete b2-wabot:wabot-backups/, 'chamou rclone delete (rotação) para o remote B2')
+  assert.match(calls, /delete gdrive-wabot:wabot-backups/, 'chamou rclone delete (rotação) para o remote Drive')
+})
+
 test('backup_prod.sh grava last_success.txt ao final', async (t) => {
   const env = setupFakeProd()
   t.after(env.cleanup)
