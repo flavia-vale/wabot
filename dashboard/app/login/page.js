@@ -210,6 +210,21 @@ function LoginContent() {
           </div>
         </div>
 
+        <div className="mb-5 flex justify-center">
+          <Link
+            href="/"
+            aria-label="Voltar para a página principal do BOTinho"
+            className={`group inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-bold shadow-sm transition focus-visible:outline-none focus-visible:ring-2 ${
+              isRegister
+                ? 'border-emerald-400/40 bg-emerald-900/70 text-emerald-100 hover:border-emerald-300 hover:bg-emerald-800 focus-visible:ring-emerald-300'
+                : 'border-green-100 bg-green-50 text-green-700 hover:border-green-200 hover:bg-green-100 focus-visible:ring-green-500'
+            }`}
+          >
+            <span aria-hidden="true" className="transition-transform group-hover:-translate-x-0.5">←</span>
+            Voltar para a página principal
+          </Link>
+        </div>
+
         <div className="mb-2 text-center">
           <p className={`text-sm font-semibold ${isRegister ? 'text-emerald-200' : 'text-green-700'}`}><span aria-hidden="true">🤖</span> O BOTinho que espelha grupos</p>
           <h1 className={`mt-2 text-xl sm:text-2xl font-bold leading-tight ${isRegister ? 'text-emerald-100' : 'text-gray-900'}`}>{isRegister ? 'Criar sua conta' : 'Entrar na sua conta'}</h1>
