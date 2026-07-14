@@ -69,6 +69,7 @@ import { parseEnumEnv, logModeSummary } from './core/envModes.js'
 import { buildRedisOptions } from './core/redisFactory.js'
 import { installWorkerCrashGuards } from './core/workerCrashGuard.js'
 import { buildWorkerMetadata } from './workerMetadata.js'
+import { recordWaConnectionEventSafe } from './waConnectionTelemetry.js'
 
 const userId = process.env.BOT_USER_ID
 const WORKER_STARTED_AT = Date.now()
@@ -258,8 +259,16 @@ let reconnectDeadlineMs = 0
 let disconnectedSinceMs = Date.now()
 const MAX_RECONNECTING_MS = Math.max(30_000, envNumber('WA_HEARTBEAT_MAX_RECONNECTING_MS', DEFAULT_MAX_RECONNECTING_MS))
 
-function scheduleReconnect(delayMs) {
+function scheduleReconnect(delayMs, metadata = {}) {
   reconnectDeadlineMs = Date.now() + Math.max(0, delayMs)
+  recordWaConnectionEventSafe({
+    userId,
+    type: 'reconnect_attempt',
+    code: metadata.code,
+    lifecycle: lifecycleState,
+    ownerInstance: OWNER_INSTANCE,
+    metadata: { delayMs: Math.max(0, delayMs), attempt: reconnectAttempts, reason: metadata.reason || 'scheduled' },
+  })
   setTimeout(startBot, delayMs)
 }
 
@@ -2055,6 +2064,7 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       // concluída". O reset agora é decidido no close, só se a sessão foi estável
       // (shouldResetBackoff). Aqui só marcamos quando ela abriu.
       connectionOpenedAt = Date.now()
+      const wasReconnecting = disconnectedSinceMs != null
       activeSock = sock
       pendingSock = null
       disconnectedSinceMs = null
@@ -2062,6 +2072,13 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       const phone = sock.user?.id?.split(':')[0] ?? null
       if (process.send) process.send({ type: 'status', data: 'connected', phone })
 await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: null })
+      recordWaConnectionEventSafe({
+        userId,
+        type: wasReconnecting ? 'reconnect_success' : 'connected',
+        lifecycle: 'ready',
+        ownerInstance: OWNER_INSTANCE,
+        metadata: { reconnectAttempts, hadStableOpen: everHadStableOpen },
+      })
       trackAnalyticsEventSafe({ userId, event: 'whatsapp_connected' })
       ensureChannelSubscriptions().catch(err => logger.error({ err: err?.message }, 'channels: erro ao inscrever no boot'))
     }
@@ -2116,12 +2133,29 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         ownerInstance: OWNER_INSTANCE,
         now: new Date(),
       })).catch(() => {})
+      recordWaConnectionEventSafe({
+        userId,
+        type: isLoggedOut ? 'disconnect_terminal' : 'disconnect',
+        code,
+        lifecycle: isLoggedOut ? 'disconnected' : 'reconnecting',
+        ownerInstance: OWNER_INSTANCE,
+        metadata: {
+          wasStable,
+          restartRequired: isRestartRequired,
+          connectionReplaced: isConnectionReplaced,
+          forbidden: isForbidden,
+          badSession: isBadSession,
+          pairing: wasPairing,
+          stuckMsg: Boolean(stuckMsgId),
+        },
+      })
       if (isForbidden) {
         // 403/forbidden: o WhatsApp recusou a sessão — chip possivelmente
         // restringido/banido (costuma vir após flapping prolongado). Sinal
         // durável por chip para vigiar e agir antes do ban definitivo. Só
         // observabilidade: NÃO altera o fluxo de reconexão abaixo.
         logger.error({ code, userId }, 'WA recusou a sessão (403/forbidden) — chip sob risco de restrição/ban')
+        recordWaConnectionEventSafe({ userId, type: 'forbidden', code, lifecycle: 'disconnected', ownerInstance: OWNER_INSTANCE })
         try { recordOperationalSignal('wa_forbidden', { userId, code }) } catch {}
       }
       if (isLoggedOut) {
@@ -2135,7 +2169,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // completar o handshake pós-pairing e chegar em connection: 'open'.
         logger.info({ code }, 'Pairing aceito pelo WA (restartRequired 515) — reiniciando com creds novas')
         pairingState.clear()
-        scheduleReconnect(500)
+        scheduleReconnect(500, { code, reason: 'pairing_restart_required' })
       } else if (wasPairing) {
         // Diferencia dois sub-casos:
         //   a) código ainda não chegou ao usuário (pairingState.code == null):
@@ -2153,7 +2187,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           pairingState.clear()
           const delayMs = calcReconnectDelayMs()
           reconnectAttempts++
-          scheduleReconnect(delayMs)
+          scheduleReconnect(delayMs, { code, reason: 'pairing_after_code' })
         } else {
           // Código ainda não foi mostrado — NÃO auto-reiniciar. Se o usuário
           // falhar em colar o código a tempo, a UI chamará novamente o endpoint.
@@ -2184,7 +2218,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         } else {
           logger.warn({ code, replacedCount: r.count, delayMs }, 'WA conexão substituída (replaced/440) — cooldown longo para evitar ping-pong')
         }
-        scheduleReconnect(delayMs)
+        recordWaConnectionEventSafe({ userId, type: 'replaced', code, lifecycle: 'reconnecting', ownerInstance: OWNER_INSTANCE, metadata: { replacedCount: r.count, escalated: r.escalate } })
+        scheduleReconnect(delayMs, { code, reason: 'connection_replaced' })
       } else {
         // Close genérico (500 badSession, 428, 408, 515 fora de pairing, ...).
         // Dois males históricos tratados aqui:
@@ -2226,6 +2261,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               'badSession (500) repetido sem conexão estável — credencial Signal corrompida. Limpando auth_info para re-pareamento (QR limpo no próximo start). Sessão fica offline até novo pareamento.'
             )
             try { recordOperationalSignal('wa_bad_session_reset', { userId, count: b.count }) } catch {}
+            recordWaConnectionEventSafe({ userId, type: 'auth_reset', code, lifecycle: 'auth_reset_required', ownerInstance: OWNER_INSTANCE, metadata: { badSessionCount: b.count } })
             await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
             await persistSessionPatch(buildAuthResetSessionPatch({ code, ownerInstance: OWNER_INSTANCE, now: new Date() })).catch(() => {})
             badSessionTimestamps = []
@@ -2253,6 +2289,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             'Flapping detectado (closes repetidos na janela) — cooldown curto para conter o spam de "sincronização concluída" sem sacrificar disponibilidade. Recupera sozinho quando o chip estabilizar.'
           )
           try { recordOperationalSignal('wa_flap_cooldown', { userId, code, count: f.count }) } catch {}
+          recordWaConnectionEventSafe({ userId, type: 'flap_cooldown', code, lifecycle: 'reconnecting', ownerInstance: OWNER_INSTANCE, metadata: { closeCount: f.count, delayMs } })
         } else if (shouldConsiderStableCloseCooldown({
           hadStableOpen: wasStable,
           code,
@@ -2272,6 +2309,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               'Quedas periódicas de sessão WA estável detectadas — cooldown curto para reduzir re-sync/push notification sem sacrificar disponibilidade.'
             )
             try { recordOperationalSignal('wa_stable_close_cooldown', { userId, code, count: s.count }) } catch {}
+            recordWaConnectionEventSafe({ userId, type: 'stable_close_cooldown', code, lifecycle: 'reconnecting', ownerInstance: OWNER_INSTANCE, metadata: { stableCloseCount: s.count, delayMs } })
           } else {
             delayMs = calcReconnectDelayMs()
             reconnectAttempts++
@@ -2282,7 +2320,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           reconnectAttempts++
           logger.warn({ code, attempt: reconnectAttempts, delayMs, stuckMsgId: stuckMsgId || undefined }, 'WA conexão fechada, agendando restart automático')
         }
-        scheduleReconnect(delayMs)
+        scheduleReconnect(delayMs, { code, reason: f.flapping ? 'flap_cooldown' : wasStable ? 'stable_close' : 'close' })
       }
     }
   })
