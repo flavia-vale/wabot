@@ -112,11 +112,14 @@ outro valor:
 0 6 * * * RETENTION_DAYS=60 /home/deploy/wabot/scripts/backup_prod.sh >> /home/deploy/wabot-backups/backup.log 2>&1
 ```
 
-## Cópia para nuvem (opcional)
+## Cópia para nuvem (opcional, múltiplos destinos)
 
 O script aceita upload via [rclone](https://rclone.org/) — um único
 binário que fala com S3, Backblaze B2, Cloudflare R2, Google Drive,
-Dropbox, etc.
+Dropbox, etc. `BACKUP_RCLONE_REMOTE` aceita **múltiplos remotes
+separados por vírgula** — o mesmo arquivo cifrado sobe pra cada um
+(útil pra ter Drive **e** B2 ao mesmo tempo, sem depender de um único
+provedor).
 
 ### 1) Instalar rclone
 
@@ -124,21 +127,18 @@ Dropbox, etc.
 curl https://rclone.org/install.sh | sudo bash
 ```
 
-### 2) Configurar um remote
+### 2a) Backblaze B2 — mais rápido (sem OAuth, só chave de API)
+
+1. Crie um bucket **privado** no painel do B2 e uma Application Key
+   restrita a esse bucket (não use a chave mestra da conta).
+2. Configure o remote direto por linha de comando (não-interativo,
+   funciona por SSH sem abrir navegador):
 
 ```bash
-rclone config
+rclone config create b2-wabot b2 account <keyID> key <applicationKey>
 ```
 
-Siga o menu interativo. Exemplo para Backblaze B2 (mais barato para
-backup):
-
-- Nome do remote: `b2-wabot`
-- Tipo: `b2`
-- Cole `account` e `key` do seu bucket
-- Aceite os defaults
-
-Teste:
+3. Teste:
 
 ```bash
 rclone lsd b2-wabot:
@@ -146,16 +146,57 @@ rclone copy /etc/hostname b2-wabot:wabot-backups/test.txt
 rclone ls b2-wabot:wabot-backups
 ```
 
-### 3) Apontar o cron pro remote
+### 2b) Google Drive — exige autorização única (OAuth)
 
-Edite o cron para incluir `BACKUP_RCLONE_REMOTE`:
+O Drive não aceita uma chave de API simples feito o B2; a primeira vez
+precisa de um consentimento OAuth. Como o VPS normalmente não tem
+navegador, use `rclone authorize` numa máquina com navegador (seu
+notebook, por exemplo) e cole o token de volta no VPS:
+
+```bash
+# No VPS: inicia a config e escolhe "drive", depois "No" quando perguntar
+# se quer usar auto config (porque não há navegador no VPS)
+rclone config
+# name> gdrive-wabot
+# Storage> drive
+# client_id/client_secret> deixe em branco (usa o app padrão do rclone)
+# scope> 1 (acesso completo ao próprio Drive)
+# Use auto config?> n
+
+# Na SUA máquina (com navegador), rode o comando que o rclone imprimiu, ex.:
+rclone authorize "drive"
+# Abre o navegador, você loga e autoriza; copia o token JSON gerado
+
+# De volta no VPS, cole esse token quando o rclone config pedir
+# "result"> <cole o JSON aqui>
+```
+
+4. Teste:
+
+```bash
+rclone lsd gdrive-wabot:
+rclone copy /etc/hostname gdrive-wabot:wabot-backups/test.txt
+rclone ls gdrive-wabot:wabot-backups
+```
+
+### 3) Apontar o cron pro(s) remote(s)
+
+Um só destino:
 
 ```
 0 6 * * * BACKUP_RCLONE_REMOTE=b2-wabot:wabot-backups /home/deploy/wabot/scripts/backup_prod.sh >> /home/deploy/wabot-backups/backup.log 2>&1
 ```
 
-O script vai fazer `rclone copy` do arquivo gerado e aplicar a mesma
-política de retenção (`--min-age`) no remote.
+Os dois ao mesmo tempo (recomendado — cada provedor cobre a falha do outro):
+
+```
+0 6 * * * BACKUP_RCLONE_REMOTE=b2-wabot:wabot-backups,gdrive-wabot:wabot-backups /home/deploy/wabot/scripts/backup_prod.sh >> /home/deploy/wabot-backups/backup.log 2>&1
+```
+
+O script faz `rclone copy` do arquivo gerado pra cada remote da lista e
+aplica a mesma política de retenção (`--min-age`) em cada um. Se um
+upload falhar, o script aborta (`fail`) — não fica um remote
+silenciosamente desatualizado sem ninguém perceber.
 
 ## Restauração (`scripts/restore_from_backup.sh`)
 
