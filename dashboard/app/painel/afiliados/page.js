@@ -408,8 +408,6 @@ export default function AffiliatePage() {
         <p className="mt-2 break-words text-xs text-emerald-600">Código: <strong className="break-all">{profile.code}</strong> · PIX: <span className="break-all">{profile.pixKey}</span> ({PIX_KEY_TYPE_LABELS[profile.pixKeyType] ?? profile.pixKeyType})</p>
       </div>
 
-      <AffiliateRulesCard config={affiliateConfig} affiliateLink={affiliateLink} />
-
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Total de indicados" value={stats.totalReferrals ?? 0} />
         <StatCard label="Vendas válidas" value={stats.totalSales ?? 0} helper="Não inclui estornos/reembolsos." />
@@ -448,6 +446,8 @@ export default function AffiliatePage() {
           </div>
         </div>
       )}
+
+      <AffiliateRulesCard config={affiliateConfig} affiliateLink={affiliateLink} />
 
       <div>
         <button
