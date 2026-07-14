@@ -115,7 +115,9 @@ async function apiFetch(path, options = {}) {
     const message = safeMessage && !safeMessage.startsWith('<') ? safeMessage : `HTTP ${res.status}`
     const err = new Error(message)
     if (data.code) err.code = data.code
+    else if (data?.error && typeof data.error === 'object' && data.error.code) err.code = data.error.code
     if (typeof data.retryable === 'boolean') err.retryable = data.retryable
+    if (typeof data.needsEmailUpdate === 'boolean') err.needsEmailUpdate = data.needsEmailUpdate
     err.status = res.status
     throw err
   }
@@ -148,6 +150,8 @@ export const api = {
   },
 
   me: () => apiFetch('/api/auth/me'),
+  updateAccountEmail: (email) =>
+    apiFetch('/api/auth/me/email', { method: 'PATCH', body: JSON.stringify({ email }) }),
   logout: async () => {
     const data = await apiFetch('/api/auth/logout', { method: 'POST' })
     setAuthToken('')

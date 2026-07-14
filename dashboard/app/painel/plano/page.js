@@ -55,6 +55,10 @@ export default function PlanoPage() {
   const [checkoutError, setCheckoutError] = useState('')
   const [subscribePlan, setSubscribePlan] = useState('')
   const [subscribeError, setSubscribeError] = useState('')
+  const [needsEmailUpdate, setNeedsEmailUpdate] = useState(false)
+  const [newEmail, setNewEmail] = useState('')
+  const [emailSaving, setEmailSaving] = useState(false)
+  const [emailError, setEmailError] = useState('')
 
   useEffect(() => {
     let active = true
@@ -83,8 +87,9 @@ export default function PlanoPage() {
   }
 
   async function handleSubscribe(planId) {
-    if (subscribePlan || checkoutPlan) return
+    if (subscribePlan || checkoutPlan || emailSaving) return
     setSubscribeError('')
+    setNeedsEmailUpdate(false)
     setSubscribePlan(planId)
     try {
       const data = await api.paymentsCreateSubscription(planId)
@@ -92,7 +97,32 @@ export default function PlanoPage() {
       window.location.assign(data.init_point)
     } catch (err) {
       setSubscribeError(err?.message || 'Não foi possível iniciar a assinatura. Use o pagamento avulso ou fale com o suporte.')
+      if (err?.needsEmailUpdate) setNeedsEmailUpdate(true)
       setSubscribePlan('')
+    }
+  }
+
+  async function handleUpdateEmailAndRetry(event) {
+    event?.preventDefault?.()
+    if (emailSaving || subscribePlan) return
+    setEmailError('')
+    const email = newEmail.trim()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setEmailError('Digite um e-mail válido.')
+      return
+    }
+    setEmailSaving(true)
+    try {
+      await api.updateAccountEmail(email)
+      setNeedsEmailUpdate(false)
+      setSubscribeError('')
+      setNewEmail('')
+      setEmailSaving(false)
+      // Já tenta assinar de novo com o e-mail atualizado.
+      await handleSubscribe(selectedPlanId)
+    } catch (err) {
+      setEmailError(err?.message || 'Não foi possível atualizar o e-mail. Tente novamente.')
+      setEmailSaving(false)
     }
   }
 
@@ -148,6 +178,34 @@ export default function PlanoPage() {
           <div className="pnl-note-box is-warn" style={{ marginTop: 14 }} role="alert">
             <strong style={{ fontWeight: 600 }}>Assinatura não iniciada</strong>
             <p style={{ marginTop: 4 }}>{subscribeError}</p>
+
+            {needsEmailUpdate && (
+              <form onSubmit={handleUpdateEmailAndRetry} style={{ marginTop: 12 }}>
+                <label htmlFor="novo-email-assinatura" style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>
+                  Atualizar o e-mail da conta e tentar de novo
+                </label>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <input
+                    id="novo-email-assinatura"
+                    type="email"
+                    className="pnl-input"
+                    placeholder="seu-email@exemplo.com"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    disabled={emailSaving}
+                    autoComplete="email"
+                    style={{ flex: '1 1 220px', minWidth: 0 }}
+                  />
+                  <button type="submit" className="pnl-btn is-primary" disabled={emailSaving || !!subscribePlan}>
+                    {emailSaving ? 'Salvando…' : 'Salvar e assinar'}
+                  </button>
+                </div>
+                {emailError && <p style={{ marginTop: 6, color: 'var(--danger, #b42318)' }}>{emailError}</p>}
+                <p className="pnl-hint" style={{ marginTop: 6 }}>
+                  Use um e-mail real e, de preferência, já cadastrado no Mercado Pago.
+                </p>
+              </form>
+            )}
           </div>
         )}
 
