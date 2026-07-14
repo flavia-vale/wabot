@@ -8,8 +8,10 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
-import { DEFAULT_LANDING_PLANS } from '@/lib/marketing-content'
+import { DEFAULT_LANDING_PLANS, SUPPORT_WHATSAPP_URL } from '@/lib/marketing-content'
 import { usePainelHeader } from '../PainelShell'
+
+const SUPPORT_PAYMENT_HELP_URL = `${SUPPORT_WHATSAPP_URL}?text=${encodeURIComponent('Oi! Estou com dificuldade no pagamento do BOTinho, pode me ajudar?')}`
 
 const PAID_PLAN_IDS = ['basic', 'pro']
 const PLAN_LABELS = { trial: 'Trial', basic: 'Basic', pro: 'Pro' }
@@ -53,12 +55,6 @@ export default function PlanoPage() {
   const [selectedPlanId, setSelectedPlanId] = useState('pro')
   const [checkoutPlan, setCheckoutPlan] = useState('')
   const [checkoutError, setCheckoutError] = useState('')
-  const [subscribePlan, setSubscribePlan] = useState('')
-  const [subscribeError, setSubscribeError] = useState('')
-  const [needsEmailUpdate, setNeedsEmailUpdate] = useState(false)
-  const [newEmail, setNewEmail] = useState('')
-  const [emailSaving, setEmailSaving] = useState(false)
-  const [emailError, setEmailError] = useState('')
 
   useEffect(() => {
     let active = true
@@ -83,46 +79,6 @@ export default function PlanoPage() {
     } catch (err) {
       setCheckoutError(err?.message || 'Não foi possível iniciar o checkout. Tente novamente ou fale com o suporte.')
       setCheckoutPlan('')
-    }
-  }
-
-  async function handleSubscribe(planId) {
-    if (subscribePlan || checkoutPlan || emailSaving) return
-    setSubscribeError('')
-    setNeedsEmailUpdate(false)
-    setSubscribePlan(planId)
-    try {
-      const data = await api.paymentsCreateSubscription(planId)
-      if (!data?.init_point) throw new Error('Assinatura indisponível no momento. Use o pagamento avulso ou fale com o suporte.')
-      window.location.assign(data.init_point)
-    } catch (err) {
-      setSubscribeError(err?.message || 'Não foi possível iniciar a assinatura. Use o pagamento avulso ou fale com o suporte.')
-      if (err?.needsEmailUpdate) setNeedsEmailUpdate(true)
-      setSubscribePlan('')
-    }
-  }
-
-  async function handleUpdateEmailAndRetry(event) {
-    event?.preventDefault?.()
-    if (emailSaving || subscribePlan) return
-    setEmailError('')
-    const email = newEmail.trim()
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setEmailError('Digite um e-mail válido.')
-      return
-    }
-    setEmailSaving(true)
-    try {
-      await api.updateAccountEmail(email)
-      setNeedsEmailUpdate(false)
-      setSubscribeError('')
-      setNewEmail('')
-      setEmailSaving(false)
-      // Já tenta assinar de novo com o e-mail atualizado.
-      await handleSubscribe(selectedPlanId)
-    } catch (err) {
-      setEmailError(err?.message || 'Não foi possível atualizar o e-mail. Tente novamente.')
-      setEmailSaving(false)
     }
   }
 
@@ -174,56 +130,6 @@ export default function PlanoPage() {
           })}
         </div>
 
-        {subscribeError && (
-          <div className="pnl-note-box is-warn" style={{ marginTop: 14 }} role="alert">
-            <strong style={{ fontWeight: 600 }}>Assinatura não iniciada</strong>
-            <p style={{ marginTop: 4 }}>{subscribeError}</p>
-
-            {needsEmailUpdate && (
-              <form onSubmit={handleUpdateEmailAndRetry} style={{ marginTop: 12 }}>
-                <label htmlFor="novo-email-assinatura" style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>
-                  Atualizar o e-mail da conta e tentar de novo
-                </label>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <input
-                    id="novo-email-assinatura"
-                    type="email"
-                    className="pnl-input"
-                    placeholder="seu-email@exemplo.com"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    disabled={emailSaving}
-                    autoComplete="email"
-                    style={{ flex: '1 1 220px', minWidth: 0 }}
-                  />
-                  <button type="submit" className="pnl-btn is-primary" disabled={emailSaving || !!subscribePlan}>
-                    {emailSaving ? 'Salvando…' : 'Salvar e assinar'}
-                  </button>
-                </div>
-                {emailError && <p style={{ marginTop: 6, color: 'var(--danger, #b42318)' }}>{emailError}</p>}
-                <p className="pnl-hint" style={{ marginTop: 6 }}>
-                  Use um e-mail real e, de preferência, já cadastrado no Mercado Pago.
-                </p>
-                <p className="pnl-hint" style={{ marginTop: 6 }}>
-                  Ainda não tem conta no Mercado Pago? É necessária para confirmar a assinatura recorrente.{' '}
-                  <a href="https://www.mercadopago.com.br" target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>
-                    Criar conta gratuita no Mercado Pago
-                  </a>
-                </p>
-              </form>
-            )}
-          </div>
-        )}
-
-        <button type="button" className="pnl-btn is-primary" style={{ marginTop: 16, width: '100%', justifyContent: 'center' }} onClick={() => handleSubscribe(selectedPlanId)} disabled={!!subscribePlan || !!checkoutPlan}>
-          {subscribePlan === selectedPlanId ? 'Aguarde…' : `Assinar ${selectedPlan.name} com renovação automática`}
-        </button>
-        <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 8 }}>Cobrança mensal automática no Mercado Pago. Cancele quando quiser.</p>
-        <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 4 }}>
-          É necessário ter (ou criar) uma conta no Mercado Pago para confirmar a renovação automática.{' '}
-          <a href="https://www.mercadopago.com.br" target="_blank" rel="noopener noreferrer">Criar conta no Mercado Pago</a>
-        </p>
-
         {checkoutError && (
           <div className="pnl-note-box is-warn" style={{ marginTop: 14 }} role="alert">
             <strong style={{ fontWeight: 600 }}>Checkout não iniciado</strong>
@@ -231,10 +137,25 @@ export default function PlanoPage() {
           </div>
         )}
 
-        <button type="button" className="pnl-btn is-ghost" style={{ marginTop: 12, width: '100%', justifyContent: 'center' }} onClick={() => handleCheckout(selectedPlanId)} disabled={!!checkoutPlan || !!subscribePlan}>
-          {checkoutPlan === selectedPlanId ? 'Aguarde…' : `Pagar 30 dias avulso (sem renovação)`}
+        <button type="button" className="pnl-btn is-primary" style={{ marginTop: 16, width: '100%', justifyContent: 'center' }} onClick={() => handleCheckout(selectedPlanId)} disabled={!!checkoutPlan}>
+          {checkoutPlan === selectedPlanId ? 'Aguarde…' : `Pagar 30 dias — ${selectedPlan.name}`}
         </button>
-        <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 8 }}>Pagamento único de 30 dias. Você renova manualmente ao expirar.</p>
+        <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 8 }}>Pagamento único de 30 dias via PIX ou cartão. Você renova manualmente ao expirar.</p>
+      </section>
+
+      {/* Dificuldades no pagamento */}
+      <section className="pnl-card">
+        <div className="pnl-card-title" style={{ marginBottom: 4 }}>Dificuldades no pagamento?</div>
+        <p className="pnl-card-note" style={{ marginBottom: 14 }}>Fale com o suporte pelo WhatsApp e a gente ajuda a resolver.</p>
+        <a
+          href={SUPPORT_PAYMENT_HELP_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="pnl-btn is-ghost"
+          style={{ width: '100%', justifyContent: 'center' }}
+        >
+          Chamar suporte no WhatsApp
+        </a>
       </section>
     </div>
   )
