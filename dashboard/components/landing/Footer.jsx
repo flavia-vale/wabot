@@ -29,8 +29,8 @@ const s = {
   },
 };
 
-export function FinalCTA() {
-  const finalRegisterHref = buildRegisterHref({ source: 'landing', campaign: 'home-final-cta', content: 'final-primary' })
+export function FinalCTA({ affiliateCode = '' }) {
+  const finalRegisterHref = buildRegisterHref({ source: 'landing', campaign: 'home-final-cta', content: 'final-primary', aff: affiliateCode })
   return (
     <section>
       <div className="wrap">

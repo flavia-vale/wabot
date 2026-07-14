@@ -51,7 +51,7 @@ function mergePlanContent(plans) {
   });
 }
 
-export function Pricing() {
+export function Pricing({ affiliateCode = '' }) {
   const [dynamicPlans, setDynamicPlans] = useState(null);
 
   useEffect(() => {
@@ -104,7 +104,7 @@ export function Pricing() {
                 ))}
               </ul>
               <Link
-                href={buildRegisterHref({ source: 'landing', campaign: 'home-pricing', content: `plan-${p.id}` })}
+                href={buildRegisterHref({ source: 'landing', campaign: 'home-pricing', content: `plan-${p.id}`, aff: affiliateCode })}
                 className="landing-pricing-cta"
                 style={{
                   display: 'block', textAlign: 'center', padding: '14px 22px', borderRadius: 999,
