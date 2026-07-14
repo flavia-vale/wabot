@@ -68,6 +68,27 @@ const SUCCESS_REASON_LABELS = {
   high_errors_24h: 'Muitos erros 24h',
 }
 
+function SecondarySection({ title, eyebrow, children, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <section className="rounded-2xl bg-white shadow-sm ring-1 ring-gray-100">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full flex-col gap-2 p-5 text-left sm:flex-row sm:items-center sm:justify-between"
+        aria-expanded={open}
+      >
+        <div>
+          {eyebrow && <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{eyebrow}</p>}
+          <h2 className="text-lg font-black text-gray-900">{title}</h2>
+        </div>
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{open ? 'Recolher' : 'Abrir'}</span>
+      </button>
+      {open && <div className="border-t border-gray-100 p-5">{children}</div>}
+    </section>
+  )
+}
+
 function formatDate(value) {
   if (!value) return '—'
   return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
@@ -935,6 +956,7 @@ export default function AdminPage() {
   const [systemHealth, setSystemHealth] = useState(null)
   const [systemMetrics, setSystemMetrics] = useState(null)
   const [systemObservability, setSystemObservability] = useState(null)
+  const [online, setOnline] = useState(null)
   const [faq, setFaq] = useState(null)
   const [plans, setPlans] = useState([])
   const [tutorial, setTutorial] = useState(null)
@@ -949,7 +971,7 @@ export default function AdminPage() {
   async function loadAdminData(nextRisk = risk, nextSearch = search) {
     if (accessDenied) return
     setError('')
-    const [adminData, overviewData, usersData, waDisconnectedUsersData, sessionsData, sessionTelemetryData, logsData, logsSummary24hData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, lpContentData, termsData] = await Promise.all([
+    const [adminData, overviewData, usersData, waDisconnectedUsersData, sessionsData, sessionTelemetryData, logsData, logsSummary24hData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, onlineData, lpContentData, termsData] = await Promise.all([
       api.adminMe(),
       api.adminOverview(),
       api.adminUsers({ risk: nextRisk, search: nextSearch, limit: 20 }),
@@ -966,6 +988,7 @@ export default function AdminPage() {
       api.adminSystemHealth().catch(() => null),
       api.adminSystemMetrics().catch(() => null),
       api.adminSystemObservability().catch(() => null),
+      api.adminOnline({ limit: 20 }).catch(() => null),
       api.adminLpContent().catch(() => null),
       api.adminLegalTerms().catch(() => null),
     ])
@@ -985,6 +1008,7 @@ export default function AdminPage() {
     setSystemHealth(systemHealthData)
     setSystemMetrics(systemMetricsData)
     setSystemObservability(systemObservabilityData)
+    setOnline(onlineData)
     setFaq(lpContentData?.faq ?? null)
     setPlans(lpContentData?.plans ?? [])
     setTutorial(lpContentData?.tutorial ?? null)
@@ -1015,13 +1039,14 @@ export default function AdminPage() {
           api.adminSystemHealth().catch(() => null),
           api.adminSystemMetrics().catch(() => null),
           api.adminSystemObservability().catch(() => null),
+          api.adminOnline({ limit: 20 }).catch(() => null),
           api.adminLpContent().catch(() => null),
           api.adminLegalTerms().catch(() => null),
         ])
       })
       .then((result) => {
         if (!active || !result) return
-        const [adminData, overviewData, usersData, waDisconnectedUsersData, sessionsData, sessionTelemetryData, logsData, logsSummary24hData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, lpContentData, termsData] = result
+        const [adminData, overviewData, usersData, waDisconnectedUsersData, sessionsData, sessionTelemetryData, logsData, logsSummary24hData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, onlineData, lpContentData, termsData] = result
         setAdmin(adminData)
         setOverview(overviewData)
         setUsers(usersData)
@@ -1038,6 +1063,7 @@ export default function AdminPage() {
         setSystemHealth(systemHealthData)
         setSystemMetrics(systemMetricsData)
         setSystemObservability(systemObservabilityData)
+        setOnline(onlineData)
         setFaq(lpContentData?.faq ?? null)
         setPlans(lpContentData?.plans ?? [])
         setTutorial(lpContentData?.tutorial ?? null)
@@ -1191,12 +1217,13 @@ export default function AdminPage() {
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="sticky top-0 z-10 rounded-2xl border border-emerald-100 bg-white/95 p-4 shadow-sm backdrop-blur flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Visão operacional · Etapa 2</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Centro operacional</p>
             <h1 className="text-3xl font-black text-gray-900">Admin BOTinho</h1>
-            <p className="mt-1 text-sm text-gray-500">Cockpit executivo, clientes em risco, sessões, logs e drill-down operacional.</p>
+            <p className="mt-1 text-sm text-gray-500">Tela principal minimalista: saúde do sistema, ONLINE e alertas acionáveis. Métricas secundárias ficam recolhidas abaixo.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button onClick={() => applyFilters()} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Atualizar</button>
+            <Link href="/admin/online" className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800">ONLINE</Link>
             {canAccessCustomerSuccess && <Link href="/admin/sucesso-cliente" className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Aba CS</Link>}
             <Link href="/admin/afiliados" className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600">Afiliados</Link>
             <Link href="/admin/marketing-growth" className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700">Marketing & Growth</Link>
@@ -1208,21 +1235,21 @@ export default function AdminPage() {
 
         {error && <Alert type="error" title="Painel admin" message={error} />}
 
-        {(overview || success || finance) && (
+        {(overview || systemObservability || online) && (
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Semáforo executivo</p>
-                <h2 className="text-lg font-black text-gray-900">Estado operacional em 5 segundos</h2>
+                <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Semáforo operacional</p>
+                <h2 className="text-lg font-black text-gray-900">O que precisa de decisão agora</h2>
               </div>
               <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-600">Atualização em tempo real</span>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <CommandCard label="Online agora" value={online?.summary?.onlineUsers ?? '—'} tone={severityTone(0)} helper={`${online?.summary?.stabilityPct ?? '—'}% estabilidade`} />
               <CommandCard label="Erros 24h" value={overview?.errors24h ?? 0} tone={severityTone(overview?.errors24h, 1, 10)} helper="Acima de 10 = crítico" />
-              <CommandCard label="Pagamentos pendentes" value={overview?.pendingPayments ?? 0} tone={severityTone(overview?.pendingPayments, 1, 5)} helper="Cobrança / retenção" />
-              <CommandCard label="WA desconectado" value={Math.max((overview?.paidActiveUsers ?? 0) - (overview?.connectedSessions ?? 0), 0)} tone={severityTone(Math.max((overview?.paidActiveUsers ?? 0) - (overview?.connectedSessions ?? 0), 0), 1, 5)} helper="Pagante sem sessão" />
-              <CommandCard label="Expiram em 7 dias" value={overview?.expiringInSevenDays ?? 0} tone={severityTone(overview?.expiringInSevenDays, 1, 8)} helper="Ação preventiva CS" />
-              <CommandCard label="Receita 30d" value={formatCurrency(overview?.revenue30d)} tone="ok" helper={`MRR ativo: ${formatCurrency(finance?.activeMrr ?? 0)}`} />
+              <CommandCard label="WA desconectado" value={online?.summary?.disconnectedAlerts ?? Math.max((overview?.paidActiveUsers ?? 0) - (overview?.connectedSessions ?? 0), 0)} tone={severityTone(online?.summary?.disconnectedAlerts ?? 0, 1, 5)} helper="Instâncias em alerta" />
+              <CommandCard label="DB / API" value={systemObservability?.goNoGo?.dbOk ? 'OK' : 'Revisar'} tone={systemObservability?.goNoGo?.dbOk ? 'ok' : 'critical'} helper={`${systemObservability?.api?.total5xx ?? 0} erros 5xx`} />
+              <CommandCard label="Filas/DLQ" value={(systemObservability?.goNoGo?.paymentDlqOpen ?? 0) + (systemObservability?.queues?.sendDlq?.lastKnownDlqTotal ?? 0)} tone={severityTone((systemObservability?.goNoGo?.paymentDlqOpen ?? 0) + (systemObservability?.queues?.sendDlq?.lastKnownDlqTotal ?? 0), 1, 3)} helper="Pendências técnicas" />
             </div>
           </section>
         )}
@@ -1239,14 +1266,16 @@ export default function AdminPage() {
         )}
 
         {overview && (
-          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {Object.entries(STAT_LABELS).map(([key, label]) => (
-              <article key={key} className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{label}</p>
-                <p className="mt-2 text-3xl font-black text-gray-900">{statValue(key, overview[key])}</p>
-              </article>
-            ))}
-          </section>
+          <SecondarySection title="Métricas executivas completas" eyebrow="Secundário · recolhido por padrão">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {Object.entries(STAT_LABELS).map(([key, label]) => (
+                <article key={key} className="rounded-2xl bg-gray-50 p-5 ring-1 ring-gray-100">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{label}</p>
+                  <p className="mt-2 text-3xl font-black text-gray-900">{statValue(key, overview[key])}</p>
+                </article>
+              ))}
+            </div>
+          </SecondarySection>
         )}
 
 

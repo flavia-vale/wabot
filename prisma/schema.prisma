@@ -32,6 +32,7 @@ model User {
   createdAt              DateTime  @default(now())
 
   waSession             WaSession?
+  waConnectionEvents    WaConnectionEvent[]
   groups                Group[]
   groupTargets          GroupTarget[]
   credentials           Credential[]
@@ -50,16 +51,16 @@ model User {
   offerQueues           OfferQueue[]
   offerQueueItems       OfferQueueItem[]
   affiliateLinks        AffiliateLink[]
-  probeEvidences       ProbeEvidence[]
+  probeEvidences        ProbeEvidence[]
   preservationPresets   PreservationPreset[]
 
-  affiliateProfileId    String?
-  affiliateProfile      AffiliateProfile? @relation("UserAffiliate")
-  affiliateRef          AffiliateProfile? @relation("AffiliateUser", fields: [affiliateProfileId], references: [id])
-  referredCommissions   AffiliateCommission[] @relation("ReferredUserCommissions")
-  paidCommissions       AffiliateCommission[] @relation("PaidCommissions")
-  approvedCommissions   AffiliateCommission[] @relation("ApprovedCommissions")
-  subscriptions         Subscription[]
+  affiliateProfileId          String?
+  affiliateProfile            AffiliateProfile?           @relation("UserAffiliate")
+  affiliateRef                AffiliateProfile?           @relation("AffiliateUser", fields: [affiliateProfileId], references: [id])
+  referredCommissions         AffiliateCommission[]       @relation("ReferredUserCommissions")
+  paidCommissions             AffiliateCommission[]       @relation("PaidCommissions")
+  approvedCommissions         AffiliateCommission[]       @relation("ApprovedCommissions")
+  subscriptions               Subscription[]
   affiliateAttributionTouches AffiliateAttributionTouch[]
 
   @@index([status, plan, accessExpiresAt])
@@ -69,42 +70,58 @@ model User {
 }
 
 model WaSession {
-  id               String   @id @default(cuid())
-  userId           String   @unique
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  phone            String?
-  status           String   @default("disconnected")
-  lifecycle        String   @default("idle")
-  ownerInstance    String?
-  lastHeartbeatAt  DateTime?
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone              String?
+  status             String    @default("disconnected")
+  lifecycle          String    @default("idle")
+  ownerInstance      String?
+  lastHeartbeatAt    DateTime?
   lastDisconnectCode String?
-  updatedAt        DateTime @updatedAt
+  updatedAt          DateTime  @updatedAt
 
   @@index([status, lastHeartbeatAt])
 }
 
+model WaConnectionEvent {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          String
+  code          String?
+  lifecycle     String?
+  ownerInstance String?
+  metadata      String   @default("{}")
+  occurredAt    DateTime @default(now())
+
+  @@index([userId, occurredAt])
+  @@index([type, occurredAt])
+  @@index([occurredAt])
+}
+
 model Group {
-  id                 String  @id @default(cuid())
-  userId             String
-  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  waJid              String
-  name               String
-  role               String
-  kind               String  @default("group")
-  imageMode          String  @default("preview")
-  imageLinkTarget    String  @default("first")
-  fallbackToOriginal Boolean @default(false)
-  forwardMode       String   @default("LINK_ONLY")
-  noLinkScope       String?
-  templateKey       String?
-  primaryLinkTarget String?
-  blockedKeywords   String?
-  allowedPlatforms  String?
-  welcomeMsg        String?
-  channelButtonJid  String?
-  channelButtonName String?
-  quietHoursEnabled Boolean @default(false)
-  quietHoursJson    String?
+  id                    String              @id @default(cuid())
+  userId                String
+  user                  User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  waJid                 String
+  name                  String
+  role                  String
+  kind                  String              @default("group")
+  imageMode             String              @default("preview")
+  imageLinkTarget       String              @default("first")
+  fallbackToOriginal    Boolean             @default(false)
+  forwardMode           String              @default("LINK_ONLY")
+  noLinkScope           String?
+  templateKey           String?
+  primaryLinkTarget     String?
+  blockedKeywords       String?
+  allowedPlatforms      String?
+  welcomeMsg            String?
+  channelButtonJid      String?
+  channelButtonName     String?
+  quietHoursEnabled     Boolean             @default(false)
+  quietHoursJson        String?
   // Plano B (config direcionada): preservação por DESTINO. Vínculo opcional a um
   // preset reutilizável + overrides nuláveis (null = herda do preset). Substitui
   // gradualmente a config global do BotConfig. Ver
@@ -118,12 +135,12 @@ model Group {
   burstCap              Int?
   burstWindowSec        Int?
   dailyCap              Int?
-  monitorTargets   GroupTarget[] @relation("MonitorTargets")
-  postTargets      GroupTarget[] @relation("PostTargets")
-  channelHealth    ChannelHealth?
-  channelThrottle  ChannelThrottle?
-  channelSnapshots ChannelSnapshot[]
-  probeEvidences  ProbeEvidence[]
+  monitorTargets        GroupTarget[]       @relation("MonitorTargets")
+  postTargets           GroupTarget[]       @relation("PostTargets")
+  channelHealth         ChannelHealth?
+  channelThrottle       ChannelThrottle?
+  channelSnapshots      ChannelSnapshot[]
+  probeEvidences        ProbeEvidence[]
 
   @@unique([userId, waJid, role])
   @@index([userId, kind])
@@ -185,21 +202,21 @@ model Credential {
 }
 
 model Payment {
-  id          String    @id @default(cuid())
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  mpPaymentId String?   @unique
-  plan        String
-  status      String    @default("pending")
-  amount      Float
-  expiresAt      DateTime?
-  gatewayEventId String?
-  lastSyncedAt   DateTime?
+  id                           String    @id @default(cuid())
+  userId                       String
+  user                         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mpPaymentId                  String?   @unique
+  plan                         String
+  status                       String    @default("pending")
+  amount                       Float
+  expiresAt                    DateTime?
+  gatewayEventId               String?
+  lastSyncedAt                 DateTime?
   affiliateProfileIdAtCheckout String?
   affiliateClickId             String?
   attributionModel             String?
   attributionLockedAt          DateTime?
-  createdAt      DateTime  @default(now())
+  createdAt                    DateTime  @default(now())
 
   affiliateCommission AffiliateCommission?
 
@@ -207,7 +224,6 @@ model Payment {
   @@index([gatewayEventId])
   @@index([affiliateProfileIdAtCheckout, createdAt])
 }
-
 
 model Subscription {
   id               String    @id @default(cuid())
@@ -225,20 +241,20 @@ model Subscription {
 }
 
 model PaymentWebhookDlq {
-  id             String   @id @default(cuid())
-  provider       String
-  eventId        String
-  requestId      String?
-  payload        String
-  error          String
-  retryCount     Int      @default(0)
-  lastRetryAt    DateTime?
-  resolvedAt     DateTime?
-  createdAt      DateTime @default(now())
+  id          String    @id @default(cuid())
+  provider    String
+  eventId     String
+  requestId   String?
+  payload     String
+  error       String
+  retryCount  Int       @default(0)
+  lastRetryAt DateTime?
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
 
+  @@unique([provider, eventId])
   @@index([provider, createdAt])
   @@index([resolvedAt, createdAt])
-  @@unique([provider, eventId])
 }
 
 model WebhookEvent {
@@ -262,42 +278,42 @@ model WebhookEvent {
 }
 
 model BotConfig {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  delayMin        Int      @default(5)
-  delayMax        Int      @default(15)
-  platforms       String   @default("shopee,amazon,mercadolivre,magazineluiza")
-  blockedKeywords String   @default("")
-  welcomeMsg      String   @default("")
-  postToStatus    Boolean  @default(false)
-  brandingGroupLink String   @default("")
-  couponLink        String   @default("")
-  brandingCtaText String   @default("Participe do grupo:")
-  maxDailyFollows         Int     @default(3)
-  channelMinIntervalSec   Int     @default(30)
-  channelBurstCap         Int     @default(6)
-  channelBurstWindowSec   Int     @default(600)
-  channelDailyCap         Int?
-  channelStaggerJitterMs  Int     @default(90000)
-  channelQuietHoursJson   String  @default("{\"startHour\":0,\"endHour\":6,\"tz\":\"America/Sao_Paulo\"}")
-  channelThrottleEnabled  Boolean @default(false)
-  quietHoursEnabled       Boolean @default(false)
-  followGuardEnabled      Boolean @default(false)
-  copyVariationEnabled    Boolean @default(false)
-  imageMutationEnabled    Boolean @default(true)
-  imageMutationActive     Boolean @default(false)
-  copyVariationPoolJson   String  @default("{\"greetings\":[\"🚨 COOOOOORRE QUE TÁ ACABANDO!\",\"💡 UTILIDADE PÚBLICA!!\",\"😱 TÁ BARATOOO DEMAIS!\",\"🍌 PREÇO DE BANANA!!\",\"🔥 PARA TUDO E OLHA ISSO!\",\"💸 O GERENTE ENLOUQUECEU!!\",\"⚡ OFERTA RELÂMPAGO, CLICA JÁ!\",\"🎁 QUASE DE GRAÇA, SÉRIO!!\",\"💎 ACHADO DE MILHÕES!!\",\"🏃 VOLTOU PRO ESTOQUE, VOA!\",\"💥 CHOCADO COM ESSE VALOR!\",\"🤑 SÓ QUEM FOR RÁPIDO VAI PEGAR!\"],\"ctas\":[\"📲 Entre no nosso grupo oficial:\",\"👥 Vem pro grupo economizar com a gente:\",\"👇 Clique aqui e faça parte do nosso grupo VIP:\",\"🤫 Acesse nosso grupo secreto de ofertas:\",\"🚀 Receba os melhores achadinhos direto no grupo:\",\"🔔 Quer ver as promoções primeiro? Entre no grupo:\",\"💥 Não perca nenhum bug! Faça parte do grupo:\",\"🛒 Garanta os melhores descontos entrando no grupo:\",\"🤝 Junte-se à nossa comunidade de achadinhos:\",\"👀 Para não perder nadinha, vem pro grupo:\"],\"trailers\":[\"⚠️ Atenção: Preços e estoque podem mudar a qualquer momento!\",\"🚨 O valor promocional e a disponibilidade dependem do estoque da loja.\",\"⏳ Corra! Oferta por tempo limitado ou até durarem os estoques.\",\"📝 Preço sujeito a alteração e produto sujeito a esgotar sem aviso prévio.\",\"🏃💨 Garanta logo, porque o estoque voa e o preço pode subir rapidinho!\",\"🔔 Aviso: A loja parceira pode alterar o valor ou encerrar a oferta a qualquer minuto.\",\"🛒 Unidades promocionais limitadas! Preço sujeito a reajuste no site.\",\"📉 Desconto válido por tempo limitado, sujeito a alteração e fim de estoque.\",\"ℹ️ Os preços e a disponibilidade do produto são de responsabilidade total da loja.\",\"💥 Aproveite rápido: Estoques limitados e valores sujeitos a alteração.\"]}")
-  probeAccountSessionId   String?
-  probeEnabled            Boolean @default(false)
-  mobileTemplatesJson     String  @default("{}")
-  mobileCouponLinksJson   String  @default("{}")
+  id                       String   @id @default(cuid())
+  userId                   String   @unique
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  delayMin                 Int      @default(5)
+  delayMax                 Int      @default(15)
+  platforms                String   @default("shopee,amazon,mercadolivre,magazineluiza")
+  blockedKeywords          String   @default("")
+  welcomeMsg               String   @default("")
+  postToStatus             Boolean  @default(false)
+  brandingGroupLink        String   @default("")
+  couponLink               String   @default("")
+  brandingCtaText          String   @default("Participe do grupo:")
+  maxDailyFollows          Int      @default(3)
+  channelMinIntervalSec    Int      @default(30)
+  channelBurstCap          Int      @default(6)
+  channelBurstWindowSec    Int      @default(600)
+  channelDailyCap          Int?
+  channelStaggerJitterMs   Int      @default(90000)
+  channelQuietHoursJson    String   @default("{\"startHour\":0,\"endHour\":6,\"tz\":\"America/Sao_Paulo\"}")
+  channelThrottleEnabled   Boolean  @default(false)
+  quietHoursEnabled        Boolean  @default(false)
+  followGuardEnabled       Boolean  @default(false)
+  copyVariationEnabled     Boolean  @default(false)
+  imageMutationEnabled     Boolean  @default(true)
+  imageMutationActive      Boolean  @default(false)
+  copyVariationPoolJson    String   @default("{\"greetings\":[\"🚨 COOOOOORRE QUE TÁ ACABANDO!\",\"💡 UTILIDADE PÚBLICA!!\",\"😱 TÁ BARATOOO DEMAIS!\",\"🍌 PREÇO DE BANANA!!\",\"🔥 PARA TUDO E OLHA ISSO!\",\"💸 O GERENTE ENLOUQUECEU!!\",\"⚡ OFERTA RELÂMPAGO, CLICA JÁ!\",\"🎁 QUASE DE GRAÇA, SÉRIO!!\",\"💎 ACHADO DE MILHÕES!!\",\"🏃 VOLTOU PRO ESTOQUE, VOA!\",\"💥 CHOCADO COM ESSE VALOR!\",\"🤑 SÓ QUEM FOR RÁPIDO VAI PEGAR!\"],\"ctas\":[\"📲 Entre no nosso grupo oficial:\",\"👥 Vem pro grupo economizar com a gente:\",\"👇 Clique aqui e faça parte do nosso grupo VIP:\",\"🤫 Acesse nosso grupo secreto de ofertas:\",\"🚀 Receba os melhores achadinhos direto no grupo:\",\"🔔 Quer ver as promoções primeiro? Entre no grupo:\",\"💥 Não perca nenhum bug! Faça parte do grupo:\",\"🛒 Garanta os melhores descontos entrando no grupo:\",\"🤝 Junte-se à nossa comunidade de achadinhos:\",\"👀 Para não perder nadinha, vem pro grupo:\"],\"trailers\":[\"⚠️ Atenção: Preços e estoque podem mudar a qualquer momento!\",\"🚨 O valor promocional e a disponibilidade dependem do estoque da loja.\",\"⏳ Corra! Oferta por tempo limitado ou até durarem os estoques.\",\"📝 Preço sujeito a alteração e produto sujeito a esgotar sem aviso prévio.\",\"🏃💨 Garanta logo, porque o estoque voa e o preço pode subir rapidinho!\",\"🔔 Aviso: A loja parceira pode alterar o valor ou encerrar a oferta a qualquer minuto.\",\"🛒 Unidades promocionais limitadas! Preço sujeito a reajuste no site.\",\"📉 Desconto válido por tempo limitado, sujeito a alteração e fim de estoque.\",\"ℹ️ Os preços e a disponibilidade do produto são de responsabilidade total da loja.\",\"💥 Aproveite rápido: Estoques limitados e valores sujeitos a alteração.\"]}")
+  probeAccountSessionId    String?
+  probeEnabled             Boolean  @default(false)
+  mobileTemplatesJson      String   @default("{}")
+  mobileCouponLinksJson    String   @default("{}")
   mirrorTemplateKeyDefault String?
-  primaryLinkTargetDefault String  @default("first")
-  preservationEnabled     Boolean @default(false)
-  channelForwardJid       String?
-  channelForwardName      String?
-  updatedAt       DateTime @updatedAt
+  primaryLinkTargetDefault String   @default("first")
+  preservationEnabled      Boolean  @default(false)
+  channelForwardJid        String?
+  channelForwardName       String?
+  updatedAt                DateTime @updatedAt
 }
 
 model FollowLog {
@@ -342,14 +358,14 @@ model ChannelThrottle {
 }
 
 model AffiliateLink {
-  id           String   @id @default(cuid())
+  id           String           @id @default(cuid())
   userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  hash         String   @unique
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hash         String           @unique
   originalUrl  String
   messageLogId String?
   groupId      String?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime         @default(now())
   clicks       AffiliateClick[]
 
   @@index([userId, createdAt])
@@ -381,47 +397,47 @@ model ChannelSnapshot {
 }
 
 model ScheduledMessage {
-  id          String    @id @default(cuid())
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  text        String
-  targetJids  String
-  scheduledAt DateTime
-  sentAt      DateTime?
-  status      String    @default("pending")
-  imageUrl    String?
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text            String
+  targetJids      String
+  scheduledAt     DateTime
+  sentAt          DateTime?
+  status          String    @default("pending")
+  imageUrl        String?
   imageRefererUrl String?
-  createdAt   DateTime  @default(now())
+  createdAt       DateTime  @default(now())
 
   @@index([userId, status, scheduledAt])
 }
 
 model OfferQueue {
-  id               String   @id @default(cuid())
-  userId           String
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name             String
-  enabled          Boolean  @default(true)
-  intervalEnabled  Boolean  @default(false)
-  intervalMinutes  Int      @default(30)
-  hourlyCapEnabled Boolean  @default(false)
-  hourlyCap        Int      @default(10)
-  dailyCapEnabled  Boolean  @default(false)
-  dailyCap         Int      @default(50)
+  id                    String           @id @default(cuid())
+  userId                String
+  user                  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                  String
+  enabled               Boolean          @default(true)
+  intervalEnabled       Boolean          @default(false)
+  intervalMinutes       Int              @default(30)
+  hourlyCapEnabled      Boolean          @default(false)
+  hourlyCap             Int              @default(10)
+  dailyCapEnabled       Boolean          @default(false)
+  dailyCap              Int              @default(50)
   // Horário de funcionamento POR FILA (override da janela silenciosa global).
   // Quando operatingHoursEnabled=true, a fila obedece SÓ este horário e ignora
   // a janela silenciosa global (BotConfig). Quando false, segue o global.
   // Horas em "HH:mm", interpretadas em America/Sao_Paulo.
-  operatingHoursEnabled Boolean @default(false)
+  operatingHoursEnabled Boolean          @default(false)
   operatingHoursStart   String?
   operatingHoursEnd     String?
   // JSON array de JIDs de destino da fila. "[]" = fallback para todos os
   // grupos com role 'post' (comportamento legado, pré-seleção por fila).
-  targetJids       String   @default("[]")
-  lastSentAt       DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  items            OfferQueueItem[]
+  targetJids            String           @default("[]")
+  lastSentAt            DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  items                 OfferQueueItem[]
 
   @@index([userId, enabled])
 }
@@ -581,7 +597,6 @@ model LpPlan {
   @@index([position])
 }
 
-
 model TutorialContent {
   id        String   @id
   title     String
@@ -611,7 +626,6 @@ model AnalyticsEvent {
   @@index([event, createdAt])
   @@index([userId, createdAt])
 }
-
 
 model ProbeEvidence {
   id                 String   @id @default(cuid())
@@ -705,9 +719,9 @@ model AffiliateProfile {
   commissionPercentOverride          Int?
   commissionRecurringPercentOverride Int?
 
-  user         User                  @relation("UserAffiliate", fields: [userId], references: [id], onDelete: Cascade)
-  referredUsers User[]               @relation("AffiliateUser")
-  commissions  AffiliateCommission[]
+  user               User                        @relation("UserAffiliate", fields: [userId], references: [id], onDelete: Cascade)
+  referredUsers      User[]                      @relation("AffiliateUser")
+  commissions        AffiliateCommission[]
   attributionTouches AffiliateAttributionTouch[]
 
   @@index([status])
@@ -759,11 +773,11 @@ model AffiliateCommission {
   paidByUserId          String?
   createdAt             DateTime  @default(now())
 
-  affiliate    AffiliateProfile @relation(fields: [affiliateId], references: [id])
-  payment      Payment          @relation(fields: [paymentId], references: [id])
-  referredUser User             @relation("ReferredUserCommissions", fields: [referredUserId], references: [id])
-  paidBy       User?            @relation("PaidCommissions", fields: [paidByUserId], references: [id])
-  approvedBy   User?            @relation("ApprovedCommissions", fields: [approvedByUserId], references: [id])
+  affiliate     AffiliateProfile            @relation(fields: [affiliateId], references: [id])
+  payment       Payment                     @relation(fields: [paymentId], references: [id])
+  referredUser  User                        @relation("ReferredUserCommissions", fields: [referredUserId], references: [id])
+  paidBy        User?                       @relation("PaidCommissions", fields: [paidByUserId], references: [id])
+  approvedBy    User?                       @relation("ApprovedCommissions", fields: [approvedByUserId], references: [id])
   ledgerEntries AffiliateCommissionLedger[]
 
   @@index([affiliateId, cycleMonth, status])

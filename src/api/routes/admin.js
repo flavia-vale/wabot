@@ -759,6 +759,221 @@ async function getOperationalOverview(now = new Date()) {
   }
 }
 
+function countRowsByUserAndType(rows = []) {
+  const out = new Map()
+  for (const row of rows) {
+    const userMap = out.get(row.userId) || {}
+    userMap[row.type] = (userMap[row.type] || 0) + Number(row._count?._all ?? 0)
+    out.set(row.userId, userMap)
+  }
+  return out
+}
+
+function safeIsoDate(value) {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
+function isSessionOnline(session, now = new Date()) {
+  if (!session) return false
+  if (session.status === 'connected') return true
+  const heartbeatAt = session.lastHeartbeatAt ? new Date(session.lastHeartbeatAt).getTime() : 0
+  const heartbeatFresh = heartbeatAt && now.getTime() - heartbeatAt <= 2 * 60_000
+  return session.status === 'connecting' && heartbeatFresh && ['connecting', 'reconnecting'].includes(session.lifecycle)
+}
+
+async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = {}) {
+  const now = new Date()
+  const since24h = addDays(now, -1)
+  const limit = Math.min(Math.max(Number(query.limit ?? 80), 1), 200)
+  const search = String(query.search ?? '').trim()
+  const running = new Set(await listRunningBots())
+
+  const where = {
+    status: 'active',
+    ...(search ? { OR: [{ email: { contains: search } }, { name: { contains: search } }] } : {}),
+  }
+
+  const [users, allActiveSessions] = await Promise.all([
+    db.user.findMany({
+      where,
+      orderBy: [{ lastActivityAt: 'desc' }, { createdAt: 'desc' }],
+      take: limit,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        contactPhone: true,
+        status: true,
+        plan: true,
+        lastActivityAt: true,
+        waSession: {
+          select: {
+            status: true,
+            lifecycle: true,
+            phone: true,
+            ownerInstance: true,
+            lastHeartbeatAt: true,
+            lastDisconnectCode: true,
+            updatedAt: true,
+          },
+        },
+      },
+    }),
+    db.waSession.findMany({
+      where: { user: { status: 'active' } },
+      select: { status: true, lifecycle: true, lastHeartbeatAt: true },
+    }).catch(() => []),
+  ])
+  const userIds = users.map(user => user.id)
+  const [eventCounts24hRows, recentErrorMap, lastMessageMap] = await Promise.all([
+    userIds.length ? db.waConnectionEvent.groupBy({
+      by: ['userId', 'type'],
+      where: { userId: { in: userIds }, occurredAt: { gte: since24h } },
+      _count: { _all: true },
+    }).catch(() => []) : [],
+    getLogCountMap({ status: 'error', since: since24h, userIds }),
+    getLogActivityMap({ userIds }),
+  ])
+
+  const eventCounts24h = countRowsByUserAndType(eventCounts24hRows)
+  const rows = users.map(user => {
+    const session = user.waSession
+    const counts = eventCounts24h.get(user.id) || {}
+    const disconnects24h = Number(counts.disconnect || 0) + Number(counts.disconnect_terminal || 0)
+    const reconnectAttempts24h = Number(counts.reconnect_attempt || 0)
+    const reconnectSuccess24h = Number(counts.reconnect_success || 0)
+    const lastMessageAt = lastMessageMap.get(user.id) ?? null
+    const effectiveLastActivityAt = resolveEffectiveLastActivity(user, lastMessageAt)
+    const online = isSessionOnline(session, now)
+    return sanitizeUser({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      contactPhone: user.contactPhone,
+      status: user.status,
+      plan: user.plan,
+      lastActivityAt: user.lastActivityAt,
+      effectiveLastActivityAt,
+      lastMessageAt,
+      botRunning: running.has(user.id),
+      online,
+      recentErrors: recentErrorMap.get(user.id) ?? 0,
+      disconnects24h,
+      reconnectAttempts24h,
+      reconnectSuccess24h,
+      waSession: session,
+    }, adminRole)
+  })
+
+  const totalSessions = allActiveSessions.length
+  const onlineUsers = allActiveSessions.filter(session => isSessionOnline(session, now)).length
+  const connectingUsers = allActiveSessions.filter(session => session.status === 'connecting').length
+  const disconnectedAlerts = allActiveSessions.filter(session => session.status !== 'connected' && session.status !== 'connecting').length
+  const stabilityPct = totalSessions ? Math.round((onlineUsers / totalSessions) * 1000) / 10 : 100
+
+  return {
+    checkedAt: now.toISOString(),
+    summary: {
+      onlineUsers,
+      totalSessions,
+      stabilityPct,
+      disconnectedAlerts,
+      connectingUsers,
+      activeUsersLoaded: rows.length,
+    },
+    users: rows.sort((a, b) => {
+      const priorityA = (a.waSession?.status === 'disconnected' ? 3 : a.waSession?.status === 'connecting' ? 2 : a.recentErrors ? 1 : 0)
+      const priorityB = (b.waSession?.status === 'disconnected' ? 3 : b.waSession?.status === 'connecting' ? 2 : b.recentErrors ? 1 : 0)
+      return priorityB - priorityA || String(b.effectiveLastActivityAt || '').localeCompare(String(a.effectiveLastActivityAt || ''))
+    }),
+  }
+}
+
+async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
+  const now = new Date()
+  const since24h = addDays(now, -1)
+  const since7d = addDays(now, -7)
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      contactPhone: true,
+      status: true,
+      plan: true,
+      lastActivityAt: true,
+      createdAt: true,
+      waSession: {
+        select: {
+          status: true,
+          lifecycle: true,
+          phone: true,
+          ownerInstance: true,
+          lastHeartbeatAt: true,
+          lastDisconnectCode: true,
+          updatedAt: true,
+        },
+      },
+    },
+  })
+  if (!user) return null
+
+  const [events24h, events7d, recentEvents, logs] = await Promise.all([
+    db.waConnectionEvent.groupBy({
+      by: ['type'],
+      where: { userId, occurredAt: { gte: since24h, lte: now } },
+      _count: { _all: true },
+    }).catch(() => []),
+    db.waConnectionEvent.groupBy({
+      by: ['type'],
+      where: { userId, occurredAt: { gte: since7d, lte: now } },
+      _count: { _all: true },
+    }).catch(() => []),
+    db.waConnectionEvent.findMany({
+      where: { userId, occurredAt: { gte: since7d, lte: now } },
+      orderBy: { occurredAt: 'desc' },
+      take: 40,
+      select: { id: true, type: true, code: true, lifecycle: true, ownerInstance: true, metadata: true, occurredAt: true },
+    }).catch(() => []),
+    db.messageLog.findMany({
+      where: { userId, sentAt: { gte: since7d, lte: now } },
+      orderBy: { sentAt: 'desc' },
+      take: 300,
+      select: { id: true, status: true, errorMsg: true, platform: true, sentAt: true },
+    }),
+  ])
+
+  const countByType = (rows) => Object.fromEntries(rows.map(row => [row.type, Number(row._count?._all ?? 0)]))
+  const counts24h = countByType(events24h)
+  const counts7d = countByType(events7d)
+  const disconnects24h = Number(counts24h.disconnect || 0) + Number(counts24h.disconnect_terminal || 0)
+  const disconnects7d = Number(counts7d.disconnect || 0) + Number(counts7d.disconnect_terminal || 0)
+
+  return {
+    checkedAt: now.toISOString(),
+    user: sanitizeUser(user, adminRole),
+    session: user.waSession,
+    online: isSessionOnline(user.waSession, now),
+    connectionMetrics: {
+      disconnects24h,
+      disconnects7d,
+      reconnectAttempts24h: Number(counts24h.reconnect_attempt || 0),
+      reconnectAttempts7d: Number(counts7d.reconnect_attempt || 0),
+      reconnectSuccess24h: Number(counts24h.reconnect_success || 0),
+      reconnectSuccess7d: Number(counts7d.reconnect_success || 0),
+    },
+    errorsByType: buildErrorsByMessage(logs, { limit: 20 }),
+    recentEvents: recentEvents.map(event => {
+      let metadata = {}
+      try { metadata = JSON.parse(event.metadata || '{}') } catch {}
+      return { ...event, metadata, occurredAt: safeIsoDate(event.occurredAt) }
+    }),
+  }
+}
+
 export async function adminRoutes(app) {
   const adminService = createAdminService({
     db,
@@ -828,6 +1043,30 @@ export async function adminRoutes(app) {
       action: 'admin.users.wa_disconnected.list',
       resource: 'user',
       after: { total: result.total, paidAtRisk: result.summary?.paidAtRisk ?? 0 },
+    })
+    return result
+  })
+
+  app.get('/online', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+    const result = await buildAdminOnlineOverview({ query: req.query ?? {}, adminRole: req.admin.role })
+    await writeAdminAuditLog(req, {
+      action: 'admin.online.read',
+      resource: 'waConnectionEvent',
+      after: { totalSessions: result.summary.totalSessions, disconnectedAlerts: result.summary.disconnectedAlerts },
+    })
+    return result
+  })
+
+  app.get('/online/:userId', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+    const result = await buildAdminOnlineUserDetail({ userId: req.params.userId, adminRole: req.admin.role })
+    if (!result) return reply.code(404).send({ error: 'Cliente não encontrado' })
+    await writeAdminAuditLog(req, {
+      action: 'admin.online.user_detail',
+      resource: 'waConnectionEvent',
+      targetUserId: req.params.userId,
+      after: { disconnects24h: result.connectionMetrics.disconnects24h, reconnectAttempts24h: result.connectionMetrics.reconnectAttempts24h },
     })
     return result
   })
