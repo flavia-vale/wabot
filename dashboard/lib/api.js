@@ -152,6 +152,11 @@ export const api = {
   me: () => apiFetch('/api/auth/me'),
   updateAccountEmail: (email) =>
     apiFetch('/api/auth/me/email', { method: 'PATCH', body: JSON.stringify({ email }) }),
+  updateAccountPassword: async (currentPassword, newPassword, confirmPassword) => {
+    const data = await apiFetch('/api/auth/me/password', { method: 'PATCH', body: JSON.stringify({ currentPassword, newPassword, confirmPassword }) })
+    if (data?.token) setAuthToken(data.token)
+    return data
+  },
   logout: async () => {
     const data = await apiFetch('/api/auth/logout', { method: 'POST' })
     setAuthToken('')
