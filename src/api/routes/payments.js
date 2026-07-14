@@ -2,6 +2,7 @@ import axios from 'axios'
 import { createHmac } from 'crypto'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { resolvePlanForPayment, DEFAULT_PLANS } from '../../domain/payments/service.js'
+import { classifyPayerEmail } from '../../domain/payments/payerEmail.js'
 import { appContainer } from '../../app/container.js'
 import { writeWebhookEvent } from '../../events/store.js'
 import { tryCreateAffiliateCommission, reconcileAffiliateCommissions, promoteEligibleAffiliateCommissions, reverseAffiliateCommissionForPayment } from '../../domain/affiliate/service.js'
@@ -753,19 +754,31 @@ export async function paymentsRoutes(app) {
   })
 
   app.post('/create-subscription', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const { plan } = req.body ?? {}
-    const plans = await getBillingPlans()
-    if (!plans[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic ou pro.')
-
     const userId = req.user.sub
-    const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } })
-    const payerEmail = user?.email ?? null
-
-    if (!payerEmail) return sendError(reply, 400, 'MISSING_PAYER_EMAIL', 'E-mail do usuário não encontrado.')
-
-    trackAnalyticsEventSafe({ userId, event: 'subscription_started', metadata: { plan } })
-
     try {
+      const { plan } = req.body ?? {}
+      const plans = await getBillingPlans()
+      if (!plans[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic ou pro.')
+
+      const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } })
+      const payerEmail = user?.email ?? null
+
+      // RCA do 502: o MP recusa `payer_email` inválido/fictício/fallback no
+      // `/preapproval` (às vezes com 500 cru). Pega os casos localmente óbvios
+      // ANTES da chamada e devolve erro claro + `needsEmailUpdate` para o painel
+      // oferecer a troca de e-mail em vez de um 502 opaco.
+      const emailIssue = classifyPayerEmail(payerEmail)
+      if (emailIssue) {
+        trackAnalyticsEventSafe({ userId, event: 'subscription_email_blocked', metadata: { plan, reason: emailIssue.reason } })
+        return reply.code(400).send({
+          code: 'SUBSCRIPTION_EMAIL_REQUIRED',
+          needsEmailUpdate: true,
+          error: { code: 'SUBSCRIPTION_EMAIL_REQUIRED', message: emailIssue.message },
+        })
+      }
+
+      trackAnalyticsEventSafe({ userId, event: 'subscription_started', metadata: { plan } })
+
       const { initPoint, mpSubscriptionId } = await createMercadoPagoSubscription({ userId, plan, payerEmail })
       await db.subscription.upsert({
         where: { mpSubscriptionId },
@@ -774,6 +787,7 @@ export async function paymentsRoutes(app) {
       })
       return { init_point: initPoint }
     } catch (err) {
+      const plan = req.body?.plan
       if (err?.code === 'INVALID_PLAN_CONFIG') {
         return sendError(reply, 400, 'INVALID_PLAN_CONFIG', 'Configuração do plano inválida no Admin. Revise título e preço do plano.')
       }
@@ -781,7 +795,27 @@ export async function paymentsRoutes(app) {
         return sendError(reply, 500, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'Pagamentos temporariamente indisponíveis.')
       }
       if (err?.code === 'MISSING_PAYER_EMAIL') {
-        return sendError(reply, 400, 'MISSING_PAYER_EMAIL', 'E-mail do pagador obrigatório para criar assinatura.')
+        return reply.code(400).send({
+          code: 'SUBSCRIPTION_EMAIL_REQUIRED',
+          needsEmailUpdate: true,
+          error: { code: 'SUBSCRIPTION_EMAIL_REQUIRED', message: 'Sua conta precisa de um e-mail válido para assinar com renovação automática.' },
+        })
+      }
+      if (err?.code === 'SUBSCRIPTION_PROVIDER_ERROR') {
+        // O MP recusou a criação do preapproval. Loga o motivo REAL (status +
+        // payload) — antes ia como 502 opaco e o motivo ficava invisível.
+        // O `payer_email` é a única variável do usuário aqui, então oferecemos
+        // a troca de e-mail (422, não 502: não é falha nossa de gateway).
+        req.log.error({ providerStatus: err?.providerStatus, providerPayload: err?.providerPayload, reason: err?.message, plan, userId }, 'Mercado Pago recusou criação de assinatura')
+        trackAnalyticsEventSafe({ userId, event: 'subscription_provider_rejected', metadata: { plan, providerStatus: err?.providerStatus ?? null } })
+        return reply.code(422).send({
+          code: 'SUBSCRIPTION_EMAIL_REJECTED',
+          needsEmailUpdate: true,
+          error: {
+            code: 'SUBSCRIPTION_EMAIL_REJECTED',
+            message: 'O Mercado Pago não aceitou o e-mail da sua conta para a assinatura recorrente. Confira se é um e-mail válido e já cadastrado no Mercado Pago — você pode atualizá-lo abaixo e tentar de novo. Se preferir, use o pagamento avulso.',
+          },
+        })
       }
       req.log.error({ err: err?.message, code: err?.code, plan, userId }, 'Falha ao criar assinatura MP')
       return sendError(reply, 502, 'SUBSCRIPTION_CREATION_FAILED', 'Não foi possível iniciar a assinatura. Tente novamente.')

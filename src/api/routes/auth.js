@@ -541,6 +541,36 @@ export async function authRoutes(app) {
     }
     return user
   })
+
+  // Permite ao usuário trocar o e-mail da própria conta. Necessário porque o
+  // `payer_email` da assinatura recorrente (Mercado Pago) vem daqui — contas
+  // com e-mail fictício/fallback `@sistema.com` não conseguem assinar até
+  // cadastrar um e-mail real (ver src/domain/payments/payerEmail.js). A
+  // identidade da sessão usa `sub` (userId), não o e-mail, então trocar o
+  // e-mail NÃO invalida o token atual.
+  app.patch('/me/email', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const userId = req.user.sub
+    const email = normalizeEmail(req.body?.email)
+    if (!email) return reply.code(400).send({ error: 'E-mail obrigatório' })
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply.code(400).send({ error: 'Formato de e-mail inválido' })
+    if (email.endsWith('@sistema.com')) return reply.code(400).send({ error: 'Use um e-mail real — o domínio @sistema.com é reservado para contas sem e-mail.' })
+
+    const existing = await findUserByNormalizedEmail(email)
+    if (existing && existing.id !== userId) {
+      return reply.code(409).send({ error: 'Este e-mail já está em uso por outra conta.' })
+    }
+
+    try {
+      await db.user.update({ where: { id: userId }, data: { email } })
+    } catch (err) {
+      if (String(err?.code) === 'P2002') return reply.code(409).send({ error: 'Este e-mail já está em uso por outra conta.' })
+      throw err
+    }
+
+    trackAnalyticsEventSafe({ userId, event: 'account_email_updated' })
+    const updated = await findCurrentUser(userId)
+    return publicUser(updated)
+  })
 }
 
 // Ativa a limpeza periódica assim que o módulo é importado (igual ao padrão de
