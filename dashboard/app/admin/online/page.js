@@ -106,7 +106,7 @@ function UserDrawer({ detail, loading, onClose }) {
 
             <section className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
               <p className="font-black">Como ler estas métricas</p>
-              <p className="mt-1">"Ações manuais" conta quando o cliente precisou iniciar/reparear pelo painel. "Offline auto" mede o tempo em que o robô ficou fora até o sistema recuperar sozinho; tentativas internas de backoff não entram como trabalho do cliente.</p>
+              <p className="mt-1">&quot;Ações manuais&quot; conta quando o cliente precisou iniciar/reparear pelo painel. &quot;Offline auto&quot; mede o tempo em que o robô ficou fora até o sistema recuperar sozinho; tentativas internas de backoff não entram como trabalho do cliente.</p>
             </section>
 
             <section className="rounded-3xl border border-slate-200 bg-white p-4">
