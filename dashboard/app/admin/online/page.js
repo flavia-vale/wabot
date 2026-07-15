@@ -134,25 +134,41 @@ export default function AdminOnlinePage() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [waStatus, setWaStatus] = useState('all')
+  const [plan, setPlan] = useState('all')
+  const [activity, setActivity] = useState('all')
+  const [minErrors, setMinErrors] = useState('')
   const [error, setError] = useState('')
+
+  function currentFilters(extra = {}) {
+    return {
+      limit: 120,
+      search,
+      waStatus,
+      plan,
+      activity,
+      minErrors,
+      ...extra,
+    }
+  }
 
   async function load(params = {}) {
     setError('')
-    const result = await api.adminOnline({ limit: 120, search, ...params })
+    const result = await api.adminOnline(currentFilters(params))
     setData(result)
   }
 
   useEffect(() => {
     let active = true
-    api.adminOnline({ limit: 120 })
+    api.adminOnline(currentFilters())
       .then((result) => { if (active) setData(result) })
       .catch((err) => { if (active) setError(err.message || 'Falha ao carregar ONLINE.') })
       .finally(() => { if (active) setLoading(false) })
     const timer = setInterval(() => {
-      api.adminOnline({ limit: 120, search }).then((result) => { if (active) setData(result) }).catch(() => {})
+      api.adminOnline(currentFilters()).then((result) => { if (active) setData(result) }).catch(() => {})
     }, 15000)
     return () => { active = false; clearInterval(timer) }
-  }, [search])
+  }, [search, waStatus, plan, activity, minErrors])
 
   async function openDetail(userId) {
     setDetailLoading(true)
@@ -208,10 +224,30 @@ export default function AdminOnlinePage() {
           <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h2 className="text-lg font-black text-slate-950">Usuários ativos</h2>
-              <p className="text-sm text-slate-500">{users.length} usuários carregados · atualização automática a cada 15s.</p>
+              <p className="text-sm text-slate-500">{users.length} usuários carregados · filtros aplicados em tempo real · atualização automática a cada 15s.</p>
             </div>
-            <form onSubmit={(event) => { event.preventDefault(); load() }} className="flex gap-2">
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nome ou e-mail" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400 sm:w-72" />
+            <form onSubmit={(event) => { event.preventDefault(); load() }} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[220px_160px_130px_190px_120px_90px]">
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nome ou e-mail" className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
+              <select value={waStatus} onChange={(event) => setWaStatus(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
+                <option value="all">Todos status</option>
+                <option value="alerts">Só alertas</option>
+                <option value="connected">Conectados</option>
+                <option value="connecting">Tentando conectar</option>
+                <option value="disconnected">Desconectados</option>
+                <option value="without_session">Sem sessão</option>
+              </select>
+              <select value={plan} onChange={(event) => setPlan(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
+                <option value="all">Todos planos</option>
+                <option value="trial">Trial</option>
+                <option value="basic">Basic</option>
+                <option value="pro">Pro</option>
+              </select>
+              <select value={activity} onChange={(event) => setActivity(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
+                <option value="all">Toda atividade</option>
+                <option value="with_sends_24h">Com envios 24h</option>
+                <option value="without_activity_24h">Sem atividade 24h</option>
+              </select>
+              <input value={minErrors} onChange={(event) => setMinErrors(event.target.value)} type="number" min="0" placeholder="Erros mín." className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
               <button className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800">Filtrar</button>
             </form>
           </div>
@@ -223,7 +259,7 @@ export default function AdminOnlinePage() {
                   <th className="px-3 py-3">Usuário</th>
                   <th className="px-3 py-3">WhatsApp</th>
                   <th className="px-3 py-3">Última atividade</th>
-                  <th className="px-3 py-3 text-right">Erros</th>
+                  <th className="px-3 py-3 text-right">Envios 24h</th>
                   <th className="px-3 py-3 text-right">Quedas 24h</th>
                   <th className="px-3 py-3 text-right">Reconexões</th>
                   <th className="px-3 py-3">Ação</th>
@@ -248,7 +284,10 @@ export default function AdminOnlinePage() {
                         <p className="font-bold">{formatRelative(user.effectiveLastActivityAt)}</p>
                         <p>{formatDate(user.effectiveLastActivityAt)}</p>
                       </td>
-                      <td className="px-3 py-4 text-right font-black tabular-nums text-slate-900">{formatNumber(user.recentErrors)}</td>
+                      <td className="px-3 py-4 text-right text-xs tabular-nums">
+                        <p className="font-black text-emerald-700">{formatNumber(user.successCount24h)} sucesso</p>
+                        <p className="font-black text-red-700">{formatNumber(user.errorCount24h)} erro</p>
+                      </td>
                       <td className="px-3 py-4 text-right font-black tabular-nums text-red-700">{formatNumber(user.disconnects24h)}</td>
                       <td className="px-3 py-4 text-right text-xs text-slate-600">
                         <p><strong>{formatNumber(user.reconnectSuccess24h)}</strong> sucesso</p>
