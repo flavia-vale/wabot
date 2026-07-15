@@ -788,10 +788,15 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
   const since24h = addDays(now, -1)
   const limit = Math.min(Math.max(Number(query.limit ?? 80), 1), 200)
   const search = String(query.search ?? '').trim()
+  const plan = String(query.plan ?? 'all').trim().toLowerCase()
+  const waStatus = String(query.waStatus ?? 'all').trim().toLowerCase()
+  const activity = String(query.activity ?? 'all').trim().toLowerCase()
+  const minErrors = Math.max(0, Number(query.minErrors ?? 0) || 0)
   const running = new Set(await listRunningBots())
 
   const where = {
     status: 'active',
+    ...(plan !== 'all' && ['trial', 'basic', 'pro'].includes(plan) ? { plan } : {}),
     ...(search ? { OR: [{ email: { contains: search } }, { name: { contains: search } }] } : {}),
   }
 
@@ -827,12 +832,13 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
     }).catch(() => []),
   ])
   const userIds = users.map(user => user.id)
-  const [eventCounts24hRows, recentErrorMap, lastMessageMap] = await Promise.all([
+  const [eventCounts24hRows, successMap24h, errorMap24h, lastMessageMap] = await Promise.all([
     userIds.length ? db.waConnectionEvent.groupBy({
       by: ['userId', 'type'],
       where: { userId: { in: userIds }, occurredAt: { gte: since24h } },
       _count: { _all: true },
     }).catch(() => []) : [],
+    getLogCountMap({ status: 'success', since: since24h, userIds }),
     getLogCountMap({ status: 'error', since: since24h, userIds }),
     getLogActivityMap({ userIds }),
   ])
@@ -847,6 +853,8 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
     const lastMessageAt = lastMessageMap.get(user.id) ?? null
     const effectiveLastActivityAt = resolveEffectiveLastActivity(user, lastMessageAt)
     const online = isSessionOnline(session, now)
+    const successCount24h = successMap24h.get(user.id) ?? 0
+    const errorCount24h = errorMap24h.get(user.id) ?? 0
     return sanitizeUser({
       id: user.id,
       name: user.name,
@@ -859,12 +867,27 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
       lastMessageAt,
       botRunning: running.has(user.id),
       online,
-      recentErrors: recentErrorMap.get(user.id) ?? 0,
+      recentErrors: errorCount24h,
+      successCount24h,
+      errorCount24h,
       disconnects24h,
       reconnectAttempts24h,
       reconnectSuccess24h,
       waSession: session,
     }, adminRole)
+  }).filter(row => {
+    const sessionStatus = row.waSession?.status || 'none'
+    const isAlert = row.waSession && sessionStatus !== 'connected'
+    if (waStatus === 'alerts' && !isAlert) return false
+    if (['connected', 'connecting', 'disconnected'].includes(waStatus) && sessionStatus !== waStatus) return false
+    if (waStatus === 'without_session' && row.waSession) return false
+    if (minErrors > 0 && Number(row.errorCount24h || 0) < minErrors) return false
+    if (activity === 'with_sends_24h' && (Number(row.successCount24h || 0) + Number(row.errorCount24h || 0)) <= 0) return false
+    if (activity === 'without_activity_24h') {
+      const lastAt = row.effectiveLastActivityAt ? new Date(row.effectiveLastActivityAt).getTime() : 0
+      if (lastAt && now.getTime() - lastAt <= 24 * 60 * 60_000) return false
+    }
+    return true
   })
 
   const totalSessions = allActiveSessions.length
@@ -882,6 +905,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
       disconnectedAlerts,
       connectingUsers,
       activeUsersLoaded: rows.length,
+      filters: { search, plan, waStatus, activity, minErrors },
     },
     users: rows.sort((a, b) => {
       const priorityA = (a.waSession?.status === 'disconnected' ? 3 : a.waSession?.status === 'connecting' ? 2 : a.recentErrors ? 1 : 0)
