@@ -447,8 +447,6 @@ export default function AffiliatePage() {
         </div>
       )}
 
-      <AffiliateRulesCard config={affiliateConfig} affiliateLink={affiliateLink} />
-
       <div>
         <button
           onClick={() => setShowPixEdit(v => !v)}
@@ -458,6 +456,8 @@ export default function AffiliatePage() {
         </button>
         {showPixEdit && <PixEditForm profile={profile} onUpdated={() => { setShowPixEdit(false); loadData() }} />}
       </div>
+
+      <AffiliateRulesCard config={affiliateConfig} affiliateLink={affiliateLink} />
     </div>
   )
 }
