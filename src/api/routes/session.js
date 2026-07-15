@@ -5,6 +5,7 @@ import { getAuthInfoDir } from '../../paths.js'
 import { mapInfraError } from '../../errors.js'
 import { appContainer } from '../../app/container.js'
 import { normalizePairingPhone } from '../../domain/session/service.js'
+import { recordWaConnectionEventSafe } from '../../waConnectionTelemetry.js'
 
 const WA_GROUPS_RECOVERY_TIMEOUT_MS = Math.max(Number(process.env.WA_GROUPS_RECOVERY_TIMEOUT_MS || 15000), 0)
 const WA_GROUPS_RECOVERY_RETRY_MS = Math.max(Number(process.env.WA_GROUPS_RECOVERY_RETRY_MS || 1000), 100)
@@ -74,16 +75,16 @@ export async function sessionRoutes(app) {
     const validation = sessionService.validateSessionStartUser(user)
     if (!validation.ok) return reply.code(validation.statusCode).send({ error: validation.error })
 
+    const previousSession = await db.waSession.findUnique({ where: { userId }, select: { status: true, lifecycle: true } }).catch(() => null)
     const running = Boolean(await isRunning(userId))
     if (running) {
       // Em modo remote, a API pode ver o worker como "rodando" enquanto o
       // socket WhatsApp já caiu (sem heartbeat / status='disconnected' no DB).
       // Nesse caso o QR nunca chega na dashboard. Tratamos como órfão:
       // derruba o worker e refaz o start limpo.
-      const session = await db.waSession.findUnique({ where: { userId }, select: { status: true } }).catch(() => null)
-      const isOrphan = !session || session.status === 'disconnected'
+      const isOrphan = !previousSession || previousSession.status === 'disconnected'
       if (!isOrphan) return reply.code(409).send({ error: 'Bot já está rodando' })
-      req.log.warn({ userId, dbStatus: session?.status }, 'Worker órfão detectado em /start — reiniciando sessão')
+      req.log.warn({ userId, dbStatus: previousSession?.status }, 'Worker órfão detectado em /start — reiniciando sessão')
       try { await stopBot(userId) } catch (err) { req.log.warn({ err: err.message }, 'Falha ao parar worker órfão') }
       // Espera o worker antigo realmente sair antes do start novo. O slot só é
       // liberado no exit do processo (ver sessionCore.stopBot), então um gap fixo
@@ -95,6 +96,14 @@ export async function sessionRoutes(app) {
       }
     }
 
+    if (previousSession) {
+      recordWaConnectionEventSafe({
+        userId,
+        type: 'manual_reconnect_requested',
+        lifecycle: 'manual_start',
+        metadata: { source: 'session_start', wasRunning: running, previousStatus: previousSession.status, previousLifecycle: previousSession.lifecycle },
+      })
+    }
     await startBot(userId)
     return { ok: true, message: 'Bot iniciado — aguarde o QR' }
   })
@@ -183,6 +192,12 @@ export async function sessionRoutes(app) {
       // antes do bots.set(userId, …); 600ms é folga sobre o tempo típico de fork.
       await new Promise(r => setTimeout(r, 600))
     }
+    recordWaConnectionEventSafe({
+      userId,
+      type: 'manual_pairing_requested',
+      lifecycle: 'pairing_requested',
+      metadata: { source: 'pairing_code', workerWasRunning: Boolean(await isRunning(userId)) },
+    })
     try {
       const code = await requestPairingCode(userId, normalized)
       return { code }
