@@ -144,6 +144,18 @@ export function Features() {
             </div>
           </div>
 
+          <div style={s.card(6, true)} className="landing-feature-card landing-feature-card-trust">
+            <div style={s.iconBox}><Icon name="lock" size={22} /></div>
+            <div style={s.cardTitle}>Credenciais criptografadas</div>
+            <p style={s.cardBody}>Os dados de acesso das suas contas de afiliado e sua chave PIX ficam cifrados em repouso (AES-256-GCM) — não em texto puro no banco.</p>
+          </div>
+
+          <div style={s.card(6)} className="landing-feature-card landing-feature-card-trust">
+            <div style={s.iconBox}><Icon name="refresh" size={22} /></div>
+            <div style={s.cardTitle}>Sessão que sobrevive a atualizações</div>
+            <p style={s.cardBody}>Um processo dedicado cuida do ciclo de vida da sua sessão do WhatsApp, separado da aplicação principal — atualizar o sistema não derruba a sua operação em andamento.</p>
+          </div>
+
           {featureCards.map((card) => (
             <div key={card.title} style={s.card(card.cols, card.accent)} className="landing-feature-card">
               <div style={s.iconBox}><Icon name={card.icon} size={22} /></div>

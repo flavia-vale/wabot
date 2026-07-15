@@ -10,6 +10,8 @@ Language: pt-BR.
 
 BOTinho helps an operator organize WhatsApp source groups and destination groups, monitor configured sources, work with supported affiliate links, and repost reviewed messages with operational controls such as filters, intervals, credentials, and logs.
 
+Beyond link conversion, the product also: converts coupon and voucher links (not only product links) to the operator's own affiliate code; encrypts affiliate credentials and the operator's PIX payout key at rest (AES-256-GCM); and runs the WhatsApp session lifecycle in a dedicated process so that deploying an update does not disconnect an operator's active session. It also includes a referral program where an operator can earn a recurring commission for referring other operators, paid via PIX.
+
 ## Who it is for
 
 - Affiliate marketers who curate offers and coupons.

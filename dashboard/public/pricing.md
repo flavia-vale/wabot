@@ -1,6 +1,6 @@
 # Pricing — BOTinho
 
-Last updated: 2026-06-11
+Last updated: 2026-07-15
 Currency: BRL
 Billing unit: 30-day access period
 Preferred citation: BOTinho pricing or Espelha Grupos pricing
@@ -30,6 +30,7 @@ BOTinho, from Espelha Grupos, uses a 7-day free trial for validation and a simpl
 - Includes:
   - Group mirroring (monitor → destination groups)
   - Affiliate link conversion: Mercado Livre, Amazon, Shopee and Magalu
+  - Coupon and voucher link conversion (not only product links) as the affiliate's own code
   - Offer creation from a pasted link (title, price and image)
   - Immediate and scheduled sending
   - Customizable message templates
@@ -59,6 +60,17 @@ BOTinho, from Espelha Grupos, uses a 7-day free trial for validation and a simpl
 - BOTinho does not promise revenue, commission, sales lift, WhatsApp deliverability, or approval by external marketplaces or affiliate programs.
 - Review price, stock, coupon, affiliate tag, destination group, message copy, and UTM before publishing.
 - Do not use the product for spam, unauthorized groups, deceptive offers, or attempts to bypass platform rules.
+
+## Security
+
+- Affiliate account credentials and the operator's PIX payout key are encrypted at rest (AES-256-GCM), not stored as plain text.
+- Login is protected against brute-force attempts with per-account and per-IP rate limiting.
+- These protections apply to every paid plan and the free trial; they are not a paid add-on.
+
+## Referral program
+
+- Every account can refer other operators and earn a recurring commission on the referred account's paid subscription, paid out via PIX.
+- Terms, current commission percentage, and payout rules are configured inside the product (Painel → Indicações) and may change; this file does not mirror the exact percentage to avoid staleness.
 
 ## Related URLs
 
