@@ -17,10 +17,10 @@ export const BRAND_SAME_AS = [
   SUPPORT_WHATSAPP_URL,
 ]
 
-export const PRODUCT_DEFINITION = 'O BOTinho, do Espelha Grupos, é um software web para afiliados, curadores de ofertas e admins de grupos e canais que organiza grupos e/ou canais de origem e destino, converte links suportados e ajuda a distribuir mensagens de WhatsApp com revisão humana, cadência responsável e histórico de logs.'
+export const PRODUCT_DEFINITION = 'O BOTinho é um software web para afiliados, curadores de ofertas e admins de grupos e canais que organiza grupos e/ou canais de origem e destino, converte links suportados e ajuda a distribuir mensagens de WhatsApp com revisão humana, cadência responsável e histórico de logs.'
 
 export const PRODUCT_LIMITATIONS = [
-  'Não promete ganho financeiro, comissão ou aumento garantido de vendas.',
+  'Não prometemos ganho financeiro, comissão ou aumento garantido de vendas.',
   'Não deve ser usado para spam, disparos sem consentimento ou burlar regras do WhatsApp e das plataformas de afiliados.',
   'Preço, cupom, estoque, tag de afiliado e regras de cada plataforma devem ser revisados pela operação antes da divulgação.',
 ]
