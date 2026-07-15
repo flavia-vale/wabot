@@ -22,8 +22,8 @@ const s = {
   cardBody: { fontSize: 14.5, lineHeight: 1.55, color: 'var(--ink-soft)' },
   preservationCard: {
     gridColumn: 'span 12',
-    background: 'linear-gradient(135deg, #fff3c4 0%, #ffd8a8 45%, #fcbf49 100%)',
-    border: '2px solid #f59e0b',
+    background: 'linear-gradient(135deg, color-mix(in oklab, var(--accent-3) 65%, var(--surface)) 0%, color-mix(in oklab, var(--accent-2) 45%, var(--surface)) 100%)',
+    border: '1px solid var(--line)',
     borderRadius: 28,
     padding: 36,
     minHeight: 220,
@@ -31,7 +31,7 @@ const s = {
     gridTemplateColumns: 'minmax(0, 1.2fr) minmax(240px, 0.8fr)',
     gap: 28,
     alignItems: 'center',
-    boxShadow: '0 18px 42px rgba(245, 158, 11, 0.28)',
+    boxShadow: 'var(--shadow-soft)',
   },
   preservationList: { margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.7, fontSize: 14.5 },
   bigStat: { fontFamily: "var(--font-instrument-serif), serif", fontStyle: 'italic', fontSize: 88, lineHeight: 1, color: 'var(--accent-strong)', letterSpacing: '-0.04em' },
@@ -144,18 +144,6 @@ export function Features() {
             </div>
           </div>
 
-          <div style={s.card(6, true)} className="landing-feature-card landing-feature-card-trust">
-            <div style={s.iconBox}><Icon name="lock" size={22} /></div>
-            <div style={s.cardTitle}>Credenciais criptografadas</div>
-            <p style={s.cardBody}>Os dados de acesso das suas contas de afiliado e sua chave PIX ficam cifrados em repouso (AES-256-GCM) — não em texto puro no banco.</p>
-          </div>
-
-          <div style={s.card(6)} className="landing-feature-card landing-feature-card-trust">
-            <div style={s.iconBox}><Icon name="refresh" size={22} /></div>
-            <div style={s.cardTitle}>Sessão que sobrevive a atualizações</div>
-            <p style={s.cardBody}>Um processo dedicado cuida do ciclo de vida da sua sessão do WhatsApp, separado da aplicação principal — atualizar o sistema não derruba a sua operação em andamento.</p>
-          </div>
-
           {featureCards.map((card) => (
             <div key={card.title} style={s.card(card.cols, card.accent)} className="landing-feature-card">
               <div style={s.iconBox}><Icon name={card.icon} size={22} /></div>
@@ -169,13 +157,13 @@ export function Features() {
               <span className="pill"><span className="dot" />Camada Pro</span>
               <div style={{ ...s.cardTitle, fontSize: 28, marginTop: 16 }}>Módulo de preservação avançada</div>
               <p style={{ ...s.cardBody, fontSize: 16, maxWidth: 680 }}>
-                Camada para operar grupos e/ou canais com mais controle: limites por rotina, cadência mais natural, variações, pausas preventivas e monitoramento para reduzir padrões frágeis de divulgação.
+                Uma camada extra de cuidado para quem quer postar mais sem se preocupar: o bot ajusta o ritmo dos envios sozinho, varia o texto das mensagens para não parecer repetitivo e dá uma pausa quando percebe algo fora do padrão.
               </p>
             </div>
             <ul style={s.preservationList}>
-              <li>Warmup e limites configuráveis por origem e destino.</li>
-              <li>Intervalos e variações para evitar repetição mecânica.</li>
-              <li>Logs e alertas para pausar, revisar e retomar com segurança.</li>
+              <li>Começa devagar e aumenta o ritmo aos poucos, dentro dos limites que você definir.</li>
+              <li>Varia o texto das mensagens para não repetir sempre a mesma coisa.</li>
+              <li>Registra tudo e avisa quando for hora de pausar, revisar e continuar com segurança.</li>
             </ul>
           </div>
         </div>

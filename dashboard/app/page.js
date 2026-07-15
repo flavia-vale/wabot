@@ -72,11 +72,11 @@ export default function LandingPage({ searchParams = {} }) {
         <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
       ))}
       <Hero tone={tone} />
-      <ProductDefinition />
       <How />
       <Features />
       <Social />
       <Pricing />
+      <ProductDefinition />
       <FAQ />
       <FinalCTA />
       <Footer />
