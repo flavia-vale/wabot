@@ -1136,6 +1136,26 @@ api-staging bot-supervisor-staging --update-env`.
 Em produção, investigar também `snapshot-cron` e
 eventuais `bot-worker.js` órfãos antes de repetir o migrate.
 
+**Caso especial que o fix acima NÃO cobre — bot-supervisor em modo `remote`
+(RCA 2026-07, aconteceu 2x seguidas em produção, 2026-07-14 e 2026-07-15):**
+quando `BOT_SUPERVISOR_MODE=remote`, o `bot-supervisor` é preservado por
+default durante a migration (senão derruba os bot-workers filhos — ver
+comentário no topo dos dois scripts). Só que aí o lock **não é transitório**:
+os workers escrevem no SQLite continuamente, então nunca existe uma janela
+livre para o DDL, e as 5 tentativas de retry sempre esgotam. Antes disso
+exigia disparo manual do `workflow_dispatch` com
+`stop_supervisor_for_migration=true`. Agora os dois scripts se
+auto-corrigem: se as 5 tentativas preservando o supervisor esgotarem, eles
+escalam sozinhos — param o `bot-supervisor` (fecha workers + Prisma via
+`shutdown()`, não é kill duro), tentam de novo (resolve rápido) e religam ao
+final. **Isso reconecta TODAS as sessões WhatsApp automaticamente, sem aviso
+prévio, toda vez que uma migration de schema for mergeada em `main`/`develop`
+enquanto o modo efetivo for `remote`.** Rollback sem redeploy: env
+`AUTO_ESCALATE_SUPERVISOR_FOR_MIGRATION=0` (no `.env` ou inline no SSH)
+volta ao comportamento antigo (fail-safe + runbook manual, exige disparo do
+workflow). Testes:
+`test/deploy-safe-dashboard.test.js`, `test/deploy-safe-staging.test.js`.
+
 ### 9. Supervisor iniciado do diretório errado consome a Redis DB errada (fila nunca drena)
 
 O `ecosystem.config.cjs` tem os apps de **prod e staging no mesmo arquivo**, e

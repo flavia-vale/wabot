@@ -60,3 +60,32 @@ test('deploy_safe_staging.sh only preserves the supervisor during migration in r
     'migration branch must key off the resolved (mode-aware) decision',
   )
 })
+
+test('deploy_safe_staging.sh auto-escalates supervisor stop when a preserved migration lock never clears', () => {
+  const scriptPath = path.join(__dirname, '..', 'scripts', 'deploy_safe_staging.sh')
+  const script = fs.readFileSync(scriptPath, 'utf8')
+
+  // Mirrors deploy_safe_dashboard.sh (RCA 2026-07): staging can also run in
+  // remote mode during a cutover test window, hitting the same permanent lock.
+  assert.match(
+    script,
+    /AUTO_ESCALATE_SUPERVISOR_FOR_MIGRATION="\$\{AUTO_ESCALATE_SUPERVISOR_FOR_MIGRATION:-1\}"/,
+    'escalation must default to enabled (1), overridable without a redeploy',
+  )
+  assert.match(script, /attempt_migrate_deploy\(\)/, 'migrate retry loop must be a reusable function so it can be called again after escalating')
+  assert.match(
+    script,
+    /if attempt_migrate_deploy 5 "preservando \$SUPERVISOR_APP_FOR_MIGRATION"; then/,
+    'first pass must still try preserving the supervisor before escalating',
+  )
+  assert.match(
+    script,
+    /MIGRATE_OK" != "1" && "\$PRESERVE_SUPERVISOR_EFFECTIVE" == "1" && "\$AUTO_ESCALATE_SUPERVISOR_FOR_MIGRATION" != "0"/,
+    'escalation must only trigger when the first pass failed, supervisor was preserved, and the kill switch is not off',
+  )
+  assert.match(
+    script,
+    /stop_app_for_migration "\$SUPERVISOR_APP_FOR_MIGRATION"\s*\n\s*if attempt_migrate_deploy 3 "pós-escalonamento"; then/,
+    'escalation must stop the supervisor and retry the migrate deploy',
+  )
+})

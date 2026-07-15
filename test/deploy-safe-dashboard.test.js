@@ -51,3 +51,36 @@ test('deploy_safe_dashboard.sh only preserves the supervisor during migration in
     'migration branch must key off the resolved (mode-aware) decision',
   )
 })
+
+test('deploy_safe_dashboard.sh auto-escalates supervisor stop when a preserved migration lock never clears', () => {
+  const scriptPath = path.join(__dirname, '..', 'scripts', 'deploy_safe_dashboard.sh')
+  const script = fs.readFileSync(scriptPath, 'utf8')
+
+  // RCA 2026-07: preserving bot-supervisor in remote mode during a pending
+  // DDL migration is not a transient lock — bot-workers write continuously,
+  // so the exclusive lock window never opens and the 5 retries always fail.
+  // The escalation kill switch must default to ON so automatic push deploys
+  // self-heal instead of getting stuck until someone notices and manually
+  // re-runs the workflow with stop_supervisor_for_migration.
+  assert.match(
+    script,
+    /AUTO_ESCALATE_SUPERVISOR_FOR_MIGRATION="\$\{AUTO_ESCALATE_SUPERVISOR_FOR_MIGRATION:-1\}"/,
+    'escalation must default to enabled (1), overridable without a redeploy',
+  )
+  assert.match(script, /attempt_migrate_deploy_prod\(\)/, 'migrate retry loop must be a reusable function so it can be called again after escalating')
+  assert.match(
+    script,
+    /if attempt_migrate_deploy_prod 5 "preservando bot-supervisor"; then/,
+    'first pass must still try preserving the supervisor before escalating',
+  )
+  assert.match(
+    script,
+    /MIGRATE_OK" != "1" && "\$PRESERVE_SUPERVISOR_EFFECTIVE" == "1" && "\$AUTO_ESCALATE_SUPERVISOR_FOR_MIGRATION" != "0"/,
+    'escalation must only trigger when the first pass failed, supervisor was preserved, and the kill switch is not off',
+  )
+  assert.match(
+    script,
+    /stop_app_for_migration_prod "bot-supervisor" 1\s*\n\s*if attempt_migrate_deploy_prod 3 "pós-escalonamento"; then/,
+    'escalation must stop bot-supervisor (restart_after=1, so it gets revived) and retry the migrate deploy',
+  )
+})

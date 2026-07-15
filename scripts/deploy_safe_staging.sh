@@ -27,6 +27,16 @@ API_BASE_URL="${API_BASE_URL:-http://127.0.0.1:3004}"
 # só em manutenção explícita.
 PRESERVE_SUPERVISOR_DURING_MIGRATION="${PRESERVE_SUPERVISOR_DURING_MIGRATION:-}"
 
+# RCA 2026-07 (mesmo problema visto em produção — ver comentário irmão em
+# deploy_safe_dashboard.sh): preservar o supervisor em modo remote durante uma
+# migration DDL pendente não é lock transitório, é permanente enquanto os
+# bot-workers filhos escrevem no SQLite. Por default o script se auto-corrige:
+# se as 5 tentativas preservando o supervisor esgotarem, ele PARA o
+# bot-supervisor-staging sozinho, tenta de novo e religa ao final — sem
+# disparo manual. Reconecta as sessões WhatsApp de staging automaticamente.
+# Rollback sem redeploy: AUTO_ESCALATE_SUPERVISOR_FOR_MIGRATION=0.
+AUTO_ESCALATE_SUPERVISOR_FOR_MIGRATION="${AUTO_ESCALATE_SUPERVISOR_FOR_MIGRATION:-1}"
+
 # APP_ENV precisa existir no ambiente do BUILD do Next (headers() é avaliado em
 # `npm run build` e gravado no routes-manifest). Staging é HTTP, então força
 # 'staging' para manter CSP em report-only e NÃO emitir HSTS — o smoke abaixo
@@ -490,6 +500,26 @@ restart_apps_stopped_for_migration() {
   done
 }
 
+# Roda `prisma migrate deploy` com retry/backoff. Retorna 0 no sucesso, 1 se
+# esgotar as tentativas — não usa `exit` para o chamador decidir o que fazer
+# (ex.: escalar antes de desistir).
+attempt_migrate_deploy() {
+  local max_attempts="$1"
+  local label="$2"
+  local attempt=0
+
+  until npx prisma migrate deploy; do
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge "$max_attempts" ]; then
+      return 1
+    fi
+    local wait_s=$((attempt * 3))
+    echo "  migrate ($label) falhou (tentativa $attempt/$max_attempts) — aguardando ${wait_s}s..."
+    sleep "$wait_s"
+  done
+  return 0
+}
+
 if npx prisma migrate status 2>&1 | grep -q "Database schema is up to date"; then
   echo "  Nenhuma migration pendente — pulando migrate deploy."
 else
@@ -497,8 +527,8 @@ else
   # SQLite — incompatível com processos segurando conexões WAL. A API staging
   # pode ser parada na janela de deploy, mas o supervisor é preservado por
   # default para não derrubar sessões quando staging está em modo remote durante
-  # testes de cutover. O migrate abaixo já usa retry/backoff contra locks
-  # transitórios.
+  # testes de cutover. O migrate abaixo já usa retry/backoff primeiro — só
+  # escala (ver abaixo) se essas tentativas esgotarem.
   echo "  Migrations pendentes — parando processos que travam o banco..."
   stop_app_for_migration "$API_APP"
   if [[ "$PRESERVE_SUPERVISOR_EFFECTIVE" == "1" ]]; then
@@ -508,18 +538,30 @@ else
     stop_app_for_migration "$SUPERVISOR_APP_FOR_MIGRATION"
   fi
 
-  migrate_attempt=0
-  until npx prisma migrate deploy; do
-    migrate_attempt=$((migrate_attempt + 1))
-    if [ "$migrate_attempt" -ge 5 ]; then
-      echo "ERRO: prisma migrate deploy falhou após 5 tentativas."
-      restart_apps_stopped_for_migration
-      exit 1
+  MIGRATE_OK=0
+  if attempt_migrate_deploy 5 "preservando $SUPERVISOR_APP_FOR_MIGRATION"; then
+    MIGRATE_OK=1
+  fi
+
+  # Escalonamento automático (RCA 2026-07): ver comentário irmão em
+  # deploy_safe_dashboard.sh. Mesmo mecanismo, aplicado ao supervisor de
+  # staging.
+  if [[ "$MIGRATE_OK" != "1" && "$PRESERVE_SUPERVISOR_EFFECTIVE" == "1" && "$AUTO_ESCALATE_SUPERVISOR_FOR_MIGRATION" != "0" ]]; then
+    echo "  Migration presa com $SUPERVISOR_APP_FOR_MIGRATION preservado (modo=$BOT_SUPERVISOR_MODE_EFFECTIVE)."
+    echo "  Escalando: parando $SUPERVISOR_APP_FOR_MIGRATION para destravar o lock exclusivo do SQLite"
+    echo "  (reconecta as sessões WhatsApp de staging; AUTO_ESCALATE_SUPERVISOR_FOR_MIGRATION=0 desativa)."
+    stop_app_for_migration "$SUPERVISOR_APP_FOR_MIGRATION"
+    if attempt_migrate_deploy 3 "pós-escalonamento"; then
+      MIGRATE_OK=1
+      echo "  Migration aplicada após parar $SUPERVISOR_APP_FOR_MIGRATION."
     fi
-    wait_s=$((migrate_attempt * 3))
-    echo "  migrate falhou (tentativa $migrate_attempt/5) — aguardando ${wait_s}s..."
-    sleep "$wait_s"
-  done
+  fi
+
+  if [[ "$MIGRATE_OK" != "1" ]]; then
+    echo "ERRO: prisma migrate deploy falhou após esgotar as tentativas."
+    restart_apps_stopped_for_migration
+    exit 1
+  fi
 
   if [ -n "$MIGRATE_STOPPED_APPS" ]; then
     echo "  Migrations aplicadas. Religando:$MIGRATE_STOPPED_APPS"

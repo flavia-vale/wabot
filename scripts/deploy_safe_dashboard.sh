@@ -19,6 +19,24 @@ DASHBOARD_PORT="${DASHBOARD_PORT:-3000}"
 # explícita de manutenção/cutover.
 PRESERVE_SUPERVISOR_DURING_MIGRATION="${PRESERVE_SUPERVISOR_DURING_MIGRATION:-}"
 
+# RCA 2026-07: preservar o bot-supervisor em modo remote durante uma migration
+# DDL pendente não é um lock transitório — os bot-workers filhos escrevem no
+# SQLite continuamente, então NUNCA existe janela livre pro `prisma migrate
+# deploy` conseguir o lock exclusivo. As 5 tentativas com backoff sempre
+# esgotam e o deploy automático fica preso até alguém disparar manualmente o
+# workflow_dispatch com stop_supervisor_for_migration=true. Isso já aconteceu
+# 2x seguidas em produção (2026-07-14 e 2026-07-15) e exigiu intervenção
+# humana nas duas. Por default agora o script se auto-corrige: se as 5
+# tentativas preservando o supervisor esgotarem, ele PARA o bot-supervisor
+# sozinho (fecha workers + conexão Prisma via shutdown() do supervisor — não é
+# kill duro), tenta de novo, e religa ao final — sem precisar de disparo
+# manual. Isso reconecta TODAS as sessões WhatsApp automaticamente, sem aviso
+# prévio, toda vez que uma migration de schema for mergeada em main enquanto
+# BOT_SUPERVISOR_MODE=remote estiver ativo. Rollback sem redeploy: setar
+# AUTO_ESCALATE_SUPERVISOR_FOR_MIGRATION=0 (no .env ou inline no comando SSH)
+# volta ao comportamento antigo (fail-safe + runbook manual).
+AUTO_ESCALATE_SUPERVISOR_FOR_MIGRATION="${AUTO_ESCALATE_SUPERVISOR_FOR_MIGRATION:-1}"
+
 # APP_ENV precisa existir no ambiente do BUILD, não só no runtime do PM2.
 # O Next.js avalia next.config headers() em tempo de `npm run build` e grava
 # o resultado em .next/routes-manifest.json; `next start` só serve o manifest.
@@ -373,6 +391,26 @@ restart_apps_stopped_for_migration_prod() {
   fi
 }
 
+# Roda `prisma migrate deploy` com retry/backoff. Retorna 0 no sucesso, 1 se
+# esgotar as tentativas — não usa `exit` para o chamador decidir o que fazer
+# (ex.: escalar antes de desistir).
+attempt_migrate_deploy_prod() {
+  local max_attempts="$1"
+  local label="$2"
+  local attempt=0
+
+  until npx prisma migrate deploy; do
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge "$max_attempts" ]; then
+      return 1
+    fi
+    local wait_s=$((attempt * 3))
+    echo "  migrate ($label) falhou (tentativa $attempt/$max_attempts) — aguardando ${wait_s}s..."
+    sleep "$wait_s"
+  done
+  return 0
+}
+
 if npx prisma migrate status 2>&1 | grep -q "Database schema is up to date"; then
   echo "  Nenhuma migration pendente — pulando migrate deploy."
 else
@@ -381,7 +419,8 @@ else
   # podem ser parados na janela de deploy, mas o bot-supervisor é o dono das
   # sessões WhatsApp em modo remote; pará-lo aqui desfaz a blindagem prometida
   # ("deploy da API não derruba sessões"). Por isso ele é preservado por
-  # default e o migrate usa retry/backoff se houver lock transitório.
+  # default e o migrate usa retry/backoff primeiro — só escala (ver abaixo)
+  # se essas tentativas esgotarem.
   echo "  Migrations pendentes — parando processos que travam o banco..."
   stop_app_for_migration_prod "api" 1
   if [[ "$PRESERVE_SUPERVISOR_EFFECTIVE" == "1" ]]; then
@@ -392,33 +431,58 @@ else
   fi
   stop_app_for_migration_prod "snapshot-cron" 0
 
-  migrate_attempt=0
-  until npx prisma migrate deploy; do
-    migrate_attempt=$((migrate_attempt + 1))
-    if [ "$migrate_attempt" -ge 5 ]; then
-      echo "ERRO: prisma migrate deploy falhou após 5 tentativas."
-      if [[ "$PRESERVE_SUPERVISOR_EFFECTIVE" == "1" ]]; then
-        echo "  Causa provável (pegadinha #8 do AGENTS.md): bot-supervisor foi preservado"
-        echo "  (modo=$BOT_SUPERVISOR_MODE_EFFECTIVE) e segue segurando conexão WAL no"
-        echo "  SQLite; sob escrita contínua dos bot-workers, o migrate nunca encontra a"
-        echo "  janela de lock exclusivo que uma DDL (CREATE TABLE/ALTER TABLE) precisa."
-        echo "  Deploy NÃO foi aplicado a propósito (fail-safe) — código já está em"
-        echo "  \$BRANCH mas o schema do banco ficou parado na versão anterior; \`api\`"
-        echo "  já foi religada com o código novo (sem quebrar, pois nada no boot exige"
-        echo "  a tabela nova ainda)."
-        echo "  Para destravar manualmente (janela curta, reconecta TODAS as sessões WA"
-        echo "  — anunciar antes):"
-        echo "    pm2 stop bot-supervisor"
-        echo "    cd $ROOT_DIR && npx prisma migrate deploy"
-        echo "    pm2 restart bot-supervisor --update-env && pm2 save"
-      fi
-      restart_apps_stopped_for_migration_prod
-      exit 1
+  MIGRATE_OK=0
+  if attempt_migrate_deploy_prod 5 "preservando bot-supervisor"; then
+    MIGRATE_OK=1
+  fi
+
+  # Escalonamento automático (RCA 2026-07, ver comentário de
+  # AUTO_ESCALATE_SUPERVISOR_FOR_MIGRATION no topo do arquivo): quando o
+  # bot-supervisor foi preservado (modo=remote) e mesmo assim as 5 tentativas
+  # esgotaram, o lock não é transitório — não existe janela livre enquanto ele
+  # segue forkando workers que escrevem no SQLite continuamente. Em vez de
+  # abortar e esperar disparo manual do workflow, para o bot-supervisor
+  # (fecha workers + Prisma via shutdown() dele, não é kill duro), tenta de
+  # novo (deve resolver rápido) e religa ao final via
+  # restart_apps_stopped_for_migration_prod — reconecta TODAS as sessões
+  # WhatsApp como efeito colateral.
+  if [[ "$MIGRATE_OK" != "1" && "$PRESERVE_SUPERVISOR_EFFECTIVE" == "1" && "$AUTO_ESCALATE_SUPERVISOR_FOR_MIGRATION" != "0" ]]; then
+    echo "  Migration presa com bot-supervisor preservado (modo=$BOT_SUPERVISOR_MODE_EFFECTIVE)."
+    echo "  Escalando: parando bot-supervisor para destravar o lock exclusivo do SQLite"
+    echo "  (reconecta TODAS as sessões WhatsApp; AUTO_ESCALATE_SUPERVISOR_FOR_MIGRATION=0 desativa este escalonamento)."
+    stop_app_for_migration_prod "bot-supervisor" 1
+    if attempt_migrate_deploy_prod 3 "pós-escalonamento"; then
+      MIGRATE_OK=1
+      echo "  Migration aplicada após parar bot-supervisor."
     fi
-    wait_s=$((migrate_attempt * 3))
-    echo "  migrate falhou (tentativa $migrate_attempt/5) — aguardando ${wait_s}s..."
-    sleep "$wait_s"
-  done
+  fi
+
+  if [[ "$MIGRATE_OK" != "1" ]]; then
+    echo "ERRO: prisma migrate deploy falhou após esgotar as tentativas."
+    if [[ "$PRESERVE_SUPERVISOR_EFFECTIVE" == "1" ]]; then
+      echo "  Causa provável (pegadinha #8 do AGENTS.md): bot-supervisor segue"
+      echo "  (modo=$BOT_SUPERVISOR_MODE_EFFECTIVE) segurando conexão WAL no SQLite; sob"
+      echo "  escrita contínua dos bot-workers, o migrate não encontra a janela de lock"
+      echo "  exclusivo que uma DDL (CREATE TABLE/ALTER TABLE) precisa."
+      if [[ "$AUTO_ESCALATE_SUPERVISOR_FOR_MIGRATION" == "0" ]]; then
+        echo "  AUTO_ESCALATE_SUPERVISOR_FOR_MIGRATION=0 — escalonamento automático desativado."
+      else
+        echo "  O escalonamento automático (parar bot-supervisor) também falhou — algo além"
+        echo "  do lock de migration está impedindo o prisma migrate deploy."
+      fi
+      echo "  Deploy NÃO foi aplicado a propósito (fail-safe) — código já está em"
+      echo "  \$BRANCH mas o schema do banco ficou parado na versão anterior; \`api\`"
+      echo "  já foi religada com o código novo (sem quebrar, pois nada no boot exige"
+      echo "  a tabela nova ainda)."
+      echo "  Para destravar manualmente (janela curta, reconecta TODAS as sessões WA"
+      echo "  — anunciar antes):"
+      echo "    pm2 stop bot-supervisor"
+      echo "    cd $ROOT_DIR && npx prisma migrate deploy"
+      echo "    pm2 restart bot-supervisor --update-env && pm2 save"
+    fi
+    restart_apps_stopped_for_migration_prod
+    exit 1
+  fi
 
   if [ -n "$MIGRATE_STOPPED_APPS_PROD" ] || [ -n "$MIGRATE_STOPPED_NO_RESTART_APPS_PROD" ]; then
     echo "  Migrations aplicadas. Religando:$MIGRATE_STOPPED_APPS_PROD"
