@@ -29,6 +29,20 @@ function formatNumber(value) {
   return new Intl.NumberFormat('pt-BR').format(Number(value ?? 0))
 }
 
+
+function formatDurationMs(value) {
+  const ms = Math.max(0, Number(value ?? 0))
+  if (!Number.isFinite(ms) || ms <= 0) return '0min'
+  const minutes = Math.max(1, Math.round(ms / 60000))
+  if (minutes < 60) return `${minutes}min`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  if (hours < 24) return rest ? `${hours}h ${rest}min` : `${hours}h`
+  const days = Math.floor(hours / 24)
+  const remHours = hours % 24
+  return remHours ? `${days}d ${remHours}h` : `${days}d`
+}
+
 function statusMeta(status, lifecycle) {
   if (status === 'connected') return { label: 'Conectado', className: 'bg-emerald-100 text-emerald-700 ring-emerald-200', dot: 'bg-emerald-500' }
   if (status === 'connecting' || lifecycle === 'reconnecting') return { label: lifecycle === 'reconnecting' ? 'Tentando reconectar' : 'Tentando conectar', className: 'bg-amber-100 text-amber-800 ring-amber-200', dot: 'bg-amber-500' }
@@ -83,11 +97,16 @@ function UserDrawer({ detail, loading, onClose }) {
 
             <section className="grid gap-3 sm:grid-cols-3">
               <OnlineCard label="Quedas 24h" value={formatNumber(detail.connectionMetrics?.disconnects24h)} tone={detail.connectionMetrics?.disconnects24h ? 'red' : 'green'} />
-              <OnlineCard label="Tentativas 24h" value={formatNumber(detail.connectionMetrics?.reconnectAttempts24h)} tone="amber" />
-              <OnlineCard label="Reconexões 24h" value={formatNumber(detail.connectionMetrics?.reconnectSuccess24h)} tone="green" />
+              <OnlineCard label="Ações manuais 24h" value={formatNumber(detail.connectionMetrics?.manualReconnects24h)} helper="start/pareamento pedidos pelo cliente" tone={detail.connectionMetrics?.manualReconnects24h ? 'red' : 'green'} />
+              <OnlineCard label="Offline auto 24h" value={formatDurationMs((detail.connectionMetrics?.automaticOfflineMs24h || 0) + (detail.connectionMetrics?.ongoingOfflineMs24h || 0))} helper="tempo até recuperação automática" tone={(detail.connectionMetrics?.automaticOfflineMs24h || detail.connectionMetrics?.ongoingOfflineMs24h) ? 'amber' : 'green'} />
               <OnlineCard label="Quedas 7d" value={formatNumber(detail.connectionMetrics?.disconnects7d)} tone={detail.connectionMetrics?.disconnects7d ? 'red' : 'green'} />
-              <OnlineCard label="Tentativas 7d" value={formatNumber(detail.connectionMetrics?.reconnectAttempts7d)} tone="amber" />
-              <OnlineCard label="Reconexões 7d" value={formatNumber(detail.connectionMetrics?.reconnectSuccess7d)} tone="green" />
+              <OnlineCard label="Ações manuais 7d" value={formatNumber(detail.connectionMetrics?.manualReconnects7d)} helper="trabalho real do cliente" tone={detail.connectionMetrics?.manualReconnects7d ? 'red' : 'green'} />
+              <OnlineCard label="Offline auto 7d" value={formatDurationMs((detail.connectionMetrics?.automaticOfflineMs7d || 0) + (detail.connectionMetrics?.ongoingOfflineMs7d || 0))} helper={`${formatNumber(detail.connectionMetrics?.automaticRecoveries7d)} recuperação(ões) automáticas`} tone={(detail.connectionMetrics?.automaticOfflineMs7d || detail.connectionMetrics?.ongoingOfflineMs7d) ? 'amber' : 'green'} />
+            </section>
+
+            <section className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-black">Como ler estas métricas</p>
+              <p className="mt-1">&quot;Ações manuais&quot; conta quando o cliente precisou iniciar/reparear pelo painel. &quot;Offline auto&quot; mede o tempo em que o robô ficou fora até o sistema recuperar sozinho; tentativas internas de backoff não entram como trabalho do cliente.</p>
             </section>
 
             <section className="rounded-3xl border border-slate-200 bg-white p-4">
@@ -261,7 +280,7 @@ export default function AdminOnlinePage() {
                   <th className="px-3 py-3">Última atividade</th>
                   <th className="px-3 py-3 text-right">Envios 24h</th>
                   <th className="px-3 py-3 text-right">Quedas 24h</th>
-                  <th className="px-3 py-3 text-right">Reconexões</th>
+                  <th className="px-3 py-3 text-right">Recuperação</th>
                   <th className="px-3 py-3">Ação</th>
                 </tr>
               </thead>
@@ -290,8 +309,8 @@ export default function AdminOnlinePage() {
                       </td>
                       <td className="px-3 py-4 text-right font-black tabular-nums text-red-700">{formatNumber(user.disconnects24h)}</td>
                       <td className="px-3 py-4 text-right text-xs text-slate-600">
-                        <p><strong>{formatNumber(user.reconnectSuccess24h)}</strong> sucesso</p>
-                        <p>{formatNumber(user.reconnectAttempts24h)} tentativa(s)</p>
+                        <p><strong>{formatDurationMs((user.automaticOfflineMs24h || 0) + (user.ongoingOfflineMs24h || 0))}</strong> offline auto</p>
+                        <p>{formatNumber(user.manualReconnects24h)} ação(ões) manuais</p>
                       </td>
                       <td className="px-3 py-4">
                         <button onClick={() => openDetail(user.id)} className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 hover:bg-emerald-100">Abrir detalhes</button>

@@ -1,5 +1,5 @@
 -- CreateTable
-CREATE TABLE "WaConnectionEvent" (
+CREATE TABLE IF NOT EXISTS "WaConnectionEvent" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "userId" TEXT NOT NULL,
     "type" TEXT NOT NULL,
@@ -12,10 +12,10 @@ CREATE TABLE "WaConnectionEvent" (
 );
 
 -- CreateIndex
-CREATE INDEX "WaConnectionEvent_userId_occurredAt_idx" ON "WaConnectionEvent"("userId", "occurredAt");
+CREATE INDEX IF NOT EXISTS "WaConnectionEvent_userId_occurredAt_idx" ON "WaConnectionEvent"("userId", "occurredAt");
 
 -- CreateIndex
-CREATE INDEX "WaConnectionEvent_type_occurredAt_idx" ON "WaConnectionEvent"("type", "occurredAt");
+CREATE INDEX IF NOT EXISTS "WaConnectionEvent_type_occurredAt_idx" ON "WaConnectionEvent"("type", "occurredAt");
 
 -- CreateIndex
-CREATE INDEX "WaConnectionEvent_occurredAt_idx" ON "WaConnectionEvent"("occurredAt");
+CREATE INDEX IF NOT EXISTS "WaConnectionEvent_occurredAt_idx" ON "WaConnectionEvent"("occurredAt");
