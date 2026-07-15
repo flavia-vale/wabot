@@ -87,6 +87,11 @@ export const CORE_FAQ_ITEMS = [
     question: 'Posso controlar os envios?',
     answer: 'Sim. Você define grupos e/ou canais de origem e destino, filtros por palavras, plataformas permitidas e acompanha os envios pelo histórico de logs.',
   },
+  {
+    id: 'faq_seed_security',
+    question: 'Meus dados de afiliado ficam seguros?',
+    answer: 'Sim. As credenciais das suas contas de afiliado e sua chave PIX ficam criptografadas em repouso (AES-256-GCM), não em texto puro no banco. O login também tem proteção contra tentativas de força bruta.',
+  },
 ]
 
 export const RESPONSIBLE_OPERATION_POINTS = [
