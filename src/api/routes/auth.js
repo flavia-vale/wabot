@@ -560,7 +560,7 @@ export async function authRoutes(app) {
     if (!user) return reply.code(404).send({ error: 'Usuário não encontrado' })
 
     const currentMatches = await bcrypt.compare(currentPassword, user.passwordHash)
-    if (!currentMatches) return reply.code(401).send({ error: 'Senha atual inválida' })
+    if (!currentMatches) return reply.code(400).send({ error: 'Senha atual inválida' })
 
     const samePassword = await bcrypt.compare(newPassword, user.passwordHash)
     if (samePassword) return reply.code(400).send({ error: 'A nova senha precisa ser diferente da senha atual' })
