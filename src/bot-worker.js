@@ -1310,7 +1310,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     // Link de cupom/campanha não tem produto: raspar a landing pegava a
     // imagem de um produto promovido aleatório no card. Usa o banner da
     // marca da loja (storeBrandCard), como os canais concorrentes fazem.
-    // O banner já nasce em 800x420 (bem acima de 500px) — mesma fonte para
+    // O banner já nasce em 720x720 (bem acima de 500px) — mesma fonte para
     // os dois campos.
     const banner = (await buildStoreBrandCardImage(primary?.platform)) || undefined
     jpegThumbnail = banner
