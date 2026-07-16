@@ -3,6 +3,7 @@ import axios from 'axios'
 import logger from '../logger.js'
 import { withMercadoLivreCredentialLock } from './mercadolivreCredentialLock.js'
 import { shouldConvertCouponLinks } from './couponPolicy.js'
+import { decideVitrineFallback } from './mlVitrinePolicy.js'
 
 // Cache LRU simples para evitar reexpansão de short links repetidos
 // (campanhas de cupons disparam o mesmo meli.la várias vezes seguidas).
@@ -983,35 +984,60 @@ async function convertMlCouponWithoutProduct(url, creds) {
   } catch (err) {
     await notifyCredentialPatch(creds, err.credentialPatch)
     logger.warn({ url, resolved, err: err.message }, 'ML cupom: createLink falhou — descartando (não encaminha link de terceiro)')
-    if (err.mlFailureType === 'unsupported_url') {
-      // ML recusou createLink para essa página (regra do programa de
-      // afiliados, renovar SSID não resolve). Se a usuária tem uma vitrine
-      // PRÓPRIA cadastrada, usamos ela SEMPRE que isso acontece — melhora a
-      // monetização sem risco, seja o motivo genuína vitrine de terceiro ou
-      // produto ambíguo (abaixo).
+
+    // Decisão centralizada (feature 007-ml-vitrine-fallback-expired):
+    // isDirectVitrine só é true quando o link ORIGINAL compartilhado já era
+    // diretamente uma página /social/ (certeza de vitrine/perfil de
+    // terceiro) — não quando chegamos aqui via encurtador ambíguo que falhou
+    // a resolver (RCA regressão 2026-07-08, preservado por
+    // isDirectVitrineShare). hasVitrine reflete se a própria afiliada tem
+    // vitrine cadastrada (Credential.data.vitrineUrl).
+    const isDirectVitrine = isDirectVitrineShare(url)
+    const hasVitrine = !!buildVitrineFallback(creds)
+    const outcome = decideVitrineFallback({
+      failureType: err.mlFailureType,
+      isDirectVitrine,
+      hasVitrine,
+    })
+
+    if (outcome === 'use_vitrine') {
+      // ML recusou createLink para essa página. Isso acontece tanto por
+      // `unsupported_url` (regra do programa de afiliados — comportamento
+      // 004 preservado) quanto por `expired` quando o link JÁ é vitrine
+      // direta de terceiro (FR-001: renovar o SSID nunca resolveria isso,
+      // então usamos a vitrine própria da mesma forma). Se a usuária tem uma
+      // vitrine PRÓPRIA cadastrada, usamos ela sempre que isso acontece —
+      // melhora a monetização sem risco.
       const fallback = buildVitrineFallback(creds)
-      if (fallback) {
-        logger.info({ url, vitrineUrl: fallback.url }, 'ML cupom: ML recusou o link de terceiro — usando vitrine cadastrada da própria afiliada')
-        return fallback
-      }
-      // Sem vitrine cadastrada: só afirmamos "é vitrine, cadastre a sua" com
-      // CERTEZA, isto é, quando o link original já era diretamente /social/.
-      // Quando chegamos aqui via encurtador (meli.la/mluvem/sec) que falhou a
-      // resolver, não sabemos se por trás havia um produto de verdade (ex.:
-      // loja oficial, que o ML também recusa com o MESMO error_code 111, por
-      // exclusão do programa de afiliados — não por ser vitrine). Nesse caso
-      // ambíguo, comportamento seguro histórico: descarta sem mensagem
-      // enganosa (RCA regressão 2026-07-08).
-      if (!isDirectVitrineShare(url)) {
-        logger.warn({ url }, 'ML cupom: recusa ambígua (não veio de link de vitrine direto) — descartando sem culpar vitrine/credencial')
-        return null
-      }
+      logger.info({ url, vitrineUrl: fallback.url, mlFailureType: err.mlFailureType }, 'ML cupom: ML recusou o link de terceiro — usando vitrine cadastrada da própria afiliada')
+      return fallback
     }
-    // Falhas classificadas (SSID expirado, 403, 429, ou vitrine confirmada
-    // sem produto) sobem para o convert() e depois para o bot-worker.js, que
-    // grava o motivo REAL no painel em vez do genérico "não retornou link
-    // convertido — confira as credenciais" (enganoso quando o problema não é
-    // a credencial).
+
+    if (outcome === 'missing_vitrine') {
+      // Certeza de vitrine/perfil de terceiro (link original /social/), sem
+      // vitrine própria cadastrada: motivo específico e acionável (FR-003),
+      // sem mencionar SSID (FR-005) — renovar SSID nunca resolveria isso.
+      logger.warn({ url, mlFailureType: err.mlFailureType }, 'ML cupom: vitrine de terceiro confirmada sem vitrine própria cadastrada — ignorando com motivo específico')
+      err.conversionLogErrorMsg = 'skip:ml_vitrine_missing'
+      err.conversionLogStatus = 'skipped'
+      throw err
+    }
+
+    if (outcome === 'discard') {
+      // Recusa ambígua (não veio de link de vitrine direto): não sabemos se
+      // por trás havia um produto de verdade (ex.: loja oficial, mesmo
+      // error_code 111 por exclusão do programa de afiliados — não por ser
+      // vitrine). Comportamento seguro histórico: descarta sem mensagem
+      // enganosa (RCA regressão 2026-07-08).
+      logger.warn({ url }, 'ML cupom: recusa ambígua (não veio de link de vitrine direto) — descartando sem culpar vitrine/credencial')
+      return null
+    }
+
+    // outcome === 'passthrough': falhas classificadas (SSID expirado em
+    // link não-vitrine, 403, 429, etc.) sobem para o convert() e depois para
+    // o bot-worker.js, que grava o motivo REAL no painel em vez do genérico
+    // "não retornou link convertido — confira as credenciais" (enganoso
+    // quando o problema não é a credencial).
     if (err.mlFailureType) throw err
   }
   return null

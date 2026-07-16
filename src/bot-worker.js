@@ -2640,8 +2640,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       }
 
 
-      async function recordConversionIssue({ platform, url, jid, text, reason }) {
-        logger.warn({ platform, url, reason }, 'Conversão ignorada com diagnóstico para o painel')
+      // `errorMsg`/`status` (opcionais): permitem que o converter pré-classifique
+      // o motivo (ex.: `skip:ml_vitrine_missing`/`skipped` — feature
+      // 007-ml-vitrine-fallback-expired), em vez de sempre cair no genérico
+      // `error:conversion:${reason}`/`error`. Sem eles, comportamento inalterado.
+      async function recordConversionIssue({ platform, url, jid, text, reason, errorMsg, status }) {
+        logger.warn({ platform, url, reason, errorMsg, status }, 'Conversão ignorada com diagnóstico para o painel')
         await db.messageLog.create({
           data: {
             userId,
@@ -2651,8 +2655,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             originalUrl: url,
             convertedUrl: '',
             messageText: sanitizeMessageForLog(text),
-            status: 'error',
-            errorMsg: `error:conversion:${reason}`,
+            status: status || 'error',
+            errorMsg: errorMsg || `error:conversion:${reason}`,
           },
         }).catch(err => {
           logger.warn({ err: err.message, platform }, 'Falha ao gravar diagnóstico de conversão')
@@ -2702,6 +2706,23 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             // para preservar a oferta/CTA original, enquanto os demais links
             // válidos da mesma mensagem continuam sendo convertidos juntos.
             return { platform, url, converted: url, passthrough: true, linkKind: 'coupon' }
+          }
+          // Motivo pré-classificado pelo converter (feature
+          // 007-ml-vitrine-fallback-expired: skip:ml_vitrine_missing) tem
+          // prioridade sobre o genérico error:conversion:* — o converter já
+          // sabe que é um bloqueio de configuração acionável, não uma falha
+          // real de conversão.
+          if (err.conversionLogErrorMsg) {
+            await recordConversionIssue({
+              platform,
+              url,
+              jid,
+              text,
+              reason: err.message,
+              errorMsg: err.conversionLogErrorMsg,
+              status: err.conversionLogStatus,
+            })
+            return null
           }
           await recordConversionIssue({ platform, url, jid, text, reason: `Falha na conversão de ${credentialValidation.label}: ${err.message}` })
           return null
