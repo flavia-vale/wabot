@@ -99,3 +99,57 @@ test('US1: buildPayload só executa o ramo de link preview quando imageMode === 
   const callSiteStart = botWorkerSource.indexOf("if (imageMode === 'preview')")
   assert.notEqual(callSiteStart, -1, "ramo imageMode === 'preview' precisa existir e ser o caminho de runtime único hoje")
 })
+
+// specs/008-coupon-brand-banner (T011) — blindagem crítica de não-regressão
+// #1205/#1208: produto Amazon/ML compartilhado por short link (sem ASIN/MLB,
+// texto sem sinal de cupom) precisa continuar montando o card com a FOTO do
+// produto (fetchProductImage), nunca com o banner de marca — mesmo com
+// COUPON_BRAND_CARD_ENABLED=true. bot-worker.js roda como processo próprio
+// (não expõe buildManualLinkPreview para import direto — mesma limitação
+// estrutural documentada acima), então a prova é por inspeção do wiring: (1)
+// useCouponBrandCard é a ÚNICA porta de entrada do ramo do banner — não há
+// nenhum outro caminho de código que monte o banner; (2) o ramo `else if
+// (primary?.platform)` (fetch de imagem real via fetchProductImage) só roda
+// quando useCouponBrandCard é false — exatamente o caso de produto por short
+// link, cujo shouldUseCouponBrandCard() (test/coupon-brand-card-policy.test.js,
+// caso CRÍTICO) devolve false por falta de couponTextSignal.
+test('T011: ramo do banner é gated por useCouponBrandCard; produto real cai no fetch de foto (fetchProductImage), nunca no banner', () => {
+  const fnStart = botWorkerSource.indexOf('async function buildManualLinkPreview(')
+  assert.notEqual(fnStart, -1, 'buildManualLinkPreview não encontrada')
+  const fnEnd = botWorkerSource.indexOf('\nfunction storePreviewTitle', fnStart)
+  assert.notEqual(fnEnd, -1, 'fim de buildManualLinkPreview (storePreviewTitle) não encontrado')
+  const fnBody = botWorkerSource.slice(fnStart, fnEnd)
+
+  assert.match(
+    fnBody,
+    /const useCouponBrandCard = shouldUseCouponBrandCard\(\{[\s\S]*?\}\)/,
+    'decisão do banner precisa vir exclusivamente de shouldUseCouponBrandCard',
+  )
+  assert.match(
+    fnBody,
+    /if \(useCouponBrandCard\) \{/,
+    'ramo do banner precisa ser gated só por useCouponBrandCard',
+  )
+  assert.match(
+    fnBody,
+    /\} else if \(primary\?\.platform\) \{[\s\S]*?fetchProductImage\(/,
+    'quando useCouponBrandCard é false, precisa cair no fetch da foto real do produto (fetchProductImage)',
+  )
+})
+
+test('T011: couponTextSignal é calculado no call site a partir de isCouponMsg / warning de vitrine ML, sem detector novo', () => {
+  const callSiteStart = botWorkerSource.indexOf("if (imageMode === 'preview')")
+  assert.notEqual(callSiteStart, -1, "bloco imageMode === 'preview' não encontrado")
+  const callStart = botWorkerSource.indexOf('await buildManualLinkPreview({', callSiteStart)
+  const preamble = botWorkerSource.slice(callSiteStart, callStart)
+
+  assert.match(
+    preamble,
+    /const couponTextSignal = isCouponMsg \|\| primary\?\.warning === 'ml_vitrine_fallback_used'/,
+    'couponTextSignal precisa reusar isCouponMsg e o warning ml_vitrine_fallback_used, sem criar detector novo',
+  )
+
+  const callEnd = botWorkerSource.indexOf('})', callStart)
+  const callBlock = botWorkerSource.slice(callStart, callEnd)
+  assert.match(callBlock, /couponTextSignal/, 'call site precisa passar couponTextSignal pro buildManualLinkPreview')
+})
