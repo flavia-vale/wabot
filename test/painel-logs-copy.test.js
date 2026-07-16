@@ -29,3 +29,16 @@ test('explainErrorMsg outros prefixos continuam funcionando (sem regressão)', (
   assert.match(explainErrorMsg('warning:amazon_cookies_expired'), /cookies da Amazon/)
   assert.equal(explainErrorMsg(null), null)
 })
+
+// Feature 007-ml-vitrine-fallback-expired (T012): tradução de
+// skip:ml_vitrine_missing precisa citar "cadastrar a vitrine" e NUNCA
+// mencionar SSID/renove/cookie (FR-005) — renovar o SSID nunca resolve
+// vitrine de terceiro, mencionar isso é enganoso.
+test('explainErrorMsg: skip:ml_vitrine_missing cita cadastrar a vitrine e não menciona SSID/renove/cookie', () => {
+  const result = explainErrorMsg('skip:ml_vitrine_missing')
+  assert.match(result, /cadastr(ar|ou) o link da SUA vitrine|cadastrar a vitrine/i)
+  assert.match(result, /IDs de afiliada/i)
+  assert.doesNotMatch(result, /ssid/i)
+  assert.doesNotMatch(result, /renove/i)
+  assert.doesNotMatch(result, /cookie/i)
+})

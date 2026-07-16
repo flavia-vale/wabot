@@ -43,12 +43,6 @@ export function Icon({ name, size = 20, stroke = 1.6 }) {
     case 'star': return (
       <svg {...props}><path d="m12 3 2.6 5.6 6 .9-4.3 4.3 1 6-5.3-2.9L6.7 20l1-6-4.3-4.3 6-.9z"/></svg>
     );
-    case 'lock': return (
-      <svg {...props}><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
-    );
-    case 'refresh': return (
-      <svg {...props}><path d="M3 12a9 9 0 0 1 15.3-6.4M21 12a9 9 0 0 1-15.3 6.4"/><path d="M18 3v3.5H14.5M6 21v-3.5H9.5"/></svg>
-    );
     default: return null;
   }
 }

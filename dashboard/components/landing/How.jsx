@@ -3,11 +3,17 @@ const s = {
   inner: { padding: '88px 64px' },
   head: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 56, gap: 32, flexWrap: 'wrap' },
   h2: { fontSize: 'clamp(36px, 4vw, 56px)', lineHeight: 1.05, maxWidth: 600 },
-  steps: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 },
+  steps: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 },
   step: {
-    background: 'var(--surface)', borderRadius: 28, padding: 28,
+    background: 'var(--surface)', borderRadius: 28, padding: 32,
     border: '1px solid var(--line)', position: 'relative',
-    minHeight: 360, display: 'flex', flexDirection: 'column',
+    minHeight: 380, display: 'flex', flexDirection: 'column',
+  },
+  automationNote: {
+    marginTop: 24, borderRadius: 20, padding: '20px 24px',
+    background: 'color-mix(in oklab, var(--accent) 14%, var(--surface))',
+    border: '1px solid var(--line)',
+    display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between',
   },
   num: {
     fontFamily: "var(--font-instrument-serif), serif", fontStyle: 'italic',
@@ -64,19 +70,6 @@ const steps = [
       </div>
     ),
   },
-  {
-    n: '04',
-    title: 'Ligue as ofertas automáticas (Pro)',
-    body: 'No plano Pro, o bot também busca ofertas da Shopee por palavra-chave e filtro, aplica dedup inteligente entre automações e envia direto para os canais e/ou grupos configurados — sem precisar de um grupo de origem para copiar.',
-    visual: (
-      <div style={s.visual}>
-        <div style={{ color: 'var(--ink-soft)' }}>{'// automação · palavra-chave "fone bluetooth"'}</div>
-        <div style={{ color: 'var(--ink)', marginTop: 6 }}>✓ filtro de preço aplicado</div>
-        <div style={{ color: 'var(--ink)' }}>✓ dedup: sem repetição em 24h</div>
-        <div style={{ marginTop: 8, color: 'var(--accent-strong)' }}>{'● enviado para "Achados da Sol"'}</div>
-      </div>
-    ),
-  },
 ];
 
 export function How() {
@@ -88,10 +81,10 @@ export function How() {
             <div style={s.head}>
               <div>
                 <span className="pill" style={{ marginBottom: 16 }}><span className="dot" />Como funciona</span>
-                <h2 style={s.h2}>Do manual ao automático.<br /><span className="serif" style={{ fontStyle: 'italic' }}>Zero esforço diário.</span></h2>
+                <h2 style={s.h2}>Três passos.<br /><span className="serif" style={{ fontStyle: 'italic' }}>Zero esforço diário.</span></h2>
               </div>
               <p style={{ maxWidth: 360, color: 'var(--ink-soft)', fontSize: 15, lineHeight: 1.6 }}>
-                Você configura a rotina e acompanha pelos logs. Ideal para quem tem mais de um grupo e/ou canal e não quer ficar copiando link toda hora — e pode evoluir para ofertas automáticas quando quiser escalar.
+                Você configura a rotina e acompanha pelos logs. Ideal para quem tem mais de um grupo e/ou canal e não quer ficar copiando link toda hora.
               </p>
             </div>
             <div style={s.steps} className="landing-how-steps">
@@ -103,6 +96,12 @@ export function How() {
                   {step.visual}
                 </div>
               ))}
+            </div>
+            <div style={s.automationNote}>
+              <p style={{ margin: 0, fontSize: 14.5, color: 'var(--ink)', maxWidth: 560 }}>
+                <strong>Quer ir além do espelhamento?</strong> No plano Pro, o bot também busca ofertas da Shopee sozinho por palavra-chave, sem precisar de um grupo de origem para copiar.
+              </p>
+              <span className="pill"><span className="dot" />Ofertas automáticas · Pro</span>
             </div>
           </div>
         </div>

@@ -33,6 +33,8 @@ export const EDITORIAL_DATES = {
   '/melhores-bots-para-afiliados-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
   '/glossario': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
   '/estudos-de-caso': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
+  '/confiabilidade-sessao-whatsapp': { publishedAt: '2026-07-15', updatedAt: '2026-07-15' },
+  '/seguranca-credenciais-afiliado': { publishedAt: '2026-07-15', updatedAt: '2026-07-15' },
 }
 
 export function formatDatePtBr(date) {

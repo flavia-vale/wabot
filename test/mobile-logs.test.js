@@ -43,6 +43,18 @@ test('friendlyMobileLogError traduz warnings específicos do Mercado Livre', () 
   assert.match(friendlyMobileLogError('warning:ml_affiliate_busy'), /Outra conversão/i)
 })
 
+// Feature 007-ml-vitrine-fallback-expired (T012): tradução de
+// skip:ml_vitrine_missing precisa citar cadastro da vitrine e NUNCA
+// mencionar SSID/renove/cookie (FR-005).
+test('friendlyMobileLogError: skip:ml_vitrine_missing cita cadastrar a vitrine e não menciona SSID/renove/cookie', () => {
+  const result = friendlyMobileLogError('skip:ml_vitrine_missing')
+  assert.match(result, /vitrine/i)
+  assert.match(result, /IDs de afiliada.*Mercado Livre/i)
+  assert.doesNotMatch(result, /ssid/i)
+  assert.doesNotMatch(result, /renove/i)
+  assert.doesNotMatch(result, /cookie/i)
+})
+
 test('friendlyMobileLogError expõe o detalhe técnico do skip:incoming_error', () => {
   const result = friendlyMobileLogError('skip:incoming_error:Cannot read properties of undefined (reading foo)')
   assert.match(result, /processar essa mensagem/i)

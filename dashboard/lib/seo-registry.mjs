@@ -271,6 +271,8 @@ export const CONTENT_SEO_ROUTES = [
   { path: '/ferramentas', template: 'tools-hub', priority: 0.8, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   { path: '/ferramentas/calculadora-tempo-grupos-whatsapp', template: 'tool-calculator', priority: 0.8, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   { path: '/ferramentas/calculadora-risco-whatsapp', title: 'Calculadora de risco para WhatsApp de afiliados', description: 'Calcule a exposição operacional da sua divulgação no WhatsApp com base em volume, cadência, mensagens idênticas, chip dedicado, monitoramento e recuperação.', template: 'tool-calculator', priority: 0.84, changeFrequency: 'weekly', lastModified: resolveLastModified('/ferramentas/calculadora-risco-whatsapp'), indexable: true },
+  { path: '/confiabilidade-sessao-whatsapp', title: 'Confiabilidade da sessão do WhatsApp no BOTinho', description: 'Como o BOTinho mantém sua sessão do WhatsApp conectada durante atualizações do sistema, com um processo dedicado ao ciclo de vida do bot e status honesto no painel.', template: 'module-deep-dive', priority: 0.78, changeFrequency: 'monthly', lastModified: resolveLastModified('/confiabilidade-sessao-whatsapp'), indexable: true },
+  { path: '/seguranca-credenciais-afiliado', title: 'Segurança das credenciais de afiliado no BOTinho', description: 'Como o BOTinho protege as credenciais das suas contas de afiliado e sua chave PIX: criptografia em repouso, proteção contra força bruta no login e isolamento entre ambientes.', template: 'module-deep-dive', priority: 0.78, changeFrequency: 'monthly', lastModified: resolveLastModified('/seguranca-credenciais-afiliado'), indexable: true },
 ]
 
 export const SEO_ROUTES = [

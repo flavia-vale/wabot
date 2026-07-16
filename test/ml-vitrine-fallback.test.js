@@ -15,6 +15,11 @@ import {
 // Cobre os 6 casos do contrato (US1: 1,3,4,5,6 — US2: 2) e a regressão de
 // coerência mensagem×status (FR-004) descoberta na investigação de produção
 // (research.md §Decisão de causa raiz).
+//
+// Estendida pela feature 007-ml-vitrine-fallback-expired (US1/US2/US3): novos
+// casos cobrindo o motivo `expired` (SSID/cookie vencido) cruzado com vitrine
+// direta + com/sem vitrine própria cadastrada, e regressões confirmando que o
+// caminho de produto e o caminho ambíguo via encurtador continuam intocados.
 
 const botWorkerSource = readFileSync(
   fileURLToPath(new URL('../src/bot-worker.js', import.meta.url)),
@@ -245,4 +250,126 @@ test('US2 anti-regressão: link de produto NUNCA aciona o ramo de vitrine mesmo 
   })
   assert.equal(result.linkKind, 'product')
   assert.equal(postCalls, 1, 'createLink de produto deve ser chamado normalmente (única tentativa, sem short-circuit para vitrine)')
+})
+
+// --- Feature 007 / US1 (FR-001, T006): vitrine direta + SSID expirado + vitrine própria → fallback ---
+
+test('US1 (007): vitrine direta recusada por SSID expirado + vitrineUrl cadastrada → fallback com a vitrine própria (novo, antes era descartado)', async (t) => {
+  withCouponLinkConvertOn(t)
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/social/vitrine-expirada' }))
+  t.mock.method(axios, 'post', async () => ({
+    status: 401,
+    data: {
+      status: 401,
+      urls: [{ message: 'Sessão expirada, faça login novamente', status: 401 }],
+    },
+    headers: {},
+  }))
+  const url = 'https://www.mercadolivre.com.br/social/vitrine-expirada'
+  const result = await convert(url, {
+    tag: '475630078',
+    ssid: 'ssid-vencido-1234567890',
+    vitrineUrl: 'https://www.mercadolivre.com.br/social/minha-vitrine-oficial',
+  })
+  assert.deepEqual(result, {
+    url: 'https://www.mercadolivre.com.br/social/minha-vitrine-oficial',
+    linkKind: 'coupon',
+    warning: 'ml_vitrine_fallback_used',
+  })
+})
+
+test('US1 (007) regressão: caso 004 (unsupported_url + vitrine direta + vitrine própria) permanece inalterado', async (t) => {
+  withCouponLinkConvertOn(t)
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/social/gatuna-regressao' }))
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: {
+      status: 200,
+      urls: [{ message: 'URL not allowed in affiliates program', error_code: 111, status: 200 }],
+    },
+    headers: {},
+  }))
+  const url = 'https://www.mercadolivre.com.br/social/gatuna-regressao'
+  const result = await convert(url, {
+    tag: '475630078',
+    ssid: 'ssid-valido-1234567890',
+    vitrineUrl: 'https://www.mercadolivre.com.br/social/minha-vitrine-oficial',
+  })
+  assert.deepEqual(result, {
+    url: 'https://www.mercadolivre.com.br/social/minha-vitrine-oficial',
+    linkKind: 'coupon',
+    warning: 'ml_vitrine_fallback_used',
+  })
+})
+
+// --- Feature 007 / US2 (FR-003/FR-005, T011): vitrine direta + expired + SEM vitrine própria ---
+
+test('US2 (007): vitrine direta + SSID expirado + SEM vitrineUrl cadastrada → erro sinalizado skip:ml_vitrine_missing/skipped, sem mencionar SSID', async (t) => {
+  withCouponLinkConvertOn(t)
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/social/vitrine-sem-cadastro' }))
+  t.mock.method(axios, 'post', async () => ({
+    status: 401,
+    data: {
+      status: 401,
+      urls: [{ message: 'Sessão expirada, faça login novamente', status: 401 }],
+    },
+    headers: {},
+  }))
+  const url = 'https://www.mercadolivre.com.br/social/vitrine-sem-cadastro'
+  await assert.rejects(
+    () => convert(url, { tag: '475630078', ssid: 'ssid-vencido-1234567890' }),
+    (err) => {
+      assert.equal(err.mlFailureType, 'expired')
+      assert.equal(err.conversionLogErrorMsg, 'skip:ml_vitrine_missing')
+      assert.equal(err.conversionLogStatus, 'skipped')
+      return true
+    },
+  )
+})
+
+// --- Feature 007 / US3 (FR-008, T013/T014): não-vitrine e recusa ambígua preservam comportamento atual ---
+
+test('US3 (007) regressão: link ORIGINAL não-vitrine (encurtador, não /social/) + SSID expirado → passthrough, erro real de SSID sobe intocado (sem virar ml_vitrine_missing)', async (t) => {
+  withCouponLinkConvertOn(t)
+  // isDirectVitrineShare olha o link ORIGINAL compartilhado, não a landing
+  // resolvida. Aqui o original é um encurtador (não /social/), então
+  // isDirectVitrine=false mesmo a landing sendo /social/ — outcome esperado é
+  // passthrough (linha 7 da tabela-verdade: expired + não-vitrine + com
+  // vitrine), preservando a mensagem histórica de renovar SSID (FR-008).
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/social/loja-nao-vitrine-007' }))
+  t.mock.method(axios, 'post', async () => ({
+    status: 401,
+    data: {
+      status: 401,
+      urls: [{ message: 'Sessão expirada, faça login novamente', status: 401 }],
+    },
+    headers: {},
+  }))
+  const url = 'https://meli.la/naovitrine007'
+  await assert.rejects(
+    () => convert(url, {
+      tag: '475630078',
+      ssid: 'ssid-vencido-1234567890',
+      vitrineUrl: 'https://www.mercadolivre.com.br/social/minha-vitrine-oficial',
+    }),
+    (err) => {
+      assert.equal(err.mlFailureType, 'expired')
+      assert.equal(err.conversionLogErrorMsg, undefined, 'passthrough não pode sinalizar skip:ml_vitrine_missing')
+      assert.match(err.message, /Renove o SSID/i, 'mensagem de renovar SSID preservada para não-vitrine (FR-008)')
+      return true
+    },
+  )
+})
+
+test('US3 (007) regressão: recusa ambígua (unsupported_url, não-vitrine, sem vitrine própria) continua descarte silencioso (outcome discard, RCA 2026-07-08)', async (t) => {
+  withCouponLinkConvertOn(t)
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/social/loja-ambigua-007' }))
+  t.mock.method(axios, 'post', async () => ({
+    status: 200,
+    data: { status: 200, urls: [{ message: 'URL not allowed in affiliates program', error_code: 111, status: 200 }] },
+    headers: {},
+  }))
+  const url = 'https://meli.la/ambiguo007'
+  const result = await convert(url, { tag: '475630078', ssid: 'ssid-valido-1234567890' })
+  assert.equal(result, null)
 })

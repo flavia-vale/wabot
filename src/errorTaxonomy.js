@@ -78,6 +78,12 @@ export function categorizeErrorMsg(errorMsg) {
   if (errorMsg.startsWith('skip:blocked_keyword')) return ERROR_CATEGORIES.CONFIG_BLOCK
   if (errorMsg.startsWith('skip:title_mismatch')) return ERROR_CATEGORIES.CONFIG_BLOCK
   if (errorMsg.startsWith('skip:text_too_large')) return ERROR_CATEGORIES.CONFIG_BLOCK
+  // Vitrine/perfil de terceiro do ML (link /social/) sem vitrine própria
+  // cadastrada — bloqueio de configuração acionável (cadastrar em IDs de
+  // afiliada → Mercado Livre), não falha de credencial/SSID. Já coberto pelo
+  // catch-all `skip:` abaixo; branch explícito só para documentar o motivo
+  // canônico (feature 007-ml-vitrine-fallback-expired).
+  if (errorMsg.startsWith('skip:ml_vitrine_missing')) return ERROR_CATEGORIES.CONFIG_BLOCK
   if (errorMsg.startsWith('skip:decrypt_failed')) return ERROR_CATEGORIES.DECRYPT
   if (errorMsg.startsWith('skip:incoming_error')) return ERROR_CATEGORIES.INCOMING_ERROR
   if (errorMsg.startsWith('warning:amazon_cookies_expired')) return ERROR_CATEGORIES.CREDENTIAL_EXPIRED
