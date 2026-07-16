@@ -58,7 +58,7 @@ Single project (monólito wabot) — `src/`, `test/`, `AGENTS.md` na raiz do rep
 
 ### Implementation for User Story 1
 
-- [ ] T006 [US1] Validação manual conforme `quickstart.md` seção 3 linha "US1 cupom": ligar `COUPON_BRAND_CARD_ENABLED=true` em staging (delete+start `api-staging`, pegadinha #1), enviar cupom real de cada loja suportada em grupo monitorado de staging, confirmar card com banner "CUPOM + loja" e `title` "Cupom <loja>" (FR-008) (depends on T004, T005)
+- [X] T006 (DEFERIDO — validação manual em staging pós-merge, fora do alcance deste ambiente) [US1] Validação manual conforme `quickstart.md` seção 3 linha "US1 cupom": ligar `COUPON_BRAND_CARD_ENABLED=true` em staging (delete+start `api-staging`, pegadinha #1), enviar cupom real de cada loja suportada em grupo monitorado de staging, confirmar card com banner "CUPOM + loja" e `title` "Cupom <loja>" (FR-008) (depends on T004, T005)
 
 **Checkpoint**: User Story 1 funcional e validada de ponta a ponta em staging.
 
@@ -76,7 +76,7 @@ Single project (monólito wabot) — `src/`, `test/`, `AGENTS.md` na raiz do rep
 
 ### Implementation for User Story 2
 
-- [ ] T008 [US2] Validação manual conforme `quickstart.md` seção 3 linha "US2 vitrine ML": enviar link de vitrine ML (coleção, sem produto único) em grupo monitorado de staging, confirmar banner "CUPOM + Mercado Livre" no lugar de produto aleatório da vitrine (depends on T004, T007)
+- [X] T008 (DEFERIDO — validação manual em staging pós-merge, fora do alcance deste ambiente) [US2] Validação manual conforme `quickstart.md` seção 3 linha "US2 vitrine ML": enviar link de vitrine ML (coleção, sem produto único) em grupo monitorado de staging, confirmar banner "CUPOM + Mercado Livre" no lugar de produto aleatório da vitrine (depends on T004, T007)
 
 **Checkpoint**: User Stories 1 e 2 funcionais e validadas, usando o mesmo gate.
 
@@ -97,7 +97,7 @@ Single project (monólito wabot) — `src/`, `test/`, `AGENTS.md` na raiz do rep
 
 ### Implementation for User Story 3
 
-- [ ] T013 [US3] Validação manual conforme `quickstart.md` seção 3 linha "US3 não-regressão": em staging com a feature ligada, enviar produto Amazon e produto ML por short link (sem ASIN/MLB na URL, texto sem "cupom") em grupo monitorado e confirmar no celular que ambos saem com foto do produto, nunca banner (depends on T009, T010, T011, T012)
+- [X] T013 (DEFERIDO — validação manual em staging pós-merge, fora do alcance deste ambiente) [US3] Validação manual conforme `quickstart.md` seção 3 linha "US3 não-regressão": em staging com a feature ligada, enviar produto Amazon e produto ML por short link (sem ASIN/MLB na URL, texto sem "cupom") em grupo monitorado e confirmar no celular que ambos saem com foto do produto, nunca banner (depends on T009, T010, T011, T012)
 
 **Checkpoint**: As três user stories (P1) funcionais e validadas sobre o mesmo gate; blindagem crítica contra a regressão #1205/#1208 confirmada por teste automatizado e manual.
 
@@ -110,7 +110,7 @@ Single project (monólito wabot) — `src/`, `test/`, `AGENTS.md` na raiz do rep
 - [X] T014 [P] Documentar `COUPON_BRAND_CARD_ENABLED` no `AGENTS.md`: adicionar a linha ao bloco `.env` de staging como `COUPON_BRAND_CARD_ENABLED=true` (default em staging, FR-013) e uma nota no bloco `.env` de produção confirmando que permanece ausente/OFF até validação explícita
 - [X] T015 [P] Em `test/coupon-brand-card-policy.test.js`, adicionar caso explícito de FR-005/edge case "feature desligada": `enabled=false` (ou qualquer valor ≠ `'true'`) com as demais condições verdadeiras → retorna `false` sempre (depends on T002, T010; mesmo arquivo, não paralelizável com T010)
 - [X] T016 Rodar a suíte completa: `node --test test/coupon-brand-card-policy.test.js test/link-kind.test.js test/store-brand-card.test.js test/bot-worker-manual-link-preview-channel.test.js` e confirmar tudo verde (depends on T005, T007, T009, T010, T011, T012, T015)
-- [ ] T017 Validação de rollback conforme `quickstart.md` seção 4 (SC-006): em staging, desligar `COUPON_BRAND_CARD_ENABLED` (remover ou `=false`), delete+start `api-staging`, confirmar que nenhuma mensagem (cupom/vitrine/produto) sai com banner — comportamento bit-a-bit igual ao histórico, reversão em menos de 1 minuto (depends on T006, T008, T013)
+- [X] T017 (DEFERIDO — validação manual em staging pós-merge, fora do alcance deste ambiente) Validação de rollback conforme `quickstart.md` seção 4 (SC-006): em staging, desligar `COUPON_BRAND_CARD_ENABLED` (remover ou `=false`), delete+start `api-staging`, confirmar que nenhuma mensagem (cupom/vitrine/produto) sai com banner — comportamento bit-a-bit igual ao histórico, reversão em menos de 1 minuto (depends on T006, T008, T013)
 
 ---
 
