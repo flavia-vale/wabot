@@ -47,6 +47,7 @@ export function friendlyMobileLogError(errorMsg) {
     }
     return 'Esse link já foi enviado recentemente para esse destino — bloqueado para não duplicar. Ofertas de produto ficam bloqueadas por até 24h; links de cupom, só por alguns minutos.'
   }
+  if (errorMsg.startsWith('skip:ml_vitrine_missing')) return 'Esse link era uma vitrine de outra loja. Ignorada porque falta cadastrar a sua vitrine em Conta → Credenciais → Mercado Livre.'
   if (errorMsg.startsWith('skip:blocked_keyword')) return 'Contém uma palavra que você marcou para bloquear.'
   if (errorMsg.startsWith('skip:title_mismatch')) return 'O texto da oferta não combina com o produto do link. Bloqueado por segurança.'
   if (errorMsg.startsWith('skip:text_too_large')) return 'Mensagem muito grande — ignorada para não atrasar o restante da fila.'

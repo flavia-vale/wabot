@@ -29,7 +29,7 @@ Projeto web existente (backend `src/` + `dashboard/`). Sem estrutura nova de dir
 
 **Purpose**: Confirmar baseline antes de qualquer mudança.
 
-- [ ] T001 Rodar a suite existente como baseline (`node --test test/ml-vitrine-fallback.test.js`) e confirmar que os 6 casos da feature 004 passam antes de qualquer edição
+- [X] T001 Rodar a suite existente como baseline (`node --test test/ml-vitrine-fallback.test.js`) e confirmar que os 6 casos da feature 004 passam antes de qualquer edição
 
 **Checkpoint**: Baseline verde confirmado.
 
@@ -41,9 +41,9 @@ Projeto web existente (backend `src/` + `dashboard/`). Sem estrutura nova de dir
 
 **⚠️ CRITICAL**: Nenhuma user story pode começar até esta fase estar completa.
 
-- [ ] T002 [P] Criar `decideVitrineFallback({ failureType, isDirectVitrine, hasVitrine })` (função pura leaf, sem I/O) em `src/converters/mlVitrinePolicy.js`, implementando a tabela-verdade normativa de `contracts/decide-vitrine-fallback.md` (11 linhas: `use_vitrine` | `missing_vitrine` | `discard` | `passthrough`)
-- [ ] T003 [P] Criar `test/ml-vitrine-policy.test.js` cobrindo 1:1 as 11 linhas da tabela-verdade de `contracts/decide-vitrine-fallback.md`
-- [ ] T004 [P] Adicionar constante/branch explícito documentando o motivo `skip:ml_vitrine_missing` (categoria `config_block`, `isBenignSkip=true`) em `src/errorTaxonomy.js`, conforme `contracts/errormsg-vitrine-missing.md`
+- [X] T002 [P] Criar `decideVitrineFallback({ failureType, isDirectVitrine, hasVitrine })` (função pura leaf, sem I/O) em `src/converters/mlVitrinePolicy.js`, implementando a tabela-verdade normativa de `contracts/decide-vitrine-fallback.md` (11 linhas: `use_vitrine` | `missing_vitrine` | `discard` | `passthrough`)
+- [X] T003 [P] Criar `test/ml-vitrine-policy.test.js` cobrindo 1:1 as 11 linhas da tabela-verdade de `contracts/decide-vitrine-fallback.md`
+- [X] T004 [P] Adicionar constante/branch explícito documentando o motivo `skip:ml_vitrine_missing` (categoria `config_block`, `isBenignSkip=true`) em `src/errorTaxonomy.js`, conforme `contracts/errormsg-vitrine-missing.md`
 
 **Checkpoint**: Módulo `mlVitrinePolicy.js` testado isoladamente e taxonomia atualizada — user stories podem começar.
 
@@ -57,8 +57,8 @@ Projeto web existente (backend `src/` + `dashboard/`). Sem estrutura nova de dir
 
 ### Implementation for User Story 1
 
-- [ ] T005 [US1] Em `convertMlCouponWithoutProduct` (`src/converters/mercadolivre.js`, ~L983-1016): calcular `isDirectVitrine = isDirectVitrineShare(url)` e `hasVitrine = !!buildVitrineFallback(creds)`, chamar `decideVitrineFallback({ failureType: err.mlFailureType, isDirectVitrine, hasVitrine })` e, no outcome `'use_vitrine'`, retornar `buildVitrineFallback(creds)` (mantendo `warning: 'ml_vitrine_fallback_used'`) tanto para `unsupported_url` (comportamento 004 preservado) quanto para `expired` (novo, FR-001); outros outcomes seguem lançando o erro original por enquanto (preserva comportamento atual até US2/US3)
-- [ ] T006 [US1] Estender `test/ml-vitrine-fallback.test.js` com o caso: vitrine direta + `expired` + com vitrine própria → `convert()` retorna `{ url: <vitrine cadastrada>, warning: 'ml_vitrine_fallback_used' }`; e regressão explícita do caso 004 (`unsupported_url` + com vitrine → inalterado)
+- [X] T005 [US1] Em `convertMlCouponWithoutProduct` (`src/converters/mercadolivre.js`, ~L983-1016): calcular `isDirectVitrine = isDirectVitrineShare(url)` e `hasVitrine = !!buildVitrineFallback(creds)`, chamar `decideVitrineFallback({ failureType: err.mlFailureType, isDirectVitrine, hasVitrine })` e, no outcome `'use_vitrine'`, retornar `buildVitrineFallback(creds)` (mantendo `warning: 'ml_vitrine_fallback_used'`) tanto para `unsupported_url` (comportamento 004 preservado) quanto para `expired` (novo, FR-001); outros outcomes seguem lançando o erro original por enquanto (preserva comportamento atual até US2/US3)
+- [X] T006 [US1] Estender `test/ml-vitrine-fallback.test.js` com o caso: vitrine direta + `expired` + com vitrine própria → `convert()` retorna `{ url: <vitrine cadastrada>, warning: 'ml_vitrine_fallback_used' }`; e regressão explícita do caso 004 (`unsupported_url` + com vitrine → inalterado)
 
 **Checkpoint**: User Story 1 completa e testável de forma independente — MVP entregável.
 
@@ -72,12 +72,12 @@ Projeto web existente (backend `src/` + `dashboard/`). Sem estrutura nova de dir
 
 ### Implementation for User Story 2
 
-- [ ] T007 [US2] Em `convertMlCouponWithoutProduct` (`src/converters/mercadolivre.js`): tratar outcome `'missing_vitrine'` lançando erro sinalizado com `err.mlFailureType` preservado, `err.conversionLogErrorMsg = 'skip:ml_vitrine_missing'` e `err.conversionLogStatus = 'skipped'` (depende de T005)
-- [ ] T008 [US2] No catch de conversão em `src/bot-worker.js` (~L2698-2708): antes de cair em `recordConversionIssue` genérico, checar `err.conversionLogErrorMsg`/`err.conversionLogStatus` e, se presentes, gravar `MessageLog` com esses valores pré-classificados em vez de `error:conversion:${err.message}` (depende de T007)
-- [ ] T009 [P] [US2] Adicionar branch `if (errorMsg.startsWith('skip:ml_vitrine_missing'))` em `explainErrorMsg` (`dashboard/lib/painel/logsCopy.js`) explicando que a oferta foi ignorada por falta de cadastro da vitrine própria e indicando o caminho Painel → IDs de afiliada → Mercado Livre; texto NÃO pode mencionar renovar/atualizar SSID
-- [ ] T010 [P] [US2] Adicionar branch equivalente em `dashboard/lib/mobileLogs.js` (texto mais curto, mesmo sentido, mesmo caminho de cadastro; NÃO mencionar SSID) — não esquecer este arquivo (2º renderizador)
-- [ ] T011 [US2] Estender `test/ml-vitrine-fallback.test.js` com o caso: vitrine direta + `expired` + sem vitrine própria → `errorMsg='skip:ml_vitrine_missing'`, `status='skipped'` (depende de T007, T008)
-- [ ] T012 [P] [US2] Adicionar teste unitário garantindo que as traduções de `logsCopy.js` e `mobileLogs.js` para `skip:ml_vitrine_missing` citam "cadastrar a vitrine" e NUNCA contêm "SSID"/"renove"/"cookie" (depende de T009, T010)
+- [X] T007 [US2] Em `convertMlCouponWithoutProduct` (`src/converters/mercadolivre.js`): tratar outcome `'missing_vitrine'` lançando erro sinalizado com `err.mlFailureType` preservado, `err.conversionLogErrorMsg = 'skip:ml_vitrine_missing'` e `err.conversionLogStatus = 'skipped'` (depende de T005)
+- [X] T008 [US2] No catch de conversão em `src/bot-worker.js` (~L2698-2708): antes de cair em `recordConversionIssue` genérico, checar `err.conversionLogErrorMsg`/`err.conversionLogStatus` e, se presentes, gravar `MessageLog` com esses valores pré-classificados em vez de `error:conversion:${err.message}` (depende de T007)
+- [X] T009 [P] [US2] Adicionar branch `if (errorMsg.startsWith('skip:ml_vitrine_missing'))` em `explainErrorMsg` (`dashboard/lib/painel/logsCopy.js`) explicando que a oferta foi ignorada por falta de cadastro da vitrine própria e indicando o caminho Painel → IDs de afiliada → Mercado Livre; texto NÃO pode mencionar renovar/atualizar SSID
+- [X] T010 [P] [US2] Adicionar branch equivalente em `dashboard/lib/mobileLogs.js` (texto mais curto, mesmo sentido, mesmo caminho de cadastro; NÃO mencionar SSID) — não esquecer este arquivo (2º renderizador)
+- [X] T011 [US2] Estender `test/ml-vitrine-fallback.test.js` com o caso: vitrine direta + `expired` + sem vitrine própria → `errorMsg='skip:ml_vitrine_missing'`, `status='skipped'` (depende de T007, T008)
+- [X] T012 [P] [US2] Adicionar teste unitário garantindo que as traduções de `logsCopy.js` e `mobileLogs.js` para `skip:ml_vitrine_missing` citam "cadastrar a vitrine" e NUNCA contêm "SSID"/"renove"/"cookie" (depende de T009, T010)
 
 **Checkpoint**: User Story 2 completa e testável de forma independente.
 
@@ -91,8 +91,8 @@ Projeto web existente (backend `src/` + `dashboard/`). Sem estrutura nova de dir
 
 ### Implementation for User Story 3
 
-- [ ] T013 [US3] Estender `test/ml-vitrine-fallback.test.js` com o caso de regressão: produto não-vitrine (`isDirectVitrine=false`) + `expired` → outcome `passthrough`, mensagem de renovar SSID / fallback `partner_id` preservada (depende de T005, T007 já estarem implementados para confirmar que não regrediram este caminho)
-- [ ] T014 [P] [US3] Estender `test/ml-vitrine-fallback.test.js` (ou `test/ml-vitrine-policy.test.js`) com o caso de regressão: `unsupported_url` + não-vitrine + sem vitrine própria → outcome `discard` (descarte silencioso, RCA 2026-07-08) preservado e inalterado
+- [X] T013 [US3] Estender `test/ml-vitrine-fallback.test.js` com o caso de regressão: produto não-vitrine (`isDirectVitrine=false`) + `expired` → outcome `passthrough`, mensagem de renovar SSID / fallback `partner_id` preservada (depende de T005, T007 já estarem implementados para confirmar que não regrediram este caminho)
+- [X] T014 [P] [US3] Estender `test/ml-vitrine-fallback.test.js` (ou `test/ml-vitrine-policy.test.js`) com o caso de regressão: `unsupported_url` + não-vitrine + sem vitrine própria → outcome `discard` (descarte silencioso, RCA 2026-07-08) preservado e inalterado
 
 **Checkpoint**: Todas as user stories (US1, US2, US3) funcionais e testáveis de forma independente.
 
@@ -102,8 +102,8 @@ Projeto web existente (backend `src/` + `dashboard/`). Sem estrutura nova de dir
 
 **Purpose**: Validação final cruzando os três cenários e checagem de não-regressão do caminho de produto.
 
-- [ ] T015 [P] Rodar toda a suíte relevante (`node --test test/ml-vitrine-policy.test.js`, `node --test test/ml-vitrine-fallback.test.js`) e confirmar os 4 cenários de `quickstart.md` (SC-004)
-- [ ] T016 Revisar o diff de `src/converters/mercadolivre.js` confirmando que o guard anti-regressão `!cleanTarget` (~L1031-1039, caminho de produto) permanece intocado (FR-008)
+- [X] T015 [P] Rodar toda a suíte relevante (`node --test test/ml-vitrine-policy.test.js`, `node --test test/ml-vitrine-fallback.test.js`) e confirmar os 4 cenários de `quickstart.md` (SC-004)
+- [X] T016 Revisar o diff de `src/converters/mercadolivre.js` confirmando que o guard anti-regressão `!cleanTarget` (~L1031-1039, caminho de produto) permanece intocado (FR-008)
 - [ ] T017 Validação manual em staging conforme `quickstart.md` seção 3 (cadastrar/remover vitrine própria + SSID expirado real, clique real no celular) antes de promover para produção
 
 ---
