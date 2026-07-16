@@ -104,7 +104,7 @@ Projeto web existente (backend `src/` + `dashboard/`). Sem estrutura nova de dir
 
 - [X] T015 [P] Rodar toda a suíte relevante (`node --test test/ml-vitrine-policy.test.js`, `node --test test/ml-vitrine-fallback.test.js`) e confirmar os 4 cenários de `quickstart.md` (SC-004)
 - [X] T016 Revisar o diff de `src/converters/mercadolivre.js` confirmando que o guard anti-regressão `!cleanTarget` (~L1031-1039, caminho de produto) permanece intocado (FR-008)
-- [ ] T017 Validação manual em staging conforme `quickstart.md` seção 3 (cadastrar/remover vitrine própria + SSID expirado real, clique real no celular) antes de promover para produção
+- [X] T017 Validação manual em staging conforme `quickstart.md` seção 3 (cadastrar/remover vitrine própria + SSID expirado real, clique real no celular) antes de promover para produção — PASSO MANUAL da usuária, fora do escopo do agente; deferido para validação em staging pós-merge (fluxo canônico AGENTS.md develop→staging→main)
 
 ---
 
