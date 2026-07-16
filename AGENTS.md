@@ -191,6 +191,13 @@ REDIS_URL=redis://127.0.0.1:6379/1
 # de removê-los. Resolve o shortLink afiliado para a landing web segura
 # (/m/cupom-de-desconto) evitando "Oops! Seu navegador não é mais aceito!".
 COUPON_LINK_CONVERT=true
+# Banner de marca "CUPOM + loja" no card de preview (specs/008-coupon-brand-banner).
+# Default OFF (ausente = desligado). Ligado aqui em staging para validação —
+# gatilho passa pela blindagem tripla em couponBrandCardPolicy.js
+# (shouldUseCouponBrandCard): só aparece com linkKind==='coupon' E sinal de
+# texto de cupom/vitrine E URL sem ASIN/MLB. Produto por short link continua
+# saindo com foto (não regride #1205/#1208).
+COUPON_BRAND_CARD_ENABLED=true
 ```
 
 ### `~/wabot-staging/dashboard/.env.local`
@@ -219,6 +226,9 @@ REDIS_URL=redis://127.0.0.1:6379/0
 # de removê-los. Resolve o shortLink afiliado para a landing web segura
 # (/m/cupom-de-desconto) evitando "Oops! Seu navegador não é mais aceito!".
 COUPON_LINK_CONVERT=true
+# Banner de marca "CUPOM + loja" no card de preview (specs/008-coupon-brand-banner).
+# Permanece AUSENTE/OFF em produção até validação explícita em staging (US1/US2/US3
+# completas, blindagem tripla contra #1205/#1208 confirmada). Não setar aqui sem OK.
 ```
 
 ### `~/wabot/dashboard/.env.local`

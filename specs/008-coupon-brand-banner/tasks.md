@@ -37,10 +37,10 @@ Single project (monólito wabot) — `src/`, `test/`, `AGENTS.md` na raiz do rep
 
 **⚠️ CRITICAL**: Nenhuma fase de user story pode começar antes desta fase estar completa.
 
-- [ ] T001 [P] Adicionar export `urlHasProductId(platform, url)` em `src/converters/linkKind.js`, reusando `AMAZON_ASIN_RE`/`MLB_ID_RE`/`PRODUCT_ID_DETECTORS` já existentes; `resolveLinkKind` permanece byte-a-byte inalterado (FR-010)
-- [ ] T002 [P] Criar `src/converters/couponBrandCardPolicy.js` exportando `shouldUseCouponBrandCard({ enabled, platform, linkKind, couponTextSignal, resolvedUrl })` — módulo LEAF puro, sem I/O, sem import de `bot-worker.js`/`db.js`, retorna `false` para entradas ausentes/`undefined` e nunca lança; usa `isBrandCardPlatform` (de `storeBrandCard.js`) e `urlHasProductId` (T001) conforme a fórmula de `data-model.md` (depends on T001)
-- [ ] T003 Em `src/bot-worker.js`, na função `buildManualLinkPreview` (linha ~1263-1362): substituir `const COUPON_BRAND_CARD_ENABLED = false` (linha ~1299) por leitura de env `process.env.COUPON_BRAND_CARD_ENABLED === 'true'`; adicionar parâmetro `couponTextSignal` à assinatura; substituir a guarda `COUPON_BRAND_CARD_ENABLED && primary?.linkKind === 'coupon'` (2 ocorrências: bloco do banner e argumento de `storePreviewTitle`) por uma única variável `useCouponBrandCard = shouldUseCouponBrandCard({ enabled, platform: primary?.platform, linkKind: primary?.linkKind, couponTextSignal, resolvedUrl: primary?.converted || primary?.url })`; manter `title: storePreviewTitle(...)` sempre presente (invariante #1186, FR-008); manter fallback silencioso quando `buildStoreBrandCardImage` retorna `null`/falha (FR-009) (depends on T002)
-- [ ] T004 No call site de `buildManualLinkPreview` dentro de `startBotInner` (`src/bot-worker.js`, bloco `imageMode === 'preview'`, linha ~3227), calcular e passar `couponTextSignal = isCouponMsg || primary?.warning === 'ml_vitrine_fallback_used'` (reusa `isCouponMsg` já calculado via `isCouponAnnouncement` na linha ~2463, e o sinal de vitrine ML já emitido por `mercadolivre.js`/`mlVitrinePolicy.js` via `conversionResult.warning`, sem criar detector novo — Assumptions da spec) (depends on T003)
+- [X] T001 [P] Adicionar export `urlHasProductId(platform, url)` em `src/converters/linkKind.js`, reusando `AMAZON_ASIN_RE`/`MLB_ID_RE`/`PRODUCT_ID_DETECTORS` já existentes; `resolveLinkKind` permanece byte-a-byte inalterado (FR-010)
+- [X] T002 [P] Criar `src/converters/couponBrandCardPolicy.js` exportando `shouldUseCouponBrandCard({ enabled, platform, linkKind, couponTextSignal, resolvedUrl })` — módulo LEAF puro, sem I/O, sem import de `bot-worker.js`/`db.js`, retorna `false` para entradas ausentes/`undefined` e nunca lança; usa `isBrandCardPlatform` (de `storeBrandCard.js`) e `urlHasProductId` (T001) conforme a fórmula de `data-model.md` (depends on T001)
+- [X] T003 Em `src/bot-worker.js`, na função `buildManualLinkPreview` (linha ~1263-1362): substituir `const COUPON_BRAND_CARD_ENABLED = false` (linha ~1299) por leitura de env `process.env.COUPON_BRAND_CARD_ENABLED === 'true'`; adicionar parâmetro `couponTextSignal` à assinatura; substituir a guarda `COUPON_BRAND_CARD_ENABLED && primary?.linkKind === 'coupon'` (2 ocorrências: bloco do banner e argumento de `storePreviewTitle`) por uma única variável `useCouponBrandCard = shouldUseCouponBrandCard({ enabled, platform: primary?.platform, linkKind: primary?.linkKind, couponTextSignal, resolvedUrl: primary?.converted || primary?.url })`; manter `title: storePreviewTitle(...)` sempre presente (invariante #1186, FR-008); manter fallback silencioso quando `buildStoreBrandCardImage` retorna `null`/falha (FR-009) (depends on T002)
+- [X] T004 No call site de `buildManualLinkPreview` dentro de `startBotInner` (`src/bot-worker.js`, bloco `imageMode === 'preview'`, linha ~3227), calcular e passar `couponTextSignal = isCouponMsg || primary?.warning === 'ml_vitrine_fallback_used'` (reusa `isCouponMsg` já calculado via `isCouponAnnouncement` na linha ~2463, e o sinal de vitrine ML já emitido por `mercadolivre.js`/`mlVitrinePolicy.js` via `conversionResult.warning`, sem criar detector novo — Assumptions da spec) (depends on T003)
 
 **Checkpoint**: Gate completo e com fail-safe (env OFF, loja não suportada, falha de geração, título sempre presente). US1/US2/US3 podem agora ser testadas/validadas independentemente sobre este mesmo gate.
 
@@ -54,7 +54,7 @@ Single project (monólito wabot) — `src/`, `test/`, `AGENTS.md` na raiz do rep
 
 ### Tests for User Story 1
 
-- [ ] T005 [P] [US1] Em `test/coupon-brand-card-policy.test.js` (novo arquivo), adicionar casos de `shouldUseCouponBrandCard` para cada loja suportada (amazon, shopee, mercadolivre, magazineluiza): `enabled=true`, `linkKind='coupon'`, `couponTextSignal=true`, `resolvedUrl` sem ASIN/MLB → retorna `true` (FR-001/FR-002/FR-007) (depends on T002)
+- [X] T005 [P] [US1] Em `test/coupon-brand-card-policy.test.js` (novo arquivo), adicionar casos de `shouldUseCouponBrandCard` para cada loja suportada (amazon, shopee, mercadolivre, magazineluiza): `enabled=true`, `linkKind='coupon'`, `couponTextSignal=true`, `resolvedUrl` sem ASIN/MLB → retorna `true` (FR-001/FR-002/FR-007) (depends on T002)
 
 ### Implementation for User Story 1
 
@@ -72,7 +72,7 @@ Single project (monólito wabot) — `src/`, `test/`, `AGENTS.md` na raiz do rep
 
 ### Tests for User Story 2
 
-- [ ] T007 [US2] Em `test/coupon-brand-card-policy.test.js`, adicionar caso: `platform='mercadolivre'`, `linkKind='coupon'`, `couponTextSignal=true` (via sinal `ml_vitrine_fallback_used`), `resolvedUrl` sem MLB → retorna `true`; e caso confirmando que o banner resultante é o MESMO (mesma chamada `buildStoreBrandCardImage('mercadolivre')`) usado no cenário de cupom — sem variação de visual entre cupom e vitrine (FR-002) (depends on T002, T005; mesmo arquivo de T005, não paralelizável)
+- [X] T007 [US2] Em `test/coupon-brand-card-policy.test.js`, adicionar caso: `platform='mercadolivre'`, `linkKind='coupon'`, `couponTextSignal=true` (via sinal `ml_vitrine_fallback_used`), `resolvedUrl` sem MLB → retorna `true`; e caso confirmando que o banner resultante é o MESMO (mesma chamada `buildStoreBrandCardImage('mercadolivre')`) usado no cenário de cupom — sem variação de visual entre cupom e vitrine (FR-002) (depends on T002, T005; mesmo arquivo de T005, não paralelizável)
 
 ### Implementation for User Story 2
 
@@ -90,10 +90,10 @@ Single project (monólito wabot) — `src/`, `test/`, `AGENTS.md` na raiz do rep
 
 ### Tests for User Story 3
 
-- [ ] T009 [P] [US3] Em `test/link-kind.test.js`, adicionar casos de `urlHasProductId`: URLs Amazon com `/dp/<ASIN>` e `/gp/product/<ASIN>` → `true`; URL ML com `MLB<id>` → `true`; short link sem ID (`amzn.to/...`, `meli.la/...`) → `false`; confirmar que `resolveLinkKind` permanece byte-a-byte inalterado (FR-010) (depends on T001)
-- [ ] T010 [US3] Em `test/coupon-brand-card-policy.test.js`, adicionar os dois casos CRÍTICOS do contrato (FR-006/FR-012): (a) produto Amazon/ML por short link — `linkKind='coupon'` (por falta de ID na URL) mas `couponTextSignal=false` (texto não confirma cupom/vitrine) → `shouldUseCouponBrandCard` retorna `false`; (b) `linkKind='coupon'`, `couponTextSignal=true`, mas `resolvedUrl` CONTÉM ASIN ou MLB → retorna `false` (tratado como produto) (depends on T002, T007; mesmo arquivo, não paralelizável)
-- [ ] T011 [US3] Estender `test/bot-worker-manual-link-preview-channel.test.js`: com `COUPON_BRAND_CARD_ENABLED=true`, simular produto Amazon e produto ML compartilhados por short link (sem ASIN/MLB, texto sem sinal de cupom) e confirmar que `buildManualLinkPreview` monta o card com a foto do produto (fetch de imagem via `fetchProductImage`), nunca com o banner de marca (depends on T003, T004)
-- [ ] T012 [P] [US3] Rodar `node --test test/store-brand-card.test.js` e confirmar que o guard estrutural de `storePreviewTitle`/`title` continua verde e o arquivo não foi alterado (FR-011 — preservação, não remoção) (depends on T003)
+- [X] T009 [P] [US3] Em `test/link-kind.test.js`, adicionar casos de `urlHasProductId`: URLs Amazon com `/dp/<ASIN>` e `/gp/product/<ASIN>` → `true`; URL ML com `MLB<id>` → `true`; short link sem ID (`amzn.to/...`, `meli.la/...`) → `false`; confirmar que `resolveLinkKind` permanece byte-a-byte inalterado (FR-010) (depends on T001)
+- [X] T010 [US3] Em `test/coupon-brand-card-policy.test.js`, adicionar os dois casos CRÍTICOS do contrato (FR-006/FR-012): (a) produto Amazon/ML por short link — `linkKind='coupon'` (por falta de ID na URL) mas `couponTextSignal=false` (texto não confirma cupom/vitrine) → `shouldUseCouponBrandCard` retorna `false`; (b) `linkKind='coupon'`, `couponTextSignal=true`, mas `resolvedUrl` CONTÉM ASIN ou MLB → retorna `false` (tratado como produto) (depends on T002, T007; mesmo arquivo, não paralelizável)
+- [X] T011 [US3] Estender `test/bot-worker-manual-link-preview-channel.test.js`: com `COUPON_BRAND_CARD_ENABLED=true`, simular produto Amazon e produto ML compartilhados por short link (sem ASIN/MLB, texto sem sinal de cupom) e confirmar que `buildManualLinkPreview` monta o card com a foto do produto (fetch de imagem via `fetchProductImage`), nunca com o banner de marca (depends on T003, T004)
+- [X] T012 [P] [US3] Rodar `node --test test/store-brand-card.test.js` e confirmar que o guard estrutural de `storePreviewTitle`/`title` continua verde e o arquivo não foi alterado (FR-011 — preservação, não remoção) (depends on T003)
 
 ### Implementation for User Story 3
 
@@ -107,9 +107,9 @@ Single project (monólito wabot) — `src/`, `test/`, `AGENTS.md` na raiz do rep
 
 **Purpose**: Documentação, verificação de flag OFF/rollback e suíte completa.
 
-- [ ] T014 [P] Documentar `COUPON_BRAND_CARD_ENABLED` no `AGENTS.md`: adicionar a linha ao bloco `.env` de staging como `COUPON_BRAND_CARD_ENABLED=true` (default em staging, FR-013) e uma nota no bloco `.env` de produção confirmando que permanece ausente/OFF até validação explícita
-- [ ] T015 [P] Em `test/coupon-brand-card-policy.test.js`, adicionar caso explícito de FR-005/edge case "feature desligada": `enabled=false` (ou qualquer valor ≠ `'true'`) com as demais condições verdadeiras → retorna `false` sempre (depends on T002, T010; mesmo arquivo, não paralelizável com T010)
-- [ ] T016 Rodar a suíte completa: `node --test test/coupon-brand-card-policy.test.js test/link-kind.test.js test/store-brand-card.test.js test/bot-worker-manual-link-preview-channel.test.js` e confirmar tudo verde (depends on T005, T007, T009, T010, T011, T012, T015)
+- [X] T014 [P] Documentar `COUPON_BRAND_CARD_ENABLED` no `AGENTS.md`: adicionar a linha ao bloco `.env` de staging como `COUPON_BRAND_CARD_ENABLED=true` (default em staging, FR-013) e uma nota no bloco `.env` de produção confirmando que permanece ausente/OFF até validação explícita
+- [X] T015 [P] Em `test/coupon-brand-card-policy.test.js`, adicionar caso explícito de FR-005/edge case "feature desligada": `enabled=false` (ou qualquer valor ≠ `'true'`) com as demais condições verdadeiras → retorna `false` sempre (depends on T002, T010; mesmo arquivo, não paralelizável com T010)
+- [X] T016 Rodar a suíte completa: `node --test test/coupon-brand-card-policy.test.js test/link-kind.test.js test/store-brand-card.test.js test/bot-worker-manual-link-preview-channel.test.js` e confirmar tudo verde (depends on T005, T007, T009, T010, T011, T012, T015)
 - [ ] T017 Validação de rollback conforme `quickstart.md` seção 4 (SC-006): em staging, desligar `COUPON_BRAND_CARD_ENABLED` (remover ou `=false`), delete+start `api-staging`, confirmar que nenhuma mensagem (cupom/vitrine/produto) sai com banner — comportamento bit-a-bit igual ao histórico, reversão em menos de 1 minuto (depends on T006, T008, T013)
 
 ---

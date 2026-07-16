@@ -51,36 +51,38 @@ test('SVG do banner não contém emoji nem fonte sem fallback genérico (liçõe
   assert.match(source, /sans-serif/, 'font-family precisa terminar em sans-serif genérico')
 })
 
-// ROLLBACK DE PRODUÇÃO (incidente 2026-07, hotfix #1205 em main): o banner de
-// cupom estava saindo em textos de PRODUTO (produto compartilhado por short
-// link sem ASIN/MLB caía como linkKind:'coupon' e ganhava o banner "Cupom
-// Loja" no lugar da foto). Até a classificação ficar robusta, o banner fica
-// DESLIGADO por flag — todo card usa a imagem raspada do produto.
-// buildStoreBrandCardImage continua no código, só gated. Este teste garante
-// que o flag permanece OFF em develop também (consistente com main —
-// promover develop→main não pode reativar o banner sem querer).
-test('bot-worker mantém o banner de cupom DESLIGADO no preview (rollback de produção)', () => {
+// REATIVAÇÃO CONTROLADA (specs/008-coupon-brand-banner, supersede o hotfix
+// #1205/#1208 em main): o banner de cupom volta a ser gerado, mas agora
+// atrás da blindagem tripla de couponBrandCardPolicy.js (shouldUseCouponBrandCard)
+// — linkKind==='coupon' E sinal de TEXTO de cupom/vitrine E URL sem ASIN/MLB
+// ao mesmo tempo. Isso ataca a causa raiz da regressão antiga (produto por
+// short link caindo como linkKind:'coupon' sem sinal de texto correspondente)
+// em vez de manter o banner permanentemente desligado. Rollout via env
+// COUPON_BRAND_CARD_ENABLED, default OFF (comportamento histórico preservado
+// sem a env setada).
+test('bot-worker lê o banner de cupom via env (default OFF) e delega a decisão à blindagem tripla', () => {
   const botWorkerSource = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
   assert.match(
     botWorkerSource,
-    /const COUPON_BRAND_CARD_ENABLED = false/,
-    'banner de cupom deve permanecer desligado até a classificação ser robusta',
+    /const COUPON_BRAND_CARD_ENABLED = process\.env\.COUPON_BRAND_CARD_ENABLED === 'true'/,
+    'ativação do banner de cupom precisa vir da env (default OFF), não hardcoded',
   )
   assert.match(
     botWorkerSource,
-    /COUPON_BRAND_CARD_ENABLED && primary\?\.linkKind === 'coupon'/,
-    'o ramo do banner de cupom deve estar atrás do flag (desligado)',
+    /const useCouponBrandCard = shouldUseCouponBrandCard\(\{/,
+    'a decisão de usar o banner precisa passar pela blindagem tripla (shouldUseCouponBrandCard)',
   )
 })
 
 // Sem title o cliente WhatsApp NÃO renderiza o card (cards sumiram em
 // staging no deploy do PR #1186). O urlInfo manual PRECISA sempre levar
-// title (nome da loja), nunca voltar a omiti-lo.
+// title (nome da loja), nunca voltar a omiti-lo — inclusive depois da
+// reativação do banner (specs/008).
 test('bot-worker sempre inclui title (nome da loja) no urlInfo manual do preview', () => {
   const botWorkerSource = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
   assert.match(
     botWorkerSource,
-    /title: storePreviewTitle\(primary\?\.platform, matchedText, COUPON_BRAND_CARD_ENABLED && primary\?\.linkKind === 'coupon'\)/,
+    /title: storePreviewTitle\(primary\?\.platform, matchedText, useCouponBrandCard\)/,
     'urlInfo manual precisa de title fixo do nome da loja',
   )
 })

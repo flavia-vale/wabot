@@ -20,6 +20,7 @@ import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantT
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
 import { buildStoreBrandCardImage } from './converters/storeBrandCard.js'
 import { resolveLinkKind } from './converters/linkKind.js'
+import { shouldUseCouponBrandCard } from './converters/couponBrandCardPolicy.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
 import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
@@ -1260,7 +1261,7 @@ function buildBroadcastImageRecipe(text, options = {}) {
 // NUNCA usar contextInfo.externalAdReply para "forçar" card grande: é campo
 // de anúncio e causa drop silencioso em mensagem monitorada — a guarda em
 // monitoredMessagePayload.js rejeita payload com esse campo em qualquer rota.
-async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid }) {
+async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal }) {
   const matchedText = isHttpUrl(primary?.converted) ? primary.converted : (isHttpUrl(primary?.url) ? primary.url : '')
   if (!matchedText) return null
   // matched-text precisa existir literalmente no corpo da mensagem; sem essa
@@ -1292,12 +1293,20 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
   // cupom estava saindo em textos que eram de PRODUTO. Um produto compartilhado
   // por short link que não revela ASIN/MLB (ex.: amzn.to/amzn.divulgador.link/
   // meli.la não resolvidos) cai como linkKind:'coupon' e ganhava o banner
-  // "Cupom Loja" no lugar da foto do produto. Até refinarmos a classificação com
-  // calma (produto vs. cupom robusto), o banner fica DESLIGADO aqui também —
-  // mantém main e develop consistentes (não regredir ao promover develop→main).
-  // Reativar = flip do flag quando a classificação estiver robusta.
-  const COUPON_BRAND_CARD_ENABLED = false
-  if (COUPON_BRAND_CARD_ENABLED && primary?.linkKind === 'coupon') {
+  // "Cupom Loja" no lugar da foto do produto. Reativado (specs/008) com
+  // blindagem tripla em couponBrandCardPolicy.js (shouldUseCouponBrandCard):
+  // exige linkKind==='coupon' E sinal de TEXTO de cupom/vitrine E URL sem
+  // ASIN/MLB ao mesmo tempo — produto por short link continua saindo com foto
+  // (não regride #1205/#1208). Rollout controlado por env, default OFF.
+  const COUPON_BRAND_CARD_ENABLED = process.env.COUPON_BRAND_CARD_ENABLED === 'true'
+  const useCouponBrandCard = shouldUseCouponBrandCard({
+    enabled: COUPON_BRAND_CARD_ENABLED,
+    platform: primary?.platform,
+    linkKind: primary?.linkKind,
+    couponTextSignal,
+    resolvedUrl: primary?.converted || primary?.url,
+  })
+  if (useCouponBrandCard) {
     // Link de cupom/campanha não tem produto: raspar a landing pegava a
     // imagem de um produto promovido aleatório no card. Usa o banner da
     // marca da loja (storeBrandCard), como os canais concorrentes fazem.
@@ -1355,7 +1364,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     // deploy do PR #1186 — cards sumiram até este fix). Em cupom, prefixa
     // "Cupom" — mesmo texto do banner (buildStoreBrandCardImage), pra não
     // ficar inconsistente (imagem diz "Cupom Amazon", título diz só "Amazon").
-    title: storePreviewTitle(primary?.platform, matchedText, COUPON_BRAND_CARD_ENABLED && primary?.linkKind === 'coupon'),
+    title: storePreviewTitle(primary?.platform, matchedText, useCouponBrandCard),
     ...(jpegThumbnail ? { jpegThumbnail } : {}),
     ...(highQualityThumbnail ? { highQualityThumbnail } : {}),
   }
@@ -3224,12 +3233,19 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           // activeSock (e não um sock capturado) porque buildPayload roda no
           // dequeue, possivelmente após reconexão.
           if (imageMode === 'preview') {
+            // Sinal de TEXTO da blindagem tripla (couponBrandCardPolicy.js):
+            // reusa isCouponMsg (isCouponAnnouncement, já calculado acima) e o
+            // sinal de vitrine ML já emitido por mercadolivre.js/mlVitrinePolicy.js
+            // via conversionResult.warning — sem criar detector novo (Assumptions
+            // da spec 008).
+            const couponTextSignal = isCouponMsg || primary?.warning === 'ml_vitrine_fallback_used'
             const linkPreview = await buildManualLinkPreview({
               text: variantText,
               primary,
               credentialsMap: cfg.credentials,
               uploadToServer: activeSock?.waUploadToServer,
               destJid,
+              couponTextSignal,
             })
             return buildMonitoredMessagePayload({
               finalText: variantText,
