@@ -28,6 +28,7 @@ import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { validateCredentialData } from './credentialHealth.js'
+import { sanitizeMessageForLog, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'
 import { decryptCredential } from './credentialCrypto.js'
 import { persistCredentialPatch } from './credentialPatch.js'
 import { createMessageQueue } from './messageQueue.js'
@@ -738,15 +739,6 @@ async function monitorSilenceWatchdog() {
     'Monitor(es) silenciado(s) detectado(s); forçando refresh de sender_keys'
   )
   await triggerWaGroupsRefresh('silence_watchdog')
-}
-
-const MESSAGE_LOG_MAX_CHARS = Math.max(40, Number(process.env.MESSAGE_LOG_MAX_CHARS || 240))
-
-function sanitizeMessageForLog(text) {
-  const raw = String(text ?? '').replace(/\s+/g, ' ').trim()
-  if (!raw) return ''
-  if (raw.length <= MESSAGE_LOG_MAX_CHARS) return raw
-  return `${raw.slice(0, MESSAGE_LOG_MAX_CHARS)}…`
 }
 
 const AD_TEXT = '💡 Bot gerenciado pelo Bot Conversor para Afiliados — automatize seus grupos de afiliados'
@@ -3633,18 +3625,30 @@ process.on('message', async msg => {
     let queued = 0
     const errors = []
     for (const jid of msg.jids) {
-      const log = await db.messageLog.create({
-        data: {
-          userId,
-          platform: 'broadcast',
-          sourceGroup: broadcastSourceGroup(msg.options),
-          destGroup: jid,
-          originalUrl: '',
-          convertedUrl: '',
-          messageText: sanitizeMessageForLog(msg.text),
-          status: 'queued',
-        },
-      })
+      let log
+      try {
+        log = await db.messageLog.create({
+          data: {
+            userId,
+            platform: 'broadcast',
+            sourceGroup: broadcastSourceGroup(msg.options),
+            destGroup: jid,
+            originalUrl: '',
+            convertedUrl: '',
+            messageText: sanitizeMessageForLog(msg.text),
+            status: 'queued',
+          },
+        })
+      } catch (err) {
+        // Defesa em profundidade (specs/006-worker-crash-log-safety): uma
+        // falha ao gravar o log NUNCA pode virar unhandledRejection e
+        // derrubar o worker via crash-guard, o que descartaria toda a fila de
+        // envio em memória para os demais jids. Loga e segue para o próximo
+        // jid — sem log.id válido não há como enfileirar o envio deste.
+        logger.error({ err: err?.message, jid }, 'Falha ao gravar MessageLog no broadcast; pulando este destinatário')
+        errors.push({ jid, error: classifyError(err) })
+        continue
+      }
       const imageRecipe = buildBroadcastImageRecipe(msg.text, msg.options)
       // Botão "Ver canal" herdado do grupo de destino (oferta automática,
       // broadcast manual). null = sem botão. A injeção acontece em processSendJob.

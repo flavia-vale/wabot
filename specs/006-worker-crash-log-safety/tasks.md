@@ -31,7 +31,7 @@ Projeto único (monolito Node): `src/`, `test/` na raiz do repositório.
 **Purpose**: Nenhuma inicialização de projeto necessária — repositório já existe,
 dependências já resolvidas, sem dependência nova (ver plan.md Technical Context).
 
-- [ ] T001 Confirmar `node --test` roda localmente sem falhas antes de iniciar (baseline) a partir da raiz do repositório
+- [X] T001 Confirmar `node --test` roda localmente sem falhas antes de iniciar (baseline) a partir da raiz do repositório
 
 **Checkpoint**: Baseline verde confirmado — pode prosseguir para Foundational.
 
@@ -46,8 +46,8 @@ causa raiz) e reaproveitado por todos os call-sites já existentes em
 
 **⚠️ CRITICAL**: Nenhuma implementação de user story pode começar antes desta fase.
 
-- [ ] T002 Criar `src/messageLogSanitizer.js`: extrair `MESSAGE_LOG_MAX_CHARS` (linha 743 de `src/bot-worker.js`) e a assinatura de `sanitizeMessageForLog(text)` (linhas 745-750) para o novo módulo, exportando ambos. Implementar nesta task apenas a extração 1:1 (comportamento antigo preservado) — a correção do truncamento por code point é feita em T004 (US1)
-- [ ] T003 Editar `src/bot-worker.js`: remover a definição local de `MESSAGE_LOG_MAX_CHARS`/`sanitizeMessageForLog` (linhas 743-750) e adicionar `import { sanitizeMessageForLog, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'` no topo do arquivo, preservando a mesma assinatura em todos os ~14 call-sites (linhas 625, 2369, 2431, 2500, 2661, 2757, 2880, 2930, 3140, 3423, 3644 e demais)
+- [X] T002 Criar `src/messageLogSanitizer.js`: extrair `MESSAGE_LOG_MAX_CHARS` (linha 743 de `src/bot-worker.js`) e a assinatura de `sanitizeMessageForLog(text)` (linhas 745-750) para o novo módulo, exportando ambos. Implementar nesta task apenas a extração 1:1 (comportamento antigo preservado) — a correção do truncamento por code point é feita em T004 (US1)
+- [X] T003 Editar `src/bot-worker.js`: remover a definição local de `MESSAGE_LOG_MAX_CHARS`/`sanitizeMessageForLog` (linhas 743-750) e adicionar `import { sanitizeMessageForLog, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'` no topo do arquivo, preservando a mesma assinatura em todos os ~14 call-sites (linhas 625, 2369, 2431, 2500, 2661, 2757, 2880, 2930, 3140, 3423, 3644 e demais)
 
 **Checkpoint**: `node --test` continua verde (nenhum call-site quebrado); módulo
 leaf existe e é importado por `bot-worker.js`. US1 e US2 podem começar.
@@ -68,11 +68,11 @@ pelo Prisma (via `node --test test/message-log-sanitizer.test.js`).
 
 > **NOTE: Escrever este teste PRIMEIRO; confirmar que falha antes de T004.**
 
-- [ ] T004 [P] [US1] Criar `test/message-log-sanitizer.test.js` (`node:test`) cobrindo: (a) corte exatamente no meio de um par surrogate de emoji → sem surrogate solto e dentro do limite; (b) texto composto majoritariamente de emojis/multi-byte → truncagem por code point, não code unit; (c) texto com `NUL`/caracteres de controle → removidos do resultado; (d) `null`/`''`/não-string → retorna `''` sem lançar; (e) texto sanitizado nunca excede `MESSAGE_LOG_MAX_CHARS`
+- [X] T004 [P] [US1] Criar `test/message-log-sanitizer.test.js` (`node:test`) cobrindo: (a) corte exatamente no meio de um par surrogate de emoji → sem surrogate solto e dentro do limite; (b) texto composto majoritariamente de emojis/multi-byte → truncagem por code point, não code unit; (c) texto com `NUL`/caracteres de controle → removidos do resultado; (d) `null`/`''`/não-string → retorna `''` sem lançar; (e) texto sanitizado nunca excede `MESSAGE_LOG_MAX_CHARS`
 
 ### Implementation for User Story 1
 
-- [ ] T005 [US1] Implementar em `src/messageLogSanitizer.js` a sanitização correta (D1/D2/D3 do research.md): `String(text ?? '')` → normalizar whitespace/trim → remover controle/`NUL` (regex de classe de controle) → truncar por code point (`Array.from`/spread, não `slice`) para ≤ `MESSAGE_LOG_MAX_CHARS` code points → remover surrogate solto residual (`/[\uD800-\uDFFF]/g` sobre o que sobrou fora de pares válidos) → anexar `…` só se houve truncagem (depende de T002; faz T004 passar)
+- [X] T005 [US1] Implementar em `src/messageLogSanitizer.js` a sanitização correta (D1/D2/D3 do research.md): `String(text ?? '')` → normalizar whitespace/trim → remover controle/`NUL` (regex de classe de controle) → truncar por code point (`Array.from`/spread, não `slice`) para ≤ `MESSAGE_LOG_MAX_CHARS` code points → remover surrogate solto residual (`/[\uD800-\uDFFF]/g` sobre o que sobrou fora de pares válidos) → anexar `…` só se houve truncagem (depende de T002; faz T004 passar)
 
 **Checkpoint**: `node --test test/message-log-sanitizer.test.js` passa; `node
 --test` inteiro continua verde; User Story 1 é funcional e testável de forma
@@ -94,8 +94,8 @@ via quickstart.md item 3 em staging.
 
 ### Implementation for User Story 2
 
-- [ ] T006 [US2] Editar `src/bot-worker.js` (~linha 3636, dentro do `for (const jid of msg.jids)` do handler `msg?.type === 'broadcast'`): envolver a chamada `await db.messageLog.create({...})` em `try/catch` local — no `catch`, `logger.warn`/`error` com `err.message` e o `jid` (sem PII crua), registrar o `jid` em `errors` com um `errorMsg` apropriado (sem inventar novo prefixo de taxonomia, ver `src/errorTaxonomy.js`) e usar `continue` para seguir para o próximo `jid` sem chamar `enqueueSendJob` para este (não há `log.id` válido); garantir que nenhum `throw`/`process.exit` escape deste bloco
-- [ ] T007 [P] [US2] Adicionar teste estrutural em `test/bot-worker-broadcast-log-safety.test.js` (padrão de grep-de-source, análogo a `test/bot-worker-retry-cache-wiring.test.js`, já que `bot-worker.js` não é importável em `node:test`) que lê `src/bot-worker.js` e falha se o `await db.messageLog.create(` do handler `type:'broadcast'` não estiver dentro de um bloco `try` seguido de `catch` sem `process.exit`/`throw` não capturado (depende de T006)
+- [X] T006 [US2] Editar `src/bot-worker.js` (~linha 3636, dentro do `for (const jid of msg.jids)` do handler `msg?.type === 'broadcast'`): envolver a chamada `await db.messageLog.create({...})` em `try/catch` local — no `catch`, `logger.warn`/`error` com `err.message` e o `jid` (sem PII crua), registrar o `jid` em `errors` com um `errorMsg` apropriado (sem inventar novo prefixo de taxonomia, ver `src/errorTaxonomy.js`) e usar `continue` para seguir para o próximo `jid` sem chamar `enqueueSendJob` para este (não há `log.id` válido); garantir que nenhum `throw`/`process.exit` escape deste bloco
+- [X] T007 [P] [US2] Adicionar teste estrutural em `test/bot-worker-broadcast-log-safety.test.js` (padrão de grep-de-source, análogo a `test/bot-worker-retry-cache-wiring.test.js`, já que `bot-worker.js` não é importável em `node:test`) que lê `src/bot-worker.js` e falha se o `await db.messageLog.create(` do handler `type:'broadcast'` não estiver dentro de um bloco `try` seguido de `catch` sem `process.exit`/`throw` não capturado (depende de T006)
 
 **Checkpoint**: `node --test` inteiro verde; falha simulada de escrita de log
 (inspeção estrutural) não encerra o worker; User Story 1 e User Story 2 ambas
@@ -108,9 +108,9 @@ funcionais e testáveis de forma independente.
 **Purpose**: Validação final cruzando as duas correções e confirmando os
 critérios de sucesso mensuráveis da spec.
 
-- [ ] T008 Rodar `node --test` completo (suíte inteira) e confirmar 0 falhas, incluindo os testes novos de T004 e T007 (SC-004)
-- [ ] T009 Executar o passo 1 do `quickstart.md` (`node --test test/message-log-sanitizer.test.js`) e o snippet de sanidade rápida (`node -e "..."`) e confirmar `lone surrogate? false`
-- [ ] T010 Documentar no PR a validação manual do item 3 do `quickstart.md` (defesa em profundidade do broadcast) a ser feita em staging antes do merge `develop`→`main`, conforme fluxo canônico do `AGENTS.md`
+- [X] T008 Rodar `node --test` completo (suíte inteira) e confirmar 0 falhas, incluindo os testes novos de T004 e T007 (SC-004)
+- [X] T009 Executar o passo 1 do `quickstart.md` (`node --test test/message-log-sanitizer.test.js`) e o snippet de sanidade rápida (`node -e "..."`) e confirmar `lone surrogate? false`
+- [X] T010 Documentar no PR a validação manual do item 3 do `quickstart.md` (defesa em profundidade do broadcast) a ser feita em staging antes do merge `develop`→`main`, conforme fluxo canônico do `AGENTS.md`
 
 ---
 
