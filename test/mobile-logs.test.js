@@ -49,7 +49,7 @@ test('friendlyMobileLogError traduz warnings específicos do Mercado Livre', () 
 test('friendlyMobileLogError: skip:ml_vitrine_missing cita cadastrar a vitrine e não menciona SSID/renove/cookie', () => {
   const result = friendlyMobileLogError('skip:ml_vitrine_missing')
   assert.match(result, /vitrine/i)
-  assert.match(result, /Credenciais.*Mercado Livre/i)
+  assert.match(result, /IDs de afiliada.*Mercado Livre/i)
   assert.doesNotMatch(result, /ssid/i)
   assert.doesNotMatch(result, /renove/i)
   assert.doesNotMatch(result, /cookie/i)
