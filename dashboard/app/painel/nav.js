@@ -38,7 +38,6 @@ export const NAV_GROUPS = [
       {
         label: 'Espelhar grupos',
         href: '/painel/espelhamento',
-        pro: true,
         icon: i(<><path d="M17 2l4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v1a4 4 0 0 1-4 4H3" /></>),
       },
       {
@@ -55,6 +54,7 @@ export const NAV_GROUPS = [
       {
         label: 'Filas',
         href: '/painel/filas',
+        pro: true,
         icon: i(<><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" /><circle cx="2" cy="6" r=".5" /><circle cx="2" cy="12" r=".5" /><circle cx="2" cy="18" r=".5" /></>),
       },
     ],
@@ -88,14 +88,9 @@ export const NAV_GROUPS = [
         icon: i(<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />),
       },
       {
-        label: 'IDs de afiliada',
+        label: 'Minhas credenciais',
         href: '/painel/ids-afiliada',
         icon: i(<><circle cx="7.5" cy="15.5" r="5.5" /><path d="M21 2l-9.6 9.6" /><path d="M15.5 7.5 18 10l3-3-2.5-2.5z" /></>),
-      },
-      {
-        label: 'Afiliados',
-        href: '/painel/afiliados',
-        icon: i(<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 1-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>),
       },
     ],
   },
@@ -111,16 +106,16 @@ export const NAV_GROUPS = [
         icon: i(<><path d="M3 3v18h18" /><path d="m7 14 3-3 3 3 4-5" /></>),
       },
       {
+        label: 'Preservação por grupo e canal',
+        href: '/painel/preservacao/destinos',
+        pro: true,
+        icon: i(<><circle cx="12" cy="10" r="3" /><path d="M12 2a8 8 0 0 0-8 8c0 5.4 8 12 8 12s8-6.6 8-12a8 8 0 0 0-8-8z" /></>),
+      },
+      {
         label: 'Configurações avançadas',
         href: '/painel/preservacao/configuracoes',
         pro: true,
         icon: i(<><path d="M12 2 4 5v6c0 5 3.5 8 8 11 4.5-3 8-6 8-11V5l-8-3z" /><path d="m9 12 2 2 4-4" /></>),
-      },
-      {
-        label: 'Preservação por destino',
-        href: '/painel/preservacao/destinos',
-        pro: true,
-        icon: i(<><circle cx="12" cy="10" r="3" /><path d="M12 2a8 8 0 0 0-8 8c0 5.4 8 12 8 12s8-6.6 8-12a8 8 0 0 0-8-8z" /></>),
       },
     ],
   },
@@ -131,6 +126,11 @@ export const NAV_GROUPS = [
         label: 'Plano',
         href: '/painel/plano',
         icon: i(<path d="M12 2.5l2.9 6 6.6.6-5 4.4 1.5 6.5L12 16.9 5.5 20.5 7 14 2 9.6l6.6-.6z" />),
+      },
+      {
+        label: 'Afiliados',
+        href: '/painel/afiliados',
+        icon: i(<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 1-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>),
       },
     ],
   },

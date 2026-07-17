@@ -36,7 +36,7 @@ function summarizePreset(p) {
 }
 
 export default function PreservacaoPorDestinoPage() {
-  usePainelHeader({ title: 'Preservação por destino', subtitle: 'Presets reutilizáveis e ajustes por grupo/canal de destino' })
+  usePainelHeader({ title: 'Preservação por grupo e canal', subtitle: 'Presets reutilizáveis e ajustes por grupo/canal de destino' })
 
   const [presets, setPresets] = useState(null)
   const [destinations, setDestinations] = useState([])
