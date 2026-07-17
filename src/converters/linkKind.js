@@ -34,3 +34,14 @@ export function resolveLinkKind(platform, { url, converted, linkKind: existingLi
   if (detector(String(converted || '')) || detector(String(url || ''))) return 'product'
   return 'coupon'
 }
+
+// Detector de ID de produto reusável fora do fluxo de `resolveLinkKind`
+// (ex.: blindagem tripla do banner de marca em couponBrandCardPolicy.js).
+// Retorna true se a URL revela ASIN (Amazon) ou MLB (Mercado Livre); false
+// para short links sem ID e para plataformas sem detector. Não tem efeito
+// sobre `resolveLinkKind`, que permanece byte-a-byte inalterado (FR-010).
+export function urlHasProductId(platform, url) {
+  const detector = PRODUCT_ID_DETECTORS[platform]
+  if (!detector) return false
+  return detector(String(url || ''))
+}

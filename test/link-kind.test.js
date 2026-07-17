@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { resolveLinkKind } from '../src/converters/linkKind.js'
+import { resolveLinkKind, urlHasProductId } from '../src/converters/linkKind.js'
 
 test('respeita linkKind já decidido pelo converter (shopee.js)', () => {
   assert.equal(resolveLinkKind('shopee', { url: 'https://s.shopee.com.br/x', linkKind: 'coupon' }), 'coupon')
@@ -59,4 +59,27 @@ test('plataforma sem detector (magazineluiza) devolve undefined sem lançar', ()
 
 test('plataforma desconhecida devolve undefined', () => {
   assert.equal(resolveLinkKind('nolink', { url: 'https://example.com' }), undefined)
+})
+
+// urlHasProductId (T001, FR-010): export novo reusado pela blindagem tripla
+// do banner de marca (couponBrandCardPolicy.js). resolveLinkKind permanece
+// byte-a-byte inalterado — este export só LÊ os mesmos detectores.
+test('urlHasProductId: amazon com ASIN em /dp/ e /gp/product/ retorna true', () => {
+  assert.equal(urlHasProductId('amazon', 'https://www.amazon.com.br/dp/B09VQ39F41'), true)
+  assert.equal(urlHasProductId('amazon', 'https://www.amazon.com.br/gp/product/B09VQ39F41'), true)
+})
+
+test('urlHasProductId: mercadolivre com MLB retorna true', () => {
+  assert.equal(urlHasProductId('mercadolivre', 'https://produto.mercadolivre.com.br/MLB4060932335-x'), true)
+})
+
+test('urlHasProductId: short link sem ID (amzn.to, meli.la) retorna false', () => {
+  assert.equal(urlHasProductId('amazon', 'https://amzn.to/4gipdUe'), false)
+  assert.equal(urlHasProductId('mercadolivre', 'https://meli.la/1fyQi7e'), false)
+})
+
+test('urlHasProductId: plataforma sem detector ou URL ausente retorna false sem lançar', () => {
+  assert.equal(urlHasProductId('shopee', 'https://s.shopee.com.br/x'), false)
+  assert.equal(urlHasProductId('amazon', undefined), false)
+  assert.equal(urlHasProductId(undefined, undefined), false)
 })
