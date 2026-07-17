@@ -160,7 +160,7 @@ function PlatformCard({ platform, initialData, onSave, disabled, sessionStatus }
 }
 
 export default function IdsAfiliadaPage() {
-  usePainelHeader({ title: 'IDs de afiliada', subtitle: 'Cole o ID de cada plataforma — o bot cuida do resto' })
+  usePainelHeader({ title: 'Minhas credenciais', subtitle: 'Cole o ID de cada plataforma — o bot cuida do resto' })
 
   const [credMap, setCredMap] = useState(null)
   const [loadError, setLoadError] = useState('')
