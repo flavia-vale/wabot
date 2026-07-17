@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "cmo-advisor": {
+      "source": "borghei/claude-skills",
+      "sourceType": "github",
+      "skillPath": "c-level-advisor/cmo-advisor/SKILL.md",
+      "computedHash": "5ea6b43932d538db9b7671d319485cb546f9251fead932467efd79be13c0483d"
+    }
+  }
+}
