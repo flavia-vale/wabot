@@ -125,6 +125,13 @@ export default function PlanoPage() {
                 </div>
                 <span className="pnl-serif" style={{ fontSize: 26, color: 'var(--accent-strong)', display: 'block', margin: '6px 0 2px' }}>{plan.price}<small style={{ fontSize: 11, color: 'var(--ink-faint)', fontWeight: 500 }}> / 30 dias</small></span>
                 <small>{plan.description}</small>
+                {Array.isArray(plan.features) && plan.features.length > 0 && (
+                  <ul style={{ margin: '10px 0 0', paddingLeft: 18, display: 'grid', gap: 5 }}>
+                    {plan.features.map((feature) => (
+                      <li key={feature} className="pnl-hint" style={{ listStyle: 'disc' }}>{feature}</li>
+                    ))}
+                  </ul>
+                )}
               </button>
             )
           })}

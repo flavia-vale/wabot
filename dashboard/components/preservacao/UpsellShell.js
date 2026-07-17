@@ -45,7 +45,7 @@ export function UpsellShell({ ctaHref = '/painel/plano' }) {
           className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2">
           Ativar Pro
         </Link>
-        <Link href="/planos"
+        <Link href="/painel/plano"
           className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
           Ver detalhes do plano
         </Link>
