@@ -69,7 +69,7 @@ export default function ConfiguracoesAvancadasPage() {
           O intervalo entre envios, rajada, limite diário e o horário de cada grupo/canal
           ficam em{' '}
           <Link href="/painel/preservacao/destinos" className="font-semibold underline">
-            Preservação por destino
+            Preservação por grupo e canal
           </Link>
           {' '}(presets reutilizáveis). Aqui ficam só os ajustes que valem para a conta toda.
         </p>
