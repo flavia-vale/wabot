@@ -307,7 +307,12 @@ async function resolveAmazonImage(url) {
 // resolveToCleanProductUrl já faz essa resolução completa (usada para montar
 // o link de afiliado do texto); reaproveitamos aqui para a imagem também.
 async function resolveMercadoLivreImage(url) {
-  const target = (await resolveToCleanProductUrl(url).catch(() => null)) || url
+  const target = await resolveToCleanProductUrl(url).catch(() => null)
+  // Sem produto confirmado, não arriscar: raspar a URL curta crua reintroduz
+  // o bug documentado acima (og:image de landing/vitrine/carrossel genérico,
+  // de um produto diferente do anunciado no texto). Melhor sem imagem do que
+  // com a imagem errada — buildManualLinkPreview já trata null normalmente.
+  if (!target) return null
   return resolveByHtmlLayers(target, { ua: BROWSER_UA })
 }
 
@@ -429,7 +434,12 @@ export async function fetchProductImage(platform, productUrl, creds) {
     } else if (platform === 'mercadolivre') {
       image = await resolveMercadoLivreImage(productUrl)
     }
-    if (!image) image = await resolveByHtmlLayers(productUrl, { ua: BROWSER_UA })
+    // Mercado Livre fica de fora deste fallback genérico: resolveMercadoLivreImage
+    // já faz a resolução completa (short link -> produto confirmado) e devolve
+    // null DE PROPÓSITO quando o produto não pôde ser confirmado. Raspar
+    // productUrl aqui (short link/landing crua) reintroduziria o bug documentado
+    // em resolveMercadoLivreImage: og:image de vitrine/carrossel de OUTRO produto.
+    if (!image && platform !== 'mercadolivre') image = await resolveByHtmlLayers(productUrl, { ua: BROWSER_UA })
 
     if (!image) incFailure(productUrl)
     setCached(productUrl, image)
