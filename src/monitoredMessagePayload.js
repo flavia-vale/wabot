@@ -46,6 +46,12 @@ export function buildMonitoredMessagePayload({ finalText, image, useLinkPreview 
     mimetype: image.mimetype || 'image/jpeg',
     jpegThumbnail: image.jpegThumbnail,
     caption: String(finalText || ''),
+    // Baileys só calcula width/height sozinho quando NÃO recebe jpegThumbnail
+    // pronto (Utils/messages.js: requiresThumbnailComputation). Como sempre
+    // fornecemos o thumbnail pré-gerado (normalizeImageForWhatsApp), sem isso
+    // o imageMessage sai sem dimensões e o WhatsApp renderiza a foto pequena.
+    ...(image.width ? { width: image.width } : {}),
+    ...(image.height ? { height: image.height } : {}),
   }
 
   const payload = {
