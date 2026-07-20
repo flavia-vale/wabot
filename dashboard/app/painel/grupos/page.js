@@ -576,7 +576,7 @@ export default function GruposPage() {
           <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12 }}>
             <p className="pnl-label" style={{ marginBottom: 6 }}>Botão &quot;Ver canal&quot; ao final das mensagens</p>
             <p className="pnl-hint" style={{ marginTop: 0, marginBottom: 8 }}>
-              Toda mensagem enviada para este grupo (espelhada, oferta automática ou agendada) sai com um botão &quot;Ver canal&quot; apontando para o canal escolhido. Deixe sem canal para não inserir botão.
+              Mensagens enviadas para este grupo (espelhada, oferta automática ou agendada) saem com um botão &quot;Ver canal&quot; apontando para o canal escolhido — o WhatsApp só aceita esse botão em mensagens com imagem, então quando a foto do produto não é encontrada a mensagem sai normalmente, sem o botão. Deixe sem canal para não inserir botão.
             </p>
             {g.channelButtonJid ? (
               <div style={{ display: 'grid', gap: 8 }}>

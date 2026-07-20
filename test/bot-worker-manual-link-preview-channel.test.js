@@ -43,7 +43,7 @@ test('buildManualLinkPreview aceita destJid e repassa como jid pro upload da thu
 })
 
 test('imageMode preview repassa destJid pro buildManualLinkPreview no call site', () => {
-  const callSiteStart = botWorkerSource.indexOf("if (imageMode === 'preview')")
+  const callSiteStart = botWorkerSource.indexOf("if (imageMode === 'preview' && !channelForward)")
   assert.notEqual(callSiteStart, -1, "bloco imageMode === 'preview' não encontrado")
 
   const callStart = botWorkerSource.indexOf('await buildManualLinkPreview({', callSiteStart)
@@ -68,6 +68,13 @@ test('imageMode preview repassa destJid pro buildManualLinkPreview no call site'
 // `getImage()` (fonte de fetch ativo) só retorna null para 'preview' porque
 // 'preview' está no array de curto-circuito — provando que os três cenários
 // caem no mesmo ramo de runtime, sem divergência de comportamento.
+//
+// Exceção (fix "Ver canal" não aparece em oferta automática): quando o
+// destino tem `channelForward` (Group.channelButtonJid) configurado, o ramo
+// de preview é pulado e getImage() busca imagem mesmo assim
+// (forceOriginalForChannelButton) — só assim o botão nativo "Ver canal"
+// (mídia-only, src/core/channelSend.js) tem um corpo de mídia pra anexar.
+// Ver testes dedicados abaixo.
 test('US1: grupo antes em "fetch" sai como preview (chokepoint força imageMode efetivo)', () => {
   const groups = [{ id: 'g1', role: 'monitor', waJid: 'fetch@g.us', kind: 'group', imageMode: 'fetch', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' }]
   const result = buildEntitledGroupConfig({ groups, groupTargets: [], planSubject: { plan: 'pro' } })
@@ -86,18 +93,50 @@ test('US1: grupo já em "preview" mantém comportamento idêntico (sem regressã
   assert.equal(result.groups.monitor[0].imageMode, 'preview')
 })
 
-test('US1: getImage() no bot-worker retorna null (curto-circuito) para o imageMode efetivo preview', () => {
+test('US1: getImage() no bot-worker pula o fetch ativo (curto-circuito) para o imageMode efetivo preview, exceto com channelForward', () => {
   // Prova estrutural de que, com o chokepoint sempre entregando 'preview',
-  // o único ramo executável em runtime é o curto-circuito que pula o fetch
-  // ativo de imagem — o restante da função (resolveMonitoredImage) fica
-  // dormente (FR-006).
-  const shortCircuitStart = botWorkerSource.indexOf("if (!monitorGroup || ['none', 'preview'].includes(monitorGroup.imageMode)) return null")
+  // o fetch ativo de imagem só roda quando forceOriginalForChannelButton
+  // (destino com botão "Ver canal") pede explicitamente — o restante da
+  // função (resolveMonitoredImage) fica dormente pra qualquer outro destino
+  // (FR-006).
+  const shortCircuitStart = botWorkerSource.indexOf("const skipFetch = !forceOriginalForChannelButton && ['none', 'preview'].includes(monitorGroup.imageMode)")
   assert.notEqual(shortCircuitStart, -1, 'curto-circuito de getImage() não encontrado — não remover FR-006')
 })
 
-test('US1: buildPayload só executa o ramo de link preview quando imageMode === preview', () => {
-  const callSiteStart = botWorkerSource.indexOf("if (imageMode === 'preview')")
-  assert.notEqual(callSiteStart, -1, "ramo imageMode === 'preview' precisa existir e ser o caminho de runtime único hoje")
+test('US1: buildPayload só executa o ramo de link preview quando imageMode === preview e não há channelForward', () => {
+  const callSiteStart = botWorkerSource.indexOf("if (imageMode === 'preview' && !channelForward)")
+  assert.notEqual(callSiteStart, -1, "ramo imageMode === 'preview' precisa existir e ser o caminho de runtime único hoje (exceto quando o destino pediu o botão Ver canal)")
+})
+
+// Fix "Ver canal não funciona para todos os tipos de envio": destino com
+// channelForward configurado precisa pular o ramo de texto/preview (sem
+// mídia) e forçar a busca de imagem, senão o botão nativo nunca tem um
+// corpo de mídia pra anexar (injectChannelForwardIntoPayload é mídia-only).
+test('buildPayload pula o ramo de preview e getImage força fetch quando channelForward está setado', () => {
+  const previewGuardStart = botWorkerSource.indexOf("if (imageMode === 'preview' && !channelForward)")
+  assert.notEqual(previewGuardStart, -1, 'guarda de preview precisa excluir destinos com channelForward')
+
+  const wantImageStart = botWorkerSource.indexOf('if (wantImage || channelForward)')
+  assert.notEqual(wantImageStart, -1, 'busca de imagem precisa rodar também quando channelForward está setado, mesmo com wantImage=false')
+
+  const getImageCallStart = botWorkerSource.indexOf('await getImage({ forceOriginalForChannelButton: !!channelForward })')
+  assert.notEqual(getImageCallStart, -1, 'getImage precisa ser chamado com forceOriginalForChannelButton para o destino com botão')
+
+  const fallbackStart = botWorkerSource.indexOf("if ((imageMode === 'original' || channelForward) && !image)")
+  assert.notEqual(fallbackStart, -1, 'sem imagem disponível, destino com channelForward precisa cair no fallback de link preview automático (useLinkPreview) em vez de texto pelado')
+})
+
+test('getImage trata forceOriginalForChannelButton como mode "original" quando o imageMode efetivo é none/preview', () => {
+  const fnStart = botWorkerSource.indexOf('async function getImage({ forceOriginalForChannelButton = false } = {}) {')
+  assert.notEqual(fnStart, -1, 'assinatura de getImage precisa aceitar forceOriginalForChannelButton')
+
+  const fnEnd = botWorkerSource.indexOf('\n      }\n', fnStart)
+  const fnBody = botWorkerSource.slice(fnStart, fnEnd)
+  assert.match(
+    fnBody,
+    /const effectiveMode = forceOriginalForChannelButton[\s\S]*?\?\s*'original'\s*\n\s*:\s*monitorGroup\.imageMode/,
+    "forceOriginalForChannelButton precisa mapear pra mode:'original' no resolveMonitoredImage",
+  )
 })
 
 // specs/008-coupon-brand-banner (T011) — blindagem crítica de não-regressão
@@ -138,7 +177,7 @@ test('T011: ramo do banner é gated por useCouponBrandCard; produto real cai no 
 })
 
 test('T011: couponTextSignal é calculado no call site a partir de isCouponMsg / warning de vitrine ML, sem detector novo', () => {
-  const callSiteStart = botWorkerSource.indexOf("if (imageMode === 'preview')")
+  const callSiteStart = botWorkerSource.indexOf("if (imageMode === 'preview' && !channelForward)")
   assert.notEqual(callSiteStart, -1, "bloco imageMode === 'preview' não encontrado")
   const callStart = botWorkerSource.indexOf('await buildManualLinkPreview({', callSiteStart)
   const preamble = botWorkerSource.slice(callSiteStart, callStart)
