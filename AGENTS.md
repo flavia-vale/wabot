@@ -476,6 +476,43 @@ Settings → Secrets and variables → Actions:
 Falha do smoke 9 geralmente é `.env` faltando, `JWT_SECRET` ausente
 ou porta divergente do que está em `apiPortByDashboardPort`.
 
+## Fila travava inteira quando UM item falhava (RCA 2026-07-20, não regredir)
+
+Cliente reportou "as filas não estão funcionando, não enviando mensagens".
+Achado: duas filas tinham um `for` sequencial sem isolamento por item — uma
+exceção em UM item abortava o `for` inteiro, perdendo o progresso já feito e
+travando a fila até intervenção manual/restart:
+
+1. **`runAutomation` (`src/offerAutomation/dispatcher.js`)**: o
+   `await sendBroadcastFn(...)` dentro do loop de `toSend` não tinha
+   try/catch. Uma falha pontual num item (timeout de IPC pro worker, bot sem
+   socket no instante exato) lançava e pulava o bloco de persistência
+   inteiro logo após o loop (`sentLogRows`/`sentItemIds`/`page`) — mesmo os
+   itens JÁ enviados com sucesso ANTES da falha perdiam o registro. Sem
+   `sentItemIds`/`page` avançarem, o próximo tick do cron tentava o MESMO
+   lote de novo — se a causa fosse persistente (não transitória), a
+   automação ficava presa reenviando o mesmo lote pra sempre sem nunca
+   progredir.
+2. **`checkScheduledMessages` (`src/bot-worker.js`)**: o
+   `db.messageLog.create()` por `jid` dentro do loop de mensagens agendadas
+   não tinha try/catch (só o `try` de fora, que envolve TODAS as mensagens
+   `pending` do tick). Uma falha de escrita (ex.: `SQLITE_BUSY` pontual)
+   abortava o processamento dos jids restantes DESSA mensagem, de TODAS as
+   outras mensagens agendadas pendentes no mesmo tick, e deixava `msg` presa
+   em `status='queued'` para sempre — a query de pending só busca
+   `status='pending'`, e `markInterruptedSendLogs()` (que resgataria
+   `queued`/`sending` órfãos) só roda uma vez, no boot do worker.
+
+**Fix**: cada item do loop agora tem seu próprio try/catch — loga e
+`continue` para o próximo item em vez de deixar o erro escapar pro `for`
+inteiro. `runAutomation` retorna `{ sent, failed, failures }` quando há
+falhas parciais; o item que falhou fica de fora de `sentItemIds` (reentra
+candidato no próximo tick). Não regredir: não remover o try/catch por-item
+desses dois loops — a AUSÊNCIA dele é exatamente o que travava a fila
+inteira por causa de um item só. Teste:
+`test/offer-automation.test.js` ("falha pontual num item do lote não aborta
+os demais").
+
 ## Dedup das ofertas automáticas (cruzada entre automações, por grupo)
 
 Os **envios automáticos** (`src/offerAutomation/dispatcher.js`) NÃO passam pela
