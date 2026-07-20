@@ -464,6 +464,8 @@ export async function normalizeImageForWhatsApp(buf, opts = {}) {
     // + sharpen leve) sobrevive melhor à 2ª compressão. Limite de
     // 1600 cobre fotos grandes do ML/Shopee/Amazon sem upscale.
     let main
+    let mainWidth
+    let mainHeight
     if (mutation) {
       // Anti-fingerprint de canal num ÚNICO encode JPEG: renderiza resize+
       // sharpen em RAW (lossless) só para medir as dimensões pós-resize e
@@ -479,24 +481,33 @@ export async function normalizeImageForWhatsApp(buf, opts = {}) {
         const crop = computeMutationCrop(info, { groupId: mutation.groupId, date: mutation.date })
         let pipeline = sharp(data, { raw: { width: info.width, height: info.height, channels: info.channels } })
         if (crop) pipeline = pipeline.extract({ left: crop.left, top: crop.top, width: crop.width, height: crop.height })
-        main = await pipeline
+        const encoded = await pipeline
           .jpeg({ quality: crop ? crop.quality : 95, mozjpeg: true, chromaSubsampling: '4:4:4' })
-          .toBuffer()
+          .toBuffer({ resolveWithObject: true })
+        main = encoded.data
+        mainWidth = encoded.info.width
+        mainHeight = encoded.info.height
       } catch {
-        main = await sharp(buf, { failOn: 'none' })
+        const encoded = await sharp(buf, { failOn: 'none' })
           .rotate()
           .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
           .sharpen({ sigma: 0.6 })
           .jpeg({ quality: 95, mozjpeg: true, chromaSubsampling: '4:4:4' })
-          .toBuffer()
+          .toBuffer({ resolveWithObject: true })
+        main = encoded.data
+        mainWidth = encoded.info.width
+        mainHeight = encoded.info.height
       }
     } else {
-      main = await sharp(buf, { failOn: 'none' })
+      const encoded = await sharp(buf, { failOn: 'none' })
         .rotate()
         .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
         .sharpen({ sigma: 0.6 })
         .jpeg({ quality: 95, mozjpeg: true, chromaSubsampling: '4:4:4' })
-        .toBuffer()
+        .toBuffer({ resolveWithObject: true })
+      main = encoded.data
+      mainWidth = encoded.info.width
+      mainHeight = encoded.info.height
     }
 
     // jpegThumbnail é o que o WA exibe de cara em link previews e
@@ -512,7 +523,17 @@ export async function normalizeImageForWhatsApp(buf, opts = {}) {
       .jpeg({ quality: 80, mozjpeg: true })
       .toBuffer()
 
-    return { buffer: main, mimetype: 'image/jpeg', jpegThumbnail: thumbnail }
+    // width/height do buffer FINAL (pós-resize/crop) precisam ir explícitos no
+    // payload de envio: como já fornecemos jpegThumbnail pronto, o Baileys
+    // PULA sua própria extração de dimensões (só roda dentro do bloco que
+    // gera o thumbnail internamente — Utils/messages.js:132-162) e o
+    // imageMessage sai sem width/height no proto. Sem esses campos, o
+    // WhatsApp não sabe o tamanho real da foto para reservar o espaço do
+    // balão e renderiza um card pequeno (regressão silenciosa introduzida
+    // junto com a otimização de pré-gerar o thumbnail — ver
+    // buildMonitoredMessagePayload, que repassa estes campos no payload real
+    // de imagem).
+    return { buffer: main, mimetype: 'image/jpeg', jpegThumbnail: thumbnail, width: mainWidth, height: mainHeight }
   } catch {
     return null
   }

@@ -18,6 +18,34 @@ test('payload monitorado com imagem usa imageMessage simples com caption origina
   assert.equal(payload.primarySendOptions, undefined)
 })
 
+// RCA "imagens muito pequenas" (filas/broadcast): a Baileys só calcula
+// width/height sozinho quando NÃO recebe jpegThumbnail pronto — como este app
+// SEMPRE fornece o thumbnail pré-gerado, sem repassar width/height
+// explicitamente o imageMessage saía sem dimensões e o WhatsApp renderizava a
+// foto pequena. normalizeImageForWhatsApp agora devolve width/height do
+// buffer principal; este payload precisa repassá-los.
+test('payload monitorado com imagem repassa width/height do buffer principal (regressão: card pequeno sem dimensões)', () => {
+  const finalText = 'Oferta convertida https://afiliado.example/produto'
+  const payload = buildMonitoredMessagePayload({
+    finalText,
+    image: { buffer: Buffer.from('img'), mimetype: 'image/jpeg', jpegThumbnail: Buffer.from('thumb'), width: 1600, height: 1200 },
+  })
+
+  assert.equal(payload.primary.width, 1600)
+  assert.equal(payload.primary.height, 1200)
+})
+
+test('payload monitorado com imagem sem width/height (fonte antiga) não injeta campos indefinidos', () => {
+  const finalText = 'Oferta convertida https://afiliado.example/produto'
+  const payload = buildMonitoredMessagePayload({
+    finalText,
+    image: { buffer: Buffer.from('img'), mimetype: 'image/jpeg', jpegThumbnail: Buffer.from('thumb') },
+  })
+
+  assert.equal('width' in payload.primary, false)
+  assert.equal('height' in payload.primary, false)
+})
+
 test('payload monitorado sem imagem cai para texto puro igual ao caminho estável anterior', () => {
   const payload = buildMonitoredMessagePayload({
     finalText: 'Só texto https://afiliado.example/produto',
