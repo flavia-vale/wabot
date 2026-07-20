@@ -2629,22 +2629,31 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
 
       let cachedImage
       let imageFetched = false
-      async function getImage() {
+      // `forceOriginalForChannelButton`: o botão nativo "Ver canal"
+      // (contextInfo.forwardedNewsletterMessageInfo, injetado por
+      // injectChannelForwardIntoPayload em src/core/channelSend.js) só é aceito
+      // pelo WhatsApp em corpos de MÍDIA (image/video) — texto puro com o botão
+      // é derrubado silenciosamente. resolveGroupEntitlements() força
+      // `monitorGroup.imageMode` para 'preview' sempre (specs/001-image-mode-preview-default),
+      // e o modo preview manda texto+linkPreview (sem `image`), então nenhum
+      // grupo tinha uma mensagem de mídia pra carregar o botão. Quando o destino
+      // tem `channelForward` configurado (Group.channelButtonJid), buscamos a
+      // imagem mesmo assim — reaproveita o MESMO caminho (resolveMonitoredImage,
+      // mode 'original') que já é usado pelas ofertas comuns, só que escopado ao
+      // destino que pediu o botão, sem tocar no default global de imageMode.
+      async function getImage({ forceOriginalForChannelButton = false } = {}) {
         if (imageFetched) return cachedImage
         imageFetched = true
-        // 2026-07 (specs/001-image-mode-preview-default): resolveGroupEntitlements()
-        // (src/billing/groupEntitlements.js, toMonitorGroup) já força
-        // `monitorGroup.imageMode` para 'preview' sempre, então este `return null`
-        // é o ÚNICO ramo que roda em runtime hoje — 'preview' está sempre incluído
-        // no array abaixo. O restante desta função (fetch ativo/scrape de imagem
-        // oficial via resolveMonitoredImage) fica dormente/preservado (FR-006),
-        // pronto para reativação futura caso a escolha por grupo volte.
-        if (!monitorGroup || ['none', 'preview'].includes(monitorGroup.imageMode)) return null
+        const skipFetch = !forceOriginalForChannelButton && ['none', 'preview'].includes(monitorGroup.imageMode)
+        if (skipFetch) return null
+        const effectiveMode = forceOriginalForChannelButton && ['none', 'preview'].includes(monitorGroup.imageMode)
+          ? 'original'
+          : monitorGroup.imageMode
 
         const enabled = links.filter(l => enabledPlatforms.has(l.platform))
         const target = effectiveLinkTarget === 'last' ? enabled[enabled.length - 1] : enabled[0]
         const platform = target?.platform || 'unknown'
-        logger.info({ msgId: msg.key.id, imageMode: monitorGroup.imageMode, linkTarget: effectiveLinkTarget, platform, couponSkipActiveFetch }, 'getImage: iniciando resolução de imagem')
+        logger.info({ msgId: msg.key.id, imageMode: effectiveMode, linkTarget: effectiveLinkTarget, platform, couponSkipActiveFetch, forceOriginalForChannelButton }, 'getImage: iniciando resolução de imagem')
 
         // skipActiveFetch NÃO depende mais de "é cupom?" (isso borrava ofertas
         // de produto com código de cupom — regressão image-upload-bug-fix). Só
@@ -2652,7 +2661,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // resolve para produto não relacionado (caso A em
         // decideSkipActiveFetchForCoupon). Produto+cupom busca hi-res normalmente.
         cachedImage = await resolveMonitoredImage({
-          mode: monitorGroup.imageMode,
+          mode: effectiveMode,
           target,
           credentials: cfg.credentials,
           downloadOriginalImage,
@@ -3249,7 +3258,16 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           // abre o link, enquanto o clique numa imagem só ampliaria a foto.
           // activeSock (e não um sock capturado) porque buildPayload roda no
           // dequeue, possivelmente após reconexão.
-          if (imageMode === 'preview') {
+          //
+          // EXCEÇÃO — destino com botão "Ver canal" (channelForward): o botão
+          // (contextInfo.forwardedNewsletterMessageInfo) só é aceito pelo
+          // WhatsApp em corpo de MÍDIA (injectChannelForwardIntoPayload,
+          // src/core/channelSend.js, MÍDIA-ONLY por decisão pós-regressão) —
+          // texto puro/linkPreview nunca carrega o botão. Por isso, quando o
+          // destino pediu o botão, pulamos o card de preview e caímos no
+          // caminho de imagem abaixo (getImage com forceOriginalForChannelButton),
+          // que é o único capaz de anexar o botão.
+          if (imageMode === 'preview' && !channelForward) {
             // Sinal de TEXTO da blindagem tripla (couponBrandCardPolicy.js):
             // reusa isCouponMsg (isCouponAnnouncement, já calculado acima) e o
             // sinal de vitrine ML já emitido por mercadolivre.js/mlVitrinePolicy.js
@@ -3297,8 +3315,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           }
 
           let image = null
-          if (wantImage) {
-            const fetched = await getImage()
+          if (wantImage || channelForward) {
+            const fetched = await getImage({ forceOriginalForChannelButton: !!channelForward })
             // Mutação anti-fingerprint SOMENTE para canal-destino (newsletter
             // JID) e quando o opt-in global está ligado. NÃO aplicar a grupos.
             // Quando ligada, o crop + qualidade variada vão DENTRO do mesmo
@@ -3312,7 +3330,14 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             if (fetched && !image) {
               logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
             }
-            if (imageMode === 'original' && !image) {
+            // Sem imagem disponível (falha de fetch ou produto sem foto): cai
+            // pro link preview automático do WhatsApp em vez de texto pelado —
+            // vale tanto pro modo 'original' histórico quanto pro destino com
+            // channelForward (que não tem 'original' setado, mas precisa do
+            // mesmo fallback gracioso). Sem imagem não há corpo de mídia, então
+            // o botão "Ver canal" não sai nesse envio específico — degrada pra
+            // preview normal em vez de falhar o envio.
+            if ((imageMode === 'original' || channelForward) && !image) {
               useLinkPreview = true
             }
           }
