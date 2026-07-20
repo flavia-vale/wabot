@@ -476,6 +476,43 @@ Settings → Secrets and variables → Actions:
 Falha do smoke 9 geralmente é `.env` faltando, `JWT_SECRET` ausente
 ou porta divergente do que está em `apiPortByDashboardPort`.
 
+## Fila travava inteira quando UM item falhava (RCA 2026-07-20, não regredir)
+
+Cliente reportou "as filas não estão funcionando, não enviando mensagens".
+Achado: duas filas tinham um `for` sequencial sem isolamento por item — uma
+exceção em UM item abortava o `for` inteiro, perdendo o progresso já feito e
+travando a fila até intervenção manual/restart:
+
+1. **`runAutomation` (`src/offerAutomation/dispatcher.js`)**: o
+   `await sendBroadcastFn(...)` dentro do loop de `toSend` não tinha
+   try/catch. Uma falha pontual num item (timeout de IPC pro worker, bot sem
+   socket no instante exato) lançava e pulava o bloco de persistência
+   inteiro logo após o loop (`sentLogRows`/`sentItemIds`/`page`) — mesmo os
+   itens JÁ enviados com sucesso ANTES da falha perdiam o registro. Sem
+   `sentItemIds`/`page` avançarem, o próximo tick do cron tentava o MESMO
+   lote de novo — se a causa fosse persistente (não transitória), a
+   automação ficava presa reenviando o mesmo lote pra sempre sem nunca
+   progredir.
+2. **`checkScheduledMessages` (`src/bot-worker.js`)**: o
+   `db.messageLog.create()` por `jid` dentro do loop de mensagens agendadas
+   não tinha try/catch (só o `try` de fora, que envolve TODAS as mensagens
+   `pending` do tick). Uma falha de escrita (ex.: `SQLITE_BUSY` pontual)
+   abortava o processamento dos jids restantes DESSA mensagem, de TODAS as
+   outras mensagens agendadas pendentes no mesmo tick, e deixava `msg` presa
+   em `status='queued'` para sempre — a query de pending só busca
+   `status='pending'`, e `markInterruptedSendLogs()` (que resgataria
+   `queued`/`sending` órfãos) só roda uma vez, no boot do worker.
+
+**Fix**: cada item do loop agora tem seu próprio try/catch — loga e
+`continue` para o próximo item em vez de deixar o erro escapar pro `for`
+inteiro. `runAutomation` retorna `{ sent, failed, failures }` quando há
+falhas parciais; o item que falhou fica de fora de `sentItemIds` (reentra
+candidato no próximo tick). Não regredir: não remover o try/catch por-item
+desses dois loops — a AUSÊNCIA dele é exatamente o que travava a fila
+inteira por causa de um item só. Teste:
+`test/offer-automation.test.js` ("falha pontual num item do lote não aborta
+os demais").
+
 ## Dedup das ofertas automáticas (cruzada entre automações, por grupo)
 
 Os **envios automáticos** (`src/offerAutomation/dispatcher.js`) NÃO passam pela
@@ -489,12 +526,12 @@ Hoje há uma camada **cruzada por grupo de destino**, na tabela
 `OfferAutomationSentLog (userId, destGroupJid, productKey, priceCents, sentAt)`:
 
 1. Antes de enviar, o dispatcher carrega o que já saiu pro grupo dentro de
-   `OFFER_AUTOMATION_DEDUP_WINDOW_MS` (default **24h** = "no máximo uma vez por
-   dia") e filtra os produtos por `productKey` (de `productDedupKey`).
+   `OFFER_AUTOMATION_DEDUP_WINDOW_MS` (default **120min**) e filtra os
+   produtos por `productKey` (de `productDedupKey`).
 2. **Exceção por preço:** se o `priceCents` atual difere de todos os preços
-   com que aquele produto saiu nas últimas 24h, a oferta **passa** — é uma
+   com que aquele produto saiu dentro da janela, a oferta **passa** — é uma
    oferta nova de fato (relâmpago da manhã a R$X vs. da tarde a R$Y). Isso
-   concilia o "1x/dia" com o pedido histórico de não prender oferta legítima
+   concilia a janela com o pedido histórico de não prender oferta legítima
    que voltou mais barata.
 3. Cada envio grava uma linha em `OfferAutomationSentLog`; registros fora da
    janela são podados a cada run (a tabela fica limitada à janela por grupo).
@@ -512,9 +549,9 @@ apontando pro mesmo grupo, ou a fonte republicando), agregamos no contador
 `dedupHits` da linha mais recente do mesmo `(userId, destGroup,
 convertedUrl)`. Implementado em `registerDedupBlock()` no `bot-worker.js`:
 
-1. Procura a linha mais recente dentro de `linkDedupWindowMs` (default 24h
-   = "no máximo uma vez por dia", override via env `DEDUP_LINK_WINDOW_MS`)
-   filtrando por `userId`, `destGroup` e `convertedUrl OR originalUrl`.
+1. Procura a linha mais recente dentro de `linkDedupWindowMs` (default
+   120min, override via env `DEDUP_LINK_WINDOW_MS`) filtrando por `userId`,
+   `destGroup` e `convertedUrl OR originalUrl`.
 2. Se achar → `UPDATE` com `dedupHits = dedupHits + 1`.
 3. Senão (estado dessincronizado, fallback raro) → cria linha
    `status='skipped'` com `errorMsg='skip:dedup_recent_link'`.
@@ -541,7 +578,7 @@ tradutor `explainErrorMsg` em `dashboard/app/dashboard/logs/page.js`):
 
 | Prefixo                          | Categoria          | Significado                                                  |
 |----------------------------------|--------------------|--------------------------------------------------------------|
-| `skip:dedup_recent_link`         | DEDUP              | Mesma oferta já enviada ao destino nas últimas 24h (per-dest) |
+| `skip:dedup_recent_link`         | DEDUP              | Mesma oferta já enviada ao destino dentro da janela de dedup (per-dest) |
 | `skip:dedup_recent_link_global`  | DEDUP              | Idem, via Redis global                                       |
 | `skip:blocked_keyword`           | CONFIG_BLOCK       | Palavra-chave bloqueada pelo usuário                         |
 | `skip:title_mismatch`            | CONFIG_BLOCK       | Caption não bate com og:title raspado                        |

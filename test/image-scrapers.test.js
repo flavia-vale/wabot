@@ -5,7 +5,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 
-import { fetchImageBuffer, fetchProductImage } from '../src/converters/imageScrapers.js'
+import { fetchImageBuffer, fetchProductImage, normalizeImageForWhatsApp } from '../src/converters/imageScrapers.js'
 
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures')
 const readFixture = (name) => fs.readFileSync(path.join(fixturesDir, name), 'utf-8')
@@ -327,4 +327,43 @@ test('fetchProductImage resolve short link meli.la do Mercado Livre antes de bus
 
   assert.equal(image, cupImageUrl)
   assert.deepEqual(calls, [shortUrl, productUrl])
+})
+
+// RCA "imagens muito pequenas" (filas/broadcast): a Baileys só calcula
+// width/height de um imageMessage quando NÃO recebe jpegThumbnail pronto
+// (Utils/messages.js:132-162 do @whiskeysockets/baileys) — como o app SEMPRE
+// pré-gera o thumbnail aqui (para não depender do sharp interno da lib), o
+// proto saía sem width/height e o WhatsApp renderizava a foto pequena.
+// normalizeImageForWhatsApp precisa devolver as dimensões do buffer FINAL
+// para o chamador poder repassá-las explicitamente no payload de envio.
+test('normalizeImageForWhatsApp devolve width/height do buffer principal (sem mutation)', async () => {
+  const src = await imageBytes({ width: 2000, height: 1000 })
+  const result = await normalizeImageForWhatsApp(src)
+
+  assert.ok(result)
+  const meta = await sharp(result.buffer).metadata()
+  assert.equal(result.width, meta.width)
+  assert.equal(result.height, meta.height)
+  // Resize "inside" 1600x1600 preservando aspect ratio 2:1 -> 1600x800.
+  assert.equal(result.width, 1600)
+  assert.equal(result.height, 800)
+})
+
+test('normalizeImageForWhatsApp devolve width/height do buffer principal (com mutation)', async () => {
+  const src = await imageBytes({ width: 1500, height: 1500 })
+  const result = await normalizeImageForWhatsApp(src, { mutation: { groupId: 'grupo-1', date: '2026-07-20' } })
+
+  assert.ok(result)
+  const meta = await sharp(result.buffer).metadata()
+  assert.equal(result.width, meta.width)
+  assert.equal(result.height, meta.height)
+})
+
+test('normalizeImageForWhatsApp não amplia imagem pequena e devolve as dimensões reais dela', async () => {
+  const src = await imageBytes({ width: 300, height: 200 })
+  const result = await normalizeImageForWhatsApp(src)
+
+  assert.ok(result)
+  assert.equal(result.width, 300)
+  assert.equal(result.height, 200)
 })

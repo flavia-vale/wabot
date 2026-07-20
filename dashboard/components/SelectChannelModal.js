@@ -68,7 +68,7 @@ function SelectChannelModalContent({ onClose, onSelect }) {
         <Alert
           type="info"
           className="mb-4"
-          message="O botão “Ver canal” das mensagens espelhadas vai apontar para o canal escolhido aqui. Use um canal seu."
+          message="O botão “Ver canal” vai apontar para o canal escolhido aqui (use um canal seu). Atenção: ativar o botão muda o formato das mensagens do grupo — elas deixam de sair como card de preview clicável e passam a sair como foto do produto + legenda + botão. Sem foto do produto encontrada, sai sem o botão."
         />
 
         <div className="mb-4 flex overflow-x-auto border-b">

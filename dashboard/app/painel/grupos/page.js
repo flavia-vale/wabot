@@ -576,7 +576,7 @@ export default function GruposPage() {
           <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12 }}>
             <p className="pnl-label" style={{ marginBottom: 6 }}>Botão &quot;Ver canal&quot; ao final das mensagens</p>
             <p className="pnl-hint" style={{ marginTop: 0, marginBottom: 8 }}>
-              Toda mensagem enviada para este grupo (espelhada, oferta automática ou agendada) sai com um botão &quot;Ver canal&quot; apontando para o canal escolhido. Deixe sem canal para não inserir botão.
+              É um ou outro, nunca os dois na mesma mensagem: <strong>sem canal escolhido</strong>, as mensagens saem como o card de link clicável de sempre (preview). <strong>Com canal escolhido</strong>, elas passam a sair como foto do produto + legenda + botão &quot;Ver canal&quot; — o WhatsApp só aceita esse botão em mensagem com imagem, não no card de preview. Se a foto do produto não for encontrada, a mensagem sai do mesmo jeito, só que sem o botão.
             </p>
             {g.channelButtonJid ? (
               <div style={{ display: 'grid', gap: 8 }}>
@@ -584,9 +584,12 @@ export default function GruposPage() {
                   <div style={{ fontWeight: 600, fontSize: 13 }}>{g.channelButtonName || 'Canal sem nome'}</div>
                   <div className="pnl-hint" style={{ fontFamily: 'monospace', marginTop: 2 }}>{g.channelButtonJid}</div>
                 </div>
+                <p className="pnl-hint" style={{ marginTop: 0 }}>
+                  Botão ativo: as mensagens deste grupo agora saem como imagem (não mais como card de preview) para poder carregar o botão.
+                </p>
                 <div className="pnl-toolbar">
                   <button type="button" className="pnl-btn" onClick={() => setChannelButtonGroupId(g.id)}>Trocar canal</button>
-                  <button type="button" className="pnl-btn" onClick={() => handleUpdateGroup(g.id, { channelButtonJid: '', channelButtonName: '' })}>Remover botão</button>
+                  <button type="button" className="pnl-btn" onClick={() => handleUpdateGroup(g.id, { channelButtonJid: '', channelButtonName: '' })}>Remover botão (volta pro card de preview)</button>
                 </div>
               </div>
             ) : (

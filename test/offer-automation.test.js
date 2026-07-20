@@ -508,6 +508,49 @@ test('runAutomation: dedup cruzada — mesmo produto/preço já enviado ao grupo
   assert.deepEqual(result, { skipped: 'all_offers_filtered' })
 })
 
+test('runAutomation: falha pontual num item do lote não aborta os demais nem descarta o progresso já feito', async () => {
+  const sent = []
+  const updates = []
+  const created = []
+  const automation = baseAutomation({
+    id: 'auto-partial-fail', userId: 'user-partial-fail', minDiscountPct: 0, offersPerSend: 3,
+  })
+  const dbOverride = {
+    credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'a', secretKey: 's' }) }) },
+    botConfig: { findUnique: async () => ({ copyVariationPoolJson: '{}' }) },
+    offerAutomation: { update: async ({ data }) => { updates.push(data); return {} } },
+    offerAutomationSentLog: {
+      findMany: async () => [],
+      createMany: async ({ data }) => { created.push(...data) },
+      deleteMany: async () => ({}),
+    },
+  }
+
+  const result = await runAutomation(automation, {
+    dbOverride,
+    isRunningFn: () => true,
+    fetchOffersFn: async () => ({ rawCount: 3, offers: [
+      { itemId: '1', productName: 'Produto A', priceMin: 1000, priceDiscountRate: 30, offerLink: 'https://s.shopee.com.br/a' },
+      { itemId: '2', productName: 'Produto B', priceMin: 2000, priceDiscountRate: 30, offerLink: 'https://s.shopee.com.br/b' },
+      { itemId: '3', productName: 'Produto C', priceMin: 3000, priceDiscountRate: 30, offerLink: 'https://s.shopee.com.br/c' },
+    ] }),
+    // Item do meio falha (ex.: timeout de IPC pro worker) — os outros dois
+    // precisam sair mesmo assim, e o progresso (sentItemIds/log cruzado) do
+    // item 1 (já enviado ANTES da falha) não pode ser perdido.
+    sendBroadcastFn: async (userId, text, jids) => {
+      if (jids[0] === 'grupo@g.us' && text.includes('Produto B')) throw new Error('Timeout ao enviar mensagem')
+      sent.push(text)
+    },
+  })
+
+  assert.equal(result.sent, 2)
+  assert.equal(result.failed, 1)
+  assert.equal(result.failures[0].itemId, '2')
+  assert.equal(sent.length, 2)
+  assert.deepEqual(JSON.parse(updates[0].sentItemIds), ['1', '3'])
+  assert.deepEqual(created.map(c => c.itemId), ['1', '3'])
+})
+
 describe('runAutomation — prioritizeAMS', () => {
   const baseCreds = { appId: 'a', secretKey: 's' }
 

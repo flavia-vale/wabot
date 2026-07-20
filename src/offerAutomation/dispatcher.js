@@ -9,11 +9,11 @@ import { composeTemplates } from '../../dashboard/lib/mobileTemplateStore.js'
 const PRICE_DIVISOR = 1
 const DEFAULT_AUTOMATION_TEMPLATE_KEY = 'automatico_classico'
 
-// Janela da dedup cruzada por grupo (default 24h = "no máximo uma vez por
-// dia"). Override em ms via env OFFER_AUTOMATION_DEDUP_WINDOW_MS.
+// Janela da dedup cruzada por grupo (default 120min). Override em ms via
+// env OFFER_AUTOMATION_DEDUP_WINDOW_MS.
 const CROSS_GROUP_DEDUP_WINDOW_MS = Math.max(
   60_000,
-  Number(process.env.OFFER_AUTOMATION_DEDUP_WINDOW_MS) || 24 * 60 * 60_000,
+  Number(process.env.OFFER_AUTOMATION_DEDUP_WINDOW_MS) || 120 * 60_000,
 )
 
 // Teto de páginas para a rotação da busca Shopee. Ao passar do teto (ou quando
@@ -251,6 +251,7 @@ export async function runAutomation(automation, {
   // são acumulados para gravar de uma vez (createMany) após o loop, evitando
   // N writes serializados no SQLite.
   const sentLogRows = []
+  const failures = []
   for (const offer of toSend) {
     const base = formatOfferMessage(offer, automation.keyword, templateBody)
     const text = applyVariation(base, {
@@ -261,11 +262,25 @@ export async function runAutomation(automation, {
       random: true,
       autoInjectWhenMissing: false,
     })
-    await sendBroadcastFn(automation.userId, text, [automation.destGroupJid], {
-      imageUrl: offer.imageUrl,
-      imageRefererUrl: offer.offerLink,
-      source: 'offerAutomation',
-    })
+    try {
+      await sendBroadcastFn(automation.userId, text, [automation.destGroupJid], {
+        imageUrl: offer.imageUrl,
+        imageRefererUrl: offer.offerLink,
+        source: 'offerAutomation',
+      })
+    } catch (err) {
+      // Uma falha pontual num item do lote (timeout de IPC pro worker, bot sem
+      // socket no instante exato, imagem que não baixou) NÃO pode abortar o
+      // `for` inteiro: sem este try/catch, um `throw` aqui pulava o resto do
+      // loop E o bloco de persistência abaixo — perdendo o progresso dos itens
+      // JÁ enviados com sucesso (sentLogRows/sentItemIds/page nunca eram
+      // gravados) e deixando a automação presa tentando o MESMO lote a cada
+      // tick do cron, sem nunca avançar (sintoma: "fila automática parou de
+      // enviar"). Loga e segue para o próximo item; o item que falhou fica de
+      // fora de `sentItemIds`, então entra candidato de novo no próximo tick.
+      failures.push({ itemId: offer.itemId, error: err?.message })
+      continue
+    }
     sentIds.push(offer.itemId)
     // Registra no log cruzado por grupo (com preço) pra próxima automação que
     // mire o mesmo grupo não reenviar este produto no mesmo dia.
@@ -292,7 +307,7 @@ export async function runAutomation(automation, {
     data: { lastSentAt: new Date(), sentItemIds: JSON.stringify(newSentIds), page: advancedPage },
   })
 
-  return { sent: sentIds.length }
+  return { sent: sentIds.length, ...(failures.length ? { failed: failures.length, failures } : {}) }
 }
 
 // Dry-run da busca: roda a MESMA pipeline de fetch (resolveOffers + dedupe por
