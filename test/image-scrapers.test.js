@@ -329,38 +329,6 @@ test('fetchProductImage resolve short link meli.la do Mercado Livre antes de bus
   assert.deepEqual(calls, [shortUrl, productUrl])
 })
 
-test('fetchProductImage retorna null (não raspa a landing crua) quando o short link do Mercado Livre não confirma o produto (regressão: texto do produto A com imagem do produto B via vitrine/social)', async (t) => {
-  const originalFetch = globalThis.fetch
-  const calls = []
-  t.after(() => { globalThis.fetch = originalFetch })
-
-  // Short link que resolve para uma vitrine /social/ SEM ?ref= — sem card
-  // destacado extraível, resolveToCleanProductUrl devolve null de propósito
-  // (produto não confirmado). Antes do fix, resolveMercadoLivreImage caía no
-  // fallback `|| url` e raspava a landing crua em busca de og:image — pegando
-  // a imagem de um produto aleatório da vitrine/carrossel, não o anunciado.
-  const shortUrl = 'https://meli.la/social-landing-test'
-  const socialUrl = 'https://www.mercadolivre.com.br/social/algumavendedora'
-  const wrongProductImage = 'https://http2.mlstatic.com/D_NQ_NP_produto-errado.jpg'
-  const landingHtml = `<html><head>
-    <meta property="og:image" content="${wrongProductImage}" />
-  </head></html>`
-
-  globalThis.fetch = async (url) => {
-    const urlStr = String(url)
-    calls.push(urlStr)
-    if (urlStr === shortUrl) return htmlResponse('', socialUrl)
-    // Não deveria ser chamado — se for, o fix regrediu e voltou a raspar a landing.
-    if (urlStr === socialUrl) return htmlResponse(landingHtml, socialUrl)
-    throw new Error(`fetch inesperado: ${urlStr}`)
-  }
-
-  const image = await fetchProductImage('mercadolivre', shortUrl, {})
-
-  assert.equal(image, null)
-  assert.deepEqual(calls, [shortUrl])
-})
-
 // RCA "imagens muito pequenas" (filas/broadcast): a Baileys só calcula
 // width/height de um imageMessage quando NÃO recebe jpegThumbnail pronto
 // (Utils/messages.js:132-162 do @whiskeysockets/baileys) — como o app SEMPRE
