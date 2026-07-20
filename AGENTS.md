@@ -526,12 +526,12 @@ Hoje há uma camada **cruzada por grupo de destino**, na tabela
 `OfferAutomationSentLog (userId, destGroupJid, productKey, priceCents, sentAt)`:
 
 1. Antes de enviar, o dispatcher carrega o que já saiu pro grupo dentro de
-   `OFFER_AUTOMATION_DEDUP_WINDOW_MS` (default **24h** = "no máximo uma vez por
-   dia") e filtra os produtos por `productKey` (de `productDedupKey`).
+   `OFFER_AUTOMATION_DEDUP_WINDOW_MS` (default **120min**) e filtra os
+   produtos por `productKey` (de `productDedupKey`).
 2. **Exceção por preço:** se o `priceCents` atual difere de todos os preços
-   com que aquele produto saiu nas últimas 24h, a oferta **passa** — é uma
+   com que aquele produto saiu dentro da janela, a oferta **passa** — é uma
    oferta nova de fato (relâmpago da manhã a R$X vs. da tarde a R$Y). Isso
-   concilia o "1x/dia" com o pedido histórico de não prender oferta legítima
+   concilia a janela com o pedido histórico de não prender oferta legítima
    que voltou mais barata.
 3. Cada envio grava uma linha em `OfferAutomationSentLog`; registros fora da
    janela são podados a cada run (a tabela fica limitada à janela por grupo).
@@ -549,9 +549,9 @@ apontando pro mesmo grupo, ou a fonte republicando), agregamos no contador
 `dedupHits` da linha mais recente do mesmo `(userId, destGroup,
 convertedUrl)`. Implementado em `registerDedupBlock()` no `bot-worker.js`:
 
-1. Procura a linha mais recente dentro de `linkDedupWindowMs` (default 24h
-   = "no máximo uma vez por dia", override via env `DEDUP_LINK_WINDOW_MS`)
-   filtrando por `userId`, `destGroup` e `convertedUrl OR originalUrl`.
+1. Procura a linha mais recente dentro de `linkDedupWindowMs` (default
+   120min, override via env `DEDUP_LINK_WINDOW_MS`) filtrando por `userId`,
+   `destGroup` e `convertedUrl OR originalUrl`.
 2. Se achar → `UPDATE` com `dedupHits = dedupHits + 1`.
 3. Senão (estado dessincronizado, fallback raro) → cria linha
    `status='skipped'` com `errorMsg='skip:dedup_recent_link'`.
@@ -578,7 +578,7 @@ tradutor `explainErrorMsg` em `dashboard/app/dashboard/logs/page.js`):
 
 | Prefixo                          | Categoria          | Significado                                                  |
 |----------------------------------|--------------------|--------------------------------------------------------------|
-| `skip:dedup_recent_link`         | DEDUP              | Mesma oferta já enviada ao destino nas últimas 24h (per-dest) |
+| `skip:dedup_recent_link`         | DEDUP              | Mesma oferta já enviada ao destino dentro da janela de dedup (per-dest) |
 | `skip:dedup_recent_link_global`  | DEDUP              | Idem, via Redis global                                       |
 | `skip:blocked_keyword`           | CONFIG_BLOCK       | Palavra-chave bloqueada pelo usuário                         |
 | `skip:title_mismatch`            | CONFIG_BLOCK       | Caption não bate com og:title raspado                        |

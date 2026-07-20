@@ -9,11 +9,11 @@ import { composeTemplates } from '../../dashboard/lib/mobileTemplateStore.js'
 const PRICE_DIVISOR = 1
 const DEFAULT_AUTOMATION_TEMPLATE_KEY = 'automatico_classico'
 
-// Janela da dedup cruzada por grupo (default 24h = "no máximo uma vez por
-// dia"). Override em ms via env OFFER_AUTOMATION_DEDUP_WINDOW_MS.
+// Janela da dedup cruzada por grupo (default 120min). Override em ms via
+// env OFFER_AUTOMATION_DEDUP_WINDOW_MS.
 const CROSS_GROUP_DEDUP_WINDOW_MS = Math.max(
   60_000,
-  Number(process.env.OFFER_AUTOMATION_DEDUP_WINDOW_MS) || 24 * 60 * 60_000,
+  Number(process.env.OFFER_AUTOMATION_DEDUP_WINDOW_MS) || 120 * 60_000,
 )
 
 // Teto de páginas para a rotação da busca Shopee. Ao passar do teto (ou quando
