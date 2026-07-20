@@ -616,18 +616,35 @@ async function checkScheduledMessages() {
       const state = { remaining: jids.length, hasError: false }
 
       for (const jid of jids) {
-        const log = await db.messageLog.create({
-          data: {
-            userId,
-            platform: 'scheduled',
-            sourceGroup: 'scheduled',
-            destGroup: jid,
-            originalUrl: '',
-            convertedUrl: '',
-            messageText: sanitizeMessageForLog(msg.text),
-            status: 'queued',
-          },
-        })
+        let log
+        try {
+          log = await db.messageLog.create({
+            data: {
+              userId,
+              platform: 'scheduled',
+              sourceGroup: 'scheduled',
+              destGroup: jid,
+              originalUrl: '',
+              convertedUrl: '',
+              messageText: sanitizeMessageForLog(msg.text),
+              status: 'queued',
+            },
+          })
+        } catch (err) {
+          // Mesma defesa em profundidade do handler de broadcast
+          // (specs/006-worker-crash-log-safety): sem este try/catch, uma
+          // falha de escrita aqui (ex.: SQLITE_BUSY pontual) escapava para o
+          // catch de checkScheduledMessages() inteiro — abortando o processamento
+          // dos jids restantes DESTA mensagem, de TODAS as outras mensagens
+          // agendadas pendentes no mesmo tick, e deixando `msg` presa em
+          // status='queued' para sempre (a query de pending só busca
+          // status='pending', e o watchdog de recuperação só roda uma vez no
+          // boot do worker). Loga e segue para o próximo jid.
+          logger.error({ err: err?.message, jid, scheduledMessageId: msg.id }, 'Falha ao gravar MessageLog de mensagem agendada; pulando este destinatário')
+          state.remaining--
+          state.hasError = true
+          continue
+        }
 
         const scheduledImageRecipe = buildBroadcastImageRecipe(msg.text, { imageUrl: msg.imageUrl, imageRefererUrl: msg.imageRefererUrl })
         // Botão "Ver canal" herdado do grupo de destino (mensagem agendada).
