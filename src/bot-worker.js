@@ -1918,19 +1918,19 @@ async function startBotInner() {
 
   // Duas janelas: msgIds (curta) protege contra redelivery do WhatsApp do
   // mesmo msg.key.id; links (longa) protege contra a MESMA oferta cair no
-  // mesmo destino mais de uma vez por dia. Caso real: várias automações
-  // (canais-fonte diferentes) apontando pro mesmo grupo republicam a mesma
-  // URL ao longo do dia — sem janela diária a oferta saía repetida. A chave
-  // de dedup é `destJid:convertedUrl` (independe da fonte), então duas
-  // automações com o mesmo produto pro mesmo grupo colidem e só a 1ª passa.
-  // Default 24h = "no máximo uma vez por dia"; override via DEDUP_LINK_WINDOW_MS.
+  // mesmo destino mais de uma vez dentro da janela. Caso real: várias
+  // automações (canais-fonte diferentes) apontando pro mesmo grupo republicam
+  // a mesma URL — sem essa janela a oferta saía repetida. A chave de dedup é
+  // `destJid:convertedUrl` (independe da fonte), então duas automações com o
+  // mesmo produto pro mesmo grupo colidem e só a 1ª passa.
+  // Default 120min; override via DEDUP_LINK_WINDOW_MS.
   const dedupeWindowMs = Math.max(1_000, Number(process.env.DEDUP_MSGID_WINDOW_MS) || 300_000)
-  const linkDedupWindowMs = Math.max(dedupeWindowMs, Number(process.env.DEDUP_LINK_WINDOW_MS) || 24 * 60 * 60_000)
+  const linkDedupWindowMs = Math.max(dedupeWindowMs, Number(process.env.DEDUP_LINK_WINDOW_MS) || 120 * 60_000)
   // Cupom/campanha (primary.linkKind === 'coupon') usa janela CURTA própria:
   // é comum a MESMA URL de cupom (ex.: página fixa de campanha) ser repostada
-  // várias vezes ao dia com códigos/textos diferentes — a janela diária
-  // (linkDedupWindowMs) bloqueava esses reenvios legítimos quase o dia
-  // inteiro. Default 5min; override via COUPON_DEDUP_WINDOW_MS.
+  // várias vezes ao dia com códigos/textos diferentes — a janela longa
+  // (linkDedupWindowMs) bloqueava esses reenvios legítimos por tempo
+  // demais. Default 5min; override via COUPON_DEDUP_WINDOW_MS.
   const couponDedupWindowMs = Math.max(1_000, Number(process.env.COUPON_DEDUP_WINDOW_MS) || 5 * 60_000)
   const dedup = pruneDedupStore(
     loadDedup(),
