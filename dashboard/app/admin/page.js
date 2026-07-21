@@ -68,6 +68,29 @@ const SUCCESS_REASON_LABELS = {
   high_errors_24h: 'Muitos erros 24h',
 }
 
+const TABS = [
+  ['inicio', 'Início'],
+  ['online', 'Online'],
+  ['sucesso', 'Sucesso do Cliente'],
+  ['afiliados', 'Afiliados'],
+  ['financeiro', 'Financeiro'],
+  ['config', 'Configurações'],
+]
+
+const COMMISSION_META = {
+  paid: { label: 'Paga', cls: 'bg-emerald-100 text-emerald-700' },
+  eligible: { label: 'Elegível', cls: 'bg-sky-100 text-sky-700' },
+  approved: { label: 'Aprovada', cls: 'bg-indigo-100 text-indigo-700' },
+  held: { label: 'Em análise', cls: 'bg-orange-100 text-orange-700' },
+  rejected: { label: 'Rejeitada', cls: 'bg-red-100 text-red-700' },
+  reversed: { label: 'Revertida', cls: 'bg-gray-200 text-gray-600' },
+  pending: { label: 'Pendente', cls: 'bg-amber-100 text-amber-700' },
+}
+
+function centsToBRL(cents) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(cents ?? 0) / 100)
+}
+
 function SecondarySection({ title, eyebrow, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
@@ -967,6 +990,40 @@ export default function AdminPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [accessDenied, setAccessDenied] = useState(false)
+  const [tab, setTab] = useState('inicio')
+  const [affiliates, setAffiliates] = useState(null)
+  const [commissions, setCommissions] = useState(null)
+
+  function currentMonth() {
+    return new Date().toISOString().slice(0, 7)
+  }
+
+  async function reloadAffiliates() {
+    const [a, c] = await Promise.all([
+      api.adminAffiliates({ status: 'approved', limit: 100 }).catch(() => null),
+      api.adminAffiliateCommissions({ month: currentMonth() }).catch(() => null),
+    ])
+    setAffiliates(a)
+    setCommissions(c)
+  }
+
+  async function approveCommission(id) {
+    setError('')
+    try { await api.adminAffiliateCommissionApprove(id); await reloadAffiliates() }
+    catch (err) { setError(err.message || 'Falha ao aprovar comissão.') }
+  }
+
+  async function markCommissionPaid(id) {
+    setError('')
+    try { await api.adminAffiliateCommissionMarkPaid(id); await reloadAffiliates() }
+    catch (err) { setError(err.message || 'Falha ao marcar comissão como paga.') }
+  }
+
+  useEffect(() => {
+    let active = true
+    reloadAffiliates().catch(() => {})
+    return () => { active = false }
+  }, [])
 
   async function loadAdminData(nextRisk = risk, nextSearch = search) {
     if (accessDenied) return
@@ -1215,27 +1272,35 @@ export default function AdminPage() {
   return (
     <main className="min-h-screen bg-gray-50 px-5 py-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        <div className="sticky top-0 z-10 rounded-2xl border border-emerald-100 bg-white/95 p-4 shadow-sm backdrop-blur flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Centro operacional</p>
-            <h1 className="text-3xl font-black text-gray-900">Admin BOTinho</h1>
-            <p className="mt-1 text-sm text-gray-500">Tela principal minimalista: saúde do sistema, ONLINE e alertas acionáveis. Métricas secundárias ficam recolhidas abaixo.</p>
+        <div className="sticky top-0 z-20 rounded-2xl border border-emerald-100 bg-white/95 p-4 shadow-sm backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-base font-black text-white">B</div>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-lg font-black text-gray-900">BOTinho</span>
+                <span className="text-xs font-semibold text-gray-400">admin</span>
+              </div>
+            </div>
+            <nav className="flex flex-wrap gap-1">
+              {TABS.map(([key, label]) => (
+                <button key={key} onClick={() => setTab(key)} className={`rounded-xl px-4 py-2 text-sm font-bold transition ${tab === key ? 'bg-emerald-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>{label}</button>
+              ))}
+            </nav>
+            <div className="flex items-center gap-2">
+              <button onClick={() => applyFilters()} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Atualizar</button>
+              <Link href="/painel" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Voltar</Link>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button onClick={() => applyFilters()} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Atualizar</button>
-            <Link href="/admin/online" className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800">ONLINE</Link>
-            {canAccessCustomerSuccess && <Link href="/admin/sucesso-cliente" className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Aba CS</Link>}
-            <Link href="/admin/afiliados" className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600">Afiliados</Link>
-            <Link href="/admin/marketing-growth" className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700">Marketing & Growth</Link>
-            <Link href="/admin/observabilidade" className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">Observabilidade</Link>
-            <Link href="/admin/pipeline" className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">Pipeline técnico</Link>
-            <Link href="/painel" className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-100">Voltar ao painel</Link>
+          <div className="mt-2 flex justify-end">
+            <button onClick={() => setTab('observabilidade')} className={`flex items-center gap-1.5 text-xs font-bold ${tab === 'observabilidade' ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${tab === 'observabilidade' ? 'bg-slate-900' : 'bg-slate-400'}`}></span>Observabilidade (técnico)
+            </button>
           </div>
         </div>
 
         {error && <Alert type="error" title="Painel admin" message={error} />}
 
-        {(overview || systemObservability || online) && (
+        {(tab === 'inicio' || tab === 'online') && (overview || systemObservability || online) && (
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
               <div>
@@ -1254,7 +1319,7 @@ export default function AdminPage() {
           </section>
         )}
 
-        {admin && (
+        {tab === 'observabilidade' && admin && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
             <h2 className="text-sm font-bold text-gray-800">Sessão admin</h2>
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
@@ -1265,7 +1330,7 @@ export default function AdminPage() {
           </section>
         )}
 
-        {overview && (
+        {tab === 'observabilidade' && overview && (
           <SecondarySection title="Métricas executivas completas" eyebrow="Secundário · recolhido por padrão">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {Object.entries(STAT_LABELS).map(([key, label]) => (
@@ -1281,7 +1346,7 @@ export default function AdminPage() {
 
 
 
-        {systemObservability && (
+        {tab === 'observabilidade' && systemObservability && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -1310,7 +1375,7 @@ export default function AdminPage() {
           </section>
         )}
 
-        {systemHealth && (
+        {tab === 'observabilidade' && systemHealth && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -1362,11 +1427,13 @@ export default function AdminPage() {
           </section>
         )}
 
-        <SectionErrorBoundary label="Staging (liga/desliga)">
-          <StagingPowerCard admin={admin} />
-        </SectionErrorBoundary>
+        {tab === 'inicio' && (
+          <SectionErrorBoundary label="Staging (liga/desliga)">
+            <StagingPowerCard admin={admin} />
+          </SectionErrorBoundary>
+        )}
 
-        {success && (
+        {(tab === 'inicio' || tab === 'sucesso') && success && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -1412,7 +1479,7 @@ export default function AdminPage() {
           </section>
         )}
 
-        {finance && (
+        {tab === 'financeiro' && finance && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -1484,8 +1551,9 @@ export default function AdminPage() {
           </section>
         )}
 
-        <WhatsAppDisconnectedTable data={waDisconnectedUsers} onOpenDetail={openUserDetail} onRecordContact={recordContact} />
+        {tab === 'inicio' && <WhatsAppDisconnectedTable data={waDisconnectedUsers} onOpenDetail={openUserDetail} onRecordContact={recordContact} />}
 
+        {(tab === 'inicio' || tab === 'sucesso') && (
         <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
           <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -1539,9 +1607,131 @@ export default function AdminPage() {
             </table>
           </div>
         </section>
+        )}
 
         <DetailPanel detail={selectedUser} onClose={() => setSelectedUser(null)} onApplyAccess={(payload) => applyManualAccess(selectedUser.id, payload)} />
 
+        {tab === 'online' && (
+          <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+            <div className="mb-4">
+              <h2 className="text-lg font-black text-gray-900">Conexões de WhatsApp</h2>
+              <p className="text-sm text-gray-500">Estado de conexão por cliente.</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead className="text-xs uppercase tracking-wide text-gray-400">
+                  <tr>
+                    <th className="px-3 py-2">Cliente</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Bot</th>
+                    <th className="px-3 py-2">Atualizado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {asArray(sessions?.sessions).map(session => (
+                    <tr key={session?.id ?? session?.user?.email} className="align-top">
+                      <td className="px-3 py-3 font-bold text-gray-900">{session?.user?.email ?? 'Cliente sem e-mail'}</td>
+                      <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[11px] font-bold ${session?.status === 'connected' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{session?.status ?? '—'}</span></td>
+                      <td className="px-3 py-3 text-xs text-gray-600">{session?.botRunning ? 'rodando' : 'parado'}</td>
+                      <td className="px-3 py-3 text-xs text-gray-500">{formatDate(session?.updatedAt)}</td>
+                    </tr>
+                  ))}
+                  {!asArray(sessions?.sessions).length && <tr><td colSpan={4} className="px-3 py-6 text-sm text-gray-400">Sem sessões.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {tab === 'afiliados' && (
+          <>
+            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100"><p className="text-xs font-bold uppercase tracking-wide text-gray-400">Total de afiliados</p><p className="mt-1 text-2xl font-black text-gray-900">{formatNumber(affiliates?.total ?? asArray(affiliates?.profiles).length)}</p></div>
+              <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100"><p className="text-xs font-bold uppercase tracking-wide text-gray-400">Indicados</p><p className="mt-1 text-2xl font-black text-gray-900">{formatNumber(asArray(affiliates?.profiles).reduce((sum, p) => sum + Number(p?.totalReferrals || 0), 0))}</p></div>
+              <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100"><p className="text-xs font-bold uppercase tracking-wide text-gray-400">Comissões a pagar</p><p className="mt-1 text-2xl font-black text-orange-700">{formatCurrency(finance?.affiliateCommissionsPayable ?? 0)}</p><p className="text-[11px] text-orange-500">pendentes + elegíveis</p></div>
+              <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100"><p className="text-xs font-bold uppercase tracking-wide text-gray-400">Pagas (30d)</p><p className="mt-1 text-2xl font-black text-emerald-700">{formatCurrency(finance?.affiliateCommissionsPaid30d ?? 0)}</p></div>
+            </section>
+
+            <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-black text-gray-900">Afiliados</h2>
+                  <p className="text-sm text-gray-500">Cadastro e desempenho de cada parceiro.</p>
+                </div>
+                <Link href="/admin/afiliados" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50">Gestão completa</Link>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="text-xs uppercase tracking-wide text-gray-400">
+                    <tr>
+                      <th className="px-3 py-2">Código</th>
+                      <th className="px-3 py-2">Afiliado</th>
+                      <th className="px-3 py-2">Indicados</th>
+                      <th className="px-3 py-2">Comissão gerada</th>
+                      <th className="px-3 py-2">Chave PIX</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {asArray(affiliates?.profiles).map(a => (
+                      <tr key={a?.id} className="align-top">
+                        <td className="px-3 py-3 font-mono text-xs font-bold text-gray-500">{a?.code ?? '—'}</td>
+                        <td className="px-3 py-3"><p className="font-bold text-gray-900">{a?.user?.name ?? '—'}</p><p className="text-xs text-gray-500">{a?.user?.email ?? '—'}</p></td>
+                        <td className="px-3 py-3 text-sm">{formatNumber(a?.totalReferrals ?? 0)}</td>
+                        <td className="px-3 py-3 text-sm font-bold">{centsToBRL(a?.totalCommissions ?? 0)}</td>
+                        <td className="px-3 py-3 font-mono text-xs text-gray-500">{a?.pixKey ?? '—'}</td>
+                      </tr>
+                    ))}
+                    {!asArray(affiliates?.profiles).length && <tr><td colSpan={5} className="px-3 py-6 text-sm text-gray-400">Nenhum afiliado aprovado.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+              <div className="mb-4">
+                <h2 className="text-lg font-black text-gray-900">Comissões do mês</h2>
+                <p className="text-sm text-gray-500">Aprove ou marque como paga.</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="text-xs uppercase tracking-wide text-gray-400">
+                    <tr>
+                      <th className="px-3 py-2">Afiliado</th>
+                      <th className="px-3 py-2">Valor</th>
+                      <th className="px-3 py-2">Tipo</th>
+                      <th className="px-3 py-2">Status</th>
+                      <th className="px-3 py-2">Criada</th>
+                      <th className="px-3 py-2 text-right">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {asArray(commissions?.commissions).map(cm => {
+                      const meta = COMMISSION_META[cm?.status] ?? COMMISSION_META.pending
+                      const canApprove = cm?.status === 'pending'
+                      const canPay = cm?.status === 'eligible' || cm?.status === 'approved'
+                      return (
+                        <tr key={cm?.id} className="align-top">
+                          <td className="px-3 py-3"><p className="font-bold text-gray-900">{cm?.affiliate?.user?.name ?? '—'}</p><p className="text-xs text-gray-500">{cm?.affiliate?.user?.email ?? '—'}</p></td>
+                          <td className="px-3 py-3 text-sm font-bold">{centsToBRL(cm?.commissionAmountCents ?? 0)}</td>
+                          <td className="px-3 py-3 text-xs text-gray-500">{cm?.commissionType === 'recurring' ? 'Recorrente' : 'Inicial'}</td>
+                          <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[11px] font-bold ${meta.cls}`}>{meta.label}</span></td>
+                          <td className="px-3 py-3 text-xs text-gray-500">{formatDate(cm?.createdAt)}</td>
+                          <td className="px-3 py-3 text-right">
+                            {canApprove && <button onClick={() => approveCommission(cm.id)} className="rounded-lg bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100">Aprovar</button>}
+                            {canPay && <button onClick={() => markCommissionPaid(cm.id)} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700">Marcar paga</button>}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {!asArray(commissions?.commissions).length && <tr><td colSpan={6} className="px-3 py-6 text-sm text-gray-400">Nenhuma comissão neste mês.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </>
+        )}
+
+        {tab === 'observabilidade' && (
         <div className="grid gap-6 lg:grid-cols-2">
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
             <h2 className="mb-4 text-lg font-black text-gray-900">Sessões WhatsApp</h2>
@@ -1589,10 +1779,15 @@ export default function AdminPage() {
             </div>
           </section>
         </div>
+        )}
 
-        <TermsEditor key={`terms-${terms?.version ?? 'fallback'}`} terms={terms} onSave={saveLegalTerms} />
-        <LandingPageContentAccordion plans={plans} faq={faq} tutorial={tutorial} onSavePlan={saveLpPlan} onSaveFaq={saveFaqItem} onDeleteFaq={deleteFaqItem} onSaveTutorial={saveTutorialContent} />
-        <AdminTutorialAccordion tutorial={tutorial} onSaveTutorial={saveTutorialContent} TutorialEditor={TutorialEditor} />
+        {tab === 'config' && (
+          <>
+            <TermsEditor key={`terms-${terms?.version ?? 'fallback'}`} terms={terms} onSave={saveLegalTerms} />
+            <LandingPageContentAccordion plans={plans} faq={faq} tutorial={tutorial} onSavePlan={saveLpPlan} onSaveFaq={saveFaqItem} onDeleteFaq={deleteFaqItem} onSaveTutorial={saveTutorialContent} />
+            <AdminTutorialAccordion tutorial={tutorial} onSaveTutorial={saveTutorialContent} TutorialEditor={TutorialEditor} />
+          </>
+        )}
       </div>
     </main>
   )
