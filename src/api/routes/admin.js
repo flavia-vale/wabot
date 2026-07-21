@@ -1560,6 +1560,9 @@ export async function adminRoutes(app) {
       expiring7d,
       expiring30d,
       overduePaid,
+      commissionsAccrued30d,
+      commissionsPayable,
+      commissionsPaid30d,
     ] = await Promise.all([
       db.payment.aggregate({ where: { status: 'approved', createdAt: { gte: since30d } }, _sum: { amount: true }, _count: { _all: true } }),
       db.payment.aggregate({ where: { status: 'approved' }, _sum: { amount: true }, _count: { _all: true } }),
@@ -1572,6 +1575,14 @@ export async function adminRoutes(app) {
       db.user.count({ where: { status: 'active', accessExpiresAt: { gt: now, lte: addDays(now, 7) } } }),
       db.user.count({ where: { status: 'active', accessExpiresAt: { gt: now, lte: addDays(now, 30) } } }),
       db.user.count({ where: { status: 'active', plan: { in: PAID_PLANS }, accessExpiresAt: { lt: now } } }),
+      // Comissões de afiliados a descontar da receita bruta dos últimos 30d
+      // (casadas com revenue30d: cada pagamento aprovado gera uma comissão).
+      // Exclui rejeitadas/revertidas — essas não custam caixa.
+      db.affiliateCommission.aggregate({ where: { createdAt: { gte: since30d }, status: { notIn: ['rejected', 'reversed'] } }, _sum: { commissionAmountCents: true }, _count: { _all: true } }),
+      // Passivo em aberto (todo o histórico): comissões devidas ainda não pagas.
+      db.affiliateCommission.aggregate({ where: { status: { in: ['pending', 'eligible', 'approved', 'held'] } }, _sum: { commissionAmountCents: true }, _count: { _all: true } }),
+      // Comissões efetivamente pagas nos últimos 30d (saída de caixa real).
+      db.affiliateCommission.aggregate({ where: { status: 'paid', paidAt: { gte: since30d } }, _sum: { commissionAmountCents: true }, _count: { _all: true } }),
     ])
 
     const currentPrices = await getCurrentPlanPrices()
@@ -1579,10 +1590,17 @@ export async function adminRoutes(app) {
     const totalLtv = approvedAll._sum.amount ?? 0
     const payingUsers = approvedPayingUsers.length
 
+    // Payment.amount está em reais (Float); comissões em centavos (Int) → /100.
+    const revenue30d = approved30d._sum.amount ?? 0
+    const affiliateCommissions30d = (commissionsAccrued30d._sum.commissionAmountCents ?? 0) / 100
+    const affiliateCommissionsPayable = (commissionsPayable._sum.commissionAmountCents ?? 0) / 100
+    const affiliateCommissionsPaid30d = (commissionsPaid30d._sum.commissionAmountCents ?? 0) / 100
+    const netRevenue30d = Math.round((revenue30d - affiliateCommissions30d) * 100) / 100
+
     await writeAdminAuditLog(req, { action: 'admin.finance.overview.read', resource: 'finance' })
 
     return {
-      revenue30d: approved30d._sum.amount ?? 0,
+      revenue30d,
       approvedPayments30d: approved30d._count._all,
       totalRevenue: totalLtv,
       approvedPaymentsAll: approvedAll._count._all,
@@ -1598,6 +1616,14 @@ export async function adminRoutes(app) {
       overduePaid,
       payingUsers,
       avgLtv: payingUsers ? Math.round((totalLtv / payingUsers) * 100) / 100 : 0,
+      // Abatimento de afiliados (specs: cascata bruto → comissões → líquido).
+      affiliateCommissions30d,
+      affiliateCommissions30dCount: commissionsAccrued30d._count._all,
+      affiliateCommissionsPayable,
+      affiliateCommissionsPayableCount: commissionsPayable._count._all,
+      affiliateCommissionsPaid30d,
+      affiliateCommissionsPaid30dCount: commissionsPaid30d._count._all,
+      netRevenue30d,
     }
   })
 

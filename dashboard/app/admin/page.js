@@ -1423,9 +1423,27 @@ export default function AdminPage() {
               <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">MRR: {formatCurrency(finance.activeMrr)}</span>
             </div>
 
+            <div className="mb-4 grid items-stretch gap-3 sm:grid-cols-3">
+              <div className="rounded-xl bg-emerald-50 p-4 ring-1 ring-emerald-100">
+                <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">Receita bruta 30d</p>
+                <p className="mt-1 text-2xl font-black text-emerald-800">{formatCurrency(finance.revenue30d)}</p>
+                <p className="mt-1 text-[11px] text-emerald-600">{formatNumber(finance.approvedPayments30d)} pagamentos aprovados</p>
+              </div>
+              <div className="rounded-xl bg-orange-50 p-4 ring-1 ring-orange-100">
+                <p className="text-xs font-bold uppercase tracking-wide text-orange-600">(–) Comissões de afiliados</p>
+                <p className="mt-1 text-2xl font-black text-orange-700">− {formatCurrency(finance.affiliateCommissions30d ?? 0)}</p>
+                <p className="mt-1 text-[11px] text-orange-600">{formatNumber(finance.affiliateCommissions30dCount ?? 0)} comissões geradas nos 30d</p>
+              </div>
+              <div className="rounded-xl bg-slate-900 p-4 ring-1 ring-slate-800">
+                <p className="text-xs font-bold uppercase tracking-wide text-cyan-300">(=) Receita líquida 30d</p>
+                <p className="mt-1 text-2xl font-black text-white">{formatCurrency(finance.netRevenue30d ?? finance.revenue30d)}</p>
+                <p className="mt-1 text-[11px] text-slate-400">Depois de descontar afiliados</p>
+              </div>
+            </div>
+
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-xl bg-gray-50 p-3"><p className="text-xs text-gray-400">Receita 30d</p><p className="text-xl font-black">{formatCurrency(finance.revenue30d)}</p></div>
               <div className="rounded-xl bg-gray-50 p-3"><p className="text-xs text-gray-400">LTV médio</p><p className="text-xl font-black">{formatCurrency(finance.avgLtv)}</p></div>
+              <div className="rounded-xl bg-orange-50 p-3"><p className="text-xs text-orange-600">Comissões a pagar</p><p className="text-xl font-black text-orange-700">{formatCurrency(finance.affiliateCommissionsPayable ?? 0)}</p><p className="text-[11px] text-orange-500">{formatNumber(finance.affiliateCommissionsPayableCount ?? 0)} em aberto</p></div>
               <div className="rounded-xl bg-amber-50 p-3"><p className="text-xs text-amber-600">Pendentes</p><p className="text-xl font-black text-amber-700">{finance.pendingPayments}</p></div>
               <div className="rounded-xl bg-red-50 p-3"><p className="text-xs text-red-600">Pagos vencidos</p><p className="text-xl font-black text-red-700">{finance.overduePaid}</p></div>
             </div>
