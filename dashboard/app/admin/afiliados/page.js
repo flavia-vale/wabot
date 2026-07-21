@@ -328,6 +328,7 @@ function ApprovedTab() {
             <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Indicados</th>
             <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Comissões pagas</th>
             <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Pendente</th>
+            <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Devedor</th>
             <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Override comissão (%)</th>
           </tr>
         </thead>
@@ -350,6 +351,7 @@ function ApprovedTab() {
               </td>
               <td className="px-4 py-3 text-right text-gray-700">{formatCurrency(p.paidCommissions ?? 0)}</td>
               <td className="px-4 py-3 text-right font-semibold text-amber-700">{formatCurrency(p.pendingCommissions ?? 0)}</td>
+              <td className="px-4 py-3 text-right font-semibold text-red-700">{(p.debtCents ?? 0) > 0 ? formatCurrency(p.debtCents) : '—'}</td>
               <td className="px-4 py-3">
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-1">

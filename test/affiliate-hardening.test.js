@@ -140,7 +140,7 @@ test('O6: getAffiliateMeData soma por status a partir do groupBy', async () => {
     },
   }
   const data = await getAffiliateMeData({ userId: 'aff-user-1', db })
-  assert.deepEqual(data.stats, { totalReferrals: 7, totalSales: 4, totalEarnedCents: 1000, payableCents: 700, pendingCents: 500, reversedCents: 300 })
+  assert.deepEqual(data.stats, { totalReferrals: 7, totalSales: 4, totalEarnedCents: 1000, payableCents: 700, pendingCents: 500, reversedCents: 300, debtCents: 0 })
   assert.equal(data.months[0].month, '2026-06')
   assert.equal(data.months[0].totalCents, 1500)
   assert.equal(data.months[0].status, 'pending')

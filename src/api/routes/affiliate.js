@@ -1,5 +1,6 @@
 import { createHash } from 'crypto'
-import { COMMISSION_PAYABLE_STATUSES, applyAffiliate, approveAffiliateCommission, getAffiliateMeData, getAffiliateReferrals, getAffiliateSettings, recordAffiliateAttributionTouch, reverseAffiliateCommission, tryCreateAffiliateCommission, writeCommissionLedger } from '../../domain/affiliate/service.js'
+import { COMMISSION_PAYABLE_STATUSES, applyAffiliate, approveAffiliateCommission, getAffiliateMeData, getAffiliateReferrals, getAffiliateSettings, recordAffiliateAttributionTouch, reverseAffiliateCommission, tryCreateAffiliateCommission, writeCommissionLedger, createPayoutRequest, listAffiliatePayoutRequests, confirmPayoutRequest, rejectPayoutRequest } from '../../domain/affiliate/service.js'
+import { computeDebtCents, computeAvailableCents } from '../../domain/affiliate/affiliateBalance.js'
 import { encryptCredential, decryptCredential } from '../../credentialCrypto.js'
 import { createTrackGuard } from './affiliateTrackGuard.js'
 import { resolveAdminAccess, writeAdminAuditLog } from './admin.js'
@@ -150,6 +151,124 @@ export async function affiliateRoutes(app) {
     return getAffiliateReferrals({ affiliateProfileId: profile.id, page, limit, anonymized: true })
   })
 
+  // US2 (009-affiliate-improvements-r1): saque self-service com valor mínimo.
+  app.post('/affiliate/payout-requests', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const result = await createPayoutRequest({ userId: req.user.sub, db })
+    if (!result.created) {
+      if (result.reason === 'not_approved' || result.reason === 'disabled') return reply.code(403).send({ error: 'Solicitação de saque não disponível para este afiliado' })
+      if (result.reason === 'below_minimum') return reply.code(400).send({ error: result.error })
+      if (result.reason === 'open_request' || result.reason === 'debt_pending') return reply.code(409).send({ error: result.error })
+      return reply.code(400).send({ error: result.error ?? 'Não foi possível solicitar o saque' })
+    }
+    return { payoutRequest: result.payoutRequest }
+  })
+
+  app.get('/affiliate/payout-requests', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const profile = await db.affiliateProfile.findUnique({ where: { userId: req.user.sub } })
+    if (!profile) return { requests: [], available: { availableCents: 0, debtCents: 0, minPayoutCents: 5000, canRequest: false } }
+
+    const settings = await getAffiliateSettings()
+    const [requests, commissionRows, debtLedgerRows, openRequest] = await Promise.all([
+      listAffiliatePayoutRequests({ affiliateId: profile.id, db }),
+      db.affiliateCommission.groupBy({ by: ['status'], where: { affiliateId: profile.id, status: { in: COMMISSION_PAYABLE_STATUSES } }, _sum: { commissionAmountCents: true } }),
+      db.affiliateCommissionLedger.groupBy({ by: ['toStatus'], where: { affiliateId: profile.id, toStatus: { in: ['debt', 'debt_settled'] } }, _sum: { amountCents: true } }),
+      db.affiliatePayoutRequest.findFirst({ where: { affiliateId: profile.id, status: 'requested' } }),
+    ])
+    const availableCents = computeAvailableCents({ commissionRows: commissionRows.map(g => ({ status: g.status, commissionAmountCents: g._sum?.commissionAmountCents ?? 0 })) })
+    const debtCents = computeDebtCents({ ledgerRows: debtLedgerRows.map(g => ({ toStatus: g.toStatus, amountCents: g._sum?.amountCents ?? 0 })) })
+    const minPayoutCents = settings.minPayoutCents ?? 5000
+    const canRequest = profile.status === 'approved' && settings.payoutRequestsEnabled !== false && !openRequest && debtCents === 0 && availableCents >= minPayoutCents
+
+    return {
+      requests: requests.map(r => ({ id: r.id, amountCents: r.amountCents, status: r.status, requestedAt: r.requestedAt, resolvedAt: r.resolvedAt, rejectionReason: r.rejectionReason })),
+      available: { availableCents, debtCents, minPayoutCents, canRequest },
+    }
+  })
+
+  app.get('/admin/affiliates/payout-requests', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const access = await requireAdminAccess(req, reply, 'billing:read')
+    if (!access) return
+
+    const status = req.query?.status && req.query.status !== 'all' ? req.query.status : 'requested'
+    const where = status ? { status } : {}
+    const [requests, total] = await Promise.all([
+      db.affiliatePayoutRequest.findMany({
+        where,
+        orderBy: { requestedAt: 'asc' },
+        include: { affiliate: { select: { id: true, code: true } } },
+      }),
+      db.affiliatePayoutRequest.count({ where }),
+    ])
+
+    const affiliateIds = requests.map(r => r.affiliateId)
+    const debtLedgerRows = affiliateIds.length
+      ? await db.affiliateCommissionLedger.groupBy({ by: ['affiliateId', 'toStatus'], where: { affiliateId: { in: affiliateIds }, toStatus: { in: ['debt', 'debt_settled'] } }, _sum: { amountCents: true } })
+      : []
+    const debtByAffiliate = new Map()
+    for (const g of debtLedgerRows) {
+      const rows = debtByAffiliate.get(g.affiliateId) ?? []
+      rows.push({ toStatus: g.toStatus, amountCents: g._sum?.amountCents ?? 0 })
+      debtByAffiliate.set(g.affiliateId, rows)
+    }
+
+    return {
+      requests: requests.map(r => ({
+        id: r.id,
+        affiliateId: r.affiliateId,
+        affiliateCode: r.affiliate?.code ?? null,
+        amountCents: r.amountCents,
+        status: r.status,
+        requestedAt: r.requestedAt,
+        debtCents: computeDebtCents({ ledgerRows: debtByAffiliate.get(r.affiliateId) ?? [] }),
+      })),
+      total,
+    }
+  })
+
+  app.post('/admin/affiliates/payout-requests/:id/confirm', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const access = await requireAdminAccess(req, reply, 'billing:write')
+    if (!access) return
+
+    const { id } = req.params
+    const before = await db.affiliatePayoutRequest.findUnique({ where: { id } })
+    if (!before) return reply.code(404).send({ error: 'Solicitação de saque não encontrada' })
+
+    const result = await confirmPayoutRequest({ id, adminUserId: req.user.sub, db })
+    if (!result.updated) return reply.code(409).send({ error: 'Solicitação já foi resolvida; recarregue a página' })
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.affiliate.payout.confirm',
+      resource: 'affiliatePayoutRequest',
+      resourceId: id,
+      before: { status: before.status, amountCents: before.amountCents },
+      after: { status: 'paid', resolvedByUserId: req.user.sub },
+    })
+    return { payoutRequest: result.payoutRequest }
+  })
+
+  app.post('/admin/affiliates/payout-requests/:id/reject', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const access = await requireAdminAccess(req, reply, 'billing:write')
+    if (!access) return
+
+    const { id } = req.params
+    const { reason } = req.body ?? {}
+    const before = await db.affiliatePayoutRequest.findUnique({ where: { id } })
+    if (!before) return reply.code(404).send({ error: 'Solicitação de saque não encontrada' })
+
+    const result = await rejectPayoutRequest({ id, adminUserId: req.user.sub, reason, db })
+    if (result.reason === 'missing_reason') return reply.code(400).send({ error: 'Motivo da recusa é obrigatório' })
+    if (!result.updated) return reply.code(409).send({ error: 'Solicitação já foi resolvida; recarregue a página' })
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.affiliate.payout.reject',
+      resource: 'affiliatePayoutRequest',
+      resourceId: id,
+      before: { status: before.status, amountCents: before.amountCents },
+      after: { status: 'rejected', rejectionReason: String(reason ?? '').trim().slice(0, 500), resolvedByUserId: req.user.sub },
+    })
+    return { payoutRequest: result.payoutRequest }
+  })
+
   app.get('/admin/affiliates', { onRequest: [app.authenticate] }, async (req, reply) => {
     const access = await requireAdminAccess(req, reply, 'billing:read')
     if (!access) return
@@ -177,12 +296,14 @@ export async function affiliateRoutes(app) {
     // O5: evita N+1. Em vez de 1 count por perfil + carregar TODAS as comissões
     // de cada um, agrega indicados e somas de comissão da PÁGINA em 2 queries.
     const profileIds = profiles.map(p => p.id)
-    const [referralCounts, commissionSums] = profileIds.length
+    const [referralCounts, commissionSums, debtLedgerRows] = profileIds.length
       ? await Promise.all([
         db.user.groupBy({ by: ['affiliateProfileId'], where: { affiliateProfileId: { in: profileIds } }, _count: true }),
         db.affiliateCommission.groupBy({ by: ['affiliateId', 'status'], where: { affiliateId: { in: profileIds } }, _sum: { commissionAmountCents: true } }),
+        // US1: saldo devedor por afiliado, derivado do ledger (nunca coluna mutável).
+        db.affiliateCommissionLedger.groupBy({ by: ['affiliateId', 'toStatus'], where: { affiliateId: { in: profileIds }, toStatus: { in: ['debt', 'debt_settled'] } }, _sum: { amountCents: true } }),
       ])
-      : [[], []]
+      : [[], [], []]
 
     const referralCountMap = new Map(referralCounts.map(r => [r.affiliateProfileId, typeof r._count === 'number' ? r._count : (r._count?._all ?? 0)]))
     const sumMap = new Map()
@@ -193,6 +314,12 @@ export async function affiliateRoutes(app) {
       if (g.status === 'pending') cur.pending += s
       if (g.status === 'paid') cur.paid += s
       sumMap.set(g.affiliateId, cur)
+    }
+    const debtRowsByAffiliate = new Map()
+    for (const g of debtLedgerRows) {
+      const rows = debtRowsByAffiliate.get(g.affiliateId) ?? []
+      rows.push({ toStatus: g.toStatus, amountCents: g._sum?.amountCents ?? 0 })
+      debtRowsByAffiliate.set(g.affiliateId, rows)
     }
 
     const enriched = profiles.map((profile) => {
@@ -215,6 +342,7 @@ export async function affiliateRoutes(app) {
         totalCommissions: sums.total,
         pendingCommissions: sums.pending,
         paidCommissions: sums.paid,
+        debtCents: computeDebtCents({ ledgerRows: debtRowsByAffiliate.get(profile.id) ?? [] }),
       }
     })
 
@@ -429,7 +557,7 @@ export async function affiliateRoutes(app) {
     const access = await requireAdminAccess(req, reply, 'billing:write')
     if (!access) return
 
-    const { cookieDurationHours, commissionPercent, commissionRecurringPercent, recurringCommissionEnabled, commissionHoldDays, attributionWindowDays, attributionModel } = req.body ?? {}
+    const { cookieDurationHours, commissionPercent, commissionRecurringPercent, recurringCommissionEnabled, commissionHoldDays, attributionWindowDays, attributionModel, minPayoutCents, orphanTouchWindowDays, orphanTouchMode, payoutRequestsEnabled } = req.body ?? {}
     if (cookieDurationHours !== undefined && (typeof cookieDurationHours !== 'number' || cookieDurationHours < 1)) {
       return reply.code(400).send({ error: 'cookieDurationHours deve ser um número maior que 0' })
     }
@@ -451,6 +579,18 @@ export async function affiliateRoutes(app) {
     if (attributionModel !== undefined && !['last_non_direct'].includes(attributionModel)) {
       return reply.code(400).send({ error: 'attributionModel inválido' })
     }
+    if (minPayoutCents !== undefined && (!Number.isInteger(minPayoutCents) || minPayoutCents < 0)) {
+      return reply.code(400).send({ error: 'minPayoutCents deve ser um inteiro maior ou igual a 0' })
+    }
+    if (orphanTouchWindowDays !== undefined && (!Number.isInteger(orphanTouchWindowDays) || orphanTouchWindowDays < 1 || orphanTouchWindowDays > 365)) {
+      return reply.code(400).send({ error: 'orphanTouchWindowDays deve ser um inteiro entre 1 e 365' })
+    }
+    if (orphanTouchMode !== undefined && !['off', 'window', 'hold', 'both'].includes(orphanTouchMode)) {
+      return reply.code(400).send({ error: 'orphanTouchMode deve ser off, window, hold ou both' })
+    }
+    if (payoutRequestsEnabled !== undefined && typeof payoutRequestsEnabled !== 'boolean') {
+      return reply.code(400).send({ error: 'payoutRequestsEnabled deve ser um booleano' })
+    }
 
     const updated = await db.affiliateSettings.upsert({
       where: { id: 1 },
@@ -463,6 +603,10 @@ export async function affiliateRoutes(app) {
         commissionHoldDays: commissionHoldDays ?? 30,
         attributionWindowDays: attributionWindowDays ?? 30,
         attributionModel: attributionModel ?? 'last_non_direct',
+        minPayoutCents: minPayoutCents ?? 5000,
+        orphanTouchWindowDays: orphanTouchWindowDays ?? 7,
+        orphanTouchMode: orphanTouchMode ?? 'both',
+        payoutRequestsEnabled: payoutRequestsEnabled ?? true,
       },
       update: {
         ...(cookieDurationHours !== undefined && { cookieDurationHours }),
@@ -472,6 +616,10 @@ export async function affiliateRoutes(app) {
         ...(commissionHoldDays !== undefined && { commissionHoldDays }),
         ...(attributionWindowDays !== undefined && { attributionWindowDays }),
         ...(attributionModel !== undefined && { attributionModel }),
+        ...(minPayoutCents !== undefined && { minPayoutCents }),
+        ...(orphanTouchWindowDays !== undefined && { orphanTouchWindowDays }),
+        ...(orphanTouchMode !== undefined && { orphanTouchMode }),
+        ...(payoutRequestsEnabled !== undefined && { payoutRequestsEnabled }),
       },
     })
     return updated
