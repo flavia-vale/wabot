@@ -60,6 +60,7 @@ model User {
   referredCommissions         AffiliateCommission[]       @relation("ReferredUserCommissions")
   paidCommissions             AffiliateCommission[]       @relation("PaidCommissions")
   approvedCommissions         AffiliateCommission[]       @relation("ApprovedCommissions")
+  resolvedPayoutRequests      AffiliatePayoutRequest[]    @relation("ResolvedPayoutRequests")
   subscriptions               Subscription[]
   affiliateAttributionTouches AffiliateAttributionTouch[]
 
@@ -703,6 +704,37 @@ model AffiliateSettings {
   commissionHoldDays         Int     @default(30)
   attributionWindowDays      Int     @default(30)
   attributionModel           String  @default("last_non_direct")
+  // 009-affiliate-improvements-r1 (US2): valor mínimo (em centavos) para o
+  // afiliado poder solicitar saque self-service.
+  minPayoutCents             Int     @default(5000)
+  // 009-affiliate-improvements-r1 (US4): janela (dias) e modo de endurecimento
+  // da atribuição órfã por dispositivo. orphanTouchMode ∈ off|window|hold|both.
+  orphanTouchWindowDays      Int     @default(7)
+  orphanTouchMode            String  @default("both")
+  // 009-affiliate-improvements-r1 (US2): kill-switch de rollout do saque self-service.
+  payoutRequestsEnabled      Boolean @default(true)
+}
+
+// 009-affiliate-improvements-r1 (US2): pedido de saque self-service do
+// afiliado. Estados: requested -> paid | rejected. O valor é sempre um
+// snapshot do saldo disponível calculado no servidor (nunca vem do cliente).
+model AffiliatePayoutRequest {
+  id                   String    @id @default(cuid())
+  affiliateId          String
+  amountCents          Int
+  status               String    @default("requested")
+  requestedAt          DateTime  @default(now())
+  resolvedAt           DateTime?
+  resolvedByUserId     String?
+  rejectionReason      String?
+  settledCommissionIds String?
+  createdAt            DateTime  @default(now())
+
+  affiliate  AffiliateProfile @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  resolvedBy User?            @relation("ResolvedPayoutRequests", fields: [resolvedByUserId], references: [id])
+
+  @@index([affiliateId, status])
+  @@index([status, requestedAt])
 }
 
 model AffiliateProfile {
@@ -723,6 +755,7 @@ model AffiliateProfile {
   referredUsers      User[]                      @relation("AffiliateUser")
   commissions        AffiliateCommission[]
   attributionTouches AffiliateAttributionTouch[]
+  payoutRequests     AffiliatePayoutRequest[]
 
   @@index([status])
 }
