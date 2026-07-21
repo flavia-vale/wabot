@@ -300,6 +300,95 @@ function PixEditForm({ profile, onUpdated }) {
   )
 }
 
+const PAYOUT_STATUS_LABELS = {
+  requested: { label: 'Em análise', className: 'bg-amber-100 text-amber-700' },
+  paid: { label: 'Pago', className: 'bg-emerald-100 text-emerald-700' },
+  rejected: { label: 'Recusado', className: 'bg-red-100 text-red-700' },
+}
+
+// US2 (009-affiliate-improvements-r1): botão de solicitar saque (habilitado
+// conforme available.canRequest) + histórico de solicitações do afiliado.
+function PayoutRequests() {
+  const [data, setData] = useState(undefined)
+  const [requesting, setRequesting] = useState(false)
+  const [message, setMessage] = useState('')
+
+  function load() {
+    api.affiliatePayoutRequests().then(setData).catch(() => setData(null))
+  }
+
+  useEffect(() => { load() }, [])
+
+  async function handleRequest() {
+    setRequesting(true)
+    setMessage('')
+    try {
+      await api.affiliatePayoutRequestCreate()
+      setMessage('Solicitação de saque enviada com sucesso.')
+      load()
+    } catch (err) {
+      setMessage(err.message || 'Não foi possível solicitar o saque.')
+    } finally {
+      setRequesting(false)
+    }
+  }
+
+  if (data === undefined) return null
+  if (data === null) return null
+
+  const available = data.available ?? { availableCents: 0, debtCents: 0, minPayoutCents: 5000, canRequest: false }
+  const requests = data.requests ?? []
+
+  return (
+    <div className="rounded-xl border border-gray-100 p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-base font-bold text-gray-800">Saque self-service</h2>
+          <p className="text-xs text-gray-500">Saldo disponível: {formatCurrency(available.availableCents)} · Mínimo: {formatCurrency(available.minPayoutCents)}</p>
+        </div>
+        <button
+          onClick={handleRequest}
+          disabled={!available.canRequest || requesting}
+          className="min-h-11 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+        >
+          {requesting ? 'Enviando...' : 'Solicitar saque'}
+        </button>
+      </div>
+      {message && <p className="mt-2 text-sm text-gray-700">{message}</p>}
+
+      {requests.length > 0 && (
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-sm min-w-[440px]">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="text-left px-3 py-2 text-xs font-bold text-gray-500 uppercase">Data</th>
+                <th className="text-right px-3 py-2 text-xs font-bold text-gray-500 uppercase">Valor</th>
+                <th className="text-right px-3 py-2 text-xs font-bold text-gray-500 uppercase">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {requests.map(r => (
+                <tr key={r.id}>
+                  <td className="px-3 py-2 text-gray-700">{formatDate(r.requestedAt)}</td>
+                  <td className="px-3 py-2 text-right font-semibold text-gray-900">{formatCurrency(r.amountCents)}</td>
+                  <td className="px-3 py-2 text-right">
+                    <span className={`rounded-full px-2 py-1 text-xs font-bold ${(PAYOUT_STATUS_LABELS[r.status] ?? PAYOUT_STATUS_LABELS.requested).className}`}>
+                      {(PAYOUT_STATUS_LABELS[r.status] ?? PAYOUT_STATUS_LABELS.requested).label}
+                    </span>
+                    {r.status === 'rejected' && r.rejectionReason && (
+                      <p className="mt-1 text-xs text-red-600">{r.rejectionReason}</p>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function AffiliatePage() {
   const [data, setData] = useState(undefined)
   const [copied, setCopied] = useState(false)
@@ -414,10 +503,16 @@ export default function AffiliatePage() {
         <StatCard label="Saldo a liberar" value={formatCurrency(stats.pendingCents ?? 0)} helper="Aguardando a janela de segurança." />
         <StatCard label="Disponível para saque" value={formatCurrency(stats.payableCents ?? 0)} helper="Comissões liberadas ou aprovadas." />
         <StatCard label="Total pago" value={formatCurrency(stats.totalEarnedCents ?? 0)} helper="Somente valores já pagos via PIX." />
+        <StatCard label="Total ganho na vida" value={formatCurrency(stats.lifetimeEarnedCents ?? 0)} helper="Tudo que você já gerou de comissão não revertida (pago + a liberar + disponível)." />
         <StatCard label="Estornado/revertido" value={formatCurrency(stats.reversedCents ?? 0)} helper="Reembolsos e chargebacks removidos do saldo." />
+        {(stats.debtCents ?? 0) > 0 && (
+          <StatCard label="Saldo devedor" value={formatCurrency(stats.debtCents)} helper="Será descontado do seu próximo repasse (estorno de comissão já paga)." />
+        )}
       </div>
 
       <MyReferrals />
+
+      <PayoutRequests />
 
       {months.length > 0 && (
         <div>

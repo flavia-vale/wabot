@@ -5,7 +5,7 @@ import { resolvePlanForPayment, DEFAULT_PLANS } from '../../domain/payments/serv
 import { classifyPayerEmail } from '../../domain/payments/payerEmail.js'
 import { appContainer } from '../../app/container.js'
 import { writeWebhookEvent } from '../../events/store.js'
-import { tryCreateAffiliateCommission, reconcileAffiliateCommissions, promoteEligibleAffiliateCommissions, reverseAffiliateCommissionForPayment } from '../../domain/affiliate/service.js'
+import { tryCreateAffiliateCommission, reconcileAffiliateCommissions, promoteEligibleAffiliateCommissions, reverseAffiliateCommissionForPayment, checkStuckPromotions } from '../../domain/affiliate/service.js'
 export { resolvePlanForPayment }
 
 const MP_WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET
@@ -712,6 +712,13 @@ function startWebhookProcessor(app) {
         }
       } catch (err) {
         app.log.error({ err: err?.message }, 'affiliate_commission_eligibility_cycle_failed')
+      }
+      // US6 (009-affiliate-improvements-r1): alarme se a promoção pending→eligible
+      // parou de avançar (reaproveita este mesmo tick — sem novo timer/processo).
+      try {
+        await checkStuckPromotions({ log: app.log })
+      } catch (err) {
+        app.log.error({ err: err?.message }, 'affiliate_promotion_stuck_check_failed')
       }
     }, PAYMENT_RECONCILIATION_INTERVAL_MS)
     reconciliationTimer.unref?.()

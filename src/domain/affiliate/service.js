@@ -1,10 +1,26 @@
 import { randomBytes } from 'crypto'
 import defaultDb from '../../db.js'
 import { encryptCredential, decryptCredential } from '../../credentialCrypto.js'
+import { computeDebtCents, computeAvailableCents } from './affiliateBalance.js'
+import { canRequestPayout } from './payoutPolicy.js'
+import { validatePixKey } from './pixKeyValidation.js'
+import { resolveOrphanTouchDecision } from './orphanTouchPolicy.js'
+import { sendCommissionEligibleEmail } from '../../email/affiliateEmails.js'
+import { evaluateStuckPromotion } from './stuckPromotionAlarm.js'
+
+const AFFILIATE_STUCK_PROMOTION_THRESHOLD_MS = Number(process.env.AFFILIATE_STUCK_PROMOTION_THRESHOLD_MS) || 24 * 60 * 60 * 1000
+
+// US4 (009-affiliate-improvements-r1): marcador persistido no campo já
+// existente `campaign` de AffiliateAttributionTouch para sinalizar, sem
+// migration nova, que a atribuição órfã por dispositivo pediu hold (settings
+// orphanTouchMode='hold'/'both'). Lido em tryCreateAffiliateCommission para
+// que a comissão resultante nasça held mesmo quando os sinais afiliado×
+// indicado (evaluateAffiliateCommissionRisk) não disparam por si só.
+export const ORPHAN_DEVICE_HOLD_MARKER = 'orphan_device_hold'
 
 const db = defaultDb
 
-const DEFAULT_SETTINGS = { cookieDurationHours: 24, commissionPercent: 30, commissionRecurringPercent: 30, recurringCommissionEnabled: true, commissionHoldDays: 30, attributionWindowDays: 30, attributionModel: 'last_non_direct' }
+const DEFAULT_SETTINGS = { cookieDurationHours: 24, commissionPercent: 30, commissionRecurringPercent: 30, recurringCommissionEnabled: true, commissionHoldDays: 30, attributionWindowDays: 30, attributionModel: 'last_non_direct', minPayoutCents: 5000, orphanTouchWindowDays: 7, orphanTouchMode: 'both', payoutRequestsEnabled: true }
 
 export async function getAffiliateSettings(dbi = db) {
   const settings = await dbi.affiliateSettings.findFirst({ where: { id: 1 } })
@@ -112,18 +128,42 @@ export async function attachAffiliateAttributionTouchesToUser({ visitorId, userI
   return { updated: result.count ?? 0 }
 }
 
-// O3: fallback quando o cadastro NÃO trouxe visitorId (ex.: OAuth, body sem o
-// campo). Casa touches anônimos recentes do MESMO afiliado e MESMO dispositivo
-// (ipHash + uaHash) — exige os dois sinais juntos para não colar touches de IP
-// compartilhado (NAT). Sem isso, um clique anônimo no link vira venda órfã.
-export async function attachOrphanTouchesByDevice({ affiliateId, ipHash, uaHash, userId, windowDays = 30, db: dbi = db, now = new Date() } = {}) {
-  if (!affiliateId || !userId || (!ipHash && !uaHash) || typeof dbi.affiliateAttributionTouch?.updateMany !== 'function') return { updated: 0, skipped: 'missing_signal_or_store' }
-  const since = new Date(now.getTime() - Math.max(1, Number(windowDays) || 30) * 24 * 60 * 60 * 1000)
-  const where = { affiliateId, userId: null, touchedAt: { gte: since } }
+// O3/US4: fallback quando o cadastro NÃO trouxe visitorId (ex.: OAuth, body
+// sem o campo). Casa touches anônimos recentes do MESMO afiliado e MESMO
+// dispositivo (ipHash + uaHash) — exige os dois sinais juntos para não colar
+// touches de IP compartilhado (NAT). Sem isso, um clique anônimo no link vira
+// venda órfã. US4 (009-affiliate-improvements-r1): a janela e o hold agora
+// vêm de `orphanTouchWindowDays`/`orphanTouchMode` das settings (era 30 dias
+// hardcoded), avaliados por-touch via `orphanTouchPolicy.resolveOrphanTouchDecision`.
+export async function attachOrphanTouchesByDevice({ affiliateId, ipHash, uaHash, userId, windowDays, db: dbi = db, now = new Date() } = {}) {
+  if (!affiliateId || !userId || (!ipHash && !uaHash) || typeof dbi.affiliateAttributionTouch?.findMany !== 'function') return { updated: 0, skipped: 'missing_signal_or_store' }
+
+  const settings = windowDays != null
+    ? { orphanTouchWindowDays: windowDays, orphanTouchMode: 'off' } // compat: chamador explícito de windowDays preserva comportamento legado sem hold
+    : await getAffiliateSettings(dbi)
+
+  const where = { affiliateId, userId: null }
   if (ipHash) where.ipHash = ipHash
   if (uaHash) where.uaHash = uaHash
-  const result = await dbi.affiliateAttributionTouch.updateMany({ where, data: { userId } })
-  return { updated: result.count ?? 0 }
+  const candidates = await dbi.affiliateAttributionTouch.findMany({ where, orderBy: { touchedAt: 'desc' } })
+
+  let updated = 0
+  let held = false
+  for (const touch of candidates) {
+    const touchAgeDays = (now.getTime() - new Date(touch.touchedAt).getTime()) / (24 * 60 * 60 * 1000)
+    const decision = resolveOrphanTouchDecision({
+      orphanTouchWindowDays: settings.orphanTouchWindowDays,
+      orphanTouchMode: settings.orphanTouchMode,
+      touchAgeDays,
+    })
+    if (!decision.withinWindow) continue
+    const data = { userId }
+    if (decision.shouldHold) data.campaign = ORPHAN_DEVICE_HOLD_MARKER
+    await dbi.affiliateAttributionTouch.update({ where: { id: touch.id }, data })
+    updated++
+    if (decision.shouldHold) held = true
+  }
+  return { updated, held }
 }
 
 async function generateUniqueCode() {
@@ -136,6 +176,15 @@ async function generateUniqueCode() {
 }
 
 export async function applyAffiliate({ userId, pixKey, pixKeyType }) {
+  // US3 (009-affiliate-improvements-r1): valida o FORMATO da chave PIX contra
+  // o tipo declarado ANTES de qualquer cifragem/persistência (FR-021).
+  const validation = validatePixKey({ pixKey, pixKeyType })
+  if (!validation.ok) {
+    const err = new Error(validation.error)
+    err.statusCode = 400
+    throw err
+  }
+
   const existing = await db.affiliateProfile.findUnique({ where: { userId } })
   // pixKey/CPF cifrado em repouso (D-3). encryptCredential é no-op sem a env
   // (dev/test) e idempotente.
@@ -165,7 +214,9 @@ export async function getAffiliateMeData({ userId, db: dbi = db }) {
 
   // O6: agrega no banco (groupBy por mês+status) em vez de carregar TODAS as
   // comissões do afiliado em memória — escala com o tempo de vida do afiliado.
-  const [totalReferrals, grouped] = await Promise.all([
+  // debtLedgerRows: US1 — saldo devedor é derivado do ledger (affiliateBalance.js),
+  // nunca uma coluna mutável. groupBy por toStatus evita carregar linhas em memória.
+  const [totalReferrals, grouped, debtLedgerRows] = await Promise.all([
     dbi.user.count({ where: { affiliateProfileId: profile.id } }),
     dbi.affiliateCommission.groupBy({
       by: ['cycleMonth', 'status'],
@@ -173,7 +224,17 @@ export async function getAffiliateMeData({ userId, db: dbi = db }) {
       _sum: { commissionAmountCents: true },
       _count: true,
     }),
+    typeof dbi.affiliateCommissionLedger?.groupBy === 'function'
+      ? dbi.affiliateCommissionLedger.groupBy({
+        by: ['toStatus'],
+        where: { affiliateId: profile.id, toStatus: { in: ['debt', 'debt_settled'] } },
+        _sum: { amountCents: true },
+      }).catch(() => [])
+      : [],
   ])
+  const debtCents = computeDebtCents({
+    ledgerRows: debtLedgerRows.map(g => ({ toStatus: g.toStatus, amountCents: g._sum?.amountCents ?? 0 })),
+  })
 
   const payableStatuses = new Set(['eligible', 'approved'])
   const pendingStatuses = new Set(['pending', 'held'])
@@ -190,16 +251,27 @@ export async function getAffiliateMeData({ userId, db: dbi = db }) {
     if (g.status !== 'reversed') totalSales += count
 
     if (!byMonth[g.cycleMonth]) byMonth[g.cycleMonth] = { month: g.cycleMonth, totalCents: 0, status: g.status, count: 0 }
-    if (g.status !== 'reversed') byMonth[g.cycleMonth].totalCents += sum
-    byMonth[g.cycleMonth].count += count
+    if (g.status !== 'reversed') {
+      byMonth[g.cycleMonth].totalCents += sum
+      // US7 (FR-027): "Vendas"/"Vendas válidas" precisam bater — o count por
+      // mês (histórico) também exclui revertidas, igual ao totalSales acima
+      // (antes somava count de TODOS os status, inclusive reversed).
+      byMonth[g.cycleMonth].count += count
+    }
     const currentPriority = statusPriority[byMonth[g.cycleMonth].status] ?? 99
     const nextPriority = statusPriority[g.status] ?? 99
     if (nextPriority < currentPriority) byMonth[g.cycleMonth].status = g.status
   }
 
+  // US7 (FR-028): lifetimeEarnedCents = tudo que já foi "ganho" (não
+  // revertido), independente de já ter sido pago — distinto de
+  // totalEarnedCents (que continua sendo só o que foi efetivamente pago via
+  // PIX). Soma paid + payable (eligible/approved) + pending (pending/held).
+  const lifetimeEarnedCents = totalEarnedCents + payableCents + pendingCents
+
   return {
     profile: presentAffiliateProfile(profile),
-    stats: { totalReferrals, totalSales, totalEarnedCents, payableCents, pendingCents, reversedCents },
+    stats: { totalReferrals, totalSales, totalEarnedCents, payableCents, pendingCents, reversedCents, debtCents, lifetimeEarnedCents },
     months: Object.values(byMonth).sort((a, b) => b.month.localeCompare(a.month)),
   }
 }
@@ -403,28 +475,62 @@ export async function reverseAffiliateCommission({ id, reason, db: dbi = db } = 
   return { updated: true, commission }
 }
 
+// US1 (009-affiliate-improvements-r1): checa se já existe lançamento de
+// dívida para essa comissão — idempotência do estorno de comissão paga
+// (FR-003/R2). Reprocessar o mesmo estorno/webhook não duplica a dívida.
+async function hasExistingDebtLedgerEntry(dbi, commissionId) {
+  if (typeof dbi?.affiliateCommissionLedger?.findFirst !== 'function') return false
+  const existing = await dbi.affiliateCommissionLedger.findFirst({
+    where: { commissionId, toStatus: 'debt' },
+  }).catch(() => null)
+  return !!existing
+}
+
 export async function reverseAffiliateCommissionForPayment({ paymentId, reason, db: dbi = db } = {}) {
   if (!paymentId) throw new Error('reverseAffiliateCommissionForPayment: paymentId obrigatório')
   const normalizedReason = String(reason ?? '').trim().slice(0, 500)
   if (!normalizedReason) return { updated: 0, reason: 'missing_reason' }
   // Captura as comissões afetadas ANTES do update para gravar o ledger com o
-  // status de origem (guardado para fake dbs sem findMany).
+  // status de origem (guardado para fake dbs sem findMany). Inclui 'paid'
+  // (US1: estorno de comissão já paga vira dívida em vez de reversão simples).
   const affected = typeof dbi.affiliateCommission.findMany === 'function'
     ? await dbi.affiliateCommission.findMany({
-      where: { paymentId, status: { in: COMMISSION_REVERSIBLE_STATUSES } },
+      where: { paymentId, status: { in: [...COMMISSION_REVERSIBLE_STATUSES, 'paid'] } },
       select: { id: true, affiliateId: true, status: true, commissionAmountCents: true },
     }).catch(() => [])
     : []
+  if (!affected.length) return { updated: 0, reason: 'not_reversible' }
+
   const now = new Date()
-  const result = await dbi.affiliateCommission.updateMany({
-    where: { paymentId, status: { in: COMMISSION_REVERSIBLE_STATUSES } },
-    data: { status: 'reversed', reversedAt: now, reversalReason: normalizedReason },
-  })
-  if ((result.count ?? 0) < 1) return { updated: 0, reason: 'not_reversible' }
+  let updatedCount = 0
+
   for (const c of affected) {
+    if (c.status === 'paid') {
+      // FR-001/FR-003: estorno de comissão paga NÃO reverte o pagamento em si
+      // (já foi repassado) — gera dívida idempotente no ledger, sem duplicar
+      // se o webhook reentrar.
+      const alreadyDebt = await hasExistingDebtLedgerEntry(dbi, c.id)
+      if (alreadyDebt) continue
+      const result = await dbi.affiliateCommission.updateMany({
+        where: { id: c.id, status: 'paid' },
+        data: { status: 'reversed', reversedAt: now, reversalReason: normalizedReason },
+      })
+      if ((result.count ?? 0) < 1) continue
+      updatedCount += result.count
+      await writeCommissionLedger({ commissionId: c.id, affiliateId: c.affiliateId, fromStatus: 'paid', toStatus: 'debt', amountCents: -Math.abs(c.commissionAmountCents ?? 0), reason: 'reversal_after_paid', actor: 'webhook', at: now, db: dbi })
+      continue
+    }
+
+    const result = await dbi.affiliateCommission.updateMany({
+      where: { id: c.id, status: { in: COMMISSION_REVERSIBLE_STATUSES } },
+      data: { status: 'reversed', reversedAt: now, reversalReason: normalizedReason },
+    })
+    if ((result.count ?? 0) < 1) continue
+    updatedCount += result.count
     await writeCommissionLedger({ commissionId: c.id, affiliateId: c.affiliateId, fromStatus: c.status, toStatus: 'reversed', amountCents: c.commissionAmountCents, reason: normalizedReason, actor: 'webhook', at: now, db: dbi })
   }
-  return { updated: result.count ?? 0 }
+
+  return { updated: updatedCount }
 }
 
 export async function tryCreateAffiliateCommission({ userId, paymentId, saleAmountCents, occurredAt, log, db: dbi = db }) {
@@ -463,13 +569,23 @@ export async function tryCreateAffiliateCommission({ userId, paymentId, saleAmou
     const risk = evaluateAffiliateCommissionRisk({ profile, referredUser: user, affiliateSignals, referredSignals })
     if (risk.decision === 'block') return { skipped: risk.reason }
 
+    // US4: se a atribuição deste indicado veio de toque órfão por dispositivo
+    // marcado para hold (orphanTouchMode='hold'/'both'), a comissão nasce held
+    // mesmo quando o risco por sinais afiliado×indicado não dispara sozinho.
+    const orphanHoldTouch = typeof dbi.affiliateAttributionTouch?.findFirst === 'function'
+      ? await dbi.affiliateAttributionTouch.findFirst({ where: { affiliateId: profile.id, userId, campaign: ORPHAN_DEVICE_HOLD_MARKER } }).catch(() => null)
+      : null
+    const effectiveRisk = risk.decision === 'allow' && orphanHoldTouch
+      ? { decision: 'hold', reason: 'orphan_device_attribution' }
+      : risk
+
     const commissionRatePct = resolveRate(settings, profile, isRecurring)
     const commissionAmountCents = Math.round(saleAmountCents * commissionRatePct / 100)
     // occurredAt permite que a reconciliação retroativa atribua a comissão ao
     // ciclo do pagamento original, não ao mês em que o backfill rodou.
     const cycleMonth = (occurredAt ? new Date(occurredAt) : new Date()).toISOString().slice(0, 7)
     const eligibleAt = addDays(occurredAt, settings.commissionHoldDays ?? DEFAULT_SETTINGS.commissionHoldDays)
-    const isHeld = risk.decision === 'hold'
+    const isHeld = effectiveRisk.decision === 'hold'
 
     const commission = await dbi.affiliateCommission.create({
       data: {
@@ -483,11 +599,37 @@ export async function tryCreateAffiliateCommission({ userId, paymentId, saleAmou
         status: isHeld ? 'held' : 'pending',
         cycleMonth,
         eligibleAt,
-        ...(isHeld ? { heldAt: new Date(), holdReason: risk.reason } : {}),
+        ...(isHeld ? { heldAt: new Date(), holdReason: effectiveRisk.reason } : {}),
       },
     })
-    await writeCommissionLedger({ commissionId: commission.id, affiliateId: profile.id, fromStatus: null, toStatus: commission.status, amountCents: commissionAmountCents, reason: isHeld ? risk.reason : 'created', actor: 'system', log, db: dbi })
-    return { created: true, commissionId: commission.id, commissionType: commission.commissionType, status: commission.status }
+
+    // US7 (009-affiliate-improvements-r1, R3/FR-006): reforço determinístico
+    // contra a corrida de dois pagamentos concorrentes do MESMO indicado —
+    // ambos podem ter visto isRecurring=false e criado 'initial' em paralelo.
+    // Reconsulta pós-criação: a comissão 'initial' não-revertida MAIS ANTIGA
+    // (por createdAt) permanece 'initial'; qualquer outra perde a corrida e é
+    // rebaixada a 'recurring' aqui mesmo (2ª tentativa determinística).
+    let finalCommission = commission
+    if (!isRecurring) {
+      const earliestInitial = typeof dbi.affiliateCommission.findFirst === 'function'
+        ? await dbi.affiliateCommission.findFirst({
+          where: { referredUserId: userId, status: { not: 'reversed' }, commissionType: 'initial' },
+          orderBy: { createdAt: 'asc' },
+        }).catch(() => null)
+        : null
+      if (earliestInitial && earliestInitial.id !== commission.id) {
+        const recurringRatePct = resolveRate(settings, profile, true)
+        const recurringAmountCents = Math.round(saleAmountCents * recurringRatePct / 100)
+        finalCommission = await dbi.affiliateCommission.update({
+          where: { id: commission.id },
+          data: { commissionType: 'recurring', commissionRatePct: recurringRatePct, commissionAmountCents: recurringAmountCents },
+        })
+        log?.info?.({ commissionId: commission.id, referredUserId: userId }, 'affiliate_commission_race_demoted_to_recurring')
+      }
+    }
+
+    await writeCommissionLedger({ commissionId: finalCommission.id, affiliateId: profile.id, fromStatus: null, toStatus: finalCommission.status, amountCents: finalCommission.commissionAmountCents, reason: isHeld ? effectiveRisk.reason : 'created', actor: 'system', log, db: dbi })
+    return { created: true, commissionId: finalCommission.id, commissionType: finalCommission.commissionType, status: finalCommission.status }
   } catch (err) {
     if (err.code === 'P2002') return { skipped: 'duplicate_payment' }
     log?.error?.({ err }, 'tryCreateAffiliateCommission failed')
@@ -545,7 +687,7 @@ export async function reconcileAffiliateCommissions({ db: dbi = db, log, batchSi
 export async function promoteEligibleAffiliateCommissions({ db: dbi = db, now = new Date(), batchSize = 200, log } = {}) {
   const rows = await dbi.affiliateCommission.findMany({
     where: { status: 'pending', eligibleAt: { lte: now } },
-    select: { id: true, affiliateId: true, commissionAmountCents: true },
+    select: { id: true, affiliateId: true, commissionAmountCents: true, affiliate: { select: { user: { select: { email: true } } } } },
     orderBy: { eligibleAt: 'asc' },
     take: batchSize,
   })
@@ -559,10 +701,203 @@ export async function promoteEligibleAffiliateCommissions({ db: dbi = db, now = 
       })
       await writeCommissionLedger({ commissionId: row.id, affiliateId: row.affiliateId, fromStatus: 'pending', toStatus: 'eligible', amountCents: row.commissionAmountCents, reason: 'hold_elapsed', actor: 'system', log, db: dbi })
       result.promoted++
+      // US5 (009-affiliate-improvements-r1, T037): notificação fire-and-forget,
+      // best-effort e no-op sem SMTP — nunca atrasa/derruba a promoção em si.
+      sendCommissionEligibleEmail({ to: row.affiliate?.user?.email, amountCents: row.commissionAmountCents }).catch(() => {})
     } catch (err) {
       result.failed++
       log?.error?.({ err: err?.message, commissionId: row.id }, 'affiliate_commission_eligibility_failed')
     }
   }
   return result
+}
+
+// ---------------------------------------------------------------------------
+// US2 (009-affiliate-improvements-r1): saque self-service com valor mínimo.
+// ---------------------------------------------------------------------------
+
+// Saldo (disponível/devedor) derivado de duas agregações no banco (padrão O6,
+// sem carregar linhas em memória) — reaproveitado por createPayoutRequest e
+// pela confirmação de saque.
+async function getAffiliateBalanceSnapshot({ affiliateId, dbi }) {
+  const [commissionRows, debtLedgerRows] = await Promise.all([
+    dbi.affiliateCommission.groupBy({
+      by: ['status'],
+      where: { affiliateId, status: { in: COMMISSION_PAYABLE_STATUSES } },
+      _sum: { commissionAmountCents: true },
+    }),
+    typeof dbi.affiliateCommissionLedger?.groupBy === 'function'
+      ? dbi.affiliateCommissionLedger.groupBy({
+        by: ['toStatus'],
+        where: { affiliateId, toStatus: { in: ['debt', 'debt_settled'] } },
+        _sum: { amountCents: true },
+      }).catch(() => [])
+      : [],
+  ])
+  const availableCents = computeAvailableCents({
+    commissionRows: commissionRows.map(g => ({ status: g.status, commissionAmountCents: g._sum?.commissionAmountCents ?? 0 })),
+  })
+  const debtCents = computeDebtCents({
+    ledgerRows: debtLedgerRows.map(g => ({ toStatus: g.toStatus, amountCents: g._sum?.amountCents ?? 0 })),
+  })
+  return { availableCents, debtCents }
+}
+
+export async function createPayoutRequest({ userId, db: dbi = db } = {}) {
+  const profile = await dbi.affiliateProfile.findUnique({ where: { userId } })
+  if (!profile || profile.status !== 'approved') return { created: false, reason: 'not_approved' }
+
+  const settings = await getAffiliateSettings(dbi)
+  if (settings.payoutRequestsEnabled === false) return { created: false, reason: 'disabled' }
+
+  const [{ availableCents, debtCents }, openRequest] = await Promise.all([
+    getAffiliateBalanceSnapshot({ affiliateId: profile.id, dbi }),
+    typeof dbi.affiliatePayoutRequest?.findFirst === 'function'
+      ? dbi.affiliatePayoutRequest.findFirst({ where: { affiliateId: profile.id, status: 'requested' } })
+      : null,
+  ])
+
+  const decision = canRequestPayout({
+    availableCents,
+    debtCents,
+    minPayoutCents: settings.minPayoutCents ?? 5000,
+    hasOpenRequest: !!openRequest,
+  })
+  if (!decision.ok) return { created: false, reason: decision.reason, error: decision.error }
+
+  // O valor sacado NUNCA vem do cliente — é sempre o saldo disponível
+  // calculado no servidor no momento do pedido (snapshot).
+  const payoutRequest = await dbi.affiliatePayoutRequest.create({
+    data: { affiliateId: profile.id, amountCents: availableCents, status: 'requested' },
+  })
+  return { created: true, payoutRequest }
+}
+
+export async function listAffiliatePayoutRequests({ affiliateId, db: dbi = db } = {}) {
+  if (typeof dbi.affiliatePayoutRequest?.findMany !== 'function') return []
+  return dbi.affiliatePayoutRequest.findMany({
+    where: { affiliateId },
+    orderBy: { requestedAt: 'desc' },
+  })
+}
+
+// Distribui o valor a amortizar entre as comissões que originaram dívida
+// (mais antigas primeiro), preservando o vínculo obrigatório do ledger com
+// uma AffiliateCommission real (FK) em vez de um id sintético. O outstanding
+// por comissão é `debt` menos `debt_settled` já lançados para ela.
+async function outstandingDebtByCommission(dbi, affiliateId) {
+  if (typeof dbi.affiliateCommissionLedger?.findMany !== 'function') return []
+  const rows = await dbi.affiliateCommissionLedger.findMany({
+    where: { affiliateId, toStatus: { in: ['debt', 'debt_settled'] } },
+    select: { commissionId: true, toStatus: true, amountCents: true, createdAt: true },
+    orderBy: { createdAt: 'asc' },
+  })
+  const byCommission = new Map()
+  for (const r of rows) {
+    const cur = byCommission.get(r.commissionId) ?? { debt: 0, settled: 0, firstDebtAt: null }
+    if (r.toStatus === 'debt') {
+      cur.debt += -(Number(r.amountCents) || 0)
+      if (!cur.firstDebtAt) cur.firstDebtAt = r.createdAt
+    } else {
+      cur.settled += Number(r.amountCents) || 0
+    }
+    byCommission.set(r.commissionId, cur)
+  }
+  return [...byCommission.entries()]
+    .map(([commissionId, v]) => ({ commissionId, outstanding: Math.max(0, v.debt - v.settled), firstDebtAt: v.firstDebtAt }))
+    .filter(x => x.outstanding > 0)
+    .sort((a, b) => new Date(a.firstDebtAt) - new Date(b.firstDebtAt))
+}
+
+export async function confirmPayoutRequest({ id, adminUserId, db: dbi = db } = {}) {
+  if (!id) throw new Error('confirmPayoutRequest: id obrigatório')
+  const request = await dbi.affiliatePayoutRequest.findUnique({ where: { id } })
+  if (!request) return { updated: false, reason: 'not_found' }
+
+  const now = new Date()
+  // Reserva o pedido primeiro (idempotente por estado) antes de tocar em
+  // ledger/comissões — reprocessar uma confirmação já resolvida é 409.
+  const claim = await dbi.affiliatePayoutRequest.updateMany({
+    where: { id, status: 'requested' },
+    data: { status: 'paid', resolvedAt: now, resolvedByUserId: adminUserId ?? null },
+  })
+  if (claim.count !== 1) return { updated: false, reason: 'not_requested' }
+
+  const affiliateId = request.affiliateId
+
+  // 1) abate a dívida primeiro, sem tornar o repasse negativo (FR-002).
+  const outstandingList = await outstandingDebtByCommission(dbi, affiliateId)
+  const totalDebt = outstandingList.reduce((sum, x) => sum + x.outstanding, 0)
+  let remainingToSettle = Math.min(totalDebt, request.amountCents ?? 0)
+  for (const item of outstandingList) {
+    if (remainingToSettle <= 0) break
+    const amount = Math.min(item.outstanding, remainingToSettle)
+    await writeCommissionLedger({ commissionId: item.commissionId, affiliateId, fromStatus: 'debt', toStatus: 'debt_settled', amountCents: amount, reason: 'payout_offset', actor: adminUserId ?? 'admin', at: now, db: dbi })
+    remainingToSettle -= amount
+  }
+
+  // 2) marca as comissões elegíveis/aprovadas correspondentes como pagas
+  // (reaproveita o mesmo mecanismo do mark-paid manual).
+  const commissions = typeof dbi.affiliateCommission?.findMany === 'function'
+    ? await dbi.affiliateCommission.findMany({
+      where: { affiliateId, status: { in: COMMISSION_PAYABLE_STATUSES } },
+      select: { id: true, status: true, commissionAmountCents: true },
+    })
+    : []
+  const settledCommissionIds = []
+  for (const c of commissions) {
+    const result = await dbi.affiliateCommission.updateMany({
+      where: { id: c.id, status: { in: COMMISSION_PAYABLE_STATUSES } },
+      data: { status: 'paid', paidAt: now, paidByUserId: adminUserId ?? null },
+    })
+    if ((result.count ?? 0) < 1) continue
+    settledCommissionIds.push(c.id)
+    await writeCommissionLedger({ commissionId: c.id, affiliateId, fromStatus: c.status, toStatus: 'paid', amountCents: c.commissionAmountCents, reason: 'payout_confirm', actor: adminUserId ?? 'admin', at: now, db: dbi })
+  }
+
+  const updated = await dbi.affiliatePayoutRequest.update({
+    where: { id },
+    data: { settledCommissionIds: JSON.stringify(settledCommissionIds) },
+  })
+  return { updated: true, payoutRequest: updated }
+}
+
+// ---------------------------------------------------------------------------
+// US6 (009-affiliate-improvements-r1): alarme operacional se a promoção
+// pending→eligible parar de avançar. Reaproveita o `reconciliationTimer`
+// existente em payments.js (sem novo timer/processo — sem impacto de RAM).
+// ---------------------------------------------------------------------------
+export async function checkStuckPromotions({ db: dbi = db, log, now = new Date(), thresholdMs = AFFILIATE_STUCK_PROMOTION_THRESHOLD_MS } = {}) {
+  if (typeof dbi.affiliateCommission?.findMany !== 'function') return { shouldAlarm: false, count: 0, oldestMs: 0 }
+  const rows = await dbi.affiliateCommission.findMany({
+    where: { status: 'pending', eligibleAt: { lt: new Date(now.getTime() - thresholdMs) } },
+    select: { id: true, eligibleAt: true },
+  })
+  const result = evaluateStuckPromotion({ rows, now, thresholdMs })
+  if (result.shouldAlarm) {
+    log?.error?.({ count: result.count, oldestMs: result.oldestMs }, 'affiliate_promotion_stuck')
+    try {
+      const { trackAnalyticsEventSafe } = await import('../../analytics.js')
+      trackAnalyticsEventSafe?.({ event: 'ops_affiliate_promotion_stuck', metadata: { count: result.count, oldestMs: result.oldestMs } })
+    } catch (err) {
+      log?.error?.({ err: err?.message }, 'affiliate_promotion_stuck_event_failed')
+    }
+  }
+  return result
+}
+
+export async function rejectPayoutRequest({ id, adminUserId, reason, db: dbi = db } = {}) {
+  if (!id) throw new Error('rejectPayoutRequest: id obrigatório')
+  const normalizedReason = String(reason ?? '').trim().slice(0, 500)
+  if (!normalizedReason) return { updated: false, reason: 'missing_reason' }
+
+  const now = new Date()
+  const claim = await dbi.affiliatePayoutRequest.updateMany({
+    where: { id, status: 'requested' },
+    data: { status: 'rejected', rejectionReason: normalizedReason, resolvedAt: now, resolvedByUserId: adminUserId ?? null },
+  })
+  if (claim.count !== 1) return { updated: false, reason: 'not_requested' }
+
+  const payoutRequest = await dbi.affiliatePayoutRequest.findUnique({ where: { id } })
+  return { updated: true, payoutRequest }
 }
