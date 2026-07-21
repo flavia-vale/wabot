@@ -557,6 +557,168 @@ function CommissionsTab() {
   )
 }
 
+const PAYOUT_STATUS_BADGES = {
+  requested: { label: 'Em análise', cls: 'bg-amber-100 text-amber-700' },
+  paid: { label: 'Pago', cls: 'bg-emerald-100 text-emerald-700' },
+  rejected: { label: 'Recusado', cls: 'bg-red-100 text-red-700' },
+}
+
+function PayoutRequestBadge({ status }) {
+  const cfg = PAYOUT_STATUS_BADGES[status] ?? PAYOUT_STATUS_BADGES.requested
+  return <span className={`rounded-full px-2 py-1 text-xs font-bold ${cfg.cls}`}>{cfg.label}</span>
+}
+
+// T022 (009-affiliate-improvements-r1, US2): fila admin de solicitações de
+// saque, com ações de confirmar (comissões viram paid + auditoria) e recusar
+// (exige motivo; saldo do afiliado permanece disponível).
+function PayoutRequestsTab() {
+  const [status, setStatus] = useState('requested')
+  const [requests, setRequests] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [message, setMessage] = useState('')
+  const [rejectTarget, setRejectTarget] = useState(null)
+  const [busyId, setBusyId] = useState(null)
+
+  function loadRequests() {
+    setLoading(true)
+    api.adminAffiliatePayoutRequests({ status })
+      .then(result => { setRequests(result.requests ?? []); setLoading(false) })
+      .catch(() => { setRequests([]); setLoading(false) })
+  }
+
+  useEffect(() => {
+    let active = true
+    api.adminAffiliatePayoutRequests({ status })
+      .then(result => { if (active) { setRequests(result.requests ?? []); setLoading(false) } })
+      .catch(() => { if (active) { setRequests([]); setLoading(false) } })
+    return () => { active = false }
+  }, [status])
+
+  async function handleConfirm(id) {
+    setMessage('')
+    setBusyId(id)
+    try {
+      await api.adminAffiliatePayoutConfirm(id)
+      setMessage('Saque confirmado: comissões marcadas como pagas.')
+      loadRequests()
+    } catch (err) {
+      setMessage(err.message || 'Erro ao confirmar saque.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function handleReject(id, reason) {
+    setRejectTarget(null)
+    setMessage('')
+    setBusyId(id)
+    try {
+      await api.adminAffiliatePayoutReject(id, reason)
+      setMessage('Solicitação de saque recusada.')
+      loadRequests()
+    } catch (err) {
+      setMessage(err.message || 'Erro ao recusar saque.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {[['requested', 'Em análise'], ['paid', 'Pagos'], ['rejected', 'Recusados'], ['all', 'Todos']].map(([val, label]) => (
+          <button
+            key={val}
+            onClick={() => setStatus(val)}
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${status === val ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {message && <p className="mb-3 text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2">{message}</p>}
+
+      {loading ? (
+        <p className="text-sm text-gray-500 py-4">Carregando...</p>
+      ) : requests.length === 0 ? (
+        <p className="text-sm text-gray-400 py-4">Nenhuma solicitação de saque nesta situação.</p>
+      ) : (
+        <div className="rounded-xl border border-gray-100 overflow-x-auto">
+          <table className="w-full text-sm min-w-[700px]">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Afiliado</th>
+                <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Valor</th>
+                <th className="text-right px-4 py-2 text-xs font-bold text-gray-500 uppercase">Devedor</th>
+                <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Solicitado em</th>
+                <th className="text-left px-4 py-2 text-xs font-bold text-gray-500 uppercase">Status</th>
+                <th className="px-4 py-2"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {requests.map(r => (
+                <tr key={r.id} className="bg-white">
+                  <td className="px-4 py-3 font-mono text-xs text-gray-700">{r.affiliateCode ?? r.affiliateId}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(r.amountCents)}</td>
+                  <td className="px-4 py-3 text-right text-red-700">{(r.debtCents ?? 0) > 0 ? formatCurrency(r.debtCents) : '—'}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{formatDate(r.requestedAt)}</td>
+                  <td className="px-4 py-3"><PayoutRequestBadge status={r.status} /></td>
+                  <td className="px-4 py-3">
+                    {r.status === 'requested' && (
+                      <div className="flex flex-col items-start gap-1">
+                        <button onClick={() => handleConfirm(r.id)} disabled={busyId === r.id} className="text-xs font-semibold text-emerald-700 hover:underline disabled:opacity-50">Confirmar</button>
+                        <button onClick={() => setRejectTarget(r.id)} disabled={busyId === r.id} className="text-xs font-semibold text-red-700 hover:underline disabled:opacity-50">Recusar</button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {rejectTarget && (
+        <RejectPayoutModal
+          onConfirm={(reason) => handleReject(rejectTarget, reason)}
+          onCancel={() => setRejectTarget(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function RejectPayoutModal({ onConfirm, onCancel }) {
+  const [reason, setReason] = useState('')
+  const [error, setError] = useState('')
+
+  function handleConfirm() {
+    if (!reason.trim()) return setError('Motivo é obrigatório')
+    onConfirm(reason.trim())
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <h2 className="text-base font-bold text-gray-900 mb-3">Recusar solicitação de saque</h2>
+        <textarea
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          placeholder="Motivo da recusa (obrigatório, ex.: chave PIX inválida)"
+          rows={3}
+          className="border rounded-lg px-3 py-2 text-sm w-full outline-none focus:ring-2 focus:ring-red-300 resize-none"
+        />
+        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+        <div className="flex gap-2 mt-4 justify-end">
+          <button onClick={onCancel} className="rounded-lg px-4 py-2 text-sm font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200">Cancelar</button>
+          <button onClick={handleConfirm} className="rounded-lg px-4 py-2 text-sm font-semibold bg-red-600 text-white hover:bg-red-700">Recusar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SettingsTab() {
   const [settings, setSettings] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -568,6 +730,10 @@ function SettingsTab() {
   const [recurringEnabled, setRecurringEnabled] = useState(true)
   const [holdDays, setHoldDays] = useState('')
   const [attributionWindowDays, setAttributionWindowDays] = useState('')
+  const [minPayoutCents, setMinPayoutCents] = useState('')
+  const [orphanTouchWindowDays, setOrphanTouchWindowDays] = useState('')
+  const [orphanTouchMode, setOrphanTouchMode] = useState('both')
+  const [payoutRequestsEnabled, setPayoutRequestsEnabled] = useState(true)
 
   useEffect(() => {
     let active = true
@@ -581,6 +747,10 @@ function SettingsTab() {
         setRecurringEnabled(result.recurringCommissionEnabled ?? true)
         setHoldDays(String(result.commissionHoldDays ?? 30))
         setAttributionWindowDays(String(result.attributionWindowDays ?? 30))
+        setMinPayoutCents(String(result.minPayoutCents ?? 5000))
+        setOrphanTouchWindowDays(String(result.orphanTouchWindowDays ?? 7))
+        setOrphanTouchMode(result.orphanTouchMode ?? 'both')
+        setPayoutRequestsEnabled(result.payoutRequestsEnabled ?? true)
       })
       .catch(() => { if (active) setSettings(null) })
       .finally(() => { if (active) setLoading(false) })
@@ -600,6 +770,10 @@ function SettingsTab() {
         commissionHoldDays: Number(holdDays),
         attributionWindowDays: Number(attributionWindowDays),
         attributionModel: 'last_non_direct',
+        minPayoutCents: Number(minPayoutCents),
+        orphanTouchWindowDays: Number(orphanTouchWindowDays),
+        orphanTouchMode,
+        payoutRequestsEnabled,
       })
       setSettings(result)
       setMessage('Configurações salvas.')
@@ -680,6 +854,57 @@ function SettingsTab() {
         />
         <label htmlFor="recurringEnabled" className="text-sm font-medium text-gray-700">Habilitar comissão recorrente</label>
       </div>
+
+      <hr className="border-gray-100" />
+      <p className="text-xs font-bold uppercase tracking-wide text-gray-500">Saque self-service (US2)</p>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Valor mínimo de saque (R$)</label>
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          value={minPayoutCents === '' ? '' : (Number(minPayoutCents) / 100).toString()}
+          onChange={e => setMinPayoutCents(String(Math.round(Number(e.target.value || 0) * 100)))}
+          className="border rounded-lg px-3 py-2 text-sm w-full outline-none focus:ring-2 focus:ring-emerald-400"
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          id="payoutRequestsEnabled"
+          checked={payoutRequestsEnabled}
+          onChange={e => setPayoutRequestsEnabled(e.target.checked)}
+          className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-400"
+        />
+        <label htmlFor="payoutRequestsEnabled" className="text-sm font-medium text-gray-700">Habilitar solicitação de saque pelo afiliado</label>
+      </div>
+
+      <hr className="border-gray-100" />
+      <p className="text-xs font-bold uppercase tracking-wide text-gray-500">Atribuição órfã por dispositivo (US4)</p>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Janela de atribuição órfã (dias)</label>
+        <input
+          type="number"
+          min="1"
+          max="365"
+          value={orphanTouchWindowDays}
+          onChange={e => setOrphanTouchWindowDays(e.target.value)}
+          className="border rounded-lg px-3 py-2 text-sm w-full outline-none focus:ring-2 focus:ring-emerald-400"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Modo de atribuição órfã</label>
+        <select
+          value={orphanTouchMode}
+          onChange={e => setOrphanTouchMode(e.target.value)}
+          className="border rounded-lg px-3 py-2 text-sm w-full outline-none focus:ring-2 focus:ring-emerald-400"
+        >
+          <option value="off">Desligado (comportamento legado, 30 dias)</option>
+          <option value="window">Só janela (sem hold)</option>
+          <option value="hold">Só hold (sem restringir janela)</option>
+          <option value="both">Janela + hold (padrão seguro)</option>
+        </select>
+      </div>
       {message && <p className="text-sm text-gray-700">{message}</p>}
       <button
         type="submit"
@@ -696,6 +921,7 @@ const TABS = [
   { key: 'candidatures', label: 'Candidaturas' },
   { key: 'approved', label: 'Aprovados' },
   { key: 'commissions', label: 'Comissões' },
+  { key: 'payouts', label: 'Saques' },
   { key: 'settings', label: 'Configurações' },
 ]
 
@@ -745,6 +971,7 @@ export default function AdminAffiliatePage() {
         {activeTab === 'candidatures' && <CandidaturesTab />}
         {activeTab === 'approved' && <ApprovedTab />}
         {activeTab === 'commissions' && <CommissionsTab />}
+        {activeTab === 'payouts' && <PayoutRequestsTab />}
         {activeTab === 'settings' && <SettingsTab />}
       </div>
     </div>

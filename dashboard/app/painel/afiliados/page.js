@@ -503,6 +503,7 @@ export default function AffiliatePage() {
         <StatCard label="Saldo a liberar" value={formatCurrency(stats.pendingCents ?? 0)} helper="Aguardando a janela de segurança." />
         <StatCard label="Disponível para saque" value={formatCurrency(stats.payableCents ?? 0)} helper="Comissões liberadas ou aprovadas." />
         <StatCard label="Total pago" value={formatCurrency(stats.totalEarnedCents ?? 0)} helper="Somente valores já pagos via PIX." />
+        <StatCard label="Total ganho na vida" value={formatCurrency(stats.lifetimeEarnedCents ?? 0)} helper="Tudo que você já gerou de comissão não revertida (pago + a liberar + disponível)." />
         <StatCard label="Estornado/revertido" value={formatCurrency(stats.reversedCents ?? 0)} helper="Reembolsos e chargebacks removidos do saldo." />
         {(stats.debtCents ?? 0) > 0 && (
           <StatCard label="Saldo devedor" value={formatCurrency(stats.debtCents)} helper="Será descontado do seu próximo repasse (estorno de comissão já paga)." />

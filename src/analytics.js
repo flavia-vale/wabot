@@ -87,6 +87,11 @@ export const ANALYTICS_EVENTS = new Set([
   // auto-refresh — precisa de ação manual (ex.: cliente sair/reentrar no
   // grupo). Nunca automático: só visibilidade para decisão humana.
   'ops_wa_group_desync_unresolved',
+  // US6 (009-affiliate-improvements-r1): a promoção pending→eligible parou de
+  // avançar (comissões com eligibleAt vencido há mais que o limiar) — sinal
+  // operacional de que o cron de reconciliação de pagamentos parou ou está
+  // travado, antes que o afiliado precise reclamar.
+  'ops_affiliate_promotion_stuck',
 ])
 
 const SENSITIVE_KEY_PATTERN = /(token|secret|password|cookie|credential|csrf|ssid|key|message|text|url|phone|email)/i

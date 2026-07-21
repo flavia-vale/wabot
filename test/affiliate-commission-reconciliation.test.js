@@ -234,6 +234,13 @@ test('reverseAffiliateCommissionForPayment reverte apenas comissões reversívei
   const calls = []
   const db = {
     affiliateCommission: {
+      // US1 (009-affiliate-improvements-r1): reverseAffiliateCommissionForPayment
+      // agora captura as comissões afetadas ANTES do updateMany (para gravar o
+      // ledger com o status de origem) e atualiza por id — precisa de
+      // findMany no fake db, e o updateMany passa a ser por-comissão.
+      findMany: async ({ where }) => where.paymentId === 'pay-1'
+        ? [{ id: 'c1', affiliateId: 'prof-1', status: 'eligible', commissionAmountCents: 1000 }]
+        : [],
       updateMany: async (args) => {
         calls.push(args)
         return { count: 1 }
@@ -244,7 +251,7 @@ test('reverseAffiliateCommissionForPayment reverte apenas comissões reversívei
   assert.deepEqual(await reverseAffiliateCommissionForPayment({ paymentId: 'pay-1', reason: '', db }), { updated: 0, reason: 'missing_reason' })
   const result = await reverseAffiliateCommissionForPayment({ paymentId: 'pay-1', reason: 'payment_refunded', db })
   assert.deepEqual(result, { updated: 1 })
-  assert.equal(calls[0].where.paymentId, 'pay-1')
+  assert.equal(calls[0].where.id, 'c1')
   assert.deepEqual(calls[0].where.status.in, ['pending', 'eligible', 'approved', 'held'])
   assert.equal(calls[0].data.status, 'reversed')
   assert.equal(calls[0].data.reversalReason, 'payment_refunded')
