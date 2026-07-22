@@ -612,6 +612,62 @@ window.__PRELOADED_STATE__={"polycards":[{"unique_id":"a","metadata":{"id":"MLB4
   assert.equal(extractFeaturedSocialProduct(html), 'https://www.mercadolivre.com.br/p/MLB22797411')
 })
 
+// RCA 2026-07-22 — robustez: share de PRODUTO cujo blob de polycards mudou de
+// ESTRUTURA (a regex legada da Fonte 3 não casa mais), mas a URL do card
+// destacado ainda carrega `c_id=/home/card-featured`. A Fonte 1 (âncora na URL
+// do card destacado) extrai o MLB mesmo assim → a oferta segue com produto (e
+// o fallback partner_id funciona sem depender do SSID), em vez de virar cupom.
+test('extractFeaturedSocialProduct: Fonte 1 — extrai MLB da URL do card destacado mesmo com polycards em estrutura nova', () => {
+  const html = `<!doctype html><html><head>
+<meta property="og:title" content="Processador Amd Ryzen 5 5500"/>
+</head><body><script>window.__NEXT_DATA__={"props":{"cards":[{"kind":"featured","link":"https://www.mercadolivre.com.br/processador-amd-ryzen-5-5500/p/MLB27725557?c_id=/home/card-featured/element"}]}};</script></body></html>`
+  assert.equal(extractFeaturedSocialProduct(html), 'https://www.mercadolivre.com.br/p/MLB27725557')
+})
+
+// RCA 2026-07-22 (fim a fim) — o print da cliente: produto por short link /sec/
+// com SSID VENCIDO estava sendo DESCARTADO ("Nenhum link pôde ser convertido").
+// Deve sair com o link LONGO + partner_id (comissão preservada, independe do
+// SSID). O /sec/ resolve pra share /social/?ref= de PRODUTO; a extração do card
+// destacado dá o MLB; o createLink falha (401) e cai no fallback partner_id.
+test('/sec/ de PRODUTO com SSID vencido NÃO descarta — sai com partner_id no link longo do produto', async (t) => {
+  clearMercadoLivreAffiliateCooldownsForTest()
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/social/gatunadaspromocoes?ref=BLOB1Psi79H' }))
+  const featuredHtml = `<!doctype html><html><head>
+<meta property="og:title" content="Processador Amd Ryzen 5 5500"/>
+</head><body><script>window.__PRELOADED_STATE__={"polycards":[{"unique_id":"a","metadata":{"id":"MLB4013726737","product_id":"MLB27725557","url":"https://www.mercadolivre.com.br/ryzen/p/MLB27725557?c_id=/home/card-featured/element"}}]};</script></body></html>`
+  t.mock.method(axios, 'get', async () => ({ data: featuredHtml }))
+  // createLink rejeita por SSID expirado (401).
+  t.mock.method(axios, 'post', async () => ({ status: 401, data: { message: 'unauthorized: sessão expirada' }, headers: {} }))
+
+  const result = await convert('https://mercadolivre.com/sec/1Psi79H', { tag: '475630078', ssid: 'ssid-expirado-1234567890' })
+  assert.equal(typeof result, 'object', 'oferta não pode ser descartada quando o SSID vence')
+  assert.equal(result.linkKind, 'product')
+  assert.match(result.url, /MLB27725557/)
+  assert.match(result.url, /partner_id=475630078/)
+  assert.doesNotMatch(result.url, /\/sec\//, 'o código de terceiro não pode vazar')
+  clearMercadoLivreAffiliateCooldownsForTest()
+})
+
+// Fonte 2 — share de produto que expõe o produto no canonical/og:url (âncora
+// da própria página, não recomendação). Sem card-featured e sem polycard.
+test('extractFeaturedSocialProduct: Fonte 2 — extrai MLB do canonical/og:url da página de produto', () => {
+  const html = `<!doctype html><html><head>
+<link rel="canonical" href="https://www.mercadolivre.com.br/p/MLB27725557"/>
+<meta property="og:title" content="Processador Amd Ryzen 5 5500"/>
+</head><body>sem polycard, sem card-featured</body></html>`
+  assert.equal(extractFeaturedSocialProduct(html), 'https://www.mercadolivre.com.br/p/MLB27725557')
+})
+
+// Blindagem foto-errada preservada: vitrine SEM produto designado (canonical
+// aponta pra própria /social/, sem MLB; só recomendações) continua null.
+test('extractFeaturedSocialProduct: vitrine sem produto (canonical /social/, só recomendações) continua null', () => {
+  const html = `<!doctype html><html><head>
+<link rel="canonical" href="https://www.mercadolivre.com.br/social/xetdaspromocoes"/>
+<meta property="og:title" content="Minhas listas de recomendações"/>
+</head><body><script>window.__PRELOADED_STATE__={"polycards":[{"unique_id":"z","metadata":{"id":"MLB50829128","product_id":"MLB50829128","url":"https://www.mercadolivre.com.br/y/p/MLB50829128?c_id=/home/affiliate-profile-recommendations/element"}}]};</script></body></html>`
+  assert.equal(extractFeaturedSocialProduct(html), null)
+})
+
 test('gatuna: meli.la que resolve para /social/?ref= COM card destacado extrai o produto certo (Bioré MLB22797411) — RCA 2026-07-10', async (t) => {
   const resolved = 'https://www.mercadolivre.com.br/social/gatuna?matt_word=gatunawhatsapp&matt_tool=44711447&forceInApp=true&ref=BBFoNtlrJiET%2FCrAZSX9QQaxk40NFaPjS'
   // Código único (o resolveCache é módulo-level e persiste entre testes).

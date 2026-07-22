@@ -372,13 +372,39 @@ async function tryExtractProductFromLanding(url) {
 // primeiro polycard), que é o alvo real do ref.
 export function extractFeaturedSocialProduct(html) {
   if (typeof html !== 'string' || !html) return null
-  // Sem card destacado => não é divulgação de um produto específico.
+
+  // Fonte 1 — URL de ação do CARD DESTACADO (`c_id=/home/card-featured/...`).
+  // É a âncora mais robusta: o ML marca a URL do produto-alvo com esse c_id, e
+  // extrair o MLB que precede o marcador funciona mesmo se a ESTRUTURA JSON dos
+  // polycards mudar (a Fonte 3 depende do shape exato e quebra quando o ML
+  // reorganiza o blob — causa provável de ofertas de produto virando "cupom"
+  // sem foto quando o SSID some, RCA 2026-07-22). Mantém a blindagem foto-errada:
+  // recomendações usam `affiliate-profile-recommendations`, NUNCA `card-featured`.
+  // O `[^"'<>\s]` impede cruzar aspas/tags, então um MLB anterior no documento
+  // (chamariz em nav/analytics) não alcança o marcador.
+  const featuredUrlMlb = extractMlbId(
+    html.match(/(MLB[-_]?[0-9]{6,})[^"'<>\s]*?c_id=\/home\/card-featured/i)?.[1] || '',
+  )
+  if (featuredUrlMlb) return `https://www.mercadolivre.com.br/p/${featuredUrlMlb}`
+
+  // Fonte 2 — tags <head> ANCORADAS à página. Numa share de PRODUTO o ML
+  // resolve o `ref` server-side e aponta canonical/og:url/twitter:url para o
+  // produto real; numa vitrine/lista genérica essas tags apontam pra própria
+  // /social/ (sem MLB) — então extrair MLB daqui não fabrica produto aleatório.
+  for (const re of [
+    /<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i,
+    /<meta[^>]*property=["']og:url["'][^>]*content=["']([^"']+)["']/i,
+    /<meta[^>]*name=["']twitter:url["'][^>]*content=["']([^"']+)["']/i,
+  ]) {
+    const mlb = extractMlbId(html.match(re)?.[1] || '')
+    if (mlb) return `https://www.mercadolivre.com.br/p/${mlb}`
+  }
+
+  // Fonte 3 (legado) — 1º polycard sob o marcador `card-featured`. Mantido para
+  // não regredir os HTMLs onde as fontes acima não trazem o MLB mas o polycard
+  // traz. Ancorado no PRIMEIRO polycard (card destacado), nunca no 1º product_id
+  // solto do documento (blindagem foto-errada histórica).
   if (!/card-featured/i.test(html)) return null
-  // Blindagem contra o bug histórico da "foto errada": ancoramos a extração no
-  // PRIMEIRO polycard (o card destacado), não no primeiro `product_id` que
-  // aparecer no HTML. Assim, mesmo que algum id apareça antes no documento (nav,
-  // header, blob não relacionado), pegamos o produto do card destacado — o alvo
-  // real do ref. Os polycards seguintes são recomendações e ficam de fora.
   const firstPolycard = html.match(/"polycards"\s*:\s*\[\s*\{[\s\S]*?"metadata"\s*:\s*\{([\s\S]*?)\}/i)?.[1]
   if (firstPolycard) {
     const productId = firstPolycard.match(/"product_id"\s*:\s*"(MLB[0-9]+)"/i)?.[1]
