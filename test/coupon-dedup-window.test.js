@@ -18,14 +18,33 @@ test('couponDedupWindowMs existe com default de 5min e override via COUPON_DEDUP
   )
 })
 
-test('effectiveDedupWindowMs é escolhido por primary.linkKind === coupon antes do loop de destinos', () => {
+// A janela CURTA de cupom vale SÓ para cupom de LOJA genuíno (store-wide):
+// isCouponLink (linkKind==='coupon') E couponLooksGeneric (texto com cara de
+// store-wide). Oferta de PRODUTO classificada como 'coupon' só porque o short
+// link /sec/ do ML não resolveu o MLB (muro anti-bot) NÃO é store-wide, então
+// usa a janela diária e volta a ser deduplicada — senão a MESMA oferta
+// repostada ~20min depois sai duplicada (report real: Tênis New Balance +
+// cupom PRAMODA). Se a janela curta voltar a valer para todo isCouponLink,
+// produto com /sec/ não resolvido volta a duplicar.
+test('janela curta de cupom só vale para cupom store-wide (isCouponLink && couponLooksGeneric)', () => {
   assert.match(
     botWorkerSource,
     /const isCouponLink = primary\.linkKind === 'coupon'/,
   )
   assert.match(
     botWorkerSource,
+    /const useShortCouponWindow = isCouponLink && couponLooksGeneric/,
+    'a janela curta precisa exigir TAMBÉM que o texto tenha cara de store-wide (couponLooksGeneric)',
+  )
+  assert.match(
+    botWorkerSource,
+    /const effectiveDedupWindowMs = useShortCouponWindow \? couponDedupWindowMs : linkDedupWindowMs/,
+    'produto (mesmo classificado coupon por /sec/ não resolvido) precisa cair na janela diária',
+  )
+  assert.doesNotMatch(
+    botWorkerSource,
     /const effectiveDedupWindowMs = isCouponLink \? couponDedupWindowMs : linkDedupWindowMs/,
+    'regressão: janela curta não pode voltar a valer para TODO cupom (produto com /sec/ volta a duplicar)',
   )
 })
 

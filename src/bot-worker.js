@@ -2958,13 +2958,33 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // PR-5.B.2: stagger entre destinos para quebrar simultaneidade exata.
       // Primeiro destino sem atraso; demais com jitter aleatório limitado.
       const staggerJitterMs = Math.max(0, Number(cfg.botConfig.channelStaggerJitterMs ?? 0))
-      // Cupom usa a janela curta (couponDedupWindowMs); produto mantém a
-      // janela diária. primary.linkKind é resolvido por resolveLinkKind no
-      // momento da conversão (mesmo em Amazon/ML, que não marcam sozinhos —
-      // ver converters/linkKind.js), então já reflete a classificação correta
-      // aqui, igual pra todos os destinos desta mensagem.
+      // Escolha da janela de dedup. primary.linkKind é resolvido por
+      // resolveLinkKind no momento da conversão (ver converters/linkKind.js),
+      // igual pra todos os destinos desta mensagem.
+      //
+      // A janela CURTA (couponDedupWindowMs, 5min) existe SÓ para cupom de LOJA
+      // genuíno (store-wide): uma página fixa de campanha repostada o dia todo
+      // com códigos diferentes, que a janela diária bloquearia à toa. Ela NÃO
+      // deve valer para oferta de PRODUTO.
+      //
+      // Pegadinha (RCA deste report): um short link /sec/ de TERCEIRO que o ML
+      // não consegue resolver até o MLB (muro anti-bot) cai no fallback de
+      // convert() e sai marcado linkKind:'coupon' (ver mercadolivre.js
+      // resolveToCleanProductUrl → retorna null p/ /sec/ não resolvido). Ou
+      // seja, uma oferta de PRODUTO de verdade (nome + preço "DE X | POR Y")
+      // pode chegar aqui como 'coupon'. Se ela usar a janela curta, a MESMA
+      // oferta repostada pela fonte ~20min depois sai DUPLICADA (report real:
+      // Tênis New Balance 480, cupom PRAMODA, mesmo link, 12:28 e 12:48).
+      //
+      // Fix: a janela curta só vale quando o texto ALÉM de anunciar cupom
+      // (isCouponMsg) tem cara de store-wide (couponLooksGeneric, já calculado
+      // acima via looksLikeGenericCoupon). Oferta de produto — mesmo
+      // classificada como 'coupon' por link /sec/ não resolvido — usa a janela
+      // diária e volta a ser deduplicada corretamente. Cupom store-wide segue
+      // com a janela curta (não regride o pedido original da cliente).
       const isCouponLink = primary.linkKind === 'coupon'
-      const effectiveDedupWindowMs = isCouponLink ? couponDedupWindowMs : linkDedupWindowMs
+      const useShortCouponWindow = isCouponLink && couponLooksGeneric
+      const effectiveDedupWindowMs = useShortCouponWindow ? couponDedupWindowMs : linkDedupWindowMs
       let destIndex = -1
       for (const destJid of destinations) {
         destIndex++
