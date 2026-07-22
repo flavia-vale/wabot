@@ -30,6 +30,36 @@ const blogPosts = [
     description: 'Tag de associado, link convertido, preview com imagem e cadência que protege o número.',
   },
   {
+    href: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp',
+    title: 'Como divulgar ofertas do Mercado Livre no WhatsApp como afiliado',
+    description: 'Link de afiliado, conversão automática de MLB e landings, preview com imagem e cadência.',
+  },
+  {
+    href: '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp',
+    title: 'Amazon, Shopee ou Mercado Livre: qual programa usar no WhatsApp?',
+    description: 'Comparativo de comissão, cupom e conversão de link — e por que combinar os três.',
+  },
+  {
+    href: '/blog/como-converter-link-de-afiliado-automaticamente-whatsapp',
+    title: 'Como converter link de afiliado automaticamente no WhatsApp',
+    description: 'Troque qualquer link de produto ou cupom pelo seu, sem encaminhar link de terceiro.',
+  },
+  {
+    href: '/blog/quanto-custa-bot-para-whatsapp-afiliados',
+    title: 'Quanto custa um bot para WhatsApp de afiliados?',
+    description: 'Preços dos planos e como avaliar o custo real além da mensalidade.',
+  },
+  {
+    href: '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp',
+    title: 'Melhores horários para postar ofertas no WhatsApp',
+    description: 'Janelas que funcionam e por que a cadência importa mais que o horário exato.',
+  },
+  {
+    href: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero',
+    title: 'Como montar um grupo de ofertas no WhatsApp do zero',
+    description: 'Chip dedicado, fontes de oferta, conversão de link e rotina de postagem.',
+  },
+  {
     href: '/blog/grupo-ou-canal-whatsapp-achadinhos',
     title: 'Guia: grupo ou canal para achadinhos no WhatsApp',
     description: 'Compare grupos e canais para organizar achadinhos com menos ruído e mais preservação operacional.',
