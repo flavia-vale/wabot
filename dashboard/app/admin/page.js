@@ -1021,7 +1021,14 @@ export default function AdminPage() {
 
   useEffect(() => {
     let active = true
-    reloadAffiliates().catch(() => {})
+    Promise.all([
+      api.adminAffiliates({ status: 'approved', limit: 100 }).catch(() => null),
+      api.adminAffiliateCommissions({ month: currentMonth() }).catch(() => null),
+    ]).then(([a, c]) => {
+      if (!active) return
+      setAffiliates(a)
+      setCommissions(c)
+    })
     return () => { active = false }
   }, [])
 
