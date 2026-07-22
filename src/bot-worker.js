@@ -3268,12 +3268,26 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           // caminho de imagem abaixo (getImage com forceOriginalForChannelButton),
           // que é o único capaz de anexar o botão.
           if (imageMode === 'preview' && !channelForward) {
-            // Sinal de TEXTO da blindagem tripla (couponBrandCardPolicy.js):
-            // reusa isCouponMsg (isCouponAnnouncement, já calculado acima) e o
-            // sinal de vitrine ML já emitido por mercadolivre.js/mlVitrinePolicy.js
-            // via conversionResult.warning — sem criar detector novo (Assumptions
-            // da spec 008).
-            const couponTextSignal = isCouponMsg || primary?.warning === 'ml_vitrine_fallback_used'
+            // Sinal de TEXTO da blindagem tripla (couponBrandCardPolicy.js).
+            //
+            // NÃO usar isCouponMsg cru aqui: ele (isCouponAnnouncement) dispara
+            // com QUALQUER "cupom" + palavra em CAIXA ALTA, inclusive num PRODUTO
+            // que só carrega um código de cupom ("...Ryzen 5 5500... CUPOM:
+            // PRESENTE"). Quando esse produto vem por short link que esconde o
+            // MLB/ASIN (ex.: mercadolivre.com/sec/XXXX → linkKind:'coupon',
+            // urlHasProductId:false), as três blindagens passavam e o produto
+            // saía com o BANNER "Cupom Loja" no lugar da foto — regressão de
+            // produção (produto Ryzen com banner ML, 2026-07; mesma família de
+            // #1205/#1208, que o short link driblava por trás do texto).
+            //
+            // Reusa a MESMA decisão já computada para a estratégia de imagem
+            // (couponSkipActiveFetch, via decideSkipActiveFetchForCoupon): ela
+            // distingue "cupom genérico → link resolve p/ produto aleatório"
+            // (skip=true → banner é o certo) de "produto + cupom" (titleOverlap
+            // 'match' → skip=false → foto do produto). Assim os dois caminhos de
+            // imagem (preview e não-preview) concordam sobre produto-vs-cupom. O
+            // sinal de vitrine ML (warning) segue como gatilho independente.
+            const couponTextSignal = couponSkipActiveFetch || primary?.warning === 'ml_vitrine_fallback_used'
             const linkPreview = await buildManualLinkPreview({
               text: variantText,
               primary,

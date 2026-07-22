@@ -176,16 +176,20 @@ test('T011: ramo do banner é gated por useCouponBrandCard; produto real cai no 
   )
 })
 
-test('T011: couponTextSignal é calculado no call site a partir de isCouponMsg / warning de vitrine ML, sem detector novo', () => {
+test('T011: couponTextSignal é calculado no call site a partir de couponSkipActiveFetch / warning de vitrine ML, sem detector novo', () => {
   const callSiteStart = botWorkerSource.indexOf("if (imageMode === 'preview' && !channelForward)")
   assert.notEqual(callSiteStart, -1, "bloco imageMode === 'preview' não encontrado")
   const callStart = botWorkerSource.indexOf('await buildManualLinkPreview({', callSiteStart)
   const preamble = botWorkerSource.slice(callSiteStart, callStart)
 
+  // Fix 2026-07: o sinal deriva de couponSkipActiveFetch (a MESMA decisão
+  // produto-vs-cupom já computada para a estratégia de imagem), NÃO de
+  // isCouponMsg cru — que dava banner em produto que só carrega código de
+  // cupom (regressão do Ryzen por short link ML). Continua sem detector novo.
   assert.match(
     preamble,
-    /const couponTextSignal = isCouponMsg \|\| primary\?\.warning === 'ml_vitrine_fallback_used'/,
-    'couponTextSignal precisa reusar isCouponMsg e o warning ml_vitrine_fallback_used, sem criar detector novo',
+    /const couponTextSignal = couponSkipActiveFetch \|\| primary\?\.warning === 'ml_vitrine_fallback_used'/,
+    'couponTextSignal precisa reusar couponSkipActiveFetch e o warning ml_vitrine_fallback_used, sem criar detector novo',
   )
 
   const callEnd = botWorkerSource.indexOf('})', callStart)
