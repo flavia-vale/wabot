@@ -41,6 +41,41 @@ function bumpErrorMessageGroup(groups, log) {
   groups.set(key, current)
 }
 
+// Agrega os eventos duráveis de dessincronização de grupo (ops_wa_group_desync_*)
+// por jid, para o painel admin mostrar QUAL grupo não-monitorado está derrubando
+// a sessão do cliente — sem a operadora precisar grepar log. `unresolved: true`
+// marca o grupo que o auto-refresh não curou (recomendação: cliente sair dele).
+export function summarizeDesyncGroups(events = [], { limit = 10 } = {}) {
+  const groups = new Map()
+  for (const event of events) {
+    let metadata = {}
+    try { metadata = typeof event?.metadata === 'string' ? JSON.parse(event.metadata) : (event?.metadata || {}) } catch { metadata = {} }
+    const jid = metadata?.jid
+    if (!jid) continue
+    const createdAtIso = toIsoOrNull(event?.createdAt)
+    const isUnresolved = event?.event === 'ops_wa_group_desync_unresolved'
+    const current = groups.get(jid) || {
+      jid,
+      name: null,
+      autoheals: 0,
+      unresolved: false,
+      lastSeenAt: null,
+    }
+    if (event?.event === 'ops_wa_group_desync_autoheal') current.autoheals += 1
+    if (isUnresolved) current.unresolved = true
+    if (metadata?.name && !current.name) current.name = metadata.name
+    if (createdAtIso && (!current.lastSeenAt || createdAtIso > current.lastSeenAt)) current.lastSeenAt = createdAtIso
+    groups.set(jid, current)
+  }
+  return Array.from(groups.values())
+    .sort((a, b) =>
+      (Number(b.unresolved) - Number(a.unresolved)) ||
+      (b.autoheals - a.autoheals) ||
+      String(b.lastSeenAt || '').localeCompare(String(a.lastSeenAt || ''))
+    )
+    .slice(0, Math.max(1, Math.min(50, Number(limit) || 10)))
+}
+
 export function buildErrorsByMessage(logs = [], { limit = 50 } = {}) {
   const groups = new Map()
   for (const log of logs) {
