@@ -126,6 +126,37 @@ function formatNumber(value) {
   return new Intl.NumberFormat('pt-BR').format(Number(value ?? 0))
 }
 
+function formatRelative(value) {
+  if (!value) return 'sem atividade'
+  const ms = Date.now() - new Date(value).getTime()
+  if (!Number.isFinite(ms)) return 'sem atividade'
+  const minutes = Math.max(0, Math.round(ms / 60000))
+  if (minutes < 1) return 'agora'
+  if (minutes < 60) return `${minutes}min atrás`
+  const hours = Math.round(minutes / 60)
+  if (hours < 48) return `${hours}h atrás`
+  return `${Math.round(hours / 24)}d atrás`
+}
+
+function formatDurationMs(value) {
+  const ms = Math.max(0, Number(value ?? 0))
+  if (!Number.isFinite(ms) || ms <= 0) return '0min'
+  const minutes = Math.max(1, Math.round(ms / 60000))
+  if (minutes < 60) return `${minutes}min`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  if (hours < 24) return rest ? `${hours}h ${rest}min` : `${hours}h`
+  const days = Math.floor(hours / 24)
+  const remHours = hours % 24
+  return remHours ? `${days}d ${remHours}h` : `${days}d`
+}
+
+function onlineStatusMeta(status, lifecycle) {
+  if (status === 'connected') return { label: 'Conectado', cls: 'bg-emerald-100 text-emerald-700' }
+  if (status === 'connecting' || lifecycle === 'reconnecting') return { label: lifecycle === 'reconnecting' ? 'Reconectando' : 'Conectando', cls: 'bg-amber-100 text-amber-800' }
+  return { label: 'Desconectado', cls: 'bg-red-100 text-red-700' }
+}
+
 function ErrorVolumeCard({ summary }) {
   const items = asArray(summary?.errorsByMessage)
   const total = items.reduce((sum, item) => sum + Number(item?.count || 0), 0)
@@ -1052,7 +1083,7 @@ export default function AdminPage() {
       api.adminSystemHealth().catch(() => null),
       api.adminSystemMetrics().catch(() => null),
       api.adminSystemObservability().catch(() => null),
-      api.adminOnline({ limit: 20 }).catch(() => null),
+      api.adminOnline({ limit: 120 }).catch(() => null),
       api.adminLpContent().catch(() => null),
       api.adminLegalTerms().catch(() => null),
     ])
@@ -1103,7 +1134,7 @@ export default function AdminPage() {
           api.adminSystemHealth().catch(() => null),
           api.adminSystemMetrics().catch(() => null),
           api.adminSystemObservability().catch(() => null),
-          api.adminOnline({ limit: 20 }).catch(() => null),
+          api.adminOnline({ limit: 120 }).catch(() => null),
           api.adminLpContent().catch(() => null),
           api.adminLegalTerms().catch(() => null),
         ])
@@ -1620,33 +1651,54 @@ export default function AdminPage() {
 
         {tab === 'online' && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
-            <div className="mb-4">
-              <h2 className="text-lg font-black text-gray-900">Conexões de WhatsApp</h2>
-              <p className="text-sm text-gray-500">Estado de conexão por cliente.</p>
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="text-lg font-black text-gray-900">Conexões, erros e quedas</h2>
+                <p className="text-sm text-gray-500">Status de WhatsApp por cliente, com erros e quedas nas últimas 24h.</p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{formatNumber(asArray(online?.users).length)} clientes · {online?.summary?.stabilityPct ?? '—'}% estáveis</span>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm">
                 <thead className="text-xs uppercase tracking-wide text-gray-400">
                   <tr>
                     <th className="px-3 py-2">Cliente</th>
-                    <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2">Bot</th>
-                    <th className="px-3 py-2">Atualizado</th>
+                    <th className="px-3 py-2">WhatsApp</th>
+                    <th className="px-3 py-2">Última atividade</th>
+                    <th className="px-3 py-2 text-right">Erros 24h</th>
+                    <th className="px-3 py-2 text-right">Quedas 24h</th>
+                    <th className="px-3 py-2">Recuperação 24h</th>
+                    <th className="px-3 py-2 text-right">Ação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {asArray(sessions?.sessions).map(session => (
-                    <tr key={session?.id ?? session?.user?.email} className="align-top">
-                      <td className="px-3 py-3 font-bold text-gray-900">{session?.user?.email ?? 'Cliente sem e-mail'}</td>
-                      <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[11px] font-bold ${session?.status === 'connected' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{session?.status ?? '—'}</span></td>
-                      <td className="px-3 py-3 text-xs text-gray-600">{session?.botRunning ? 'rodando' : 'parado'}</td>
-                      <td className="px-3 py-3 text-xs text-gray-500">{formatDate(session?.updatedAt)}</td>
-                    </tr>
-                  ))}
-                  {!asArray(sessions?.sessions).length && <tr><td colSpan={4} className="px-3 py-6 text-sm text-gray-400">Sem sessões.</td></tr>}
+                  {asArray(online?.users).map(user => {
+                    const meta = onlineStatusMeta(user?.waSession?.status, user?.waSession?.lifecycle)
+                    const errors = Number(user?.errorCount24h || 0)
+                    const drops = Number(user?.disconnects24h || 0)
+                    return (
+                      <tr key={user?.id ?? user?.email} className={`align-top ${errors || drops ? 'bg-red-50/40' : ''}`}>
+                        <td className="px-3 py-3">
+                          <p className="font-bold text-gray-900">{user?.name || user?.email || 'Cliente sem e-mail'}</p>
+                          <p className="text-xs text-gray-500">{user?.email} · {user?.plan ?? '—'}</p>
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${meta.cls}`}>{meta.label}</span>
+                          <p className="mt-1 text-[11px] text-gray-400">HB {formatRelative(user?.waSession?.lastHeartbeatAt)}</p>
+                        </td>
+                        <td className="px-3 py-3 text-xs text-gray-600"><p className="font-semibold">{formatRelative(user?.effectiveLastActivityAt)}</p><p className="text-gray-400">{formatNumber(user?.successCount24h)} envios 24h</p></td>
+                        <td className={`px-3 py-3 text-right font-black tabular-nums ${errors ? 'text-red-700' : 'text-gray-400'}`}>{formatNumber(errors)}</td>
+                        <td className={`px-3 py-3 text-right font-black tabular-nums ${drops ? 'text-red-700' : 'text-gray-400'}`}>{formatNumber(drops)}</td>
+                        <td className="px-3 py-3 text-xs text-gray-600"><p><strong>{formatDurationMs((user?.automaticOfflineMs24h || 0) + (user?.ongoingOfflineMs24h || 0))}</strong> offline auto</p><p>{formatNumber(user?.manualReconnects24h)} ação(ões) manuais</p></td>
+                        <td className="px-3 py-3 text-right"><button onClick={() => openUserDetail(user?.id)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Drill-down</button></td>
+                      </tr>
+                    )
+                  })}
+                  {!asArray(online?.users).length && <tr><td colSpan={7} className="px-3 py-6 text-sm text-gray-400">Nenhum cliente ativo encontrado.</td></tr>}
                 </tbody>
               </table>
             </div>
+            <p className="mt-3 text-[11px] text-gray-400">&quot;Quedas&quot; = desconexões no período. &quot;Offline auto&quot; = tempo fora até o robô recuperar sozinho. &quot;Ações manuais&quot; = start/pareamento pedidos pelo cliente.</p>
           </section>
         )}
 
