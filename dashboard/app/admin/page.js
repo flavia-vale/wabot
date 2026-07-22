@@ -126,6 +126,37 @@ function formatNumber(value) {
   return new Intl.NumberFormat('pt-BR').format(Number(value ?? 0))
 }
 
+function formatRelative(value) {
+  if (!value) return 'sem atividade'
+  const ms = Date.now() - new Date(value).getTime()
+  if (!Number.isFinite(ms)) return 'sem atividade'
+  const minutes = Math.max(0, Math.round(ms / 60000))
+  if (minutes < 1) return 'agora'
+  if (minutes < 60) return `${minutes}min atrás`
+  const hours = Math.round(minutes / 60)
+  if (hours < 48) return `${hours}h atrás`
+  return `${Math.round(hours / 24)}d atrás`
+}
+
+function formatDurationMs(value) {
+  const ms = Math.max(0, Number(value ?? 0))
+  if (!Number.isFinite(ms) || ms <= 0) return '0min'
+  const minutes = Math.max(1, Math.round(ms / 60000))
+  if (minutes < 60) return `${minutes}min`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  if (hours < 24) return rest ? `${hours}h ${rest}min` : `${hours}h`
+  const days = Math.floor(hours / 24)
+  const remHours = hours % 24
+  return remHours ? `${days}d ${remHours}h` : `${days}d`
+}
+
+function onlineStatusMeta(status, lifecycle) {
+  if (status === 'connected') return { label: 'Conectado', cls: 'bg-emerald-100 text-emerald-700' }
+  if (status === 'connecting' || lifecycle === 'reconnecting') return { label: lifecycle === 'reconnecting' ? 'Reconectando' : 'Conectando', cls: 'bg-amber-100 text-amber-800' }
+  return { label: 'Desconectado', cls: 'bg-red-100 text-red-700' }
+}
+
 function ErrorVolumeCard({ summary }) {
   const items = asArray(summary?.errorsByMessage)
   const total = items.reduce((sum, item) => sum + Number(item?.count || 0), 0)
@@ -1052,7 +1083,7 @@ export default function AdminPage() {
       api.adminSystemHealth().catch(() => null),
       api.adminSystemMetrics().catch(() => null),
       api.adminSystemObservability().catch(() => null),
-      api.adminOnline({ limit: 20 }).catch(() => null),
+      api.adminOnline({ limit: 120 }).catch(() => null),
       api.adminLpContent().catch(() => null),
       api.adminLegalTerms().catch(() => null),
     ])
@@ -1103,7 +1134,7 @@ export default function AdminPage() {
           api.adminSystemHealth().catch(() => null),
           api.adminSystemMetrics().catch(() => null),
           api.adminSystemObservability().catch(() => null),
-          api.adminOnline({ limit: 20 }).catch(() => null),
+          api.adminOnline({ limit: 120 }).catch(() => null),
           api.adminLpContent().catch(() => null),
           api.adminLegalTerms().catch(() => null),
         ])
