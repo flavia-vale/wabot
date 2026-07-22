@@ -4,6 +4,7 @@ import { convertLink as defaultConvertLink } from '../../converters/index.js'
 import { fetchProductInfo as defaultFetchProductInfo } from '../../converters/productInfoScraper.js'
 import { validateCredentialData } from '../../credentialHealth.js'
 import { persistCredentialPatch } from '../../credentialPatch.js'
+import { recordOperationalSignal } from '../../observability/operationalSignals.js'
 import { assertPublicUrl } from '../../core/ssrfGuard.js'
 import {
   buildScrapedOffer,
@@ -53,17 +54,32 @@ function getRateStateForUser(rateState, userId, windowMs, now = Date.now()) {
 }
 
 
-function attachCredentialPatchHandler(credentialsMap, userId, logger) {
+// T041 (specs/006-ml-cookie-expiry-followup, Phase 7): `persistCredentialPatchFn`
+// é injetável (default = implementação real importada no topo) só para o
+// teste conseguir forçar a falha de persistência sem tocar banco real,
+// exercitando o catch/recordOperationalSignal DE VERDADE deste handler (e
+// não um stub que substitui o handler inteiro).
+export function attachCredentialPatchHandler(credentialsMap, userId, logger, persistCredentialPatchFn = persistCredentialPatch) {
   Object.defineProperty(credentialsMap, '__onCredentialPatch', {
     enumerable: false,
     value: async (platform, patch) => {
       try {
-        const updated = await persistCredentialPatch({ userId, platform, patch })
+        const updated = await persistCredentialPatchFn({ userId, platform, patch })
         if (updated && credentialsMap[platform]) {
           credentialsMap[platform] = { ...credentialsMap[platform], ...patch }
         }
       } catch (err) {
         logger?.warn({ platform, err: err?.message }, 'Falha ao persistir cookies rotacionados da credencial')
+        // T040 (specs/006-ml-cookie-expiry-followup, Phase 7): este é o catch
+        // REAL de persistCredentialPatch em produção — o catch em
+        // productInfoScraper.js nunca dispara aqui porque este handler já
+        // engole a exceção. Emite o sinal durável aqui, no ponto onde a falha
+        // de fato acontece. axis genérico ('mercadolivre') porque este
+        // handler não sabe se o patch era de cookie ou OAuth; best-effort,
+        // sem vazar segredo (só o nome da plataforma).
+        if (platform === 'mercadolivre') {
+          recordOperationalSignal('ml_patch_persist_failed', { axis: 'mercadolivre', userId })
+        }
       }
     },
   })

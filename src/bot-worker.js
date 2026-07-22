@@ -533,6 +533,15 @@ async function loadConfig() {
         }
       } catch (err) {
         logger.warn({ platform, err: err?.message }, 'Falha ao persistir cookies rotacionados da credencial')
+        // T040 (specs/006-ml-cookie-expiry-followup, Phase 7): catch REAL de
+        // persistCredentialPatch em produção — o catch em
+        // productInfoScraper.js nunca dispara aqui porque este handler já
+        // engole a exceção. axis genérico ('mercadolivre') porque este
+        // handler não sabe se o patch era de cookie ou OAuth; best-effort,
+        // sem vazar segredo (só o nome da plataforma).
+        if (platform === 'mercadolivre') {
+          recordOperationalSignal('ml_patch_persist_failed', { axis: 'mercadolivre', userId })
+        }
       }
     },
   })

@@ -29,10 +29,21 @@ function cookieValue(cookieHeader = '', name) {
 
 export function mercadoLivreCredentialLockKey(creds = {}) {
   const sessionCookie = creds.ssid || cookieValue(creds.cookie, 'ssid') || creds.cookie || ''
-  const parts = [
-    String(creds.id || ''),
-    String(sessionCookie),
-  ]
+  const id = String(creds.id || '')
+  // T042 (specs/006-ml-cookie-expiry-followup): credencial OAuth-only (sem
+  // ssid/id/cookie — cenário previsto para o eixo OAuth de getMlUserToken)
+  // não tem nenhum componente para diferenciar credenciais, então a chave
+  // degenerava para a MESMA constante sha256('|') para qualquer usuário,
+  // serializando o refresh OAuth de usuários diferentes sob o mesmo lock
+  // (contenção cross-user, risco de ML_AFFILIATE_LOCK_TIMEOUT). Quando não há
+  // id/cookie mas `creds.userId` está disponível (double-check de
+  // getMlUserToken expõe `mlCredentials.userId`), usa o userId como chave.
+  // O eixo afiliado (que sempre tem id/cookie) NÃO passa por este ramo —
+  // preserva a chave histórica já em produção, byte a byte.
+  if (!id && !sessionCookie && creds.userId != null && String(creds.userId) !== '') {
+    return crypto.createHash('sha256').update(`oauth:${String(creds.userId)}`).digest('hex').slice(0, 24)
+  }
+  const parts = [id, String(sessionCookie)]
   return crypto.createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 24)
 }
 
