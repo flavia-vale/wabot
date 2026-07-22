@@ -536,6 +536,10 @@ async function loadConfig() {
       }
     },
   })
+  // T021 (specs/006-ml-cookie-expiry-followup, US2): expõe userId ao lado de
+  // __onCredentialPatch para o double-check de getMlUserToken (leitor default
+  // de credencial fresca) localizar a linha de Credential no banco.
+  Object.defineProperty(credentials, 'userId', { enumerable: false, value: userId })
 
   const { groups } = buildEntitledGroupConfig({
     groups: user.groups,

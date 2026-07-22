@@ -79,6 +79,11 @@ export const ANALYTICS_EVENTS = new Set([
   // loop de retry-receipt travado derrubando a sessão em cadência (RCA
   // 2026-07, ver AGENTS.md "Loop de retry-receipt travado").
   'ops_wa_stuck_message_retry',
+  // #4 (specs/006-ml-cookie-expiry-followup, US3): falha ao persistir a
+  // rotação de credencial ML (cookie ou OAuth) via __onCredentialPatch —
+  // antes engolida em silêncio pelo catch best-effort. Best-effort continua
+  // valendo (não quebra o scrape), só deixa de ser invisível.
+  'ops_ml_patch_persist_failed',
 ])
 
 const SENSITIVE_KEY_PATTERN = /(token|secret|password|cookie|credential|csrf|ssid|key|message|text|url|phone|email)/i

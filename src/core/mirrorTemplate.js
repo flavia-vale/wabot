@@ -85,8 +85,11 @@ export async function resolveMirrorOfferFromLink({
   const converted = String(convertedUrl || '').trim()
   if (!converted) return null
 
+  // T022 (specs/006-ml-cookie-expiry-followup, US2): repassa userId (mesmo
+  // jeito que __onCredentialPatch já é propagado) para o double-check de
+  // getMlUserToken conseguir localizar a credencial fresca no banco.
   const mlCredentials = typeof credentialsMap?.__onCredentialPatch === 'function'
-    ? (credentialsMap.mercadolivre ? { ...credentialsMap.mercadolivre, __onCredentialPatch: credentialsMap.__onCredentialPatch } : null)
+    ? (credentialsMap.mercadolivre ? { ...credentialsMap.mercadolivre, __onCredentialPatch: credentialsMap.__onCredentialPatch, userId: credentialsMap.userId } : null)
     : (credentialsMap?.mercadolivre || null)
 
   const scrapeOpts = {

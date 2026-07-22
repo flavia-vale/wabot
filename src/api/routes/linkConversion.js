@@ -67,6 +67,10 @@ function attachCredentialPatchHandler(credentialsMap, userId, logger) {
       }
     },
   })
+  // T020 (specs/006-ml-cookie-expiry-followup, US2): expõe userId ao lado de
+  // __onCredentialPatch para o double-check de getMlUserToken (leitor default
+  // de credencial fresca) localizar a linha de Credential no banco.
+  Object.defineProperty(credentialsMap, 'userId', { enumerable: false, value: userId })
   return credentialsMap
 }
 

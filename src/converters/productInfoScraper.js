@@ -7,6 +7,9 @@ import { resolveToCleanProductUrl } from './mercadolivre.js'
 import { isAmazonShortLink, resolveAmazonShortLink } from './amazon.js'
 import { buildOAuthRefreshDecision, applyOAuthTokenResponse } from './mlOAuthTokenPolicy.js'
 import { withMercadoLivreCredentialLock } from './mercadolivreCredentialLock.js'
+import { getSetCookieLines, buildCredentialPatchFromSetCookie } from './mercadolivreCookieRotation.js'
+import logger from '../logger.js'
+import { recordOperationalSignal } from '../observability/operationalSignals.js'
 
 const HTML_FETCH_TIMEOUT_MS = Number(process.env.PRODUCT_INFO_TIMEOUT_MS) || 8_000
 const HTML_MAX_BYTES = Number(process.env.PRODUCT_INFO_MAX_BYTES) || 2 * 1024 * 1024
@@ -164,6 +167,27 @@ function isMercadoLivreUrl(url) {
   }
 }
 
+// #1 (specs/006-ml-cookie-expiry-followup): reusa buildCredentialPatchFromSetCookie
+// (mesma lógica do eixo de afiliado, agora compartilhada) para persistir a
+// rotação do cookie ssid capturada por fetchHtml no scrape web autenticado.
+// Best-effort: falha de persistência não pode quebrar o scrape em curso — o
+// catch aqui é temporariamente vazio; T030 (US3) o substitui por log + sinal
+// operacional sem alterar este contrato.
+async function persistMlCookieRotation(mlCredentials, mlCookieHeader, setCookie) {
+  if (!mlCredentials || typeof mlCredentials.__onCredentialPatch !== 'function') return
+  const patch = buildCredentialPatchFromSetCookie(mlCredentials, mlCookieHeader, { 'set-cookie': setCookie })
+  if (!patch) return
+  try {
+    await mlCredentials.__onCredentialPatch('mercadolivre', patch)
+  } catch (err) {
+    // #4 (specs/006-ml-cookie-expiry-followup, US3): best-effort — a falha
+    // de persistência não pode quebrar o scrape em curso, mas deixa de ser
+    // silenciosa (antes engolida em silêncio, queimando a rotação sem rastro).
+    logger.warn({ err, axis: 'cookie' }, 'ML credential rotation persist failed')
+    recordOperationalSignal('ml_patch_persist_failed', { axis: 'cookie' })
+  }
+}
+
 // Monta o header Cookie a partir das credenciais de sessão do ML
 // (mesmo formato usado por src/converters/mercadolivre.js).
 function buildMlCookieHeader(creds) {
@@ -176,7 +200,14 @@ function buildMlCookieHeader(creds) {
   return pairs.join('; ')
 }
 
-async function fetchHtml(url, { ua = BROWSER_UA, timeoutMs = HTML_FETCH_TIMEOUT_MS, cookieHeader = '' } = {}) {
+// #1 (specs/006-ml-cookie-expiry-followup): expõe o `Set-Cookie` bruto da
+// resposta ao chamador. Antes, `fetchHtml` enviava o cookie `ssid` do usuário
+// para a página web do ML mas jogava fora qualquer rotação — o mesmo bug já
+// corrigido no eixo de afiliado (`mercadolivre.js`), só que no eixo cookie do
+// scrape (alta frequência: painel "Criar oferta" + espelhamento em template).
+// `setCookie` é sempre um array (vazio quando a resposta não traz o header),
+// populado nos três pontos de retorno para não perder rotação em nenhum ramo.
+export async function fetchHtml(url, { ua = BROWSER_UA, timeoutMs = HTML_FETCH_TIMEOUT_MS, cookieHeader = '' } = {}) {
   const res = await fetch(url, {
     headers: {
       'User-Agent': ua,
@@ -187,13 +218,14 @@ async function fetchHtml(url, { ua = BROWSER_UA, timeoutMs = HTML_FETCH_TIMEOUT_
     signal: AbortSignal.timeout(timeoutMs),
     redirect: 'follow',
   })
-  if (!res.ok) return { html: null, finalUrl: res.url || url }
+  const setCookie = res.headers.getSetCookie?.() ?? []
+  if (!res.ok) return { html: null, finalUrl: res.url || url, setCookie }
   const contentType = res.headers.get('content-type') || ''
   if (contentType && !contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) {
-    return { html: null, finalUrl: res.url || url }
+    return { html: null, finalUrl: res.url || url, setCookie }
   }
   const html = await readLimitedText(res)
-  return { html, finalUrl: res.url || url }
+  return { html, finalUrl: res.url || url, setCookie }
 }
 
 function findProductNodes(html) {
@@ -397,13 +429,57 @@ async function refreshMlOAuthToken(mlCredentials) {
   }
 }
 
-export async function getMlUserToken(mlCredentials) {
+// #3 (specs/006-ml-cookie-expiry-followup, US2): leitor DEFAULT de credencial
+// fresca, usado quando `opts.readFreshCredential` não é passado (produção).
+// Dynamic import lazy de `db.js`/`credentialHealth.js` dentro do corpo da
+// função — não no topo do módulo — para `productInfoScraper.js` continuar
+// sem import estático de `db.js` (mesmo padrão de `emitDurable` em
+// `src/observability/operationalSignals.js`). Nunca lança: qualquer falha
+// (userId ausente, linha inexistente, exceção de DB) devolve `null` e o
+// double-check cai de volta no snapshot pré-lock (degradação graciosa).
+async function defaultReadFreshCredential(mlCredentials) {
+  const userId = mlCredentials?.userId
+  if (!userId) return null
+  try {
+    const [{ default: db }, { parseCredentialData }] = await Promise.all([
+      import('../db.js'),
+      import('../credentialHealth.js'),
+    ])
+    const row = await db.credential.findUnique({
+      where: { userId_platform: { userId, platform: 'mercadolivre' } },
+    })
+    if (!row) return null
+    return parseCredentialData(row.data)
+  } catch {
+    return null
+  }
+}
+
+// #3 (specs/006-ml-cookie-expiry-followup, US2): double-checked locking.
+// `buildOAuthRefreshDecision` decide sobre um snapshot capturado ANTES do
+// lock; duas chamadas concorrentes podiam decidir "refresh" sobre o MESMO
+// snapshot, e a segunda tentaria renovar com um `refresh_token` já
+// invalidado pela primeira (single-use). Dentro do lock, relemos a
+// credencial fresca (via `opts.readFreshCredential`, injetável — default
+// real em produção) e recomputamos a decisão: se outra chamada já renovou
+// (`action === 'reuse'`), reaproveitamos o access token novo em vez de
+// queimar outro refresh. Caminho feliz (`reuse`/`skip` no snapshot pré-lock)
+// permanece idêntico — não adquire lock nem lê credencial fresca (FR-009).
+export async function getMlUserToken(mlCredentials, opts = {}) {
   const decision = buildOAuthRefreshDecision(mlCredentials, Date.now())
   if (decision.action === 'skip') return { token: null, credentialPatch: null }
   if (decision.action === 'reuse') return { token: decision.token, credentialPatch: null }
 
+  const readFreshCredential = opts.readFreshCredential ?? defaultReadFreshCredential
+
   try {
-    return await withMercadoLivreCredentialLock(mlCredentials, () => refreshMlOAuthToken(mlCredentials))
+    return await withMercadoLivreCredentialLock(mlCredentials, async () => {
+      const fresh = (await readFreshCredential(mlCredentials)) ?? mlCredentials
+      const reDecision = buildOAuthRefreshDecision(fresh, Date.now())
+      if (reDecision.action === 'reuse') return { token: reDecision.token, credentialPatch: null }
+      if (reDecision.action === 'skip') return { token: null, credentialPatch: null }
+      return await refreshMlOAuthToken(fresh)
+    })
   } catch (err) {
     // Timeout/erro do lock (ex.: `ML_AFFILIATE_LOCK_TIMEOUT`) não pode
     // quebrar o scrape em curso — mesma postura best-effort do eixo cookie.
@@ -417,19 +493,26 @@ function parseMercadoLivreItemIdFromUrl(url) {
   return m?.[1]?.toUpperCase() || null
 }
 
-async function fetchMercadoLivreItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS, mlCredentials = null } = {}) {
+async function fetchMercadoLivreItemInfo(url, opts = {}) {
+  const { timeoutMs = HTML_FETCH_TIMEOUT_MS, mlCredentials = null } = opts
   if (parseMercadoLivreProductIdFromUrl(url)) return null
   const itemId = parseMercadoLivreItemIdFromUrl(url)
   if (!itemId) return null
   const endpoint = `https://api.mercadolibre.com/items/${itemId}`
   try {
-    const { token: userToken, credentialPatch } = await getMlUserToken(mlCredentials)
+    // T019 (US2): repassa `opts` (pode conter `opts.readFreshCredential`
+    // injetado em teste) para o double-check dentro do lock em getMlUserToken.
+    const { token: userToken, credentialPatch } = await getMlUserToken(mlCredentials, opts)
     if (credentialPatch && typeof mlCredentials?.__onCredentialPatch === 'function') {
       try {
         await mlCredentials.__onCredentialPatch('mercadolivre', credentialPatch)
       } catch (err) {
-        // Best-effort: persistência do refresh OAuth rotacionado não pode
-        // quebrar o fluxo de scrape em curso (mesmo padrão do eixo cookie).
+        // #4 (specs/006-ml-cookie-expiry-followup, US3): best-effort —
+        // persistência do refresh OAuth rotacionado não pode quebrar o fluxo
+        // de scrape em curso (mesmo padrão do eixo cookie), mas deixa de ser
+        // silenciosa.
+        logger.warn({ err, axis: 'oauth' }, 'ML credential rotation persist failed')
+        recordOperationalSignal('ml_patch_persist_failed', { axis: 'oauth' })
       }
     }
     if (!userToken) return null
@@ -827,6 +910,9 @@ export async function fetchProductInfo(url, opts = {}) {
     const fetched = await fetchHtml(resolvedUrl, fetchOpts)
     html = fetched?.html ?? null
     finalUrl = fetched?.finalUrl || resolvedUrl
+    if (fetchOpts.cookieHeader === mlCookieHeader) {
+      await persistMlCookieRotation(opts.mlCredentials, mlCookieHeader, fetched?.setCookie)
+    }
   } catch {
     html = null
     finalUrl = resolvedUrl
@@ -899,6 +985,7 @@ export async function fetchProductInfo(url, opts = {}) {
     if (noUsefulMlHtml) {
       try {
         const retried = await fetchHtml(finalUrl, { ...fetchOpts, cookieHeader: mlCookieHeader, ua: ML_MOBILE_UA })
+        await persistMlCookieRotation(opts.mlCredentials, mlCookieHeader, retried?.setCookie)
         if (retried?.html) {
           html = retried.html
           finalUrl = retried.finalUrl || finalUrl

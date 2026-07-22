@@ -1,13 +1,18 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { fetchProductInfo, getMlUserToken } from '../src/converters/productInfoScraper.js'
+import { fetchProductInfo, getMlUserToken, fetchHtml } from '../src/converters/productInfoScraper.js'
+import logger from '../src/logger.js'
+import { getOperationalSignalsSnapshot, __resetOperationalSignals } from '../src/observability/operationalSignals.js'
 
-function mockHtmlResponse(html, url = 'https://www.amazon.com.br/dp/B0CXGBT3Z9') {
+function mockHtmlResponse(html, url = 'https://www.amazon.com.br/dp/B0CXGBT3Z9', setCookie = []) {
   return {
     ok: true,
     url,
-    headers: { get: (name) => (name.toLowerCase() === 'content-type' ? 'text/html; charset=utf-8' : null) },
+    headers: {
+      get: (name) => (name.toLowerCase() === 'content-type' ? 'text/html; charset=utf-8' : null),
+      getSetCookie: () => setCookie,
+    },
     body: null,
     text: async () => html,
   }
@@ -18,7 +23,7 @@ function mockRedirectResponse(location, url) {
     ok: false,
     status: 301,
     url,
-    headers: { get: (name) => (name.toLowerCase() === 'location' ? location : null) },
+    headers: { get: (name) => (name.toLowerCase() === 'location' ? location : null), getSetCookie: () => [] },
     text: async () => '',
   }
 }
@@ -965,4 +970,472 @@ test('getMlUserToken: duas chamadas concorrentes para a MESMA credencial seriali
   assert.equal(maxConcurrent, 1, 'as duas chamadas de refresh OAuth para a mesma credencial nunca devem sobrepor')
   assert.equal(r1.credentialPatch?.oauthRefreshToken, 'new-refresh-token')
   assert.equal(r2.credentialPatch?.oauthRefreshToken, 'new-refresh-token')
+})
+
+// ---------------------------------------------------------------------------
+// specs/006-ml-cookie-expiry-followup — US1 (T006/T007): fetchHtml expõe
+// Set-Cookie; fetchProductInfo persiste a rotação do cookie ssid no scrape
+// web autenticado via __onCredentialPatch.
+// ---------------------------------------------------------------------------
+
+test('fetchHtml: retorna { html, finalUrl, setCookie } com Set-Cookie presente na resposta', async (t) => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => mockHtmlResponse('<html>ok</html>', 'https://example.com/x', ['ssid=novo-valor; Path=/'])
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const result = await fetchHtml('https://example.com/x')
+  assert.equal(result.html, '<html>ok</html>')
+  assert.equal(result.finalUrl, 'https://example.com/x')
+  assert.deepEqual(result.setCookie, ['ssid=novo-valor; Path=/'])
+})
+
+test('fetchHtml: sem Set-Cookie na resposta => setCookie é []', async (t) => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => mockHtmlResponse('<html>ok</html>')
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const result = await fetchHtml('https://example.com/x')
+  assert.deepEqual(result.setCookie, [])
+})
+
+test('fetchHtml: setCookie é populado mesmo quando !res.ok', async (t) => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 403,
+    url: 'https://example.com/x',
+    headers: { get: () => null, getSetCookie: () => ['ssid=rotacionado; Path=/'] },
+    text: async () => '',
+  })
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const result = await fetchHtml('https://example.com/x')
+  assert.equal(result.html, null)
+  assert.deepEqual(result.setCookie, ['ssid=rotacionado; Path=/'])
+})
+
+test('fetchHtml: setCookie é populado mesmo quando content-type não é HTML', async (t) => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => ({
+    ok: true,
+    url: 'https://example.com/x',
+    headers: {
+      get: (name) => (name.toLowerCase() === 'content-type' ? 'application/json' : null),
+      getSetCookie: () => ['ssid=rotacionado-json; Path=/'],
+    },
+    text: async () => '{}',
+  })
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const result = await fetchHtml('https://example.com/x')
+  assert.equal(result.html, null)
+  assert.deepEqual(result.setCookie, ['ssid=rotacionado-json; Path=/'])
+})
+
+test('fetchProductInfo (ML autenticado): rotação de cookie no Set-Cookie é persistida via __onCredentialPatch', async (t) => {
+  const realPdp = `<!doctype html><html><head>
+    <meta property="og:title" content="Fone de Ouvido Bluetooth"/>
+    </head><body>
+    <h1 class="ui-pdp-title">Fone de Ouvido Bluetooth</h1>
+    <div class="ui-pdp-price__second-line">
+      <span class="andes-money-amount"><span class="andes-money-amount__fraction">99</span><span class="andes-money-amount__cents">90</span></span>
+    </div>
+  </body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('api.mercadolibre.com')) {
+      return { ok: false, status: 401, headers: { get: () => 'application/json', getSetCookie: () => [] }, json: async () => ({}) }
+    }
+    return mockHtmlResponse(
+      realPdp,
+      'https://www.mercadolivre.com.br/fone/p/MLB999',
+      ['ssid=ssid-rotacionado-999888777; Path=/']
+    )
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const patches = []
+  const mlCredentials = {
+    ssid: 'ssid-antigo-111222333',
+    __onCredentialPatch: async (platform, patch) => { patches.push({ platform, patch }) },
+  }
+
+  const info = await fetchProductInfo('https://www.mercadolivre.com.br/fone/p/MLB999', { mlCredentials })
+
+  assert.match(info.title, /Fone de Ouvido Bluetooth/i)
+  assert.equal(patches.length, 1)
+  assert.equal(patches[0].platform, 'mercadolivre')
+  assert.equal(patches[0].patch.ssid, 'ssid-rotacionado-999888777')
+})
+
+test('fetchProductInfo (ML autenticado): sem Set-Cookie relevante, __onCredentialPatch NÃO é chamado (FR-006)', async (t) => {
+  const realPdp = `<!doctype html><html><head>
+    <meta property="og:title" content="Produto Sem Rotação"/>
+    </head><body>
+    <h1 class="ui-pdp-title">Produto Sem Rotação</h1>
+    <div class="ui-pdp-price__second-line">
+      <span class="andes-money-amount"><span class="andes-money-amount__fraction">50</span><span class="andes-money-amount__cents">00</span></span>
+    </div>
+  </body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('api.mercadolibre.com')) {
+      return { ok: false, status: 401, headers: { get: () => 'application/json', getSetCookie: () => [] }, json: async () => ({}) }
+    }
+    return mockHtmlResponse(realPdp, 'https://www.mercadolivre.com.br/produto/p/MLB111', [])
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  let called = false
+  const mlCredentials = {
+    ssid: 'ssid-estavel-111222333',
+    __onCredentialPatch: async () => { called = true },
+  }
+
+  await fetchProductInfo('https://www.mercadolivre.com.br/produto/p/MLB111', { mlCredentials })
+  assert.equal(called, false)
+})
+
+test('fetchProductInfo (ML autenticado): Set-Cookie de deleção do ssid NUNCA é persistido com valor vazio (FR-004)', async (t) => {
+  const realPdp = `<!doctype html><html><head>
+    <meta property="og:title" content="Produto Deleção"/>
+    </head><body>
+    <h1 class="ui-pdp-title">Produto Deleção</h1>
+    <div class="ui-pdp-price__second-line">
+      <span class="andes-money-amount"><span class="andes-money-amount__fraction">15</span><span class="andes-money-amount__cents">00</span></span>
+    </div>
+  </body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('api.mercadolibre.com')) {
+      return { ok: false, status: 401, headers: { get: () => 'application/json', getSetCookie: () => [] }, json: async () => ({}) }
+    }
+    // ML "apaga" o ssid (Max-Age=0) mas rotaciona o _csrf — deve gerar patch
+    // (porque algo mudou), mas sem NUNCA gravar ssid vazio.
+    return mockHtmlResponse(
+      realPdp,
+      'https://www.mercadolivre.com.br/produto/p/MLB222',
+      ['ssid=; Max-Age=0; Path=/', '_csrf=csrf-novo-999; Path=/']
+    )
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const patches = []
+  const mlCredentials = {
+    ssid: 'ssid-conhecido-111222333',
+    csrf: 'csrf-antigo',
+    __onCredentialPatch: async (platform, patch) => { patches.push(patch) },
+  }
+
+  await fetchProductInfo('https://www.mercadolivre.com.br/produto/p/MLB222', { mlCredentials })
+
+  if (patches.length) {
+    assert.notEqual(patches[0].ssid, '')
+    assert.equal(patches[0].ssid, 'ssid-conhecido-111222333')
+  }
+})
+
+test('fetchProductInfo (ML sem mlCredentials): rotação de cookie não tenta persistir nada', async (t) => {
+  const realPdp = `<!doctype html><html><head>
+    <meta property="og:title" content="Produto Sem Credencial"/>
+    </head><body>
+    <h1 class="ui-pdp-title">Produto Sem Credencial</h1>
+    <div class="ui-pdp-price__second-line">
+      <span class="andes-money-amount"><span class="andes-money-amount__fraction">10</span><span class="andes-money-amount__cents">00</span></span>
+    </div>
+  </body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('api.mercadolibre.com')) {
+      return { ok: false, status: 401, headers: { get: () => 'application/json', getSetCookie: () => [] }, json: async () => ({}) }
+    }
+    return mockHtmlResponse(realPdp, 'https://www.mercadolivre.com.br/produto/p/MLB333', ['ssid=algum-valor; Path=/'])
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://www.mercadolivre.com.br/produto/p/MLB333')
+  assert.match(info.title, /Produto Sem Credencial/i)
+})
+
+// ---------------------------------------------------------------------------
+// specs/006-ml-cookie-expiry-followup — US2 (T013-T016): double-check dentro
+// do lock em getMlUserToken (releitura fresca via opts.readFreshCredential).
+// ---------------------------------------------------------------------------
+
+test('getMlUserToken (double-check): outra chamada já renovou => reaproveita token fresco sem chamar fetch', async (t) => {
+  const prevEnv = { ML_CLIENT_ID: process.env.ML_CLIENT_ID, ML_CLIENT_SECRET: process.env.ML_CLIENT_SECRET }
+  process.env.ML_CLIENT_ID = 'client-id-test'
+  process.env.ML_CLIENT_SECRET = 'client-secret-test'
+  t.after(() => {
+    process.env.ML_CLIENT_ID = prevEnv.ML_CLIENT_ID
+    process.env.ML_CLIENT_SECRET = prevEnv.ML_CLIENT_SECRET
+  })
+
+  let fetchCalls = 0
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => { fetchCalls++; throw new Error('fetch não deveria ser chamado') }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const staleSnapshot = {
+    ssid: 'x'.repeat(20),
+    oauthAccessToken: 'access-old',
+    oauthTokenExpiry: Date.now() - 1000, // expirado => decision inicial = 'refresh'
+    oauthRefreshToken: 'refresh-old',
+  }
+  const freshFromOtherCaller = {
+    ...staleSnapshot,
+    oauthAccessToken: 'access-fresh-from-other-caller',
+    oauthTokenExpiry: Date.now() + 21_600_000, // válido — outra chamada já renovou
+    oauthRefreshToken: 'refresh-fresh-from-other-caller',
+  }
+
+  const result = await getMlUserToken(staleSnapshot, {
+    readFreshCredential: async () => freshFromOtherCaller,
+  })
+
+  assert.equal(result.token, 'access-fresh-from-other-caller')
+  assert.equal(result.credentialPatch, null)
+  assert.equal(fetchCalls, 0, 'fetch de refresh do ML NÃO deve ser chamado quando outra chamada já renovou')
+})
+
+test('getMlUserToken (double-check): sem concorrência (readFreshCredential devolve mesma credencial expirada) => renova normalmente', async (t) => {
+  const prevEnv = { ML_CLIENT_ID: process.env.ML_CLIENT_ID, ML_CLIENT_SECRET: process.env.ML_CLIENT_SECRET }
+  process.env.ML_CLIENT_ID = 'client-id-test'
+  process.env.ML_CLIENT_SECRET = 'client-secret-test'
+  t.after(() => {
+    process.env.ML_CLIENT_ID = prevEnv.ML_CLIENT_ID
+    process.env.ML_CLIENT_SECRET = prevEnv.ML_CLIENT_SECRET
+  })
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => ({
+    ok: true,
+    headers: { get: () => 'application/json' },
+    json: async () => ({ access_token: 'access-novo', refresh_token: 'refresh-novo', expires_in: 21600 }),
+  })
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const staleSnapshot = {
+    ssid: 'x'.repeat(20),
+    oauthAccessToken: 'access-old',
+    oauthTokenExpiry: Date.now() - 1000,
+    oauthRefreshToken: 'refresh-old',
+  }
+
+  const result = await getMlUserToken(staleSnapshot, {
+    readFreshCredential: async () => ({ ...staleSnapshot }), // idem — ainda expirado
+  })
+
+  assert.equal(result.token, 'access-novo')
+  assert.equal(result.credentialPatch?.oauthAccessToken, 'access-novo')
+  assert.equal(result.credentialPatch?.oauthRefreshToken, 'refresh-novo')
+})
+
+test('getMlUserToken (double-check): readFreshCredential retorna null => cai no snapshot original sem quebrar', async (t) => {
+  const prevEnv = { ML_CLIENT_ID: process.env.ML_CLIENT_ID, ML_CLIENT_SECRET: process.env.ML_CLIENT_SECRET }
+  process.env.ML_CLIENT_ID = 'client-id-test'
+  process.env.ML_CLIENT_SECRET = 'client-secret-test'
+  t.after(() => {
+    process.env.ML_CLIENT_ID = prevEnv.ML_CLIENT_ID
+    process.env.ML_CLIENT_SECRET = prevEnv.ML_CLIENT_SECRET
+  })
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => ({
+    ok: true,
+    headers: { get: () => 'application/json' },
+    json: async () => ({ access_token: 'access-via-snapshot', refresh_token: 'refresh-via-snapshot', expires_in: 21600 }),
+  })
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const staleSnapshot = {
+    ssid: 'x'.repeat(20),
+    oauthAccessToken: 'access-old',
+    oauthTokenExpiry: Date.now() - 1000,
+    oauthRefreshToken: 'refresh-old',
+  }
+
+  const result = await getMlUserToken(staleSnapshot, { readFreshCredential: async () => null })
+  assert.equal(result.token, 'access-via-snapshot')
+})
+
+test('getMlUserToken (double-check): sem opts (chamada default), sem userId => não lança e usa snapshot', async (t) => {
+  const prevEnv = { ML_CLIENT_ID: process.env.ML_CLIENT_ID, ML_CLIENT_SECRET: process.env.ML_CLIENT_SECRET }
+  process.env.ML_CLIENT_ID = 'client-id-test'
+  process.env.ML_CLIENT_SECRET = 'client-secret-test'
+  t.after(() => {
+    process.env.ML_CLIENT_ID = prevEnv.ML_CLIENT_ID
+    process.env.ML_CLIENT_SECRET = prevEnv.ML_CLIENT_SECRET
+  })
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => ({
+    ok: true,
+    headers: { get: () => 'application/json' },
+    json: async () => ({ access_token: 'access-default-path', refresh_token: 'refresh-default-path', expires_in: 21600 }),
+  })
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const staleSnapshot = {
+    ssid: 'x'.repeat(20),
+    oauthAccessToken: 'access-old',
+    oauthTokenExpiry: Date.now() - 1000,
+    oauthRefreshToken: 'refresh-old',
+    // sem userId => defaultReadFreshCredential deve devolver null graciosamente
+  }
+
+  const result = await getMlUserToken(staleSnapshot)
+  assert.equal(result.token, 'access-default-path')
+})
+
+test('getMlUserToken (double-check): decision.action === "reuse" no snapshot NÃO chama readFreshCredential (caminho feliz sem lock)', async (t) => {
+  let readFreshCalled = false
+  const creds = {
+    ssid: 'x'.repeat(20),
+    oauthAccessToken: 'access-ainda-valido',
+    oauthTokenExpiry: Date.now() + 60_000,
+    oauthRefreshToken: 'refresh-nao-usado',
+  }
+
+  const result = await getMlUserToken(creds, { readFreshCredential: async () => { readFreshCalled = true; return null } })
+
+  assert.equal(result.token, 'access-ainda-valido')
+  assert.equal(result.credentialPatch, null)
+  assert.equal(readFreshCalled, false, 'reuse no snapshot pré-lock não deve chamar readFreshCredential')
+})
+
+test('getMlUserToken (double-check): decision.action === "skip" no snapshot NÃO chama readFreshCredential', async (t) => {
+  let readFreshCalled = false
+  const creds = { ssid: 'x'.repeat(20) } // sem oauthAccessToken nem oauthRefreshToken
+
+  const result = await getMlUserToken(creds, { readFreshCredential: async () => { readFreshCalled = true; return null } })
+
+  assert.equal(result.token, null)
+  assert.equal(result.credentialPatch, null)
+  assert.equal(readFreshCalled, false, 'skip no snapshot pré-lock não deve chamar readFreshCredential')
+})
+
+// ---------------------------------------------------------------------------
+// specs/006-ml-cookie-expiry-followup — US3 (T025/T026): falha ao persistir
+// rotação (cookie OU OAuth) via __onCredentialPatch emite logger.warn +
+// recordOperationalSignal('ml_patch_persist_failed', { axis }) sem quebrar o
+// retorno normal do scrape (contrato best-effort preservado).
+//
+// recordOperationalSignal é uma função exportada (não um método de objeto) —
+// bindings de named export ESM são somente-leitura e não podem ser
+// sobrescritos via t.mock.method sem a flag --experimental-test-module-mocks
+// (não habilitada no test runner deste repo). Em vez de mockar o módulo,
+// usamos a implementação REAL de recordOperationalSignal (via
+// getOperationalSignalsSnapshot/__resetOperationalSignals) como sonda: o
+// contador in-memory só incrementa se productInfoScraper.js de fato chamou
+// recordOperationalSignal('ml_patch_persist_failed', ...). logger.warn É
+// mockável (logger é um objeto, t.mock.method muta a propriedade do objeto,
+// não o binding do módulo).
+// ---------------------------------------------------------------------------
+
+test('fetchProductInfo (ML): falha ao persistir rotação de COOKIE emite logger.warn + sinal, sem quebrar o scrape', async (t) => {
+  __resetOperationalSignals()
+  const warnCalls = []
+  t.mock.method(logger, 'warn', (...args) => { warnCalls.push(args) })
+
+  const realPdp = `<!doctype html><html><head>
+    <meta property="og:title" content="Produto Falha Persistencia Cookie"/>
+    </head><body>
+    <h1 class="ui-pdp-title">Produto Falha Persistencia Cookie</h1>
+    <div class="ui-pdp-price__second-line">
+      <span class="andes-money-amount"><span class="andes-money-amount__fraction">77</span><span class="andes-money-amount__cents">70</span></span>
+    </div>
+  </body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes('api.mercadolibre.com')) {
+      return { ok: false, status: 401, headers: { get: () => 'application/json', getSetCookie: () => [] }, json: async () => ({}) }
+    }
+    return mockHtmlResponse(
+      realPdp,
+      'https://www.mercadolivre.com.br/produto/p/MLB444',
+      ['ssid=ssid-rotacionado-444555666; Path=/']
+    )
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const mlCredentials = {
+    ssid: 'ssid-antigo-444555666',
+    __onCredentialPatch: async () => { throw new Error('SQLITE_BUSY: simulado') },
+  }
+
+  const info = await fetchProductInfo('https://www.mercadolivre.com.br/produto/p/MLB444', { mlCredentials })
+
+  // Retorno normal — a falha de persistência não propaga erro ao chamador.
+  assert.match(info.title, /Produto Falha Persistencia Cookie/i)
+
+  assert.ok(warnCalls.length >= 1, 'logger.warn deveria ter sido chamado')
+  assert.equal(warnCalls[0][0].axis, 'cookie')
+
+  const snap = getOperationalSignalsSnapshot()
+  assert.equal(snap.ml_patch_persist_failed?.total, 1)
+})
+
+test('fetchMercadoLivreItemInfo (via fetchProductInfo): falha ao persistir rotação OAuth emite logger.warn + sinal, sem quebrar o scrape', async (t) => {
+  __resetOperationalSignals()
+  const warnCalls = []
+  t.mock.method(logger, 'warn', (...args) => { warnCalls.push(args) })
+
+  const prevEnv = { ML_CLIENT_ID: process.env.ML_CLIENT_ID, ML_CLIENT_SECRET: process.env.ML_CLIENT_SECRET }
+  process.env.ML_CLIENT_ID = 'client-id-test'
+  process.env.ML_CLIENT_SECRET = 'client-secret-test'
+  t.after(() => {
+    process.env.ML_CLIENT_ID = prevEnv.ML_CLIENT_ID
+    process.env.ML_CLIENT_SECRET = prevEnv.ML_CLIENT_SECRET
+  })
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url === 'https://api.mercadolibre.com/oauth/token') {
+      return {
+        ok: true,
+        headers: { get: () => 'application/json', getSetCookie: () => [] },
+        json: async () => ({ access_token: 'novo-access', refresh_token: 'novo-refresh', expires_in: 21600 }),
+      }
+    }
+    if (url.includes('api.mercadolibre.com/items/')) {
+      return {
+        ok: true,
+        headers: { get: () => 'application/json', getSetCookie: () => [] },
+        json: async () => ({ title: 'Item Falha OAuth', price: 55.5 }),
+      }
+    }
+    // sem HTML útil — força o fallback para fetchMercadoLivreItemInfo (API)
+    return mockHtmlResponse('<!doctype html><html><head><title>Mercado Libre</title></head><body></body></html>', 'https://www.mercadolivre.com.br/MLB777', [])
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const mlCredentials = {
+    ssid: 'x'.repeat(20),
+    oauthAccessToken: 'access-old',
+    oauthTokenExpiry: Date.now() - 1000,
+    oauthRefreshToken: 'refresh-old',
+    __onCredentialPatch: async () => { throw new Error('SQLITE_BUSY: simulado') },
+  }
+
+  const info = await fetchProductInfo('https://www.mercadolivre.com.br/MLB777', { mlCredentials })
+
+  assert.match(info.title, /Item Falha OAuth/i)
+
+  assert.ok(warnCalls.length >= 1, 'logger.warn deveria ter sido chamado')
+  assert.equal(warnCalls[0][0].axis, 'oauth')
+
+  const snap = getOperationalSignalsSnapshot()
+  assert.equal(snap.ml_patch_persist_failed?.total, 1)
 })

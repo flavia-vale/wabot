@@ -35,6 +35,10 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   // Mesma mensagem repetindo no ack de um stream:error — loop de
   // retry-receipt travado derrubando a sessão em cadência (RCA 2026-07).
   wa_stuck_message_retry: 'ops_wa_stuck_message_retry',
+  // Falha ao persistir a rotação de credencial ML (cookie no scrape web OU
+  // OAuth em fetchMercadoLivreItemInfo) via __onCredentialPatch — antes
+  // engolida em silêncio pelo catch best-effort (specs/006-ml-cookie-expiry-followup, US3).
+  ml_patch_persist_failed: 'ops_ml_patch_persist_failed',
 }
 
 let cachedTrackFn = null
