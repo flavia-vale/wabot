@@ -24,6 +24,18 @@ export const AFFILIATE_PLATFORMS = [
     ],
   },
   {
+    id: 'cookieEditorInfo',
+    type: 'info',
+    label: 'Extensão necessária',
+    instructions: 'Para pegar as credenciais das lojas abaixo é necessário você estar em um computador e instalar essa extensão em seu Google Chrome:',
+    actionLinks: [
+      {
+        label: 'Cookie-Editor',
+        href: 'https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm?pli=1',
+      },
+    ],
+  },
+  {
     id: 'amazon',
     label: 'Amazon',
     instructions: 'Onde obter: associados.amazon.com.br. A Tag vem do painel. Para o link curto (amzn.to) sair de forma estável, cole o Cookie completo da sessão logada na Amazon Brasil (recomendado) — os 3 cookies separados param de autenticar em poucos dias e precisarão ser renovados.',
@@ -63,6 +75,12 @@ export const AFFILIATE_PLATFORMS = [
     id: 'magazineluiza',
     label: 'Magazine Luiza',
     instructions: 'Onde obter: painel de afiliados do Magazine Luiza. Copie a tag usada nos seus links de afiliado.',
+    actionLinks: [
+      {
+        label: 'Pegue suas credenciais',
+        href: 'https://www.magazinevoce.com.br/admin',
+      },
+    ],
     fields: [{ key: 'tag', label: 'Tag de afiliado', hint: 'Ex.: parceiro123' }],
   },
 ]
