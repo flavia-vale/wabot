@@ -15,7 +15,7 @@ export const AFFILIATE_PLATFORMS = [
       },
       {
         label: 'Pegue suas credenciais',
-        href: 'https://espelhagrupos.com.br/painel/tutorial#:~:text=Acesse%20o%20painel%20Shopee%20Open%20API',
+        href: 'https://affiliate.shopee.com.br/open_api',
       },
     ],
     fields: [
