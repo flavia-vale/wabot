@@ -45,7 +45,7 @@ export const AFFILIATE_PLATFORMS = [
   {
     id: 'mercadolivre',
     label: 'Mercado Livre',
-    instructions: 'Onde obter: afiliados.mercadolivre.com.br. A Etiqueta em uso vem do Gerador de Links; SSID é o cookie da sessão ativa e deve ser tratado como dado sensível.',
+    instructions: 'Onde obter: https://www.mercadolivre.com.br/afiliados/linkbuilder#hub . A Etiqueta em uso vem do Gerador de Links; SSID é o cookie da sessão ativa e deve ser pegado usando o Cookies Editor.',
     actionLinks: [
       {
         label: 'Pegue suas credenciais',
