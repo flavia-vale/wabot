@@ -1,68 +1,82 @@
 # Implementation Plan: SEO Fix, Signup Attribution & Article Lead Capture
 
-**Branch**: `010-seo-lead-capture` | **Date**: 2026-07-22 | **Spec**: [spec.md](./spec.md)
+**Branch**: `010-seo-lead-capture` | **Date**: 2026-07-23 | **Spec**: [spec.md](./spec.md)
 
 **Input**: Feature specification from `/specs/010-seo-lead-capture/spec.md`
 
 ## Summary
 
-Corrigir SEO técnico pré-existente e fechar o funil orgânico reaproveitando 100% da
-infra existente do dashboard Next, sem novo processo/worker/Redis/heap:
+Três frentes de baixo risco, todas dentro do dashboard Next.js e da API existente, sem
+novo processo/worker/Redis/heap:
 
-1. **US1/US4 (SEO técnico)** — registrar `/cadastro` e `/parcerias` em
-   `lib/seo-registry.mjs` (entram automaticamente em `app/sitemap.js`), e diferenciar o
-   título de `/conteudos` do artigo `comecar-afiliado-whatsapp-sem-grupo-grande` dando à
-   entrada `/conteudos` `title`/`description` explícitos no registry (hoje o lint
-   raspa o primeiro `title:` da page.js, que é um item de lista de artigos → falso
-   duplicado). Critério objetivo: `npm run validate:seo-p0` verde.
-2. **US2 (atribuição)** — capturar a **página de entrada** (landing/rota) no cadastro,
-   além dos UTMs que já são capturados. Estender o payload de `POST /register` e a
-   metadata do evento durável `signup_created`; a consulta por landing agrupa esse
-   evento. Reaproveita `OrganicPageTracker` + `lib/marketing-attribution.js` (first-touch
-   já é a semântica da infra de UTM existente).
-3. **US3 (lead capture)** — `ArticleShell` **já** renderiza `<LeadMagnetCard>`; o trabalho
-   é garantir que as 6 páginas de blog-alvo rendem via ArticleShell (herdam o bloco) e
-   validar o comportamento de e-mail válido/ inválido do fluxo de lead magnet existente.
+1. **US1/US4 — Parar o vazamento de SEO técnico.** Registrar `/cadastro` e `/parcerias`
+   no `lib/seo-registry.mjs` (o `app/sitemap.js` deriva o sitemap 100% do registro, então
+   registrar já resolve a presença no sitemap) e diferenciar o título de `/conteudos` para
+   remover a duplicidade com o artigo `/blog/comecar-afiliado-whatsapp-sem-grupo-grande`.
+   Critério objetivo: `npm run guard:seo-registry`, `npm run lint:seo-metadata` e a suíte
+   `npm run validate:seo-p0` verdes. As 6 páginas de blog novas já estão registradas (o guard
+   passaria/falharia por elas) — US4 é majoritariamente verificação + documentação de submissão
+   no Search Console/Bing.
 
-Marca pública = **BOTinho** em toda cópia nova. Entrega: branch de `develop` → staging →
-PR `develop`→`main`. Sem tocar `.env`/portas/deploy.
+2. **US2 — Medir qual conteúdo orgânico vira cadastro.** Hoje o `/register` só persiste
+   entrada/landing para o fluxo de **afiliado** (`AffiliateAttributionTouch`) e emite
+   `signup_created` (AnalyticsEvent) com `source`/`utm_*`, **sem a página de entrada** para
+   cadastros orgânicos. Fechar essa lacuna reaproveitando `marketing-attribution` +
+   `OrganicPageTracker`: capturar a página de entrada (first-touch) no cliente e enviá-la no
+   payload de `/register`, persistindo-a na metadata do evento `signup_created` (sem migration
+   de schema). Consulta agrupada por landing = leitura desses eventos (rota admin de leitura).
+
+3. **US3 — Captura de e-mail no artigo.** O `ArticleShell` já renderiza `LeadMagnetCard`, que
+   já posta `mode=register` + `email` para `/login` (o lead vira cadastro). Escopo aqui é
+   **verificar/ajustar**: garantir que todo artigo passe pelo `ArticleShell`, que a validação de
+   e-mail (vazio/inválido) seja amigável e que a cópia use a marca **BOTinho**.
+
+Restrições canônicas respeitadas: mudança leve (FR-013/SC-006), reaproveita infra, marca
+pública = BOTinho, fluxo feature → develop → main sem tocar `.env`/portas/deploy.
 
 ## Technical Context
 
-**Language/Version**: Node.js (ESM `.mjs` para scripts/registry), React 18 / Next.js (App Router) no `dashboard/`; Fastify no `src/api` (backend do `/register`).
+**Language/Version**: Node.js (ESM no dashboard), Next.js 14 App Router (dashboard), Fastify (API)
 
-**Primary Dependencies**: Next.js App Router (`app/sitemap.js`, `app/robots.js`), `lib/seo-registry.mjs`, `components/marketing/{ArticleShell,LeadMagnetCard,OrganicPageTracker}.jsx`, `lib/marketing-attribution.js`, `lib/analytics.js`; backend `src/api/routes/auth.js` (`POST /register`), `AnalyticsEvent` (Prisma/SQLite).
+**Primary Dependencies**: Next.js (`app/`), React (client components de marketing), Fastify
+(`src/api/routes/auth.js`), Prisma/SQLite (AnalyticsEvent) — todas já presentes; nenhuma nova.
 
-**Storage**: SQLite via Prisma. Atribuição de cadastro persiste como metadata JSON em `AnalyticsEvent(event='signup_created')` — **sem migration de schema** (campo metadata já existe). Nenhuma tabela nova.
+**Storage**: SQLite via Prisma. **Sem migration nova** — a atribuição orgânica de cadastro é
+gravada na metadata (JSON) do evento durável `AnalyticsEvent('signup_created')` já existente.
 
-**Testing**: `node --test` (backend) + guards/lints Node no dashboard: `npm run guard:seo-registry`, `npm run lint:seo-metadata`, `npm run validate:seo-p0` (rodados de dentro de `dashboard/`).
+**Testing**: `node --test` (repo raiz e `dashboard/scripts/*` guards); guards de SEO
+(`guard:seo-registry`, `lint:seo-metadata`, `validate:seo-p0`) como aceitação executável.
 
-**Target Platform**: Web (dashboard Next SSR) + API Fastify no VPS. Staging `:3006/:3004`, prod `:3000/:3001` (inalterado).
+**Target Platform**: Web (dashboard público Next.js) + API Fastify no VPS.
 
-**Project Type**: Web app (frontend `dashboard/` + backend `src/api`).
+**Project Type**: Web application (frontend `dashboard/` + backend `src/`).
 
-**Performance Goals**: Nenhuma meta nova de throughput. Conteúdo estático + 1 campo extra no payload de cadastro (custo desprezível).
+**Performance Goals**: N/A (conteúdo estático + instrumentação leve; sem caminho quente novo).
 
-**Constraints**: **Mudança leve, memory-neutral** (FR-013/SC-006): sem novo processo PM2, worker, Redis/BullMQ, cache em memória ou aumento de heap. PII: e-mail de lead e valores de atribuição seguem `sanitizeAttributionValue` / tratamento de PII já adotado (FR-014). Não regredir cobertura do guard para blogs futuros.
+**Constraints**: Envelope de "mudança leve" da política de memória do repo — **nenhum** novo
+processo PM2/worker, dependência de Redis/BullMQ, cache em memória ou aumento de heap
+(FR-013/SC-006). PII: e-mail de lead segue tratamento já adotado; atribuição não expõe PII
+sensível em claro (FR-014) — landing/UTMs passam por `sanitizeAttributionValue`.
 
-**Scale/Scope**: ~2 arquivos de registry/página no dashboard, 1 estender de payload no dashboard (form de cadastro) + `auth.js` no backend, verificação de 6 páginas de blog, 1 doc operacional de submissão (Search Console/Bing). Nenhuma dependência nova.
+**Scale/Scope**: ~4 arquivos de código tocados no dashboard + ~1 na API; conteúdo estático de
+poucas rotas; nenhum volume de runtime relevante.
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-O arquivo `.specify/memory/constitution.md` é o template não ratificado (placeholders) — não há princípios versionados que imponham gates específicos. Na ausência de constituição ratificada, aplicam-se as regras canônicas do repo (`AGENTS.md`) como gates de fato:
+O arquivo `.specify/memory/constitution.md` é o template não preenchido (placeholders), portanto
+não há princípios formais versionados a checar. Na ausência dele, os gates aplicáveis vêm das
+regras canônicas do `AGENTS.md` do repo, que funcionam como constituição de fato:
 
-| Gate (AGENTS.md) | Status |
-|---|---|
-| Política de memória — nenhuma mudança memory-heavy (novo processo/worker/Redis/heap/cache) | **PASS** — feature é conteúdo estático + 1 campo de metadata; SC-006 verificável no ecosystem/diff. |
-| Fluxo feature → `develop` → staging → `main`; nunca PR direto p/ main | **PASS** — planejado. |
-| Não tocar `.env`, portas, deploy | **PASS** — nada em `.env`/portas; sitemap/robots já servidos pelo Next. |
-| Marca pública = BOTinho | **PASS** — FR-012 exige em toda cópia nova. |
-| Reaproveitar infra, não duplicar lógica | **PASS** — registry, sitemap, ArticleShell, LeadMagnetCard, OrganicPageTracker, marketing-attribution reaproveitados. |
-| Guards de aceitação existentes verdes | **PASS (alvo)** — `validate:seo-p0` é o critério objetivo. |
+- **Política de memória (REGRA #1/#2/#3)**: nenhuma mudança memory-heavy. ✅ Feature é conteúdo
+  estático + instrumentação leve; sem novo processo/worker/Redis/heap. Sem necessidade de
+  super-sinalização de RAM.
+- **Fluxo de entrega**: feature → `develop` (staging) → `main`. ✅ Sem tocar `.env`/portas/deploy.
+- **Marca pública = BOTinho** em toda cópia nova. ✅ (FR-012).
+- **Sem migration destrutiva / DDL sob lock**: ✅ Nenhuma migration nova (usa AnalyticsEvent).
 
-Sem violações a justificar → Complexity Tracking vazio.
+**Resultado do gate: PASS** — nenhuma violação; a seção Complexity Tracking fica vazia.
 
 ## Project Structure
 
@@ -70,14 +84,14 @@ Sem violações a justificar → Complexity Tracking vazio.
 
 ```text
 specs/010-seo-lead-capture/
-├── plan.md              # Este arquivo
-├── research.md          # Phase 0 — decisões (fix de duplicidade, atribuição, lead)
-├── data-model.md        # Phase 1 — atribuição de cadastro, lead, entrada de registry
-├── quickstart.md        # Phase 1 — como validar (guards + fluxos manuais)
-├── contracts/
-│   ├── seo-registry-entry.md    # contrato da entrada de rota no registry / sitemap
-│   ├── register-attribution.md  # contrato do payload /register + metadata do evento
-│   └── lead-magnet-form.md      # contrato do bloco de captura no ArticleShell
+├── plan.md              # Este arquivo (/speckit-plan)
+├── research.md          # Phase 0 — decisões (first-touch, persistência, título)
+├── data-model.md        # Phase 1 — entidades e shape da metadata do evento
+├── quickstart.md        # Phase 1 — roteiro de validação executável
+├── contracts/           # Phase 1 — contratos (register payload, seo-registry, sitemap/robots)
+│   ├── register-attribution.md
+│   ├── seo-registry-entry.md
+│   └── lead-capture.md
 └── tasks.md             # Phase 2 (/speckit-tasks — NÃO criado aqui)
 ```
 
@@ -86,35 +100,36 @@ specs/010-seo-lead-capture/
 ```text
 dashboard/
 ├── lib/
-│   ├── seo-registry.mjs                 # (edit) +entradas /cadastro, /parcerias; +title/description de /conteudos
-│   └── marketing-attribution.js         # (reuso) sanitização + chaves de atribuição; +chave de landing se necessário
+│   ├── seo-registry.mjs            # US1: + entradas /cadastro e /parcerias
+│   └── marketing-attribution.js    # US2: reaproveitado (entry-page first-touch)
 ├── app/
-│   ├── sitemap.js                       # (reuso, sem edição) já deriva de getIndexableSeoRoutes()
-│   ├── robots.js                        # (verificar) não bloquear rotas indexáveis novas
-│   ├── cadastro/page.js                 # (edit) form encaminha landing/entry path no POST /register
-│   ├── conteudos/page.js                # (verificar) título permanece 'Conteúdos: ...'
-│   └── blog/_preservationBlogPosts.js   # (verificar) 6 blogs-alvo rendem via ArticleShell → herdam LeadMagnetCard
+│   ├── sitemap.js                  # US4: derivado do registro (sem mudança de lógica)
+│   ├── robots.js                   # US4: já não bloqueia as rotas (verificação)
+│   ├── conteudos/page.js           # US1: diferenciar `title`
+│   ├── cadastro/page.js            # US1: alvo do registro (metadata coerente)
+│   ├── parcerias/page.js           # US1: alvo do registro (metadata coerente)
+│   └── login/page.js               # US2: enviar entry-page (first-touch) no /register
 ├── components/marketing/
-│   ├── ArticleShell.jsx                 # (reuso) já renderiza <LeadMagnetCard origin compact />
-│   ├── LeadMagnetCard.jsx               # (reuso) fluxo de captura de e-mail já existente
-│   └── OrganicPageTracker.jsx           # (reuso) first-touch/organic tracking
+│   ├── OrganicPageTracker.jsx      # US2: origem do first-touch de página de entrada
+│   ├── ArticleShell.jsx            # US3: já renderiza LeadMagnetCard (verificação)
+│   └── LeadMagnetCard.jsx          # US3: validação amigável + cópia BOTinho (ajuste)
 └── scripts/
-    ├── guard-seo-registry-coverage.mjs  # (critério) deve passar
-    └── lint-seo-metadata-duplicates.mjs # (critério) deve passar
+    ├── guard-seo-registry-coverage.mjs   # US1: gate de aceitação (não alterar)
+    └── lint-seo-metadata-duplicates.mjs  # US1: gate de aceitação (não alterar)
 
-src/api/routes/
-└── auth.js                              # (edit) POST /register lê landing/entry path e grava na metadata de signup_created
+src/
+└── api/routes/auth.js              # US2: aceitar landingPage e gravar na metadata do
+                                    #      signup_created (sem migration)
 
-docs/seo/
-└── search-console-bing-submission.md    # (novo) passo operacional de submissão do sitemap (FR-009)
+docs/
+└── deploy/seo-search-console-submission.md   # US4/FR-009: passo manual documentado
 ```
 
-**Structure Decision**: Web app existente. Reaproveitamento máximo — a maioria das
-mudanças é edição pontual em `lib/seo-registry.mjs` (SEO) e no par
-`app/cadastro/page.js` + `src/api/routes/auth.js` (atribuição). US3 é
-predominantemente verificação porque `ArticleShell` já injeta o `LeadMagnetCard`.
-Nenhum diretório/serviço novo.
+**Structure Decision**: Web application. A frente de SEO e captura vive inteira em
+`dashboard/` (Next.js App Router); a única mudança na API é aditiva e não-destrutiva em
+`src/api/routes/auth.js` (persistir a landing orgânica na metadata de um evento durável já
+existente). Nenhuma pasta/serviço novo.
 
 ## Complexity Tracking
 
-> Sem violações de gate. Nada a justificar.
+> Nenhuma violação de gate. Seção intencionalmente vazia.
