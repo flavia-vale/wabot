@@ -27,6 +27,15 @@ function PlatformActionLinks({ links }) {
   )
 }
 
+function PlatformInfoCard({ platform }) {
+  return (
+    <div className="pnl-card">
+      {platform.instructions && <p className="pnl-card-note" style={{ marginBottom: 12 }}>{platform.instructions}</p>}
+      <PlatformActionLinks links={platform.actionLinks} />
+    </div>
+  )
+}
+
 function SessionWarning({ platformId, sessionStatus }) {
   if (!sessionStatus || sessionStatus.alive !== false) return null
   if (platformId === 'amazon') {
@@ -228,16 +237,20 @@ export default function IdsAfiliadaPage() {
 
       {loading
         ? [0, 1, 2, 3].map((k) => <div key={k} className="pnl-skel" style={{ height: 160 }} />)
-        : AFFILIATE_PLATFORMS.map((p) => (
-            <PlatformCard
-              key={p.id}
-              platform={p}
-              initialData={credMap?.[p.id]}
-              onSave={handleSave}
-              disabled={!!loadError}
-              sessionStatus={p.id === 'mercadolivre' ? mlSession : p.id === 'amazon' ? amazonSession : null}
-            />
-          ))}
+        : AFFILIATE_PLATFORMS.map((p) =>
+            p.type === 'info' ? (
+              <PlatformInfoCard key={p.id} platform={p} />
+            ) : (
+              <PlatformCard
+                key={p.id}
+                platform={p}
+                initialData={credMap?.[p.id]}
+                onSave={handleSave}
+                disabled={!!loadError}
+                sessionStatus={p.id === 'mercadolivre' ? mlSession : p.id === 'amazon' ? amazonSession : null}
+              />
+            )
+          )}
     </div>
   )
 }
