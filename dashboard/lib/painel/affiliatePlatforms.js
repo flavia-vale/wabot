@@ -75,6 +75,12 @@ export const AFFILIATE_PLATFORMS = [
     id: 'magazineluiza',
     label: 'Magazine Luiza',
     instructions: 'Onde obter: painel de afiliados do Magazine Luiza. Copie a tag usada nos seus links de afiliado.',
+    actionLinks: [
+      {
+        label: 'Pegue suas credenciais',
+        href: 'https://www.magazinevoce.com.br/admin',
+      },
+    ],
     fields: [{ key: 'tag', label: 'Tag de afiliado', hint: 'Ex.: parceiro123' }],
   },
 ]
