@@ -1647,7 +1647,13 @@ export default function AdminPage() {
         </section>
         )}
 
-        <DetailPanel detail={selectedUser} onClose={() => setSelectedUser(null)} onApplyAccess={(payload) => applyManualAccess(selectedUser.id, payload)} />
+        {selectedUser && (
+          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/40 p-4 backdrop-blur-sm" onClick={() => setSelectedUser(null)}>
+            <div className="my-6 w-full max-w-4xl" onClick={(e) => e.stopPropagation()}>
+              <DetailPanel detail={selectedUser} onClose={() => setSelectedUser(null)} onApplyAccess={(payload) => applyManualAccess(selectedUser.id, payload)} />
+            </div>
+          </div>
+        )}
 
         {tab === 'online' && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
