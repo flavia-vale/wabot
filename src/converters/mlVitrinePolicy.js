@@ -17,8 +17,19 @@
 // jeito, sem duplicar a lógica em cada call site.
 
 export function decideVitrineFallback({ failureType, isDirectVitrine, hasVitrine }) {
+  // Atualização 2026-07-23 (pedido da cliente): quando o SSID venceu
+  // (`expired`) e a afiliada TEM vitrine própria cadastrada, usar a vitrine
+  // dela mesmo que o link original seja um ENCURTADOR (não `/social/` direto).
+  // Antes, `expired` só caía na vitrine com `isDirectVitrine` (linha 7 da
+  // tabela = passthrough) — então cupom do ML por meli.la com SSID vencido era
+  // descartado ("Credencial ML inválida/expirada") em vez de sair com a vitrine
+  // + banner de cupom. Segurança preservada: a vitrine é o link de afiliado da
+  // PRÓPRIA cliente (nunca vaza comissão), e este ramo só é alcançado quando
+  // não há produto conversível a montante (resolveToCleanProductUrl == null).
+  // `isDirectVitrine` segue relevante só para `missing_vitrine` (mensagem
+  // acionável quando ela NÃO tem vitrine — não regride o RCA 2026-07-08).
   const useVitrine = hasVitrine
-    && (failureType === 'unsupported_url' || (failureType === 'expired' && isDirectVitrine))
+    && (failureType === 'unsupported_url' || failureType === 'expired')
   if (useVitrine) return 'use_vitrine'
 
   const missingVitrine = !hasVitrine
