@@ -15,7 +15,7 @@ export const AFFILIATE_PLATFORMS = [
       },
       {
         label: 'Pegue suas credenciais',
-        href: 'https://espelhagrupos.com.br/painel/tutorial#:~:text=Acesse%20o%20painel%20Shopee%20Open%20API',
+        href: 'https://affiliate.shopee.com.br/open_api',
       },
     ],
     fields: [
@@ -26,7 +26,13 @@ export const AFFILIATE_PLATFORMS = [
   {
     id: 'amazon',
     label: 'Amazon',
-    instructions: 'Onde obter: affiliate-program.amazon.com.br. A Tag vem do painel. Para o link curto (amzn.to) sair de forma estável, cole o Cookie completo da sessão logada na Amazon Brasil (recomendado) — os 3 cookies separados param de autenticar em poucos dias.',
+    instructions: 'Onde obter: associados.amazon.com.br. A Tag vem do painel. Para o link curto (amzn.to) sair de forma estável, cole o Cookie completo da sessão logada na Amazon Brasil (recomendado) — os 3 cookies separados param de autenticar em poucos dias e precisarão ser renovados.',
+    actionLinks: [
+      {
+        label: 'Pegue suas credenciais',
+        href: 'https://associados.amazon.com.br',
+      },
+    ],
     platformWarning: 'Para gerar link curto (amzn.to), preencha a Tag e o Cookie completo da sessão Amazon. Sem isso, a oferta ainda sai (com o link longo ?tag=), mas sem encurtar.',
     fields: [
       { key: 'tag', label: 'ID de associado/StoreID', hint: 'Ex.: suatag-20' },
