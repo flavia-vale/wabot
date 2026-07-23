@@ -46,6 +46,12 @@ export const AFFILIATE_PLATFORMS = [
     id: 'mercadolivre',
     label: 'Mercado Livre',
     instructions: 'Onde obter: afiliados.mercadolivre.com.br. A Etiqueta em uso vem do Gerador de Links; SSID é o cookie da sessão ativa e deve ser tratado como dado sensível.',
+    actionLinks: [
+      {
+        label: 'Pegue suas credenciais',
+        href: 'https://www.mercadolivre.com.br/afiliados/linkbuilder#hub',
+      },
+    ],
     platformWarning: 'Para gerar link curto (meli.la), preencha Etiqueta em uso e SSID.',
     fields: [
       { key: 'tag', label: 'Etiqueta em uso', hint: 'Copie exatamente como aparece no Mercado Livre.', help: 'Copie a etiqueta em uso exibida no Gerador de Links do Mercado Livre.' },
