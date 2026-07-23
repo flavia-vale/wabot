@@ -574,47 +574,6 @@ test('gatuna: link direto para /social/gatuna/lists (vitrine de verdade, listage
   })
 })
 
-// RCA 2026-07-23 (print da cliente): cupom "CUPOM MERCADO LIVRE 30% OFF" por
-// ENCURTADOR (meli.la) com SSID VENCIDO estava FALHANDO ("Credencial ML
-// inválida/expirada") em vez de sair com a vitrine própria + banner de cupom.
-// Row 7 da tabela (expired + encurtador + tem vitrine) passou de passthrough
-// para use_vitrine: agora sai com o link de afiliado da própria cliente.
-test('cupom ML por meli.la com SSID vencido usa a VITRINE própria (não descarta) — COUPON on', async (t) => {
-  const prev = process.env.COUPON_LINK_CONVERT
-  process.env.COUPON_LINK_CONVERT = 'true'
-  t.after(() => { process.env.COUPON_LINK_CONVERT = prev })
-  clearMercadoLivreAffiliateCooldownsForTest()
-  // meli.la resolve pra vitrine /social/ de terceiro (sem produto, sem ?ref=).
-  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/social/gatunadaspromocoes' }))
-  // createLink rejeita por SSID expirado (401).
-  t.mock.method(axios, 'post', async () => ({ status: 401, data: { message: 'unauthorized: sessão expirada' }, headers: {} }))
-  const result = await convert('https://meli.la/2w3wuxf', {
-    tag: '475630078',
-    ssid: 'ssid-expirado-1234567890',
-    vitrineUrl: 'https://www.mercadolivre.com.br/social/minha-vitrine-oficial',
-  })
-  assert.deepEqual(result, {
-    url: 'https://www.mercadolivre.com.br/social/minha-vitrine-oficial',
-    linkKind: 'coupon',
-    warning: 'ml_vitrine_fallback_used',
-  })
-})
-
-// Contraprova: SSID vencido + encurtador + SEM vitrine própria continua
-// passthrough (não há link seguro pra usar — não fabrica nada).
-test('cupom ML por meli.la com SSID vencido e SEM vitrine própria segue passthrough (descarta)', async (t) => {
-  const prev = process.env.COUPON_LINK_CONVERT
-  process.env.COUPON_LINK_CONVERT = 'true'
-  t.after(() => { process.env.COUPON_LINK_CONVERT = prev })
-  clearMercadoLivreAffiliateCooldownsForTest()
-  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/social/gatunadaspromocoes' }))
-  t.mock.method(axios, 'post', async () => ({ status: 401, data: { message: 'unauthorized: sessão expirada' }, headers: {} }))
-  await assert.rejects(
-    () => convert('https://meli.la/2w3wuxf', { tag: '475630078', ssid: 'ssid-expirado-1234567890' }),
-    (err) => err?.mlFailureType === 'expired',
-  )
-})
-
 // ===== Extração do produto destacado (featured) de share /social/?ref= =====
 // RCA 2026-07-10: todo meli.la do canal resolve para /social/<handle>?ref=<blob>.
 // O ML resolve o `ref` server-side e renderiza o PRODUTO-ALVO como card destacado

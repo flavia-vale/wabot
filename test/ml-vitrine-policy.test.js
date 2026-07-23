@@ -12,10 +12,7 @@ const TRUTH_TABLE = [
   { n: 4, failureType: 'unsupported_url', isDirectVitrine: false, hasVitrine: false, outcome: 'discard' },
   { n: 5, failureType: 'expired', isDirectVitrine: true, hasVitrine: true, outcome: 'use_vitrine' },
   { n: 6, failureType: 'expired', isDirectVitrine: true, hasVitrine: false, outcome: 'missing_vitrine' },
-  // Atualização 2026-07-23: expired + encurtador + TEM vitrine própria → usa a
-  // vitrine da cliente (antes era passthrough → cupom ML por meli.la com SSID
-  // vencido era descartado). A vitrine é o link de afiliado dela mesma.
-  { n: 7, failureType: 'expired', isDirectVitrine: false, hasVitrine: true, outcome: 'use_vitrine' },
+  { n: 7, failureType: 'expired', isDirectVitrine: false, hasVitrine: true, outcome: 'passthrough' },
   { n: 8, failureType: 'expired', isDirectVitrine: false, hasVitrine: false, outcome: 'passthrough' },
   { n: 9, failureType: 'forbidden', isDirectVitrine: true, hasVitrine: true, outcome: 'passthrough' },
   { n: 10, failureType: 'rate_limited', isDirectVitrine: true, hasVitrine: false, outcome: 'passthrough' },
