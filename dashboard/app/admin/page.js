@@ -273,6 +273,125 @@ function RiskBadges({ flags = [] }) {
   )
 }
 
+function OriginCell({ origin }) {
+  if (!origin) return <span className="text-xs text-gray-400">—</span>
+  if (origin.type === 'affiliate') {
+    return (
+      <div>
+        <span className="rounded-full bg-violet-100 px-2 py-1 text-[11px] font-bold text-violet-700">Afiliado</span>
+        <p className="mt-1 text-xs font-semibold text-gray-700">{origin.affiliateName || 'Sem nome'}</p>
+        <p className="text-[11px] text-gray-500">{origin.affiliateEmail || '—'}{origin.affiliateCode ? ` · ${origin.affiliateCode}` : ''}</p>
+      </div>
+    )
+  }
+  if (origin.type === 'referral') {
+    return (
+      <div>
+        <span className="rounded-full bg-sky-100 px-2 py-1 text-[11px] font-bold text-sky-700">Indicação de cliente</span>
+        <p className="mt-1 text-xs font-semibold text-gray-700">{origin.referrerName || 'Sem nome'}</p>
+        <p className="text-[11px] text-gray-500">{origin.referrerEmail || '—'}</p>
+      </div>
+    )
+  }
+  return (
+    <div>
+      <span className="rounded-full bg-gray-100 px-2 py-1 text-[11px] font-bold text-gray-600">{origin.label || 'Não rastreada'}</span>
+      {origin.detail && <p className="mt-1 text-[11px] text-gray-500">{origin.detail}</p>}
+    </div>
+  )
+}
+
+function OnlineMetricCard({ label, value, helper, tone = 'slate' }) {
+  const tones = {
+    slate: 'bg-slate-50 text-slate-900 ring-slate-200',
+    green: 'bg-emerald-50 text-emerald-900 ring-emerald-200',
+    amber: 'bg-amber-50 text-amber-900 ring-amber-200',
+    red: 'bg-red-50 text-red-900 ring-red-200',
+  }
+  return (
+    <div className={`rounded-2xl p-3 ring-1 ${tones[tone] || tones.slate}`}>
+      <p className="text-[11px] font-black uppercase tracking-wide opacity-70">{label}</p>
+      <p className="mt-1 text-2xl font-black tabular-nums">{value}</p>
+      {helper && <p className="mt-1 text-[11px] font-medium opacity-70">{helper}</p>}
+    </div>
+  )
+}
+
+function OnlineDetailDrawer({ detail, loading, onClose }) {
+  if (!detail && !loading) return null
+  const session = detail?.session
+  const meta = onlineStatusMeta(session?.status, session?.lifecycle)
+  const cm = detail?.connectionMetrics ?? {}
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 backdrop-blur-sm" onClick={onClose}>
+      <aside className="relative h-full w-full max-w-2xl overflow-y-auto bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-700">Drill-down online</p>
+            <h2 className="mt-1 text-2xl font-black text-slate-950">{detail?.user?.name || detail?.user?.email || 'Carregando...'}</h2>
+            <p className="text-sm text-slate-500">{detail?.user?.email || '—'} · {detail?.user?.plan || '—'}</p>
+          </div>
+          <button onClick={onClose} className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200">Fechar</button>
+        </div>
+
+        {loading && <LoadingState />}
+        {!loading && detail && (
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <span className={`rounded-full px-3 py-1 text-xs font-black ${meta.cls}`}>{meta.label}</span>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-500 ring-1 ring-slate-200">Heartbeat: {formatRelative(session?.lastHeartbeatAt)}</span>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-500 ring-1 ring-slate-200">Código: {session?.lastDisconnectCode || '—'}</span>
+            </div>
+
+            <section className="grid gap-3 sm:grid-cols-3">
+              <OnlineMetricCard label="Quedas 24h" value={formatNumber(cm.disconnects24h)} tone={cm.disconnects24h ? 'red' : 'green'} />
+              <OnlineMetricCard label="Reconexões manuais 24h" value={formatNumber(cm.manualReconnects24h)} helper="start/pareamento pedido pelo cliente" tone={cm.manualReconnects24h ? 'red' : 'green'} />
+              <OnlineMetricCard label="Offline auto 24h" value={formatDurationMs((cm.automaticOfflineMs24h || 0) + (cm.ongoingOfflineMs24h || 0))} helper="tempo até recuperar sozinho" tone={(cm.automaticOfflineMs24h || cm.ongoingOfflineMs24h) ? 'amber' : 'green'} />
+              <OnlineMetricCard label="Quedas 7d" value={formatNumber(cm.disconnects7d)} tone={cm.disconnects7d ? 'red' : 'green'} />
+              <OnlineMetricCard label="Reconexões manuais 7d" value={formatNumber(cm.manualReconnects7d)} helper="trabalho real do cliente" tone={cm.manualReconnects7d ? 'red' : 'green'} />
+              <OnlineMetricCard label="Reconexões automáticas 7d" value={formatNumber(cm.automaticRecoveries7d)} helper={`offline auto ${formatDurationMs((cm.automaticOfflineMs7d || 0) + (cm.ongoingOfflineMs7d || 0))}`} tone={(cm.automaticOfflineMs7d || cm.ongoingOfflineMs7d) ? 'amber' : 'green'} />
+            </section>
+
+            <p className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><strong>Como ler:</strong> &quot;Reconexões manuais&quot; = quando o cliente teve que iniciar/reparear pelo painel. &quot;Offline auto&quot; = tempo que o robô ficou fora até recuperar sozinho; tentativas internas de backoff não contam como trabalho do cliente.</p>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-4">
+              <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Erros agrupados por tipo (7d)</h3>
+              <div className="mt-3 divide-y divide-slate-100">
+                {asArray(detail.errorsByType).map((item) => (
+                  <div key={item.errorMsg} className="grid grid-cols-[1fr_auto] gap-3 py-3 text-sm">
+                    <div>
+                      <p className="break-words font-mono text-xs font-bold text-slate-900">{item.errorMsg}</p>
+                      <p className="mt-1 text-xs text-slate-500">{item.category || 'UNKNOWN'} · último {formatDate(item.lastSeenAt)}</p>
+                    </div>
+                    <span className="self-start rounded-full bg-red-50 px-3 py-1 text-xs font-black text-red-700">{formatNumber(item.count)}x</span>
+                  </div>
+                ))}
+                {!asArray(detail.errorsByType).length && <p className="py-4 text-sm text-slate-500">Sem erros recentes nos últimos 7 dias.</p>}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-4">
+              <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Linha do tempo de conexão</h3>
+              <div className="mt-3 space-y-2">
+                {asArray(detail.recentEvents).slice(0, 20).map((event) => (
+                  <div key={event.id} className="rounded-xl bg-slate-50 p-3 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-black text-slate-900">{event.type}</p>
+                      <span className="text-xs font-bold text-slate-500">{formatDate(event.occurredAt)}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">Código {event.code || '—'} · lifecycle {event.lifecycle || '—'}</p>
+                  </div>
+                ))}
+                {!asArray(detail.recentEvents).length && <p className="py-4 text-sm text-slate-500">Sem eventos de conexão nos últimos 7 dias.</p>}
+              </div>
+            </section>
+          </div>
+        )}
+      </aside>
+    </div>
+  )
+}
+
 
 function ManualAccessEditor({ detail, onApply }) {
   const [form, setForm] = useState({ plan: detail?.plan ?? '', days: '', reason: '' })
@@ -1024,6 +1143,27 @@ export default function AdminPage() {
   const [tab, setTab] = useState('inicio')
   const [affiliates, setAffiliates] = useState(null)
   const [commissions, setCommissions] = useState(null)
+  const [onlineDetail, setOnlineDetail] = useState(null)
+  const [onlineDetailLoading, setOnlineDetailLoading] = useState(false)
+
+  async function openOnlineDetail(userId) {
+    if (!userId) return
+    setOnlineDetailLoading(true)
+    setOnlineDetail(null)
+    try {
+      setOnlineDetail(await api.adminOnlineUser(userId))
+    } catch (err) {
+      setError(err.message || 'Falha ao carregar detalhes de conexão.')
+      setOnlineDetail(null)
+    } finally {
+      setOnlineDetailLoading(false)
+    }
+  }
+
+  function closeOnlineDetail() {
+    setOnlineDetail(null)
+    setOnlineDetailLoading(false)
+  }
 
   function currentMonth() {
     return new Date().toISOString().slice(0, 7)
@@ -1612,6 +1752,7 @@ export default function AdminPage() {
               <thead className="text-xs uppercase tracking-wide text-gray-400">
                 <tr>
                   <th className="px-3 py-2">Cliente</th>
+                  <th className="px-3 py-2">Origem</th>
                   <th className="px-3 py-2">Plano</th>
                   <th className="px-3 py-2">Operação</th>
                   <th className="px-3 py-2">Atividade</th>
@@ -1626,6 +1767,7 @@ export default function AdminPage() {
                       <p className="font-bold text-gray-900">{user?.email ?? 'Cliente sem e-mail'}</p>
                       <p className="text-xs text-gray-500">{user?.contactPhone || 'Sem celular'} · {user?.status ?? '—'}</p>
                     </td>
+                    <td className="px-3 py-3"><OriginCell origin={user?.origin} /></td>
                     <td className="px-3 py-3"><p className="font-semibold">{user?.plan ?? '—'}</p><p className="text-xs text-gray-500">{user?.accessStatus ?? '—'}</p></td>
                     <td className="px-3 py-3 text-xs text-gray-600">
                       <p>Bot: {user?.botRunning ? 'rodando' : 'parado'}</p>
@@ -1653,6 +1795,10 @@ export default function AdminPage() {
               <DetailPanel detail={selectedUser} onClose={() => setSelectedUser(null)} onApplyAccess={(payload) => applyManualAccess(selectedUser.id, payload)} />
             </div>
           </div>
+        )}
+
+        {(onlineDetail || onlineDetailLoading) && (
+          <OnlineDetailDrawer detail={onlineDetail} loading={onlineDetailLoading} onClose={closeOnlineDetail} />
         )}
 
         {tab === 'online' && (
@@ -1696,7 +1842,7 @@ export default function AdminPage() {
                         <td className={`px-3 py-3 text-right font-black tabular-nums ${errors ? 'text-red-700' : 'text-gray-400'}`}>{formatNumber(errors)}</td>
                         <td className={`px-3 py-3 text-right font-black tabular-nums ${drops ? 'text-red-700' : 'text-gray-400'}`}>{formatNumber(drops)}</td>
                         <td className="px-3 py-3 text-xs text-gray-600"><p><strong>{formatDurationMs((user?.automaticOfflineMs24h || 0) + (user?.ongoingOfflineMs24h || 0))}</strong> offline auto</p><p>{formatNumber(user?.manualReconnects24h)} ação(ões) manuais</p></td>
-                        <td className="px-3 py-3 text-right"><button onClick={() => openUserDetail(user?.id)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Drill-down</button></td>
+                        <td className="px-3 py-3 text-right"><button onClick={() => openOnlineDetail(user?.id)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Drill-down</button></td>
                       </tr>
                     )
                   })}
