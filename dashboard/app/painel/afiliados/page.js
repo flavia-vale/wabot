@@ -27,7 +27,7 @@ function formatDate(value) {
 
 const REFERRAL_ACCESS_STATUS = {
   active: { label: 'Ativo', className: 'bg-emerald-100 text-emerald-700' },
-  trial: { label: 'Teste', className: 'bg-blue-100 text-blue-700' },
+  trial: { label: 'Teste grátis', className: 'bg-blue-100 text-blue-700' },
   awaiting_subscription: { label: 'Aguardando assinatura', className: 'bg-indigo-100 text-indigo-700' },
   referral_expired: { label: 'Indicação vencida', className: 'bg-gray-200 text-gray-600' },
   expired: { label: 'Expirado', className: 'bg-amber-100 text-amber-700' },

@@ -42,7 +42,7 @@ function CommissionTypeBadge({ type }) {
 
 const ACCESS_STATUS_BADGES = {
   active: { label: 'Ativo', cls: 'bg-emerald-100 text-emerald-700' },
-  trial: { label: 'Trial', cls: 'bg-sky-100 text-sky-700' },
+  trial: { label: 'Teste grátis', cls: 'bg-sky-100 text-sky-700' },
   awaiting_subscription: { label: 'Aguardando assinatura', cls: 'bg-indigo-100 text-indigo-700' },
   referral_expired: { label: 'Indicação vencida', cls: 'bg-gray-200 text-gray-600' },
   expired: { label: 'Expirado', cls: 'bg-gray-200 text-gray-600' },
