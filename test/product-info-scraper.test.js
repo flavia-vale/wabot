@@ -57,6 +57,40 @@ test('fetchProductInfo (ML social share) usa o preço do produto destacado, não
   assert.equal(info.oldPrice, '3699,00')
 })
 
+// Regressão (painel "Criar oferta" não raspava meli.la, 2026-07-23): a página
+// /social/?ref= é renderizada pelo ML server-side e serve og:title/preço para
+// QUALQUER requisição — não exige cookie de sessão. Antes, sem mlCredentials
+// (usuário sem ML conectado no painel), o código ignorava a share e
+// canonicalizava para a PDP (produto.mercadolivre.com.br/MLB...), que o ML
+// bloqueia com a parede anti-bot para IP de datacenter sem sessão — resultando
+// em título/preço vazios ("Não conseguimos ler título e preço desse link").
+test('fetchProductInfo (ML social share) funciona SEM mlCredentials — não exige cookie', async (t) => {
+  const expanded = 'https://www.mercadolivre.com.br/social/475630078?matt_word=475630078&ref=ENCRYPTEDREF'
+  const socialHtml = `<!doctype html><html><head>
+    <meta property="og:title" content="Jaqueta Puffer Blusa De Frio Impermeável Inverno Bobojaco" />
+    <title>Cuponito | Perfil Social</title></head><body>
+    <script>window.__PRELOADED_STATE__={"price":{"previous_price":{"value":199,"currency":"BRL"},"current_price":{"value":76.61,"currency":"BRL"}}}</script>
+  </body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const target = String(input)
+    if (/meli\.la/.test(target)) {
+      assert.equal(init?.redirect, 'manual')
+      return mockRedirectResponse(expanded, target)
+    }
+    // Sem credenciais, nenhum Cookie deve ser enviado ao buscar a share.
+    assert.ok(!init?.headers?.Cookie, 'não deve enviar cookie sem mlCredentials')
+    return mockHtmlResponse(socialHtml, expanded)
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://meli.la/2YH3Vob', {})
+  assert.match(info.title, /Jaqueta Puffer/)
+  assert.equal(info.newPrice, '76,61')
+  assert.equal(info.oldPrice, '199,00')
+})
+
 // Regressão: Amazon serve intermitentemente uma página de CAPTCHA (~5KB,
 // opfcaptcha) no lugar da PDP. fetchProductInfo deve detectar e re-tentar até
 // pegar a página real.
