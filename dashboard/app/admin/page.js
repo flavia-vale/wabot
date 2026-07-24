@@ -1145,6 +1145,26 @@ export default function AdminPage() {
   const [commissions, setCommissions] = useState(null)
   const [onlineDetail, setOnlineDetail] = useState(null)
   const [onlineDetailLoading, setOnlineDetailLoading] = useState(false)
+  const [onlineFilters, setOnlineFilters] = useState({ search: '', waStatus: 'all', plan: 'all', activity: 'all', minErrors: '' })
+  const [onlineFiltering, setOnlineFiltering] = useState(false)
+
+  async function reloadOnline(next = onlineFilters) {
+    setOnlineFiltering(true)
+    setError('')
+    try {
+      setOnline(await api.adminOnline({ limit: 120, ...next }))
+    } catch (err) {
+      setError(err.message || 'Falha ao filtrar a aba Online.')
+    } finally {
+      setOnlineFiltering(false)
+    }
+  }
+
+  function onOnlineSelect(key, value) {
+    const next = { ...onlineFilters, [key]: value }
+    setOnlineFilters(next)
+    reloadOnline(next)
+  }
 
   async function openOnlineDetail(userId) {
     if (!userId) return
@@ -1809,18 +1829,50 @@ export default function AdminPage() {
 
         {tab === 'online' && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
-            <div className="mb-4">
-              <h2 className="text-lg font-black text-gray-900">Conexões de WhatsApp</h2>
-              <p className="text-sm text-gray-500">Estado de conexão por cliente.</p>
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="text-lg font-black text-gray-900">Conexões, erros e quedas</h2>
+                <p className="text-sm text-gray-500">Status de WhatsApp por cliente, com erros e quedas nas últimas 24h.</p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{formatNumber(asArray(online?.users).length)} clientes · {online?.summary?.stabilityPct ?? '—'}% estáveis</span>
             </div>
+
+            <form onSubmit={(e) => { e.preventDefault(); reloadOnline() }} className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(180px,1fr)_160px_130px_190px_110px_auto]">
+              <input value={onlineFilters.search} onChange={(e) => setOnlineFilters({ ...onlineFilters, search: e.target.value })} placeholder="Buscar nome ou e-mail" className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
+              <select value={onlineFilters.waStatus} onChange={(e) => onOnlineSelect('waStatus', e.target.value)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
+                <option value="all">Todos status</option>
+                <option value="alerts">Só alertas</option>
+                <option value="connected">Conectados</option>
+                <option value="connecting">Tentando conectar</option>
+                <option value="disconnected">Desconectados</option>
+                <option value="without_session">Sem sessão</option>
+              </select>
+              <select value={onlineFilters.plan} onChange={(e) => onOnlineSelect('plan', e.target.value)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
+                <option value="all">Todos planos</option>
+                <option value="trial">Trial</option>
+                <option value="basic">Basic</option>
+                <option value="pro">Pro</option>
+              </select>
+              <select value={onlineFilters.activity} onChange={(e) => onOnlineSelect('activity', e.target.value)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
+                <option value="all">Toda atividade</option>
+                <option value="with_sends_24h">Com envios 24h</option>
+                <option value="without_activity_24h">Sem atividade 24h</option>
+              </select>
+              <input value={onlineFilters.minErrors} onChange={(e) => setOnlineFilters({ ...onlineFilters, minErrors: e.target.value })} type="number" min="0" placeholder="Erros mín." className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
+              <button disabled={onlineFiltering} className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-50">{onlineFiltering ? 'Filtrando…' : 'Filtrar'}</button>
+            </form>
+
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm">
                 <thead className="text-xs uppercase tracking-wide text-gray-400">
                   <tr>
                     <th className="px-3 py-2">Cliente</th>
-                    <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2">Bot</th>
-                    <th className="px-3 py-2">Atualizado</th>
+                    <th className="px-3 py-2">WhatsApp</th>
+                    <th className="px-3 py-2">Última atividade</th>
+                    <th className="px-3 py-2 text-right">Erros 24h</th>
+                    <th className="px-3 py-2 text-right">Quedas 24h</th>
+                    <th className="px-3 py-2">Recuperação 24h</th>
+                    <th className="px-3 py-2 text-right">Ação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1850,6 +1902,7 @@ export default function AdminPage() {
                 </tbody>
               </table>
             </div>
+            <p className="mt-3 text-[11px] text-gray-400">&quot;Quedas&quot; = desconexões no período. &quot;Offline auto&quot; = tempo fora até o robô recuperar sozinho. &quot;Ações manuais&quot; = start/pareamento pedidos pelo cliente.</p>
           </section>
         )}
 
