@@ -1145,6 +1145,26 @@ export default function AdminPage() {
   const [commissions, setCommissions] = useState(null)
   const [onlineDetail, setOnlineDetail] = useState(null)
   const [onlineDetailLoading, setOnlineDetailLoading] = useState(false)
+  const [onlineFilters, setOnlineFilters] = useState({ search: '', waStatus: 'all', plan: 'all', activity: 'all', minErrors: '' })
+  const [onlineFiltering, setOnlineFiltering] = useState(false)
+
+  async function reloadOnline(next = onlineFilters) {
+    setOnlineFiltering(true)
+    setError('')
+    try {
+      setOnline(await api.adminOnline({ limit: 120, ...next }))
+    } catch (err) {
+      setError(err.message || 'Falha ao filtrar a aba Online.')
+    } finally {
+      setOnlineFiltering(false)
+    }
+  }
+
+  function onOnlineSelect(key, value) {
+    const next = { ...onlineFilters, [key]: value }
+    setOnlineFilters(next)
+    reloadOnline(next)
+  }
 
   async function openOnlineDetail(userId) {
     if (!userId) return
@@ -1813,6 +1833,32 @@ export default function AdminPage() {
               <h2 className="text-lg font-black text-gray-900">Conexões de WhatsApp</h2>
               <p className="text-sm text-gray-500">Estado de conexão por cliente.</p>
             </div>
+
+            <form onSubmit={(e) => { e.preventDefault(); reloadOnline() }} className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(180px,1fr)_160px_130px_190px_110px_auto]">
+              <input value={onlineFilters.search} onChange={(e) => setOnlineFilters({ ...onlineFilters, search: e.target.value })} placeholder="Buscar nome ou e-mail" className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
+              <select value={onlineFilters.waStatus} onChange={(e) => onOnlineSelect('waStatus', e.target.value)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
+                <option value="all">Todos status</option>
+                <option value="alerts">Só alertas</option>
+                <option value="connected">Conectados</option>
+                <option value="connecting">Tentando conectar</option>
+                <option value="disconnected">Desconectados</option>
+                <option value="without_session">Sem sessão</option>
+              </select>
+              <select value={onlineFilters.plan} onChange={(e) => onOnlineSelect('plan', e.target.value)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
+                <option value="all">Todos planos</option>
+                <option value="trial">Trial</option>
+                <option value="basic">Basic</option>
+                <option value="pro">Pro</option>
+              </select>
+              <select value={onlineFilters.activity} onChange={(e) => onOnlineSelect('activity', e.target.value)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
+                <option value="all">Toda atividade</option>
+                <option value="with_sends_24h">Com envios 24h</option>
+                <option value="without_activity_24h">Sem atividade 24h</option>
+              </select>
+              <input value={onlineFilters.minErrors} onChange={(e) => setOnlineFilters({ ...onlineFilters, minErrors: e.target.value })} type="number" min="0" placeholder="Erros mín." className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
+              <button disabled={onlineFiltering} className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-50">{onlineFiltering ? 'Filtrando…' : 'Filtrar'}</button>
+            </form>
+
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm">
                 <thead className="text-xs uppercase tracking-wide text-gray-400">
