@@ -42,7 +42,9 @@ function CommissionTypeBadge({ type }) {
 
 const ACCESS_STATUS_BADGES = {
   active: { label: 'Ativo', cls: 'bg-emerald-100 text-emerald-700' },
-  trial: { label: 'Trial', cls: 'bg-sky-100 text-sky-700' },
+  trial: { label: 'Teste grátis', cls: 'bg-sky-100 text-sky-700' },
+  awaiting_subscription: { label: 'Aguardando assinatura', cls: 'bg-indigo-100 text-indigo-700' },
+  referral_expired: { label: 'Indicação vencida', cls: 'bg-gray-200 text-gray-600' },
   expired: { label: 'Expirado', cls: 'bg-gray-200 text-gray-600' },
   banned: { label: 'Banido', cls: 'bg-red-100 text-red-700' },
   suspended: { label: 'Suspenso', cls: 'bg-orange-100 text-orange-700' },
@@ -114,7 +116,7 @@ function ReferralsModal({ affiliate, onClose }) {
                       {r.contactPhone && <p className="text-xs text-gray-400">{r.contactPhone}</p>}
                     </td>
                     <td className="px-3 py-3 text-xs text-gray-500">{formatDate(r.createdAt)}</td>
-                    <td className="px-3 py-3"><AccessStatusBadge status={r.accessStatus} /></td>
+                    <td className="px-3 py-3"><AccessStatusBadge status={r.referralStatus} /></td>
                     <td className="px-3 py-3 text-right text-gray-700">{r.paymentCount}</td>
                     <td className="px-3 py-3 text-right text-gray-700">{formatCurrency(r.totalPaidCents ?? 0)}</td>
                     <td className="px-3 py-3 text-xs text-gray-500">{r.lastPaymentAt ? formatDate(r.lastPaymentAt) : '—'}</td>
