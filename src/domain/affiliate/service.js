@@ -285,6 +285,30 @@ export function resolveAccessStatus(user, now = new Date()) {
   return 'active'
 }
 
+// Dias após o fim do teste grátis (accessExpiresAt) em que a indicação ainda é
+// considerada "em aberto" no painel do afiliado, mesmo sem o indicado ter
+// assinado ainda.
+export const REFERRAL_GRACE_PERIOD_DAYS = 30
+
+// resolveAccessStatus mistura duas coisas diferentes sob o mesmo rótulo
+// "expired": (a) o teste grátis do indicado acabou sem ele nunca ter assinado
+// — a indicação continua válida, o afiliado ainda ganha comissão se a pessoa
+// assinar depois — e (b) uma assinatura PAGA que venceu (o indicado já rendeu
+// comissão pelo menos uma vez). Mostrar "Expirado" para o caso (a) passava a
+// impressão errada de que a indicação tinha morrido. resolveReferralStatus
+// separa os dois: só entra em "aguardando assinatura"/"indicação vencida"
+// quando o indicado NUNCA pagou (paymentCount === 0); quem já pagou continua
+// classificado pela assinatura atual (resolveAccessStatus), que aqui já
+// significa "assinatura", não "indicação". Não bloqueia comissão nenhuma —
+// tryCreateAffiliateCommission não depende deste status; é só exibição.
+export function resolveReferralStatus(user, paymentCount = 0, now = new Date()) {
+  if (user.status === 'banned' || user.status === 'suspended') return user.status
+  if (paymentCount > 0 || user.plan !== 'trial') return resolveAccessStatus(user, now)
+  if (!user.accessExpiresAt || new Date(user.accessExpiresAt) >= now) return 'trial'
+  const daysSinceExpiry = Math.floor((now - new Date(user.accessExpiresAt)) / 86400000)
+  return daysSinceExpiry >= REFERRAL_GRACE_PERIOD_DAYS ? 'referral_expired' : 'awaiting_subscription'
+}
+
 // "Maria Silva Souza" -> "Maria S." — preserva o primeiro nome e a inicial do
 // segundo para a visão anônima do próprio afiliado (sem expor o nome completo).
 function maskName(name) {
@@ -365,6 +389,7 @@ export async function getAffiliateReferrals({ affiliateProfileId, page = 1, limi
     const comm = commAgg.get(u.id) ?? { initialCents: 0, recurringCents: 0, totalCents: 0, pendingCents: 0, payableCents: 0, paidCents: 0, reversedCents: 0, lastEligibleAt: null, lastPaidAt: null, statuses: {} }
     const accessStatus = resolveAccessStatus(u, now)
     const isActive = accessStatus === 'active' || accessStatus === 'trial'
+    const referralStatus = resolveReferralStatus(u, pay.count, now)
 
     if (anonymized) {
       // Visão do próprio afiliado: sem e-mail/telefone e sem valores de
@@ -374,6 +399,7 @@ export async function getAffiliateReferrals({ affiliateProfileId, page = 1, limi
         name: maskName(u.name),
         createdAt: u.createdAt,
         accessStatus,
+        referralStatus,
         isActive,
         paymentCount: pay.count,
         lastPaymentAt: pay.lastPaymentAt,
@@ -400,6 +426,7 @@ export async function getAffiliateReferrals({ affiliateProfileId, page = 1, limi
       createdAt: u.createdAt,
       lastActivityAt: u.lastActivityAt,
       accessStatus,
+      referralStatus,
       isActive,
       paymentCount: pay.count,
       totalPaidCents: pay.totalCents,

@@ -28,6 +28,8 @@ function formatDate(value) {
 const REFERRAL_ACCESS_STATUS = {
   active: { label: 'Ativo', className: 'bg-emerald-100 text-emerald-700' },
   trial: { label: 'Teste', className: 'bg-blue-100 text-blue-700' },
+  awaiting_subscription: { label: 'Aguardando assinatura', className: 'bg-indigo-100 text-indigo-700' },
+  referral_expired: { label: 'Indicação vencida', className: 'bg-gray-200 text-gray-600' },
   expired: { label: 'Expirado', className: 'bg-amber-100 text-amber-700' },
   suspended: { label: 'Suspenso', className: 'bg-red-100 text-red-700' },
   banned: { label: 'Banido', className: 'bg-red-100 text-red-700' },
@@ -92,7 +94,7 @@ function MyReferrals() {
                 <tr key={i} className="bg-white align-top">
                   <td className="px-4 py-3 text-gray-800">{r.name}</td>
                   <td className="px-4 py-3 text-xs text-gray-500">{formatDate(r.createdAt)}</td>
-                  <td className="px-4 py-3"><ReferralStatusBadge status={r.accessStatus} active={r.isActive} /></td>
+                  <td className="px-4 py-3"><ReferralStatusBadge status={r.referralStatus} active={r.isActive} /></td>
                   <td className="px-4 py-3 text-xs text-gray-500">{formatDate(r.lastPaymentAt)}</td>
                   <td className="px-4 py-3 text-right text-gray-700">{r.paymentCount}</td>
                   <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(r.commissionInitialCents ?? 0)}</td>
