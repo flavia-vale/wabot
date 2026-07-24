@@ -329,13 +329,12 @@ test('US2 (007): vitrine direta + SSID expirado + SEM vitrineUrl cadastrada → 
 
 // --- Feature 007 / US3 (FR-008, T013/T014): não-vitrine e recusa ambígua preservam comportamento atual ---
 
-test('US3 (007) regressão: link ORIGINAL não-vitrine (encurtador, não /social/) + SSID expirado → passthrough, erro real de SSID sobe intocado (sem virar ml_vitrine_missing)', async (t) => {
+test('cupom por encurtador (não /social/) + SSID expirado + TEM vitrine própria → usa a vitrine (atualização 2026-07-23, linha 7 = use_vitrine)', async (t) => {
   withCouponLinkConvertOn(t)
-  // isDirectVitrineShare olha o link ORIGINAL compartilhado, não a landing
-  // resolvida. Aqui o original é um encurtador (não /social/), então
-  // isDirectVitrine=false mesmo a landing sendo /social/ — outcome esperado é
-  // passthrough (linha 7 da tabela-verdade: expired + não-vitrine + com
-  // vitrine), preservando a mensagem histórica de renovar SSID (FR-008).
+  // Pedido da cliente: cupom do ML por meli.la com SSID vencido deve sair com a
+  // vitrine cadastrada (link de afiliado dela mesma), não ser descartado. A
+  // linha 7 da tabela-verdade passou de passthrough para use_vitrine — o
+  // isDirectVitrine deixou de ser exigido no motivo `expired`.
   t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/social/loja-nao-vitrine-007' }))
   t.mock.method(axios, 'post', async () => ({
     status: 401,
@@ -345,17 +344,41 @@ test('US3 (007) regressão: link ORIGINAL não-vitrine (encurtador, não /social
     },
     headers: {},
   }))
-  const url = 'https://meli.la/naovitrine007'
+  const result = await convert('https://meli.la/naovitrine007', {
+    tag: '475630078',
+    ssid: 'ssid-vencido-1234567890',
+    vitrineUrl: 'https://www.mercadolivre.com.br/social/minha-vitrine-oficial',
+  })
+  assert.deepEqual(result, {
+    url: 'https://www.mercadolivre.com.br/social/minha-vitrine-oficial',
+    linkKind: 'coupon',
+    warning: 'ml_vitrine_fallback_used',
+  })
+})
+
+test('US3 (007) regressão: encurtador (não /social/) + SSID expirado + SEM vitrine própria → passthrough, erro real de SSID sobe intocado (FR-008, linha 8)', async (t) => {
+  withCouponLinkConvertOn(t)
+  // Sem vitrine própria cadastrada não há link seguro pra usar — mantém o
+  // passthrough histórico (mensagem de renovar SSID preservada), sem virar
+  // ml_vitrine_missing (isDirectVitrine=false).
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/social/loja-nao-vitrine-007' }))
+  t.mock.method(axios, 'post', async () => ({
+    status: 401,
+    data: {
+      status: 401,
+      urls: [{ message: 'Sessão expirada, faça login novamente', status: 401 }],
+    },
+    headers: {},
+  }))
   await assert.rejects(
-    () => convert(url, {
+    () => convert('https://meli.la/naovitrine007', {
       tag: '475630078',
       ssid: 'ssid-vencido-1234567890',
-      vitrineUrl: 'https://www.mercadolivre.com.br/social/minha-vitrine-oficial',
     }),
     (err) => {
       assert.equal(err.mlFailureType, 'expired')
       assert.equal(err.conversionLogErrorMsg, undefined, 'passthrough não pode sinalizar skip:ml_vitrine_missing')
-      assert.match(err.message, /Renove o SSID/i, 'mensagem de renovar SSID preservada para não-vitrine (FR-008)')
+      assert.match(err.message, /Renove o SSID/i, 'mensagem de renovar SSID preservada para não-vitrine sem vitrine própria (FR-008)')
       return true
     },
   )

@@ -783,17 +783,22 @@ export async function fetchProductInfo(url, opts = {}) {
   const fetchOpts = { ...opts }
 
   // Resolução de landing do ML. Dois caminhos:
-  //   (1) Share /social/?ref= COM cookie → NÃO canonicalizar. O `ref` identifica
-  //       o produto destacado; raspamos a própria URL /social/ autenticada e os
-  //       extratores (og:title + previous/current_price) pegam o produto certo.
-  //       Canonicalizar aqui jogava fora o `ref` e resolveToCleanProductUrl caía
-  //       no anti-bot (IP datacenter) extraindo um MLB aleatório/errado.
-  //   (2) Demais landings (/up/, meli.la → /p/MLB, sem cookie) → mantém o
+  //   (1) Share /social/?ref= → NÃO canonicalizar. O `ref` identifica o produto
+  //       destacado; raspamos a própria URL /social/ e os extratores (og:title +
+  //       previous/current_price) pegam o produto certo. A página /social/ é
+  //       renderizada server-side pelo ML e serve og:title/preço para QUALQUER
+  //       requisição (confirmado em produção, sem cookie/UA especial) — NÃO
+  //       exigir cookie aqui. Canonicalizar (ou exigir cookie) jogava fora o
+  //       `ref` e mandava o scrape para a PDP canônica
+  //       (produto.mercadolivre.com.br/MLB...), que o ML bloqueia com a parede
+  //       anti-bot /gz/account-verification para IP de datacenter sem sessão —
+  //       ficando sem título/preço mesmo com o produto correto identificado.
+  //   (2) Demais landings (/up/, meli.la → /p/MLB) → mantém o
   //       resolveToCleanProductUrl histórico (best-effort).
   let resolvedUrl = url
   if (isMercadoLivreLandingUrl(url)) {
     const expanded = await expandMlShortLink(url).catch(() => url)
-    if (mlCookieHeader && isMercadoLivreSocialShare(expanded)) {
+    if (isMercadoLivreSocialShare(expanded)) {
       resolvedUrl = expanded
     } else {
       const canonical = await resolveToCleanProductUrl(url).catch(() => null)

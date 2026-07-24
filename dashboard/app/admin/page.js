@@ -1809,24 +1809,18 @@ export default function AdminPage() {
 
         {tab === 'online' && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
-            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <h2 className="text-lg font-black text-gray-900">Conexões, erros e quedas</h2>
-                <p className="text-sm text-gray-500">Status de WhatsApp por cliente, com erros e quedas nas últimas 24h.</p>
-              </div>
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{formatNumber(asArray(online?.users).length)} clientes · {online?.summary?.stabilityPct ?? '—'}% estáveis</span>
+            <div className="mb-4">
+              <h2 className="text-lg font-black text-gray-900">Conexões de WhatsApp</h2>
+              <p className="text-sm text-gray-500">Estado de conexão por cliente.</p>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm">
                 <thead className="text-xs uppercase tracking-wide text-gray-400">
                   <tr>
                     <th className="px-3 py-2">Cliente</th>
-                    <th className="px-3 py-2">WhatsApp</th>
-                    <th className="px-3 py-2">Última atividade</th>
-                    <th className="px-3 py-2 text-right">Erros 24h</th>
-                    <th className="px-3 py-2 text-right">Quedas 24h</th>
-                    <th className="px-3 py-2">Recuperação 24h</th>
-                    <th className="px-3 py-2 text-right">Ação</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Bot</th>
+                    <th className="px-3 py-2">Atualizado</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1856,7 +1850,6 @@ export default function AdminPage() {
                 </tbody>
               </table>
             </div>
-            <p className="mt-3 text-[11px] text-gray-400">&quot;Quedas&quot; = desconexões no período. &quot;Offline auto&quot; = tempo fora até o robô recuperar sozinho. &quot;Ações manuais&quot; = start/pareamento pedidos pelo cliente.</p>
           </section>
         )}
 

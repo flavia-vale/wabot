@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import { shouldUseCouponBrandCard } from '../src/converters/couponBrandCardPolicy.js'
 import { buildStoreBrandCardImage } from '../src/converters/storeBrandCard.js'
+import { decideSkipActiveFetchForCoupon } from '../src/monitoredImageResolver.js'
 
 const SUPPORTED_PLATFORMS = ['amazon', 'shopee', 'mercadolivre', 'magazineluiza']
 
@@ -107,6 +108,60 @@ test('shouldUseCouponBrandCard: CRÍTICO — URL com ASIN ou MLB é sempre trata
       resolvedUrl: 'https://produto.mercadolivre.com.br/MLB4060932335-x',
     }),
     false,
+  )
+})
+
+// REGRESSÃO (2026-07): produto Ryzen com "CUPOM: PRESENTE" por short link ML
+// (mercadolivre.com/sec/XXXX) saiu com o banner "CUPOM Mercado Livre" no lugar
+// da foto. Causa: o sinal de texto do banner usava isCouponMsg cru, que dispara
+// para QUALQUER produto que só carrega um código de cupom. O fix passou a
+// derivar o couponTextSignal de couponSkipActiveFetch (decideSkipActiveFetchForCoupon):
+// quando o título raspado bate com o caption (titleOverlap='match'), é produto →
+// skip=false → couponTextSignal=false → SEM banner (foto do produto).
+test('shouldUseCouponBrandCard: CRÍTICO — produto + código de cupom por short link (titleOverlap=match) NÃO recebe banner', () => {
+  // Passo 1: a estratégia de imagem reconhece que é produto (título bate).
+  const couponSkipActiveFetch = decideSkipActiveFetchForCoupon({
+    isCouponMsg: true, // "...Ryzen 5 5500... CUPOM: PRESENTE" casa isCouponAnnouncement
+    hasProductLink: true, // mercadolivre.com/sec/1Psi79H
+    titleOverlap: 'match', // og:title raspado ("Processador Ryzen...") bate com o caption
+    looksGeneric: false, // não é cupom store-wide
+  })
+  assert.equal(couponSkipActiveFetch, false, 'produto + cupom não deve pular o fetch da foto')
+
+  // Passo 2: o sinal de texto do banner deriva de couponSkipActiveFetch (fix).
+  const couponTextSignal = couponSkipActiveFetch || false /* sem warning de vitrine ML */
+  assert.equal(
+    shouldUseCouponBrandCard({
+      enabled: true,
+      platform: 'mercadolivre',
+      linkKind: 'coupon', // short link /sec/ esconde o MLB
+      couponTextSignal,
+      resolvedUrl: 'https://mercadolivre.com/sec/1Psi79H',
+    }),
+    false,
+    'produto por short link com código de cupom deve sair com FOTO, nunca com banner',
+  )
+})
+
+// Contraprova: cupom GENÉRICO store-wide (link resolve p/ produto aleatório) —
+// aí o banner É o certo, e o sinal derivado continua verdadeiro.
+test('shouldUseCouponBrandCard: cupom genérico store-wide (skip=true) mantém o banner', () => {
+  const couponSkipActiveFetch = decideSkipActiveFetchForCoupon({
+    isCouponMsg: true,
+    hasProductLink: true,
+    titleOverlap: 'unknown', // short link de cupom não resolve og:title
+    looksGeneric: true, // "em compras a partir de", "qualquer produto", etc.
+  })
+  assert.equal(couponSkipActiveFetch, true)
+  assert.equal(
+    shouldUseCouponBrandCard({
+      enabled: true,
+      platform: 'mercadolivre',
+      linkKind: 'coupon',
+      couponTextSignal: couponSkipActiveFetch,
+      resolvedUrl: 'https://mercadolivre.com/sec/cupomGenerico',
+    }),
+    true,
   )
 })
 

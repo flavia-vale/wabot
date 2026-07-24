@@ -11,7 +11,7 @@ import { readBacklogPipeline, updateBacklogIssueStatus } from '../../backlogPipe
 import { TERMS_DOCUMENT_ID, getEffectiveTermsDocument, nextTermsVersion, normalizeTermsContent } from '../../legalTerms.js'
 import { getDlqMaintenanceSnapshot } from '../../jobs/dlqMaintenance.js'
 import { redactAdminPayload, serializeAdminAuditValue } from '../../adminRedaction.js'
-import { buildErrorsByMessage } from '../../adminLogSummary.js'
+import { buildErrorsByMessage, summarizeDesyncGroups } from '../../adminLogSummary.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -1023,7 +1023,7 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
   })
   if (!user) return null
 
-  const [events24h, events7d, offlineEvents7d, recentEvents, logs] = await Promise.all([
+  const [events24h, events7d, offlineEvents7d, recentEvents, logs, desyncEvents] = await Promise.all([
     db.waConnectionEvent.groupBy({
       by: ['type'],
       where: { userId, occurredAt: { gte: since24h, lte: now } },
@@ -1051,6 +1051,12 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
       take: 300,
       select: { id: true, status: true, errorMsg: true, platform: true, sentAt: true },
     }),
+    db.analyticsEvent.findMany({
+      where: { userId, event: { in: ['ops_wa_group_desync_autoheal', 'ops_wa_group_desync_unresolved'] }, createdAt: { gte: since7d, lte: now } },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      select: { event: true, metadata: true, createdAt: true },
+    }).catch(() => []),
   ])
 
   const countByType = (rows) => Object.fromEntries(rows.map(row => [row.type, Number(row._count?._all ?? 0)]))
@@ -1085,6 +1091,7 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
       ongoingOfflineMs7d: Number(offlineMetrics7d.ongoingOfflineMs || 0),
     },
     errorsByType: buildErrorsByMessage(logs, { limit: 20 }),
+    desyncGroups: summarizeDesyncGroups(desyncEvents, { limit: 10 }),
     recentEvents: recentEvents.map(event => {
       let metadata = {}
       try { metadata = JSON.parse(event.metadata || '{}') } catch {}

@@ -757,6 +757,60 @@ senão o contador zera a cada `open`/close e o threshold nunca é cruzado.
 
 Testes: `test/reconnect-policy.test.js` (`extractRemoteJidFromLogArgs`).
 
+## Ignorar grupos NÃO-monitorados no socket — fix de causa raiz do desync (RCA 2026-07, cliente `vanessascar12@gmail.com`)
+
+**Investigação:** cliente com robô caindo a cada ~50min o dia inteiro (~30
+quedas/dia), recuperando sozinho em ~6s, `0 ações manuais` no painel admin — só
+ela, diferente dos outros. `WaConnectionEvent`: `disconnect|500` com
+`stuckMsg:true`/`badSession:true` em cadência de relógio. `AnalyticsEvent`:
+`ops_wa_group_desync_autoheal` + `ops_wa_stuck_message_retry` recorrentes. No
+`bot.log`, as falhas de decrypt do worker dela concentravam-se num **único grupo
+`@g.us` que ela participa mas o robô NEM monitora** (não estava nas fontes
+monitor/post dela). É o mesmo mecanismo do "Loop de retry-receipt travado" e do
+"Auto-heal de grupo" acima, mas o auto-heal (refresh de sender-keys) **não cura**
+esse caso: o refresh re-emite chaves pra frente, mas não cancela a mensagem já
+enfileirada que o WhatsApp reoferece — a fonte segue viva.
+
+**Causa raiz de segundo nível:** o robô só espelha grupos monitorados, mas o
+Baileys tenta decifrar (e por isso manda retry-receipt) mensagens de **qualquer**
+grupo que a conta participa. Grupo-lixo dessincronizado → decrypt fail → retry
+receipt → WhatsApp reoferece → `stream:error 500` → queda. O robô estava brigando
+por mensagem que nunca vai usar.
+
+**Fix (prevenção na origem) — `WA_IGNORE_UNMONITORED_GROUPS` (default OFF):**
+liga a opção `shouldIgnoreJid` do `makeWASocket` (`src/bot-worker.js`) via
+`shouldIgnoreChatJid` (`src/core/ignoredJidPolicy.js`, puro/testado). Confirmado
+na FONTE do Baileys (`Socket/messages-recv.js → handleMessage`): quando
+`shouldIgnoreJid(from)` é `true`, a mensagem é **ACKada e descartada ANTES** de
+`decrypt()` e `sendRetryRequest()` → sem Bad MAC, sem retry receipt → o WhatsApp
+não reoferece → **o stream não cai**. Blast radius mínimo DE PROPÓSITO: só entram
+na regra jids de **grupo `@g.us` fora do allowlist**; `@newsletter` (Canais que
+sigo), DMs (`@s.whatsapp.net`), `status@broadcast` e o próprio número **nunca**
+são ignorados. O allowlist (`allowedChatJids`, escopo de módulo) = monitor +
+destino + canal-botão, repopulado a cada `getConfig()`; `ready`-guard evita
+ignorar mensagem legítima enquanto a config não carregou (default seguro no boot).
+Mensagem travada de `@newsletter` continua coberta pela blindagem do
+`msgRetryCounterCache` (limite 5/mensagem). **Rollout seguro:** default OFF,
+reversível sem redeploy; **validar em staging** (o gate é confirmar em campo que
+o retry-receipt some com um grupo real dessincronizado) antes de ligar em prod.
+Teste: `test/ignored-jid-policy.test.js`.
+
+**Visibilidade admin (Part B):** como a regra é **NUNCA sair de grupo sozinho**,
+a "cura" (cliente decide sair) tem que ser barata — antes exigia grepar 1.4GB de
+log. Agora os eventos `ops_wa_group_desync_autoheal`/`unresolved` carregam o
+**nome** do grupo (`groupSubjectByJid`, cacheado no `groupFetchAllParticipating`),
+e o detalhe do painel admin online (`buildAdminOnlineUserDetail` +
+`summarizeDesyncGroups` em `src/adminLogSummary.js`) devolve `desyncGroups`
+(nome + jid + nº de refresh + flag `unresolved`), renderizado numa seção do drawer
+em `dashboard/app/admin/online/page.js`. Teste: `test/admin-desync-groups.test.js`.
+
+**Não regredir:** não ler `group.imageMode`/config fora do chokepoint não muda
+aqui, mas não mover `allowedChatJids`/`groupSubjectByJid` pra dentro de
+`startBotInner` (precisam sobreviver a reconexões, mesma lição do
+`msgRetryCounterCache`); não ampliar o `shouldIgnoreChatJid` para ignorar
+newsletter/DM sem revalidar Canais/pareamento; manter o default OFF até validação
+explícita em staging.
+
 ## Loop de retry-receipt travado derrubando sessão a cada ~50min (RCA 2026-07)
 
 **Sintoma:** cliente reportou queda "de novo hoje". Investigação encontrou uma

@@ -88,6 +88,34 @@ test('sanitizeInviteLinks remove CTA inline que ficou sem link de convite', () =
   assert.equal(sanitized, 'Oferta boa https://amzn.to/produto')
 })
 
+test('sanitizeInviteLinks remove CTA órfão do grupo mesmo em itálico/negrito do WhatsApp', () => {
+  // Regressão: o CTA vinha em itálico (_Grupo Pincei Casa_). O `_` conta como
+  // caractere de palavra em regex, então `\bgrupo\b` falhava e a linha órfã
+  // sobrevivia após o link de convite ser removido. Vale para * ~ ` também.
+  const italico = sanitizeInviteLinks([
+    'Geladeira HQ 140L',
+    '🔥 R$ 976,87 VIA PIX',
+    '🛍️ PEGAR PROMOÇÃO:',
+    'https://s.shopee.com.br/8V7XbGxiZT',
+    '',
+    '🟤 _Grupo Pincei Casa_:',
+    'https://chat.whatsapp.com/ABCDEF123',
+  ].join('\n'))
+  assert.equal(italico.includes('Pincei Casa'), false)
+  assert.equal(italico.includes('chat.whatsapp.com'), false)
+  assert.equal(italico.includes('8V7XbGxiZT'), true, 'oferta convertida deve permanecer')
+
+  assert.equal(sanitizeInviteLinks('🟤 *Grupo Pincei Casa*:'), '')
+  assert.equal(sanitizeInviteLinks('🟤 ~Canal de Ofertas~:'), '')
+})
+
+test('sanitizeInviteLinks não apaga linha de oferta legítima que mencione "grupo" e tenha link', () => {
+  // Uma linha que ainda carrega uma URL de oferta não é um CTA órfão — nunca
+  // deve ser removida só por conter a palavra "grupo".
+  const line = 'Kit 3 potes _grupo_ premium por R$ 50 https://s.shopee.com.br/xyz'
+  assert.equal(sanitizeInviteLinks(line), line)
+})
+
 test('sanitizeInviteLinks remove CTA+link final irrelevante fora de marketplaces suportados', () => {
   const sanitized = sanitizeInviteLinks([
     '🚨 MENOR PREÇO!',

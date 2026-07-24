@@ -125,6 +125,30 @@ function UserDrawer({ detail, loading, onClose }) {
               </div>
             </section>
 
+            {!!asArray(detail.desyncGroups).length && (
+              <section className="rounded-3xl border border-orange-200 bg-orange-50 p-4">
+                <h3 className="text-sm font-black uppercase tracking-wide text-orange-900">Grupos derrubando a sessão (dessincronizados)</h3>
+                <p className="mt-1 text-xs text-orange-800">Grupos não-monitorados com falha de sincronização que fazem o robô cair sozinho. Recomende ao cliente <strong>sair do grupo</strong> — o robô não usa esses grupos.</p>
+                <div className="mt-3 divide-y divide-orange-100">
+                  {asArray(detail.desyncGroups).map((item) => (
+                    <div key={item.jid} className="grid grid-cols-[1fr_auto] gap-3 py-3 text-sm">
+                      <div>
+                        <p className="break-words font-black text-slate-900">{item.name || 'Grupo sem nome resolvido'}</p>
+                        <p className="mt-1 break-all font-mono text-[11px] text-slate-500">{item.jid}</p>
+                        <p className="mt-1 text-xs text-slate-500">último {formatDate(item.lastSeenAt)}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        {item.unresolved
+                          ? <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-black text-red-700">não resolvido</span>
+                          : <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-800">auto-refresh ativo</span>}
+                        <span className="text-xs text-slate-500">{formatNumber(item.autoheals)} refresh(es)</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             <section className="rounded-3xl border border-slate-200 bg-white p-4">
               <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Linha do tempo de conexão</h3>
               <div className="mt-3 space-y-2">

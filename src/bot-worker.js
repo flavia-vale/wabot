@@ -28,6 +28,7 @@ import db from './db.js'
 import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { recordOperationalSignal } from './observability/operationalSignals.js'
+import { shouldIgnoreChatJid, buildAllowedJidSet } from './core/ignoredJidPolicy.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { sanitizeMessageForLog, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'
 import { decryptCredential } from './credentialCrypto.js'
@@ -217,6 +218,38 @@ const TITLE_MISMATCH_GUARD_DISABLED = String(process.env.WA_DISABLE_TITLE_MISMAT
 function normalizeJidForMatch(jid) {
   if (typeof jid !== 'string') return ''
   return jid.trim().replace(/:\d+(?=@)/, '')
+}
+
+// Fix de causa raiz (RCA 2026-07 — ver src/core/ignoredJidPolicy.js): ignorar no
+// socket Baileys as mensagens de grupos @g.us que o robô NÃO monitora. Um grupo
+// dessincronizado que o cliente participa mas o robô não usa derrubava a sessão
+// a cada ~50min via retry-receipt → stream:error 500. Default OFF (rollout
+// seguro / reversível sem redeploy); ligar só após validar em staging.
+const IGNORE_UNMONITORED_GROUPS = String(process.env.WA_IGNORE_UNMONITORED_GROUPS || '0') === '1'
+// Allowlist normalizado (monitor + destino + canal-botão), atualizado a cada
+// getConfig(). `ready` só vira true depois da 1ª carga — antes disso não
+// ignoramos nada (default seguro no boot). Escopo de módulo: sobrevive a
+// reconexões do MESMO worker.
+let allowedChatJids = new Set()
+let allowedChatJidsReady = false
+
+// Cache jid→nome (subject) preenchido no groupFetchAllParticipating. Best-effort,
+// só para anexar o NOME do grupo culpado nos eventos de desync (Part B —
+// visibilidade admin), evitando que a operadora precise cruzar o jid na mão.
+const groupSubjectByJid = new Map()
+
+function updateAllowedChatJids(groups) {
+  try {
+    const jids = [
+      ...(groups?.monitorJids ?? []),
+      ...(groups?.post ?? []),
+      ...((groups?.postDetails ?? []).map(detail => detail?.channelButtonJid).filter(Boolean)),
+    ]
+    allowedChatJids = buildAllowedJidSet(jids)
+    allowedChatJidsReady = true
+  } catch {
+    // Nunca deixa a atualização do allowlist quebrar o getConfig.
+  }
 }
 
 let activeSock = null
@@ -555,6 +588,11 @@ async function loadConfig() {
     logger,
   })
 
+  // Mantém o allowlist do shouldIgnoreJid em dia com a config atual (grupos
+  // monitor/destino podem mudar quando o cliente edita no painel → reloadConfig
+  // zera o cache e o próximo getConfig repopula).
+  updateAllowedChatJids(groups)
+
   const botConfig = {
     delayMin: 5,
     delayMax: 15,
@@ -719,6 +757,13 @@ async function triggerWaGroupsRefresh(reason = 'manual') {
     const startedAt = Date.now()
     const groups = await activeSock.groupFetchAllParticipating()
     const count = groups ? Object.keys(groups).length : 0
+    // Cacheia jid→subject (best-effort) para nomear grupos culpados nos eventos
+    // de desync consumidos pelo painel admin.
+    if (groups) {
+      for (const [jid, meta] of Object.entries(groups)) {
+        if (meta?.subject) groupSubjectByJid.set(normalizeJidForMatch(jid), meta.subject)
+      }
+    }
     lastWaGroupsRefreshAt = Date.now()
     logger.info({ reason, count, durationMs: lastWaGroupsRefreshAt - startedAt }, 'WA groups refresh concluído')
     return { ok: true, count }
@@ -1096,7 +1141,8 @@ function handleGroupDecryptSignal(args) {
       { jid, decryptFailures: r.count, windowMs: WA_GROUP_DESYNC_WINDOW_MS },
       'Grupo com falhas de decrypt repetidas (sender-key dessincronizada) — disparando auto-refresh de sender-keys sozinho (não derruba a sessão)'
     )
-    try { recordOperationalSignal('wa_group_desync_autoheal', { userId, jid, count: r.count }) } catch {}
+    const groupName = groupSubjectByJid.get(normalizeJidForMatch(jid)) || null
+    try { recordOperationalSignal('wa_group_desync_autoheal', { userId, jid, name: groupName, count: r.count }) } catch {}
     void triggerWaGroupsRefresh('auto_group_desync')
       .then(result => {
         if (!result?.ok) return
@@ -1110,7 +1156,7 @@ function handleGroupDecryptSignal(args) {
             { jid, autoRefreshCount: esc.count },
             'Grupo continua com falhas de decrypt após múltiplos auto-refresh — pode precisar que a cliente saia e reentre no grupo (ação manual, não-automática)'
           )
-          try { recordOperationalSignal('wa_group_desync_unresolved', { userId, jid, count: esc.count }) } catch {}
+          try { recordOperationalSignal('wa_group_desync_unresolved', { userId, jid, name: groupSubjectByJid.get(normalizeJidForMatch(jid)) || null, count: esc.count }) } catch {}
         }
       })
       .catch(() => {})
@@ -1974,9 +2020,23 @@ async function startBotInner() {
     // declaração acima (RCA 2026-07: loop infinito de retry-receipt).
     msgRetryCounterCache,
     placeholderResendCache,
+    // Fix de causa raiz: grupo @g.us não-monitorado e dessincronizado que
+    // derrubava a sessão via retry-receipt agora é ACKado e descartado antes do
+    // decrypt (ver src/core/ignoredJidPolicy.js). Default OFF; ready-guard evita
+    // ignorar mensagem legítima enquanto a config ainda não carregou.
+    shouldIgnoreJid: (jid) => shouldIgnoreChatJid(jid, {
+      allowedJids: allowedChatJids,
+      enabled: IGNORE_UNMONITORED_GROUPS,
+      ready: allowedChatJidsReady,
+    }),
   })
 
   pendingSock = sock
+
+  // Aquece o allowlist antes de qualquer mensagem chegar (o shouldIgnoreJid é
+  // síncrono; sem isso o 1º lote de mensagens passaria com ready=false). Best
+  // effort — se falhar, o ready-guard mantém o comportamento seguro (não ignora).
+  if (IGNORE_UNMONITORED_GROUPS) void getConfig().catch(() => {})
 
   sock.ev.on('creds.update', saveCreds)
 
@@ -3268,12 +3328,26 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           // caminho de imagem abaixo (getImage com forceOriginalForChannelButton),
           // que é o único capaz de anexar o botão.
           if (imageMode === 'preview' && !channelForward) {
-            // Sinal de TEXTO da blindagem tripla (couponBrandCardPolicy.js):
-            // reusa isCouponMsg (isCouponAnnouncement, já calculado acima) e o
-            // sinal de vitrine ML já emitido por mercadolivre.js/mlVitrinePolicy.js
-            // via conversionResult.warning — sem criar detector novo (Assumptions
-            // da spec 008).
-            const couponTextSignal = isCouponMsg || primary?.warning === 'ml_vitrine_fallback_used'
+            // Sinal de TEXTO da blindagem tripla (couponBrandCardPolicy.js).
+            //
+            // NÃO usar isCouponMsg cru aqui: ele (isCouponAnnouncement) dispara
+            // com QUALQUER "cupom" + palavra em CAIXA ALTA, inclusive num PRODUTO
+            // que só carrega um código de cupom ("...Ryzen 5 5500... CUPOM:
+            // PRESENTE"). Quando esse produto vem por short link que esconde o
+            // MLB/ASIN (ex.: mercadolivre.com/sec/XXXX → linkKind:'coupon',
+            // urlHasProductId:false), as três blindagens passavam e o produto
+            // saía com o BANNER "Cupom Loja" no lugar da foto — regressão de
+            // produção (produto Ryzen com banner ML, 2026-07; mesma família de
+            // #1205/#1208, que o short link driblava por trás do texto).
+            //
+            // Reusa a MESMA decisão já computada para a estratégia de imagem
+            // (couponSkipActiveFetch, via decideSkipActiveFetchForCoupon): ela
+            // distingue "cupom genérico → link resolve p/ produto aleatório"
+            // (skip=true → banner é o certo) de "produto + cupom" (titleOverlap
+            // 'match' → skip=false → foto do produto). Assim os dois caminhos de
+            // imagem (preview e não-preview) concordam sobre produto-vs-cupom. O
+            // sinal de vitrine ML (warning) segue como gatilho independente.
+            const couponTextSignal = couponSkipActiveFetch || primary?.warning === 'ml_vitrine_fallback_used'
             const linkPreview = await buildManualLinkPreview({
               text: variantText,
               primary,
