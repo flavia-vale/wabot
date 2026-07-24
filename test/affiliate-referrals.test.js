@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { getAffiliateReferrals, resolveAccessStatus } from '../src/domain/affiliate/service.js'
+import { getAffiliateReferrals, resolveAccessStatus, resolveReferralStatus } from '../src/domain/affiliate/service.js'
 
 const NOW = new Date('2026-06-15T12:00:00.000Z')
 
@@ -29,6 +29,20 @@ test('resolveAccessStatus classifica situação canônica do cliente', () => {
   assert.equal(resolveAccessStatus({ status: 'active', plan: 'pro', accessExpiresAt: null }, NOW), 'active')
 })
 
+test('resolveReferralStatus distingue teste grátis não convertido de assinatura vencida', () => {
+  // Nunca pagou, ainda dentro do teste: continua "trial".
+  assert.equal(resolveReferralStatus({ status: 'active', plan: 'trial', accessExpiresAt: '2026-07-01T00:00:00.000Z' }, 0, NOW), 'trial')
+  // Nunca pagou, teste acabou há poucos dias: indicação ainda em aberto.
+  assert.equal(resolveReferralStatus({ status: 'active', plan: 'trial', accessExpiresAt: '2026-06-10T00:00:00.000Z' }, 0, NOW), 'awaiting_subscription')
+  // Nunca pagou, teste acabou há 30+ dias: indicação vencida.
+  assert.equal(resolveReferralStatus({ status: 'active', plan: 'trial', accessExpiresAt: '2026-05-01T00:00:00.000Z' }, 0, NOW), 'referral_expired')
+  // Já pagou pelo menos uma vez: reflete a assinatura atual, não a indicação.
+  assert.equal(resolveReferralStatus({ status: 'active', plan: 'pro', accessExpiresAt: '2026-05-01T00:00:00.000Z' }, 1, NOW), 'expired')
+  assert.equal(resolveReferralStatus({ status: 'active', plan: 'pro', accessExpiresAt: '2026-12-01T00:00:00.000Z' }, 1, NOW), 'active')
+  // Banido/suspenso prevalece independente de pagamento.
+  assert.equal(resolveReferralStatus({ status: 'banned', plan: 'trial', accessExpiresAt: '2026-05-01T00:00:00.000Z' }, 0, NOW), 'banned')
+})
+
 test('getAffiliateReferrals agrega pagamentos e comissões por cliente', async () => {
   const users = [
     { id: 'u1', name: 'Maria Silva Souza', email: 'maria@ex.com', contactPhone: '5511999', status: 'active', plan: 'pro', accessExpiresAt: '2026-12-01T00:00:00.000Z', createdAt: new Date('2026-05-01'), lastActivityAt: null },
@@ -52,6 +66,7 @@ test('getAffiliateReferrals agrega pagamentos e comissões por cliente', async (
   const u1 = result.referrals.find(r => r.userId === 'u1')
   assert.equal(u1.email, 'maria@ex.com')
   assert.equal(u1.accessStatus, 'active')
+  assert.equal(u1.referralStatus, 'active')
   assert.equal(u1.isActive, true)
   assert.equal(u1.paymentCount, 2)
   assert.equal(u1.totalPaidCents, 9980)
@@ -62,6 +77,7 @@ test('getAffiliateReferrals agrega pagamentos e comissões por cliente', async (
 
   const u2 = result.referrals.find(r => r.userId === 'u2')
   assert.equal(u2.accessStatus, 'trial')
+  assert.equal(u2.referralStatus, 'trial')
   assert.equal(u2.isActive, true)
   assert.equal(u2.paymentCount, 0)
   assert.equal(u2.totalPaidCents, 0)

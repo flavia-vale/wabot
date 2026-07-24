@@ -350,6 +350,8 @@ falha silenciosamente.
 | `MP_ACCESS_TOKEN`            | Sim          | Token de produção do MP (`APP_USR-...`). Obtido em Credenciais → Produção no painel MP.    |
 | `MP_WEBHOOK_SECRET`          | Sim (prod)   | Chave HMAC gerada pelo painel MP (Webhooks → Assinatura). Sem ela, `/api/payments/webhook` retorna 500 em produção. |
 | `BILLING_WEBHOOK_AUTOPROCESS`| Recomendada  | `true` ativa processamento imediato do webhook. Default `false` atrasa ativação em até 1h (reconciliação periódica). |
+| `MP_FEE_PERCENT`             | Não (default `4.99`) | Percentual retido pelo Mercado Pago, descontado da **receita líquida** no painel Financeiro (`GET /finance/overview` → `mpFees30d`/`netRevenue30d`). Estimativa: 4,99% reproduz o caso observado (R$69 → R$65,56). O valor real varia por método/prazo — ajustar aqui se necessário. |
+| `MP_FEE_FIXED_CENTS`         | Não (default `0`) | Taxa fixa em centavos por transação aprovada, somada às taxas MP no cálculo do líquido. |
 
 **URL de webhook a registrar no painel MP:**
 `https://espelhagrupos.com.br/api/payments/webhook`
