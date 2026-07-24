@@ -1595,7 +1595,15 @@ export async function adminRoutes(app) {
     const affiliateCommissions30d = (commissionsAccrued30d._sum.commissionAmountCents ?? 0) / 100
     const affiliateCommissionsPayable = (commissionsPayable._sum.commissionAmountCents ?? 0) / 100
     const affiliateCommissionsPaid30d = (commissionsPaid30d._sum.commissionAmountCents ?? 0) / 100
-    const netRevenue30d = Math.round((revenue30d - affiliateCommissions30d) * 100) / 100
+
+    // Taxa do gateway Mercado Pago retida ANTES de cairmos o dinheiro (ex.: R$69
+    // → R$65,56 = 4,99%). Percentual configurável (MP_FEE_PERCENT) + taxa fixa
+    // opcional por transação aprovada (MP_FEE_FIXED_CENTS). Estimativa: o valor
+    // exato varia por método/prazo, mas 4,99% reproduz o caso observado.
+    const mpFeePercent = Number.parseFloat(process.env.MP_FEE_PERCENT ?? '4.99') || 0
+    const mpFeeFixedCents = Number.parseInt(process.env.MP_FEE_FIXED_CENTS ?? '0', 10) || 0
+    const mpFees30d = Math.round((revenue30d * (mpFeePercent / 100) + (approved30d._count._all * mpFeeFixedCents) / 100) * 100) / 100
+    const netRevenue30d = Math.round((revenue30d - affiliateCommissions30d - mpFees30d) * 100) / 100
 
     await writeAdminAuditLog(req, { action: 'admin.finance.overview.read', resource: 'finance' })
 
@@ -1623,6 +1631,10 @@ export async function adminRoutes(app) {
       affiliateCommissionsPayableCount: commissionsPayable._count._all,
       affiliateCommissionsPaid30d,
       affiliateCommissionsPaid30dCount: commissionsPaid30d._count._all,
+      // Taxas do Mercado Pago (gateway) descontadas do líquido.
+      mpFeePercent,
+      mpFeeFixedCents,
+      mpFees30d,
       netRevenue30d,
     }
   })
