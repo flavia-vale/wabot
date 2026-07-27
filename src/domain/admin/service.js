@@ -120,8 +120,9 @@ export function createAdminService({
     ])
 
     const userIds = users.map(user => user.id)
-    const [successMap, errorMap, lastMessageMap] = await Promise.all([
+    const [successMap, successMap24h, errorMap, lastMessageMap] = await Promise.all([
       getLogCountMap({ status: 'success', userIds }),
+      getLogCountMap({ status: 'success', since: since24h, userIds }),
       getLogCountMap({ status: 'error', since: since24h, userIds }),
       getLogActivityMap({ userIds }),
     ])
@@ -162,6 +163,7 @@ export function createAdminService({
       users: users.map(user => {
         const groupCounts = getGroupCounts(user.groups)
         const successCount = successMap.get(user.id) ?? 0
+        const successCount24h = successMap24h.get(user.id) ?? 0
         const errorCount24h = errorMap.get(user.id) ?? 0
         const userRunning = running.has(user.id)
         const lastMessageAt = lastMessageMap.get(user.id) ?? null
@@ -178,6 +180,7 @@ export function createAdminService({
           lastMessageAt,
           effectiveLastActivityAt,
           successCount,
+          successCount24h,
           errorCount24h,
           credentialHealth: summarizeCredentialHealth(user.credentials),
           credentials: undefined,
