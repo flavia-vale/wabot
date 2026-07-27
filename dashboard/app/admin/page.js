@@ -58,6 +58,32 @@ const resolveAdminEmail = (admin) => String(admin?.email || admin?.user?.email |
 const asArray = (value) => Array.isArray(value) ? value : []
 const asPlainObject = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {}
 
+const DATE_SORT_OPTIONS = [
+  ['default', 'Padrão'],
+  ['createdAt', 'Data de criação'],
+  ['lastMessageAt', 'Último envio'],
+]
+
+function sortByDateField(list, field) {
+  if (field === 'default') return list
+  return [...list].sort((a, b) => {
+    const av = a?.[field] ? new Date(a[field]).getTime() : 0
+    const bv = b?.[field] ? new Date(b[field]).getTime() : 0
+    return bv - av
+  })
+}
+
+function SortBar({ value, onChange, options = DATE_SORT_OPTIONS }) {
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+      <span className="font-bold text-gray-600">Ordenar por:</span>
+      {options.map(([key, label]) => (
+        <button key={key} type="button" onClick={() => onChange(key)} className={`rounded-full px-3 py-1.5 font-bold ring-1 ${value === key ? 'bg-indigo-600 text-white ring-indigo-600' : 'bg-white text-gray-600 ring-gray-200'}`}>{label}</button>
+      ))}
+    </div>
+  )
+}
+
 const SUCCESS_REASON_LABELS = {
   missing_phone: 'Sem celular',
   paid_stale_48h: 'Pago parado 48h',
@@ -1015,7 +1041,8 @@ function StagingPowerCard({ admin }) {
 
 
 function WhatsAppDisconnectedTable({ data, onOpenDetail, onRecordContact }) {
-  const users = asArray(data?.users)
+  const [sortBy, setSortBy] = useState('default')
+  const users = useMemo(() => sortByDateField(asArray(data?.users), sortBy), [data, sortBy])
   const summary = asPlainObject(data?.summary)
   const hasUsers = users.length > 0
 
@@ -1047,6 +1074,8 @@ function WhatsAppDisconnectedTable({ data, onOpenDetail, onRecordContact }) {
         </div>
       </div>
 
+      <SortBar value={sortBy} onChange={setSortBy} />
+
       <div className="overflow-x-auto">
         <table className="min-w-full text-left text-sm">
           <thead className="text-xs uppercase tracking-wide text-gray-400">
@@ -1067,12 +1096,13 @@ function WhatsAppDisconnectedTable({ data, onOpenDetail, onRecordContact }) {
                   <td className="px-3 py-3">
                     <p className="font-bold text-gray-900">{user?.email ?? 'Cliente sem e-mail'}</p>
                     <p className="text-xs text-gray-500">{user?.contactPhone || 'Sem celular'} · {user?.plan ?? '—'} · {user?.accessStatus ?? '—'}</p>
-                    <p className="mt-1 text-[11px] text-gray-400">Contato CS: {formatDate(user?.lastSupportContactAt)}</p>
+                    <p className="mt-1 text-[11px] text-gray-400">Criado em: {formatDate(user?.createdAt)}</p>
+                    <p className="text-[11px] text-gray-400">Contato CS: {formatDate(user?.lastSupportContactAt)}</p>
                   </td>
                   <td className="px-3 py-3 text-xs text-gray-600">
                     <p><strong>{formatNumber(user?.successCount ?? 0)}</strong> sucessos · {formatNumber(user?.totalLogCount ?? 0)} logs</p>
                     <p>Último sucesso: {formatDate(user?.lastSuccessAt)}</p>
-                    <p>Último log: {formatDate(user?.lastMessageAt)}</p>
+                    <p>Último envio (log): {formatDate(user?.lastMessageAt)}</p>
                   </td>
                   <td className="px-3 py-3 text-xs text-gray-600">
                     <span className="inline-flex rounded-full bg-red-100 px-2 py-1 text-[11px] font-black text-red-700">{user?.waSession?.status || 'sem sessão'}</span>
@@ -1337,6 +1367,10 @@ export default function AdminPage() {
     return () => { active = false }
   }, [])
 
+  const [usersSort, setUsersSort] = useState('default')
+  const sortedUsers = useMemo(() => sortByDateField(asArray(users?.users), usersSort), [users, usersSort])
+  const [onlineSort, setOnlineSort] = useState('default')
+  const sortedOnlineUsers = useMemo(() => sortByDateField(asArray(online?.users), onlineSort), [online, onlineSort])
   const atRiskUsers = useMemo(() => asArray(users?.users).filter(user => asArray(user.riskFlags).length), [users])
   const canAccessCustomerSuccess = useMemo(() => {
     const email = resolveAdminEmail(admin)
@@ -1773,6 +1807,8 @@ export default function AdminPage() {
             </form>
           </div>
 
+          <SortBar value={usersSort} onChange={setUsersSort} />
+
           <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-gray-400">
@@ -1787,11 +1823,12 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {asArray(users?.users).map(user => (
+                {sortedUsers.map(user => (
                   <tr key={user?.id ?? user?.email} className={`align-top ${asArray(user?.riskFlags).length ? 'bg-amber-50/40' : ''}`}>
                     <td className="px-3 py-3">
                       <p className="font-bold text-gray-900">{user?.email ?? 'Cliente sem e-mail'}</p>
                       <p className="text-xs text-gray-500">{user?.contactPhone || 'Sem celular'} · {user?.status ?? '—'}</p>
+                      <p className="mt-1 text-[11px] text-gray-400">Criado em: {formatDate(user?.createdAt)}</p>
                     </td>
                     <td className="px-3 py-3"><OriginCell origin={user?.origin} /></td>
                     <td className="px-3 py-3"><p className="font-semibold">{user?.plan ?? '—'}</p><p className="text-xs text-gray-500">{user?.accessStatus ?? '—'}</p></td>
@@ -1802,7 +1839,7 @@ export default function AdminPage() {
                     </td>
                     <td className="px-3 py-3 text-xs text-gray-600">
                       <p>Atividade: {formatDate(user?.effectiveLastActivityAt)}</p>
-                      <p>Último log: {formatDate(user?.lastMessageAt)}</p>
+                      <p>Último envio: {formatDate(user?.lastMessageAt)}</p>
                       <p>Erros 24h: {user?.errorCount24h ?? 0}</p>
                     </td>
                     <td className="px-3 py-3"><RiskBadges flags={user?.riskFlags} /></td>
@@ -1862,6 +1899,8 @@ export default function AdminPage() {
               <button disabled={onlineFiltering} className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-50">{onlineFiltering ? 'Filtrando…' : 'Filtrar'}</button>
             </form>
 
+            <SortBar value={onlineSort} onChange={setOnlineSort} />
+
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm">
                 <thead className="text-xs uppercase tracking-wide text-gray-400">
@@ -1876,7 +1915,7 @@ export default function AdminPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {asArray(online?.users).map(user => {
+                  {sortedOnlineUsers.map(user => {
                     const meta = onlineStatusMeta(user?.waSession?.status, user?.waSession?.lifecycle)
                     const errors = Number(user?.errorCount24h || 0)
                     const drops = Number(user?.disconnects24h || 0)
@@ -1885,12 +1924,13 @@ export default function AdminPage() {
                         <td className="px-3 py-3">
                           <p className="font-bold text-gray-900">{user?.name || user?.email || 'Cliente sem e-mail'}</p>
                           <p className="text-xs text-gray-500">{user?.email} · {user?.plan ?? '—'}</p>
+                          <p className="mt-1 text-[11px] text-gray-400">Criado em: {formatDate(user?.createdAt)}</p>
                         </td>
                         <td className="px-3 py-3">
                           <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${meta.cls}`}>{meta.label}</span>
                           <p className="mt-1 text-[11px] text-gray-400">HB {formatRelative(user?.waSession?.lastHeartbeatAt)}</p>
                         </td>
-                        <td className="px-3 py-3 text-xs text-gray-600"><p className="font-semibold">{formatRelative(user?.effectiveLastActivityAt)}</p><p className="text-gray-400">{formatNumber(user?.successCount24h)} envios 24h</p></td>
+                        <td className="px-3 py-3 text-xs text-gray-600"><p className="font-semibold">{formatRelative(user?.effectiveLastActivityAt)}</p><p className="text-gray-400">{formatNumber(user?.successCount24h)} envios 24h</p><p className="text-gray-400">Último envio: {formatDate(user?.lastMessageAt)}</p></td>
                         <td className={`px-3 py-3 text-right font-black tabular-nums ${errors ? 'text-red-700' : 'text-gray-400'}`}>{formatNumber(errors)}</td>
                         <td className={`px-3 py-3 text-right font-black tabular-nums ${drops ? 'text-red-700' : 'text-gray-400'}`}>{formatNumber(drops)}</td>
                         <td className="px-3 py-3 text-xs text-gray-600"><p><strong>{formatDurationMs((user?.automaticOfflineMs24h || 0) + (user?.ongoingOfflineMs24h || 0))}</strong> offline auto</p><p>{formatNumber(user?.manualReconnects24h)} ação(ões) manuais</p></td>

@@ -880,6 +880,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
         status: true,
         plan: true,
         lastActivityAt: true,
+        createdAt: true,
         waSession: {
           select: {
             status: true,
@@ -937,6 +938,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
       status: user.status,
       plan: user.plan,
       lastActivityAt: user.lastActivityAt,
+      createdAt: user.createdAt,
       effectiveLastActivityAt,
       lastMessageAt,
       botRunning: running.has(user.id),
@@ -1381,6 +1383,7 @@ export async function adminRoutes(app) {
       getLogCountMap({ status: 'success' }),
       getLogCountMap({ status: 'error', since: since24h }),
     ])
+    const lastMessageMap = await getLogActivityMap({ userIds: users.map(user => user.id) })
 
     const queue = users
       .map(user => {
@@ -1410,6 +1413,7 @@ export async function adminRoutes(app) {
           riskFlags,
           contactReasons,
           lastContact,
+          lastMessageAt: lastMessageMap.get(user.id) ?? null,
           suggestedAction: getSuggestedAction(contactReasons),
           priorityScore,
           financialWeight,
