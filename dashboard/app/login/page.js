@@ -9,6 +9,8 @@ import { resolvePostAuthRedirect } from '@/lib/onboardingProgress'
 import { Alert } from '@/components/Alert'
 import { mapAuthError, trackEvent, TRACKING_EVENTS } from '@/lib/analytics'
 import { attributionForTracking, readAttributionFromSearchParams, getFirstTouchLandingPage } from '@/lib/marketing-attribution'
+import { SUPPORT_WHATSAPP_URL } from '@/lib/marketing-content'
+import { SUPPORT_PHONE_LABEL } from '@/lib/mobilePixUtils'
 
 const LOGIN_BENEFITS = [
   'Conversão automática de links de afiliado',
