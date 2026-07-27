@@ -38,14 +38,33 @@ function removeInviteUrl(match) {
   return trailing
 }
 
+// Marcadores de formata\u00e7\u00e3o do WhatsApp (*negrito*, _it\u00e1lico_, ~tachado~,
+// `mono`). O `_` e os demais contam como caractere de palavra (\w) em regex,
+// ent\u00e3o um CTA em it\u00e1lico ("_Grupo Pincei Casa_:") fazia o `\bgrupo\b` de
+// CTA_DESTINATION_RE/CTA_KEYWORD_RE FALHAR (n\u00e3o h\u00e1 boundary entre `_` e `grupo`)
+// \u2014 a linha \u00f3rf\u00e3 do convite sobrevivia ap\u00f3s o link ser removido. Trocamos por
+// espa\u00e7o (n\u00e3o por vazio) para n\u00e3o juntar palavras vizinhas.
+const WA_FORMATTING_MARKERS_RE = /[*_~`]/g
+
 function normalizeForCtaCheck(text) {
   return String(text ?? '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(WA_FORMATTING_MARKERS_RE, ' ')
     .toLowerCase()
 }
 
 function isInviteCtaOnlyLine(line) {
+  const raw = String(line ?? '')
+  // Um CTA órfão, por definição, NÃO tem link (o link de convite já foi
+  // removido). Uma linha que ainda carrega uma URL de oferta legítima
+  // (Shopee/Amazon/ML/Magalu) não é órfã e nunca deve ser apagada só porque
+  // menciona "grupo"/"canal" por acaso — isso perderia a oferta.
+  const urlMatch = raw.match(ANY_HTTP_URL_RE)
+  ANY_HTTP_URL_RE.lastIndex = 0
+  if (urlMatch && urlMatch.some(url => isOfferUrl(url.replace(TRAILING_URL_NOISE_RE, '')))) {
+    return false
+  }
   const normalized = normalizeForCtaCheck(line)
   if (!normalized.trim() || normalized.length > 140) return false
   return CTA_DESTINATION_RE.test(normalized) && CTA_KEYWORD_RE.test(normalized)

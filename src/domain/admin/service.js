@@ -1,3 +1,56 @@
+const ORIGIN_SOURCE_LABELS = {
+  direct: 'Direto',
+  organic: 'Orgânico',
+  promo_vip_7dias: 'Promo VIP 7 dias',
+  google: 'Google',
+  instagram: 'Instagram',
+  facebook: 'Facebook',
+  youtube: 'YouTube',
+  tiktok: 'TikTok',
+}
+
+function labelForSource(source) {
+  const key = String(source ?? '').trim().toLowerCase()
+  if (!key) return 'Não rastreada'
+  return ORIGIN_SOURCE_LABELS[key] ?? String(source).trim()
+}
+
+// Monta a origem do cliente para a coluna "Origem" da gestão. Afiliado ganha
+// nome/email de quem indicou; indicação de cliente idem; orgânico mostra a
+// fonte (source/utm) do cadastro, ou "Não rastreada" quando não há sinal.
+export function buildUserOrigin(user, { referrerMap = new Map(), signupMetaMap = new Map() } = {}) {
+  if (user?.affiliateProfileId && user?.affiliateRef?.user) {
+    const aff = user.affiliateRef.user
+    return {
+      type: 'affiliate',
+      label: 'Afiliado',
+      affiliateName: aff.name ?? null,
+      affiliateEmail: aff.email ?? null,
+      affiliateCode: user.affiliateRef.code ?? null,
+    }
+  }
+  if (user?.referredBy && referrerMap.has(user.referredBy)) {
+    const ref = referrerMap.get(user.referredBy)
+    return {
+      type: 'referral',
+      label: 'Indicação de cliente',
+      referrerName: ref.name ?? null,
+      referrerEmail: ref.email ?? null,
+    }
+  }
+  const meta = signupMetaMap.get(user?.id) ?? {}
+  const rawSource = meta.utm_source || meta.source || null
+  const detailBits = [meta.utm_medium, meta.utm_campaign].filter(Boolean)
+  return {
+    type: 'organic',
+    label: labelForSource(rawSource),
+    source: rawSource || null,
+    medium: meta.utm_medium || null,
+    campaign: meta.utm_campaign || null,
+    detail: detailBits.length ? detailBits.join(' · ') : null,
+  }
+}
+
 export function createAdminService({
   db,
   listRunningBots,
@@ -49,6 +102,7 @@ export function createAdminService({
         select: {
           id: true, name: true, email: true, contactPhone: true, status: true, plan: true, accessExpiresAt: true,
           affiliateProfileId: true,
+          referredBy: true,
           affiliateRef: {
             select: {
               code: true,
@@ -66,11 +120,39 @@ export function createAdminService({
     ])
 
     const userIds = users.map(user => user.id)
-    const [successMap, errorMap, lastMessageMap] = await Promise.all([
+    const [successMap, successMap24h, errorMap, lastMessageMap] = await Promise.all([
       getLogCountMap({ status: 'success', userIds }),
+      getLogCountMap({ status: 'success', since: since24h, userIds }),
       getLogCountMap({ status: 'error', since: since24h, userIds }),
       getLogActivityMap({ userIds }),
     ])
+
+    // Origem do cliente (coluna "Origem" na gestão): quem NÃO veio por afiliado
+    // precisa mostrar por onde veio. Dois lookups em lote (sem N+1):
+    // (1) indicador (referredBy → outro cliente); (2) evento de cadastro
+    // (signup_created) que guarda source/utm no metadata para os orgânicos.
+    const nonAffiliateIds = users.filter(u => !u.affiliateProfileId).map(u => u.id)
+    const referrerIds = [...new Set(users.filter(u => !u.affiliateProfileId && u.referredBy).map(u => u.referredBy))]
+    const [referrerRows, signupRows] = await Promise.all([
+      referrerIds.length
+        ? db.user.findMany({ where: { id: { in: referrerIds } }, select: { id: true, name: true, email: true } })
+        : [],
+      nonAffiliateIds.length
+        ? db.analyticsEvent.findMany({
+          where: { userId: { in: nonAffiliateIds }, event: 'signup_created' },
+          orderBy: { createdAt: 'desc' },
+          select: { userId: true, metadata: true },
+        })
+        : [],
+    ])
+    const referrerMap = new Map(referrerRows.map(r => [r.id, r]))
+    const signupMetaMap = new Map()
+    for (const row of signupRows) {
+      if (!row.userId || signupMetaMap.has(row.userId)) continue // fica com o mais recente
+      let meta = {}
+      try { meta = JSON.parse(row.metadata || '{}') } catch { meta = {} }
+      signupMetaMap.set(row.userId, meta)
+    }
 
     const running = new Set(await listRunningBots())
 
@@ -81,13 +163,16 @@ export function createAdminService({
       users: users.map(user => {
         const groupCounts = getGroupCounts(user.groups)
         const successCount = successMap.get(user.id) ?? 0
+        const successCount24h = successMap24h.get(user.id) ?? 0
         const errorCount24h = errorMap.get(user.id) ?? 0
         const userRunning = running.has(user.id)
         const lastMessageAt = lastMessageMap.get(user.id) ?? null
         const effectiveLastActivityAt = resolveEffectiveLastActivity(user, lastMessageAt)
         const riskUser = { ...user, lastActivityAt: effectiveLastActivityAt }
+        const origin = buildUserOrigin(user, { referrerMap, signupMetaMap })
         return sanitizeUser({
           ...user,
+          origin,
           groups: undefined,
           groupCounts,
           accessStatus: getAccessStatus(user, now),
@@ -95,6 +180,7 @@ export function createAdminService({
           lastMessageAt,
           effectiveLastActivityAt,
           successCount,
+          successCount24h,
           errorCount24h,
           credentialHealth: summarizeCredentialHealth(user.credentials),
           credentials: undefined,

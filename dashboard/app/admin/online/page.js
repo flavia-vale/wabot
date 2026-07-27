@@ -29,6 +29,52 @@ function formatNumber(value) {
   return new Intl.NumberFormat('pt-BR').format(Number(value ?? 0))
 }
 
+const DATE_SORT_OPTIONS = [
+  ['default', 'Padrão'],
+  ['createdAt', 'Data de criação'],
+  ['lastMessageAt', 'Último envio'],
+]
+
+function sortByDateField(list, field) {
+  if (field === 'default') return list
+  return [...list].sort((a, b) => {
+    const av = a?.[field] ? new Date(a[field]).getTime() : 0
+    const bv = b?.[field] ? new Date(b[field]).getTime() : 0
+    return bv - av
+  })
+}
+
+function SortBar({ value, onChange }) {
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+      <span className="font-bold text-slate-600">Ordenar por:</span>
+      {DATE_SORT_OPTIONS.map(([key, label]) => (
+        <button key={key} type="button" onClick={() => onChange(key)} className={`rounded-full px-3 py-1.5 font-bold ring-1 ${value === key ? 'bg-indigo-600 text-white ring-indigo-600' : 'bg-white text-slate-600 ring-slate-200'}`}>{label}</button>
+      ))}
+    </div>
+  )
+}
+
+// Telefone mascarado (ex.: "551*****99", vindo de sanitizeUser para quem não
+// tem support:write) não vira link válido — trata como ausente em vez de
+// montar um wa.me quebrado.
+function normalizePhoneForWa(phone) {
+  const raw = String(phone || '').trim()
+  if (!raw || raw.includes('*')) return null
+  const digits = raw.replace(/\D/g, '')
+  return digits || null
+}
+
+function WhatsAppButton({ phone }) {
+  const digits = normalizePhoneForWa(phone)
+  if (!digits) {
+    return <span className="rounded-xl bg-slate-100 px-3 py-2 text-center text-xs font-black text-slate-400">Sem WhatsApp</span>
+  }
+  return (
+    <a href={`https://wa.me/${digits}`} target="_blank" rel="noreferrer" className="rounded-xl bg-green-600 px-3 py-2 text-center text-xs font-black text-white hover:bg-green-700">WhatsApp</a>
+  )
+}
+
 
 function formatDurationMs(value) {
   const ms = Math.max(0, Number(value ?? 0))
@@ -125,6 +171,30 @@ function UserDrawer({ detail, loading, onClose }) {
               </div>
             </section>
 
+            {!!asArray(detail.desyncGroups).length && (
+              <section className="rounded-3xl border border-orange-200 bg-orange-50 p-4">
+                <h3 className="text-sm font-black uppercase tracking-wide text-orange-900">Grupos derrubando a sessão (dessincronizados)</h3>
+                <p className="mt-1 text-xs text-orange-800">Grupos não-monitorados com falha de sincronização que fazem o robô cair sozinho. Recomende ao cliente <strong>sair do grupo</strong> — o robô não usa esses grupos.</p>
+                <div className="mt-3 divide-y divide-orange-100">
+                  {asArray(detail.desyncGroups).map((item) => (
+                    <div key={item.jid} className="grid grid-cols-[1fr_auto] gap-3 py-3 text-sm">
+                      <div>
+                        <p className="break-words font-black text-slate-900">{item.name || 'Grupo sem nome resolvido'}</p>
+                        <p className="mt-1 break-all font-mono text-[11px] text-slate-500">{item.jid}</p>
+                        <p className="mt-1 text-xs text-slate-500">último {formatDate(item.lastSeenAt)}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        {item.unresolved
+                          ? <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-black text-red-700">não resolvido</span>
+                          : <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-800">auto-refresh ativo</span>}
+                        <span className="text-xs text-slate-500">{formatNumber(item.autoheals)} refresh(es)</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             <section className="rounded-3xl border border-slate-200 bg-white p-4">
               <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Linha do tempo de conexão</h3>
               <div className="mt-3 space-y-2">
@@ -201,7 +271,8 @@ export default function AdminOnlinePage() {
     }
   }
 
-  const users = asArray(data?.users)
+  const [sortBy, setSortBy] = useState('default')
+  const users = useMemo(() => sortByDateField(asArray(data?.users), sortBy), [data, sortBy])
   const criticalUsers = useMemo(() => users.filter(user => user.waSession && user.waSession.status !== 'connected'), [users])
 
   if (loading) return <LoadingState />
@@ -271,6 +342,8 @@ export default function AdminOnlinePage() {
             </form>
           </div>
 
+          <SortBar value={sortBy} onChange={setSortBy} />
+
           <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm">
               <thead className="border-y border-slate-100 text-[11px] uppercase tracking-[0.18em] text-slate-400">
@@ -292,6 +365,7 @@ export default function AdminOnlinePage() {
                       <td className="px-3 py-4">
                         <p className="font-black text-slate-900">{user.name || user.email}</p>
                         <p className="text-xs text-slate-500">{user.email} · {user.plan}</p>
+                        <p className="mt-1 text-[11px] text-slate-400">Criado em: {formatDate(user.createdAt)}</p>
                       </td>
                       <td className="px-3 py-4">
                         <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black ring-1 ${meta.className}`}>
@@ -302,6 +376,7 @@ export default function AdminOnlinePage() {
                       <td className="px-3 py-4 text-xs text-slate-600">
                         <p className="font-bold">{formatRelative(user.effectiveLastActivityAt)}</p>
                         <p>{formatDate(user.effectiveLastActivityAt)}</p>
+                        <p className="mt-1 text-slate-400">Último envio: {formatDate(user.lastMessageAt)}</p>
                       </td>
                       <td className="px-3 py-4 text-right text-xs tabular-nums">
                         <p className="font-black text-emerald-700">{formatNumber(user.successCount24h)} sucesso</p>
@@ -313,7 +388,10 @@ export default function AdminOnlinePage() {
                         <p>{formatNumber(user.manualReconnects24h)} ação(ões) manuais</p>
                       </td>
                       <td className="px-3 py-4">
-                        <button onClick={() => openDetail(user.id)} className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 hover:bg-emerald-100">Abrir detalhes</button>
+                        <div className="flex flex-col gap-2">
+                          <button onClick={() => openDetail(user.id)} className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 hover:bg-emerald-100">Abrir detalhes</button>
+                          <WhatsAppButton phone={user.contactPhone} />
+                        </div>
                       </td>
                     </tr>
                   )

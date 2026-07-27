@@ -11,7 +11,7 @@ import { readBacklogPipeline, updateBacklogIssueStatus } from '../../backlogPipe
 import { TERMS_DOCUMENT_ID, getEffectiveTermsDocument, nextTermsVersion, normalizeTermsContent } from '../../legalTerms.js'
 import { getDlqMaintenanceSnapshot } from '../../jobs/dlqMaintenance.js'
 import { redactAdminPayload, serializeAdminAuditValue } from '../../adminRedaction.js'
-import { buildErrorsByMessage } from '../../adminLogSummary.js'
+import { buildErrorsByMessage, summarizeDesyncGroups } from '../../adminLogSummary.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -880,6 +880,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
         status: true,
         plan: true,
         lastActivityAt: true,
+        createdAt: true,
         waSession: {
           select: {
             status: true,
@@ -937,6 +938,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
       status: user.status,
       plan: user.plan,
       lastActivityAt: user.lastActivityAt,
+      createdAt: user.createdAt,
       effectiveLastActivityAt,
       lastMessageAt,
       botRunning: running.has(user.id),
@@ -1023,7 +1025,7 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
   })
   if (!user) return null
 
-  const [events24h, events7d, offlineEvents7d, recentEvents, logs] = await Promise.all([
+  const [events24h, events7d, offlineEvents7d, recentEvents, logs, desyncEvents] = await Promise.all([
     db.waConnectionEvent.groupBy({
       by: ['type'],
       where: { userId, occurredAt: { gte: since24h, lte: now } },
@@ -1051,6 +1053,12 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
       take: 300,
       select: { id: true, status: true, errorMsg: true, platform: true, sentAt: true },
     }),
+    db.analyticsEvent.findMany({
+      where: { userId, event: { in: ['ops_wa_group_desync_autoheal', 'ops_wa_group_desync_unresolved'] }, createdAt: { gte: since7d, lte: now } },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      select: { event: true, metadata: true, createdAt: true },
+    }).catch(() => []),
   ])
 
   const countByType = (rows) => Object.fromEntries(rows.map(row => [row.type, Number(row._count?._all ?? 0)]))
@@ -1085,6 +1093,7 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
       ongoingOfflineMs7d: Number(offlineMetrics7d.ongoingOfflineMs || 0),
     },
     errorsByType: buildErrorsByMessage(logs, { limit: 20 }),
+    desyncGroups: summarizeDesyncGroups(desyncEvents, { limit: 10 }),
     recentEvents: recentEvents.map(event => {
       let metadata = {}
       try { metadata = JSON.parse(event.metadata || '{}') } catch {}
@@ -1374,6 +1383,7 @@ export async function adminRoutes(app) {
       getLogCountMap({ status: 'success' }),
       getLogCountMap({ status: 'error', since: since24h }),
     ])
+    const lastMessageMap = await getLogActivityMap({ userIds: users.map(user => user.id) })
 
     const queue = users
       .map(user => {
@@ -1403,6 +1413,7 @@ export async function adminRoutes(app) {
           riskFlags,
           contactReasons,
           lastContact,
+          lastMessageAt: lastMessageMap.get(user.id) ?? null,
           suggestedAction: getSuggestedAction(contactReasons),
           priorityScore,
           financialWeight,
@@ -1595,7 +1606,15 @@ export async function adminRoutes(app) {
     const affiliateCommissions30d = (commissionsAccrued30d._sum.commissionAmountCents ?? 0) / 100
     const affiliateCommissionsPayable = (commissionsPayable._sum.commissionAmountCents ?? 0) / 100
     const affiliateCommissionsPaid30d = (commissionsPaid30d._sum.commissionAmountCents ?? 0) / 100
-    const netRevenue30d = Math.round((revenue30d - affiliateCommissions30d) * 100) / 100
+
+    // Taxa do gateway Mercado Pago retida ANTES de cairmos o dinheiro (ex.: R$69
+    // → R$65,56 = 4,99%). Percentual configurável (MP_FEE_PERCENT) + taxa fixa
+    // opcional por transação aprovada (MP_FEE_FIXED_CENTS). Estimativa: o valor
+    // exato varia por método/prazo, mas 4,99% reproduz o caso observado.
+    const mpFeePercent = Number.parseFloat(process.env.MP_FEE_PERCENT ?? '4.99') || 0
+    const mpFeeFixedCents = Number.parseInt(process.env.MP_FEE_FIXED_CENTS ?? '0', 10) || 0
+    const mpFees30d = Math.round((revenue30d * (mpFeePercent / 100) + (approved30d._count._all * mpFeeFixedCents) / 100) * 100) / 100
+    const netRevenue30d = Math.round((revenue30d - affiliateCommissions30d - mpFees30d) * 100) / 100
 
     await writeAdminAuditLog(req, { action: 'admin.finance.overview.read', resource: 'finance' })
 
@@ -1623,6 +1642,10 @@ export async function adminRoutes(app) {
       affiliateCommissionsPayableCount: commissionsPayable._count._all,
       affiliateCommissionsPaid30d,
       affiliateCommissionsPaid30dCount: commissionsPaid30d._count._all,
+      // Taxas do Mercado Pago (gateway) descontadas do líquido.
+      mpFeePercent,
+      mpFeeFixedCents,
+      mpFees30d,
       netRevenue30d,
     }
   })

@@ -58,6 +58,52 @@ const resolveAdminEmail = (admin) => String(admin?.email || admin?.user?.email |
 const asArray = (value) => Array.isArray(value) ? value : []
 const asPlainObject = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {}
 
+const DATE_SORT_OPTIONS = [
+  ['default', 'Padrão'],
+  ['createdAt', 'Data de criação'],
+  ['lastMessageAt', 'Último envio'],
+]
+
+function sortByDateField(list, field) {
+  if (field === 'default') return list
+  return [...list].sort((a, b) => {
+    const av = a?.[field] ? new Date(a[field]).getTime() : 0
+    const bv = b?.[field] ? new Date(b[field]).getTime() : 0
+    return bv - av
+  })
+}
+
+function SortBar({ value, onChange, options = DATE_SORT_OPTIONS }) {
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+      <span className="font-bold text-gray-600">Ordenar por:</span>
+      {options.map(([key, label]) => (
+        <button key={key} type="button" onClick={() => onChange(key)} className={`rounded-full px-3 py-1.5 font-bold ring-1 ${value === key ? 'bg-indigo-600 text-white ring-indigo-600' : 'bg-white text-gray-600 ring-gray-200'}`}>{label}</button>
+      ))}
+    </div>
+  )
+}
+
+// Telefone mascarado (ex.: "551*****99", vindo de sanitizeUser para quem não
+// tem support:write) não vira link válido — trata como ausente em vez de
+// montar um wa.me quebrado.
+function normalizePhoneForWa(phone) {
+  const raw = String(phone || '').trim()
+  if (!raw || raw.includes('*')) return null
+  const digits = raw.replace(/\D/g, '')
+  return digits || null
+}
+
+function WhatsAppButton({ phone, className = '' }) {
+  const digits = normalizePhoneForWa(phone)
+  if (!digits) {
+    return <span className={`rounded-lg bg-gray-100 px-3 py-2 text-center text-xs font-bold text-gray-400 ${className}`}>Sem WhatsApp</span>
+  }
+  return (
+    <a href={`https://wa.me/${digits}`} target="_blank" rel="noreferrer" className={`rounded-lg bg-green-600 px-3 py-2 text-center text-xs font-bold text-white hover:bg-green-700 ${className}`}>WhatsApp</a>
+  )
+}
+
 const SUCCESS_REASON_LABELS = {
   missing_phone: 'Sem celular',
   paid_stale_48h: 'Pago parado 48h',
@@ -66,6 +112,29 @@ const SUCCESS_REASON_LABELS = {
   onboarding_incomplete: 'Onboarding incompleto',
   expiring_soon: 'Expira em 7 dias',
   high_errors_24h: 'Muitos erros 24h',
+}
+
+const TABS = [
+  ['inicio', 'Início'],
+  ['online', 'Online'],
+  ['sucesso', 'Sucesso do Cliente'],
+  ['afiliados', 'Afiliados'],
+  ['financeiro', 'Financeiro'],
+  ['config', 'Configurações'],
+]
+
+const COMMISSION_META = {
+  paid: { label: 'Paga', cls: 'bg-emerald-100 text-emerald-700' },
+  eligible: { label: 'Elegível', cls: 'bg-sky-100 text-sky-700' },
+  approved: { label: 'Aprovada', cls: 'bg-indigo-100 text-indigo-700' },
+  held: { label: 'Em análise', cls: 'bg-orange-100 text-orange-700' },
+  rejected: { label: 'Rejeitada', cls: 'bg-red-100 text-red-700' },
+  reversed: { label: 'Revertida', cls: 'bg-gray-200 text-gray-600' },
+  pending: { label: 'Pendente', cls: 'bg-amber-100 text-amber-700' },
+}
+
+function centsToBRL(cents) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(cents ?? 0) / 100)
 }
 
 function SecondarySection({ title, eyebrow, children, defaultOpen = false }) {
@@ -101,6 +170,37 @@ function formatCurrency(value) {
 
 function formatNumber(value) {
   return new Intl.NumberFormat('pt-BR').format(Number(value ?? 0))
+}
+
+function formatRelative(value) {
+  if (!value) return 'sem atividade'
+  const ms = Date.now() - new Date(value).getTime()
+  if (!Number.isFinite(ms)) return 'sem atividade'
+  const minutes = Math.max(0, Math.round(ms / 60000))
+  if (minutes < 1) return 'agora'
+  if (minutes < 60) return `${minutes}min atrás`
+  const hours = Math.round(minutes / 60)
+  if (hours < 48) return `${hours}h atrás`
+  return `${Math.round(hours / 24)}d atrás`
+}
+
+function formatDurationMs(value) {
+  const ms = Math.max(0, Number(value ?? 0))
+  if (!Number.isFinite(ms) || ms <= 0) return '0min'
+  const minutes = Math.max(1, Math.round(ms / 60000))
+  if (minutes < 60) return `${minutes}min`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  if (hours < 24) return rest ? `${hours}h ${rest}min` : `${hours}h`
+  const days = Math.floor(hours / 24)
+  const remHours = hours % 24
+  return remHours ? `${days}d ${remHours}h` : `${days}d`
+}
+
+function onlineStatusMeta(status, lifecycle) {
+  if (status === 'connected') return { label: 'Conectado', cls: 'bg-emerald-100 text-emerald-700' }
+  if (status === 'connecting' || lifecycle === 'reconnecting') return { label: lifecycle === 'reconnecting' ? 'Reconectando' : 'Conectando', cls: 'bg-amber-100 text-amber-800' }
+  return { label: 'Desconectado', cls: 'bg-red-100 text-red-700' }
 }
 
 function ErrorVolumeCard({ summary }) {
@@ -215,6 +315,125 @@ function RiskBadges({ flags = [] }) {
         <span key={flag} className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-700">{RISK_LABELS[flag] ?? flag}</span>
       ))}
       {safeFlags.length > 4 && <span className="rounded-full bg-gray-100 px-2 py-1 text-[11px] font-bold text-gray-600">+{safeFlags.length - 4}</span>}
+    </div>
+  )
+}
+
+function OriginCell({ origin }) {
+  if (!origin) return <span className="text-xs text-gray-400">—</span>
+  if (origin.type === 'affiliate') {
+    return (
+      <div>
+        <span className="rounded-full bg-violet-100 px-2 py-1 text-[11px] font-bold text-violet-700">Afiliado</span>
+        <p className="mt-1 text-xs font-semibold text-gray-700">{origin.affiliateName || 'Sem nome'}</p>
+        <p className="text-[11px] text-gray-500">{origin.affiliateEmail || '—'}{origin.affiliateCode ? ` · ${origin.affiliateCode}` : ''}</p>
+      </div>
+    )
+  }
+  if (origin.type === 'referral') {
+    return (
+      <div>
+        <span className="rounded-full bg-sky-100 px-2 py-1 text-[11px] font-bold text-sky-700">Indicação de cliente</span>
+        <p className="mt-1 text-xs font-semibold text-gray-700">{origin.referrerName || 'Sem nome'}</p>
+        <p className="text-[11px] text-gray-500">{origin.referrerEmail || '—'}</p>
+      </div>
+    )
+  }
+  return (
+    <div>
+      <span className="rounded-full bg-gray-100 px-2 py-1 text-[11px] font-bold text-gray-600">{origin.label || 'Não rastreada'}</span>
+      {origin.detail && <p className="mt-1 text-[11px] text-gray-500">{origin.detail}</p>}
+    </div>
+  )
+}
+
+function OnlineMetricCard({ label, value, helper, tone = 'slate' }) {
+  const tones = {
+    slate: 'bg-slate-50 text-slate-900 ring-slate-200',
+    green: 'bg-emerald-50 text-emerald-900 ring-emerald-200',
+    amber: 'bg-amber-50 text-amber-900 ring-amber-200',
+    red: 'bg-red-50 text-red-900 ring-red-200',
+  }
+  return (
+    <div className={`rounded-2xl p-3 ring-1 ${tones[tone] || tones.slate}`}>
+      <p className="text-[11px] font-black uppercase tracking-wide opacity-70">{label}</p>
+      <p className="mt-1 text-2xl font-black tabular-nums">{value}</p>
+      {helper && <p className="mt-1 text-[11px] font-medium opacity-70">{helper}</p>}
+    </div>
+  )
+}
+
+function OnlineDetailDrawer({ detail, loading, onClose }) {
+  if (!detail && !loading) return null
+  const session = detail?.session
+  const meta = onlineStatusMeta(session?.status, session?.lifecycle)
+  const cm = detail?.connectionMetrics ?? {}
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 backdrop-blur-sm" onClick={onClose}>
+      <aside className="relative h-full w-full max-w-2xl overflow-y-auto bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-700">Drill-down online</p>
+            <h2 className="mt-1 text-2xl font-black text-slate-950">{detail?.user?.name || detail?.user?.email || 'Carregando...'}</h2>
+            <p className="text-sm text-slate-500">{detail?.user?.email || '—'} · {detail?.user?.plan || '—'}</p>
+          </div>
+          <button onClick={onClose} className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200">Fechar</button>
+        </div>
+
+        {loading && <LoadingState />}
+        {!loading && detail && (
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <span className={`rounded-full px-3 py-1 text-xs font-black ${meta.cls}`}>{meta.label}</span>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-500 ring-1 ring-slate-200">Heartbeat: {formatRelative(session?.lastHeartbeatAt)}</span>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-500 ring-1 ring-slate-200">Código: {session?.lastDisconnectCode || '—'}</span>
+            </div>
+
+            <section className="grid gap-3 sm:grid-cols-3">
+              <OnlineMetricCard label="Quedas 24h" value={formatNumber(cm.disconnects24h)} tone={cm.disconnects24h ? 'red' : 'green'} />
+              <OnlineMetricCard label="Reconexões manuais 24h" value={formatNumber(cm.manualReconnects24h)} helper="start/pareamento pedido pelo cliente" tone={cm.manualReconnects24h ? 'red' : 'green'} />
+              <OnlineMetricCard label="Offline auto 24h" value={formatDurationMs((cm.automaticOfflineMs24h || 0) + (cm.ongoingOfflineMs24h || 0))} helper="tempo até recuperar sozinho" tone={(cm.automaticOfflineMs24h || cm.ongoingOfflineMs24h) ? 'amber' : 'green'} />
+              <OnlineMetricCard label="Quedas 7d" value={formatNumber(cm.disconnects7d)} tone={cm.disconnects7d ? 'red' : 'green'} />
+              <OnlineMetricCard label="Reconexões manuais 7d" value={formatNumber(cm.manualReconnects7d)} helper="trabalho real do cliente" tone={cm.manualReconnects7d ? 'red' : 'green'} />
+              <OnlineMetricCard label="Reconexões automáticas 7d" value={formatNumber(cm.automaticRecoveries7d)} helper={`offline auto ${formatDurationMs((cm.automaticOfflineMs7d || 0) + (cm.ongoingOfflineMs7d || 0))}`} tone={(cm.automaticOfflineMs7d || cm.ongoingOfflineMs7d) ? 'amber' : 'green'} />
+            </section>
+
+            <p className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><strong>Como ler:</strong> &quot;Reconexões manuais&quot; = quando o cliente teve que iniciar/reparear pelo painel. &quot;Offline auto&quot; = tempo que o robô ficou fora até recuperar sozinho; tentativas internas de backoff não contam como trabalho do cliente.</p>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-4">
+              <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Erros agrupados por tipo (7d)</h3>
+              <div className="mt-3 divide-y divide-slate-100">
+                {asArray(detail.errorsByType).map((item) => (
+                  <div key={item.errorMsg} className="grid grid-cols-[1fr_auto] gap-3 py-3 text-sm">
+                    <div>
+                      <p className="break-words font-mono text-xs font-bold text-slate-900">{item.errorMsg}</p>
+                      <p className="mt-1 text-xs text-slate-500">{item.category || 'UNKNOWN'} · último {formatDate(item.lastSeenAt)}</p>
+                    </div>
+                    <span className="self-start rounded-full bg-red-50 px-3 py-1 text-xs font-black text-red-700">{formatNumber(item.count)}x</span>
+                  </div>
+                ))}
+                {!asArray(detail.errorsByType).length && <p className="py-4 text-sm text-slate-500">Sem erros recentes nos últimos 7 dias.</p>}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-4">
+              <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Linha do tempo de conexão</h3>
+              <div className="mt-3 space-y-2">
+                {asArray(detail.recentEvents).slice(0, 20).map((event) => (
+                  <div key={event.id} className="rounded-xl bg-slate-50 p-3 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-black text-slate-900">{event.type}</p>
+                      <span className="text-xs font-bold text-slate-500">{formatDate(event.occurredAt)}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">Código {event.code || '—'} · lifecycle {event.lifecycle || '—'}</p>
+                  </div>
+                ))}
+                {!asArray(detail.recentEvents).length && <p className="py-4 text-sm text-slate-500">Sem eventos de conexão nos últimos 7 dias.</p>}
+              </div>
+            </section>
+          </div>
+        )}
+      </aside>
     </div>
   )
 }
@@ -842,7 +1061,8 @@ function StagingPowerCard({ admin }) {
 
 
 function WhatsAppDisconnectedTable({ data, onOpenDetail, onRecordContact }) {
-  const users = asArray(data?.users)
+  const [sortBy, setSortBy] = useState('default')
+  const users = useMemo(() => sortByDateField(asArray(data?.users), sortBy), [data, sortBy])
   const summary = asPlainObject(data?.summary)
   const hasUsers = users.length > 0
 
@@ -874,6 +1094,8 @@ function WhatsAppDisconnectedTable({ data, onOpenDetail, onRecordContact }) {
         </div>
       </div>
 
+      <SortBar value={sortBy} onChange={setSortBy} />
+
       <div className="overflow-x-auto">
         <table className="min-w-full text-left text-sm">
           <thead className="text-xs uppercase tracking-wide text-gray-400">
@@ -894,12 +1116,13 @@ function WhatsAppDisconnectedTable({ data, onOpenDetail, onRecordContact }) {
                   <td className="px-3 py-3">
                     <p className="font-bold text-gray-900">{user?.email ?? 'Cliente sem e-mail'}</p>
                     <p className="text-xs text-gray-500">{user?.contactPhone || 'Sem celular'} · {user?.plan ?? '—'} · {user?.accessStatus ?? '—'}</p>
-                    <p className="mt-1 text-[11px] text-gray-400">Contato CS: {formatDate(user?.lastSupportContactAt)}</p>
+                    <p className="mt-1 text-[11px] text-gray-400">Criado em: {formatDate(user?.createdAt)}</p>
+                    <p className="text-[11px] text-gray-400">Contato CS: {formatDate(user?.lastSupportContactAt)}</p>
                   </td>
                   <td className="px-3 py-3 text-xs text-gray-600">
                     <p><strong>{formatNumber(user?.successCount ?? 0)}</strong> sucessos · {formatNumber(user?.totalLogCount ?? 0)} logs</p>
                     <p>Último sucesso: {formatDate(user?.lastSuccessAt)}</p>
-                    <p>Último log: {formatDate(user?.lastMessageAt)}</p>
+                    <p>Último envio (log): {formatDate(user?.lastMessageAt)}</p>
                   </td>
                   <td className="px-3 py-3 text-xs text-gray-600">
                     <span className="inline-flex rounded-full bg-red-100 px-2 py-1 text-[11px] font-black text-red-700">{user?.waSession?.status || 'sem sessão'}</span>
@@ -967,6 +1190,88 @@ export default function AdminPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [accessDenied, setAccessDenied] = useState(false)
+  const [tab, setTab] = useState('inicio')
+  const [affiliates, setAffiliates] = useState(null)
+  const [commissions, setCommissions] = useState(null)
+  const [onlineDetail, setOnlineDetail] = useState(null)
+  const [onlineDetailLoading, setOnlineDetailLoading] = useState(false)
+  const [onlineFilters, setOnlineFilters] = useState({ search: '', waStatus: 'all', plan: 'all', activity: 'all', minErrors: '' })
+  const [onlineFiltering, setOnlineFiltering] = useState(false)
+
+  async function reloadOnline(next = onlineFilters) {
+    setOnlineFiltering(true)
+    setError('')
+    try {
+      setOnline(await api.adminOnline({ limit: 120, ...next }))
+    } catch (err) {
+      setError(err.message || 'Falha ao filtrar a aba Online.')
+    } finally {
+      setOnlineFiltering(false)
+    }
+  }
+
+  function onOnlineSelect(key, value) {
+    const next = { ...onlineFilters, [key]: value }
+    setOnlineFilters(next)
+    reloadOnline(next)
+  }
+
+  async function openOnlineDetail(userId) {
+    if (!userId) return
+    setOnlineDetailLoading(true)
+    setOnlineDetail(null)
+    try {
+      setOnlineDetail(await api.adminOnlineUser(userId))
+    } catch (err) {
+      setError(err.message || 'Falha ao carregar detalhes de conexão.')
+      setOnlineDetail(null)
+    } finally {
+      setOnlineDetailLoading(false)
+    }
+  }
+
+  function closeOnlineDetail() {
+    setOnlineDetail(null)
+    setOnlineDetailLoading(false)
+  }
+
+  function currentMonth() {
+    return new Date().toISOString().slice(0, 7)
+  }
+
+  async function reloadAffiliates() {
+    const [a, c] = await Promise.all([
+      api.adminAffiliates({ status: 'approved', limit: 100 }).catch(() => null),
+      api.adminAffiliateCommissions({ month: currentMonth() }).catch(() => null),
+    ])
+    setAffiliates(a)
+    setCommissions(c)
+  }
+
+  async function approveCommission(id) {
+    setError('')
+    try { await api.adminAffiliateCommissionApprove(id); await reloadAffiliates() }
+    catch (err) { setError(err.message || 'Falha ao aprovar comissão.') }
+  }
+
+  async function markCommissionPaid(id) {
+    setError('')
+    try { await api.adminAffiliateCommissionMarkPaid(id); await reloadAffiliates() }
+    catch (err) { setError(err.message || 'Falha ao marcar comissão como paga.') }
+  }
+
+  useEffect(() => {
+    let active = true
+    Promise.all([
+      api.adminAffiliates({ status: 'approved', limit: 100 }).catch(() => null),
+      api.adminAffiliateCommissions({ month: currentMonth() }).catch(() => null),
+    ]).then(([a, c]) => {
+      if (!active) return
+      setAffiliates(a)
+      setCommissions(c)
+    })
+    return () => { active = false }
+  }, [])
 
   async function loadAdminData(nextRisk = risk, nextSearch = search) {
     if (accessDenied) return
@@ -988,7 +1293,7 @@ export default function AdminPage() {
       api.adminSystemHealth().catch(() => null),
       api.adminSystemMetrics().catch(() => null),
       api.adminSystemObservability().catch(() => null),
-      api.adminOnline({ limit: 20 }).catch(() => null),
+      api.adminOnline({ limit: 120 }).catch(() => null),
       api.adminLpContent().catch(() => null),
       api.adminLegalTerms().catch(() => null),
     ])
@@ -1039,7 +1344,7 @@ export default function AdminPage() {
           api.adminSystemHealth().catch(() => null),
           api.adminSystemMetrics().catch(() => null),
           api.adminSystemObservability().catch(() => null),
-          api.adminOnline({ limit: 20 }).catch(() => null),
+          api.adminOnline({ limit: 120 }).catch(() => null),
           api.adminLpContent().catch(() => null),
           api.adminLegalTerms().catch(() => null),
         ])
@@ -1082,7 +1387,82 @@ export default function AdminPage() {
     return () => { active = false }
   }, [])
 
+  const [usersSort, setUsersSort] = useState('default')
+  const sortedUsers = useMemo(() => sortByDateField(asArray(users?.users), usersSort), [users, usersSort])
+  const [onlineSort, setOnlineSort] = useState('default')
+  const sortedOnlineUsers = useMemo(() => sortByDateField(asArray(online?.users), onlineSort), [online, onlineSort])
   const atRiskUsers = useMemo(() => asArray(users?.users).filter(user => asArray(user.riskFlags).length), [users])
+
+  const gestaoClientesSection = (
+    <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h2 className="text-lg font-black text-gray-900">Gestão de clientes</h2>
+          <p className="text-sm text-gray-500">{users?.total ?? 0} clientes encontrados · {atRiskUsers.length} com alertas nesta página</p>
+        </div>
+        <form onSubmit={applyFilters} className="flex flex-col gap-2 sm:flex-row">
+          <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar por email" className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
+          <select value={risk} onChange={event => setRisk(event.target.value)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
+            {RISK_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+          <button className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black">Filtrar</button>
+        </form>
+      </div>
+
+      <SortBar value={usersSort} onChange={setUsersSort} />
+
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="text-xs uppercase tracking-wide text-gray-400">
+            <tr>
+              <th className="px-3 py-2">Cliente</th>
+              <th className="px-3 py-2">Origem</th>
+              <th className="px-3 py-2">Plano</th>
+              <th className="px-3 py-2">Operação</th>
+              <th className="px-3 py-2">Enviados com sucesso/Erros (24h)</th>
+              <th className="px-3 py-2">Atividade</th>
+              <th className="px-3 py-2">Riscos</th>
+              <th className="px-3 py-2">Ação</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {sortedUsers.map(user => (
+              <tr key={user?.id ?? user?.email} className={`align-top ${asArray(user?.riskFlags).length ? 'bg-amber-50/40' : ''}`}>
+                <td className="px-3 py-3">
+                  <p className="font-bold text-gray-900">{user?.email ?? 'Cliente sem e-mail'}</p>
+                  <p className="text-xs text-gray-500">{user?.contactPhone || 'Sem celular'} · {user?.status ?? '—'}</p>
+                  <p className="mt-1 text-[11px] text-gray-400">Criado em: {formatDate(user?.createdAt)}</p>
+                </td>
+                <td className="px-3 py-3"><OriginCell origin={user?.origin} /></td>
+                <td className="px-3 py-3"><p className="font-semibold">{user?.plan ?? '—'}</p><p className="text-xs text-gray-500">{user?.accessStatus ?? '—'}</p></td>
+                <td className="px-3 py-3 text-xs text-gray-600">
+                  <p>Bot: {user?.botRunning ? 'rodando' : 'parado'}</p>
+                  <p>WA: {user?.waSession?.status || '—'}</p>
+                  <p>Origem/Destino: {user?.groupCounts?.monitor ?? 0}/{user?.groupCounts?.post ?? 0}</p><div className="mt-1"><CredentialHealthBadges health={user?.credentialHealth} compact /></div>
+                </td>
+                <td className="px-3 py-3 text-xs text-gray-600">
+                  <p className="font-semibold text-emerald-700">{formatNumber(user?.successCount24h ?? 0)} sucesso</p>
+                  <p className="font-semibold text-red-700">{formatNumber(user?.errorCount24h ?? 0)} erro</p>
+                </td>
+                <td className="px-3 py-3 text-xs text-gray-600">
+                  <p>Último acesso ao site: {formatDate(user?.lastActivityAt)}</p>
+                  <p>Último envio: {formatDate(user?.lastMessageAt)}</p>
+                </td>
+                <td className="px-3 py-3"><RiskBadges flags={user?.riskFlags} /></td>
+                <td className="px-3 py-3">
+                  <div className="flex flex-col gap-2">
+                    <button onClick={() => openUserDetail(user?.id)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Drill-down</button>
+                    <WhatsAppButton phone={user?.contactPhone} />
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+
   const canAccessCustomerSuccess = useMemo(() => {
     const email = resolveAdminEmail(admin)
     const permissions = Array.isArray(admin?.permissions) ? admin.permissions : []
@@ -1215,27 +1595,35 @@ export default function AdminPage() {
   return (
     <main className="min-h-screen bg-gray-50 px-5 py-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        <div className="sticky top-0 z-10 rounded-2xl border border-emerald-100 bg-white/95 p-4 shadow-sm backdrop-blur flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Centro operacional</p>
-            <h1 className="text-3xl font-black text-gray-900">Admin BOTinho</h1>
-            <p className="mt-1 text-sm text-gray-500">Tela principal minimalista: saúde do sistema, ONLINE e alertas acionáveis. Métricas secundárias ficam recolhidas abaixo.</p>
+        <div className="sticky top-0 z-20 rounded-2xl border border-emerald-100 bg-white/95 p-4 shadow-sm backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-base font-black text-white">B</div>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-lg font-black text-gray-900">BOTinho</span>
+                <span className="text-xs font-semibold text-gray-400">admin</span>
+              </div>
+            </div>
+            <nav className="flex flex-wrap gap-1">
+              {TABS.map(([key, label]) => (
+                <button key={key} onClick={() => setTab(key)} className={`rounded-xl px-4 py-2 text-sm font-bold transition ${tab === key ? 'bg-emerald-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>{label}</button>
+              ))}
+            </nav>
+            <div className="flex items-center gap-2">
+              <button onClick={() => applyFilters()} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Atualizar</button>
+              <Link href="/painel" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Voltar</Link>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button onClick={() => applyFilters()} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Atualizar</button>
-            <Link href="/admin/online" className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800">ONLINE</Link>
-            {canAccessCustomerSuccess && <Link href="/admin/sucesso-cliente" className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Aba CS</Link>}
-            <Link href="/admin/afiliados" className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600">Afiliados</Link>
-            <Link href="/admin/marketing-growth" className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700">Marketing & Growth</Link>
-            <Link href="/admin/observabilidade" className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">Observabilidade</Link>
-            <Link href="/admin/pipeline" className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">Pipeline técnico</Link>
-            <Link href="/painel" className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-100">Voltar ao painel</Link>
+          <div className="mt-2 flex justify-end">
+            <button onClick={() => setTab('observabilidade')} className={`flex items-center gap-1.5 text-xs font-bold ${tab === 'observabilidade' ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${tab === 'observabilidade' ? 'bg-slate-900' : 'bg-slate-400'}`}></span>Observabilidade (técnico)
+            </button>
           </div>
         </div>
 
         {error && <Alert type="error" title="Painel admin" message={error} />}
 
-        {(overview || systemObservability || online) && (
+        {(tab === 'inicio' || tab === 'online') && (overview || systemObservability || online) && (
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
               <div>
@@ -1254,7 +1642,7 @@ export default function AdminPage() {
           </section>
         )}
 
-        {admin && (
+        {tab === 'observabilidade' && admin && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
             <h2 className="text-sm font-bold text-gray-800">Sessão admin</h2>
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
@@ -1265,7 +1653,7 @@ export default function AdminPage() {
           </section>
         )}
 
-        {overview && (
+        {tab === 'observabilidade' && overview && (
           <SecondarySection title="Métricas executivas completas" eyebrow="Secundário · recolhido por padrão">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {Object.entries(STAT_LABELS).map(([key, label]) => (
@@ -1281,7 +1669,7 @@ export default function AdminPage() {
 
 
 
-        {systemObservability && (
+        {tab === 'observabilidade' && systemObservability && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -1310,7 +1698,7 @@ export default function AdminPage() {
           </section>
         )}
 
-        {systemHealth && (
+        {tab === 'observabilidade' && systemHealth && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -1362,11 +1750,15 @@ export default function AdminPage() {
           </section>
         )}
 
-        <SectionErrorBoundary label="Staging (liga/desliga)">
-          <StagingPowerCard admin={admin} />
-        </SectionErrorBoundary>
+        {tab === 'inicio' && (
+          <SectionErrorBoundary label="Staging (liga/desliga)">
+            <StagingPowerCard admin={admin} />
+          </SectionErrorBoundary>
+        )}
 
-        {success && (
+        {tab === 'sucesso' && gestaoClientesSection}
+
+        {(tab === 'inicio' || tab === 'sucesso') && success && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -1403,6 +1795,7 @@ export default function AdminPage() {
                     <div className="flex gap-2">
                       <button onClick={() => openUserDetail(customer?.id)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Drill-down</button>
                       <button onClick={() => recordContact(customer)} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700">Registrar contato</button>
+                      <WhatsAppButton phone={customer?.contactPhone} />
                     </div>
                   </div>
                 </div>
@@ -1412,7 +1805,7 @@ export default function AdminPage() {
           </section>
         )}
 
-        {finance && (
+        {tab === 'financeiro' && finance && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -1423,7 +1816,7 @@ export default function AdminPage() {
               <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">MRR: {formatCurrency(finance.activeMrr)}</span>
             </div>
 
-            <div className="mb-4 grid items-stretch gap-3 sm:grid-cols-3">
+            <div className="mb-4 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-xl bg-emerald-50 p-4 ring-1 ring-emerald-100">
                 <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">Receita bruta 30d</p>
                 <p className="mt-1 text-2xl font-black text-emerald-800">{formatCurrency(finance.revenue30d)}</p>
@@ -1434,14 +1827,20 @@ export default function AdminPage() {
                 <p className="mt-1 text-2xl font-black text-orange-700">− {formatCurrency(finance.affiliateCommissions30d ?? 0)}</p>
                 <p className="mt-1 text-[11px] text-orange-600">{formatNumber(finance.affiliateCommissions30dCount ?? 0)} comissões geradas nos 30d</p>
               </div>
+              <div className="rounded-xl bg-rose-50 p-4 ring-1 ring-rose-100">
+                <p className="text-xs font-bold uppercase tracking-wide text-rose-600">(–) Taxas Mercado Pago</p>
+                <p className="mt-1 text-2xl font-black text-rose-700">− {formatCurrency(finance.mpFees30d ?? 0)}</p>
+                <p className="mt-1 text-[11px] text-rose-600">{finance.mpFeePercent ?? 0}% do bruto{finance.mpFeeFixedCents ? ` + ${formatCurrency((finance.mpFeeFixedCents ?? 0) / 100)}/transação` : ''}</p>
+              </div>
               <div className="rounded-xl bg-slate-900 p-4 ring-1 ring-slate-800">
                 <p className="text-xs font-bold uppercase tracking-wide text-cyan-300">(=) Receita líquida 30d</p>
                 <p className="mt-1 text-2xl font-black text-white">{formatCurrency(finance.netRevenue30d ?? finance.revenue30d)}</p>
-                <p className="mt-1 text-[11px] text-slate-400">Depois de descontar afiliados</p>
+                <p className="mt-1 text-[11px] text-slate-400">Após afiliados e taxas do Mercado Pago</p>
               </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl bg-rose-50 p-3"><p className="text-xs text-rose-600">Taxa Mercado Pago</p><p className="text-xl font-black text-rose-700">{finance.mpFeePercent ?? 0}%</p><p className="text-[11px] text-rose-500">estimada · ajuste em MP_FEE_PERCENT</p></div>
               <div className="rounded-xl bg-gray-50 p-3"><p className="text-xs text-gray-400">LTV médio</p><p className="text-xl font-black">{formatCurrency(finance.avgLtv)}</p></div>
               <div className="rounded-xl bg-orange-50 p-3"><p className="text-xs text-orange-600">Comissões a pagar</p><p className="text-xl font-black text-orange-700">{formatCurrency(finance.affiliateCommissionsPayable ?? 0)}</p><p className="text-[11px] text-orange-500">{formatNumber(finance.affiliateCommissionsPayableCount ?? 0)} em aberto</p></div>
               <div className="rounded-xl bg-amber-50 p-3"><p className="text-xs text-amber-600">Pendentes</p><p className="text-xl font-black text-amber-700">{finance.pendingPayments}</p></div>
@@ -1484,64 +1883,198 @@ export default function AdminPage() {
           </section>
         )}
 
-        <WhatsAppDisconnectedTable data={waDisconnectedUsers} onOpenDetail={openUserDetail} onRecordContact={recordContact} />
+        {tab === 'inicio' && <WhatsAppDisconnectedTable data={waDisconnectedUsers} onOpenDetail={openUserDetail} onRecordContact={recordContact} />}
 
-        <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
-          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <h2 className="text-lg font-black text-gray-900">Gestão de clientes</h2>
-              <p className="text-sm text-gray-500">{users?.total ?? 0} clientes encontrados · {atRiskUsers.length} com alertas nesta página</p>
+        {tab === 'inicio' && gestaoClientesSection}
+
+        {selectedUser && (
+          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/40 p-4 backdrop-blur-sm" onClick={() => setSelectedUser(null)}>
+            <div className="my-6 w-full max-w-4xl" onClick={(e) => e.stopPropagation()}>
+              <DetailPanel detail={selectedUser} onClose={() => setSelectedUser(null)} onApplyAccess={(payload) => applyManualAccess(selectedUser.id, payload)} />
             </div>
-            <form onSubmit={applyFilters} className="flex flex-col gap-2 sm:flex-row">
-              <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar por email" className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
-              <select value={risk} onChange={event => setRisk(event.target.value)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
-                {RISK_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </div>
+        )}
+
+        {(onlineDetail || onlineDetailLoading) && (
+          <OnlineDetailDrawer detail={onlineDetail} loading={onlineDetailLoading} onClose={closeOnlineDetail} />
+        )}
+
+        {tab === 'online' && (
+          <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="text-lg font-black text-gray-900">Conexões, erros e quedas</h2>
+                <p className="text-sm text-gray-500">Status de WhatsApp por cliente, com erros e quedas nas últimas 24h.</p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{formatNumber(asArray(online?.users).length)} clientes · {online?.summary?.stabilityPct ?? '—'}% estáveis</span>
+            </div>
+
+            <form onSubmit={(e) => { e.preventDefault(); reloadOnline() }} className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(180px,1fr)_160px_130px_190px_110px_auto]">
+              <input value={onlineFilters.search} onChange={(e) => setOnlineFilters({ ...onlineFilters, search: e.target.value })} placeholder="Buscar nome ou e-mail" className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
+              <select value={onlineFilters.waStatus} onChange={(e) => onOnlineSelect('waStatus', e.target.value)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
+                <option value="all">Todos status</option>
+                <option value="alerts">Só alertas</option>
+                <option value="connected">Conectados</option>
+                <option value="connecting">Tentando conectar</option>
+                <option value="disconnected">Desconectados</option>
+                <option value="without_session">Sem sessão</option>
               </select>
-              <button className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black">Filtrar</button>
+              <select value={onlineFilters.plan} onChange={(e) => onOnlineSelect('plan', e.target.value)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
+                <option value="all">Todos planos</option>
+                <option value="trial">Trial</option>
+                <option value="basic">Basic</option>
+                <option value="pro">Pro</option>
+              </select>
+              <select value={onlineFilters.activity} onChange={(e) => onOnlineSelect('activity', e.target.value)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
+                <option value="all">Toda atividade</option>
+                <option value="with_sends_24h">Com envios 24h</option>
+                <option value="without_activity_24h">Sem atividade 24h</option>
+              </select>
+              <input value={onlineFilters.minErrors} onChange={(e) => setOnlineFilters({ ...onlineFilters, minErrors: e.target.value })} type="number" min="0" placeholder="Erros mín." className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
+              <button disabled={onlineFiltering} className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-50">{onlineFiltering ? 'Filtrando…' : 'Filtrar'}</button>
             </form>
-          </div>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="text-xs uppercase tracking-wide text-gray-400">
-                <tr>
-                  <th className="px-3 py-2">Cliente</th>
-                  <th className="px-3 py-2">Plano</th>
-                  <th className="px-3 py-2">Operação</th>
-                  <th className="px-3 py-2">Atividade</th>
-                  <th className="px-3 py-2">Riscos</th>
-                  <th className="px-3 py-2">Ação</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {asArray(users?.users).map(user => (
-                  <tr key={user?.id ?? user?.email} className={`align-top ${asArray(user?.riskFlags).length ? 'bg-amber-50/40' : ''}`}>
-                    <td className="px-3 py-3">
-                      <p className="font-bold text-gray-900">{user?.email ?? 'Cliente sem e-mail'}</p>
-                      <p className="text-xs text-gray-500">{user?.contactPhone || 'Sem celular'} · {user?.status ?? '—'}</p>
-                    </td>
-                    <td className="px-3 py-3"><p className="font-semibold">{user?.plan ?? '—'}</p><p className="text-xs text-gray-500">{user?.accessStatus ?? '—'}</p></td>
-                    <td className="px-3 py-3 text-xs text-gray-600">
-                      <p>Bot: {user?.botRunning ? 'rodando' : 'parado'}</p>
-                      <p>WA: {user?.waSession?.status || '—'}</p>
-                      <p>Origem/Destino: {user?.groupCounts?.monitor ?? 0}/{user?.groupCounts?.post ?? 0}</p><div className="mt-1"><CredentialHealthBadges health={user?.credentialHealth} compact /></div>
-                    </td>
-                    <td className="px-3 py-3 text-xs text-gray-600">
-                      <p>Atividade: {formatDate(user?.effectiveLastActivityAt)}</p>
-                      <p>Último log: {formatDate(user?.lastMessageAt)}</p>
-                      <p>Erros 24h: {user?.errorCount24h ?? 0}</p>
-                    </td>
-                    <td className="px-3 py-3"><RiskBadges flags={user?.riskFlags} /></td>
-                    <td className="px-3 py-3"><button onClick={() => openUserDetail(user?.id)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Drill-down</button></td>
+            <SortBar value={onlineSort} onChange={setOnlineSort} />
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead className="text-xs uppercase tracking-wide text-gray-400">
+                  <tr>
+                    <th className="px-3 py-2">Cliente</th>
+                    <th className="px-3 py-2">WhatsApp</th>
+                    <th className="px-3 py-2">Última atividade</th>
+                    <th className="px-3 py-2 text-right">Erros 24h</th>
+                    <th className="px-3 py-2 text-right">Quedas 24h</th>
+                    <th className="px-3 py-2">Recuperação 24h</th>
+                    <th className="px-3 py-2 text-right">Ação</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {sortedOnlineUsers.map(user => {
+                    const meta = onlineStatusMeta(user?.waSession?.status, user?.waSession?.lifecycle)
+                    const errors = Number(user?.errorCount24h || 0)
+                    const drops = Number(user?.disconnects24h || 0)
+                    return (
+                      <tr key={user?.id ?? user?.email} className={`align-top ${errors || drops ? 'bg-red-50/40' : ''}`}>
+                        <td className="px-3 py-3">
+                          <p className="font-bold text-gray-900">{user?.name || user?.email || 'Cliente sem e-mail'}</p>
+                          <p className="text-xs text-gray-500">{user?.email} · {user?.plan ?? '—'}</p>
+                          <p className="mt-1 text-[11px] text-gray-400">Criado em: {formatDate(user?.createdAt)}</p>
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${meta.cls}`}>{meta.label}</span>
+                          <p className="mt-1 text-[11px] text-gray-400">HB {formatRelative(user?.waSession?.lastHeartbeatAt)}</p>
+                        </td>
+                        <td className="px-3 py-3 text-xs text-gray-600"><p className="font-semibold">{formatRelative(user?.effectiveLastActivityAt)}</p><p className="text-gray-400">{formatNumber(user?.successCount24h)} envios 24h</p><p className="text-gray-400">Último envio: {formatDate(user?.lastMessageAt)}</p></td>
+                        <td className={`px-3 py-3 text-right font-black tabular-nums ${errors ? 'text-red-700' : 'text-gray-400'}`}>{formatNumber(errors)}</td>
+                        <td className={`px-3 py-3 text-right font-black tabular-nums ${drops ? 'text-red-700' : 'text-gray-400'}`}>{formatNumber(drops)}</td>
+                        <td className="px-3 py-3 text-xs text-gray-600"><p><strong>{formatDurationMs((user?.automaticOfflineMs24h || 0) + (user?.ongoingOfflineMs24h || 0))}</strong> offline auto</p><p>{formatNumber(user?.manualReconnects24h)} ação(ões) manuais</p></td>
+                        <td className="px-3 py-3 text-right">
+                          <div className="flex flex-col items-end gap-2">
+                            <button onClick={() => openOnlineDetail(user?.id)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Drill-down</button>
+                            <WhatsAppButton phone={user?.contactPhone} />
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  {!asArray(online?.users).length && <tr><td colSpan={7} className="px-3 py-6 text-sm text-gray-400">Nenhum cliente ativo encontrado.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-3 text-[11px] text-gray-400">&quot;Quedas&quot; = desconexões no período. &quot;Offline auto&quot; = tempo fora até o robô recuperar sozinho. &quot;Ações manuais&quot; = start/pareamento pedidos pelo cliente.</p>
+          </section>
+        )}
 
-        <DetailPanel detail={selectedUser} onClose={() => setSelectedUser(null)} onApplyAccess={(payload) => applyManualAccess(selectedUser.id, payload)} />
+        {tab === 'afiliados' && (
+          <>
+            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100"><p className="text-xs font-bold uppercase tracking-wide text-gray-400">Total de afiliados</p><p className="mt-1 text-2xl font-black text-gray-900">{formatNumber(affiliates?.total ?? asArray(affiliates?.profiles).length)}</p></div>
+              <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100"><p className="text-xs font-bold uppercase tracking-wide text-gray-400">Indicados</p><p className="mt-1 text-2xl font-black text-gray-900">{formatNumber(asArray(affiliates?.profiles).reduce((sum, p) => sum + Number(p?.totalReferrals || 0), 0))}</p></div>
+              <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100"><p className="text-xs font-bold uppercase tracking-wide text-gray-400">Comissões a pagar</p><p className="mt-1 text-2xl font-black text-orange-700">{formatCurrency(finance?.affiliateCommissionsPayable ?? 0)}</p><p className="text-[11px] text-orange-500">pendentes + elegíveis</p></div>
+              <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100"><p className="text-xs font-bold uppercase tracking-wide text-gray-400">Pagas (30d)</p><p className="mt-1 text-2xl font-black text-emerald-700">{formatCurrency(finance?.affiliateCommissionsPaid30d ?? 0)}</p></div>
+            </section>
 
+            <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-black text-gray-900">Afiliados</h2>
+                  <p className="text-sm text-gray-500">Cadastro e desempenho de cada parceiro.</p>
+                </div>
+                <Link href="/admin/afiliados" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50">Gestão completa</Link>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="text-xs uppercase tracking-wide text-gray-400">
+                    <tr>
+                      <th className="px-3 py-2">Código</th>
+                      <th className="px-3 py-2">Afiliado</th>
+                      <th className="px-3 py-2">Indicados</th>
+                      <th className="px-3 py-2">Comissão gerada</th>
+                      <th className="px-3 py-2">Chave PIX</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {asArray(affiliates?.profiles).map(a => (
+                      <tr key={a?.id} className="align-top">
+                        <td className="px-3 py-3 font-mono text-xs font-bold text-gray-500">{a?.code ?? '—'}</td>
+                        <td className="px-3 py-3"><p className="font-bold text-gray-900">{a?.user?.name ?? '—'}</p><p className="text-xs text-gray-500">{a?.user?.email ?? '—'}</p></td>
+                        <td className="px-3 py-3 text-sm">{formatNumber(a?.totalReferrals ?? 0)}</td>
+                        <td className="px-3 py-3 text-sm font-bold">{centsToBRL(a?.totalCommissions ?? 0)}</td>
+                        <td className="px-3 py-3 font-mono text-xs text-gray-500">{a?.pixKey ?? '—'}</td>
+                      </tr>
+                    ))}
+                    {!asArray(affiliates?.profiles).length && <tr><td colSpan={5} className="px-3 py-6 text-sm text-gray-400">Nenhum afiliado aprovado.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+              <div className="mb-4">
+                <h2 className="text-lg font-black text-gray-900">Comissões do mês</h2>
+                <p className="text-sm text-gray-500">Aprove ou marque como paga.</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="text-xs uppercase tracking-wide text-gray-400">
+                    <tr>
+                      <th className="px-3 py-2">Afiliado</th>
+                      <th className="px-3 py-2">Valor</th>
+                      <th className="px-3 py-2">Tipo</th>
+                      <th className="px-3 py-2">Status</th>
+                      <th className="px-3 py-2">Criada</th>
+                      <th className="px-3 py-2 text-right">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {asArray(commissions?.commissions).map(cm => {
+                      const meta = COMMISSION_META[cm?.status] ?? COMMISSION_META.pending
+                      const canApprove = cm?.status === 'pending'
+                      const canPay = cm?.status === 'eligible' || cm?.status === 'approved'
+                      return (
+                        <tr key={cm?.id} className="align-top">
+                          <td className="px-3 py-3"><p className="font-bold text-gray-900">{cm?.affiliate?.user?.name ?? '—'}</p><p className="text-xs text-gray-500">{cm?.affiliate?.user?.email ?? '—'}</p></td>
+                          <td className="px-3 py-3 text-sm font-bold">{centsToBRL(cm?.commissionAmountCents ?? 0)}</td>
+                          <td className="px-3 py-3 text-xs text-gray-500">{cm?.commissionType === 'recurring' ? 'Recorrente' : 'Inicial'}</td>
+                          <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[11px] font-bold ${meta.cls}`}>{meta.label}</span></td>
+                          <td className="px-3 py-3 text-xs text-gray-500">{formatDate(cm?.createdAt)}</td>
+                          <td className="px-3 py-3 text-right">
+                            {canApprove && <button onClick={() => approveCommission(cm.id)} className="rounded-lg bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100">Aprovar</button>}
+                            {canPay && <button onClick={() => markCommissionPaid(cm.id)} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700">Marcar paga</button>}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {!asArray(commissions?.commissions).length && <tr><td colSpan={6} className="px-3 py-6 text-sm text-gray-400">Nenhuma comissão neste mês.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </>
+        )}
+
+        {tab === 'observabilidade' && (
         <div className="grid gap-6 lg:grid-cols-2">
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
             <h2 className="mb-4 text-lg font-black text-gray-900">Sessões WhatsApp</h2>
@@ -1589,10 +2122,15 @@ export default function AdminPage() {
             </div>
           </section>
         </div>
+        )}
 
-        <TermsEditor key={`terms-${terms?.version ?? 'fallback'}`} terms={terms} onSave={saveLegalTerms} />
-        <LandingPageContentAccordion plans={plans} faq={faq} tutorial={tutorial} onSavePlan={saveLpPlan} onSaveFaq={saveFaqItem} onDeleteFaq={deleteFaqItem} onSaveTutorial={saveTutorialContent} />
-        <AdminTutorialAccordion tutorial={tutorial} onSaveTutorial={saveTutorialContent} TutorialEditor={TutorialEditor} />
+        {tab === 'config' && (
+          <>
+            <TermsEditor key={`terms-${terms?.version ?? 'fallback'}`} terms={terms} onSave={saveLegalTerms} />
+            <LandingPageContentAccordion plans={plans} faq={faq} tutorial={tutorial} onSavePlan={saveLpPlan} onSaveFaq={saveFaqItem} onDeleteFaq={deleteFaqItem} onSaveTutorial={saveTutorialContent} />
+            <AdminTutorialAccordion tutorial={tutorial} onSaveTutorial={saveTutorialContent} TutorialEditor={TutorialEditor} />
+          </>
+        )}
       </div>
     </main>
   )

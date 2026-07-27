@@ -350,6 +350,8 @@ falha silenciosamente.
 | `MP_ACCESS_TOKEN`            | Sim          | Token de produção do MP (`APP_USR-...`). Obtido em Credenciais → Produção no painel MP.    |
 | `MP_WEBHOOK_SECRET`          | Sim (prod)   | Chave HMAC gerada pelo painel MP (Webhooks → Assinatura). Sem ela, `/api/payments/webhook` retorna 500 em produção. |
 | `BILLING_WEBHOOK_AUTOPROCESS`| Recomendada  | `true` ativa processamento imediato do webhook. Default `false` atrasa ativação em até 1h (reconciliação periódica). |
+| `MP_FEE_PERCENT`             | Não (default `4.99`) | Percentual retido pelo Mercado Pago, descontado da **receita líquida** no painel Financeiro (`GET /finance/overview` → `mpFees30d`/`netRevenue30d`). Estimativa: 4,99% reproduz o caso observado (R$69 → R$65,56). O valor real varia por método/prazo — ajustar aqui se necessário. |
+| `MP_FEE_FIXED_CENTS`         | Não (default `0`) | Taxa fixa em centavos por transação aprovada, somada às taxas MP no cálculo do líquido. |
 
 **URL de webhook a registrar no painel MP:**
 `https://espelhagrupos.com.br/api/payments/webhook`
@@ -754,6 +756,60 @@ com humano/cliente, o sistema nunca sai de grupo sozinho).
 senão o contador zera a cada `open`/close e o threshold nunca é cruzado.
 
 Testes: `test/reconnect-policy.test.js` (`extractRemoteJidFromLogArgs`).
+
+## Ignorar grupos NÃO-monitorados no socket — fix de causa raiz do desync (RCA 2026-07, cliente `vanessascar12@gmail.com`)
+
+**Investigação:** cliente com robô caindo a cada ~50min o dia inteiro (~30
+quedas/dia), recuperando sozinho em ~6s, `0 ações manuais` no painel admin — só
+ela, diferente dos outros. `WaConnectionEvent`: `disconnect|500` com
+`stuckMsg:true`/`badSession:true` em cadência de relógio. `AnalyticsEvent`:
+`ops_wa_group_desync_autoheal` + `ops_wa_stuck_message_retry` recorrentes. No
+`bot.log`, as falhas de decrypt do worker dela concentravam-se num **único grupo
+`@g.us` que ela participa mas o robô NEM monitora** (não estava nas fontes
+monitor/post dela). É o mesmo mecanismo do "Loop de retry-receipt travado" e do
+"Auto-heal de grupo" acima, mas o auto-heal (refresh de sender-keys) **não cura**
+esse caso: o refresh re-emite chaves pra frente, mas não cancela a mensagem já
+enfileirada que o WhatsApp reoferece — a fonte segue viva.
+
+**Causa raiz de segundo nível:** o robô só espelha grupos monitorados, mas o
+Baileys tenta decifrar (e por isso manda retry-receipt) mensagens de **qualquer**
+grupo que a conta participa. Grupo-lixo dessincronizado → decrypt fail → retry
+receipt → WhatsApp reoferece → `stream:error 500` → queda. O robô estava brigando
+por mensagem que nunca vai usar.
+
+**Fix (prevenção na origem) — `WA_IGNORE_UNMONITORED_GROUPS` (default OFF):**
+liga a opção `shouldIgnoreJid` do `makeWASocket` (`src/bot-worker.js`) via
+`shouldIgnoreChatJid` (`src/core/ignoredJidPolicy.js`, puro/testado). Confirmado
+na FONTE do Baileys (`Socket/messages-recv.js → handleMessage`): quando
+`shouldIgnoreJid(from)` é `true`, a mensagem é **ACKada e descartada ANTES** de
+`decrypt()` e `sendRetryRequest()` → sem Bad MAC, sem retry receipt → o WhatsApp
+não reoferece → **o stream não cai**. Blast radius mínimo DE PROPÓSITO: só entram
+na regra jids de **grupo `@g.us` fora do allowlist**; `@newsletter` (Canais que
+sigo), DMs (`@s.whatsapp.net`), `status@broadcast` e o próprio número **nunca**
+são ignorados. O allowlist (`allowedChatJids`, escopo de módulo) = monitor +
+destino + canal-botão, repopulado a cada `getConfig()`; `ready`-guard evita
+ignorar mensagem legítima enquanto a config não carregou (default seguro no boot).
+Mensagem travada de `@newsletter` continua coberta pela blindagem do
+`msgRetryCounterCache` (limite 5/mensagem). **Rollout seguro:** default OFF,
+reversível sem redeploy; **validar em staging** (o gate é confirmar em campo que
+o retry-receipt some com um grupo real dessincronizado) antes de ligar em prod.
+Teste: `test/ignored-jid-policy.test.js`.
+
+**Visibilidade admin (Part B):** como a regra é **NUNCA sair de grupo sozinho**,
+a "cura" (cliente decide sair) tem que ser barata — antes exigia grepar 1.4GB de
+log. Agora os eventos `ops_wa_group_desync_autoheal`/`unresolved` carregam o
+**nome** do grupo (`groupSubjectByJid`, cacheado no `groupFetchAllParticipating`),
+e o detalhe do painel admin online (`buildAdminOnlineUserDetail` +
+`summarizeDesyncGroups` em `src/adminLogSummary.js`) devolve `desyncGroups`
+(nome + jid + nº de refresh + flag `unresolved`), renderizado numa seção do drawer
+em `dashboard/app/admin/online/page.js`. Teste: `test/admin-desync-groups.test.js`.
+
+**Não regredir:** não ler `group.imageMode`/config fora do chokepoint não muda
+aqui, mas não mover `allowedChatJids`/`groupSubjectByJid` pra dentro de
+`startBotInner` (precisam sobreviver a reconexões, mesma lição do
+`msgRetryCounterCache`); não ampliar o `shouldIgnoreChatJid` para ignorar
+newsletter/DM sem revalidar Canais/pareamento; manter o default OFF até validação
+explícita em staging.
 
 ## Loop de retry-receipt travado derrubando sessão a cada ~50min (RCA 2026-07)
 
@@ -1484,6 +1540,53 @@ comissão).
 (1) o ML credita cupom de algum jeito? **Validar clicando no link num celular
 ANTES de ligar em prod.** Testes: `test/shopee-affiliate-info.test.js` e
 `test/converters-amazon.test.js`.
+
+## Amazon: a tag PRECISA estar dentro da `longUrl` mandada ao SiteStripe (RCA 2026-07 — não regredir)
+
+**Sintoma:** cliente relatou **zero cliques** no painel de afiliados da Amazon
+entre 16 e 23/07, voltando ao normal em 24/07. Não era queda de envio: o
+`MessageLog` mostra 100-160 ofertas Amazon/dia saindo com sucesso o período
+inteiro, com `tag=` correta no fallback.
+
+**Causa raiz:** em `convert()` (`src/converters/amazon.js`), o caminho de
+**produto** mandava ao endpoint `sitestripe/getShortUrl` a `longUrl` crua vinda
+de `buildLongUrl` — `https://www.amazon.com.br/dp/<ASIN>`, **sem `?tag=`** —
+confiando apenas no query param `tag=` da própria chamada para creditar. O
+SiteStripe encurta a `longUrl` **como recebeu**: o `amzn.to` gerado nascia sem
+tag de afiliado. A oferta saía bonita, era clicada, e **nenhum clique era
+creditado**. O caminho de **cupom** (`convertStoreUrlWithoutAsin`) sempre
+embutiu a tag via `withAffiliateTag` — a assimetria entre os dois caminhos era
+o próprio bug.
+
+**Correlação que confirmou em produção** (conta `flavia.vale@usp.br`,
+tag `fafaciane-20`):
+
+| Período       | Formato do link enviado | Cliques |
+|---------------|-------------------------|---------|
+| 02/07 – 12/07 | `?tag=` longo (fallback, cookie expirado) | sim |
+| 13/07 – 23/07 | `amzn.to` (sessão SiteStripe viva)        | **zero** |
+| 24/07 – hoje  | `?tag=` longo (cookie expirou de novo)    | sim |
+
+O atraso de 13/07 (início do `amzn.to`) para 16/07 (zero cliques) é o rastro dos
+links `?tag=` antigos ainda circulando nos grupos e morrendo aos poucos.
+
+**Armadilha de diagnóstico (não repetir):** o cookie do SiteStripe expirado
+**mascara** o bug — sessão morta força o fallback `?tag=`, que credita
+normalmente. Ou seja, **quanto mais saudável a sessão Amazon, pior a comissão**.
+Renovar o cookie sem esta correção faz os cliques sumirem de novo. Se um relato
+de "parei de receber comissão" coincidir com sessão SiteStripe saudável,
+suspeitar disto antes de qualquer outra coisa.
+
+**Não regredir:** nunca mandar `longUrl` sem `?tag=` para o `getShortUrl`, em
+NENHUM caminho de conversão. E, como a `longUrl` já carrega a tag, os fallbacks
+não podem reanexar `?tag=` (viraria `?tag=x?tag=x`). Testes:
+`test/converters-amazon.test.js` ("produto embute ?tag= na longUrl mandada ao
+getShortUrl" e "fallback de produto não duplica ?tag=").
+
+**Diagnóstico reutilizável:** `scripts/diag-amazon-clicks.mjs` (estado da
+credencial + formato do link enviado por dia + probe ao vivo) e
+`scripts/diag-amazon-shortlink-tag.mjs` (segue os `amzn.to` já enviados e lê a
+tag final). Os dois são read-only e não imprimem segredo.
 
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 
