@@ -1764,6 +1764,37 @@ export async function adminRoutes(app) {
   })
 
 
+  // US2 (specs/010-seo-lead-capture, FR-007): contagem de cadastros por página de entrada
+  // (landing first-touch), sem PII sensível — só landing/contagem. Lê a metadata gravada em
+  // src/api/routes/auth.js (landing_page), sem migration/tabela nova.
+  app.get('/marketing/signups-by-landing', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:read'))) return
+    const { from, to } = parseDateRange(req.query, 30)
+
+    const rows = await db.$queryRaw`
+      SELECT
+        COALESCE(NULLIF(json_extract(metadata, '$.landing_page'), ''), 'unknown') as landingPage,
+        COUNT(*) as signups
+      FROM AnalyticsEvent
+      WHERE event = 'signup_created'
+        AND createdAt >= ${from}
+        AND createdAt <= ${to}
+      GROUP BY COALESCE(NULLIF(json_extract(metadata, '$.landing_page'), ''), 'unknown')
+      ORDER BY signups DESC
+      LIMIT 50
+    `
+
+    await writeAdminAuditLog(req, { action: 'admin.marketing.signupsByLanding.read', resource: 'marketingSignupsByLanding' })
+    return {
+      signupsByLanding: rows.map(row => ({
+        landingPage: String(row.landingPage || 'unknown'),
+        signups: Number(row.signups || 0),
+      })),
+      from,
+      to,
+    }
+  })
+
   app.get('/marketing/prompts', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'admin:read'))) return
     const { from, to } = parseDateRange(req.query, 30)

@@ -7,10 +7,12 @@ import { sanitizeAttributionValue } from '@/lib/marketing-attribution'
 
 const OFFER_ID = 'checklist-operacao-whatsapp'
 const UTM_CAMPAIGN = 'dia4_conteudo_dor_cluster1'
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export function LeadMagnetCard({ origin = 'conteudo_dor_cluster1', compact = false }) {
   const safeOrigin = sanitizeAttributionValue(origin) || 'conteudo_dor_cluster1'
   const [trackedFocus, setTrackedFocus] = useState(false)
+  const [emailError, setEmailError] = useState('')
 
   const trackingParams = useMemo(() => ({
     origin: safeOrigin,
@@ -27,7 +29,19 @@ export function LeadMagnetCard({ origin = 'conteudo_dor_cluster1', compact = fal
     trackEvent(TRACKING_EVENTS.LEAD_MAGNET_FORM_FOCUSED, trackingParams)
   }
 
-  function trackLeadMagnetSubmit() {
+  function handleSubmit(event) {
+    const emailValue = String(event.target.elements?.email?.value ?? '').trim()
+    if (!emailValue) {
+      event.preventDefault()
+      setEmailError('Informe seu e-mail para receber o checklist.')
+      return
+    }
+    if (!EMAIL_RE.test(emailValue)) {
+      event.preventDefault()
+      setEmailError('Confira o formato do e-mail antes de continuar.')
+      return
+    }
+    setEmailError('')
     trackEvent(TRACKING_EVENTS.LEAD_MAGNET_SUBMITTED, trackingParams)
   }
 
@@ -51,7 +65,8 @@ export function LeadMagnetCard({ origin = 'conteudo_dor_cluster1', compact = fal
         data-crm-stage="Lead"
         data-crm-source={safeOrigin}
         onFocus={trackLeadMagnetFocus}
-        onSubmit={trackLeadMagnetSubmit}
+        onSubmit={handleSubmit}
+        noValidate
       >
         <input type="hidden" name="mode" value="register" />
         <input type="hidden" name="source" value={safeOrigin} />
@@ -65,10 +80,13 @@ export function LeadMagnetCard({ origin = 'conteudo_dor_cluster1', compact = fal
           id={`lead-email-${safeOrigin}`}
           name="email"
           type="email"
-          required
           placeholder="voce@empresa.com"
+          onChange={() => { if (emailError) setEmailError('') }}
           className="min-h-12 rounded-xl border border-emerald-200 bg-white px-4 text-gray-900 outline-none ring-emerald-300 focus:ring-2"
         />
+        {emailError && (
+          <p role="alert" className="-mt-2 text-sm font-semibold text-red-600">{emailError}</p>
+        )}
         <label className="text-sm font-bold text-gray-800" htmlFor={`lead-segment-${safeOrigin}`}>Perfil da operação</label>
         <select
           id={`lead-segment-${safeOrigin}`}

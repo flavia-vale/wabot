@@ -96,19 +96,20 @@ export default function MarketingGrowthAdminPage() {
   const [subscriptions, setSubscriptions] = useState([])
   const [marketingOverview, setMarketingOverview] = useState(null)
   const [marketingCampaigns, setMarketingCampaigns] = useState([])
+  const [signupsByLanding, setSignupsByLanding] = useState([])
   const [marketingFunnel, setMarketingFunnel] = useState(null)
   const [dataTrust, setDataTrust] = useState(null)
   const [cohorts, setCohorts] = useState([])
   const [backendAlerts, setBackendAlerts] = useState([])
   const [promptMetrics, setPromptMetrics] = useState([])
   const [users, setUsers] = useState([])
-  const [lastUpdated, setLastUpdated] = useState({ dashboard: '', kpis: '', funnel: '', channels: '', campaigns: '', prompts: '', trust: '' })
+  const [lastUpdated, setLastUpdated] = useState({ dashboard: '', kpis: '', funnel: '', channels: '', campaigns: '', prompts: '', trust: '', signupsByLanding: '' })
 
   useEffect(() => {
     let active = true
     ;(async () => {
       try {
-        const [adminData, overviewData, financeData, paymentsData, subscriptionsData, usersData, mkOverview, mkCampaigns, mkFunnel, mkTrust, mkCohorts, mkAlerts, mkPrompts] = await Promise.all([
+        const [adminData, overviewData, financeData, paymentsData, subscriptionsData, usersData, mkOverview, mkCampaigns, mkFunnel, mkTrust, mkCohorts, mkAlerts, mkPrompts, mkSignupsByLanding] = await Promise.all([
           api.adminMe(),
           api.adminOverview(),
           api.adminFinanceOverview().catch(() => null),
@@ -122,6 +123,7 @@ export default function MarketingGrowthAdminPage() {
           api.adminMarketingCohorts(dateRangeFromPeriod('90d')).catch(() => ({ cohorts: [] })),
           api.adminMarketingAlerts(dateRangeFromPeriod('30d')).catch(() => ({ alerts: [] })),
           api.adminMarketingPrompts(dateRangeFromPeriod('30d')).catch(() => ({ prompts: [] })),
+          api.adminMarketingSignupsByLanding(dateRangeFromPeriod('30d')).catch(() => ({ signupsByLanding: [] })),
         ])
         if (!active) return
         setAdmin(adminData)
@@ -137,8 +139,9 @@ export default function MarketingGrowthAdminPage() {
         setCohorts(Array.isArray(mkCohorts?.cohorts) ? mkCohorts.cohorts : [])
         setBackendAlerts(Array.isArray(mkAlerts?.alerts) ? mkAlerts.alerts : [])
         setPromptMetrics(Array.isArray(mkPrompts?.prompts) ? mkPrompts.prompts : [])
+        setSignupsByLanding(Array.isArray(mkSignupsByLanding?.signupsByLanding) ? mkSignupsByLanding.signupsByLanding : [])
         const nowIso = new Date().toISOString()
-        setLastUpdated({ dashboard: nowIso, kpis: nowIso, funnel: nowIso, channels: nowIso, campaigns: nowIso, prompts: nowIso, trust: nowIso })
+        setLastUpdated({ dashboard: nowIso, kpis: nowIso, funnel: nowIso, channels: nowIso, campaigns: nowIso, prompts: nowIso, trust: nowIso, signupsByLanding: nowIso })
       } catch (err) {
         if (!active) return
         setError(err.message || 'Não foi possível carregar métricas de marketing.')
@@ -154,8 +157,8 @@ export default function MarketingGrowthAdminPage() {
     setError('')
     try {
       const range = dateRangeFromPeriod(period)
-      const [adminData, overviewData, financeData, paymentsData, subscriptionsData, usersData, mkOverview, mkCampaigns, mkFunnel, mkTrust, mkCohorts, mkAlerts, mkPrompts] = await Promise.all([
-        api.adminMe(), api.adminOverview(), api.adminFinanceOverview().catch(() => null), api.adminPayments({ limit: 100 }).catch(() => ({ items: [] })), api.adminSubscriptions({ limit: 100 }).catch(() => ({ items: [] })), api.adminUsers({ limit: 120 }).catch(() => ({ users: [] })), api.adminMarketingOverview(range).catch(() => null), api.adminMarketingCampaigns(range).catch(() => ({ campaigns: [] })), api.adminMarketingFunnel(range).catch(() => null), api.adminMarketingDataTrust(range).catch(() => null), api.adminMarketingCohorts(dateRangeFromPeriod('90d')).catch(() => ({ cohorts: [] })), api.adminMarketingAlerts(range).catch(() => ({ alerts: [] })), api.adminMarketingPrompts(range).catch(() => ({ prompts: [] })),
+      const [adminData, overviewData, financeData, paymentsData, subscriptionsData, usersData, mkOverview, mkCampaigns, mkFunnel, mkTrust, mkCohorts, mkAlerts, mkPrompts, mkSignupsByLanding] = await Promise.all([
+        api.adminMe(), api.adminOverview(), api.adminFinanceOverview().catch(() => null), api.adminPayments({ limit: 100 }).catch(() => ({ items: [] })), api.adminSubscriptions({ limit: 100 }).catch(() => ({ items: [] })), api.adminUsers({ limit: 120 }).catch(() => ({ users: [] })), api.adminMarketingOverview(range).catch(() => null), api.adminMarketingCampaigns(range).catch(() => ({ campaigns: [] })), api.adminMarketingFunnel(range).catch(() => null), api.adminMarketingDataTrust(range).catch(() => null), api.adminMarketingCohorts(dateRangeFromPeriod('90d')).catch(() => ({ cohorts: [] })), api.adminMarketingAlerts(range).catch(() => ({ alerts: [] })), api.adminMarketingPrompts(range).catch(() => ({ prompts: [] })), api.adminMarketingSignupsByLanding(range).catch(() => ({ signupsByLanding: [] })),
       ])
       setAdmin(adminData); setOverview(overviewData); setFinance(financeData)
       setPayments(Array.isArray(paymentsData?.items) ? paymentsData.items : [])
@@ -168,8 +171,9 @@ export default function MarketingGrowthAdminPage() {
       setCohorts(Array.isArray(mkCohorts?.cohorts) ? mkCohorts.cohorts : [])
       setBackendAlerts(Array.isArray(mkAlerts?.alerts) ? mkAlerts.alerts : [])
       setPromptMetrics(Array.isArray(mkPrompts?.prompts) ? mkPrompts.prompts : [])
+      setSignupsByLanding(Array.isArray(mkSignupsByLanding?.signupsByLanding) ? mkSignupsByLanding.signupsByLanding : [])
       const nowIso = new Date().toISOString()
-      setLastUpdated({ dashboard: nowIso, kpis: nowIso, funnel: nowIso, channels: nowIso, campaigns: nowIso, prompts: nowIso, trust: nowIso })
+      setLastUpdated({ dashboard: nowIso, kpis: nowIso, funnel: nowIso, channels: nowIso, campaigns: nowIso, prompts: nowIso, trust: nowIso, signupsByLanding: nowIso })
     } catch (err) {
       setError(err.message || 'Não foi possível carregar métricas de marketing.')
     } finally { setLoading(false) }
@@ -480,6 +484,7 @@ export default function MarketingGrowthAdminPage() {
     campaigns: formatUpdatedAt(lastUpdated.campaigns),
     prompts: formatUpdatedAt(lastUpdated.prompts),
     trust: formatUpdatedAt(lastUpdated.trust),
+    signupsByLanding: formatUpdatedAt(lastUpdated.signupsByLanding),
   }), [lastUpdated])
 
   const alerts = useMemo(() => {
@@ -551,6 +556,12 @@ export default function MarketingGrowthAdminPage() {
           <h2 className="text-lg font-black text-gray-900">Campanhas (Fase 2)</h2>
           <p className="text-xs text-gray-500">Ranking por campanha para priorizar escala, otimização ou pausa. {updatedAt.campaigns ? `Atualizado: ${updatedAt.campaigns}` : ''}</p>
           <div className="mt-4 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead className="text-xs uppercase tracking-wide text-gray-400"><tr><th className="px-3 py-2">Campanha</th><th className="px-3 py-2">Canal</th><th className="px-3 py-2">Conteúdo</th><th className="px-3 py-2">Leads</th><th className="px-3 py-2">Cadastros</th><th className="px-3 py-2">Ativações</th><th className="px-3 py-2">Pagas</th><th className="px-3 py-2">CVR paga</th><th className="px-3 py-2">Receita atrib.</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Confiabilidade</th></tr></thead><tbody className="divide-y divide-gray-100">{campaignRows.map(row => <tr key={row.campaign}><td className="px-3 py-3 font-semibold text-gray-900">{row.campaign}</td><td className="px-3 py-3">{row.source}</td><td className="px-3 py-3">{row.content}</td><td className="px-3 py-3">{row.leads}</td><td className="px-3 py-3">{row.signups}</td><td className="px-3 py-3">{row.activations}</td><td className="px-3 py-3">{row.paid}</td><td className="px-3 py-3">{row.cvrPaid}%</td><td className="px-3 py-3">{formatCurrency(row.revenue)}</td><td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-xs font-bold ${row.status === 'escalar' ? 'bg-emerald-100 text-emerald-700' : row.status === 'otimizar' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{row.status}</span></td><td className="px-3 py-3 text-xs text-gray-500">{trustTag({ source: 'mixed', confidence: 'medium', note: 'utm + modelagem de conversão' })}</td></tr>)}</tbody></table></div>
+        </section>
+
+        <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+          <h2 className="text-lg font-black text-gray-900">Cadastros por página de entrada</h2>
+          <p className="text-xs text-gray-500">Qual página orgânica (first-touch) trouxe cada cadastro novo. {updatedAt.signupsByLanding ? `Atualizado: ${updatedAt.signupsByLanding}` : ''}</p>
+          <div className="mt-4 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead className="text-xs uppercase tracking-wide text-gray-400"><tr><th className="px-3 py-2">Página de entrada</th><th className="px-3 py-2">Cadastros</th></tr></thead><tbody className="divide-y divide-gray-100">{signupsByLanding.map(row => <tr key={row.landingPage}><td className="px-3 py-3 font-semibold text-gray-900">{row.landingPage}</td><td className="px-3 py-3">{row.signups}</td></tr>)}</tbody></table></div>
         </section>
 
         <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
