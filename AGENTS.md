@@ -478,6 +478,40 @@ Settings → Secrets and variables → Actions:
 Falha do smoke 9 geralmente é `.env` faltando, `JWT_SECRET` ausente
 ou porta divergente do que está em `apiPortByDashboardPort`.
 
+## IndexNow — notificação automática de URLs ao Bing (2026-07, canônico)
+
+A cada deploy de **produção** (`main`), o step "Notificar IndexNow (produção)"
+em `.github/workflows/deploy.yml` (logo após a purga da Cloudflare) roda
+`node scripts/notify-indexnow.mjs`, que faz `POST` para
+`https://api.indexnow.org/indexnow` com a lista completa de URLs indexáveis
+(`getIndexableSeoRoutes()` de `dashboard/lib/seo-registry.mjs` — a MESMA fonte
+usada pelo `sitemap.xml`). Bing, Yandex e DuckDuckGo consomem o protocolo
+IndexNow; ChatGPT/Copilot puxam do índice do Bing, então a automação também
+alimenta essas IAs indiretamente.
+
+- **Chave de verificação NÃO é segredo** — o IndexNow exige um arquivo
+  público `https://espelhagrupos.com.br/<chave>.txt` contendo a própria
+  chave, para provar posse do domínio. Por ser público por design, a chave
+  fica hardcoded no próprio `scripts/notify-indexnow.mjs` (constante
+  `INDEXNOW_KEY`) e replicada no arquivo estático
+  `dashboard/public/<chave>.txt` — **os dois valores têm que ser idênticos**.
+  Não precisa de GitHub secret.
+- **Só roda em `main`** (`github.ref == 'refs/heads/main'`, mesma guarda do
+  purge da Cloudflare) — staging não é indexado, não faz sentido notificar.
+- **Não bloqueia o deploy**: a etapa de SSH já rodou antes desse step; falha
+  aqui só marca o step como vermelho no Actions (3 tentativas com backoff,
+  igual ao padrão do purge da Cloudflare), sem exigir ação manual — o
+  IndexNow tem TTL curto e o próximo deploy tenta de novo.
+- **Google NÃO usa IndexNow** (não implementa o protocolo) — Google segue
+  via sitemap + rastreamento natural, fora do escopo deste script. Não tentar
+  usar a Google Indexing API para páginas comuns: ela é restrita a
+  `JobPosting`/`BroadcastEvent` nos termos de uso do Google.
+- **Trocar a chave** (rotação): gerar novo valor
+  (`node -e "console.log(require('crypto').randomBytes(16).toString('hex'))"`),
+  criar o novo `dashboard/public/<chave-nova>.txt`, atualizar
+  `INDEXNOW_KEY` em `notify-indexnow.mjs` e remover o `.txt` antigo no mesmo
+  PR — os dois arquivos nunca podem divergir.
+
 ## Fila travava inteira quando UM item falhava (RCA 2026-07-20, não regredir)
 
 Cliente reportou "as filas não estão funcionando, não enviando mensagens".
