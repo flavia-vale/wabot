@@ -109,6 +109,12 @@ export default function CustomerSuccessPage() {
         const bv = b.lastContact?.createdAt ? new Date(b.lastContact.createdAt).getTime() : 0
         return bv - av
       })
+    } else if (sortBy === 'lastMessageAt') {
+      items.sort((a, b) => {
+        const av = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0
+        const bv = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0
+        return bv - av
+      })
     } else {
       items.sort((a, b) => (b.priorityScore || 0) - (a.priorityScore || 0))
     }
@@ -242,6 +248,7 @@ export default function CustomerSuccessPage() {
             <button onClick={() => setSortBy('priority')} className={`rounded-full px-3 py-1.5 font-bold ring-1 ${sortBy === 'priority' ? 'bg-indigo-600 text-white ring-indigo-600' : 'bg-white text-gray-600 ring-gray-200'}`}>Prioridade</button>
             <button onClick={() => setSortBy('createdAt')} className={`rounded-full px-3 py-1.5 font-bold ring-1 ${sortBy === 'createdAt' ? 'bg-indigo-600 text-white ring-indigo-600' : 'bg-white text-gray-600 ring-gray-200'}`}>Data de criação</button>
             <button onClick={() => setSortBy('lastContact')} className={`rounded-full px-3 py-1.5 font-bold ring-1 ${sortBy === 'lastContact' ? 'bg-indigo-600 text-white ring-indigo-600' : 'bg-white text-gray-600 ring-gray-200'}`}>Último contato</button>
+            <button onClick={() => setSortBy('lastMessageAt')} className={`rounded-full px-3 py-1.5 font-bold ring-1 ${sortBy === 'lastMessageAt' ? 'bg-indigo-600 text-white ring-indigo-600' : 'bg-white text-gray-600 ring-gray-200'}`}>Último envio</button>
           </div>
           <div className="mb-4 flex flex-wrap gap-2">
             {Object.entries(REASON_LABELS).map(([key, label]) => (
@@ -253,7 +260,7 @@ export default function CustomerSuccessPage() {
             <table className="min-w-full text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-gray-400">
                 <tr>
-                  <th className="px-3 py-2">Cliente</th><th className="px-3 py-2">Contato</th><th className="px-3 py-2">Criado em</th><th className="px-3 py-2">Motivos</th><th className="px-3 py-2">Prioridade</th><th className="px-3 py-2">Peso valor</th><th className="px-3 py-2">Experimento</th><th className="px-3 py-2">Ação sugerida</th><th className="px-3 py-2">Último contato</th><th className="px-3 py-2">Ações</th>
+                  <th className="px-3 py-2">Cliente</th><th className="px-3 py-2">Contato</th><th className="px-3 py-2">Criado em</th><th className="px-3 py-2">Motivos</th><th className="px-3 py-2">Prioridade</th><th className="px-3 py-2">Peso valor</th><th className="px-3 py-2">Experimento</th><th className="px-3 py-2">Ação sugerida</th><th className="px-3 py-2">Último contato</th><th className="px-3 py-2">Último envio</th><th className="px-3 py-2">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -268,6 +275,7 @@ export default function CustomerSuccessPage() {
                       <td className="px-3 py-3"><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{user.priorityScore ?? 0}</span></td><td className="px-3 py-3 text-xs">{user.financialWeight ?? 0}</td><td className="px-3 py-3 text-xs">{user.experimentVariant || '—'}</td>
                       <td className="px-3 py-3 text-xs text-gray-700">{user.suggestedAction || 'Diagnosticar causa de risco'}</td>
                       <td className="px-3 py-3 text-xs text-gray-600">{formatDate(user.lastContact?.createdAt)}<br />{user.lastContact ? (CONTACT_OUTCOMES[user.lastContact.outcome] || user.lastContact.outcome) : 'Sem registro'}</td>
+                      <td className="px-3 py-3 text-xs text-gray-600">{formatDate(user.lastMessageAt)}</td>
                       <td className="px-3 py-3"><div className="flex flex-wrap gap-2"><a href={phone ? `https://wa.me/${phone}` : undefined} target="_blank" rel="noreferrer" className={`rounded-lg px-3 py-2 text-xs font-bold ${phone ? 'bg-green-600 text-white' : 'pointer-events-none bg-gray-200 text-gray-500'}`}>WhatsApp</a><button onClick={() => { setContactTarget(user); setContactPayload(prev => ({ ...prev, reason: user.contactReasons?.[0] || '', notes: `Playbook: ${user.suggestedAction || 'Diagnóstico'} | Variante: ${user.experimentVariant || 'n/a'}` })) }} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Registrar contato</button><button onClick={() => openAccessModal(user)} className="rounded-lg bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700">Ajustar plano</button></div></td>
                     </tr>
                   )

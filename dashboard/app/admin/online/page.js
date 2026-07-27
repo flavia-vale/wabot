@@ -29,6 +29,32 @@ function formatNumber(value) {
   return new Intl.NumberFormat('pt-BR').format(Number(value ?? 0))
 }
 
+const DATE_SORT_OPTIONS = [
+  ['default', 'Padrão'],
+  ['createdAt', 'Data de criação'],
+  ['lastMessageAt', 'Último envio'],
+]
+
+function sortByDateField(list, field) {
+  if (field === 'default') return list
+  return [...list].sort((a, b) => {
+    const av = a?.[field] ? new Date(a[field]).getTime() : 0
+    const bv = b?.[field] ? new Date(b[field]).getTime() : 0
+    return bv - av
+  })
+}
+
+function SortBar({ value, onChange }) {
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+      <span className="font-bold text-slate-600">Ordenar por:</span>
+      {DATE_SORT_OPTIONS.map(([key, label]) => (
+        <button key={key} type="button" onClick={() => onChange(key)} className={`rounded-full px-3 py-1.5 font-bold ring-1 ${value === key ? 'bg-indigo-600 text-white ring-indigo-600' : 'bg-white text-slate-600 ring-slate-200'}`}>{label}</button>
+      ))}
+    </div>
+  )
+}
+
 
 function formatDurationMs(value) {
   const ms = Math.max(0, Number(value ?? 0))
@@ -225,7 +251,8 @@ export default function AdminOnlinePage() {
     }
   }
 
-  const users = asArray(data?.users)
+  const [sortBy, setSortBy] = useState('default')
+  const users = useMemo(() => sortByDateField(asArray(data?.users), sortBy), [data, sortBy])
   const criticalUsers = useMemo(() => users.filter(user => user.waSession && user.waSession.status !== 'connected'), [users])
 
   if (loading) return <LoadingState />
@@ -295,6 +322,8 @@ export default function AdminOnlinePage() {
             </form>
           </div>
 
+          <SortBar value={sortBy} onChange={setSortBy} />
+
           <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm">
               <thead className="border-y border-slate-100 text-[11px] uppercase tracking-[0.18em] text-slate-400">
@@ -316,6 +345,7 @@ export default function AdminOnlinePage() {
                       <td className="px-3 py-4">
                         <p className="font-black text-slate-900">{user.name || user.email}</p>
                         <p className="text-xs text-slate-500">{user.email} · {user.plan}</p>
+                        <p className="mt-1 text-[11px] text-slate-400">Criado em: {formatDate(user.createdAt)}</p>
                       </td>
                       <td className="px-3 py-4">
                         <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black ring-1 ${meta.className}`}>
@@ -326,6 +356,7 @@ export default function AdminOnlinePage() {
                       <td className="px-3 py-4 text-xs text-slate-600">
                         <p className="font-bold">{formatRelative(user.effectiveLastActivityAt)}</p>
                         <p>{formatDate(user.effectiveLastActivityAt)}</p>
+                        <p className="mt-1 text-slate-400">Último envio: {formatDate(user.lastMessageAt)}</p>
                       </td>
                       <td className="px-3 py-4 text-right text-xs tabular-nums">
                         <p className="font-black text-emerald-700">{formatNumber(user.successCount24h)} sucesso</p>
