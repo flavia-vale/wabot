@@ -55,6 +55,26 @@ function SortBar({ value, onChange }) {
   )
 }
 
+// Telefone mascarado (ex.: "551*****99", vindo de sanitizeUser para quem não
+// tem support:write) não vira link válido — trata como ausente em vez de
+// montar um wa.me quebrado.
+function normalizePhoneForWa(phone) {
+  const raw = String(phone || '').trim()
+  if (!raw || raw.includes('*')) return null
+  const digits = raw.replace(/\D/g, '')
+  return digits || null
+}
+
+function WhatsAppButton({ phone }) {
+  const digits = normalizePhoneForWa(phone)
+  if (!digits) {
+    return <span className="rounded-xl bg-slate-100 px-3 py-2 text-center text-xs font-black text-slate-400">Sem WhatsApp</span>
+  }
+  return (
+    <a href={`https://wa.me/${digits}`} target="_blank" rel="noreferrer" className="rounded-xl bg-green-600 px-3 py-2 text-center text-xs font-black text-white hover:bg-green-700">WhatsApp</a>
+  )
+}
+
 
 function formatDurationMs(value) {
   const ms = Math.max(0, Number(value ?? 0))
@@ -368,7 +388,10 @@ export default function AdminOnlinePage() {
                         <p>{formatNumber(user.manualReconnects24h)} ação(ões) manuais</p>
                       </td>
                       <td className="px-3 py-4">
-                        <button onClick={() => openDetail(user.id)} className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 hover:bg-emerald-100">Abrir detalhes</button>
+                        <div className="flex flex-col gap-2">
+                          <button onClick={() => openDetail(user.id)} className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 hover:bg-emerald-100">Abrir detalhes</button>
+                          <WhatsAppButton phone={user.contactPhone} />
+                        </div>
                       </td>
                     </tr>
                   )
