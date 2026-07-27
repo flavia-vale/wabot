@@ -9,12 +9,17 @@ import { resolvePostAuthRedirect } from '@/lib/onboardingProgress'
 import { Alert } from '@/components/Alert'
 import { mapAuthError, trackEvent, TRACKING_EVENTS } from '@/lib/analytics'
 import { attributionForTracking, readAttributionFromSearchParams } from '@/lib/marketing-attribution'
+import { SUPPORT_WHATSAPP_URL } from '@/lib/marketing-content'
+import { SUPPORT_PHONE_LABEL } from '@/lib/mobilePixUtils'
 
 const LOGIN_BENEFITS = [
   'Conversão automática de links de afiliado',
   'Grupos de WhatsApp organizados por origem e destino',
   'Envio e agendamento de ofertas em menos tempo',
 ]
+
+const PHONE_ALREADY_REGISTERED_ERROR = 'Este número de telefone já está cadastrado'
+const PHONE_RECOVERY_WHATSAPP_URL = `${SUPPORT_WHATSAPP_URL}?text=${encodeURIComponent('Oi! Meu WhatsApp já está cadastrado no BOTinho e preciso recuperar o acesso da minha conta.')}`
 
 function normalizePhoneInput(value) {
   return String(value ?? '').replace(/\D/g, '').slice(0, 15)
@@ -355,7 +360,21 @@ function LoginContent() {
             {isRegister && <p className="mt-1 text-[11px] leading-4 text-emerald-200">Use pelo menos 8 caracteres para reduzir erros no cadastro.</p>}
           </div>
 
-          {error && <Alert type="error" title="Falha na autenticação" message={error} />}
+          {error && error === PHONE_ALREADY_REGISTERED_ERROR && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" role="alert" aria-live="assertive">
+              <p className="font-semibold"><span aria-hidden="true">⚠️</span> {error}</p>
+              <p className="mt-1">Para recuperar sua conta envie uma mensagem para nosso suporte: {SUPPORT_PHONE_LABEL}</p>
+              <a
+                href={PHONE_RECOVERY_WHATSAPP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700"
+              >
+                Chamar suporte no WhatsApp
+              </a>
+            </div>
+          )}
+          {error && error !== PHONE_ALREADY_REGISTERED_ERROR && <Alert type="error" title="Falha na autenticação" message={error} />}
           {success && <Alert type="success" title="Sucesso" message={success} />}
 
           {isRegister && (
