@@ -468,7 +468,19 @@ export async function convert(url, creds) {
       return null
     }
 
-    const longUrl = buildLongUrl(target, asin)
+    // A tag PRECISA estar embutida na própria `longUrl` mandada ao getShortUrl.
+    // RCA 2026-07 (zero cliques na Amazon entre 16 e 23/07): aqui mandávamos
+    // `buildLongUrl` cru (`.../dp/ASIN`, sem `?tag=`) e contávamos com o query
+    // param `tag=` da chamada para creditar. O SiteStripe encurta a `longUrl`
+    // como recebeu — o amzn.to nascia SEM tag, a oferta saía e era clicada, e
+    // nada era creditado. Correlação confirmada em produção: enquanto a sessão
+    // do SiteStripe esteve viva (13-23/07) todos os links saíram como amzn.to e
+    // os cliques zeraram; quando o cookie expirou e o fallback `?tag=` voltou
+    // (24/07) os cliques voltaram no mesmo dia. O caminho de cupom
+    // (`convertStoreUrlWithoutAsin`) sempre embutiu a tag via
+    // `withAffiliateTag` — era só o caminho de PRODUTO que não embutia.
+    // Não regredir: nunca mandar `longUrl` sem `?tag=` para o getShortUrl.
+    const longUrl = withAffiliateTag(buildLongUrl(target, asin), tag)
 
     if (hasCookies) {
       const { shortUrl, transient } = await createAmazonShortLink(longUrl, tag, creds)
@@ -481,10 +493,11 @@ export async function convert(url, creds) {
       // transient) sinalizamos `cookies_expired` pro painel avisar a
       // cliente; 5xx é instabilidade do lado da Amazon e não pede ação.
       logger.warn({ url, longUrl, transient }, 'Amazon: API não retornou shortUrl — fallback para ?tag=')
-      return { url: `${longUrl}?tag=${tag}`, linkKind: 'product', warning: transient ? null : 'amazon_cookies_expired' }
+      // `longUrl` já carrega `?tag=` (withAffiliateTag acima) — não reanexar.
+      return { url: longUrl, linkKind: 'product', warning: transient ? null : 'amazon_cookies_expired' }
     }
 
-    return { url: `${longUrl}?tag=${tag}`, linkKind: 'product' }
+    return { url: longUrl, linkKind: 'product' }
   } catch {
     return null
   }
