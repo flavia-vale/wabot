@@ -503,3 +503,56 @@ test('Amazon: sem __onCredentialPatch (ex.: offerEngine) a rotação é no-op si
     restore()
   }
 })
+
+// RCA 2026-07 — zero cliques na Amazon entre 16 e 23/07.
+//
+// O caminho de PRODUTO mandava ao getShortUrl a `longUrl` crua vinda de
+// `buildLongUrl` (`.../dp/ASIN`, SEM `?tag=`), confiando só no query param
+// `tag=` da chamada para creditar. O SiteStripe encurta a `longUrl` como
+// recebeu: o amzn.to nascia sem tag, a oferta saía, era clicada, e nenhum
+// clique era creditado. Enquanto a sessão do SiteStripe esteve viva
+// (13-23/07) TODOS os links saíram como amzn.to e os cliques zeraram; assim
+// que o cookie expirou e o fallback `?tag=` voltou (24/07), os cliques
+// voltaram no mesmo dia. O caminho de cupom já embutia a tag — só o de
+// produto não embutia.
+//
+// Estes dois testes travam a regressão: a tag precisa estar DENTRO da
+// `longUrl` enviada, e o fallback não pode duplicar `?tag=`.
+test('Amazon: produto embute ?tag= na longUrl mandada ao getShortUrl (senão o amzn.to nasce sem tag)', async () => {
+  let seenLongUrl = null
+  const restore = mockAxiosOnce(async (url, options) => {
+    if (url.includes('sitestripe/getShortUrl')) {
+      seenLongUrl = options.params.longUrl
+      assert.equal(options.params.tag, CREDS.tag)
+      return { status: 200, data: { shortUrl: 'https://amzn.to/3taggedOK' }, headers: {} }
+    }
+    return { status: 200, request: { res: { responseUrl: LONG_URL } }, config: { url: LONG_URL } }
+  })
+  try {
+    const result = await convert(LONG_URL, CREDS)
+    assert.deepEqual(result, { url: 'https://amzn.to/3taggedOK', linkKind: 'product' })
+    assert.equal(
+      seenLongUrl,
+      `${LONG_URL}?tag=${CREDS.tag}`,
+      'a longUrl enviada ao SiteStripe precisa carregar ?tag= — sem isso o amzn.to gerado não credita clique nenhum',
+    )
+  } finally {
+    restore()
+  }
+})
+
+test('Amazon: fallback de produto não duplica ?tag= depois de a longUrl já ter a tag', async () => {
+  const restore = mockAxiosOnce(async (url) => {
+    if (url.includes('sitestripe/getShortUrl')) {
+      return { status: 401, data: { error: 'unauthorized' }, headers: {} }
+    }
+    return { status: 200, request: { res: { responseUrl: LONG_URL } }, config: { url: LONG_URL } }
+  })
+  try {
+    const result = await convert(LONG_URL, CREDS)
+    assert.equal(result.url, `${LONG_URL}?tag=${CREDS.tag}`)
+    assert.equal((result.url.match(/[?&]tag=/g) || []).length, 1, 'só pode haver um ?tag= na URL final')
+  } finally {
+    restore()
+  }
+})

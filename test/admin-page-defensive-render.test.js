@@ -35,7 +35,7 @@ test('admin page normaliza coleções opcionais antes de renderizar listas vinda
     'asArray(systemMetrics?.recentErrors).slice',
     'Object.entries(asPlainObject(sessionTelemetry?.summary))',
     'asArray(sessionTelemetry?.events).slice',
-    'asArray(users?.users).map',
+    'sortByDateField(asArray(users?.users), usersSort)',
     'asArray(sessions?.sessions).map',
     'asArray(logs?.logs).map',
   ]

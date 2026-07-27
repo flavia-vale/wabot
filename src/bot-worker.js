@@ -552,6 +552,16 @@ async function loadConfig() {
 
   if (user.accessExpiresAt && user.accessExpiresAt < new Date()) {
     if (process.send) process.send({ type: 'status', data: 'blocked' })
+    // Sem isso, o WaSession.status fica preso no último valor antes do
+    // vencimento (normalmente 'connected') — o health monitor do supervisor só
+    // busca sessões com status IN ('connected','connecting') pra ressuscitar, e
+    // nunca vê que essa conta está permanentemente bloqueada. Resultado: fork
+    // → detecta vencido → sai → 15s depois o health monitor tenta de novo →
+    // loop infinito de restart/quarentena (RCA 2026-07, contas com trial
+    // vencido e sessão que estava conectada antes de vencer).
+    await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected' }).catch(err => {
+      logger.warn({ err: String(err?.message ?? err) }, 'Falha ao persistir status de acesso expirado')
+    })
     logger.error('Acesso expirado — bot bloqueado')
     process.exit(0)
   }

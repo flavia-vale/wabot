@@ -1541,6 +1541,53 @@ comissão).
 ANTES de ligar em prod.** Testes: `test/shopee-affiliate-info.test.js` e
 `test/converters-amazon.test.js`.
 
+## Amazon: a tag PRECISA estar dentro da `longUrl` mandada ao SiteStripe (RCA 2026-07 — não regredir)
+
+**Sintoma:** cliente relatou **zero cliques** no painel de afiliados da Amazon
+entre 16 e 23/07, voltando ao normal em 24/07. Não era queda de envio: o
+`MessageLog` mostra 100-160 ofertas Amazon/dia saindo com sucesso o período
+inteiro, com `tag=` correta no fallback.
+
+**Causa raiz:** em `convert()` (`src/converters/amazon.js`), o caminho de
+**produto** mandava ao endpoint `sitestripe/getShortUrl` a `longUrl` crua vinda
+de `buildLongUrl` — `https://www.amazon.com.br/dp/<ASIN>`, **sem `?tag=`** —
+confiando apenas no query param `tag=` da própria chamada para creditar. O
+SiteStripe encurta a `longUrl` **como recebeu**: o `amzn.to` gerado nascia sem
+tag de afiliado. A oferta saía bonita, era clicada, e **nenhum clique era
+creditado**. O caminho de **cupom** (`convertStoreUrlWithoutAsin`) sempre
+embutiu a tag via `withAffiliateTag` — a assimetria entre os dois caminhos era
+o próprio bug.
+
+**Correlação que confirmou em produção** (conta `flavia.vale@usp.br`,
+tag `fafaciane-20`):
+
+| Período       | Formato do link enviado | Cliques |
+|---------------|-------------------------|---------|
+| 02/07 – 12/07 | `?tag=` longo (fallback, cookie expirado) | sim |
+| 13/07 – 23/07 | `amzn.to` (sessão SiteStripe viva)        | **zero** |
+| 24/07 – hoje  | `?tag=` longo (cookie expirou de novo)    | sim |
+
+O atraso de 13/07 (início do `amzn.to`) para 16/07 (zero cliques) é o rastro dos
+links `?tag=` antigos ainda circulando nos grupos e morrendo aos poucos.
+
+**Armadilha de diagnóstico (não repetir):** o cookie do SiteStripe expirado
+**mascara** o bug — sessão morta força o fallback `?tag=`, que credita
+normalmente. Ou seja, **quanto mais saudável a sessão Amazon, pior a comissão**.
+Renovar o cookie sem esta correção faz os cliques sumirem de novo. Se um relato
+de "parei de receber comissão" coincidir com sessão SiteStripe saudável,
+suspeitar disto antes de qualquer outra coisa.
+
+**Não regredir:** nunca mandar `longUrl` sem `?tag=` para o `getShortUrl`, em
+NENHUM caminho de conversão. E, como a `longUrl` já carrega a tag, os fallbacks
+não podem reanexar `?tag=` (viraria `?tag=x?tag=x`). Testes:
+`test/converters-amazon.test.js` ("produto embute ?tag= na longUrl mandada ao
+getShortUrl" e "fallback de produto não duplica ?tag=").
+
+**Diagnóstico reutilizável:** `scripts/diag-amazon-clicks.mjs` (estado da
+credencial + formato do link enviado por dia + probe ao vivo) e
+`scripts/diag-amazon-shortlink-tag.mjs` (segue os `amzn.to` já enviados e lê a
+tag final). Os dois são read-only e não imprimem segredo.
+
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 
 O **Painel "Criar oferta"** (`/m/op/offer` → `POST
