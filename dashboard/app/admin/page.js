@@ -1372,6 +1372,72 @@ export default function AdminPage() {
   const [onlineSort, setOnlineSort] = useState('default')
   const sortedOnlineUsers = useMemo(() => sortByDateField(asArray(online?.users), onlineSort), [online, onlineSort])
   const atRiskUsers = useMemo(() => asArray(users?.users).filter(user => asArray(user.riskFlags).length), [users])
+
+  const gestaoClientesSection = (
+    <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h2 className="text-lg font-black text-gray-900">Gestão de clientes</h2>
+          <p className="text-sm text-gray-500">{users?.total ?? 0} clientes encontrados · {atRiskUsers.length} com alertas nesta página</p>
+        </div>
+        <form onSubmit={applyFilters} className="flex flex-col gap-2 sm:flex-row">
+          <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar por email" className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
+          <select value={risk} onChange={event => setRisk(event.target.value)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
+            {RISK_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+          <button className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black">Filtrar</button>
+        </form>
+      </div>
+
+      <SortBar value={usersSort} onChange={setUsersSort} />
+
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="text-xs uppercase tracking-wide text-gray-400">
+            <tr>
+              <th className="px-3 py-2">Cliente</th>
+              <th className="px-3 py-2">Origem</th>
+              <th className="px-3 py-2">Plano</th>
+              <th className="px-3 py-2">Operação</th>
+              <th className="px-3 py-2">Enviados com sucesso/Erros (24h)</th>
+              <th className="px-3 py-2">Atividade</th>
+              <th className="px-3 py-2">Riscos</th>
+              <th className="px-3 py-2">Ação</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {sortedUsers.map(user => (
+              <tr key={user?.id ?? user?.email} className={`align-top ${asArray(user?.riskFlags).length ? 'bg-amber-50/40' : ''}`}>
+                <td className="px-3 py-3">
+                  <p className="font-bold text-gray-900">{user?.email ?? 'Cliente sem e-mail'}</p>
+                  <p className="text-xs text-gray-500">{user?.contactPhone || 'Sem celular'} · {user?.status ?? '—'}</p>
+                  <p className="mt-1 text-[11px] text-gray-400">Criado em: {formatDate(user?.createdAt)}</p>
+                </td>
+                <td className="px-3 py-3"><OriginCell origin={user?.origin} /></td>
+                <td className="px-3 py-3"><p className="font-semibold">{user?.plan ?? '—'}</p><p className="text-xs text-gray-500">{user?.accessStatus ?? '—'}</p></td>
+                <td className="px-3 py-3 text-xs text-gray-600">
+                  <p>Bot: {user?.botRunning ? 'rodando' : 'parado'}</p>
+                  <p>WA: {user?.waSession?.status || '—'}</p>
+                  <p>Origem/Destino: {user?.groupCounts?.monitor ?? 0}/{user?.groupCounts?.post ?? 0}</p><div className="mt-1"><CredentialHealthBadges health={user?.credentialHealth} compact /></div>
+                </td>
+                <td className="px-3 py-3 text-xs text-gray-600">
+                  <p className="font-semibold text-emerald-700">{formatNumber(user?.successCount24h ?? 0)} sucesso</p>
+                  <p className="font-semibold text-red-700">{formatNumber(user?.errorCount24h ?? 0)} erro</p>
+                </td>
+                <td className="px-3 py-3 text-xs text-gray-600">
+                  <p>Último acesso ao site: {formatDate(user?.lastActivityAt)}</p>
+                  <p>Último envio: {formatDate(user?.lastMessageAt)}</p>
+                </td>
+                <td className="px-3 py-3"><RiskBadges flags={user?.riskFlags} /></td>
+                <td className="px-3 py-3"><button onClick={() => openUserDetail(user?.id)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Drill-down</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+
   const canAccessCustomerSuccess = useMemo(() => {
     const email = resolveAdminEmail(admin)
     const permissions = Array.isArray(admin?.permissions) ? admin.permissions : []
@@ -1665,6 +1731,8 @@ export default function AdminPage() {
           </SectionErrorBoundary>
         )}
 
+        {tab === 'sucesso' && gestaoClientesSection}
+
         {(tab === 'inicio' || tab === 'sucesso') && success && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1791,66 +1859,7 @@ export default function AdminPage() {
 
         {tab === 'inicio' && <WhatsAppDisconnectedTable data={waDisconnectedUsers} onOpenDetail={openUserDetail} onRecordContact={recordContact} />}
 
-        {(tab === 'inicio' || tab === 'sucesso') && (
-        <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
-          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <h2 className="text-lg font-black text-gray-900">Gestão de clientes</h2>
-              <p className="text-sm text-gray-500">{users?.total ?? 0} clientes encontrados · {atRiskUsers.length} com alertas nesta página</p>
-            </div>
-            <form onSubmit={applyFilters} className="flex flex-col gap-2 sm:flex-row">
-              <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar por email" className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
-              <select value={risk} onChange={event => setRisk(event.target.value)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
-                {RISK_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-              <button className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black">Filtrar</button>
-            </form>
-          </div>
-
-          <SortBar value={usersSort} onChange={setUsersSort} />
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="text-xs uppercase tracking-wide text-gray-400">
-                <tr>
-                  <th className="px-3 py-2">Cliente</th>
-                  <th className="px-3 py-2">Origem</th>
-                  <th className="px-3 py-2">Plano</th>
-                  <th className="px-3 py-2">Operação</th>
-                  <th className="px-3 py-2">Atividade</th>
-                  <th className="px-3 py-2">Riscos</th>
-                  <th className="px-3 py-2">Ação</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {sortedUsers.map(user => (
-                  <tr key={user?.id ?? user?.email} className={`align-top ${asArray(user?.riskFlags).length ? 'bg-amber-50/40' : ''}`}>
-                    <td className="px-3 py-3">
-                      <p className="font-bold text-gray-900">{user?.email ?? 'Cliente sem e-mail'}</p>
-                      <p className="text-xs text-gray-500">{user?.contactPhone || 'Sem celular'} · {user?.status ?? '—'}</p>
-                      <p className="mt-1 text-[11px] text-gray-400">Criado em: {formatDate(user?.createdAt)}</p>
-                    </td>
-                    <td className="px-3 py-3"><OriginCell origin={user?.origin} /></td>
-                    <td className="px-3 py-3"><p className="font-semibold">{user?.plan ?? '—'}</p><p className="text-xs text-gray-500">{user?.accessStatus ?? '—'}</p></td>
-                    <td className="px-3 py-3 text-xs text-gray-600">
-                      <p>Bot: {user?.botRunning ? 'rodando' : 'parado'}</p>
-                      <p>WA: {user?.waSession?.status || '—'}</p>
-                      <p>Origem/Destino: {user?.groupCounts?.monitor ?? 0}/{user?.groupCounts?.post ?? 0}</p><div className="mt-1"><CredentialHealthBadges health={user?.credentialHealth} compact /></div>
-                    </td>
-                    <td className="px-3 py-3 text-xs text-gray-600">
-                      <p>Atividade: {formatDate(user?.effectiveLastActivityAt)}</p>
-                      <p>Último envio: {formatDate(user?.lastMessageAt)}</p>
-                      <p>Erros 24h: {user?.errorCount24h ?? 0}</p>
-                    </td>
-                    <td className="px-3 py-3"><RiskBadges flags={user?.riskFlags} /></td>
-                    <td className="px-3 py-3"><button onClick={() => openUserDetail(user?.id)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Drill-down</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-        )}
+        {tab === 'inicio' && gestaoClientesSection}
 
         {selectedUser && (
           <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/40 p-4 backdrop-blur-sm" onClick={() => setSelectedUser(null)}>
