@@ -8,7 +8,7 @@ import { TERMS_VERSION, api } from '@/lib/api'
 import { resolvePostAuthRedirect } from '@/lib/onboardingProgress'
 import { Alert } from '@/components/Alert'
 import { mapAuthError, trackEvent, TRACKING_EVENTS } from '@/lib/analytics'
-import { attributionForTracking, readAttributionFromSearchParams } from '@/lib/marketing-attribution'
+import { attributionForTracking, readAttributionFromSearchParams, getFirstTouchLandingPage } from '@/lib/marketing-attribution'
 import { SUPPORT_WHATSAPP_URL } from '@/lib/marketing-content'
 import { SUPPORT_PHONE_LABEL } from '@/lib/mobilePixUtils'
 
@@ -29,6 +29,17 @@ function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value ?? '').trim())
 }
 
+
+function resolveRegisterLandingPage() {
+  if (typeof window === 'undefined') return ''
+  try {
+    const firstTouch = getFirstTouchLandingPage()
+    if (firstTouch) return firstTouch
+    return `${window.location.pathname}${window.location.search}`.slice(0, 500)
+  } catch {
+    return ''
+  }
+}
 
 function getOrCreateAffiliateVisitorId() {
   if (typeof window === 'undefined') return ''
@@ -158,7 +169,7 @@ function LoginContent() {
         ...(isRegister ? trackingAttribution : {}),
       })
       if (isRegister) {
-        await api.register(cleanName, cleanEmail, password, cleanPhone, { ...signupAttribution, ...(ref && { ref }), ...(affCode && { aff_code: affCode, affiliateVisitorId: getOrCreateAffiliateVisitorId() }), termsAccepted, termsVersion: TERMS_VERSION })
+        await api.register(cleanName, cleanEmail, password, cleanPhone, { ...signupAttribution, landingPage: resolveRegisterLandingPage(), ...(ref && { ref }), ...(affCode && { aff_code: affCode, affiliateVisitorId: getOrCreateAffiliateVisitorId() }), termsAccepted, termsVersion: TERMS_VERSION })
         trackEvent(TRACKING_EVENTS.SIGNUP_SUCCESS, { origin: 'login_page', has_ref: Boolean(ref), ...trackingAttribution })
       } else {
         await api.login(cleanEmail, password)

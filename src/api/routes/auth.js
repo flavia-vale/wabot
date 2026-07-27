@@ -14,6 +14,21 @@ import { DEFAULT_TERMS_VERSION, getEffectiveTermsVersion } from '../../legalTerm
 // bcrypt — diferença de timing que permite enumerar e-mails cadastrados.
 const TIMING_SAFE_DUMMY_HASH = bcrypt.hashSync('timing-safe-placeholder', 10)
 
+// US2 (specs/010-seo-lead-capture): mesma regra de sanitização de
+// `dashboard/lib/marketing-attribution.js` (sanitizeAttributionValue), reimplementada aqui
+// porque backend (src/) e dashboard (dashboard/) são árvores/pacotes separados sem import
+// compartilhado. Usada só para `landingPage` -> `landing_page` na metadata do evento
+// `signup_created` (sem migration; FR-014).
+const ATTRIBUTION_UNSAFE_VALUE_RE = /[^\p{L}\p{N}._~:@/-]/gu
+export function sanitizeAttributionValue(value, maxLength = 500) {
+  if (value === undefined || value === null) return ''
+  return String(value)
+    .trim()
+    .replace(ATTRIBUTION_UNSAFE_VALUE_RE, '-')
+    .replace(/-+/g, '-')
+    .slice(0, maxLength)
+}
+
 // A-1 (anti brute-force): dois mapas de tentativas. `loginAttempts` é por
 // (email|ip) — pega o caso comum de força bruta de um IP. `loginAttemptsByEmail`
 // é só por email — pega ataque DISTRIBUÍDO (mesma conta atacada de vários IPs),
@@ -303,6 +318,7 @@ export async function authRoutes(app) {
       utm_term: utmTerm,
       conversion_prompt_id: conversionPromptId,
       conversion_prompt_variant: conversionPromptVariant,
+      landingPage: rawLandingPage,
       coupon_code: couponCode,
       aff_code: rawAffCode,
       affiliateVisitorId: rawAffiliateVisitorId,
@@ -317,6 +333,8 @@ export async function authRoutes(app) {
     const contactPhone = normalizedPhone
     const hasPassword = typeof rawPassword === 'string' && rawPassword.trim().length > 0
     const password = hasPassword ? String(rawPassword) : ''
+    // Ausência MUST NOT bloquear o cadastro (FR-005) — string vazia é o fallback.
+    const landingPage = sanitizeAttributionValue(rawLandingPage)
 
     if (!name || !contactPhone) return reply.code(400).send({ error: 'nome e celular obrigatórios' })
     if (termsAccepted !== true) return reply.code(400).send({ error: 'Aceite os Termos de Uso e ciência de riscos para criar a conta' })
@@ -453,6 +471,7 @@ export async function authRoutes(app) {
         utm_campaign: utmCampaign || null,
         utm_content: utmContent || null,
         utm_term: utmTerm || null,
+        landing_page: landingPage,
         conversion_prompt_id: conversionPromptId || null,
         conversion_prompt_variant: conversionPromptVariant || null,
         terms_version: acceptedTermsVersion,

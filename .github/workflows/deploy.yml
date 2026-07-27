@@ -226,3 +226,13 @@ jobs:
           echo "❌ Falha ao limpar o cache da Cloudflare após 3 tentativas. O DEPLOY foi concluído; refaça o purge manualmente no painel da Cloudflare (Caching → Purge Everything)."
           exit 1
 
+      # Notifica o IndexNow (Bing, Yandex, DuckDuckGo) com a lista de URLs
+      # públicas indexáveis a cada deploy de PRODUÇÃO. A chave de verificação
+      # (arquivo público em dashboard/public/<chave>.txt) não é segredo — é
+      # publicada de propósito para o IndexNow validar posse do domínio — por
+      # isso não depende de secret do GitHub. Só roda em main; staging não é
+      # indexado. Falha aqui não bloqueia o deploy (a etapa de SSH já rodou).
+      - name: Notificar IndexNow (produção)
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+        run: node scripts/notify-indexnow.mjs
+
