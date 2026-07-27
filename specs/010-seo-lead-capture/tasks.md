@@ -170,9 +170,10 @@ com UTMs vazios e a landing ainda registrada.
       da allowlist → sanitizado; string maior que 500 → truncada). Seguir o padrão de mock/DB
       já usado em testes existentes de `src/api/routes/auth.js` (ex.
       `test/auth-rate-limit.test.js`) para não depender de banco real.
-- [ ] T017 [US2] Validar manualmente em staging o roteiro completo do quickstart (US2):
-      entrar por URL de artigo com UTMs → cadastrar → consultar via T015/T013 → repetir sem
-      UTMs e confirmar landing ainda registrada com UTMs vazios (SC-004, FR-005, FR-007).
+- [~] T017 [US2] DIFERIDA (validação manual pós-deploy — não executável no ciclo automatizado):
+      validar em staging o roteiro completo do quickstart (US2): entrar por URL de artigo com
+      UTMs → cadastrar → consultar via T015/T013 → repetir sem UTMs e confirmar landing ainda
+      registrada com UTMs vazios (SC-004, FR-005, FR-007). Rodar após merge em `develop`.
 
 **Checkpoint**: US2 completa e testável de forma independente de US1/US3/US4 — cadastros novos
 já carregam landing/UTMs consultáveis por landing.
@@ -206,10 +207,11 @@ pelo fluxo existente).
 - [X] T020 [US3] Revisar toda a cópia visível de `dashboard/components/marketing/LeadMagnetCard.jsx`
       (título, texto, rótulos, botão) e confirmar que nenhum texto usa nome interno diferente
       de **BOTinho** (FR-012); ajustar se necessário.
-- [ ] T021 [US3] Validar manualmente (staging ou local) o roteiro do quickstart (US3): abrir
-      artigo → bloco visível dentro do `ArticleShell` → submeter e-mail inválido/vazio → ver
-      mensagem amigável sem navegação → submeter e-mail válido → confirmar redirecionamento
-      para `/login?mode=register&email=...` com fluxo de cadastro/lead prosseguindo (SC-005).
+- [~] T021 [US3] DIFERIDA (validação manual pós-deploy — não executável no ciclo automatizado):
+      validar (staging ou local) o roteiro do quickstart (US3): abrir artigo → bloco visível
+      dentro do `ArticleShell` → submeter e-mail inválido/vazio → ver mensagem amigável sem
+      navegação → submeter e-mail válido → confirmar redirecionamento para
+      `/login?mode=register&email=...` com fluxo de cadastro/lead prosseguindo (SC-005).
 
 **Checkpoint**: US3 completa e testável de forma independente — todo artigo captura lead com
 validação amigável e marca correta.
@@ -259,7 +261,8 @@ quickstart completo antes do PR `develop` → validação em staging.
       concentradas em `dashboard/` + `src/api/routes/auth.js` + `src/api/routes/admin.js` +
       `docs/`) — nenhuma dependência nova de Redis/BullMQ, nenhum processo PM2 novo, nenhum
       aumento de heap.
-- [ ] T026 Rodar o roteiro completo de `specs/010-seo-lead-capture/quickstart.md` (US1-US4) em
+- [~] T026 DIFERIDA (validação manual pós-deploy — não executável no ciclo automatizado):
+      rodar o roteiro completo de `specs/010-seo-lead-capture/quickstart.md` (US1-US4) em
       staging (`http://178.105.54.0:3006`) após merge em `develop`, confirmando os critérios de
       aceite de cada seção antes de abrir o PR `develop` → `main`.
 - [X] T027 [P] Atualizar `specs/010-seo-lead-capture/quickstart.md` (ou anexar nota) com a
