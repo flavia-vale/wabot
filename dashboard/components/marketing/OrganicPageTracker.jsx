@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { TRACKING_EVENTS, trackEvent } from '@/lib/analytics'
+import { captureFirstTouchLandingPage } from '@/lib/marketing-attribution'
 
 function sanitizeSeoRoute(route = {}) {
   return {
@@ -18,6 +19,7 @@ export function OrganicPageTracker({ route }) {
   useEffect(() => {
     const seoContext = sanitizeSeoRoute(route)
     trackEvent(TRACKING_EVENTS.ORGANIC_PAGE_VIEW, seoContext)
+    captureFirstTouchLandingPage(`${window.location.pathname}${window.location.search}`)
 
     function handleClick(event) {
       const target = event.target?.closest?.('[data-seo-cta]')

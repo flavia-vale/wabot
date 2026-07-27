@@ -89,3 +89,38 @@ git diff --stat                      # mudanças concentradas em dashboard/ + au
 Branch → validar em **staging** (`http://178.105.54.0:3006`) rodando os passos US1–US4 →
 PR `develop` → após validado, PR `develop` → `main`. Sem tocar `.env`, portas ou deploy além do
 necessário.
+
+---
+
+## Evidência final (T002/T027 — "antes" vs "depois")
+
+### Antes (baseline vermelha, capturada em T002)
+
+```
+$ npm run guard:seo-registry
+ERRO: rotas públicas sem entrada no seo-registry:
+ - /cadastro
+ - /parcerias
+
+$ npm run lint:seo-metadata
+ERRO: títulos duplicados em rotas indexáveis:
+ - "como comecar como afiliado no whatsapp sem ter grupo grande" => /conteudos, /blog/comecar-afiliado-whatsapp-sem-grupo-grande
+```
+
+### Depois (T003-T008 aplicados)
+
+```
+$ npm run guard:seo-registry
+OK: todas as rotas públicas detectadas estão cobertas no seo-registry.
+
+$ npm run lint:seo-metadata
+OK: 78/96 rotas indexáveis avaliadas com metadata única (title/description).
+
+$ npm run validate:seo-p0
+OK (agrega os dois comandos acima) — exit 0.
+```
+
+Os dois erros conhecidos (`/cadastro`/`/parcerias` ausentes e o par duplicado `/conteudos` ×
+`/blog/comecar-afiliado-whatsapp-sem-grupo-grande`) foram resolvidos por T003-T005 e confirmados
+por T006-T008. Sitemap confirmado (T022) incluindo `/cadastro`, `/parcerias` e as 6 páginas de
+blog novas via `getIndexableSeoRoutes()`; `robots.js` não bloqueia nenhuma delas (T023).

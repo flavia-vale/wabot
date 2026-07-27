@@ -75,6 +75,55 @@ export function readAttributionFromSearchParams(searchParams) {
   return attribution
 }
 
+const FIRST_TOUCH_LANDING_COOKIE = 'first_touch_landing'
+const FIRST_TOUCH_LANDING_MAX_LENGTH = 500
+
+function readCookie(name) {
+  if (typeof document === 'undefined' || typeof document.cookie !== 'string') return ''
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`))
+  return match ? decodeURIComponent(match[1]) : ''
+}
+
+function writeCookie(name, value) {
+  if (typeof document === 'undefined') return
+  const encoded = encodeURIComponent(value)
+  document.cookie = `${name}=${encoded}; path=/; max-age=15552000; SameSite=Lax`
+}
+
+/**
+ * Grava, só na primeira vez da sessão (semântica first-touch, D4), a página de entrada
+ * atual num cookie `SameSite=Lax`. Não sobrescreve se já existir. Degrada graciosamente
+ * (nunca lança) quando `document`/cookies não estão disponíveis ou estão bloqueados.
+ */
+export function captureFirstTouchLandingPage(pathnameAndSearch) {
+  try {
+    if (typeof document === 'undefined') return ''
+    const existing = readCookie(FIRST_TOUCH_LANDING_COOKIE)
+    if (existing) return existing
+
+    const raw = String(pathnameAndSearch ?? '')
+    const safeValue = sanitizeAttributionValue(raw, FIRST_TOUCH_LANDING_MAX_LENGTH)
+    if (!safeValue) return ''
+
+    writeCookie(FIRST_TOUCH_LANDING_COOKIE, safeValue)
+    return safeValue
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Lê a página de entrada first-touch persistida por `captureFirstTouchLandingPage`.
+ * Degrada graciosamente (retorna string vazia) se cookies não estiverem disponíveis.
+ */
+export function getFirstTouchLandingPage() {
+  try {
+    return readCookie(FIRST_TOUCH_LANDING_COOKIE)
+  } catch {
+    return ''
+  }
+}
+
 export function attributionForTracking(attribution = {}) {
   return Object.fromEntries(
     Object.entries(attribution)
