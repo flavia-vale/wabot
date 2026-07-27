@@ -127,6 +127,26 @@ function QuickChecklist() {
   )
 }
 
+function VideoBanner({ href, title, desc }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="flex items-center gap-4 rounded-2xl border border-red-200 bg-red-50 p-4 hover:bg-red-100 transition-colors"
+    >
+      <span className="flex-shrink-0 flex items-center justify-center w-11 h-11 rounded-full bg-red-600 text-white">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-black text-red-900">{title}</span>
+        <span className="block text-xs text-red-800 mt-0.5">{desc}</span>
+      </span>
+      <span className="ml-auto flex-shrink-0 text-xs font-bold text-red-700 underline underline-offset-2">Assistir ▶</span>
+    </a>
+  )
+}
+
 function TutorialInlineImage({ src, alt }) {
   return (
     <a href={src} target="_blank" rel="noreferrer" className="mx-auto block w-full max-w-lg overflow-hidden rounded-xl border border-gray-200 bg-white">
@@ -163,6 +183,11 @@ export default function TutorialPage() {
           <Badge color="blue">Dificuldade: fácil</Badge>
           <Badge color="yellow">Ordem recomendada: ML → Amazon → Shopee</Badge>
         </div>
+        <VideoBanner
+          href="https://youtu.be/6F2AUM88FKk?is=Tafcm6QdDvJo9UgH"
+          title="🎥 Prefere assistir? Vídeo-aula: Como cadastrar suas credenciais"
+          desc="Shopee, Mercado Livre, Amazon e Magazine Luiza passo a passo em vídeo."
+        />
         <Tip>
           Este guia cobre <strong>Mercado Livre</strong>, <strong>Amazon</strong> e <strong>Shopee</strong>. Você não precisa configurar todas de uma vez — faça uma por vez.
         </Tip>
