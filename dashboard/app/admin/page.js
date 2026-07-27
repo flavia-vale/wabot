@@ -84,6 +84,26 @@ function SortBar({ value, onChange, options = DATE_SORT_OPTIONS }) {
   )
 }
 
+// Telefone mascarado (ex.: "551*****99", vindo de sanitizeUser para quem não
+// tem support:write) não vira link válido — trata como ausente em vez de
+// montar um wa.me quebrado.
+function normalizePhoneForWa(phone) {
+  const raw = String(phone || '').trim()
+  if (!raw || raw.includes('*')) return null
+  const digits = raw.replace(/\D/g, '')
+  return digits || null
+}
+
+function WhatsAppButton({ phone, className = '' }) {
+  const digits = normalizePhoneForWa(phone)
+  if (!digits) {
+    return <span className={`rounded-lg bg-gray-100 px-3 py-2 text-center text-xs font-bold text-gray-400 ${className}`}>Sem WhatsApp</span>
+  }
+  return (
+    <a href={`https://wa.me/${digits}`} target="_blank" rel="noreferrer" className={`rounded-lg bg-green-600 px-3 py-2 text-center text-xs font-bold text-white hover:bg-green-700 ${className}`}>WhatsApp</a>
+  )
+}
+
 const SUCCESS_REASON_LABELS = {
   missing_phone: 'Sem celular',
   paid_stale_48h: 'Pago parado 48h',
@@ -1429,7 +1449,12 @@ export default function AdminPage() {
                   <p>Último envio: {formatDate(user?.lastMessageAt)}</p>
                 </td>
                 <td className="px-3 py-3"><RiskBadges flags={user?.riskFlags} /></td>
-                <td className="px-3 py-3"><button onClick={() => openUserDetail(user?.id)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Drill-down</button></td>
+                <td className="px-3 py-3">
+                  <div className="flex flex-col gap-2">
+                    <button onClick={() => openUserDetail(user?.id)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Drill-down</button>
+                    <WhatsAppButton phone={user?.contactPhone} />
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -1770,6 +1795,7 @@ export default function AdminPage() {
                     <div className="flex gap-2">
                       <button onClick={() => openUserDetail(customer?.id)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Drill-down</button>
                       <button onClick={() => recordContact(customer)} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700">Registrar contato</button>
+                      <WhatsAppButton phone={customer?.contactPhone} />
                     </div>
                   </div>
                 </div>
@@ -1943,7 +1969,12 @@ export default function AdminPage() {
                         <td className={`px-3 py-3 text-right font-black tabular-nums ${errors ? 'text-red-700' : 'text-gray-400'}`}>{formatNumber(errors)}</td>
                         <td className={`px-3 py-3 text-right font-black tabular-nums ${drops ? 'text-red-700' : 'text-gray-400'}`}>{formatNumber(drops)}</td>
                         <td className="px-3 py-3 text-xs text-gray-600"><p><strong>{formatDurationMs((user?.automaticOfflineMs24h || 0) + (user?.ongoingOfflineMs24h || 0))}</strong> offline auto</p><p>{formatNumber(user?.manualReconnects24h)} ação(ões) manuais</p></td>
-                        <td className="px-3 py-3 text-right"><button onClick={() => openOnlineDetail(user?.id)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Drill-down</button></td>
+                        <td className="px-3 py-3 text-right">
+                          <div className="flex flex-col items-end gap-2">
+                            <button onClick={() => openOnlineDetail(user?.id)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Drill-down</button>
+                            <WhatsAppButton phone={user?.contactPhone} />
+                          </div>
+                        </td>
                       </tr>
                     )
                   })}
