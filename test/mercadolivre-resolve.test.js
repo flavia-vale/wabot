@@ -758,3 +758,45 @@ test('proteção preservada: mismatch REAL via redirect direto para outro produt
   assert.match(result.url, /partner_id=475630078/)
   assert.doesNotMatch(result.url, /REALMISS1/)
 })
+
+// ===== Endereço do card destacado: usar o do ML, não fabricar (RCA 2026-07-28) =====
+// Achado em produção: quando o card destacado NÃO tem `product_id` (anúncio sem
+// catálogo), o código fabricava `produto.mercadolivre.com.br/<id>-x-_JM` — sem
+// hífen depois de MLB e com slug inventado "-x-". Aberto do próprio VPS, esse
+// endereço respondeu 404. O HTML do ML traz o endereço REAL no campo `url` do
+// card (barras escapadas como /). HTML abaixo é fiel ao capturado em
+// produção (vitrine /social/oreidapromobr, tênis Fila MLB4224584697).
+const FEATURED_NO_PRODUCT_ID_HTML = `<!doctype html><html><body>
+<div class="card-featured"></div>
+<script>window.__PRELOADED_STATE__={"polycards":[{"unique_id":"q","metadata":{"id":"MLB4224584697","variation_id":"","url":"produto.mercadolivre.com.br\\u002FMLB-4224584697-tnis-fila-vector-masculino-confortavel-estilo-esportivo-_JM","card_type":"featured","category_id":"MLB1276"}}]};</script>
+</body></html>`
+
+test('extractFeaturedSocialProduct: sem product_id, usa o endereço REAL do card (não fabrica -x-_JM que dá 404)', () => {
+  const url = extractFeaturedSocialProduct(FEATURED_NO_PRODUCT_ID_HTML)
+  assert.equal(url, 'https://produto.mercadolivre.com.br/MLB-4224584697-tnis-fila-vector-masculino-confortavel-estilo-esportivo-_JM')
+  assert.doesNotMatch(url, /-x-_JM/, 'não pode voltar a fabricar o endereço com slug inventado')
+})
+
+test('extractFeaturedSocialProduct: card com product_id continua indo para /p/ (não regride o caminho seguro)', () => {
+  assert.equal(extractFeaturedSocialProduct(FEATURED_SHARE_HTML), 'https://www.mercadolivre.com.br/p/MLB22797411')
+})
+
+test('extractFeaturedSocialProduct: url de host que não é do ML é ignorada (não seguimos endereço de terceiro)', () => {
+  const html = `<html><body><div class="card-featured"></div><script>{"polycards":[{"metadata":{"id":"MLB4224584697","url":"https://site-malicioso.example.com\\u002FMLB-4224584697-x-_JM"}}]}</script></body></html>`
+  assert.equal(extractFeaturedSocialProduct(html), 'https://produto.mercadolivre.com.br/MLB4224584697-x-_JM')
+})
+
+test('extractFeaturedSocialProduct: url apontando para outro MLB é ignorada (anti-mismatch)', () => {
+  const html = `<html><body><div class="card-featured"></div><script>{"polycards":[{"metadata":{"id":"MLB4224584697","url":"produto.mercadolivre.com.br\\u002FMLB-9999999999-outro-produto-_JM"}}]}</script></body></html>`
+  assert.equal(extractFeaturedSocialProduct(html), 'https://produto.mercadolivre.com.br/MLB4224584697-x-_JM')
+})
+
+test('extractFeaturedSocialProduct: endereço do card sai limpo (sem parâmetros de rastreio)', () => {
+  const html = `<html><body><div class="card-featured"></div><script>{"polycards":[{"metadata":{"id":"MLB4224584697","url":"produto.mercadolivre.com.br\\u002FMLB-4224584697-tenis-_JM?matt_tool=123&c_id=/home/card-featured/element"}}]}</script></body></html>`
+  assert.equal(extractFeaturedSocialProduct(html), 'https://produto.mercadolivre.com.br/MLB-4224584697-tenis-_JM')
+})
+
+test('extractFeaturedSocialProduct: card sem url utilizável mantém o fallback antigo (não quebra quem já funcionava)', () => {
+  const html = `<html><body><div class="card-featured"></div><script>{"polycards":[{"metadata":{"id":"MLB4224584697","category_id":"MLB1276"}}]}</script></body></html>`
+  assert.equal(extractFeaturedSocialProduct(html), 'https://produto.mercadolivre.com.br/MLB4224584697-x-_JM')
+})
