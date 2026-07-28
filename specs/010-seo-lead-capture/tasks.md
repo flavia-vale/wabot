@@ -368,3 +368,35 @@ Com mais de uma pessoa disponível:
   portas ou deploy.
 - Commitar após cada tarefa ou grupo lógico; parar em qualquer checkpoint de story para validar
   antes de seguir.
+
+---
+
+## Phase 8: Code Review Fixes
+
+**Objetivo**: fechar os achados da fase `review` (2026-07-28). Ambos afetam US2 (P1) —
+a atribuição de cadastro por página de entrada não cumpre o cenário de aceitação principal
+da spec. Não reescrever/renumerar tasks anteriores.
+
+- [ ] T028 [US2] Fazer a captura first-touch rodar nas páginas de artigo do blog per achado
+      "US2 AS-1/FR-004 não é satisfeito para entrada por `/blog/<artigo>`": hoje
+      `captureFirstTouchLandingPage()` só é chamada dentro de
+      `dashboard/components/marketing/OrganicPageTracker.jsx`, e nenhuma das 19 páginas de
+      `dashboard/app/blog/*` (renderizadas por `dashboard/app/blog/_preservationBlogPosts.js`
+      → `dashboard/components/marketing/ArticleShell.jsx`) monta esse componente. Resultado:
+      quem entra por um artigo nunca grava o cookie `first_touch_landing` e o cadastro é
+      atribuído à própria página de cadastro, exatamente o oposto do objetivo da US2
+      ("descobrir qual artigo orgânico gera leads"). Cobrir também `/comparativos` e demais
+      rotas indexáveis sem tracker. Opções: (a) montar `OrganicPageTracker` no `ArticleShell`
+      com o `route` correspondente do seo-registry, ou (b) chamar apenas
+      `captureFirstTouchLandingPage()` num efeito leve do `ArticleShell` — a opção (a) muda o
+      volume de `ORGANIC_PAGE_VIEW`, avaliar antes de escolher. (review)
+- [ ] T029 [US2] Corrigir o fallback de landing em `resolveRegisterLandingPage()`
+      (`dashboard/app/login/page.js`) per achado "fallback grava a query string inteira da
+      página de cadastro e estoura a cardinalidade do relatório": o fallback devolve
+      `${window.location.pathname}${window.location.search}`, ou seja `/login?mode=register&
+      utm_*&aff=...`; depois da sanitização do backend (`?`/`&`/`=` viram `-`) cada cadastro
+      vira um valor praticamente único. Como `GET /marketing/signups-by-landing`
+      (`src/api/routes/admin.js`) agrupa por valor exato com `LIMIT 50`, o card "Cadastros por
+      página de entrada" enche de linhas de contagem 1 e deixa de responder a FR-007/SC-004.
+      Usar só o `pathname` (ou string vazia) no fallback e revalidar o card no painel admin.
+      (review)
