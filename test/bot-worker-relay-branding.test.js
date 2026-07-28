@@ -70,10 +70,14 @@ test('bot-worker consulta MessageLog para dedup compartilhada entre processos', 
     /const dedupLookupUrls = \[\.\.\.new Set\(\[primary\.url, primary\.converted\]\.filter\(Boolean\)\)\]/,
     'dedup DB deve consultar link original e convertido',
   )
+  // RCA 2026-07 (mensagem espelhada 5x): a checagem deixou de ser um único
+  // `status: { in: [...] } + sentAt na janela` e passou a ter dois ramos —
+  // já-entregue DENTRO da janela do link, e ainda-PENDENTE independente da
+  // janela (job pode estar adiado há horas pela preservação do destino).
   assert.match(
     botWorkerSource,
-    /db\.messageLog\.findFirst\(\{[\s\S]*userId,[\s\S]*destGroup: destJid,[\s\S]*status: \{ in: \['queued', 'sending', 'success'\] \}/,
-    'dedup DB deve bloquear envios recentes já enfileirados/enviados para mesmo usuário e destino',
+    /db\.messageLog\.findFirst\(\{[\s\S]*userId,[\s\S]*destGroup: destJid,[\s\S]*status: 'success'[\s\S]*status: \{ in: \['queued', 'sending'\] \}/,
+    'dedup DB deve bloquear envios recentes já enviados E os ainda pendentes para mesmo usuário e destino',
   )
   assert.match(
     botWorkerSource,

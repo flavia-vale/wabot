@@ -169,6 +169,21 @@ const GLOBAL_DEDUP_REDIS_SAFETY_CAP_MS = Math.max(60_000, Number(process.env.GLO
 // bug real reportado em produção.
 const SEND_DEDUP_RESERVATION_TTL_MS = Math.max(30_000, Number(process.env.SEND_DEDUP_RESERVATION_TTL_MS) || 5 * 60_000)
 
+// Idade máxima considerada para um envio AINDA PENDENTE (status queued/sending)
+// contar como duplicata na dedup por DB.
+//
+// RCA 2026-07 (mensagem espelhada 5x): a dedup por DB só enxergava linhas com
+// `sentAt` DENTRO da janela do link (120min). Só que `sentAt` de uma linha
+// `queued` é o momento em que ela foi criada, e um job pode ficar horas parado
+// na fila esperando a preservação do destino (horário de funcionamento, burst
+// cap, daily cap — ver deferSendJob). Passados os 120min, a linha pendente
+// ficava INVISÍVEL pra dedup: a mesma oferta reofertada pelo WhatsApp entrava
+// de novo, e quando a janela do destino abria as duas (ou cinco) saíam em
+// sequência, espaçadas pelo throttle. Uma mensagem que ainda NÃO foi entregue
+// é duplicata independente da idade — só limitamos por este teto pra que uma
+// linha presa em `queued` por bug não bloqueie o destino pra sempre.
+const PENDING_DEDUP_MAX_AGE_MS = Math.max(60_000, Number(process.env.PENDING_DEDUP_MAX_AGE_MS) || 24 * 60 * 60_000)
+
 async function globalDedupCheckAndSet(key, ttlMs) {
   const r = ensureRuntimeRedis()
   if (!r) return { duplicate: false }
@@ -1980,8 +1995,23 @@ async function startBotInner() {
   // `destJid:convertedUrl` (independe da fonte), então duas automações com o
   // mesmo produto pro mesmo grupo colidem e só a 1ª passa.
   // Default 120min; override via DEDUP_LINK_WINDOW_MS.
-  const dedupeWindowMs = Math.max(1_000, Number(process.env.DEDUP_MSGID_WINDOW_MS) || 300_000)
-  const linkDedupWindowMs = Math.max(dedupeWindowMs, Number(process.env.DEDUP_LINK_WINDOW_MS) || 120 * 60_000)
+  //
+  // RCA 2026-07 (mesma mensagem do grupo monitorado espelhada 5x ao longo de
+  // ~6h, sem a fonte ter repostado): a janela de msgIds era 5min. `msg.key.id`
+  // é ÚNICO por mensagem no WhatsApp — lembrar dele por 5min só protege contra
+  // redelivery imediato. Quando o WhatsApp reoferece a MESMA mensagem horas
+  // depois (reconexão/offline sync/retry-receipt travado — ver RCAs de
+  // reconexão neste AGENTS.md), a única barreira restante era a janela de LINK
+  // (120min), que já tinha expirado — e a mensagem era espelhada de novo.
+  // Agora msgIds guarda 24h: como a chave é `remoteJid:key.id`, uma janela
+  // longa NUNCA bloqueia mensagem legítima diferente (ids não se repetem);
+  // só torna impossível espelhar a MESMA mensagem duas vezes no mesmo dia.
+  // Teto de entradas em MAX_DEDUP_MSGID_ENTRIES (src/messageDedup.js).
+  const dedupeWindowMs = Math.max(1_000, Number(process.env.DEDUP_MSGID_WINDOW_MS) || 24 * 60 * 60_000)
+  // NÃO derivar a janela de link da de msgIds (era `Math.max(dedupeWindowMs,
+  // ...)`): com msgIds em 24h isso arrastaria o link pra 24h junto e prenderia
+  // reposts legítimos de oferta/cupom. As duas janelas são independentes.
+  const linkDedupWindowMs = Math.max(1_000, Number(process.env.DEDUP_LINK_WINDOW_MS) || 120 * 60_000)
   // Cupom/campanha (primary.linkKind === 'coupon') usa janela CURTA própria:
   // é comum a MESMA URL de cupom (ex.: página fixa de campanha) ser repostada
   // várias vezes ao dia com códigos/textos diferentes — a janela longa
@@ -3087,15 +3117,30 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               where: {
                 userId,
                 destGroup: destJid,
-                status: { in: ['queued', 'sending', 'success'] },
-                sentAt: { gte: new Date(Date.now() - effectiveDedupWindowMs) },
                 OR: [
                   { originalUrl: { in: dedupLookupUrls } },
                   { convertedUrl: { in: dedupLookupUrls } },
                 ],
+                // Dois critérios independentes (ver PENDING_DEDUP_MAX_AGE_MS):
+                // 1) já ENTREGUE dentro da janela do linkKind;
+                // 2) ainda PENDENTE na fila — duplicata independente da idade,
+                //    porque o job pode estar adiado há horas pela preservação
+                //    do destino e ainda vai sair.
+                AND: [{
+                  OR: [
+                    {
+                      status: 'success',
+                      sentAt: { gte: new Date(Date.now() - effectiveDedupWindowMs) },
+                    },
+                    {
+                      status: { in: ['queued', 'sending'] },
+                      sentAt: { gte: new Date(Date.now() - PENDING_DEDUP_MAX_AGE_MS) },
+                    },
+                  ],
+                }],
               },
               orderBy: { sentAt: 'desc' },
-              select: { id: true, sentAt: true },
+              select: { id: true, sentAt: true, status: true },
             }).catch(err => {
               logger.warn({ err: err?.message, destJid }, 'Dedup DB lookup falhou; seguindo com dedup local/global')
               return null
@@ -3113,7 +3158,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             dedupWindowMs: effectiveDedupWindowMs,
             ageMs: dbAgeMs,
           })
-          logger.info({ destJid, recentLogId: recentDbDuplicate.id, dedupKeyCount: dedupKeys.length, ageMs: dbAgeMs, windowMs: effectiveDedupWindowMs, layer: 'db' }, 'Duplicata DB ignorada')
+          logger.info({ destJid, recentLogId: recentDbDuplicate.id, recentStatus: recentDbDuplicate.status, dedupKeyCount: dedupKeys.length, ageMs: dbAgeMs, windowMs: effectiveDedupWindowMs, layer: 'db' }, 'Duplicata DB ignorada')
           continue
         }
 
@@ -3546,10 +3591,26 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       pruneDedupStore(dedup, now, { msgIds: dedupeWindowMs, links: linkDedupWindowMs })
       const dedupKey = buildIncomingDedupKey(msg)
       if (dedupKey && hasRecentDedupEntry(dedup.msgIds, dedupKey, now, dedupeWindowMs)) {
-        logger.info({ dedupKey, jid: msg.key.remoteJid }, 'Mensagem duplicada ignorada')
+        logger.info({ dedupKey, jid: msg.key.remoteJid, upsertType: type, ageMs: msgTs ? now - msgTs : null, windowMs: dedupeWindowMs }, 'Mensagem duplicada ignorada')
         continue
       }
       if (rememberDedupEntry(dedup, dedupKey, now)) scheduleDedupSave(dedup)
+
+      // Forense de reoferta (RCA 2026-07 — mensagem espelhada 5x): sem esta
+      // linha era impossível provar, pelo bot.log, se o WhatsApp reofertou a
+      // MESMA mensagem (mesmo key.id) ou se a fonte republicou — o log de
+      // upsert só trazia {type, count}. Volume proporcional ao de mensagens
+      // aceitas (as duplicatas param no `continue` acima).
+      // hasValidTimestamp=false é o caso em que a barreira de frescor (cutoff
+      // de 5min) NÃO consegue julgar a idade e a mensagem passa mesmo velha —
+      // a proteção que resta é a janela longa de msgIds acima.
+      logger.info({
+        jid: msg.key.remoteJid,
+        msgId: msg.key.id,
+        upsertType: type,
+        hasValidTimestamp,
+        ageMs: msgTs ? now - msgTs : null,
+      }, 'Mensagem aceita para processamento')
 
       const msgId = msg.key.id || dedupKey || `${msg.key.remoteJid || 'unknown'}:${msgTsRaw || now}`
       const accepted = incomingQueue.enqueue(() => processIncomingMessage(msg, sock), {

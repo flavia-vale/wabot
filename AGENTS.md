@@ -577,6 +577,70 @@ Hoje há uma camada **cruzada por grupo de destino**, na tabela
 
 Teste: `test/offer-automation.test.js`.
 
+## Mensagem do grupo monitorado espelhada N vezes (RCA 2026-07 — não regredir)
+
+**Sintoma:** o grupo monitorado publicou UMA mensagem às 14:13. Em staging ela
+saiu 5x (14:14, 18:41, 19:42, 19:52, 20:04); em produção saiu uma vez só, mas
+5h atrasada (19:13). Mesmo código nos dois ambientes (`develop` == `main` na
+data) — a diferença é de estado/configuração, não de versão.
+
+**Duas brechas de dedup, ambas corrigidas:**
+
+1. **Janela de `msgIds` era 5min.** `remoteJid:key.id` é ÚNICO por mensagem no
+   WhatsApp, então lembrar dele só 5min protegia apenas contra redelivery
+   imediato. Quando o WhatsApp **reoferece a MESMA mensagem** horas depois
+   (reconexão/offline sync/retry-receipt travado — ver os RCAs de reconexão
+   acima), a única barreira restante era a janela de **link** (120min), que já
+   tinha expirado → a mensagem era espelhada de novo. Hoje `DEDUP_MSGID_WINDOW_MS`
+   tem default **24h**: como a chave é o id da mensagem, janela longa **nunca**
+   bloqueia mensagem legítima diferente — só torna impossível espelhar a MESMA
+   duas vezes no dia. Teto de memória em `MAX_DEDUP_MSGID_ENTRIES`
+   (`src/messageDedup.js`, 20k entradas, mantém as mais novas).
+   **Não voltar a derivar `linkDedupWindowMs` de `dedupeWindowMs`**
+   (era `Math.max(dedupeWindowMs, ...)`) — com msgIds em 24h isso arrastaria a
+   janela de link pra 24h e prenderia repost legítimo de oferta/cupom.
+2. **A dedup por DB não enxergava envio ainda PENDENTE.** A consulta filtrava
+   `sentAt` dentro da janela do link; só que `sentAt` de uma linha `queued` é o
+   momento em que ela foi criada, e um job pode ficar **horas adiado** pela
+   preservação do destino (`deferSendJob`: horário de funcionamento, burst cap,
+   daily cap). Passados os 120min a linha pendente ficava invisível pra dedup, a
+   mesma oferta entrava de novo na fila, e quando a janela do destino abria as
+   duas (ou cinco) saíam em **rajada espaçada pelo throttle** — exatamente o
+   padrão 19:42/19:52/20:04. Hoje a consulta tem dois ramos: `success` dentro de
+   `effectiveDedupWindowMs`, **ou** `queued`/`sending` dentro de
+   `PENDING_DEDUP_MAX_AGE_MS` (default 24h — teto só pra que uma linha presa em
+   `queued` por bug não bloqueie o destino pra sempre). Mensagem que ainda não
+   foi entregue é duplicata independente da idade.
+
+**Forense (o que faltava para diagnosticar):** o `bot.log` só registrava
+`messages.upsert recebido {type, count}` — sem `msgId` era impossível separar
+"WhatsApp reofertou o mesmo `key.id`" de "a fonte republicou". Agora cada
+mensagem ACEITA loga `Mensagem aceita para processamento {jid, msgId,
+upsertType, hasValidTimestamp, ageMs}` (volume proporcional ao de mensagens
+aceitas; as duplicatas param antes, no `continue`). `hasValidTimestamp:false`
+marca o caso em que a barreira de frescor (cutoff de 5min sobre
+`messageTimestamp`) **não consegue julgar a idade** e a mensagem passa mesmo
+velha — nesse caso a proteção que resta é a janela longa de `msgIds`.
+
+**Atraso de horas ≠ duplicata.** Um envio pode ficar `queued` legitimamente
+esperando a preservação do destino; o painel mostra a espera no `errorMsg` da
+linha. Antes de tratar atraso como bug, rodar o diagnóstico abaixo e conferir
+`operatingHours*`/`burstCap`/`dailyCap` do destino.
+
+**Diagnóstico (read-only, roda no VPS dentro do diretório do ambiente):**
+```bash
+cd ~/wabot-staging && node scripts/diag-mirror-duplicates.mjs <email> \
+  --since "2026-07-27 13:30" --until "2026-07-27 21:00"
+cd ~/wabot && node scripts/diag-mirror-duplicates.mjs <email> \
+  --since "2026-07-27 13:30" --until "2026-07-27 21:00"
+```
+Ele cruza `MessageLog` (incluindo pendentes), `SendDedupKey`,
+`WaConnectionEvent`, `AnalyticsEvent ops_*`, a preservação de cada destino e o
+`bot.log`, e diz explicitamente se o MESMO `key.id` foi aceito mais de uma vez.
+
+Testes: `test/mirror-duplicate-replay.test.js`,
+`test/bot-worker-relay-branding.test.js`.
+
 ## Agregação de duplicatas em `MessageLog.dedupHits`
 
 Em vez de criar N linhas de `skip:dedup_recent_link` quando a mesma
