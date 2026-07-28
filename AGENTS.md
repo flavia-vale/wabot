@@ -320,6 +320,95 @@ scripts/backup_prod.sh && pm2 stop api && cd ~/wabot && node scripts/migrate-cre
 mantém leituras funcionando em ambos os formatos. Testes:
 `test/credential-crypto.test.js`.
 
+## Modo sem cookie nas credenciais de afiliado (privacidade — canônico)
+
+Cliente reportou desconforto legítimo em cadastrar o **SSID do Mercado Livre**
+("expõe muito os dados pessoais de quem utiliza") — é o cookie de sessão da
+conta dela, e quem tem o cookie fica logado como ela até expirar.
+
+**Fato técnico que sustenta a solução: o cookie é OTIMIZAÇÃO, não requisito.**
+Sem `ssid`, `convert()` (`src/converters/mercadolivre.js`) pula a API de
+afiliados e cai no fallback `partner_id=<tag>`; sem cookie Amazon (`hasCookies`
+em `src/converters/amazon.js`) o link sai com `?tag=` longo — formato que o RCA
+"Amazon: a tag PRECISA estar dentro da longUrl" comprovou **em campo** que
+credita comissão. O cookie compra link curto (meli.la/amzn.to) e conversão de
+cupom sem produto, nada além disso.
+
+`src/credentialPrivacy.js` (módulo **puro**, sem DB/rede/crypto) transforma isso
+em escolha explícita — flag `cookielessMode` dentro do próprio JSON de
+`Credential.data` (**sem migration**, o campo é blob cifrado):
+
+- `sanitizeCredentialBody` (`src/credentialHealth.js`) aplica
+  `applyCookielessMode` **antes** de qualquer outra regra: com o modo ligado,
+  nenhum campo de sessão é persistido, nem que venha preenchido no corpo. Como o
+  PUT sobrescreve o blob inteiro, ligar o modo **apaga** o cookie já guardado.
+- `validateCredentialData` deixa de exigir os campos de cookie (só a `tag`
+  continua obrigatória — sem ela não há comissão a creditar) e devolve
+  `cookielessMode: true`, senão o painel marcaria "incompleto" para sempre.
+- `GET /credentials/{mercadolivre,amazon}/session` responde
+  `{ configured:false, alive:null, reason:'cookieless_mode' }` **sem sondar** —
+  não faz sentido alarmar "sessão expirada" para quem escolheu não dar sessão.
+- `DELETE /credentials/:platform` (novo) apaga a credencial, invalida o cache de
+  sondagem, recarrega a config do worker e é **idempotente** (200 +
+  `deleted:false` quando não havia nada). Evento `credential_deleted` na
+  allowlist de `src/analytics.js`.
+
+Campos considerados de sessão (`COOKIE_FIELDS_BY_PLATFORM`): ML `ssid`,
+`cookie`, `csrf`, `id`; Amazon `cookie`, `ubid-acbbr`, `at-acbbr`, `x-acbbr` —
+`csrf`/`id` e os nomeados entram porque são artefatos de rotação da MESMA
+sessão; apagar só o `ssid` deixaria resíduo autenticável.
+
+UI: toggle + explicação "o que fazemos com esse cookie" + botão de apagar em
+`dashboard/app/painel/ids-afiliada/page.js` (campos de cookie marcados com
+`cookieField: true` em `dashboard/lib/painel/affiliatePlatforms.js`), nota no
+tutorial e FAQ pública em `/seguranca-credenciais-afiliado`.
+
+### Garantia "nada se perde" (com ou sem o código) — travada por teste
+
+A promessa feita para a cliente no painel é literal e tem teste próprio em
+`test/credential-cookieless-nothing-lost.test.js`:
+
+1. a oferta **sempre sai** (com ou sem cookie, `convert()` nunca devolve `null`
+   por falta de credencial de sessão);
+2. o link **sempre carrega a etiqueta dela** (`partner_id` no ML, `tag=` na
+   Amazon), nos dois caminhos;
+3. o link de terceiro **nunca** é repassado (etiqueta de concorrente é
+   substituída, não preservada);
+4. ligar/desligar o modo **não leva junto** o resto (etiqueta, vitrine e demais
+   campos sobrevivem; só o código de sessão sai).
+
+Não remover esses testes: eles são o contrato do texto que a usuária lê.
+
+### Linguagem para a usuária (obrigatório nesta superfície)
+
+Nome técnico de campo **não pode chegar à tela**. Toda mensagem de credencial
+passa por `friendlyFieldName` / `describeMissingCredentials`
+(`src/credentialHealth.js`) — consumidas também por `missingCredentialMessage`
+(`offerEngine.js`) e pelo `recordConversionIssue` do `bot-worker.js`, para a
+cliente ler a MESMA frase em qualquer lugar. Vocabulário canônico: "etiqueta de
+afiliada" (nunca "tag"), "código de acesso" (nunca "cookie de sessão"/"SSID"
+solto), "link mais comprido" (nunca "?tag=/amzn.to/partner_id"), "venceu" (nunca
+"sessão expirada"). `test/painel-linguagem-leiga.test.js` falha se jargão voltar
+aos rótulos/dicas/avisos.
+
+Correção de fato importante aplicada junto: o aviso de código vencido do ML
+dizia "a geração de ofertas do ML está pausada" — **era falso** (o fallback
+segue enviando) e assustava à toa.
+
+**Não regredir:** não voltar a exigir cookie na validação quando o modo está
+ligado; não sondar sessão nesse modo; não persistir campo de sessão que chegue
+no corpo com a flag ligada; não voltar a imprimir `missing` cru na tela.
+**Pendência de validação em campo (staging/celular): confirmar que o
+`partner_id` do ML credita comissão de produto** — só temos prova de campo do
+lado Amazon (`?tag=`). Por isso os textos prometem "a oferta continua saindo com
+a sua comissão" apoiados no caminho comprovado, e o painel admite explicitamente
+o que se perde no ML (link curto + cupom sem produto). Testes:
+`test/credential-cookieless-mode.test.js`,
+`test/credentials-cookieless-route.test.js`,
+`test/credential-cookieless-nothing-lost.test.js`,
+`test/painel-ids-afiliada-privacy.test.js`,
+`test/painel-linguagem-leiga.test.js`.
+
 ## A-1 — Proteção contra brute-force no login (canônico)
 
 `src/api/routes/auth.js` rastreia tentativas de login em **dois** mapas
@@ -576,6 +665,100 @@ Hoje há uma camada **cruzada por grupo de destino**, na tabela
    envio vira uma oferta só — a exceção por preço só atua entre execuções.
 
 Teste: `test/offer-automation.test.js`.
+
+## Mensagem do grupo monitorado espelhada N vezes (RCA 2026-07 — não regredir)
+
+**Sintoma:** o grupo monitorado publicou UMA mensagem às 14:13. Em staging ela
+saiu 5x (14:14, 18:41, 19:42, 19:52, 20:04); em produção saiu uma vez só, mas
+5h atrasada (19:13). Mesmo código nos dois ambientes (`develop` == `main` na
+data) — a diferença é de estado/configuração, não de versão.
+
+**Causa de primeira ordem — a mensagem estava sendo VISTA várias vezes.**
+Confirmado na fonte do Baileys 6.7.23 instalado (`lib/Socket/messages-recv.js`):
+
+```js
+await upsertMessage(msg, node.attrs.offline ? 'append' : 'notify')
+```
+
+Mensagem **reentregue** pelo WhatsApp (fila offline, drenada a cada reconexão)
+chega com `type: 'append'`; ao vivo chega como `'notify'`. O handler de
+`messages.upsert` aceitava as duas vias, e a única barreira era o cutoff de
+idade — que o Baileys monta com `messageTimestamp: +stanza.attrs.t`
+(`lib/Utils/decode-wa-message.js`). **Sem o atributo `t` no stanza isso vira
+`NaN`**, e o guard antigo (`if (msgTs && msgTs < cutoff) continue`) era
+**pulado**: reentrega de horas antes passava direto para o pipeline.
+
+Hoje a decisão vive em `shouldProcessIncomingMessage`
+(`src/core/incomingFreshness.js`, puro/testado), chamada no chokepoint do
+`messages.upsert`:
+
+- `append` (reentrega/histórico) **sem** timestamp confiável → **descarta**;
+- qualquer via com timestamp mais velho que `INCOMING_MAX_AGE_MS` (5min) → **descarta**;
+- `notify` (ao vivo) sem timestamp → **processa** (é a via da mensagem nova;
+  descartar perderia mensagem legítima).
+
+**Não descartar `append` em bloco:** mensagem de **canal (`@newsletter`) ao
+vivo** também chega como `append` (`Processed plaintext newsletter message`, no
+mesmo arquivo do Baileys). Ela vem com `t` válido e recente, então passa pela
+regra de idade — a distinção é a idade, não o tipo.
+
+O descarte **loga motivo e idade** (`Mensagem descartada: reentrega/mensagem
+velha não reentra no pipeline`). Antes era um `continue` mudo, o que tornava
+impossível ver reoferta acontecendo no `bot.log`.
+
+**Não esticar a janela de `msgIds` para compensar.** Ela vale **5min** de
+propósito (`DEDUP_MSGID_WINDOW_MS`) — é a rede contra re-emissão imediata do
+mesmo id, não a barreira contra reoferta horas depois; janelas curtas são o que
+a semântica de cupom depende. **Não voltar a derivar `linkDedupWindowMs` de
+`dedupeWindowMs`** (era `Math.max(dedupeWindowMs, ...)`): amarrar as duas faz
+qualquer aumento em msgIds arrastar a janela de link junto e prender repost
+legítimo.
+
+**Segunda brecha, no lado do ENVIO:**
+
+1. **A dedup por DB não enxergava envio ainda PENDENTE.** A consulta filtrava
+   `sentAt` dentro da janela do link; só que `sentAt` de uma linha `queued` é o
+   momento em que ela foi criada, e um job pode ficar **horas adiado** pela
+   preservação do destino (`deferSendJob`: horário de funcionamento, burst cap,
+   daily cap). Passados os 120min a linha pendente ficava invisível pra dedup, a
+   mesma oferta entrava de novo na fila, e quando a janela do destino abria as
+   duas (ou cinco) saíam em **rajada espaçada pelo throttle** — exatamente o
+   padrão 19:42/19:52/20:04. Hoje a consulta tem dois ramos: `success` dentro de
+   `effectiveDedupWindowMs`, **ou** `queued`/`sending` dentro de
+   `pendingDedupMaxAgeMs` (produto: `PENDING_DEDUP_MAX_AGE_MS`, default 24h —
+   teto só pra que uma linha presa em `queued` por bug não bloqueie o destino
+   pra sempre). Mensagem que ainda não foi entregue é duplicata independente da
+   idade. **Cupom fica de fora desse teto** (`pendingDedupMaxAgeMs` cai para a
+   janela curta do cupom): a mesma URL de campanha é reposta várias vezes ao dia
+   com códigos diferentes, e segurar a segunda porque a primeira ainda não saiu
+   perderia oferta legítima.
+
+**Forense (o que faltava para diagnosticar):** o `bot.log` só registrava
+`messages.upsert recebido {type, count}` — sem `msgId` era impossível separar
+"WhatsApp reofertou o mesmo `key.id`" de "a fonte republicou". Agora cada
+mensagem ACEITA loga `Mensagem aceita para processamento {jid, msgId,
+upsertType, hasValidTimestamp, ageMs}` e cada mensagem DESCARTADA loga o motivo
+(`stale` / `replay_without_timestamp`) com a idade. Volume proporcional ao de
+mensagens do socket.
+
+**Atraso de horas ≠ duplicata.** Um envio pode ficar `queued` legitimamente
+esperando a preservação do destino; o painel mostra a espera no `errorMsg` da
+linha. Antes de tratar atraso como bug, rodar o diagnóstico abaixo e conferir
+`operatingHours*`/`burstCap`/`dailyCap` do destino.
+
+**Diagnóstico (read-only, roda no VPS dentro do diretório do ambiente):**
+```bash
+cd ~/wabot-staging && node scripts/diag-mirror-duplicates.mjs <email> \
+  --since "2026-07-27 13:30" --until "2026-07-27 21:00"
+cd ~/wabot && node scripts/diag-mirror-duplicates.mjs <email> \
+  --since "2026-07-27 13:30" --until "2026-07-27 21:00"
+```
+Ele cruza `MessageLog` (incluindo pendentes), `SendDedupKey`,
+`WaConnectionEvent`, `AnalyticsEvent ops_*`, a preservação de cada destino e o
+`bot.log`, e diz explicitamente se o MESMO `key.id` foi aceito mais de uma vez.
+
+Testes: `test/incoming-freshness.test.js`, `test/mirror-duplicate-replay.test.js`,
+`test/bot-worker-relay-branding.test.js`.
 
 ## Agregação de duplicatas em `MessageLog.dedupHits`
 

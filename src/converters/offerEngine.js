@@ -16,7 +16,7 @@
 import { detectLinks } from '../detector.js'
 import { convertLink as defaultConvertLink } from './index.js'
 import { fetchProductInfo as defaultFetchProductInfo } from './productInfoScraper.js'
-import { parseCredentialData, validateCredentialData } from '../credentialHealth.js'
+import { describeMissingCredentials, parseCredentialData, validateCredentialData } from '../credentialHealth.js'
 
 export const CONVERSION_TIMEOUT_MS = 15_000
 
@@ -34,8 +34,7 @@ export function buildCredentialsMap(credentials) {
 }
 
 export function missingCredentialMessage(validation) {
-  const missing = validation.missing?.length ? `: ${validation.missing.join(', ')}` : ''
-  return `Credenciais de ${validation.label} ausentes ou incompletas${missing}. Abra a aba Credenciais para configurar antes de converter links dessa loja.`
+  return describeMissingCredentials(validation)
 }
 
 export function conversionFailureFromContext(context, err) {

@@ -40,32 +40,61 @@ function SessionWarning({ platformId, sessionStatus }) {
   if (!sessionStatus || sessionStatus.alive !== false) return null
   if (platformId === 'amazon') {
     return (
-      <div className="pnl-note-box is-error" style={{ marginBottom: 12 }} role="alert">
-        <strong>Cookies da Amazon expirados.</strong> A sessão não está mais autenticando — as ofertas ainda saem,
-        mas com o link longo (?tag=) em vez do amzn.to. Exporte um cookie novo da sua sessão logada e salve para
-        voltar a gerar o link curto.
+      <div className="pnl-note-box is-warn" style={{ marginBottom: 12 }} role="alert">
+        <strong>O código de acesso da Amazon venceu.</strong> Suas ofertas continuam saindo normalmente e a comissão
+        continua sendo sua — só que o link fica mais comprido. Para voltar a encurtar, cole um código novo aqui embaixo.
+        Se preferir, deixe assim mesmo: nada se perde.
       </div>
     )
   }
   return (
-    <div className="pnl-note-box is-error" style={{ marginBottom: 12 }} role="alert">
-      <strong>Sessão expirada.</strong> O cookie SSID do Mercado Livre não está mais válido — a geração de ofertas do ML está pausada.
-      Cole um SSID novo da sua sessão ativa e salve para voltar a funcionar.
+    <div className="pnl-note-box is-warn" style={{ marginBottom: 12 }} role="alert">
+      <strong>O código de acesso do Mercado Livre venceu.</strong> Suas ofertas continuam saindo e a comissão continua
+      sendo sua — só que o link fica mais comprido e cupons sem produto deixam de ser convertidos. Para voltar ao link
+      curto, cole um código novo aqui embaixo.
     </div>
   )
 }
 
-function PlatformCard({ platform, initialData, onSave, disabled, sessionStatus }) {
+// Explica, na tela onde o dado é pedido, o que fazemos com o código de acesso.
+// A dúvida "isso expõe meus dados pessoais?" é legítima e não se resolve com
+// texto tranquilizador solto: fica junto do campo, com o botão de apagar ao lado.
+// Linguagem simples de propósito — quem usa o painel quer divulgar oferta, não
+// aprender vocabulário técnico.
+function CookiePrivacyDetails({ platform }) {
+  if (!platform.supportsCookielessMode) return null
+  return (
+    <details className="pnl-help" style={{ marginBottom: 12 }}>
+      <summary>Esse código expõe meus dados pessoais?</summary>
+      <ul style={{ margin: '6px 0 0', paddingLeft: 16 }}>
+        <li>Ele serve <strong>só para uma coisa</strong>: montar o link da oferta já com a sua comissão.</li>
+        <li>Fica guardado <strong>trancado (criptografado)</strong> e não é repassado para ninguém.</li>
+        <li>Não compramos nada, não mudamos nada na sua conta e não lemos suas conversas.</li>
+        <li>Você <strong>apaga quando quiser</strong>, no botão lá embaixo. Sair da sua conta na loja também derruba o código na hora.</li>
+        <li>
+          Não quer guardar esse código? Marque a opção abaixo. <strong>Nada se perde:</strong> suas ofertas continuam
+          saindo com a sua comissão — só que o link fica mais comprido.
+        </li>
+      </ul>
+    </details>
+  )
+}
+
+function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessionStatus }) {
   const [draft, setDraft] = useState({})
   const [dirty, setDirty] = useState(false)
   const [visible, setVisible] = useState({})
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [feedback, setFeedback] = useState(null) // { type, message, warnings }
   const [fieldErrors, setFieldErrors] = useState({})
 
   const values = dirty ? draft : (initialData ?? {})
   const status = CRED_STATUS[getPlatformStatus(platform, values)]
-  const isDisabled = disabled || saving
+  const cookieless = !!platform.supportsCookielessMode && values.cookielessMode === true
+  const visibleFields = platform.fields.filter((f) => !(cookieless && f.cookieField))
+  const hasStoredCredential = !!initialData && Object.keys(initialData).length > 0
+  const isDisabled = disabled || saving || deleting
 
   function update(key, value) {
     setFeedback(null)
@@ -74,9 +103,43 @@ function PlatformCard({ platform, initialData, onSave, disabled, sessionStatus }
     setDirty(true)
   }
 
+  // Ligar o modo sem cookie limpa os campos de sessão no formulário na hora —
+  // o backend também os descarta ao salvar (sanitizeCredentialBody), mas a
+  // usuária precisa VER o valor sumir, não confiar que sumiu.
+  function toggleCookieless(next) {
+    setFeedback(null)
+    const base = { ...(dirty ? draft : (initialData ?? {})) }
+    if (next) {
+      for (const f of platform.fields) {
+        if (f.cookieField) delete base[f.key]
+      }
+      setFieldErrors({})
+    }
+    setDraft({ ...base, cookielessMode: next })
+    setDirty(true)
+  }
+
+  async function handleDelete() {
+    if (!window.confirm(
+      `Apagar os dados da ${platform.label}?\n\nEles saem daqui agora. Suas ofertas dessa loja param de sair até você cadastrar de novo — e cadastrar leva menos de um minuto.`,
+    )) return
+    setDeleting(true)
+    setFeedback(null)
+    try {
+      const result = await onDelete(platform.id)
+      setDraft({})
+      setDirty(false)
+      setFeedback({ type: 'success', message: result?.message || 'Credencial apagada.' })
+    } catch (err) {
+      setFeedback({ type: 'error', message: err?.message || 'Não foi possível apagar a credencial.' })
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   async function submit(e) {
     e.preventDefault()
-    const missing = platform.fields.filter((f) => f.required !== false && !String(values[f.key] ?? '').trim())
+    const missing = visibleFields.filter((f) => f.required !== false && !String(values[f.key] ?? '').trim())
     if (missing.length) {
       setFieldErrors(Object.fromEntries(missing.map((f) => [f.key, `${f.label} é obrigatório.`])))
       setFeedback({ type: 'error', message: `Preencha os campos obrigatórios de ${platform.label}.` })
@@ -104,12 +167,35 @@ function PlatformCard({ platform, initialData, onSave, disabled, sessionStatus }
         <span className={`pnl-tag ${status.cls}`}>{status.label}</span>
       </div>
       {platform.instructions && <p className="pnl-card-note" style={{ marginBottom: 12 }}>{platform.instructions}</p>}
-      <SessionWarning platformId={platform.id} sessionStatus={sessionStatus} />
+      {!cookieless && <SessionWarning platformId={platform.id} sessionStatus={sessionStatus} />}
       <PlatformActionLinks links={platform.actionLinks} />
-      {platform.platformWarning && <div className="pnl-note-box is-warn" style={{ marginBottom: 12 }}>{platform.platformWarning}</div>}
+      {platform.platformWarning && !cookieless && <div className="pnl-note-box is-warn" style={{ marginBottom: 12 }}>{platform.platformWarning}</div>}
+
+      <CookiePrivacyDetails platform={platform} />
+
+      {platform.supportsCookielessMode && (
+        <div className="pnl-note-box is-info" style={{ marginBottom: 12 }}>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: isDisabled ? 'default' : 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={cookieless}
+              onChange={(e) => toggleCookieless(e.target.checked)}
+              disabled={isDisabled}
+              style={{ marginTop: 3 }}
+            />
+            <span>
+              <strong>Não quero guardar meu código de acesso.</strong> Guardamos só a sua etiqueta de afiliada — nada da sua conta da loja.
+              {platform.cookielessNote && <><br />{platform.cookielessNote}</>}
+              {cookieless && (
+                <><br /><em>Pode mudar de ideia quando quiser: é só desmarcar e colar o código de novo.</em></>
+              )}
+            </span>
+          </label>
+        </div>
+      )}
 
       <div className="pnl-grid" style={{ gap: 12 }}>
-        {platform.fields.map((f) => {
+        {visibleFields.map((f) => {
           const hidden = f.sensitive && !visible[f.key]
           const id = `${platform.id}-${f.key}`
           return (
@@ -164,6 +250,18 @@ function PlatformCard({ platform, initialData, onSave, disabled, sessionStatus }
       <button type="submit" className="pnl-btn is-primary" style={{ marginTop: 16, width: '100%', justifyContent: 'center' }} disabled={isDisabled}>
         {saving ? 'Salvando…' : 'Salvar'}
       </button>
+
+      {hasStoredCredential && (
+        <button
+          type="button"
+          className="pnl-btn"
+          style={{ marginTop: 8, width: '100%', justifyContent: 'center', color: 'var(--danger)' }}
+          onClick={handleDelete}
+          disabled={isDisabled}
+        >
+          {deleting ? 'Apagando…' : `Apagar meus dados da ${platform.label}`}
+        </button>
+      )}
     </form>
   )
 }
@@ -179,6 +277,10 @@ export default function IdsAfiliadaPage() {
   // Checa a validade do SSID do ML (sessão de afiliado). Só roda quando há
   // cookie cadastrado — o endpoint faz um request autenticado ao ML.
   function refreshMlSession(data) {
+    // Modo sem cookie: não há sessão para checar (o endpoint responde
+    // `cookieless_mode`), então nem chamamos — evita request inútil e qualquer
+    // chance de alarme "sessão expirada" para quem optou por não dar o SSID.
+    if (data?.cookielessMode === true) { setMlSession(null); return }
     if (!(data?.ssid || data?.cookie)) { setMlSession(null); return }
     api.mercadolivreSession()
       .then((status) => setMlSession(status))
@@ -189,6 +291,7 @@ export default function IdsAfiliadaPage() {
   // (o cookie completo OU o at-acbbr legado). O endpoint faz um getShortUrl
   // autenticado no SiteStripe.
   function refreshAmazonSession(data) {
+    if (data?.cookielessMode === true) { setAmazonSession(null); return }
     if (!(data?.tag && (data?.cookie || data?.['at-acbbr']))) { setAmazonSession(null); return }
     api.amazonSession()
       .then((status) => setAmazonSession(status))
@@ -220,12 +323,27 @@ export default function IdsAfiliadaPage() {
     return result
   }
 
+  async function handleDelete(platform) {
+    const result = await api.deleteCredential(platform)
+    setCredMap((m) => {
+      const next = { ...(m || {}) }
+      delete next[platform]
+      return next
+    })
+    if (platform === 'mercadolivre') setMlSession(null)
+    if (platform === 'amazon') setAmazonSession(null)
+    return result
+  }
+
   const loading = credMap === null && !loadError
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 640, margin: '0 auto' }}>
       <div className="pnl-note-box is-info">
-        Esses dados são usados apenas para gerar seus links de afiliado com a sua comissão. Não compartilhe suas credenciais fora do painel.
+        Tudo o que você cola aqui serve só para uma coisa: montar seus links de oferta já com a sua comissão. Fica guardado trancado
+        (criptografado) e você apaga quando quiser. <strong>Prefere não guardar o código de acesso da loja?</strong> Marque a opção
+        &quot;não quero guardar meu código&quot; no cartão da loja — suas ofertas continuam saindo do mesmo jeito, só com o link mais
+        comprido. Fora daqui, não passe esses dados para ninguém.
       </div>
 
       {loadError && (
@@ -246,6 +364,7 @@ export default function IdsAfiliadaPage() {
                 platform={p}
                 initialData={credMap?.[p.id]}
                 onSave={handleSave}
+                onDelete={handleDelete}
                 disabled={!!loadError}
                 sessionStatus={p.id === 'mercadolivre' ? mlSession : p.id === 'amazon' ? amazonSession : null}
               />
