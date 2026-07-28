@@ -88,6 +88,10 @@ export const ANALYTICS_EVENTS = new Set([
   // auto-refresh — precisa de ação manual (ex.: cliente sair/reentrar no
   // grupo). Nunca automático: só visibilidade para decisão humana.
   'ops_wa_group_desync_unresolved',
+  // `failure reason=405` do WhatsApp: recusa de login/registro por versão do WA
+  // Web cortada pelo servidor. Atinge todas as sessões ao mesmo tempo (RCA
+  // 2026-07-28) — é o sinal que separa incidente global de problema de chip.
+  'ops_wa_version_rejected',
   // US6 (009-affiliate-improvements-r1): a promoção pending→eligible parou de
   // avançar (comissões com eligibleAt vencido há mais que o limiar) — sinal
   // operacional de que o cron de reconciliação de pagamentos parou ou está

@@ -10,7 +10,7 @@ import makeWASocket, {
 import { Boom } from '@hapi/boom'
 import NodeCache from '@cacheable/node-cache'
 import { readFileSync, mkdirSync } from 'fs'
-import { rm, writeFile, readdir } from 'fs/promises'
+import { rm, rename, writeFile, readdir } from 'fs/promises'
 import { dirname } from 'path'
 
 import logger from './logger.js'
@@ -55,6 +55,8 @@ import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/prese
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
 import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
+import { createPairingAuthBackup } from './core/pairingAuthBackup.js'
+import { resolveWaWebVersion, WA_VERSION_REGISTRY_URL_DEFAULT, WA_FAILURE_VERSION_REJECTED } from './core/waVersion.js'
 import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, shouldResetBackoff, registerBadSessionAndDecide, shouldResetAuthForBadSession, registerStableCloseAndDecide, shouldConsiderStableCloseCooldown, extractAckMessageIdFromStreamErrorNode, registerStuckMessageAndDecide, extractRemoteJidFromLogArgs } from './core/reconnectPolicy.js'
 import { buildAuthResetSessionPatch, buildCloseSessionPatch, buildHeartbeatSessionPatch, computeHeartbeatState, DEFAULT_MAX_RECONNECTING_MS } from './core/sessionPersistencePolicy.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
@@ -418,6 +420,11 @@ function stopHeartbeatIpc() {
 }
 
 const AUTH_DIR = getAuthInfoDir(userId)
+// A credencial atual NÃO é apagada ao iniciar o pareamento — vai para um
+// backup e volta se o pareamento falhar antes de o código chegar ao usuário.
+// Sem isso, um clique em "conectar" durante uma recusa do WhatsApp (405)
+// destruía a credencial boa e travava a sessão de vez (RCA 2026-07-28).
+const pairingAuthBackup = createPairingAuthBackup({ authDir: AUTH_DIR, fs: { rename, rm }, logger })
 const DEDUP_FILE = getDedupFile(userId)
 const KNOWN_CHANNELS_FILE = getKnownChannelsFile(userId)
 const DEDUP_FLUSH_DEBOUNCE_MS = 1_000
@@ -1937,21 +1944,37 @@ function calcReconnectDelayMs() {
   return calcBackoffDelayMs(reconnectAttempts, { baseMs: RECONNECT_BASE_MS, maxMs: RECONNECT_MAX_MS })
 }
 
+// Busca o registro público de versões REAIS do WA Web com o mesmo teto de
+// tempo do fetch do Baileys — a resolução de versão nunca pode segurar o boot
+// do socket.
+async function fetchWaVersionRegistry(url) {
+  const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_WA_VERSION_TIMEOUT_MS) })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
 async function fetchVersionCached() {
-  try {
-    const timeoutSignal = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('fetchLatestBaileysVersion timeout')), FETCH_WA_VERSION_TIMEOUT_MS).unref()
-    )
-    const { version } = await Promise.race([fetchLatestBaileysVersion(), timeoutSignal])
-    cachedBaileysVersion = version
-    return version
-  } catch (err) {
-    if (cachedBaileysVersion) {
-      logger.warn({ err: err?.message }, 'fetchLatestBaileysVersion falhou; usando versão cacheada')
-      return cachedBaileysVersion
-    }
-    throw err
+  const { version, source } = await resolveWaWebVersion({
+    envValue: process.env.WA_WEB_VERSION,
+    registryUrl: process.env.WA_VERSION_REGISTRY_URL ?? WA_VERSION_REGISTRY_URL_DEFAULT,
+    fetchRegistry: fetchWaVersionRegistry,
+    fetchBaileysVersion: () => Promise.race([
+      fetchLatestBaileysVersion(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('fetchLatestBaileysVersion timeout')), FETCH_WA_VERSION_TIMEOUT_MS).unref()
+      ),
+    ]),
+    cached: cachedBaileysVersion,
+    logger,
+  })
+  // A versão anunciada é a causa raiz do 405 em massa de 2026-07-28: sem esta
+  // linha no log é impossível saber, olhando um incidente, QUAL versão foi
+  // usada e de qual fonte ela veio.
+  if (!cachedBaileysVersion || cachedBaileysVersion.join('.') !== version.join('.')) {
+    logger.info({ waVersion: version.join('.'), source }, 'Versão do WhatsApp Web resolvida para o handshake')
   }
+  cachedBaileysVersion = version
+  return version
 }
 
 async function startBot() {
@@ -2131,6 +2154,9 @@ async function startBotInner() {
         if (!pairingState.ownsRequest(requestId)) return
         logger.error({ err: err.message, stack: err.stack, requestId }, 'Falha ao solicitar pairing code no socket WA')
         pairingState.clear()
+        // O código nunca chegou ao usuário: nada foi trocado no WhatsApp, então
+        // a credencial antiga continua válida e volta ao lugar.
+        await pairingAuthBackup.restore()
         if (process.send) process.send({ type: 'pairingCode', requestId, error: err.message })
       }
     })()
@@ -2207,6 +2233,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       const isConnectionReplaced = code === DisconnectReason.connectionReplaced
       const isForbidden = code === DisconnectReason.forbidden
       const isBadSession = code === DisconnectReason.badSession // 500
+      // 405 não existe no DisconnectReason do Baileys: vem cru do
+      // `<failure reason="405">` do servidor (ws.on('CB:failure')). Na prática
+      // significa "recusei seu login" e a causa observada em campo é a versão
+      // do WA Web anunciada no handshake ter sido cortada (RCA 2026-07-28).
+      const isVersionRejected = code === WA_FAILURE_VERSION_REJECTED
       const wasPairing = pairingState.suppressAutoRestart()
       // Mede a estabilidade desta sessão (quanto tempo ficou em 'open') ANTES de
       // limpar o marcador. Um `open` longo = sessão saudável que caiu; curto = flap.
@@ -2263,8 +2294,31 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           badSession: isBadSession,
           pairing: wasPairing,
           stuckMsg: Boolean(stuckMsgId),
+          versionRejected: isVersionRejected,
         },
       })
+      if (isVersionRejected) {
+        // `error.data` carrega os atributos crus do nó de failure — a única
+        // fonte do motivo real. Antes deste fix ele era descartado e o
+        // incidente aparecia no log como um `code: 405` mudo, indistinguível
+        // de queda de rede.
+        logger.error(
+          {
+            code,
+            failure: lastDisconnect?.error?.data,
+            waVersion: Array.isArray(cachedBaileysVersion) ? cachedBaileysVersion.join('.') : null,
+            userId,
+          },
+          'WhatsApp RECUSOU a conexão (failure 405) — quase sempre é a versão do WA Web anunciada no handshake sendo rejeitada pelo servidor, e atinge TODAS as sessões ao mesmo tempo. Fixe uma versão válida em WA_WEB_VERSION e reinicie. Ver AGENTS.md "405".'
+        )
+        try {
+          recordOperationalSignal('wa_version_rejected', {
+            userId,
+            code,
+            waVersion: Array.isArray(cachedBaileysVersion) ? cachedBaileysVersion.join('.') : null,
+          })
+        } catch {}
+      }
       if (isForbidden) {
         // 403/forbidden: o WhatsApp recusou a sessão — chip possivelmente
         // restringido/banido (costuma vir após flapping prolongado). Sinal
@@ -2285,6 +2339,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // completar o handshake pós-pairing e chegar em connection: 'open'.
         logger.info({ code }, 'Pairing aceito pelo WA (restartRequired 515) — reiniciando com creds novas')
         pairingState.clear()
+        // Pareamento aceito: a credencial nova é a boa, a antiga não serve mais.
+        await pairingAuthBackup.discard()
         scheduleReconnect(500, { code, reason: 'pairing_restart_required' })
       } else if (wasPairing) {
         // Diferencia dois sub-casos:
@@ -2305,9 +2361,21 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           reconnectAttempts++
           scheduleReconnect(delayMs, { code, reason: 'pairing_after_code' })
         } else {
-          // Código ainda não foi mostrado — NÃO auto-reiniciar. Se o usuário
-          // falhar em colar o código a tempo, a UI chamará novamente o endpoint.
-          logger.warn({ code }, 'WA close durante pairing pré-código (não-515) — não reiniciando automaticamente')
+          // Código ainda não foi mostrado: o pareamento não chegou a acontecer.
+          // Devolve a credencial anterior (se havia) e volta a reconectar
+          // sozinho com ela — antes deste fix a sessão ficava sem credencial E
+          // sem reconexão, travada até intervenção manual (RCA 2026-07-28).
+          const restored = await pairingAuthBackup.restore()
+          if (restored) {
+            const delayMs = calcReconnectDelayMs()
+            reconnectAttempts++
+            logger.warn({ code, delayMs }, 'WA close durante pairing pré-código — credencial anterior restaurada, retomando reconexão automática')
+            scheduleReconnect(delayMs, { code, reason: 'pairing_failed_auth_restored' })
+          } else {
+            // Sem credencial anterior (primeiro pareamento): não há o que
+            // reconectar. A UI detecta o erro e pede nova tentativa.
+            logger.warn({ code }, 'WA close durante pairing pré-código (não-515) — sem credencial anterior, não reiniciando automaticamente')
+          }
         }
       } else if (isConnectionReplaced) {
         // Outro socket assumiu a MESMA credencial (worker duplicado /
@@ -3835,6 +3903,9 @@ process.on('message', async msg => {
         requestId,
         onExpire: (expired) => {
           logger.warn({ requestId: expired.requestId }, 'Pairing window expirou sem código')
+          // Janela venceu sem código: o pareamento não aconteceu, devolve a
+          // credencial antiga para a sessão poder voltar sozinha.
+          void pairingAuthBackup.restore()
           if (process.send) process.send({ type: 'pairingCode', requestId: expired.requestId, error: 'Tempo esgotado aguardando código de pareamento' })
         },
       })
@@ -3849,18 +3920,24 @@ process.on('message', async msg => {
       // Pequena espera pra eventos 'close' propagarem antes de criar novo sock
       await new Promise(r => setTimeout(r, 300))
 
-      await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
+      // NÃO apagar: mover para backup. Se o WhatsApp recusar o pareamento
+      // antes de o código chegar ao usuário, a credencial antiga volta e a
+      // sessão retoma a reconexão automática em vez de ficar travada sem
+      // credencial nenhuma (RCA 2026-07-28).
+      await pairingAuthBackup.backup()
 
       logger.info({ requestId }, 'Iniciando socket fresh em pairing mode')
-      startBot().catch(err => {
+      startBot().catch(async err => {
         if (!pairingState.ownsRequest(requestId)) return
         logger.error({ err: err.message, requestId }, 'startBot falhou durante pairing')
         pairingState.clear()
+        await pairingAuthBackup.restore()
         if (process.send) process.send({ type: 'pairingCode', requestId, error: `Falha ao iniciar sessão: ${err.message}` })
       })
     } catch (err) {
       logger.error({ err: err.message, requestId }, 'Erro inesperado no handler de pairing')
       pairingState.clear()
+      await pairingAuthBackup.restore()
       if (process.send) process.send({ type: 'pairingCode', requestId, error: err.message })
     }
   }
