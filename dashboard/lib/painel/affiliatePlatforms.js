@@ -46,12 +46,14 @@ export const AFFILIATE_PLATFORMS = [
       },
     ],
     platformWarning: 'Para gerar link curto (amzn.to), preencha a Tag e o Cookie completo da sessão Amazon. Sem isso, a oferta ainda sai (com o link longo ?tag=), mas sem encurtar.',
+    supportsCookielessMode: true,
+    cookielessNote: 'Sem cookie, a oferta sai com o link longo (?tag=) em vez do amzn.to. A comissão continua sendo sua — é o mesmo formato que já roda sempre que a sessão expira.',
     fields: [
       { key: 'tag', label: 'ID de associado/StoreID', hint: 'Ex.: suatag-20' },
-      { key: 'cookie', label: 'Cookie completo da sessão (recomendado)', required: false, sensitive: true, hint: 'Sessão completa logada da Amazon Brasil — mais estável que os 3 cookies separados.', help: 'Logada em https://associados.amazon.com.br/ use a extensão Cookie-Editor → Export (botão no lado direito inferior) → JSON. Automaticamente o código é copiado e é só colá-lo aqui.' },
-      { key: 'ubid-acbbr', label: 'Cookie ubid-acbbr (alternativo)', required: false, hint: 'Alternativa legada ao Cookie completo. Cookie de sessão da Amazon Brasil.', sensitive: true, help: 'Só precisa preencher se NÃO usar o Cookie completo acima. DevTools → Application → Cookies → amazon.com.br → copie o valor do cookie ubid-acbbr.' },
-      { key: 'at-acbbr', label: 'Cookie at-acbbr (alternativo)', required: false, hint: 'Alternativa legada ao Cookie completo. Cookie de autenticação da Amazon Brasil.', sensitive: true, help: 'Só precisa preencher se NÃO usar o Cookie completo acima. Mesmo painel do DevTools: copie o valor do cookie at-acbbr.' },
-      { key: 'x-acbbr', label: 'Cookie x-acbbr (alternativo)', required: false, hint: 'Alternativa legada ao Cookie completo. Cookie de identificação da Amazon Brasil.', sensitive: true, help: 'Só precisa preencher se NÃO usar o Cookie completo acima. Mesmo painel do DevTools: copie o valor do cookie x-acbbr.' },
+      { key: 'cookie', label: 'Cookie completo da sessão (recomendado)', required: false, sensitive: true, cookieField: true, hint: 'Sessão completa logada da Amazon Brasil — mais estável que os 3 cookies separados.', help: 'Logada em https://associados.amazon.com.br/ use a extensão Cookie-Editor → Export (botão no lado direito inferior) → JSON. Automaticamente o código é copiado e é só colá-lo aqui.' },
+      { key: 'ubid-acbbr', label: 'Cookie ubid-acbbr (alternativo)', required: false, cookieField: true, hint: 'Alternativa legada ao Cookie completo. Cookie de sessão da Amazon Brasil.', sensitive: true, help: 'Só precisa preencher se NÃO usar o Cookie completo acima. DevTools → Application → Cookies → amazon.com.br → copie o valor do cookie ubid-acbbr.' },
+      { key: 'at-acbbr', label: 'Cookie at-acbbr (alternativo)', required: false, cookieField: true, hint: 'Alternativa legada ao Cookie completo. Cookie de autenticação da Amazon Brasil.', sensitive: true, help: 'Só precisa preencher se NÃO usar o Cookie completo acima. Mesmo painel do DevTools: copie o valor do cookie at-acbbr.' },
+      { key: 'x-acbbr', label: 'Cookie x-acbbr (alternativo)', required: false, cookieField: true, hint: 'Alternativa legada ao Cookie completo. Cookie de identificação da Amazon Brasil.', sensitive: true, help: 'Só precisa preencher se NÃO usar o Cookie completo acima. Mesmo painel do DevTools: copie o valor do cookie x-acbbr.' },
     ],
   },
   {
@@ -65,9 +67,11 @@ export const AFFILIATE_PLATFORMS = [
       },
     ],
     platformWarning: 'Para gerar link curto (meli.la), preencha Etiqueta em uso e SSID.',
+    supportsCookielessMode: true,
+    cookielessNote: 'Sem o SSID, a oferta sai com o link longo (com a sua etiqueta) em vez do link curto do Mercado Livre, e links de cupom sem produto deixam de ser convertidos. A comissão de produto continua sendo sua.',
     fields: [
       { key: 'tag', label: 'Etiqueta em uso', hint: 'Copie exatamente como aparece no Mercado Livre.', help: 'Copie a etiqueta em uso exibida no Gerador de Links do Mercado Livre.' },
-      { key: 'ssid', label: 'SSID (cookie)', hint: 'Cookie da sessão ativa do Mercado Livre.', sensitive: true, help: 'No navegador, acesse os cookies do Mercado Livre na sua sessão ativa e copie apenas o valor do cookie ssid. Não compartilhe esse valor fora do painel.' },
+      { key: 'ssid', label: 'SSID (cookie)', hint: 'Cookie da sessão ativa do Mercado Livre.', sensitive: true, cookieField: true, help: 'No navegador, acesse os cookies do Mercado Livre na sua sessão ativa e copie apenas o valor do cookie ssid. Não compartilhe esse valor fora do painel.' },
       { key: 'vitrineUrl', label: 'Link da sua vitrine (opcional)', required: false, hint: 'Usado quando um link compartilhado é a vitrine/perfil de OUTRA loja — o Mercado Livre não permite gerar link de afiliado para vitrine de terceiro.', help: 'Cole aqui o link da SUA própria vitrine/perfil de afiliada no Mercado Livre (ex.: mercadolivre.com.br/social/seu-usuario). Quando um link compartilhado for uma vitrine de outra loja (sem produto específico), em vez de descartar a mensagem o bot substitui pelo link da sua vitrine.' },
     ],
   },
@@ -91,8 +95,16 @@ export const CRED_STATUS = {
   pending: { label: 'Pendente', cls: 'is-skip' },
 }
 
+// Espelha `validateCredentialData` do backend (src/credentialHealth.js): no
+// modo sem cookie os campos de sessão deixam de ser obrigatórios, então a
+// credencial fica "Configurado" só com a tag — sem isso o painel marcaria
+// "Incompleto" para sempre e ficaria cobrando o cookie que a usuária escolheu
+// não entregar.
 export function getPlatformStatus(platform, values) {
-  const required = platform.fields.filter((field) => field.required !== false)
+  const cookieless = platform.supportsCookielessMode && values?.cookielessMode === true
+  const required = platform.fields.filter(
+    (field) => field.required !== false && !(cookieless && field.cookieField),
+  )
   const filled = required.filter((field) => String(values?.[field.key] ?? '').trim())
   if (filled.length === 0) return 'pending'
   if (filled.length < required.length) return 'incomplete'

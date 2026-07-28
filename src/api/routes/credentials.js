@@ -1,6 +1,7 @@
 import dbDefault from '../../db.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { getCredentialSaveMessage, parseCredentialData, PLATFORMS, sanitizeCredentialBody, validateCredentialData } from '../../credentialHealth.js'
+import { isCookielessMode } from '../../credentialPrivacy.js'
 import { encryptCredential } from '../../credentialCrypto.js'
 import { checkMercadoLivreSession as defaultCheckMercadoLivreSession } from '../../converters/mercadolivre.js'
 import { checkAmazonSession as defaultCheckAmazonSession } from '../../converters/amazon.js'
@@ -58,6 +59,12 @@ export async function credentialsRoutes(app, opts = {}) {
     })
     if (!cred) return { configured: false, alive: null, reason: 'not_configured' }
     const data = parseCredentialData(cred.data)
+    // Modo sem cookie: não há sessão para sondar. Responder `cookieless_mode`
+    // (em vez de sondar e devolver alive:false) evita o falso alarme "Sessão
+    // expirada" no painel para quem escolheu deliberadamente não dar o SSID.
+    if (isCookielessMode('mercadolivre', data)) {
+      return { configured: false, alive: null, reason: 'cookieless_mode' }
+    }
     const result = await checkMercadoLivreSession(data)
     app.log.debug({ userId: req.user.sub }, 'Mercado Livre session: sondagem efetiva (chamada real ao ML)')
 
@@ -104,6 +111,11 @@ export async function credentialsRoutes(app, opts = {}) {
     })
     if (!cred) return { configured: false, alive: null, reason: 'not_configured' }
     const data = parseCredentialData(cred.data)
+    // Mesmo contrato do ML acima: sem cookie cadastrado por escolha da usuária,
+    // não existe sessão para expirar — nada a sondar, nada a alarmar.
+    if (isCookielessMode('amazon', data)) {
+      return { configured: false, alive: null, reason: 'cookieless_mode' }
+    }
     const result = await checkAmazonSession(data)
     app.log.debug({ userId: req.user.sub }, 'Amazon session: sondagem efetiva (chamada real à Amazon)')
 
@@ -193,5 +205,50 @@ export async function credentialsRoutes(app, opts = {}) {
     app.log.info({ platform, configReloaded, configReloadError, workerHealth, workerMetricsError, workerRestart, workerRestartError }, 'Credencial salva; reload da config do worker solicitado')
     trackAnalyticsEventSafe({ userId: req.user.sub, event: 'credential_saved', metadata: { platform, status: validation.status } })
     return { ...cred, data: parseCredentialData(cred.data), validation, message: getCredentialSaveMessage(validation), configReloaded, configReloadError, workerHealth, workerMetricsError, workerRestart, workerRestartError }
+  })
+
+  // Apagar credencial da plataforma. Contrapartida do modo sem cookie: quem
+  // desconfia de deixar cookie/tag guardados precisa de um botão que APAGUE de
+  // verdade, na hora, sem abrir suporte. Idempotente — apagar o que já não
+  // existe responde 200 com `deleted: false` (a usuária não precisa entender
+  // 404 para saber que o dado não está mais lá).
+  app.delete('/:platform', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const { platform } = req.params
+    if (!PLATFORMS.includes(platform)) return reply.code(400).send({ error: 'Plataforma inválida' })
+
+    let deleted = false
+    try {
+      await db.credential.delete({ where: { userId_platform: { userId: req.user.sub, platform } } })
+      deleted = true
+    } catch (err) {
+      // P2025 = registro inexistente no Prisma. Qualquer outro erro é real.
+      if (err?.code !== 'P2025') throw err
+    }
+
+    if (platform === 'amazon') invalidateCachedAmazonProbe(req.user.sub)
+    if (platform === 'mercadolivre') invalidateCachedMlProbe(req.user.sub)
+
+    // Mesmo contrato do PUT: sem o reload, o worker seguiria convertendo com a
+    // credencial apagada em cache (CONFIG_CACHE_TTL_MS, ~60s). Best-effort.
+    let configReloaded = false
+    let configReloadError = null
+    try {
+      configReloaded = Boolean(await reloadConfig(req.user.sub))
+    } catch (err) {
+      configReloadError = err?.message || 'Falha ao recarregar config do worker'
+      app.log.warn({ platform, err: configReloadError }, 'Falha ao recarregar config do worker após apagar credencial')
+    }
+
+    app.log.info({ platform, deleted, configReloaded, configReloadError }, 'Credencial apagada a pedido da usuária')
+    trackAnalyticsEventSafe({ userId: req.user.sub, event: 'credential_deleted', metadata: { platform, deleted } })
+    return {
+      platform,
+      deleted,
+      configReloaded,
+      configReloadError,
+      message: deleted
+        ? 'Credencial apagada. Os dados dessa loja não estão mais guardados no BOTinho.'
+        : 'Nenhuma credencial guardada para essa loja.',
+    }
   })
 }

@@ -1,4 +1,5 @@
 import { decryptCredential } from './credentialCrypto.js'
+import { applyCookielessMode, filterRequiredFieldsForCookieless, isCookielessMode } from './credentialPrivacy.js'
 
 const PLATFORM_LABELS = {
   shopee: 'Shopee',
@@ -72,8 +73,29 @@ export function validateCredentialData(platform, data = {}) {
     }
   }
 
-  const required = REQUIRED_FIELDS[platform] ?? []
+  // Modo sem cookie (credentialPrivacy.js): a usuária optou por não entregar a
+  // sessão da loja. A credencial fica COMPLETA com a tag sozinha — o converter
+  // já cai no fallback (partner_id / ?tag=) e a comissão continua creditando.
+  // Sem isto, o painel marcaria "incompleto" para sempre e ficaria cobrando o
+  // cookie que ela decidiu não dar.
+  const cookieless = isCookielessMode(platform, data)
+  const required = cookieless
+    ? filterRequiredFieldsForCookieless(platform, REQUIRED_FIELDS[platform] ?? [])
+    : (REQUIRED_FIELDS[platform] ?? [])
   const missing = required.filter(field => !hasValue(data?.[field]))
+
+  if (cookieless) {
+    const warnings = missing.length ? [] : getFormatWarnings(platform, data)
+    return {
+      platform,
+      label: PLATFORM_LABELS[platform],
+      status: missing.length ? 'incomplete' : (warnings.length ? 'warning' : 'configured'),
+      configured: missing.length === 0,
+      cookielessMode: true,
+      missing,
+      warnings,
+    }
+  }
 
   if (platform === 'amazon') {
     // O cookie string COMPLETO da sessão (campo `cookie`) satisfaz a autenticação
@@ -104,6 +126,7 @@ export function validateCredentialData(platform, data = {}) {
     label: PLATFORM_LABELS[platform],
     status: configured ? (warnings.length ? 'warning' : 'configured') : 'incomplete',
     configured,
+    cookielessMode: false,
     missing,
     warnings,
   }
@@ -144,6 +167,9 @@ export function getCredentialSaveMessage(validation) {
   if (!validation?.configured) {
     return `Credenciais de ${validation?.label ?? 'plataforma'} incompletas. Preencha: ${(validation?.missing ?? []).join(', ')}.`
   }
+  if (validation.cookielessMode) {
+    return `Credenciais de ${validation.label} salvas no modo sem cookie: guardamos apenas a sua tag. As ofertas saem com o link longo, com a sua comissão.`
+  }
   if (validation.warnings?.length) {
     return `Credenciais de ${validation.label} salvas, mas há alertas para revisar antes do bot converter links dessa loja.`
   }
@@ -160,6 +186,13 @@ export function getCredentialSaveMessage(validation) {
 // reconstrói no primeiro createLink bem-sucedido.
 export function sanitizeCredentialBody(platform, body = {}) {
   if (!body || typeof body !== 'object') return body
+
+  // Modo sem cookie tem precedência sobre tudo: se a usuária ligou a opção,
+  // nenhum campo de sessão é persistido, nem que venha preenchido no corpo.
+  // Como o PUT sobrescreve o blob `data` inteiro, isto APAGA o cookie que já
+  // estava guardado (não é só parar de usar).
+  const cookielessBody = applyCookielessMode(platform, body)
+  if (cookielessBody !== body) return cookielessBody
 
   if (platform === 'mercadolivre') {
     const ssid = typeof body.ssid === 'string' ? body.ssid.trim() : ''

@@ -9,6 +9,8 @@ const slug = '/seguranca-credenciais-afiliado'
 const dates = getEditorialDates(slug)
 
 const layers = [
+  ['Modo sem cookie (você escolhe o que entrega)', 'Não quer cadastrar o cookie de sessão da loja? Ligue o modo sem cookie no painel: guardamos apenas a sua tag de afiliado, os campos de sessão são apagados do que fica salvo e o robô continua enviando com a sua comissão — só sem encurtar o link.'],
+  ['Apagar quando quiser, sem pedir suporte', 'Cada loja tem um botão que apaga as credenciais na hora. Encerrar as sessões dentro da própria loja também invalida imediatamente qualquer cookie já cadastrado.'],
   ['Criptografia em repouso (AES-256-GCM)', 'As credenciais das suas contas de afiliado e sua chave PIX ficam cifradas no banco de dados, não em texto puro. Mesmo em caso de acesso indevido ao banco, os valores não ficam legíveis diretamente.'],
   ['Proteção contra força bruta no login', 'Tentativas de login são limitadas por conta e por IP, com bloqueio temporário após várias tentativas falhas — reduz o risco de alguém tentar adivinhar sua senha.'],
   ['Isolamento entre staging e produção', 'Ambiente de testes e ambiente de produção usam bancos, credenciais e chaves de criptografia completamente separados — uma mudança em teste não expõe dados reais.'],
@@ -16,6 +18,14 @@ const layers = [
 ]
 
 const faq = [
+  {
+    q: 'Sou obrigada a entregar o cookie de sessão (SSID) da minha conta?',
+    a: 'Não. O cookie é uma otimização, não um requisito: ele serve para gerar o link curto da loja. Com o modo sem cookie ligado no painel, guardamos apenas a sua tag de afiliado e as ofertas saem com o link longo — a comissão continua sendo creditada para você. No Mercado Livre, links de cupom sem produto deixam de ser convertidos nesse modo.',
+  },
+  {
+    q: 'Consigo apagar minhas credenciais depois de cadastrar?',
+    a: 'Sim, a qualquer momento, pelo botão "Apagar credenciais" no cartão da loja dentro do painel. O dado sai do sistema na hora e o robô volta a operar sem ele. Encerrar as sessões dentro da própria loja também invalida qualquer cookie já cadastrado.',
+  },
   {
     q: 'Minhas credenciais de afiliado ficam salvas em texto puro?',
     a: 'Não. Ficam cifradas em repouso com AES-256-GCM. O sistema só decifra o valor no momento em que precisa usá-lo para uma operação autorizada.',

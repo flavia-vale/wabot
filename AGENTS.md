@@ -320,6 +320,60 @@ scripts/backup_prod.sh && pm2 stop api && cd ~/wabot && node scripts/migrate-cre
 mantém leituras funcionando em ambos os formatos. Testes:
 `test/credential-crypto.test.js`.
 
+## Modo sem cookie nas credenciais de afiliado (privacidade — canônico)
+
+Cliente reportou desconforto legítimo em cadastrar o **SSID do Mercado Livre**
+("expõe muito os dados pessoais de quem utiliza") — é o cookie de sessão da
+conta dela, e quem tem o cookie fica logado como ela até expirar.
+
+**Fato técnico que sustenta a solução: o cookie é OTIMIZAÇÃO, não requisito.**
+Sem `ssid`, `convert()` (`src/converters/mercadolivre.js`) pula a API de
+afiliados e cai no fallback `partner_id=<tag>`; sem cookie Amazon (`hasCookies`
+em `src/converters/amazon.js`) o link sai com `?tag=` longo — formato que o RCA
+"Amazon: a tag PRECISA estar dentro da longUrl" comprovou **em campo** que
+credita comissão. O cookie compra link curto (meli.la/amzn.to) e conversão de
+cupom sem produto, nada além disso.
+
+`src/credentialPrivacy.js` (módulo **puro**, sem DB/rede/crypto) transforma isso
+em escolha explícita — flag `cookielessMode` dentro do próprio JSON de
+`Credential.data` (**sem migration**, o campo é blob cifrado):
+
+- `sanitizeCredentialBody` (`src/credentialHealth.js`) aplica
+  `applyCookielessMode` **antes** de qualquer outra regra: com o modo ligado,
+  nenhum campo de sessão é persistido, nem que venha preenchido no corpo. Como o
+  PUT sobrescreve o blob inteiro, ligar o modo **apaga** o cookie já guardado.
+- `validateCredentialData` deixa de exigir os campos de cookie (só a `tag`
+  continua obrigatória — sem ela não há comissão a creditar) e devolve
+  `cookielessMode: true`, senão o painel marcaria "incompleto" para sempre.
+- `GET /credentials/{mercadolivre,amazon}/session` responde
+  `{ configured:false, alive:null, reason:'cookieless_mode' }` **sem sondar** —
+  não faz sentido alarmar "sessão expirada" para quem escolheu não dar sessão.
+- `DELETE /credentials/:platform` (novo) apaga a credencial, invalida o cache de
+  sondagem, recarrega a config do worker e é **idempotente** (200 +
+  `deleted:false` quando não havia nada). Evento `credential_deleted` na
+  allowlist de `src/analytics.js`.
+
+Campos considerados de sessão (`COOKIE_FIELDS_BY_PLATFORM`): ML `ssid`,
+`cookie`, `csrf`, `id`; Amazon `cookie`, `ubid-acbbr`, `at-acbbr`, `x-acbbr` —
+`csrf`/`id` e os nomeados entram porque são artefatos de rotação da MESMA
+sessão; apagar só o `ssid` deixaria resíduo autenticável.
+
+UI: toggle + explicação "o que fazemos com esse cookie" + botão de apagar em
+`dashboard/app/painel/ids-afiliada/page.js` (campos de cookie marcados com
+`cookieField: true` em `dashboard/lib/painel/affiliatePlatforms.js`), nota no
+tutorial e FAQ pública em `/seguranca-credenciais-afiliado`.
+
+**Não regredir:** não voltar a exigir cookie na validação quando o modo está
+ligado; não sondar sessão nesse modo; não persistir campo de sessão que chegue
+no corpo com a flag ligada. **Pendência de validação em campo (staging/celular):
+confirmar que o `partner_id` do ML credita comissão de produto** — só temos
+prova de campo do lado Amazon (`?tag=`). Enquanto isso não for confirmado, o
+modo sem cookie no ML deve ser apresentado como troca de link curto por
+privacidade, sem prometer paridade de comissão. Testes:
+`test/credential-cookieless-mode.test.js`,
+`test/credentials-cookieless-route.test.js`,
+`test/painel-ids-afiliada-privacy.test.js`.
+
 ## A-1 — Proteção contra brute-force no login (canônico)
 
 `src/api/routes/auth.js` rastreia tentativas de login em **dois** mapas

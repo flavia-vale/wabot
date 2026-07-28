@@ -195,6 +195,10 @@ export default function TutorialPage() {
         <Warning>
           Nunca compartilhe seus cookies, IDs, SSID, Key ou Secret com terceiros. Esses dados dão acesso à sua conta.
         </Warning>
+        <Tip>
+          Prefere não cadastrar o SSID/cookie? Em <strong>Minhas credenciais</strong> você pode ligar o <strong>modo sem cookie</strong>: guardamos só a sua tag,
+          o robô continua enviando com a sua comissão e o link sai no formato longo (sem encurtar). Dá para mudar de ideia depois, e apagar as credenciais quando quiser.
+        </Tip>
       </div>
 
       {/* Passo 0 */}
