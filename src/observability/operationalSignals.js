@@ -40,6 +40,12 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   wa_group_desync_autoheal: 'ops_wa_group_desync_autoheal',
   // Auto-refresh repetido não resolveu — precisa de ação manual (humano).
   wa_group_desync_unresolved: 'ops_wa_group_desync_unresolved',
+  // `failure reason=405`: o WhatsApp recusou o login/registro. Na prática é
+  // sempre a versão do WA Web anunciada no handshake tendo sido cortada pelo
+  // servidor — atinge TODAS as sessões de uma vez (RCA 2026-07-28), não um chip
+  // específico. Sinal durável para separar "essa conta está com problema" de
+  // "o WhatsApp cortou a nossa versão e todo mundo caiu junto".
+  wa_version_rejected: 'ops_wa_version_rejected',
 }
 
 let cachedTrackFn = null

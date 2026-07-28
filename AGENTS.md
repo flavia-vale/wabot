@@ -187,6 +187,11 @@ API_URL=http://178.105.54.0:3006
 # delega ciclo de vida dos bots ao app PM2 bot-supervisor-staging via Redis.
 BOT_SUPERVISOR_MODE=inline
 REDIS_URL=redis://127.0.0.1:6379/1
+# WA_WEB_VERSION: pin manual da versão do WhatsApp Web anunciada no handshake.
+# Ausente = resolve sozinho (registro público -> Baileys -> cache). Só preencher
+# quando o WhatsApp cortar a versão vigente e todas as sessões caírem com 405 —
+# ver seção "failure 405 derrubando TODAS as sessões".
+# WA_WEB_VERSION=2.3000.1044015310
 # Converte links de cupom/voucher (Shopee, Amazon, ML) com comissão nossa em vez
 # de removê-los. Resolve o shortLink afiliado para a landing web segura
 # (/m/cupom-de-desconto) evitando "Oops! Seu navegador não é mais aceito!".
@@ -222,6 +227,9 @@ API_URL=http://espelhagrupos.com.br
 # Ver seção "Processos PM2" para detalhes sobre cutover inline -> remote.
 BOT_SUPERVISOR_MODE=inline
 REDIS_URL=redis://127.0.0.1:6379/0
+# WA_WEB_VERSION: pin manual da versão do WhatsApp Web (botão de emergência do
+# incidente 405 — ver seção própria). Ausente = resolve sozinho.
+# WA_WEB_VERSION=2.3000.1044015310
 # Converte links de cupom/voucher (Shopee, Amazon, ML) com comissão nossa em vez
 # de removê-los. Resolve o shortLink afiliado para a landing web segura
 # (/m/cupom-de-desconto) evitando "Oops! Seu navegador não é mais aceito!".
@@ -1145,6 +1153,91 @@ vezes (`WA_STUCK_MSG_THRESHOLD`, default 2) dentro de 2h
 ops_wa_stuck_message_retry` — visibilidade operacional ANTES do cliente
 reclamar, independente de qual bug específico estiver causando o travamento
 dessa vez.
+
+## `failure 405` derrubando TODAS as sessões: versão do WA Web cortada (RCA 2026-07-28)
+
+**Sintoma:** cliente reporta "não consigo reconectar meu WhatsApp"; o painel
+mostra `Falha na conexão / Falha ao solicitar código de pareamento` e
+`Desconectado`. Investigação mostrou que **não era o número dela**: em produção,
+**todas** as sessões estavam caídas com `code: 405` (1254 eventos em 48h,
+começando 2026-07-27 ~20:24 BRT), e em staging idem.
+
+**Causa raiz:** `405` **não existe** no `DisconnectReason` do Baileys — vem cru
+do `<failure reason="405">` do servidor do WhatsApp (`ws.on('CB:failure')` em
+`Socket/socket.js`), ou seja, é **recusa de login/registro**. O que estava sendo
+recusado era a **versão do WA Web anunciada no handshake**:
+`fetchLatestBaileysVersion()` busca o arquivo de versão do **repositório do
+Baileys**, que ficou preso em `2.3000.1035194821` — build que **não existe** na
+lista real de versões do WA Web (`wppconnect-team/wa-version`). Quando o
+WhatsApp expirou a faixa antiga, todo login passou a receber 405. Bumpar o
+pacote não resolve: `baileys@7.0.0-rc13` hardcoda exatamente a mesma versão.
+
+**Armadilha de diagnóstico (não repetir):** com a sessão registrada, um 405 se
+parece com queda genérica; com auth limpo, o log diz `not logged in, attempting
+registration...` e some — dá a impressão de bloqueio do número. Dois sinais
+separam de verdade: (1) o incidente atinge **todas as contas ao mesmo tempo** —
+sempre conferir `WaConnectionEvent` de prod antes de culpar um chip; (2) o nó
+bruto de failure (`lastDisconnect.error.data`), que **era descartado** e hoje é
+logado.
+
+**Resolução da versão (`src/core/waVersion.js`, puro/testado)** — ordem:
+1. **`WA_WEB_VERSION`** (ex.: `2.3000.1044015310`) — pin manual. É o botão de
+   emergência: quando o WhatsApp cortar a versão de novo, fixar no `.env` +
+   `pm2 delete/start` (pegadinha #1) resolve **sem redeploy**.
+2. Registro público de versões reais (`WA_VERSION_REGISTRY_URL`, default
+   `wppconnect-team/wa-version`), que espelha o próprio web.whatsapp.com.
+   Builds com `expire` vencido são descartadas — usar build expirada é
+   exatamente o que produz o 405. `''` desliga a fonte.
+3. `fetchLatestBaileysVersion()` — comportamento histórico, agora penúltimo
+   recurso em vez de fonte única.
+4. Última versão boa deste processo (cache em memória).
+
+A versão escolhida e a fonte aparecem no `bot.log` (`Versão do WhatsApp Web
+resolvida para o handshake`) — sem isso é impossível auditar um incidente
+depois. Sinal durável `ops_wa_version_rejected` (allowlist em `src/analytics.js`
++ `src/observability/operationalSignals.js`).
+
+**Não regredir:** não voltar a usar `fetchLatestBaileysVersion()` como fonte
+única; não remover o corte de sufixo de canal (`-alpha`) no parse — sem ele a
+versão vigente é descartada e caímos na fonte velha; não escolher build com
+`expire` vencido. Testes: `test/wa-version.test.js`, `test/errors-map-infra.test.js`.
+
+### Pareamento NUNCA pode apagar a credencial antes da hora (mesmo RCA)
+
+O que transformou um incidente recuperável em **sessão travada** foi um bug
+nosso: o handler de `requestPairingCode` (`src/bot-worker.js`) fazia
+`rm -rf AUTH_DIR` **assim que a cliente clicava em conectar**, antes de saber se
+o WhatsApp aceitaria o pareamento. Com o WA recusando (405), a credencial válida
+era destruída e o close pré-código **não reagendava reconexão** — a sessão saía
+de "caiu mas volta sozinha" para "sem credencial e sem reconexão". Cada nova
+tentativa da cliente repetia a destruição.
+
+Hoje `createPairingAuthBackup` (`src/core/pairingAuthBackup.js`, I/O injetado,
+testado) transforma o `rm` em `rename` para `<AUTH_DIR>.pairing-backup`:
+- **restore** nos quatro caminhos de falha pré-código (erro no socket,
+  expiração da janela de pareamento, `startBot` falhando, close não-515 sem
+  código entregue). No caso do close, a sessão **volta a reconectar sozinha**
+  com a credencial antiga;
+- **discard** só quando o WhatsApp aceita o pareamento (close `515`
+  restartRequired), ponto em que a credencial nova é a boa;
+- backup órfão de um pareamento interrompido é descartado antes do próximo;
+- falha inesperada de `rename` degrada para o comportamento histórico
+  (AUTH_DIR limpo), nunca para "pareamento impossível".
+
+**Não regredir:** não voltar a apagar `AUTH_DIR` no início do pareamento; não
+remover o `restore` de nenhum dos quatro caminhos; não descartar o backup antes
+do `515`. Teste: `test/pairing-auth-backup.test.js`.
+
+### Mensagem honesta para a cliente
+
+`mapInfraError` (`src/errors.js`) jogava cinco erros distintos do worker no
+catch-all `WA_PAIRING_FAILED` ("Falha ao solicitar código de pareamento") — a
+cliente lia uma falha genérica e re-pareava sem parar, destruindo a credencial a
+cada tentativa, sem nenhuma chance de sucesso. O 405 agora tem código próprio
+`WA_VERSION_REJECTED` (503, retryable) e texto que diz o que é: recusa do
+WhatsApp por versão desatualizada, **não** problema do número dela. Segue a
+regra de linguagem leiga — nenhum jargão (`405`, `socket`, `handshake`,
+`pairing`) pode chegar à tela, e há teste que falha se voltar.
 
 ## Loop de init-queries 408 derrubando sessões (RCA 2026-07 — Trilho B)
 
