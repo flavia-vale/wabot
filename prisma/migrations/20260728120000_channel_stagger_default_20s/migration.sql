@@ -1,0 +1,25 @@
+-- Atraso entre canais (channelStaggerJitterMs): default 90s -> 20s.
+--
+-- Motivo (RCA 2026-07-28): investigação de "mensagens ficando muito tempo na
+-- fila" na conta de dev encontrou este campo em 120000ms. O sorteio de 0..valor
+-- roda como `sleep` DENTRO da fila serial de envio (processSendJob), então ele
+-- não espaça só os canais: segura todos os envios do usuário. Medição no log de
+-- staging: média de 60,4s de espera por mensagem, máximo 119,5s; ao zerar o
+-- campo, o intervalo entre envios caiu de 88-125s para 8-14s. O default de 90s
+-- reproduz o mesmo efeito (só que menor) em toda conta que nunca mexeu no
+-- campo — 20s mantém o anti-fingerprint sem custar minutos de atraso.
+--
+-- DML puro (UPDATE), sem ALTER TABLE: convive com o WAL e não exige lock
+-- exclusivo, então não precisa parar API/supervisor (pegadinha #8 do AGENTS.md
+-- não se aplica). Mesmo padrão de
+-- 20260710160000_group_image_mode_preview_default.
+--
+-- Escopo deliberado: só as linhas ainda no default antigo (90000). Quem
+-- escolheu um valor próprio (inclusive 0) mantém a escolha — este campo é uma
+-- config de preservação, sobrescrever decisão do cliente seria pior que o
+-- atraso. Idempotente: rodar 2x converge para o mesmo estado.
+--
+-- O DEFAULT físico da coluna no SQLite não é reescrito aqui (exigiria recriar a
+-- tabela). Contas novas nascem em 20000 pelo @default(20000) do
+-- prisma/schema.prisma, que é o caminho usado por `botConfig.create`.
+UPDATE "BotConfig" SET "channelStaggerJitterMs" = 20000 WHERE "channelStaggerJitterMs" = 90000;

@@ -296,7 +296,7 @@ model BotConfig {
   channelBurstCap          Int      @default(6)
   channelBurstWindowSec    Int      @default(600)
   channelDailyCap          Int?
-  channelStaggerJitterMs   Int      @default(90000)
+  channelStaggerJitterMs   Int      @default(20000)
   channelQuietHoursJson    String   @default("{\"startHour\":0,\"endHour\":6,\"tz\":\"America/Sao_Paulo\"}")
   channelThrottleEnabled   Boolean  @default(false)
   quietHoursEnabled        Boolean  @default(false)

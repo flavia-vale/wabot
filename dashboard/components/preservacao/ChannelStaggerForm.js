@@ -30,7 +30,8 @@ export function ChannelStaggerForm({ value, onChange, disabled }) {
           className="mt-1 w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
         />
         <span className="text-[11px] text-gray-500 mt-1 block">
-          Ex.: 90 = o bot espera de 0 a 90 segundos antes de cada canal seguinte. 0 = sem espera.
+          Ex.: 20 = o bot espera de 0 a 20 segundos antes de cada canal seguinte. 0 = sem espera.
+          Quanto maior o valor, mais tempo a oferta demora para sair.
         </span>
       </label>
     </fieldset>

@@ -841,6 +841,50 @@ após observar timeouts excessivos com Amazon BR lenta (HTML ~1.3MB).
 **Não desligar os timeouts** — sem eles, um socket Baileys silenciosamente
 morto trava a fila serial inteira até reinício do worker.
 
+## "Atraso entre canais" (`channelStaggerJitterMs`) — default 90s → 20s (RCA 2026-07-28)
+
+**Sintoma:** cliente relatou mensagens "muito tempo na fila" **mesmo sem
+preservação configurada**. Na conta de dev, `preservationEnabled=0`,
+`channelThrottleEnabled=0` e preset com `throttleEnabled=0` — nenhum gate de
+throttle agindo — e ainda assim os envios saíam com 88-125s de intervalo.
+
+**Causa raiz:** `BotConfig.channelStaggerJitterMs` (campo "🎲 Atraso entre
+canais", em Preservação → Configurações) estava em 120000ms. Para o 2º destino
+em diante que seja canal, `bot-worker.js` sorteia `0..channelStaggerJitterMs` e
+guarda no `job.delayMs`; `processSendJob` faz `await sleep(delayMs)` **dentro da
+fila serial de envio**. Ou seja, não espaça só os canais: **congela todos os
+envios do usuário**, inclusive para grupos e de outras fontes. Medição no
+`bot.log` de staging: média **60,4s** de espera por mensagem (máx 119,5s); ao
+zerar o campo, o intervalo entre envios caiu para **8-14s**.
+
+**Duas armadilhas de diagnóstico:**
+- o campo é **desacoplado** dos toggles de preservação (comentário em
+  `bot-worker.js:3368`: "aplica sempre que houver jitter configurado") — logo
+  "preservação desligada" **não** significa "sem atraso";
+- `BotConfig.channelMinIntervalSec` continua gravado mas é **campo morto**: o
+  gate lê `destPreservation` (preset por destino), e `checkAndReserve` ignora o
+  botConfig (`_botConfig`). Não perder tempo investigando esse valor.
+
+**Mudança aplicada:** default 90000 → **20000** em `prisma/schema.prisma` +
+migration DML `20260728120000_channel_stagger_default_20s` que troca **só as
+linhas ainda em 90000**. Quem escolheu valor próprio (inclusive `0`) mantém a
+escolha — é config de preservação, sobrescrever decisão do cliente seria pior
+que o atraso. Testes: `test/migrations-channel-stagger-default.test.js`.
+
+**Pendências conhecidas (não corrigidas ainda):** (1) o atraso aplicar mesmo com
+a preservação desligada; (2) o `sleep` rodar dentro do consumidor serial em vez
+de adiar o job (o mecanismo de `deferSendJob`/`notBefore` já existe justamente
+para não congelar a fila — o stagger não o usa). Enquanto isso não mudar,
+**qualquer aumento nesse campo custa atraso em TODOS os envios da conta**, não
+só entre canais.
+
+**Diagnóstico rápido** (o atraso aparece no log com nome próprio):
+```bash
+grep '"msg":"Smart delay antes do envio"' $BOT_LOG_DIR/bot.log | tail -100 \
+ | sed -n 's/.*"time":\([0-9]*\).*"baseDelayMs":\([0-9]*\).*/\1 \2/p' \
+ | awk -v now=$(date +%s) '{ printf "%.1f min atras base=%.1fs\n", (now-$1/1000)/60, $2/1000 }'
+```
+
 ## Status honesto da sessão WA no painel: nem falso-offline, nem "conectando" eterno (2026-07)
 
 Dois bugs relacionados, resolvidos juntos, no eixo "o que o cliente vê no painel
