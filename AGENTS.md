@@ -1711,6 +1711,38 @@ credencial + formato do link enviado por dia + probe ao vivo) e
 `scripts/diag-amazon-shortlink-tag.mjs` (segue os `amzn.to` já enviados e lê a
 tag final). Os dois são read-only e não imprimem segredo.
 
+## Vitrine `/social/?ref=`: usar o endereço do card, nunca fabricar (RCA 2026-07-28)
+
+Todo `meli.la` de canal resolve para `/social/<handle>?ref=<blob>`, e
+`extractFeaturedSocialProduct` (`src/converters/mercadolivre.js`) extrai o
+produto do card destacado. Ordem canônica (não inverter):
+
+1. `product_id` no card → `https://www.mercadolivre.com.br/p/<id>` (catálogo);
+2. **campo `url` do card → endereço REAL do anúncio** (`extractFeaturedCardUrl`);
+3. só então, último recurso, `produto.mercadolivre.com.br/<id>-x-_JM`.
+
+O passo 2 é novo. Antes, card sem `product_id` caía direto no passo 3, que
+**fabrica** o endereço: sem hífen depois de `MLB` e com o slug inventado `-x-`.
+O endereço real do ML é `produto.mercadolivre.com.br/MLB-<id>-<nome>-_JM`.
+Medido em produção: o fabricado respondeu **404** ao ser aberto do próprio VPS,
+e essa forma era ~16% dos links de ML de uma cliente (370 em 7 dias) — a cliente
+reportou "página não existe". Diagnóstico reutilizável:
+`scripts/diag-ml-social-featured.mjs` (lê o mesmo HTML que o robô lê, lista os
+campos do card e testa o endereço montado, distinguindo 404 real de muro
+anti-robô do ML).
+
+`extractFeaturedCardUrl` só aceita host do próprio ML (o HTML é de terceiro),
+exige MLB no caminho, descarta quando o MLB do `url` diverge do `id` do card
+(anti-mismatch, mesma filosofia de `validateAffiliateRedirect`) e remove
+query/hash. **Não regredir:** não voltar a fabricar endereço antes de tentar o
+`url` do card. Testes: `test/mercadolivre-resolve.test.js` (bloco "Endereço do
+card destacado").
+
+**Armadilha de diagnóstico:** o ML serve o muro anti-robô
+(`suspicious-traffic-frontend` / `/gz/account-verification`) com **status 200**
+para quem ele não reconhece. Um `200` num teste de fora do VPS **não prova** que
+a página existe — confira o corpo antes de concluir.
+
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 
 O **Painel "Criar oferta"** (`/m/op/offer` → `POST
