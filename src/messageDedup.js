@@ -1,3 +1,11 @@
+// Teto de entradas guardadas em `msgIds`. Com a janela default (5min) o volume
+// é naturalmente pequeno; o teto existe para que subir DEDUP_MSGID_WINDOW_MS
+// num ambiente não faça o arquivo de dedup crescer sem limite. Mantemos as mais
+// NOVAS: descartar uma entrada antiga só reabre a porta pra um replay muito
+// velho, enquanto descartar a nova reabriria pro replay imediato (bem mais
+// provável).
+export const MAX_DEDUP_MSGID_ENTRIES = 20_000
+
 export function pruneDedupStore(store, now = Date.now(), windowMs = 300_000) {
   // Aceita número (mesma janela pra msgIds e links) OU objeto
   // { msgIds, links } pra janelas independentes — necessário porque o dedup
@@ -12,10 +20,13 @@ export function pruneDedupStore(store, now = Date.now(), windowMs = 300_000) {
   const msgIds = Array.isArray(store?.msgIds) ? store.msgIds : []
   const links = store?.links && typeof store.links === 'object' ? store.links : {}
 
-  store.msgIds = msgIds.filter(entry => {
+  const kept = msgIds.filter(entry => {
     const ts = Number(entry?.ts ?? 0)
     return Number.isFinite(ts) && now - ts < msgIdWindow
   })
+  store.msgIds = kept.length > MAX_DEDUP_MSGID_ENTRIES
+    ? kept.slice(kept.length - MAX_DEDUP_MSGID_ENTRIES)
+    : kept
 
   store.links = links
   for (const key of Object.keys(store.links)) {

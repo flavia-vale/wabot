@@ -63,6 +63,7 @@ import { calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypin
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { applyMirrorTemplate } from './core/mirrorTemplate.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
+import { INCOMING_MAX_AGE_MS, shouldProcessIncomingMessage } from './core/incomingFreshness.js'
 import { classifyError } from './errorTaxonomy.js'
 import { recoverStuckSendLogs, STUCK_SEND_LOG_CUTOFF_MS } from './jobs/stuckSendLogs.js'
 import { detectMessageKind, extractIncomingText, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
@@ -168,6 +169,21 @@ const GLOBAL_DEDUP_REDIS_SAFETY_CAP_MS = Math.max(60_000, Number(process.env.GLO
 // janela ANTIGA (até 24h) sempre que o índice único continuava ocupado —
 // bug real reportado em produção.
 const SEND_DEDUP_RESERVATION_TTL_MS = Math.max(30_000, Number(process.env.SEND_DEDUP_RESERVATION_TTL_MS) || 5 * 60_000)
+
+// Idade máxima considerada para um envio AINDA PENDENTE (status queued/sending)
+// contar como duplicata na dedup por DB.
+//
+// RCA 2026-07 (mensagem espelhada 5x): a dedup por DB só enxergava linhas com
+// `sentAt` DENTRO da janela do link (120min). Só que `sentAt` de uma linha
+// `queued` é o momento em que ela foi criada, e um job pode ficar horas parado
+// na fila esperando a preservação do destino (horário de funcionamento, burst
+// cap, daily cap — ver deferSendJob). Passados os 120min, a linha pendente
+// ficava INVISÍVEL pra dedup: a mesma oferta reofertada pelo WhatsApp entrava
+// de novo, e quando a janela do destino abria as duas (ou cinco) saíam em
+// sequência, espaçadas pelo throttle. Uma mensagem que ainda NÃO foi entregue
+// é duplicata independente da idade — só limitamos por este teto pra que uma
+// linha presa em `queued` por bug não bloqueie o destino pra sempre.
+const PENDING_DEDUP_MAX_AGE_MS = Math.max(60_000, Number(process.env.PENDING_DEDUP_MAX_AGE_MS) || 24 * 60 * 60_000)
 
 async function globalDedupCheckAndSet(key, ttlMs) {
   const r = ensureRuntimeRedis()
@@ -1980,8 +1996,20 @@ async function startBotInner() {
   // `destJid:convertedUrl` (independe da fonte), então duas automações com o
   // mesmo produto pro mesmo grupo colidem e só a 1ª passa.
   // Default 120min; override via DEDUP_LINK_WINDOW_MS.
+  //
+  // RCA 2026-07 (mensagem espelhada 5x): a janela de msgIds fica em 5min DE
+  // PROPÓSITO — ela é só a rede contra re-emissão imediata do mesmo id; não é
+  // (e não deve virar) a barreira contra reoferta horas depois. A causa da
+  // reoferta é atacada na origem, no filtro de frescor do upsert
+  // (shouldProcessIncomingMessage / src/core/incomingFreshness.js): mensagem
+  // reentregue pelo WhatsApp (`type: 'append'`, node com `offline`) não entra
+  // no pipeline. Esticar esta janela mascararia o sintoma e ainda mexeria na
+  // semântica de cupom, que depende de janelas curtas.
   const dedupeWindowMs = Math.max(1_000, Number(process.env.DEDUP_MSGID_WINDOW_MS) || 300_000)
-  const linkDedupWindowMs = Math.max(dedupeWindowMs, Number(process.env.DEDUP_LINK_WINDOW_MS) || 120 * 60_000)
+  // Janela de link INDEPENDENTE da de msgIds (era `Math.max(dedupeWindowMs,
+  // ...)`): com defaults atuais dá no mesmo, mas amarrar as duas fazia qualquer
+  // aumento em msgIds arrastar a janela de link junto e prender repost legítimo.
+  const linkDedupWindowMs = Math.max(1_000, Number(process.env.DEDUP_LINK_WINDOW_MS) || 120 * 60_000)
   // Cupom/campanha (primary.linkKind === 'coupon') usa janela CURTA própria:
   // é comum a MESMA URL de cupom (ex.: página fixa de campanha) ser repostada
   // várias vezes ao dia com códigos/textos diferentes — a janela longa
@@ -3035,6 +3063,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // aqui, igual pra todos os destinos desta mensagem.
       const isCouponLink = primary.linkKind === 'coupon'
       const effectiveDedupWindowMs = isCouponLink ? couponDedupWindowMs : linkDedupWindowMs
+      // Idade máxima para um envio AINDA PENDENTE contar como duplicata. Cupom
+      // usa a própria janela curta (não segura repost legítimo de campanha);
+      // produto usa o teto longo, porque um job adiado horas pela preservação
+      // do destino continua sendo o MESMO envio esperando sair.
+      const pendingDedupMaxAgeMs = isCouponLink ? effectiveDedupWindowMs : PENDING_DEDUP_MAX_AGE_MS
       let destIndex = -1
       for (const destJid of destinations) {
         destIndex++
@@ -3087,15 +3120,35 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               where: {
                 userId,
                 destGroup: destJid,
-                status: { in: ['queued', 'sending', 'success'] },
-                sentAt: { gte: new Date(Date.now() - effectiveDedupWindowMs) },
                 OR: [
                   { originalUrl: { in: dedupLookupUrls } },
                   { convertedUrl: { in: dedupLookupUrls } },
                 ],
+                // Dois critérios independentes (ver PENDING_DEDUP_MAX_AGE_MS):
+                // 1) já ENTREGUE dentro da janela do linkKind;
+                // 2) ainda PENDENTE na fila — duplicata independente da idade,
+                //    porque o job pode estar adiado há horas pela preservação
+                //    do destino e ainda vai sair.
+                // CUPOM fica de fora do critério 2 (pendingMaxAgeMs cai para a
+                // janela curta do cupom): a mesma URL de campanha é reposta
+                // várias vezes ao dia com códigos diferentes, e segurar a
+                // segunda porque a primeira ainda não saiu perderia oferta
+                // legítima. Produto mantém a proteção completa.
+                AND: [{
+                  OR: [
+                    {
+                      status: 'success',
+                      sentAt: { gte: new Date(Date.now() - effectiveDedupWindowMs) },
+                    },
+                    {
+                      status: { in: ['queued', 'sending'] },
+                      sentAt: { gte: new Date(Date.now() - pendingDedupMaxAgeMs) },
+                    },
+                  ],
+                }],
               },
               orderBy: { sentAt: 'desc' },
-              select: { id: true, sentAt: true },
+              select: { id: true, sentAt: true, status: true },
             }).catch(err => {
               logger.warn({ err: err?.message, destJid }, 'Dedup DB lookup falhou; seguindo com dedup local/global')
               return null
@@ -3113,7 +3166,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             dedupWindowMs: effectiveDedupWindowMs,
             ageMs: dbAgeMs,
           })
-          logger.info({ destJid, recentLogId: recentDbDuplicate.id, dedupKeyCount: dedupKeys.length, ageMs: dbAgeMs, windowMs: effectiveDedupWindowMs, layer: 'db' }, 'Duplicata DB ignorada')
+          logger.info({ destJid, recentLogId: recentDbDuplicate.id, recentStatus: recentDbDuplicate.status, dedupKeyCount: dedupKeys.length, ageMs: dbAgeMs, windowMs: effectiveDedupWindowMs, layer: 'db' }, 'Duplicata DB ignorada')
           continue
         }
 
@@ -3466,7 +3519,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     logger.info({ type, count: messages.length }, 'messages.upsert recebido')
     if (type !== 'notify' && type !== 'append') return
-    const cutoff = Date.now() - 5 * 60_000
+    const cutoff = Date.now() - INCOMING_MAX_AGE_MS
 
     for (const msg of messages) {
       rememberChannelJid(msg?.key?.remoteJid)
@@ -3540,16 +3593,52 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       const msgTsRaw = Number(msg.messageTimestamp ?? 0)
       const hasValidTimestamp = Number.isFinite(msgTsRaw) && msgTsRaw > 0
       const msgTs = hasValidTimestamp ? msgTsRaw * 1000 : null
-      if (msgTs && msgTs < cutoff) continue
+      // Cada mensagem é vista UMA vez, ao vivo. Reentrega da fila offline do
+      // WhatsApp (`type: 'append'`, drenada a cada reconexão) e mensagem velha
+      // não reentram no pipeline — ver src/core/incomingFreshness.js. Antes o
+      // descarte era um `continue` mudo: nem o motivo nem a idade apareciam no
+      // bot.log, o que tornava impossível ver reoferta acontecendo.
+      const freshness = shouldProcessIncomingMessage({
+        upsertType: type,
+        messageTimestampMs: msgTs,
+        now: Date.now(),
+        maxAgeMs: INCOMING_MAX_AGE_MS,
+      })
+      if (!freshness.process) {
+        logger.info({
+          jid: msg.key.remoteJid,
+          msgId: msg.key.id,
+          upsertType: type,
+          reason: freshness.reason,
+          ageMs: freshness.ageMs,
+          maxAgeMs: INCOMING_MAX_AGE_MS,
+        }, 'Mensagem descartada: reentrega/mensagem velha não reentra no pipeline')
+        continue
+      }
 
       const now = Date.now()
       pruneDedupStore(dedup, now, { msgIds: dedupeWindowMs, links: linkDedupWindowMs })
       const dedupKey = buildIncomingDedupKey(msg)
       if (dedupKey && hasRecentDedupEntry(dedup.msgIds, dedupKey, now, dedupeWindowMs)) {
-        logger.info({ dedupKey, jid: msg.key.remoteJid }, 'Mensagem duplicada ignorada')
+        logger.info({ dedupKey, jid: msg.key.remoteJid, upsertType: type, ageMs: msgTs ? now - msgTs : null, windowMs: dedupeWindowMs }, 'Mensagem duplicada ignorada')
         continue
       }
       if (rememberDedupEntry(dedup, dedupKey, now)) scheduleDedupSave(dedup)
+
+      // Forense de reoferta (RCA 2026-07 — mensagem espelhada 5x): sem esta
+      // linha era impossível provar, pelo bot.log, se o WhatsApp reofertou a
+      // MESMA mensagem (mesmo key.id) ou se a fonte republicou — o log de
+      // upsert só trazia {type, count}. Volume proporcional ao de mensagens
+      // aceitas (reentregas e duplicatas param nos `continue` acima).
+      // upsertType='append' aqui significa mensagem de CANAL ao vivo (a única
+      // 'append' que sobrevive ao filtro de frescor).
+      logger.info({
+        jid: msg.key.remoteJid,
+        msgId: msg.key.id,
+        upsertType: type,
+        hasValidTimestamp,
+        ageMs: msgTs ? now - msgTs : null,
+      }, 'Mensagem aceita para processamento')
 
       const msgId = msg.key.id || dedupKey || `${msg.key.remoteJid || 'unknown'}:${msgTsRaw || now}`
       const accepted = incomingQueue.enqueue(() => processIncomingMessage(msg, sock), {
