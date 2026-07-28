@@ -92,6 +92,11 @@ export const NAV_GROUPS = [
         href: '/painel/ids-afiliada',
         icon: i(<><circle cx="7.5" cy="15.5" r="5.5" /><path d="M21 2l-9.6 9.6" /><path d="M15.5 7.5 18 10l3-3-2.5-2.5z" /></>),
       },
+      {
+        label: 'Tutorial',
+        href: '/painel/tutorial',
+        icon: i(<><circle cx="12" cy="12" r="10" /><path d="M9.5 9v6l5-3-5-3z" /></>),
+      },
     ],
   },
   {
