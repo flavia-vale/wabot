@@ -363,16 +363,51 @@ UI: toggle + explicação "o que fazemos com esse cookie" + botão de apagar em
 `cookieField: true` em `dashboard/lib/painel/affiliatePlatforms.js`), nota no
 tutorial e FAQ pública em `/seguranca-credenciais-afiliado`.
 
+### Garantia "nada se perde" (com ou sem o código) — travada por teste
+
+A promessa feita para a cliente no painel é literal e tem teste próprio em
+`test/credential-cookieless-nothing-lost.test.js`:
+
+1. a oferta **sempre sai** (com ou sem cookie, `convert()` nunca devolve `null`
+   por falta de credencial de sessão);
+2. o link **sempre carrega a etiqueta dela** (`partner_id` no ML, `tag=` na
+   Amazon), nos dois caminhos;
+3. o link de terceiro **nunca** é repassado (etiqueta de concorrente é
+   substituída, não preservada);
+4. ligar/desligar o modo **não leva junto** o resto (etiqueta, vitrine e demais
+   campos sobrevivem; só o código de sessão sai).
+
+Não remover esses testes: eles são o contrato do texto que a usuária lê.
+
+### Linguagem para a usuária (obrigatório nesta superfície)
+
+Nome técnico de campo **não pode chegar à tela**. Toda mensagem de credencial
+passa por `friendlyFieldName` / `describeMissingCredentials`
+(`src/credentialHealth.js`) — consumidas também por `missingCredentialMessage`
+(`offerEngine.js`) e pelo `recordConversionIssue` do `bot-worker.js`, para a
+cliente ler a MESMA frase em qualquer lugar. Vocabulário canônico: "etiqueta de
+afiliada" (nunca "tag"), "código de acesso" (nunca "cookie de sessão"/"SSID"
+solto), "link mais comprido" (nunca "?tag=/amzn.to/partner_id"), "venceu" (nunca
+"sessão expirada"). `test/painel-linguagem-leiga.test.js` falha se jargão voltar
+aos rótulos/dicas/avisos.
+
+Correção de fato importante aplicada junto: o aviso de código vencido do ML
+dizia "a geração de ofertas do ML está pausada" — **era falso** (o fallback
+segue enviando) e assustava à toa.
+
 **Não regredir:** não voltar a exigir cookie na validação quando o modo está
 ligado; não sondar sessão nesse modo; não persistir campo de sessão que chegue
-no corpo com a flag ligada. **Pendência de validação em campo (staging/celular):
-confirmar que o `partner_id` do ML credita comissão de produto** — só temos
-prova de campo do lado Amazon (`?tag=`). Enquanto isso não for confirmado, o
-modo sem cookie no ML deve ser apresentado como troca de link curto por
-privacidade, sem prometer paridade de comissão. Testes:
+no corpo com a flag ligada; não voltar a imprimir `missing` cru na tela.
+**Pendência de validação em campo (staging/celular): confirmar que o
+`partner_id` do ML credita comissão de produto** — só temos prova de campo do
+lado Amazon (`?tag=`). Por isso os textos prometem "a oferta continua saindo com
+a sua comissão" apoiados no caminho comprovado, e o painel admite explicitamente
+o que se perde no ML (link curto + cupom sem produto). Testes:
 `test/credential-cookieless-mode.test.js`,
 `test/credentials-cookieless-route.test.js`,
-`test/painel-ids-afiliada-privacy.test.js`.
+`test/credential-cookieless-nothing-lost.test.js`,
+`test/painel-ids-afiliada-privacy.test.js`,
+`test/painel-linguagem-leiga.test.js`.
 
 ## A-1 — Proteção contra brute-force no login (canônico)
 

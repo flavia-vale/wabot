@@ -96,11 +96,21 @@ test('sem o modo ligado, o SSID continua obrigatório (não regride a exigência
   assert.ok(validation.missing.includes('ssid/cookie'))
 })
 
-test('mensagem de save explica o trade-off em vez de parecer erro', () => {
+test('mensagem de save tranquiliza em linguagem simples (nada de jargão)', () => {
   const validation = validateCredentialData('amazon', { tag: 'fafaciane-20', cookielessMode: true })
   const message = getCredentialSaveMessage(validation)
-  assert.match(message, /sem cookie/i)
-  assert.match(message, /comiss/i)
+  assert.match(message, /etiqueta/i, 'fala "etiqueta", não "tag"')
+  assert.match(message, /comiss/i, 'promete a comissão explicitamente')
+  assert.match(message, /continuam saindo/i, 'diz que nada se perde')
+  assert.doesNotMatch(message, /cookie|ssid|partner_id|fallback/i)
+})
+
+test('mensagem de pendência usa nome de gente, não nome de campo', () => {
+  const validation = validateCredentialData('mercadolivre', {})
+  const message = getCredentialSaveMessage(validation)
+  assert.match(message, /etiqueta de afiliado/i)
+  assert.match(message, /c[oó]digo de acesso/i)
+  assert.doesNotMatch(message, /ssid\/cookie/i, 'nome técnico do campo não pode vazar para a tela')
 })
 
 test('helpers puros: strip e required não mutam a entrada', () => {

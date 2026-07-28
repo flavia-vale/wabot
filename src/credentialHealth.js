@@ -10,6 +10,45 @@ const PLATFORM_LABELS = {
 
 export const PLATFORMS = Object.keys(PLATFORM_LABELS)
 
+// Como cada campo é CHAMADO para a usuária. As mensagens de erro/save saíam com
+// o nome técnico do campo ("Campos obrigatórios: ssid/cookie, ubid-acbbr"), que
+// não diz nada para quem só quer divulgar oferta. Toda mensagem que chega na
+// tela passa por `friendlyFieldName` — se um campo novo não estiver no mapa, o
+// fallback é o próprio nome (nunca quebra, só fica menos amigável).
+const FIELD_LABELS = {
+  tag: 'sua etiqueta de afiliado',
+  'ssid/cookie': 'o código de acesso da sua conta',
+  ssid: 'o código de acesso da sua conta',
+  cookie: 'o código de acesso da sua conta',
+  'ubid-acbbr': 'o código de acesso da sua conta',
+  'at-acbbr': 'o código de acesso da sua conta',
+  'x-acbbr': 'o código de acesso da sua conta',
+  appId: 'o App ID da Shopee',
+  secretKey: 'a chave secreta da Shopee',
+}
+
+export function friendlyFieldName(field) {
+  return FIELD_LABELS[field] ?? field
+}
+
+// Recado único de "falta cadastrar" — usado no painel, no motor de ofertas e no
+// worker, para a usuária ler sempre a MESMA frase, em português comum, em vez de
+// três variações com nome técnico de campo.
+export function describeMissingCredentials(validation) {
+  const pendencias = joinFriendly(validation?.missing ?? [])
+  const loja = validation?.label ?? 'loja'
+  const oQueFalta = pendencias ? `Faltou preencher ${pendencias} da ${loja}.` : `Faltam dados da ${loja}.`
+  return `${oQueFalta} Abra "Minhas credenciais" no painel para completar — leva menos de um minuto.`
+}
+
+// Junta a lista de pendências em português corrente ("A e B", "A, B e C") —
+// vírgula seca no fim de frase soa a erro de sistema, não a recado.
+function joinFriendly(fields = []) {
+  const names = [...new Set(fields.map(friendlyFieldName))]
+  if (names.length <= 1) return names[0] ?? ''
+  return `${names.slice(0, -1).join(', ')} e ${names[names.length - 1]}`
+}
+
 export const REQUIRED_FIELDS = {
   shopee: ['appId', 'secretKey'],
   amazon: ['tag', 'ubid-acbbr', 'at-acbbr', 'x-acbbr'],
@@ -165,15 +204,15 @@ export function summarizeCredentialHealth(credentials = []) {
 
 export function getCredentialSaveMessage(validation) {
   if (!validation?.configured) {
-    return `Credenciais de ${validation?.label ?? 'plataforma'} incompletas. Preencha: ${(validation?.missing ?? []).join(', ')}.`
+    return `Faltou preencher ${joinFriendly(validation?.missing ?? [])} da ${validation?.label ?? 'loja'}.`
   }
   if (validation.cookielessMode) {
-    return `Credenciais de ${validation.label} salvas no modo sem cookie: guardamos apenas a sua tag. As ofertas saem com o link longo, com a sua comissão.`
+    return `Pronto! Guardamos só a sua etiqueta da ${validation.label} — nada da sua conta. Suas ofertas continuam saindo normalmente, com a sua comissão; o link só fica mais comprido.`
   }
   if (validation.warnings?.length) {
-    return `Credenciais de ${validation.label} salvas, mas há alertas para revisar antes do bot converter links dessa loja.`
+    return `Salvamos os dados da ${validation.label}, mas confira os avisos abaixo antes de começar a divulgar.`
   }
-  return `Credenciais de ${validation.label} salvas e prontas para conversão.`
+  return `Tudo certo! A ${validation.label} está pronta e suas ofertas já saem com a sua comissão.`
 }
 
 // Quando a usuária cola um SSID NOVO do Mercado Livre, o `cookie` (jar completo)

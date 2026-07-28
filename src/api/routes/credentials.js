@@ -149,7 +149,7 @@ export async function credentialsRoutes(app, opts = {}) {
     const validation = validateCredentialData(platform, sanitizedBody)
     if (validation.missing.length) {
       return reply.code(400).send({
-        error: `Campos obrigatórios: ${validation.missing.join(', ')}`,
+        error: getCredentialSaveMessage(validation),
         validation,
       })
     }
@@ -247,8 +247,8 @@ export async function credentialsRoutes(app, opts = {}) {
       configReloaded,
       configReloadError,
       message: deleted
-        ? 'Credencial apagada. Os dados dessa loja não estão mais guardados no BOTinho.'
-        : 'Nenhuma credencial guardada para essa loja.',
+        ? 'Pronto, apagamos. Os dados dessa loja não estão mais guardados aqui. Quando quiser voltar a usar, é só cadastrar de novo.'
+        : 'Não havia nada guardado dessa loja por aqui.',
     }
   })
 }

@@ -40,12 +40,18 @@ test('status do painel: modo sem cookie não dispensa a tag', () => {
   assert.equal(getPlatformStatus(platform('mercadolivre'), { cookielessMode: true }), 'pending')
 })
 
-test('a página oferece o modo sem cookie, o botão de apagar e a explicação de privacidade', () => {
-  assert.match(pageSource, /Modo sem cookie/)
+test('a página oferece a opção, o botão de apagar e a explicação de privacidade', () => {
+  assert.match(pageSource, /não quero guardar meu código de acesso/i)
   assert.match(pageSource, /toggleCookieless/)
-  assert.match(pageSource, /Apagar credenciais de/)
-  assert.match(pageSource, /O que o BOTinho faz com esse cookie\?/)
+  assert.match(pageSource, /Apagar meus dados da/)
+  assert.match(pageSource, /Esse código expõe meus dados pessoais\?/)
   assert.match(pageSource, /criptografad/i)
+})
+
+test('a página promete, em texto, que nada se perde sem o código', () => {
+  assert.match(pageSource, /Nada se perde/i)
+  assert.match(pageSource, /continuam saindo/i)
+  assert.match(pageSource, /mudar de ideia/i, 'a usuária precisa saber que dá para voltar atrás')
 })
 
 test('a página não sonda sessão nem alarma "expirada" no modo sem cookie', () => {

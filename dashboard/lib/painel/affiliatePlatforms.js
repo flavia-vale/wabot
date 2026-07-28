@@ -7,27 +7,27 @@ export const AFFILIATE_PLATFORMS = [
   {
     id: 'shopee',
     label: 'Shopee',
-    instructions: 'Onde obter: affiliate.shopee.com.br → Ferramentas → API de Afiliados → Gerar credenciais. Mantenha o Secret Key privado.',
+    instructions: 'Onde pegar: no site de afiliados da Shopee, em Ferramentas → API de Afiliados → Gerar credenciais. A chave secreta é sua: não passe para ninguém.',
     actionLinks: [
       {
-        label: 'Solicite sua API Shopee',
+        label: 'Pedir seu acesso na Shopee',
         href: 'https://help.shopee.com.br/portal/webform/bbce78695c364ba18c9cbceb74ec9091?entryPoint=1&lastArticleID=',
       },
       {
-        label: 'Pegue suas credenciais',
+        label: 'Abrir a página da loja',
         href: 'https://affiliate.shopee.com.br/open_api',
       },
     ],
     fields: [
-      { key: 'appId', label: 'App ID', hint: 'Identificador do seu app na Shopee.' },
-      { key: 'secretKey', label: 'Secret Key', hint: 'Chave secreta do app (não compartilhe).', sensitive: true },
+      { key: 'appId', label: 'App ID da Shopee', hint: 'Número que identifica seu acesso na Shopee.' },
+      { key: 'secretKey', label: 'Chave secreta da Shopee', hint: 'Guarde só aqui — não passe para mais ninguém.', sensitive: true },
     ],
   },
   {
     id: 'cookieEditorInfo',
     type: 'info',
     label: 'Extensão necessária',
-    instructions: 'Para pegar as credenciais das lojas abaixo é necessário você estar em um computador e instalar essa extensão em seu Google Chrome:',
+    instructions: 'Para pegar os dados das lojas abaixo, use um computador com Google Chrome e instale esta extensão gratuita:',
     actionLinks: [
       {
         label: 'Cookie-Editor',
@@ -38,61 +38,61 @@ export const AFFILIATE_PLATFORMS = [
   {
     id: 'amazon',
     label: 'Amazon',
-    instructions: 'Onde obter: associados.amazon.com.br. A Tag vem do painel. Para o link curto (amzn.to) sair de forma estável, cole o Cookie completo da sessão logada na Amazon Brasil (recomendado) — os 3 cookies separados param de autenticar em poucos dias e precisarão ser renovados.',
+    instructions: 'Onde pegar: no site de associados da Amazon (link abaixo). A etiqueta aparece na própria tela. O código de acesso é opcional e serve só para deixar o link curtinho — se for usar, prefira o código completo: os três códigos separados vencem em poucos dias.',
     actionLinks: [
       {
-        label: 'Pegue suas credenciais',
+        label: 'Abrir a página da loja',
         href: 'https://associados.amazon.com.br',
       },
     ],
-    platformWarning: 'Para gerar link curto (amzn.to), preencha a Tag e o Cookie completo da sessão Amazon. Sem isso, a oferta ainda sai (com o link longo ?tag=), mas sem encurtar.',
+    platformWarning: 'Com a etiqueta e o código de acesso, o link da oferta sai curtinho. Só com a etiqueta, a oferta sai do mesmo jeito — o link só fica mais comprido.',
     supportsCookielessMode: true,
-    cookielessNote: 'Sem cookie, a oferta sai com o link longo (?tag=) em vez do amzn.to. A comissão continua sendo sua — é o mesmo formato que já roda sempre que a sessão expira.',
+    cookielessNote: 'Suas ofertas continuam saindo e a comissão continua sendo sua. A única diferença: o link fica mais comprido, em vez do link curto da Amazon.',
     fields: [
-      { key: 'tag', label: 'ID de associado/StoreID', hint: 'Ex.: suatag-20' },
-      { key: 'cookie', label: 'Cookie completo da sessão (recomendado)', required: false, sensitive: true, cookieField: true, hint: 'Sessão completa logada da Amazon Brasil — mais estável que os 3 cookies separados.', help: 'Logada em https://associados.amazon.com.br/ use a extensão Cookie-Editor → Export (botão no lado direito inferior) → JSON. Automaticamente o código é copiado e é só colá-lo aqui.' },
-      { key: 'ubid-acbbr', label: 'Cookie ubid-acbbr (alternativo)', required: false, cookieField: true, hint: 'Alternativa legada ao Cookie completo. Cookie de sessão da Amazon Brasil.', sensitive: true, help: 'Só precisa preencher se NÃO usar o Cookie completo acima. DevTools → Application → Cookies → amazon.com.br → copie o valor do cookie ubid-acbbr.' },
-      { key: 'at-acbbr', label: 'Cookie at-acbbr (alternativo)', required: false, cookieField: true, hint: 'Alternativa legada ao Cookie completo. Cookie de autenticação da Amazon Brasil.', sensitive: true, help: 'Só precisa preencher se NÃO usar o Cookie completo acima. Mesmo painel do DevTools: copie o valor do cookie at-acbbr.' },
-      { key: 'x-acbbr', label: 'Cookie x-acbbr (alternativo)', required: false, cookieField: true, hint: 'Alternativa legada ao Cookie completo. Cookie de identificação da Amazon Brasil.', sensitive: true, help: 'Só precisa preencher se NÃO usar o Cookie completo acima. Mesmo painel do DevTools: copie o valor do cookie x-acbbr.' },
+      { key: 'tag', label: 'Sua etiqueta de afiliada (ID de associado)', hint: 'É o código que identifica suas vendas. Ex.: suaetiqueta-20' },
+      { key: 'cookie', label: 'Código de acesso da sua conta (recomendado)', required: false, sensitive: true, cookieField: true, hint: 'Serve só para encurtar o link da oferta. Você pode deixar em branco.', help: 'No computador, entre em associados.amazon.com.br já logada, clique na extensão Cookie-Editor → botão Export (canto inferior direito) → JSON. O código é copiado sozinho; é só colar aqui.' },
+      { key: 'ubid-acbbr', label: 'Código alternativo 1 (ubid-acbbr)', required: false, cookieField: true, hint: 'Só se você não usar o código completo acima.', sensitive: true, help: 'Só precisa se NÃO colou o código completo acima. É um dos três códigos separados da Amazon, encontrados na mesma extensão Cookie-Editor.' },
+      { key: 'at-acbbr', label: 'Código alternativo 2 (at-acbbr)', required: false, cookieField: true, hint: 'Só se você não usar o código completo acima.', sensitive: true, help: 'Só precisa se NÃO colou o código completo acima. Mesmo lugar da extensão Cookie-Editor.' },
+      { key: 'x-acbbr', label: 'Código alternativo 3 (x-acbbr)', required: false, cookieField: true, hint: 'Só se você não usar o código completo acima.', sensitive: true, help: 'Só precisa se NÃO colou o código completo acima. Mesmo lugar da extensão Cookie-Editor.' },
     ],
   },
   {
     id: 'mercadolivre',
     label: 'Mercado Livre',
-    instructions: 'Onde obter: https://www.mercadolivre.com.br/afiliados/linkbuilder#hub . A Etiqueta em uso vem do Gerador de Links; SSID é o cookie da sessão ativa e deve ser pegado usando o Cookies Editor.',
+    instructions: 'Onde pegar: no Gerador de Links do Mercado Livre (link abaixo). A etiqueta aparece na própria tela; o código de acesso (SSID) você copia com a extensão Cookie-Editor, no computador.',
     actionLinks: [
       {
-        label: 'Pegue suas credenciais',
+        label: 'Abrir a página da loja',
         href: 'https://www.mercadolivre.com.br/afiliados/linkbuilder#hub',
       },
     ],
-    platformWarning: 'Para gerar link curto (meli.la), preencha Etiqueta em uso e SSID.',
+    platformWarning: 'Com a etiqueta e o código de acesso, o link da oferta sai curtinho. Só com a etiqueta, a oferta sai do mesmo jeito — o link só fica mais comprido.',
     supportsCookielessMode: true,
-    cookielessNote: 'Sem o SSID, a oferta sai com o link longo (com a sua etiqueta) em vez do link curto do Mercado Livre, e links de cupom sem produto deixam de ser convertidos. A comissão de produto continua sendo sua.',
+    cookielessNote: 'Suas ofertas de produto continuam saindo e a comissão continua sendo sua. Duas diferenças: o link fica mais comprido e links só de cupom (sem produto) deixam de ser aproveitados.',
     fields: [
-      { key: 'tag', label: 'Etiqueta em uso', hint: 'Copie exatamente como aparece no Mercado Livre.', help: 'Copie a etiqueta em uso exibida no Gerador de Links do Mercado Livre.' },
-      { key: 'ssid', label: 'SSID (cookie)', hint: 'Cookie da sessão ativa do Mercado Livre.', sensitive: true, cookieField: true, help: 'No navegador, acesse os cookies do Mercado Livre na sua sessão ativa e copie apenas o valor do cookie ssid. Não compartilhe esse valor fora do painel.' },
-      { key: 'vitrineUrl', label: 'Link da sua vitrine (opcional)', required: false, hint: 'Usado quando um link compartilhado é a vitrine/perfil de OUTRA loja — o Mercado Livre não permite gerar link de afiliado para vitrine de terceiro.', help: 'Cole aqui o link da SUA própria vitrine/perfil de afiliada no Mercado Livre (ex.: mercadolivre.com.br/social/seu-usuario). Quando um link compartilhado for uma vitrine de outra loja (sem produto específico), em vez de descartar a mensagem o bot substitui pelo link da sua vitrine.' },
+      { key: 'tag', label: 'Sua etiqueta de afiliada', hint: 'Copie igualzinho ao que aparece no Mercado Livre.', help: 'É a "etiqueta em uso" que aparece na tela do Gerador de Links do Mercado Livre.' },
+      { key: 'ssid', label: 'Código de acesso da sua conta (SSID)', hint: 'Serve só para encurtar o link da oferta. Você pode deixar em branco.', sensitive: true, cookieField: true, help: 'No computador, com o Mercado Livre aberto e logado, clique na extensão Cookie-Editor, procure o item chamado ssid e copie o valor dele. Não passe esse código para mais ninguém.' },
+      { key: 'vitrineUrl', label: 'Link da sua vitrine (opcional)', required: false, hint: 'Serve para quando chega um link da lojinha de outra pessoa, sem produto específico.', help: 'Cole o link da SUA vitrine no Mercado Livre (ex.: mercadolivre.com.br/social/seu-usuario). Quando chegar um link da vitrine de outra pessoa, em vez de descartar a mensagem o robô troca pelo link da sua.' },
     ],
   },
   {
     id: 'magazineluiza',
     label: 'Magazine Luiza',
-    instructions: 'Onde obter: painel de afiliados do Magazine Luiza. Copie a tag usada nos seus links de afiliado.',
+    instructions: 'Onde pegar: no painel de afiliados do Magazine Luiza. Copie a etiqueta que aparece nos seus links.',
     actionLinks: [
       {
-        label: 'Pegue suas credenciais',
+        label: 'Abrir a página da loja',
         href: 'https://www.magazinevoce.com.br/admin',
       },
     ],
-    fields: [{ key: 'tag', label: 'Tag de afiliado', hint: 'Ex.: parceiro123' }],
+    fields: [{ key: 'tag', label: 'Sua etiqueta de afiliada', hint: 'Ex.: parceiro123' }],
   },
 ]
 
 export const CRED_STATUS = {
-  configured: { label: 'Configurado', cls: 'is-success' },
-  incomplete: { label: 'Incompleto', cls: 'is-flight' },
-  pending: { label: 'Pendente', cls: 'is-skip' },
+  configured: { label: 'Pronta para usar', cls: 'is-success' },
+  incomplete: { label: 'Falta preencher', cls: 'is-flight' },
+  pending: { label: 'Ainda não cadastrada', cls: 'is-skip' },
 }
 
 // Espelha `validateCredentialData` do backend (src/credentialHealth.js): no

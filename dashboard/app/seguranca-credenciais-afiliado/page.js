@@ -9,8 +9,8 @@ const slug = '/seguranca-credenciais-afiliado'
 const dates = getEditorialDates(slug)
 
 const layers = [
-  ['Modo sem cookie (você escolhe o que entrega)', 'Não quer cadastrar o cookie de sessão da loja? Ligue o modo sem cookie no painel: guardamos apenas a sua tag de afiliado, os campos de sessão são apagados do que fica salvo e o robô continua enviando com a sua comissão — só sem encurtar o link.'],
-  ['Apagar quando quiser, sem pedir suporte', 'Cada loja tem um botão que apaga as credenciais na hora. Encerrar as sessões dentro da própria loja também invalida imediatamente qualquer cookie já cadastrado.'],
+  ['Você escolhe o que entrega', 'Não quer guardar o código de acesso da sua conta na loja? Marque a opção no painel: guardamos só a sua etiqueta de afiliada e apagamos o código. Suas ofertas continuam saindo com a sua comissão — o link só fica mais comprido.'],
+  ['Apagar quando quiser, sem pedir para ninguém', 'Cada loja tem um botão que apaga seus dados na hora, direto no painel. Sair da sua conta dentro da própria loja também derruba na mesma hora qualquer código já cadastrado.'],
   ['Criptografia em repouso (AES-256-GCM)', 'As credenciais das suas contas de afiliado e sua chave PIX ficam cifradas no banco de dados, não em texto puro. Mesmo em caso de acesso indevido ao banco, os valores não ficam legíveis diretamente.'],
   ['Proteção contra força bruta no login', 'Tentativas de login são limitadas por conta e por IP, com bloqueio temporário após várias tentativas falhas — reduz o risco de alguém tentar adivinhar sua senha.'],
   ['Isolamento entre staging e produção', 'Ambiente de testes e ambiente de produção usam bancos, credenciais e chaves de criptografia completamente separados — uma mudança em teste não expõe dados reais.'],
@@ -19,12 +19,12 @@ const layers = [
 
 const faq = [
   {
-    q: 'Sou obrigada a entregar o cookie de sessão (SSID) da minha conta?',
-    a: 'Não. O cookie é uma otimização, não um requisito: ele serve para gerar o link curto da loja. Com o modo sem cookie ligado no painel, guardamos apenas a sua tag de afiliado e as ofertas saem com o link longo — a comissão continua sendo creditada para você. No Mercado Livre, links de cupom sem produto deixam de ser convertidos nesse modo.',
+    q: 'Sou obrigada a entregar o código de acesso (SSID) da minha conta?',
+    a: 'Não. Esse código serve só para deixar o link da oferta curtinho — não é obrigatório. Marcando a opção no painel, guardamos apenas a sua etiqueta de afiliada: suas ofertas continuam saindo e a comissão continua sendo sua, o link só fica mais comprido. No Mercado Livre há uma diferença a mais: links que são só cupom, sem produto, deixam de ser aproveitados.',
   },
   {
     q: 'Consigo apagar minhas credenciais depois de cadastrar?',
-    a: 'Sim, a qualquer momento, pelo botão "Apagar credenciais" no cartão da loja dentro do painel. O dado sai do sistema na hora e o robô volta a operar sem ele. Encerrar as sessões dentro da própria loja também invalida qualquer cookie já cadastrado.',
+    a: 'Sim, quando quiser, pelo botão "Apagar meus dados" no cartão da loja dentro do painel. Sai do sistema na hora. Para voltar a divulgar aquela loja, é só cadastrar de novo — leva menos de um minuto. Sair da sua conta dentro da loja também derruba qualquer código já cadastrado.',
   },
   {
     q: 'Minhas credenciais de afiliado ficam salvas em texto puro?',
@@ -68,6 +68,16 @@ export default function Page() {
             <section>
               <h2>Resposta direta</h2>
               <p>Usar um bot de terceiro para automatizar suas contas de afiliado significa confiar suas credenciais a esse sistema. No BOTinho, essas credenciais — incluindo a chave PIX usada para receber comissões — ficam criptografadas em repouso (AES-256-GCM), não guardadas em texto puro.</p>
+            </section>
+
+            <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+              <h2>Em português claro</h2>
+              <ul>
+                <li>O que você cola no painel serve para <strong>uma coisa só</strong>: montar seus links de oferta já com a sua comissão.</li>
+                <li>Fica guardado <strong>trancado</strong>, e ninguém de fora recebe esses dados.</li>
+                <li><strong>Você não é obrigada</strong> a guardar o código de acesso da sua conta na loja. Sem ele, suas ofertas continuam saindo com a sua comissão — o link só fica mais comprido.</li>
+                <li>Você <strong>apaga tudo quando quiser</strong>, sozinha, por um botão no painel.</li>
+              </ul>
             </section>
 
             <section>

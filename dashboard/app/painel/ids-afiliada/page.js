@@ -40,35 +40,41 @@ function SessionWarning({ platformId, sessionStatus }) {
   if (!sessionStatus || sessionStatus.alive !== false) return null
   if (platformId === 'amazon') {
     return (
-      <div className="pnl-note-box is-error" style={{ marginBottom: 12 }} role="alert">
-        <strong>Cookies da Amazon expirados.</strong> A sessão não está mais autenticando — as ofertas ainda saem,
-        mas com o link longo (?tag=) em vez do amzn.to. Exporte um cookie novo da sua sessão logada e salve para
-        voltar a gerar o link curto.
+      <div className="pnl-note-box is-warn" style={{ marginBottom: 12 }} role="alert">
+        <strong>O código de acesso da Amazon venceu.</strong> Suas ofertas continuam saindo normalmente e a comissão
+        continua sendo sua — só que o link fica mais comprido. Para voltar a encurtar, cole um código novo aqui embaixo.
+        Se preferir, deixe assim mesmo: nada se perde.
       </div>
     )
   }
   return (
-    <div className="pnl-note-box is-error" style={{ marginBottom: 12 }} role="alert">
-      <strong>Sessão expirada.</strong> O cookie SSID do Mercado Livre não está mais válido — a geração de ofertas do ML está pausada.
-      Cole um SSID novo da sua sessão ativa e salve para voltar a funcionar.
+    <div className="pnl-note-box is-warn" style={{ marginBottom: 12 }} role="alert">
+      <strong>O código de acesso do Mercado Livre venceu.</strong> Suas ofertas continuam saindo e a comissão continua
+      sendo sua — só que o link fica mais comprido e cupons sem produto deixam de ser convertidos. Para voltar ao link
+      curto, cole um código novo aqui embaixo.
     </div>
   )
 }
 
-// Explica, na tela onde o dado é pedido, o que fazemos com o cookie de sessão.
+// Explica, na tela onde o dado é pedido, o que fazemos com o código de acesso.
 // A dúvida "isso expõe meus dados pessoais?" é legítima e não se resolve com
 // texto tranquilizador solto: fica junto do campo, com o botão de apagar ao lado.
+// Linguagem simples de propósito — quem usa o painel quer divulgar oferta, não
+// aprender vocabulário técnico.
 function CookiePrivacyDetails({ platform }) {
   if (!platform.supportsCookielessMode) return null
   return (
     <details className="pnl-help" style={{ marginBottom: 12 }}>
-      <summary>O que o BOTinho faz com esse cookie?</summary>
+      <summary>Esse código expõe meus dados pessoais?</summary>
       <ul style={{ margin: '6px 0 0', paddingLeft: 16 }}>
-        <li>Usamos <strong>só</strong> para gerar o seu link de afiliado com a sua comissão.</li>
-        <li>Fica <strong>guardado criptografado</strong> no servidor e nunca é repassado a terceiros.</li>
-        <li>Não compramos, não alteramos sua conta e não lemos suas mensagens ou dados pessoais.</li>
-        <li>Você pode <strong>apagar quando quiser</strong> no botão abaixo, ou encerrar as sessões na própria loja — o cookie deixa de valer na hora.</li>
-        <li>Prefere não dar o cookie? Ligue o <strong>modo sem cookie</strong> abaixo: o robô continua funcionando.</li>
+        <li>Ele serve <strong>só para uma coisa</strong>: montar o link da oferta já com a sua comissão.</li>
+        <li>Fica guardado <strong>trancado (criptografado)</strong> e não é repassado para ninguém.</li>
+        <li>Não compramos nada, não mudamos nada na sua conta e não lemos suas conversas.</li>
+        <li>Você <strong>apaga quando quiser</strong>, no botão lá embaixo. Sair da sua conta na loja também derruba o código na hora.</li>
+        <li>
+          Não quer guardar esse código? Marque a opção abaixo. <strong>Nada se perde:</strong> suas ofertas continuam
+          saindo com a sua comissão — só que o link fica mais comprido.
+        </li>
       </ul>
     </details>
   )
@@ -114,7 +120,9 @@ function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessi
   }
 
   async function handleDelete() {
-    if (!window.confirm(`Apagar as credenciais de ${platform.label}? Os dados dessa loja saem do BOTinho agora.`)) return
+    if (!window.confirm(
+      `Apagar os dados da ${platform.label}?\n\nEles saem daqui agora. Suas ofertas dessa loja param de sair até você cadastrar de novo — e cadastrar leva menos de um minuto.`,
+    )) return
     setDeleting(true)
     setFeedback(null)
     try {
@@ -176,8 +184,11 @@ function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessi
               style={{ marginTop: 3 }}
             />
             <span>
-              <strong>Modo sem cookie (mais privado).</strong> Guardamos apenas a sua tag — nenhum dado de sessão da sua conta.
+              <strong>Não quero guardar meu código de acesso.</strong> Guardamos só a sua etiqueta de afiliada — nada da sua conta da loja.
               {platform.cookielessNote && <><br />{platform.cookielessNote}</>}
+              {cookieless && (
+                <><br /><em>Pode mudar de ideia quando quiser: é só desmarcar e colar o código de novo.</em></>
+              )}
             </span>
           </label>
         </div>
@@ -248,7 +259,7 @@ function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessi
           onClick={handleDelete}
           disabled={isDisabled}
         >
-          {deleting ? 'Apagando…' : `Apagar credenciais de ${platform.label}`}
+          {deleting ? 'Apagando…' : `Apagar meus dados da ${platform.label}`}
         </button>
       )}
     </form>
@@ -329,8 +340,10 @@ export default function IdsAfiliadaPage() {
   return (
     <div className="pnl-grid" style={{ maxWidth: 640, margin: '0 auto' }}>
       <div className="pnl-note-box is-info">
-        Esses dados são usados apenas para gerar seus links de afiliado com a sua comissão, ficam guardados criptografados e você pode apagá-los quando quiser.
-        Se preferir não cadastrar cookie de sessão, ligue o <strong>modo sem cookie</strong> no cartão da loja — o robô continua funcionando. Não compartilhe suas credenciais fora do painel.
+        Tudo o que você cola aqui serve só para uma coisa: montar seus links de oferta já com a sua comissão. Fica guardado trancado
+        (criptografado) e você apaga quando quiser. <strong>Prefere não guardar o código de acesso da loja?</strong> Marque a opção
+        &quot;não quero guardar meu código&quot; no cartão da loja — suas ofertas continuam saindo do mesmo jeito, só com o link mais
+        comprido. Fora daqui, não passe esses dados para ninguém.
       </div>
 
       {loadError && (
