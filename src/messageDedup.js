@@ -1,10 +1,9 @@
-// Teto de entradas guardadas em `msgIds`. A janela de msgIds passou de 5min
-// para 24h (RCA da mensagem espelhada 5x: a única barreira contra o WhatsApp
-// reofertar a MESMA mensagem horas depois era a janela de link, que expira em
-// 120min) — sem teto, uma conta movimentada acumularia dezenas de milhares de
-// entradas no arquivo de dedup. Mantemos as mais NOVAS: uma entrada antiga
-// descartada só reabre a porta pra um replay muito velho, enquanto descartar a
-// nova reabriria pro replay imediato (bem mais provável).
+// Teto de entradas guardadas em `msgIds`. Com a janela default (5min) o volume
+// é naturalmente pequeno; o teto existe para que subir DEDUP_MSGID_WINDOW_MS
+// num ambiente não faça o arquivo de dedup crescer sem limite. Mantemos as mais
+// NOVAS: descartar uma entrada antiga só reabre a porta pra um replay muito
+// velho, enquanto descartar a nova reabriria pro replay imediato (bem mais
+// provável).
 export const MAX_DEDUP_MSGID_ENTRIES = 20_000
 
 export function pruneDedupStore(store, now = Date.now(), windowMs = 300_000) {

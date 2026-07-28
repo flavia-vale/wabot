@@ -13,44 +13,34 @@ import {
 const botWorkerSource = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
 
 // RCA 2026-07: uma mensagem publicada UMA vez no grupo monitorado foi espelhada
-// 5x ao longo de ~6h (14:14, 18:41, 19:42, 19:52, 20:04). As duas brechas que
-// permitiam isso estão cobertas aqui.
+// 5x ao longo de ~6h (14:14, 18:41, 19:42, 19:52, 20:04).
+//
+// A causa de PRIMEIRA ordem — a mensagem ser VISTA várias vezes — é atacada na
+// origem, em src/core/incomingFreshness.js (reentrega da fila offline não
+// reentra no pipeline). Ver test/incoming-freshness.test.js.
+//
+// Este arquivo cobre a segunda brecha, no lado do ENVIO, e guarda a decisão de
+// NÃO esticar a janela de msgIds: ela vale 5min de propósito (rede contra
+// re-emissão imediata), e as janelas curtas são o que a semântica de cupom
+// depende.
 
-// Brecha 1 — a janela de msgIds era 5min. `remoteJid:key.id` é único por
-// mensagem no WhatsApp: lembrar dele só 5min deixava qualquer reoferta posterior
-// (reconexão/offline sync/retry-receipt travado) reentrar no pipeline, com a
-// janela de LINK (120min) como única barreira — e ela já tinha expirado.
-test('mesma mensagem reofertada horas depois continua deduplicada (janela msgIds de 24h)', () => {
+test('janela de msgIds continua curta (5min) — não é ela a barreira contra reoferta', () => {
   const store = { msgIds: [], links: {} }
   const t0 = Date.parse('2026-07-27T17:14:00Z')
   const key = buildIncomingDedupKey({ key: { remoteJid: '123@g.us', id: 'STANZA-A' } })
-
   rememberDedupEntry(store, key, t0)
 
-  const janela24h = 24 * 60 * 60_000
-  for (const horas of [4.5, 5.5, 5.8, 6]) {
-    const agora = t0 + horas * 60 * 60_000
-    pruneDedupStore(store, agora, { msgIds: janela24h, links: 120 * 60_000 })
-    assert.equal(
-      hasRecentDedupEntry(store.msgIds, key, agora, janela24h),
-      true,
-      `reoferta ${horas}h depois precisa continuar bloqueada`,
-    )
-  }
+  const janela5min = 300_000
+  assert.equal(hasRecentDedupEntry(store.msgIds, key, t0 + 60_000, janela5min), true, 're-emissão imediata continua bloqueada')
 
-  // Passadas 24h a entrada sai (teto de memória), mas aí não é mais o mesmo dia.
-  const depois = t0 + 25 * 60 * 60_000
-  pruneDedupStore(store, depois, { msgIds: janela24h, links: 120 * 60_000 })
-  assert.deepEqual(store.msgIds, [])
-})
+  pruneDedupStore(store, t0 + 10 * 60_000, { msgIds: janela5min, links: 120 * 60_000 })
+  assert.deepEqual(store.msgIds, [], 'passados 5min a entrada sai — por isso o filtro de frescor existe')
 
-test('janela longa de msgIds não bloqueia mensagem diferente do mesmo grupo', () => {
-  const store = { msgIds: [], links: {} }
-  const t0 = Date.now()
-  const janela = 24 * 60 * 60_000
-  rememberDedupEntry(store, buildIncomingDedupKey({ key: { remoteJid: '123@g.us', id: 'A' } }), t0)
-  const outra = buildIncomingDedupKey({ key: { remoteJid: '123@g.us', id: 'B' } })
-  assert.equal(hasRecentDedupEntry(store.msgIds, outra, t0 + 60_000, janela), false)
+  assert.match(
+    botWorkerSource,
+    /const dedupeWindowMs = Math\.max\(1_000, Number\(process\.env\.DEDUP_MSGID_WINDOW_MS\) \|\| 300_000\)/,
+    'default da janela de msgIds precisa continuar 5min',
+  )
 })
 
 test('pruneDedupStore aplica teto de entradas mantendo as mais novas', () => {
@@ -67,14 +57,9 @@ test('pruneDedupStore aplica teto de entradas mantendo as mais novas', () => {
 })
 
 // Guarda estrutural: as duas janelas precisam ser INDEPENDENTES. Antes,
-// linkDedupWindowMs = Math.max(dedupeWindowMs, ...) — com msgIds em 24h isso
-// arrastaria a janela de link pra 24h e prenderia repost legítimo de oferta.
+// linkDedupWindowMs = Math.max(dedupeWindowMs, ...) — qualquer aumento em
+// msgIds arrastava a janela de link junto e prenderia repost legítimo.
 test('janela de link não é derivada da janela de msgIds', () => {
-  assert.match(
-    botWorkerSource,
-    /const dedupeWindowMs = Math\.max\(1_000, Number\(process\.env\.DEDUP_MSGID_WINDOW_MS\) \|\| 24 \* 60 \* 60_000\)/,
-    'janela de msgIds precisa ter default de 24h',
-  )
   assert.match(
     botWorkerSource,
     /const linkDedupWindowMs = Math\.max\(1_000, Number\(process\.env\.DEDUP_LINK_WINDOW_MS\) \|\| 120 \* 60_000\)/,
@@ -95,8 +80,15 @@ test('dedup por DB considera envio ainda PENDENTE independente da janela do link
   )
   assert.match(
     botWorkerSource,
-    /status: \{ in: \['queued', 'sending'\] \},\s*\n\s*sentAt: \{ gte: new Date\(Date\.now\(\) - PENDING_DEDUP_MAX_AGE_MS\) \}/,
-    'o ramo de pendente precisa usar PENDING_DEDUP_MAX_AGE_MS, não a janela do link',
+    /status: \{ in: \['queued', 'sending'\] \},\s*\n\s*sentAt: \{ gte: new Date\(Date\.now\(\) - pendingDedupMaxAgeMs\) \}/,
+    'o ramo de pendente precisa usar o teto de pendente, não a janela do link',
+  )
+  // Cupom fica de fora do teto longo: a mesma URL de campanha é reposta várias
+  // vezes ao dia com códigos diferentes.
+  assert.match(
+    botWorkerSource,
+    /const pendingDedupMaxAgeMs = isCouponLink \? effectiveDedupWindowMs : PENDING_DEDUP_MAX_AGE_MS/,
+    'cupom precisa manter a janela curta também no ramo de pendente',
   )
   assert.match(
     botWorkerSource,

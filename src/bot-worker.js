@@ -63,6 +63,7 @@ import { calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypin
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { applyMirrorTemplate } from './core/mirrorTemplate.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
+import { INCOMING_MAX_AGE_MS, shouldProcessIncomingMessage } from './core/incomingFreshness.js'
 import { classifyError } from './errorTaxonomy.js'
 import { recoverStuckSendLogs, STUCK_SEND_LOG_CUTOFF_MS } from './jobs/stuckSendLogs.js'
 import { detectMessageKind, extractIncomingText, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
@@ -1996,21 +1997,18 @@ async function startBotInner() {
   // mesmo produto pro mesmo grupo colidem e só a 1ª passa.
   // Default 120min; override via DEDUP_LINK_WINDOW_MS.
   //
-  // RCA 2026-07 (mesma mensagem do grupo monitorado espelhada 5x ao longo de
-  // ~6h, sem a fonte ter repostado): a janela de msgIds era 5min. `msg.key.id`
-  // é ÚNICO por mensagem no WhatsApp — lembrar dele por 5min só protege contra
-  // redelivery imediato. Quando o WhatsApp reoferece a MESMA mensagem horas
-  // depois (reconexão/offline sync/retry-receipt travado — ver RCAs de
-  // reconexão neste AGENTS.md), a única barreira restante era a janela de LINK
-  // (120min), que já tinha expirado — e a mensagem era espelhada de novo.
-  // Agora msgIds guarda 24h: como a chave é `remoteJid:key.id`, uma janela
-  // longa NUNCA bloqueia mensagem legítima diferente (ids não se repetem);
-  // só torna impossível espelhar a MESMA mensagem duas vezes no mesmo dia.
-  // Teto de entradas em MAX_DEDUP_MSGID_ENTRIES (src/messageDedup.js).
-  const dedupeWindowMs = Math.max(1_000, Number(process.env.DEDUP_MSGID_WINDOW_MS) || 24 * 60 * 60_000)
-  // NÃO derivar a janela de link da de msgIds (era `Math.max(dedupeWindowMs,
-  // ...)`): com msgIds em 24h isso arrastaria o link pra 24h junto e prenderia
-  // reposts legítimos de oferta/cupom. As duas janelas são independentes.
+  // RCA 2026-07 (mensagem espelhada 5x): a janela de msgIds fica em 5min DE
+  // PROPÓSITO — ela é só a rede contra re-emissão imediata do mesmo id; não é
+  // (e não deve virar) a barreira contra reoferta horas depois. A causa da
+  // reoferta é atacada na origem, no filtro de frescor do upsert
+  // (shouldProcessIncomingMessage / src/core/incomingFreshness.js): mensagem
+  // reentregue pelo WhatsApp (`type: 'append'`, node com `offline`) não entra
+  // no pipeline. Esticar esta janela mascararia o sintoma e ainda mexeria na
+  // semântica de cupom, que depende de janelas curtas.
+  const dedupeWindowMs = Math.max(1_000, Number(process.env.DEDUP_MSGID_WINDOW_MS) || 300_000)
+  // Janela de link INDEPENDENTE da de msgIds (era `Math.max(dedupeWindowMs,
+  // ...)`): com defaults atuais dá no mesmo, mas amarrar as duas fazia qualquer
+  // aumento em msgIds arrastar a janela de link junto e prender repost legítimo.
   const linkDedupWindowMs = Math.max(1_000, Number(process.env.DEDUP_LINK_WINDOW_MS) || 120 * 60_000)
   // Cupom/campanha (primary.linkKind === 'coupon') usa janela CURTA própria:
   // é comum a MESMA URL de cupom (ex.: página fixa de campanha) ser repostada
@@ -3065,6 +3063,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // aqui, igual pra todos os destinos desta mensagem.
       const isCouponLink = primary.linkKind === 'coupon'
       const effectiveDedupWindowMs = isCouponLink ? couponDedupWindowMs : linkDedupWindowMs
+      // Idade máxima para um envio AINDA PENDENTE contar como duplicata. Cupom
+      // usa a própria janela curta (não segura repost legítimo de campanha);
+      // produto usa o teto longo, porque um job adiado horas pela preservação
+      // do destino continua sendo o MESMO envio esperando sair.
+      const pendingDedupMaxAgeMs = isCouponLink ? effectiveDedupWindowMs : PENDING_DEDUP_MAX_AGE_MS
       let destIndex = -1
       for (const destJid of destinations) {
         destIndex++
@@ -3126,6 +3129,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
                 // 2) ainda PENDENTE na fila — duplicata independente da idade,
                 //    porque o job pode estar adiado há horas pela preservação
                 //    do destino e ainda vai sair.
+                // CUPOM fica de fora do critério 2 (pendingMaxAgeMs cai para a
+                // janela curta do cupom): a mesma URL de campanha é reposta
+                // várias vezes ao dia com códigos diferentes, e segurar a
+                // segunda porque a primeira ainda não saiu perderia oferta
+                // legítima. Produto mantém a proteção completa.
                 AND: [{
                   OR: [
                     {
@@ -3134,7 +3142,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
                     },
                     {
                       status: { in: ['queued', 'sending'] },
-                      sentAt: { gte: new Date(Date.now() - PENDING_DEDUP_MAX_AGE_MS) },
+                      sentAt: { gte: new Date(Date.now() - pendingDedupMaxAgeMs) },
                     },
                   ],
                 }],
@@ -3511,7 +3519,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     logger.info({ type, count: messages.length }, 'messages.upsert recebido')
     if (type !== 'notify' && type !== 'append') return
-    const cutoff = Date.now() - 5 * 60_000
+    const cutoff = Date.now() - INCOMING_MAX_AGE_MS
 
     for (const msg of messages) {
       rememberChannelJid(msg?.key?.remoteJid)
@@ -3585,7 +3593,28 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       const msgTsRaw = Number(msg.messageTimestamp ?? 0)
       const hasValidTimestamp = Number.isFinite(msgTsRaw) && msgTsRaw > 0
       const msgTs = hasValidTimestamp ? msgTsRaw * 1000 : null
-      if (msgTs && msgTs < cutoff) continue
+      // Cada mensagem é vista UMA vez, ao vivo. Reentrega da fila offline do
+      // WhatsApp (`type: 'append'`, drenada a cada reconexão) e mensagem velha
+      // não reentram no pipeline — ver src/core/incomingFreshness.js. Antes o
+      // descarte era um `continue` mudo: nem o motivo nem a idade apareciam no
+      // bot.log, o que tornava impossível ver reoferta acontecendo.
+      const freshness = shouldProcessIncomingMessage({
+        upsertType: type,
+        messageTimestampMs: msgTs,
+        now: Date.now(),
+        maxAgeMs: INCOMING_MAX_AGE_MS,
+      })
+      if (!freshness.process) {
+        logger.info({
+          jid: msg.key.remoteJid,
+          msgId: msg.key.id,
+          upsertType: type,
+          reason: freshness.reason,
+          ageMs: freshness.ageMs,
+          maxAgeMs: INCOMING_MAX_AGE_MS,
+        }, 'Mensagem descartada: reentrega/mensagem velha não reentra no pipeline')
+        continue
+      }
 
       const now = Date.now()
       pruneDedupStore(dedup, now, { msgIds: dedupeWindowMs, links: linkDedupWindowMs })
@@ -3600,10 +3629,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // linha era impossível provar, pelo bot.log, se o WhatsApp reofertou a
       // MESMA mensagem (mesmo key.id) ou se a fonte republicou — o log de
       // upsert só trazia {type, count}. Volume proporcional ao de mensagens
-      // aceitas (as duplicatas param no `continue` acima).
-      // hasValidTimestamp=false é o caso em que a barreira de frescor (cutoff
-      // de 5min) NÃO consegue julgar a idade e a mensagem passa mesmo velha —
-      // a proteção que resta é a janela longa de msgIds acima.
+      // aceitas (reentregas e duplicatas param nos `continue` acima).
+      // upsertType='append' aqui significa mensagem de CANAL ao vivo (a única
+      // 'append' que sobrevive ao filtro de frescor).
       logger.info({
         jid: msg.key.remoteJid,
         msgId: msg.key.id,

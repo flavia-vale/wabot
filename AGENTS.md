@@ -584,22 +584,50 @@ saiu 5x (14:14, 18:41, 19:42, 19:52, 20:04); em produção saiu uma vez só, mas
 5h atrasada (19:13). Mesmo código nos dois ambientes (`develop` == `main` na
 data) — a diferença é de estado/configuração, não de versão.
 
-**Duas brechas de dedup, ambas corrigidas:**
+**Causa de primeira ordem — a mensagem estava sendo VISTA várias vezes.**
+Confirmado na fonte do Baileys 6.7.23 instalado (`lib/Socket/messages-recv.js`):
 
-1. **Janela de `msgIds` era 5min.** `remoteJid:key.id` é ÚNICO por mensagem no
-   WhatsApp, então lembrar dele só 5min protegia apenas contra redelivery
-   imediato. Quando o WhatsApp **reoferece a MESMA mensagem** horas depois
-   (reconexão/offline sync/retry-receipt travado — ver os RCAs de reconexão
-   acima), a única barreira restante era a janela de **link** (120min), que já
-   tinha expirado → a mensagem era espelhada de novo. Hoje `DEDUP_MSGID_WINDOW_MS`
-   tem default **24h**: como a chave é o id da mensagem, janela longa **nunca**
-   bloqueia mensagem legítima diferente — só torna impossível espelhar a MESMA
-   duas vezes no dia. Teto de memória em `MAX_DEDUP_MSGID_ENTRIES`
-   (`src/messageDedup.js`, 20k entradas, mantém as mais novas).
-   **Não voltar a derivar `linkDedupWindowMs` de `dedupeWindowMs`**
-   (era `Math.max(dedupeWindowMs, ...)`) — com msgIds em 24h isso arrastaria a
-   janela de link pra 24h e prenderia repost legítimo de oferta/cupom.
-2. **A dedup por DB não enxergava envio ainda PENDENTE.** A consulta filtrava
+```js
+await upsertMessage(msg, node.attrs.offline ? 'append' : 'notify')
+```
+
+Mensagem **reentregue** pelo WhatsApp (fila offline, drenada a cada reconexão)
+chega com `type: 'append'`; ao vivo chega como `'notify'`. O handler de
+`messages.upsert` aceitava as duas vias, e a única barreira era o cutoff de
+idade — que o Baileys monta com `messageTimestamp: +stanza.attrs.t`
+(`lib/Utils/decode-wa-message.js`). **Sem o atributo `t` no stanza isso vira
+`NaN`**, e o guard antigo (`if (msgTs && msgTs < cutoff) continue`) era
+**pulado**: reentrega de horas antes passava direto para o pipeline.
+
+Hoje a decisão vive em `shouldProcessIncomingMessage`
+(`src/core/incomingFreshness.js`, puro/testado), chamada no chokepoint do
+`messages.upsert`:
+
+- `append` (reentrega/histórico) **sem** timestamp confiável → **descarta**;
+- qualquer via com timestamp mais velho que `INCOMING_MAX_AGE_MS` (5min) → **descarta**;
+- `notify` (ao vivo) sem timestamp → **processa** (é a via da mensagem nova;
+  descartar perderia mensagem legítima).
+
+**Não descartar `append` em bloco:** mensagem de **canal (`@newsletter`) ao
+vivo** também chega como `append` (`Processed plaintext newsletter message`, no
+mesmo arquivo do Baileys). Ela vem com `t` válido e recente, então passa pela
+regra de idade — a distinção é a idade, não o tipo.
+
+O descarte **loga motivo e idade** (`Mensagem descartada: reentrega/mensagem
+velha não reentra no pipeline`). Antes era um `continue` mudo, o que tornava
+impossível ver reoferta acontecendo no `bot.log`.
+
+**Não esticar a janela de `msgIds` para compensar.** Ela vale **5min** de
+propósito (`DEDUP_MSGID_WINDOW_MS`) — é a rede contra re-emissão imediata do
+mesmo id, não a barreira contra reoferta horas depois; janelas curtas são o que
+a semântica de cupom depende. **Não voltar a derivar `linkDedupWindowMs` de
+`dedupeWindowMs`** (era `Math.max(dedupeWindowMs, ...)`): amarrar as duas faz
+qualquer aumento em msgIds arrastar a janela de link junto e prender repost
+legítimo.
+
+**Segunda brecha, no lado do ENVIO:**
+
+1. **A dedup por DB não enxergava envio ainda PENDENTE.** A consulta filtrava
    `sentAt` dentro da janela do link; só que `sentAt` de uma linha `queued` é o
    momento em que ela foi criada, e um job pode ficar **horas adiado** pela
    preservação do destino (`deferSendJob`: horário de funcionamento, burst cap,
@@ -608,19 +636,21 @@ data) — a diferença é de estado/configuração, não de versão.
    duas (ou cinco) saíam em **rajada espaçada pelo throttle** — exatamente o
    padrão 19:42/19:52/20:04. Hoje a consulta tem dois ramos: `success` dentro de
    `effectiveDedupWindowMs`, **ou** `queued`/`sending` dentro de
-   `PENDING_DEDUP_MAX_AGE_MS` (default 24h — teto só pra que uma linha presa em
-   `queued` por bug não bloqueie o destino pra sempre). Mensagem que ainda não
-   foi entregue é duplicata independente da idade.
+   `pendingDedupMaxAgeMs` (produto: `PENDING_DEDUP_MAX_AGE_MS`, default 24h —
+   teto só pra que uma linha presa em `queued` por bug não bloqueie o destino
+   pra sempre). Mensagem que ainda não foi entregue é duplicata independente da
+   idade. **Cupom fica de fora desse teto** (`pendingDedupMaxAgeMs` cai para a
+   janela curta do cupom): a mesma URL de campanha é reposta várias vezes ao dia
+   com códigos diferentes, e segurar a segunda porque a primeira ainda não saiu
+   perderia oferta legítima.
 
 **Forense (o que faltava para diagnosticar):** o `bot.log` só registrava
 `messages.upsert recebido {type, count}` — sem `msgId` era impossível separar
 "WhatsApp reofertou o mesmo `key.id`" de "a fonte republicou". Agora cada
 mensagem ACEITA loga `Mensagem aceita para processamento {jid, msgId,
-upsertType, hasValidTimestamp, ageMs}` (volume proporcional ao de mensagens
-aceitas; as duplicatas param antes, no `continue`). `hasValidTimestamp:false`
-marca o caso em que a barreira de frescor (cutoff de 5min sobre
-`messageTimestamp`) **não consegue julgar a idade** e a mensagem passa mesmo
-velha — nesse caso a proteção que resta é a janela longa de `msgIds`.
+upsertType, hasValidTimestamp, ageMs}` e cada mensagem DESCARTADA loga o motivo
+(`stale` / `replay_without_timestamp`) com a idade. Volume proporcional ao de
+mensagens do socket.
 
 **Atraso de horas ≠ duplicata.** Um envio pode ficar `queued` legitimamente
 esperando a preservação do destino; o painel mostra a espera no `errorMsg` da
@@ -638,7 +668,7 @@ Ele cruza `MessageLog` (incluindo pendentes), `SendDedupKey`,
 `WaConnectionEvent`, `AnalyticsEvent ops_*`, a preservação de cada destino e o
 `bot.log`, e diz explicitamente se o MESMO `key.id` foi aceito mais de uma vez.
 
-Testes: `test/mirror-duplicate-replay.test.js`,
+Testes: `test/incoming-freshness.test.js`, `test/mirror-duplicate-replay.test.js`,
 `test/bot-worker-relay-branding.test.js`.
 
 ## Agregação de duplicatas em `MessageLog.dedupHits`
