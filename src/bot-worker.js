@@ -29,7 +29,7 @@ import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { shouldIgnoreChatJid, buildAllowedJidSet } from './core/ignoredJidPolicy.js'
-import { validateCredentialData } from './credentialHealth.js'
+import { describeMissingCredentials, validateCredentialData } from './credentialHealth.js'
 import { sanitizeMessageForLog, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'
 import { decryptCredential } from './credentialCrypto.js'
 import { persistCredentialPatch } from './credentialPatch.js'
@@ -2787,7 +2787,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             url,
             jid,
             text,
-            reason: `Credenciais de ${credentialValidation.label} ausentes ou incompletas: ${credentialValidation.missing.join(', ')}`,
+            reason: describeMissingCredentials(credentialValidation),
           })
           return null
         }

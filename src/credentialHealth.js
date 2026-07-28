@@ -1,4 +1,5 @@
 import { decryptCredential } from './credentialCrypto.js'
+import { applyCookielessMode, filterRequiredFieldsForCookieless, isCookielessMode } from './credentialPrivacy.js'
 
 const PLATFORM_LABELS = {
   shopee: 'Shopee',
@@ -8,6 +9,45 @@ const PLATFORM_LABELS = {
 }
 
 export const PLATFORMS = Object.keys(PLATFORM_LABELS)
+
+// Como cada campo é CHAMADO para a usuária. As mensagens de erro/save saíam com
+// o nome técnico do campo ("Campos obrigatórios: ssid/cookie, ubid-acbbr"), que
+// não diz nada para quem só quer divulgar oferta. Toda mensagem que chega na
+// tela passa por `friendlyFieldName` — se um campo novo não estiver no mapa, o
+// fallback é o próprio nome (nunca quebra, só fica menos amigável).
+const FIELD_LABELS = {
+  tag: 'sua etiqueta de afiliado',
+  'ssid/cookie': 'o código de acesso da sua conta',
+  ssid: 'o código de acesso da sua conta',
+  cookie: 'o código de acesso da sua conta',
+  'ubid-acbbr': 'o código de acesso da sua conta',
+  'at-acbbr': 'o código de acesso da sua conta',
+  'x-acbbr': 'o código de acesso da sua conta',
+  appId: 'o App ID da Shopee',
+  secretKey: 'a chave secreta da Shopee',
+}
+
+export function friendlyFieldName(field) {
+  return FIELD_LABELS[field] ?? field
+}
+
+// Recado único de "falta cadastrar" — usado no painel, no motor de ofertas e no
+// worker, para a usuária ler sempre a MESMA frase, em português comum, em vez de
+// três variações com nome técnico de campo.
+export function describeMissingCredentials(validation) {
+  const pendencias = joinFriendly(validation?.missing ?? [])
+  const loja = validation?.label ?? 'loja'
+  const oQueFalta = pendencias ? `Faltou preencher ${pendencias} da ${loja}.` : `Faltam dados da ${loja}.`
+  return `${oQueFalta} Abra "Minhas credenciais" no painel para completar — leva menos de um minuto.`
+}
+
+// Junta a lista de pendências em português corrente ("A e B", "A, B e C") —
+// vírgula seca no fim de frase soa a erro de sistema, não a recado.
+function joinFriendly(fields = []) {
+  const names = [...new Set(fields.map(friendlyFieldName))]
+  if (names.length <= 1) return names[0] ?? ''
+  return `${names.slice(0, -1).join(', ')} e ${names[names.length - 1]}`
+}
 
 export const REQUIRED_FIELDS = {
   shopee: ['appId', 'secretKey'],
@@ -72,8 +112,29 @@ export function validateCredentialData(platform, data = {}) {
     }
   }
 
-  const required = REQUIRED_FIELDS[platform] ?? []
+  // Modo sem cookie (credentialPrivacy.js): a usuária optou por não entregar a
+  // sessão da loja. A credencial fica COMPLETA com a tag sozinha — o converter
+  // já cai no fallback (partner_id / ?tag=) e a comissão continua creditando.
+  // Sem isto, o painel marcaria "incompleto" para sempre e ficaria cobrando o
+  // cookie que ela decidiu não dar.
+  const cookieless = isCookielessMode(platform, data)
+  const required = cookieless
+    ? filterRequiredFieldsForCookieless(platform, REQUIRED_FIELDS[platform] ?? [])
+    : (REQUIRED_FIELDS[platform] ?? [])
   const missing = required.filter(field => !hasValue(data?.[field]))
+
+  if (cookieless) {
+    const warnings = missing.length ? [] : getFormatWarnings(platform, data)
+    return {
+      platform,
+      label: PLATFORM_LABELS[platform],
+      status: missing.length ? 'incomplete' : (warnings.length ? 'warning' : 'configured'),
+      configured: missing.length === 0,
+      cookielessMode: true,
+      missing,
+      warnings,
+    }
+  }
 
   if (platform === 'amazon') {
     // O cookie string COMPLETO da sessão (campo `cookie`) satisfaz a autenticação
@@ -104,6 +165,7 @@ export function validateCredentialData(platform, data = {}) {
     label: PLATFORM_LABELS[platform],
     status: configured ? (warnings.length ? 'warning' : 'configured') : 'incomplete',
     configured,
+    cookielessMode: false,
     missing,
     warnings,
   }
@@ -142,12 +204,15 @@ export function summarizeCredentialHealth(credentials = []) {
 
 export function getCredentialSaveMessage(validation) {
   if (!validation?.configured) {
-    return `Credenciais de ${validation?.label ?? 'plataforma'} incompletas. Preencha: ${(validation?.missing ?? []).join(', ')}.`
+    return `Faltou preencher ${joinFriendly(validation?.missing ?? [])} da ${validation?.label ?? 'loja'}.`
+  }
+  if (validation.cookielessMode) {
+    return `Pronto! Guardamos só a sua etiqueta da ${validation.label} — nada da sua conta. Suas ofertas continuam saindo normalmente, com a sua comissão; o link só fica mais comprido.`
   }
   if (validation.warnings?.length) {
-    return `Credenciais de ${validation.label} salvas, mas há alertas para revisar antes do bot converter links dessa loja.`
+    return `Salvamos os dados da ${validation.label}, mas confira os avisos abaixo antes de começar a divulgar.`
   }
-  return `Credenciais de ${validation.label} salvas e prontas para conversão.`
+  return `Tudo certo! A ${validation.label} está pronta e suas ofertas já saem com a sua comissão.`
 }
 
 // Quando a usuária cola um SSID NOVO do Mercado Livre, o `cookie` (jar completo)
@@ -160,6 +225,13 @@ export function getCredentialSaveMessage(validation) {
 // reconstrói no primeiro createLink bem-sucedido.
 export function sanitizeCredentialBody(platform, body = {}) {
   if (!body || typeof body !== 'object') return body
+
+  // Modo sem cookie tem precedência sobre tudo: se a usuária ligou a opção,
+  // nenhum campo de sessão é persistido, nem que venha preenchido no corpo.
+  // Como o PUT sobrescreve o blob `data` inteiro, isto APAGA o cookie que já
+  // estava guardado (não é só parar de usar).
+  const cookielessBody = applyCookielessMode(platform, body)
+  if (cookielessBody !== body) return cookielessBody
 
   if (platform === 'mercadolivre') {
     const ssid = typeof body.ssid === 'string' ? body.ssid.trim() : ''

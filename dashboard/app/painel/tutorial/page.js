@@ -195,6 +195,12 @@ export default function TutorialPage() {
         <Warning>
           Nunca compartilhe seus cookies, IDs, SSID, Key ou Secret com terceiros. Esses dados dão acesso à sua conta.
         </Warning>
+        <Tip>
+          Não quer guardar esse código de acesso? Você não é obrigada. Em <strong>Minhas credenciais</strong>, marque a opção
+          <strong> &quot;não quero guardar meu código de acesso&quot;</strong>: guardamos só a sua etiqueta de afiliada.
+          <strong> Nada se perde</strong> — suas ofertas continuam saindo com a sua comissão, o link só fica mais comprido.
+          E dá para mudar de ideia quando quiser, nos dois sentidos.
+        </Tip>
       </div>
 
       {/* Passo 0 */}
