@@ -23,6 +23,7 @@ export const ANALYTICS_EVENTS = new Set([
   'login_completed',
   'whatsapp_connected',
   'credential_saved',
+  'credential_deleted',
   'monitor_group_created',
   'post_group_created',
   'checkout_started',

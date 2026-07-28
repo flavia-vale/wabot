@@ -91,7 +91,11 @@ test('POST /convert retorna erro por item quando faltam credenciais', async (t) 
   const body = JSON.parse(res.body)
   assert.equal(body.results[0].status, 'error')
   assert.equal(body.results[0].code, 'MISSING_CREDENTIALS')
-  assert.match(body.results[0].error, /Credenciais de Amazon ausentes/i)
+  // Recado em linguagem de gente (describeMissingCredentials): nomeia a loja e o
+  // que falta sem despejar nome técnico de campo na tela.
+  assert.match(body.results[0].error, /Faltou preencher .* da Amazon/i)
+  assert.match(body.results[0].error, /Minhas credenciais/i)
+  assert.doesNotMatch(body.results[0].error, /ubid-acbbr|at-acbbr|x-acbbr/i)
   assert.equal(calls, 0)
 })
 
