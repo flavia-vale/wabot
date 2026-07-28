@@ -125,7 +125,63 @@ test('isAmazonShortLink reconhece encurtadores e ignora URL plena de produto', (
   assert.equal(isAmazonShortLink('https://amzn.to/abc'), true)
   assert.equal(isAmazonShortLink('https://link.amazon/B00WDbu4a'), true)
   assert.equal(isAmazonShortLink('https://a.co/d/abc'), true)
+  assert.equal(isAmazonShortLink('https://amzn.divulguei.app/ypAVjz'), true)
   assert.equal(isAmazonShortLink('https://www.amazon.com.br/dp/B09WG452T1'), false)
+})
+
+// Encurtador de plataforma de divulgação: dá DOIS saltos, e o do meio
+// (`<slug>.promos.app.br`) não é host Amazon. O resolvedor só valida o host na
+// entrada, então a cadeia inteira é seguida — não regredir esse comportamento
+// adicionando checagem de host por hop, senão o link morre no salto do meio.
+test('resolveAmazonShortLink: segue cadeia amzn.divulguei.app -> promos.app.br -> PDP', async () => {
+  const HOP = 'https://promobaby.promos.app.br/p/amazon/B0CNTVD72S'
+  const PDP = 'https://www.amazon.com.br/dp/B0CNTVD72S?linkCode=ogi&psc=1&tag=promobaby07-20&th=1'
+  const REDIRECTS = { 'https://amzn.divulguei.app/ypAVjz': HOP, [HOP]: PDP }
+  const seen = []
+  const fetchImpl = async (u) => {
+    seen.push(u)
+    return {
+      url: u,
+      headers: {
+        getSetCookie: () => [],
+        get: (k) => (String(k).toLowerCase() === 'location' ? (REDIRECTS[u] ?? null) : null),
+      },
+    }
+  }
+  const resolved = await resolveAmazonShortLink('https://amzn.divulguei.app/ypAVjz', { fetchImpl })
+  assert.equal(resolved, PDP)
+  assert.deepEqual(seen, ['https://amzn.divulguei.app/ypAVjz', HOP], 'passa pelo hop de terceiro')
+})
+
+// O ponto da feature: o link de origem carrega a tag de OUTRO afiliado
+// (`promobaby07-20`). Depois de resolvida a cadeia, o link entregue tem que
+// carregar a etiqueta da cliente — nunca repassar a comissão do concorrente.
+test('Amazon: converte amzn.divulguei.app trocando a tag do concorrente pela nossa', async () => {
+  const HOP = 'https://promobaby.promos.app.br/p/amazon/B0CNTVD72S'
+  const PDP = 'https://www.amazon.com.br/dp/B0CNTVD72S?linkCode=ogi&psc=1&tag=promobaby07-20&th=1'
+  const REDIRECTS = { 'https://amzn.divulguei.app/ypAVjz': HOP, [HOP]: PDP }
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (u) => ({
+    url: u,
+    headers: {
+      getSetCookie: () => [],
+      get: (k) => (String(k).toLowerCase() === 'location' ? (REDIRECTS[u] ?? null) : null),
+    },
+  })
+  const restore = mockAxiosOnce(async (url) => {
+    if (url.includes('sitestripe/getShortUrl')) return { status: 401, data: {}, headers: {} }
+    return { status: 200, request: { res: { responseUrl: PDP } }, config: { url: PDP } }
+  })
+  try {
+    const result = await convert('https://amzn.divulguei.app/ypAVjz', CREDS)
+    assert.equal(result.linkKind, 'product')
+    assert.ok(result.url.includes('/dp/B0CNTVD72S'), 'preserva o ASIN da cadeia')
+    assert.ok(result.url.includes(`tag=${CREDS.tag}`), 'sai com a etiqueta da cliente')
+    assert.ok(!result.url.includes('promobaby07-20'), 'não repassa a tag do concorrente')
+  } finally {
+    restore()
+    globalThis.fetch = originalFetch
+  }
 })
 
 test('resolveAmazonShortLink: segue redirect HTTP até a PDP com ASIN', async () => {

@@ -6,8 +6,16 @@ import { shouldConvertCouponLinks } from './couponPolicy.js'
 const AMAZON_STORE_HOST = /(^|\.)amazon\.com\.br$/
 
 const ASIN_RE = /(?:\/dp\/|\/gp\/product\/|\/product-reviews\/|\/exec\/obidos\/ASIN\/)([A-Z0-9]{10})/i
-const AMAZON_HOST = /amazon\.com\.br|link\.amazon|amzn\.to|amzn\.la|a\.co|amzn\.divulgador\.link|amzlink\.to/
-const SHORT_HOST = /link\.amazon|amzn\.to|amzn\.la|a\.co|amzn\.divulgador\.link|amzlink\.to/
+// `amzn.divulguei.app` é encurtador de terceiro (plataforma de divulgação), não
+// da Amazon: ele salta primeiro para uma landing intermediária do próprio
+// serviço (`<slug>.promos.app.br/p/amazon/<ASIN>`) e só então para
+// `amazon.com.br/dp/<ASIN>?tag=<afiliado-de-origem>`. Resolver a cadeia inteira
+// é o que nos deixa trocar a tag do concorrente pela da cliente — sem isso o
+// link nem era detectado e a oferta passava batida. `resolveAmazonShortLink`
+// segue os hops sem exigir que os intermediários sejam hosts Amazon (só a
+// entrada é checada), então o salto por `promos.app.br` funciona de graça.
+const AMAZON_HOST = /amazon\.com\.br|link\.amazon|amzn\.to|amzn\.la|a\.co|amzn\.divulgador\.link|amzn\.divulguei\.app|amzlink\.to/
+const SHORT_HOST = /link\.amazon|amzn\.to|amzn\.la|a\.co|amzn\.divulgador\.link|amzn\.divulguei\.app|amzlink\.to/
 
 async function resolveShortUrl(url) {
   try {
