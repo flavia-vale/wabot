@@ -370,6 +370,47 @@ async function tryExtractProductFromLanding(url) {
 // Por que a heurística antiga (recommended_items[0]) falhava: pegava o primeiro
 // item de RECOMENDAÇÃO, não o card destacado. Aqui usamos o featured (og +
 // primeiro polycard), que é o alvo real do ref.
+// O card destacado traz o endereço REAL do anúncio no campo `url` (sem esquema
+// e com as barras escapadas como /). Usá-lo é sempre melhor do que montar
+// um endereço na mão.
+//
+// RCA 2026-07-28 (404 em produção): quando o card não tem `product_id` de
+// catálogo, o código caía direto no ramo que FABRICA
+// `produto.mercadolivre.com.br/<id>-x-_JM` — sem hífen depois de MLB e com o
+// slug inventado "-x-". O endereço real do ML é
+// `produto.mercadolivre.com.br/MLB-<id>-<nome-do-produto>-_JM`. O endereço
+// fabricado respondeu 404 quando aberto do próprio VPS, e essa forma era ~16%
+// dos links de ML de uma cliente (370 em 7 dias). Não regredir: preferir
+// SEMPRE o `url` do card antes de fabricar.
+function extractFeaturedCardUrl(metadata, expectedMlbId) {
+  const raw = metadata.match(/"url"\s*:\s*"([^"]+)"/i)?.[1]
+  if (!raw) return null
+
+  // O HTML traz a URL como string JSON escapada (/, \/ etc.).
+  let decoded = raw
+  try {
+    decoded = JSON.parse(`"${raw.replace(/(?<!\\)"/g, '\\"')}"`)
+  } catch { /* mantém o valor cru */ }
+  decoded = String(decoded).trim()
+  if (!decoded) return null
+  if (!/^https?:\/\//i.test(decoded)) decoded = `https://${decoded.replace(/^\/+/, '')}`
+
+  let u
+  try { u = new URL(decoded) } catch { return null }
+  // Segurança: só aceitamos endereço do próprio ML vindo do HTML de terceiro.
+  if (!ML_HOST.test(u.hostname)) return null
+
+  // Anti-mismatch (mesma filosofia da validação do short link): se o endereço
+  // aponta para um MLB diferente do card, não é o produto destacado.
+  const urlMlbId = extractMlbId(u.pathname)
+  if (!urlMlbId) return null
+  if (expectedMlbId && urlMlbId !== expectedMlbId) return null
+
+  u.search = ''
+  u.hash = ''
+  return u.toString()
+}
+
 export function extractFeaturedSocialProduct(html) {
   if (typeof html !== 'string' || !html) return null
   // Sem card destacado => não é divulgação de um produto específico.
@@ -384,6 +425,12 @@ export function extractFeaturedSocialProduct(html) {
     const productId = firstPolycard.match(/"product_id"\s*:\s*"(MLB[0-9]+)"/i)?.[1]
     if (productId) return `https://www.mercadolivre.com.br/p/${productId}`
     const listingId = firstPolycard.match(/"id"\s*:\s*"(MLB[0-9]+)"/i)?.[1]
+    // Endereço real do ML antes de qualquer fabricação (ver extractFeaturedCardUrl).
+    const cardUrl = extractFeaturedCardUrl(firstPolycard, listingId)
+    if (cardUrl) return cardUrl
+    // Último recurso: sem `url` utilizável no card, montamos o endereço pelo id.
+    // Essa forma já respondeu 404 em produção — por isso ela é o ÚLTIMO caminho,
+    // não o primeiro.
     if (listingId) return `https://produto.mercadolivre.com.br/${listingId}-x-_JM`
   }
   return null

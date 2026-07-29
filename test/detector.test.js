@@ -51,6 +51,22 @@ test('detecta short link link.amazon como amazon', () => {
   assert.equal(links[0].url, 'https://link.amazon/B00WDbu4a')
 })
 
+// Encurtador de plataforma de divulgação (2026-07): o link não era detectado,
+// então a oferta passava batida e a comissão ficava com o afiliado de origem.
+// Nome parecido com `amzn.divulgador.link`, mas é outro serviço/domínio.
+test('detecta short link amzn.divulguei.app como amazon', () => {
+  const links = detectLinks('corre que acaba https://amzn.divulguei.app/ypAVjz agora')
+  assert.equal(links.length, 1)
+  assert.equal(links[0].platform, 'amazon')
+  assert.equal(links[0].url, 'https://amzn.divulguei.app/ypAVjz')
+})
+
+// A entrada é `amzn.` de propósito: `divulguei.app` serve várias lojas, então
+// casar o domínio nu classificaria link de outra loja como amazon.
+test('não casa outro subdomínio de divulguei.app como amazon', () => {
+  assert.equal(detectLinks('https://shopee.divulguei.app/abc123').length, 0)
+})
+
 test('não casa host colado (notmercadolivre.com.br)', () => {
   assert.equal(detectLinks('https://notmercadolivre.com.br/p/MLB123').length, 0)
 })

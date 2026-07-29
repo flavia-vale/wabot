@@ -187,6 +187,11 @@ API_URL=http://178.105.54.0:3006
 # delega ciclo de vida dos bots ao app PM2 bot-supervisor-staging via Redis.
 BOT_SUPERVISOR_MODE=inline
 REDIS_URL=redis://127.0.0.1:6379/1
+# WA_WEB_VERSION: pin manual da versão do WhatsApp Web anunciada no handshake.
+# Ausente = resolve sozinho (registro público -> Baileys -> cache). Só preencher
+# quando o WhatsApp cortar a versão vigente e todas as sessões caírem com 405 —
+# ver seção "failure 405 derrubando TODAS as sessões".
+# WA_WEB_VERSION=2.3000.1044015310
 # Converte links de cupom/voucher (Shopee, Amazon, ML) com comissão nossa em vez
 # de removê-los. Resolve o shortLink afiliado para a landing web segura
 # (/m/cupom-de-desconto) evitando "Oops! Seu navegador não é mais aceito!".
@@ -222,6 +227,9 @@ API_URL=http://espelhagrupos.com.br
 # Ver seção "Processos PM2" para detalhes sobre cutover inline -> remote.
 BOT_SUPERVISOR_MODE=inline
 REDIS_URL=redis://127.0.0.1:6379/0
+# WA_WEB_VERSION: pin manual da versão do WhatsApp Web (botão de emergência do
+# incidente 405 — ver seção própria). Ausente = resolve sozinho.
+# WA_WEB_VERSION=2.3000.1044015310
 # Converte links de cupom/voucher (Shopee, Amazon, ML) com comissão nossa em vez
 # de removê-los. Resolve o shortLink afiliado para a landing web segura
 # (/m/cupom-de-desconto) evitando "Oops! Seu navegador não é mais aceito!".
@@ -841,6 +849,50 @@ após observar timeouts excessivos com Amazon BR lenta (HTML ~1.3MB).
 **Não desligar os timeouts** — sem eles, um socket Baileys silenciosamente
 morto trava a fila serial inteira até reinício do worker.
 
+## "Atraso entre canais" (`channelStaggerJitterMs`) — default 90s → 20s (RCA 2026-07-28)
+
+**Sintoma:** cliente relatou mensagens "muito tempo na fila" **mesmo sem
+preservação configurada**. Na conta de dev, `preservationEnabled=0`,
+`channelThrottleEnabled=0` e preset com `throttleEnabled=0` — nenhum gate de
+throttle agindo — e ainda assim os envios saíam com 88-125s de intervalo.
+
+**Causa raiz:** `BotConfig.channelStaggerJitterMs` (campo "🎲 Atraso entre
+canais", em Preservação → Configurações) estava em 120000ms. Para o 2º destino
+em diante que seja canal, `bot-worker.js` sorteia `0..channelStaggerJitterMs` e
+guarda no `job.delayMs`; `processSendJob` faz `await sleep(delayMs)` **dentro da
+fila serial de envio**. Ou seja, não espaça só os canais: **congela todos os
+envios do usuário**, inclusive para grupos e de outras fontes. Medição no
+`bot.log` de staging: média **60,4s** de espera por mensagem (máx 119,5s); ao
+zerar o campo, o intervalo entre envios caiu para **8-14s**.
+
+**Duas armadilhas de diagnóstico:**
+- o campo é **desacoplado** dos toggles de preservação (comentário em
+  `bot-worker.js:3368`: "aplica sempre que houver jitter configurado") — logo
+  "preservação desligada" **não** significa "sem atraso";
+- `BotConfig.channelMinIntervalSec` continua gravado mas é **campo morto**: o
+  gate lê `destPreservation` (preset por destino), e `checkAndReserve` ignora o
+  botConfig (`_botConfig`). Não perder tempo investigando esse valor.
+
+**Mudança aplicada:** default 90000 → **20000** em `prisma/schema.prisma` +
+migration DML `20260728120000_channel_stagger_default_20s` que troca **só as
+linhas ainda em 90000**. Quem escolheu valor próprio (inclusive `0`) mantém a
+escolha — é config de preservação, sobrescrever decisão do cliente seria pior
+que o atraso. Testes: `test/migrations-channel-stagger-default.test.js`.
+
+**Pendências conhecidas (não corrigidas ainda):** (1) o atraso aplicar mesmo com
+a preservação desligada; (2) o `sleep` rodar dentro do consumidor serial em vez
+de adiar o job (o mecanismo de `deferSendJob`/`notBefore` já existe justamente
+para não congelar a fila — o stagger não o usa). Enquanto isso não mudar,
+**qualquer aumento nesse campo custa atraso em TODOS os envios da conta**, não
+só entre canais.
+
+**Diagnóstico rápido** (o atraso aparece no log com nome próprio):
+```bash
+grep '"msg":"Smart delay antes do envio"' $BOT_LOG_DIR/bot.log | tail -100 \
+ | sed -n 's/.*"time":\([0-9]*\).*"baseDelayMs":\([0-9]*\).*/\1 \2/p' \
+ | awk -v now=$(date +%s) '{ printf "%.1f min atras base=%.1fs\n", (now-$1/1000)/60, $2/1000 }'
+```
+
 ## Status honesto da sessão WA no painel: nem falso-offline, nem "conectando" eterno (2026-07)
 
 Dois bugs relacionados, resolvidos juntos, no eixo "o que o cliente vê no painel
@@ -1101,6 +1153,91 @@ vezes (`WA_STUCK_MSG_THRESHOLD`, default 2) dentro de 2h
 ops_wa_stuck_message_retry` — visibilidade operacional ANTES do cliente
 reclamar, independente de qual bug específico estiver causando o travamento
 dessa vez.
+
+## `failure 405` derrubando TODAS as sessões: versão do WA Web cortada (RCA 2026-07-28)
+
+**Sintoma:** cliente reporta "não consigo reconectar meu WhatsApp"; o painel
+mostra `Falha na conexão / Falha ao solicitar código de pareamento` e
+`Desconectado`. Investigação mostrou que **não era o número dela**: em produção,
+**todas** as sessões estavam caídas com `code: 405` (1254 eventos em 48h,
+começando 2026-07-27 ~20:24 BRT), e em staging idem.
+
+**Causa raiz:** `405` **não existe** no `DisconnectReason` do Baileys — vem cru
+do `<failure reason="405">` do servidor do WhatsApp (`ws.on('CB:failure')` em
+`Socket/socket.js`), ou seja, é **recusa de login/registro**. O que estava sendo
+recusado era a **versão do WA Web anunciada no handshake**:
+`fetchLatestBaileysVersion()` busca o arquivo de versão do **repositório do
+Baileys**, que ficou preso em `2.3000.1035194821` — build que **não existe** na
+lista real de versões do WA Web (`wppconnect-team/wa-version`). Quando o
+WhatsApp expirou a faixa antiga, todo login passou a receber 405. Bumpar o
+pacote não resolve: `baileys@7.0.0-rc13` hardcoda exatamente a mesma versão.
+
+**Armadilha de diagnóstico (não repetir):** com a sessão registrada, um 405 se
+parece com queda genérica; com auth limpo, o log diz `not logged in, attempting
+registration...` e some — dá a impressão de bloqueio do número. Dois sinais
+separam de verdade: (1) o incidente atinge **todas as contas ao mesmo tempo** —
+sempre conferir `WaConnectionEvent` de prod antes de culpar um chip; (2) o nó
+bruto de failure (`lastDisconnect.error.data`), que **era descartado** e hoje é
+logado.
+
+**Resolução da versão (`src/core/waVersion.js`, puro/testado)** — ordem:
+1. **`WA_WEB_VERSION`** (ex.: `2.3000.1044015310`) — pin manual. É o botão de
+   emergência: quando o WhatsApp cortar a versão de novo, fixar no `.env` +
+   `pm2 delete/start` (pegadinha #1) resolve **sem redeploy**.
+2. Registro público de versões reais (`WA_VERSION_REGISTRY_URL`, default
+   `wppconnect-team/wa-version`), que espelha o próprio web.whatsapp.com.
+   Builds com `expire` vencido são descartadas — usar build expirada é
+   exatamente o que produz o 405. `''` desliga a fonte.
+3. `fetchLatestBaileysVersion()` — comportamento histórico, agora penúltimo
+   recurso em vez de fonte única.
+4. Última versão boa deste processo (cache em memória).
+
+A versão escolhida e a fonte aparecem no `bot.log` (`Versão do WhatsApp Web
+resolvida para o handshake`) — sem isso é impossível auditar um incidente
+depois. Sinal durável `ops_wa_version_rejected` (allowlist em `src/analytics.js`
++ `src/observability/operationalSignals.js`).
+
+**Não regredir:** não voltar a usar `fetchLatestBaileysVersion()` como fonte
+única; não remover o corte de sufixo de canal (`-alpha`) no parse — sem ele a
+versão vigente é descartada e caímos na fonte velha; não escolher build com
+`expire` vencido. Testes: `test/wa-version.test.js`, `test/errors-map-infra.test.js`.
+
+### Pareamento NUNCA pode apagar a credencial antes da hora (mesmo RCA)
+
+O que transformou um incidente recuperável em **sessão travada** foi um bug
+nosso: o handler de `requestPairingCode` (`src/bot-worker.js`) fazia
+`rm -rf AUTH_DIR` **assim que a cliente clicava em conectar**, antes de saber se
+o WhatsApp aceitaria o pareamento. Com o WA recusando (405), a credencial válida
+era destruída e o close pré-código **não reagendava reconexão** — a sessão saía
+de "caiu mas volta sozinha" para "sem credencial e sem reconexão". Cada nova
+tentativa da cliente repetia a destruição.
+
+Hoje `createPairingAuthBackup` (`src/core/pairingAuthBackup.js`, I/O injetado,
+testado) transforma o `rm` em `rename` para `<AUTH_DIR>.pairing-backup`:
+- **restore** nos quatro caminhos de falha pré-código (erro no socket,
+  expiração da janela de pareamento, `startBot` falhando, close não-515 sem
+  código entregue). No caso do close, a sessão **volta a reconectar sozinha**
+  com a credencial antiga;
+- **discard** só quando o WhatsApp aceita o pareamento (close `515`
+  restartRequired), ponto em que a credencial nova é a boa;
+- backup órfão de um pareamento interrompido é descartado antes do próximo;
+- falha inesperada de `rename` degrada para o comportamento histórico
+  (AUTH_DIR limpo), nunca para "pareamento impossível".
+
+**Não regredir:** não voltar a apagar `AUTH_DIR` no início do pareamento; não
+remover o `restore` de nenhum dos quatro caminhos; não descartar o backup antes
+do `515`. Teste: `test/pairing-auth-backup.test.js`.
+
+### Mensagem honesta para a cliente
+
+`mapInfraError` (`src/errors.js`) jogava cinco erros distintos do worker no
+catch-all `WA_PAIRING_FAILED` ("Falha ao solicitar código de pareamento") — a
+cliente lia uma falha genérica e re-pareava sem parar, destruindo a credencial a
+cada tentativa, sem nenhuma chance de sucesso. O 405 agora tem código próprio
+`WA_VERSION_REJECTED` (503, retryable) e texto que diz o que é: recusa do
+WhatsApp por versão desatualizada, **não** problema do número dela. Segue a
+regra de linguagem leiga — nenhum jargão (`405`, `socket`, `handshake`,
+`pairing`) pode chegar à tela, e há teste que falha se voltar.
 
 ## Loop de init-queries 408 derrubando sessões (RCA 2026-07 — Trilho B)
 
@@ -1804,6 +1941,38 @@ getShortUrl" e "fallback de produto não duplica ?tag=").
 credencial + formato do link enviado por dia + probe ao vivo) e
 `scripts/diag-amazon-shortlink-tag.mjs` (segue os `amzn.to` já enviados e lê a
 tag final). Os dois são read-only e não imprimem segredo.
+
+## Vitrine `/social/?ref=`: usar o endereço do card, nunca fabricar (RCA 2026-07-28)
+
+Todo `meli.la` de canal resolve para `/social/<handle>?ref=<blob>`, e
+`extractFeaturedSocialProduct` (`src/converters/mercadolivre.js`) extrai o
+produto do card destacado. Ordem canônica (não inverter):
+
+1. `product_id` no card → `https://www.mercadolivre.com.br/p/<id>` (catálogo);
+2. **campo `url` do card → endereço REAL do anúncio** (`extractFeaturedCardUrl`);
+3. só então, último recurso, `produto.mercadolivre.com.br/<id>-x-_JM`.
+
+O passo 2 é novo. Antes, card sem `product_id` caía direto no passo 3, que
+**fabrica** o endereço: sem hífen depois de `MLB` e com o slug inventado `-x-`.
+O endereço real do ML é `produto.mercadolivre.com.br/MLB-<id>-<nome>-_JM`.
+Medido em produção: o fabricado respondeu **404** ao ser aberto do próprio VPS,
+e essa forma era ~16% dos links de ML de uma cliente (370 em 7 dias) — a cliente
+reportou "página não existe". Diagnóstico reutilizável:
+`scripts/diag-ml-social-featured.mjs` (lê o mesmo HTML que o robô lê, lista os
+campos do card e testa o endereço montado, distinguindo 404 real de muro
+anti-robô do ML).
+
+`extractFeaturedCardUrl` só aceita host do próprio ML (o HTML é de terceiro),
+exige MLB no caminho, descarta quando o MLB do `url` diverge do `id` do card
+(anti-mismatch, mesma filosofia de `validateAffiliateRedirect`) e remove
+query/hash. **Não regredir:** não voltar a fabricar endereço antes de tentar o
+`url` do card. Testes: `test/mercadolivre-resolve.test.js` (bloco "Endereço do
+card destacado").
+
+**Armadilha de diagnóstico:** o ML serve o muro anti-robô
+(`suspicious-traffic-frontend` / `/gz/account-verification`) com **status 200**
+para quem ele não reconhece. Um `200` num teste de fora do VPS **não prova** que
+a página existe — confira o corpo antes de concluir.
 
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 

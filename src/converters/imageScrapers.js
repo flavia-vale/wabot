@@ -188,7 +188,7 @@ async function resolveByHtmlLayers(url, opts) {
   return extractImageFromHtmlLayers(html)
 }
 
-const AMAZON_SHORT_HOST_RE = /^(amzn\.to|amzn\.la|a\.co|amzn\.divulgador\.link)$/
+const AMAZON_SHORT_HOST_RE = /^(amzn\.to|amzn\.la|a\.co|amzn\.divulgador\.link|amzn\.divulguei\.app)$/
 
 async function resolveAmazonShortLink(url) {
   try {
