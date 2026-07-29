@@ -6,6 +6,7 @@ import { mapInfraError } from '../../errors.js'
 import { appContainer } from '../../app/container.js'
 import { normalizePairingPhone } from '../../domain/session/service.js'
 import { recordWaConnectionEventSafe } from '../../waConnectionTelemetry.js'
+import { STOPPED_BY_USER_LIFECYCLE } from '../../core/sessionResumePolicy.js'
 
 const WA_GROUPS_RECOVERY_TIMEOUT_MS = Math.max(Number(process.env.WA_GROUPS_RECOVERY_TIMEOUT_MS || 15000), 0)
 const WA_GROUPS_RECOVERY_RETRY_MS = Math.max(Number(process.env.WA_GROUPS_RECOVERY_RETRY_MS || 1000), 100)
@@ -114,7 +115,14 @@ export async function sessionRoutes(app) {
     if (!stopped) return reply.code(404).send({ error: 'Bot não estava rodando' })
     await db.waSession.updateMany({
       where: { userId },
-      data: { status: 'disconnected' },
+      data: {
+        status: 'disconnected',
+        // Marca a INTENÇÃO da cliente. Sem isso, "desliguei de propósito" e
+        // "o incidente me abandonou" ficam com exatamente o mesmo `status`, e
+        // a retomada automática do supervisor não consegue separar os dois
+        // (ver src/core/sessionResumePolicy.js).
+        lifecycle: STOPPED_BY_USER_LIFECYCLE,
+      },
     }).catch(() => {})
     return { ok: true }
   })
