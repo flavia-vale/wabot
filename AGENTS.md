@@ -1154,6 +1154,56 @@ ops_wa_stuck_message_retry` — visibilidade operacional ANTES do cliente
 reclamar, independente de qual bug específico estiver causando o travamento
 dessa vez.
 
+## Retomada automática abandonava sessão marcada `disconnected` (RCA 2026-07-29)
+
+**Rescaldo do incidente do `failure 405`.** Corrigida a causa raiz e reiniciado o
+supervisor, só **7 de 21** sessões com credencial válida voltaram. As demais
+precisaram ser caçadas no banco, uma a uma, com a cliente fora do ar o tempo
+todo.
+
+**Causa:** o supervisor só retomava sessão com `status IN ('connected',
+'connecting')`. Durante as ~27h de apagão, o heartbeat marcou cada sessão como
+`disconnected` (é o comportamento correto — `computeHeartbeatState` desiste de
+mostrar "conectando" após `WA_HEARTBEAT_MAX_RECONNECTING_MS`). Resultado
+perverso: **o próprio incidente tira as clientes da fila de recuperação
+automática**, e quanto mais longo o incidente, mais gente fica para trás.
+
+**Por que a correção óbvia está errada (não regredir para ela):**
+`POST /session/stop` — o botão "Desconectar" do painel — grava **exatamente o
+mesmo** `status: 'disconnected'`. Retomar todo `disconnected` religaria o robô
+de quem desligou de propósito: reconexão indesejada, notificação de
+sincronização no celular e sessão rodando contra a vontade da cliente.
+
+**Solução — separar intenção de acidente.** `POST /session/stop` passa a gravar
+`lifecycle = 'stopped_by_user'` (`STOPPED_BY_USER_LIFECYCLE`), e
+`shouldResumeSession` (`src/core/sessionResumePolicy.js`, puro/testado) decide:
+
+- `connected`/`connecting` → retoma como sempre (comportamento histórico intacto);
+- `disconnected` + `lifecycle='stopped_by_user'` → **não** retoma;
+- `disconnected` + **sem** credencial no disco → não retoma (só geraria QR que
+  ninguém pediu — caso do logout 401, que apaga o auth de propósito);
+- `disconnected` + credencial + conta em dia → **retoma** (o caso do RCA);
+- conta `banned`/`suspended` ou assinatura vencida → nunca retoma, espelhando
+  `validateSessionStartUser`.
+
+`listResumableSessions()` (`src/supervisor/index.js`) é a fonte única usada
+**pelos dois** caminhos (resume de boot e health monitor) — corrigir só um faria
+a recuperação depender de qual roda primeiro. O `creds.json` só é lido no disco
+para o caso novo (`disconnected`), senão seria I/O à toa a cada tick de 15s.
+
+**`sessionCore.js` é [PROTECTED_CORE]** — o `resumePersistedBots` do modo
+`inline` **não** foi alterado; a correção vive na camada do supervisor (modo
+`remote`, que é o de produção).
+
+**Atenção ao validar:** staging é `inline` por padrão e **não exercita** este
+código. Para testar de verdade é preciso ligar `BOT_SUPERVISOR_MODE=remote` em
+staging durante a janela de teste e reverter ao final (ver "Seleção de modo").
+
+Testes: `test/session-resume-policy.test.js` (regra),
+`test/session-resume-wiring.test.js` (estrutural — falha se a query legada
+`status IN ('connected','connecting')` voltar ao supervisor, se o marcador sumir
+do `/stop`, ou se os dois caminhos deixarem de usar a mesma fonte).
+
 ## `failure 405` derrubando TODAS as sessões: versão do WA Web cortada (RCA 2026-07-28)
 
 **Sintoma:** cliente reporta "não consigo reconectar meu WhatsApp"; o painel

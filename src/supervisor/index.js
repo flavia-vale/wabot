@@ -25,6 +25,10 @@ import { checkSupervisorEnvConsistency, supervisorManagesSessions, supervisorSho
 import { createRestartBudget, RESTART_BUDGET_MAX, RESTART_BUDGET_WINDOW_MS, RESTART_QUARANTINE_MS } from './restartBudget.js'
 import { createReloadConfigHandler } from './commandHandlers.js'
 import { parseEnumEnv, logModeSummary } from '../core/envModes.js'
+import { shouldResumeSession } from '../core/sessionResumePolicy.js'
+import { getAuthInfoDir } from '../paths.js'
+import { access } from 'fs/promises'
+import { join } from 'path'
 import {
   COMMAND,
   COMMAND_QUEUE,
@@ -413,12 +417,8 @@ async function healthMonitorTick() {
   // está desligado (AUTO_START_WHATSAPP_SESSIONS=false).
   if (!AUTO_RESUME) return
   try {
-    const persisted = await db.waSession.findMany({
-      where: { status: { in: ['connected', 'connecting'] } },
-      select: { userId: true },
-    })
+    const persisted = await listResumableSessions()
     for (const s of persisted) {
-      if (!belongsToThisShard(s.userId)) continue
       if (sessionCore.isRunning(s.userId)) continue
       // Restart budget: sessão que morre repetidamente (auth_info corrompido,
       // falha permanente) entra em quarentena em vez de churn infinito de
@@ -449,6 +449,55 @@ async function healthMonitorTick() {
   }
 }
 
+/**
+ * Sessões candidatas à retomada, já filtradas por `shouldResumeSession`.
+ *
+ * Antes a query era `status IN ('connected','connecting')` e pronto. O
+ * incidente do `failure 405` mostrou o buraco: sessão que passa horas caída
+ * acaba marcada `disconnected` pelo heartbeat e some da retomada para sempre —
+ * a causa raiz é corrigida, o robô volta, e a cliente continua fora do ar.
+ * Agora `disconnected` também entra, mas só quando há credencial no disco,
+ * conta em dia e NENHUM sinal de que a cliente desligou de propósito.
+ */
+async function listResumableSessions() {
+  const sessions = await db.waSession.findMany({
+    where: { status: { in: ['connected', 'connecting', 'disconnected'] } },
+    select: {
+      userId: true,
+      status: true,
+      lifecycle: true,
+      user: { select: { status: true, accessExpiresAt: true } },
+    },
+  })
+
+  const resumable = []
+  for (const s of sessions) {
+    if (!belongsToThisShard(s.userId)) continue
+    // Só toca o disco para o caso novo (`disconnected`): os status históricos
+    // não dependem de credencial e a checagem seria I/O à toa a cada tick.
+    const hasCredential = s.status === 'disconnected' ? await hasStoredCredential(s.userId) : true
+    const verdict = shouldResumeSession({
+      status: s.status,
+      lifecycle: s.lifecycle,
+      hasCredential,
+      userStatus: s.user?.status ?? null,
+      accessExpiresAt: s.user?.accessExpiresAt ?? null,
+    })
+    if (verdict.resume) resumable.push({ userId: s.userId, reason: verdict.reason })
+  }
+  return resumable
+}
+
+/** Existe credencial utilizável no disco para esta sessão? */
+async function hasStoredCredential(userId) {
+  try {
+    await access(join(getAuthInfoDir(userId), 'creds.json'))
+    return true
+  } catch {
+    return false
+  }
+}
+
 function startShardHealthMonitor() {
   if (healthMonitorTimer) return
   healthMonitorTimer = setInterval(
@@ -471,13 +520,19 @@ async function boot() {
   let started = 0
   let attempted = 0
   try {
-    const persisted = AUTO_RESUME
-      ? await db.waSession.findMany({ where: { status: { in: ['connected', 'connecting'] } }, select: { userId: true } })
-      : []
+    const persisted = AUTO_RESUME ? await listResumableSessions() : []
     if (!AUTO_RESUME) logger.info({ shard: SHARD_TAG }, 'AUTO_START_WHATSAPP_SESSIONS=false — supervisor não faz auto-resume (só comandos manuais)')
     attempted = persisted.length
+    const rescued = persisted.filter(s => s.reason === 'abandoned_with_credential')
+    if (rescued.length) {
+      // Visibilidade explícita: são as sessões que o comportamento antigo
+      // teria deixado para trás depois de um incidente longo.
+      logger.warn(
+        { count: rescued.length, userIds: rescued.map(s => s.userId), shard: SHARD_TAG },
+        'Retomando sessões que estavam marcadas como desconectadas mas têm credencial válida (recuperação pós-incidente)'
+      )
+    }
     for (const s of persisted) {
-      if (!belongsToThisShard(s.userId)) continue
       try {
         if (await startBotWithBridge(s.userId)) started++
       } catch (err) {
