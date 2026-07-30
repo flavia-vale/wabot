@@ -9,7 +9,6 @@ const slug = '/seguranca-credenciais-afiliado'
 const dates = getEditorialDates(slug)
 
 const layers = [
-  ['Você escolhe o que entrega', 'Não quer guardar o código de acesso da sua conta na loja? Marque a opção no painel: guardamos só a sua etiqueta de afiliada e apagamos o código. Suas ofertas continuam saindo com a sua comissão — o link só fica mais comprido.'],
   ['Apagar quando quiser, sem pedir para ninguém', 'Cada loja tem um botão que apaga seus dados na hora, direto no painel. Sair da sua conta dentro da própria loja também derruba na mesma hora qualquer código já cadastrado.'],
   ['Criptografia em repouso (AES-256-GCM)', 'As credenciais das suas contas de afiliado e sua chave PIX ficam cifradas no banco de dados, não em texto puro. Mesmo em caso de acesso indevido ao banco, os valores não ficam legíveis diretamente.'],
   ['Proteção contra força bruta no login', 'Tentativas de login são limitadas por conta e por IP, com bloqueio temporário após várias tentativas falhas — reduz o risco de alguém tentar adivinhar sua senha.'],
@@ -19,8 +18,8 @@ const layers = [
 
 const faq = [
   {
-    q: 'Sou obrigada a entregar o código de acesso (SSID) da minha conta?',
-    a: 'Não. Esse código serve só para deixar o link da oferta curtinho — não é obrigatório. Marcando a opção no painel, guardamos apenas a sua etiqueta de afiliada: suas ofertas continuam saindo e a comissão continua sendo sua, o link só fica mais comprido. No Mercado Livre há uma diferença a mais: links que são só cupom, sem produto, deixam de ser aproveitados.',
+    q: 'Para que serve o código de acesso (SSID) que vocês pedem?',
+    a: 'Ele serve para uma coisa só: gerar o link curto da loja já com a sua comissão. Não usamos para comprar, alterar sua conta ou ler suas mensagens. Fica guardado criptografado e você pode apagá-lo quando quiser, direto no painel.',
   },
   {
     q: 'Consigo apagar minhas credenciais depois de cadastrar?',
@@ -75,7 +74,7 @@ export default function Page() {
               <ul>
                 <li>O que você cola no painel serve para <strong>uma coisa só</strong>: montar seus links de oferta já com a sua comissão.</li>
                 <li>Fica guardado <strong>trancado</strong>, e ninguém de fora recebe esses dados.</li>
-                <li><strong>Você não é obrigada</strong> a guardar o código de acesso da sua conta na loja. Sem ele, suas ofertas continuam saindo com a sua comissão — o link só fica mais comprido.</li>
+                <li>O código de acesso da loja serve para o link da oferta sair curtinho, já com a sua comissão.</li>
                 <li>Você <strong>apaga tudo quando quiser</strong>, sozinha, por um botão no painel.</li>
               </ul>
             </section>
