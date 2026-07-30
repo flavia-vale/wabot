@@ -332,6 +332,14 @@ explícito**: o código de acesso volta a ser obrigatório na validação
 não oferece opção de operar sem ele. Guarda de regressão em
 `test/painel-ids-afiliada-privacy.test.js`.
 
+**Resíduo em contas que chegaram a ligar a opção:** os campos de sessão foram
+apagados no momento em que o modo foi ligado e **não há como recuperá-los** — a
+cliente precisa colar um código novo (o painel já mostra "Falta preencher").
+`sanitizeCredentialBody` descarta a flag `cookielessMode` em todo save, para o
+resíduo não sobreviver, e `scripts/cleanup-cookieless-flag.mjs` limpa as linhas
+antigas (dry-run por padrão, `--apply` para gravar; lista quem precisa
+recadastrar). Rodar em staging e em produção (com backup antes) após o deploy.
+
 O que ficou dessa rodada:
 
 - `DELETE /credentials/:platform` — apaga a credencial da loja, invalida o cache

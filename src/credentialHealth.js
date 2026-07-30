@@ -200,6 +200,17 @@ export function getCredentialSaveMessage(validation) {
 export function sanitizeCredentialBody(platform, body = {}) {
   if (!body || typeof body !== 'object') return body
 
+  // Resíduo do "modo sem cookie" (removido a pedido da cliente): credenciais
+  // salvas naquela janela ficaram com `cookielessMode: true` guardado. A
+  // validação já ignora a flag, mas ela não pode ser REGRAVADA a cada save —
+  // senão o resíduo sobrevive para sempre e reativaria o modo em silêncio caso
+  // alguém reintroduza a leitura da flag. Limpeza das linhas antigas:
+  // `scripts/cleanup-cookieless-flag.mjs`.
+  if ('cookielessMode' in body) {
+    const { cookielessMode: _legado, ...semFlag } = body
+    return sanitizeCredentialBody(platform, semFlag)
+  }
+
   if (platform === 'mercadolivre') {
     const ssid = typeof body.ssid === 'string' ? body.ssid.trim() : ''
     if (!ssid) return body

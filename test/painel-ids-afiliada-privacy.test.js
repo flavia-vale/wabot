@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { AFFILIATE_PLATFORMS, getPlatformStatus } from '../dashboard/lib/painel/affiliatePlatforms.js'
+import { sanitizeCredentialBody, validateCredentialData } from '../src/credentialHealth.js'
 
 const pageSource = readFileSync(new URL('../dashboard/app/painel/ids-afiliada/page.js', import.meta.url), 'utf8')
 const apiSource = readFileSync(new URL('../dashboard/lib/api.js', import.meta.url), 'utf8')
@@ -47,4 +48,26 @@ test('a página explica o que é feito com o código e deixa apagar os dados', (
 test('o client da API expõe o apagamento de credencial', () => {
   assert.match(apiSource, /deleteCredential: \(platform\) =>/)
   assert.match(apiSource, /method: 'DELETE'/)
+})
+
+test('resíduo do modo removido: a flag antiga nunca é regravada ao salvar', () => {
+  // Contas que ligaram a opção enquanto ela existiu ficaram com
+  // `cookielessMode: true` guardado. Salvar de novo tem que limpar o resíduo,
+  // senão ele sobrevive para sempre. Limpeza das linhas antigas:
+  // scripts/cleanup-cookieless-flag.mjs.
+  const out = sanitizeCredentialBody('mercadolivre', {
+    tag: '475630078',
+    ssid: 'ghy-codigo-novo-colado',
+    cookielessMode: true,
+  })
+  assert.equal('cookielessMode' in out, false)
+  assert.equal(out.tag, '475630078')
+  assert.equal(out.ssid, 'ghy-codigo-novo-colado')
+})
+
+test('resíduo do modo removido: a flag não deixa a credencial passar sem código', () => {
+  // Mesmo com a flag guardada, o ML volta a exigir o código de acesso.
+  const validacao = validateCredentialData('mercadolivre', { tag: '475630078', cookielessMode: true })
+  assert.equal(validacao.configured, false)
+  assert.ok(validacao.missing.includes('ssid/cookie'))
 })
