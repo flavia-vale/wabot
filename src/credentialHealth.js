@@ -1,5 +1,4 @@
 import { decryptCredential } from './credentialCrypto.js'
-import { applyCookielessMode, filterRequiredFieldsForCookieless, isCookielessMode } from './credentialPrivacy.js'
 
 const PLATFORM_LABELS = {
   shopee: 'Shopee',
@@ -112,29 +111,8 @@ export function validateCredentialData(platform, data = {}) {
     }
   }
 
-  // Modo sem cookie (credentialPrivacy.js): a usuária optou por não entregar a
-  // sessão da loja. A credencial fica COMPLETA com a tag sozinha — o converter
-  // já cai no fallback (partner_id / ?tag=) e a comissão continua creditando.
-  // Sem isto, o painel marcaria "incompleto" para sempre e ficaria cobrando o
-  // cookie que ela decidiu não dar.
-  const cookieless = isCookielessMode(platform, data)
-  const required = cookieless
-    ? filterRequiredFieldsForCookieless(platform, REQUIRED_FIELDS[platform] ?? [])
-    : (REQUIRED_FIELDS[platform] ?? [])
+  const required = REQUIRED_FIELDS[platform] ?? []
   const missing = required.filter(field => !hasValue(data?.[field]))
-
-  if (cookieless) {
-    const warnings = missing.length ? [] : getFormatWarnings(platform, data)
-    return {
-      platform,
-      label: PLATFORM_LABELS[platform],
-      status: missing.length ? 'incomplete' : (warnings.length ? 'warning' : 'configured'),
-      configured: missing.length === 0,
-      cookielessMode: true,
-      missing,
-      warnings,
-    }
-  }
 
   if (platform === 'amazon') {
     // O cookie string COMPLETO da sessão (campo `cookie`) satisfaz a autenticação
@@ -165,7 +143,6 @@ export function validateCredentialData(platform, data = {}) {
     label: PLATFORM_LABELS[platform],
     status: configured ? (warnings.length ? 'warning' : 'configured') : 'incomplete',
     configured,
-    cookielessMode: false,
     missing,
     warnings,
   }
@@ -206,9 +183,6 @@ export function getCredentialSaveMessage(validation) {
   if (!validation?.configured) {
     return `Faltou preencher ${joinFriendly(validation?.missing ?? [])} da ${validation?.label ?? 'loja'}.`
   }
-  if (validation.cookielessMode) {
-    return `Pronto! Guardamos só a sua etiqueta da ${validation.label} — nada da sua conta. Suas ofertas continuam saindo normalmente, com a sua comissão; o link só fica mais comprido.`
-  }
   if (validation.warnings?.length) {
     return `Salvamos os dados da ${validation.label}, mas confira os avisos abaixo antes de começar a divulgar.`
   }
@@ -226,12 +200,16 @@ export function getCredentialSaveMessage(validation) {
 export function sanitizeCredentialBody(platform, body = {}) {
   if (!body || typeof body !== 'object') return body
 
-  // Modo sem cookie tem precedência sobre tudo: se a usuária ligou a opção,
-  // nenhum campo de sessão é persistido, nem que venha preenchido no corpo.
-  // Como o PUT sobrescreve o blob `data` inteiro, isto APAGA o cookie que já
-  // estava guardado (não é só parar de usar).
-  const cookielessBody = applyCookielessMode(platform, body)
-  if (cookielessBody !== body) return cookielessBody
+  // Resíduo do "modo sem cookie" (removido a pedido da cliente): credenciais
+  // salvas naquela janela ficaram com `cookielessMode: true` guardado. A
+  // validação já ignora a flag, mas ela não pode ser REGRAVADA a cada save —
+  // senão o resíduo sobrevive para sempre e reativaria o modo em silêncio caso
+  // alguém reintroduza a leitura da flag. Limpeza das linhas antigas:
+  // `scripts/cleanup-cookieless-flag.mjs`.
+  if ('cookielessMode' in body) {
+    const { cookielessMode: _legado, ...semFlag } = body
+    return sanitizeCredentialBody(platform, semFlag)
+  }
 
   if (platform === 'mercadolivre') {
     const ssid = typeof body.ssid === 'string' ? body.ssid.trim() : ''
