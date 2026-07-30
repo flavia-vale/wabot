@@ -28,7 +28,7 @@ const JARGAO_PROIBIDO = [
 function textosVisiveis() {
   const textos = []
   for (const plataforma of AFFILIATE_PLATFORMS) {
-    textos.push(plataforma.instructions, plataforma.platformWarning, plataforma.cookielessNote)
+    textos.push(plataforma.instructions, plataforma.platformWarning)
     for (const campo of plataforma.fields ?? []) {
       textos.push(campo.label, campo.hint, campo.help)
     }
@@ -46,24 +46,13 @@ test('nenhum jargão técnico nos textos das lojas', () => {
   }
 })
 
-test('o campo do código de acesso diz que é opcional, na dica que aparece na tela', () => {
+test('cada loja com código de acesso explica, em uma linha, para que ele serve', () => {
   for (const id of ['mercadolivre', 'amazon']) {
     const plataforma = AFFILIATE_PLATFORMS.find((p) => p.id === id)
     const campoPrincipal = plataforma.fields.find((f) => f.cookieField)
-    assert.match(campoPrincipal.hint, /pode deixar em branco/i, `${id}: a dica precisa dizer que dá para deixar vazio`)
+    assert.match(campoPrincipal.hint, /curtinho/i, `${id}: a dica precisa dizer para que serve o código`)
+    assert.match(plataforma.platformWarning, /curtinho/i, `${id}: o aviso da loja precisa explicar o ganho do código`)
   }
-})
-
-test('cada loja com código de acesso explica o que muda sem ele — sem prometer o que não cumpre', () => {
-  for (const id of ['mercadolivre', 'amazon']) {
-    const plataforma = AFFILIATE_PLATFORMS.find((p) => p.id === id)
-    assert.match(plataforma.cookielessNote, /continuam saindo/i, `${id}: precisa dizer que a oferta continua saindo`)
-    assert.match(plataforma.cookielessNote, /comiss/i, `${id}: precisa falar da comissão`)
-    assert.match(plataforma.cookielessNote, /mais comprido/i, `${id}: precisa admitir o que se perde (link curto)`)
-  }
-  // ML tem uma perda a mais que a Amazon não tem — não pode ser escondida.
-  const ml = AFFILIATE_PLATFORMS.find((p) => p.id === 'mercadolivre')
-  assert.match(ml.cookielessNote, /cupom/i)
 })
 
 test('o aviso de código vencido não diz que o robô parou (porque não parou)', () => {

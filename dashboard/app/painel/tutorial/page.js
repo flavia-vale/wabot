@@ -196,10 +196,9 @@ export default function TutorialPage() {
           Nunca compartilhe seus cookies, IDs, SSID, Key ou Secret com terceiros. Esses dados dão acesso à sua conta.
         </Warning>
         <Tip>
-          Não quer guardar esse código de acesso? Você não é obrigada. Em <strong>Minhas credenciais</strong>, marque a opção
-          <strong> &quot;não quero guardar meu código de acesso&quot;</strong>: guardamos só a sua etiqueta de afiliada.
-          <strong> Nada se perde</strong> — suas ofertas continuam saindo com a sua comissão, o link só fica mais comprido.
-          E dá para mudar de ideia quando quiser, nos dois sentidos.
+          Esse código é usado só para montar seus links de oferta já com a sua comissão. Ele fica guardado trancado
+          (criptografado) e você pode apagá-lo quando quiser, no botão dentro de <strong>Minhas credenciais</strong>.
+          De tempos em tempos ele vence — quando isso acontecer, o painel avisa e é só colar um novo.
         </Tip>
       </div>
 
