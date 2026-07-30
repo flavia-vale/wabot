@@ -376,3 +376,20 @@ Já existem `docs/marketing/ai_visibility_tracking.csv` e um playbook mensal —
 - [Blog Devzapp — achadinhos](https://blog.devzapp.com.br/post/vender-encher-grupos-achadinhos-whatsapp) · [Grupify](https://www.grupify.com.br/)
 - [DivulgaLinks](https://pro.divulgalinks.com.br/landing) · [Filipe Souza — N8N + WPPConnect](https://filipesouza.com.br/como-automatizar-grupos-de-afiliados-amazon-e-shopee-no-whatsapp-n8n-wppconnect/)
 - Página do BOTinho que já rankeia: [automacao-whatsapp-afiliados](https://espelhagrupos.com.br/automacao-whatsapp-afiliados)
+
+---
+
+> ## ⚠️ AVISO — ESTE ESTUDO FOI PARCIALMENTE CORRIGIDO (2026-07-30)
+>
+> Os volumes das seções 4 e 7 eram **estimativas por sinais de SERP** e os dados
+> reais do Google mostraram que a premissa central estava errada:
+> `bot/robô para grupos de ofertas` tem **500 buscas/mês com concorrência alta**,
+> não "alto volume / baixa dificuldade". O cluster "robô" também foi cancelado
+> (12× menor que "bot").
+>
+> **Vale o documento novo:** `ANALISE_DADOS_REAIS_KEYWORDS_2026-07-30.md`
+>
+> Continua válido deste estudo: o mapa de concorrentes (seção 3), os 6 problemas
+> estruturais (seção 5), toda a parte de IA/AEO (seção 6), os riscos (seção 9) e
+> a recomendação de congelar as LPs de cidade — esta última agora confirmada por
+> dado (25 impressões em 2,5 meses).
