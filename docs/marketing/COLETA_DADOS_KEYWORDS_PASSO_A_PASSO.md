@@ -79,9 +79,17 @@ Comece pela A. Se as faixas ficarem largas demais para decidir, aí faça a B.
    - **Idioma: Português**
    - **Redes de Pesquisa: Google** (sem "parceiros de pesquisa")
    - **Período: Últimos 12 meses**
-4. Cole o **Lote 1** da lista abaixo → **Ver resultados**
-5. Canto superior direito → **Fazer o download das ideias de palavras-chave** → **CSV**
-6. **Repita** para os Lotes 2, 3 e 4 (o Google aceita no máximo 10 sementes por vez)
+4. ⚠️ **O segundo campo ("Insira um site para filtrar palavras-chave não
+   relacionadas") deve ficar VAZIO.** Ele *remove* palavras que o Google julga
+   não relacionadas ao site — ou seja, cortaria justamente "achadinhos", "robô"
+   e "grátis", que são os termos que ainda não cobrimos e queremos descobrir.
+   Preencher esse campo faz o relatório voltar só confirmando o que já existe.
+5. ⚠️ **Desligue o bloqueador de anúncios** nessa aba. O Google Ads avisa na
+   tela e o download do CSV falha com o bloqueador ativo.
+6. Cole o **Lote 1** da lista abaixo → **Ver resultados**
+7. Confira no topo dos resultados se o período está em **últimos 12 meses**
+8. Canto superior direito → **Fazer o download das ideias de palavras-chave** → **CSV**
+9. **Repita** para os Lotes 2, 3 e 4 (o Google aceita no máximo 10 sementes por vez)
 
 ### Parte B — "Ver o volume de pesquisa" (a lista fechada)
 
@@ -124,62 +132,35 @@ qual está **crescendo**. O Trends responde isso e é grátis, sem login.
 
 ---
 
-## SEMENTES PARA A PARTE A (copiar e colar, 10 por vez)
+## SEMENTES PARA A PARTE A (copiar e colar, um lote por vez)
+
+> **Calibragem importante.** Nesta tela o Google usa a semente para **expandir**.
+> Semente **curta ou média** abre um leque grande de ideias; semente longa
+> devolve pouca coisa. Por isso os lotes abaixo são curtos de propósito.
+> As frases longas não se perdem — elas são medidas na **Parte B**, onde o
+> objetivo é medir uma lista fechada, não descobrir.
+>
+> Pode colar tudo de uma vez **separado por vírgula** — o Google quebra em
+> etiquetas sozinho.
 
 ### Lote 1 — núcleo bot / robô
 ```
-bot para grupos de ofertas whatsapp
-robô para grupos de ofertas whatsapp
-bot para afiliados whatsapp
-robô para afiliados whatsapp
-bot achadinhos whatsapp
-automação whatsapp afiliados
-automatizar grupos de ofertas
-postar ofertas automaticamente whatsapp
-bot de ofertas
-divulgar ofertas whatsapp automático
+bot para grupos de ofertas, robô para whatsapp, bot afiliados, grupo de ofertas whatsapp, achadinhos, automação whatsapp, afiliado shopee, divulgar ofertas, link de afiliado, grupo de achadinhos
 ```
 
 ### Lote 2 — marketplaces e links
 ```
-bot shopee whatsapp
-afiliado shopee whatsapp
-bot amazon afiliados whatsapp
-bot mercado livre afiliados
-divulgar ofertas magalu whatsapp
-converter link de afiliado
-link de afiliado shopee automático
-gerar link de afiliado automaticamente
-afiliado aliexpress whatsapp
-programa de afiliados divulgar whatsapp
+afiliado amazon, afiliado mercado livre, afiliado magalu, converter link de afiliado, programa de afiliados, comissão de afiliado, shopee afiliados, vender como afiliado
 ```
 
-### Lote 3 — topo de funil e dor
+### Lote 3 — topo de funil
 ```
-como criar grupo de ofertas no whatsapp
-como encher grupo de achadinhos
-quanto ganha com grupo de ofertas
-grupo de achadinhos whatsapp
-ganhar dinheiro como afiliado whatsapp
-evitar banimento whatsapp
-quantas mensagens whatsapp sem tomar ban
-whatsapp banido divulgação
-gerenciar vários grupos whatsapp
-disparo em massa whatsapp grupos
+grupo de whatsapp de promoções, como criar grupo de ofertas, ganhar dinheiro no whatsapp, cupom de desconto, promoções whatsapp, encher grupo de whatsapp, renda extra whatsapp
 ```
 
-### Lote 4 — comercial e concorrentes
+### Lote 4 — dor e concorrentes
 ```
-melhor bot para afiliados
-melhores ferramentas para afiliados
-bot afiliados grátis
-quanto custa bot whatsapp
-achadinho pro
-proafiliados
-shozap
-fluxopromo
-bot whatsapp telegram afiliados
-software para grupos de ofertas
+whatsapp banido, disparo em massa whatsapp, enviar mensagem vários grupos, achadinho pro, proafiliados, shozap, bot whatsapp preço, chatbot whatsapp
 ```
 
 ---
