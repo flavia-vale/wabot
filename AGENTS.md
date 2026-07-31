@@ -328,64 +328,35 @@ scripts/backup_prod.sh && pm2 stop api && cd ~/wabot && node scripts/migrate-cre
 mantém leituras funcionando em ambos os formatos. Testes:
 `test/credential-crypto.test.js`.
 
-## Modo sem cookie nas credenciais de afiliado (privacidade — canônico)
+## Credenciais de afiliado: linguagem e apagamento (canônico)
 
-Cliente reportou desconforto legítimo em cadastrar o **SSID do Mercado Livre**
-("expõe muito os dados pessoais de quem utiliza") — é o cookie de sessão da
-conta dela, e quem tem o cookie fica logado como ela até expirar.
+Cliente reportou desconforto em cadastrar o **SSID do Mercado Livre** ("expõe
+muito os dados pessoais de quem utiliza"). Foi implementado um "modo sem
+cookie" (guardar só a etiqueta) e **removido a pedido da própria cliente** após
+teste: sem o código de acesso o link nunca sai curto, e a expectativa do produto
+é "SSID cadastrado → link curto sempre". **Não reintroduzir sem pedido
+explícito**: o código de acesso volta a ser obrigatório na validação
+(`REQUIRED_FIELDS` + a exigência de portador `ssid`/`cookie` no ML), e o painel
+não oferece opção de operar sem ele. Guarda de regressão em
+`test/painel-ids-afiliada-privacy.test.js`.
 
-**Fato técnico que sustenta a solução: o cookie é OTIMIZAÇÃO, não requisito.**
-Sem `ssid`, `convert()` (`src/converters/mercadolivre.js`) pula a API de
-afiliados e cai no fallback `partner_id=<tag>`; sem cookie Amazon (`hasCookies`
-em `src/converters/amazon.js`) o link sai com `?tag=` longo — formato que o RCA
-"Amazon: a tag PRECISA estar dentro da longUrl" comprovou **em campo** que
-credita comissão. O cookie compra link curto (meli.la/amzn.to) e conversão de
-cupom sem produto, nada além disso.
+**Resíduo em contas que chegaram a ligar a opção:** os campos de sessão foram
+apagados no momento em que o modo foi ligado e **não há como recuperá-los** — a
+cliente precisa colar um código novo (o painel já mostra "Falta preencher").
+`sanitizeCredentialBody` descarta a flag `cookielessMode` em todo save, para o
+resíduo não sobreviver, e `scripts/cleanup-cookieless-flag.mjs` limpa as linhas
+antigas (dry-run por padrão, `--apply` para gravar; lista quem precisa
+recadastrar). Rodar em staging e em produção (com backup antes) após o deploy.
 
-`src/credentialPrivacy.js` (módulo **puro**, sem DB/rede/crypto) transforma isso
-em escolha explícita — flag `cookielessMode` dentro do próprio JSON de
-`Credential.data` (**sem migration**, o campo é blob cifrado):
+O que ficou dessa rodada:
 
-- `sanitizeCredentialBody` (`src/credentialHealth.js`) aplica
-  `applyCookielessMode` **antes** de qualquer outra regra: com o modo ligado,
-  nenhum campo de sessão é persistido, nem que venha preenchido no corpo. Como o
-  PUT sobrescreve o blob inteiro, ligar o modo **apaga** o cookie já guardado.
-- `validateCredentialData` deixa de exigir os campos de cookie (só a `tag`
-  continua obrigatória — sem ela não há comissão a creditar) e devolve
-  `cookielessMode: true`, senão o painel marcaria "incompleto" para sempre.
-- `GET /credentials/{mercadolivre,amazon}/session` responde
-  `{ configured:false, alive:null, reason:'cookieless_mode' }` **sem sondar** —
-  não faz sentido alarmar "sessão expirada" para quem escolheu não dar sessão.
-- `DELETE /credentials/:platform` (novo) apaga a credencial, invalida o cache de
-  sondagem, recarrega a config do worker e é **idempotente** (200 +
+- `DELETE /credentials/:platform` — apaga a credencial da loja, invalida o cache
+  de sondagem, recarrega a config do worker e é **idempotente** (200 +
   `deleted:false` quando não havia nada). Evento `credential_deleted` na
-  allowlist de `src/analytics.js`.
-
-Campos considerados de sessão (`COOKIE_FIELDS_BY_PLATFORM`): ML `ssid`,
-`cookie`, `csrf`, `id`; Amazon `cookie`, `ubid-acbbr`, `at-acbbr`, `x-acbbr` —
-`csrf`/`id` e os nomeados entram porque são artefatos de rotação da MESMA
-sessão; apagar só o `ssid` deixaria resíduo autenticável.
-
-UI: toggle + explicação "o que fazemos com esse cookie" + botão de apagar em
-`dashboard/app/painel/ids-afiliada/page.js` (campos de cookie marcados com
-`cookieField: true` em `dashboard/lib/painel/affiliatePlatforms.js`), nota no
-tutorial e FAQ pública em `/seguranca-credenciais-afiliado`.
-
-### Garantia "nada se perde" (com ou sem o código) — travada por teste
-
-A promessa feita para a cliente no painel é literal e tem teste próprio em
-`test/credential-cookieless-nothing-lost.test.js`:
-
-1. a oferta **sempre sai** (com ou sem cookie, `convert()` nunca devolve `null`
-   por falta de credencial de sessão);
-2. o link **sempre carrega a etiqueta dela** (`partner_id` no ML, `tag=` na
-   Amazon), nos dois caminhos;
-3. o link de terceiro **nunca** é repassado (etiqueta de concorrente é
-   substituída, não preservada);
-4. ligar/desligar o modo **não leva junto** o resto (etiqueta, vitrine e demais
-   campos sobrevivem; só o código de sessão sai).
-
-Não remover esses testes: eles são o contrato do texto que a usuária lê.
+  allowlist de `src/analytics.js`. Botão "Apagar meus dados" no painel.
+- Explicação "o que fazemos com esse código" junto do campo
+  (`CookiePrivacyDetails`, renderizada nas lojas cujos campos têm
+  `cookieField: true`) e FAQ pública em `/seguranca-credenciais-afiliado`.
 
 ### Linguagem para a usuária (obrigatório nesta superfície)
 
@@ -403,18 +374,9 @@ Correção de fato importante aplicada junto: o aviso de código vencido do ML
 dizia "a geração de ofertas do ML está pausada" — **era falso** (o fallback
 segue enviando) e assustava à toa.
 
-**Não regredir:** não voltar a exigir cookie na validação quando o modo está
-ligado; não sondar sessão nesse modo; não persistir campo de sessão que chegue
-no corpo com a flag ligada; não voltar a imprimir `missing` cru na tela.
-**Pendência de validação em campo (staging/celular): confirmar que o
-`partner_id` do ML credita comissão de produto** — só temos prova de campo do
-lado Amazon (`?tag=`). Por isso os textos prometem "a oferta continua saindo com
-a sua comissão" apoiados no caminho comprovado, e o painel admite explicitamente
-o que se perde no ML (link curto + cupom sem produto). Testes:
-`test/credential-cookieless-mode.test.js`,
-`test/credentials-cookieless-route.test.js`,
-`test/credential-cookieless-nothing-lost.test.js`,
-`test/painel-ids-afiliada-privacy.test.js`,
+**Não regredir:** não voltar a imprimir `missing` cru na tela; não voltar a
+dizer que o envio "está pausado" quando o código vence (o fallback continua
+enviando). Testes: `test/painel-ids-afiliada-privacy.test.js`,
 `test/painel-linguagem-leiga.test.js`.
 
 ## A-1 — Proteção contra brute-force no login (canônico)
@@ -2012,6 +1974,41 @@ convertido na oferta) + metadados de conversão na resposta.
 
 Testes: `test/offer-engine.test.js` (motor),
 `test/link-conversion-route.test.js`.
+
+## SEO orgânico — linhas CONGELADAS por dado (2026-07-30, não reabrir)
+
+Decidido com dado real do Google (Search Console 12m + Planejador com 8.923
+termos + Trends). Análise completa em
+`docs/marketing/ANALISE_DADOS_REAIS_KEYWORDS_2026-07-30.md`.
+
+**NÃO produzir mais páginas nestas linhas:**
+
+| Linha congelada | Evidência que sustenta |
+|---|---|
+| LPs por **cidade** (`espelhar-grupos-whatsapp-<cidade>`) | as 15 somaram ~25 impressões em 2,5 meses; 5 delas em zero |
+| LPs de **nicho** novo (farmácia, autopeças, pet shop, beleza) | zero impressão em 2,5 meses |
+| Cluster **"robô"** como termo próprio | Trends: "robô whatsapp" é 12× menor que "bot whatsapp" |
+| **Magalu** como frente nova | único marketplace em queda no Trends |
+| `automação whatsapp` / `disparo em massa` | 5.000/mês mas concorrência **alta**, e é mercado de atendimento corporativo (Blip/Wati), não afiliado |
+
+**Não deletar as páginas existentes** — perder link e histórico não ajuda. Só
+parar de investir.
+
+**Onde está a demanda real (atacar aqui):** o público **antes** de precisar do
+robô. `shopee afiliados`, `mercado livre afiliados`, `afiliado amazon` —
+50.000/mês cada, concorrência **baixa**. Contra `bot para grupo whatsapp`, que
+tem **500/mês e concorrência alta**. Ordem dos marketplaces: Shopee ≫ Mercado
+Livre > Amazon ≫ Magalu.
+
+**Regra de vocabulário:** título e H1 entram pela palavra que o cliente busca
+("whatsapp banido", "achadinhos", "afiliado shopee"); o termo próprio da casa
+("Módulo de Preservação Avançada", "cadência", "espelhamento") é explicado
+**dentro** da página, não usado como porta de entrada.
+
+⚠️ **Limite que não se cruza:** entrar pela palavra "banido"/"anti-ban" **não**
+pode virar promessa de que não banem. Corrigir a expectativa dentro da página é
+honesto; prometer é risco jurídico e contraria a política de uso responsável já
+publicada no `llms.txt`.
 
 ## Triagem de novas demandas (implementar agora vs. backlog)
 

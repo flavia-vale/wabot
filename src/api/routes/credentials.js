@@ -1,7 +1,6 @@
 import dbDefault from '../../db.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { getCredentialSaveMessage, parseCredentialData, PLATFORMS, sanitizeCredentialBody, validateCredentialData } from '../../credentialHealth.js'
-import { isCookielessMode } from '../../credentialPrivacy.js'
 import { encryptCredential } from '../../credentialCrypto.js'
 import { checkMercadoLivreSession as defaultCheckMercadoLivreSession } from '../../converters/mercadolivre.js'
 import { checkAmazonSession as defaultCheckAmazonSession } from '../../converters/amazon.js'
@@ -59,12 +58,6 @@ export async function credentialsRoutes(app, opts = {}) {
     })
     if (!cred) return { configured: false, alive: null, reason: 'not_configured' }
     const data = parseCredentialData(cred.data)
-    // Modo sem cookie: não há sessão para sondar. Responder `cookieless_mode`
-    // (em vez de sondar e devolver alive:false) evita o falso alarme "Sessão
-    // expirada" no painel para quem escolheu deliberadamente não dar o SSID.
-    if (isCookielessMode('mercadolivre', data)) {
-      return { configured: false, alive: null, reason: 'cookieless_mode' }
-    }
     const result = await checkMercadoLivreSession(data)
     app.log.debug({ userId: req.user.sub }, 'Mercado Livre session: sondagem efetiva (chamada real ao ML)')
 
@@ -111,11 +104,6 @@ export async function credentialsRoutes(app, opts = {}) {
     })
     if (!cred) return { configured: false, alive: null, reason: 'not_configured' }
     const data = parseCredentialData(cred.data)
-    // Mesmo contrato do ML acima: sem cookie cadastrado por escolha da usuária,
-    // não existe sessão para expirar — nada a sondar, nada a alarmar.
-    if (isCookielessMode('amazon', data)) {
-      return { configured: false, alive: null, reason: 'cookieless_mode' }
-    }
     const result = await checkAmazonSession(data)
     app.log.debug({ userId: req.user.sub }, 'Amazon session: sondagem efetiva (chamada real à Amazon)')
 

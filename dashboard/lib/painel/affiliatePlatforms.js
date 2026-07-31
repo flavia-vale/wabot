@@ -38,7 +38,7 @@ export const AFFILIATE_PLATFORMS = [
   {
     id: 'amazon',
     label: 'Amazon',
-    instructions: 'Onde pegar: no site de associados da Amazon (link abaixo). A etiqueta aparece na própria tela. O código de acesso é opcional e serve só para deixar o link curtinho — se for usar, prefira o código completo: os três códigos separados vencem em poucos dias.',
+    instructions: 'Onde pegar: no site de associados da Amazon (link abaixo). A etiqueta aparece na própria tela. O código de acesso é o que deixa o link curtinho — prefira o código completo: os três códigos separados vencem em poucos dias.',
     actionLinks: [
       {
         label: 'Abrir a página da loja',
@@ -46,11 +46,9 @@ export const AFFILIATE_PLATFORMS = [
       },
     ],
     platformWarning: 'Com a etiqueta e o código de acesso, o link da oferta sai curtinho. Só com a etiqueta, a oferta sai do mesmo jeito — o link só fica mais comprido.',
-    supportsCookielessMode: true,
-    cookielessNote: 'Suas ofertas continuam saindo e a comissão continua sendo sua. A única diferença: o link fica mais comprido, em vez do link curto da Amazon.',
     fields: [
       { key: 'tag', label: 'Sua etiqueta de afiliada (ID de associado)', hint: 'É o código que identifica suas vendas. Ex.: suaetiqueta-20' },
-      { key: 'cookie', label: 'Código de acesso da sua conta (recomendado)', required: false, sensitive: true, cookieField: true, hint: 'Serve só para encurtar o link da oferta. Você pode deixar em branco.', help: 'No computador, entre em associados.amazon.com.br já logada, clique na extensão Cookie-Editor → botão Export (canto inferior direito) → JSON. O código é copiado sozinho; é só colar aqui.' },
+      { key: 'cookie', label: 'Código de acesso da sua conta (recomendado)', required: false, sensitive: true, cookieField: true, hint: 'Necessário para o link da oferta sair curtinho. Use este ou os três códigos alternativos abaixo.', help: 'No computador, entre em associados.amazon.com.br já logada, clique na extensão Cookie-Editor → botão Export (canto inferior direito) → JSON. O código é copiado sozinho; é só colar aqui.' },
       { key: 'ubid-acbbr', label: 'Código alternativo 1 (ubid-acbbr)', required: false, cookieField: true, hint: 'Só se você não usar o código completo acima.', sensitive: true, help: 'Só precisa se NÃO colou o código completo acima. É um dos três códigos separados da Amazon, encontrados na mesma extensão Cookie-Editor.' },
       { key: 'at-acbbr', label: 'Código alternativo 2 (at-acbbr)', required: false, cookieField: true, hint: 'Só se você não usar o código completo acima.', sensitive: true, help: 'Só precisa se NÃO colou o código completo acima. Mesmo lugar da extensão Cookie-Editor.' },
       { key: 'x-acbbr', label: 'Código alternativo 3 (x-acbbr)', required: false, cookieField: true, hint: 'Só se você não usar o código completo acima.', sensitive: true, help: 'Só precisa se NÃO colou o código completo acima. Mesmo lugar da extensão Cookie-Editor.' },
@@ -67,11 +65,9 @@ export const AFFILIATE_PLATFORMS = [
       },
     ],
     platformWarning: 'Com a etiqueta e o código de acesso, o link da oferta sai curtinho. Só com a etiqueta, a oferta sai do mesmo jeito — o link só fica mais comprido.',
-    supportsCookielessMode: true,
-    cookielessNote: 'Suas ofertas de produto continuam saindo e a comissão continua sendo sua. Duas diferenças: o link fica mais comprido e links só de cupom (sem produto) deixam de ser aproveitados.',
     fields: [
       { key: 'tag', label: 'Sua etiqueta de afiliada', hint: 'Copie igualzinho ao que aparece no Mercado Livre.', help: 'É a "etiqueta em uso" que aparece na tela do Gerador de Links do Mercado Livre.' },
-      { key: 'ssid', label: 'Código de acesso da sua conta (SSID)', hint: 'Serve só para encurtar o link da oferta. Você pode deixar em branco.', sensitive: true, cookieField: true, help: 'No computador, com o Mercado Livre aberto e logado, clique na extensão Cookie-Editor, procure o item chamado ssid e copie o valor dele. Não passe esse código para mais ninguém.' },
+      { key: 'ssid', label: 'Código de acesso da sua conta (SSID)', hint: 'Necessário para o link da oferta sair curtinho.', sensitive: true, cookieField: true, help: 'No computador, com o Mercado Livre aberto e logado, clique na extensão Cookie-Editor, procure o item chamado ssid e copie o valor dele. Não passe esse código para mais ninguém.' },
       { key: 'vitrineUrl', label: 'Link da sua vitrine (opcional)', required: false, hint: 'Serve para quando chega um link da lojinha de outra pessoa, sem produto específico.', help: 'Cole o link da SUA vitrine no Mercado Livre (ex.: mercadolivre.com.br/social/seu-usuario). Quando chegar um link da vitrine de outra pessoa, em vez de descartar a mensagem o robô troca pelo link da sua.' },
     ],
   },
@@ -95,16 +91,8 @@ export const CRED_STATUS = {
   pending: { label: 'Ainda não cadastrada', cls: 'is-skip' },
 }
 
-// Espelha `validateCredentialData` do backend (src/credentialHealth.js): no
-// modo sem cookie os campos de sessão deixam de ser obrigatórios, então a
-// credencial fica "Configurado" só com a tag — sem isso o painel marcaria
-// "Incompleto" para sempre e ficaria cobrando o cookie que a usuária escolheu
-// não entregar.
 export function getPlatformStatus(platform, values) {
-  const cookieless = platform.supportsCookielessMode && values?.cookielessMode === true
-  const required = platform.fields.filter(
-    (field) => field.required !== false && !(cookieless && field.cookieField),
-  )
+  const required = platform.fields.filter((field) => field.required !== false)
   const filled = required.filter((field) => String(values?.[field.key] ?? '').trim())
   if (filled.length === 0) return 'pending'
   if (filled.length < required.length) return 'incomplete'
