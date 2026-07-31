@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { ArticleShell } from '@/components/marketing/ArticleShell'
 import { getSiteUrl } from '@/lib/site-url'
-import { buildArticleJsonLd, getEditorialDates } from '@/lib/editorial-content'
+import { buildArticleJsonLd, getEditorialDates, EDITORIAL_PERSON_AUTHOR, EDITORIAL_PERSON_AUTHOR_DESCRIPTION } from '@/lib/editorial-content'
 
 const siteUrl = getSiteUrl()
 
@@ -145,6 +145,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Guia completo de Shopee Afiliados: como se cadastrar, quanto paga de comissão por tipo de venda, prazo de atribuição e como divulgar no WhatsApp sem perder comissão.',
     eyebrow: 'Shopee Afiliados · Guia completo',
     origin: 'blog_como_ser_afiliado_shopee_whatsapp',
+    usePersonAuthor: true,
     intro: 'Shopee Afiliados é o programa que paga comissão sobre vendas geradas pelo seu link. O cadastro é gratuito, a comissão parte de 3% e a atribuição vale por até 7 dias após o clique. Divulgar no WhatsApp funciona bem quando o link sai sempre com o seu código e a frequência de envio é controlada.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Cadastre-se no Programa de Afiliados Shopee, pegue suas credenciais de afiliado, gere o link de cada produto com o seu código e divulgue no WhatsApp com texto próprio e frequência controlada.', 'O ponto crítico é garantir que TODO link enviado já esteja convertido para o seu código — senão a venda acontece, mas a comissão não cai para você.'] },
@@ -168,6 +169,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Guia de afiliado Amazon (Amazon Associados): quanto paga de comissão por categoria de produto, como divulgar no WhatsApp com a tag correta e cadência que protege o número.',
     eyebrow: 'Afiliado Amazon · Divulgação',
     origin: 'blog_como_divulgar_ofertas_amazon_whatsapp',
+    usePersonAuthor: true,
     intro: 'Divulgar Amazon no WhatsApp como associado dá certo quando o link sai com a sua tag, o preview mostra a imagem do produto e o envio respeita uma cadência que não queima o número. A comissão varia por categoria — de 0% a 13% — e errar a tag é o jeito mais rápido de trabalhar de graça.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Entre no Amazon Associados, pegue sua tag de afiliado, gere o link do produto com essa tag e divulgue no WhatsApp com imagem, preço e texto próprio — controlando a frequência de envio.', 'A regra de ouro: confira sempre se a sua tag está no link antes de enviar. Sem a tag, a venda não gera comissão para você.'] },
@@ -313,14 +315,15 @@ export function getPreservationBlogMetadata(postKey) {
 export function PreservationBlogPost({ postKey }) {
   const post = PRESERVATION_BLOG_POSTS[postKey]
   const dates = getEditorialDates(post.slug)
-  const schemas = buildArticleJsonLd({ title: post.title, description: post.description, slug: post.slug, siteUrl, faq: post.faq })
+  const personAuthor = post.usePersonAuthor ? { type: 'Person', name: EDITORIAL_PERSON_AUTHOR, description: EDITORIAL_PERSON_AUTHOR_DESCRIPTION } : undefined
+  const schemas = buildArticleJsonLd({ title: post.title, description: post.description, slug: post.slug, siteUrl, faq: post.faq, author: personAuthor })
 
   return (
     <>
       {schemas.map((schema) => (
         <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
       ))}
-      <ArticleShell eyebrow={post.eyebrow} title={post.title} description={post.description} origin={post.origin} publishedAt={dates.publishedAt} updatedAt={dates.updatedAt}>
+      <ArticleShell eyebrow={post.eyebrow} title={post.title} description={post.description} origin={post.origin} publishedAt={dates.publishedAt} updatedAt={dates.updatedAt} author={post.usePersonAuthor ? EDITORIAL_PERSON_AUTHOR : undefined}>
         <section>
           <h2>Resumo prático</h2>
           <p>{post.intro}</p>
