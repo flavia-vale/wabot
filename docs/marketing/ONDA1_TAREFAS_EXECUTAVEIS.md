@@ -211,3 +211,16 @@ Medir em **60 dias**, no Search Console:
 O indicador mais honesto é **consultas distintas**: hoje são 13. Um site
 saudável nesse nicho deveria estar na casa das centenas. É a métrica que mostra
 se o site parou de falar sozinho.
+
+---
+
+> ## ⚠️ SUPERSEDIDO — ver `ONDA1_PLANO_DETALHADO.md`
+>
+> Este documento ficou vago (não separava o que é ação de código do que é ação
+> manual) e continha um erro: classificou como "prioridade máxima, zero
+> impressão" três páginas que tinham **8 dias de vida** na data do export.
+> Zero impressão com 8 dias é normal — a ação certa nelas é pedir indexação,
+> não reescrever.
+>
+> O plano válido, já separado por responsável e com passo a passo, está em
+> `ONDA1_PLANO_DETALHADO.md`.
