@@ -35,6 +35,9 @@ import { validateEncryptionKey } from '../credentialCrypto.js'
 import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, SUPERVISOR_MODE } from '../manager.js'
 import { shouldWarnModeRegression } from '../ops/modeRegressionGuard.js'
 import { trackAnalyticsEventSafe } from '../analytics.js'
+import { runNurtureSweep } from '../leadNurture/sweep.js'
+import { sendMail } from '../email/mailer.js'
+import { leadNurtureRoutes } from './routes/leadNurture.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
 registerApiMetricsHooks(app)
@@ -150,6 +153,37 @@ function startLogRetentionJob() {
   const timer = setInterval(() => {
     cleanupOldLogs().catch(err => app.log.error({ err: err.message }, 'Falha na limpeza automática de retenção'))
   }, LOG_RETENTION_INTERVAL_MS)
+  timer.unref?.()
+}
+
+// Trilha de nutrição de leads (011-lead-nurture-emails): passada diária
+// in-process, mesmo padrão de startLogRetentionJob/startActivityCacheCleanup
+// (setInterval + unref, sem processo/worker/Redis novo — AGENTS.md "Política
+// de memória"). Envs opcionais aditivas, sem mudança de .env de ambiente:
+//   LEAD_NURTURE_SWEEP_INTERVAL_MS — intervalo entre passadas (default 24h).
+//   LEAD_NURTURE_GO_LIVE_AT        — ISO opcional; filtra leads cadastrados
+//                                     antes dessa data (evita reenviar a
+//                                     trilha para a base histórica no go-live).
+const LEAD_NURTURE_SWEEP_INTERVAL_MS = Math.max(Number(process.env.LEAD_NURTURE_SWEEP_INTERVAL_MS) || 24 * 60 * 60 * 1000, 60 * 1000)
+async function runLeadNurtureSweepTick() {
+  try {
+    const summary = await runNurtureSweep({
+      db,
+      sendMail,
+      secret: process.env.JWT_SECRET,
+      baseUrl: process.env.DASHBOARD_URL || process.env.API_URL,
+      logger: app.log,
+    })
+    if (summary.sent > 0 || summary.failed > 0) {
+      app.log.info({ ...summary }, 'lead-nurture: passada concluída')
+    }
+  } catch (err) {
+    app.log.error({ err: err.message }, 'lead-nurture: passada falhou')
+  }
+}
+function startLeadNurtureSweep() {
+  runLeadNurtureSweepTick()
+  const timer = setInterval(runLeadNurtureSweepTick, LEAD_NURTURE_SWEEP_INTERVAL_MS)
   timer.unref?.()
 }
 
@@ -287,6 +321,7 @@ app.register(offerAutomationRoutes, { prefix: '/api/offer-automations' })
 app.register(offerQueueRoutes, { prefix: '/api/offer-queues' })
 app.register(clickTrackerRoutes) // sem prefix — /r/:hash precisa estar na raiz
 app.register(affiliateRoutes, { prefix: '/api' })
+app.register(leadNurtureRoutes, { prefix: '/api/lead-nurture' })
 
 // Liveness: processo está de pé
 app.get('/health', () => ({ ok: true }))
@@ -360,6 +395,7 @@ if (databaseReadyAtBoot) {
 
 startLogRetentionJob()
 startActivityCacheCleanup()
+startLeadNurtureSweep()
 startProbeWatchdogJob()
 startOfferAutomationCron()
 startOfferQueueCron()

@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs'
-import { randomBytes, createHash } from 'crypto'
+import { randomBytes, createHash, randomUUID } from 'crypto'
 import db from '../../db.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { normalizeEmail } from '../auth-utils.js'
@@ -7,6 +7,8 @@ import { DEFAULT_COPY_VARIATION_POOL_JSON } from '../../core/copyVariation.js'
 import { sendWelcomeEmail } from '../../email/welcomeEmail.js'
 import { attachAffiliateAttributionTouchesToUser, attachOrphanTouchesByDevice, recordAffiliateAttributionTouch } from '../../domain/affiliate/service.js'
 import { DEFAULT_TERMS_VERSION, getEffectiveTermsVersion } from '../../legalTerms.js'
+import { isRealEmail } from '../../leadNurture/policy.js'
+import { isUnsubscribed } from '../../leadNurture/sweep.js'
 
 // Hash descartável usado só para igualar o custo de tempo do bcrypt.compare
 // no caminho "usuário não existe". Sem ele, login com e-mail inexistente
@@ -482,6 +484,30 @@ export async function authRoutes(app) {
     // No-op quando SMTP não está configurado; nunca derruba o signup.
     if (providedEmail) {
       sendWelcomeEmail({ to: providedEmail, name }).catch(() => {})
+    }
+
+    // Trilha de nutrição de leads (011-lead-nurture-emails, D4): o welcome
+    // acima cobre o passo dia 0 — semeamos o evento para que a passada
+    // diária (sweep.js) não reenvie o dia 0 e comece direto no passo 2.
+    // Condicionado a !isUnsubscribed para não reabrir a trilha de um contato
+    // já descadastrado (US2 cenário 3) — best-effort, nunca derruba o signup.
+    if (providedEmail && isRealEmail(providedEmail)) {
+      isUnsubscribed({ db, userId: user.id })
+        .then((unsub) => {
+          if (unsub) return
+          return db.analyticsEvent.create({
+            data: {
+              id: randomUUID(),
+              userId: user.id,
+              event: 'nurture_email_sent',
+              metadata: JSON.stringify({ step: 0 }),
+              createdAt: new Date(),
+            },
+          })
+        })
+        .catch((err) => {
+          req.log?.warn?.({ err, userId: user.id }, 'register: falha ao semear passo 0 da trilha de nutrição (best-effort)')
+        })
     }
 
     const token = app.jwt.sign({ sub: user.id, email: user.email, jti: randomToken(12) }, { expiresIn: '7d' })
