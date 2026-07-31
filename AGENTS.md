@@ -1662,6 +1662,63 @@ pode virar promessa de que não banem. Corrigir a expectativa dentro da página 
 honesto; prometer é risco jurídico e contraria a política de uso responsável já
 publicada no `llms.txt`.
 
+## Dados de mercado para marketing (canônico — usar em toda decisão de SEO/conteúdo)
+
+Baseline de **2026-07-30**, fonte: Search Console (12 meses), Planejador de
+Palavras-Chave (8.923 termos, Brasil/PT), Google Trends (12 meses, Brasil).
+Análise completa em `docs/marketing/ANALISE_DADOS_REAIS_KEYWORDS_2026-07-30.md`.
+**Toda conversa de marketing/SEO/conteúdo deve partir destes números — não
+re-estimar por sinal de SERP quando este dado real já existe.**
+
+### Tiers de palavra-chave (volume/mês, concorrência)
+
+| Tier | Termos | Volume | Concorrência | Observação |
+|---|---|---:|---|---|
+| **1 — prioridade máxima** | `shopee afiliados`, `mercado livre afiliados`, `afiliado amazon`/`associados amazon` | 50.000 cada | **Baixa** | maior oportunidade do levantamento |
+| 1 | `como se tornar afiliado shopee`, `programa de afiliados shopee` | 50.000 | Média | |
+| 1 | `como ser afiliado [shopee/ML/amazon]` | 5.000 cada | Média | |
+| 1 | `programa de afiliados mercado livre`, `shopee afiliados entrar` | 5.000 | Baixa | |
+| **2 — dor aguda** | `whatsapp banido`, `zap banido`, `número banido whatsapp`, `conta banida whatsapp` | 5.000 cada | **Baixa** | tratar como topo de funil, não venda direta |
+| **3 — secundário** | `achadinhos`/`achadinho`, `grupo de ofertas whatsapp`, `grupo de promoções whatsapp` | 5.000 cada | Baixa/Média | ⚠️ quem busca "grupo de ofertas" quer **entrar**, não criar — só serve como isca |
+| **4 — estacionado** | `cupom amazon`, `cupom mercadolivre` | 500.000 | Baixa | público é consumidor final, não afiliado — não perseguir agora |
+| **5 — evitar** | `bot`/`robô para grupo whatsapp` | 500 | **Alta** | é onde o site tenta competir hoje; não é onde está o volume |
+
+Ordem de prioridade dos marketplaces (Trends, estável salvo Magalu):
+**Shopee ≫ Mercado Livre > Amazon ≫ Magalu (em queda)**.
+
+### Baseline do site (Search Console, snapshot 2026-07-30)
+
+| Métrica | Valor |
+|---|---:|
+| Cliques (site inteiro, ~2,5 meses de dado) | 41 |
+| Impressões | 1.154 |
+| Posição média | 7,85 |
+| Consultas distintas registradas | **13** ← métrica mais honesta de progresso |
+| Rotas indexáveis no sitemap | 96 |
+| Rotas com zero impressão | 36 |
+| Páginas indexadas / não indexadas | 76 / 16 |
+
+As duas páginas que concentram tração hoje (42% das impressões, ambas em
+posição ~8,4): `/blog/como-divulgar-ofertas-amazon-whatsapp` e
+`/blog/como-ser-afiliado-shopee-whatsapp`.
+
+### Concorrentes mapeados
+
+Achadinho Pro, ProAfiliados, FluxoPromo, Shozap, Afilira, AchadinhosBot /
+AchadinBot, IA Divulgadora, Devzapp (blog), Shark Pomo Bot, Lumi Ofertas
+Inteligentes, Gigi Bot. Preços e planos coletados por print em 2026-07-31 —
+ver `docs/marketing/ONDA1_PLANO_DETALHADO.md` (B2) para o detalhe por
+concorrente antes de citar preço em qualquer página pública.
+
+### 🔁 Atualizar mensalmente
+
+No começo de cada mês, sugerir à usuária repetir a coleta (Search Console +
+Planejador + Trends, mesmo passo a passo de
+`docs/marketing/COLETA_DADOS_KEYWORDS_PASSO_A_PASSO.md`) e comparar contra
+este baseline — principalmente **consultas distintas** e **posição média das
+2 páginas fortes**. Atualizar esta seção e a data do cabeçalho quando novos
+números chegarem.
+
 ## Triagem de novas demandas (implementar agora vs. backlog)
 
 - **Sempre que surgir uma nova demanda**, pergunte à usuária se vamos
