@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { ArticleShell } from '@/components/marketing/ArticleShell'
 import { getSiteUrl } from '@/lib/site-url'
-import { buildArticleJsonLd, getEditorialDates } from '@/lib/editorial-content'
+import { buildArticleJsonLd, getEditorialDates, EDITORIAL_PERSON_AUTHOR, EDITORIAL_PERSON_AUTHOR_DESCRIPTION } from '@/lib/editorial-content'
 
 const siteUrl = getSiteUrl()
 
@@ -141,38 +141,46 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'como-ser-afiliado-shopee-whatsapp': {
     slug: '/blog/como-ser-afiliado-shopee-whatsapp',
-    title: 'Como ser afiliado Shopee e divulgar ofertas no WhatsApp',
-    description: 'Passo a passo para se tornar afiliado Shopee, gerar seu link de afiliado e divulgar ofertas no WhatsApp com conversão automática e cadência responsável.',
-    eyebrow: 'Afiliado Shopee · Primeiros passos',
+    title: 'Shopee Afiliados: como se cadastrar e divulgar no WhatsApp (guia 2026)',
+    description: 'Guia completo de Shopee Afiliados: como se cadastrar, quanto paga de comissão por tipo de venda, prazo de atribuição e como divulgar no WhatsApp sem perder comissão.',
+    eyebrow: 'Shopee Afiliados · Guia completo',
     origin: 'blog_como_ser_afiliado_shopee_whatsapp',
-    intro: 'Ser afiliado Shopee e divulgar no WhatsApp tem três etapas: entrar no programa de afiliados, gerar o link com o seu código e enviar as ofertas para grupos e canais sem parecer spam. A parte que mais trava o iniciante é manter o link sempre convertido.',
+    usePersonAuthor: true,
+    intro: 'Shopee Afiliados é o programa que paga comissão sobre vendas geradas pelo seu link. O cadastro é gratuito, a comissão parte de 3% e a atribuição vale por até 7 dias após o clique. Divulgar no WhatsApp funciona bem quando o link sai sempre com o seu código e a frequência de envio é controlada.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Cadastre-se no Programa de Afiliados Shopee, pegue suas credenciais de afiliado, gere o link de cada produto com o seu código e divulgue no WhatsApp com texto próprio e frequência controlada.', 'O ponto crítico é garantir que TODO link enviado já esteja convertido para o seu código — senão a venda acontece, mas a comissão não cai para você.'] },
+      { h2: 'Quanto paga a comissão da Shopee', paragraphs: ['A comissão-base é de 3% sobre o valor líquido da venda (sem impostos, cupons ou frete), tanto para vendas via redes sociais/WhatsApp quanto para vendas geradas em lives e Shopee Vídeo.', 'Existe também o programa de Comissão Extra: ao divulgar produtos de parceiros selecionados, a comissão pode chegar a até 30% — a comissão padrão da Shopee soma com uma comissão extra paga pelo próprio vendedor.'], table: { headers: ['Tipo de venda', 'Comissão'], rows: [['Venda padrão (redes sociais e WhatsApp)', '3%'], ['Vendas em lives', '3%'], ['Vendas via Shopee Vídeo', '3%'], ['Produtos do programa de Comissão Extra', 'até 30% (padrão + extra do vendedor)']], note: 'Fonte: Shopee Affiliate Program, "Entenda o Comissionamento da Shopee" (consultado em 30/07/2026). Comissão calculada sobre o valor líquido da venda; sujeita às condições especiais e a alterações sem aviso prévio da Shopee.' } },
+      { h2: 'Prazo para a comissão ser atribuída a você', paragraphs: ['Quando alguém clica no seu link e adiciona o produto ao carrinho, a Shopee guarda essa atribuição por até 7 dias — mesmo que a pessoa não compre na hora, você ainda ganha a comissão se ela finalizar a compra dentro desse prazo.', 'Sites e apps especializados em cupom, cashback ou tecnologia têm taxa de comissão sob consulta — as regras padrão valem para o afiliado comum divulgando em grupos e canais.'] },
       { h2: 'Passo a passo para entrar', bullets: ['Cadastre-se no Programa de Afiliados Shopee.', 'Confirme seus dados e aguarde a aprovação.', 'Localize suas credenciais de afiliado (appId / secret).', 'Gere links com o seu código para os produtos que vai divulgar.', 'Organize seus grupos e canais de destino no WhatsApp.'] },
       { h2: 'Como divulgar sem queimar o número', paragraphs: ['Use um chip dedicado, publique poucas ofertas boas por vez, varie o texto e evite mandar a mesma mensagem idêntica para todos os destinos ao mesmo tempo.', 'Quem dispara dezenas de links iguais em sequência arrisca o número e ainda cansa a audiência. Cadência responsável vende mais no médio prazo.'] },
       { h2: 'Como o BOTinho automatiza a Shopee', paragraphs: ['Com as credenciais de afiliada Shopee cadastradas, o BOTinho converte os links para o seu código automaticamente antes de enviar, monta a oferta com título e preço e distribui para os seus grupos e canais com cadência controlada.', 'Assim você não precisa gerar link a link na mão nem corre o risco de enviar um link sem comissão.'] },
     ],
     faq: [
       { q: 'Ser afiliado Shopee é gratuito?', a: 'Sim, a entrada no programa de afiliados não tem custo. Você ganha comissão sobre as vendas geradas pelos seus links.' },
+      { q: 'Shopee Afiliados como funciona?', a: 'Você se cadastra no programa, gera links de produtos com o seu código de afiliado e ganha comissão (a partir de 3%) sobre as vendas feitas por esse link em até 7 dias após o clique.' },
+      { q: 'Quanto a Shopee paga de comissão?', a: 'A comissão padrão é 3% sobre o valor líquido da venda. Produtos do programa de Comissão Extra podem chegar a até 30%, somando a comissão padrão com uma comissão adicional paga pelo vendedor.' },
       { q: 'Preciso gerar cada link na mão?', a: 'Não, se usar uma ferramenta de conversão. Com as credenciais Shopee no BOTinho, os links são convertidos automaticamente para o seu código antes do envio.' },
       { q: 'Posso divulgar Shopee e outras lojas juntas?', a: 'Sim. É comum divulgar Shopee, Mercado Livre e Amazon na mesma operação. O importante é manter cada link com o código de afiliado correto.' },
     ],
   },
   'como-divulgar-ofertas-amazon-whatsapp': {
     slug: '/blog/como-divulgar-ofertas-amazon-whatsapp',
-    title: 'Como divulgar ofertas da Amazon no WhatsApp como afiliado',
-    description: 'Aprenda a divulgar ofertas da Amazon no WhatsApp como afiliado: tag de associado, link convertido, preview com imagem e cadência que protege seu número.',
+    title: 'Afiliado Amazon: como divulgar ofertas no WhatsApp (comissão por categoria)',
+    description: 'Guia de afiliado Amazon (Amazon Associados): quanto paga de comissão por categoria de produto, como divulgar no WhatsApp com a tag correta e cadência que protege o número.',
     eyebrow: 'Afiliado Amazon · Divulgação',
     origin: 'blog_como_divulgar_ofertas_amazon_whatsapp',
-    intro: 'Divulgar Amazon no WhatsApp dá certo quando o link sai com a sua tag de associado, o preview mostra a imagem do produto e o envio respeita uma cadência que não queima o número. Errar a tag é o jeito mais rápido de trabalhar de graça.',
+    usePersonAuthor: true,
+    intro: 'Divulgar Amazon no WhatsApp como associado dá certo quando o link sai com a sua tag, o preview mostra a imagem do produto e o envio respeita uma cadência que não queima o número. A comissão varia por categoria — de 0% a 13% — e errar a tag é o jeito mais rápido de trabalhar de graça.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Entre no Amazon Associados, pegue sua tag de afiliado, gere o link do produto com essa tag e divulgue no WhatsApp com imagem, preço e texto próprio — controlando a frequência de envio.', 'A regra de ouro: confira sempre se a sua tag está no link antes de enviar. Sem a tag, a venda não gera comissão para você.'] },
+      { h2: 'Quanto a Amazon paga de comissão por categoria', paragraphs: ['A comissão da Amazon Associados não é fixa — varia por categoria de produto, de 0% (categoria Coach) a 13% (bebê, beleza, saúde e alimentos).'], table: { headers: ['Categoria', 'Comissão'], rows: [['Bebê, Beleza, Beleza de Luxo, Saúde e Cuidados Pessoais, Bebidas Alcoólicas, Alimentos e Bebidas, Audiolivros', '13%'], ['Roupas, Pet Shop', '11%'], ['Livros, Livros Digitais', '10%'], ['Dispositivos Amazon (Echo, Fire TV, Kindle)', '9,5%'], ['Aventura e Lazer, Esportes, Brinquedos e Jogos, Móveis, Casa, Construção, Ferramentas, Cozinha, Jardim e Piscina, Eletrodomésticos', '8%'], ['Câmeras e Foto, Eletrônicos, Informática, Instrumentos Musicais, Papelaria, Celulares, Games e Consoles, TV e Áudio', '8%'], ['Bolsas, Malas e Mochilas, Calçados, Jóias, Relógios', '7%'], ['CD e Vinil, DVD e Blu-ray, Automotivo, Produtos Industriais e Científicos', '7%'], ['Outras categorias', '7%'], ['Coach', '0%']], note: 'Fonte: programa Amazon Associados, tabela de comissão padrão fixa (consultado em 30/07/2026). A Amazon também paga recompensas fixas por assinatura de Prime, Prime Video, Kindle Unlimited e Amazon Music — valores sujeitos a alteração sem aviso prévio.' } },
       { h2: 'O que cuidar nos links da Amazon', bullets: ['Garantir que a tag de associado está presente no link.', 'Usar link curto quando possível, sem perder a tag.', 'Conferir se o preview mostra imagem em boa resolução.', 'Evitar links com parâmetros que quebram o rastreamento.', 'Atualizar a oferta se o preço mudar.'] },
       { h2: 'Cadência e preservação do número', paragraphs: ['A Amazon costuma ter muitas ofertas, e a tentação é mandar tudo de uma vez. Resista: poucas ofertas selecionadas por vez, com variação de texto, performam melhor e protegem o número.', 'Use chip dedicado e horário de silêncio para a operação não parecer um robô disparando.'] },
       { h2: 'Como o BOTinho cuida da Amazon', paragraphs: ['Com a sua tag de associado cadastrada, o BOTinho converte os links da Amazon automaticamente, busca a imagem em alta resolução para o preview do WhatsApp e distribui a oferta para seus grupos e canais com cadência responsável.', 'Isso evita o erro clássico de enviar um link sem tag e garante que a oferta chegue com cara profissional.'] },
     ],
     faq: [
       { q: 'Como sei se o link tem minha tag?', a: 'O link de afiliado da Amazon inclui um parâmetro de tag (tag=seucodigo). Sem ela, a venda não é atribuída a você. Uma ferramenta de conversão garante isso automaticamente.' },
+      { q: 'Qual categoria da Amazon paga mais comissão?', a: 'Bebê, Beleza, Saúde e Cuidados Pessoais, Bebidas Alcoólicas e Alimentos pagam 13%, a maior faixa da tabela padrão. A categoria Coach não paga comissão (0%).' },
       { q: 'Por que a imagem do produto importa?', a: 'O preview com imagem em boa resolução aumenta o clique. O BOTinho busca a imagem em alta para o link preview do WhatsApp.' },
       { q: 'Posso agendar as ofertas da Amazon?', a: 'Sim. Distribuir ao longo do dia, com cadência controlada, costuma converter melhor do que despejar tudo de uma vez e ainda protege o número.' },
     ],
@@ -307,14 +315,15 @@ export function getPreservationBlogMetadata(postKey) {
 export function PreservationBlogPost({ postKey }) {
   const post = PRESERVATION_BLOG_POSTS[postKey]
   const dates = getEditorialDates(post.slug)
-  const schemas = buildArticleJsonLd({ title: post.title, description: post.description, slug: post.slug, siteUrl, faq: post.faq })
+  const personAuthor = post.usePersonAuthor ? { type: 'Person', name: EDITORIAL_PERSON_AUTHOR, description: EDITORIAL_PERSON_AUTHOR_DESCRIPTION } : undefined
+  const schemas = buildArticleJsonLd({ title: post.title, description: post.description, slug: post.slug, siteUrl, faq: post.faq, author: personAuthor })
 
   return (
     <>
       {schemas.map((schema) => (
         <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
       ))}
-      <ArticleShell eyebrow={post.eyebrow} title={post.title} description={post.description} origin={post.origin} publishedAt={dates.publishedAt} updatedAt={dates.updatedAt}>
+      <ArticleShell eyebrow={post.eyebrow} title={post.title} description={post.description} origin={post.origin} publishedAt={dates.publishedAt} updatedAt={dates.updatedAt} author={post.usePersonAuthor ? EDITORIAL_PERSON_AUTHOR : undefined}>
         <section>
           <h2>Resumo prático</h2>
           <p>{post.intro}</p>
@@ -328,6 +337,29 @@ export function PreservationBlogPost({ postKey }) {
               <ul>
                 {section.bullets.map((bullet) => <li key={bullet}>{bullet}</li>)}
               </ul>
+            ) : null}
+            {section.table ? (
+              <div className="overflow-x-auto rounded-2xl border border-emerald-100">
+                <table className="w-full min-w-[420px] border-collapse text-sm">
+                  <thead className="bg-emerald-50">
+                    <tr>
+                      {section.table.headers.map((header) => (
+                        <th key={header} className="border-b border-emerald-100 p-4 text-left font-black text-gray-950">{header}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {section.table.rows.map((row, i) => (
+                      <tr key={row[0]} className={i === section.table.rows.length - 1 ? '' : 'border-b border-emerald-50'}>
+                        {row.map((cell, j) => (
+                          <td key={j} className={`p-4 align-top ${j === 0 ? 'font-semibold text-gray-950' : 'text-gray-600'}`}>{cell}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {section.table.note ? <p className="border-t border-emerald-100 bg-emerald-50/60 p-3 text-xs text-gray-500">{section.table.note}</p> : null}
+              </div>
             ) : null}
           </section>
         ))}

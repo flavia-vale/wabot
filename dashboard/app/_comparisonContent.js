@@ -21,7 +21,7 @@ export const COMPARISON_PAGES = {
     eyebrow: 'Alternativas · Afiliados',
     title: 'Alternativas de bot para afiliados no WhatsApp: como escolher em 2026',
     description: 'Compare caminhos para divulgar ofertas em grupos de WhatsApp: operação manual, planilha, automação genérica, ferramenta oficial de mensagens e BOTinho.',
-    competitorSlugs: ['divulgador-inteligente', 'divulga-ninja', 'gigi-prime-bot', 'busqy', 'divulga-links', 'manual-spreadsheet-workflow', 'generic-automation-tools', 'official-service-api-tools'],
+    competitorSlugs: ['achadinho-pro', 'achadinhosbot', 'proafiliados-com', 'lumi-ofertas-inteligentes', 'gigi-bot', 'manual-spreadsheet-workflow', 'generic-automation-tools', 'official-service-api-tools'],
     tldr: 'Se você está pesquisando alternativas de bot para WhatsApp, compare foco operacional, capacidade de governança e custo de manutenção contínua antes de decidir.',
     directAnswer: 'A melhor alternativa de bot para WhatsApp para afiliados depende do estágio da operação. Para poucos grupos, planilha e revisão manual podem bastar. Para rotina com origem, destino, link monetizado, filtros, cadência e logs, o BOTinho foi desenhado para organizar esse fluxo sem prometer ganho financeiro ou burlar regras das plataformas.',
     rows: [
@@ -397,31 +397,6 @@ export function ComparisonPage({ slug }) {
           </div>
         </section>
       )}
-
-      <section>
-        <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-            <span className="pill"><span className="dot" />Perfis de alternativa</span>
-            <h2 style={{ fontSize: 'clamp(22px, 2.4vw, 30px)', lineHeight: 1.15, margin: '14px 0 12px' }}>Resumo centralizado dos caminhos avaliados</h2>
-            <div style={{ display: 'grid', gap: 12 }}>
-              {(page.competitorSlugs || []).map((slug) => {
-                const competitor = getCompetitorBySlug(slug)
-                return (
-                  <article key={slug} style={{ border: '1px solid var(--line)', borderRadius: 16, padding: 16, background: 'color-mix(in oklab, var(--surface) 92%, white)' }}>
-                    <h3 style={{ margin: '0 0 8px', fontSize: 18 }}>{competitor.name}</h3>
-                    <p style={{ margin: 0, color: 'var(--ink-soft)', lineHeight: 1.6 }}>{competitor.positioning}</p>
-                    <p style={{ margin: '8px 0 0', color: 'var(--ink)', lineHeight: 1.6 }}><strong>Melhor para:</strong> {competitor.bestFor}</p>
-                    <p style={{ margin: '8px 0 0', color: 'var(--ink)', lineHeight: 1.6 }}><strong>Não ideal para:</strong> {competitor.notIdealFor}</p>
-                    <p style={{ margin: '8px 0 0', color: 'var(--ink-soft)', lineHeight: 1.6 }}><strong>Nota de migração:</strong> {competitor.migrationNotes}</p>
-                    <p style={{ margin: '8px 0 0', color: 'var(--ink-soft)', lineHeight: 1.6 }}><strong>Fonte:</strong> {competitor.source}</p>
-                    <p style={{ margin: '4px 0 0', color: 'var(--ink-soft)', lineHeight: 1.6 }}><strong>Verificado em:</strong> {competitor.verifiedAt}</p>
-                  </article>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      </section>
 
       {Array.isArray(page.migrationPath) && page.migrationPath.length > 0 && (
         <section>
