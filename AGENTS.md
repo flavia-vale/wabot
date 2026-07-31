@@ -1975,6 +1975,41 @@ convertido na oferta) + metadados de conversão na resposta.
 Testes: `test/offer-engine.test.js` (motor),
 `test/link-conversion-route.test.js`.
 
+## SEO orgânico — linhas CONGELADAS por dado (2026-07-30, não reabrir)
+
+Decidido com dado real do Google (Search Console 12m + Planejador com 8.923
+termos + Trends). Análise completa em
+`docs/marketing/ANALISE_DADOS_REAIS_KEYWORDS_2026-07-30.md`.
+
+**NÃO produzir mais páginas nestas linhas:**
+
+| Linha congelada | Evidência que sustenta |
+|---|---|
+| LPs por **cidade** (`espelhar-grupos-whatsapp-<cidade>`) | as 15 somaram ~25 impressões em 2,5 meses; 5 delas em zero |
+| LPs de **nicho** novo (farmácia, autopeças, pet shop, beleza) | zero impressão em 2,5 meses |
+| Cluster **"robô"** como termo próprio | Trends: "robô whatsapp" é 12× menor que "bot whatsapp" |
+| **Magalu** como frente nova | único marketplace em queda no Trends |
+| `automação whatsapp` / `disparo em massa` | 5.000/mês mas concorrência **alta**, e é mercado de atendimento corporativo (Blip/Wati), não afiliado |
+
+**Não deletar as páginas existentes** — perder link e histórico não ajuda. Só
+parar de investir.
+
+**Onde está a demanda real (atacar aqui):** o público **antes** de precisar do
+robô. `shopee afiliados`, `mercado livre afiliados`, `afiliado amazon` —
+50.000/mês cada, concorrência **baixa**. Contra `bot para grupo whatsapp`, que
+tem **500/mês e concorrência alta**. Ordem dos marketplaces: Shopee ≫ Mercado
+Livre > Amazon ≫ Magalu.
+
+**Regra de vocabulário:** título e H1 entram pela palavra que o cliente busca
+("whatsapp banido", "achadinhos", "afiliado shopee"); o termo próprio da casa
+("Módulo de Preservação Avançada", "cadência", "espelhamento") é explicado
+**dentro** da página, não usado como porta de entrada.
+
+⚠️ **Limite que não se cruza:** entrar pela palavra "banido"/"anti-ban" **não**
+pode virar promessa de que não banem. Corrigir a expectativa dentro da página é
+honesto; prometer é risco jurídico e contraria a política de uso responsável já
+publicada no `llms.txt`.
+
 ## Triagem de novas demandas (implementar agora vs. backlog)
 
 - **Sempre que surgir uma nova demanda**, pergunte à usuária se vamos
