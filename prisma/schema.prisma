@@ -136,6 +136,7 @@ model Group {
   burstCap              Int?
   burstWindowSec        Int?
   dailyCap              Int?
+  queueMaxAgeMin        Int?
   monitorTargets        GroupTarget[]       @relation("MonitorTargets")
   postTargets           GroupTarget[]       @relation("PostTargets")
   channelHealth         ChannelHealth?
@@ -170,6 +171,12 @@ model PreservationPreset {
   burstCap        Int     @default(6)
   burstWindowSec  Int     @default(600)
   dailyCap        Int?
+
+  // Quando a fila deste destino acumula, descarta o que estiver esperando há
+  // mais tempo que isto (em minutos). Oferta velha demais já não serve — e
+  // fila infinita derruba a vazão de TODOS os destinos (RCA 2026-07).
+  // 0 = nunca descarta. Default 300 (5h).
+  queueMaxAgeMin  Int     @default(300)
 
   groups    Group[]
   createdAt DateTime @default(now())

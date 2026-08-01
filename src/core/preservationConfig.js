@@ -16,6 +16,9 @@ export const HARD_DEFAULT_PRESERVATION = Object.freeze({
   burstCap: 6,
   burstWindowSec: 600,
   dailyCap: null,
+  // Descarte por idade na fila (minutos). 0 = nunca descarta. Ver
+  // src/core/queueExpiry.js e o RCA da fila entupida no AGENTS.md.
+  queueMaxAgeMin: 300,
 })
 
 const FIELDS = Object.freeze([
@@ -26,6 +29,7 @@ const FIELDS = Object.freeze([
   'burstCap',
   'burstWindowSec',
   'dailyCap',
+  'queueMaxAgeMin',
 ])
 
 /**

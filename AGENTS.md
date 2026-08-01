@@ -797,6 +797,68 @@ Strings históricas livres caem em categoria `UNKNOWN` — `categorizeErrorMsg`
 é tolerante. Para mudanças destrutivas (renomear prefixo) considerar
 backfill via SQL antes do deploy.
 
+## Fila entupida por UM destino derrubando a vazão de todos (RCA 2026-07 — não regredir)
+
+**Sintoma:** conta em produção com **489 envios parados na fila** e mensagem
+publicada à meia-noite saindo às 14h.
+
+**Medição (não suposição):** entravam **~111 envios/hora** e saíam **~52/hora**.
+O `bot.log` mostrava cadência travada em **68–71s entre QUALQUER envio**,
+inclusive para destinos com `minIntervalSec=3`. O log de `Smart delay antes do
+envio` trazia `delayMs: 60000` em 17 dos 20 últimos envios.
+
+**Causa 1 — o freio progressivo media a fila TOTAL.**
+`buildQueuePressureDelayMs` (`src/bot-worker.js`) usa
+`calculateProgressiveDelayMs`: `degraus = floor((fila - 20)/20) + 1`,
+`atraso = min(60s, degraus × 5s)`. A fila de envio é **única e serial**
+(`concurrency: 1`), então um destino com cadência apertada (`burstCap=1` a cada
+`600s` → teto de 6 envios/hora) acumulava centenas de itens, mantinha a fila
+acima de 240 (onde o freio **satura**) e fazia **todos os outros destinos**
+pagarem 60s por envio. Espiral: fila grande → vazão menor → fila maior.
+
+Hoje a pressão é medida **por destino** (`getSendBackendQueueSizeForDest` →
+`getQueueSizeByDest` no backend memory) e **recalculada no dequeue**, não mais
+congelada no enqueue com o número global. Jobs adiados (`notBefore`) vivem fora
+da fila (em `scheduled`), então já não contam como pressão — correto, não estão
+disputando o consumidor. **Não voltar a chamar `buildQueuePressureDelayMs()` sem
+argumento nos sites de enqueue.** Backend BullMQ não tem contagem por destino e
+cai no total (comportamento antigo).
+
+**Causa 2 — espera inline de até 90s congelava o consumidor.**
+`THROTTLE_INLINE_WAIT_MAX_MS` era 90s: um destino com `minIntervalSec=100`
+fazia `await sleep` de ~90s **dentro** da fila serial (medido: `waitMs` 87693,
+89241, 89449, 89668) e nesse tempo nenhum outro destino recebia nada. Default
+passou para **5s** — o que exceder vai para o caminho de re-enfileiramento com
+`notBefore`, que não bloqueia. Como a preservação é por destino, a espera de um
+destino não pode virar espera de todos.
+
+**Descarte por idade na fila (`queueMaxAgeMin`) — configurável pela usuária.**
+Se entra mais oferta do que o destino aceita, a fila cresce para sempre e a
+oferta sai velha (preço/estoque já mudaram). Cada destino agora tem um teto de
+espera na Preservação: `PreservationPreset.queueMaxAgeMin` (NOT NULL, default
+**300 min = 5h**) + override nulável em `Group.queueMaxAgeMin`. Decisão pura em
+`src/core/queueExpiry.js` (`shouldDropExpiredQueueJob`), aplicada em
+`processSendJob` **antes** do smart delay — não faz sentido dormir 60s para
+depois jogar a mensagem fora. A idade vem de `job.enqueuedAt` (preservado pelos
+re-enfileiramentos de defer).
+
+- `0` desliga o descarte (fila volta a crescer sem limite) — escape hatch.
+- Sem `enqueuedAt` confiável **não descarta** (fail-safe: descartar por dúvida
+  perderia oferta legítima).
+- Linha vira `status='skipped'` com `skip:queue_expired:age=<n>min:max=<n>min`
+  (categoria `CONFIG_BLOCK` em `errorTaxonomy.js`, tradução leiga em
+  `dashboard/lib/painel/logsCopy.js`). Não é erro de envio: é decisão de
+  configuração.
+- UI: campo "Descartar oferta que esperou mais de (minutos)" em
+  `PreservationLimitsForm`, junto dos demais limites anti-ban.
+
+**Ordem canônica dentro de `processSendJob` (não reordenar):** resolver a
+preservação do destino → descartar por idade → smart delay (freio por destino +
+rest) → gate de throttle → tentativas de envio.
+
+Testes: `test/queue-pressure-and-expiry.test.js`,
+`test/core/preservationConfig.test.js`.
+
 ## Timeouts no pipeline de mensagens
 
 | Constante                       | Default | Onde     | O que faz                                                          |
