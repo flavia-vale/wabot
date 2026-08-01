@@ -11,13 +11,14 @@ const dates = getEditorialDates(slug)
 // Resposta direta em 40–60 palavras: é o bloco que o Google usa como snippet e
 // que os motores de IA extraem como citação. Não transformar em parágrafo longo.
 const directAnswer =
-  'Os três maiores programas de afiliados do Brasil para quem divulga ofertas são Shopee, Amazon Associados e Mercado Livre Afiliados. A entrada é gratuita nos três. A diferença está na comissão: a Amazon paga por categoria (de 0% a 13%), a Shopee paga 3% na venda padrão e até 30% em produtos do programa de Comissão Extra.'
+  'Os três maiores programas de afiliados do Brasil para quem divulga ofertas são Shopee, Amazon Associados e Mercado Livre Afiliados. A entrada é gratuita nos três. A diferença está na comissão: o Mercado Livre paga de 0% a 16% por categoria, a Amazon de 0% a 13%, e a Shopee 3% na venda padrão, com até 30% em produtos do programa de Comissão Extra.'
 
-// Dados conferidos nas fontes oficiais em 30/07/2026. O Mercado Livre está
-// deliberadamente sem percentual: a fonte disponível até aqui descrevia as
-// TARIFAS DE VENDA pagas pelo vendedor (10-14% Clássico / 15-19% Premium), que
-// NÃO são a comissão paga ao afiliado. Publicar aquele número seria erro
-// factual. Preencher só com a tabela do painel de afiliado do ML.
+// Dados conferidos nas fontes oficiais dos programas: Shopee e Amazon em
+// 30/07/2026, Mercado Livre em 31/07/2026 (Central de Ajuda do Programa de
+// Afiliados). Cuidado ao atualizar o ML: a tabela pública é a de "Afiliados
+// generalistas"; quem se enquadra como "Afiliado Divulgador de Ofertas" recebe
+// tabela própria por e-mail. NUNCA usar as tarifas de venda do ML (10-14%
+// Clássico / 15-19% Premium) — aquilo é custo do vendedor, não comissão.
 const programs = [
   {
     name: 'Shopee Afiliados',
@@ -40,11 +41,11 @@ const programs = [
   {
     name: 'Mercado Livre Afiliados',
     entry: 'Gratuita',
-    commission: 'Percentual por categoria em verificação junto à fonte oficial — ver observação abaixo.',
-    attribution: 'Em verificação',
-    note: 'A comissão varia por categoria e por tipo de venda. Esta linha só será preenchida com a tabela oficial do painel de afiliado.',
+    commission: 'De 0% a 16% por categoria em venda direta (16% beleza, calçados e esportes; 12% na maioria; 5% em eletrônicos; 0% em alimentos). Em venda indireta o percentual cai pela metade.',
+    attribution: 'Pagamento em até 60 dias após a entrega',
+    note: 'Atenção: a tabela pública vale para Afiliados generalistas. Quem se enquadra como Afiliado Divulgador de Ofertas recebe percentuais próprios por e-mail.',
     href: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp',
-    hrefLabel: 'Como divulgar Mercado Livre no WhatsApp',
+    hrefLabel: 'Guia completo do Mercado Livre Afiliados',
   },
 ]
 
@@ -56,11 +57,12 @@ const howToChoose = [
 ]
 
 const faq = [
-  { q: 'Qual programa de afiliados paga mais?', a: 'Depende da categoria. A Amazon paga até 13% em bebê, beleza, saúde e alimentos, mas 7% na maioria das categorias e 0% em Coach. A Shopee paga 3% na venda padrão, porém produtos do programa de Comissão Extra podem chegar a 30%. Compare sempre a categoria que você realmente divulga.' },
+  { q: 'Qual programa de afiliados paga mais?', a: 'Depende da categoria. O Mercado Livre paga até 16% em beleza, calçados, roupas e esportes, mas 0% em alimentos e bebidas. A Amazon paga até 13% em bebê, beleza e saúde, e 7% na maioria das categorias. A Shopee paga 3% na venda padrão, com até 30% em produtos do programa de Comissão Extra. Compare sempre a categoria que você realmente divulga.' },
   { q: 'Preciso pagar para entrar em algum deles?', a: 'Não. A entrada nos programas de afiliados de Shopee, Amazon e Mercado Livre é gratuita. Você ganha comissão sobre as vendas geradas pelos seus links.' },
   { q: 'Posso ser afiliado dos três ao mesmo tempo?', a: 'Sim, e é o mais comum em operações de grupos de ofertas. O cuidado é garantir que cada link enviado carregue o código de afiliado da loja certa — link sem código gera venda sem comissão.' },
   { q: 'Ser afiliado garante quanto de renda por mês?', a: 'Nenhum valor é garantido. A comissão depende de venda concluída, categoria do produto, regras do programa e comportamento do público. Qualquer promessa de ganho fixo em programa de afiliados deve ser tratada como alerta.' },
-  { q: 'Onde vejo a comissão do Mercado Livre?', a: 'A tabela de comissão do Mercado Livre Afiliados fica dentro do painel de afiliado, na conta logada. Atenção para não confundir com as tarifas de venda do Mercado Livre, que são o custo pago pelo vendedor e não a comissão do afiliado.' },
+  { q: 'Onde vejo a comissão do Mercado Livre?', a: 'A tabela pública está na Central de Ajuda do Programa de Afiliados e vale para Afiliados generalistas. Atenção para não confundir com as tarifas de venda do Mercado Livre (10% a 19%), que são o custo pago pelo vendedor para anunciar — não a comissão do afiliado.' },
+  { q: 'Quem opera grupo de ofertas recebe a comissão da tabela pública do Mercado Livre?', a: 'Não necessariamente. O Mercado Livre informa que afiliados enquadrados como Afiliados Divulgadores de Ofertas recebem uma tabela de percentuais própria, enviada ao e-mail cadastrado no Programa. Se você opera grupo de achadinhos ou promoções, confirme a sua tabela antes de projetar receita com base nos percentuais públicos.' },
 ]
 
 export const metadata = {

@@ -42,7 +42,7 @@ export const EDITORIAL_DATES = {
   '/blog/comecar-afiliado-whatsapp-sem-grupo-grande': { publishedAt: '2026-06-08', updatedAt: '2026-06-08' },
   '/blog/como-ser-afiliado-shopee-whatsapp': { publishedAt: '2026-06-08', updatedAt: '2026-07-31' },
   '/blog/como-divulgar-ofertas-amazon-whatsapp': { publishedAt: '2026-06-08', updatedAt: '2026-07-31' },
-  '/blog/como-divulgar-ofertas-mercado-livre-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-07-22' },
+  '/blog/como-divulgar-ofertas-mercado-livre-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-07-31' },
   '/blog/quanto-custa-bot-para-whatsapp-afiliados': { publishedAt: '2026-07-22', updatedAt: '2026-07-22' },
   '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-07-22' },
   '/blog/como-converter-link-de-afiliado-automaticamente-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-07-22' },
