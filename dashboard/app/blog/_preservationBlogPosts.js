@@ -145,6 +145,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Guia completo de Shopee Afiliados: como se cadastrar, quanto paga de comissão por tipo de venda, prazo de atribuição e como divulgar no WhatsApp sem perder comissão.',
     eyebrow: 'Shopee Afiliados · Guia completo',
     origin: 'blog_como_ser_afiliado_shopee_whatsapp',
+    leadMagnetVariant: 'afiliados',
     usePersonAuthor: true,
     intro: 'Shopee Afiliados é o programa que paga comissão sobre vendas geradas pelo seu link. O cadastro é gratuito, a comissão parte de 3% e a atribuição vale por até 7 dias após o clique. Divulgar no WhatsApp funciona bem quando o link sai sempre com o seu código e a frequência de envio é controlada.',
     sections: [
@@ -177,6 +178,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Guia de afiliado Amazon (Amazon Associados): quanto paga de comissão por categoria de produto, como divulgar no WhatsApp com a tag correta e cadência que protege o número.',
     eyebrow: 'Afiliado Amazon · Divulgação',
     origin: 'blog_como_divulgar_ofertas_amazon_whatsapp',
+    leadMagnetVariant: 'afiliados',
     usePersonAuthor: true,
     intro: 'Divulgar Amazon no WhatsApp como associado dá certo quando o link sai com a sua tag, o preview mostra a imagem do produto e o envio respeita uma cadência que não queima o número. A comissão varia por categoria — de 0% a 13% — e errar a tag é o jeito mais rápido de trabalhar de graça.',
     sections: [
@@ -205,6 +207,7 @@ export const PRESERVATION_BLOG_POSTS = {
     eyebrow: 'Afiliado Mercado Livre · Guia completo',
     usePersonAuthor: true,
     origin: 'blog_como_divulgar_ofertas_mercado_livre_whatsapp',
+    leadMagnetVariant: 'afiliados',
     intro: 'O Mercado Livre Afiliados paga de 0% a 16% de comissão, dependendo da categoria do produto e de a venda ser direta ou indireta. A entrada é gratuita. Para divulgar no WhatsApp você precisa do link com o seu identificador, um preview com imagem e cadência que não pareça disparo — encaminhar o link do grupo de origem credita a comissão para o concorrente.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Gere seu link de afiliado no programa do Mercado Livre (Mercado Livre Afiliados), confirme que o link carrega o seu identificador, monte a oferta com título, preço e imagem e distribua nos grupos e canais com intervalo entre envios.', 'O ponto crítico é a atribuição: o link precisa ser o SEU, não o do grupo de onde a oferta veio. Quando o BOTinho espelha, ele converte o link para o seu código automaticamente antes de enviar.'] },
@@ -294,6 +297,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Estratégia para operar os três programas de afiliados ao mesmo tempo no WhatsApp: qual loja usar para cada tipo de oferta, como não misturar os códigos e como medir qual rende mais no seu público.',
     eyebrow: 'Estratégia · Operar os três programas',
     origin: 'blog_amazon_shopee_ou_mercado_livre_para_afiliados_whatsapp',
+    leadMagnetVariant: 'afiliados',
     intro: 'Não existe um único programa vencedor: Amazon é forte em variedade e confiança, Shopee é forte em achadinhos baratos e cupom, e Mercado Livre é forte em ticket médio e frete. Para quem divulga no WhatsApp, a estratégia madura combina os três, escolhendo o programa por tipo de oferta. Se você ainda está decidindo por onde começar, veja antes o comparativo de comissão dos três programas.',
     relatedLinks: [
       { href: '/programa-de-afiliados', label: 'Comparativo de comissão dos três programas', note: 'quanto cada um paga e prazo de atribuição' },
@@ -355,7 +359,7 @@ export function PreservationBlogPost({ postKey }) {
       {schemas.map((schema) => (
         <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
       ))}
-      <ArticleShell eyebrow={post.eyebrow} title={post.title} description={post.description} origin={post.origin} publishedAt={dates.publishedAt} updatedAt={dates.updatedAt} author={post.usePersonAuthor ? EDITORIAL_PERSON_AUTHOR : undefined}>
+      <ArticleShell eyebrow={post.eyebrow} title={post.title} description={post.description} origin={post.origin} publishedAt={dates.publishedAt} updatedAt={dates.updatedAt} author={post.usePersonAuthor ? EDITORIAL_PERSON_AUTHOR : undefined} leadMagnetVariant={post.leadMagnetVariant ?? 'default'}>
         <section>
           <h2>Resumo prático</h2>
           <p>{post.intro}</p>
