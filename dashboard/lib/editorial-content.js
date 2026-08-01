@@ -1,6 +1,12 @@
 export const EDITORIAL_AUTHOR = 'Equipe editorial do BOTinho'
 export const EDITORIAL_AUTHOR_DESCRIPTION = 'Equipe responsável por guias de operação responsável, afiliados, grupos de WhatsApp e rotinas de divulgação com revisão humana.'
 
+// Autoria com pessoa física (E-E-A-T / citação por IA) — usar via `authorOverride`
+// nas páginas de maior prioridade (guias de marketplace). Não trocar a autoria
+// padrão do site inteiro sem decisão explícita — ver AGENTS.md > SEO orgânico.
+export const EDITORIAL_PERSON_AUTHOR = 'Flávia Vale'
+export const EDITORIAL_PERSON_AUTHOR_DESCRIPTION = 'Fundadora do BOTinho, trabalha com tecnologia e opera grupos de ofertas desde 2023.'
+
 export const EDITORIAL_DATES = {
   // Rotas comerciais/ferramentas que estavam sem updatedAt (validate:seo-consistency
   // acusava 9 erros). Sem essa data não há sinal de frescor para o Google nem para
@@ -27,8 +33,8 @@ export const EDITORIAL_DATES = {
   '/blog/chip-dedicado-bot-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-05-18' },
   '/blog/bot-whatsapp-antiban-existe': { publishedAt: '2026-05-18', updatedAt: '2026-05-18' },
   '/blog/comecar-afiliado-whatsapp-sem-grupo-grande': { publishedAt: '2026-06-08', updatedAt: '2026-06-08' },
-  '/blog/como-ser-afiliado-shopee-whatsapp': { publishedAt: '2026-06-08', updatedAt: '2026-06-08' },
-  '/blog/como-divulgar-ofertas-amazon-whatsapp': { publishedAt: '2026-06-08', updatedAt: '2026-06-08' },
+  '/blog/como-ser-afiliado-shopee-whatsapp': { publishedAt: '2026-06-08', updatedAt: '2026-07-31' },
+  '/blog/como-divulgar-ofertas-amazon-whatsapp': { publishedAt: '2026-06-08', updatedAt: '2026-07-31' },
   '/blog/como-divulgar-ofertas-mercado-livre-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-07-22' },
   '/blog/quanto-custa-bot-para-whatsapp-afiliados': { publishedAt: '2026-07-22', updatedAt: '2026-07-22' },
   '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-07-22' },
@@ -45,7 +51,7 @@ export const EDITORIAL_DATES = {
   '/materiais/checklist-operacao-whatsapp': { publishedAt: '2026-05-11', updatedAt: '2026-05-15' },
   '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp': { publishedAt: '2026-05-14', updatedAt: '2026-05-15' },
   '/metodologia-uso-responsavel-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
-  '/alternativas/bot-para-whatsapp-afiliados': { publishedAt: '2026-05-15', updatedAt: '2026-07-30' },
+  '/alternativas/bot-para-whatsapp-afiliados': { publishedAt: '2026-05-15', updatedAt: '2026-07-31' },
   '/botinho-vs-planilha-manual': { publishedAt: '2026-05-15', updatedAt: '2026-07-30' },
   '/botinho-vs-ferramentas-genericas-automacao': { publishedAt: '2026-05-15', updatedAt: '2026-07-30' },
   '/melhores-bots-para-afiliados-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-07-30' },
@@ -64,14 +70,17 @@ export function getEditorialDates(slug) {
   return EDITORIAL_DATES[slug] ?? { publishedAt: '2026-05-15', updatedAt: '2026-05-15' }
 }
 
-export function buildArticleJsonLd({ title, description, slug, siteUrl, faq = [], type = 'Article' }) {
+export function buildArticleJsonLd({ title, description, slug, siteUrl, faq = [], type = 'Article', author }) {
   const dates = getEditorialDates(slug)
+  const resolvedAuthor = author
+    ? { '@type': author.type ?? 'Person', name: author.name, description: author.description }
+    : { '@type': 'Organization', name: EDITORIAL_AUTHOR, description: EDITORIAL_AUTHOR_DESCRIPTION }
   const article = {
     '@context': 'https://schema.org',
     '@type': type,
     headline: title,
     description,
-    author: { '@type': 'Organization', name: EDITORIAL_AUTHOR, description: EDITORIAL_AUTHOR_DESCRIPTION },
+    author: resolvedAuthor,
     publisher: { '@type': 'Organization', name: 'BOTinho', logo: { '@type': 'ImageObject', url: `${siteUrl}/botinho-logo.svg` } },
     datePublished: dates.publishedAt,
     dateModified: dates.updatedAt,

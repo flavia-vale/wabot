@@ -62,6 +62,13 @@ export function explainErrorMsg(errorMsg) {
     return 'Mensagem fora das regras de encaminhamento que você configurou para este grupo.'
   }
   if (errorMsg.startsWith('skip:queue_cleared')) return 'Você limpou a fila de envios manualmente — esta oferta foi removida da fila antes de ser enviada.'
+  if (errorMsg.startsWith('skip:queue_expired')) {
+    const m = /age=(\d+)min:max=(\d+)min/.exec(errorMsg)
+    if (m) {
+      return `Essa oferta esperou ${formatDuration(Number(m[1]) * 60)} na fila desse destino e foi descartada — o limite de espera que você configurou é ${formatDuration(Number(m[2]) * 60)}. Para segurar por mais tempo, aumente "Descartar oferta que esperou mais de" em Preservação por grupo e canal.`
+    }
+    return 'Essa oferta esperou tempo demais na fila desse destino e foi descartada. O limite de espera fica em Preservação por grupo e canal.'
+  }
   if (errorMsg.startsWith('skip:decrypt_failed')) return 'O WhatsApp não conseguiu decifrar essa mensagem na sua ponta. Costuma ser pontual.'
   if (errorMsg.startsWith('skip:incoming_error')) {
     const detail = errorMsg.slice('skip:incoming_error'.length).replace(/^:/, '').trim()

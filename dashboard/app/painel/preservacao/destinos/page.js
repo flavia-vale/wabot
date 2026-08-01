@@ -22,6 +22,8 @@ const NEW_PRESET = {
   burstCap: 6,
   burstWindowSec: 600,
   dailyCap: null,
+  // Descarte por idade na fila: 5h. Ver src/core/queueExpiry.js.
+  queueMaxAgeMin: 300,
 }
 
 function summarizePreset(p) {
@@ -32,6 +34,7 @@ function summarizePreset(p) {
   } else parts.push('envia 24h')
   if (p.throttleEnabled !== false) parts.push(`min ${p.minIntervalSec}s · ${p.burstCap}/janela${p.dailyCap ? ` · ${p.dailyCap}/dia` : ''}`)
   else parts.push('sem limite anti-ban')
+  if (Number(p.queueMaxAgeMin) > 0) parts.push(`descarta após ${Math.round(Number(p.queueMaxAgeMin) / 60)}h na fila`)
   return parts.join(' · ')
 }
 

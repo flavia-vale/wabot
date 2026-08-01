@@ -126,6 +126,8 @@ function collectPreservationFields(body, { nullable }) {
   num('burstCap', 1, 1000)
   num('burstWindowSec', 60, 86400)
   num('dailyCap', 1, 10000, true)
+  // Descarte por idade na fila (minutos). 0 = nunca descarta; teto de 7 dias.
+  num('queueMaxAgeMin', 0, 10080)
   return { updates, errors }
 }
 
@@ -189,6 +191,7 @@ export async function preservationRoutes(app) {
     id: true, name: true, isDefault: true,
     operatingHoursEnabled: true, operatingHoursJson: true,
     throttleEnabled: true, minIntervalSec: true, burstCap: true, burstWindowSec: true, dailyCap: true,
+    queueMaxAgeMin: true,
     createdAt: true, updatedAt: true,
   }
 
@@ -268,6 +271,7 @@ export async function preservationRoutes(app) {
     id: true, name: true, waJid: true, kind: true, preservationPresetId: true,
     operatingHoursEnabled: true, operatingHoursJson: true,
     throttleEnabled: true, minIntervalSec: true, burstCap: true, burstWindowSec: true, dailyCap: true,
+    queueMaxAgeMin: true,
   }
 
   app.get('/destinations', async (req, reply) => {

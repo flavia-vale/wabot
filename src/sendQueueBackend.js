@@ -59,6 +59,19 @@ export function createMemorySendBackend({ maxSize, onRejected, onDequeued }) {
   return /** @type {SendBackend} */ ({
     backend: 'memory',
     getQueueSize: () => queue.length,
+    // Pressão POR DESTINO (RCA 2026-07): o freio progressivo anti-ban media a
+    // fila TOTAL, então um destino lento (burstCap baixo) entupia a fila e
+    // fazia TODOS os outros destinos pagarem o atraso máximo. Contar só o que
+    // está esperando para ESTE destino mantém o freio local ao gargalo.
+    // Jobs adiados (notBefore no futuro) vivem em `scheduled`, fora de `queue`
+    // — logo já não contam como pressão, que é o comportamento correto: eles
+    // não estão disputando o consumidor agora.
+    getQueueSizeByDest: (destJid) => {
+      if (!destJid) return queue.length
+      let n = 0
+      for (const job of queue) if (job?.destJid === destJid) n++
+      return n
+    },
     getScheduledSize: () => scheduled.size,
     getDlqSize: async () => 0,
     async close() {

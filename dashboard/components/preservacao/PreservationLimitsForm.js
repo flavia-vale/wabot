@@ -11,12 +11,23 @@ const FIELDS = [
   { key: 'burstCap', label: 'Máximo de envios na janela', hint: 'Quantos envios cabem dentro da janela de rajada (anti-flood).', min: 1, max: 1000 },
   { key: 'burstWindowSec', label: 'Janela de rajada (segundos)', hint: 'Tamanho da janela do limite acima. Ex.: 600 = 10 minutos.', min: 60, max: 86400 },
   { key: 'dailyCap', label: 'Limite diário (envios/dia)', hint: 'Máximo por dia. Vazio = sem limite.', min: 1, max: 10000, nullable: true },
+  // Se chegam mais ofertas do que este destino aceita enviar, a fila cresce e a
+  // oferta sai velha (preço/estoque já mudaram) — e fila grande ainda derruba a
+  // velocidade dos OUTROS destinos. Aqui a usuária escolhe até quando vale a
+  // pena segurar. Padrão 300 min (5h). Ver src/core/queueExpiry.js.
+  {
+    key: 'queueMaxAgeMin',
+    label: 'Descartar oferta que esperou mais de (minutos)',
+    hint: 'Se as mensagens acumularem na fila, com quanto tempo você quer descartar as mais antigas? Padrão 300 (5 horas). 0 = nunca descartar.',
+    min: 0,
+    max: 10080,
+  },
 ]
 
 const PRESETS = [
-  { label: '🛡️ Conservador', tone: 'safe', description: 'Lento e seguro — contas novas ou que levaram aviso.', values: { minIntervalSec: 120, burstCap: 3, burstWindowSec: 3600, dailyCap: 80 } },
-  { label: '⚖️ Médio', tone: 'medium', description: 'Equilíbrio — bom default para contas aquecidas.', values: { minIntervalSec: 60, burstCap: 6, burstWindowSec: 3600, dailyCap: 150 } },
-  { label: '⚡ Leve', tone: 'aggressive', description: 'Mais rápido, mais risco. Só se estável há semanas.', values: { minIntervalSec: 30, burstCap: 10, burstWindowSec: 3600, dailyCap: 300 } },
+  { label: '🛡️ Conservador', tone: 'safe', description: 'Lento e seguro — contas novas ou que levaram aviso.', values: { minIntervalSec: 120, burstCap: 3, burstWindowSec: 3600, dailyCap: 80, queueMaxAgeMin: 300 } },
+  { label: '⚖️ Médio', tone: 'medium', description: 'Equilíbrio — bom default para contas aquecidas.', values: { minIntervalSec: 60, burstCap: 6, burstWindowSec: 3600, dailyCap: 150, queueMaxAgeMin: 300 } },
+  { label: '⚡ Leve', tone: 'aggressive', description: 'Mais rápido, mais risco. Só se estável há semanas.', values: { minIntervalSec: 30, burstCap: 10, burstWindowSec: 3600, dailyCap: 300, queueMaxAgeMin: 300 } },
 ]
 
 export function PreservationLimitsForm({ value, onChange, disabled }) {

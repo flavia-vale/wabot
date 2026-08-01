@@ -797,6 +797,68 @@ Strings históricas livres caem em categoria `UNKNOWN` — `categorizeErrorMsg`
 é tolerante. Para mudanças destrutivas (renomear prefixo) considerar
 backfill via SQL antes do deploy.
 
+## Fila entupida por UM destino derrubando a vazão de todos (RCA 2026-07 — não regredir)
+
+**Sintoma:** conta em produção com **489 envios parados na fila** e mensagem
+publicada à meia-noite saindo às 14h.
+
+**Medição (não suposição):** entravam **~111 envios/hora** e saíam **~52/hora**.
+O `bot.log` mostrava cadência travada em **68–71s entre QUALQUER envio**,
+inclusive para destinos com `minIntervalSec=3`. O log de `Smart delay antes do
+envio` trazia `delayMs: 60000` em 17 dos 20 últimos envios.
+
+**Causa 1 — o freio progressivo media a fila TOTAL.**
+`buildQueuePressureDelayMs` (`src/bot-worker.js`) usa
+`calculateProgressiveDelayMs`: `degraus = floor((fila - 20)/20) + 1`,
+`atraso = min(60s, degraus × 5s)`. A fila de envio é **única e serial**
+(`concurrency: 1`), então um destino com cadência apertada (`burstCap=1` a cada
+`600s` → teto de 6 envios/hora) acumulava centenas de itens, mantinha a fila
+acima de 240 (onde o freio **satura**) e fazia **todos os outros destinos**
+pagarem 60s por envio. Espiral: fila grande → vazão menor → fila maior.
+
+Hoje a pressão é medida **por destino** (`getSendBackendQueueSizeForDest` →
+`getQueueSizeByDest` no backend memory) e **recalculada no dequeue**, não mais
+congelada no enqueue com o número global. Jobs adiados (`notBefore`) vivem fora
+da fila (em `scheduled`), então já não contam como pressão — correto, não estão
+disputando o consumidor. **Não voltar a chamar `buildQueuePressureDelayMs()` sem
+argumento nos sites de enqueue.** Backend BullMQ não tem contagem por destino e
+cai no total (comportamento antigo).
+
+**Causa 2 — espera inline de até 90s congelava o consumidor.**
+`THROTTLE_INLINE_WAIT_MAX_MS` era 90s: um destino com `minIntervalSec=100`
+fazia `await sleep` de ~90s **dentro** da fila serial (medido: `waitMs` 87693,
+89241, 89449, 89668) e nesse tempo nenhum outro destino recebia nada. Default
+passou para **5s** — o que exceder vai para o caminho de re-enfileiramento com
+`notBefore`, que não bloqueia. Como a preservação é por destino, a espera de um
+destino não pode virar espera de todos.
+
+**Descarte por idade na fila (`queueMaxAgeMin`) — configurável pela usuária.**
+Se entra mais oferta do que o destino aceita, a fila cresce para sempre e a
+oferta sai velha (preço/estoque já mudaram). Cada destino agora tem um teto de
+espera na Preservação: `PreservationPreset.queueMaxAgeMin` (NOT NULL, default
+**300 min = 5h**) + override nulável em `Group.queueMaxAgeMin`. Decisão pura em
+`src/core/queueExpiry.js` (`shouldDropExpiredQueueJob`), aplicada em
+`processSendJob` **antes** do smart delay — não faz sentido dormir 60s para
+depois jogar a mensagem fora. A idade vem de `job.enqueuedAt` (preservado pelos
+re-enfileiramentos de defer).
+
+- `0` desliga o descarte (fila volta a crescer sem limite) — escape hatch.
+- Sem `enqueuedAt` confiável **não descarta** (fail-safe: descartar por dúvida
+  perderia oferta legítima).
+- Linha vira `status='skipped'` com `skip:queue_expired:age=<n>min:max=<n>min`
+  (categoria `CONFIG_BLOCK` em `errorTaxonomy.js`, tradução leiga em
+  `dashboard/lib/painel/logsCopy.js`). Não é erro de envio: é decisão de
+  configuração.
+- UI: campo "Descartar oferta que esperou mais de (minutos)" em
+  `PreservationLimitsForm`, junto dos demais limites anti-ban.
+
+**Ordem canônica dentro de `processSendJob` (não reordenar):** resolver a
+preservação do destino → descartar por idade → smart delay (freio por destino +
+rest) → gate de throttle → tentativas de envio.
+
+Testes: `test/queue-pressure-and-expiry.test.js`,
+`test/core/preservationConfig.test.js`.
+
 ## Timeouts no pipeline de mensagens
 
 | Constante                       | Default | Onde     | O que faz                                                          |
@@ -2009,6 +2071,63 @@ Livre > Amazon ≫ Magalu.
 pode virar promessa de que não banem. Corrigir a expectativa dentro da página é
 honesto; prometer é risco jurídico e contraria a política de uso responsável já
 publicada no `llms.txt`.
+
+## Dados de mercado para marketing (canônico — usar em toda decisão de SEO/conteúdo)
+
+Baseline de **2026-07-30**, fonte: Search Console (12 meses), Planejador de
+Palavras-Chave (8.923 termos, Brasil/PT), Google Trends (12 meses, Brasil).
+Análise completa em `docs/marketing/ANALISE_DADOS_REAIS_KEYWORDS_2026-07-30.md`.
+**Toda conversa de marketing/SEO/conteúdo deve partir destes números — não
+re-estimar por sinal de SERP quando este dado real já existe.**
+
+### Tiers de palavra-chave (volume/mês, concorrência)
+
+| Tier | Termos | Volume | Concorrência | Observação |
+|---|---|---:|---|---|
+| **1 — prioridade máxima** | `shopee afiliados`, `mercado livre afiliados`, `afiliado amazon`/`associados amazon` | 50.000 cada | **Baixa** | maior oportunidade do levantamento |
+| 1 | `como se tornar afiliado shopee`, `programa de afiliados shopee` | 50.000 | Média | |
+| 1 | `como ser afiliado [shopee/ML/amazon]` | 5.000 cada | Média | |
+| 1 | `programa de afiliados mercado livre`, `shopee afiliados entrar` | 5.000 | Baixa | |
+| **2 — dor aguda** | `whatsapp banido`, `zap banido`, `número banido whatsapp`, `conta banida whatsapp` | 5.000 cada | **Baixa** | tratar como topo de funil, não venda direta |
+| **3 — secundário** | `achadinhos`/`achadinho`, `grupo de ofertas whatsapp`, `grupo de promoções whatsapp` | 5.000 cada | Baixa/Média | ⚠️ quem busca "grupo de ofertas" quer **entrar**, não criar — só serve como isca |
+| **4 — estacionado** | `cupom amazon`, `cupom mercadolivre` | 500.000 | Baixa | público é consumidor final, não afiliado — não perseguir agora |
+| **5 — evitar** | `bot`/`robô para grupo whatsapp` | 500 | **Alta** | é onde o site tenta competir hoje; não é onde está o volume |
+
+Ordem de prioridade dos marketplaces (Trends, estável salvo Magalu):
+**Shopee ≫ Mercado Livre > Amazon ≫ Magalu (em queda)**.
+
+### Baseline do site (Search Console, snapshot 2026-07-30)
+
+| Métrica | Valor |
+|---|---:|
+| Cliques (site inteiro, ~2,5 meses de dado) | 41 |
+| Impressões | 1.154 |
+| Posição média | 7,85 |
+| Consultas distintas registradas | **13** ← métrica mais honesta de progresso |
+| Rotas indexáveis no sitemap | 96 |
+| Rotas com zero impressão | 36 |
+| Páginas indexadas / não indexadas | 76 / 16 |
+
+As duas páginas que concentram tração hoje (42% das impressões, ambas em
+posição ~8,4): `/blog/como-divulgar-ofertas-amazon-whatsapp` e
+`/blog/como-ser-afiliado-shopee-whatsapp`.
+
+### Concorrentes mapeados
+
+Achadinho Pro, ProAfiliados, FluxoPromo, Shozap, Afilira, AchadinhosBot /
+AchadinBot, IA Divulgadora, Devzapp (blog), Shark Pomo Bot, Lumi Ofertas
+Inteligentes, Gigi Bot. Preços e planos coletados por print em 2026-07-31 —
+ver `docs/marketing/ONDA1_PLANO_DETALHADO.md` (B2) para o detalhe por
+concorrente antes de citar preço em qualquer página pública.
+
+### 🔁 Atualizar mensalmente
+
+No começo de cada mês, sugerir à usuária repetir a coleta (Search Console +
+Planejador + Trends, mesmo passo a passo de
+`docs/marketing/COLETA_DADOS_KEYWORDS_PASSO_A_PASSO.md`) e comparar contra
+este baseline — principalmente **consultas distintas** e **posição média das
+2 páginas fortes**. Atualizar esta seção e a data do cabeçalho quando novos
+números chegarem.
 
 ## Triagem de novas demandas (implementar agora vs. backlog)
 
