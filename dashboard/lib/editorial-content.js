@@ -26,6 +26,7 @@ export const EDITORIAL_DATES = {
   // criação dos arquivos (PR #1186).
   '/cadastro': { publishedAt: '2026-07-03', updatedAt: '2026-07-31' },
   '/parcerias': { publishedAt: '2026-07-03', updatedAt: '2026-07-31' },
+  '/programa-de-afiliados': { publishedAt: '2026-07-31', updatedAt: '2026-07-31' },
   '/conteudos': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
   '/benchmarks/operacao-grupos-ofertas-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
   '/blog/como-escalar-grupos-sem-operacao-manual': { publishedAt: '2026-05-11', updatedAt: '2026-05-15' },
@@ -45,7 +46,7 @@ export const EDITORIAL_DATES = {
   '/blog/quanto-custa-bot-para-whatsapp-afiliados': { publishedAt: '2026-07-22', updatedAt: '2026-07-22' },
   '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-07-22' },
   '/blog/como-converter-link-de-afiliado-automaticamente-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-07-22' },
-  '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-07-22' },
+  '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-07-31' },
   '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero': { publishedAt: '2026-07-22', updatedAt: '2026-07-22' },
   '/diagnostico-antiban-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-07-30' },
   '/bot-comum-vs-botinho': { publishedAt: '2026-05-18', updatedAt: '2026-05-18' },
