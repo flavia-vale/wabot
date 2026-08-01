@@ -50,6 +50,7 @@ import {
 } from './core/channelHealth.js'
 import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
 import { resolveDestinationPreservation } from './core/preservationConfig.js'
+import { buildQueueExpiredReason, shouldDropExpiredQueueJob } from './core/queueExpiry.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
 import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/preservationFeatures.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
@@ -726,7 +727,9 @@ async function checkScheduledMessages() {
           destJid: jid,
           platforms: 'scheduled',
           plan: 'scheduled',
-          delayMs: buildQueuePressureDelayMs(),
+          // Sem freio de fila congelado aqui: a pressão é medida por destino
+          // no dequeue (processSendJob). Ver getSendBackendQueueSizeForDest.
+          delayMs: 0,
           typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           channelForward: scheduledChannelForward,
           ...(scheduledImageRecipe ? { payloadRecipe: scheduledImageRecipe } : { payload: { text: msg.text } }),
@@ -847,10 +850,18 @@ function envNumber(name, fallback) {
 const SEND_QUEUE_MAX_SIZE = envNumber('SEND_QUEUE_MAX_SIZE', 1_000)
 const SEND_MAX_ATTEMPTS = Math.max(1, envNumber('SEND_MAX_ATTEMPTS', 3))
 const SEND_RETRY_BASE_MS = Math.max(0, envNumber('SEND_RETRY_BASE_MS', 2_000))
-// Defer de throttle ≤ este teto é esperado inline (barato, ex.: min_interval).
-// Acima dele (quiet_hours/burst_cap/daily_cap/health_paused), o job é
-// re-enfileirado com notBefore para NÃO congelar a fila serial do usuário.
-const THROTTLE_INLINE_WAIT_MAX_MS = Math.max(0, envNumber('THROTTLE_INLINE_WAIT_MAX_MS', 90_000))
+// Defer de throttle ≤ este teto é esperado inline (barato, ex.: min_interval de
+// poucos segundos). Acima dele (quiet_hours/burst_cap/daily_cap/health_paused e
+// min_interval longo), o job é re-enfileirado com notBefore para NÃO congelar a
+// fila serial do usuário.
+//
+// RCA 2026-07: o default era 90s. Um destino com `minIntervalSec=100` fazia o
+// consumidor dormir INLINE quase 90s (medido no log: waitMs 87693, 89241,
+// 89449, 89668) — e nesse tempo NENHUM outro destino recebia nada, mesmo os
+// que têm intervalo mínimo de 3s. Como a preservação é por destino, a espera de
+// um destino não pode virar espera de todos: 5s cobre o min_interval curto
+// legítimo e joga o resto para o caminho de re-enfileiramento, que não bloqueia.
+const THROTTLE_INLINE_WAIT_MAX_MS = Math.max(0, envNumber('THROTTLE_INLINE_WAIT_MAX_MS', 5_000))
 const SEND_RETRY_MAX_MS = Math.max(SEND_RETRY_BASE_MS, envNumber('SEND_RETRY_MAX_MS', 30_000))
 const RECONNECT_BASE_MS = Math.max(1_000, envNumber('RECONNECT_BASE_MS', 5_000))
 const RECONNECT_MAX_MS = Math.max(RECONNECT_BASE_MS, envNumber('RECONNECT_MAX_MS', 5 * 60_000))
@@ -1067,6 +1078,7 @@ const sendMetrics = {
   retryTotal: 0,
   rejectedTotal: 0,
   deferredTotal: 0,
+  queueExpiredTotal: 0,
   broadcastQueuedTotal: 0,
   scheduledQueuedTotal: 0,
   convertedQueuedTotal: 0,
@@ -1245,6 +1257,26 @@ function canAcceptSendJob() {
 function getSendBackendQueueSize() {
   const size = typeof sendBackend?.getQueueSize === 'function' ? sendBackend.getQueueSize() : 0
   return typeof size === 'number' ? size : 0
+}
+
+// Tamanho da fila que está disputando o consumidor PARA ESTE DESTINO.
+//
+// RCA 2026-07 (fila de 489, mensagem da meia-noite saindo às 14h): o freio
+// progressivo media a fila TOTAL. Como a fila de envio é única e serial, um
+// destino com cadência apertada (PROMO FESTAS: burstCap=1/600s, teto de 6
+// envios/hora) acumulava centenas de itens e mantinha a fila permanentemente
+// acima do limiar — então TODOS os outros destinos, mesmo sem gargalo próprio,
+// levavam o atraso máximo (60s) em cada envio. Vazão caiu para ~52/h com ~111/h
+// entrando: espiral que nunca se recupera sozinha.
+//
+// A preservação já é POR DESTINO; a pressão também precisa ser. Backend sem
+// suporte a contagem por destino (BullMQ) cai no total — comportamento antigo.
+function getSendBackendQueueSizeForDest(destJid) {
+  if (destJid && typeof sendBackend?.getQueueSizeByDest === 'function') {
+    const size = sendBackend.getQueueSizeByDest(destJid)
+    if (typeof size === 'number') return size
+  }
+  return getSendBackendQueueSize()
 }
 
 function buildQueuePressureDelayMs(queueSize = getSendBackendQueueSize()) {
@@ -1654,17 +1686,6 @@ async function processSendJob(job) {
     })
     sendMetrics.sendingTotal++
 
-    const restDelayMs = calculateRestWindowDelayMs({
-      sentCount: sendMetrics.successTotal,
-      every: SMART_DELAY_REST_EVERY,
-      durationMs: SMART_DELAY_REST_MS,
-    })
-    const totalDelayMs = Math.max(0, job.delayMs || 0) + restDelayMs
-    if (totalDelayMs > 0) {
-      logger.info({ destJid: job.destJid, delayMs: totalDelayMs, baseDelayMs: job.delayMs || 0, restDelayMs, type: job.type }, 'Smart delay antes do envio')
-      await sleep(totalDelayMs)
-    }
-
     // PR-5.C.1 + 5.B.1: lookup do groupId do destino-post (uma vez por job)
     // para alimentar ChannelHealth e passar pelo velocity scheduler.
     //
@@ -1674,29 +1695,78 @@ async function processSendJob(job) {
     // mínimo da preservação — por isso enviavam de madrugada e sem respeitar o
     // espaçamento. A decisão (checkAndReserve → decideDestination) já é agnóstica
     // de kind; só o call site limitava.
+    //
+    // RCA 2026-07: a resolução da preservação subiu para ANTES de qualquer
+    // espera. Ela decide também o descarte por idade (queueMaxAgeMin) — não faz
+    // sentido dormir 60s de freio para só então jogar a mensagem fora.
+    let destPreservation = null
+    let destGroupRow = null
     try {
-      const g = await db.group.findFirst({
+      destGroupRow = await db.group.findFirst({
         where: { userId, waJid: job.destJid, role: 'post' },
         select: {
           id: true,
           // Plano B: config de preservação por destino (Fase 1b).
           preservationPresetId: true, operatingHoursEnabled: true, operatingHoursJson: true,
           throttleEnabled: true, minIntervalSec: true, burstCap: true, burstWindowSec: true,
-          dailyCap: true, preservationPreset: true,
+          dailyCap: true, queueMaxAgeMin: true, preservationPreset: true,
         },
       })
-      destGroupId = g?.id ?? null
+      destGroupId = destGroupRow?.id ?? null
       if (destGroupId) {
-        // checkAndReserve já cobre: pausa por health, horário/quiet, daily cap,
-        // intervalo mínimo, burst cap. Reserva o slot quando libera.
-        const cfgFull = await getConfig().catch(() => null)
-        const cfg = cfgFull?.botConfig ?? {}
         // Plano B / Fase 3: a config POR DESTINO é a ÚNICA fonte de verdade do
         // gate. resolveDestinationPreservation cai no preset default da conta e,
         // na ausência dele, no HARD_DEFAULT — então NUNCA fica sem proteção
         // anti-ban. O fallback para a global do BotConfig foi aposentado aqui.
         const defaultPreset = await getDefaultPreservationPreset()
-        const destPreservation = resolveDestinationPreservation(g, { preset: g.preservationPreset, defaultPreset })
+        destPreservation = resolveDestinationPreservation(destGroupRow, { preset: destGroupRow.preservationPreset, defaultPreset })
+      }
+    } catch (err) {
+      logger.warn({ err: err?.message, destJid: job.destJid }, 'Preservação do destino não pôde ser lida; seguindo sem pausa')
+    }
+
+    // C) Descarte por idade na fila (configurável por destino na Preservação).
+    // Oferta que ficou esperando mais que o teto não serve mais — e fila
+    // infinita é o que liga o freio progressivo e derruba a vazão de todos os
+    // destinos. Não é erro de envio: é decisão, com motivo próprio no painel.
+    const queueExpiry = shouldDropExpiredQueueJob({
+      enqueuedAt: job.enqueuedAt,
+      queueMaxAgeMin: destPreservation?.queueMaxAgeMin,
+    })
+    if (queueExpiry.drop) {
+      const reason = buildQueueExpiredReason(queueExpiry)
+      sendMetrics.queueExpiredTotal++
+      await db.messageLog.update({
+        where: { id: job.logId },
+        data: { status: 'skipped', errorMsg: reason, sentAt: new Date() },
+      }).catch(() => {})
+      logger.warn({ destJid: job.destJid, logId: job.logId, ageMs: queueExpiry.ageMs, maxAgeMs: queueExpiry.maxAgeMs, type: job.type }, 'Envio descartado: esperou na fila além do teto do destino')
+      await finishSendJob(job, { ok: false, error: 'queue_expired' })
+      return
+    }
+
+    const restDelayMs = calculateRestWindowDelayMs({
+      sentCount: sendMetrics.successTotal,
+      every: SMART_DELAY_REST_EVERY,
+      durationMs: SMART_DELAY_REST_MS,
+    })
+    // B) Freio progressivo medido POR DESTINO (ver getSendBackendQueueSizeForDest):
+    // recalculado agora, no dequeue, em vez de congelado no enqueue com o
+    // tamanho da fila GLOBAL — que fazia um destino lento penalizar todos.
+    const destQueueSize = getSendBackendQueueSizeForDest(job.destJid)
+    const pressureDelayMs = buildQueuePressureDelayMs(destQueueSize)
+    const totalDelayMs = Math.max(0, job.delayMs || 0) + pressureDelayMs + restDelayMs
+    if (totalDelayMs > 0) {
+      logger.info({ destJid: job.destJid, delayMs: totalDelayMs, baseDelayMs: job.delayMs || 0, pressureDelayMs, destQueueSize, restDelayMs, type: job.type }, 'Smart delay antes do envio')
+      await sleep(totalDelayMs)
+    }
+
+    try {
+      if (destGroupId && destPreservation) {
+        // checkAndReserve já cobre: pausa por health, horário/quiet, daily cap,
+        // intervalo mínimo, burst cap. Reserva o slot quando libera.
+        const cfgFull = await getConfig().catch(() => null)
+        const cfg = cfgFull?.botConfig ?? {}
         const gateOpts = {
           // A-2: fila com horário próprio sobrepõe a janela do destino (a fila já
           // checou seu horário antes de despachar) → ignoreOperatingHours.
@@ -3560,7 +3630,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           destJid,
           platforms,
           plan: cfg.plan,
-          delayMs: buildQueuePressureDelayMs() + staggerMs,
+          // Só o stagger entre destinos fica congelado no job; o freio de fila
+          // é recalculado por destino no dequeue (processSendJob).
+          delayMs: staggerMs,
           typingDelayMs: calculateTypingDelayMs({ text: variantText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           channelForward,
           buildPayload,
@@ -3988,7 +4060,8 @@ process.on('message', async msg => {
         destJid: jid,
         platforms: 'broadcast',
         plan: 'broadcast',
-        delayMs: buildQueuePressureDelayMs(),
+        // Freio de fila recalculado por destino no dequeue (processSendJob).
+        delayMs: 0,
         typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
         channelForward: broadcastChannelForward,
         // Fila de ofertas com horário próprio pede para ignorar a janela

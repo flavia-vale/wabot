@@ -15,6 +15,9 @@ const PRESET = {
   burstCap: 5,
   burstWindowSec: 300,
   dailyCap: 100,
+  // Descarte por idade na fila (coluna NOT NULL com default 300): um preset
+  // real sempre traz o campo, então o fixture também traz.
+  queueMaxAgeMin: 240,
 }
 
 test('resolve: sem grupo e sem preset cai no HARD_DEFAULT', () => {

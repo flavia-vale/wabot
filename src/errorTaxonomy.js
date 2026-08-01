@@ -84,6 +84,10 @@ export function categorizeErrorMsg(errorMsg) {
   // catch-all `skip:` abaixo; branch explícito só para documentar o motivo
   // canônico (feature 007-ml-vitrine-fallback-expired).
   if (errorMsg.startsWith('skip:ml_vitrine_missing')) return ERROR_CATEGORIES.CONFIG_BLOCK
+  // Descarte por idade na fila (queueMaxAgeMin da Preservação do destino). É
+  // decisão de configuração, não falha de envio — cai em CONFIG_BLOCK como os
+  // demais `skip:`. Branch explícito só para documentar o motivo canônico.
+  if (errorMsg.startsWith('skip:queue_expired')) return ERROR_CATEGORIES.CONFIG_BLOCK
   if (errorMsg.startsWith('skip:decrypt_failed')) return ERROR_CATEGORIES.DECRYPT
   if (errorMsg.startsWith('skip:incoming_error')) return ERROR_CATEGORIES.INCOMING_ERROR
   if (errorMsg.startsWith('warning:amazon_cookies_expired')) return ERROR_CATEGORIES.CREDENTIAL_EXPIRED
