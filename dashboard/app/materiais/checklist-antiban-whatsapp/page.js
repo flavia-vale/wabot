@@ -125,7 +125,7 @@ export default function Page() {
                   Receber checklist e criar conta
                 </button>
               </form>
-              <p className="mt-4 text-xs leading-5 text-gray-500">Mapeamento CRM: Lead quando o checklist é solicitado; MQL quando também existe diagnóstico ou calculadora preenchida.</p>
+              <p className="mt-4 text-xs leading-5 text-gray-500">Você pode cancelar quando quiser. O checklist reduz exposição operacional, mas nenhuma ferramenta garante que uma conta não seja banida.</p>
             </section>
 
             <section className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5">

@@ -3,7 +3,7 @@ import { PublicShell } from '@/components/PublicShell'
 import { LeadMagnetCard } from './LeadMagnetCard'
 import { EDITORIAL_AUTHOR, formatDatePtBr } from '@/lib/editorial-content'
 
-export function ArticleShell({ eyebrow, title, description, children, origin, publishedAt, updatedAt, author = EDITORIAL_AUTHOR }) {
+export function ArticleShell({ eyebrow, title, description, children, origin, publishedAt, updatedAt, author = EDITORIAL_AUTHOR, leadMagnetVariant = 'default' }) {
   return (
     <PublicShell>
       <main className="mx-auto grid w-full max-w-6xl gap-8 px-5 py-10 md:grid-cols-[minmax(0,1fr)_360px] md:px-8 md:py-16">
@@ -22,7 +22,7 @@ export function ArticleShell({ eyebrow, title, description, children, origin, pu
           </div>
         </article>
         <div className="md:sticky md:top-6 md:self-start">
-          <LeadMagnetCard origin={origin} compact />
+          <LeadMagnetCard origin={origin} compact variant={leadMagnetVariant} />
         </div>
       </main>
     </PublicShell>
