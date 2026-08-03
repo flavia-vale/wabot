@@ -232,7 +232,16 @@ jobs:
       # publicada de propósito para o IndexNow validar posse do domínio — por
       # isso não depende de secret do GitHub. Só roda em main; staging não é
       # indexado. Falha aqui não bloqueia o deploy (a etapa de SSH já rodou).
+      # continue-on-error: o comentário acima sempre disse que falha aqui não
+      # bloqueia o deploy, mas sem esta linha o `exit 1` do script derrubava o
+      # workflow inteiro — o deploy aparecia como FALHO mesmo tendo concluído
+      # (a etapa de SSH roda antes). O step continua ficando amarelo/vermelho
+      # quando falha, então o sinal não se perde; só deixa de reprovar a
+      # promoção para main. O purge da Cloudflare acima NÃO ganha o mesmo
+      # tratamento de propósito: cache velho é problema visível para o cliente
+      # e merece reprovar o workflow.
       - name: Notificar IndexNow (produção)
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+        continue-on-error: true
         run: node scripts/notify-indexnow.mjs
 

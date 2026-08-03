@@ -570,6 +570,33 @@ alimenta essas IAs indiretamente.
   criar o novo `dashboard/public/<chave-nova>.txt`, atualizar
   `INDEXNOW_KEY` em `notify-indexnow.mjs` e remover o `.txt` antigo no mesmo
   PR — os dois arquivos nunca podem divergir.
+- ⚠️ **O `.txt` deve conter APENAS a chave, sem quebra de linha no fim.**
+- **Rotacionar a chave não é de graça:** o IndexNow amarra o host à chave que
+  validou. Trocar por uma chave nova pode passar a devolver
+  `403 UserForbiddedToAccessSite` mesmo com o `.txt` novo servindo 200. Não
+  rotacione sem necessidade real, e valide com um POST manual antes de mergear.
+
+### RCA 2026-07-31 — deploy de produção vermelho por causa do IndexNow
+
+Dois commits com **1 minuto de diferença** (`c0201487` e `5bee4a71`)
+implementaram o IndexNow em paralelo e deixaram **dois** arquivos de chave em
+`dashboard/public/`. O script passou a apontar para a chave do segundo commit
+(`76ef5ca2…`, com `\n` no fim, 33 bytes), que o IndexNow **rejeitava com 403
+`UserForbiddedToAccessSite`** — enquanto a chave do primeiro (`fa4326c7…`, 32
+bytes, sem `\n`) respondia **202**. Os dois `.txt` serviam 200 em produção, então
+o problema não era acessibilidade: era qual chave o IndexNow tinha validado.
+
+Resultado: **todo deploy de `develop` → `main` aparecia como FALHO** desde
+27/07, apesar de o deploy em si ter concluído (a etapa de SSH roda antes deste
+step). O script dizia "não bloqueia o deploy" e mesmo assim fazia `exit 1`, sem
+`continue-on-error` no workflow — a mensagem contradizia o comportamento.
+
+Correções: script aponta para a chave que funciona, `.txt` órfão removido,
+`continue-on-error: true` no step (o purge da Cloudflare **não** ganhou o mesmo
+tratamento — cache velho é problema do cliente e deve reprovar o workflow) e
+mensagem de erro com o passo a passo de diagnóstico. Guarda de regressão sem
+rede em `test/indexnow-key.test.js`: exige exatamente um `.txt`, que o nome bata
+com `INDEXNOW_KEY` e que o conteúdo não tenha quebra de linha.
 
 ## Fila travava inteira quando UM item falhava (RCA 2026-07-20, não regredir)
 
