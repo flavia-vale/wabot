@@ -41,16 +41,27 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     h1: 'Bot para achadinhos no WhatsApp: as ofertas saem sozinhas',
     lead: 'Um bot de achadinhos acompanha os grupos onde as promoções aparecem primeiro, troca o link pelo seu código de afiliado e publica a oferta nos seus próprios grupos e canais do WhatsApp. Você deixa de copiar e colar oferta por oferta e passa a revisar o que já foi enviado.',
     intent: 'bot para achadinhos whatsapp',
-    primaryCta: 'Migrar achadinhos para canais',
-    secondaryCta: 'Ver módulo de preservação',
-    problemTitle: 'Achadinhos crescem rápido — e a rotina quebra rápido também.',
-    problem: 'Muitos canais começam com publicação manual, depois viram uma rede de grupos, chips e mensagens repetidas. O BOTinho organiza essa expansão com regras claras.',
-    bullets: ['Espelhar achadinhos entre grupos e Canais do WhatsApp.', 'Variar chamadas e cadência para evitar publicação mecânica.', 'Criar plano B para canal, chip e audiência.'],
-    process: ['Mapeie seus grupos e canais atuais.', 'Defina canais como vitrine e grupos como fonte ou comunidade.', 'Use preservação avançada para publicar com limites e monitoramento.'],
+    about: ['Achadinhos', 'Afiliados', 'Grupos de WhatsApp'],
+    aside: {
+      pill: 'Como funciona na prática',
+      title: 'Você escolhe as fontes. O resto sai sozinho.',
+      body: 'O bot acompanha os grupos que você indicou como fonte, troca o link pelo seu código de afiliado e publica nos seus grupos e canais — com intervalo entre envios e sem repetir a mesma oferta no mesmo grupo.',
+    },
+    primaryCta: 'Testar grátis por 7 dias',
+    secondaryCta: 'Ver como funciona',
+    problemTitle: 'O achadinho bom dura minutos — e você não está sempre no celular.',
+    problem: 'Promoção de achadinho é por tempo limitado e estoque curto. Quem depende de ver a oferta, copiar o link, trocar pelo seu código de afiliado e colar em cada grupo sempre chega atrasado — ou desiste de postar em metade dos grupos.',
+    bullets: ['A oferta sai nos seus grupos no mesmo minuto em que aparece na fonte, não meia hora depois.', 'O link já vai com o seu código de afiliado, sem você trocar nada na mão.', 'A mesma promoção não é repostada duas vezes no mesmo grupo no mesmo dia.'],
+    process: ['Escolha os grupos onde os achadinhos aparecem primeiro — eles viram sua fonte.', 'Escolha os seus grupos e canais que vão receber as ofertas.', 'Defina o intervalo entre envios e quais palavras você não quer repassar.', 'Acompanhe no histórico o que saiu, para onde e o que foi bloqueado por repetição.'],
     faqs: [
-      ['Funciona para grupos de promoções e cupons?', 'Sim. O foco é operação de ofertas, achadinhos, cupons e afiliados que precisam controlar distribuição no WhatsApp.'],
-      ['O canal substitui o grupo?', 'Nem sempre. Em muitos casos, o canal vira vitrine principal e o grupo continua como comunidade ou fonte de ofertas.'],
-      ['Por que falar de preservação?', 'Porque a dor não é só postar. É manter chip, canal e audiência vivos com rotina menos robótica e mais monitorada.'],
+      ['O que é um bot de achadinhos?', 'É um programa que acompanha os grupos onde as promoções aparecem primeiro, troca o link pelo seu código de afiliado e publica a oferta nos seus próprios grupos e canais do WhatsApp — sem você copiar e colar oferta por oferta.'],
+      ['De onde vêm os achadinhos?', 'Dos grupos que você já acompanha e escolhe como fonte. O bot não inventa oferta nem busca em lugar nenhum sozinho: ele repassa o que aparece nas fontes que você indicou, com o seu link no lugar do original.'],
+      ['A comissão fica comigo mesmo se a oferta veio de outro grupo?', 'Fica, desde que o link seja convertido antes de sair. É esse o ponto: encaminhar o link do jeito que veio credita a venda para quem publicou primeiro. O BOTinho troca pelo seu código de Shopee, Amazon, Mercado Livre ou Magalu antes de publicar.'],
+      ['Ele posta a mesma promoção várias vezes?', 'Não no mesmo grupo dentro da janela de repetição. Se a mesma oferta chega por duas fontes diferentes, ela sai uma vez só — e o histórico mostra quantas repetições foram bloqueadas.'],
+      ['Preciso ficar com o celular ligado?', 'O aparelho precisa estar conectado à internet, como no WhatsApp Web. Mas você não precisa estar olhando: as ofertas saem sozinhas conforme as regras que você definiu.'],
+      ['Serve para cupom, ou só para produto?', 'Serve para os dois. Links de cupom e campanha também são convertidos para o seu código, não só links de produto — que é onde muita ferramenta simplesmente remove o link.'],
+      ['Quantos grupos posso usar?', 'Não há limite de grupos. O que muda entre os planos é o acesso a Canais, ofertas automáticas da Shopee e filas de envio.'],
+      ['Corro risco de perder o número?', 'Existe risco em qualquer operação de divulgação, e ninguém pode prometer o contrário. O que dá para controlar é o ritmo: intervalo entre envios, variação de texto e limite por grupo. Vale ler antes o guia sobre WhatsApp banido.'],
     ],
   },
   'anti-ban-whatsapp': {
@@ -61,16 +72,27 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     h1: 'Teve o WhatsApp banido divulgando ofertas? Veja o que dá para controlar',
     lead: 'Contas de WhatsApp usadas para divulgar ofertas costumam ser banidas quando o comportamento parece automático demais: muitas mensagens iguais em sequência, links repetidos e denúncias de membros. Nenhuma ferramenta garante imunidade — o que dá para controlar é ritmo, variação de texto e volume por destino.',
     intent: 'anti-ban whatsapp',
-    primaryCta: 'Conhecer preservação avançada',
-    secondaryCta: 'Ver canais protegidos',
-    problemTitle: 'Promessa absoluta é o primeiro sinal de alerta.',
-    problem: 'Quem vende “anti-ban 100%” promete controlar decisões que não controla. A abordagem correta é reduzir comportamento suspeito, monitorar sinais e preparar recuperação.',
-    bullets: ['Cadência responsável e horário de silêncio.', 'Variações de texto e ordem da oferta.', 'Monitoramento de saúde e pausa preventiva por risco.'],
-    process: ['Substitua promessa absoluta por camadas de preservação.', 'Configure limites, variações e alertas por canal.', 'Use chip dedicado e plano de recuperação como padrão operacional.'],
+    about: ['WhatsApp banido', 'Banimento de conta', 'Divulgação em grupos'],
+    aside: {
+      pill: 'Sem promessa de imunidade',
+      title: 'Ninguém pode garantir que você não será banido.',
+      body: 'O WhatsApp decide sozinho e não explica o critério. Quem promete banimento zero está vendendo o que não controla. O que dá para controlar é ritmo de envio, variação de texto, limite por grupo e divulgar só para quem aceitou receber.',
+    },
+    primaryCta: 'Testar grátis por 7 dias',
+    secondaryCta: 'Fazer o teste de risco',
+    problemTitle: 'O que faz o WhatsApp banir um número que divulga oferta.',
+    problem: 'O WhatsApp não bane por você vender — bane por comportamento que parece robô. Na prática, três coisas pesam mais: mandar muitas mensagens iguais em sequência, ter gente clicando em "denunciar" ou "bloquear", e adicionar pessoas em grupo sem elas pedirem. Volume sozinho não é o problema; volume com mensagem idêntica é.',
+    bullets: ['Mensagem repetida no mesmo formato para vários grupos seguidos é o padrão mais fácil de detectar.', 'Denúncia de membro pesa mais que quantidade de envio — um grupo irritado derruba mais rápido que mil mensagens.', 'Número novo tem menos margem que número antigo com histórico de conversa real.'],
+    process: ['Use um chip só para a operação, nunca o número pessoal — se cair, você não perde seus contatos.', 'Deixe intervalo entre os envios em vez de disparar tudo de uma vez.', 'Varie o texto: a mesma oferta com chamadas diferentes por grupo.', 'Só divulgue em grupo que aceitou receber oferta — denúncia é o que mais derruba.', 'Tenha um plano B pronto: segundo chip, backup da lista de grupos e das configurações.'],
     faqs: [
-      ['O BOTinho é “anti-ban”?', 'O BOTinho não promete “anti-ban” absoluto. Ele oferece Módulo de Preservação Avançada para reduzir risco e organizar recuperação.'],
-      ['Por que manter o termo “anti-ban” na página?', 'Porque afiliados pesquisam assim. O termo aparece entre aspas para SEO e explicação, não como promessa comercial.'],
-      ['Existe garantia contra banimento?', 'Não. Existe redução de risco com cadência, variações, monitoramento, chip dedicado e plano de recuperação.'],
+      ['Por que meu WhatsApp foi banido divulgando ofertas?', 'Quase sempre por um destes três: mensagens iguais disparadas em sequência, denúncias de membros que não queriam receber, ou adição de pessoas em grupos sem consentimento. O WhatsApp não divulga o motivo exato, mas esses são os padrões que ele descreve como uso automatizado ou não solicitado.'],
+      ['Dá para recuperar um número banido do WhatsApp?', 'Às vezes. O próprio app oferece a opção de pedir revisão quando você tenta entrar e vê a mensagem de banimento. A revisão é feita pelo WhatsApp, não por nenhuma ferramenta, e não há prazo garantido nem certeza de retorno. Se o número era o da operação e não o pessoal, o prejuízo fica limitado.'],
+      ['Qual a diferença entre número banido, conta banida e shadowban?', 'Banimento de número ou conta é explícito: você não consegue mais usar e vê o aviso ao abrir o app. O que o mercado chama de shadowban é diferente e mais difícil de identificar — nada avisa, mas a entrega cai e as mensagens param de aparecer para parte das pessoas. O primeiro é um evento; o segundo, uma queda silenciosa.'],
+      ['Existe bot “anti-ban” de verdade?', 'Não. Nenhuma ferramenta controla a decisão do WhatsApp, e quem promete banimento zero está vendendo o que não pode entregar. O que existe é reduzir os padrões que chamam atenção: ritmo, variação de texto, limite por grupo e consentimento de quem recebe.'],
+      ['Usar um bot aumenta o risco de tomar ban?', 'Depende de como ele envia. Uma ferramenta que dispara tudo de uma vez, com texto idêntico, aumenta. Uma que espaça os envios, varia o texto e respeita limite por grupo tende a parecer mais com uso humano do que a pessoa copiando e colando às pressas em vinte grupos seguidos.'],
+      ['Quantas mensagens posso mandar por dia sem risco?', 'Não existe número oficial, e desconfie de quem cita um. O que importa mais que a quantidade é o padrão: cem mensagens espaçadas, com texto variado, para grupos que pediram para receber, são mais seguras que vinte idênticas em dois minutos.'],
+      ['Chip dedicado resolve?', 'Não impede o banimento, mas limita o estrago. Se o número da operação cair, seus contatos pessoais, suas conversas e seu histórico continuam intactos em outro número. É a medida mais barata de todas.'],
+      ['O BOTinho garante que eu não seja banido?', 'Não, e desconfie de qualquer ferramenta que garanta. O que ele faz é controlar o que está sob controle: intervalo entre envios, variação de texto, limite por destino e histórico do que saiu.'],
     ],
   },
   'grupo-para-canal-whatsapp': {
@@ -155,7 +177,7 @@ function buildSchemas(page) {
       description: page.description,
       url: pageUrl,
       inLanguage: 'pt-BR',
-      about: ['Canais do WhatsApp', 'Afiliados', 'Módulo de Preservação Avançada'],
+      about: page.about ?? ['Canais do WhatsApp', 'Afiliados', 'Módulo de Preservação Avançada'],
     },
     {
       '@context': 'https://schema.org',
@@ -203,6 +225,15 @@ function SectionHeader({ eyebrow, title, body }) {
 
 export function PreservationCommercialPage({ pageKey }) {
   const page = PRESERVATION_COMMERCIAL_PAGES[pageKey]
+  // Barra lateral configurável por página. O default preserva o texto da campanha
+  // "Canais + Preservação" para as páginas que continuam sendo sobre isso; páginas
+  // que entram por outra intenção (achadinhos, WhatsApp banido) sobrescrevem, para
+  // o corpo não contradizer o título.
+  const aside = page.aside ?? {
+    pill: 'Módulo de Preservação Avançada',
+    title: 'Redução de risco sem promessa absoluta.',
+    body: 'O BOTinho usa cadência, variações, limites, monitoramento e plano de recuperação. Quando falamos de “anti-ban”, é como termo de busca do mercado, não garantia.',
+  }
   const schemas = buildSchemas(page)
   const trackerRoute = { slug: pageKey, path: page.path, cluster: 'canais-preservacao', intent: page.intent, template: 'commercial-seo' }
 
@@ -225,10 +256,10 @@ export function PreservationCommercialPage({ pageKey }) {
                 <Link className="btn btn-ghost" href={diagnosticHref} data-seo-cta="commercial_diagnostic" data-cta-position="hero_secondary" data-cta-stage="diagnostic" data-cta-destination="diagnostic">Fazer diagnóstico</Link>
               </div>
             </div>
-            <aside style={s.softCard} aria-label="Resumo do Módulo de Preservação Avançada">
-              <span className="pill"><span className="dot" />Módulo de Preservação Avançada</span>
-              <h2 style={{ ...s.h2, fontSize: 'clamp(24px, 2.5vw, 34px)' }}>Redução de risco sem promessa absoluta.</h2>
-              <p style={s.small}>O BOTinho usa cadência, variações, limites, monitoramento e plano de recuperação. Quando falamos de “anti-ban”, é como termo de busca do mercado, não garantia.</p>
+            <aside style={s.softCard} aria-label={`Resumo: ${aside.pill}`}>
+              <span className="pill"><span className="dot" />{aside.pill}</span>
+              <h2 style={{ ...s.h2, fontSize: 'clamp(24px, 2.5vw, 34px)' }}>{aside.title}</h2>
+              <p style={s.small}>{aside.body}</p>
             </aside>
           </div>
         </section>

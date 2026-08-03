@@ -53,6 +53,56 @@ export const COMPARISON_PAGES = {
       { q: 'Essas alternativas garantem comissão?', a: 'Não. Comissão depende de oferta, público, regras da plataforma, rastreio correto e comportamento dos compradores.' },
     ],
   },
+  /* Página de marca do concorrente. Existe porque duas das 13 consultas que o
+   * site registra no Search Console são `achadinhos bot` e `achadinhoosbot`
+   * (posições 7 e 9,5): a demanda por essa marca já chega aqui sem nenhuma
+   * página feita para ela.
+   *
+   * Todos os dados de preço e recurso vêm de `competitors-data.js`, verificados
+   * por print em 31/07/2026. Regra que não se quebra: dizer honestamente onde o
+   * concorrente é melhor. Comparativo enviesado é penalizado por IA e é risco
+   * jurídico — e o objetivo aqui é justamente ser citável.
+   */
+  '/alternativas/achadinhos-bot': {
+    format: 'alternative-plural',
+    eyebrow: 'Alternativas · AchadinhosBot',
+    title: 'Alternativa ao AchadinhosBot: comparativo honesto para grupos de achadinhos',
+    description: 'Compare AchadinhosBot, Achadinho Pro e BOTinho para automatizar grupos de achadinhos no WhatsApp: preço por plano, marketplaces suportados e teste grátis. Dados verificados em 31/07/2026.',
+    competitorSlugs: ['achadinhosbot', 'achadinho-pro'],
+    tldr: 'Se você opera só Shopee e quer escalar por número de grupos, o AchadinhosBot resolve. Se precisa de Mercado Livre, Amazon e Magalu na mesma conta, compare o custo total antes de decidir.',
+    directAnswer: 'O AchadinhosBot automatiza grupos de achadinhos no WhatsApp com foco em Shopee, cobrando por faixa de grupos (R$ 59,90 por 1 grupo até R$ 199,90 por 15 grupos) e oferecendo teste grátis de 3 dias. As alternativas mais próximas são o Achadinho Pro, que adiciona Mercado Livre e Amazon a partir de R$ 59,97/mês, e o BOTinho, que cobre quatro marketplaces e converte também links de cupom.',
+    rows: [
+      ['Preço de entrada', 'AchadinhosBot: R$ 59,90/mês (1 grupo). Achadinho Pro: R$ 49,97/mês (só Shopee). BOTinho: R$ 39/30 dias.', 'Compare pelo número de grupos que você realmente usa, não só pelo preço da primeira faixa.'],
+      ['Marketplaces', 'AchadinhosBot: Shopee. Achadinho Pro: Shopee no Basic, +ML e Amazon no Pro. BOTinho: Shopee, Amazon, Mercado Livre e Magalu.', 'Se você só divulga Shopee, cobertura extra não vale nada. Pese pelo que você usa hoje.'],
+      ['Como escala o preço', 'AchadinhosBot: por faixa de grupos (1 → 5 → 10 → 15). Achadinho Pro: grupos ilimitados por automação. BOTinho: sem limite de grupos.', 'Escalar por faixa é previsível, mas fica caro se a operação cresce em grupos.'],
+      ['Teste grátis', 'AchadinhosBot: 3 dias, com marca d’água e conexão que o próprio site descreve como "menos estável". BOTinho: 7 dias com o plano Pro completo.', 'Teste limitado mostra menos do produto real. Veja o que está incluído antes de concluir.'],
+      ['Conversão de cupom', 'Não indicada nas páginas públicas dos dois concorrentes. BOTinho converte link de cupom, não só de produto.', 'Só faz diferença para quem divulga campanha de cupom além de produto avulso.'],
+    ],
+    criteria: ['Número de grupos que você opera hoje', 'Marketplaces que realmente usa', 'Se precisa converter cupom além de produto', 'O que o teste grátis deixa você validar', 'Transparência de preço e de limites'],
+    botinhoDifferentials: ['Quatro marketplaces incluídos', 'Conversão de link de cupom, não só de produto', 'Sem limite de grupos', 'Teste grátis de 7 dias com o Pro completo', 'Canais e Comunidades do WhatsApp', 'Histórico completo de envios'],
+    bestFit: [
+      'Escolha o AchadinhosBot se opera só Shopee, quer preço previsível por faixa de grupos e valoriza suporte 24/7 já no plano de entrada.',
+      'Escolha o Achadinho Pro se quer os três marketplaces principais pagando pouco mais que o plano básico, e se grupos ilimitados por automação resolve sua estrutura.',
+      'Escolha o BOTinho se precisa de quatro marketplaces, converte campanhas de cupom além de produto, ou quer validar a operação completa antes de pagar.',
+    ],
+    notIdealFit: [
+      'O AchadinhosBot não é ideal para quem divulga Mercado Livre, Amazon ou Magalu — a tabela pública de preços cobre Shopee.',
+      'O Achadinho Pro não é ideal para quem quer testar antes de pagar: a página de preços não indica teste grátis.',
+      'O BOTinho não é ideal para quem quer automação sem revisão humana ou opera em Telegram — o produto é só WhatsApp.',
+    ],
+    migrationPath: [
+      'Liste seus grupos de origem e de destino e conte quantos realmente recebem oferta por semana.',
+      'Confira em qual faixa de preço esse número cai em cada ferramenta — é aí que a diferença de custo aparece, não no plano de entrada.',
+      'Rode uma semana em paralelo antes de cancelar a ferramenta atual, comparando qualidade do link convertido e do preview.',
+    ],
+    faq: [
+      { q: 'Qual a melhor alternativa ao AchadinhosBot?', a: 'Depende do que você opera. Para quem fica só na Shopee, o próprio AchadinhosBot resolve e tem suporte 24/7 no plano de entrada. Para quem precisa de Mercado Livre, Amazon e Magalu na mesma conta, Achadinho Pro e BOTinho cobrem mais marketplaces.' },
+      { q: 'Quanto custa o AchadinhosBot?', a: 'Conforme a página pública consultada em 31/07/2026: R$ 59,90/mês para 1 grupo, R$ 99,90 para 5, R$ 149,90 para 10 e R$ 199,90 para 15 grupos, além de um teste grátis de 3 dias. Confirme na página oficial antes de decidir — preços mudam.' },
+      { q: 'O AchadinhosBot tem teste grátis?', a: 'Sim, 3 dias sem cartão. Vale saber o que está incluído: 1 grupo, 30 envios por dia, intervalo mínimo de 10 minutos, marca d’água nas mensagens e uma conexão que o próprio site descreve como "menos estável".' },
+      { q: 'Em que o AchadinhosBot é melhor que o BOTinho?', a: 'Em dois pontos concretos: o preço escala de forma muito previsível por faixa de grupos, e o suporte 24/7 por e-mail e WhatsApp aparece já no plano de entrada. Se sua operação é só Shopee e cabe numa faixa, essa simplicidade é uma vantagem real.' },
+      { q: 'Trocar de ferramenta faz perder os grupos?', a: 'Não. Os grupos são seus, no seu WhatsApp. O que muda é qual ferramenta se conecta a eles. Por isso dá para rodar uma semana em paralelo antes de cancelar a atual.' },
+    ],
+  },
   '/botinho-vs-planilha-manual': {
     format: 'vs',
     eyebrow: 'Comparativo · Operação manual',
