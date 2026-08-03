@@ -58,6 +58,7 @@ export const EDITORIAL_DATES = {
   '/materiais/checklist-operacao-whatsapp': { publishedAt: '2026-05-11', updatedAt: '2026-05-15' },
   '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp': { publishedAt: '2026-05-14', updatedAt: '2026-05-15' },
   '/metodologia-uso-responsavel-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
+  '/alternativas/achadinhos-bot': { publishedAt: '2026-08-03', updatedAt: '2026-08-03' },
   '/alternativas/bot-para-whatsapp-afiliados': { publishedAt: '2026-05-15', updatedAt: '2026-07-31' },
   '/botinho-vs-planilha-manual': { publishedAt: '2026-05-15', updatedAt: '2026-07-30' },
   '/botinho-vs-ferramentas-genericas-automacao': { publishedAt: '2026-05-15', updatedAt: '2026-07-30' },
