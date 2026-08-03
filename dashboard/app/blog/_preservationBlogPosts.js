@@ -145,19 +145,28 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Guia completo de Shopee Afiliados: como se cadastrar, quanto paga de comissão por tipo de venda, prazo de atribuição e como divulgar no WhatsApp sem perder comissão.',
     eyebrow: 'Shopee Afiliados · Guia completo',
     origin: 'blog_como_ser_afiliado_shopee_whatsapp',
+    leadMagnetVariant: 'afiliados',
     usePersonAuthor: true,
     intro: 'Shopee Afiliados é o programa que paga comissão sobre vendas geradas pelo seu link. O cadastro é gratuito, a comissão parte de 3% e a atribuição vale por até 7 dias após o clique. Divulgar no WhatsApp funciona bem quando o link sai sempre com o seu código e a frequência de envio é controlada.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Cadastre-se no Programa de Afiliados Shopee, pegue suas credenciais de afiliado, gere o link de cada produto com o seu código e divulgue no WhatsApp com texto próprio e frequência controlada.', 'O ponto crítico é garantir que TODO link enviado já esteja convertido para o seu código — senão a venda acontece, mas a comissão não cai para você.'] },
       { h2: 'Quanto paga a comissão da Shopee', paragraphs: ['A comissão-base é de 3% sobre o valor líquido da venda (sem impostos, cupons ou frete), tanto para vendas via redes sociais/WhatsApp quanto para vendas geradas em lives e Shopee Vídeo.', 'Existe também o programa de Comissão Extra: ao divulgar produtos de parceiros selecionados, a comissão pode chegar a até 30% — a comissão padrão da Shopee soma com uma comissão extra paga pelo próprio vendedor.'], table: { headers: ['Tipo de venda', 'Comissão'], rows: [['Venda padrão (redes sociais e WhatsApp)', '3%'], ['Vendas em lives', '3%'], ['Vendas via Shopee Vídeo', '3%'], ['Produtos do programa de Comissão Extra', 'até 30% (padrão + extra do vendedor)']], note: 'Fonte: Shopee Affiliate Program, "Entenda o Comissionamento da Shopee" (consultado em 30/07/2026). Comissão calculada sobre o valor líquido da venda; sujeita às condições especiais e a alterações sem aviso prévio da Shopee.' } },
       { h2: 'Prazo para a comissão ser atribuída a você', paragraphs: ['Quando alguém clica no seu link e adiciona o produto ao carrinho, a Shopee guarda essa atribuição por até 7 dias — mesmo que a pessoa não compre na hora, você ainda ganha a comissão se ela finalizar a compra dentro desse prazo.', 'Sites e apps especializados em cupom, cashback ou tecnologia têm taxa de comissão sob consulta — as regras padrão valem para o afiliado comum divulgando em grupos e canais.'] },
-      { h2: 'Passo a passo para entrar', bullets: ['Cadastre-se no Programa de Afiliados Shopee.', 'Confirme seus dados e aguarde a aprovação.', 'Localize suas credenciais de afiliado (appId / secret).', 'Gere links com o seu código para os produtos que vai divulgar.', 'Organize seus grupos e canais de destino no WhatsApp.'] },
+      { h2: 'Como se tornar afiliado Shopee: passo a passo', paragraphs: ['Tornar-se afiliado Shopee leva poucos minutos e não tem custo. O cadastro é feito no site do Programa de Afiliados Shopee, e depois da aprovação você já consegue gerar links com o seu código.'], bullets: ['Acesse o site do Programa de Afiliados Shopee e crie sua conta.', 'Confirme seus dados cadastrais e aguarde a aprovação.', 'Ao entrar na sua conta de afiliado, localize suas credenciais (appId / secret).', 'Gere links com o seu código para os produtos que vai divulgar.', 'Organize seus grupos e canais de destino no WhatsApp antes de começar a publicar.'] },
       { h2: 'Como divulgar sem queimar o número', paragraphs: ['Use um chip dedicado, publique poucas ofertas boas por vez, varie o texto e evite mandar a mesma mensagem idêntica para todos os destinos ao mesmo tempo.', 'Quem dispara dezenas de links iguais em sequência arrisca o número e ainda cansa a audiência. Cadência responsável vende mais no médio prazo.'] },
       { h2: 'Como o BOTinho automatiza a Shopee', paragraphs: ['Com as credenciais de afiliada Shopee cadastradas, o BOTinho converte os links para o seu código automaticamente antes de enviar, monta a oferta com título e preço e distribui para os seus grupos e canais com cadência controlada.', 'Assim você não precisa gerar link a link na mão nem corre o risco de enviar um link sem comissão.'] },
+    ],
+    relatedLinks: [
+      { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual programa escolher', note: 'comparativo de comissão e prazo de atribuição dos três' },
+      { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Afiliado Amazon: comissão por categoria', note: 'a Amazon paga de 0% a 13% dependendo do produto' },
+      { href: '/bot-afiliados-whatsapp', label: 'Converter os links de afiliado automaticamente', note: 'para não enviar link sem o seu código' },
     ],
     faq: [
       { q: 'Ser afiliado Shopee é gratuito?', a: 'Sim, a entrada no programa de afiliados não tem custo. Você ganha comissão sobre as vendas geradas pelos seus links.' },
       { q: 'Shopee Afiliados como funciona?', a: 'Você se cadastra no programa, gera links de produtos com o seu código de afiliado e ganha comissão (a partir de 3%) sobre as vendas feitas por esse link em até 7 dias após o clique.' },
+      { q: 'Como se tornar afiliado Shopee?', a: 'Crie sua conta no site do Programa de Afiliados Shopee, confirme seus dados e aguarde a aprovação. Depois disso, localize suas credenciais de afiliado na conta e comece a gerar links com o seu código. O cadastro é gratuito.' },
+      { q: 'Como entrar na minha conta do Shopee Afiliados?', a: 'O acesso é feito pelo site do Programa de Afiliados Shopee, com o mesmo login da sua conta Shopee. É lá que ficam suas credenciais de afiliado, os relatórios de venda e a tabela de comissão vigente.' },
+      { q: 'Preciso ter um site ou muitos seguidores para ser afiliado Shopee?', a: 'Não. É possível divulgar em grupos e canais de WhatsApp, redes sociais e listas próprias. O que importa é ter um público real e enviar sempre o link com o seu código de afiliado.' },
       { q: 'Quanto a Shopee paga de comissão?', a: 'A comissão padrão é 3% sobre o valor líquido da venda. Produtos do programa de Comissão Extra podem chegar a até 30%, somando a comissão padrão com uma comissão adicional paga pelo vendedor.' },
       { q: 'Preciso gerar cada link na mão?', a: 'Não, se usar uma ferramenta de conversão. Com as credenciais Shopee no BOTinho, os links são convertidos automaticamente para o seu código antes do envio.' },
       { q: 'Posso divulgar Shopee e outras lojas juntas?', a: 'Sim. É comum divulgar Shopee, Mercado Livre e Amazon na mesma operação. O importante é manter cada link com o código de afiliado correto.' },
@@ -169,6 +178,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Guia de afiliado Amazon (Amazon Associados): quanto paga de comissão por categoria de produto, como divulgar no WhatsApp com a tag correta e cadência que protege o número.',
     eyebrow: 'Afiliado Amazon · Divulgação',
     origin: 'blog_como_divulgar_ofertas_amazon_whatsapp',
+    leadMagnetVariant: 'afiliados',
     usePersonAuthor: true,
     intro: 'Divulgar Amazon no WhatsApp como associado dá certo quando o link sai com a sua tag, o preview mostra a imagem do produto e o envio respeita uma cadência que não queima o número. A comissão varia por categoria — de 0% a 13% — e errar a tag é o jeito mais rápido de trabalhar de graça.',
     sections: [
@@ -177,6 +187,11 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'O que cuidar nos links da Amazon', bullets: ['Garantir que a tag de associado está presente no link.', 'Usar link curto quando possível, sem perder a tag.', 'Conferir se o preview mostra imagem em boa resolução.', 'Evitar links com parâmetros que quebram o rastreamento.', 'Atualizar a oferta se o preço mudar.'] },
       { h2: 'Cadência e preservação do número', paragraphs: ['A Amazon costuma ter muitas ofertas, e a tentação é mandar tudo de uma vez. Resista: poucas ofertas selecionadas por vez, com variação de texto, performam melhor e protegem o número.', 'Use chip dedicado e horário de silêncio para a operação não parecer um robô disparando.'] },
       { h2: 'Como o BOTinho cuida da Amazon', paragraphs: ['Com a sua tag de associado cadastrada, o BOTinho converte os links da Amazon automaticamente, busca a imagem em alta resolução para o preview do WhatsApp e distribui a oferta para seus grupos e canais com cadência responsável.', 'Isso evita o erro clássico de enviar um link sem tag e garante que a oferta chegue com cara profissional.'] },
+    ],
+    relatedLinks: [
+      { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual programa escolher', note: 'comparativo de comissão e prazo de atribuição dos três' },
+      { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: '3% na venda padrão, até 30% na Comissão Extra' },
+      { href: '/bot-afiliados-whatsapp', label: 'Converter os links de afiliado automaticamente', note: 'para a tag nunca cair no caminho' },
     ],
     faq: [
       { q: 'Como sei se o link tem minha tag?', a: 'O link de afiliado da Amazon inclui um parâmetro de tag (tag=seucodigo). Sem ela, a venda não é atribuída a você. Uma ferramenta de conversão garante isso automaticamente.' },
@@ -187,21 +202,36 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'como-divulgar-ofertas-mercado-livre-whatsapp': {
     slug: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp',
-    title: 'Como divulgar ofertas do Mercado Livre no WhatsApp como afiliado',
-    description: 'Passo a passo para divulgar ofertas do Mercado Livre no WhatsApp como afiliado: link de afiliado, conversão automática, preview com imagem e cadência que protege o número.',
-    eyebrow: 'Mercado Livre · Afiliados',
+    title: 'Afiliado Mercado Livre: comissão por categoria e como divulgar no WhatsApp',
+    description: 'Quanto o Mercado Livre paga de comissão de afiliado por categoria (venda direta e indireta), o prazo de pagamento e como divulgar as ofertas no WhatsApp sem perder a atribuição do link.',
+    eyebrow: 'Afiliado Mercado Livre · Guia completo',
+    usePersonAuthor: true,
     origin: 'blog_como_divulgar_ofertas_mercado_livre_whatsapp',
-    intro: 'Para divulgar ofertas do Mercado Livre no WhatsApp você precisa de três coisas: um link de afiliado com o seu código, um preview com imagem que gere clique e uma cadência que não pareça disparo em massa. O erro mais comum é encaminhar o link do grupo de origem — isso credita a comissão para o concorrente, não para você.',
+    leadMagnetVariant: 'afiliados',
+    intro: 'O Mercado Livre Afiliados paga de 0% a 16% de comissão, dependendo da categoria do produto e de a venda ser direta ou indireta. A entrada é gratuita. Para divulgar no WhatsApp você precisa do link com o seu identificador, um preview com imagem e cadência que não pareça disparo — encaminhar o link do grupo de origem credita a comissão para o concorrente.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Gere seu link de afiliado no programa do Mercado Livre (Mercado Livre Afiliados), confirme que o link carrega o seu identificador, monte a oferta com título, preço e imagem e distribua nos grupos e canais com intervalo entre envios.', 'O ponto crítico é a atribuição: o link precisa ser o SEU, não o do grupo de onde a oferta veio. Quando o BOTinho espelha, ele converte o link para o seu código automaticamente antes de enviar.'] },
+      { h2: 'Quanto o Mercado Livre paga de comissão por categoria', paragraphs: ['A tabela abaixo é a do Percentual de Pagamentos dos Resultados aplicável a Afiliados generalistas. O Mercado Livre separa venda direta (o produto que você divulgou) de venda indireta, com percentual menor.'], table: { headers: ['Categoria', 'Venda direta', 'Venda indireta'], rows: [['Beleza e Cuidado Pessoal; Calçados, Roupas e Bolsas; Esportes e Fitness', '16%', '8%'], ['Acessórios para Veículos; Bebês; Brinquedos e Hobbies; Casa, Móveis e Decoração; Construção; Ferramentas; Games; Joias e Relógios; Livros, Revistas e Comics; demais categorias', '12%', '6%'], ['Câmeras e Acessórios; Celulares e Telefones; Eletrodomésticos; Eletrônicos, Áudio e Vídeo; Informática', '5%', '2,5%'], ['Alimentos e Bebidas', '0%', '0%']], note: 'Fonte: Mercado Livre, Central de Ajuda do Programa de Afiliados (consultado em 31/07/2026). Percentuais sujeitos a alteração pelo Mercado Livre — confirme na sua conta antes de decidir.' } },
+      { h2: 'Atenção: quem divulga ofertas tem tabela própria', paragraphs: ['A tabela acima vale para Afiliados generalistas. O próprio Mercado Livre avisa que os afiliados enquadrados na categoria de Afiliados Divulgadores de Ofertas, conforme definição nos termos e condições do programa, recebem uma tabela de percentuais diferente — enviada para o e-mail cadastrado no Programa, e não publicada na Central de Ajuda.', 'Isso importa muito para quem opera grupo de achadinhos ou de promoções: é provável que você se enquadre nessa categoria. Antes de planejar receita em cima dos 16%, confirme no e-mail cadastrado qual é a sua tabela.'] },
+      { h2: 'Comissão de cupom personalizado', paragraphs: ['Para cupons personalizados, o percentual é calculado sobre o valor final da transação válida e segue uma tabela separada, bem menor que a de produto.'], table: { headers: ['Tipo de produto', 'Percentual'], rows: [['Todas as categorias, exceto as da linha abaixo', '3%'], ['Roupas e calçados; Bolsas e acessórios; Esportes e fitness', '5%']], note: 'Fonte: Mercado Livre, Central de Ajuda do Programa de Afiliados (consultado em 31/07/2026).' } },
+      { h2: 'Quando a comissão cai na conta', paragraphs: ['O pagamento só é efetuado após a confirmação de uma Transação Válida, o que pode levar até 60 dias contados a partir da data de entrega do produto.', 'Na prática, isso significa que a venda de hoje pode demorar cerca de dois meses para virar dinheiro disponível. Planeje o caixa da operação considerando esse intervalo, principalmente se você divulga muito produto de entrega longa.'] },
       { h2: 'Como funciona a conversão de link do Mercado Livre', bullets: ['Links de produto (com MLB) são convertidos para o seu código de afiliado.', 'Links de recomendação e landing (/up/, /social/) são resolvidos para a URL canônica do produto.', 'Short links são resolvidos antes da conversão para não perder o produto no meio da cadeia.', 'Se a conversão falhar, o link original de terceiro nunca é encaminhado — a comissão do concorrente não vaza.'] },
       { h2: 'Por que o preview com imagem importa', paragraphs: ['No WhatsApp, o card clicável com foto do produto em boa resolução converte muito mais que um link seco. O BOTinho monta o preview com a imagem em alta e o nome da loja acima do domínio, mantendo o card sempre renderizado.', 'Sem imagem, a oferta compete em desvantagem com todos os outros links do grupo. Com imagem, ela ocupa espaço visual e chama o olho.'] },
       { h2: 'Cadência que protege o número', paragraphs: ['Despejar 20 ofertas em sequência é o caminho mais rápido para o número entrar em risco. Distribua ao longo do dia, varie o texto e respeite horário de silêncio.', 'O Módulo de Preservação Avançada organiza essas camadas: limite por hora, variações de copy e pausas preventivas, para que a operação não pareça robótica.'] },
     ],
+    relatedLinks: [
+      { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual programa escolher', note: 'comparativo de comissão e prazo de atribuição dos três' },
+      { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: 'o programa com maior volume de busca no Brasil' },
+      { href: '/bot-afiliados-whatsapp', label: 'Converter os links de afiliado automaticamente', note: 'produto, cupom e short link' },
+    ],
     faq: [
+      { q: 'Quanto o Mercado Livre paga de comissão de afiliado?', a: 'Para Afiliados generalistas, de 0% a 16% conforme a categoria: 16% em Beleza, Calçados/Roupas/Bolsas e Esportes; 12% na maioria das categorias; 5% em eletrônicos, celulares e informática; e 0% em Alimentos e Bebidas. Em venda indireta o percentual cai pela metade.' },
+      { q: 'Qual a diferença entre venda direta e venda indireta?', a: 'O Mercado Livre paga percentuais diferentes conforme a venda seja direta (o produto que você divulgou) ou indireta. A venda indireta paga metade: 8% onde a direta paga 16%, 6% onde paga 12%, e 2,5% onde paga 5%.' },
+      { q: 'Quem divulga ofertas recebe a mesma comissão da tabela pública?', a: 'Não necessariamente. O Mercado Livre informa que afiliados enquadrados como Afiliados Divulgadores de Ofertas recebem uma tabela de percentuais própria, enviada ao e-mail cadastrado no Programa e não publicada na Central de Ajuda. Quem opera grupo de achadinhos deve confirmar a própria tabela antes de projetar receita.' },
+      { q: 'Em quanto tempo a comissão do Mercado Livre é paga?', a: 'O pagamento só ocorre após a confirmação de uma Transação Válida, o que pode levar até 60 dias a partir da data de entrega do produto.' },
       { q: 'Preciso ser aprovado no Mercado Livre Afiliados?', a: 'Sim. Você precisa se inscrever no programa de afiliados do Mercado Livre e gerar seu link com o identificador da sua conta antes de divulgar.' },
       { q: 'O BOTinho converte qualquer link do Mercado Livre?', a: 'Links de produto são convertidos para o seu código. Links de recomendação e landing são resolvidos para o produto canônico. Se não for possível converter com segurança, o link original não é encaminhado.' },
-      { q: 'Cupom do Mercado Livre credita comissão?', a: 'O mecanismo de crédito de cupom no Mercado Livre ainda está em avaliação — valide clicando no link em um celular antes de confiar na atribuição. Para produto com MLB, a conversão é direta.' },
+      { q: 'Cupom do Mercado Livre credita comissão?', a: 'Sim, com tabela própria: 3% na maioria das categorias e 5% em roupas e calçados, bolsas e acessórios, esportes e fitness — percentual calculado sobre o valor final da transação válida. Ainda assim, valide clicando no link em um celular antes de confiar na atribuição.' },
     ],
   },
   'quanto-custa-bot-para-whatsapp-afiliados': {
@@ -263,11 +293,17 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp': {
     slug: '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp',
-    title: 'Amazon, Shopee ou Mercado Livre: qual programa de afiliados usar no WhatsApp?',
-    description: 'Compare Amazon, Shopee e Mercado Livre para afiliados que divulgam no WhatsApp: comissão, conversão de link, cupom e como combinar os três programas.',
-    eyebrow: 'Comparativo · Programas de afiliados',
+    title: 'Como combinar Amazon, Shopee e Mercado Livre no mesmo grupo de ofertas',
+    description: 'Estratégia para operar os três programas de afiliados ao mesmo tempo no WhatsApp: qual loja usar para cada tipo de oferta, como não misturar os códigos e como medir qual rende mais no seu público.',
+    eyebrow: 'Estratégia · Operar os três programas',
     origin: 'blog_amazon_shopee_ou_mercado_livre_para_afiliados_whatsapp',
-    intro: 'Não existe um único programa vencedor: Amazon é forte em variedade e confiança, Shopee é forte em achadinhos baratos e cupom, e Mercado Livre é forte em ticket médio e frete. Para quem divulga no WhatsApp, a estratégia madura combina os três, escolhendo o programa por tipo de oferta.',
+    leadMagnetVariant: 'afiliados',
+    intro: 'Não existe um único programa vencedor: Amazon é forte em variedade e confiança, Shopee é forte em achadinhos baratos e cupom, e Mercado Livre é forte em ticket médio e frete. Para quem divulga no WhatsApp, a estratégia madura combina os três, escolhendo o programa por tipo de oferta. Se você ainda está decidindo por onde começar, veja antes o comparativo de comissão dos três programas.',
+    relatedLinks: [
+      { href: '/programa-de-afiliados', label: 'Comparativo de comissão dos três programas', note: 'quanto cada um paga e prazo de atribuição' },
+      { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: guia de cadastro', note: 'o programa com maior volume de busca' },
+      { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Afiliado Amazon: comissão por categoria', note: 'de 0% a 13% conforme o produto' },
+    ],
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Use Shopee para achadinhos de baixo preço e campanhas de cupom, Amazon para variedade e produtos de marca com boa taxa de clique, e Mercado Livre para ticket médio maior e itens com frete competitivo.', 'O que decide a comissão real é a atribuição correta do link e a taxa de conversão do seu público, não só o percentual do programa.'] },
       { h2: 'Como cada programa se comporta no WhatsApp', bullets: ['Shopee: cupom e voucher fazem parte da oferta; a conversão precisa preservar o cupom e usar short link que abre o app.', 'Amazon: a tag de associado precisa estar na URL da loja; preview com imagem em alta ajuda muito no clique.', 'Mercado Livre: links de produto (MLB) convertem direto; landings de recomendação precisam ser resolvidas para o produto.'] },
@@ -323,7 +359,7 @@ export function PreservationBlogPost({ postKey }) {
       {schemas.map((schema) => (
         <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
       ))}
-      <ArticleShell eyebrow={post.eyebrow} title={post.title} description={post.description} origin={post.origin} publishedAt={dates.publishedAt} updatedAt={dates.updatedAt} author={post.usePersonAuthor ? EDITORIAL_PERSON_AUTHOR : undefined}>
+      <ArticleShell eyebrow={post.eyebrow} title={post.title} description={post.description} origin={post.origin} publishedAt={dates.publishedAt} updatedAt={dates.updatedAt} author={post.usePersonAuthor ? EDITORIAL_PERSON_AUTHOR : undefined} leadMagnetVariant={post.leadMagnetVariant ?? 'default'}>
         <section>
           <h2>Resumo prático</h2>
           <p>{post.intro}</p>
@@ -363,6 +399,20 @@ export function PreservationBlogPost({ postKey }) {
             ) : null}
           </section>
         ))}
+
+        {post.relatedLinks?.length ? (
+          <section>
+            <h2>Continue no cluster de afiliados</h2>
+            <ul>
+              {post.relatedLinks.map((item) => (
+                <li key={item.href}>
+                  <Link className="font-black text-emerald-700 no-underline hover:text-emerald-800" href={item.href}>{item.label}</Link>
+                  {item.note ? ` — ${item.note}` : null}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         <section>
           <h2>Próximo passo</h2>
