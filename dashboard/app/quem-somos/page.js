@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { PublicPage } from '@/components/PublicShell'
 
 export const metadata = {
-  title: 'Quem Somos | BOTinho',
+  title: 'Quem Somos',
   description: 'Conheça o BOTinho, bot conversor para afiliados no WhatsApp.',
   alternates: { canonical: '/quem-somos' },
 }

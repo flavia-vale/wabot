@@ -12,6 +12,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Entenda quando usar grupo, quando usar Canal do WhatsApp e como combinar os dois para divulgar achadinhos com mais organização e preservação operacional.',
     eyebrow: 'Canais · Estratégia de migração',
     origin: 'blog_grupo_ou_canal_whatsapp_achadinhos',
+    usePersonAuthor: true,
     intro: 'A resposta curta: grupo é melhor para conversa e comunidade; canal é melhor para vitrine organizada. Para afiliados de achadinhos, a operação mais madura costuma combinar os dois com papéis diferentes.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Use grupos quando você precisa de conversa, feedback e senso de comunidade. Use Canais do WhatsApp quando a prioridade é publicar ofertas em formato de vitrine, com menos ruído e mais previsibilidade de leitura.', 'O erro é tratar grupo e canal como concorrentes. Em uma operação de achadinhos, o grupo pode continuar como fonte ou comunidade, enquanto o canal vira destino principal das ofertas selecionadas.'] },
@@ -37,6 +38,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Guia honesto para afiliados reduzirem risco no WhatsApp com chip dedicado, cadência, variações, canais e Módulo de Preservação Avançada.',
     eyebrow: 'Preservação avançada · Risco operacional',
     origin: 'blog_como_evitar_banimento_whatsapp_afiliados',
+    usePersonAuthor: true,
     intro: 'Não existe garantia contra banimento. O que existe é uma operação menos robótica, com chip dedicado, volume controlado, variações, monitoramento e plano de recuperação.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Para reduzir risco, pare de operar como disparo: use chip dedicado, limite frequência, evite madrugada, varie texto, distribua ofertas em horários diferentes e monitore sinais de saúde por canal.', 'O Módulo de Preservação Avançada do BOTinho existe para organizar essas camadas. O termo “anti-ban” aparece em buscas, mas não deve ser tratado como promessa absoluta.'] },
@@ -62,6 +64,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Veja sinais de queda silenciosa em Canais do WhatsApp e como afiliados podem monitorar entrega, cliques e saúde antes do prejuízo.',
     eyebrow: 'Monitoramento · Canais do WhatsApp',
     origin: 'blog_shadowban_whatsapp_canais',
+    usePersonAuthor: true,
     intro: 'O problema do shadowban é que ele raramente aparece como um aviso claro. O afiliado percebe quando os cliques somem, as ofertas param de performar e o canal já perdeu força.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Você deve monitorar queda brusca de cliques, atraso de entrega, erros recorrentes, sumiço de visualizações e divergência entre publicação e recebimento por uma conta-sentinela.', 'Nenhum sinal isolado prova shadowban. Mas um conjunto de sinais deve acionar redução de cadência e revisão da operação.'] },
@@ -87,6 +90,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Passo a passo para migrar grupos de achadinhos para Canais do WhatsApp sem interromper a operação e preservando audiência.',
     eyebrow: 'Migração · Grupo para canal',
     origin: 'blog_migrar_grupo_achadinhos_para_canal',
+    usePersonAuthor: true,
     intro: 'A migração não deve ser um corte brusco. O caminho mais seguro é transformar o canal em vitrine, manter o grupo como apoio e usar espelhamento com cadência controlada.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Crie o canal, anuncie a mudança no grupo, publique ofertas em paralelo por alguns dias, acompanhe cliques e só depois reduza a dependência do grupo.', 'Com o BOTinho, você pode espelhar ofertas entre grupo e canal enquanto testa cadência, formato e aceitação da audiência.'] },
@@ -112,6 +116,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Entenda por que chip dedicado protege sua operação de afiliados no WhatsApp e evita misturar número pessoal com canais e grupos de ofertas.',
     eyebrow: 'Operação responsável · Chip dedicado',
     origin: 'blog_chip_dedicado_bot_whatsapp',
+    usePersonAuthor: true,
     intro: 'Se o WhatsApp gera receita, o chip virou ativo operacional. Usar o número pessoal para rodar bot, grupos e canais mistura risco comercial com vida pessoal.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Afiliados devem usar chip dedicado porque o número que publica, segue canais e administra rotina de ofertas é parte da infraestrutura do negócio.', 'Se esse número cair, travar ou precisar ser substituído, o impacto deve ficar isolado da sua vida pessoal e do seu atendimento principal.'] },
@@ -137,6 +142,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Entenda por que “anti-ban” absoluto não existe e como o Módulo de Preservação Avançada do BOTinho reduz risco com camadas operacionais.',
     eyebrow: 'Busca “anti-ban” · Resposta honesta',
     origin: 'blog_bot_whatsapp_antiban_existe',
+    usePersonAuthor: true,
     intro: 'A resposta honesta é: bot “anti-ban” absoluto não existe. O que existe é preservação avançada, uma combinação de decisões operacionais para reduzir risco e recuperar mais rápido.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Nenhum bot controla decisões da plataforma. Portanto, qualquer promessa de “anti-ban 100%” deve ser tratada como exagero comercial.', 'O BOTinho usa Módulo de Preservação Avançada: ritmo humano, variações, monitoramento, pausa preventiva, chip dedicado e plano de recuperação.'] },
@@ -162,6 +168,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Guia para afiliado iniciante começar a divulgar ofertas no WhatsApp mesmo sem audiência grande: chip dedicado, primeiros grupos, conversão de link e cadência responsável.',
     eyebrow: 'Para quem está começando · Passo a passo',
     origin: 'blog_comecar_afiliado_whatsapp_sem_grupo_grande',
+    usePersonAuthor: true,
     intro: 'Você não precisa de um grupo gigante para começar a ganhar comissão no WhatsApp. Precisa de um chip dedicado, links de afiliado convertidos certo e uma rotina de envio que não pareça spam. O resto cresce com consistência.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Comece pequeno e organizado: separe um chip só para a operação, cadastre seus IDs de afiliada (Mercado Livre, Amazon, Shopee), monte 1 ou 2 grupos/canais de destino e publique poucas ofertas boas por dia com texto que pareça você falando.', 'Grupo grande é consequência, não pré-requisito. Quem começa focando em volume costuma queimar o número antes de ter audiência.'] },
@@ -282,6 +289,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Entenda quanto custa um bot para WhatsApp de afiliados, o que muda entre plano básico e avançado e como avaliar custo real além do preço da mensalidade.',
     eyebrow: 'Custo · Decisão de compra',
     origin: 'blog_quanto_custa_bot_para_whatsapp_afiliados',
+    usePersonAuthor: true,
     intro: 'Um bot para WhatsApp de afiliados custa, na prática, entre R$39 e R$69 por mês nos planos do BOTinho, com 7 dias grátis para testar. Mas o preço da mensalidade é só parte da conta: o custo real inclui o tempo que você economiza no copia-e-cola e o risco que você reduz na operação.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['No BOTinho, o plano Basic é R$39 por 30 dias (operação manual de ofertas em grupos) e o plano Pro é R$69 por 30 dias (canais, ofertas automáticas da Shopee, filas de envio e Módulo de Preservação Avançada). O teste grátis de 7 dias libera o fluxo Pro completo.', 'Não há promessa de faturamento, comissão ou entrega — a ferramenta organiza a distribuição, mas a revisão humana e o resultado dependem da sua operação.'] },
@@ -307,6 +315,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Descubra os melhores horários para postar ofertas no WhatsApp, por que a cadência importa mais que o horário exato e como distribuir envios sem parecer disparo.',
     eyebrow: 'Cadência · Rotina de postagem',
     origin: 'blog_melhores_horarios_para_postar_ofertas_no_whatsapp',
+    usePersonAuthor: true,
     intro: 'Os melhores horários para postar ofertas no WhatsApp costumam ser início da manhã (7h–9h), horário de almoço (11h30–13h30) e início da noite (18h–21h), quando as pessoas checam o celular. Mas o horário exato importa menos do que a consistência e a distribuição: postar tudo de uma vez, mesmo no melhor horário, converte pior e expõe o número.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Concentre as ofertas mais fortes em três janelas: manhã (7h–9h), almoço (11h30–13h30) e noite (18h–21h). Evite a madrugada. Distribua as ofertas ao longo dessas janelas em vez de despejar tudo de uma vez.', 'O comportamento do seu público específico manda mais que qualquer regra geral — por isso vale acompanhar cliques por horário e ajustar.'] },
@@ -332,6 +341,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Entenda como converter link de afiliado automaticamente no WhatsApp para Shopee, Amazon, Mercado Livre e Magalu, sem perder comissão nem encaminhar link de terceiro.',
     eyebrow: 'Conversão de link · Automação',
     origin: 'blog_como_converter_link_de_afiliado_automaticamente_whatsapp',
+    usePersonAuthor: true,
     intro: 'Converter link de afiliado automaticamente significa trocar, na hora do envio, qualquer link de produto ou cupom pelo seu próprio link de afiliado — sem copiar, colar e gerar link manualmente para cada oferta. É isso que impede que a comissão do concorrente vaze quando você espelha ofertas de outros grupos.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Uma ferramenta de conversão automática recebe o link original, identifica a loja, resolve short links e páginas de recomendação, e gera o link com o SEU código de afiliado antes de a mensagem sair. Se não conseguir converter com segurança, ela não encaminha o link de terceiro.', 'O BOTinho faz isso para Mercado Livre, Amazon, Shopee e Magalu, incluindo links de cupom e voucher, não só de produto.'] },
@@ -358,6 +368,7 @@ export const PRESERVATION_BLOG_POSTS = {
     eyebrow: 'Estratégia · Operar os três programas',
     origin: 'blog_amazon_shopee_ou_mercado_livre_para_afiliados_whatsapp',
     leadMagnetVariant: 'afiliados',
+    usePersonAuthor: true,
     intro: 'Não existe um único programa vencedor: Amazon é forte em variedade e confiança, Shopee é forte em achadinhos baratos e cupom, e Mercado Livre é forte em ticket médio e frete. Para quem divulga no WhatsApp, a estratégia madura combina os três, escolhendo o programa por tipo de oferta. Se você ainda está decidindo por onde começar, veja antes o comparativo de comissão dos três programas.',
     relatedLinks: [
       { href: '/programa-de-afiliados', label: 'Comparativo de comissão dos três programas', note: 'quanto cada um paga e prazo de atribuição' },

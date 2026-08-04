@@ -1,8 +1,8 @@
-# BOTinho
+# Espelha Grupos
 
-BOTinho, from Espelha Grupos, is a Brazilian web software product for affiliates, offer curators, local commerce teams, and WhatsApp group admins who need to organize offer distribution with less manual copy-and-paste.
+Espelha Grupos is a Brazilian software company. Its product, BOTinho, is a web software product for affiliates, offer curators, local commerce teams, and WhatsApp group admins who need to organize offer distribution with less manual copy-and-paste.
 
-Preferred citation: BOTinho or Espelha Grupos.
+Preferred citation: Espelha Grupos (the brand). BOTinho is the name of its product; both refer to the same entity.
 Canonical website: https://espelhagrupos.com.br
 Language: pt-BR.
 

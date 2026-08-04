@@ -1,6 +1,25 @@
-export const BRAND_NAME = 'BOTinho'
-export const BRAND_SHORT_NAME = 'Espelha Grupos'
-export const BRAND_LEGAL_CITATION = 'BOTinho / Espelha Grupos'
+// Hierarquia de marca (decisão de 2026-08, P1 do estudo de inbound).
+//
+// Antes o site renderizava "BOTinho" num domínio "espelhagrupos.com.br" e as
+// duas coisas apareciam como marcas concorrentes. Para o Google e sobretudo
+// para as IAs, entidade é tudo: uma IA só cita com confiança uma marca que ela
+// consegue identificar de forma consistente, e não havia nada ligando um nome
+// ao outro. Como o domínio fica, "Espelha Grupos" passa a ser a MARCA
+// (Organization, title template, publisher) e "BOTinho" o NOME DO PRODUTO
+// (SoftwareApplication, corpo do texto, painel, mensagens).
+//
+// Não renomear as rotas que têm "botinho" no slug (/protecao-antiban-botinho,
+// /bot-comum-vs-botinho, etc.): trocar URL descarta o histórico que o Google já
+// acumulou nelas, que é justamente o ativo que estamos tentando crescer.
+export const BRAND_ORG_NAME = 'Espelha Grupos'
+export const BRAND_PRODUCT_NAME = 'BOTinho'
+
+// Aliases históricos — os pontos de uso já aplicavam a semântica correta
+// (BRAND_NAME no corpo do texto = produto; BRAND_SHORT_NAME em eyebrow/Brand =
+// marca), então mantê-los evita reescrever dezenas de arquivos sem ganho.
+export const BRAND_NAME = BRAND_PRODUCT_NAME
+export const BRAND_SHORT_NAME = BRAND_ORG_NAME
+export const BRAND_LEGAL_CITATION = 'Espelha Grupos / BOTinho'
 
 export const SUPPORT_WHATSAPP_NUMBER = '5532999844020'
 export const SUPPORT_WHATSAPP_URL = `https://wa.me/${SUPPORT_WHATSAPP_NUMBER}`
@@ -13,9 +32,20 @@ export const SUPPORT_EMAIL =
 export const SUPPORT_HOURS = 'Segunda a sexta, das 9h às 18h (horário de Brasília)'
 export const SUPPORT_RESPONSE_SLA = 'Respondemos em até 1 dia útil'
 
+// Perfis oficiais da marca. Entram no `sameAs` do schema Organization: é assim
+// que o Google e as IAs ligam o site aos perfis de fora e tratam tudo como a
+// MESMA entidade. Sem isso, o canal do YouTube e o site são duas coisas
+// desconexas — e o estudo mediu que marca é citada por IA ~6,5x mais via fonte
+// de terceiro do que pelo próprio site.
+// A URL do canal vem por env para não travar deploy caso ela mude; sem a env, o
+// canal simplesmente não é declarado (nunca declarar URL inventada — sameAs
+// apontando para perfil errado enfraquece a entidade em vez de reforçar).
+export const BRAND_YOUTUBE_URL = process.env.NEXT_PUBLIC_BRAND_YOUTUBE_URL || ''
+
 export const BRAND_SAME_AS = [
   SUPPORT_WHATSAPP_URL,
-]
+  BRAND_YOUTUBE_URL,
+].filter(Boolean)
 
 export const PRODUCT_DEFINITION = 'O BOTinho é um software web para afiliados, curadores de ofertas e admins de grupos e canais que organiza grupos e/ou canais de origem e destino, converte links suportados e ajuda a distribuir mensagens de WhatsApp com revisão humana, cadência responsável e histórico de logs.'
 

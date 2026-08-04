@@ -163,8 +163,8 @@ function buildJsonLd(page) {
       headline: page.title,
       description: page.description,
       mainEntityOfPage: `${siteUrl}${page.slug}`,
-      author: { '@type': 'Organization', name: 'Equipe editorial do BOTinho' },
-      publisher: { '@type': 'Organization', name: 'BOTinho' },
+      author: { '@type': 'Organization', name: 'Equipe editorial do Espelha Grupos' },
+      publisher: { '@type': 'Organization', name: 'Espelha Grupos' },
     },
     {
       '@type': 'BreadcrumbList',

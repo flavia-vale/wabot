@@ -12,11 +12,14 @@ import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { selectHomeHeroVariant } from '@/lib/cro-experiments'
 
 export const metadata = {
-  title: 'BOTinho | Bot para Afiliados no WhatsApp',
+  // `absolute` porque o título da home já termina na marca — sem isso o template
+  // do layout raiz (`%s | Espelha Grupos`) somaria a marca de novo e o título
+  // sairia duplicado, que é exatamente o defeito apontado no P3 do estudo.
+  title: { absolute: 'Espelha Grupos | Bot para afiliados espelhar ofertas no WhatsApp' },
   description: PRODUCT_DEFINITION,
   alternates: { canonical: '/' },
   openGraph: {
-    title: 'BOTinho | Bot para Afiliados no WhatsApp',
+    title: 'Espelha Grupos | Bot para afiliados espelhar ofertas no WhatsApp',
     description: PRODUCT_DEFINITION,
     url: '/',
   },
