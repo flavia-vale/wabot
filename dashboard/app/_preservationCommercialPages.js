@@ -21,6 +21,11 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     h1: 'Bot para afiliados no WhatsApp que converte seus links automaticamente',
     lead: 'Um bot para afiliados no WhatsApp monitora grupos de origem, converte cada link de produto ou cupom para o seu código de afiliado e republica a oferta nos seus grupos e canais. O BOTinho faz isso com Shopee, Amazon, Mercado Livre e Magalu, com intervalos controlados e histórico de envio.',
     intent: 'bot para afiliados whatsapp',
+    related: [
+      { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'Shopee, Amazon e Mercado Livre: comissão e prazo de atribuição lado a lado.' },
+      { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: cadastro e comissão', note: 'Cadastro gratuito, 3% na venda padrão e até 30% na Comissão Extra.' },
+      { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Afiliado Amazon: comissão por categoria', note: 'De 0% a 13% conforme o produto, e por que a tag precisa estar na URL da loja.' },
+    ],
     primaryCta: 'Ver operação para afiliados',
     secondaryCta: 'Conhecer preservação avançada',
     problemTitle: 'Afiliado que depende só de grupo fica exposto demais.',
@@ -41,6 +46,12 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     h1: 'Bot para achadinhos no WhatsApp: as ofertas saem sozinhas',
     lead: 'Um bot de achadinhos acompanha os grupos onde as promoções aparecem primeiro, troca o link pelo seu código de afiliado e publica a oferta nos seus próprios grupos e canais do WhatsApp. Você deixa de copiar e colar oferta por oferta e passa a revisar o que já foi enviado.',
     intent: 'bot para achadinhos whatsapp',
+    relatedTitle: 'Continue: o que publicar nos seus achadinhos',
+    related: [
+      { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'De onde vem a comissão dos achadinhos que você publica.' },
+      { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: cadastro e comissão', note: 'O programa com maior volume de busca no Brasil.' },
+      { href: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero', label: 'Montar um grupo de ofertas do zero', note: 'Os primeiros passos antes de automatizar.' },
+    ],
     about: ['Achadinhos', 'Afiliados', 'Grupos de WhatsApp'],
     aside: {
       pill: 'Como funciona na prática',
@@ -72,6 +83,12 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     h1: 'Teve o WhatsApp banido divulgando ofertas? Veja o que dá para controlar',
     lead: 'Contas de WhatsApp usadas para divulgar ofertas costumam ser banidas quando o comportamento parece automático demais: muitas mensagens iguais em sequência, links repetidos e denúncias de membros. Nenhuma ferramenta garante imunidade — o que dá para controlar é ritmo, variação de texto e volume por destino.',
     intent: 'anti-ban whatsapp',
+    relatedTitle: 'Continue: reduzir risco na prática',
+    related: [
+      { href: '/blog/chip-dedicado-bot-whatsapp', label: 'Por que usar chip dedicado', note: 'Não impede o banimento, mas limita o estrago — a medida mais barata de todas.' },
+      { href: '/blog/como-evitar-banimento-whatsapp-afiliados', label: 'Reduzir risco de banimento como afiliado', note: 'Cadência, variação de texto e consentimento de quem recebe.' },
+      { href: '/blog/bot-whatsapp-antiban-existe', label: 'Bot antiban existe mesmo?', note: 'O que nenhuma ferramenta do mercado pode garantir.' },
+    ],
     about: ['WhatsApp banido', 'Banimento de conta', 'Divulgação em grupos'],
     aside: {
       pill: 'Sem promessa de imunidade',
@@ -103,6 +120,12 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     h1: 'Migre grupos de achadinhos para canais sem parar a operação',
     lead: 'O BOTinho permite uma transição gradual: grupos continuam úteis como comunidade ou fonte, enquanto os Canais do WhatsApp viram uma vitrine organizada com cadência e preservação avançada.',
     intent: 'migrar grupo para canal whatsapp',
+    relatedTitle: 'Continue: grupos, canais e o que publicar',
+    related: [
+      { href: '/blog/migrar-grupo-achadinhos-para-canal', label: 'Migrar um grupo de achadinhos para canal', note: 'O passo a passo sem perder a audiência no caminho.' },
+      { href: '/blog/grupo-ou-canal-whatsapp-achadinhos', label: 'Grupo ou canal para achadinhos?', note: 'O que muda em alcance, interação e risco.' },
+      { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'De onde vem a comissão das ofertas que você publica.' },
+    ],
     primaryCta: 'Planejar minha migração',
     secondaryCta: 'Ver fluxos grupo e canal',
     problemTitle: 'Migrar de uma vez pode derrubar alcance e rotina.',
@@ -123,6 +146,12 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     h1: 'Canal do WhatsApp precisa de bot com cadência, não disparo',
     lead: 'O BOTinho transforma o canal em vitrine de ofertas com regras de publicação, variações e monitoramento. O objetivo é preservar a operação, não apenas postar mais rápido.',
     intent: 'bot para canal whatsapp',
+    relatedTitle: 'Continue: cadência, canal e o que publicar',
+    related: [
+      { href: '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp', label: 'Melhores horários para postar ofertas', note: 'Quando a audiência responde — e por que concentrar tudo num horário só é arriscado.' },
+      { href: '/blog/shadowban-whatsapp-canais', label: 'Shadowban em canais do WhatsApp', note: 'A queda silenciosa de entrega que nada avisa.' },
+      { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'Shopee, Amazon e Mercado Livre: comissão e prazo de atribuição.' },
+    ],
     primaryCta: 'Criar operação com canal',
     secondaryCta: 'Conhecer preservação avançada',
     problemTitle: 'Canal que parece robô perde confiança e aumenta risco.',
@@ -234,6 +263,13 @@ export function PreservationCommercialPage({ pageKey }) {
     title: 'Redução de risco sem promessa absoluta.',
     body: 'O BOTinho usa cadência, variações, limites, monitoramento e plano de recuperação. Quando falamos de “anti-ban”, é como termo de busca do mercado, não garantia.',
   }
+  // Links internos para o conteúdo editorial. Antes destas páginas comerciais só
+  // apontarem para cadastro/diagnóstico/checklist, a força que elas acumulam ficava
+  // presa aqui em vez de reforçar os guias que já rankeiam (Shopee/Amazon/ML e o hub
+  // /programa-de-afiliados). Cada página escolhe os seus — link sem relação temática
+  // é descontado pelo Google e ignorado pelo leitor.
+  const related = page.related ?? []
+  const relatedTitle = page.relatedTitle ?? 'Continue no cluster de afiliados'
   const schemas = buildSchemas(page)
   const trackerRoute = { slug: pageKey, path: page.path, cluster: 'canais-preservacao', intent: page.intent, template: 'commercial-seo' }
 
@@ -309,6 +345,33 @@ export function PreservationCommercialPage({ pageKey }) {
             </div>
           </div>
         </section>
+
+        {related.length ? (
+          <section style={s.section}>
+            <div className="wrap">
+              <SectionHeader eyebrow="Continue lendo" title={relatedTitle} />
+              <div style={s.grid}>
+                {related.map((item) => (
+                  <article key={item.href} style={s.card}>
+                    <h3 style={{ fontSize: 20, marginBottom: 10 }}>{item.label}</h3>
+                    <p style={s.small}>{item.note}</p>
+                    <Link
+                      className="btn btn-ghost"
+                      style={{ marginTop: 18 }}
+                      href={`${item.href}?utm_source=seo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=commercial_related`}
+                      data-seo-cta="commercial_related"
+                      data-cta-position="related"
+                      data-cta-stage="consideration"
+                      data-cta-destination="content"
+                    >
+                      Ler
+                    </Link>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <section style={s.section}>
           <div className="wrap">
