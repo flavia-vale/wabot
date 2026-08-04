@@ -1,4 +1,5 @@
 import { isOfferUrl } from './detector.js'
+import { stripTrailingSourceSignature } from './core/sourceSignature.js'
 
 const DEFAULT_BRANDING_CTA_TEXT = 'Participe do grupo:'
 const MAX_BRANDING_CTA_CHARS = 80
@@ -100,7 +101,18 @@ export function sanitizeInviteLinks(text) {
     ? raw.replace(GROUP_INVITE_URL_RE, removeInviteUrl)
     : raw
   const withoutNonOfferUrls = removeNonOfferUrls(withoutInviteLinks)
-  return normalizeMessageWhitespace(removeOrphanInviteCtas(withoutNonOfferUrls))
+  const withoutOrphanCtas = removeOrphanInviteCtas(withoutNonOfferUrls)
+  // 4º passo: assinatura do grupo de ORIGEM colada no fim da oferta
+  // (`sharabarros`, `@ocasaljovemoficial_`). Os três passos acima só enxergam
+  // URL com protocolo ou CTA que fale "grupo/canal" — assinatura em texto puro
+  // passava direto. Ver o RCA no topo de core/sourceSignature.js.
+  //
+  // A ORDEM importa e está coberta por teste: precisa rodar por ÚLTIMO. A regra
+  // de assinatura "palavra solta" exige que a linha anterior seja a do link, e
+  // um CTA órfão ("Entre no grupo:", já sem o convite) ou uma URL não-oferta
+  // ficariam ENTRE o link e a assinatura, escondendo o link e fazendo a
+  // assinatura sobreviver.
+  return normalizeMessageWhitespace(stripTrailingSourceSignature(withoutOrphanCtas))
 }
 
 export function normalizeBrandingCtaText(text) {
