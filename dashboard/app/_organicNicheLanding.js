@@ -132,8 +132,8 @@ function buildSchema(page) {
       headline: page.h1,
       description: page.description,
       mainEntityOfPage: url,
-      author: { '@type': 'Organization', name: 'BOTinho' },
-      publisher: { '@type': 'Organization', name: 'BOTinho', logo: { '@type': 'ImageObject', url: `${siteUrl}/botinho-logo.svg` } },
+      author: { '@type': 'Organization', name: 'Equipe editorial do Espelha Grupos' },
+      publisher: { '@type': 'Organization', name: 'Espelha Grupos', logo: { '@type': 'ImageObject', url: `${siteUrl}/botinho-logo.svg` } },
     },
     {
       '@context': 'https://schema.org',

@@ -1,11 +1,11 @@
-export const EDITORIAL_AUTHOR = 'Equipe editorial do BOTinho'
+export const EDITORIAL_AUTHOR = 'Equipe editorial do Espelha Grupos'
 export const EDITORIAL_AUTHOR_DESCRIPTION = 'Equipe responsável por guias de operação responsável, afiliados, grupos de WhatsApp e rotinas de divulgação com revisão humana.'
 
 // Autoria com pessoa física (E-E-A-T / citação por IA) — usar via `authorOverride`
 // nas páginas de maior prioridade (guias de marketplace). Não trocar a autoria
 // padrão do site inteiro sem decisão explícita — ver AGENTS.md > SEO orgânico.
 export const EDITORIAL_PERSON_AUTHOR = 'Flávia Vale'
-export const EDITORIAL_PERSON_AUTHOR_DESCRIPTION = 'Fundadora do BOTinho, trabalha com tecnologia e opera grupos de ofertas desde 2023.'
+export const EDITORIAL_PERSON_AUTHOR_DESCRIPTION = 'Fundadora do Espelha Grupos, trabalha com tecnologia e opera grupos de ofertas desde 2023.'
 
 export const EDITORIAL_DATES = {
   // Rotas comerciais/ferramentas que estavam sem updatedAt (validate:seo-consistency
@@ -89,7 +89,7 @@ export function buildArticleJsonLd({ title, description, slug, siteUrl, faq = []
     headline: title,
     description,
     author: resolvedAuthor,
-    publisher: { '@type': 'Organization', name: 'BOTinho', logo: { '@type': 'ImageObject', url: `${siteUrl}/botinho-logo.svg` } },
+    publisher: { '@type': 'Organization', name: 'Espelha Grupos', logo: { '@type': 'ImageObject', url: `${siteUrl}/botinho-logo.svg` } },
     datePublished: dates.publishedAt,
     dateModified: dates.updatedAt,
     mainEntityOfPage: `${siteUrl}${slug}`,
