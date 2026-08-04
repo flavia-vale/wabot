@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { TRACKING_EVENTS, trackEvent } from '@/lib/analytics'
 import { captureFirstTouchLandingPage } from '@/lib/marketing-attribution'
+import { classifyReferrer, shouldTrackReferral } from '@/lib/ai-referral'
 
 function sanitizeSeoRoute(route = {}) {
   return {
@@ -20,6 +21,20 @@ export function OrganicPageTracker({ route }) {
     const seoContext = sanitizeSeoRoute(route)
     trackEvent(TRACKING_EVENTS.ORGANIC_PAGE_VIEW, seoContext)
     captureFirstTouchLandingPage(`${window.location.pathname}${window.location.search}`)
+
+    // Origem da visita. Só dispara para quem veio de FORA (IA, busca, social) —
+    // navegação interna e acesso direto não dizem nada sobre descoberta.
+    // Guardamos apenas o host do referenciador, nunca a URL completa: URL de
+    // buscador carrega o termo pesquisado, que é dado da pessoa.
+    const referral = classifyReferrer(document.referrer, window.location.hostname)
+    if (shouldTrackReferral(referral)) {
+      trackEvent(TRACKING_EVENTS.REFERRAL_VISIT, {
+        ...seoContext,
+        referrer_kind: referral.kind,
+        referrer_source: referral.source,
+        referrer_host: referral.host.slice(0, 96),
+      })
+    }
 
     function handleClick(event) {
       const target = event.target?.closest?.('[data-seo-cta]')

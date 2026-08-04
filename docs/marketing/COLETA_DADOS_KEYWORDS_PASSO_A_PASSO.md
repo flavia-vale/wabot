@@ -290,7 +290,84 @@ espelha grupos
 
 ---
 
-## Sobre a marca (decidido: BOTinho)
+## RELATÓRIO 4 — Referrals de IA (a partir de 08/2026)
+
+**O que é:** quanta gente chegou ao site depois de ler uma resposta do ChatGPT,
+da Perplexity, do Gemini ou do Claude. É a medida de "estou sendo citada por IA"
+que vira lead de verdade.
+
+**Não confundir com os relatórios 1-3.** Eles medem *onde está a demanda* e *o
+que o Google mostra*. Este mede *se as IAs estão mandando gente*. Nenhum
+substitui o outro, e nenhuma dessas fontes diz qual pergunta a pessoa fez à IA —
+isso ninguém entrega hoje.
+
+### 4A — Painel do BOTinho (fonte principal)
+
+O site registra a origem de toda visita que vem de fora, no evento
+`referral_visit` (`AnalyticsEvent`). Campos: `referrer_kind` (`ai` / `search` /
+`social` / `other`), `referrer_source` (`chatgpt`, `perplexity`, `claude`,
+`gemini`, `youtube`, `google`…) e `referrer_host`.
+
+Privacidade: guardamos só o **host**, nunca a URL completa — URL de buscador
+carrega o termo pesquisado, que é dado da pessoa. Ver
+`dashboard/lib/ai-referral.js` e o teste `test/ai-referral.test.js`.
+
+Vale mais que a Cloudflare porque liga a origem **à página** que a pessoa abriu
+e ao que ela fez depois.
+
+### 4B — Cloudflare AI Crawl Control (complemento)
+
+Painel da Cloudflare → domínio → **AI Crawl Control**.
+
+| Onde olhar | Para quê |
+|---|---|
+| **Metrics → referral trends** | pessoas chegando de resposta de IA |
+| **Crawlers** | quais robôs entram e com que frequência |
+| **Overview → Managed robots.txt** | ⚠️ conferir que continua **DESLIGADO** |
+
+O terceiro item é o mais importante e leva 5 segundos: quando ligado, a
+Cloudflare cola `Disallow: /` para GPTBot, ClaudeBot, Google-Extended e CCBot na
+frente do `robots.txt` do site. Já aconteceu (veio ligado por padrão, descoberto
+em 04/08/2026 e desligado). Se voltar a ligar, todo o trabalho de IA para de
+valer em silêncio.
+
+Conferência rápida, sem entrar no painel:
+
+```bash
+curl -s https://espelhagrupos.com.br/robots.txt | grep -c "Disallow: /$"
+# 0 = certo. Qualquer número maior = o bloqueio voltou.
+```
+
+### O que anotar por mês
+
+| Indicador | Onde |
+|---|---|
+| Visitas de IA no mês (total e por origem) | 4A |
+| Páginas que mais receberam visita de IA | 4A |
+| Visitas de IA ÷ visitas de busca | 4A |
+| Perplexity e DuckDuckGo saíram de zero? | 4B |
+| `Managed robots.txt` continua desligado? | 4B |
+
+**Baseline zera em 04/08/2026.** Antes dessa data os robôs de treinamento
+estavam bloqueados e o site não registrava origem nenhuma — número anterior a
+isso não existe e não dá para comparar.
+
+⚠️ Com o tráfego atual (41 cliques em 2,5 meses), esses números vão ser
+pequenos por vários meses. **Não tirar conclusão de variação pequena** — dois
+ou três meses de série valem mais que a leitura de um mês só.
+
+---
+
+## Sobre a marca (decidido em 08/2026: Espelha Grupos como marca, BOTinho como produto)
+
+**Decisão tomada:** como o domínio `espelhagrupos.com.br` fica, *Espelha Grupos*
+virou a marca principal (schema `Organization`, título das páginas, assinatura
+dos artigos) e *BOTinho* o nome do produto (schema `SoftwareApplication`, corpo
+do texto, painel, mensagens). Motivo: entidade única para Google e IA — uma IA
+só cita com confiança uma marca que consegue identificar de forma consistente.
+
+O registro abaixo é o que sustentou a decisão.
+
 
 Registro do que já foi apurado, para não repetir a pesquisa depois:
 
