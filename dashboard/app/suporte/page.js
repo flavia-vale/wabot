@@ -10,7 +10,7 @@ import {
 } from '@/lib/marketing-content'
 
 export const metadata = {
-  title: 'Suporte | BOTinho',
+  title: 'Suporte',
   description: 'Canais de suporte e orientações iniciais para usar o BOTinho.',
   alternates: { canonical: '/suporte' },
 }

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { PublicPage } from '@/components/PublicShell'
 
 export const metadata = {
-  title: 'Política de Privacidade | BOTinho',
+  title: 'Política de Privacidade',
   description: 'Política mínima de privacidade do BOTinho para usuários e visitantes.',
   alternates: { canonical: '/privacidade' },
 }

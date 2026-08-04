@@ -21,16 +21,31 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     h1: 'Bot para afiliados no WhatsApp que converte seus links automaticamente',
     lead: 'Um bot para afiliados no WhatsApp monitora grupos de origem, converte cada link de produto ou cupom para o seu código de afiliado e republica a oferta nos seus grupos e canais. O BOTinho faz isso com Shopee, Amazon, Mercado Livre e Magalu, com intervalos controlados e histórico de envio.',
     intent: 'bot para afiliados whatsapp',
+    related: [
+      { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'Shopee, Amazon e Mercado Livre: comissão e prazo de atribuição lado a lado.' },
+      { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: cadastro e comissão', note: 'Cadastro gratuito, 3% na venda padrão e até 30% na Comissão Extra.' },
+      { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Afiliado Amazon: comissão por categoria', note: 'De 0% a 13% conforme o produto, e por que a tag precisa estar na URL da loja.' },
+    ],
+    about: ['Marketing de afiliados', 'Link de afiliado', 'Grupos de WhatsApp'],
+    aside: {
+      pill: 'O erro que mais custa caro',
+      title: 'Link enviado sem o seu código não gera comissão nenhuma.',
+      body: 'A venda acontece, o cliente compra, e o dinheiro vai para outra pessoa. É o tipo de perda que não aparece em lugar nenhum: a oferta saiu bonita, ninguém reclamou, e a comissão simplesmente não caiu. Converter cada link antes do envio é a parte que não pode falhar.',
+    },
     primaryCta: 'Ver operação para afiliados',
     secondaryCta: 'Conhecer preservação avançada',
-    problemTitle: 'Afiliado que depende só de grupo fica exposto demais.',
-    problem: 'Quando o WhatsApp é canal de receita, publicar tudo igual em todos os lugares vira risco operacional. A operação precisa de fontes, destinos, cadência e sinais de saúde.',
-    bullets: ['Converter e redistribuir ofertas sem copiar manualmente cada mensagem.', 'Usar grupos e canais juntos, sem tratar todos os destinos como iguais.', 'Adicionar ritmo humano, pausa, variação e monitoramento antes de escalar volume.'],
-    process: ['Conecte fontes de ofertas e destinos de publicação.', 'Separe grupos de comunidade, canais de vitrine e regras por destino.', 'Ative o Módulo de Preservação Avançada para controlar ritmo, variação e sinais de risco.'],
+    problemTitle: 'O gargalo do afiliado não é achar oferta — é publicar sem errar.',
+    problem: 'Quem divulga ofertas em grupo passa o dia copiando link, gerando a versão de afiliado, colando o texto e repetindo isso em cada destino. Nesse caminho manual acontecem três coisas: link que sai sem o código de afiliado e não paga comissão, a mesma oferta publicada duas vezes no mesmo grupo, e tudo saindo de uma vez porque só sobrou aquela janela do dia. As três custam dinheiro, e nenhuma delas é falta de esforço.',
+    bullets: ['Cada link de produto ou cupom convertido para o seu código antes de sair — Shopee, Amazon, Mercado Livre e Magalu.', 'A mesma oferta não sai duas vezes no mesmo grupo: repetição dentro da janela é bloqueada e fica registrada.', 'Publicação espaçada em vez de tudo de uma vez, com limite por destino.', 'Histórico do que saiu, para onde, quando — e do que foi bloqueado e por quê.'],
+    process: ['Cadastre suas credenciais de afiliada de cada loja que você divulga.', 'Escolha os grupos e canais de origem que você acompanha e os destinos onde publica.', 'Defina o intervalo entre envios e o limite por destino de acordo com o tamanho da sua operação.', 'Acompanhe pelo histórico o que saiu, o que foi bloqueado por repetição e o que falhou na conversão.'],
     faqs: [
-      ['Serve para afiliados de marketplace?', 'Sim. A página foi pensada para afiliados que divulgam achadinhos e ofertas de marketplaces em grupos e Canais do WhatsApp.'],
-      ['Preciso migrar tudo para canais?', 'Não. O BOTinho permite operar grupos e canais juntos, escolhendo o melhor papel para cada ambiente.'],
-      ['Isso é o mesmo que “anti-ban”?', 'Não como promessa absoluta. O Módulo de Preservação Avançada é uma camada de redução de risco; “anti-ban” aparece apenas como termo de busca usado pelo mercado.'],
+      ['Como o bot converte o link para o meu código de afiliado?', 'Você cadastra suas credenciais de afiliada de cada loja uma vez. A partir daí, quando uma oferta é capturada, o link é convertido para a sua versão antes do envio. Se a conversão não for possível com segurança, o link original de outra pessoa não é encaminhado — é melhor não publicar do que publicar dando comissão para o concorrente.'],
+      ['Funciona com cupom, ou só com link de produto?', 'Também com cupom e voucher. Isso importa porque muitas vezes o preço anunciado só fecha com o cupom, e remover o cupom da mensagem quebra a oferta. O link de campanha também é convertido para o seu código.'],
+      ['Quais lojas são suportadas?', 'Shopee, Amazon, Mercado Livre e Magalu. Cada uma credita comissão por um mecanismo diferente, e a conversão respeita o mecanismo de cada uma.'],
+      ['Preciso migrar tudo para canais?', 'Não. Dá para operar grupos e canais juntos, escolhendo o papel de cada ambiente — grupo como comunidade ou origem, canal como vitrine.'],
+      ['E se a mesma oferta chegar de duas fontes diferentes?', 'Ela sai uma vez só. A repetição no mesmo destino dentro da janela é bloqueada e aparece no histórico como bloqueio, não como envio — assim você vê quantas vezes a mesma promoção tentou entrar.'],
+      ['Isso é o mesmo que “anti-ban”?', 'Não como promessa. Nenhuma ferramenta controla a decisão do WhatsApp, e quem garante banimento zero está vendendo o que não pode entregar. O que existe aqui é controle do que está sob controle: intervalo entre envios, limite por destino e variação.'],
+      ['Preciso ter grupo grande para valer a pena?', 'Não. O ganho principal é de tempo e de comissão que deixa de se perder no caminho, e isso vale desde o primeiro grupo. Volume grande muda a conta, não a lógica.'],
     ],
   },
   'bot-achadinhos-whatsapp': {
@@ -41,6 +56,12 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     h1: 'Bot para achadinhos no WhatsApp: as ofertas saem sozinhas',
     lead: 'Um bot de achadinhos acompanha os grupos onde as promoções aparecem primeiro, troca o link pelo seu código de afiliado e publica a oferta nos seus próprios grupos e canais do WhatsApp. Você deixa de copiar e colar oferta por oferta e passa a revisar o que já foi enviado.',
     intent: 'bot para achadinhos whatsapp',
+    relatedTitle: 'Continue: o que publicar nos seus achadinhos',
+    related: [
+      { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'De onde vem a comissão dos achadinhos que você publica.' },
+      { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: cadastro e comissão', note: 'O programa com maior volume de busca no Brasil.' },
+      { href: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero', label: 'Montar um grupo de ofertas do zero', note: 'Os primeiros passos antes de automatizar.' },
+    ],
     about: ['Achadinhos', 'Afiliados', 'Grupos de WhatsApp'],
     aside: {
       pill: 'Como funciona na prática',
@@ -72,6 +93,12 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     h1: 'Teve o WhatsApp banido divulgando ofertas? Veja o que dá para controlar',
     lead: 'Contas de WhatsApp usadas para divulgar ofertas costumam ser banidas quando o comportamento parece automático demais: muitas mensagens iguais em sequência, links repetidos e denúncias de membros. Nenhuma ferramenta garante imunidade — o que dá para controlar é ritmo, variação de texto e volume por destino.',
     intent: 'anti-ban whatsapp',
+    relatedTitle: 'Continue: reduzir risco na prática',
+    related: [
+      { href: '/blog/chip-dedicado-bot-whatsapp', label: 'Por que usar chip dedicado', note: 'Não impede o banimento, mas limita o estrago — a medida mais barata de todas.' },
+      { href: '/blog/como-evitar-banimento-whatsapp-afiliados', label: 'Reduzir risco de banimento como afiliado', note: 'Cadência, variação de texto e consentimento de quem recebe.' },
+      { href: '/blog/bot-whatsapp-antiban-existe', label: 'Bot antiban existe mesmo?', note: 'O que nenhuma ferramenta do mercado pode garantir.' },
+    ],
     about: ['WhatsApp banido', 'Banimento de conta', 'Divulgação em grupos'],
     aside: {
       pill: 'Sem promessa de imunidade',
@@ -103,16 +130,31 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     h1: 'Migre grupos de achadinhos para canais sem parar a operação',
     lead: 'O BOTinho permite uma transição gradual: grupos continuam úteis como comunidade ou fonte, enquanto os Canais do WhatsApp viram uma vitrine organizada com cadência e preservação avançada.',
     intent: 'migrar grupo para canal whatsapp',
+    relatedTitle: 'Continue: grupos, canais e o que publicar',
+    related: [
+      { href: '/blog/migrar-grupo-achadinhos-para-canal', label: 'Migrar um grupo de achadinhos para canal', note: 'O passo a passo sem perder a audiência no caminho.' },
+      { href: '/blog/grupo-ou-canal-whatsapp-achadinhos', label: 'Grupo ou canal para achadinhos?', note: 'O que muda em alcance, interação e risco.' },
+      { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'De onde vem a comissão das ofertas que você publica.' },
+    ],
+    about: ['Canais do WhatsApp', 'Grupos de WhatsApp', 'Achadinhos'],
+    aside: {
+      pill: 'Migração gradual',
+      title: 'Grupo e canal não são a mesma coisa — e você não precisa escolher.',
+      body: 'No grupo as pessoas conversam, respondem e o limite de membros é fixo. No canal você publica para muita gente e quase ninguém responde. Quem migra de uma vez costuma perder as duas coisas ao mesmo tempo: a conversa que tinha e o alcance que ainda não construiu.',
+    },
     primaryCta: 'Planejar minha migração',
     secondaryCta: 'Ver fluxos grupo e canal',
-    problemTitle: 'Migrar de uma vez pode derrubar alcance e rotina.',
-    problem: 'A migração segura precisa preservar fontes, organizar destinos e preparar comunicação para a audiência, sem transformar todos os canais em cópias idênticas.',
-    bullets: ['Definir grupos que continuam como origem ou comunidade.', 'Criar canais como vitrine principal de ofertas.', 'Configurar espelhamento com janelas e limites diferentes por destino.'],
-    process: ['Faça inventário dos grupos e canais atuais.', 'Escolha o papel de cada ambiente: fonte, comunidade, vitrine ou backup.', 'Ative espelhamento gradual e monitore sinais de entrega e clique.'],
+    problemTitle: 'Migrar de uma vez é como fechar a loja para mudar de rua.',
+    problem: 'O grupo que você levou meses para encher não se transfere para um canal com um aviso. Parte das pessoas não entra, parte não vê o recado, e nas primeiras semanas o canal novo tem menos alcance do que o grupo antigo tinha. A migração que funciona mantém os dois vivos enquanto a audiência atravessa — o grupo continua como comunidade ou como fonte de ofertas, e o canal vai virando a vitrine principal aos poucos.',
+    bullets: ['Grupos seguem funcionando como comunidade ou como origem das ofertas que você acompanha.', 'O canal vira a vitrine, recebendo as ofertas já convertidas para o seu código de afiliado.', 'Cada destino tem o seu ritmo: o que vale para o grupo não precisa valer para o canal.', 'A mesma oferta não é publicada duas vezes no mesmo destino durante a transição.'],
+    process: ['Liste os grupos e canais que você já tem e defina o papel de cada um: origem, comunidade, vitrine ou reserva.', 'Crie o canal e comece publicando nele em paralelo, sem desmontar nada.', 'Avise a audiência do grupo mais de uma vez, ao longo de semanas — aviso único não alcança quem não abriu naquele dia.', 'Só reduza o ritmo do grupo quando o canal já estiver entregando de forma estável.'],
     faqs: [
-      ['Preciso fechar meus grupos?', 'Não. A migração recomendada é gradual, com grupos e canais convivendo enquanto a audiência aprende o novo fluxo.'],
-      ['O BOTinho publica de grupo para canal?', 'Sim. O fluxo cobre grupo para canal, canal para grupo, canal para canal e grupo para grupo.'],
-      ['Como reduzir risco nessa migração?', 'Use Módulo de Preservação Avançada: limites, pausas, variações, chip dedicado e monitoramento por canal.'],
+      ['Preciso fechar meus grupos?', 'Não, e fechar cedo é o erro mais comum. A migração que funciona é gradual: grupo e canal convivem enquanto a audiência aprende o caminho novo. O grupo pode inclusive continuar para sempre, com outro papel.'],
+      ['Dá para publicar de grupo para canal automaticamente?', 'Sim. O fluxo cobre grupo para canal, canal para grupo, canal para canal e grupo para grupo — com o link já convertido para o seu código de afiliado.'],
+      ['Vou perder alcance na migração?', 'No começo, quase sempre sim. O canal novo não nasce com a audiência do grupo, e parte das pessoas não faz a troca. Por isso a recomendação é sobrepor os dois por semanas, não por dias.'],
+      ['Qual a vantagem do canal, então?', 'Não tem limite de membros como o grupo, ninguém vê o número de quem entrou, e não há conversa paralela cobrindo a oferta. Para quem publica achadinhos em volume, é um ambiente mais organizado.'],
+      ['E a vantagem de manter o grupo?', 'Conversa. No grupo as pessoas perguntam, respondem, dizem se a oferta valeu — e isso não existe no canal. Quem depende dessa relação costuma manter os dois.'],
+      ['Como reduzir o risco durante a migração?', 'Publicar nos dois lugares aumenta o volume total de envio, então é justamente o momento de espaçar mais, não menos. Limite por destino, intervalo entre envios e chip dedicado valem ainda mais nessa fase.'],
     ],
   },
   'bot-canal-whatsapp': {
@@ -123,16 +165,30 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     h1: 'Canal do WhatsApp precisa de bot com cadência, não disparo',
     lead: 'O BOTinho transforma o canal em vitrine de ofertas com regras de publicação, variações e monitoramento. O objetivo é preservar a operação, não apenas postar mais rápido.',
     intent: 'bot para canal whatsapp',
+    relatedTitle: 'Continue: cadência, canal e o que publicar',
+    related: [
+      { href: '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp', label: 'Melhores horários para postar ofertas', note: 'Quando a audiência responde — e por que concentrar tudo num horário só é arriscado.' },
+      { href: '/blog/shadowban-whatsapp-canais', label: 'Shadowban em canais do WhatsApp', note: 'A queda silenciosa de entrega que nada avisa.' },
+      { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'Shopee, Amazon e Mercado Livre: comissão e prazo de atribuição.' },
+    ],
+    aside: {
+      pill: 'O que ninguém avisa',
+      title: 'No canal, quando a entrega cai, nada avisa.',
+      body: 'Grupo dá sinal: as pessoas somem, reclamam, saem. Canal não — o número de inscritos continua igual e as ofertas simplesmente aparecem para menos gente. Por isso ritmo e histórico importam mais no canal do que no grupo: é o único jeito de perceber antes de perder o alcance inteiro.',
+    },
     primaryCta: 'Criar operação com canal',
     secondaryCta: 'Conhecer preservação avançada',
-    problemTitle: 'Canal que parece robô perde confiança e aumenta risco.',
-    problem: 'Publicar ofertas sem ritmo, sem variação e sem monitoramento deixa o canal vulnerável. A operação precisa parecer administrada por gente, com controle por destino.',
-    bullets: ['Publicar em canais com intervalo e janela natural.', 'Distribuir a mesma oferta em momentos diferentes.', 'Acompanhar sinais de saúde e pausar quando o risco aumenta.'],
-    process: ['Conecte o canal e defina fontes de ofertas.', 'Configure limites por hora/dia, silêncio e variações.', 'Monitore desempenho e ajuste cadência antes de escalar.'],
+    problemTitle: 'Canal não é lugar de despejar oferta — é vitrine.',
+    problem: 'Como o canal aceita muito mais gente que o grupo, a tentação é publicar tudo o que aparece. Só que quem recebe vinte ofertas seguidas silencia o canal, e canal silenciado não entrega — sem aviso, sem reclamação, sem nada no painel do WhatsApp. O que sustenta um canal de ofertas no médio prazo é publicar espaçado, com curadoria, e conseguir olhar para trás e ver o que saiu.',
+    bullets: ['Publicação espaçada em vez de rajada, com limite por canal.', 'A mesma oferta não repete no mesmo canal dentro da janela definida.', 'Vários canais recebem em momentos diferentes, em vez de tudo ao mesmo tempo.', 'Histórico do que saiu e do que foi bloqueado, para ajustar antes de perder alcance.'],
+    process: ['Conecte o canal e escolha as fontes de oferta que você acompanha.', 'Defina o intervalo entre publicações e o teto por dia para esse canal.', 'Se tiver mais de um canal, escalone os horários em vez de publicar em todos de uma vez.', 'Revise o histórico com frequência e reduza o ritmo ao primeiro sinal de queda.'],
     faqs: [
-      ['O BOTinho funciona com Canal do WhatsApp?', 'Sim. O foco desta página é operação para Canais do WhatsApp com espelhamento e preservação avançada.'],
-      ['Posso usar vários canais?', 'Sim. A distribuição pode ser escalonada para que cada canal receba ofertas em momentos diferentes.'],
-      ['É melhor canal ou grupo?', 'Para achadinhos, canal funciona bem como vitrine; grupo pode continuar como comunidade ou fonte. O ideal é combinar os dois com estratégia.'],
+      ['Dá para publicar em Canal do WhatsApp automaticamente?', 'Sim. O canal recebe a oferta já com o link convertido para o seu código de afiliado e com o card de preview montado, no ritmo que você definir.'],
+      ['Posso usar vários canais ao mesmo tempo?', 'Sim, e o recomendado é escalonar: cada canal recebe em um momento diferente, em vez de todos receberem a mesma oferta no mesmo minuto.'],
+      ['Quantas ofertas por dia dá para publicar num canal?', 'Não existe número oficial, e desconfie de quem cita um. O que pesa mais que a quantidade é o espaçamento e a qualidade da curadoria — quem silencia o canal não volta.'],
+      ['É melhor canal ou grupo?', 'Depende do que você quer. Canal alcança mais e organiza melhor a vitrine; grupo gera conversa e resposta. Para achadinhos, muita gente usa canal como vitrine e mantém o grupo como comunidade ou como fonte de ofertas.'],
+      ['Como sei se meu canal está com a entrega ruim?', 'É difícil, e esse é o ponto: o WhatsApp não mostra alcance por publicação em canal como uma rede social mostraria. Os sinais que sobram são indiretos — queda de cliques e de resposta. Por isso o histórico de envio importa: sem ele você não tem nem com o que comparar.'],
+      ['Preciso de chip dedicado para operar canal?', 'Não é obrigatório, mas é a medida mais barata de proteção. Se o número cair, você perde a operação, não os seus contatos pessoais e conversas.'],
     ],
   },
 }
@@ -234,6 +290,13 @@ export function PreservationCommercialPage({ pageKey }) {
     title: 'Redução de risco sem promessa absoluta.',
     body: 'O BOTinho usa cadência, variações, limites, monitoramento e plano de recuperação. Quando falamos de “anti-ban”, é como termo de busca do mercado, não garantia.',
   }
+  // Links internos para o conteúdo editorial. Antes destas páginas comerciais só
+  // apontarem para cadastro/diagnóstico/checklist, a força que elas acumulam ficava
+  // presa aqui em vez de reforçar os guias que já rankeiam (Shopee/Amazon/ML e o hub
+  // /programa-de-afiliados). Cada página escolhe os seus — link sem relação temática
+  // é descontado pelo Google e ignorado pelo leitor.
+  const related = page.related ?? []
+  const relatedTitle = page.relatedTitle ?? 'Continue no cluster de afiliados'
   const schemas = buildSchemas(page)
   const trackerRoute = { slug: pageKey, path: page.path, cluster: 'canais-preservacao', intent: page.intent, template: 'commercial-seo' }
 
@@ -309,6 +372,33 @@ export function PreservationCommercialPage({ pageKey }) {
             </div>
           </div>
         </section>
+
+        {related.length ? (
+          <section style={s.section}>
+            <div className="wrap">
+              <SectionHeader eyebrow="Continue lendo" title={relatedTitle} />
+              <div style={s.grid}>
+                {related.map((item) => (
+                  <article key={item.href} style={s.card}>
+                    <h3 style={{ fontSize: 20, marginBottom: 10 }}>{item.label}</h3>
+                    <p style={s.small}>{item.note}</p>
+                    <Link
+                      className="btn btn-ghost"
+                      style={{ marginTop: 18 }}
+                      href={`${item.href}?utm_source=seo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=commercial_related`}
+                      data-seo-cta="commercial_related"
+                      data-cta-position="related"
+                      data-cta-stage="consideration"
+                      data-cta-destination="content"
+                    >
+                      Ler
+                    </Link>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <section style={s.section}>
           <div className="wrap">

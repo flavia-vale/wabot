@@ -12,12 +12,19 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Entenda quando usar grupo, quando usar Canal do WhatsApp e como combinar os dois para divulgar achadinhos com mais organização e preservação operacional.',
     eyebrow: 'Canais · Estratégia de migração',
     origin: 'blog_grupo_ou_canal_whatsapp_achadinhos',
+    usePersonAuthor: true,
     intro: 'A resposta curta: grupo é melhor para conversa e comunidade; canal é melhor para vitrine organizada. Para afiliados de achadinhos, a operação mais madura costuma combinar os dois com papéis diferentes.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Use grupos quando você precisa de conversa, feedback e senso de comunidade. Use Canais do WhatsApp quando a prioridade é publicar ofertas em formato de vitrine, com menos ruído e mais previsibilidade de leitura.', 'O erro é tratar grupo e canal como concorrentes. Em uma operação de achadinhos, o grupo pode continuar como fonte ou comunidade, enquanto o canal vira destino principal das ofertas selecionadas.'] },
       { h2: 'Quando o grupo faz sentido', bullets: ['Comunidade que comenta e pede indicação.', 'Curadoria colaborativa de achadinhos.', 'Relacionamento com seguidores mais próximos.', 'Testes rápidos de oferta e feedback.'] },
       { h2: 'Quando o canal faz sentido', bullets: ['Publicação de ofertas em vitrine limpa.', 'Menos ruído de conversa entre membros.', 'Organização por nicho, frequência e calendário.', 'Distribuição mais clara para quem quer só receber oportunidades.'] },
       { h2: 'O modelo recomendado', paragraphs: ['Comece mapeando quais grupos geram boas ofertas, quais grupos têm audiência engajada e quais canais podem funcionar como vitrine. Depois, defina regras de espelhamento para que cada destino receba a oferta no ritmo certo.', 'O BOTinho entra como camada operacional: espelha de grupo para canal, de canal para grupo e entre canais, mantendo cadência, variações e monitoramento dentro do Módulo de Preservação Avançada.'] },
+    ],
+    relatedTitle: 'Continue: o que divulgar nos seus achadinhos',
+    relatedLinks: [
+      { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual programa escolher', note: 'comissão e prazo de atribuição dos três, lado a lado' },
+      { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: 'o programa mais buscado no Brasil' },
+      { href: '/bot-achadinhos-whatsapp', label: 'Automatizar um grupo de achadinhos', note: 'conversão de link e cadência controlada' },
     ],
     faq: [
       { q: 'Canal vende mais que grupo?', a: 'Depende do público. Canal tende a ser melhor como vitrine organizada; grupo tende a ser melhor para conversa e comunidade. O ideal é testar os dois com papéis diferentes.' },
@@ -31,12 +38,19 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Guia honesto para afiliados reduzirem risco no WhatsApp com chip dedicado, cadência, variações, canais e Módulo de Preservação Avançada.',
     eyebrow: 'Preservação avançada · Risco operacional',
     origin: 'blog_como_evitar_banimento_whatsapp_afiliados',
+    usePersonAuthor: true,
     intro: 'Não existe garantia contra banimento. O que existe é uma operação menos robótica, com chip dedicado, volume controlado, variações, monitoramento e plano de recuperação.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Para reduzir risco, pare de operar como disparo: use chip dedicado, limite frequência, evite madrugada, varie texto, distribua ofertas em horários diferentes e monitore sinais de saúde por canal.', 'O Módulo de Preservação Avançada do BOTinho existe para organizar essas camadas. O termo “anti-ban” aparece em buscas, mas não deve ser tratado como promessa absoluta.'] },
       { h2: 'Checklist mínimo de preservação', bullets: ['Usar chip dedicado, nunca número pessoal.', 'Definir limite por hora e por dia.', 'Ativar horário de silêncio.', 'Evitar mensagens idênticas em todos os destinos.', 'Ter plano de recuperação para canal e chip.'] },
       { h2: 'O que aumenta risco', paragraphs: ['Publicar muitas ofertas em sequência, repetir o mesmo texto em vários destinos e depender de um único grupo ou chip aumenta a fragilidade da operação.', 'Outro ponto crítico é não perceber queda de entrega. Quando os cliques caem e ninguém monitora, o afiliado só descobre tarde demais que o canal perdeu força.'] },
       { h2: 'Como o BOTinho organiza o processo', paragraphs: ['O BOTinho combina cadência, variações, espelhamento entre grupos e canais, monitoramento e pausas preventivas. A ferramenta não controla decisões da plataforma, mas ajuda o afiliado a evitar comportamento de operação improvisada.'] },
+    ],
+    relatedTitle: 'Continue no cluster de afiliados',
+    relatedLinks: [
+      { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'comissão real de Shopee, Amazon e Mercado Livre' },
+      { href: '/anti-ban-whatsapp', label: 'Reduzir o risco de banimento na prática', note: 'cadência, limites e preservação de sessão' },
+      { href: '/blog/chip-dedicado-bot-whatsapp', label: 'Por que usar chip dedicado', note: 'separar o número pessoal da operação' },
     ],
     faq: [
       { q: 'Existe “anti-ban” 100%?', a: 'Não. Qualquer promessa absoluta deve ser tratada como sinal de alerta. A abordagem correta é redução de risco com camadas de preservação.' },
@@ -50,12 +64,19 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Veja sinais de queda silenciosa em Canais do WhatsApp e como afiliados podem monitorar entrega, cliques e saúde antes do prejuízo.',
     eyebrow: 'Monitoramento · Canais do WhatsApp',
     origin: 'blog_shadowban_whatsapp_canais',
+    usePersonAuthor: true,
     intro: 'O problema do shadowban é que ele raramente aparece como um aviso claro. O afiliado percebe quando os cliques somem, as ofertas param de performar e o canal já perdeu força.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Você deve monitorar queda brusca de cliques, atraso de entrega, erros recorrentes, sumiço de visualizações e divergência entre publicação e recebimento por uma conta-sentinela.', 'Nenhum sinal isolado prova shadowban. Mas um conjunto de sinais deve acionar redução de cadência e revisão da operação.'] },
       { h2: 'Sinais que merecem atenção', bullets: ['Cliques caem sem mudança de oferta ou horário.', 'Seguidores relatam que não viram publicações.', 'Mensagens demoram mais para aparecer.', 'Canais parecidos performam bem, mas um canal específico despenca.', 'Erros técnicos começam a se repetir.'] },
       { h2: 'Conta-sentinela: por que ela importa', paragraphs: ['Uma conta-sentinela é um número secundário que segue seus canais e confirma se as mensagens aparecem como deveriam. Ela ajuda a detectar diferença entre “post publicado” e “post realmente visto”.'] },
       { h2: 'O que fazer quando o risco sobe', paragraphs: ['Reduza frequência, pause publicações no canal afetado, revise variações e confira se houve mudança de comportamento recente. Se o canal continuar em risco, prepare plano de recuperação antes que a audiência fique inacessível.'] },
+    ],
+    relatedTitle: 'Continue: risco de bloqueio no WhatsApp',
+    relatedLinks: [
+      { href: '/anti-ban-whatsapp', label: 'WhatsApp banido: o que aumenta e o que reduz o risco', note: 'sem promessa de imunidade' },
+      { href: '/blog/bot-whatsapp-antiban-existe', label: 'Bot antiban existe mesmo?', note: 'o que nenhuma ferramenta pode garantir' },
+      { href: '/faq-antiban-whatsapp', label: 'Perguntas frequentes sobre banimento', note: 'respostas diretas' },
     ],
     faq: [
       { q: 'Shadowban no WhatsApp é sempre comprovável?', a: 'Não. Normalmente você trabalha com sinais indiretos: cliques, entrega, relatos, conta-sentinela e comparação entre canais.' },
@@ -69,12 +90,19 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Passo a passo para migrar grupos de achadinhos para Canais do WhatsApp sem interromper a operação e preservando audiência.',
     eyebrow: 'Migração · Grupo para canal',
     origin: 'blog_migrar_grupo_achadinhos_para_canal',
+    usePersonAuthor: true,
     intro: 'A migração não deve ser um corte brusco. O caminho mais seguro é transformar o canal em vitrine, manter o grupo como apoio e usar espelhamento com cadência controlada.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Crie o canal, anuncie a mudança no grupo, publique ofertas em paralelo por alguns dias, acompanhe cliques e só depois reduza a dependência do grupo.', 'Com o BOTinho, você pode espelhar ofertas entre grupo e canal enquanto testa cadência, formato e aceitação da audiência.'] },
       { h2: 'Passo a passo recomendado', bullets: ['Faça inventário dos grupos, canais e fontes atuais.', 'Crie o canal com nome claro e descrição fiel ao conteúdo.', 'Avise o grupo com CTA simples para seguir o canal.', 'Publique em paralelo antes de cortar qualquer fluxo.', 'Monitore cliques, visualizações e reclamações.'] },
       { h2: 'Como evitar uma migração confusa', paragraphs: ['Não mude tudo de uma vez. Se você troca formato, frequência e copy no mesmo dia, fica impossível saber o que afetou o resultado. Preserve um padrão por vez e compare dados.'] },
       { h2: 'Onde entra o Módulo de Preservação Avançada', paragraphs: ['Ele organiza limites, variações, pausa e monitoramento para que o novo canal não nasça com comportamento mecânico. O canal deve parecer administrado por uma pessoa, não por um disparador.'] },
+    ],
+    relatedTitle: 'Continue: grupos, canais e achadinhos',
+    relatedLinks: [
+      { href: '/blog/grupo-ou-canal-whatsapp-achadinhos', label: 'Grupo ou canal para achadinhos?', note: 'o que muda em alcance e em risco' },
+      { href: '/bot-achadinhos-whatsapp', label: 'Automatizar um grupo de achadinhos', note: 'da conversão do link ao envio' },
+      { href: '/bot-canal-whatsapp', label: 'Publicar em Canais do WhatsApp', note: 'como o BOTinho envia para canal' },
     ],
     faq: [
       { q: 'Quanto tempo dura a migração?', a: 'Depende do tamanho da audiência, mas uma janela de paralelismo entre grupo e canal costuma ser mais segura que migração imediata.' },
@@ -88,12 +116,19 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Entenda por que chip dedicado protege sua operação de afiliados no WhatsApp e evita misturar número pessoal com canais e grupos de ofertas.',
     eyebrow: 'Operação responsável · Chip dedicado',
     origin: 'blog_chip_dedicado_bot_whatsapp',
+    usePersonAuthor: true,
     intro: 'Se o WhatsApp gera receita, o chip virou ativo operacional. Usar o número pessoal para rodar bot, grupos e canais mistura risco comercial com vida pessoal.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Afiliados devem usar chip dedicado porque o número que publica, segue canais e administra rotina de ofertas é parte da infraestrutura do negócio.', 'Se esse número cair, travar ou precisar ser substituído, o impacto deve ficar isolado da sua vida pessoal e do seu atendimento principal.'] },
       { h2: 'Riscos de usar número pessoal', bullets: ['Perder acesso a conversas pessoais em caso de bloqueio.', 'Misturar rotina comercial e vida privada.', 'Dificultar recuperação da operação.', 'Não conseguir separar testes, canais e alertas.', 'Aumentar ansiedade operacional a cada instabilidade.'] },
       { h2: 'Como tratar chip como ativo', paragraphs: ['Registre quem usa o chip, onde ele está conectado, quais canais administra e quais rotinas dependem dele. Tenha backup de configurações, lista de canais e processo de substituição.'] },
       { h2: 'Papel do BOTinho', paragraphs: ['O BOTinho não elimina risco do chip, mas ajuda a operar com cadência, monitoramento, pausas e plano de recuperação. Isso torna o chip parte de um processo, não um ponto único de improviso.'] },
+    ],
+    relatedTitle: 'Continue: proteger o número da operação',
+    relatedLinks: [
+      { href: '/anti-ban-whatsapp', label: 'WhatsApp banido: o que aumenta e o que reduz o risco', note: 'os fatores que realmente pesam' },
+      { href: '/blog/como-evitar-banimento-whatsapp-afiliados', label: 'Reduzir risco de banimento como afiliado', note: 'cadência e variação de texto' },
+      { href: '/protecao-antiban-botinho', label: 'Como o BOTinho preserva a sessão', note: 'limites por destino e monitoramento' },
     ],
     faq: [
       { q: 'Posso começar com meu número pessoal?', a: 'Não é recomendado. Mesmo operações pequenas deveriam separar número pessoal e número operacional desde o início.' },
@@ -107,12 +142,19 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Entenda por que “anti-ban” absoluto não existe e como o Módulo de Preservação Avançada do BOTinho reduz risco com camadas operacionais.',
     eyebrow: 'Busca “anti-ban” · Resposta honesta',
     origin: 'blog_bot_whatsapp_antiban_existe',
+    usePersonAuthor: true,
     intro: 'A resposta honesta é: bot “anti-ban” absoluto não existe. O que existe é preservação avançada, uma combinação de decisões operacionais para reduzir risco e recuperar mais rápido.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Nenhum bot controla decisões da plataforma. Portanto, qualquer promessa de “anti-ban 100%” deve ser tratada como exagero comercial.', 'O BOTinho usa Módulo de Preservação Avançada: ritmo humano, variações, monitoramento, pausa preventiva, chip dedicado e plano de recuperação.'] },
       { h2: 'Por que o termo “anti-ban” aparece', paragraphs: ['Afiliados pesquisam por “anti-ban” porque sentem medo real de perder chip, canal e audiência. Usar o termo ajuda a responder a busca, mas a comunicação precisa deixar claro que não é garantia absoluta.'] },
       { h2: 'O que é preservação avançada', bullets: ['Cadência por destino.', 'Limites por hora e dia.', 'Horário de silêncio.', 'Variações de copy e ordem da oferta.', 'Monitoramento de saúde e cliques.', 'Pausa preventiva quando o risco aumenta.', 'Plano de recuperação para canal e chip.'] },
       { h2: 'Como avaliar uma ferramenta', paragraphs: ['Desconfie de ferramenta que só promete “não banir”. Prefira produto que explica limites, recomenda chip dedicado, fala de uso responsável e mostra quais camadas realmente controla.'] },
+    ],
+    relatedTitle: 'Continue: o que dá e o que não dá para prometer',
+    relatedLinks: [
+      { href: '/anti-ban-whatsapp', label: 'WhatsApp banido: o que aumenta e o que reduz o risco', note: 'redução de risco, não imunidade' },
+      { href: '/faq-antiban-whatsapp', label: 'Perguntas frequentes sobre banimento', note: 'as dúvidas mais comuns' },
+      { href: '/protecao-antiban-botinho', label: 'Como o BOTinho preserva a sessão', note: 'o que a ferramenta faz de fato' },
     ],
     faq: [
       { q: 'Então o BOTinho é “anti-ban”?', a: 'Não como promessa absoluta. O BOTinho oferece Módulo de Preservação Avançada para reduzir risco, monitorar sinais e preparar recuperação.' },
@@ -126,12 +168,19 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Guia para afiliado iniciante começar a divulgar ofertas no WhatsApp mesmo sem audiência grande: chip dedicado, primeiros grupos, conversão de link e cadência responsável.',
     eyebrow: 'Para quem está começando · Passo a passo',
     origin: 'blog_comecar_afiliado_whatsapp_sem_grupo_grande',
+    usePersonAuthor: true,
     intro: 'Você não precisa de um grupo gigante para começar a ganhar comissão no WhatsApp. Precisa de um chip dedicado, links de afiliado convertidos certo e uma rotina de envio que não pareça spam. O resto cresce com consistência.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Comece pequeno e organizado: separe um chip só para a operação, cadastre seus IDs de afiliada (Mercado Livre, Amazon, Shopee), monte 1 ou 2 grupos/canais de destino e publique poucas ofertas boas por dia com texto que pareça você falando.', 'Grupo grande é consequência, não pré-requisito. Quem começa focando em volume costuma queimar o número antes de ter audiência.'] },
       { h2: 'O que você precisa no dia 1', bullets: ['Um chip dedicado (nunca o número pessoal).', 'Contas de afiliado nas plataformas que você vai divulgar.', 'Um grupo ou canal de destino, mesmo que pequeno.', 'Uma fonte de ofertas (grupos que você acompanha, sites, encartes).', 'Uma ferramenta que converte o link e mantém cadência.'] },
       { h2: 'O erro mais comum de quem começa', paragraphs: ['O iniciante cola o link cru, sem converter para afiliado — e perde a comissão da venda que ele mesmo gerou. O segundo erro é despejar 30 ofertas seguidas no mesmo dia, o que parece spam e arrisca o número.', 'A correção é simples: converta todo link antes de enviar e limite a frequência. Poucas ofertas boas convertem mais do que muitas ofertas repetidas.'] },
       { h2: 'Como o BOTinho ajuda quem está começando', paragraphs: ['O BOTinho converte automaticamente os links de Mercado Livre, Amazon e Shopee para o seu código de afiliada antes de enviar, espelha as ofertas dos grupos que você acompanha para os seus destinos e mantém uma cadência responsável para reduzir risco no número.', 'Para quem está começando, isso elimina a parte chata (copiar, converter, reescrever, reenviar) e deixa você focar em escolher boas ofertas.'] },
+    ],
+    relatedTitle: 'Continue no cluster de afiliados',
+    relatedLinks: [
+      { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: 'cadastro gratuito, comissão a partir de 3%' },
+      { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'Shopee, Amazon e Mercado Livre comparados' },
+      { href: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero', label: 'Montar um grupo de ofertas do zero', note: 'os primeiros passos' },
     ],
     faq: [
       { q: 'Preciso de muitos seguidores para começar?', a: 'Não. Dá para começar com um grupo ou canal pequeno. O que importa no início é converter os links corretamente e manter consistência, não o tamanho da audiência.' },
@@ -240,12 +289,19 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Entenda quanto custa um bot para WhatsApp de afiliados, o que muda entre plano básico e avançado e como avaliar custo real além do preço da mensalidade.',
     eyebrow: 'Custo · Decisão de compra',
     origin: 'blog_quanto_custa_bot_para_whatsapp_afiliados',
+    usePersonAuthor: true,
     intro: 'Um bot para WhatsApp de afiliados custa, na prática, entre R$39 e R$69 por mês nos planos do BOTinho, com 7 dias grátis para testar. Mas o preço da mensalidade é só parte da conta: o custo real inclui o tempo que você economiza no copia-e-cola e o risco que você reduz na operação.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['No BOTinho, o plano Basic é R$39 por 30 dias (operação manual de ofertas em grupos) e o plano Pro é R$69 por 30 dias (canais, ofertas automáticas da Shopee, filas de envio e Módulo de Preservação Avançada). O teste grátis de 7 dias libera o fluxo Pro completo.', 'Não há promessa de faturamento, comissão ou entrega — a ferramenta organiza a distribuição, mas a revisão humana e o resultado dependem da sua operação.'] },
       { h2: 'O que muda entre básico e avançado', bullets: ['Basic: espelhamento de grupos, conversão de link (Mercado Livre, Amazon, Shopee, Magalu), conversão de cupom, criação de oferta por link, envio imediato e agendado, relatórios.', 'Pro: tudo do Basic + monitoramento e envio em Canais, ofertas automáticas da Shopee, filas com limite por hora e por dia, e Módulo de Preservação Avançada (cadência, horário de silêncio, variações e limites).'] },
       { h2: 'Custo real além da mensalidade', paragraphs: ['Some o tempo que você gasta hoje copiando e colando oferta por oferta em cada grupo. Se são duas horas por dia, o custo escondido da operação manual costuma superar em muito o valor de uma mensalidade.', 'Há também o custo de risco: mensagens idênticas em vários destinos e volume sem cadência aumentam a chance de perder o número. Reduzir esse risco tem valor mesmo que não apareça na fatura.'] },
       { h2: 'Como avaliar antes de pagar', paragraphs: ['Use o teste grátis para medir três coisas: quanto tempo você economiza, se a conversão de link mantém sua comissão e se a cadência deixa a operação mais estável. Só depois disso escolha o plano.'] },
+    ],
+    relatedTitle: 'Continue: quanto custa e quanto rende',
+    relatedLinks: [
+      { href: '/programa-de-afiliados', label: 'Quanto cada programa de afiliados paga', note: 'o outro lado da conta: a comissão real' },
+      { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: comissão e prazo de atribuição', note: '3% na venda padrão, até 30% na Comissão Extra' },
+      { href: '/melhores-bots-para-afiliados-whatsapp', label: 'Comparativo de bots para afiliados', note: 'o que avaliar antes de assinar' },
     ],
     faq: [
       { q: 'Tem plano gratuito?', a: 'Há um teste grátis de 7 dias com o fluxo Pro completo. Depois disso, os planos pagos são Basic (R$39/30 dias) e Pro (R$69/30 dias).' },
@@ -259,12 +315,19 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Descubra os melhores horários para postar ofertas no WhatsApp, por que a cadência importa mais que o horário exato e como distribuir envios sem parecer disparo.',
     eyebrow: 'Cadência · Rotina de postagem',
     origin: 'blog_melhores_horarios_para_postar_ofertas_no_whatsapp',
+    usePersonAuthor: true,
     intro: 'Os melhores horários para postar ofertas no WhatsApp costumam ser início da manhã (7h–9h), horário de almoço (11h30–13h30) e início da noite (18h–21h), quando as pessoas checam o celular. Mas o horário exato importa menos do que a consistência e a distribuição: postar tudo de uma vez, mesmo no melhor horário, converte pior e expõe o número.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Concentre as ofertas mais fortes em três janelas: manhã (7h–9h), almoço (11h30–13h30) e noite (18h–21h). Evite a madrugada. Distribua as ofertas ao longo dessas janelas em vez de despejar tudo de uma vez.', 'O comportamento do seu público específico manda mais que qualquer regra geral — por isso vale acompanhar cliques por horário e ajustar.'] },
       { h2: 'Janelas que costumam funcionar', bullets: ['Manhã (7h–9h): quem checa o celular antes do trabalho.', 'Almoço (11h30–13h30): pausa e navegação livre.', 'Noite (18h–21h): maior tempo de tela e decisão de compra.', 'Fins de semana: manhãs e fim de tarde tendem a render bem para achadinhos.'] },
       { h2: 'Por que cadência importa mais que horário', paragraphs: ['Acertar o horário e mandar 15 ofertas seguidas anula o ganho: o público satura e o número fica exposto a padrão de disparo. O que sustenta resultado é frequência distribuída com intervalo entre envios.', 'Postar de forma consistente todos os dias, em horários parecidos, também treina o público a esperar suas ofertas — isso vale mais que um único horário mágico.'] },
       { h2: 'Como o BOTinho ajuda a manter o ritmo', paragraphs: ['Com agendamento e filas com limite por hora e por dia, você programa as ofertas nas janelas certas sem ficar preso ao celular. O Módulo de Preservação Avançada acrescenta horário de silêncio e variações de texto para evitar comportamento robótico.'] },
+    ],
+    relatedTitle: 'Continue no cluster de afiliados',
+    relatedLinks: [
+      { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: 'o que publicar nesses horários' },
+      { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Afiliado Amazon: comissão por categoria', note: 'de 0% a 13% conforme o produto' },
+      { href: '/anti-ban-whatsapp', label: 'Frequência de envio e risco de banimento', note: 'por que concentrar tudo num horário só é arriscado' },
     ],
     faq: [
       { q: 'Existe um horário único que converte mais?', a: 'Não. As janelas de manhã, almoço e noite costumam render bem, mas o comportamento do seu público específico manda. Acompanhe cliques por horário e ajuste.' },
@@ -278,12 +341,19 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Entenda como converter link de afiliado automaticamente no WhatsApp para Shopee, Amazon, Mercado Livre e Magalu, sem perder comissão nem encaminhar link de terceiro.',
     eyebrow: 'Conversão de link · Automação',
     origin: 'blog_como_converter_link_de_afiliado_automaticamente_whatsapp',
+    usePersonAuthor: true,
     intro: 'Converter link de afiliado automaticamente significa trocar, na hora do envio, qualquer link de produto ou cupom pelo seu próprio link de afiliado — sem copiar, colar e gerar link manualmente para cada oferta. É isso que impede que a comissão do concorrente vaze quando você espelha ofertas de outros grupos.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Uma ferramenta de conversão automática recebe o link original, identifica a loja, resolve short links e páginas de recomendação, e gera o link com o SEU código de afiliado antes de a mensagem sair. Se não conseguir converter com segurança, ela não encaminha o link de terceiro.', 'O BOTinho faz isso para Mercado Livre, Amazon, Shopee e Magalu, incluindo links de cupom e voucher, não só de produto.'] },
       { h2: 'O que acontece com cada loja', bullets: ['Amazon: adiciona a sua tag de associado na URL da loja.', 'Shopee: resolve o short link, preserva o cupom e devolve o link de afiliado que abre direto o app.', 'Mercado Livre: converte links de produto (MLB) e resolve landings de recomendação para o produto canônico.', 'Magalu: aplica o seu partner_id em qualquer URL, inclusive campanhas.'] },
       { h2: 'Por que cupom também precisa ser convertido', paragraphs: ['Muitas ofertas só fecham o preço anunciado com o cupom. Encaminhar o cupom original credita a comissão para o afiliado de origem; removê-lo quebra a oferta. A conversão de cupom resolve isso mantendo a identidade do cupom e trocando a atribuição para você.', 'A regra de ouro é: o link original de terceiro nunca é encaminhado. Se a conversão falhar, o sistema cai em um tratamento seguro em vez de vazar comissão.'] },
       { h2: 'Conferir antes de confiar', paragraphs: ['Automatizar não elimina a revisão. Antes de escalar, clique no link convertido em um celular e confirme que ele carrega o seu código e leva ao produto certo. Depois disso, a conversão automática economiza horas por dia.'] },
+    ],
+    relatedTitle: 'Continue no cluster de afiliados',
+    relatedLinks: [
+      { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: 'onde ficam suas credenciais de afiliada' },
+      { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Afiliado Amazon: a tag na URL da loja', note: 'sem ela a venda não é atribuída a você' },
+      { href: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp', label: 'Afiliado Mercado Livre: comissão por categoria', note: 'venda direta e venda indireta' },
     ],
     faq: [
       { q: 'A conversão automática funciona com short link?', a: 'Sim. O short link é resolvido antes da conversão para não perder o produto no meio da cadeia de redirecionamento, especialmente na Shopee.' },
@@ -298,6 +368,7 @@ export const PRESERVATION_BLOG_POSTS = {
     eyebrow: 'Estratégia · Operar os três programas',
     origin: 'blog_amazon_shopee_ou_mercado_livre_para_afiliados_whatsapp',
     leadMagnetVariant: 'afiliados',
+    usePersonAuthor: true,
     intro: 'Não existe um único programa vencedor: Amazon é forte em variedade e confiança, Shopee é forte em achadinhos baratos e cupom, e Mercado Livre é forte em ticket médio e frete. Para quem divulga no WhatsApp, a estratégia madura combina os três, escolhendo o programa por tipo de oferta. Se você ainda está decidindo por onde começar, veja antes o comparativo de comissão dos três programas.',
     relatedLinks: [
       { href: '/programa-de-afiliados', label: 'Comparativo de comissão dos três programas', note: 'quanto cada um paga e prazo de atribuição' },
@@ -328,6 +399,12 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'Passo a passo inicial', bullets: ['Ative um chip dedicado para a operação de ofertas.', 'Escolha um nicho claro (achadinhos, eletrônicos, casa, moda, etc.).', 'Inscreva-se nos programas de afiliados (Amazon, Shopee, Mercado Livre, Magalu).', 'Defina 2 a 3 janelas de postagem por dia.', 'Converta todo link para o seu código antes de divulgar.'] },
       { h2: 'Erros que travam quem começa', paragraphs: ['Os mais comuns: usar o número pessoal, encaminhar link de terceiro (perdendo comissão), postar em rajada e abandonar o grupo por falta de rotina. Todos são de processo, não de audiência.', 'Outro erro é não medir. Sem acompanhar cliques e envios, você não sabe qual oferta e qual horário funcionam.'] },
       { h2: 'Quando escalar e migrar para canal', paragraphs: ['Quando a rotina estiver estável e o grupo engajado, o próximo passo costuma ser adicionar um Canal do WhatsApp como vitrine e espelhar as ofertas selecionadas do grupo para o canal.', 'É aqui que o BOTinho entra: espelha entre grupos e canais, converte os links, mantém cadência e monitora a saúde da operação — para você crescer sem multiplicar o copia-e-cola.'] },
+    ],
+    relatedTitle: 'Continue: o que publicar no grupo novo',
+    relatedLinks: [
+      { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'comissão de Shopee, Amazon e Mercado Livre' },
+      { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: 'cadastro gratuito, sem exigir audiência grande' },
+      { href: '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp', label: 'Melhores horários para postar ofertas', note: 'quando o grupo responde mais' },
     ],
     faq: [
       { q: 'Preciso de muita gente para começar?', a: 'Não. Constância e ofertas boas importam mais que tamanho no início. Audiência cresce com rotina consistente e curadoria.' },
@@ -402,7 +479,7 @@ export function PreservationBlogPost({ postKey }) {
 
         {post.relatedLinks?.length ? (
           <section>
-            <h2>Continue no cluster de afiliados</h2>
+            <h2>{post.relatedTitle ?? 'Continue no cluster de afiliados'}</h2>
             <ul>
               {post.relatedLinks.map((item) => (
                 <li key={item.href}>

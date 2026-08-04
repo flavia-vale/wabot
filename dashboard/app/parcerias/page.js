@@ -6,7 +6,7 @@ import { getSiteUrl } from '@/lib/site-url'
 
 const slug = '/parcerias'
 const siteUrl = getSiteUrl()
-const title = 'Parcerias BOTinho | Co-marketing para admins e afiliados'
+const title = 'Parcerias | Co-marketing para admins e afiliados de ofertas'
 const description = 'Programa de parcerias do BOTinho para admins, creators e comunidades que operam ofertas no WhatsApp com piloto guiado, UTMs e operação responsável.'
 
 const partnerTypes = [
