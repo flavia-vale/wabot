@@ -25,6 +25,8 @@ export const TRACKING_EVENTS = {
   COMPARISON_CTA_CLICK: 'comparison_cta_click',
   PARTNER_FORM_SUBMIT: 'partner_form_submit',
   PARTNER_FORM_VALIDATION_BLOCKED: 'partner_form_validation_blocked',
+  // Visita chegando de fora (IA, busca, social). Ver lib/ai-referral.js.
+  REFERRAL_VISIT: 'referral_visit',
 }
 
 
@@ -51,6 +53,7 @@ export const PUBLIC_PERSISTED_EVENTS = new Set([
   TRACKING_EVENTS.DIAGNOSTIC_RESULT_VIEWED,
   TRACKING_EVENTS.DIAGNOSTIC_FORM_SUBMITTED,
   TRACKING_EVENTS.DIAGNOSTIC_CTA_CLICKED,
+  TRACKING_EVENTS.REFERRAL_VISIT,
 ])
 
 export function shouldSuppressConversionPrompt(pathname = resolvePathname()) {

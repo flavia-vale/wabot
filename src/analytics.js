@@ -16,6 +16,11 @@ export const PUBLIC_ANALYTICS_EVENTS = new Set([
   'comparison_cta_click',
   'partner_form_submit',
   'partner_form_validation_blocked',
+  // Visita chegando de fora (IA, busca, social). É como medimos se resposta de
+  // ChatGPT/Perplexity está trazendo gente — a Cloudflare mostra o robô que
+  // rastreou, isto mostra a pessoa que chegou. Só o host do referenciador é
+  // gravado, nunca a URL completa (ver dashboard/lib/ai-referral.js).
+  'referral_visit',
 ])
 
 export const ANALYTICS_EVENTS = new Set([
@@ -34,6 +39,8 @@ export const ANALYTICS_EVENTS = new Set([
   'send_error',
   'organic_page_view',
   'organic_cta_click',
+  // Origem da visita (IA / busca / social) — ver PUBLIC_ANALYTICS_EVENTS acima.
+  'referral_visit',
   'lead_magnet_started',
   'lead_magnet_submitted',
   'signup_started_from_seo',
