@@ -2150,11 +2150,36 @@ concorrente antes de citar preço em qualquer página pública.
 ### 🔁 Atualizar mensalmente
 
 No começo de cada mês, sugerir à usuária repetir a coleta (Search Console +
-Planejador + Trends, mesmo passo a passo de
+Planejador + Trends + **referrals de IA**, mesmo passo a passo de
 `docs/marketing/COLETA_DADOS_KEYWORDS_PASSO_A_PASSO.md`) e comparar contra
 este baseline — principalmente **consultas distintas** e **posição média das
 2 páginas fortes**. Atualizar esta seção e a data do cabeçalho quando novos
 números chegarem.
+
+**Referrals de IA (Relatório 4, baseline zera em 2026-08-04).** O site grava a
+origem de toda visita externa no evento `referral_visit` (`AnalyticsEvent`),
+classificada por `dashboard/lib/ai-referral.js` em `ai`/`search`/`social`/
+`other`. **Só o host do referenciador é gravado, nunca a URL completa** — URL de
+buscador carrega o termo pesquisado, que é dado da pessoa; não regredir isso
+(guard em `test/ai-referral.test.js`). O evento precisa estar nas **duas**
+allowlists de `src/analytics.js` (`PUBLIC_ANALYTICS_EVENTS` autoriza a rota,
+`ANALYTICS_EVENTS` autoriza a gravação) — faltar em uma faz o dado sumir sem
+erro. Cuidado ao renomear os campos: `sanitizeAnalyticsMetadata` descarta
+qualquer chave que case com `/(token|secret|…|key|url|…)/i`, então algo como
+`referrer_url` seria descartado em silêncio.
+
+**Conferir todo mês que a Cloudflare não voltou a bloquear as IAs:**
+
+```bash
+curl -s https://espelhagrupos.com.br/robots.txt | grep -c "Disallow: /$"   # 0 = ok
+```
+
+O `Managed robots.txt` da Cloudflare veio **ligado por padrão** e colava
+`Disallow: /` para GPTBot, ClaudeBot, Google-Extended e CCBot na frente do
+`robots.txt` do site — descoberto e desligado em 2026-08-04. Enquanto esteve
+ligado, os robôs de *resposta* (OAI-SearchBot, Claude-SearchBot) passavam, mas
+os de *indexação/treino* não. Se voltar a ligar, o trabalho de IA para de valer
+em silêncio.
 
 ## Triagem de novas demandas (implementar agora vs. backlog)
 
