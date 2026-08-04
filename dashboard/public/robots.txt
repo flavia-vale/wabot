@@ -1,3 +1,13 @@
+# Fonte ÚNICA do robots.txt deste site.
+#
+# Existia também um `app/robots.js` que NUNCA era servido: com os dois no
+# repositório, o arquivo estático de `public/` vence, e as regras que o
+# `app/robots.js` tentava aplicar (/painel, /api/auth/*, /api/admin/*) nunca
+# valeram na prática. Ele foi removido e as regras dele estão aqui embaixo.
+#
+# Não voltar a criar `app/robots.js`: com dois arquivos, um vira código morto
+# silencioso e a regra que alguém editar pode não ser a que está no ar.
+# `scripts/validate-seo-consistency.mjs` lê ESTE arquivo.
 User-agent: *
 Allow: /
 Allow: /llms.txt
@@ -6,7 +16,16 @@ Allow: /termos
 Allow: /privacidade
 Allow: /quem-somos
 Allow: /suporte
+# Endpoints públicos: dado aberto (planos e FAQ) que ajuda buscador e motor de
+# IA a responder sobre preço e funcionamento sem depender de raspar a página.
+# Regra mais específica vence o `Disallow: /api/*` logo abaixo.
+Allow: /api/public/faq
+Allow: /api/public/plans
 Disallow: /api/*
+Disallow: /painel
+Disallow: /painel/*
+Disallow: /admin
+Disallow: /admin/*
 Disallow: /promo-vip-7dias
 
 Sitemap: https://espelhagrupos.com.br/sitemap.xml

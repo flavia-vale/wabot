@@ -37,10 +37,12 @@ export const SUPPORT_RESPONSE_SLA = 'Respondemos em até 1 dia útil'
 // MESMA entidade. Sem isso, o canal do YouTube e o site são duas coisas
 // desconexas — e o estudo mediu que marca é citada por IA ~6,5x mais via fonte
 // de terceiro do que pelo próprio site.
-// A URL do canal vem por env para não travar deploy caso ela mude; sem a env, o
-// canal simplesmente não é declarado (nunca declarar URL inventada — sameAs
-// apontando para perfil errado enfraquece a entidade em vez de reforçar).
-export const BRAND_YOUTUBE_URL = process.env.NEXT_PUBLIC_BRAND_YOUTUBE_URL || ''
+// Canal oficial (verificado em 04/08/2026). Fica como default no código, e não
+// só em env, para não depender de editar `.env.local` no VPS + delete/start do
+// pm2 (pegadinha #1 do AGENTS.md) — é URL pública, não é segredo. A env segue
+// existindo como override caso o canal mude de endereço.
+export const BRAND_YOUTUBE_URL =
+  process.env.NEXT_PUBLIC_BRAND_YOUTUBE_URL || 'https://www.youtube.com/@botinhoafiliado'
 
 export const BRAND_SAME_AS = [
   SUPPORT_WHATSAPP_URL,
