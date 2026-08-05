@@ -15,7 +15,12 @@ const contentSecurityPolicy = [
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: blob: https:",
   "connect-src 'self' ws: wss:",
-  "frame-src 'none'",
+  // `frame-src 'none'` bloqueava o tutorial oficial embutido na home — o
+  // visitante via "Este conteúdo está bloqueado" no lugar do vídeo (confirmado
+  // em produção, 2026-08-05). Liberado APENAS o host do player sem cookie do
+  // YouTube: nenhum outro domínio pode ser embutido, e a política segue
+  // fechada para todo o resto. Não trocar por 'https:' nem por curinga.
+  'frame-src https://www.youtube-nocookie.com',
   "manifest-src 'self'",
   "worker-src 'self' blob:",
   'upgrade-insecure-requests',

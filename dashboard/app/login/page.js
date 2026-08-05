@@ -150,7 +150,11 @@ function LoginContent() {
       if (!cleanName) return blockSubmit('name', 'Informe seu nome para criar a conta.')
       if (!cleanEmail) return blockSubmit('email', 'Informe seu email para criar a conta e recuperar acesso depois.')
       if (!isValidEmail(cleanEmail)) return blockSubmit('email', 'Confira o formato do email antes de continuar.')
-      if (!cleanPhone || cleanPhone.length < 10) return blockSubmit('contactPhone', 'Informe seu WhatsApp com DDD para suporte do teste.')
+      // Celular é obrigatório de propósito: é por ele que a operação procura a
+      // cliente quando ela trava na configuração. A proposta de torná-lo
+      // opcional (auditoria de funil §3.4) foi revertida a pedido dela — não
+      // reabrir sem pedido explícito.
+      if (!cleanPhone || cleanPhone.length < 10) return blockSubmit('contactPhone', 'Informe seu WhatsApp com DDD para o suporte falar com você se algo travar.')
       if (!password) return blockSubmit('password', 'Crie uma senha para acessar o painel depois.')
       if (password.length < 8) return blockSubmit('password', 'Use pelo menos 8 caracteres na senha.')
       if (!termsAccepted) return blockSubmit('termsAccepted', 'Você precisa aceitar os Termos de Uso e declarar ciência dos riscos de automação no WhatsApp para criar a conta.')
@@ -300,7 +304,7 @@ function LoginContent() {
           {isRegister && (
             <>
               <div>
-                <label htmlFor="contactPhone" className="block text-sm font-medium mb-1 text-emerald-100">Celular/WhatsApp para suporte</label>
+                <label htmlFor="contactPhone" className="block text-sm font-medium mb-1 text-emerald-100">Seu WhatsApp</label>
                 <input
                   id="contactPhone"
                   type="tel"
@@ -316,7 +320,7 @@ function LoginContent() {
                   className="border rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-400 w-full"
                 />
                 <p className="mt-1 text-[11px] leading-4 text-emerald-200">
-                  Usaremos este contato para suporte proativo, como avisar se seu robô ficar parado por 2 dias ou se detectarmos dificuldade na configuração.
+                  É por aqui que a gente te avisa se o robô parar ou se a configuração travar. Não usamos para divulgação.
                 </p>
               </div>
               <div>

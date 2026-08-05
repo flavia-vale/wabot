@@ -44,6 +44,15 @@ export const SUPPORT_RESPONSE_SLA = 'Respondemos em até 1 dia útil'
 export const BRAND_YOUTUBE_URL =
   process.env.NEXT_PUBLIC_BRAND_YOUTUBE_URL || 'https://www.youtube.com/@botinhoafiliado'
 
+// Tutorial oficial de criação de conta. É a prova social VERIFICÁVEL que
+// substituiu os números inventados do bloco `Social` (auditoria de funil
+// 2026-08-05, §1.1) — qualquer visitante confere no canal. `-nocookie` evita
+// cookie de rastreio do YouTube antes de o vídeo ser tocado.
+export const BRAND_YOUTUBE_TUTORIAL_ID =
+  process.env.NEXT_PUBLIC_BRAND_YOUTUBE_TUTORIAL_ID || '_Sy6BAdN2hI'
+export const BRAND_YOUTUBE_TUTORIAL_URL = `https://www.youtube.com/watch?v=${BRAND_YOUTUBE_TUTORIAL_ID}`
+export const BRAND_YOUTUBE_TUTORIAL_EMBED_URL = `https://www.youtube-nocookie.com/embed/${BRAND_YOUTUBE_TUTORIAL_ID}?rel=0`
+
 export const BRAND_SAME_AS = [
   SUPPORT_WHATSAPP_URL,
   BRAND_YOUTUBE_URL,

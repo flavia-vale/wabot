@@ -156,9 +156,6 @@
   .landing-root .landing-social-grid {
     grid-template-columns: 1fr !important;
   }
-  .landing-root .landing-social-numbers {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
   .landing-root .landing-faq-wrap {
     grid-template-columns: 1fr !important;
     gap: 28px !important;
@@ -246,8 +243,18 @@
     margin-top: 22px !important;
     gap: 10px !important;
   }
-  .landing-root .landing-trust-item:not(:first-child) {
-    display: none;
+  /* Os três selos ("sem cartão", "configura em 4 minutos", "cancela quando
+   * quiser") são a prova verificável mais forte da primeira dobra — esconder
+   * dois deles no mobile (onde está a maior parte do público) jogava fora
+   * justamente o que reduz o medo de conectar o WhatsApp. Em vez de ocultar,
+   * quebram em duas colunas. Auditoria de funil 2026-08-05, §3.2. */
+  .landing-root .landing-trust {
+    display: grid !important;
+    grid-template-columns: repeat(2, auto) !important;
+    justify-content: start !important;
+    row-gap: 8px !important;
+    column-gap: 14px !important;
+    font-size: 12.5px !important;
   }
   .landing-root .landing-how-inner,
   .landing-root .landing-final-cta {
@@ -261,10 +268,6 @@
   .landing-root .landing-feature-card {
     min-height: unset !important;
     padding: 24px !important;
-  }
-  .landing-root .landing-social-numbers {
-    grid-template-columns: 1fr !important;
-    padding: 18px 12px !important;
   }
   .landing-root .landing-footer-grid,
   .landing-root .landing-footer-bottom {

@@ -331,6 +331,14 @@ export async function authRoutes(app) {
     const providedEmail = normalizeEmail(rawEmail)
     const email = providedEmail || generateFallbackEmail()
     const isPromoVipFlow = source === 'promo_vip_7dias' && couponCode === 'VIP7DIAS'
+    // Celular é OBRIGATÓRIO no cadastro — decisão de produto, não descuido.
+    // A auditoria de funil (2026-08-05, §3.4) propôs torná-lo opcional pela
+    // regra genérica de "menos campo, mais conversão", e a proposta foi
+    // REVERTIDA a pedido da dona do produto: o contato é o que viabiliza
+    // procurar a cliente quando ela trava na configuração — que é justamente
+    // onde o teste de 7 dias morre. Trocar um contato certo por um cadastro a
+    // mais é troca ruim neste estágio, em que o suporte próximo é o
+    // diferencial. NÃO tornar opcional de novo sem pedido explícito dela.
     const normalizedPhone = normalizeContactPhone(rawContactPhone)
     const contactPhone = normalizedPhone
     const hasPassword = typeof rawPassword === 'string' && rawPassword.trim().length > 0
