@@ -121,11 +121,17 @@ de 90 dias.
 
 ## Resposta a "quero mais que 30%"
 
-> Entendo. 30% recorrente já é o teto que fecha a conta pra mim — depois da taxa
-> do Mercado Pago e do custo de servidor por cliente, sobra pouco mais que isso.
+> Entendo, mas aqui eu vou ser direta: 30% recorrente é o que eu pratico com
+> todo mundo, e não tenho percentual diferente por parceiro. É o teto que fecha a
+> conta pra mim — depois da taxa do Mercado Pago e do custo de servidor por
+> cliente, sobra pouco mais que isso.
 >
-> O que eu consigo fazer é bônus por volume: **R$500 quando você chegar em 25
-> indicados ativos**, mantendo os 30%. Funciona pra você?
+> Se assim fizer sentido pra você, sigo com prazer. Se não fizer, tudo bem também.
+
+**Não invente contraoferta aqui** (bônus, percentual maior, mês extra de
+cortesia). A oferta é única de propósito — vide a decisão registrada em
+`docs/marketing/PARCERIA_INFLUENCIADORES_AFILIADOS_2026-08-04.md`. Abrir exceção
+para um parceiro vira a régua que todos os outros vão cobrar depois.
 
 ## Resposta a "o WhatsApp não bane?"
 

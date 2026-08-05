@@ -35,7 +35,7 @@ const sections = [
       'A comissão é recorrente: incide sobre a primeira mensalidade e sobre todas as seguintes, enquanto a pessoa continuar cliente.',
       'A comissão não depende da cortesia. Mesmo que a cortesia do robô termine, as comissões dos indicados continuam sendo pagas normalmente.',
       'A atribuição é por último clique não direto, com janela de 30 dias entre o clique e o cadastro. Se a pessoa chegou por outro canal depois do seu link dentro da janela, a comissão vai para o último.',
-      'O percentual pode ser diferente do padrão se isso estiver combinado por escrito com o parceiro. Uma mudança do percentual padrão nunca é aplicada de forma retroativa a comissões já geradas.',
+      'O percentual é o mesmo para todos os parceiros: não trabalhamos com comissão negociada caso a caso nem com bônus por volume. Se um dia o percentual padrão mudar, a mudança nunca é aplicada de forma retroativa a comissões já geradas.',
     ],
   },
   {

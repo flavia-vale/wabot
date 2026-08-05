@@ -82,7 +82,7 @@ const faq = [
   },
   {
     q: 'E se eu quiser mais que 30%?',
-    a: 'Trinta por cento recorrente já é o teto que fecha a conta depois da taxa de pagamento e do custo de servidor por cliente. O que dá para fazer é bônus por volume — um valor fixo quando você passa de uma quantidade de indicados ativos. Fale com a gente.',
+    a: 'Trinta por cento recorrente é o que a gente pratica, igual para todo mundo. É o teto que fecha a conta depois da taxa de pagamento e do custo de servidor por cliente, e não trabalhamos com percentual diferente por parceiro.',
   },
   {
     q: 'O que exatamente o robô faz?',

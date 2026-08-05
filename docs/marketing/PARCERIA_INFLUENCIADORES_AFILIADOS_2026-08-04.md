@@ -55,10 +55,15 @@ divulga, e depois reclama publicamente).
   enquanto o indicado pagar.
 
 **Limite honesto:** 30% recorrente + taxa MP + infra deixa ~R$43 de margem no Pro.
-Não dá para subir para 40-50% recorrente sem mexer no preço. Se um parceiro grande
-pedir mais, a alavanca certa é **bônus fixo por volume** (ex.: R$500 ao chegar em
-25 indicados ativos), não subir o percentual recorrente — bônus é limitado, o
-percentual é para sempre.
+Não dá para subir para 40-50% recorrente sem mexer no preço.
+
+**Decisão da fundadora (2026-08-05): a oferta é única e não se negocia.** 30%
+recorrente para todo mundo, sem percentual diferenciado por parceiro e **sem
+bônus por volume**. Se um parceiro grande pedir mais, a resposta é não — dita com
+educação e sem contraoferta. Motivo: oferta única é simples de explicar, não cria
+parceiro de primeira e de segunda classe, e não abre precedente de negociação que
+depois vira régua para todos. **Não reintroduzir bônus nem percentual variável
+sem pedido explícito dela.**
 
 ---
 
@@ -94,7 +99,7 @@ sem esperar 6 meses de SEO.
 
 | Tier | Quem | Oferta |
 |---|---|---|
-| **Embaixador** (até 5 no primeiro ciclo) | educador com audiência engajada de afiliados | Pro grátis 12 meses + 30% recorrente + bônus R$500 aos 25 indicados ativos + call de onboarding com a fundadora + material co-branded |
+| **Embaixador** (até 5 no primeiro ciclo) | educador com audiência engajada de afiliados | Pro grátis 12 meses + 30% recorrente + call de onboarding com a fundadora + material co-branded |
 | **Parceiro** | educador/criador menor, curador grande | Pro grátis 90 dias (renovável) + 30% recorrente |
 | **Afiliado padrão** | qualquer pessoa | 30% recorrente (programa público, já no ar) |
 
