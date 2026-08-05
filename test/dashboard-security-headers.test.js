@@ -42,7 +42,13 @@ const requiredCspDirectives = [
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: blob: https:",
   "connect-src 'self' ws: wss:",
-  "frame-src 'none'",
+  // Era `frame-src 'none'`. O tutorial oficial embutido na home caía nessa
+  // regra e o visitante via "Este conteudo esta bloqueado" no lugar do vídeo
+  // (confirmado em produção, 2026-08-05). Liberado UM host, o player sem
+  // cookie do YouTube — a intenção da trava (nada de terceiro arbitrário
+  // dentro de um iframe nosso) continua valendo, e o teste
+  // `frame-src continua restrito` abaixo é quem garante isso.
+  'frame-src https://www.youtube-nocookie.com',
   "manifest-src 'self'",
   "worker-src 'self' blob:",
   'upgrade-insecure-requests',
@@ -52,11 +58,36 @@ function headersByKey(rule) {
   return new Map(rule.headers.map(({ key, value }) => [key, value]))
 }
 
+/* `frame-src` deixou de ser `'none'` para permitir o tutorial oficial, então a
+ * proteção passa a ser por ALLOWLIST em vez de proibição total. Sem esta
+ * checagem, alguém "consertando" um embed futuro poderia trocar por `https:`
+ * ou `*` e reabrir o site para conteúdo de terceiro arbitrário — que é
+ * exatamente o que o `'none'` original existia para impedir. */
+const ALLOWED_FRAME_SOURCES = new Set(['https://www.youtube-nocookie.com'])
+
+function assertFrameSrcStaysRestricted(csp) {
+  const directive = csp.split('; ').find((part) => part.startsWith('frame-src'))
+  assert.ok(directive, 'CSP must declare frame-src')
+
+  const sources = directive.split(/\s+/).slice(1)
+  assert.ok(sources.length > 0, 'frame-src must not be empty')
+
+  for (const source of sources) {
+    if (source === "'none'") continue
+    assert.ok(
+      ALLOWED_FRAME_SOURCES.has(source),
+      `frame-src must stay restricted to the allowlist; "${source}" is not allowed. ` +
+        'Curinga ("*"), esquema solto ("https:") ou host novo exigem decisão consciente aqui.',
+    )
+  }
+}
+
 function assertCspDirectives(csp) {
   assert.doesNotMatch(csp, /'unsafe-eval'/, 'CSP must not allow unsafe-eval')
   for (const directive of requiredCspDirectives) {
     assert.ok(csp.split('; ').includes(directive), `CSP must include: ${directive}`)
   }
+  assertFrameSrcStaysRestricted(csp)
 }
 
 test('dashboard keeps CSP report-only and no HSTS outside production (staging is HTTP)', async () => {
