@@ -10,6 +10,7 @@ import { IntroCard, RulesCard } from '@/components/landing/IntroCard'
 import { BRAND_NAME, BRAND_SHORT_NAME, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS, CORE_FAQ_ITEMS } from '@/lib/marketing-content'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { selectHomeHeroVariant } from '@/lib/cro-experiments'
+import { getLandingPlans } from '@/lib/plans-server'
 
 export const metadata = {
   // `absolute` porque o título da home já termina na marca — sem isso o template
@@ -65,9 +66,12 @@ function buildHomeJsonLd() {
 }
 
 
-export default function LandingPage({ searchParams = {} }) {
+export default async function LandingPage({ searchParams = {} }) {
   const { variant, tone } = selectHomeHeroVariant(searchParams)
   const jsonLd = buildHomeJsonLd()
+  // Preço resolvido no servidor: o HTML inicial carrega o valor real, não o
+  // fallback (auditoria de funil 2026-08-05, §1.4).
+  const plans = await getLandingPlans()
   return (
     <div className="landing-root">
       <OrganicPageTracker route={{ slug: 'home', path: '/', cluster: 'homepage', intent: 'commercial', template: 'landing', variant }} />
@@ -78,7 +82,7 @@ export default function LandingPage({ searchParams = {} }) {
       <How />
       <Features />
       <Social />
-      <Pricing />
+      <Pricing initialPlans={plans} />
       <ProductDefinition />
       <FAQ />
       <FinalCTA />
