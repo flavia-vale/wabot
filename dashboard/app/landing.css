@@ -156,9 +156,6 @@
   .landing-root .landing-social-grid {
     grid-template-columns: 1fr !important;
   }
-  .landing-root .landing-social-honesty {
-    padding: 22px 20px !important;
-  }
   .landing-root .landing-faq-wrap {
     grid-template-columns: 1fr !important;
     gap: 28px !important;
@@ -271,11 +268,6 @@
   .landing-root .landing-feature-card {
     min-height: unset !important;
     padding: 24px !important;
-  }
-  .landing-root .landing-social-honesty {
-    flex-direction: column !important;
-    gap: 12px !important;
-    padding: 20px 16px !important;
   }
   .landing-root .landing-footer-grid,
   .landing-root .landing-footer-bottom {
