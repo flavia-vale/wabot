@@ -62,7 +62,22 @@ const TRAILING_MARKERS_RE = /[\s>|•·:：\-–—.,!¦]+$/
 // destes, ela não é assinatura — é informação que a cliente quer entregar.
 // Protege os casos reais observados no log de produção dela, como
 // "🎟️Use o cupom:*CASAPROMO*".
-const OFFER_CONTENT_WORD_RE = /(?:frete|gr[áa]tis|cupom|cupons|desconto|oferta|promo|promoç[ãa]o|pre[çc]o|pix|entrega|estoque|link|compre|comprar|aproveite|corre|[úu]ltim|unidade|leve|pague|off|voucher|c[óo]digo|clube|assinatura|prime|full|vendido|avalia)/i
+const OFFER_CONTENT_WORD_RE = /(?:frete|gr[áa]tis|cupom|cupons|desconto|oferta|promo|promoç[ãa]o|pre[çc]o|pix|entrega|estoque|link|compre|comprar|aproveite|corre|[úu]ltim|unidade|leve|pague|off|voucher|c[óo]digo|clube|assinatura|prime|full|vendido|avalia|tempo|limitad|v[áa]lid|durar|hoje|agora|resgat|garant)/i
+
+// Linha de CRÉDITO/autoria: `/Vitrinedadecor - Por Marla Tavares`.
+// Terceira forma encontrada em produção (grupo "PROMO FESTAS", 2026-08). Não
+// tem `@`, não tem domínio social e tem 4 palavras — passava do teto de 3 da
+// regra de "palavra solta". O que a identifica é o formato de assinatura:
+// marca prefixada por `/` ou `@`, e/ou crédito "Por <Nome Próprio>".
+const CREDIT_PREFIX_RE = /^[/\\@]\p{L}/u
+// `\p{Lu}` (maiúscula) é a trava que separa crédito de autoria de frase
+// comum: "Por Marla" é assinatura, "por tempo limitado" não é. Por isso a
+// regex NÃO pode levar a flag `i` — ela faria o `\p{Lu}` casar minúscula
+// também e derrubaria justamente essa trava. As variantes de caixa da
+// palavra-chave são escritas à mão.
+const CREDIT_BYLINE_RE = /(?:^|[\s\-–—|•·])(?:[Pp]or|POR|[Bb]y|BY|[Vv]ia|VIA)\s+\p{Lu}/u
+const MAX_CREDIT_CHARS = 60
+const MAX_CREDIT_WORDS = 6
 
 // Teto de linhas removidas por mensagem. Assinatura de grupo raramente passa
 // de duas linhas, e um teto baixo limita o estrago caso alguma origem futura
@@ -167,6 +182,26 @@ export function isBareSignatureLine(line) {
   return words.length > 0 && words.length <= MAX_BARE_SIGNATURE_WORDS
 }
 
+// Linha de crédito/autoria do grupo de origem (`/Vitrinedadecor - Por Marla
+// Tavares`). Separada de `isBareSignatureLine` de propósito: aceita mais
+// palavras (crédito costuma ter nome e sobrenome), mas em troca EXIGE um
+// marcador de assinatura — prefixo de marca (`/`, `@`) ou crédito de autoria
+// com nome próprio. Sem marcador, a linha não é tocada.
+export function isCreditSignatureLine(line) {
+  const raw = String(line ?? '')
+  if (hasHttpUrl(raw)) return false
+
+  const core = signatureCore(raw)
+  if (!core || core.length > MAX_CREDIT_CHARS) return false
+  if (/\d/.test(core)) return false
+  if (OFFER_CONTENT_WORD_RE.test(core)) return false
+
+  const words = core.split(/\s+/).filter(word => /\p{L}/u.test(word))
+  if (words.length === 0 || words.length > MAX_CREDIT_WORDS) return false
+
+  return CREDIT_PREFIX_RE.test(core) || CREDIT_BYLINE_RE.test(core)
+}
+
 function lastNonEmptyIndex(lines, before = lines.length) {
   for (let i = Math.min(before, lines.length) - 1; i >= 0; i--) {
     if (String(lines[i] ?? '').trim()) return i
@@ -229,7 +264,7 @@ export function stripTrailingSourceSignature(text) {
 
     const previousIndex = lastNonEmptyIndex(lines, index)
     const previousIsLinkLine = previousIndex >= 0 && hasOfferUrl(lines[previousIndex])
-    if (previousIsLinkLine && isBareSignatureLine(line)) {
+    if (previousIsLinkLine && (isBareSignatureLine(line) || isCreditSignatureLine(line))) {
       lines.splice(index, 1)
       removed++
       changed = true
