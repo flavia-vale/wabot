@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import Link from 'next/link'
 import { ArticleShell } from '@/components/marketing/ArticleShell'
 import { getSiteUrl } from '@/lib/site-url'
@@ -195,6 +196,13 @@ export const PRESERVATION_BLOG_POSTS = {
     eyebrow: 'Shopee Afiliados · Guia completo',
     origin: 'blog_como_ser_afiliado_shopee_whatsapp',
     leadMagnetVariant: 'afiliados',
+    midBridge: {
+      question: 'Você já tem um grupo ou canal para divulgar?',
+      body: 'Se já tem, o gargalo deixa de ser o cadastro na Shopee e passa a ser o trabalho de postar oferta por oferta. Dá para o robô pegar os links, trocar pelo seu código de afiliada e postar sozinho — com intervalo controlado entre os envios. Teste 7 dias, sem cartão.',
+      cta: 'Ver preços e testar grátis',
+      href: '/precos',
+      secondary: { label: 'Ainda não tenho grupo', href: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero' },
+    },
     usePersonAuthor: true,
     intro: 'Shopee Afiliados é o programa que paga comissão sobre vendas geradas pelo seu link. O cadastro é gratuito, a comissão parte de 3% e a atribuição vale por até 7 dias após o clique. Divulgar no WhatsApp funciona bem quando o link sai sempre com o seu código e a frequência de envio é controlada.',
     sections: [
@@ -228,6 +236,13 @@ export const PRESERVATION_BLOG_POSTS = {
     eyebrow: 'Afiliado Amazon · Divulgação',
     origin: 'blog_como_divulgar_ofertas_amazon_whatsapp',
     leadMagnetVariant: 'afiliados',
+    midBridge: {
+      question: 'Cansou de conferir a tag oferta por oferta?',
+      body: 'Errar a tag é o jeito mais rápido de trabalhar de graça — e conferir na mão em cada link é o que mais consome tempo. O robô converte o link com a sua tag e posta no seu grupo, no intervalo que você definir. Teste 7 dias, sem cartão.',
+      cta: 'Ver preços e testar grátis',
+      href: '/precos',
+      secondary: { label: 'Como converter link automaticamente', href: '/blog/como-converter-link-de-afiliado-automaticamente-whatsapp' },
+    },
     usePersonAuthor: true,
     intro: 'Divulgar Amazon no WhatsApp como associado dá certo quando o link sai com a sua tag, o preview mostra a imagem do produto e o envio respeita uma cadência que não queima o número. A comissão varia por categoria — de 0% a 13% — e errar a tag é o jeito mais rápido de trabalhar de graça.',
     sections: [
@@ -425,6 +440,50 @@ export function getPreservationBlogMetadata(postKey) {
   }
 }
 
+/* PONTE DE INTENÇÃO NO MEIO DO ARTIGO (auditoria de funil 2026-08-05, §2.3).
+ *
+ * Estes dois posts concentram 42% das impressões do site, mas a única oferta
+ * vivia na seção "Próximo passo", no fim — depois do ponto em que a maior
+ * parte do tráfego mobile já abandonou. Pior: quem lê "como ser afiliado"
+ * ainda NÃO tem grupo, então o CTA de diagnóstico anti-ban fala de um problema
+ * que essa pessoa ainda não tem.
+ *
+ * A ponte entra no meio, qualifica em vez de empurrar ("você já tem grupo?")
+ * e manda quem está pronto para o preço, sem interromper quem não está.
+ * Sem promessa de ganho — só de trabalho a menos (PRODUCT_LIMITATIONS).
+ */
+function MidArticleBridge({ bridge, slug }) {
+  const utm = `utm_source=blog&utm_medium=organic&utm_campaign=mid_article_bridge&utm_content=${encodeURIComponent(slug.replace('/blog/', ''))}`
+  return (
+    <aside className="my-8 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-6">
+      <p className="text-base font-black text-gray-950">{bridge.question}</p>
+      <p className="mt-2 text-sm leading-6 text-gray-600">{bridge.body}</p>
+      <div className="mt-4 flex flex-wrap gap-3">
+        <Link
+          className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-black text-white no-underline hover:bg-emerald-700"
+          href={`${bridge.href}?${utm}&utm_term=primary`}
+          data-seo-cta="blog_mid_bridge"
+          data-cta-position="article_mid_bridge"
+          data-cta-stage="consideration"
+        >
+          {bridge.cta}
+        </Link>
+        {bridge.secondary ? (
+          <Link
+            className="rounded-xl border border-emerald-200 bg-white px-5 py-3 text-sm font-black text-emerald-700 no-underline hover:border-emerald-300"
+            href={`${bridge.secondary.href}?${utm}&utm_term=secondary`}
+            data-seo-cta="blog_mid_bridge_secondary"
+            data-cta-position="article_mid_bridge"
+            data-cta-stage="awareness"
+          >
+            {bridge.secondary.label}
+          </Link>
+        ) : null}
+      </div>
+    </aside>
+  )
+}
+
 export function PreservationBlogPost({ postKey }) {
   const post = PRESERVATION_BLOG_POSTS[postKey]
   const dates = getEditorialDates(post.slug)
@@ -442,7 +501,11 @@ export function PreservationBlogPost({ postKey }) {
           <p>{post.intro}</p>
         </section>
 
-        {post.sections.map((section) => (
+        {post.sections.map((section, sectionIndex) => (
+          <Fragment key={section.h2}>
+          {post.midBridge && sectionIndex === Math.ceil(post.sections.length / 2) ? (
+            <MidArticleBridge bridge={post.midBridge} slug={post.slug} />
+          ) : null}
           <section key={section.h2}>
             <h2>{section.h2}</h2>
             {section.paragraphs?.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
@@ -475,6 +538,7 @@ export function PreservationBlogPost({ postKey }) {
               </div>
             ) : null}
           </section>
+          </Fragment>
         ))}
 
         {post.relatedLinks?.length ? (
