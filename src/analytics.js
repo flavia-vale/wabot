@@ -83,6 +83,7 @@ export const ANALYTICS_EVENTS = new Set([
   // com BOT_SUPERVISOR_MODE != remote e sessão conectada — deploy da API vai
   // derrubar a sessão na próxima janela.
   'ops_mode_regression',
+  'ops_stale_worker_code',
   // Mesma mensagem repetindo no ack de um stream:error N+ vezes — sinal de
   // loop de retry-receipt travado derrubando a sessão em cadência (RCA
   // 2026-07, ver AGENTS.md "Loop de retry-receipt travado").
@@ -104,6 +105,10 @@ export const ANALYTICS_EVENTS = new Set([
   // operacional de que o cron de reconciliação de pagamentos parou ou está
   // travado, antes que o afiliado precise reclamar.
   'ops_affiliate_promotion_stuck',
+  // Trilha de nutrição de leads (011-lead-nurture-emails): passo enviado (idempotência).
+  'nurture_email_sent',
+  // Opt-out durável da trilha de nutrição (LGPD) — prevalece sobre novos downloads.
+  'nurture_unsubscribed',
 ])
 
 const SENSITIVE_KEY_PATTERN = /(token|secret|password|cookie|credential|csrf|ssid|key|message|text|url|phone|email)/i

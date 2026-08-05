@@ -131,6 +131,51 @@ pelo spam de "A sincronização foi concluída" no celular da cliente. Roda só
 quando o banco está disponível no boot (`databaseReadyAtBoot`). Teste puro
 (sem DB) em `test/ops-mode-regression-guard.test.js`.
 
+### Aviso "código novo não carregado pelos bots" (RCA 2026-08 — não regredir)
+
+Em `remote`, o deploy reinicia a `api` mas **não** o `bot-supervisor` — de
+propósito, para não derrubar as sessões. O preço é que **toda correção em
+`bot-worker.js` ou no pipeline de mensagem (`messageProcessor.js`, `core/*`)
+chega ao disco do VPS e continua SEM VALER**, porque os workers em execução
+seguem com o módulo antigo em memória. Isso era **totalmente silencioso**: os
+três fixes de assinatura de grupo de origem (#1383, #1389, #1391) foram para
+`main`, o deploy ficou verde, e mesmo assim os 11 bot-workers de produção
+rodavam código de 4 dias antes — a cliente seguia recebendo a assinatura e não
+havia aviso em lugar nenhum. Foi descoberto só porque a cliente reclamou pela
+terceira vez.
+
+Como o aviso funciona:
+
+- O supervisor publica o próprio boot no Redis (`SUPERVISOR_BOOTED_AT_KEY`,
+  chave **separada** do heartbeat — o heartbeat é lido como `Boolean(value)`
+  por `isSupervisorAlive` e mudar o formato dele arriscaria a liveness).
+  Aditivo: **não** exige bump de `PROTOCOL_VERSION`.
+- `src/ops/codeVersion.js` calcula "quando o código mudou" pelo **mtime mais
+  recente dentro de `src/`** (o `git pull` do deploy só reescreve arquivo
+  alterado). Ignora `node_modules`/`test` de propósito — `npm ci` mexe em
+  `node_modules` em todo deploy e criaria alarme falso.
+- `src/ops/staleWorkerCodeGuard.js` (`shouldWarnStaleWorkerCode`) é puro/
+  testável e compara os dois, com folga de 60s para o deploy normal (pull e
+  restart quase simultâneos). A API roda a checagem ~20s após o boot
+  (`STALE_CODE_CHECK_DELAY_MS`), loga `error` e emite
+  `AnalyticsEvent('ops_stale_worker_code')` (allowlist em `src/analytics.js`).
+
+**Só avisa — nunca reinicia nada.** Reiniciar o supervisor reconecta TODAS as
+sessões WhatsApp de uma vez; isso é decisão humana e continua valendo a regra
+de anunciar/agendar antes. Fail-safe em todos os caminhos: sem dado confiável
+(supervisor fora do ar, modo `inline`, chave ausente) **não** avisa — alarme
+falso recorrente treina a pessoa a ignorar justamente este alerta.
+
+Aplicar o código novo nos bots (o passo manual que o aviso está cobrando):
+
+```bash
+cd ~/wabot && pm2 restart bot-supervisor --update-env && pm2 save
+# confere que os workers renasceram (etime baixo):
+ps -eo pid,lstart,etime,cmd | grep "wabot/src/bot-worker" | grep -v staging | grep -v grep
+```
+
+Teste: `test/ops-stale-worker-code-guard.test.js` (puro, sem Redis/DB).
+
 ### Arquivos do supervisor (não confundir)
 
 - `src/supervisor/protocol.js` — contrato (nomes de filas, eventos,

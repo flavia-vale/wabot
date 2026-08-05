@@ -32,9 +32,14 @@ import { startDlqMaintenanceJob, getDlqMaintenanceSnapshot } from '../jobs/dlqMa
 import db from '../db.js'
 import { revokeTokenJtiGlobal, isTokenRevokedGlobal } from '../core/tokenRevocationStore.js'
 import { validateEncryptionKey } from '../credentialCrypto.js'
-import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, SUPERVISOR_MODE } from '../manager.js'
+import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, getSupervisorBootedAtMs, SUPERVISOR_MODE } from '../manager.js'
 import { shouldWarnModeRegression } from '../ops/modeRegressionGuard.js'
+import { describeStaleWorkerCode, shouldWarnStaleWorkerCode } from '../ops/staleWorkerCodeGuard.js'
+import { getCodeChangedAtMs } from '../ops/codeVersion.js'
 import { trackAnalyticsEventSafe } from '../analytics.js'
+import { runNurtureSweep } from '../leadNurture/sweep.js'
+import { sendMail } from '../email/mailer.js'
+import { leadNurtureRoutes } from './routes/leadNurture.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
 registerApiMetricsHooks(app)
@@ -150,6 +155,37 @@ function startLogRetentionJob() {
   const timer = setInterval(() => {
     cleanupOldLogs().catch(err => app.log.error({ err: err.message }, 'Falha na limpeza automática de retenção'))
   }, LOG_RETENTION_INTERVAL_MS)
+  timer.unref?.()
+}
+
+// Trilha de nutrição de leads (011-lead-nurture-emails): passada diária
+// in-process, mesmo padrão de startLogRetentionJob/startActivityCacheCleanup
+// (setInterval + unref, sem processo/worker/Redis novo — AGENTS.md "Política
+// de memória"). Envs opcionais aditivas, sem mudança de .env de ambiente:
+//   LEAD_NURTURE_SWEEP_INTERVAL_MS — intervalo entre passadas (default 24h).
+//   LEAD_NURTURE_GO_LIVE_AT        — ISO opcional; filtra leads cadastrados
+//                                     antes dessa data (evita reenviar a
+//                                     trilha para a base histórica no go-live).
+const LEAD_NURTURE_SWEEP_INTERVAL_MS = Math.max(Number(process.env.LEAD_NURTURE_SWEEP_INTERVAL_MS) || 24 * 60 * 60 * 1000, 60 * 1000)
+async function runLeadNurtureSweepTick() {
+  try {
+    const summary = await runNurtureSweep({
+      db,
+      sendMail,
+      secret: process.env.JWT_SECRET,
+      baseUrl: process.env.DASHBOARD_URL || process.env.API_URL,
+      logger: app.log,
+    })
+    if (summary.sent > 0 || summary.failed > 0) {
+      app.log.info({ ...summary }, 'lead-nurture: passada concluída')
+    }
+  } catch (err) {
+    app.log.error({ err: err.message }, 'lead-nurture: passada falhou')
+  }
+}
+function startLeadNurtureSweep() {
+  runLeadNurtureSweepTick()
+  const timer = setInterval(runLeadNurtureSweepTick, LEAD_NURTURE_SWEEP_INTERVAL_MS)
   timer.unref?.()
 }
 
@@ -287,6 +323,7 @@ app.register(offerAutomationRoutes, { prefix: '/api/offer-automations' })
 app.register(offerQueueRoutes, { prefix: '/api/offer-queues' })
 app.register(clickTrackerRoutes) // sem prefix — /r/:hash precisa estar na raiz
 app.register(affiliateRoutes, { prefix: '/api' })
+app.register(leadNurtureRoutes, { prefix: '/api/lead-nurture' })
 
 // Liveness: processo está de pé
 app.get('/health', () => ({ ok: true }))
@@ -358,8 +395,57 @@ if (databaseReadyAtBoot) {
   }
 }
 
+// Aviso "código novo não carregado pelos bots" (RCA 2026-08).
+//
+// Em modo `remote` o deploy reinicia a API mas NÃO o bot-supervisor — de
+// propósito, para não derrubar as sessões. O preço é que correção no
+// bot-worker/pipeline de mensagem fica no disco sem valer, e isso era
+// totalmente silencioso: três fixes seguidos chegaram em `main`, o deploy
+// ficou verde, e os workers seguiram dias com o código anterior.
+//
+// A API roda esta checagem logo depois do boot, que é exatamente o momento
+// útil: ela acabou de subir com o código novo, então se o supervisor é mais
+// velho que o código, os bots estão desatualizados. Só avisa — reiniciar o
+// supervisor reconecta todas as sessões e é decisão humana (AGENTS.md).
+async function warnIfWorkersRunStaleCode() {
+  try {
+    const [supervisorBootedAtMs, codeChangedAtMs] = await Promise.all([
+      getSupervisorBootedAtMs(),
+      getCodeChangedAtMs(),
+    ])
+    if (!shouldWarnStaleWorkerCode({ supervisorMode: SUPERVISOR_MODE, supervisorBootedAtMs, codeChangedAtMs })) return
+
+    app.log.error(
+      {
+        supervisorMode: SUPERVISOR_MODE,
+        supervisorBootedAt: new Date(supervisorBootedAtMs).toISOString(),
+        codeChangedAt: new Date(codeChangedAtMs).toISOString(),
+        acao: 'pm2 restart bot-supervisor --update-env',
+      },
+      describeStaleWorkerCode({ supervisorBootedAtMs, codeChangedAtMs }),
+    )
+    trackAnalyticsEventSafe({
+      event: 'ops_stale_worker_code',
+      metadata: {
+        supervisorMode: SUPERVISOR_MODE,
+        staleMinutes: Math.round((codeChangedAtMs - supervisorBootedAtMs) / 60_000),
+      },
+    })
+  } catch (err) {
+    app.log.warn({ err: err.message }, 'Falha ao checar se os bots estão com código desatualizado')
+  }
+}
+
+// Adiado (e `unref()`) de propósito: a checagem depende do client Redis do
+// supervisor estar conectado e NÃO pode atrasar nem derrubar o boot da API.
+// Se o supervisor ainda não respondeu, o guard trata como "sem dado" e não
+// avisa — melhor perder um aviso do que emitir alarme falso.
+const STALE_CODE_CHECK_DELAY_MS = Math.max(5_000, Number(process.env.STALE_CODE_CHECK_DELAY_MS || 20_000))
+setTimeout(() => { warnIfWorkersRunStaleCode() }, STALE_CODE_CHECK_DELAY_MS).unref?.()
+
 startLogRetentionJob()
 startActivityCacheCleanup()
+startLeadNurtureSweep()
 startProbeWatchdogJob()
 startOfferAutomationCron()
 startOfferQueueCron()

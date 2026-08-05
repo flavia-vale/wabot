@@ -16,6 +16,7 @@ import {
   EVENT,
   EVENTS_CHANNEL,
   PROTOCOL_VERSION,
+  SUPERVISOR_BOOTED_AT_KEY,
   SUPERVISOR_HEARTBEAT_KEY,
   commandTimeoutMs,
   decodeEvent,
@@ -65,6 +66,7 @@ function warnOnProtocolMismatch(raw) {
  * @property {()=>Function} startSessionHealthMonitor
  * @property {()=>number} stopAllBots
  * @property {()=>Promise<boolean>} isSupervisorAlive
+ * @property {()=>Promise<number|null>} getSupervisorBootedAtMs
  * @property {()=>Promise<void>} close
  */
 
@@ -175,6 +177,23 @@ export function createSupervisorClient({
     }
   }
 
+  // Momento (epoch ms) em que o supervisor subiu, ou null se a chave não
+  // existe (supervisor fora do ar, ou versão anterior a esta que ainda não
+  // publica o campo). Consumido pelo guard de "código novo não carregado"
+  // (ops/staleWorkerCodeGuard.js), que trata null como "não avisar".
+  async function getSupervisorBootedAtMs() {
+    if (!publisherCheck) {
+      try { await init() } catch { return null }
+    }
+    try {
+      const value = await publisherCheck.get(SUPERVISOR_BOOTED_AT_KEY)
+      const parsed = Number(value)
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+    } catch {
+      return null
+    }
+  }
+
   // ---- Superfície compatível com src/core/sessionCore.js ----
 
   // Comandos fire-and-forget assíncronos: aguardam ack do supervisor.
@@ -255,6 +274,6 @@ export function createSupervisorClient({
     onQR, onStatus, getLastQR,
     resumePersistedBots, startSessionHealthMonitor, stopAllBots,
     // extras
-    isSupervisorAlive, getLastEvent, close, _events: events,
+    isSupervisorAlive, getSupervisorBootedAtMs, getLastEvent, close, _events: events,
   })
 }
