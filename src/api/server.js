@@ -32,8 +32,10 @@ import { startDlqMaintenanceJob, getDlqMaintenanceSnapshot } from '../jobs/dlqMa
 import db from '../db.js'
 import { revokeTokenJtiGlobal, isTokenRevokedGlobal } from '../core/tokenRevocationStore.js'
 import { validateEncryptionKey } from '../credentialCrypto.js'
-import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, SUPERVISOR_MODE } from '../manager.js'
+import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, getSupervisorBootedAtMs, SUPERVISOR_MODE } from '../manager.js'
 import { shouldWarnModeRegression } from '../ops/modeRegressionGuard.js'
+import { describeStaleWorkerCode, shouldWarnStaleWorkerCode } from '../ops/staleWorkerCodeGuard.js'
+import { getCodeChangedAtMs } from '../ops/codeVersion.js'
 import { trackAnalyticsEventSafe } from '../analytics.js'
 import { runNurtureSweep } from '../leadNurture/sweep.js'
 import { sendMail } from '../email/mailer.js'
@@ -392,6 +394,54 @@ if (databaseReadyAtBoot) {
     app.log.warn({ err: err.message }, 'Falha ao checar guard anti-reversão de modo')
   }
 }
+
+// Aviso "código novo não carregado pelos bots" (RCA 2026-08).
+//
+// Em modo `remote` o deploy reinicia a API mas NÃO o bot-supervisor — de
+// propósito, para não derrubar as sessões. O preço é que correção no
+// bot-worker/pipeline de mensagem fica no disco sem valer, e isso era
+// totalmente silencioso: três fixes seguidos chegaram em `main`, o deploy
+// ficou verde, e os workers seguiram dias com o código anterior.
+//
+// A API roda esta checagem logo depois do boot, que é exatamente o momento
+// útil: ela acabou de subir com o código novo, então se o supervisor é mais
+// velho que o código, os bots estão desatualizados. Só avisa — reiniciar o
+// supervisor reconecta todas as sessões e é decisão humana (AGENTS.md).
+async function warnIfWorkersRunStaleCode() {
+  try {
+    const [supervisorBootedAtMs, codeChangedAtMs] = await Promise.all([
+      getSupervisorBootedAtMs(),
+      getCodeChangedAtMs(),
+    ])
+    if (!shouldWarnStaleWorkerCode({ supervisorMode: SUPERVISOR_MODE, supervisorBootedAtMs, codeChangedAtMs })) return
+
+    app.log.error(
+      {
+        supervisorMode: SUPERVISOR_MODE,
+        supervisorBootedAt: new Date(supervisorBootedAtMs).toISOString(),
+        codeChangedAt: new Date(codeChangedAtMs).toISOString(),
+        acao: 'pm2 restart bot-supervisor --update-env',
+      },
+      describeStaleWorkerCode({ supervisorBootedAtMs, codeChangedAtMs }),
+    )
+    trackAnalyticsEventSafe({
+      event: 'ops_stale_worker_code',
+      metadata: {
+        supervisorMode: SUPERVISOR_MODE,
+        staleMinutes: Math.round((codeChangedAtMs - supervisorBootedAtMs) / 60_000),
+      },
+    })
+  } catch (err) {
+    app.log.warn({ err: err.message }, 'Falha ao checar se os bots estão com código desatualizado')
+  }
+}
+
+// Adiado (e `unref()`) de propósito: a checagem depende do client Redis do
+// supervisor estar conectado e NÃO pode atrasar nem derrubar o boot da API.
+// Se o supervisor ainda não respondeu, o guard trata como "sem dado" e não
+// avisa — melhor perder um aviso do que emitir alarme falso.
+const STALE_CODE_CHECK_DELAY_MS = Math.max(5_000, Number(process.env.STALE_CODE_CHECK_DELAY_MS || 20_000))
+setTimeout(() => { warnIfWorkersRunStaleCode() }, STALE_CODE_CHECK_DELAY_MS).unref?.()
 
 startLogRetentionJob()
 startActivityCacheCleanup()

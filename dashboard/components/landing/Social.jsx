@@ -1,7 +1,5 @@
-import Link from 'next/link';
 import { Icon } from './Icon';
 import {
-  BRAND_ORG_NAME,
   BRAND_PRODUCT_NAME,
   BRAND_YOUTUBE_TUTORIAL_EMBED_URL,
   BRAND_YOUTUBE_TUTORIAL_URL,
@@ -53,12 +51,6 @@ const s = {
   promiseIcon: { flexShrink: 0, marginTop: 2, color: 'var(--accent-strong)' },
   promiseTitle: { fontSize: 15, fontWeight: 600, color: 'var(--ink)' },
   promiseBody: { fontSize: 13.5, lineHeight: 1.5, color: 'var(--ink-soft)', marginTop: 4 },
-  honesty: {
-    marginTop: 32, background: 'color-mix(in oklab, var(--accent) 18%, var(--surface))',
-    border: '1px solid var(--line)', borderRadius: 24, padding: '28px 32px',
-    display: 'flex', gap: 18, alignItems: 'flex-start',
-  },
-  honestyText: { fontSize: 14.5, lineHeight: 1.6, color: 'var(--ink)' },
   link: { color: 'var(--accent-strong)', fontWeight: 600 },
 };
 
@@ -134,22 +126,6 @@ export function Social() {
           </div>
         </div>
 
-        <div style={s.honesty} className="landing-social-honesty">
-          <span style={{ flexShrink: 0, marginTop: 2, color: 'var(--accent-strong)' }}>
-            <Icon name="check" size={20} />
-          </span>
-          <p style={s.honestyText}>
-            <strong>Somos um time pequeno e preferimos ser honestos:</strong> não publicamos
-            número de clientes nem print de comissão que você não teria como conferir. O{' '}
-            {BRAND_PRODUCT_NAME} organiza e automatiza a sua divulgação — quanto você ganha
-            depende das suas ofertas, do seu público e das regras de cada programa de
-            afiliados.{' '}
-            <Link style={s.link} href="/quem-somos">
-              Conheça quem está por trás do {BRAND_ORG_NAME}
-            </Link>
-            .
-          </p>
-        </div>
       </div>
     </section>
   );

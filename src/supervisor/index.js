@@ -31,6 +31,7 @@ import {
   COMMAND_TIMEOUTS_MS,
   EVENT,
   EVENTS_CHANNEL,
+  SUPERVISOR_BOOTED_AT_KEY,
   SUPERVISOR_HEARTBEAT_KEY,
   SUPERVISOR_HEARTBEAT_RENEW_INTERVAL_MS,
   SUPERVISOR_HEARTBEAT_TTL_SECONDS,
@@ -373,9 +374,15 @@ worker.on('stalled', jobId => {
 // ---- Heartbeat ----
 
 let heartbeatTimer = null
+// Momento em que ESTE processo subiu. Renovado junto do heartbeat (mesmo TTL)
+// para a chave sumir quando o supervisor morre — assim a API nunca compara
+// contra o boot de um supervisor que não existe mais. Ver
+// `ops/staleWorkerCodeGuard.js`.
+const SUPERVISOR_BOOTED_AT_MS = Date.now()
 async function renewHeartbeat() {
   try {
     await publisher.set(SUPERVISOR_HEARTBEAT_KEY, String(Date.now()), 'EX', SUPERVISOR_HEARTBEAT_TTL_SECONDS)
+    await publisher.set(SUPERVISOR_BOOTED_AT_KEY, String(SUPERVISOR_BOOTED_AT_MS), 'EX', SUPERVISOR_HEARTBEAT_TTL_SECONDS)
   } catch (err) {
     logger.warn({ err: err.message }, 'Falha ao renovar heartbeat')
   }
@@ -522,6 +529,7 @@ async function shutdown(signal) {
   try { if (heartbeatTimer) clearInterval(heartbeatTimer) } catch {}
   try { if (healthMonitorTimer) clearInterval(healthMonitorTimer) } catch {}
   try { await publisher.del(SUPERVISOR_HEARTBEAT_KEY) } catch {}
+  try { await publisher.del(SUPERVISOR_BOOTED_AT_KEY) } catch {}
   try { await worker.close() } catch {}
   try { await publisher.quit() } catch {}
   try { sessionCore.stopAllBots() } catch {}
