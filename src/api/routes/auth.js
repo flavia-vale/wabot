@@ -319,6 +319,7 @@ export async function authRoutes(app) {
       conversion_prompt_id: conversionPromptId,
       conversion_prompt_variant: conversionPromptVariant,
       landingPage: rawLandingPage,
+      gclid: rawGclid,
       coupon_code: couponCode,
       aff_code: rawAffCode,
       affiliateVisitorId: rawAffiliateVisitorId,
@@ -335,6 +336,13 @@ export async function authRoutes(app) {
     const password = hasPassword ? String(rawPassword) : ''
     // Ausência MUST NOT bloquear o cadastro (FR-005) — string vazia é o fallback.
     const landingPage = sanitizeAttributionValue(rawLandingPage)
+    // Identificador de clique do Google Ads. Sanitização própria: o
+    // `sanitizeAttributionValue` troca `_` por `-`, e `_` é caractere válido
+    // dentro de um gclid — usá-lo aqui corromperia o valor em silêncio e a
+    // importação de conversão offline falharia sem erro visível.
+    const gclid = /^[A-Za-z0-9_-]{1,200}$/.test(String(rawGclid ?? '').trim())
+      ? String(rawGclid).trim()
+      : ''
 
     if (!name || !contactPhone) return reply.code(400).send({ error: 'nome e celular obrigatórios' })
     if (termsAccepted !== true) return reply.code(400).send({ error: 'Aceite os Termos de Uso e ciência de riscos para criar a conta' })
@@ -472,6 +480,7 @@ export async function authRoutes(app) {
         utm_content: utmContent || null,
         utm_term: utmTerm || null,
         landing_page: landingPage,
+        gclid: gclid || null,
         conversion_prompt_id: conversionPromptId || null,
         conversion_prompt_variant: conversionPromptVariant || null,
         terms_version: acceptedTermsVersion,

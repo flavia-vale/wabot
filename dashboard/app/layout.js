@@ -1,6 +1,7 @@
 import "./globals.css";
 import { ToastProvider } from "@/components/ToastProvider";
 import { ConversionPrompt } from "@/components/marketing/ConversionPrompt";
+import { GoogleAdsTag } from "@/components/marketing/GoogleAdsTag";
 import { getSiteUrl } from '@/lib/site-url'
 import { BRAND_ORG_NAME, BRAND_PRODUCT_NAME, BRAND_SAME_AS, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION, SUPPORT_EMAIL } from '@/lib/marketing-content'
 
@@ -89,6 +90,7 @@ export default function RootLayout({ children }) {
             dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
           />
         ))}
+        <GoogleAdsTag />
         <ToastProvider>{children}<ConversionPrompt /></ToastProvider>
       </body>
     </html>

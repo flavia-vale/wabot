@@ -63,6 +63,32 @@ function resolvePathname() {
   return window.location?.pathname || ''
 }
 
+/**
+ * Reporta uma conversão ao Google Ads.
+ *
+ * No-op silencioso quando o gtag não está carregado (sem `NEXT_PUBLIC_GADS_ID`)
+ * ou quando o rótulo da ação de conversão não foi configurado — sem o rótulo o
+ * Google não sabe A QUAL conversão o evento pertence e o disparo é descartado.
+ */
+export function trackAdsConversion(sendTo, { value, currency = 'BRL', transactionId } = {}) {
+  try {
+    if (typeof window === 'undefined' || typeof window.gtag !== 'function') return false
+    if (!sendTo) return false
+
+    const payload = { send_to: sendTo }
+    if (typeof value === 'number') {
+      payload.value = value
+      payload.currency = currency
+    }
+    if (transactionId) payload.transaction_id = String(transactionId).slice(0, 64)
+
+    window.gtag('event', 'conversion', payload)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function trackEvent(eventName, params = {}) {
   try {
     if (typeof window === 'undefined' || !eventName) return
