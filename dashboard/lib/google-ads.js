@@ -11,9 +11,27 @@
 
 export const GOOGLE_ADS_ID = process.env.NEXT_PUBLIC_GADS_ID || ''
 
-// Rótulo da ação de conversão "Cadastro" (o `AW-xxx/yyy` que o painel do Ads
-// gera). Sem ele o script até carrega, mas nenhuma conversão é reportada.
-export const GOOGLE_ADS_SIGNUP_LABEL = process.env.NEXT_PUBLIC_GADS_SIGNUP_LABEL || ''
+// Ação de conversão "Cadastro". Sem ela o script até carrega, mas nenhuma
+// conversão é reportada.
+const RAW_SIGNUP_LABEL = process.env.NEXT_PUBLIC_GADS_SIGNUP_LABEL || ''
+
+/**
+ * O Google exige o formato `AW-1234567890/AbC-D_efG` no `send_to`. O painel
+ * mostra isso dentro do snippet, e é fácil copiar só o pedaço depois da barra.
+ *
+ * Se vier só o rótulo, montamos o valor completo com o ID em vez de falhar: o
+ * modo de falha aqui é SILENCIOSO — o Google descarta o disparo sem erro, a
+ * campanha fica sem conversão e ninguém descobre até estranhar o relatório.
+ */
+export function resolveConversionSendTo(label = RAW_SIGNUP_LABEL, id = GOOGLE_ADS_ID) {
+  const raw = String(label ?? '').trim()
+  if (!raw) return ''
+  if (raw.includes('/')) return raw
+  if (!id) return ''
+  return `${id}/${raw}`
+}
+
+export const GOOGLE_ADS_SIGNUP_LABEL = resolveConversionSendTo()
 
 export function isGoogleAdsEnabled() {
   return /^AW-[A-Za-z0-9]+$/.test(GOOGLE_ADS_ID)
