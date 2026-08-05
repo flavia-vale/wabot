@@ -440,7 +440,7 @@ function OnlineDetailDrawer({ detail, loading, onClose }) {
 
 
 function ManualAccessEditor({ detail, onApply }) {
-  const [form, setForm] = useState({ plan: detail?.plan ?? '', days: '', reason: '' })
+  const [form, setForm] = useState({ plan: detail?.plan ?? '', days: '', reason: '', partnerCode: '' })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
 
@@ -454,10 +454,11 @@ function ManualAccessEditor({ detail, onApply }) {
         plan: form.plan || undefined,
         days: form.days === '' ? undefined : Number(form.days),
         reason: form.reason,
+        partnerCode: form.partnerCode.trim() || undefined,
       }
       await onApply(payload)
       setMessage('Acesso atualizado com sucesso.')
-      setForm((current) => ({ ...current, days: '', reason: '' }))
+      setForm((current) => ({ ...current, days: '', reason: '', partnerCode: '' }))
     } catch (err) {
       setMessage(err.message || 'Falha ao atualizar acesso.')
     } finally {
@@ -477,6 +478,10 @@ function ManualAccessEditor({ detail, onApply }) {
         </select>
         <input value={form.days} onChange={(e) => setForm((f) => ({ ...f, days: e.target.value }))} type="number" min="-365" max="365" placeholder="Dias (+/-)" className="rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs" />
         <input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Motivo (obrigatório)" className="rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs" required minLength={5} />
+      </div>
+      <div className="mt-2">
+        <input value={form.partnerCode} onChange={(e) => setForm((f) => ({ ...f, partnerCode: e.target.value }))} placeholder="Código do parceiro influenciador (opcional — só para cortesia de parceria)" className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs" maxLength={32} />
+        <p className="mt-1 text-[11px] text-gray-500">Preenchendo aqui, o motivo é gravado como <code>parceiro-influenciador:&lt;código&gt;</code>, o que permite auditar depois quantas cortesias de parceria estão de pé. Cada cortesia ativa é uma sessão WhatsApp a mais no servidor.</p>
       </div>
       <div className="mt-2 flex items-center justify-between gap-2">
         <p className="text-[11px] text-gray-500">Altera plano e/ou expiração imediatamente e deve refletir no uso real após reloadConfig natural das rotas.</p>
