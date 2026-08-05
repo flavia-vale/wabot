@@ -124,6 +124,43 @@ export function getFirstTouchLandingPage() {
   }
 }
 
+const FIRST_TOUCH_CLICK_ID_COOKIE = 'first_touch_gclid'
+
+/**
+ * Guarda o identificador de clique do anúncio (`gclid`/`gbraid`/`wbraid`) na
+ * PRIMEIRA visita, com a mesma semântica first-touch da página de entrada.
+ *
+ * Precisa ser first-touch porque quase ninguém se cadastra no clique do
+ * anúncio: a pessoa chega, lê, volta dias depois e só então cria a conta. Sem
+ * persistir, o cadastro parece orgânico e a campanha nunca recebe o crédito.
+ *
+ * Não reusa `sanitizeAttributionValue` de propósito — ela troca `_` por `-`, e
+ * `_` é caractere válido dentro de um gclid.
+ */
+export function captureFirstTouchClickId(clickId) {
+  try {
+    if (typeof document === 'undefined') return ''
+    const existing = readCookie(FIRST_TOUCH_CLICK_ID_COOKIE)
+    if (existing) return existing
+
+    const safeValue = String(clickId ?? '').trim()
+    if (!/^[A-Za-z0-9_-]{1,200}$/.test(safeValue)) return ''
+
+    writeCookie(FIRST_TOUCH_CLICK_ID_COOKIE, safeValue)
+    return safeValue
+  } catch {
+    return ''
+  }
+}
+
+export function getFirstTouchClickId() {
+  try {
+    return readCookie(FIRST_TOUCH_CLICK_ID_COOKIE)
+  } catch {
+    return ''
+  }
+}
+
 export function attributionForTracking(attribution = {}) {
   return Object.fromEntries(
     Object.entries(attribution)

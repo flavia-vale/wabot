@@ -7,8 +7,9 @@ import Link from 'next/link'
 import { TERMS_VERSION, api } from '@/lib/api'
 import { resolvePostAuthRedirect } from '@/lib/onboardingProgress'
 import { Alert } from '@/components/Alert'
-import { mapAuthError, trackEvent, TRACKING_EVENTS } from '@/lib/analytics'
-import { attributionForTracking, readAttributionFromSearchParams, getFirstTouchLandingPage } from '@/lib/marketing-attribution'
+import { mapAuthError, trackAdsConversion, trackEvent, TRACKING_EVENTS } from '@/lib/analytics'
+import { attributionForTracking, readAttributionFromSearchParams, getFirstTouchClickId, getFirstTouchLandingPage } from '@/lib/marketing-attribution'
+import { GOOGLE_ADS_SIGNUP_LABEL } from '@/lib/google-ads'
 import { SUPPORT_WHATSAPP_URL } from '@/lib/marketing-content'
 import { SUPPORT_PHONE_LABEL } from '@/lib/mobilePixUtils'
 
@@ -173,8 +174,17 @@ function LoginContent() {
         ...(isRegister ? trackingAttribution : {}),
       })
       if (isRegister) {
-        await api.register(cleanName, cleanEmail, password, cleanPhone, { ...signupAttribution, landingPage: resolveRegisterLandingPage(), ...(ref && { ref }), ...(affCode && { aff_code: affCode, affiliateVisitorId: getOrCreateAffiliateVisitorId() }), termsAccepted, termsVersion: TERMS_VERSION })
+        // gclid guardado na PRIMEIRA visita (cookie first-touch): quase ninguém
+        // se cadastra no clique do anúncio, então sem isso a campanha nunca
+        // recebe o crédito do cadastro que ela gerou.
+        const clickId = getFirstTouchClickId()
+        await api.register(cleanName, cleanEmail, password, cleanPhone, { ...signupAttribution, landingPage: resolveRegisterLandingPage(), ...(clickId && { gclid: clickId }), ...(ref && { ref }), ...(affCode && { aff_code: affCode, affiliateVisitorId: getOrCreateAffiliateVisitorId() }), termsAccepted, termsVersion: TERMS_VERSION })
         trackEvent(TRACKING_EVENTS.SIGNUP_SUCCESS, { origin: 'login_page', has_ref: Boolean(ref), ...trackingAttribution })
+        // Conversão para o Google Ads. No-op sem NEXT_PUBLIC_GADS_SIGNUP_LABEL.
+        // Cadastro é a conversão PRIMÁRIA por volume; o pagamento (que é o que
+        // realmente importa) entra depois por importação offline via gclid —
+        // ver docs/marketing/PLANO_GOOGLE_ADS_2026-08-04.md.
+        trackAdsConversion(GOOGLE_ADS_SIGNUP_LABEL)
       } else {
         await api.login(cleanEmail, password)
         trackEvent(TRACKING_EVENTS.LOGIN_SUCCESS, { origin: 'login_page' })
