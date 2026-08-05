@@ -31,11 +31,25 @@ const HTTP_URL_RE = /https?:\/\/[^\s<>"'`]+/gi
 // `@handle` genérico. Cobre tanto o perfil social (`@ocasaljovemoficial_`)
 // quanto a menção de contato do WhatsApp, cujo texto cru é o telefone
 // (`@5511987654321`) e só vira nome na renderização.
-const SOCIAL_HANDLE_RE = /@[\p{L}\p{N}][\p{L}\p{N}._-]{1,49}/gu
+const HANDLE_SRC = '@[\\p{L}\\p{N}][\\p{L}\\p{N}._-]{1,49}'
 
 // Domínio social escrito SEM protocolo — `removeNonOfferUrls` não enxerga
 // esses (o regex dele exige `https?://`), então a linha chegava inteira aqui.
-const SOCIAL_DOMAIN_RE = /(?<![\w.])(?:www\.)?(?:instagram\.com|tiktok\.com|facebook\.com|fb\.com|youtube\.com|youtu\.be|threads\.net|threads\.com|kwai\.com|linktr\.ee|linktree\.com|beacons\.ai|bio\.link|linkbio\.co)\/[^\s]*/gi
+const DOMAIN_SRC = '(?<![\\w.])(?:www\\.)?(?:instagram\\.com|tiktok\\.com|facebook\\.com|fb\\.com|youtube\\.com|youtu\\.be|threads\\.net|threads\\.com|kwai\\.com|linktr\\.ee|linktree\\.com|beacons\\.ai|bio\\.link|linkbio\\.co)\\/[^\\s]*'
+
+const SOCIAL_HANDLE_RE = new RegExp(HANDLE_SRC, 'gu')
+const SOCIAL_DOMAIN_RE = new RegExp(DOMAIN_SRC, 'gui')
+
+// Cauda social no FIM de uma linha: um ou mais tokens sociais separados apenas
+// por espaço, pontuação, emoji e marcadores de formatação. Existe para o caso
+// em que a origem gruda a assinatura na MESMA linha do link — aí remover a
+// linha inteira levaria o link junto, então aparamos só a cauda.
+// A classe `[\s\p{P}\p{S}]` não inclui letra nem dígito, então a cauda nunca
+// avança para dentro da URL nem para dentro do texto da oferta.
+const TRAILING_SOCIAL_TAIL_RE = new RegExp(
+  `(?:[\\s\\p{P}\\p{S}]*(?:${HANDLE_SRC}|${DOMAIN_SRC}))+[\\s\\p{P}\\p{S}]*$`,
+  'iu',
+)
 
 // Marcadores de citação/lista/formatação que a origem usa como enfeite da
 // assinatura. Descascados só para ANALISAR a linha — o texto original nunca é
@@ -112,6 +126,30 @@ export function isSocialOnlyLine(line) {
   return !hasVisibleContent(residue)
 }
 
+// Apara a cauda social do FIM de uma linha, preservando tudo antes dela.
+//
+// Existe porque a origem às vezes gruda a assinatura na mesma linha do link
+// (`➡️ Compre aqui: https://... ⚠ 😱. *@perfil*`). Nesse caso a invariante 2
+// ("nunca remover linha com URL") impedia a limpeza — e impedir era certo:
+// remover a linha levaria o link da cliente junto. Aqui cortamos só o rabo.
+//
+// Devolve a linha original quando não há cauda social, quando a cauda é a
+// linha inteira (caso de `isSocialOnlyLine`, que remove a linha toda) ou
+// quando o que sobraria perdeu o link de oferta que a linha tinha.
+export function stripSocialTail(line) {
+  const raw = String(line ?? '')
+  const match = raw.match(TRAILING_SOCIAL_TAIL_RE)
+  if (!match || match.index === undefined || match.index === 0) return raw
+
+  const prefix = raw.slice(0, match.index).replace(/[\s]+$/, '')
+  if (!hasVisibleContent(prefix)) return raw
+  // Se a linha carregava link de oferta, o prefixo TEM que continuar
+  // carregando — caso contrário estaríamos comendo o link da cliente.
+  if (hasOfferUrl(raw) && !hasOfferUrl(prefix)) return raw
+
+  return prefix
+}
+
 // Assinatura "palavra solta", sem `@` e sem domínio — o caso `sharabarros`.
 // Deliberadamente estreita: sem link, sem dígito (protege preço/%/R$), no
 // máximo 3 palavras (protege frase legítima como "Corre porque o valor pode
@@ -152,17 +190,40 @@ export function stripTrailingSourceSignature(text) {
 
   const lines = raw.split('\n')
   let removed = 0
+  let changed = false
+  let cursor = lines.length
 
   while (removed < MAX_SIGNATURE_LINES) {
-    const index = lastNonEmptyIndex(lines)
+    const index = lastNonEmptyIndex(lines, cursor)
     if (index < 0) break
 
     const line = lines[index]
-    if (hasHttpUrl(line)) break
+
+    // Linha com URL: não pode ser removida (levaria o link junto), mas ainda
+    // pode ter a assinatura grudada no fim. Apara só a cauda e encerra — o
+    // link é o piso da varredura, nada acima dele é assinatura.
+    if (hasHttpUrl(line)) {
+      const trimmed = stripSocialTail(line)
+      if (trimmed !== line) {
+        lines[index] = trimmed
+        changed = true
+      }
+      break
+    }
 
     if (isSocialOnlyLine(line)) {
       lines.splice(index, 1)
       removed++
+      changed = true
+      cursor = index
+      continue
+    }
+
+    // Linha puramente decorativa (só emoji/pontuação, ex.: "🔥🔥🔥"): não é
+    // conteúdo e não é assinatura. Passa por cima dela SEM remover, para que
+    // uma assinatura logo acima continue alcançável.
+    if (!hasVisibleContent(line)) {
+      cursor = index
       continue
     }
 
@@ -171,11 +232,13 @@ export function stripTrailingSourceSignature(text) {
     if (previousIsLinkLine && isBareSignatureLine(line)) {
       lines.splice(index, 1)
       removed++
+      changed = true
+      cursor = index
       continue
     }
 
     break
   }
 
-  return removed ? lines.join('\n') : raw
+  return changed ? lines.join('\n') : raw
 }
