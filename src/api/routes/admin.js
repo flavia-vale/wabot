@@ -12,6 +12,7 @@ import { TERMS_DOCUMENT_ID, getEffectiveTermsDocument, nextTermsVersion, normali
 import { getDlqMaintenanceSnapshot } from '../../jobs/dlqMaintenance.js'
 import { redactAdminPayload, serializeAdminAuditValue } from '../../adminRedaction.js'
 import { buildErrorsByMessage, summarizeDesyncGroups } from '../../adminLogSummary.js'
+import { buildPartnerCourtesyReason, normalizePartnerCode } from '../../ops/partnerCourtesy.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -204,9 +205,18 @@ function parseManualAccessInput(body = {}) {
   const daysRaw = body.days === undefined || body.days === '' ? undefined : Number(body.days)
   const expiresAtRaw = body.expiresAt === undefined || body.expiresAt === '' ? undefined : String(body.expiresAt)
   const reason = String(body.reason ?? '').trim()
+  // Cortesia de parceiro influenciador: quando o admin informa o código do
+  // parceiro, o motivo é gravado no formato canônico
+  // `parceiro-influenciador:<codigo> — <motivo>`, para que dê para auditar
+  // depois quantas cortesias de parceria estão de pé (cada uma é uma sessão
+  // WhatsApp a mais em produção). Campo opcional — não muda nada quando ausente.
+  const partnerCodeRaw = body.partnerCode === undefined || body.partnerCode === '' ? undefined : String(body.partnerCode)
 
   if (plan !== undefined && !['trial', ...PAID_PLANS].includes(plan)) {
     return { ok: false, error: 'Plano inválido. Use trial, basic ou pro.' }
+  }
+  if (partnerCodeRaw !== undefined && !normalizePartnerCode(partnerCodeRaw)) {
+    return { ok: false, error: 'Código do parceiro inválido. Use letras, números, hífen ou underline (até 32 caracteres).' }
   }
   if (daysRaw !== undefined && (!Number.isInteger(daysRaw) || daysRaw < -365 || daysRaw > 365)) {
     return { ok: false, error: 'Dias deve ser um inteiro entre -365 e 365.' }
@@ -221,7 +231,9 @@ function parseManualAccessInput(body = {}) {
     return { ok: false, error: 'Informe plano, dias ou data de expiração para alterar o acesso.' }
   }
 
-  return { ok: true, data: { plan, days: daysRaw, expiresAt, reason } }
+  const finalReason = partnerCodeRaw === undefined ? reason : buildPartnerCourtesyReason(partnerCodeRaw, reason)
+
+  return { ok: true, data: { plan, days: daysRaw, expiresAt, reason: finalReason } }
 }
 
 

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { isBareSignatureLine, isSocialOnlyLine, stripTrailingSourceSignature } from '../src/core/sourceSignature.js'
+import { isBareSignatureLine, isSocialOnlyLine, stripSocialTail, stripTrailingSourceSignature } from '../src/core/sourceSignature.js'
 import { sanitizeInviteLinks } from '../src/messageProcessor.js'
 
 // As mensagens deste arquivo foram copiadas do MessageLog de PRODUÇÃO da conta
@@ -58,6 +58,68 @@ test('remove linha de perfil mesmo cercada de emoji (caso ocasaljovemoficial)', 
   assert.equal(result.includes('ocasaljovemoficial'), false)
   assert.equal(result.includes('https://s.shopee.com.br/4LIJqrEqow'), true)
   assert.equal(result.includes('R$ 49,90'), true)
+})
+
+// 2ª rodada (staging, 2026-08): o `sharabarros` saiu mas o
+// `@ocasaljovemoficial_` sobreviveu. O `MessageLog` troca quebra de linha por
+// espaço (`sanitizeMessageForLog`), então o log NÃO distingue "handle em linha
+// própria" de "handle grudado na linha do link" — e a 1ª rodada só cobria a
+// primeira forma. Estes testes cobrem as duas que faltavam.
+
+test('remove handle GRUDADO na linha do link, preservando o link', () => {
+  const original = [
+    '*UM LAVABO CLEAN* ✨',
+    '🛍 Kit Lavabo Granilite Branco - 2 Peças',
+    '➡️ Compre aqui: https://s.shopee.com.br/4LIJqrEqow ⚠ *😱😱😱.* *@ocasaljovemoficial_*',
+  ].join('\n')
+
+  const result = stripTrailingSourceSignature(original)
+
+  assert.equal(result.includes('ocasaljovemoficial'), false)
+  assert.equal(result.includes('https://s.shopee.com.br/4LIJqrEqow'), true)
+  assert.equal(result.includes('➡️ Compre aqui:'), true)
+})
+
+test('remove handle mesmo com linha decorativa depois dele', () => {
+  const original = [
+    'Kit Lavabo',
+    '➡️ Compre aqui: https://s.shopee.com.br/4LIJqrEqow',
+    '*@ocasaljovemoficial_*',
+    '🔥🔥🔥',
+  ].join('\n')
+
+  const result = stripTrailingSourceSignature(original)
+
+  assert.equal(result.includes('ocasaljovemoficial'), false)
+  assert.equal(result.includes('https://s.shopee.com.br/4LIJqrEqow'), true)
+  // A linha decorativa é pulada, nunca removida — não é conteúdo nem assinatura.
+  assert.equal(result.includes('🔥🔥🔥'), true)
+})
+
+test('remove domínio social grudado na linha do link', () => {
+  const original = 'Kit\nCompre: https://meli.la/1j6G8ag | instagram.com/sharabarros'
+  const result = stripTrailingSourceSignature(original)
+
+  assert.equal(result.includes('sharabarros'), false)
+  assert.equal(result.includes('https://meli.la/1j6G8ag'), true)
+})
+
+test('stripSocialTail nunca come o link nem texto real', () => {
+  // Sem cauda social: intocado.
+  assert.equal(stripSocialTail('Compre aqui: https://meli.la/1j6G8ag'), 'Compre aqui: https://meli.la/1j6G8ag')
+  // Cauda é a linha inteira: devolve intacta (quem remove é isSocialOnlyLine).
+  assert.equal(stripSocialTail('*@perfil*'), '*@perfil*')
+  // Handle no MEIO do texto não é cauda.
+  assert.equal(stripSocialTail('Siga @fulano para mais ofertas'), 'Siga @fulano para mais ofertas')
+  // Corta a cauda, mantém o link.
+  assert.equal(stripSocialTail('Compre: https://meli.la/x ⚠ *@perfil*'), 'Compre: https://meli.la/x')
+})
+
+test('PRESERVA linha do link quando aparar a cauda perderia o link', () => {
+  // Linha em que o próprio link é o "prefixo" — se a cauda engolisse o link,
+  // a oferta ia embora. A guarda devolve a linha intacta.
+  const original = 'Oferta\nhttps://meli.la/1j6G8ag'
+  assert.equal(stripTrailingSourceSignature(original), original)
 })
 
 test('remove domínio social escrito sem protocolo', () => {
