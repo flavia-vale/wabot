@@ -24,6 +24,19 @@ export const EVENTS_CHANNEL = 'bots:events'
 
 // Chave Redis com TTL renovado pelo supervisor para liveness.
 export const SUPERVISOR_HEARTBEAT_KEY = 'supervisor:heartbeat'
+
+// Momento (epoch ms) em que o processo do supervisor subiu. Chave SEPARADA do
+// heartbeat de propósito: o valor do heartbeat é lido por `isSupervisorAlive`
+// como `Boolean(value)`, e mudar o formato dele para carregar mais campos
+// arriscaria a checagem de liveness. Aditivo — não muda formato de mensagem
+// nenhuma, então NÃO exige bump de PROTOCOL_VERSION; uma API antiga
+// simplesmente não lê a chave.
+//
+// Consumido por `ops/staleWorkerCodeGuard.js`: comparado contra o mtime do
+// código no disco, revela que os bot-workers em execução ainda rodam a versão
+// anterior (deploy em modo `remote` não reinicia o supervisor). Ver o RCA no
+// topo daquele arquivo.
+export const SUPERVISOR_BOOTED_AT_KEY = 'supervisor:bootedAt'
 export const SUPERVISOR_HEARTBEAT_TTL_SECONDS = 30
 export const SUPERVISOR_HEARTBEAT_RENEW_INTERVAL_MS = 10_000
 

@@ -69,3 +69,18 @@ export async function isSupervisorAlive() {
     return false
   }
 }
+
+/**
+ * Momento (epoch ms) em que o processo do bot-supervisor subiu, ou `null`
+ * quando não se aplica (modo `inline`) ou o dado não está disponível.
+ * Best-effort: nunca lança. Consumido pelo guard de "código novo não
+ * carregado" (`ops/staleWorkerCodeGuard.js`).
+ */
+export async function getSupervisorBootedAtMs() {
+  if (MODE !== 'remote' || !remoteClient?.getSupervisorBootedAtMs) return null
+  try {
+    return await remoteClient.getSupervisorBootedAtMs()
+  } catch {
+    return null
+  }
+}
