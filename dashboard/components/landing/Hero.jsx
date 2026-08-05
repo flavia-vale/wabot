@@ -2,12 +2,15 @@ import Link from 'next/link';
 import { Icon } from './Icon';
 import { WhatsAppMockup } from './WhatsAppMockup';
 import { buildRegisterHref } from '@/lib/marketing-attribution';
+import { BRAND_ORG_NAME, BRAND_PRODUCT_NAME } from '@/lib/marketing-content';
 
 const s = {
   nav: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '24px 0' },
   navLinks: { display: 'flex', gap: 32, fontSize: 14, color: 'var(--ink-soft)' },
   navLink: { color: 'var(--ink-soft)', textDecoration: 'none', cursor: 'pointer' },
   logo: { display: 'flex', alignItems: 'center', gap: 10, fontWeight: 600, fontSize: 17, color: 'var(--ink)' },
+  logoNames: { display: 'flex', flexDirection: 'column', lineHeight: 1.15 },
+  logoProduct: { fontSize: 12, fontWeight: 500, color: 'var(--ink-soft)' },
   logoMark: {
     width: 32, height: 32, borderRadius: 10,
     background: 'linear-gradient(135deg, var(--accent), var(--accent-2))',
@@ -40,23 +43,32 @@ const s = {
   },
 };
 
-function Nav() {
+function Nav({ registerHref }) {
   return (
     <nav style={s.nav} className="landing-nav" aria-label="Navegação principal da página inicial">
+      {/* Marca única na superfície pública (auditoria de funil 2026-08-05, §1.2).
+        * O visitante chega de um resultado do Google que diz "Espelha Grupos" e
+        * lia só "BOTinho" no topo — duas entidades diferentes no segundo mais
+        * caro do funil. A hierarquia já decidida em marketing-content.js
+        * (Organization = Espelha Grupos, produto = BOTinho) agora aparece
+        * também na tela, em vez de existir só no JSON-LD. */}
       <div style={s.logo}>
         <div style={s.logoMark}>b</div>
-        <span>BOTinho</span>
+        <span style={s.logoNames}>
+          <span>{BRAND_ORG_NAME}</span>
+          <span style={s.logoProduct}>{BRAND_PRODUCT_NAME}</span>
+        </span>
       </div>
       <div style={s.navLinks} className="landing-nav-links">
         <a style={s.navLink} href="#como">Como funciona</a>
         <a style={s.navLink} href="#features">Recursos</a>
         <Link style={s.navLink} href="/ferramentas">Ferramentas</Link>
-        <a style={s.navLink} href="#planos">Planos</a>
+        <Link style={s.navLink} href="/precos">Preços</Link>
         <a style={s.navLink} href="#faq">Perguntas</a>
       </div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center' }} className="landing-nav-cta">
         <Link className="btn btn-ghost" href="/login" style={{ padding: '10px 18px', fontSize: 14 }}>Entrar</Link>
-        <a className="btn btn-primary" href="#planos" style={{ padding: '10px 18px', fontSize: 14 }}>Começar grátis</a>
+        <Link className="btn btn-primary" href={registerHref} data-seo-cta="nav-primary-register" style={{ padding: '10px 18px', fontSize: 14 }}>Testar 7 dias grátis</Link>
       </div>
       <details className="landing-mobile-menu">
         <summary className="landing-mobile-menu-trigger" aria-label="Abrir menu de navegação">Menu</summary>
@@ -64,33 +76,47 @@ function Nav() {
           <a style={s.navLink} href="#como">Como funciona</a>
           <a style={s.navLink} href="#features">Recursos</a>
           <Link style={s.navLink} href="/ferramentas">Ferramentas</Link>
-          <a style={s.navLink} href="#planos">Planos</a>
+          <Link style={s.navLink} href="/precos">Preços</Link>
           <a style={s.navLink} href="#faq">Perguntas</a>
           <Link className="btn btn-ghost" href="/login">Entrar</Link>
-          <a className="btn btn-primary" href="#planos">Começar grátis</a>
+          <Link className="btn btn-primary" href={registerHref} data-seo-cta="nav-mobile-register">Testar 7 dias grátis</Link>
         </div>
       </details>
     </nav>
   );
 }
 
-export function Hero({ tone, primaryCtaLabel = 'Conectar meu WhatsApp', eyebrowLabel = 'Experimente grátis!', headlineOverride, subOverride, heroStyle }) {
+/* HEADLINE — teste dos 5 segundos (auditoria de funil 2026-08-05, §3.1).
+ *
+ * A versão anterior vendia benefício de PROCESSO ("rotina organizada",
+ * "controle operacional"), usava "e/ou" três vezes em duas frases e gastava a
+ * primeira dobra com ressalva jurídica ("quando aplicável", "credenciais
+ * cadastradas") — que continua no site, na seção de uso responsável, que é o
+ * lugar dela. Além disso não dizia PARA QUEM é: "afiliada" não aparecia.
+ *
+ * A versão nova entra pelas palavras que a pessoa usa (afiliada, robô, copiar
+ * e colar), promete TRABALHO A MENOS — nunca dinheiro a mais, o que violaria
+ * PRODUCT_LIMITATIONS — e carrega a preservação como "intervalo controlado",
+ * sem o jargão da casa ("cadência", "Preservação Avançada"). */
+
+export function Hero({ tone, primaryCtaLabel = 'Testar 7 dias grátis', eyebrowLabel = '7 dias grátis, sem cartão', headlineOverride, subOverride, heroStyle }) {
   const heroPrimaryHref = buildRegisterHref({ source: 'landing', campaign: 'home-hero', content: 'hero-primary' })
+  const navRegisterHref = buildRegisterHref({ source: 'landing', campaign: 'home-nav', content: 'nav-primary' })
   const headline = headlineOverride ?? (tone === 'direto'
-    ? <><span>Ofertas conferidas,</span><br /><span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>rotina organizada.</span></>
+    ? <><span>Suas ofertas de afiliada,</span><br /><span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>postadas sozinhas.</span></>
     : tone === 'animado'
-    ? <><span>Grupos e canais geram ofertas.</span><br /><span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>Você organiza.</span> 💜</>
-    : <><span>Promoções conferidas</span><br />viram <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>rotina no seu grupo/canal.</span></>);
+    ? <><span>Chega de copiar e colar</span><br />oferta <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>uma por uma.</span> 💜</>
+    : <><span>Suas ofertas de afiliada,</span><br />postadas <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>sem copiar e colar.</span></>);
 
   const sub = subOverride ?? (tone === 'direto'
-    ? 'Você escolhe os grupos e/ou canais de promoção que quer monitorar. O bot pega cada link da Shopee, ML ou Amazon, ajuda a usar suas credenciais cadastradas e prepara a postagem para seu grupo e/ou canal de achadinhos.'
+    ? 'Você escolhe os grupos que já acompanha. O robô pega os links da Shopee, Amazon e Mercado Livre, troca pelo seu link de afiliada e posta no seu grupo com intervalo controlado.'
     : tone === 'animado'
-    ? 'Aqueles grupos e canais lotados de promoção que você acompanha? O bot monitora conforme sua configuração. Cada link suportado pode ser conferido, organizado e enviado para o seu grupo e/ou canal com cadência. ✨'
-    : 'Você indica os grupos e/ou canais que quer monitorar (de promoções, ofertas, achadinhos). O bot detecta cada link da Shopee, ML ou Amazon, usa as credenciais cadastradas quando aplicável e reposta no seu próprio grupo e/ou canal de clientes com controle operacional.');
+    ? 'Aqueles grupos lotados de promoção que você já acompanha? O robô pega os links da Shopee, Amazon e Mercado Livre, troca pelo seu link de afiliada e posta no seu grupo no ritmo que você definir. ✨'
+    : 'Você escolhe os grupos que já acompanha. O robô pega os links da Shopee, Amazon e Mercado Livre, troca pelo seu link de afiliada e posta no seu grupo com intervalo controlado. Você revisa o que quiser antes.');
 
   return (
     <div className="wrap" style={{ position: 'relative' }}>
-      <Nav />
+      <Nav registerHref={navRegisterHref} />
       <div className="landing-mobile-priority">
         <Link className="btn btn-ghost" href="/login">Entrar</Link>
       </div>

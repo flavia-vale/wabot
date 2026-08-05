@@ -51,7 +51,13 @@ function mergePlanContent(plans) {
   });
 }
 
-export function Pricing() {
+/* `initialPlans` chega já resolvido do servidor (lib/plans-server.js), então o
+ * preço REAL — e não o fallback — vai no HTML inicial, que é o que crawler e
+ * IA leem. O fetch abaixo continua existindo só para refletir uma troca de
+ * preço feita no painel admin sem esperar o próximo deploy; quando ele falha,
+ * a página segue mostrando o que veio do servidor.
+ * Auditoria de funil 2026-08-05, §1.4. */
+export function Pricing({ initialPlans = null, showHeading = true }) {
   const [dynamicPlans, setDynamicPlans] = useState(null);
 
   useEffect(() => {
@@ -62,26 +68,44 @@ export function Pricing() {
         return res.json();
       })
       .then((data) => {
-        if (active) setDynamicPlans(Array.isArray(data.plans) ? data.plans : []);
+        // Só sobrescreve o que veio do servidor quando a API devolve algo de
+        // fato. Lista vazia ou erro mantém `dynamicPlans` em null, e o render
+        // continua usando `initialPlans` — antes, um blip da API rebaixava o
+        // preço real para o fallback na frente do cliente.
+        if (active && Array.isArray(data.plans) && data.plans.length) setDynamicPlans(data.plans);
       })
-      .catch(() => {
-        if (active) setDynamicPlans([]);
-      });
+      .catch(() => {});
     return () => { active = false; };
   }, []);
 
-  const plans = useMemo(() => mergePlanContent(dynamicPlans), [dynamicPlans]);
+  const serverPlans = useMemo(
+    () => (Array.isArray(initialPlans) && initialPlans.length ? initialPlans : null),
+    [initialPlans],
+  );
+  const plans = useMemo(
+    () => (dynamicPlans === null ? serverPlans ?? mergePlanContent(null) : mergePlanContent(dynamicPlans)),
+    [dynamicPlans, serverPlans],
+  );
 
   return (
     <section id="planos">
       <div className="wrap">
-        <div style={s.head}>
-          <span className="pill"><span className="dot" />Planos</span>
-          <h2 style={{ ...s.h2, marginTop: 16 }}>
-            Escolha o plano para <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>começar e escalar</span> sua operação.
-          </h2>
-          <p style={s.sub}>Planos públicos: Trial com experiência Pro por 7 dias, Basic para operação manual em grupos e Pro com canais, ofertas automáticas, filas e Módulo de Preservação Avançada. Valores podem ser atualizados pelo painel administrativo após validação em staging.</p>
-        </div>
+        {showHeading && (
+          <div style={s.head}>
+            <span className="pill"><span className="dot" />Planos</span>
+            <h2 style={{ ...s.h2, marginTop: 16 }}>
+              Teste 7 dias de graça. <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>Sem cartão.</span>
+            </h2>
+            {/* Jargão da casa ("Módulo de Preservação Avançada") não é porta de
+              * entrada — vira "intervalo entre os envios", que é o que a pessoa
+              * entende. Regra de vocabulário do AGENTS.md, seção de SEO. */}
+            <p style={s.sub}>
+              São 7 dias com tudo do Pro liberado e sem pedir cartão. Depois você escolhe:
+              Basic para postar nos seus grupos, ou Pro para incluir canais, ofertas
+              automáticas e o controle de intervalo entre os envios.
+            </p>
+          </div>
+        )}
 
         <div style={s.grid} className="landing-pricing-grid">
           {plans.map(p => (

@@ -26,27 +26,26 @@ const s = {
   numLabel: { fontSize: 12.5, color: 'var(--ink-soft)', marginTop: 8 },
 };
 
-const testimonials = [
-  { q: 'Eu mandava os links na mão para 4 grupos diferentes. Agora durmo e acordo com comissão pingando.', name: 'Sol Almeida', role: 'Afiliada Shopee · 6 grupos', g: 'linear-gradient(135deg,#F4D9E0,#A78BFA)' },
-  { q: 'O texto que ele monta soa igual eu falando. As meninas do grupo nem percebem que é bot.', name: 'Mariana Costa', role: 'Influencer micro · ML + Amazon', g: 'linear-gradient(135deg,#C8E6D8,#7CC9A9)' },
-  { q: 'Em duas semanas paguei a assinatura do ano. Sério, era dinheiro que eu deixava na mesa.', name: 'Rafa Pires', role: 'Mãe afiliada · Shopee', g: 'linear-gradient(135deg,#F4E5D5,#E8A488)' },
-];
+/* PROVA SOCIAL INVENTADA — REMOVIDA (auditoria de funil 2026-08-05, §1.1).
+ * Estes depoimentos e números ("1.200+ afiliadas", "R$ 4,2M em comissões")
+ * nunca tiveram lastro e prometiam resultado financeiro, contradizendo a
+ * política de uso responsável do produto. Este diretório é o protótipo Vite
+ * (não vai para o deploy), mas os dados ficam zerados aqui também para que os
+ * números não voltem por copiar-e-colar. A versão viva do bloco está em
+ * dashboard/components/landing/Social.jsx.
+ * NÃO REINTRODUZIR sem fonte rastreável e autorização por escrito. */
+const testimonials = [];
 
-const stats = [
-  ['1.200+', 'afiliadas ativas'],
-  ['R$ 4,2M', 'comissões geradas'],
-  ['380k', 'links convertidos'],
-  ['4,9 ★', 'nota das clientes'],
-];
+const stats = [];
 
 export function Social() {
   return (
     <section>
       <div className="wrap">
         <div style={s.head}>
-          <span className="pill"><span className="dot" />Quem já usa</span>
+          <span className="pill"><span className="dot" />Veja funcionando</span>
           <h2 style={{ ...s.h2, marginTop: 16 }}>
-            Mais de <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>1.200 afiliadas</span> deixaram o copia-e-cola.
+            Não pedimos que você <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>acredite</span>. Veja.
           </h2>
         </div>
         <div style={s.grid}>

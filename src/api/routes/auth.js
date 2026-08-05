@@ -331,6 +331,14 @@ export async function authRoutes(app) {
     const providedEmail = normalizeEmail(rawEmail)
     const email = providedEmail || generateFallbackEmail()
     const isPromoVipFlow = source === 'promo_vip_7dias' && couponCode === 'VIP7DIAS'
+    // Celular OPCIONAL no cadastro (auditoria de funil 2026-08-05, §3.4).
+    // Era campo obrigatório e cada campo obrigatório a mais custa conversão no
+    // primeiro contato — ainda mais um telefone, que o público de afiliado
+    // hesita em dar antes de confiar no produto. Continua sendo pedido (é o que
+    // viabiliza o suporte proativo), só não trava mais a criação da conta.
+    // A coluna é `String? @unique`, então NULL já era permitido e não há
+    // migration envolvida; no SQLite vários NULL convivem sob o índice único.
+    const phoneWasProvided = String(rawContactPhone ?? '').replace(/\D/g, '').length > 0
     const normalizedPhone = normalizeContactPhone(rawContactPhone)
     const contactPhone = normalizedPhone
     const hasPassword = typeof rawPassword === 'string' && rawPassword.trim().length > 0
@@ -338,7 +346,10 @@ export async function authRoutes(app) {
     // Ausência MUST NOT bloquear o cadastro (FR-005) — string vazia é o fallback.
     const landingPage = sanitizeAttributionValue(rawLandingPage)
 
-    if (!name || !contactPhone) return reply.code(400).send({ error: 'nome e celular obrigatórios' })
+    if (!name) return reply.code(400).send({ error: 'nome obrigatório' })
+    // Telefone digitado mas inválido continua sendo erro: melhor avisar do que
+    // gravar NULL em silêncio e a pessoa achar que deixou contato de suporte.
+    if (phoneWasProvided && !contactPhone) return reply.code(400).send({ error: 'Confira o celular: informe com DDD, apenas números' })
     if (termsAccepted !== true) return reply.code(400).send({ error: 'Aceite os Termos de Uso e ciência de riscos para criar a conta' })
     if (rawEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply.code(400).send({ error: 'Formato de email inválido' })
     if (!hasPassword) return reply.code(400).send({ error: 'Senha obrigatória' })
@@ -346,7 +357,7 @@ export async function authRoutes(app) {
 
     const [existingEmail] = await Promise.all([
       findUserByNormalizedEmail(email),
-      ensureUniqueContactPhone(contactPhone),
+      contactPhone ? ensureUniqueContactPhone(contactPhone) : Promise.resolve(),
     ])
     if (existingEmail) return reply.code(409).send({ error: 'Email já cadastrado' })
 
@@ -387,7 +398,8 @@ export async function authRoutes(app) {
         email,
         passwordHash,
         contactPhone,
-        contactPhoneOptInAt: now,
+        // Sem telefone não existe opt-in de contato para registrar.
+        contactPhoneOptInAt: contactPhone ? now : null,
         status: 'active',
         plan: 'trial',
         accessExpiresAt,
