@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { isBareSignatureLine, isSocialOnlyLine, stripSocialTail, stripTrailingSourceSignature } from '../src/core/sourceSignature.js'
+import { isBareSignatureLine, isCreditSignatureLine, isSocialOnlyLine, stripSocialTail, stripTrailingSourceSignature } from '../src/core/sourceSignature.js'
 import { sanitizeInviteLinks } from '../src/messageProcessor.js'
 
 // As mensagens deste arquivo foram copiadas do MessageLog de PRODUÇÃO da conta
@@ -119,6 +119,71 @@ test('PRESERVA linha do link quando aparar a cauda perderia o link', () => {
   // Linha em que o próprio link é o "prefixo" — se a cauda engolisse o link,
   // a oferta ia embora. A guarda devolve a linha intacta.
   const original = 'Oferta\nhttps://meli.la/1j6G8ag'
+  assert.equal(stripTrailingSourceSignature(original), original)
+})
+
+// 3ª rodada (produção, 2026-08): OUTRO cliente, grupo "PROMO FESTAS". A
+// assinatura é uma linha de CRÉDITO — `/Vitrinedadecor - Por Marla Tavares`.
+// Sem `@`, sem domínio social e com 4 palavras, passava do teto de 3 da regra
+// de "palavra solta". Mensagem reproduzida do print enviado pela cliente.
+
+test('remove linha de crédito/autoria do grupo de origem (caso PROMO FESTAS)', () => {
+  const original = [
+    '🧡 kit2 Suporte Coluna Balão Base Bexiga 1,m Armação Decoração',
+    '',
+    'Aproveite e compre agora:',
+    '',
+    'Apenas R$ 46,96',
+    '',
+    '🔗 Compre aqui:',
+    'https://s.shopee.com.br/5fnhlzxLBO',
+    '',
+    '🎟 Resgate seus cupons aqui:',
+    'https://s.shopee.com.br/6pzfA8slH2',
+    '',
+    '/Vitrinedadecor - Por Marla Tavares',
+  ].join('\n')
+
+  const result = stripTrailingSourceSignature(original)
+
+  assert.equal(result.includes('Vitrinedadecor'), false)
+  assert.equal(result.includes('Marla'), false)
+  // Os DOIS links precisam sobreviver — produto e cupom.
+  assert.equal(result.includes('https://s.shopee.com.br/5fnhlzxLBO'), true)
+  assert.equal(result.includes('https://s.shopee.com.br/6pzfA8slH2'), true)
+  assert.equal(result.includes('🎟 Resgate seus cupons aqui:'), true)
+  assert.equal(result.includes('Apenas R$ 46,96'), true)
+})
+
+test('isCreditSignatureLine: exige marcador de assinatura, não só contagem de palavras', () => {
+  // Crédito de autoria e marca prefixada.
+  assert.equal(isCreditSignatureLine('/Vitrinedadecor - Por Marla Tavares'), true)
+  assert.equal(isCreditSignatureLine('/Vitrinedadecor'), true)
+  assert.equal(isCreditSignatureLine('Por Marla Tavares'), true)
+  assert.equal(isCreditSignatureLine('by Ana Paula'), true)
+  assert.equal(isCreditSignatureLine('@lojinhadaana'), true)
+
+  // A trava de maiúscula separa crédito de frase comum: "Por Marla" é
+  // assinatura, "por tempo limitado" não é.
+  assert.equal(isCreditSignatureLine('por tempo limitado'), false)
+  assert.equal(isCreditSignatureLine('Válido por tempo limitado'), false)
+  // Caixa alta não pode driblar a trava — quem barra aqui é o vocabulário
+  // de oferta ("tempo"/"limitado"), não a maiúscula.
+  assert.equal(isCreditSignatureLine('Por Tempo Limitado'), false)
+  // Dígito = conteúdo de oferta.
+  assert.equal(isCreditSignatureLine('Por apenas R$ 10'), false)
+  // Sem marcador nenhum: intocada, por mais curta que seja.
+  assert.equal(isCreditSignatureLine('Compre agora e garanta o seu'), false)
+  assert.equal(isCreditSignatureLine('Resgate seus cupons aqui:'), false)
+})
+
+test('PRESERVA frase de urgência de 4+ palavras sem marcador de assinatura', () => {
+  const original = [
+    'Kit Suporte Coluna Balão',
+    'Compre aqui: https://s.shopee.com.br/5fnhlzxLBO',
+    'Últimas peças no estoque',
+  ].join('\n')
+
   assert.equal(stripTrailingSourceSignature(original), original)
 })
 
