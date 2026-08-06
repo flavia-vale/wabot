@@ -50,16 +50,11 @@ else
   echo "  .env.local ......... NÃO existe, será criado"
 fi
 
-# O .env.local do dashboard também carrega PORT e NEXT_PUBLIC_FORCE_SAME_ORIGIN_API.
-# Se ele existe e NÃO tem PORT, provavelmente é o arquivo errado — abortar em vez
-# de subir o dashboard numa porta default e derrubar o site.
-if [ -f "$ENV_FILE" ] && ! grep -q '^PORT=' "$ENV_FILE"; then
-  echo
-  echo "  AVISO: o .env.local não tem PORT. Confira se é o arquivo certo antes de seguir."
-  echo "  (esperado: PORT=3000 em prod, PORT=3006 em staging)"
-  read -r -p "  Continuar mesmo assim? [s/N] " ok
-  [ "$ok" = "s" ] || { echo "Abortado."; exit 1; }
-fi
+# NÃO exigir PORT aqui. Em produção o PORT do dashboard vem do
+# `ecosystem.config.cjs` (env.PORT do app pm2), e o `.env.local` pode
+# legitimamente nem existir — foi o que aconteceu na primeira execução real
+# deste script. Uma versão anterior abortava nesse caso, tratando ambiente
+# normal como erro de configuração.
 
 # ------------------------------------------------------- memória disponível ---
 if [ "$DO_BUILD" = "1" ]; then
@@ -127,7 +122,14 @@ pm2 restart "$PM2_APP" --update-env
 
 # ---------------------------------------------------------------- verificar ---
 say "5/5  Verificação"
-PORT_VALUE="$(grep '^PORT=' "$ENV_FILE" | cut -d= -f2- || echo 3000)"
+# O PORT costuma vir do ecosystem.config.cjs, não do .env.local — por isso o
+# fallback por ambiente em vez de assumir que o arquivo tem a chave.
+PORT_VALUE="$(grep '^PORT=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
+if [ -z "$PORT_VALUE" ]; then
+  PORT_VALUE=3000
+  [ "$PM2_APP" = "visual-staging" ] && PORT_VALUE=3006
+fi
+echo "  porta usada na verificação: $PORT_VALUE"
 sleep 5
 
 HITS="$(curl -s --max-time 20 "http://127.0.0.1:${PORT_VALUE}/" | grep -c 'googletagmanager' || true)"
