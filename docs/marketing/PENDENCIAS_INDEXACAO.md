@@ -17,21 +17,17 @@ para ser rastreada.
 Só pedir **depois** que a PR correspondente estiver mergeada e o deploy de
 produção tiver terminado — pedir antes indexa a versão velha e obriga a repetir.
 
-### Da PR #1385 (comparativos nome-contra-nome)
-
-- [ ] `https://espelhagrupos.com.br/alternativas/proafiliados`
-- [ ] `https://espelhagrupos.com.br/alternativas/shozap`
-- [ ] `https://espelhagrupos.com.br/alternativas/fluxopromo`
-
-### Restante da rodada de 04/08 (cota do dia acabou)
-
-- [ ] `https://espelhagrupos.com.br/bot-canal-whatsapp`
-- [ ] `https://espelhagrupos.com.br/faq-antiban-whatsapp`
+Nada pendente.
 
 ---
 
 ## Já pedido em 04/08/2026
 
+- [x] `/alternativas/proafiliados`
+- [x] `/alternativas/shozap`
+- [x] `/alternativas/fluxopromo`
+- [x] `/bot-canal-whatsapp`
+- [x] `/faq-antiban-whatsapp`
 - [x] `/` (home — título mudou de "BOTinho" para "Espelha Grupos")
 - [x] `/programa-de-afiliados`
 - [x] `/alternativas/achadinhos-bot`
