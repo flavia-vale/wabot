@@ -68,3 +68,20 @@ test('a tag só é montada quando configurada, e o gclid é capturado sempre', (
   assert.ok(effectIdx > 0 && guardIdx > 0, 'estrutura do componente mudou')
   assert.ok(effectIdx < guardIdx, 'a captura do gclid não pode depender da env do Ads')
 })
+
+test('aceita o send_to completo OU só o rótulo, sem falhar em silêncio', async () => {
+  const { resolveConversionSendTo } = await import('../dashboard/lib/google-ads.js')
+  const ID = 'AW-1234567890'
+
+  // Formato completo, copiado do snippet do painel: passa direto.
+  assert.equal(resolveConversionSendTo('AW-1234567890/AbC-D_efG', ID), 'AW-1234567890/AbC-D_efG')
+
+  // Só o rótulo (erro fácil de cometer ao copiar): montamos o valor completo.
+  // Sem isso o Google descarta o disparo SEM ERRO e a campanha fica sem
+  // conversao, o que só se descobre estranhando o relatório semanas depois.
+  assert.equal(resolveConversionSendTo('AbC-D_efG', ID), 'AW-1234567890/AbC-D_efG')
+
+  // Sem rótulo, ou sem ID e sem barra: nada a enviar.
+  assert.equal(resolveConversionSendTo('', ID), '')
+  assert.equal(resolveConversionSendTo('AbC-D_efG', ''), '')
+})
