@@ -4,6 +4,10 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { DEFAULT_RISK_INPUTS, RISK_INPUT_LIMITS, calculateWhatsAppRisk } from '@/lib/free-tools/risk-calculator'
 import { TRACKING_EVENTS, trackEvent } from '@/lib/analytics'
+import { ToolLeadCapture } from '@/components/free-tools/ToolLeadCapture'
+// Mesma allowlist que a rota valida no servidor — importar evita as duas pontas
+// divergirem e a captura passar a tomar 400 sem ninguém perceber.
+import { LEAD_SOURCES } from '../../../src/marketing/leadCapture.js'
 
 const numericFields = [
   { key: 'channels', label: 'Canais do WhatsApp', suffix: 'canais' },
@@ -201,6 +205,12 @@ export function WhatsAppRiskCalculator() {
             </Link>
           </div>
         </div>
+
+        <ToolLeadCapture
+          source={LEAD_SOURCES.RISK_CALCULATOR}
+          context={{ score: result.score, band: result.band.id, destinations: result.destinations }}
+          question="Quer receber o guia de preservação quando sair?"
+        />
       </div>
     </section>
   )

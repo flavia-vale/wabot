@@ -845,3 +845,21 @@ model AffiliateCommissionLedger {
   @@index([commissionId, createdAt])
   @@index([affiliateId, createdAt])
 }
+
+// Lead capturado nas ferramentas gratuitas (calculadoras + diagnóstico anti-ban).
+// Ver src/marketing/leadCapture.js para a validação e o motivo de existir.
+model MarketingLead {
+  id             String    @id @default(cuid())
+  email          String
+  source         String
+  context        String    @default("{}")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  unsubscribedAt DateTime?
+
+  // A mesma pessoa usando a mesma ferramenta de novo atualiza a linha em vez de
+  // criar outra; usando ferramenta DIFERENTE cria linha nova (interesse novo).
+  @@unique([email, source])
+  @@index([createdAt])
+  @@index([source, createdAt])
+}

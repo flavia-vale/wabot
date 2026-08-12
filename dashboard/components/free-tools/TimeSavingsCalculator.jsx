@@ -9,6 +9,9 @@ import {
   formatCurrency,
   formatHours,
 } from '@/lib/free-tools/time-calculator'
+import { ToolLeadCapture } from '@/components/free-tools/ToolLeadCapture'
+// Mesma allowlist validada no servidor — ver WhatsAppRiskCalculator.
+import { LEAD_SOURCES } from '../../../src/marketing/leadCapture.js'
 
 const fields = [
   { key: 'monitorGroups', label: 'Grupos que você monitora', suffix: 'origens' },
@@ -143,6 +146,16 @@ export function TimeSavingsCalculator() {
             </Link>
           </div>
         </div>
+
+        <ToolLeadCapture
+          source={LEAD_SOURCES.TIME_CALCULATOR}
+          context={{
+            manual_hours_month: result.manualHoursMonth,
+            saved_hours_month: result.savedHoursMonth,
+            risk_level: result.riskLevel.id,
+          }}
+          question="Quer receber a rotina pronta quando a gente publicar?"
+        />
       </div>
     </section>
   )

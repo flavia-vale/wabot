@@ -4,6 +4,9 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { TRACKING_EVENTS, trackEvent } from '@/lib/analytics'
 import { sanitizeAttributionValue } from '@/lib/marketing-attribution'
+import { submitLeadBeacon } from '@/lib/free-tools/lead-capture-client'
+// Mesma allowlist validada no servidor — ver src/marketing/leadCapture.js.
+import { LEAD_SOURCES } from '../../../src/marketing/leadCapture.js'
 
 const questions = [
   {
@@ -163,6 +166,20 @@ export function PreservationDiagnostic({ origin = 'diagnostico_antiban_whatsapp'
       score_band: result.id,
       profile: sanitizeAttributionValue(profile),
     })
+
+    /* Guarda o lead ANTES da navegação para o cadastro. Sem isto, quem preenche
+     * o e-mail aqui e desiste no meio do cadastro não deixa rastro nenhum — e
+     * essa pessoa é justamente a mais interessada da página. Beacon porque o
+     * submit é um GET para /login e um fetch comum morreria na navegação. */
+    // O campo de e-mail é opcional nesta página. Só chamamos com algo plausível
+    // para não gerar 400 (e ruído de `tool_lead_rejected`) em cada submit vazio.
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      submitLeadBeacon({
+        email: email.trim(),
+        source: LEAD_SOURCES.ANTIBAN_DIAGNOSTIC,
+        context: { score, band: result.id, profile: sanitizeAttributionValue(profile) },
+      })
+    }
   }
 
   function trackCta(cta) {

@@ -16,6 +16,10 @@ export const PUBLIC_ANALYTICS_EVENTS = new Set([
   'comparison_cta_click',
   'partner_form_submit',
   'partner_form_validation_blocked',
+  // Captura de e-mail nas ferramentas gratuitas. Precisa estar TAMBÉM em
+  // ANALYTICS_EVENTS abaixo — faltar em uma das duas some com o dado sem erro.
+  'tool_lead_captured',
+  'tool_lead_rejected',
   // Visita chegando de fora (IA, busca, social). É como medimos se resposta de
   // ChatGPT/Perplexity está trazendo gente — a Cloudflare mostra o robô que
   // rastreou, isto mostra a pessoa que chegou. Só o host do referenciador é
@@ -43,6 +47,9 @@ export const ANALYTICS_EVENTS = new Set([
   'referral_visit',
   'lead_magnet_started',
   'lead_magnet_submitted',
+  // Captura de e-mail nas ferramentas gratuitas — ver PUBLIC_ANALYTICS_EVENTS.
+  'tool_lead_captured',
+  'tool_lead_rejected',
   'signup_started_from_seo',
   'comparison_page_view',
   'comparison_scroll_50',

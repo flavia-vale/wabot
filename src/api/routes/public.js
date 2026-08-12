@@ -1,12 +1,19 @@
 import db from '../../db.js'
 import { PUBLIC_ANALYTICS_EVENTS, sanitizeAnalyticsMetadata, trackAnalyticsEvent, trackAnalyticsEventSafe } from '../../analytics.js'
 import { getEffectiveTermsDocument } from '../../legalTerms.js'
+import { buildLeadCapturePayload } from '../../marketing/leadCapture.js'
 
 
 const publicAnalyticsAttempts = new Map()
 const publicAnalyticsQuality = { blocked429: 0, invalidEvent: 0, accepted: 0 }
 const PUBLIC_ANALYTICS_RATE_WINDOW_MS = 10 * 60 * 1000
 const PUBLIC_ANALYTICS_RATE_LIMIT = 60
+
+// Limite próprio, bem mais apertado que o de analytics: aqui cada requisição
+// GRAVA uma linha no SQLite. 60/10min por IP seria convite para encher a tabela.
+const leadCaptureAttempts = new Map()
+const LEAD_CAPTURE_RATE_WINDOW_MS = 10 * 60 * 1000
+const LEAD_CAPTURE_RATE_LIMIT = 8
 
 export function normalizePublicAnalyticsMetadata(metadata = {}) {
   const safe = sanitizeAnalyticsMetadata(metadata)
@@ -33,6 +40,24 @@ export function consumePublicAnalyticsAttempt({ ip = 'unknown', now = Date.now()
 
 export function clearPublicAnalyticsAttempts() {
   publicAnalyticsAttempts.clear()
+}
+
+export function consumeLeadCaptureAttempt({ ip = 'unknown', now = Date.now() } = {}) {
+  const key = String(ip || 'unknown').slice(0, 80)
+  const current = leadCaptureAttempts.get(key)
+  if (!current || now > current.resetAt) {
+    const next = { count: 1, resetAt: now + LEAD_CAPTURE_RATE_WINDOW_MS }
+    leadCaptureAttempts.set(key, next)
+    return { blocked: false, resetAt: next.resetAt }
+  }
+
+  current.count += 1
+  if (current.count > LEAD_CAPTURE_RATE_LIMIT) return { blocked: true, resetAt: current.resetAt }
+  return { blocked: false, resetAt: current.resetAt }
+}
+
+export function clearLeadCaptureAttempts() {
+  leadCaptureAttempts.clear()
 }
 export function getPublicAnalyticsQualitySnapshot() {
   return { ...publicAnalyticsQuality }
@@ -134,6 +159,49 @@ async function handlePublicAnalytics(req, reply, { includeVersion = false } = {}
   return reply.code(202).send(includeVersion ? { ok: true, version: 'v1' } : { ok: true })
 }
 
+/* Captura de e-mail nas ferramentas gratuitas.
+ *
+ * Contrato de honestidade (não regredir): esta rota SÓ guarda o lead. Ela não
+ * promete e não dispara e-mail — o SMTP é opcional (`src/email/mailer.js` vira
+ * no-op sem as envs `SMTP_*`), então prometer entrega aqui seria mentir para a
+ * pessoa toda vez que a env não estivesse preenchida. A copy do formulário
+ * também não promete (ver ToolLeadCapture.jsx). Quando o SMTP for configurado,
+ * o envio entra como passo separado e a copy muda junto.
+ */
+async function handleLeadCapture(req, reply) {
+  const attempt = consumeLeadCaptureAttempt({ ip: req.ip })
+  if (attempt.blocked) {
+    const retryAfter = Math.max(1, Math.ceil((attempt.resetAt - Date.now()) / 1000))
+    reply.header('Retry-After', String(retryAfter))
+    return reply.code(429).send({ error: 'Muitas tentativas. Tente novamente mais tarde.' })
+  }
+
+  const parsed = buildLeadCapturePayload(req.body ?? {})
+  if (!parsed.ok) {
+    trackAnalyticsEventSafe({ event: 'tool_lead_rejected', metadata: { reason: parsed.error } })
+    return reply.code(400).send({ error: parsed.error })
+  }
+
+  const { email, source, context } = parsed.lead
+
+  try {
+    // Upsert: a mesma pessoa recalculando não vira linha nova nem erro de
+    // unique — o contexto novo (resultado mais recente) substitui o antigo.
+    await db.marketingLead.upsert({
+      where: { email_source: { email, source } },
+      create: { email, source, context: JSON.stringify(context) },
+      update: { context: JSON.stringify(context) },
+    })
+  } catch (err) {
+    req.log?.warn?.({ err: err?.message }, 'lead-capture: falha ao gravar lead')
+    return reply.code(500).send({ error: 'Não conseguimos salvar agora. Tente de novo em instantes.' })
+  }
+
+  // Só a origem entra no analytics — e-mail é dado da pessoa e não vira evento.
+  trackAnalyticsEventSafe({ event: 'tool_lead_captured', metadata: { source } })
+  return reply.code(202).send({ ok: true })
+}
+
 async function getActiveFaqItems() {
   return db.faqItem.findMany({
     where: { isActive: true },
@@ -230,6 +298,16 @@ export async function publicRoutes(app) {
     return { tutorial }
   })
 
+
+  app.post('/leads', async (req, reply) => {
+    reply.header('Cache-Control', 'no-store, max-age=0')
+    return handleLeadCapture(req, reply)
+  })
+
+  app.post('/v1/leads', async (req, reply) => {
+    reply.header('Cache-Control', 'no-store, max-age=0')
+    return handleLeadCapture(req, reply)
+  })
 
   app.post('/analytics', async (req, reply) => {
     reply.header('Cache-Control', 'no-store, max-age=0')
