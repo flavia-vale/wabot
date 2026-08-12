@@ -154,7 +154,8 @@ export function TimeSavingsCalculator() {
             saved_hours_month: result.savedHoursMonth,
             risk_level: result.riskLevel.id,
           }}
-          question="Quer receber a rotina pronta quando a gente publicar?"
+          question="Quer recuperar essas horas na sua operação?"
+          utmCampaign="canais-preservacao"
         />
       </div>
     </section>

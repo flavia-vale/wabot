@@ -209,7 +209,8 @@ export function WhatsAppRiskCalculator() {
         <ToolLeadCapture
           source={LEAD_SOURCES.RISK_CALCULATOR}
           context={{ score: result.score, band: result.band.id, destinations: result.destinations }}
-          question="Quer receber o guia de preservação quando sair?"
+          question="Quer aplicar essas correções na sua operação?"
+          utmCampaign="canais-preservacao"
         />
       </div>
     </section>

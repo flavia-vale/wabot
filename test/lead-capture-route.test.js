@@ -61,3 +61,33 @@ test('a captura não esconde o resultado atrás do e-mail', () => {
   assert.ok(risk.indexOf('Resultado estimado') < risk.indexOf('<ToolLeadCapture'))
   assert.ok(!capture.includes('result.'))
 })
+
+/* O clique encaminha para o cadastro. Rotular o botão de "entrar na lista" e
+ * jogar a pessoa numa tela de cadastro é isca — queima a confiança de quem
+ * chegou pela busca. Se o encaminhamento for removido um dia, este teste deve
+ * cair junto com a mudança de rótulo. */
+test('o botão diz que leva para o cadastro', () => {
+  const source = readFileSync(new URL('../dashboard/components/free-tools/ToolLeadCapture.jsx', import.meta.url), 'utf8')
+
+  assert.match(source, /Continuar para criar conta/)
+  assert.match(source, /mode: 'register'/)
+})
+
+test('o encaminhamento para o cadastro não depende da captura dar certo', () => {
+  const source = readFileSync(new URL('../dashboard/components/free-tools/ToolLeadCapture.jsx', import.meta.url), 'utf8')
+
+  // O push tem de estar FORA do try da captura: falha nossa de banco não pode
+  // custar a conversão mais valiosa da página.
+  const tryBlock = source.slice(source.indexOf('try {'), source.indexOf('router.push'))
+  assert.ok(tryBlock.includes('submitLead'), 'submitLead deveria estar dentro do try')
+  assert.ok(tryBlock.includes('} catch {}'), 'a falha da captura deveria ser engolida')
+})
+
+test('o e-mail vai preenchido para o cadastro, para não digitar de novo', () => {
+  const source = readFileSync(new URL('../dashboard/components/free-tools/ToolLeadCapture.jsx', import.meta.url), 'utf8')
+  const login = readFileSync(new URL('../dashboard/app/login/page.js', import.meta.url), 'utf8')
+
+  assert.match(source, /email: cleanEmail/)
+  // A ponta que consome: sem isto o parâmetro seria ignorado em silêncio.
+  assert.match(login, /searchParams\.get\('email'\)/)
+})
