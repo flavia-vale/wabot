@@ -19,9 +19,10 @@
  *
  * Não imprime segredo, cookie nem credencial. Só mostra e-mail se você passar.
  *
- * Uso (dentro do diretório do ambiente):
- *   cd ~/wabot && node scripts/diag-ml-sends.mjs <email> [--days=7] [--limit=40]
- *   cd ~/wabot-staging && node scripts/diag-ml-sends.mjs <email>
+ * Uso (dentro do diretório do ambiente). O identificador pode ser o e-mail, o
+ * telefone de contato ou parte do nome:
+ *   cd ~/wabot && node scripts/diag-ml-sends.mjs <email|telefone|nome> [--days=7] [--limit=40]
+ *   cd ~/wabot && node scripts/diag-ml-sends.mjs "Matheus França"
  */
 
 import 'dotenv/config'
@@ -32,12 +33,12 @@ function arg(name, fallback) {
   return hit ? hit.slice(name.length + 3) : fallback
 }
 
-const email = process.argv.slice(2).find(a => !a.startsWith('--'))
+const who = process.argv.slice(2).find(a => !a.startsWith('--'))
 const days = Number(arg('days', 7))
 const limit = Number(arg('limit', 40))
 
-if (!email) {
-  console.error('Uso: node scripts/diag-ml-sends.mjs <email> [--days=7] [--limit=40]')
+if (!who) {
+  console.error('Uso: node scripts/diag-ml-sends.mjs <email|telefone|nome> [--days=7] [--limit=40]')
   process.exit(1)
 }
 
@@ -72,11 +73,29 @@ function classify(raw) {
 
 const SUSPEITOS = new Set(['listing_fabricado', 'vitrine_social', 'cupom_generico', 'sem_url', 'nao_ml'])
 
-const user = await db.user.findUnique({ where: { email }, select: { id: true, email: true } })
-if (!user) {
-  console.error(`Usuário não encontrado: ${email}`)
+const onlyDigits = who.replace(/\D+/g, '')
+const matches = await db.user.findMany({
+  where: {
+    OR: [
+      { email: who },
+      { name: { contains: who } },
+      ...(onlyDigits.length >= 8 ? [{ contactPhone: { contains: onlyDigits.slice(-8) } }] : []),
+    ],
+  },
+  select: { id: true, email: true, name: true, createdAt: true },
+  take: 10,
+})
+
+if (matches.length === 0) {
+  console.error(`Nenhum cliente encontrado para: ${who}`)
   process.exit(1)
 }
+if (matches.length > 1) {
+  console.error(`Mais de um cliente bate com "${who}" — rode de novo com o e-mail exato:`)
+  for (const m of matches) console.error(`  ${m.email}  (${m.name})`)
+  process.exit(1)
+}
+const user = matches[0]
 
 const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
 const rows = await db.messageLog.findMany({
@@ -91,7 +110,7 @@ const rows = await db.messageLog.findMany({
 
 const mlRows = rows.filter(r => isMlUrl(r.convertedUrl) || isMlUrl(r.originalUrl) || /mercado/i.test(r.platform || ''))
 
-console.log(`\nCliente: ${user.email}`)
+console.log(`\nCliente: ${user.name} <${user.email}>  (cadastro em ${user.createdAt.toISOString().slice(0, 10)})`)
 console.log(`Janela: últimos ${days} dia(s)  |  envios totais: ${rows.length}  |  envios de ML: ${mlRows.length}\n`)
 
 const tally = new Map()
