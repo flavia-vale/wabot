@@ -31,11 +31,6 @@ function arg(name, fallback) {
 const email = process.argv.slice(2).find(a => !a.startsWith('--'))
 const days = Number(arg('days', 7))
 
-if (!email) {
-  console.error('Uso: node scripts/diag-ml-ssid-expiry.mjs <email> [--days=7]')
-  process.exit(1)
-}
-
 // Horário de Brasília para a saída ficar comparável com o relato do cliente.
 const BRT_OFFSET_MS = -3 * 60 * 60 * 1000
 const hourKey = (date) => new Date(date.getTime() + BRT_OFFSET_MS).toISOString().slice(0, 13).replace('T', ' ') + 'h'
@@ -51,13 +46,53 @@ function classify(row) {
   return null
 }
 
+const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+
+// Sem e-mail: ranking de quem mais é recusado pelo ML. Serve para achar a conta
+// com código de acesso morto há semanas, que fica batendo na API do Mercado
+// Livre 24h por dia sem nunca dar certo (desperdício e risco para o nosso IP).
+if (!email) {
+  const all = await db.messageLog.findMany({
+    where: { sentAt: { gte: since } },
+    select: { userId: true, sentAt: true, status: true, errorMsg: true, convertedUrl: true, originalUrl: true },
+  })
+  const perUser = new Map()
+  for (const r of all) {
+    if (!ML_URL.test(r.convertedUrl || '') && !ML_URL.test(r.originalUrl || '') && !/ml_ssid_expired/.test(r.errorMsg || '')) continue
+    const kind = classify(r)
+    if (!kind) continue
+    if (!perUser.has(r.userId)) perUser.set(r.userId, { curto: 0, planoB: 0, recusa: 0, primeira: r.sentAt, ultima: r.sentAt })
+    const u = perUser.get(r.userId)
+    u[kind] += 1
+    if (kind === 'recusa') {
+      if (r.sentAt < u.primeira) u.primeira = r.sentAt
+      if (r.sentAt > u.ultima) u.ultima = r.sentAt
+    }
+  }
+  const ranked = [...perUser.entries()].filter(([, u]) => u.recusa > 0).sort((a, b) => b[1].recusa - a[1].recusa)
+  const users = await db.user.findMany({ where: { id: { in: ranked.map(([id]) => id) } }, select: { id: true, email: true, name: true } })
+  const byId = new Map(users.map(u => [u.id, u]))
+
+  console.log(`\nQuem o Mercado Livre mais recusou nos últimos ${days} dia(s):\n`)
+  console.log('recusas  curto  planoB  cliente                                  1a recusa         ultima recusa')
+  for (const [id, u] of ranked) {
+    const who = byId.get(id)
+    console.log(
+      `${String(u.recusa).padStart(7)}  ${String(u.curto).padStart(5)}  ${String(u.planoB).padStart(6)}  ` +
+      `${(who?.email || id).padEnd(38)}  ${u.primeira.toISOString().slice(0, 16)}  ${u.ultima.toISOString().slice(0, 16)}`,
+    )
+  }
+  console.log('\nRecusa espalhada por muitos dias = código de acesso morto e nunca recadastrado:')
+  console.log('essa conta bate na API do ML o dia inteiro sem nunca dar certo. Vale avisar o cliente.\n')
+  await db.$disconnect()
+  process.exit(0)
+}
+
 const user = await db.user.findUnique({ where: { email }, select: { id: true, name: true, email: true, createdAt: true } })
 if (!user) {
   console.error(`Cliente não encontrado: ${email}`)
   process.exit(1)
 }
-
-const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
 
 const rows = await db.messageLog.findMany({
   where: { sentAt: { gte: since } },
