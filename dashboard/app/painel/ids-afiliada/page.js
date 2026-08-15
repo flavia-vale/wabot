@@ -130,8 +130,16 @@ function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessi
     try {
       const result = await onSave(platform.id, values)
       const warnings = result?.validation?.warnings || []
-      setFeedback({ type: warnings.length ? 'warn' : 'success', message: result?.message || 'Credenciais atualizadas com sucesso.', warnings })
+      // `messageTone` vem do teste do código feito no momento do save (RCA
+      // 2026-08-15): quando a loja recusa o código, o banner precisa ficar
+      // VERMELHO ali mesmo. Antes era sempre verde "atualizadas com sucesso" e o
+      // cliente saía da tela achando que estava tudo certo. Sem o campo (API
+      // antiga), cai no comportamento histórico.
+      const tone = result?.messageTone || (warnings.length ? 'warn' : 'success')
+      setFeedback({ type: tone, message: result?.message || 'Credenciais atualizadas com sucesso.', warnings })
       setDraft({})
+      // Código recusado: manter o formulário "sujo" seria confuso, mas limpar o
+      // rascunho sem avisar também. O banner vermelho acima é o aviso.
       setDirty(false)
     } catch (err) {
       setFeedback({ type: 'error', message: `${err?.message || 'Não foi possível salvar.'} Verifique os campos e tente novamente.` })
@@ -271,9 +279,14 @@ export default function IdsAfiliadaPage() {
     const result = await api.saveCredential(platform, data)
     const savedData = result?.data ?? data
     setCredMap((m) => ({ ...(m || {}), [platform]: savedData }))
-    // Ao salvar cookies novos, re-checa a sessão para limpar/atualizar o aviso.
-    if (platform === 'mercadolivre') refreshMlSession(savedData)
-    if (platform === 'amazon') refreshAmazonSession(savedData)
+    // O save já testa o código e devolve o resultado em `sessionCheck` — usar
+    // ele evita uma SEGUNDA sondagem à loja logo em seguida (na Amazon cada
+    // sondagem gasta uma rotação de código de acesso). Sem o campo (API antiga),
+    // cai no comportamento histórico de re-checar.
+    const setter = platform === 'mercadolivre' ? setMlSession : platform === 'amazon' ? setAmazonSession : null
+    if (setter && result?.sessionCheck) setter(result.sessionCheck)
+    else if (platform === 'mercadolivre') refreshMlSession(savedData)
+    else if (platform === 'amazon') refreshAmazonSession(savedData)
     return result
   }
 

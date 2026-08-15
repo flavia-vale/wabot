@@ -7,6 +7,7 @@ import { checkAmazonSession as defaultCheckAmazonSession } from '../../converter
 import { getCachedProbe as defaultGetCachedProbe, invalidateCachedProbe as defaultInvalidateCachedProbe, setCachedProbe as defaultSetCachedProbe } from '../../converters/amazonSessionProbeCache.js'
 import { getCachedProbe as defaultGetCachedMlProbe, invalidateCachedProbe as defaultInvalidateCachedMlProbe, setCachedProbe as defaultSetCachedMlProbe } from '../../converters/mercadolivreSessionProbeCache.js'
 import { getBotMetrics as defaultGetBotMetrics, isRunning as defaultIsRunning, reloadConfig as defaultReloadConfig, startBot as defaultStartBot, stopBot as defaultStopBot } from '../../manager.js'
+import { describeSaveSessionCheck, platformSupportsSessionCheck } from '../../credentialSaveCheck.js'
 import { classifyWorkerHealth } from '../../workerHealth.js'
 import { restartStaleWorkerIfNeeded } from '../../workerRemediation.js'
 
@@ -162,6 +163,21 @@ export async function credentialsRoutes(app, opts = {}) {
       // antigo em GET /mercadolivre/session até o cache expirar sozinho.
       invalidateCachedMlProbe(req.user.sub)
     }
+
+    // Testa o código de acesso NA HORA DE SALVAR (RCA 2026-08-15, ver
+    // src/credentialSaveCheck.js). Antes, o save só conferia se os campos
+    // estavam preenchidos e respondia "Tudo certo!" mesmo para um código que a
+    // loja recusa — um cliente novo salvou 17 vezes seguidas sem descobrir.
+    //
+    // Nunca bloqueia o save: a credencial JÁ foi gravada acima. Se a sondagem
+    // falhar (loja fora do ar, timeout), o resultado vira "não deu para testar"
+    // — nunca "não funciona".
+    const sessionCheck = await probeSavedCredential({
+      platform,
+      userId: req.user.sub,
+      data: parseCredentialData(cred.data),
+      log: app.log,
+    })
     // Recarrega a config do worker imediatamente — sem isso, o bot usa a
     // credencial antiga em cache (CONFIG_CACHE_TTL_MS, ~60s) e ofertas novas
     // seguem saindo com a credencial expirada logo após a troca. Best-effort
@@ -191,9 +207,65 @@ export async function credentialsRoutes(app, opts = {}) {
       app.log.warn({ platform, err: workerRestartError, workerHealth }, 'Falha ao remediar worker desatualizado após salvar credencial')
     }
     app.log.info({ platform, configReloaded, configReloadError, workerHealth, workerMetricsError, workerRestart, workerRestartError }, 'Credencial salva; reload da config do worker solicitado')
-    trackAnalyticsEventSafe({ userId: req.user.sub, event: 'credential_saved', metadata: { platform, status: validation.status } })
-    return { ...cred, data: parseCredentialData(cred.data), validation, message: getCredentialSaveMessage(validation), configReloaded, configReloadError, workerHealth, workerMetricsError, workerRestart, workerRestartError }
+    const saveFeedback = describeSaveSessionCheck({
+      platform,
+      validation,
+      probe: sessionCheck,
+      fallbackMessage: getCredentialSaveMessage(validation),
+    })
+    trackAnalyticsEventSafe({
+      userId: req.user.sub,
+      event: 'credential_saved',
+      // `sessionAlive` responde, no histórico, quantas vezes alguém salvou um
+      // código que a loja recusa — o sinal que faltava para enxergar o cliente
+      // preso tentando de novo em vez de esperar ele reclamar no WhatsApp.
+      metadata: { platform, status: validation.status, sessionAlive: sessionCheck?.alive ?? null, sessionReason: sessionCheck?.reason ?? null },
+    })
+    return {
+      ...cred,
+      data: parseCredentialData(cred.data),
+      validation,
+      message: saveFeedback.message,
+      messageTone: saveFeedback.tone,
+      sessionCheck,
+      configReloaded,
+      configReloadError,
+      workerHealth,
+      workerMetricsError,
+      workerRestart,
+      workerRestartError,
+    }
   })
+
+  // Sondagem pós-save. Espelha a persistência de rotação de cookie e o cache
+  // das rotas GET /<loja>/session: sem persistir o patch, a rotação que a loja
+  // devolve nesta chamada seria descartada e a sessão morreria mais cedo; sem
+  // popular o cache, o painel dispararia uma SEGUNDA sondagem logo em seguida
+  // (na Amazon isso custa mais uma rotação de cookie).
+  async function probeSavedCredential({ platform, userId, data, log }) {
+    if (!platformSupportsSessionCheck(platform)) return null
+    try {
+      const check = platform === 'mercadolivre' ? checkMercadoLivreSession : checkAmazonSession
+      const result = await check(data)
+      const { credentialPatch, ...publicResult } = result || {}
+      if (credentialPatch) {
+        await db.credential.update({
+          where: { userId_platform: { userId, platform } },
+          data: { data: encryptCredential(JSON.stringify({ ...data, ...credentialPatch })) },
+        })
+      }
+      const body = { ...publicResult, checkedAt: new Date().toISOString() }
+      if (body.alive === true || body.alive === false) {
+        if (platform === 'mercadolivre') setCachedMlProbe(userId, body)
+        else setCachedAmazonProbe(userId, body)
+      }
+      return body
+    } catch (err) {
+      // Falha da sondagem NUNCA vira "seu código não funciona": indeterminado.
+      log?.warn?.({ platform, err: err?.message }, 'Falha ao testar o código de acesso após salvar')
+      return { configured: true, alive: null, reason: 'check_failed', checkedAt: new Date().toISOString() }
+    }
+  }
 
   // Apagar credencial da plataforma. Contrapartida do modo sem cookie: quem
   // desconfia de deixar cookie/tag guardados precisa de um botão que APAGUE de
