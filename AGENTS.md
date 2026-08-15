@@ -2070,6 +2070,48 @@ card destacado").
 para quem ele não reconhece. Um `200` num teste de fora do VPS **não prova** que
 a página existe — confira o corpo antes de concluir.
 
+### O endereço montado por nós NUNCA pode ser publicado (RCA 2026-08-15)
+
+O RCA acima passou a **preferir** o endereço do card, mas manteve a fabricação de
+`produto.mercadolivre.com.br/MLB<id>-x-_JM` como último recurso — e ela continuou
+chegando ao grupo. Cliente novo (`matheuschaves308@gmail.com`) reportou "os links
+do mercado livre estão dando erro" com print da página **"Tivemos um problema"**;
+o mesmo endereço aberto no celular E no computador dá **"Parece que esta página
+não existe"**. Em 7 dias, **10 de 79** envios de ML dele saíram como
+`produto.mercadolivre.com.br/MLB<id>-x-_JM?partner_id=<tag>` — e gravados como
+`success` no painel.
+
+**Por que ficava escondido:** o endereço montado é só a **entrada** da chamada à
+API de afiliados, e a API **aceita** (validado ao vivo com a credencial dele:
+devolveu `meli.la` funcionando). Quem chega ao grupo é o `meli.la`. Só quando a
+chamada falha (código de acesso vencido, 403, 429) o plano B publica o endereço
+montado **cru** — e aí o link quebrado vai para o grupo. Isso explica o relato do
+cliente ("atualizei o código, voltou a funcionar, caiu de novo"): com a credencial
+viva sai `meli.la`, com ela morta sai o endereço quebrado.
+
+**Armadilha de diagnóstico (não repetir):** os 401 do `bot.log` estavam TODOS em
+endereços montados, sugerindo que o formato causava o 401. É falso — um teste
+controlado com a credencial dele converteu o MESMO endereço montado com sucesso.
+O 401 era a credencial; a página de erro era o endereço. **Dois problemas
+independentes** que se sobrepunham no log.
+
+**Fix:** `isSyntheticListingUrl` (`src/converters/mercadolivre.js`, pura/exportada)
+reconhece exatamente o formato que nós montamos, e `convert()` **retorna `null`**
+em vez de aplicar o fallback `partner_id` sobre ele. A guarda é no **publicar**,
+não no montar — montar continua valendo como entrada da API (é o que preserva os
+links curtos). Melhor não enviar a oferta do que enviar link quebrado, e a linha
+vira falha de conversão honesta em vez de `success` mentiroso.
+
+**Não regredir:** não voltar a pendurar `partner_id` em endereço que casa com
+`isSyntheticListingUrl`; não confundir com o endereço REAL
+(`MLB-<id>-<nome>-_JM`) nem com catálogo (`/p/MLB<id>`), que continuam saindo
+normalmente no fallback. Testes: `test/mercadolivre-resolve.test.js` (bloco
+"Nunca publicar endereço montado por nós").
+
+**Diagnóstico reutilizável:** `scripts/diag-ml-sends.mjs <email|telefone|nome>`
+— read-only, classifica o formato de cada link de ML publicado e marca com ⚠ os
+suspeitos (`listing_fabricado`, `vitrine_social`, `cupom_generico`).
+
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 
 O **Painel "Criar oferta"** (`/m/op/offer` → `POST
