@@ -191,7 +191,7 @@ test('GET /amazon/session: credencial não cadastrada devolve not_configured sem
 // precisa invalidar o cache de sondagem — senão o GET seguinte continua
 // servindo o resultado antigo (ex.: expirado) até o TTL vencer sozinho,
 // mesmo com um cookie novo e válido recém-salvo.
-test('PUT /amazon: invalida o cache de sondagem — GET seguinte sonda de novo (sem servir valor stale)', async () => {
+test('PUT /amazon: o próprio save testa o código e deixa o resultado FRESCO em cache', async () => {
   await withEncryptionKey(async () => {
     const userId = nextUserId()
     const db = fakeDb({ userId, platform: 'amazon', data: JSON.stringify({ tag: 'x-20', cookie: 'session-token=tokVelho-000000' }) })
@@ -218,11 +218,19 @@ test('PUT /amazon: invalida o cache de sondagem — GET seguinte sonda de novo (
       payload: { tag: 'x-20', cookie: 'session-token=tokNOVO-000000000000' },
     })
     assert.equal(putRes.statusCode, 200)
-    assert.equal(probeCache.has(userId), false, 'PUT deve invalidar a entrada em cache do usuário')
+    // Mudança de contrato (RCA 2026-08-15): antes o PUT só INVALIDAVA o cache e
+    // deixava o GET seguinte sondar. Agora o próprio save sonda — é assim que
+    // ele consegue dizer na hora se o código funciona — e guarda o resultado
+    // FRESCO. A garantia que importa continua valendo: nunca servir valor
+    // stale. E gasta-se uma sondagem a menos por recadastro (na Amazon, uma
+    // rotação de código a menos).
+    assert.equal(calls, 2, 'o próprio PUT deve testar o código recém-colado')
+    assert.equal(JSON.parse(putRes.body).sessionCheck.alive, true)
+    assert.equal(probeCache.has(userId), true, 'o resultado fresco do save fica em cache')
 
     const res2 = await app.inject({ method: 'GET', url: '/amazon/session' })
-    assert.equal(calls, 2, 'GET após PUT deve sondar de novo (cache miss), não servir o valor stale')
-    assert.equal(JSON.parse(res2.body).alive, true)
+    assert.equal(calls, 2, 'GET após PUT não sonda de novo — serve o resultado fresco do save')
+    assert.equal(JSON.parse(res2.body).alive, true, 'e o valor servido é o novo, nunca o stale')
   })
 })
 
