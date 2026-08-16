@@ -18,6 +18,7 @@ import { dashboardRoutes } from './routes/dashboard.js'
 import { logsRoutes } from './routes/logs.js'
 import { linkConversionRoutes } from './routes/linkConversion.js'
 import { adminRoutes } from './routes/admin.js'
+import { adminEmailsRoutes } from './routes/adminEmails.js'
 import { publicRoutes } from './routes/public.js'
 import { clickTrackerRoutes } from './routes/clickTracker.js'
 import { preservationRoutes } from './routes/preservation.js'
@@ -409,6 +410,7 @@ app.register(dashboardRoutes, { prefix: '/api/dashboard' })
 app.register(logsRoutes, { prefix: '/api/logs' })
 app.register(linkConversionRoutes, { prefix: '/api/link-conversion' })
 app.register(adminRoutes, { prefix: '/api/admin' })
+app.register(adminEmailsRoutes, { prefix: '/api/admin/emails' })
 app.register(publicRoutes, { prefix: '/api/public' })
 app.register(preservationRoutes, { prefix: '/api/preservation' })
 app.register(offerAutomationRoutes, { prefix: '/api/offer-automations' })
